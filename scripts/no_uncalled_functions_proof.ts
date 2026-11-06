@@ -17,7 +17,6 @@ const ALLOWED = new Map<string, string>([
   ["authSessions:scrubRevokedAuthSessionSecretsForMaintenance", "operator tool: scripts/auth_scrub_revoked_session_secrets.sh"],
   ["communityAiFeedRetirement:inspectAiFeedRetirementInternal", "data retirement job; removed with the AI feed tables"],
   ["communityAiFeedRetirement:deleteAiFeedRetirementBatchInternal", "data retirement job; removed with the AI feed tables"],
-  ["founderBilling:createPendingPublicBuilderCheckoutInternal", "anonymous Builder recovery path, test-only since the public checkout retired (Nov 5); removed with the billing redesign"],
   ["retiredTablesCleanup:emptyRetiredTableInternal", "table-drop release 1 (POL-31): run by hand; removed in release 2"],
   ["retiredTablesCleanup:rewriteRetiredPersonalAgentInternal", "table-drop release 1 (POL-31): run by hand; removed in release 2"],
   ["communityApps:registerCommunityDomainInternal", "operator tool: registers a site domain by hand"],

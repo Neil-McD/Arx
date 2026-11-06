@@ -40,9 +40,6 @@ const convexAuthSessionProbe = read("shared/convexAuthSessionProbe.ts");
 const onboardingController = read(
   "apps/web/src/controllers/useWebOnboardingProfileController.ts",
 );
-const builderCheckoutController = read(
-  "apps/web/src/controllers/useWebPublicBuilderCheckoutController.ts",
-);
 const chatController = read(
   "apps/web/src/controllers/useWebCommunityChatController.ts",
 );
@@ -508,29 +505,9 @@ assert.match(
 );
 
 assert.match(
-  builderCheckoutController,
-  /status === "unavailable"[\s\S]*showToast[\s\S]*return;[\s\S]*scrubCurrentRouteSearchParams/,
-  "paid Builder return must retain its recovery marker while setup is unavailable",
-);
-assert.match(
-  builderCheckoutController,
-  /params\.resumeEpoch/,
-  "paid Builder recovery must retry when the installed app resumes",
-);
-assert.match(
-  builderCheckoutController,
-  /!accountSetupResolution\.accountSetup\.completed[\s\S]*reason: "resume_builder_checkout"[\s\S]*navigateTo\("\/onboarding"\)/,
-  "paid Builder recovery must survive account setup before continuing",
-);
-assert.match(
   onboardingController,
   /readAuthResumeState\(\)[\s\S]*resumePendingAuthIntent\(\)[\s\S]*if \(resumed\) return true/,
   "completed onboarding must resume the preserved commercial or community intent",
-);
-assert.doesNotMatch(
-  builderCheckoutController,
-  /!latestAccountSetupStatus\?\.completed/,
-  "paid Builder return must not collapse an unavailable read into incomplete setup",
 );
 
 for (const [name, source] of [

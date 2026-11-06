@@ -15,16 +15,12 @@ const read = (path: string) => readFileSync(resolve(root, path), "utf8");
 const app = read("apps/web/src/App.tsx");
 const offer = read("shared/builderOffer.ts");
 const createModal = read("apps/web/src/components/WebCreateCommunityModal.tsx");
-const purchaseModal = read("apps/web/src/components/WebBuilderPurchaseModal.tsx");
 const createController = read("shared/useCommunityCreateController.ts");
 const billing = read("apps/web/src/components/WebBillingSettingsSection.tsx");
 const account = read("apps/web/src/components/WebAccountSettingsSection.tsx");
 const offerModal = read("apps/web/src/components/WebBuilderOfferModal.tsx");
 const offerSummary = read("apps/web/src/components/WebBuilderOfferSummary.tsx");
 const offerController = read("apps/web/src/controllers/useWebBuilderOfferController.ts");
-const publicCheckoutController = read(
-  "apps/web/src/controllers/useWebPublicBuilderCheckoutController.ts",
-);
 const builderSetupFlowController = read(
   "apps/web/src/controllers/useWebBuilderSetupFlowController.ts",
 );
@@ -91,12 +87,8 @@ assert.match(offerModal, /WebBuilderOfferSummary/);
 assert.match(offerModal, /resolveBuilderOfferPrimaryAction/);
 assert.match(globalOverlay, /<WebBuilderOfferModal/);
 assert.equal((globalOverlay.match(/<WebBuilderOfferModal/g) ?? []).length, 1);
-assert.match(globalOverlay, /<WebBuilderPurchaseModal/);
-assert.equal((globalOverlay.match(/<WebBuilderPurchaseModal/g) ?? []).length, 1);
-assert.match(purchaseModal, /WebBuilderOfferSummary compact purpose="purchase"/);
-assert.match(purchaseModal, /Get the Agent plan/);
-assert.match(purchaseModal, /operator_included/);
-assert.doesNotMatch(purchaseModal, /paid_setup|Continue to community setup/);
+// The pre-payment Builder purchase (popup, controller, recovery) is gone.
+assert.doesNotMatch(globalOverlay, /WebBuilderPurchaseModal/);
 assert.match(offerSummary, /POLYNET_BUILDER_OFFER\.benefits\.map/);
 assert.match(
   settingsStyles,
@@ -116,7 +108,6 @@ assert.match(offerController, /startCheckout\(community\.community_id\)/);
 assert.match(offerController, /openPortal\(community\.community_id\)/);
 assert.match(app, /useWebBuilderOfferController\(\{[\s\S]*startCheckout: founderBilling\.startCheckout/);
 assert.doesNotMatch(app, /startCheckoutAfterCommunityCreated/);
-assert.match(app, /publicBuilderCheckout\.startPurchase\(\)/);
 assert.match(
   createController,
   /const founderSubscriptionId = current\.founderSubscriptionId[\s\S]*founderSubscriptionId,/,
@@ -149,14 +140,7 @@ assert.match(
 );
 assert.doesNotMatch(builderSetupFlowController, /params\.openPurchasePrompt\(\)/);
 assert.match(app, /useWebBuilderPurchaseFlowController\(\{/);
-assert.match(
-  app,
-  /builderPurchaseProps:[\s\S]*operatorComplimentaryAccess[\s\S]*"purchase"[\s\S]*publicBuilderCheckout\.startPurchase\(\)/,
-);
-assert.match(
-  publicCheckoutController,
-  /startCloudPublicBuilderCheckout\(\)[\s\S]*window\.location\.assign/,
-);
+assert.doesNotMatch(app, /builderPurchaseProps|publicBuilderCheckout/);
 assert.doesNotMatch(app, /claimFounderCheckoutReceipt|founderCheckoutBrowserState/);
 assert.doesNotMatch(app, /createBlockingFundingCommunity/);
 assert.equal(

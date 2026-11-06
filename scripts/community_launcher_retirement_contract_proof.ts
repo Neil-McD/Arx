@@ -30,7 +30,6 @@ const pendingAuthIntent = read(
 );
 const routeLifecycle = read("apps/web/src/controllers/useWebPathRouteLifecycle.ts");
 const createModal = read("apps/web/src/components/WebCreateCommunityModal.tsx");
-const purchaseModal = read("apps/web/src/components/WebBuilderPurchaseModal.tsx");
 const webCreateController = read("apps/web/src/controllers/useWebCommunityUiController.ts");
 const createController = read("shared/useCommunityCreateController.ts");
 const settings = read("apps/web/src/components/WebCommunitySettingsSection.tsx");
@@ -99,12 +98,8 @@ assert.doesNotMatch(
   /WebBuilderOfferSummary|Buy Builder/,
   "post-payment setup must not repeat the purchase offer",
 );
-assert.match(
-  purchaseModal,
-  /WebBuilderOfferSummary compact purpose="purchase"/,
-  "the pre-payment offer must remain a separate compact surface",
-);
-assert.match(purchaseModal, /Get the Agent plan/);
+// The pre-payment Builder purchase popup is gone with the anonymous purchase.
+assert.equal(existsSync("apps/web/src/components/WebBuilderPurchaseModal.tsx"), false);
 assert.match(
   webCreateController,
   /useCommunityCreateController[\s\S]*openCreateCommunityModal[\s\S]*modalHostProps/,
