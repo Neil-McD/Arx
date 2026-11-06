@@ -877,7 +877,10 @@ export function WebCommunitySettingsSection(props: WebCommunitySettingsSectionPr
                     {isOwnerSettingsLayer ? (
                       <CommunityPublicPageSection
                         communityId={resolvedActiveCommunity.id}
-                        publicPageUrl={resolvedActiveCommunity.site_url ?? null}
+                        publicPageUrl={(() => {
+                          // Join, the doorstep this panel edits (a custom site's own home is the founder's).
+                          try { return resolvedActiveCommunity.site_url ? `${new URL(resolvedActiveCommunity.site_url).origin}/join` : null; } catch { return null; }
+                        })()}
                         session={props.session}
                         ensureSession={props.ensureSession}
                       />
