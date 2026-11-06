@@ -7,7 +7,6 @@ function read(path: string): string {
 
 const realtimeAuth = read("shared/convexRealtimeAuth.ts");
 const chatGateway = read("shared/cloudCommunityChatGateway.ts");
-const dmGateway = read("shared/cloudDirectMessagesGateway.ts");
 const authController = read("apps/web/src/controllers/useWebAppAuthController.ts");
 
 assert.match(realtimeAuth, /export class AuthenticatedConvexRealtimePool/);
@@ -39,7 +38,6 @@ assert.doesNotMatch(
 
 for (const [label, gateway] of [
   ["community chat", chatGateway],
-  ["direct messages", dmGateway],
 ] as const) {
   assert.match(
     gateway,

@@ -132,11 +132,17 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
 - **Hand-run:** `communityChannelAudit`, `communityChannelBackfill` (General channel
   migration: delete after two clean production audits, residue map R-009).
 
-### 4. Direct messages — Keep (Studio only)
+### 4. Direct messages — Keep (on community sites)
 
+- **Does:** one inbox, on every community site's private pages (`/messages`,
+  the member's whole inbox, whichever site). Studio has no inbox since Nov 6:
+  its Messages button and a profile's "Message" open a site's Messages
+  (`useWebSiteMessagesController`, from `messages_url` on each of the user's
+  communities); DM emails open the conversation on the site it began in, else
+  another site the recipient is in, else Polynet's home.
 - **Code:** `directMessages`, `directMessageReadCore`, `directMessageEmails`.
-  Text only since Nov 5 (attachments removed; the two upload-URL mutations
-  stay as refusing stubs for one release, for cached Studio pages).
+  Text only since Nov 5. Studio's public DM functions stay one release for
+  cached Studio pages, then go (the site uses the `*ForTrustedUserInternal` ones).
 - **Tables:** `dmConversations`, `dmParticipants`, `dmMessages`, `dmBlocks`,
   `dmRateCounters`, `dmTypingPresence`.
 

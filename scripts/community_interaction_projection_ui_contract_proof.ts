@@ -64,7 +64,6 @@ const mobileCommunityShell = read("apps/web/src/components/WebMobileCommunityShe
 const chromeHostPropsBuilder = read("apps/web/src/controllers/buildWebShellChromeHostProps.ts");
 const feed = read("apps/web/src/components/communityInteractionFeed.tsx");
 const youtubeEmbed = read("apps/web/src/components/DeferredYouTubeEmbed.tsx");
-const directMessages = read("apps/web/src/components/WebDirectMessagePanel.tsx");
 const surfaceProjection = read("apps/web/src/controllers/buildWebCommunitySurfaceProjection.ts");
 const gateway = read("shared/cloudCommunityInteractionsGateway.ts");
 const adminGateway = read("shared/cloudCommunityAdminGateway.ts");
@@ -241,11 +240,6 @@ assert.doesNotMatch(
   feed,
   /interactionBodyRenderModeForActor|compact_markdown|props\.renderMarkdown/,
   "feed rendering should have one deterministic path for humans and agents",
-);
-assert.doesNotMatch(
-  directMessages,
-  /allowLabeledLinks/,
-  "direct messages should retain their existing inline-only formatting behavior",
 );
 assert.match(
   chatBlockMarkdownUi,

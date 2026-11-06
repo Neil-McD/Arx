@@ -43,7 +43,6 @@ import { useWebCommunityDirectoryState } from "./controllers/useWebCommunityDire
 import { useWebTelemetryLifecycle } from "./controllers/useWebTelemetryLifecycle";
 import { useWebAuthErrorToastLifecycle } from "./controllers/useWebAuthErrorToastLifecycle";
 import { useWebCommunityAgentSurfaceController } from "./controllers/useWebCommunityAgentSurfaceController";
-import { useWebDirectMessagesChromeController } from "./controllers/useWebDirectMessagesChromeController";
 import { useWebCommunityTabAccessGuard } from "./controllers/useWebCommunityTabAccessGuard";
 import { useWebMemberSiteHandoff } from "./controllers/useWebMemberSiteHandoff";
 import { communityAccessRunsCommunity } from "../../../shared/communityAccessViewModel";
@@ -138,7 +137,7 @@ import { useCommunitySettingsAccessLifecycle } from "../../../shared/useCommunit
 import type { WebSettingsPanelsProps } from "./components/WebSettingsPanels";
 import { WebAppCompositionRoot } from "./components/WebAppCompositionRoot";
 import { WebRouteAccessHold } from "./components/WebRouteAccessHold";
-import { useWebDirectMessagesController } from "./controllers/useWebDirectMessagesController";
+import { useWebSiteMessagesController } from "./controllers/useWebSiteMessagesController";
 import { buildWebGlobalOverlayHostProps } from "./controllers/buildWebGlobalOverlayHostProps";
 import { buildWebAppMainSurfaceHostProps } from "./controllers/buildWebAppMainSurfaceHostProps";
 import { buildWebShellChromeHostProps } from "./controllers/buildWebShellChromeHostProps";
@@ -170,19 +169,6 @@ type CommunityJoinRequest = WebCommunityJoinRequest;
 
 export default function App() {
   const appActivity = useWebAppActivityController();
-  const directMessages = useWebDirectMessagesController();
-  const {
-    isOpen: isDirectMessagesOpen,
-    openRequest: directMessageOpenRequest,
-    openConversationRequest: directMessageOpenConversationRequest,
-    unreadCount: directMessagesUnreadCount,
-    setUnreadCount: setDirectMessagesUnreadCount,
-    openConversationById: handleOpenDirectConversationById,
-    toggle: handleToggleDirectMessages,
-    open: handleOpenDirectMessages,
-    close: handleCloseDirectMessages,
-    openFromCommunity: handleOpenDirectMessageFromCommunity,
-  } = directMessages;
   const resetWebSessionStateRef =
     useRef<() => Promise<void>>(() => {
       beginBrowserSignedOutState();
@@ -341,6 +327,12 @@ export default function App() {
     communities,
     setCommunityTab,
     setCommunityChannelSlug,
+  });
+  const siteMessages = useWebSiteMessagesController({
+    isAuthenticated: Boolean(session),
+    communities,
+    activeCommunityId,
+    profilesByUserId,
   });
   const { loadCommunities, loadUserProfiles } = useWebCommunityAccessController<
     AuthSession,
@@ -1603,16 +1595,14 @@ export default function App() {
       mobileOverlay,
       showMobileShell,
       showMobileSettingsShell,
-      canOpenDirectMessages: Boolean(session),
-      isDirectMessagesOpen,
+      canOpenDirectMessages: Boolean(siteMessages.messagesUrl),
       isThreadPageOpen: mobileThreadPageOpen,
       setMobileOverlay,
       setMobileRootPage,
       setMobileSettingsView,
       openCommunityHome,
       handleOpenDiscover,
-      openDirectMessages: handleOpenDirectMessages,
-      closeDirectMessages: handleCloseDirectMessages,
+      openDirectMessages: siteMessages.open,
       closeThreadPage: handleCloseCommunityInteractionDrawer,
       openCommunityCreateFlow: openNewCommunityPurchaseFlow,
     });
@@ -1695,7 +1685,7 @@ export default function App() {
       hasAuthenticatedPresentation: hasAuthenticatedAppShellPresentation,
       isAuthRecoveringSignedIn: isAuthRecoveringSignedInAppShell,
       hasSession: Boolean(session),
-      onOpenDirectMessageFromCommunity: handleOpenDirectMessageFromCommunity,
+      onOpenDirectMessageFromCommunity: siteMessages.messageMember,
       hasResolvedCommunities,
       isLoadingCommunities,
       sessionUserId: canonicalSessionUserId,
@@ -2156,17 +2146,6 @@ export default function App() {
     Number(Boolean(activeCommunityAttentionSummary.chat)) +
     Number(Boolean(activeCommunityAttentionSummary.resources)) +
     Number(Boolean(activeCommunityAttentionSummary.events));
-  const {
-    notifications: directMessageWebNotifications,
-    button: directMessagesButton,
-  } = useWebDirectMessagesChromeController({
-    isAuthenticated: Boolean(session),
-    isOpen: isDirectMessagesOpen,
-    unreadCount: directMessagesUnreadCount,
-    toggle: handleToggleDirectMessages,
-    open: handleOpenDirectMessages,
-    openConversation: handleOpenDirectConversationById,
-  });
 
   const globalOverlayHostProps = buildWebGlobalOverlayHostProps({
     communityModalHostProps: communityUi.modalHostProps,
@@ -2314,14 +2293,12 @@ export default function App() {
     surfaceContext: communityAgentSurfaceContext,
     isVisible: isCommunityAgentDockVisible,
   } = useWebCommunityAgentSurfaceController({
-    pageMode: !showMobileShell,
     activePage,
     communityTab,
     activeCommunity,
     isAuthenticated: Boolean(session),
     publicRouteKind: publicRoute.kind,
     hasResolvedCommunities,
-    isDirectMessagesOpen,
     isOnboardingModalOpen,
     communityAgentVoiceUiState,
     cancelVoiceInput,
@@ -2379,7 +2356,7 @@ export default function App() {
     isPublicCommunityFunnel,
     hasBackTargetSnapshot: Boolean(backTargetSnapshot),
     backTargetLabel: effectiveBackTargetLabel ?? null,
-    directMessagesButton,
+    directMessagesButton: siteMessages.button,
     handleTopbarBackFromPublicFunnel,
     handleTopbarBackFromSettings,
     handleTopbarBackToCommunity,
@@ -2420,8 +2397,7 @@ export default function App() {
     handleSelectCommunityTab,
     handleSelectCommunityTabFromMobile,
     onCopyCommunityJoinLink: copyTextToClipboard,
-    canOpenDirectMessages: Boolean(session),
-    directMessagesUnreadCount,
+    canOpenDirectMessages: Boolean(siteMessages.messagesUrl),
     handleOpenDiscover,
     openMobileCreateCommunity,
     openCommunityCreateFlow: openNewCommunityPurchaseFlow,
@@ -2519,31 +2495,6 @@ export default function App() {
         finalizeVoiceInputForSubmit: () =>
           finishVoiceInputForSubmit("member_agent"),
         onStartBuilder: () => openNewCommunityPurchaseFlow(),
-      }}
-      directMessagesHostProps={{
-        isOpen: isDirectMessagesOpen,
-        mobileRoot:
-          showMobileShell && mobileRootPage === "messages",
-        openRequest: directMessageOpenRequest,
-        openConversationRequest: directMessageOpenConversationRequest,
-        session,
-        ensureSession: ensureUsableAuthSession,
-        sessionUserId: canonicalSessionUserId,
-        getInitials,
-        getAvatarColor,
-        renderTextWithLinks,
-        requireSignIn: () => requireSignIn(),
-        showAppToastMessage,
-        onUnreadCountChange: setDirectMessagesUnreadCount,
-        onIncomingDirectMessage:
-          directMessageWebNotifications.notifyIncoming,
-        onDirectMessageSent:
-          directMessageWebNotifications.requestPermissionIfNeeded,
-        notificationsState:
-          directMessageWebNotifications.notificationsState,
-        onToggleNotifications:
-          directMessageWebNotifications.toggleNotifications,
-        onClose: handleCloseDirectMessages,
       }}
       mainSurfaceHostProps={mainSurfaceHostProps}
       shellChromeHostProps={shellChromeHostProps}

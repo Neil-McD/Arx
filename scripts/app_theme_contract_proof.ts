@@ -244,10 +244,6 @@ const publicBuilderLandingCss = read(
 const communityAgentCss = read("apps/web/src/components/WebCommunityAgentDock.css");
 const communityAgentComponent = read("apps/web/src/components/WebCommunityAgentDock.tsx");
 const communityChat = read("apps/web/src/components/WebCommunityChatPanel.tsx");
-const directMessages = read("apps/web/src/components/WebDirectMessagePanel.tsx");
-const directMessagesChrome = read(
-  "apps/web/src/controllers/useWebDirectMessagesChromeController.tsx",
-);
 const communityNav = read("shared/CommunityNav.tsx");
 const voiceInputButton = read("shared/VoiceInputButton.tsx");
 const mvpGuards = read(".github/workflows/mvp-guards.yml");
@@ -447,25 +443,17 @@ assert.match(
   );
 });
 [
-  /\.community-dm-inbox-row-unread\s*\{[\s\S]*?background:\s*var\(--accent-global-attention\);/,
   /\.community-rail-dot\s*\{[\s\S]*?background:\s*var\(--accent-global-attention\);/,
-  /\.mobile-bottom-rail-unread\s*\{[\s\S]*?background:\s*var\(--accent-global-attention\);[\s\S]*?color:\s*var\(--text-on-global-attention\);/,
   /\.mobile-bottom-rail-dot\s*\{[\s\S]*?background:\s*var\(--accent-global-attention\);/,
-  /\.direct-messages-unread-badge\s*\{[\s\S]*?background:\s*var\(--accent-global-attention\);[\s\S]*?color:\s*var\(--text-on-global-attention\);/,
 ].forEach((globalAttentionSelector) => {
   assert.match(
     baseCss,
     globalAttentionSelector,
-    "DM and outer-rail attention should share the red global-attention role",
+    "outer-rail attention should use the red global-attention role",
   );
 });
-assert.match(
-  directMessagesChrome,
-  /className="direct-messages-unread-badge"/,
-  "the DM trigger should use its exact semantic badge class",
-);
 assert.doesNotMatch(
-  `${baseThemeCss}\n${baseCss}\n${directMessagesChrome}`,
+  `${baseThemeCss}\n${baseCss}`,
   /accent-attention-fill|className="unread-badge"|\.unread-badge\s*\{/,
   "the redundant attention fill and generic unread badge aliases should stay deleted",
 );
@@ -659,7 +647,6 @@ assert.doesNotMatch(
 
 [
   communityChat,
-  directMessages,
   communityAgentComponent,
 ].forEach((component) => {
   assert.match(

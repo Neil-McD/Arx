@@ -43,9 +43,6 @@ const communityAgentDock = read("apps/web/src/components/WebCommunityAgentDock.t
 const communityAgentDockCss = read(
   "apps/web/src/components/WebCommunityAgentDock.css",
 );
-const directMessagesHost = read(
-  "apps/web/src/components/WebDirectMessagesHost.tsx",
-);
 const chatPanel = read("apps/web/src/components/WebCommunityChatPanel.tsx");
 const communityHost = read("apps/web/src/components/WebCommunityHost.tsx");
 const rosterPanel = read("apps/web/src/components/ChannelRosterPanel.tsx");
@@ -103,8 +100,8 @@ assert.doesNotMatch(
 );
 assert.match(
   app,
-  /canOpenDirectMessages: Boolean\(session\)/,
-  "Messages should only be enabled for an authenticated session",
+  /canOpenDirectMessages: Boolean\(siteMessages\.messagesUrl\)/,
+  "Messages (on the community's site) should be enabled only when there's a site to open",
 );
 assert.match(
   shared,
@@ -113,13 +110,13 @@ assert.match(
 );
 assert.match(
   app,
-  /communityAgentDockProps=\{\{[\s\S]*mobileShellActive: showMobileShell,[\s\S]*mobileRoot: showMobileShell && mobileRootPage === "agent"[\s\S]*directMessagesHostProps=\{\{[\s\S]*mobileRoot:[\s\S]*showMobileShell && mobileRootPage === "messages"/,
-  "AI and Messages should reuse their existing surfaces as persistent mobile roots",
+  /communityAgentDockProps=\{\{[\s\S]*mobileShellActive: showMobileShell,[\s\S]*mobileRoot: showMobileShell && mobileRootPage === "agent"/,
+  "AI should reuse its existing surface as a persistent mobile root",
 );
 assert.match(
   appCompositionRoot,
-  /<WebCommunityAgentDock[\s\S]*\{\.\.\.props\.communityAgentDockProps\}[\s\S]*<WebDirectMessagesHost \{\.\.\.props\.directMessagesHostProps\} \/>/,
-  "the composition root should mount both controlled persistent mobile-root surfaces",
+  /<WebCommunityAgentDock[\s\S]*\{\.\.\.props\.communityAgentDockProps\}/,
+  "the composition root should mount the controlled persistent mobile-root surface",
 );
 assert.doesNotMatch(
   app,
@@ -134,8 +131,8 @@ assert.doesNotMatch(
 
 assert.match(
   controller,
-  /if \(nextRootPage === "messages"\) \{[\s\S]*if \(!params\.canOpenDirectMessages\) return;[\s\S]*params\.setMobileRootPage\("messages"\);[\s\S]*params\.openDirectMessages\(\);/,
-  "Messages should be a first-class mobile root backed by the existing DM host",
+  /if \(nextRootPage === "messages"\) \{[\s\S]*if \(params\.canOpenDirectMessages\) params\.openDirectMessages\(\);[\s\S]*return;/,
+  "Messages opens the community site's Messages (Studio has no inbox)",
 );
 assert.match(
   controller,
@@ -164,13 +161,13 @@ assert.doesNotMatch(
 );
 assert.match(
   controller,
-  /const prepareMobileGlobalNavigation = useCallback\(\(\) => \{[\s\S]*if \(params\.isThreadPageOpen\) params\.closeThreadPage\(\);[\s\S]*params\.closeDirectMessages\(\);[\s\S]*params\.setMobileOverlay\(null\);[\s\S]*params\.setMobileRootPage\("community"\);/,
-  "global navigation should atomically exit threads, DMs, and transient overlays before changing routes",
+  /const prepareMobileGlobalNavigation = useCallback\(\(\) => \{[\s\S]*if \(params\.isThreadPageOpen\) params\.closeThreadPage\(\);[\s\S]*params\.setMobileOverlay\(null\);[\s\S]*params\.setMobileRootPage\("community"\);/,
+  "global navigation should atomically exit threads and transient overlays before changing routes",
 );
 assert.match(
   controller,
-  /if \(params\.canOpenDirectMessages \|\| params\.mobileRootPage !== "messages"\) return;[\s\S]*params\.setMobileRootPage\("community"\);/,
-  "a lost session should fail closed from Messages back to Community",
+  /if \(params\.mobileRootPage === "messages"\) params\.setMobileRootPage\("community"\);/,
+  "Messages is never a Studio root: a stale one falls back to Community",
 );
 assert.doesNotMatch(
   controller,
@@ -288,7 +285,7 @@ assert.match(
 );
 assert.match(
   bottomRail,
-  /aria-label=\{[\s\S]*hasCommunityAttention \? "Community, updates available" : "Community"[\s\S]*\}[\s\S]*aria-label="Open Polynet AI"[\s\S]*: "Messages"/,
+  /aria-label=\{[\s\S]*hasCommunityAttention \? "Community, updates available" : "Community"[\s\S]*\}[\s\S]*aria-label="Open Polynet AI"[\s\S]*aria-label="Messages"/,
   "the icon-only rail should retain accessible names for all three actions",
 );
 assert.doesNotMatch(
@@ -411,11 +408,6 @@ assert.match(
   /\.community-agent-dock\.mobile-root \{[\s\S]*var\(--mobile-bottom-rail-height\)[\s\S]*left: var\(--mobile-community-rail-width\);[\s\S]*\.community-agent-dock\.mobile-root \.community-agent-dock-panel \{[\s\S]*width: 100%;[\s\S]*height: 100%;[\s\S]*border-radius: var\(--community-shell-radius\);/,
   "the member-agent root should fit the canonical framed surface beside the rail",
 );
-assert.match(
-  directMessagesHost,
-  /mobileRoot\?: boolean;[\s\S]*if \(!isOpen \|\| props\.mobileRoot\) return;[\s\S]*web-direct-messages-host\$\{props\.mobileRoot \? " mobile-root" : ""\}/,
-  "DM root presentation should preserve the desktop host while disabling popover dismissal",
-);
 assert.match(rosterPanel, /useWebMemberDirectorySearch/, "right panel preserves community-wide search");
 
 assert.match(
@@ -481,7 +473,7 @@ assert.match(
 );
 assert.match(
   indexCss,
-  /\.mobile-bottom-rail-action\.active \{[\s\S]*color: var\(--text-primary\);[\s\S]*\.mobile-bottom-rail-action\.active \.mobile-bottom-rail-icon-wrap > svg \{[\s\S]*fill: currentColor;[\s\S]*\.mobile-bottom-rail-community-cutout \{[\s\S]*position: absolute;[\s\S]*display: none;[\s\S]*\.mobile-bottom-rail-community\.active \.mobile-bottom-rail-icon-wrap > \.mobile-bottom-rail-community-cutout \{[\s\S]*display: block;[\s\S]*fill: none;[\s\S]*\.mobile-bottom-rail-community\.active \.mobile-bottom-rail-community-cutout > path:first-child \{[\s\S]*fill: var\(--mobile-bottom-rail-surface\);[\s\S]*stroke: var\(--mobile-bottom-rail-surface\);[\s\S]*\.mobile-bottom-rail-unread \{[\s\S]*background: var\(--accent-global-attention\);[\s\S]*\.mobile-bottom-rail-dot \{[\s\S]*border: 2px solid var\(--mobile-bottom-rail-surface\);[\s\S]*background: var\(--accent-global-attention\);/,
+  /\.mobile-bottom-rail-action\.active \{[\s\S]*color: var\(--text-primary\);[\s\S]*\.mobile-bottom-rail-action\.active \.mobile-bottom-rail-icon-wrap > svg \{[\s\S]*fill: currentColor;[\s\S]*\.mobile-bottom-rail-community-cutout \{[\s\S]*position: absolute;[\s\S]*display: none;[\s\S]*\.mobile-bottom-rail-community\.active \.mobile-bottom-rail-icon-wrap > \.mobile-bottom-rail-community-cutout \{[\s\S]*display: block;[\s\S]*fill: none;[\s\S]*\.mobile-bottom-rail-community\.active \.mobile-bottom-rail-community-cutout > path:first-child \{[\s\S]*fill: var\(--mobile-bottom-rail-surface\);[\s\S]*stroke: var\(--mobile-bottom-rail-surface\);[\s\S]*\.mobile-bottom-rail-dot \{[\s\S]*border: 2px solid var\(--mobile-bottom-rail-surface\);[\s\S]*background: var\(--accent-global-attention\);/,
   "routine selection should use solid white icon forms while outer-context attention uses the global red role",
 );
 assert.match(
@@ -599,11 +591,6 @@ assert.match(
   baseCss,
   /\.app-root\.mobile-shell \.community-chat \.mobile-thread-page-open \.community-interaction-main \{[\s\S]*display: none;[\s\S]*\.community-interaction-thread-page \{[\s\S]*width: 100%;[\s\S]*\.community-interaction-thread-page \.community-interaction-drawer-scroll \{[\s\S]*flex: 1 1 auto;[\s\S]*\.community-interaction-thread-page \.community-interaction-drawer-composer \{[\s\S]*var\(--mobile-bottom-rail-height\)/,
   "the thread page should fill mobile width, own the scroll region, and anchor its composer above the rail",
-);
-assert.match(
-  baseCss,
-  /\.web-direct-messages-host\.mobile-root \.community-dm-panel \{[\s\S]*var\(--mobile-bottom-rail-height\)[\s\S]*left: var\(--mobile-community-rail-width\);[\s\S]*border-radius: var\(--community-shell-radius\);/,
-  "Messages root should fit the canonical framed surface beside the rail",
 );
 assert.doesNotMatch(
   indexCss + baseCss,

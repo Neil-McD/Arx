@@ -166,7 +166,8 @@ export const getCommunityAppAccountInternal = internalQuery({
         communities: studio("/"),
         discover: studio("/discover"),
         settings: studio("/settings/profile"),
-        messages: studio("/?dm=inbox"),
+        // Messages is only on a site's private pages (Studio has no inbox).
+        messages: null,
       },
     };
   },

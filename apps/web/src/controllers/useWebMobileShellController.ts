@@ -21,7 +21,6 @@ export function useWebMobileShellController(params: {
   showMobileShell: boolean;
   showMobileSettingsShell: boolean;
   canOpenDirectMessages: boolean;
-  isDirectMessagesOpen: boolean;
   isThreadPageOpen: boolean;
   setMobileOverlay: Dispatch<SetStateAction<MobileOverlay | null>>;
   setMobileRootPage: Dispatch<SetStateAction<MobileRootPage>>;
@@ -31,8 +30,8 @@ export function useWebMobileShellController(params: {
     opts?: { pushSnapshot?: boolean },
   ) => void;
   handleOpenDiscover: () => void;
+  // Messages is on the community's site: this leaves Studio for it.
   openDirectMessages: () => void;
-  closeDirectMessages: () => void;
   closeThreadPage: () => void;
   openCommunityCreateFlow: () => void;
 }) {
@@ -60,11 +59,9 @@ export function useWebMobileShellController(params: {
 
   const prepareMobileGlobalNavigation = useCallback(() => {
     if (params.isThreadPageOpen) params.closeThreadPage();
-    params.closeDirectMessages();
     params.setMobileOverlay(null);
     params.setMobileRootPage("community");
   }, [
-    params.closeDirectMessages,
     params.closeThreadPage,
     params.isThreadPageOpen,
     params.setMobileOverlay,
@@ -76,15 +73,11 @@ export function useWebMobileShellController(params: {
       if (params.isThreadPageOpen) params.closeThreadPage();
 
       if (nextRootPage === "messages") {
-        if (!params.canOpenDirectMessages) return;
-        params.setMobileOverlay(null);
-        params.setMobileRootPage("messages");
-        params.openDirectMessages();
+        if (params.canOpenDirectMessages) params.openDirectMessages();
         return;
       }
 
       if (nextRootPage === "agent") {
-        params.closeDirectMessages();
         params.setMobileOverlay(null);
         params.setMobileRootPage("agent");
         return;
@@ -95,7 +88,6 @@ export function useWebMobileShellController(params: {
     },
     [
       params.canOpenDirectMessages,
-      params.closeDirectMessages,
       params.closeThreadPage,
       params.isThreadPageOpen,
       params.openDirectMessages,
@@ -133,45 +125,15 @@ export function useWebMobileShellController(params: {
   }, [params.canViewMembers, params.mobileOverlay, params.setMobileOverlay]);
 
   useEffect(() => {
-    if (params.canOpenDirectMessages || params.mobileRootPage !== "messages") return;
-    if (params.isDirectMessagesOpen) params.closeDirectMessages();
-    params.setMobileRootPage("community");
-  }, [
-    params.canOpenDirectMessages,
-    params.closeDirectMessages,
-    params.isDirectMessagesOpen,
-    params.mobileRootPage,
-    params.setMobileRootPage,
-  ]);
-
-  useEffect(() => {
     if (!params.showMobileSettingsShell) {
       params.setMobileSettingsView("detail");
     }
   }, [params.setMobileSettingsView, params.showMobileSettingsShell]);
 
+  // Messages is never a Studio page now (it's on the site): back to the community.
   useEffect(() => {
-    if (!params.showMobileShell) return;
-    if (params.isDirectMessagesOpen && params.canOpenDirectMessages) {
-      if (params.mobileOverlay) params.setMobileOverlay(null);
-      if (params.mobileRootPage !== "messages") {
-        params.setMobileRootPage("messages");
-      }
-      return;
-    }
-    if (params.mobileRootPage === "messages") {
-      params.setMobileRootPage("community");
-    }
-  }, [
-    params.canOpenDirectMessages,
-    params.closeDirectMessages,
-    params.isDirectMessagesOpen,
-    params.mobileOverlay,
-    params.mobileRootPage,
-    params.setMobileOverlay,
-    params.setMobileRootPage,
-    params.showMobileShell,
-  ]);
+    if (params.mobileRootPage === "messages") params.setMobileRootPage("community");
+  }, [params.mobileRootPage, params.setMobileRootPage]);
 
   return {
     handleSelectMobileRootPage,

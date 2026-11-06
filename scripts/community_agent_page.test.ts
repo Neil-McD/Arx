@@ -29,13 +29,11 @@ test("suppressed or unavailable Agent page keeps the primary content host visibl
   }
 });
 
-test("DM overlays preserve the desktop Agent page while retaining mobile and voice suppression", () => {
+test("the Agent dock hides only off a community surface or behind onboarding (Studio has no DM overlay)", () => {
   const controller = readFileSync(new URL("../apps/web/src/controllers/useWebCommunityAgentSurfaceController.ts", import.meta.url), "utf8");
-  const app = readFileSync(new URL("../apps/web/src/App.tsx", import.meta.url), "utf8");
-  expect(controller).toContain('(params.pageMode || !params.isDirectMessagesOpen)');
-  expect(controller).toContain('(!isVisible || params.isDirectMessagesOpen || scopeChanged)');
-  expect(app).toMatch(/useWebCommunityAgentSurfaceController\(\{\s*pageMode: !showMobileShell/);
-  expect(controller).toContain('!params.isOnboardingModalOpen');
+  expect(controller).not.toMatch(/isDirectMessagesOpen|pageMode/);
+  expect(controller).toContain("(!isVisible || scopeChanged)");
+  expect(controller).toContain("!params.isOnboardingModalOpen");
 });
 
 test("floating controls and their exclusive styles stay retired", () => {

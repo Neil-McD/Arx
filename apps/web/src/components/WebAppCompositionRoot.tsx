@@ -4,14 +4,9 @@ import {
   type Ref,
 } from "react";
 
-import type { AuthSession } from "../auth";
 import { communityAgentSessionKey, showCommunityAgentWorkspace } from "../../../../shared/communityAgentPageState";
 import type { WebAppMainSurfaceHostProps } from "./WebAppMainSurfaceHost";
 import { WebAppMainSurfaceFallback } from "./WebAppMainSurfaceFallback";
-import type {
-  WebDirectMessagesHostProps,
-} from "./WebDirectMessagesHost";
-import { WebDirectMessagesHost } from "./WebDirectMessagesHost";
 import { WebGlobalOverlayHost } from "./WebGlobalOverlayHost";
 import type { WebGlobalOverlayHostProps } from "./WebGlobalOverlayHost";
 import type {
@@ -37,7 +32,6 @@ export function WebAppCompositionRoot(props: {
   globalOverlayHostProps: WebGlobalOverlayHostProps;
   communityAgentDockRef: Ref<WebCommunityAgentDockHandle>;
   communityAgentDockProps: WebCommunityAgentDockProps;
-  directMessagesHostProps: WebDirectMessagesHostProps<AuthSession>;
   mainSurfaceHostProps: WebAppMainSurfaceHostProps;
   shellChromeHostProps: Omit<
     WebShellChromeHostProps,
@@ -56,7 +50,6 @@ export function WebAppCompositionRoot(props: {
           {...props.communityAgentDockProps}
         />
       </Suspense>}
-      <WebDirectMessagesHost {...props.directMessagesHostProps} />
     </>
   );
   const mainSurface = (

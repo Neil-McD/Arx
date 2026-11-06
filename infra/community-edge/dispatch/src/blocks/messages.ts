@@ -18,8 +18,7 @@
 // Kept as text (a String.raw literal: no backticks or template placeholders
 // inside) so the edge serves exactly what is reviewed.
 
-// Studio's wording for each refusal (WebDirectMessagesHost's
-// friendlyDirectMessageSendError), plus the twin's own.
+// The wording for each refusal (Polynet's only inbox since Nov 6).
 export const MESSAGES_TEXT: Record<string, string> = {
   dm_rate_limited: "You're sending messages too quickly. Give it a minute and try again.",
   dm_conversation_access_required: "You can't message this person right now.",

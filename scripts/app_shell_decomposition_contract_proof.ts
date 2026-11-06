@@ -92,7 +92,6 @@ assert.match(
 for (const directPresentationOwner of [
   "WebShellChromeHost",
   "WebGlobalOverlayHost",
-  "WebDirectMessagesHost",
 ] as const) {
   assert.doesNotMatch(
     app,
@@ -162,8 +161,6 @@ const boundedFeatureOwners = [
   "apps/web/src/controllers/useWebCommunityProfileHydrationController.ts",
   "apps/web/src/controllers/useWebCommunityTabAccessGuard.ts",
   "apps/web/src/controllers/useWebCommunityVoiceController.ts",
-  "apps/web/src/controllers/useWebDirectMessageDeepLinkLifecycle.ts",
-  "apps/web/src/controllers/useWebDirectMessagesChromeController.tsx",
   "apps/web/src/controllers/useWebDiscoverActivationController.ts",
   "apps/web/src/controllers/useWebJoinedCommunityEntryAction.ts",
   "apps/web/src/controllers/useWebCommunityAgentSurfaceController.ts",

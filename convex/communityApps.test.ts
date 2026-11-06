@@ -629,7 +629,7 @@ test("the shell shows the member's account: who they are, their role here, and l
     community: { slug: "apps-community", name: "apps-community", role: "member", studio_url: "https://studio.example.com/c/apps-community/settings/community" },
     links: {
       communities: "https://studio.example.com/", discover: "https://studio.example.com/discover",
-      settings: "https://studio.example.com/settings/profile", messages: "https://studio.example.com/?dm=inbox",
+      settings: "https://studio.example.com/settings/profile", messages: null,
     },
   } } });
   expect(JSON.stringify(account)).not.toContain("apps-other");

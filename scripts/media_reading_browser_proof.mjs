@@ -12,33 +12,7 @@ const { createServer } = await import(webRequire.resolve("vite"));
 const outputArg = process.argv.find((arg) => arg.startsWith("--output="));
 const out = outputArg ? fileURLToPath(new URL(outputArg.slice(9) + "/", `file://${root}`)) : await mkdtemp(join(tmpdir(), "polynet-media-reading-"));
 await mkdir(out, { recursive: true });
-// Mock only the data boundary. The real host, focus policy, subscriptions' consumers,
-// panel, reader and document event handlers all execute in the browser.
-const gatewayFixture = `
-import { conversation, messages } from "/@fs/${root}scripts/fixtures/mediaReadingData.ts";
-export const createCloudDirectMessagesLiveClient = () => ({ close() {} });
-export const listCloudDirectConversations = async () => [conversation];
-export const listCloudNetworkPeople = async () => ({ people: [], source_community_count: 0 });
-export const listCloudDirectMessagePeerPresence = async () => [];
-export const subscribeCloudDirectConversations = ({ onUpdate }) => { onUpdate([conversation]); return () => {}; };
-export const subscribeCloudDirectMessages = ({ onUpdate }) => { onUpdate(messages); return () => {}; };
-export const subscribeCloudDirectTyping = ({ onUpdate }) => { onUpdate({ users: [], total_count: 0 }); return () => {}; };
-export const markCloudDirectConversationRead = async () => {};
-export const clearCloudDirectTyping = async () => {};
-const forbidden = () => { throw new Error("Unexpected write in media fixture"); };
-export const setCloudDirectTyping = forbidden;
-export const ensureCloudDirectConversationFromCommunity = forbidden;
-export const sendCloudDirectMessage = forbidden;
-export const sendCloudDirectMessageToUser = forbidden;
-export const blockCloudDirectMessageUser = forbidden;
-export const unblockCloudDirectMessageUser = forbidden;
-export const setCloudDirectConversationMuted = forbidden;
-export const uploadCloudDirectMessageAttachmentFile = forbidden;
-export const uploadCloudDirectMessageAttachmentFileForUser = forbidden;
-`;
-const server = await createServer({ configFile: join(root, "apps/web/vite.config.ts"), root: join(root, "apps/web"), server: { port: process.argv.includes("--serve") ? 5186 : 0, host: "127.0.0.1", strictPort: process.argv.includes("--serve") }, plugins: [{ name: "media-review-fixture", enforce: "pre", load(id) {
-  if (id === join(root, "shared/cloudDirectMessagesGateway.ts")) return gatewayFixture;
-}, configureServer(server) { server.middlewares.use(async (req, res, next) => {
+const server = await createServer({ configFile: join(root, "apps/web/vite.config.ts"), root: join(root, "apps/web"), server: { port: process.argv.includes("--serve") ? 5186 : 0, host: "127.0.0.1", strictPort: process.argv.includes("--serve") }, plugins: [{ name: "media-review-fixture", enforce: "pre", configureServer(server) { server.middlewares.use(async (req, res, next) => {
   if (!req.url?.startsWith("/__media-review")) return next();
   res.setHeader("Content-Type", "text/html");
   res.end(await server.transformIndexHtml(req.url, `<!doctype html><html><head><meta name="viewport" content="width=device-width, initial-scale=1"></head><body><div id="root"></div><script type="module" src="/@fs/${root}scripts/fixtures/mediaReading.tsx"></script></body></html>`));
@@ -159,45 +133,6 @@ try {
   await page.locator(".textLayer").getByText("Welcome to the community", { exact: true }).waitFor();
   await page.screenshot({ path: join(out, "pdf-mobile.png") });
   await page.keyboard.press("Escape");
-  await page.goto(`${baseUrl}?mode=dm-mobile`);
-  await page.locator(".message-pdf-card").first().waitFor();
-  assert.equal(await page.locator(".message-pdf-card").count(), 2);
-  await page.getByRole("button", { name: "guide.pdf PDF document · Read", exact: true }).click();
-  await page.locator(".textLayer").getByText("Welcome to the community", { exact: true }).waitFor();
-  await page.screenshot({ path: join(out, "dm-pdf-mobile.png") });
-  await page.keyboard.press("Escape");
-  await page.screenshot({ path: join(out, "dm-mobile.png"), fullPage: true });
-  await page.setViewportSize({ width: 1200, height: 1000 });
-  await page.goto(`${baseUrl}?mode=dm`);
-  const dmCard = page.getByRole("button", { name: "guide.pdf PDF document · Read", exact: true });
-  await dmCard.click();
-  await page.locator(".textLayer").getByText("Welcome to the community", { exact: true }).waitFor();
-  await page.getByRole("button", { name: "Next", exact: true }).click();
-  assert.equal(await page.locator(".community-dm-panel").count(), 1, "Reader controls must not close the real DM host");
-  await page.locator(".textLayer").getByText("Your first useful contribution", { exact: true }).waitFor();
-  // Next is now disabled on the final page. Browsers can move focus to body;
-  // Escape must still belong to the open modal, regardless of its event target.
-  await page.keyboard.press("Escape");
-  assert.equal(await page.locator(".community-dm-panel").count(), 1, "Escape after last-page Next must not close the DM host");
-  await dmCard.click();
-  await page.locator(".textLayer").getByText("Welcome to the community", { exact: true }).waitFor();
-  const dmDownload = page.waitForEvent("download");
-  await page.getByRole("button", { name: "Download", exact: true }).click();
-  await dmDownload;
-  await page.screenshot({ path: join(out, "dm-pdf-desktop.png") });
-  assert.equal(await page.getByRole("link", { name: "Open original", exact: true }).evaluate((element) => getComputedStyle(element).color),
-    await page.locator("dialog[open]").evaluate((element) => getComputedStyle(element).color), "Reader link uses its own surface contrast, not the message bubble's link color");
-  await page.keyboard.press("Escape");
-  assert.equal(await page.locator("dialog[open]").count(), 0);
-  assert.equal(await page.locator(".community-dm-panel").count(), 1, "Escape must close only the reader");
-  assert(await dmCard.evaluate((element) => element === document.activeElement), "Focus returns to document card");
-  await page.keyboard.press("Escape");
-  assert.equal(await page.locator(".web-direct-messages-host").count(), 0, "Next Escape closes the DM host normally");
-  await page.getByRole("button", { name: "Open conversation", exact: true }).click();
-  await page.locator(".web-direct-messages-host").waitFor({ state: "attached" });
-  await page.getByRole("button", { name: "Outside conversation", exact: true }).click();
-  assert.equal(await page.locator(".web-direct-messages-host").count(), 0, "Outside click still dismisses the DM host");
-
   for (const width of [320, 390, 768, 1200]) {
     for (const theme of ["light", "dark"]) {
       await page.setViewportSize({ width, height: 900 });
@@ -213,21 +148,9 @@ try {
     }
   }
   await page.setViewportSize({ width: 320, height: 900 });
-  await page.goto(`${baseUrl}?mode=dm-mobile`);
-  await page.locator(".community-dm-panel-message.is-own .chat-media-grid").waitFor();
-  const imageGrid = page.locator(".community-dm-panel-message.is-own .chat-media-grid");
-  assert.equal(await imageGrid.locator(".chat-media-item").count(), 5);
-  assert((await imageGrid.boundingBox()).width > 168, "Sent image group uses message width");
-  assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), "DM does not overflow at 320");
-  const dmFrames = await page.locator(".deferred-youtube:not(.is-too-narrow)").evaluateAll((els) => els.map((el) => ({ width: el.clientWidth, height: el.clientHeight })));
-  assert(dmFrames.every((r) => r.width >= 200 && r.height >= 200), "Narrow DM preserves YouTube minimum size");
-  assert(await page.locator(".deferred-youtube.is-too-narrow a").count() > 0, "Too-narrow DM offers native YouTube link");
-  const panelBox = await page.locator(".community-dm-panel").boundingBox();
-  assert(panelBox.x >= 0 && panelBox.x + panelBox.width <= 320, "Real mobile DM host fits screen");
-  const gridBox = await imageGrid.boundingBox();
-  assert(gridBox.x >= panelBox.x && gridBox.x + gridBox.width <= panelBox.x + panelBox.width, "Image grid is not clipped by host");
-  await page.screenshot({ path: join(out, "dm-320.png") });
-  await page.getByRole("button", { name: "guide.pdf PDF document · Read", exact: true }).click();
+  await page.goto(baseUrl);
+  await page.locator(".deferred-youtube iframe").first().waitFor();
+  await page.getByRole("button", { name: "Community welcome guide.pdf PDF document · Read" }).click();
   await page.locator(".textLayer").getByText("Welcome to the community", { exact: true }).waitFor();
   for (let i = 0; i < 5; i++) await page.getByRole("button", { name: "Zoom in", exact: true }).click();
   assert.equal(await page.locator(".message-pdf-zoom-level").innerText(), "4×");
@@ -263,7 +186,7 @@ try {
   assert.equal(new URL(await resource.locator("iframe").getAttribute("src")).searchParams.get("start"), "12");
   await page.screenshot({ path: join(out, "shared-surfaces.png"), fullPage: true });
   assert.deepEqual(errors, []);
-  console.log(JSON.stringify({ success: true, screenshots: out, checks: "desktop/mobile media grid, five images, native YouTube layout and deferred stable playback, lazy PDF loading, pages and scroll, zoom, selectable text, download, error/timeout retry, close cancellation and reopen, real DM host reader ownership, Escape, focus restoration and outside dismissal" }));
+  console.log(JSON.stringify({ success: true, screenshots: out, checks: "desktop/mobile media grid, five images, native YouTube layout and deferred stable playback, lazy PDF loading, pages and scroll, zoom, selectable text, download, error/timeout retry, close cancellation and reopen, Escape, and 4× zoom at 320px" }));
 } catch (error) {
   console.error({ errors, body: (await page.locator("body").innerText()).slice(0, 3000), screenshots: out });
   await page.screenshot({ path: join(out, "failure.png"), fullPage: true });

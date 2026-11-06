@@ -12,10 +12,6 @@ export function WebMobileBottomRail({
 
   const activeRoot = communityShell.mobileRootPage;
   const hasCommunityRail = communityShell.showMobileGlobalShell;
-  const unreadDisplay =
-    communityShell.directMessagesUnreadCount > 99
-      ? "99+"
-      : String(communityShell.directMessagesUnreadCount);
   const hasCommunityAttention = Boolean(
     communityShell.activeCommunity?.id &&
     communityShell.communityRailAttentionById[
@@ -62,23 +58,16 @@ export function WebMobileBottomRail({
           </span>
         </button>
 
+        {/* Messages is on the community's site (Studio has no inbox). */}
         <button
           type="button"
-          className={`mobile-bottom-rail-action mobile-bottom-rail-messages${activeRoot === "messages" ? " active" : ""}`}
-          aria-current={activeRoot === "messages" ? "page" : undefined}
-          aria-label={
-            communityShell.directMessagesUnreadCount > 0
-              ? `Messages, ${unreadDisplay} unread`
-              : "Messages"
-          }
+          className="mobile-bottom-rail-action mobile-bottom-rail-messages"
+          aria-label="Messages"
           disabled={!communityShell.canOpenDirectMessages}
           onClick={() => communityShell.onSelectMobileRootPage("messages")}
         >
           <span className="mobile-bottom-rail-icon-wrap">
             <MessageCircle aria-hidden="true" />
-            {communityShell.directMessagesUnreadCount > 0 ? (
-              <span className="mobile-bottom-rail-unread">{unreadDisplay}</span>
-            ) : null}
           </span>
         </button>
       </div>

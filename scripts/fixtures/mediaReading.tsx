@@ -1,7 +1,6 @@
 import React, { useState } from "react";
 import { createRoot } from "react-dom/client";
 import { InteractionContent, InteractionAttachments } from "../../apps/web/src/components/communityInteractionFeed";
-import { WebDirectMessagesHost } from "../../apps/web/src/components/WebDirectMessagesHost";
 import { WebCommunityResourceViewerContent } from "../../apps/web/src/components/WebCommunityResourceViewerContent";
 import { CommunityPinnedRootSurface } from "../../apps/web/src/components/CommunityPinnedRootSurface";
 import { communityInteractionRootHasRichContent } from "../../apps/web/src/components/WebCommunityInteractionProjection";
@@ -10,20 +9,6 @@ import "../../apps/web/src/index.css";
 
 import { pdf, text, images } from "./mediaReadingData";
 const mode = new URLSearchParams(location.search).get("mode");
-const session = { access_token: "local-fixture-only", user: { id: "me" } };
-const openConversationRequest = { requestId: 1, conversationId: "review" };
-function DirectMessageReview() {
-  const [open, setOpen] = useState(true);
-  return <div className="dm-review">
-    <button className="direct-messages-topbar-button" onClick={() => setOpen(true)}>Open conversation</button>
-    <button className="outside-dm">Outside conversation</button>
-    <output aria-label="Conversation state">{open ? "Open" : "Closed"}</output>
-    <WebDirectMessagesHost isOpen={open} mobileRoot={mode === "dm-mobile"} openRequest={null}
-      openConversationRequest={openConversationRequest} session={session} sessionUserId="me"
-      getInitials={() => "CB"} getAvatarColor={() => "#555"} renderTextWithLinks={renderTextWithLinks}
-      onClose={() => setOpen(false)} />
-  </div>;
-}
 document.documentElement.dataset.theme = new URLSearchParams(location.search).get("theme") || "dark";
 createRoot(document.getElementById("root")!).render(<>
   <style>{`
@@ -34,7 +19,7 @@ createRoot(document.getElementById("root")!).render(<>
     .review h2 {font-size:14px; color:#aaa; margin:0 0 16px;} .review > p {color:#aaa;}
     .review .community-interaction-body {white-space:normal;}
   `}</style>
-  {mode === "surfaces" ? <SurfaceReview /> : mode === "performance" ? <PerformanceReview /> : mode?.startsWith("dm") ? <DirectMessageReview /> : <main className="review">
+  {mode === "surfaces" ? <SurfaceReview /> : mode === "performance" ? <PerformanceReview /> : <main className="review">
     <h1>Community media</h1><p>Local review · actual message components · fixture content</p>
     <article><h2>Two YouTube links in one message</h2><InteractionContent text={text} renderTextWithLinks={renderTextWithLinks} /></article>
     <article><h2>Five images in one message</h2><InteractionAttachments attachments={images} /></article>

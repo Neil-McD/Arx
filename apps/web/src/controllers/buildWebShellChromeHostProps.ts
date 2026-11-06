@@ -73,7 +73,6 @@ export function buildWebShellChromeHostProps(params: {
   handleSelectCommunityTabFromMobile: (tab: WebShellChromeHostProps["communityShell"]["communityTab"]) => void;
   onCopyCommunityJoinLink: WebShellChromeHostProps["communityShell"]["onCopyCommunityJoinLink"];
   canOpenDirectMessages: boolean;
-  directMessagesUnreadCount: number;
   handleOpenDiscover: () => void;
   openMobileCreateCommunity: () => void;
   openCommunityCreateFlow: () => void;
@@ -238,7 +237,6 @@ export function buildWebShellChromeHostProps(params: {
       onCopyCommunityJoinLink: params.onCopyCommunityJoinLink,
       memberNextStep: params.memberNextStep,
       canOpenDirectMessages: params.canOpenDirectMessages,
-      directMessagesUnreadCount: params.directMessagesUnreadCount,
       onOpenDiscover: () => {
         if (params.showMobileGlobalShell) params.prepareMobileGlobalNavigation();
         params.handleOpenDiscover();

@@ -67,7 +67,6 @@ const uiOnlyIntervalFiles = [
   "apps/web/src/components/ChannelRosterPanel.tsx",
   "apps/web/src/components/RuntimeLiveTimeline.tsx",
   "shared/useCommunityTypingPresence.ts",
-  "shared/useDirectMessageTypingPresence.ts",
 ] as const;
 const costBearingIntervalFiles = [
   "apps/web/src/controllers/useWebActiveCommunityShellController.ts",

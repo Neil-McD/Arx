@@ -29,6 +29,9 @@ export type WebCommunityRecord = {
   updated_at: string;
   branding_revision?: number | null;
   visual_identity?: CommunityVisualIdentity | null;
+  // Its own site, and Messages on its private pages (Polynet's one inbox).
+  site_url?: string | null;
+  messages_url?: string | null;
 };
 
 export type WebPublicCommunityRecord = {

@@ -78,7 +78,6 @@ export function WebRouteAccessHold(props: {
       canViewActiveCommunityAnalytics: false,
       isLoadingCommunityAccess: true,
       canOpenDirectMessages: false,
-      directMessagesUnreadCount: 0,
       communities: [],
       railCommunities: [],
       communityRailAttentionById: {},

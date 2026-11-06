@@ -6,8 +6,6 @@ function read(relativePath: string): string {
 }
 
 const chatPanel = read("apps/web/src/components/WebCommunityChatPanel.tsx");
-const dmHost = read("apps/web/src/components/WebDirectMessagesHost.tsx");
-const dmPanel = read("apps/web/src/components/WebDirectMessagePanel.tsx");
 
 assert.match(
   chatPanel,
@@ -60,50 +58,5 @@ assert.match(
   "replying to a drawer reply must use the same safe drawer focus path",
 );
 
-assert.match(
-  dmHost,
-  /const DIRECT_MESSAGE_COMPOSER_FOCUS_MEDIA_QUERY = "\$?\(min-width: 901px\)"/,
-  "DM composer autofocus must be desktop-gated",
-);
-assert.match(
-  dmHost,
-  /function isDirectMessageComposerEditableElement\(element: Element \| null\): boolean/,
-  "DM focus policy must explicitly detect editable targets",
-);
-assert.match(
-  dmHost,
-  /function shouldPreserveDirectMessageComposerFocus\(activeElement: Element \| null, input: HTMLTextAreaElement\): boolean[\s\S]*isDirectMessageComposerEditableElement\(activeElement\)[\s\S]*\[role='dialog'\]:not\(\.community-dm-panel\)[\s\S]*\.community-dm-recipient-search/,
-  "DM focus policy must preserve other dialogs and the recipient search view",
-);
-assert.match(
-  dmHost,
-  /const focusDirectMessageInput = useCallback\(\(options\?: \{ force\?: boolean \}\) => \{[\s\S]*input\.focus\(\{ preventScroll: true \}\);[\s\S]*input\.setSelectionRange\(end, end\);/,
-  "DM composer focus must use preventScroll and restore the caret",
-);
-assert.match(
-  dmHost,
-  /window\.requestAnimationFrame\(\(\) => \{[\s\S]*!options\?\.force[\s\S]*shouldPreserveDirectMessageComposerFocus\(activeElement, input\)[\s\S]*activeElement !== input[\s\S]*return;/,
-  "DM composer focus must re-check active focus inside the frame before moving the caret",
-);
-assert.match(
-  dmHost,
-  /const lastDirectMessageFocusConversationRef = useRef<string \| null>\(null\)/,
-  "DM focus policy must remember the focused conversation to avoid a render-time focus loop",
-);
-assert.match(
-  dmHost,
-  /useEffect\(\(\) => \{[\s\S]*!isOpen \|\| !activeConversationId[\s\S]*lastDirectMessageFocusConversationRef\.current = null[\s\S]*lastDirectMessageFocusConversationRef\.current === activeConversationId[\s\S]*focusDirectMessageInput\(\{ force: true \}\);[\s\S]*\}, \[activeConversationId, focusDirectMessageInput, isOpen\]\);/,
-  "DM conversation open and switch transitions must focus the DM composer",
-);
-assert.match(
-  dmHost,
-  /setDirectMessagePanel\(\(previous\) =>[\s\S]*input: "",[\s\S]*attachments: \[\],[\s\S]*window\.setTimeout\(\(\) => \{[\s\S]*focusDirectMessageInput\(\);[\s\S]*\}, 0\);/,
-  "DM successful send must return focus to the DM composer",
-);
-assert.match(
-  dmPanel,
-  /ref=\{\(node\) => \{[\s\S]*if \(props\.inputRef\) props\.inputRef\.current = node;/,
-  "DM conversation panel must expose the composer textarea ref to the host focus policy",
-);
 
 console.log("community_composer_focus_policy_proof: ok");

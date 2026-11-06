@@ -28,18 +28,33 @@ function readMessageSnippet(contentJson: unknown): string {
 }
 
 // Read-only suppression stack + payload build; the action enqueues on pass.
-// A conversation begun in a community with a site opens on that community's
-// private pages, for a recipient still in it (Messages there is members only);
-// any other opens Studio's inbox, on this environment's own app.
+// Messages lives on community sites' private pages (members only), and every
+// one of them shows the recipient's whole inbox. The link opens the
+// conversation on the site of the community it began in, while the recipient
+// is still in it; else on another site they're in; else Polynet's home.
+const DM_LINK_COMMUNITY_SCAN = 25;
+async function messagesPageFor(ctx: any, community: Record<string, any> | null, recipientUserId: unknown, path: string): Promise<string | null> {
+  if (!community) return null;
+  const stillIn = await requireCommunityChatAccess({ ctx, communityId: community._id, userId: recipientUserId as any }).then(() => true, () => false);
+  return stillIn ? await communityPrivatePageUrl(ctx, community as any, path) : null;
+}
+
 export async function directMessageLink(ctx: any, community: Record<string, any> | null, conversationId: string, recipientUserId: unknown): Promise<string> {
-  const stillIn = community
-    ? await requireCommunityChatAccess({ ctx, communityId: community._id, userId: recipientUserId as any }).then(() => true, () => false)
-    : false;
-  const onSite = stillIn ? await communityPrivatePageUrl(ctx, community as any, `/messages/${encodeURIComponent(conversationId)}`) : null;
-  if (onSite) return onSite;
+  const path = `/messages/${encodeURIComponent(conversationId)}`;
+  const begunIn = await messagesPageFor(ctx, community, recipientUserId, path);
+  if (begunIn) return begunIn;
+  const memberships = await ctx.db
+    .query("communityMemberships")
+    .withIndex("by_user", (q: any) => q.eq("userId", recipientUserId))
+    .take(DM_LINK_COMMUNITY_SCAN);
+  for (const membership of memberships) {
+    if (community && String(membership.communityId) === String(community._id)) continue;
+    const other = await messagesPageFor(ctx, await ctx.db.get(membership.communityId), recipientUserId, path);
+    if (other) return other;
+  }
   let origin = "https://www.polynet.ai";
   try { origin = readCanonicalPublicAppOrigin(); } catch { /* the production app, as before */ }
-  return `${origin.replace(/\/+$/, "")}/?dm=${encodeURIComponent(conversationId)}`;
+  return `${origin.replace(/\/+$/, "")}/`;
 }
 
 export const evaluateDirectMessageEmailInternal = internalQuery({

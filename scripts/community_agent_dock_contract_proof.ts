@@ -908,7 +908,7 @@ assert.doesNotMatch(
 );
 assert.match(
   communityAgentSurfaceController,
-  /const isVisible =[\s\S]*params\.isAuthenticated[\s\S]*params\.publicRouteKind === "app"[\s\S]*params\.activePage === "community"[\s\S]*params\.hasResolvedCommunities[\s\S]*Boolean\(surfaceContext\)[\s\S]*!params\.isDirectMessagesOpen[\s\S]*!params\.isOnboardingModalOpen/,
+  /const isVisible =[\s\S]*params\.isAuthenticated[\s\S]*params\.publicRouteKind === "app"[\s\S]*params\.activePage === "community"[\s\S]*params\.hasResolvedCommunities[\s\S]*Boolean\(surfaceContext\)[\s\S]*!params\.isOnboardingModalOpen/,
   "the dock must appear only inside an authenticated resolved community surface",
 );
 

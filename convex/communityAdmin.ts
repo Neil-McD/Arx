@@ -1,5 +1,5 @@
 import { action, internalAction, internalMutation, internalQuery, mutation, query } from "./_generated/server";
-import { communitySiteUrl } from "./communitySites";
+import { communityPrivatePageUrl, communitySiteUrl } from "./communitySites";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
@@ -841,8 +841,10 @@ export const listCommunityMemberships = query({
         created_at: toIsoString(community.createdAt),
         branding_revision: community.brandingRevision ?? community.updatedAt,
         visual_identity: buildCommunityVisualIdentity(community, branding),
-        // Its own site, where members live (null where it has none).
+        // Its own site, where members live (null where it has none), and
+        // Messages on its private pages: Polynet's one inbox (Studio has none).
         site_url: await communitySiteUrl(ctx, community),
+        messages_url: await communityPrivatePageUrl(ctx, community, "/messages"),
       };
       return selectMode === "minimal"
         ? base

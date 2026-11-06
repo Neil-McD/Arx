@@ -96,7 +96,6 @@ export type WebCommunityShellProps = {
   onSelectCommunityTabFromMobile: (tab: CommunityTab) => void;
   onCopyCommunityJoinLink: (joinUrl: string) => Promise<void> | void;
   canOpenDirectMessages: boolean;
-  directMessagesUnreadCount: number;
   onOpenDiscover: () => void;
   onOpenMobileCreateCommunity: () => void;
   communities: CommunityLike[];

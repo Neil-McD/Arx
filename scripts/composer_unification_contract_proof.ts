@@ -17,16 +17,6 @@ assert.match(
 );
 assert.match(
   baseCss,
-  /\.community-dm-panel-composer \{[\s\S]*background: var\(--composer-surface\);/,
-  "DMs should preserve their canonical composer surface",
-);
-assert.match(
-  baseCss,
-  /\.community-dm-panel-composer \{[^}]*align-items: flex-end;/,
-  "DM composer controls should remain bottom-aligned as the input grows",
-);
-assert.match(
-  baseCss,
   /\.community-chat \.community-interaction-main-composer \.chat-input-bar \{[^}]*align-items: stretch;/,
   "community composer shell should stretch its stacked regions",
 );
@@ -135,13 +125,8 @@ assert.match(
 );
 assert.doesNotMatch(
   baseCss,
-  /(?:\.community-member-chat \.chat-input-bar|\.community-dm-panel-composer):focus-within/,
+  /\.community-member-chat \.chat-input-bar:focus-within/,
   "member communication composer shells should not change when focused",
-);
-assert.match(
-  baseCss,
-  /\.community-dm-composer-float::before \{[\s\S]*z-index: -1;[\s\S]*height: calc\(100% \+ 32px\);[\s\S]*linear-gradient\([\s\S]*var\(--web-context-panel-surface\) 100%/,
-  "DM content should fade into the context-panel surface behind a static composer layer",
 );
 
 assert.match(
