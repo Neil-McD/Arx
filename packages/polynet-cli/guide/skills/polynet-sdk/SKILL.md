@@ -44,8 +44,8 @@ if (!session.signed_in) {
 ```
 
 - Signed out, only `session()` (`community_name`, `community_one_liner`,
-  `community_about`, `member_count`, `join_url`), `community()` and
-  `discover()` work. Everything else throws `sign_in_required`.
+  `community_about`, `member_count`, `join_url`), `community()`,
+  `discover()` and `publicPage()` work. Everything else throws `sign_in_required`.
 - `join_url` is the community's own join page (`/join`, on the site's private
   twin, in your frame): free, approval or paid. Someone on Polynet who isn't a
   member yet and signs in lands there too, and comes back signed in once
@@ -184,6 +184,7 @@ offer `askAgent: true` in channels.
 | Courses and lessons | `resources()`, `resources(course.path)`, `readText(lesson)` (a long lesson is read whole); `lesson.done` is true once the member marked it, and `lessonDone(lesson, done)` marks or unmarks it (only they see it); link to `/learn/<course segment>/<lesson segment>` (the last part of each `path`, without `.md`) |
 | What the community knows | `knowledge(query?)` |
 | Other communities (public) | `discover()`: `[{ slug, name, one_liner, avatar_url, member_count, url, has_site, here }]`; `url` is that community's own site, or its Polynet page when `has_site` is false; `here` is this one |
+| The public (sales) page | `publicPage()`: `{ community: { name, one_liner, about, member_count, avatar_url, banner_url, host, courses, page }, gate, available, action_label, plans: [{ billing_period, label, price }], join_url }`, signed out too; `community.page` holds the owner's sections (`for_you`, `not_for`, `first_steps`, `results`, `founder_bio`, `video`, `guarantee`, `objections`): show only the filled ones, and link every Join to `join_url` |
 | Members | `members()`, `profile(member)`, `online()` (includes the signed-in member) |
 | Older posts | `feed(slug, { cursor: posts.cursor })`; `cursor` is null at the start |
 
