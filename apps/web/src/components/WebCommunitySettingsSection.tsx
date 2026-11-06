@@ -412,7 +412,7 @@ function CommunityBrandingSettingsSection({
               }}
             />
             <span className="create-community-hint">
-              {`Your site: ${communitySiteAddress(state.communitySettingsSlug, activeCommunity)}`}
+              {`Your public page: ${communitySiteAddress(state.communitySettingsSlug, activeCommunity)}`}
             </span>
           </label>
         </div>

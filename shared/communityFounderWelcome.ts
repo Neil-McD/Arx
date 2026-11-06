@@ -21,6 +21,6 @@ export function buildCommunityFounderWelcomeText(args: {
     `Hi ${founderName} — welcome to ${communityName}.`,
     "I’m your community concierge.",
     `Reply to me in this thread using Reply, or mention @${communityName} anywhere in chat whenever you want my help.`,
-    "To get going: invite people with Invite people (it shares your community's own site), set a price and connect Stripe in Settings when you want paid members, and build your own site whenever you like (ask your AI, or run npx @polynet/cli deploy).",
+    "To get going: invite people with Invite people (it shares your community's public page), set a price and connect Stripe in Settings when you want paid members, and build your own site whenever you like (ask your AI, or run npx @polynet/cli deploy).",
   ].join(" ");
 }
