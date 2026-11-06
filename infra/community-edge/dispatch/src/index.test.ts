@@ -1316,9 +1316,11 @@ test("twin messages: the refusals read as Studio words them", async () => {
 const JOIN_ANSWER = {
   ok: true, signed_in: true,
   community: { slug: "apps-community", name: "Apps Club", one_liner: "We build.", about: "About us.", member_count: 12,
-    avatar_url: "https://live.example.convex.cloud/api/storage/av", owner_email: "owner@example.com" },
+    avatar_url: "https://live.example.convex.cloud/api/storage/av", owner_email: "owner@example.com",
+    banner_url: "https://live.example.convex.cloud/api/storage/bn", host: { name: "Ana", email: "ana@example.com" },
+    courses: [{ title: "Basics", summary: "Start here.", lessons: 3, module_id: "m1" }, { title: "Empty", summary: null, lessons: 0 }] },
   gate: "checkout", available: true, action_label: "Join $10/month",
-  plans: [{ billing_period: "monthly", name: "Monthly", label: "Join $10/month", price_id: "price_x" }, { billing_period: "weekly", label: "Join $1/week" }],
+  plans: [{ billing_period: "monthly", name: "Monthly", label: "Join $10/month", price: "$10", price_id: "price_x" }, { billing_period: "weekly", label: "Join $1/week" }],
   viewer: { state: "visitor", can_request_again: false, reapply_at: null, setup_required: false, user_id: "u1" },
   terms_url: "https://polynet.example.com/terms",
   // Anything but Polynet's own legal pages never reaches the page.
@@ -1326,8 +1328,9 @@ const JOIN_ANSWER = {
 };
 const SHAPED_JOIN = {
   ok: true, signed_in: true,
-  community: { name: "Apps Club", one_liner: "We build.", about: "About us.", member_count: 12, avatar_url: "https://live.example.convex.cloud/api/storage/av" },
-  gate: "checkout", available: true, action_label: "Join $10/month", plans: [{ billing_period: "monthly", name: "Monthly", label: "Join $10/month" }],
+  community: { name: "Apps Club", one_liner: "We build.", about: "About us.", member_count: 12, avatar_url: "https://live.example.convex.cloud/api/storage/av",
+    banner_url: "https://live.example.convex.cloud/api/storage/bn", host: { name: "Ana" }, courses: [{ title: "Basics", summary: "Start here.", lessons: 3 }] },
+  gate: "checkout", available: true, action_label: "Join $10/month", plans: [{ billing_period: "monthly", name: "Monthly", label: "Join $10/month", price: "$10" }],
   terms_url: "https://polynet.example.com/terms", privacy_url: null,
   viewer: { state: "visitor", can_request_again: false, reapply_at: null, setup_required: false },
   // Setting up comes back: Studio's setup is told which community (by slug only).
@@ -1393,9 +1396,9 @@ test("twin join: the read works signed out; signed in it carries the twin's sess
   const signedIn = await edge.fetch(settingsCall(TWIN, "/__polynet/me/join", "GET"), e);
   expect(await signedIn.json()).toEqual(SHAPED_JOIN);
   expect(backend.mock.calls[1][1]?.headers).toMatchObject({ Origin: TWIN, Authorization: `Bearer ${TOKEN}` });
-  // An avatar anywhere but Polynet's storage isn't shown; an unknown state reads as signed out.
-  backend.mockImplementation(async () => Response.json({ ...JOIN_ANSWER, community: { ...JOIN_ANSWER.community, avatar_url: "https://tracker.example.com/a.png" }, viewer: { state: "superuser" } }));
-  expect(await (await edge.fetch(at(TWIN, "/__polynet/me/join"), e)).json()).toMatchObject({ community: { avatar_url: null }, viewer: null });
+  // An avatar or banner anywhere but Polynet's storage isn't shown; an unknown state reads as signed out.
+  backend.mockImplementation(async () => Response.json({ ...JOIN_ANSWER, community: { ...JOIN_ANSWER.community, avatar_url: "https://tracker.example.com/a.png", banner_url: "https://tracker.example.com/b.png" }, viewer: { state: "superuser" } }));
+  expect(await (await edge.fetch(at(TWIN, "/__polynet/me/join"), e)).json()).toMatchObject({ community: { avatar_url: null, banner_url: null }, viewer: null });
   // A session the backend refuses reads as signed out, and is cleared: the pitch still shows.
   const calls: Array<string | null> = [];
   vi.stubGlobal("fetch", vi.fn(async (_url: string, init?: RequestInit) => {

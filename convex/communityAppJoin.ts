@@ -27,6 +27,8 @@ import { readCanonicalPublicAppOrigin } from "./publicAppUrl";
 import { PRIVACY_AI_DATA_POLICY_DOCUMENT, TERMS_OF_SERVICE_DOCUMENT, legalDocumentPublicUrl } from "../shared/legalDocuments";
 import { attachCommunityCheckoutToUser, sha256Hex } from "./communityCheckoutBuyer";
 import { resolveCheckoutSessionFinalization } from "./communityCommerce";
+import { communityResourceIsMemberVisiblePage, communityResourceModuleIsMemberLive } from "../shared/communityResourceVisibility";
+import { formatPlanPrice } from "../shared/accountCommerce";
 
 // Join on a community site's private twin (<slug>--me<suffix>.<sites domain>/join).
 // The page shows what Studio's public funnel (/c/<slug>) shows and decides, from
@@ -36,6 +38,58 @@ import { resolveCheckoutSessionFinalization } from "./communityCommerce";
 // read-only public projection; every action needs a session minted on the twin
 // (httpCommunityApps enforces that). Access to a paid community comes only from
 // the provider's verified webhook, never from Stripe's redirect back.
+
+// The doorstep's "What you get": the courses members see (live ones, in the
+// founder's order), each with its lesson count, bounded so a signed-out read
+// stays cheap. A course with more lessons than the scan shows the scan's count.
+const DOORSTEP_COURSES = 6;
+const DOORSTEP_MODULE_SCAN = 50;
+const DOORSTEP_LESSON_SCAN = 200;
+
+// A course's first paragraph as plain text, for one line under its title.
+export function doorstepSummary(markdown: unknown): string | null {
+  const first = String(markdown ?? "").split(/\n\s*\n/).map((part) => part.trim()).find(Boolean) ?? "";
+  const plain = first
+    .replace(/!\[[^\]]*\]\([^)]*\)/g, "")
+    .replace(/\[([^\]]*)\]\([^)]*\)/g, "$1")
+    .replace(/^[#>\s-]+/gm, "")
+    .replace(/[*_`~]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!plain) return null;
+  if (plain.length <= 180) return plain;
+  const cut = plain.slice(0, 180);
+  return `${cut.slice(0, Math.max(cut.lastIndexOf(" "), 120)).trim()}…`;
+}
+
+async function doorstepCourses(ctx: any, communityId: any) {
+  const modules = await ctx.db.query("communityResourceModules")
+    .withIndex("by_community_sortOrder", (q: any) => q.eq("communityId", communityId))
+    .take(DOORSTEP_MODULE_SCAN);
+  const courses: Array<{ title: string; summary: string | null; lessons: number }> = [];
+  for (const module of modules) {
+    if (courses.length >= DOORSTEP_COURSES) break;
+    if (!communityResourceModuleIsMemberLive(module)) continue;
+    const live = new Set([String(module._id)]);
+    const rows = await ctx.db.query("communityResources")
+      .withIndex("by_community_module", (q: any) => q.eq("communityId", communityId).eq("moduleId", module._id))
+      .take(DOORSTEP_LESSON_SCAN);
+    const lessons = rows.filter((row: any) => communityResourceIsMemberVisiblePage(row, live)).length;
+    if (!lessons) continue;
+    courses.push({ title: String(module.name ?? "").trim().slice(0, 120) || "Course", summary: doorstepSummary(module.descriptionMd), lessons });
+  }
+  return courses;
+}
+
+// Who runs it, by the name they go by.
+async function doorstepHost(ctx: any, ownerId: any): Promise<{ name: string } | null> {
+  if (!ownerId) return null;
+  const user: any = await ctx.db.get(ownerId);
+  if (!user) return null;
+  const detail: any = await ctx.db.query("userProfileDetails").withIndex("by_user", (q: any) => q.eq("userId", ownerId)).first();
+  const name = String(detail?.displayName ?? user.displayName ?? "").trim().slice(0, 80);
+  return name ? { name } : null;
+}
 
 export type CommunityAppJoinViewerState = "member" | "pending" | "denied" | "blocked" | "visitor";
 
@@ -89,7 +143,11 @@ export async function communityAppJoinProjection(ctx: any, community: CommunityL
     mode, plan: plans[0] ?? null, approvalPending: admission.approvalPending,
     approvalDenied: admission.approvalDenied, canRequestAgain: admission.canRequestAgain,
   });
-  const branding = await resolveCommunityBrandingFields(ctx, community);
+  const [branding, courses, host] = await Promise.all([
+    resolveCommunityBrandingFields(ctx, community),
+    doorstepCourses(ctx, community._id),
+    doorstepHost(ctx, (community as any).ownerId),
+  ]);
   const legalOrigin = (() => { try { return readCanonicalPublicAppOrigin(); } catch { return null; } })();
   const text = (value: unknown, max: number) => (typeof value === "string" && value.trim() ? value.trim().slice(0, max) : null);
   return {
@@ -100,6 +158,9 @@ export async function communityAppJoinProjection(ctx: any, community: CommunityL
       about: text((community as any).about, 4000),
       member_count: Math.max(0, Math.floor(Number((community as any).activeMemberCount) || 0)),
       avatar_url: branding.avatar_url ?? null,
+      banner_url: branding.banner_url ?? null,
+      host,
+      courses,
     },
     gate,
     available: builder.operational,
@@ -107,7 +168,9 @@ export async function communityAppJoinProjection(ctx: any, community: CommunityL
     // Only plans Studio would sell (a valid price); each with Studio's "Join $10/month".
     plans: plans.flatMap((plan) => {
       const view = buildCommunityFunnelPrimaryActionView({ mode: "checkout", plan });
-      return view.hasValidPaidPlan ? [{ billing_period: plan.billing_period, name: plan.name, label: view.label }] : [];
+      // The price on its own ("$29"), for the doorstep's join card.
+      const price = formatPlanPrice({ ...plan, billing_period: null });
+      return view.hasValidPaidPlan ? [{ billing_period: plan.billing_period, name: plan.name, label: view.label, price }] : [];
     }),
     viewer,
     // Join's click accepts these (acceptCommunityJoin records it); the page links them.

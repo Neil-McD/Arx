@@ -248,15 +248,15 @@ function messagesBackend(path: string, body: Record<string, any>): Response {
 const CHECKOUT = `chk_${"c".repeat(32)}`;
 const joining = {
   gate: "join", viewer: null as null | Record<string, unknown>, label: "Join free", plans: [] as any[],
-  calls: [] as Array<[string, any]>, checkoutUrl: "", finishPending: 0, about: "" as string,
+  calls: [] as Array<[string, any]>, checkoutUrl: "", finishPending: 0, about: "" as string, memberCount: 4,
 };
 const SHORT_ABOUT = "We climb at sunrise.\n\nAll levels <b>welcome</b>.";
 function resetJoin(gate = "join", state: string | null = "visitor", about = SHORT_ABOUT) {
   Object.assign(joining, {
-    about,
+    about, memberCount: 4,
     gate, label: gate === "checkout" ? "Join $10/month" : "Join free", calls: [], finishPending: 0, checkoutUrl: "",
     viewer: state ? { state, can_request_again: false, reapply_at: null, setup_required: false } : null,
-    plans: gate === "checkout" ? [{ billing_period: "monthly", name: "Monthly", label: "Join $10/month" }, { billing_period: "annual", name: "Annual", label: "Join $100/year" }] : [],
+    plans: gate === "checkout" ? [{ billing_period: "monthly", name: "Monthly", label: "Join $10/month", price: "$10" }, { billing_period: "annual", name: "Annual", label: "Join $100/year", price: "$100" }] : [],
   });
 }
 const GUEST_BUYER = `buyer_${"d".repeat(32)}`;
@@ -265,7 +265,8 @@ function joinBackend(path: string, auth: string | null, body: Record<string, any
   const projection = (signedIn: boolean) => ({
     ok: true, signed_in: signedIn,
     community: { slug: "sunrise-climbing-club", name: "Sunrise Climbing Club", one_liner: "Dawn sessions at the crag.", about: joining.about,
-      member_count: 4, avatar_url: null },
+      member_count: joining.memberCount, avatar_url: null, banner_url: null, host: { name: "Ana" },
+      courses: [{ title: "Lead climbing", summary: "Clip, fall, trust the rope.", lessons: 3 }] },
     gate: joining.gate, available: true, action_label: joining.label, plans: joining.plans, viewer: signedIn ? joining.viewer : null,
   });
   if (path === "/runtime/app/me/join") return Response.json(projection(Boolean(auth)));
@@ -533,16 +534,19 @@ for (const [engine, type] of ENGINES) {
       await expect.poll(() => personal.getAttribute("state")).toBe("signed-out");
       expect(await page.title()).toBe("Join · Sunrise Climbing Club");
       expect(await page.locator("polynet-page .pn-page-heading").textContent()).toBe("Join");
+      // The doorstep: the promise is the headline, the name and its host above it.
       expect(await personal.locator("[part=join-name]").textContent()).toBe("Sunrise Climbing Club");
+      expect(await personal.locator("[part=join-host]").textContent()).toBe(" · by Ana");
       expect(await personal.locator("[part=join-one-liner]").textContent()).toBe("Dawn sessions at the crag.");
-      expect(await personal.locator("[part=join-count]").textContent()).toBe("4 members");
+      // A small count makes people hesitate: it isn't shown until it helps.
+      expect(await personal.locator("[part=join-count]").count()).toBe(0);
+      expect(await personal.locator("[part=join-course]").allTextContents()).toEqual(["3Lead climbing · 3 lessonsClip, fall, trust the rope."]);
+      expect(await personal.locator("[part=join-signin]").textContent()).toBe("Sign in");
       // Text, never markup.
       expect(await personal.locator("[part=join-about] p").allTextContents()).toEqual(["We climb at sunrise.", "All levels <b>welcome</b>."]);
       expect(await personal.locator("[part=join-about] b").count()).toBe(0);
       const action = personal.locator("[part=join-action]");
       expect(await action.textContent()).toBe("Join free");
-      // A short description: no second Join button up top.
-      expect(await personal.locator("[part=join-jump]").count()).toBe(0);
       expect(await personal.locator("[part=gate-note]").textContent()).toBe("You'll sign in with Polynet first.");
       // The frame is the site's, styled by its own stylesheet; nothing of the site's runs.
       expect(await page.locator("header.chrome").evaluate((node) => getComputedStyle(node).borderBottomColor)).toBe("rgb(1, 2, 3)");
@@ -633,8 +637,10 @@ test("Join: a paid plan goes exactly where the backend's checkout said; back fro
     expect(await personal.locator("[part=plan]").allTextContents()).toEqual(["$10/month", "$100/year"]);
     const action = personal.locator("[part=join-action]");
     expect(await action.textContent()).toBe("Join $10/month");
+    expect(await personal.locator("[part=join-price]").textContent()).toBe("$10/ month");
     await personal.getByRole("radio", { name: "$100/year" }).check();
     expect(await action.textContent()).toBe("Join $100/year");
+    expect(await personal.locator("[part=join-price]").textContent()).toBe("$100/ year");
     await action.click();
     await expect.poll(() => hops.length).toBe(1);
     // The very address the backend returned, not one the page built.
@@ -1340,23 +1346,29 @@ test("Join requests: a moderator approves and denies on the twin; a paid communi
   }
 }, 60_000);
 
-// A long description: a Join button beside the name brings the gate into view.
+// The join card stays in reach: beside a long story on a wide screen (it stays
+// in view as the page scrolls), right under the promise on a phone; the count
+// shows once it helps.
 for (const [engine, type] of ENGINES) {
   const installed = engine === "chromium" || existsSync(type.executablePath());
-  test.runIf(installed)(`${engine}: a long description gets a Join button up top that brings the gate into view`, async () => {
+  test.runIf(installed)(`${engine}: a long description never pushes Join out of reach`, async () => {
     resetJoin("join", null, Array.from({ length: 12 }, (_, n) => `Paragraph ${n + 1}: ${"We climb at sunrise and talk about it after. ".repeat(4)}`).join("\n\n"));
+    joining.memberCount = 1200;
     const { browser, page } = await openTwin(type, "/join", null);
     try {
       const personal = page.locator("polynet-personal");
       await expect.poll(() => personal.getAttribute("state")).toBe("signed-out");
-      const jump = personal.locator("[part=join-jump]");
-      expect(await jump.textContent()).toBe("Join free");
+      expect(await personal.locator("[part=join-count]").textContent()).toBe("1,200 members");
       const inView = () => personal.locator("[part=join-action]").evaluate((node) => {
         const box = node.getBoundingClientRect();
         return box.top >= 0 && box.bottom <= window.innerHeight;
       });
-      expect(await inView()).toBe(false);
-      await jump.click();
+      await page.setViewportSize({ width: 1280, height: 800 });
+      expect(await inView()).toBe(true);
+      await personal.locator("[part=join-about] p").last().scrollIntoViewIfNeeded();
+      await expect.poll(inView).toBe(true);
+      await page.setViewportSize({ width: 390, height: 844 });
+      await page.evaluate(() => window.scrollTo(0, 0));
       await expect.poll(inView).toBe(true);
     } finally {
       await browser.close();

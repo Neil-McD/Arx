@@ -426,7 +426,11 @@ export const UI_CSS = "polynet-account:not(:defined), polynet-channels:not(:defi
     ":where(polynet-page .pn-page-chat > polynet-chat[state=signed-out]) { height: auto; }",
     // A reading measure for the pages of words.
     ":where(polynet-page .pn-page-events, polynet-page .pn-page-learn, polynet-page .pn-page-knowledge, polynet-page .pn-page-ask) { max-width: 46rem; }",
-    ":where(polynet-page .pn-page-messages, polynet-page .pn-page-settings, polynet-page .pn-page-join) { max-width: 46rem; }",
+    ":where(polynet-page .pn-page-messages, polynet-page .pn-page-settings) { max-width: 46rem; }",
+    // Join is the community's doorstep: wide enough for its card beside the story,
+    // and its promise is the heading people see ("Join" stays for screen readers).
+    ":where(polynet-page .pn-page-join) { max-width: 72rem; }",
+    ":where(polynet-page[page=join] .pn-page-header) { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }",
     // The private conversation scrolls inside, its box always in reach, like the chat.
     ":where(polynet-page .pn-page-ask > polynet-ask) { height: max(24rem, calc(100vh - 12rem)); height: max(24rem, calc(100dvh - 12rem)); }",
     ":where(polynet-page .pn-page-ask > polynet-ask[state=signed-out]) { height: auto; }",
