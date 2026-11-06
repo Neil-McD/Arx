@@ -230,17 +230,6 @@ export async function startCloudFounderSubscriptionCheckout<SessionT>(params: {
   return { checkout_url: checkoutUrl };
 }
 
-export async function startCloudPublicBuilderCheckout(): Promise<{ checkout_url: string }> {
-  const client = createConvexClient();
-  const payload = await client.action(
-    "founderBilling:startPublicBuilderCheckout" as any,
-    {},
-  ) as { checkout_url?: unknown } | null;
-  const checkoutUrl = nullableString(payload?.checkout_url);
-  if (!checkoutUrl) throw new Error("stripe_checkout_url_missing");
-  return { checkout_url: checkoutUrl };
-}
-
 export async function startCloudFounderBillingPortal<SessionT>(params: {
   session: SessionT;
   communityId?: string | null;

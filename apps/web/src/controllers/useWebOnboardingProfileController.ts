@@ -503,8 +503,7 @@ export function useWebOnboardingProfileController(params: {
       !params.session ||
       params.publicRouteKind !== "app" ||
       params.activePage !== "landing" ||
-      !isRootAppRoutePath(window.location.pathname || "/") ||
-      new URLSearchParams(window.location.search).has("builder_checkout")
+      !isRootAppRoutePath(window.location.pathname || "/")
     ) {
       return;
     }

@@ -62,9 +62,7 @@ export function useWebBuilderPurchaseFlowController(params: {
     draft?: CreateCommunityIntentDraft | null,
   ) => void;
   closeRequiredCreateCommunityModal: () => void;
-  openPurchasePrompt: () => void;
 }) {
-  const pendingDraftRef = useRef<CreateCommunityIntentDraft | null>(null);
 
   const openCommunityPurchaseFlow = useCallback<OpenCommunityCreate>((draft = null) => {
     // A plan bought first is attached to the community created next.
@@ -79,15 +77,6 @@ export function useWebBuilderPurchaseFlowController(params: {
     params.openRequiredCreateCommunityModal,
     params.openCreateCommunityModal,
   ]);
-
-  const clearPendingDraft = useCallback(() => {
-    pendingDraftRef.current = null;
-  }, []);
-  const consumePendingDraft = useCallback(() => {
-    const draft = pendingDraftRef.current;
-    pendingDraftRef.current = null;
-    return draft;
-  }, []);
 
   useEffect(() => {
     if (
@@ -124,7 +113,5 @@ export function useWebBuilderPurchaseFlowController(params: {
 
   return {
     openCommunityPurchaseFlow,
-    clearPendingDraft,
-    consumePendingDraft,
   };
 }

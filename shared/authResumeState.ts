@@ -20,10 +20,6 @@ export type PendingAuthIntent =
       payload: { draft: CreateCommunityIntentDraft | null };
     }
   | {
-      reason: "resume_builder_checkout";
-      payload: Record<string, never>;
-    }
-  | {
       reason: "try_polynet_free";
       payload: Record<string, never>;
     };
@@ -70,10 +66,6 @@ function normalizePendingAuthIntent(
         : normalizeCreateCommunityIntentDraft(payload.draft);
     if (payload.draft !== null && payload.draft !== undefined && !draft) return null;
     return { reason, payload: { draft } };
-  }
-
-  if (reason === "resume_builder_checkout") {
-    return { reason, payload: {} };
   }
 
   if (reason === "try_polynet_free") {

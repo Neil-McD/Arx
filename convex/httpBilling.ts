@@ -12,12 +12,6 @@ import { buildStripeConnectAccountSnapshot } from "./stripeConnectAccountCore";
 import { normalizeStripeCommunitySubscriptionStatus } from "./billingCore";
 import { requireCommunityProviderAccountMatch } from "./communityCommerceCore";
 import { calculateApplicationFeeRefundAllocation } from "./communityApplicationFeeRefundCore";
-import {
-  FOUNDER_CHECKOUT_RECOVERY_EMAIL_HASH_VERSION,
-  hashFounderCheckoutRecoveryEmail,
-  normalizeFounderCheckoutRecoveryEmail,
-} from "./founderCheckoutReceiptCore";
-import { enqueueFounderCheckoutRecoveryEmailInternal } from "./emailEvents";
 
 type HttpRouteMethod = "GET" | "POST" | "DELETE" | "OPTIONS" | "PUT" | "PATCH";
 
@@ -99,23 +93,6 @@ function readStripeLocalSessionIdFromCheckoutSession(
   const clientReferenceId = String(session.client_reference_id ?? "").trim();
   if (clientReferenceId) return clientReferenceId;
   return readStripeMetadataString(session.metadata, "local_session_id");
-}
-
-async function readFounderCheckoutRecoveryEmail(
-  session: Stripe.Checkout.Session,
-): Promise<string | null> {
-  const checkoutEmail = String(session.customer_details?.email ?? "").trim();
-  if (checkoutEmail) return normalizeFounderCheckoutRecoveryEmail(checkoutEmail);
-  if (session.customer && typeof session.customer !== "string") {
-    const expandedEmail = String((session.customer as Stripe.Customer).email ?? "").trim();
-    if (expandedEmail) return normalizeFounderCheckoutRecoveryEmail(expandedEmail);
-  }
-  const customerId = typeof session.customer === "string" ? session.customer : null;
-  if (!customerId) return null;
-  const customer = await getStripeClient().customers.retrieve(customerId);
-  if (customer.deleted) return null;
-  const customerEmail = String(customer.email ?? "").trim();
-  return customerEmail ? normalizeFounderCheckoutRecoveryEmail(customerEmail) : null;
 }
 
 function readStripeInvoiceSubscriptionId(invoice: Stripe.Invoice): string | null {
@@ -1005,14 +982,6 @@ export function registerRuntimeBillingRoutes(
                 }, "ignored");
               }
               const subscription = await getStripeClient().subscriptions.retrieve(subscriptionId);
-              const isAnonymousBuilderCheckout =
-                !founderCheckoutSession.ownerUserId;
-              const recoveryEmail = isAnonymousBuilderCheckout
-                ? await readFounderCheckoutRecoveryEmail(session)
-                : null;
-              const recoveryEmailHash = recoveryEmail
-                ? await hashFounderCheckoutRecoveryEmail(recoveryEmail)
-                : null;
               const providerPriceId = subscription.items.data[0]?.price?.id ?? null;
               const { cycleStartedAt, cycleEndsAt } = readStripeSubscriptionCycle(subscription);
               const result = await (ctx as any).runMutation(
@@ -1037,28 +1006,13 @@ export function registerRuntimeBillingRoutes(
                   cancelAtPeriodEnd: Boolean((subscription as any)?.cancel_at_period_end),
                   verifiedCheckoutPayment: true,
                   providerEventCreatedAt: eventCreatedAt,
-                  recoveryEmail,
-                  recoveryEmailHash,
-                  recoveryEmailHashVersion: recoveryEmailHash
-                    ? FOUNDER_CHECKOUT_RECOVERY_EMAIL_HASH_VERSION
-                    : null,
                 },
               );
-              const recoveryEmailResult =
-                result?.receiptStatus === "paid_unclaimed" && recoveryEmail
-                  ? await enqueueFounderCheckoutRecoveryEmailInternal({
-                      ctx,
-                      recipientEmail: recoveryEmail,
-                      sessionId: localSessionId,
-                      nowMs: eventCreatedAt,
-                    })
-                  : null;
               return processedResponse({
                 ok: true,
                 received: true,
                 event: event.type,
                 result,
-                recovery_email_enqueued: recoveryEmailResult?.ok === true,
               });
             }
           }

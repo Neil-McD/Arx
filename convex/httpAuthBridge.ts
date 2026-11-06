@@ -321,15 +321,6 @@ export function registerRuntimeAuthBridgeRoutes(args: RegisterRuntimeAuthBridgeR
         await ctx.runMutation(internal.communityCheckoutBuyer.attachPaidCheckoutsForVerifiedEmailInternal, {
           userId: actor.dbUserId, email: normalizedStored.user.email,
         });
-        await ctx.scheduler.runAfter(
-          0,
-          (internal as any).founderBilling.reconcilePaidBuilderPurchasesForOwnerInternal,
-          {
-            ownerUserId: actor.dbUserId,
-            verifiedEmail: normalizedStored.user.email,
-            nowMs: Date.now(),
-          },
-        );
       }
 
       const sessionId = buildSessionId();

@@ -24,8 +24,7 @@ function hasPendingRouteIntentParams(): boolean {
     return (
       url.searchParams.has("code") ||
       url.searchParams.has("error") ||
-      url.searchParams.has("app_oauth") ||
-      url.searchParams.has("builder_checkout")
+      url.searchParams.has("app_oauth")
     );
   } catch {
     return false;

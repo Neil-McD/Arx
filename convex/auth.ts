@@ -125,15 +125,6 @@ export const bootstrapActor = mutation({
       if (seededProfile.emailVerified && seededProfile.email) {
         // Paid for a community before signing in, with this email: it's theirs now.
         await attachPaidCheckoutsForVerifiedEmail(ctx, actor.dbUserId, seededProfile.email, nowMs);
-        await ctx.scheduler.runAfter(
-          0,
-          (internal as any).founderBilling.reconcilePaidBuilderPurchasesForOwnerInternal,
-          {
-            ownerUserId: actor.dbUserId,
-            verifiedEmail: seededProfile.email,
-            nowMs,
-          },
-        );
       }
       const canonicalTier = await getCanonicalTierByUserIdInternal(ctx as never, actor.dbUserId, nowMs);
       const effectiveTier = resolveEffectiveTier({ authState: args.authState, canonicalTier });

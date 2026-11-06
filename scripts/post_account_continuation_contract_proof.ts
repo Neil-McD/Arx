@@ -10,9 +10,6 @@ const onboardingPage = read("apps/web/src/components/WebOnboardingPage.tsx");
 const onboardingProfile = read(
   "apps/web/src/controllers/useWebOnboardingProfileController.ts",
 );
-const builderCheckout = read(
-  "apps/web/src/controllers/useWebPublicBuilderCheckoutController.ts",
-);
 const pendingIntent = read(
   "apps/web/src/controllers/useWebPendingAuthIntentController.ts",
 );
@@ -90,21 +87,6 @@ assert.match(
   "App must wire modal onboarding to canonical continuation",
 );
 
-assert.match(
-  builderCheckout,
-  /reason: "resume_builder_checkout"[\s\S]*storeAuthResumeState[\s\S]*navigateTo\("\/onboarding"\)/,
-  "an incomplete paid return must preserve Builder intent before account setup",
-);
-assert.doesNotMatch(
-  builderCheckout,
-  /finishOnboarding|completeAccountSetup/,
-  "Builder checkout must not own account completion",
-);
-assert.match(
-  pendingIntent,
-  /resume_builder_checkout: \(\) => params\.resumeBuilderCheckout\(\)/,
-  "the canonical pending-intent router must resume Builder fulfillment",
-);
 assert.match(
   pendingIntent,
   /if \(handled\) consumeAuthResumeStateIfCurrent\(resumeState\)/,

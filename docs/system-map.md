@@ -357,7 +357,7 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
 - **Does:** founder plan, paid memberships through Stripe Connect, the 2.9%
   application fee, refunds, payouts, usage and cost receipts.
 - **Code:** `founderBilling`, `founderPlanCore`, `founderPlanPricing`,
-  `founderCheckoutReceiptCore`, `communityBuilderAccessCore`, `billingCore`,
+  `communityBuilderAccessCore`, `billingCore`,
   `communityCommerce*`, `communityCheckoutBuyer` (who a paid join belongs to, and settling it), `creatorCommerce`, `stripe*`, `httpBilling`,
   `communityApplicationFeeRefundCore`, `founderPaidTool*`, `providerCostCore`,
   `voiceProviderCostAccounting`.
@@ -365,8 +365,9 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
 - Building a community is free: `startPublicBuilderCheckout` (the anonymous
   $79 Builder purchase) refuses since Nov 5, kept by name for cached pages.
   Its recovery path (`createPendingPublicBuilderCheckoutInternal`, the
-  recovery email, the email-hash receipt claim) is removed with the billing
-  redesign.
+  recovery email, `founderCheckoutReceiptCore` and the email-hash receipt
+  claim) was deleted Nov 6. A founder checkout now needs a signed-in owner;
+  one without an owner fails (`founder_subscription_owner_missing`).
 - **Tables:** `founderSubscriptions`, `founderUsageCycles`, `checkoutSessions`,
   `purchaseClaims`, `userStripeCustomers`, `communityStripeCustomers`,
   `userStripeConnectAccounts`, `communityPricePoints`, `communitySubscriptions`,

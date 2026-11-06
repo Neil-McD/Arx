@@ -37,7 +37,6 @@ import {
 import { useWebAccountSetupSurfaceController } from "./controllers/useWebAccountSetupSurfaceController";
 import { useWebFounderBillingController } from "./controllers/useWebFounderBillingController";
 import { useWebEmailPreferencesController } from "./controllers/useWebEmailPreferencesController";
-import { useWebPublicBuilderCheckoutController } from "./controllers/useWebPublicBuilderCheckoutController";
 import { useWebCommunityVoiceController } from "./controllers/useWebCommunityVoiceController";
 import { useWebCommunityProfileHydrationController } from "./controllers/useWebCommunityProfileHydrationController";
 import { useWebCommunityDirectoryState } from "./controllers/useWebCommunityDirectoryState";
@@ -1273,21 +1272,8 @@ export default function App() {
     maxCreateImageDataUrlChars: WEB_IMAGE_DATA_URL_CHAR_LIMIT,
     createUnauthenticatedErrorMessage: "Sign in to create a community.",
   });
-  const publicBuilderCheckout = useWebPublicBuilderCheckoutController({
-    session,
-    getSession: () => sessionRef.current,
-    isAuthBootstrapComplete,
-    resumeEpoch: appActivity.resumeEpoch,
-    requireSignIn,
-    refreshAccountSetupStatus,
-    refreshBilling: founderBilling.refresh,
-    navigateTo,
-    showToast: showAppToastMessage,
-  });
   const {
     openCommunityPurchaseFlow: openNewCommunityPurchaseFlow,
-    clearPendingDraft: clearPendingBuilderCreateDraft,
-    consumePendingDraft: consumePendingBuilderCreateDraft,
   } = useWebBuilderPurchaseFlowController({
     pendingSubscriptionId: pendingBuilderSetupSubscription?.subscription_id ?? null,
     sessionUserId: session?.user.id ?? null,
@@ -1299,14 +1285,12 @@ export default function App() {
     openCreateCommunityModal: communityUi.openCreateCommunityModal,
     openRequiredCreateCommunityModal: communityUi.openRequiredCreateCommunityModal,
     closeRequiredCreateCommunityModal: communityUi.closeRequiredCreateCommunityModal,
-    openPurchasePrompt: publicBuilderCheckout.openPurchasePrompt,
   });
   const { resumePendingAuthIntent } =
     useWebPendingAuthIntentController({
       session,
       showToast: showAppToastMessage,
       openCreateCommunity: openNewCommunityPurchaseFlow,
-      resumeBuilderCheckout: publicBuilderCheckout.prepareCommunityCreation,
       routeTryPolynetFree,
     });
   onboardingProfile.actionsRef.current = {
@@ -2180,27 +2164,6 @@ export default function App() {
       onClose: builderOffer.close,
       onConfirm: builderOffer.confirm,
     },
-    builderPurchaseProps: {
-      isOpen: publicBuilderCheckout.isPurchasePromptOpen,
-      accessMode: operatorComplimentaryAccess
-        ? "operator_included"
-        : "purchase",
-      status: publicBuilderCheckout.status,
-      error: publicBuilderCheckout.error,
-      onClose: () => {
-        clearPendingBuilderCreateDraft();
-        publicBuilderCheckout.closePurchasePrompt();
-      },
-      onConfirm: () => {
-        if (operatorComplimentaryAccess) {
-          const draft = consumePendingBuilderCreateDraft();
-          publicBuilderCheckout.closePurchasePrompt();
-          communityUi.openCreateCommunityModal(draft);
-          return;
-        }
-        void publicBuilderCheckout.startPurchase();
-      },
-    },
     builderKnowledgeSetupProps: pendingBuilderKnowledgeCommunity && session
       ? {
           community: pendingBuilderKnowledgeCommunity,
@@ -2240,8 +2203,6 @@ export default function App() {
           requireSignIn({ reason: "create_community", payload: { draft: null } });
         }
       },
-      builderPurchaseStatus: publicBuilderCheckout.status,
-      builderPurchaseError: publicBuilderCheckout.error,
     },
     onboardingPageProps: {
       accountSetupStatus: effectiveAccountSetupStatus,
