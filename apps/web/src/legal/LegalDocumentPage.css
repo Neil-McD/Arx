@@ -1,5 +1,9 @@
+/* The app's shell styles stop the window itself from scrolling, so this page
+   scrolls its own viewport-sized box. */
 .legal-page {
-  min-height: 100vh;
+  height: 100vh;
+  height: 100dvh;
+  overflow-y: auto;
   background: var(--bg-app, #0b0b0c);
   color: var(--text-primary, #f4f4f5);
   padding: 48px 16px 96px;
@@ -29,4 +33,16 @@
   margin: 0 0 32px;
   opacity: 0.65;
   font-size: 0.875rem;
+}
+
+/* The reader the consent modal uses, at full length on its own page. */
+.legal-page .polynet-onboarding-legal-reader {
+  height: auto;
+  overflow: visible;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font-size: 15px;
+  line-height: 1.65;
 }
