@@ -52,6 +52,7 @@ import {
 
 const modules = import.meta.glob([
   "./communityApps.ts",
+  "./starterProfile.ts",
   "./communityNotes.ts",
   "./memberWriteRateLimit.ts",
   "./communitySites.ts",
@@ -1287,7 +1288,9 @@ test("twin join: anyone reads the pitch and the gate signed out, decided exactly
   await f.t.run((c) => c.db.patch(f.ids.communityId, { name: "Apps Club", oneLiner: "We build.", about: "About us." } as any));
   expect(await f.read()).toEqual({ status: 200, body: { ok: true, signed_in: false,
     community: { slug: "apps-community", name: "Apps Club", one_liner: "We build.", about: "About us.", member_count: 2, avatar_url: null },
-    gate: "join", available: true, action_label: "Join free", plans: [], viewer: null } });
+    gate: "join", available: true, action_label: "Join free", plans: [], viewer: null,
+    terms_url: "https://github.com/Neil-McD/Arx/blob/main/docs/legal/terms-of-service-v4.md",
+    privacy_url: "https://github.com/Neil-McD/Arx/blob/main/docs/legal/privacy-ai-data-policy-v1.md" } });
   for (const entryPolicy of ["open", "approval", "paid_subscription"]) {
     await f.policy(entryPolicy);
     const funnel = await f.t.query(api.communityPublic.resolvePublicFunnelBySlug, { communitySlug: "apps-community" }) as any;

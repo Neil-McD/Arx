@@ -10,6 +10,7 @@ import { PLATFORM_LEGAL_DOCUMENTS } from "../shared/legalDocuments";
 import schema from "./schema";
 
 const modules = import.meta.glob([
+  "./starterProfile.ts",
   "./communityPublic.ts",
   "./communityActivity.ts",
   "./communityAdmin.ts",
@@ -131,53 +132,50 @@ async function createFixture(t: ReturnType<typeof convexTest>) {
   });
 }
 
-test("incomplete accounts cannot join or resolve a community destination", async () => {
+test("a fresh account joins with no setup form: Join accepts the terms and fills the profile", async () => {
   vi.stubEnv("ARX_PUBLIC_APP_URL", "https://polynet.test");
   const t = convexTest(schema, modules);
   const fixture = await createFixture(t);
-  const incompleteSubject = "community-access-incomplete";
-  const incompleteUserId = await t.run(async (ctx) =>
+  const freshSubject = "community-access-fresh";
+  const freshUserId = await t.run(async (ctx) =>
     await ctx.db.insert("users", {
-      authSubject: incompleteSubject,
-      displayName: "Incomplete member",
-      handle: "community-access-incomplete",
-      normalizedHandle: "community-access-incomplete",
+      authSubject: freshSubject,
+      email: "fresh.person@example.com",
+      displayName: "Fresh Person",
+      avatarUrl: "https://lh3.googleusercontent.com/fresh",
       createdAt: 1_750_000_000_000,
       updatedAt: 1_750_000_000_000,
     }),
   );
-  const asIncompleteMember = t.withIdentity({ subject: incompleteSubject });
-
-  await expect(
-    asIncompleteMember.mutation(api.communityPublic.joinPublicCommunityBySlug, {
-      communitySlug: "access-lifecycle-open",
-    }),
-  ).rejects.toThrow("account_setup_required");
+  // Not a member yet, so nothing to enter.
   await expect(
     t.query(
       (internal as any).memberEntryDestination.resolveMemberEntryDestinationInternal,
-      {
-        userId: incompleteUserId,
-        communityId: fixture.openCommunityId,
-      },
+      { userId: freshUserId, communityId: fixture.openCommunityId },
     ),
   ).rejects.toThrow("account_setup_required");
 
-  const admissionRows = await t.run(async (ctx) => ({
-    memberships: await ctx.db
-      .query("communityMemberships")
-      .withIndex("by_community_user", (q) =>
-        q.eq("communityId", fixture.openCommunityId).eq("userId", incompleteUserId),
-      )
-      .collect(),
-    joinRequests: await ctx.db
-      .query("communityJoinRequests")
-      .withIndex("by_community_user", (q) =>
-        q.eq("communityId", fixture.openCommunityId).eq("userId", incompleteUserId),
-      )
-      .collect(),
+  await expect(
+    t.withIdentity({ subject: freshSubject }).mutation(api.communityPublic.joinPublicCommunityBySlug, {
+      communitySlug: "access-lifecycle-open",
+    }),
+  ).resolves.toMatchObject({ outcome: "joined" });
+
+  const after = await t.run(async (ctx) => ({
+    user: await ctx.db.get(freshUserId),
+    detail: await (await ctx.db.query("userProfileDetails").collect()).find((row: any) => row.userId === freshUserId),
+    legal: (await ctx.db.query("legalAcceptances").collect())
+      .filter((row: any) => row.userId === freshUserId).map((row: any) => [row.documentKey, row.source]),
   }));
-  expect(admissionRows).toEqual({ memberships: [], joinRequests: [] });
+  expect(after.user).toMatchObject({ handle: "fresh-person", normalizedHandle: "fresh-person" });
+  expect(after.detail).toMatchObject({ displayName: "Fresh Person", avatarUrl: "https://lh3.googleusercontent.com/fresh" });
+  expect(after.legal.sort()).toEqual([["privacy_ai_data_policy", "community_join"], ["terms_of_service", "community_join"]]);
+  await expect(
+    t.query(
+      (internal as any).memberEntryDestination.resolveMemberEntryDestinationInternal,
+      { userId: freshUserId, communityId: fixture.openCommunityId },
+    ),
+  ).resolves.toMatchObject({ page: "community" });
 });
 
 function createPlatformOperationTestContext(actor: {

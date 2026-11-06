@@ -5,7 +5,7 @@ import {
   storeAuthResumeState,
   type PendingAuthIntentInput,
 } from "../../../../shared/authResumeState";
-import type { AccountSetupResolution } from "../../../../shared/accountSetup";
+import { accountSetupBlocksJoining, type AccountSetupResolution } from "../../../../shared/accountSetup";
 import { resolveAuthSubject } from "../../../../shared/authSession";
 import { toCanonicalCommunityVisibility } from "../../../../shared/communityVisibility";
 
@@ -223,7 +223,9 @@ export function useWebPublicFunnelActions<
         current.setPublicJoinError(accountSetup.error);
         return false;
       }
-      if (!accountSetup.accountSetup.completed) {
+      // Joining accepts the terms and fills the profile itself; only an account
+      // missing something else still sets up first.
+      if (accountSetupBlocksJoining(accountSetup.accountSetup)) {
         storePendingPublicJoin(trimmedSlug || trimmedId);
         storeAuthResumeState({
           intent: {

@@ -785,6 +785,11 @@ async function proxyMine(request: Request, url: URL, env: Env, place: Place, rou
   return json(200, { ok: true, ...shaped });
 }
 
+const LEGAL_DOCUMENT_PREFIX = "https://github.com/Neil-McD/Arx/blob/main/docs/legal/";
+function legalUrl(value: unknown): string | null {
+  return typeof value === "string" && value.startsWith(LEGAL_DOCUMENT_PREFIX) && /^[a-z0-9/._:-]+$/i.test(value) ? value : null;
+}
+
 function studioJoinUrl(route: Route, env: Env): string {
   return new URL(`/c/${encodeURIComponent(route.community)}`, env.POLYNET_AUTH_URL).toString();
 }
@@ -847,6 +852,8 @@ function joinView(answer: Record<string, unknown>, env: Env, place: Place): Reco
       avatar_url: typeof community.avatar_url === "string" && storage && community.avatar_url.startsWith(`${storage}/api/storage/`) ? community.avatar_url : null,
     },
     gate, available: answer.available === true, action_label: text(answer.action_label, 80) ?? "Join", plans,
+    // Polynet's terms, which Join's click accepts: only their canonical public text.
+    terms_url: legalUrl(answer.terms_url), privacy_url: legalUrl(answer.privacy_url),
     viewer: state ? {
       state, can_request_again: viewer?.can_request_again === true,
       reapply_at: typeof viewer?.reapply_at === "string" && !Number.isNaN(Date.parse(viewer.reapply_at)) ? viewer.reapply_at : null,

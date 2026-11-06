@@ -7,6 +7,11 @@ import type {
 } from "../../../../shared/communityFunnelUi";
 import { renderMarkdown } from "../../../../shared/markdownUi";
 import {
+  PRIVACY_AI_DATA_POLICY_DOCUMENT,
+  TERMS_OF_SERVICE_DOCUMENT,
+  legalDocumentPublicUrl,
+} from "../../../../shared/legalDocuments";
+import {
   ActionStatusCards,
   renderHeroMediaDefault,
   type CommunityFunnelSurfaceAction,
@@ -55,6 +60,14 @@ function FunnelAction(props: {
       >
         {props.action.primaryActionLabel}
       </button>
+      {props.action.showJoinTerms ? (
+        <p className="community-funnel-terms">
+          By joining you agree to Polynet&apos;s{" "}
+          <a href={legalDocumentPublicUrl(TERMS_OF_SERVICE_DOCUMENT)} target="_blank" rel="noopener noreferrer">Terms</a>{" "}
+          and{" "}
+          <a href={legalDocumentPublicUrl(PRIVACY_AI_DATA_POLICY_DOCUMENT)} target="_blank" rel="noopener noreferrer">Privacy &amp; AI Data Policy</a>.
+        </p>
+      ) : null}
     </div>
   );
 }

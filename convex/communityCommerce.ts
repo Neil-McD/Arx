@@ -1122,6 +1122,8 @@ export async function startCommunityJoinCheckoutCore(
   })) {
     throw new Error("already_member");
   }
+  // Join's click accepts the terms shown under it and fills the starter profile.
+  await ctx.runMutation(internal.starterProfile.acceptCommunityJoinInternal, { userId: ownerUserId as any });
   const stripeCustomerId = await ensureCommunityStripeCustomerForUser({
     ctx,
     userId: ownerUserId,

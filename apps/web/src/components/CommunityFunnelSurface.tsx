@@ -12,6 +12,8 @@ export type CommunityFunnelSurfaceAction = {
   primaryActionLabel: string;
   isPrimaryActionDisabled: boolean;
   onPrimaryAction: () => void;
+  // Join's click accepts Polynet's terms: shown under the button until they're in.
+  showJoinTerms?: boolean;
   canJoinWithApproval: boolean;
   showSignIn: boolean;
   approvalPending: boolean;

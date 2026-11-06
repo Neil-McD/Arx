@@ -22,6 +22,8 @@ import { resolveCommunityBuilderAccess } from "./communityBuilderAccessCore";
 import { joinPublicCommunityInternal, listCurrentCommunitySellablePlans } from "./communityPublic";
 import { cancelPendingCommunityJoinRequest } from "./communityJoinRequestCore";
 import { loadAccountSetupStatusForUserId } from "./accountSetupCore";
+import { accountSetupBlocksJoining } from "../shared/accountSetup";
+import { PRIVACY_AI_DATA_POLICY_DOCUMENT, TERMS_OF_SERVICE_DOCUMENT, legalDocumentPublicUrl } from "../shared/legalDocuments";
 import { resolveCheckoutSessionFinalization } from "./communityCommerce";
 
 // Join on a community site's private twin (<slug>--me<suffix>.<sites domain>/join).
@@ -72,7 +74,7 @@ export async function communityAppJoinProjection(ctx: any, community: CommunityL
           : approvalGate && admission.approvalDenied
             ? "denied"
             : "visitor";
-    viewer = { state, can_request_again: admission.canRequestAgain, reapply_at: admission.approvalReapplyAtIso, setup_required: !setup.completed };
+    viewer = { state, can_request_again: admission.canRequestAgain, reapply_at: admission.approvalReapplyAtIso, setup_required: accountSetupBlocksJoining(setup) };
   }
   // Studio's own button wording for this state (and each plan's price).
   const mode = deriveCommunityFunnelUiMode({
@@ -105,6 +107,9 @@ export async function communityAppJoinProjection(ctx: any, community: CommunityL
       return view.hasValidPaidPlan ? [{ billing_period: plan.billing_period, name: plan.name, label: view.label }] : [];
     }),
     viewer,
+    // Join's click accepts these (acceptCommunityJoin records it); the page links them.
+    terms_url: legalDocumentPublicUrl(TERMS_OF_SERVICE_DOCUMENT),
+    privacy_url: legalDocumentPublicUrl(PRIVACY_AI_DATA_POLICY_DOCUMENT),
   };
 }
 

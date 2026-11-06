@@ -527,7 +527,7 @@ assert.match(
 );
 assert.match(
   publicFunnelActions,
-  /resolveAccountSetupStatus\(session\)[\s\S]*!accountSetup\.accountSetup\.completed[\s\S]*reason: "join_public_community"[\s\S]*onAccountSetupRequired\(\)/,
+  /resolveAccountSetupStatus\(session\)[\s\S]*accountSetupBlocksJoining\(accountSetup\.accountSetup\)[\s\S]*reason: "join_public_community"[\s\S]*onAccountSetupRequired\(\)/,
   "free and approval joins must preserve their destination while account setup runs",
 );
 assert.match(
