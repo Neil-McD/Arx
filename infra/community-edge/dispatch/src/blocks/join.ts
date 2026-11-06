@@ -88,6 +88,7 @@ const STYLE = [
   ".results blockquote { margin: 0; font-size: 1.0625em; line-height: 1.5; overflow-wrap: anywhere; }",
   ".results figcaption { font-size: .875em; color: var(--pn-muted); overflow-wrap: anywhere; }",
   ".results figcaption strong { color: var(--pn-surface-text); }",
+  ".results + .founder { margin-top: 1em; }",
   ".founder { display: grid; grid-template-columns: 3.5em minmax(0, 1fr); gap: 1em; align-items: center; padding: 1.15em 1.25em; border: 1px solid var(--pn-border); border-radius: var(--pn-radius); }",
   ".founder p { margin: .2em 0 0; color: var(--pn-muted); overflow-wrap: anywhere; }",
   ".objections { display: grid; gap: .75em; }",
