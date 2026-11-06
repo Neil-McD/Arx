@@ -26,6 +26,7 @@ import { readCommunityChannelReadState } from "./communityReadCursorCore";
 const MENTION_EMAIL_GRACE_MS = 15 * 60 * 1000;
 const MENTION_EMAIL_RECIPIENT_COOLDOWN_MS = 60 * 60 * 1000;
 const MENTION_EMAIL_BATCH_LIMIT = 25;
+const MENTION_EMAIL_SCAN_LIMIT = 500;
 
 const internalRefs = internal as any;
 
@@ -36,13 +37,15 @@ export const listPendingMentionEmailJobsInternal = internalQuery({
   handler: async (ctx, args) => {
     const nowMs = args.nowMs ?? Date.now();
     const dueBefore = nowMs - MENTION_EMAIL_GRACE_MS;
+    // Only mentions past their grace period, oldest first, and enough of them
+    // that ones held by a recipient's cooldown can't crowd out the rest.
     const pending = (await ctx.db
       .query("communityInteractionMentions" as any)
       .withIndex("by_mentionKind_notifyState_createdAt", (q: any) =>
-        q.eq("mentionKind", "user").eq("notifyState", "pending"),
+        q.eq("mentionKind", "user").eq("notifyState", "pending").lte("createdAt", dueBefore),
       )
       .order("asc")
-      .take(100)) as Array<Record<string, any>>;
+      .take(MENTION_EMAIL_SCAN_LIMIT)) as Array<Record<string, any>>;
     const jobs: Array<{
       mentionId: string;
       recipientUserId: string;
