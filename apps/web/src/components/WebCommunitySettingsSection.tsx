@@ -22,11 +22,15 @@ import {
   WebPlatformRadioGroup,
   WebPlatformTabList,
 } from "./WebPlatformChoiceControls";
+import { CommunityMemberExperienceSection } from "./CommunityMemberExperienceSection";
 
 type CommunityPricingMode = "free" | "monthly" | "annual";
 
 type ActiveCommunity = {
   id: string;
+  site_url?: string | null;
+  members_use?: "app" | "site";
+  has_custom_site?: boolean;
   name: string;
   slug: string;
   visibility: string;
@@ -867,6 +871,14 @@ export function WebCommunitySettingsSection(props: WebCommunitySettingsSectionPr
                   ) : null}
                   <div className="community-general-settings-secondary">
                     <CommunityProfileSettingsSection state={state} actions={actions} />
+                    {canManageCommunitySettings ? (
+                      <CommunityMemberExperienceSection
+                        community={resolvedActiveCommunity}
+                        canChange={isOwnerSettingsLayer}
+                        session={props.session}
+                        ensureSession={props.ensureSession}
+                      />
+                    ) : null}
                     <CommunityMonetizationConfigSection
                       activeCommunity={resolvedActiveCommunity}
                       accountCommerceStatus={accountCommerceStatus}

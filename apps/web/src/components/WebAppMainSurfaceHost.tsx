@@ -34,6 +34,8 @@ export type WebAppMainSurfaceHostProps = {
   settingsSurfaceHostProps: ComponentProps<typeof WebSettingsSurfaceHost>;
   // /c/<slug>: the community whose site to hand over to.
   publicCommunitySlug: string | null;
+  // Whether the viewer belongs to that community ("loading" until known).
+  publicCommunityMembership: "loading" | "member" | "visitor";
   communityHostProps: ComponentProps<typeof WebCommunityHost>;
   discoverPanelProps: ComponentProps<typeof WebDiscoverPanel>;
   productDocsPanelProps: ComponentProps<typeof WebProductDocsPanel>;
@@ -54,7 +56,7 @@ export function WebAppMainSurfaceHost(props: WebAppMainSurfaceHostProps) {
         <div className="landing-auth-hold" aria-hidden="true" />
       ) : props.showPublicCommunityFunnel ? (
         <div className="community-body">
-          {props.publicCommunitySlug ? <WebCommunityHandoff communitySlug={props.publicCommunitySlug} /> : null}
+          {props.publicCommunitySlug ? <WebCommunityHandoff communitySlug={props.publicCommunitySlug} membership={props.publicCommunityMembership} /> : null}
         </div>
       ) : props.showPublicFind ? (
         <PublicFindPage {...props.publicFindProps} />

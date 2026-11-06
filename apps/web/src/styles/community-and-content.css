@@ -8848,3 +8848,34 @@
 :root[data-theme="light"] .community-context-member-avatar {
   color: color-mix(in srgb, var(--member-avatar-color, var(--text-secondary)) 45%, var(--text-primary));
 }
+
+/* The owner's switch: where members spend time (Polynet's app or their site). */
+.community-member-experience-options {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.community-member-experience-option {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 10px 12px;
+  border: 1px solid var(--border-default);
+  border-radius: 12px;
+  cursor: pointer;
+}
+
+.community-member-experience-option.is-selected {
+  border-color: var(--text-primary);
+}
+
+.community-member-experience-option.is-disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
+.community-member-experience-option > span {
+  display: grid;
+  gap: 2px;
+}

@@ -1,6 +1,6 @@
 import { internal } from "./_generated/api";
 import { internalMutation, internalQuery, mutation, query } from "./_generated/server";
-import { moveCommunitySiteAddresses, registerCommunitySiteAddresses, requireSiteReadySlug } from "./communitySites";
+import { communityHasCustomSite, communityMemberExperience, moveCommunitySiteAddresses, registerCommunitySiteAddresses, requireSiteReadySlug } from "./communitySites";
 import { ConvexError, v } from "convex/values";
 import { communityIsActive } from "../shared/communityLifecycle";
 import { recordCriticalAuditEvent } from "./criticalAudit";
@@ -598,6 +598,41 @@ export const migrateSubscriptionRequiredCommunitiesToFreeInternal = internalMuta
       });
     }
     return { dryRun: args.dryRun === true, changed: changed.length, communityIds: changed };
+  },
+});
+
+// The owner's switch: where members spend time, Polynet's app or the
+// community's own deployed site. Only the owner; "site" only once a site is
+// deployed. Instant and reversible: nothing moves, every link follows it.
+export const setCommunityMemberExperience = mutation({
+  args: {
+    authSubject: v.optional(v.string()),
+    communityId: v.id("communities"),
+    experience: v.union(v.literal("app"), v.literal("site")),
+  },
+  handler: async (ctx, args) => {
+    const userId = await resolveUserIdForAuthenticatedRequest({ ctx, authSubject: args.authSubject ?? null });
+    const { community } = await requireCommunityOwner({ ctx, communityId: args.communityId, userId });
+    if (args.experience === "site" && !(await communityHasCustomSite(ctx, community._id))) {
+      throw new Error("community_custom_site_required");
+    }
+    const before = await communityMemberExperience(ctx, community as any);
+    const nowMs = Date.now();
+    await ctx.db.patch(community._id as any, { memberExperience: args.experience, updatedAt: nowMs });
+    if (before !== args.experience) {
+      await recordCriticalAuditEvent(ctx, {
+        eventKey: `community_member_experience:${String(community._id)}:${nowMs}:${before}:${args.experience}`,
+        eventType: "community_member_experience_changed",
+        severity: "info",
+        status: "succeeded",
+        actorUserId: userId,
+        communityId: community._id,
+        provider: "polynet",
+        metadata: { from: before, to: args.experience },
+        createdAt: nowMs,
+      });
+    }
+    return { member_experience: args.experience };
   },
 });
 

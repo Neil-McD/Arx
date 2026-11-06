@@ -578,6 +578,8 @@ test("a community's site shows its public identity to anyone, through the edge o
     // A free community with no Agent plan: its agent is off.
     agent_on: false,
     avatar_url: null, banner_url: null, listed: false, join_gate: "join",
+    // Members use Polynet's app until the owner switches to a deployed site.
+    members_use: "app",
   } } });
   expect((await f.post(COMMUNITY_EDGE_PUBLIC_PATH, {}, { origin: ORIGIN })).status).toBe(401);
   expect(await f.post(COMMUNITY_EDGE_PUBLIC_PATH, edgeHeaders, { origin: "https://unknown.example.com" })).toMatchObject({ status: 404, body: { code: "community_unavailable" } });

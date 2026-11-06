@@ -1333,3 +1333,19 @@ export async function saveCloudCommunityMemberSettings<SessionT>(
     mutedUntilIso: params.mutedUntil ?? null,
   });
 }
+
+// The owner's switch: where the community's members spend time.
+export async function setCloudCommunityMemberExperience<SessionT>(
+  params: CloudCommunityAdminGatewayParams<SessionT> & {
+    communityId: string;
+    experience: "app" | "site";
+  },
+): Promise<"app" | "site"> {
+  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
+  const payload = (await client.mutation("communityLifecycle:setCommunityMemberExperience" as any, {
+    authSubject,
+    communityId: params.communityId,
+    experience: params.experience,
+  })) as { member_experience?: unknown } | null;
+  return payload?.member_experience === "site" ? "site" : "app";
+}

@@ -186,16 +186,33 @@ export async function communitySiteUrl(ctx: any, community: { _id: any; slug?: u
   return sites ? await registeredSiteOrigin(ctx, community, sites.domain, sites.suffix) : null;
 }
 
-// Where an email sends a member: a page of the community's own site (its
-// members live there), or null where it has none and the email keeps its
-// Studio link. path is the site's own address, e.g. "/chat?channel=crew".
-export async function communitySitePageUrl(ctx: any, community: { _id: any; slug?: unknown }, path: string): Promise<string | null> {
+// Where members spend time: the owner's switch (Nov 6). "site" holds only
+// while the community has deployed its own site on this environment; anything
+// else (no choice, no deploy, no site address) is Polynet's app.
+export type MemberExperience = "app" | "site";
+type ExperienceCommunity = { _id: any; slug?: unknown; memberExperience?: unknown };
+
+export async function communityHasCustomSite(ctx: any, communityId: any): Promise<boolean> {
+  return Boolean(await ctx.db.query("communitySiteDeploys").withIndex("by_community_createdAt", (q: any) => q.eq("communityId", communityId)).first());
+}
+
+export async function communityMemberExperience(ctx: any, community: ExperienceCommunity): Promise<MemberExperience> {
+  if (community.memberExperience !== "site") return "app";
+  return (await communityHasCustomSite(ctx, community._id)) && (await communitySiteUrl(ctx, community)) ? "site" : "app";
+}
+
+// Where an email or link sends a member: a page of the community's own site
+// while its members use the site, or null, and the link keeps its Studio (app)
+// address. path is the site's own address, e.g. "/chat?channel=crew".
+export async function communitySitePageUrl(ctx: any, community: ExperienceCommunity, path: string): Promise<string | null> {
+  if ((await communityMemberExperience(ctx, community)) !== "site") return null;
   const site = await communitySiteUrl(ctx, community);
   return site ? new URL(path, `${site}/`).toString() : null;
 }
 
 // The same for the member's own pages (messages, settings): the site's private twin.
-export async function communityPrivatePageUrl(ctx: any, community: { _id: any; slug?: unknown }, path: string): Promise<string | null> {
+export async function communityPrivatePageUrl(ctx: any, community: ExperienceCommunity, path: string): Promise<string | null> {
+  if ((await communityMemberExperience(ctx, community)) !== "site") return null;
   const sites = sitesEnv();
   const site = await communitySiteUrl(ctx, community);
   const twin = sites && site ? privateTwinHost(new URL(site).host, sites.domain, sites.suffix) : null;

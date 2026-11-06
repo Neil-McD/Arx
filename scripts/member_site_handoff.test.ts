@@ -53,3 +53,14 @@ test("the hand-off waits for this community's access and never acts on a failed 
   const app = readFileSync(new URL("../apps/web/src/App.tsx", import.meta.url), "utf8");
   expect(app).toMatch(/runsCommunity: communityAccessRunsCommunity\(activeCommunityAccess\)/);
 });
+
+test("the owner's switch decides: Studio hands members to the site only when they use it", () => {
+  const app = readFileSync(new URL("../apps/web/src/App.tsx", import.meta.url), "utf8");
+  expect(app).toMatch(/activeCommunitySiteUrl: activeCommunity\?\.members_use === "site" \? activeCommunity\.site_url : null/);
+  const handoff = readFileSync(new URL("../apps/web/src/components/WebCommunityHandoff.tsx", import.meta.url), "utf8");
+  // /c/<slug>: wait until membership is known; a member on Polynet's app opens the community there.
+  expect(handoff).toMatch(/if \(props\.membership === "loading"\) return;/);
+  expect(handoff).toMatch(/props\.membership === "member" && community\.members_use !== "site"[\s\S]*\/c\/\$\{encodeURIComponent\(community\.slug\)\}\/home/);
+  const settings = readFileSync(new URL("../apps/web/src/components/WebCommunitySettingsSection.tsx", import.meta.url), "utf8");
+  expect(settings).toMatch(/<CommunityMemberExperienceSection[\s\S]*canChange=\{isOwnerSettingsLayer\}/);
+});

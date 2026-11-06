@@ -1,5 +1,5 @@
 import { action, internalAction, internalMutation, internalQuery, mutation, query } from "./_generated/server";
-import { communitySiteUrl } from "./communitySites";
+import { communityHasCustomSite, communityMemberExperience, communitySiteUrl } from "./communitySites";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
@@ -841,8 +841,12 @@ export const listCommunityMemberships = query({
         created_at: toIsoString(community.createdAt),
         branding_revision: community.brandingRevision ?? community.updatedAt,
         visual_identity: buildCommunityVisualIdentity(community, branding),
-        // Its own site, where members live (null where it has none).
+        // Its own site (null where it has none); where its members spend time,
+        // the owner's switch; and whether a site of its own is deployed (the
+        // switch's "site" choice needs one).
         site_url: await communitySiteUrl(ctx, community),
+        members_use: await communityMemberExperience(ctx, community),
+        has_custom_site: await communityHasCustomSite(ctx, community._id),
       };
       return selectMode === "minimal"
         ? base

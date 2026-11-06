@@ -1127,6 +1127,10 @@ export default defineSchema({
     brandingRevision: v.optional(v.number()),
     settingsRevision: v.optional(v.number()),
     visibility: v.union(v.literal("published"), v.literal("unlisted")),
+    // Where members spend time, the owner's switch: Polynet's app (absent) or
+    // the community's own deployed site. Joining and the public page are the
+    // site's either way (communityMemberExperience).
+    memberExperience: v.optional(v.union(v.literal("app"), v.literal("site"))),
     inferenceFundingPolicy: v.literal("managed_required"),
     entryPolicy: v.union(
       v.literal("open"),

@@ -393,6 +393,8 @@ export function safeReturnPath(raw: string | null): string {
 type PublicIdentity = {
   slug?: string; name: string; one_liner: string | null; about: string | null; member_count: number; agent_on?: boolean;
   avatar_url?: string | null; banner_url?: string | null; listed?: boolean; join_gate?: string;
+  // Where members spend time, the owner's switch: "app" sends member pages to Polynet's app.
+  members_use?: "app" | "site";
 };
 const IDENTITY_CACHE_MS = 60_000;
 const identityCache = new Map<string, { identity: PublicIdentity; until: number }>();
@@ -860,6 +862,30 @@ function legalUrl(value: unknown, env: Env): string | null {
   }
 }
 
+// The same place in Polynet's app for a member page of the site (or of its
+// twin), or null for a page that stays on the site whatever members use: the
+// public page, Join, Discover, moderation and anything else the site serves.
+const APP_TAB_FOR_PAGE: Record<string, string> = { chat: "chat", events: "events", learn: "resources", knowledge: "resources", ask: "agent", people: "home" };
+export function appPageFor(url: URL, slug: string, env: Env): string | null {
+  const app = (path: string) => new URL(path, env.POLYNET_AUTH_URL).toString();
+  const community = `/c/${encodeURIComponent(slug)}`;
+  const standard = standardPage(url.pathname);
+  if (standard && Object.hasOwn(APP_TAB_FOR_PAGE, standard.page.name)) {
+    const tab = APP_TAB_FOR_PAGE[standard.page.name];
+    if (tab === "home") return app(`${community}/home`);
+    const channel = tab === "chat" ? (url.searchParams.get("channel") ?? "").trim().toLowerCase() : "";
+    return app(`${community}/${tab}${/^[a-z0-9-]{1,64}$/.test(channel) && channel !== "general" ? `/${channel}` : ""}`);
+  }
+  const personal = personalPage(url.pathname);
+  if (personal?.name === "messages") {
+    const conversation = url.pathname.split("/")[2] ?? "";
+    return app(`/?dm=${/^[A-Za-z0-9]{20,40}$/.test(conversation) ? conversation : "inbox"}`);
+  }
+  if (personal?.name === "settings") return app("/settings/profile");
+  if (personal?.name === "communities") return app("/");
+  return null;
+}
+
 function studioJoinUrl(route: Route, env: Env): string {
   return new URL(`/c/${encodeURIComponent(route.community)}`, env.POLYNET_AUTH_URL).toString();
 }
@@ -1197,9 +1223,15 @@ async function serve(request: Request, url: URL, route: Route, place: Place, env
   if (url.pathname === UPLOAD_PATH || url.pathname.startsWith(FILES_PREFIX)) {
     return await proxyFile(request, url, env);
   }
+  const read = request.method === "GET" || request.method === "HEAD";
+  // Members use Polynet's app (the owner's switch): a member page sends them to
+  // the same place there. The public page, joining, checkout and Discover stay.
+  const inApp = read ? appPageFor(url, route.community, env) : null;
+  if (inApp && (await publicIdentity(env, place.siteOrigin))?.members_use === "app") {
+    return new Response(null, { status: 302, headers: { Location: inApp, "Cache-Control": "no-store" } });
+  }
   const worker = userWorker(route, place, env);
   if (!worker) return new Response("Community front end unavailable", { status: 503 });
-  const read = request.method === "GET" || request.method === "HEAD";
   const personal = read ? personalPage(url.pathname) : null;
   if (place.twin) return await serveTwin(request, url, personal, route, place, worker, env);
   // A personal page asked for on the site: on its twin (unless the site has its own file there).
