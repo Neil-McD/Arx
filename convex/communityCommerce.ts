@@ -638,6 +638,7 @@ export const createPendingPublicCommunityCheckoutSessionInternal = internalMutat
     providerPriceId: v.string(),
     ownerUserId: v.optional(v.id("users")),
     buyerSecretHash: v.optional(v.string()),
+    buyerVisitorHash: v.optional(v.string()),
     expiresAt: v.number(),
     nowMs: v.optional(v.number()),
   },
@@ -656,7 +657,7 @@ export const createPendingPublicCommunityCheckoutSessionInternal = internalMutat
     }
     // Every checkout belongs to someone: a signed-in buyer, or the browser that paid.
     if (!args.ownerUserId && !args.buyerSecretHash) throw new Error("checkout_buyer_required");
-    if (!args.ownerUserId && !(await guestCheckoutAllowed(ctx, args.communityId, nowMs))) {
+    if (!args.ownerUserId && !(await guestCheckoutAllowed(ctx, args.communityId, nowMs, args.buyerVisitorHash ?? ""))) {
       throw new Error("community_checkout_unavailable");
     }
     await ctx.db.insert("checkoutSessions", {
@@ -676,6 +677,7 @@ export const createPendingPublicCommunityCheckoutSessionInternal = internalMutat
       providerPriceId: args.providerPriceId,
       ownerUserId: args.ownerUserId,
       buyerSecretHash: args.buyerSecretHash,
+      buyerVisitorHash: args.buyerVisitorHash,
       status: "pending",
       expiresAt: args.expiresAt,
       createdAt: nowMs,
@@ -1044,21 +1046,27 @@ export async function sha256Hex(value: string): Promise<string> {
 }
 
 // Cash first lets anyone start a checkout without signing in, and each one
-// makes a Stripe session and two rows. A community takes this many unclaimed
-// guest checkouts in this window; past it, "Checkout is temporarily unavailable".
+// makes a Stripe session and a row. In this window each visitor (a hash of
+// their address, from the edge) starts a few, and a community takes this many
+// in all; past either, "Checkout is temporarily unavailable". One visitor can't
+// use up a community's checkouts for everyone else.
 export const GUEST_CHECKOUT_WINDOW_MS = 10 * 60 * 1000;
-export const GUEST_CHECKOUTS_PER_WINDOW = 20;
+export const GUEST_CHECKOUTS_PER_VISITOR = 3;
+export const GUEST_CHECKOUTS_PER_WINDOW = 100;
 
-async function guestCheckoutAllowed(ctx: any, communityId: any, nowMs: number): Promise<boolean> {
+async function guestCheckoutAllowed(ctx: any, communityId: any, nowMs: number, visitorHash = ""): Promise<boolean> {
   const since = nowMs - GUEST_CHECKOUT_WINDOW_MS;
   // Newest first, only as far back as the window: every guest in it is counted.
   let guests = 0;
+  let fromVisitor = 0;
   for await (const row of ctx.db
     .query("checkoutSessions")
     .withIndex("by_community_status", (q: any) => q.eq("communityId", communityId).eq("status", "pending"))
     .order("desc")) {
     if (row.createdAt < since) break;
-    if (!row.ownerUserId && ++guests >= GUEST_CHECKOUTS_PER_WINDOW) return false;
+    if (row.ownerUserId) continue;
+    if (++guests >= GUEST_CHECKOUTS_PER_WINDOW) return false;
+    if (visitorHash && row.buyerVisitorHash === visitorHash && ++fromVisitor >= GUEST_CHECKOUTS_PER_VISITOR) return false;
   }
   return true;
 }
@@ -1067,8 +1075,8 @@ async function guestCheckoutAllowed(ctx: any, communityId: any, nowMs: number): 
 // mutation that records the checkout (one transaction with the insert), so a
 // burst of parallel requests can't all pass on the same count.
 export const guestCheckoutAllowedInternal = internalQuery({
-  args: { communityId: v.id("communities"), nowMs: v.number() },
-  handler: async (ctx, args) => await guestCheckoutAllowed(ctx, args.communityId, args.nowMs),
+  args: { communityId: v.id("communities"), nowMs: v.number(), visitorHash: v.optional(v.string()) },
+  handler: async (ctx, args) => await guestCheckoutAllowed(ctx, args.communityId, args.nowMs, args.visitorHash ?? ""),
 });
 
 // The one checkout for a community's paid plan, for Studio's funnel and for
@@ -1091,6 +1099,8 @@ export async function startCommunityJoinCheckoutCore(
     // checkout keeps its hash. Paying, then signing in there (or with the
     // email given to Stripe), makes it theirs.
     guest?: boolean;
+    // Who's asking, as the edge saw them (a keyed hash of their address).
+    visitorHash?: string;
   },
 ): Promise<{ ok: true; session_id: string; checkout_url: string; buyer_secret?: string }> {
   const nowMs = Date.now();
@@ -1128,7 +1138,7 @@ export async function startCommunityJoinCheckoutCore(
     // An early answer before any Stripe work; the binding check is where the
     // checkout is recorded (one transaction with the insert).
     if (!(await ctx.runQuery(internal.communityCommerce.guestCheckoutAllowedInternal, {
-      communityId: checkoutConfig.communityId, nowMs,
+      communityId: checkoutConfig.communityId, nowMs, visitorHash: args.visitorHash,
     }))) {
       throw new Error("community_checkout_unavailable");
     }
@@ -1239,6 +1249,7 @@ export async function startCommunityJoinCheckoutCore(
       providerPriceId,
       ...(ownerUserId ? { ownerUserId } : {}),
       ...(buyerSecret ? { buyerSecretHash: await sha256Hex(buyerSecret) } : {}),
+      ...(args.visitorHash ? { buyerVisitorHash: args.visitorHash } : {}),
       expiresAt,
       nowMs,
     },
@@ -1525,6 +1536,20 @@ async function settleCommunityCheckout(
   evidence: { paymentIntentId: string | null; chargeId: string | null } = { paymentIntentId: null, chargeId: null },
 ): Promise<void> {
   const row = await ctx.db.query("checkoutSessions").withIndex("by_sessionId", (q: any) => q.eq("sessionId", sessionId)).first();
+  if (row && row.communityRiskRevokedReason === "buyer_blocked" && row.status === "complete" && row.providerSubscriptionId) {
+    const providerSubscriptionId = String(row.providerSubscriptionId);
+    await ctx.scheduler.runAfter(0, internal.communityCommerce.refundDuplicateCommunitySubscriptionInternal, {
+      providerSubscriptionId, providerAccountId: String(row.providerAccountId ?? ""),
+      paymentIntentId: evidence.paymentIntentId, chargeId: evidence.chargeId,
+    });
+    await recordCriticalAuditEventBestEffort(ctx, {
+      eventKey: `community_blocked_buyer_refunded:${providerSubscriptionId}`, eventType: "community_blocked_buyer_refunded",
+      status: "started", actorUserId: row.ownerUserId, subjectUserId: row.ownerUserId, communityId: row.communityId,
+      checkoutSessionId: row.sessionId, provider: "stripe", providerObjectId: providerSubscriptionId,
+      metadata: { providerAccountId: String(row.providerAccountId ?? "") }, createdAt: nowMs,
+    });
+    return;
+  }
   if (row && row.ownerUserId && row.communityId && row.status === "complete" && !(await checkoutAlreadyGranted(ctx, row))) {
     const newSubscriptionId = String(row.providerSubscriptionId ?? "").trim();
     const others = await ctx.db.query("communitySubscriptions")
@@ -1579,6 +1604,10 @@ export async function attachCommunityCheckoutToUser(ctx: any, sessionId: string,
   try {
     await requireCommunityUserNotBlocked({ ctx, communityId: row.communityId, userId });
   } catch {
+    // Blocked from this community, but they paid: theirs, never granted, and
+    // the payment cancelled and refunded (now, or once Stripe confirms it).
+    await ctx.db.patch(row._id, { ownerUserId: userId, buyerEmailNormalized: undefined, communityRiskRevokedReason: "buyer_blocked", updatedAt: nowMs });
+    if (row.status === "complete") await settleCommunityCheckout(ctx, sessionId, nowMs);
     return false;
   }
   await ctx.db.patch(row._id, { ownerUserId: userId, buyerEmailNormalized: undefined, updatedAt: nowMs });

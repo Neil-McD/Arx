@@ -1462,7 +1462,9 @@ test("twin join, cash first: a signed-out buyer goes straight to Stripe; only th
   const started = await guest(TWIN);
   expect([started.status, await started.json()]).toEqual([200, { ok: true, checkout_url: "https://checkout.stripe.com/c/pay/cs_test_g1" }]);
   expect(started.headers.get("set-cookie")).toBe(`__Host-polynet_buyer_${"b".repeat(32)}=${BUYER}; Path=/; HttpOnly; SameSite=Lax; Max-Age=1209600; Secure`);
-  expect(backend.mock.calls[0][1]?.headers).toEqual({ "Content-Type": "application/json", Origin: TWIN, "x-polynet-edge-secret": "edge-secret" });
+  // The backend gets a keyed hash of who's asking (for the per-visitor limit), never the address.
+  expect(backend.mock.calls[0][1]?.headers).toEqual({ "Content-Type": "application/json", Origin: TWIN, "x-polynet-edge-secret": "edge-secret",
+    "x-polynet-visitor": expect.stringMatching(/^[a-f0-9]{64}$/) });
   // A checkout address anywhere but Stripe's own page, or no buyer secret, and nothing is kept.
   for (const answer of [{ ...answers["/runtime/app/join/checkout"] as object, checkout_url: "https://evil.example.com/pay" },
     { ...answers["/runtime/app/join/checkout"] as object, buyer_secret: "buyer_nope" }]) {

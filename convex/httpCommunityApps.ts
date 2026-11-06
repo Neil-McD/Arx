@@ -1129,6 +1129,8 @@ function registerJoinRoutes(args: { http: HttpRouterLike; httpAction: HttpAction
       if (!found || !urls) return reply(403, { ok: false, code: "private_origin_required" });
       const started = await runJoin(() => startCommunityJoinCheckoutCore(ctx, {
         communitySlug: found.communitySlug, billingPeriod: period, successUrl: urls.successUrl, cancelUrl: urls.cancelUrl, guest: true,
+        // Only the edge sets this (the request already proved the edge secret).
+        visitorHash: /^[a-f0-9]{64}$/.test(req.headers.get("x-polynet-visitor") ?? "") ? req.headers.get("x-polynet-visitor")! : undefined,
       }));
       if (started instanceof Response) return started;
       if (!started.value.buyer_secret) return reply(500, { ok: false, code: "join_unavailable" });

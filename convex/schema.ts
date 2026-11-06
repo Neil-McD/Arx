@@ -683,6 +683,9 @@ export default defineSchema({
     // Either one attaches the payment to the account that signs in.
     buyerSecretHash: v.optional(v.string()),
     buyerEmailNormalized: v.optional(v.string()),
+    // Who started a checkout before signing in, as a keyed hash of their
+    // address (from the edge): the per-visitor limit counts these.
+    buyerVisitorHash: v.optional(v.string()),
     // community_join refunded or disputed before it was granted (a payment made
     // before signing in has no subscription row yet): never grants.
     communityRiskRevokedReason: v.optional(v.string()),
