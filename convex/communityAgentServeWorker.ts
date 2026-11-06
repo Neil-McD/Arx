@@ -1,4 +1,3 @@
-import { RETIRED_PERSONAL_AGENT_ACTOR_TYPE } from "../shared/communityAgentIdentity";
 import { buildCommunityTurnContract, checkCommunityTurnToolCall, summarizeCommunityTurnContract, isCommunityTurnRefusalCode } from "../shared/communityTurnContract";
 import { loadCommunityTurnLayers } from "../shared/communityTurnLayers";
 import { founderProviderRequestUsageValidator } from "./founderPlanPricing";
@@ -756,7 +755,6 @@ async function loadThreadParticipantContext(args: {
 function normalizeThreadActorType(
   value: unknown,
 ): CommunityAgentThreadActorType {
-  if (value === RETIRED_PERSONAL_AGENT_ACTOR_TYPE) return "community_agent";
   return value === "human" ||
     value === "community_agent" ||
     value === "system"

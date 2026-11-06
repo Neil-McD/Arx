@@ -1,4 +1,3 @@
-import { RETIRED_PERSONAL_AGENT_ACTOR_TYPE } from "../shared/communityAgentIdentity";
 import { internalMutation } from "./_generated/server";
 import { v } from "convex/values";
 
@@ -38,11 +37,7 @@ async function findReceipt(ctx: any, args: {
         .eq("idempotencyKey", args.idempotencyKey),
     )
     .first();
-  const receipt = await lookup(args.principalKind);
-  // Receipts written before the rename carry the retired name; a retry across the
-  // deploy must still find them instead of running the write again.
-  if (receipt || args.principalKind !== "community_agent_for_member") return receipt;
-  return await lookup(RETIRED_PERSONAL_AGENT_ACTOR_TYPE);
+  return await lookup(args.principalKind);
 }
 
 export const reserveCanonicalOperationReceiptInternal = internalMutation({

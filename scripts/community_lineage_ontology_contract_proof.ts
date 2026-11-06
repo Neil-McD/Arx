@@ -63,19 +63,6 @@ const rootHuman = deriveCommunityInteractionLineageEnvelope({
 });
 assert.equal(rootHuman.relation, null);
 
-const personalAgent = deriveCommunityInteractionLineageEnvelope({
-  actorType: "personal_agent",
-  actorUserId: "user_1",
-  actorAgentKey: "personal_agent:user_1",
-  communityId: "community_1",
-  objectType: "reply",
-  objectId: "reply_3",
-  rootId: "root_1",
-});
-assert.deepEqual(personalAgent.authority, { type: "user", user_id: "user_1" });
-assert.equal(personalAgent.credit, null);
-assert.equal(personalAgent.attribution_mode, "on_behalf_of");
-
 const communityAgent = deriveCommunityInteractionLineageEnvelope({
   actorType: "community_agent",
   actorAgentKey: "community_agent",
