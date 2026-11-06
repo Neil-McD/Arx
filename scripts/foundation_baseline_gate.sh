@@ -10,7 +10,7 @@ echo "Commit: $(git rev-parse HEAD)"
 echo "Scope: $ROOT_DIR"
 echo "Unit and behavior tests (vitest) are not run here; the release gate runs them once in its own \`npm run test:unit\` step."
 
-TOTAL_STEPS=54
+TOTAL_STEPS=56
 CURRENT_STEP=1
 
 run_step() {
@@ -24,6 +24,8 @@ run_step() {
 run_step "No orphan Convex modules" npm run check:no-orphan-modules
 run_step "No references to missing Convex modules" npm run check:no-missing-module-refs
 run_step "Forbidden patterns stay out" npm run check:forbidden-patterns
+run_step "Community typing presence proof" npm run check:community-typing-presence-proof
+run_step "Community presence lease proof" npm run check:community-presence-lease-proof
 run_step "System map covers every module and table" npm run check:system-map-coverage
 run_step "One inference provider, founder-funded turns" npm run check:single-inference-provider
 run_step "Legacy route surface guard" bash scripts/legacy_route_surface_guard.sh
