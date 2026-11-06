@@ -110,6 +110,9 @@ function formatCommunitySettingsErrorMessage(error: unknown): string {
   if (message.includes("community_slug_taken")) {
     return "That address is taken. Pick another.";
   }
+  if (message.includes("community_slug_invalid")) {
+    return "Pick a different address: 3-32 letters, numbers and dashes, and not a reserved word like admin or www.";
+  }
   if (message.includes("community_slug_locked_by_site")) {
     return "This community's site is published at its current address, so the address can't change yet.";
   }
