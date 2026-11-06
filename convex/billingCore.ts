@@ -353,6 +353,7 @@ export async function grantCommunityCheckout(args: {
   if (typeof session.membershipGrantedAt === "number") {
     return { communityId: String(session.communityId), accessGranted: false, grantMarker: null };
   }
+  if (session.communityRiskRevokedReason) return none;
   if (
     args.nowMs > Number(session.expiresAt ?? 0) ||
     String(session.status ?? "").trim().toLowerCase() !== "complete"

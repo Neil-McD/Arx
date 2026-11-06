@@ -1581,7 +1581,7 @@ export async function attachCommunityCheckoutToUser(ctx: any, sessionId: string,
   } catch {
     return false;
   }
-  await ctx.db.patch(row._id, { ownerUserId: userId, updatedAt: nowMs });
+  await ctx.db.patch(row._id, { ownerUserId: userId, buyerEmailNormalized: undefined, updatedAt: nowMs });
   await acceptCommunityJoin(ctx, userId, nowMs);
   await recordCriticalAuditEventBestEffort(ctx, {
     eventKey: `community_checkout_attached:${sessionId}`, eventType: "community_checkout_attached", status: "succeeded",
@@ -1597,7 +1597,11 @@ export async function attachCommunityCheckoutToUser(ctx: any, sessionId: string,
 export async function attachPaidCheckoutsForVerifiedEmail(ctx: any, userId: any, email: unknown, nowMs: number): Promise<number> {
   const normalized = normalizeAuthRelinkEmail(email);
   if (!normalized) return 0;
-  const rows = await ctx.db.query("checkoutSessions").withIndex("by_buyerEmailNormalized", (q: any) => q.eq("buyerEmailNormalized", normalized)).take(20);
+  // Only payments still waiting for their buyer (attaching clears the email), oldest first.
+  const rows = await ctx.db.query("checkoutSessions")
+    .withIndex("by_buyerEmailNormalized", (q: any) => q.eq("buyerEmailNormalized", normalized))
+    .filter((q: any) => q.and(q.eq(q.field("ownerUserId"), undefined), q.eq(q.field("status"), "complete")))
+    .take(20);
   let attached = 0;
   for (const row of rows) {
     if (row.mode !== "community_join" || row.ownerUserId || row.status !== "complete") continue;
@@ -1605,6 +1609,23 @@ export async function attachPaidCheckoutsForVerifiedEmail(ctx: any, userId: any,
   }
   return attached;
 }
+
+export const revokeUngrantedCommunityCheckoutInternal = internalMutation({
+  args: { providerAccountId: v.string(), providerSubscriptionId: v.string(), revokedReason: v.string() },
+  handler: async (ctx, args) => {
+    const rows = await ctx.db.query("checkoutSessions")
+      .withIndex("by_providerSubscriptionId", (q: any) => q.eq("providerSubscriptionId", args.providerSubscriptionId))
+      .take(5);
+    let revoked = false;
+    for (const row of rows) {
+      if (row.mode !== "community_join" || String(row.providerAccountId ?? "") !== args.providerAccountId) continue;
+      if (typeof row.membershipGrantedAt === "number") continue;
+      await ctx.db.patch(row._id, { communityRiskRevokedReason: args.revokedReason, updatedAt: Date.now() });
+      revoked = true;
+    }
+    return { revoked };
+  },
+});
 
 export const attachPaidCheckoutsForVerifiedEmailInternal = internalMutation({
   args: { userId: v.id("users"), email: v.string() },

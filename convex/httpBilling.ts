@@ -746,6 +746,14 @@ async function syncCommunitySubscriptionRiskStatus(
     },
   );
   if (!existingCommunitySubscription?.communityId || !existingCommunitySubscription?.userId) {
+    // Paid before signing in and not granted yet: there's no subscription row,
+    // so the refund or dispute is kept on the checkout, which then never grants.
+    if (args.status === "ended" || args.status === "canceled") {
+      const recorded = await ctx.runMutation(internal.communityCommerce.revokeUngrantedCommunityCheckoutInternal, {
+        providerAccountId, providerSubscriptionId, revokedReason: args.revokedReason,
+      });
+      if (recorded.revoked) return { ok: true, provider_subscription_id: providerSubscriptionId, checkout_revoked: true };
+    }
     return { ok: true, ignored: true, reason: "community_subscription_not_found" };
   }
   await ctx.runMutation(

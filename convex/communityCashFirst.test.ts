@@ -154,3 +154,36 @@ test("a community takes a limited number of guest checkouts at a time, checked w
     providerPriceId: "price_cash_first", expiresAt: Date.now() + 60_000,
   })).rejects.toThrow("checkout_buyer_required");
 });
+
+test("refunded or disputed before signing in, a payment never grants: signing in after finds nothing to join", async () => {
+  const { t, ids, finish, paid, state } = await fixture();
+  await paid(null);
+  expect(await t.mutation(internal.communityCommerce.revokeUngrantedCommunityCheckoutInternal, {
+    providerAccountId: ACCOUNT, providerSubscriptionId: "sub_cash_first", revokedReason: "subscription_refunded",
+  })).toEqual({ revoked: true });
+  expect(await finish(ids.buyerId, SECRET)).toEqual({ status: "expired" });
+  expect(await state()).toEqual({ owner: ids.buyerId, granted: false, members: [] });
+  // Once granted, a refund goes through the member's subscription instead.
+  void t;
+});
+
+test("an email with many past checkouts still finds the one waiting for it", async () => {
+  const { t, ids, paid, state } = await fixture();
+  await t.run(async (ctx) => {
+    await ctx.db.patch(ids.buyerId, { emailVerifiedAt: undefined });
+    const now = Date.now();
+    for (let index = 0; index < 25; index += 1) {
+      await ctx.db.insert("checkoutSessions", {
+        sessionId: `chk_${String(index).padStart(32, "a")}`, mode: "community_join", communityId: ids.communityId,
+        ownerUserId: ids.otherId, buyerEmailNormalized: "buyer@example.com", status: "complete",
+        expiresAt: now + 60_000, createdAt: now - 1_000 - index, updatedAt: now,
+      } as any);
+    }
+  });
+  await paid("buyer@example.com");
+  await t.run(async (ctx) => ctx.db.patch(ids.buyerId, { emailVerifiedAt: Date.now() }));
+  expect(await t.mutation(internal.communityCommerce.attachPaidCheckoutsForVerifiedEmailInternal, {
+    userId: ids.buyerId, email: "buyer@example.com",
+  })).toEqual({ attached: 1 });
+  expect(await state()).toEqual({ owner: ids.buyerId, granted: true, members: [ids.buyerId] });
+});
