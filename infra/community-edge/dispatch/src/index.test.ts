@@ -1,4 +1,4 @@
-import { afterEach, expect, test, vi } from "vitest";
+import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import edge, { appPageFor, resetEdgeCaches, resolveRoute, safeReturnPath, withShell, withoutPolynetCookies, withoutPolynetSetCookies, type Env } from "./index";
 import { deriveCommunityAppWatchToken } from "../../../../shared/communityAppSession";
 
@@ -23,6 +23,9 @@ function request(path: string, init: RequestInit = {}) {
   return new Request(`${ORIGIN}${path}`, { ...init, headers });
 }
 
+// No test reaches the real network: a call a test doesn't fake itself answers
+// "not here" at once (a real lookup could hang for seconds on a busy machine).
+beforeEach(() => vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ ok: false, code: "community_unavailable" }), { status: 404 }))));
 afterEach(() => vi.unstubAllGlobals());
 
 test("unknown community hosts are not served", async () => {
