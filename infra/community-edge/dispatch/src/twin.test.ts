@@ -542,6 +542,7 @@ for (const [engine, type] of ENGINES) {
       expect(await personal.locator("[part=join-count]").count()).toBe(0);
       expect(await personal.locator("[part=join-course]").allTextContents()).toEqual(["3Lead climbing · 3 lessonsClip, fall, trust the rope."]);
       expect(await personal.locator("[part=join-signin]").textContent()).toBe("Sign in");
+      expect(await personal.locator("[part=join-price]").textContent()).toBe("Free");
       // Text, never markup.
       expect(await personal.locator("[part=join-about] p").allTextContents()).toEqual(["We climb at sunrise.", "All levels <b>welcome</b>."]);
       expect(await personal.locator("[part=join-about] b").count()).toBe(0);

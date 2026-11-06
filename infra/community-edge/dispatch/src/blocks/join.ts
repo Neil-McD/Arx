@@ -255,6 +255,9 @@ class Join {
       out.push(h("p", { part: "setup-done", role: "status", text: say("setup_done", name) }));
     }
     if (data.gate === "checkout") return out.concat(this.checkoutGate());
+    // What it costs, said first, as a paid card says its price.
+    out.push(h("p", { class: "price", part: "join-price" }, [h("strong", { text: "Free" }),
+      data.gate === "request_access" ? h("span", { class: "muted", text: "· membership by approval" }) : null]));
     const action = h("button", { class: "primary", part: "join-action", type: "button", text: data.action_label });
     action.addEventListener("click", () => (viewer ? this.join(action) : signIn(null)));
     out.push(h("div", { class: "actions" }, [action]));
