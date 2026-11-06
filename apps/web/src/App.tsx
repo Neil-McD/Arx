@@ -704,7 +704,8 @@ export default function App() {
     communityChannelSlug,
     activeCommunityId,
     activeCommunityAccessId: activeCommunityAccess?.community_id ?? null,
-    activeCommunitySiteUrl: (activeCommunity as { site_url?: string | null } | null)?.site_url,
+    // Only while its members use the site (the owner's switch); else they stay in the app.
+    activeCommunitySiteUrl: activeCommunity?.members_use === "site" ? activeCommunity.site_url : null,
     isLoadingCommunityAccess,
     communityAccessLoadError,
     runsCommunity: communityAccessRunsCommunity(activeCommunityAccess),
@@ -1703,6 +1704,10 @@ export default function App() {
       isResolvingCommunityAccess: isLoadingCommunityAccess,
       communityAccessLoadError,
       onRetryCommunityAccess: retryActiveCommunityAccess,
+      // The owner's switch saved: keep Studio's copy of the community in step.
+      onMemberExperienceSaved: (communityId: string, experience: "app" | "site") =>
+        setCommunities((previous) => previous.map((community) =>
+          community.id === communityId ? { ...community, members_use: experience } : community)),
       canViewActiveCommunitySettings,
       communitySettingsLayer,
       communitySettingsPane,
@@ -2206,6 +2211,10 @@ export default function App() {
     activePage,
     isPublicCommunityFunnel,
     publicRoute: shellPublicRoute,
+    viewerCommunities: {
+      isLoading: !isAuthBootstrapComplete || Boolean(session && !hasResolvedCommunities),
+      slugs: session ? communities.map((community) => community.slug) : [],
+    },
     holdLandingForAuth: shouldHoldLandingForAuth,
     isSignedOut: !session,
     landingPageProps: {

@@ -9,7 +9,7 @@ import {
   resolveCommunityLens,
 } from "./communityCore";
 import { readCanonicalCommunityAgentContext } from "./communityAgentContext";
-import { registeredSiteOrigin } from "./communitySites";
+import { communityMemberExperience, registeredSiteOrigin } from "./communitySites";
 import { resolveCommunityInferenceFundingAdmission } from "./founderInferenceCore";
 import { readCanonicalPublicAppOrigin } from "./publicAppUrl";
 import { deriveCommunityFunnelAction } from "../shared/communityJoinPolicy";
@@ -124,6 +124,8 @@ export const getCommunityPublicIdentityByOriginInternal = internalQuery({
       listed: (community as any).visibility === "published",
       // How someone gets in: join, ask to join (approval), or choose a plan.
       join_gate: deriveCommunityFunnelAction({ entry_policy: resolveCommunityEntryPolicy(community as any) }),
+      // Where members spend time (the owner's switch): "app" sends member pages to Polynet's app.
+      members_use: await communityMemberExperience(ctx, community as any),
     };
   },
 });

@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 
 import type { AppPage, AppView, CommunityTab } from "../../../../shared/appShellNavigation";
-import { communityMemberSiteUrl } from "../../../../shared/webAppRouteState";
+import { cameFromSite, communityMemberSiteUrl } from "../../../../shared/webAppRouteState";
 
 // Members live on the community's site; Studio is the back office. Someone who
 // only belongs (communityAccessRunsCommunity is false) is handed over to the site's matching page when Studio opens a member screen.
@@ -25,7 +25,9 @@ export function useWebMemberSiteHandoff(params: {
     !params.isLoadingCommunityAccess &&
     !params.communityAccessLoadError &&
     params.activeCommunityAccessId === params.activeCommunityId &&
-    !params.runsCommunity
+    !params.runsCommunity &&
+    // The site just sent them here: never send them straight back (no loops).
+    !cameFromSite(window.location.search)
       ? communityMemberSiteUrl(params.activeCommunitySiteUrl, params.activeView, params.communityTab, params.communityChannelSlug)
       : null;
 

@@ -15,9 +15,12 @@ const NOW = Date.now();
 
 afterEach(() => { vi.unstubAllEnvs(); });
 
-async function fixture(withSite: boolean) {
+// withSite: the community's members use its own deployed site (the owner's
+// switch); appWithSite: it has a site address but members use Polynet's app.
+async function fixture(withSite: boolean, opts: { appWithSite?: boolean } = {}) {
+  const sited = withSite || opts.appWithSite;
   vi.stubEnv("ARX_PUBLIC_APP_URL", "https://polynet-staging.example.com");
-  if (withSite) {
+  if (sited) {
     vi.stubEnv("POLYNET_SITES_DOMAIN", "polynet.page");
     vi.stubEnv("POLYNET_SITES_HOST_SUFFIX", "-staging");
   }
@@ -28,7 +31,11 @@ async function fixture(withSite: boolean) {
     const communityId = await ctx.db.insert("communities", {
       ownerId, slug: "night-swimmers", name: "Night Swimmers", visibility: "unlisted", inferenceFundingPolicy: "managed_required",
       entryPolicy: "approval", activeMemberCount: 1, createdAt: NOW, updatedAt: NOW,
+      ...(withSite ? { memberExperience: "site" } : {}),
     } as any);
+    if (withSite) {
+      await ctx.db.insert("communitySiteDeploys", { communityId, userId: ownerId, hostname: "night-swimmers-staging.polynet.page", fileCount: 1, totalBytes: 10, createdAt: NOW });
+    }
     await ctx.db.insert("communityMemberships", {
       communityId, userId: memberId, role: "member", accessSource: "free_grant", active: true,
       activationSequence: 1, activatedAt: NOW, createdAt: NOW, updatedAt: NOW,
@@ -56,6 +63,25 @@ test("with a site, a community's links are its site's pages and its private page
     messages: "https://night-swimmers--me-staging.polynet.page/messages/k97abc",
     bySlug: "https://night-swimmers-staging.polynet.page/",
   });
+});
+
+test("members on Polynet's app (the default, even with a site address): every link stays in the app", async () => {
+  const f = await fixture(false, { appWithSite: true });
+  const links = await f.t.run(async (ctx) => {
+    const community = (await ctx.db.get(f.communityId))!;
+    return [
+      await communitySitePageUrl(ctx, community, "/chat"),
+      await communityPrivatePageUrl(ctx, community, "/messages/x"),
+      await directMessageLink(ctx, community, "k97abc", f.memberId),
+    ];
+  });
+  expect(links).toEqual([null, null, "https://polynet-staging.example.com/?dm=k97abc"]);
+  // Choosing the site without a deployed site of its own still means the app.
+  const chosenWithoutDeploy = await f.t.run(async (ctx) => {
+    await ctx.db.patch(f.communityId, { memberExperience: "site" } as any);
+    return await communitySitePageUrl(ctx, (await ctx.db.get(f.communityId))!, "/chat");
+  });
+  expect(chosenWithoutDeploy).toBeNull();
 });
 
 test("without a site there's no site link, so each email keeps its Studio link", async () => {

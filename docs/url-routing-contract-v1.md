@@ -104,15 +104,29 @@ Use explicit namespaces.
 
 - `/c/:slug`
 
-This hands the visitor over to the community's own site (Nov 6): every
-community lives on its site, where joining and paying (cash first) happen. A
-community with no site yet shows a short note. Studio has no join page or
-checkout of its own any more (`WebCommunityHandoff`).
+The community's one link (`WebCommunityHandoff`). Visitors go to its site's
+public page, where joining and paying (cash first) happen; Studio has no join
+page or checkout of its own. Members go where the owner's switch says they
+spend time (`members_use`, `communityMemberExperience`): Polynet's app
+(`/c/:slug/home`, the default) or the community's own deployed site. It waits
+until membership is known. A community with no site yet shows a short note.
 
-Studio's member screens, `/c/:slug/home`, `/c/:slug/chat`, `/c/:slug/events`,
-`/c/:slug/resources` and `/c/:slug/agent`, hand someone who only belongs to
-the site's matching page (`/`, `/chat`, `/events`, `/learn`, `/ask`) once
-their access has loaded (`useWebMemberSiteHandoff`). The owner, admins,
+The switch (Nov 6, owner only, Studio → Settings): "Polynet's app" or "Your
+custom site" (needs a deployed site; without one it reads as the app). Every
+link follows it: emails and DM links (`communitySitePageUrl` and
+`communityPrivatePageUrl` give a site link only in site mode), and the site's
+edge, which in app mode sends member pages (`/chat`, `/events`, `/learn`,
+`/knowledge`, `/ask`, `/people`, and the twin's `/messages`, `/settings`,
+`/communities`) to the same place in the app (`appPageFor`). The public page,
+`/join`, checkout, Discover and moderation never move. Each side marks the visit
+it sends (`pn_from=site` from the edge, `pn_from=app` from Studio) and never
+sends a marked visit back, so in the minute after a switch, while one side may
+still have the old choice cached, a member is moved at most once: no loops.
+
+In site mode, Studio's member screens, `/c/:slug/home`, `/c/:slug/chat`,
+`/c/:slug/events`, `/c/:slug/resources` and `/c/:slug/agent`, hand someone who
+only belongs to the site's matching page (`/`, `/chat`, `/events`, `/learn`,
+`/ask`) once their access has loaded (`useWebMemberSiteHandoff`). The owner, admins,
 moderators and anyone with a members, join-request, moderation or resources
 right (`communityAccessRunsCommunity`) stay in Studio, the back office; so does everyone in a community with no site yet.
 

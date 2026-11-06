@@ -83,6 +83,8 @@ const CRITICAL_AUDIT_METADATA_BLOCKED_KEY_PARTS = [
 
 const CRITICAL_AUDIT_METADATA_ALLOWLIST: Record<string, readonly string[]> = {
   account_delete_blocked: ["reason"],
+  // The owner's switch: where members spend time, "app" or "site".
+  community_member_experience_changed: ["from", "to"],
   account_delete_completed: [],
   community_archived: ["lifecycleGeneration"],
   community_archive_billing_cleanup_completed: [

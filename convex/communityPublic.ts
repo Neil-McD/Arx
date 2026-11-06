@@ -44,7 +44,7 @@ import {
   resolveMemberCommunityPresenceSummary,
 } from "./communityPresenceCore";
 import { communityIsActive } from "../shared/communityLifecycle";
-import { communitySiteUrl, registeredSiteOrigin } from "./communitySites";
+import { communityMemberExperience, communitySiteUrl, registeredSiteOrigin } from "./communitySites";
 import type { CommunityPublicFace } from "../shared/communityTypes";
 import {
   requireCommunityBuilderAccess,
@@ -226,8 +226,10 @@ export const resolvePublicFunnelBySlug = query({
         visibility: community.visibility,
         entry_policy: entryPolicy,
         funnel: COMMUNITY_FUNNEL_PUBLIC_CONFIG,
-        // Its own site: the community's front door, so this page sends visitors there.
+        // Its own site: the community's front door, so this page sends visitors there,
+        // and where its members spend time (Polynet's app unless the owner chose the site).
         site_url: await communitySiteUrl(ctx, community),
+        members_use: await communityMemberExperience(ctx, community),
       },
       active_plan: activePlan,
     };

@@ -2,19 +2,19 @@ import { readFileSync } from "node:fs";
 import { expect, test } from "vitest";
 
 import { communityAccessRunsCommunity, deriveCommunityAccessCapabilities } from "../shared/communityAccessViewModel";
-import { communityMemberSiteUrl } from "../shared/webAppRouteState";
+import { cameFromSite, communityMemberSiteUrl } from "../shared/webAppRouteState";
 
 const SITE = "https://sunrise.polynet.page";
 
 test("a member's Studio screen maps to the site's matching page; management tabs stay in Studio", () => {
-  expect(communityMemberSiteUrl(SITE, "community_home", "chat")).toBe(`${SITE}/`);
-  expect(communityMemberSiteUrl(SITE, "home", "chat")).toBe(`${SITE}/chat`);
-  expect(communityMemberSiteUrl(SITE, "home", "chat", "Crew")).toBe(`${SITE}/chat?channel=crew`);
-  expect(communityMemberSiteUrl(SITE, "home", "chat", "general")).toBe(`${SITE}/chat`);
-  expect(communityMemberSiteUrl(SITE, "home", "events", "crew")).toBe(`${SITE}/events`);
-  expect(communityMemberSiteUrl(SITE, "home", "events")).toBe(`${SITE}/events`);
-  expect(communityMemberSiteUrl(SITE, "home", "resources")).toBe(`${SITE}/learn`);
-  expect(communityMemberSiteUrl(SITE, "home", "agent")).toBe(`${SITE}/ask`);
+  expect(communityMemberSiteUrl(SITE, "community_home", "chat")).toBe(`${SITE}/?pn_from=app`);
+  expect(communityMemberSiteUrl(SITE, "home", "chat")).toBe(`${SITE}/chat?pn_from=app`);
+  expect(communityMemberSiteUrl(SITE, "home", "chat", "Crew")).toBe(`${SITE}/chat?channel=crew&pn_from=app`);
+  expect(communityMemberSiteUrl(SITE, "home", "chat", "general")).toBe(`${SITE}/chat?pn_from=app`);
+  expect(communityMemberSiteUrl(SITE, "home", "events", "crew")).toBe(`${SITE}/events?pn_from=app`);
+  expect(communityMemberSiteUrl(SITE, "home", "events")).toBe(`${SITE}/events?pn_from=app`);
+  expect(communityMemberSiteUrl(SITE, "home", "resources")).toBe(`${SITE}/learn?pn_from=app`);
+  expect(communityMemberSiteUrl(SITE, "home", "agent")).toBe(`${SITE}/ask?pn_from=app`);
   for (const tab of ["settings", "workflows", "analytics"] as const) expect(communityMemberSiteUrl(SITE, "home", tab)).toBeNull();
 });
 
@@ -52,4 +52,31 @@ test("the hand-off waits for this community's access and never acts on a failed 
   expect(hook).toMatch(/!params\.isLoadingCommunityAccess[\s\S]*!params\.communityAccessLoadError[\s\S]*activeCommunityAccessId === params\.activeCommunityId[\s\S]*!params\.runsCommunity/);
   const app = readFileSync(new URL("../apps/web/src/App.tsx", import.meta.url), "utf8");
   expect(app).toMatch(/runsCommunity: communityAccessRunsCommunity\(activeCommunityAccess\)/);
+});
+
+test("the owner's switch decides: Studio hands members to the site only when they use it", () => {
+  const app = readFileSync(new URL("../apps/web/src/App.tsx", import.meta.url), "utf8");
+  expect(app).toMatch(/activeCommunitySiteUrl: activeCommunity\?\.members_use === "site" \? activeCommunity\.site_url : null/);
+  const handoff = readFileSync(new URL("../apps/web/src/components/WebCommunityHandoff.tsx", import.meta.url), "utf8");
+  // /c/<slug>: wait until membership is known; a member on Polynet's app opens the community there.
+  expect(handoff).toMatch(/if \(props\.membership === "loading"\) return;/);
+  expect(handoff).toMatch(/props\.membership === "member" && community\.members_use !== "site"[\s\S]*\/c\/\$\{encodeURIComponent\(community\.slug\)\}\/home/);
+  const settings = readFileSync(new URL("../apps/web/src/components/WebCommunitySettingsSection.tsx", import.meta.url), "utf8");
+  expect(settings).toMatch(/<CommunityMemberExperienceSection[\s\S]*canChange=\{isOwnerSettingsLayer\}/);
+});
+
+test("a saved switch updates Studio's copy of the community, so reopening Settings shows it", () => {
+  const section = readFileSync(new URL("../apps/web/src/components/CommunityMemberExperienceSection.tsx", import.meta.url), "utf8");
+  expect(section).toMatch(/setCurrent\(saved\);\s*props\.onSaved\(props\.community\.id, saved\);/);
+  const app = readFileSync(new URL("../apps/web/src/App.tsx", import.meta.url), "utf8");
+  expect(app).toMatch(/onMemberExperienceSaved:[\s\S]{0,200}setCommunities\(\(previous\) => previous\.map\([\s\S]{0,120}members_use: experience/);
+});
+
+test("right after a switch, a member is moved at most once: neither side sends a marked visit back", () => {
+  expect(cameFromSite("?pn_from=site")).toBe(true);
+  expect(cameFromSite("?dm=inbox&pn_from=site")).toBe(true);
+  expect(cameFromSite("?pn_from=app")).toBe(false);
+  expect(cameFromSite("")).toBe(false);
+  const hook = readFileSync(new URL("../apps/web/src/controllers/useWebMemberSiteHandoff.ts", import.meta.url), "utf8");
+  expect(hook).toMatch(/!cameFromSite\(window\.location\.search\)/);
 });

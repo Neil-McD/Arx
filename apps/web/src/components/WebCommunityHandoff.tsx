@@ -1,17 +1,19 @@
-// Studio's /c/<slug>: every community lives on its own site, so this page only
-// hands the visitor over to it (joining, paying and members happen there). A
-// community with no site yet gets a short note instead of a dead end, and a
+// Studio's /c/<slug>: the community's one link. Visitors go to its site (its
+// public page; joining and paying happen there). Members go where the owner's
+// switch says they spend time: the community in Polynet's app, or its site.
+// A community with no site yet gets a short note instead of a dead end, and a
 // failed lookup says so (with a retry) rather than claiming it doesn't exist.
 import { useEffect, useState } from "react";
 import { resolveCloudPublicFunnel } from "../../../../shared/cloudPublicFunnelGateway";
 import { communitySiteRedirectTarget } from "../../../../shared/webAppRouteState";
 
-type HandoffCommunity = { slug?: string | null; name?: string | null; site_url?: string | null };
+type HandoffCommunity = { slug?: string | null; name?: string | null; site_url?: string | null; members_use?: "app" | "site" };
 
-export function WebCommunityHandoff(props: { communitySlug: string }) {
+export function WebCommunityHandoff(props: { communitySlug: string; membership: "loading" | "member" | "visitor" }) {
   const [state, setState] = useState<{ status: "loading" } | { status: "no_site"; name: string } | { status: "missing" } | { status: "unreachable" }>({ status: "loading" });
 
   useEffect(() => {
+    if (props.membership === "loading") return;
     let cancelled = false;
     void (async () => {
       try {
@@ -19,6 +21,9 @@ export function WebCommunityHandoff(props: { communitySlug: string }) {
         if (cancelled) return;
         const community = payload?.ok ? payload.community : null;
         if (!community?.slug) return setState({ status: "missing" });
+        if (props.membership === "member" && community.members_use !== "site") {
+          return window.location.replace(`/c/${encodeURIComponent(community.slug)}/home`);
+        }
         const target = communitySiteRedirectTarget(`/c/${community.slug}`, community.slug, community.site_url);
         if (target) return window.location.replace(target);
         setState({ status: "no_site", name: String(community.name ?? community.slug) });
@@ -29,7 +34,7 @@ export function WebCommunityHandoff(props: { communitySlug: string }) {
     return () => {
       cancelled = true;
     };
-  }, [props.communitySlug]);
+  }, [props.communitySlug, props.membership]);
 
   if (state.status === "loading") return <div className="landing-auth-hold" aria-hidden="true" />;
   const title = state.status === "no_site" ? state.name : state.status === "unreachable" ? "Couldn't reach Polynet" : "Community not found";
