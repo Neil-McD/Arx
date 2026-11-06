@@ -1505,8 +1505,9 @@ export function defaultSitePolicy(storage: string): string {
     "script-src 'self'",
     "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
     "font-src 'self' https://fonts.gstatic.com data:",
-    "img-src 'self' data: https:",
-    "media-src 'self' https:",
+    // blob: for the composer's previews of files picked or pasted in.
+    "img-src 'self' data: blob: https:",
+    "media-src 'self' blob: https:",
     `connect-src 'self'${live}`,
     "form-action 'self'",
     "frame-ancestors 'self'",

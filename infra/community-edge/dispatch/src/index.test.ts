@@ -1653,6 +1653,8 @@ test("every public site page gets browser rules that can't break it; Polynet's d
   // Polynet's default site: same-origin scripts only, its live socket allowed.
   const ours = withSiteSecurityHeaders(page(), { defaultSite: true, storageHost: "live.example.convex.cloud" }).headers.get("content-security-policy")!;
   expect(ours).toContain("script-src 'self'");
+  // The composer previews attachments from blob: addresses.
+  expect(ours).toContain("img-src 'self' data: blob: https:");
   expect(ours).toContain("connect-src 'self' https://live.example.convex.cloud wss://live.example.convex.cloud");
   expect(ours).not.toMatch(/unsafe-eval|script-src[^;]*unsafe-inline/);
   // Not a page (a script, an image): untouched.
