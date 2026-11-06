@@ -1395,6 +1395,26 @@ test("twin join: the routes and the join module exist only on the twin, for its 
   expect(source).not.toContain("innerHTML");
 });
 
+test("public page: a founder's site reads its doorstep's data signed out, as the doorstep does, with where Join is; never on the twin", async () => {
+  resetEdgeCaches();
+  const backend = vi.fn(async (_url: string, _init?: RequestInit) => Response.json({ ...JOIN_ANSWER, signed_in: false, viewer: null }));
+  vi.stubGlobal("fetch", backend);
+  const e = sitesEnv();
+  const res = await edge.fetch(at(SITE, "/__polynet/public-page"), e);
+  expect([res.status, res.headers.get("cache-control")]).toEqual([200, "public, max-age=60"]);
+  expect(await res.json()).toEqual({
+    ok: true, community: SHAPED_JOIN.community, gate: "checkout", available: true, action_label: "Join $10/month",
+    plans: [{ billing_period: "monthly", label: "Join $10/month", price: "$10" }], join_url: `${TWIN}/join`,
+  });
+  // Read as the doorstep reads it: from the twin's origin, no session.
+  const [path, init] = backend.mock.calls[0];
+  expect([path, (init?.headers as Record<string, string>).Origin, (init?.headers as Record<string, string>).Authorization]).toEqual(["https://api.example.convex.site/runtime/app/me/join", TWIN, undefined]);
+  expect((await edge.fetch(at(TWIN, "/__polynet/public-page"), e)).status).toBe(404);
+  expect((await edge.fetch(at(SITE, "/__polynet/public-page", { method: "POST", body: "{}" }), e)).status).toBe(405);
+  vi.stubGlobal("fetch", vi.fn(async () => new Response("down", { status: 503 })));
+  expect((await edge.fetch(at(SITE, "/__polynet/public-page"), e)).status).toBe(502);
+});
+
 test("twin join: the read works signed out; signed in it carries the twin's session; only the fields the page draws leave the edge", async () => {
   resetEdgeCaches();
   const backend = vi.fn(async (_url: string, _init?: RequestInit) => Response.json(JOIN_ANSWER));
