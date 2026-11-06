@@ -28,6 +28,7 @@ export type UserProfileDetailLike = UserProfileLike & {
 export type AnalyticsSummaryLike = {
   total_members: number | null;
   page_visits_window: number | null;
+  join_starts_window: number | null;
   new_members_window: number | null;
   conversion_rate_window: number | null;
   mrr_base_units: number | null;
@@ -64,6 +65,7 @@ export function emptyAnalyticsSummary(): AnalyticsSummaryLike {
   return {
     total_members: null,
     page_visits_window: null,
+    join_starts_window: null,
     new_members_window: null,
     conversion_rate_window: null,
     mrr_base_units: null,

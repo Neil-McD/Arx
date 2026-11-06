@@ -58,6 +58,7 @@ import {
   expireStripeCheckoutSessionIfOpen,
 } from "./stripeSubscriptionCancellation";
 import { requireCommunityBuilderAccess } from "./communityBuilderAccessCore";
+import { recordCommunityJoinStarted } from "./communityFunnelEvents";
 
 type CommunityCheckoutSessionRow = {
   _id: any;
@@ -687,6 +688,7 @@ export const createPendingPublicCommunityCheckoutSessionInternal = internalMutat
       createdAt: nowMs,
       updatedAt: nowMs,
     });
+    await recordCommunityJoinStarted(ctx, { communityId: args.communityId, userId: args.ownerUserId, visitorHash: args.buyerVisitorHash, nowMs });
     await recordCriticalAuditEventBestEffort(ctx, {
       eventKey: `community_checkout_created:${args.sessionId}`,
       eventType: "community_checkout_created",

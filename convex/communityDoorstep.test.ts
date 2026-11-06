@@ -60,3 +60,29 @@ test("a course's line is its first paragraph as plain words, cut at a word", () 
   expect(long?.endsWith("focus…")).toBe(true);
   expect(long!.length).toBeLessThanOrEqual(181);
 });
+
+// The middle of the funnel: acting on the doorstep (joining, asking, starting a
+// checkout) is counted once per person per half hour, between visits and new members.
+test("acting on the doorstep counts as started joining, once per person a while", async () => {
+  const t = convexTest(schema, modules);
+  const now = Date.now();
+  const { communityId, visitorId } = await t.run(async (ctx) => {
+    const user = (handle: string) => ctx.db.insert("users", {
+      authSubject: `${handle}-subject`, displayName: handle, handle, normalizedHandle: handle, createdAt: now, updatedAt: now,
+    });
+    const ownerId = await user("owner");
+    const visitorId = await user("visitor");
+    const communityId = await ctx.db.insert("communities", {
+      ownerId, slug: "club", name: "Club", visibility: "published", inferenceFundingPolicy: "managed_required",
+      entryPolicy: "approval", activeMemberCount: 1, createdAt: now, updatedAt: now,
+    } as any);
+    return { communityId, visitorId };
+  });
+  const { internal } = await import("./_generated/api");
+  await t.mutation(internal.communityAppJoin.joinCommunityAppVisitorInternal, { userId: visitorId, communityId });
+  await t.mutation(internal.communityAppJoin.cancelCommunityAppJoinRequestInternal, { userId: visitorId, communityId });
+  await t.mutation(internal.communityAppJoin.joinCommunityAppVisitorInternal, { userId: visitorId, communityId });
+  const started = await t.run(async (ctx) => (await ctx.db.query("communityAnalyticsEvents").collect())
+    .filter((row) => row.eventType === "funnel_join_started").map((row) => [row.visitorKey, row.userId]));
+  expect(started).toEqual([[`user:${visitorId}`, visitorId]]);
+});

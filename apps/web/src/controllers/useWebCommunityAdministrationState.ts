@@ -84,6 +84,7 @@ export function useWebCommunityAdministrationState(params: {
     useState<CommunityAnalyticsSummary>({
       total_members: null,
       page_visits_window: null,
+      join_starts_window: null,
       new_members_window: null,
       conversion_rate_window: null,
       mrr_base_units: null,
