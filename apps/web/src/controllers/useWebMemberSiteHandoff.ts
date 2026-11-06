@@ -4,8 +4,7 @@ import type { AppPage, AppView, CommunityTab } from "../../../../shared/appShell
 import { communityMemberSiteUrl } from "../../../../shared/webAppRouteState";
 
 // Members live on the community's site; Studio is the back office. Someone who
-// only belongs (no settings, members, analytics, join requests or moderation)
-// is handed over to the site's matching page when Studio opens a member screen.
+// only belongs (communityAccessRunsCommunity is false) is handed over to the site's matching page when Studio opens a member screen.
 // Anyone who runs the community stays; so does everyone while their access is
 // still loading or failed, and in a community with no site yet.
 export function useWebMemberSiteHandoff(params: {
