@@ -10,11 +10,14 @@ import {
 import { listActiveCommunityRecipientUserIds } from "./communityRecipientCore";
 import { communitySitePageUrl } from "./communitySites";
 import { readCanonicalPublicAppOrigin } from "./publicAppUrl";
+import { logStructuredError } from "./errorLogging";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const DEFAULT_LOOKAHEAD_MS = 20 * 60 * 1000;
-const DEFAULT_EVENT_SCAN_LIMIT = 500;
-const DEFAULT_RECIPIENT_LIMIT = 500;
+// Events read per run (per kind); hitting it is logged, never silent.
+const DEFAULT_EVENT_SCAN_LIMIT = 2000;
+// Every member is reminded: recipients go out in batches of this many.
+const RECIPIENTS_PER_BATCH = 500;
 
 type EventReminderBatch = {
   communityId: string;
@@ -114,11 +117,9 @@ export const buildEventReminderBatchesInternal = internalQuery({
     const nowMs = Number.isFinite(args.nowMs) ? Math.floor(args.nowMs as number) : Date.now();
     const lookaheadMs = normalizePositiveMs(args.lookaheadMs, DEFAULT_LOOKAHEAD_MS, 2 * 60 * 60 * 1000);
     const limitEvents = normalizePositiveLimit(args.limitEvents, DEFAULT_EVENT_SCAN_LIMIT, 2000);
-    const limitRecipientsPerEvent = normalizePositiveLimit(
-      args.limitRecipientsPerEvent,
-      DEFAULT_RECIPIENT_LIMIT,
-      2000,
-    );
+    const limitRecipientsPerEvent = typeof args.limitRecipientsPerEvent === "number"
+      ? normalizePositiveLimit(args.limitRecipientsPerEvent, Number.MAX_SAFE_INTEGER, Number.MAX_SAFE_INTEGER)
+      : Number.MAX_SAFE_INTEGER;
     const windowStart = nowMs + DAY_MS;
     const windowEnd = windowStart + lookaheadMs;
 
@@ -128,6 +129,7 @@ export const buildEventReminderBatchesInternal = internalQuery({
         q.eq("status", "live").gte("startsAt", windowStart).lte("startsAt", windowEnd),
       )
       .take(limitEvents)) as CommunityEventRow[];
+    const truncated: string[] = oneOffRows.length >= limitEvents ? ["one_off"] : [];
 
     const recurringRows: CommunityEventRow[] = [];
     for (const frequency of ["daily", "weekly", "monthly"] as const) {
@@ -137,7 +139,12 @@ export const buildEventReminderBatchesInternal = internalQuery({
           q.eq("status", "live").eq("recurrenceFrequency", frequency).lte("startsAt", windowEnd),
         )
         .take(limitEvents)) as CommunityEventRow[];
+      if (rows.length >= limitEvents) truncated.push(frequency);
       recurringRows.push(...rows);
+    }
+    // More events than one run reads: say so (some reminders would be missed).
+    if (truncated.length) {
+      logStructuredError("event_reminder_scan_truncated", { error: new Error("event_reminder_scan_truncated"), limitEvents, truncated });
     }
 
     const rowsById = new Map<string, CommunityEventRow>();
@@ -146,7 +153,7 @@ export const buildEventReminderBatchesInternal = internalQuery({
     }
 
     const batches: EventReminderBatch[] = [];
-    for (const event of [...rowsById.values()].slice(0, limitEvents)) {
+    for (const event of [...rowsById.values()]) {
       const occurrenceStarts = getEventOccurrenceStartsInWindow(event, windowStart, windowEnd);
       if (occurrenceStarts.length === 0) continue;
 
@@ -162,7 +169,7 @@ export const buildEventReminderBatchesInternal = internalQuery({
       });
       if (recipientUserIds.length === 0) continue;
 
-      for (const occurrenceStartsAt of occurrenceStarts) {
+      for (const occurrenceStartsAt of occurrenceStarts) for (let first = 0; first < recipientUserIds.length; first += RECIPIENTS_PER_BATCH) {
         batches.push({
           communityId: String(community._id),
           communityName: String(community.name ?? communitySlug).trim() || "your community",
@@ -171,7 +178,7 @@ export const buildEventReminderBatchesInternal = internalQuery({
           eventTitle: String(event.title ?? "").trim() || "Your event",
           eventTimezone: String(event.timezone ?? "").trim() || "UTC",
           occurrenceStartsAt,
-          recipientUserIds,
+          recipientUserIds: recipientUserIds.slice(first, first + RECIPIENTS_PER_BATCH),
           siteEventUrl: await communitySitePageUrl(ctx, community, `/events/${encodeURIComponent(String(event._id))}~${occurrenceStartsAt}`),
         });
       }
