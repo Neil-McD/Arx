@@ -843,11 +843,6 @@ function legalUrl(value: unknown): string | null {
   return typeof value === "string" && value.startsWith(LEGAL_DOCUMENT_PREFIX) && /^[a-z0-9/._:-]+$/i.test(value) ? value : null;
 }
 
-const LEGAL_DOCUMENT_PREFIX = "https://github.com/Neil-McD/Arx/blob/main/docs/legal/";
-function legalUrl(value: unknown): string | null {
-  return typeof value === "string" && value.startsWith(LEGAL_DOCUMENT_PREFIX) && /^[a-z0-9/._:-]+$/i.test(value) ? value : null;
-}
-
 function studioJoinUrl(route: Route, env: Env): string {
   return new URL(`/c/${encodeURIComponent(route.community)}`, env.POLYNET_AUTH_URL).toString();
 }
