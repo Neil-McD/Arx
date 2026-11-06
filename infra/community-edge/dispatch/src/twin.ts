@@ -253,9 +253,14 @@ export function twinPageHeaders(policy: string): Headers {
   });
 }
 
+// Every twin response gets these; only a page that said in so many words that
+// it may be found (X-Robots-Tag: all, a listed community's doorstep) keeps that.
 export function withTwinHeaders(response: Response): Response {
   const headers = new Headers(response.headers);
-  for (const [name, value] of Object.entries(TWIN_HEADERS)) headers.set(name, value);
+  for (const [name, value] of Object.entries(TWIN_HEADERS)) {
+    if (name === "X-Robots-Tag" && headers.get(name) === "all") continue;
+    headers.set(name, value);
+  }
   return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
 }
 

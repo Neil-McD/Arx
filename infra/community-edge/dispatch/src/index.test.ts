@@ -746,37 +746,26 @@ test("default site: a community with nothing deployed is on its own site, Polyne
   }));
   vi.stubGlobal("HTMLRewriter", FakeRewriter);
   const e = undeployed();
-  const home = await edge.fetch(at(SITE, "/", { headers: { "sec-fetch-mode": "navigate" } }), e);
-  expect(home.status).toBe(200);
-  const html = await home.text();
-  expect(html).toContain("<title>Apps &#60;Club&#62;</title>");
-  expect(html).toContain('<h1 class="name">Apps &#60;Club&#62;</h1>');
-  expect(html).toContain('<p class="tagline">We build &#34;apps&#34;.</p>');
-  expect(html).toContain("Tuesdays &#38; Thursdays.");
-  expect(html).toContain("<span>1 member</span>");
-  expect(html).toContain('<meta property="og:image" content="https://cdn.example.com/b.png">');
-  expect(html).toContain('<a class="btn go" href="/join">Join the community</a>');
-  // A community that approves each member says so on its front door.
-  resetEdgeCaches();
-  vi.stubGlobal("fetch", defaultIdentity({ name: "Apps Club", join_gate: "request_access" }));
-  expect(await (await edge.fetch(at(SITE, "/"), e)).text()).toContain('<a class="btn go" href="/join">Ask to join</a>');
-  resetEdgeCaches();
-  vi.stubGlobal("fetch", defaultIdentity({
-    name: "Apps <Club>", one_liner: "We build \"apps\".", about: "Tuesdays & Thursdays.", member_count: 1,
-    banner_url: "https://cdn.example.com/b.png", avatar_url: "javascript:alert(1)",
-  }));
-  expect(html).not.toContain("javascript:");
-  // The colour field is always under the banner, and the initial under the avatar, for when a picture doesn't load.
-  expect(html).toContain('<div class="field" aria-hidden="true"><span>A</span></div><img class="art" src="https://cdn.example.com/b.png" alt="">');
-  expect(html).toContain('<span class="emblem">A</span>');
-  // The shell is added, as on any site.
-  expect(html).toContain('<script type="module" src="/__polynet/ui.js"></script>');
+  // The front door is the doorstep: Join (on the twin, where joining happens).
+  for (const path of ["/", "/index.html"]) {
+    const home = await edge.fetch(at(SITE, path, { headers: { "sec-fetch-mode": "navigate" } }), e);
+    expect([home.status, home.headers.get("location")]).toEqual([302, "/join"]);
+  }
   // A standard page is drawn in the default frame.
   const chat = await edge.fetch(at(SITE, "/chat", { headers: { "sec-fetch-mode": "navigate" } }), e);
   const frame = await chat.text();
   expect([chat.status, frame]).toEqual([200, expect.stringContaining("<title>Chat · Apps &lt;Club&gt;</title>")]);
   expect(frame).toContain("<polynet-page></polynet-page>");
   expect(frame).toContain('<link rel="stylesheet" href="/site.css">');
+  // Every word escaped; the share card from the community's own words and banner; no unsafe picture.
+  expect(frame).toContain('<meta property="og:title" content="Apps &#60;Club&#62;">');
+  expect(frame).toContain('<meta property="og:description" content="We build &#34;apps&#34;.">');
+  expect(frame).toContain('<meta property="og:image" content="https://cdn.example.com/b.png">');
+  expect(frame).not.toContain("javascript:");
+  expect(frame).toContain('<span class="emblem">A</span>');
+  // Members use Polynet's app: no member-page menu, just the name and the shell's Join or Sign in.
+  expect(frame).not.toContain('class="nav"');
+  expect(frame).toContain("<polynet-account></polynet-account>");
   // Its stylesheet carries the community's own colour.
   const css = await edge.fetch(at(SITE, "/site.css"), e);
   expect([css.status, css.headers.get("content-type")]).toEqual([200, "text/css; charset=utf-8"]);
@@ -821,7 +810,7 @@ test("default site: a backend blip is never remembered; only 'no community here'
   expect((await edge.fetch(at(SITE, "/"), e)).status).toBe(404);
   failing = false;
   // Back at once, not a minute later.
-  expect((await edge.fetch(at(SITE, "/"), e)).status).toBe(200);
+  expect((await edge.fetch(at(SITE, "/"), e)).status).toBe(302);
   // A real "no community here" is remembered: asked once.
   backend.mockClear();
   await edge.fetch(at("https://nobody-staging.polynet.page", "/"), e);
@@ -835,13 +824,14 @@ test("default site: a backend blip is never remembered; only 'no community here'
   expect(backend).not.toHaveBeenCalled();
 });
 
-test("default site: an unlisted community asks search engines not to index it, whoever built its site; the twin never is", async () => {
+test("default site: an unlisted community asks search engines not to index it, whoever built its site; of the twin, only a listed community's doorstep is", async () => {
   resetEdgeCaches();
   vi.stubGlobal("HTMLRewriter", FakeRewriter);
   vi.stubGlobal("fetch", defaultIdentity({ name: "Apps Club", listed: false }));
-  const home = await edge.fetch(at(SITE, "/"), undeployed());
+  const home = await edge.fetch(at(SITE, "/chat", { headers: { "sec-fetch-mode": "navigate" } }), undeployed());
   expect(home.headers.get("x-robots-tag")).toBe("noindex");
   expect(await home.text()).toContain('<meta name="robots" content="noindex">');
+  expect((await edge.fetch(at(TWIN, "/join"), undeployed())).headers.get("x-robots-tag")).toBe("noindex");
   // A founder's own site for an unlisted community: the same.
   const deployed = await edge.fetch(at(SITE, "/", { headers: { "sec-fetch-mode": "navigate" } }), sitesEnv());
   expect(deployed.headers.get("x-robots-tag")).toBe("noindex");
@@ -849,14 +839,16 @@ test("default site: an unlisted community asks search engines not to index it, w
   expect((await edge.fetch(at(SITE, "/site.css"), undeployed())).headers.get("x-robots-tag")).toBe("noindex");
   resetEdgeCaches();
   vi.stubGlobal("fetch", defaultIdentity({ name: "Apps Club", listed: true }));
-  const listed = await edge.fetch(at(SITE, "/"), undeployed());
+  const listed = await edge.fetch(at(SITE, "/chat", { headers: { "sec-fetch-mode": "navigate" } }), undeployed());
   expect(listed.headers.get("x-robots-tag")).toBeNull();
   expect(await listed.text()).not.toContain('name="robots"');
-  const twin = await edge.fetch(at(TWIN, "/join"), undeployed());
-  expect(twin.headers.get("x-robots-tag")).toBe("noindex");
+  // Its doorstep can be found; a member's own pages never are.
+  expect((await edge.fetch(at(TWIN, "/join"), undeployed())).headers.get("x-robots-tag")).toBe("all");
+  const own = await edge.fetch(at(TWIN, "/communities", { headers: { cookie: `__Host-polynet_session=${TOKEN}` } }), undeployed());
+  expect(own.headers.get("x-robots-tag")).toBe("noindex");
 });
 
-test("default site: the frame shows the avatar only from Polynet's storage (the twin loads nothing else); the front door, any https avatar", async () => {
+test("default site: the frame shows the avatar only from Polynet's storage (the twin loads nothing else)", async () => {
   resetEdgeCaches();
   vi.stubGlobal("HTMLRewriter", FakeRewriter);
   vi.stubGlobal("fetch", defaultIdentity({ name: "Apps Club", avatar_url: "https://cdn.example.com/a.png" }));
@@ -864,7 +856,6 @@ test("default site: the frame shows the avatar only from Polynet's storage (the 
   const frame = await (await edge.fetch(at(SITE, "/chat", { headers: { "sec-fetch-mode": "navigate" } }), e)).text();
   expect(frame).toContain('<span class="emblem">A</span>');
   expect(frame).toContain('<script type="module" src="/site.js"></script>');
-  expect(await (await edge.fetch(at(SITE, "/"), e)).text()).toContain('<span class="emblem">A<img src="https://cdn.example.com/a.png" alt=""></span>');
   resetEdgeCaches();
   vi.stubGlobal("fetch", defaultIdentity({ name: "Apps Club", avatar_url: "https://live.example.convex.cloud/api/storage/abc" }));
   const stored = await (await edge.fetch(at(SITE, "/chat", { headers: { "sec-fetch-mode": "navigate" } }), e)).text();
@@ -1600,6 +1591,31 @@ test("a person opening a site page is reported as a visit, after the page; asset
   // A failing backend never touches the page.
   vi.stubGlobal("fetch", vi.fn(async () => { throw new Error("down"); }));
   expect((await open("/about")).status).toBe(200);
+});
+
+test("the doorstep (Join, on the twin) counts as a visit to the site; the member's other pages there don't", async () => {
+  resetEdgeCaches();
+  vi.stubGlobal("HTMLRewriter", FakeRewriter);
+  const visits: string[] = [];
+  const identity = defaultIdentity({ name: "Apps Club", listed: true });
+  vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
+    if (String(url).endsWith("/runtime/app/visit")) { visits.push(String(new Headers(init?.headers).get("origin"))); return new Response("{}"); }
+    return identity(url, init);
+  }));
+  const waits: Promise<unknown>[] = [];
+  const ctx = { waitUntil: (p: Promise<unknown>) => void waits.push(p) };
+  const browser = { "cf-connecting-ip": "203.0.113.7", "user-agent": "Mozilla/5.0 Safari/605", "sec-fetch-dest": "document" };
+  const open = async (origin: string, path: string, headers: Record<string, string> = browser) => {
+    const res = await edge.fetch(new Request(`${origin}${path}`, { headers }), undeployed(), ctx);
+    await Promise.all(waits.splice(0));
+    return res;
+  };
+  expect((await open(TWIN, "/join")).status).toBe(200);
+  expect(visits).toEqual([SITE]);
+  await open(TWIN, "/communities", { ...browser, cookie: `__Host-polynet_session=${TOKEN}` });
+  // The front door's step to the doorstep isn't a page of its own.
+  expect((await open(SITE, "/")).status).toBe(302);
+  expect(visits).toEqual([SITE]);
 });
 
 test("members use Polynet's app: member pages go to the same place there; the public page, Join and Discover stay", async () => {

@@ -1,12 +1,12 @@
-// Studio's /c/<slug>: the community's one link. Visitors go to its site (its
-// public page; joining and paying happen there). Members go where the owner's
+// Studio's /c/<slug>: the community's one link. Visitors go to its doorstep
+// (Join on its site: the page that sells it, where joining and paying happen;
+// Discover's cards come through here too). Members go where the owner's
 // switch says they spend time: the community in Polynet's app, or its site.
 // A community with no site yet gets a short note instead of a dead end, and a
 // failed lookup says so (with a retry) rather than claiming it doesn't exist.
 import { useEffect, useState } from "react";
 import { resolveCloudPublicFunnel } from "../../../../shared/cloudPublicFunnelGateway";
 import { communitySiteRedirectTarget } from "../../../../shared/webAppRouteState";
-import { arrivedFromSite } from "../controllers/useWebMemberSiteHandoff";
 
 type HandoffCommunity = { slug?: string | null; name?: string | null; site_url?: string | null; members_use?: "app" | "site" };
 
@@ -26,9 +26,9 @@ export function WebCommunityHandoff(props: { communitySlug: string; membership: 
           return window.location.replace(`/c/${encodeURIComponent(community.slug)}/home`);
         }
         const target = communitySiteRedirectTarget(`/c/${community.slug}`, community.slug, community.site_url);
-        // A visitor who clicked a member page (Chat, Events…) on the site: its
-        // Join page, not back to the page they were on.
-        if (target) return window.location.replace(props.membership === "visitor" && arrivedFromSite ? `${target.replace(/\/+$/, "")}/join` : target);
+        // A visitor: the doorstep. A member of a community on its own site:
+        // the place on the site they asked for.
+        if (target) return window.location.replace(props.membership === "visitor" ? `${new URL(target).origin}/join` : target);
         setState({ status: "no_site", name: String(community.name ?? community.slug) });
       } catch {
         if (!cancelled) setState({ status: "unreachable" });

@@ -392,7 +392,7 @@ export function safeReturnPath(raw: string | null): string {
 
 type PublicIdentity = {
   slug?: string; name: string; one_liner: string | null; about: string | null; member_count: number; agent_on?: boolean;
-  avatar_url?: string | null; banner_url?: string | null; listed?: boolean; join_gate?: string;
+  avatar_url?: string | null; banner_url?: string | null; listed?: boolean;
   // Where members spend time, the owner's switch: "app" sends member pages to Polynet's app.
   members_use?: "app" | "site";
 };
@@ -1168,7 +1168,7 @@ export default {
       ? { twin: true, siteOrigin: `${url.protocol}//${twinOf}`, privateOrigin: url.origin }
       : { twin: false, siteOrigin: url.origin, privateOrigin: twinHost ? `${url.protocol}//${twinHost}` : null };
     const response = await serve(request, url, route, place, env);
-    if (ctx && isSiteVisit(request, url, place, response)) ctx.waitUntil(reportSiteVisit(request, url, env));
+    if (ctx && isSiteVisit(request, url, place, response)) ctx.waitUntil(reportSiteVisit(request, place.siteOrigin, env));
     return place.twin
       ? withTwinHeaders(response)
       : withSiteSecurityHeaders(await unlistedNoIndex(response, place, env), { defaultSite: route.script === null, storageHost: storageHost(env) });
@@ -1176,12 +1176,15 @@ export default {
 };
 
 // A person opening one of the site's pages, for the founder's analytics: a
-// page (not a fetch, frame or asset) on the public site, not the twin, from a
-// browser rather than an obvious bot. Reported after the page is sent, so it
-// never slows one down; the address goes only as the keyed visitorHash.
+// page (not a fetch, frame or asset) on the public site, or its doorstep (Join,
+// on the twin; none of the member's other pages), from a browser rather than an
+// obvious bot. Counted as the site's (one visitor is counted once a while,
+// whichever page they open). Reported after the page is sent, so it never slows
+// one down; the address goes only as the keyed visitorHash.
 const BOT_AGENT = /bot|crawl|spider|slurp|preview|monitor|headless|lighthouse|curl|wget|python|go-http|java\//i;
 function isSiteVisit(request: Request, url: URL, place: Place, response: Response): boolean {
-  if (place.twin || request.method !== "GET" || response.status !== 200 || url.pathname.startsWith("/__polynet/")) return false;
+  if (place.twin && url.pathname !== "/join") return false;
+  if (request.method !== "GET" || response.status !== 200 || url.pathname.startsWith("/__polynet/")) return false;
   if (!(response.headers.get("content-type") ?? "").includes("text/html")) return false;
   const dest = request.headers.get("sec-fetch-dest");
   if (dest && dest !== "document") return false;
@@ -1189,11 +1192,11 @@ function isSiteVisit(request: Request, url: URL, place: Place, response: Respons
   return !BOT_AGENT.test(request.headers.get("user-agent") ?? "bot");
 }
 
-async function reportSiteVisit(request: Request, url: URL, env: Env): Promise<void> {
+async function reportSiteVisit(request: Request, siteOrigin: string, env: Env): Promise<void> {
   try {
     const answer = await fetch(`${env.POLYNET_API_URL.replace(/\/+$/, "")}/runtime/app/visit`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", origin: url.origin, "x-polynet-edge-secret": env.POLYNET_EDGE_SECRET },
+      headers: { "Content-Type": "application/json", origin: siteOrigin, "x-polynet-edge-secret": env.POLYNET_EDGE_SECRET },
       body: JSON.stringify({ visitor: await visitorHash(request, env) }),
     });
     await answer.body?.cancel();
@@ -1309,10 +1312,11 @@ const MAX_FRAME_BYTES = 1024 * 1024;
 async function serveTwinPage(
   request: Request, page: PersonalPage, route: Route, place: Place, worker: Fetcher, env: Env,
 ): Promise<Response> {
-  const name = publicIdentity(env, place.siteOrigin).then((identity) => identity?.name ?? null);
+  const identity = publicIdentity(env, place.siteOrigin);
   const frameRequest = siteRequest(new Request(`${place.siteOrigin}${page.path}`, request), "/frame", [...NAVIGATION_HEADERS, ...CONDITIONAL_HEADERS]);
   const frame = await worker.fetch(new Request(frameRequest, { method: "GET" }));
-  const communityName = await name;
+  const found = await identity;
+  const communityName = found?.name ?? null;
   const title = communityName ? `${page.title} · ${communityName}` : page.title;
   const Rewriter = typeof HTMLRewriter === "undefined" ? undefined : (HTMLRewriter as unknown as StripRewriterClass);
   const storage = storageOrigin(env);
@@ -1334,7 +1338,11 @@ async function serveTwinPage(
     html = plainTwinPage({ title, communityName, siteOrigin: place.siteOrigin });
     policy = twinPolicy({ siteOrigin: place.siteOrigin, storageOrigin: storage, styleHashes: [await plainStyleHash()] });
   }
-  return new Response(request.method === "HEAD" ? null : html, { status: 200, headers: twinPageHeaders(policy) });
+  const headers = twinPageHeaders(policy);
+  // Join is the community's doorstep, public by nature: a listed community's
+  // may be found by search. A member's other pages never are.
+  if (page.name === "join" && found?.listed === true) headers.set("X-Robots-Tag", "all");
+  return new Response(request.method === "HEAD" ? null : html, { status: 200, headers });
 }
 
 // Every page the site serves reaches the member the same way: no Polynet
