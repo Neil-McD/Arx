@@ -67,7 +67,7 @@ async function backend(request: Request): Promise<Response> {
     return Response.json({ ok: true, community: { slug: "sunrise-climbing-club", name: "Sunrise Climbing Club", one_liner: null, about: null, member_count: 4 } });
   }
   if (auth === `Bearer ${REFUSED}`) return Response.json({ ok: false, code: "community_app_session_invalid" }, { status: 401 });
-  if (url.pathname === "/runtime/app/me/join" || url.pathname.startsWith("/runtime/app/me/join/")) {
+  if (url.pathname === "/runtime/app/me/join" || url.pathname.startsWith("/runtime/app/me/join/") || url.pathname === "/runtime/app/join/checkout") {
     return joinBackend(url.pathname, auth, JSON.parse(body || "{}"));
   }
   if (url.pathname === "/runtime/app/me/communities") {
@@ -257,6 +257,7 @@ function resetJoin(gate = "join", state: string | null = "visitor") {
     plans: gate === "checkout" ? [{ billing_period: "monthly", name: "Monthly", label: "Join $10/month" }, { billing_period: "annual", name: "Annual", label: "Join $100/year" }] : [],
   });
 }
+const GUEST_BUYER = `buyer_${"d".repeat(32)}`;
 function joinBackend(path: string, auth: string | null, body: Record<string, any>): Response {
   joining.calls.push([path, body]);
   const projection = (signedIn: boolean) => ({
@@ -266,6 +267,9 @@ function joinBackend(path: string, auth: string | null, body: Record<string, any
     gate: joining.gate, available: true, action_label: joining.label, plans: joining.plans, viewer: signedIn ? joining.viewer : null,
   });
   if (path === "/runtime/app/me/join") return Response.json(projection(Boolean(auth)));
+  if (path === "/runtime/app/join/checkout") {
+    return Response.json({ ok: true, checkout_url: joining.checkoutUrl, session_id: CHECKOUT, buyer_secret: GUEST_BUYER });
+  }
   if (!auth) return Response.json({ ok: false, code: "community_app_session_required" }, { status: 401 });
   switch (path) {
     case "/runtime/app/me/join/request":
@@ -647,28 +651,26 @@ test("Join: a paid plan goes exactly where the backend's checkout said; back fro
   }
 }, 60_000);
 
-test("Join, paid: signed out, Join signs in first; back signed in with the plan, it carries straight on to Stripe", async () => {
+test("Join, cash first: signed out, Join goes straight to Stripe; back from it, one screen through sign-in and into the site", async () => {
   resetJoin("checkout", "visitor");
   joining.checkoutUrl = "https://checkout.stripe.com/c/pay/cs_test_g1#fidkdWxOYHwnPyd1blpxYHZxWjA0";
-  const first = await openTwin(chromium, "/join", null);
+  const { browser, page } = await openTwin(chromium, "/join", null);
   try {
-    const personal = first.page.locator("polynet-personal");
+    const personal = page.locator("polynet-personal");
     await expect.poll(() => personal.getAttribute("state")).toBe("signed-out");
-    expect(await personal.locator("[part=gate-note]").last().textContent()).toBe("You'll sign in with Polynet, then pay on Stripe's secure checkout.");
-    await personal.locator("[part=plan] input[value=annual]").check();
+    expect(await personal.locator("[part=gate-note]").last().textContent()).toBe("You'll pay on Stripe's secure checkout, then sign in to get in.");
     await personal.locator("[part=join-action]").click();
-    // Sign-in, never a checkout, before Polynet knows who's paying.
-    await expect.poll(() => hops.length).toBe(1);
-    expect(new URL(hops[0]).pathname).toBe("/api/auth/community-handoff");
-    expect(joining.calls.map(([path]) => path)).not.toContain("/runtime/app/me/join/checkout");
-  } finally {
-    await first.browser.close();
-  }
-  // Back from signing in with the plan they picked: no second click.
-  const { browser, page } = await openTwin(chromium, "/join?plan=annual", TOKEN);
-  try {
+    // No sign-in first: Stripe's own page, and this browser keeps the payment (never the page).
     await page.waitForURL(joining.checkoutUrl);
-    expect(joining.calls.filter(([path]) => path === "/runtime/app/me/join/checkout").map(([, body]) => body)).toEqual([{ billing_period: "annual" }]);
+    expect(joining.calls.map(([path]) => path)).toContain("/runtime/app/join/checkout");
+    const buyer = (await page.context().cookies(`${TWIN}/`)).find((cookie) => cookie.name === `__Host-polynet_buyer_${"c".repeat(32)}`);
+    expect([buyer?.value, buyer?.httpOnly]).toEqual([GUEST_BUYER, true]);
+    // Back from Stripe signed out: straight on to sign in, coming back to this checkout.
+    hops.length = 0;
+    await page.goto(`${TWIN}/join?checkout=${CHECKOUT}`);
+    await expect.poll(() => hops.length).toBe(1);
+    const start = new URL(hops[0]);
+    expect(start.pathname).toBe("/api/auth/community-handoff");
   } finally {
     await browser.close();
   }

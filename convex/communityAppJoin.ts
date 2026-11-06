@@ -24,7 +24,7 @@ import { cancelPendingCommunityJoinRequest } from "./communityJoinRequestCore";
 import { loadAccountSetupStatusForUserId } from "./accountSetupCore";
 import { accountSetupBlocksJoining } from "../shared/accountSetup";
 import { PRIVACY_AI_DATA_POLICY_DOCUMENT, TERMS_OF_SERVICE_DOCUMENT, legalDocumentPublicUrl } from "../shared/legalDocuments";
-import { resolveCheckoutSessionFinalization } from "./communityCommerce";
+import { attachCommunityCheckoutToUser, resolveCheckoutSessionFinalization, sha256Hex } from "./communityCommerce";
 
 // Join on a community site's private twin (<slug>--me<suffix>.<sites domain>/join).
 // The page shows what Studio's public funnel (/c/<slug>) shows and decides, from
@@ -154,21 +154,39 @@ export const cancelCommunityAppJoinRequestInternal = internalMutation({
   },
 });
 
+// The community a site's private twin belongs to: where a signed-out buyer's
+// checkout may start. Nothing for a site's public origin or an archived community.
+export const privateOriginCommunityInternal = internalQuery({
+  args: { origin: v.string() },
+  handler: async (ctx, args) => {
+    const found = await communityAtOrigin(ctx, args.origin);
+    if (!found || found.domain.kind !== "private") return null;
+    return { communityId: found.community._id, communitySlug: String(found.community.slug ?? "") };
+  },
+});
+
 // Back from Stripe on the twin: Studio's finalization, a read of what Stripe's
 // verified notice recorded (never the redirect); the notice itself granted the
 // membership. Only the buyer's own checkout for this community; anything else
 // reads as none at all.
 export const finishCommunityAppCheckoutInternal = internalMutation({
-  args: { userId: v.id("users"), communityId: v.id("communities"), sessionId: v.string() },
+  args: { userId: v.id("users"), communityId: v.id("communities"), sessionId: v.string(), buyerSecret: v.optional(v.string()) },
   handler: async (ctx, args): Promise<{ status: "joined" | "pending" | "expired" | "not_found" }> => {
     const row = await ctx.db
       .query("checkoutSessions")
       .withIndex("by_sessionId", (q: any) => q.eq("sessionId", args.sessionId))
       .first();
-    if (!row || row.mode !== "community_join" || String(row.communityId) !== String(args.communityId)
-      || String(row.ownerUserId ?? "") !== String(args.userId)) {
+    if (!row || row.mode !== "community_join" || String(row.communityId) !== String(args.communityId)) {
       return { status: "not_found" };
     }
+    // Paid before signing in: this browser's secret (only the edge sends it,
+    // from the buyer's HttpOnly cookie) makes it this member's.
+    if (!row.ownerUserId && args.buyerSecret && row.buyerSecretHash
+      && (await sha256Hex(args.buyerSecret)) === row.buyerSecretHash) {
+      await attachCommunityCheckoutToUser(ctx, row.sessionId, args.userId, Date.now());
+    }
+    const current = await ctx.db.get(row._id);
+    if (String(current?.ownerUserId ?? "") !== String(args.userId)) return { status: "not_found" };
     const finalization = (await resolveCheckoutSessionFinalization(ctx, args.userId, args.sessionId)) as { status: string };
     if (finalization.status === "pending") return { status: "pending" };
     if (finalization.status !== "succeeded") return { status: "expired" };

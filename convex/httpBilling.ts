@@ -1,4 +1,6 @@
 import { internal } from "./_generated/api";
+import { v } from "convex/values";
+import { internalAction } from "./_generated/server";
 import {
   getStripeClient,
   verifyStripeWebhookSignature,
@@ -744,6 +746,14 @@ async function syncCommunitySubscriptionRiskStatus(
     },
   );
   if (!existingCommunitySubscription?.communityId || !existingCommunitySubscription?.userId) {
+    // Paid before signing in and not granted yet: there's no subscription row,
+    // so the refund or dispute is kept on the checkout, which then never grants.
+    if (args.status === "ended" || args.status === "canceled") {
+      const recorded = await ctx.runMutation(internal.communityCommerce.revokeUngrantedCommunityCheckoutInternal, {
+        providerAccountId, providerSubscriptionId, revokedReason: args.revokedReason,
+      });
+      if (recorded.revoked) return { ok: true, provider_subscription_id: providerSubscriptionId, checkout_revoked: true };
+    }
     return { ok: true, ignored: true, reason: "community_subscription_not_found" };
   }
   await ctx.runMutation(
@@ -858,7 +868,16 @@ async function syncCommunityAccessForDispute(
       { allowRiskRestoration: true },
     );
     if (!founderSubscriptionResult?.ignored) return founderSubscriptionResult;
-    return await syncCommunitySubscriptionFromStripeSubscription(ctx, event, subscription);
+    const communityResult = await syncCommunitySubscriptionFromStripeSubscription(ctx, event, subscription);
+    // Paid before signing in and not granted yet: the dispute's block on the
+    // checkout lifts, so the buyer gets in when they sign in.
+    if ((communityResult as any)?.ignored && providerAccountId) {
+      const restored = await ctx.runMutation(internal.communityCommerce.restoreUngrantedCommunityCheckoutInternal, {
+        providerAccountId, providerSubscriptionId,
+      });
+      if (restored.restored) return { ok: true, provider_subscription_id: providerSubscriptionId, checkout_restored: true };
+    }
+    return communityResult;
   }
   return {
     ok: true,
@@ -1072,80 +1091,20 @@ export function registerRuntimeBillingRoutes(
               missingCode: "community_checkout_provider_account_required",
               mismatchCode: "community_checkout_provider_account_mismatch",
             });
-            if (!readStripePaymentReady(session.payment_status)) {
+            const synced = await syncCommunityCheckoutFromStripe(ctx, {
+              localSessionId,
+              providerAccountId: communityProviderAccountId,
+              session,
+              nowMs: Number(event.created ?? 0) > 0 ? Number(event.created) * 1000 : Date.now(),
+            });
+            if (synced !== "synced") {
               return processedResponse({
                 ok: true,
                 ignored: true,
                 event: event.type,
-                reason: "community_checkout_payment_pending",
+                reason: synced,
               }, "ignored");
             }
-            const subscriptionId =
-              typeof session.subscription === "string"
-                ? session.subscription
-                : null;
-            if (!subscriptionId) {
-              return processedResponse({
-                ok: true,
-                ignored: true,
-                event: event.type,
-                reason: "community_subscription_missing",
-              }, "ignored");
-            }
-            const stripe = getStripeClient();
-            const subscription =
-              await stripe.subscriptions.retrieve(
-                subscriptionId,
-                {},
-                { stripeAccount: communityProviderAccountId },
-              );
-            const providerPriceId = subscription.items.data[0]?.price?.id ?? null;
-            const { cycleStartedAt, cycleEndsAt } =
-              readStripeSubscriptionCycle(subscription);
-            const latestInvoice =
-              readStripeSubscriptionLatestInvoice(subscription) ??
-              await retrieveStripeInvoiceForEvidence(
-                readStripeObjectId((subscription as any)?.latest_invoice),
-                communityProviderAccountId,
-              );
-            const initialInvoiceEvidence = readStripeInvoiceEvidence(
-              latestInvoice,
-            );
-            await (ctx as any).runMutation(
-              internal.communityCommerce
-                .syncPendingCommunityCheckoutSubscriptionInternal as any,
-              {
-                sessionId: localSessionId,
-                providerAccountId: communityProviderAccountId,
-                providerCheckoutSessionId: session.id,
-                providerCustomerId:
-                  typeof subscription.customer === "string"
-                    ? subscription.customer
-                    : typeof session.customer === "string"
-                      ? session.customer
-                      : null,
-                providerSubscriptionId: subscription.id,
-                sourceProviderInvoiceId:
-                  initialInvoiceEvidence.sourceProviderInvoiceId ?? undefined,
-                sourceProviderPaymentIntentId:
-                  initialInvoiceEvidence.sourceProviderPaymentIntentId ?? undefined,
-                sourceProviderChargeId:
-                  initialInvoiceEvidence.sourceProviderChargeId ?? undefined,
-                providerPriceId,
-                subscriptionStatus: normalizeStripeCommunitySubscriptionStatus({
-                  subscriptionStatus: subscription.status,
-                  cancelAtPeriodEnd: (subscription as any)?.cancel_at_period_end,
-                }),
-                currentPeriodStartAt: cycleStartedAt,
-                currentPeriodEndAt: cycleEndsAt,
-                cancelAtPeriodEnd: Boolean((subscription as any)?.cancel_at_period_end),
-                markComplete: true,
-                nowMs:
-                  Number(event.created ?? 0) > 0
-                    ? Number(event.created) * 1000
-                    : Date.now(),
-              },
-            );
             return processedResponse({
               ok: true,
               received: true,
@@ -1641,3 +1600,90 @@ export function registerRuntimeBillingRoutes(
     }),
   });
 }
+
+// A paid community checkout, as Stripe has it, into Polynet's record (and so
+// membership): from Stripe's verified notice, or from the return page asking
+// Stripe directly so the member needn't wait for the notice. Same path either way.
+export async function syncCommunityCheckoutFromStripe(
+  ctx: any,
+  args: { localSessionId: string; providerAccountId: string; session: Stripe.Checkout.Session; nowMs: number },
+): Promise<"synced" | "community_checkout_payment_pending" | "community_subscription_missing"> {
+  const session = args.session;
+    if (!readStripePaymentReady(session.payment_status)) return "community_checkout_payment_pending";
+    const subscriptionId =
+      typeof session.subscription === "string"
+        ? session.subscription
+        : null;
+    if (!subscriptionId) return "community_subscription_missing";
+    const stripe = getStripeClient();
+    const subscription =
+      await stripe.subscriptions.retrieve(
+        subscriptionId,
+        {},
+        { stripeAccount: args.providerAccountId },
+      );
+    const providerPriceId = subscription.items.data[0]?.price?.id ?? null;
+    const { cycleStartedAt, cycleEndsAt } =
+      readStripeSubscriptionCycle(subscription);
+    const latestInvoice =
+      readStripeSubscriptionLatestInvoice(subscription) ??
+      await retrieveStripeInvoiceForEvidence(
+        readStripeObjectId((subscription as any)?.latest_invoice),
+        args.providerAccountId,
+      );
+    const initialInvoiceEvidence = readStripeInvoiceEvidence(
+      latestInvoice,
+    );
+    await (ctx as any).runMutation(
+      internal.communityCommerce
+        .syncPendingCommunityCheckoutSubscriptionInternal as any,
+      {
+        sessionId: args.localSessionId,
+        providerAccountId: args.providerAccountId,
+        providerCheckoutSessionId: session.id,
+        providerCustomerId:
+          typeof subscription.customer === "string"
+            ? subscription.customer
+            : typeof session.customer === "string"
+              ? session.customer
+              : null,
+        providerSubscriptionId: subscription.id,
+        sourceProviderInvoiceId:
+          initialInvoiceEvidence.sourceProviderInvoiceId ?? undefined,
+        sourceProviderPaymentIntentId:
+          initialInvoiceEvidence.sourceProviderPaymentIntentId ?? undefined,
+        sourceProviderChargeId:
+          initialInvoiceEvidence.sourceProviderChargeId ?? undefined,
+        providerPriceId,
+        subscriptionStatus: normalizeStripeCommunitySubscriptionStatus({
+          subscriptionStatus: subscription.status,
+          cancelAtPeriodEnd: (subscription as any)?.cancel_at_period_end,
+        }),
+        currentPeriodStartAt: cycleStartedAt,
+        currentPeriodEndAt: cycleEndsAt,
+        cancelAtPeriodEnd: Boolean((subscription as any)?.cancel_at_period_end),
+        markComplete: true,
+        buyerEmail: session.customer_details?.email ?? null,
+        nowMs: args.nowMs,
+      },
+    );
+    return "synced";
+}
+
+// Back from Stripe (the site's Finish): if Polynet hasn't heard yet, ask Stripe
+// for this checkout. Only a paid, complete checkout on the founder's account counts.
+export const confirmCommunityCheckoutWithStripeInternal = internalAction({
+  args: { sessionId: v.string() },
+  handler: async (ctx, args) => {
+    const row = (await ctx.runQuery(internal.communityCommerce.getCommunityJoinCheckoutSessionInternal as any, { sessionId: args.sessionId })) as {
+      status: string; providerCheckoutSessionId: string | null; providerAccountId: string | null;
+    } | null;
+    if (!row || row.status !== "pending" || !row.providerCheckoutSessionId || !row.providerAccountId) return { outcome: "skipped" };
+    const session = await getStripeClient().checkout.sessions.retrieve(row.providerCheckoutSessionId, {}, { stripeAccount: row.providerAccountId });
+    if (session.status !== "complete" || readStripeLocalSessionIdFromCheckoutSession(session) !== args.sessionId) return { outcome: "not_paid" };
+    return { outcome: await syncCommunityCheckoutFromStripe(ctx, {
+      localSessionId: args.sessionId, providerAccountId: row.providerAccountId, session, nowMs: Date.now(),
+    }) };
+  },
+});
+

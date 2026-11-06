@@ -353,12 +353,11 @@ export async function grantCommunityCheckout(args: {
   if (typeof session.membershipGrantedAt === "number") {
     return { communityId: String(session.communityId), accessGranted: false, grantMarker: null };
   }
-  if (
-    args.nowMs > Number(session.expiresAt ?? 0) ||
-    String(session.status ?? "").trim().toLowerCase() !== "complete"
-  ) {
-    return none;
-  }
+  if (session.communityRiskRevokedReason) return none;
+  // Paid is paid: a checkout's expiry is for starting it, so a payment made
+  // before signing in still grants whenever its buyer turns up. Access then
+  // runs through the paid-through date and Stripe's later notices.
+  if (String(session.status ?? "").trim().toLowerCase() !== "complete") return none;
   const checkoutStatus =
     normalizeCommunitySubscriptionStatus(session.communitySubscriptionStatus ?? "active") ?? "active";
   if (!communitySubscriptionStatusGrantsAccess(checkoutStatus)) return none;

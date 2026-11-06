@@ -317,6 +317,10 @@ export function registerRuntimeAuthBridgeRoutes(args: RegisterRuntimeAuthBridgeR
       });
 
       if (emailVerified && normalizedStored.user.email) {
+        // Paid for a community before signing in, with this email: it's theirs now.
+        await ctx.runMutation(internal.communityCommerce.attachPaidCheckoutsForVerifiedEmailInternal, {
+          userId: actor.dbUserId, email: normalizedStored.user.email,
+        });
         await ctx.scheduler.runAfter(
           0,
           (internal as any).founderBilling.reconcilePaidBuilderPurchasesForOwnerInternal,

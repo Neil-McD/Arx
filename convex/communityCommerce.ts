@@ -33,6 +33,8 @@ import {
 } from "./communityCore";
 import { enqueueCommunityBillingIssueEmailInternal } from "./emailEvents";
 import { recordCriticalAuditEventBestEffort } from "./criticalAudit";
+import { acceptCommunityJoin } from "./starterProfile";
+import { normalizeAuthRelinkEmail } from "../shared/authRelinkPolicy";
 import {
   canReceiveCommunityRevenue,
   getStripeConnectDestinationAccountId,
@@ -634,7 +636,8 @@ export const createPendingPublicCommunityCheckoutSessionInternal = internalMutat
     currencyDecimals: v.number(),
     providerAccountId: v.string(),
     providerPriceId: v.string(),
-    ownerUserId: v.id("users"),
+    ownerUserId: v.optional(v.id("users")),
+    buyerSecretHash: v.optional(v.string()),
     expiresAt: v.number(),
     nowMs: v.optional(v.number()),
   },
@@ -650,6 +653,11 @@ export const createPendingPublicCommunityCheckoutSessionInternal = internalMutat
       )
     ) {
       throw new Error("community_lifecycle_generation_mismatch");
+    }
+    // Every checkout belongs to someone: a signed-in buyer, or the browser that paid.
+    if (!args.ownerUserId && !args.buyerSecretHash) throw new Error("checkout_buyer_required");
+    if (!args.ownerUserId && !(await guestCheckoutAllowed(ctx, args.communityId, nowMs))) {
+      throw new Error("community_checkout_unavailable");
     }
     await ctx.db.insert("checkoutSessions", {
       sessionId: args.sessionId,
@@ -667,6 +675,7 @@ export const createPendingPublicCommunityCheckoutSessionInternal = internalMutat
       ),
       providerPriceId: args.providerPriceId,
       ownerUserId: args.ownerUserId,
+      buyerSecretHash: args.buyerSecretHash,
       status: "pending",
       expiresAt: args.expiresAt,
       createdAt: nowMs,
@@ -778,6 +787,8 @@ export const syncPendingCommunityCheckoutSubscriptionInternal = internalMutation
     sourceProviderInvoiceId: v.optional(v.union(v.string(), v.null())),
     sourceProviderPaymentIntentId: v.optional(v.union(v.string(), v.null())),
     sourceProviderChargeId: v.optional(v.union(v.string(), v.null())),
+    // The email the buyer gave Stripe: who a payment made before signing in is for.
+    buyerEmail: v.optional(v.union(v.string(), v.null())),
     providerPriceId: v.optional(v.union(v.string(), v.null())),
     subscriptionStatus: v.string(),
     currentPeriodStartAt: v.optional(v.union(v.number(), v.null())),
@@ -845,45 +856,20 @@ export const syncPendingCommunityCheckoutSubscriptionInternal = internalMutation
         : "expired",
       updatedAt: nowMs,
     });
-    // The buyer is known (signed in before paying): Stripe's notice itself makes
-    // them a member, once (the checkout keeps when). If they already have
-    // another paid subscription here (two tabs), this one is a duplicate:
-    // cancelled and refunded, nothing granted.
-    if (args.markComplete && lifecycleMatches && row.ownerUserId && row.communityId && !(await checkoutAlreadyGranted(ctx, row))) {
-      const newSubscriptionId = String(args.providerSubscriptionId ?? row.providerSubscriptionId ?? "").trim();
-      const others = await ctx.db.query("communitySubscriptions")
-        .withIndex("by_community_user", (q: any) => q.eq("communityId", row.communityId).eq("userId", row.ownerUserId))
-        .collect();
-      const alreadyPaying = others.some((other: any) =>
-        communitySubscriptionStatusGrantsAccess(other.status)
-        && String(other.providerSubscriptionId ?? "").trim()
-        && String(other.providerSubscriptionId).trim() !== newSubscriptionId);
-      if (alreadyPaying && newSubscriptionId) {
-        await ctx.scheduler.runAfter(0, internal.communityCommerce.refundDuplicateCommunitySubscriptionInternal, {
-          providerSubscriptionId: newSubscriptionId, providerAccountId,
+    // Paid: settle it for its buyer. Paid before signing in (cash first), the
+    // buyer is whoever Stripe's email belongs to, if that account exists and
+    // verified it; otherwise the payment waits for the buyer to sign in.
+    if (args.markComplete && lifecycleMatches && row.communityId) {
+      const buyerEmail = normalizeAuthRelinkEmail(args.buyerEmail);
+      if (!row.ownerUserId && buyerEmail) {
+        await ctx.db.patch(row._id, { buyerEmailNormalized: buyerEmail });
+        const byEmail = await verifiedUserIdForEmail(ctx, buyerEmail);
+        if (byEmail) await attachCommunityCheckoutToUser(ctx, row.sessionId, byEmail, nowMs);
+      } else if (row.ownerUserId) {
+        await settleCommunityCheckout(ctx, row.sessionId, nowMs, {
           paymentIntentId: String(args.sourceProviderPaymentIntentId ?? "").trim() || null,
           chargeId: String(args.sourceProviderChargeId ?? "").trim() || null,
         });
-        await recordCriticalAuditEventBestEffort(ctx, {
-          eventKey: `community_duplicate_subscription_refunded:${newSubscriptionId}`, eventType: "community_duplicate_subscription_refunded",
-          status: "started", actorUserId: row.ownerUserId, subjectUserId: row.ownerUserId, communityId: row.communityId,
-          checkoutSessionId: args.sessionId, provider: "stripe", providerObjectId: newSubscriptionId, metadata: { providerAccountId }, createdAt: nowMs,
-        });
-      } else {
-        try {
-          const granted = await grantCommunityCheckout({ ctx, checkoutSession: await ctx.db.get(row._id), nowMs });
-          await recordCriticalAuditEventBestEffort(ctx, {
-            eventKey: `community_checkout_granted:${args.sessionId}`, eventType: "community_checkout_granted",
-            status: granted.accessGranted ? "succeeded" : "ignored", actorUserId: row.ownerUserId, subjectUserId: row.ownerUserId,
-            communityId: row.communityId, checkoutSessionId: args.sessionId, provider: "stripe",
-            providerObjectId: newSubscriptionId || undefined,
-            metadata: { accessGranted: granted.accessGranted, grantMarker: granted.grantMarker, pricePointId: row.pricePointId ? String(row.pricePointId) : null },
-            createdAt: nowMs,
-          });
-        } catch (error) {
-          // Blocked or no longer allowed: the return page shows it; nothing is lost.
-          console.error("community_checkout_grant_failed", { sessionId: args.sessionId, error: error instanceof Error ? error.message : String(error) });
-        }
       }
     }
     await recordCriticalAuditEventBestEffort(ctx, {
@@ -1052,6 +1038,39 @@ export const startPublicCommunityCheckout = action({
   },
 });
 
+export async function sha256Hex(value: string): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
+  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+// Cash first lets anyone start a checkout without signing in, and each one
+// makes a Stripe session and two rows. A community takes this many unclaimed
+// guest checkouts in this window; past it, "Checkout is temporarily unavailable".
+export const GUEST_CHECKOUT_WINDOW_MS = 10 * 60 * 1000;
+export const GUEST_CHECKOUTS_PER_WINDOW = 20;
+
+async function guestCheckoutAllowed(ctx: any, communityId: any, nowMs: number): Promise<boolean> {
+  const since = nowMs - GUEST_CHECKOUT_WINDOW_MS;
+  // Newest first, only as far back as the window: every guest in it is counted.
+  let guests = 0;
+  for await (const row of ctx.db
+    .query("checkoutSessions")
+    .withIndex("by_community_status", (q: any) => q.eq("communityId", communityId).eq("status", "pending"))
+    .order("desc")) {
+    if (row.createdAt < since) break;
+    if (!row.ownerUserId && ++guests >= GUEST_CHECKOUTS_PER_WINDOW) return false;
+  }
+  return true;
+}
+
+// An early answer, before any Stripe work. The binding check is in the
+// mutation that records the checkout (one transaction with the insert), so a
+// burst of parallel requests can't all pass on the same count.
+export const guestCheckoutAllowedInternal = internalQuery({
+  args: { communityId: v.id("communities"), nowMs: v.number() },
+  handler: async (ctx, args) => await guestCheckoutAllowed(ctx, args.communityId, args.nowMs),
+});
+
 // The one checkout for a community's paid plan, for Studio's funnel and for
 // Join on the community site's private twin. Each caller validates its own
 // return addresses first (Studio's origin; the twin's own /join). Access comes
@@ -1067,8 +1086,13 @@ export async function startCommunityJoinCheckoutCore(
     // Set only by a caller that verified the session itself (the twin's edge
     // session, in an http action that has no Convex identity of its own).
     trustedUserId?: string;
+    // Cash first: a buyer not signed in yet, on a site's private twin. The
+    // secret goes back to that browser only (HttpOnly, via the edge); the
+    // checkout keeps its hash. Paying, then signing in there (or with the
+    // email given to Stripe), makes it theirs.
+    guest?: boolean;
   },
-): Promise<{ ok: true; session_id: string; checkout_url: string }> {
+): Promise<{ ok: true; session_id: string; checkout_url: string; buyer_secret?: string }> {
   const nowMs = Date.now();
   const cancelUrl = args.cancelUrl;
   const billingPeriod = normalizeBillingPeriod(args.billingPeriod);
@@ -1097,40 +1121,51 @@ export async function startCommunityJoinCheckoutCore(
   requireStripeConnectWebhookConfiguration();
   const sessionId = newOpaqueToken("chk");
   const expiresAt = nowMs + 14 * 24 * 60 * 60 * 1000;
-  if (!args.authSubject) {
-    throw new Error("auth_subject_required");
+  let ownerUserId: unknown = null;
+  let stripeCustomerId: string | null = null;
+  let buyerSecret: string | null = null;
+  if (args.guest) {
+    // An early answer before any Stripe work; the binding check is where the
+    // checkout is recorded (one transaction with the insert).
+    if (!(await ctx.runQuery(internal.communityCommerce.guestCheckoutAllowedInternal, {
+      communityId: checkoutConfig.communityId, nowMs,
+    }))) {
+      throw new Error("community_checkout_unavailable");
+    }
+    buyerSecret = newOpaqueToken("buyer");
+  } else {
+    if (!args.authSubject) throw new Error("auth_subject_required");
+    // Studio: the caller's verified Polynet identity. The twin: the member its
+    // edge-verified session belongs to.
+    const actor = (args.trustedUserId
+      ? await ctx.runQuery(internal.authActor.resolveAuthenticatedActorByTrustedSubjectInternal as any, {
+        authSubject: args.authSubject, userId: args.trustedUserId,
+      })
+      : await ctx.runQuery(internal.authActor.resolveAuthenticatedActorInternal as any, {
+        authSubject: args.authSubject,
+      })) as { dbUserId?: unknown; email?: string | null } | null;
+    ownerUserId = actor?.dbUserId ?? null;
+    if (!ownerUserId) throw new Error("auth_subject_required");
+    await ctx.runQuery(internal.communityCommerce.requirePublicCommunityCheckoutNotBlockedInternal as any, {
+      communityId: checkoutConfig.communityId,
+      userId: ownerUserId,
+    });
+    // Already in (a member, or the owner): no checkout, so nobody pays twice.
+    if (await ctx.runQuery(internal.communityCommerce.userHasCommunityAccessInternal, {
+      communityId: checkoutConfig.communityId, userId: ownerUserId as any,
+    })) {
+      throw new Error("already_member");
+    }
+    // Join's click accepts the terms shown under it and fills the starter profile.
+    await ctx.runMutation(internal.starterProfile.acceptCommunityJoinInternal, { userId: ownerUserId as any });
+    stripeCustomerId = await ensureCommunityStripeCustomerForUser({
+      ctx,
+      userId: ownerUserId,
+      email: actor?.email ?? null,
+      providerAccountId: checkoutConfig.providerAccountId,
+      nowMs,
+    });
   }
-  // Who pays is known before Stripe. Studio: the caller's verified Polynet
-  // identity. The twin: the member its edge-verified session belongs to.
-  const actor = (args.trustedUserId
-    ? await ctx.runQuery(internal.authActor.resolveAuthenticatedActorByTrustedSubjectInternal as any, {
-      authSubject: args.authSubject, userId: args.trustedUserId,
-    })
-    : await ctx.runQuery(internal.authActor.resolveAuthenticatedActorInternal as any, {
-      authSubject: args.authSubject,
-    })) as { dbUserId?: unknown; email?: string | null } | null;
-  const ownerUserId: unknown = actor?.dbUserId;
-  const ownerEmail: string | null = actor?.email ?? null;
-  if (!ownerUserId) throw new Error("auth_subject_required");
-  await ctx.runQuery(internal.communityCommerce.requirePublicCommunityCheckoutNotBlockedInternal as any, {
-    communityId: checkoutConfig.communityId,
-    userId: ownerUserId,
-  });
-  // Already in (a member, or the owner): no checkout, so nobody pays twice.
-  if (await ctx.runQuery(internal.communityCommerce.userHasCommunityAccessInternal, {
-    communityId: checkoutConfig.communityId, userId: ownerUserId as any,
-  })) {
-    throw new Error("already_member");
-  }
-  // Join's click accepts the terms shown under it and fills the starter profile.
-  await ctx.runMutation(internal.starterProfile.acceptCommunityJoinInternal, { userId: ownerUserId as any });
-  const stripeCustomerId = await ensureCommunityStripeCustomerForUser({
-    ctx,
-    userId: ownerUserId,
-    email: ownerEmail,
-    providerAccountId: checkoutConfig.providerAccountId,
-    nowMs,
-  });
   let providerPriceId = String(checkoutConfig.providerPriceId ?? "").trim() || null;
   if (!providerPriceId) {
     const existingProviderPrice = (await ctx.runQuery(
@@ -1202,7 +1237,8 @@ export async function startCommunityJoinCheckoutCore(
       currencyDecimals: checkoutConfig.currencyDecimals,
       providerAccountId: checkoutConfig.providerAccountId,
       providerPriceId,
-      ownerUserId,
+      ...(ownerUserId ? { ownerUserId } : {}),
+      ...(buyerSecret ? { buyerSecretHash: await sha256Hex(buyerSecret) } : {}),
       expiresAt,
       nowMs,
     },
@@ -1265,6 +1301,7 @@ export async function startCommunityJoinCheckoutCore(
       ok: true,
       session_id: sessionId,
       checkout_url: checkoutUrl,
+      ...(buyerSecret ? { buyer_secret: buyerSecret } : {}),
     };
   } catch (error) {
     let providerCleanupComplete = !createdCheckoutSession?.id;
@@ -1420,7 +1457,7 @@ export async function resolveCheckoutSessionFinalization(ctx: any, userId: any, 
       message: "checkout_session_forbidden",
     };
   }
-  if (session.expiresAt <= nowMs || session.status === "expired") {
+  if (session.status === "expired" || (session.status !== "complete" && session.expiresAt <= nowMs)) {
     return {
       ok: false,
       status: "expired",
@@ -1478,6 +1515,148 @@ export async function resolveCheckoutSessionFinalization(ctx: any, userId: any, 
 
 // Granted once, from Stripe's notice. Checkouts paid before that was recorded
 // on the checkout (staging only) were granted through a claim instead.
+// Settles a paid community checkout for its buyer, once: the membership, or,
+// if they already pay for this community (two tabs, or paid again before
+// signing in), the second payment cancelled and refunded. Safe to repeat.
+async function settleCommunityCheckout(
+  ctx: any,
+  sessionId: string,
+  nowMs: number,
+  evidence: { paymentIntentId: string | null; chargeId: string | null } = { paymentIntentId: null, chargeId: null },
+): Promise<void> {
+  const row = await ctx.db.query("checkoutSessions").withIndex("by_sessionId", (q: any) => q.eq("sessionId", sessionId)).first();
+  if (row && row.ownerUserId && row.communityId && row.status === "complete" && !(await checkoutAlreadyGranted(ctx, row))) {
+    const newSubscriptionId = String(row.providerSubscriptionId ?? "").trim();
+    const others = await ctx.db.query("communitySubscriptions")
+      .withIndex("by_community_user", (q: any) => q.eq("communityId", row.communityId).eq("userId", row.ownerUserId))
+      .collect();
+    const alreadyPaying = others.some((other: any) =>
+      communitySubscriptionStatusGrantsAccess(other.status)
+      && String(other.providerSubscriptionId ?? "").trim()
+      && String(other.providerSubscriptionId).trim() !== newSubscriptionId);
+    if (alreadyPaying && newSubscriptionId) {
+      await ctx.scheduler.runAfter(0, internal.communityCommerce.refundDuplicateCommunitySubscriptionInternal, {
+        providerSubscriptionId: newSubscriptionId, providerAccountId: String(row.providerAccountId ?? ""),
+        paymentIntentId: evidence.paymentIntentId,
+        chargeId: evidence.chargeId,
+      });
+      await recordCriticalAuditEventBestEffort(ctx, {
+        eventKey: `community_duplicate_subscription_refunded:${newSubscriptionId}`, eventType: "community_duplicate_subscription_refunded",
+        status: "started", actorUserId: row.ownerUserId, subjectUserId: row.ownerUserId, communityId: row.communityId,
+        checkoutSessionId: row.sessionId, provider: "stripe", providerObjectId: newSubscriptionId, metadata: { providerAccountId: String(row.providerAccountId ?? "") }, createdAt: nowMs,
+      });
+    } else {
+      try {
+        const granted = await grantCommunityCheckout({ ctx, checkoutSession: await ctx.db.get(row._id), nowMs });
+        await recordCriticalAuditEventBestEffort(ctx, {
+          eventKey: `community_checkout_granted:${row.sessionId}`, eventType: "community_checkout_granted",
+          status: granted.accessGranted ? "succeeded" : "ignored", actorUserId: row.ownerUserId, subjectUserId: row.ownerUserId,
+          communityId: row.communityId, checkoutSessionId: row.sessionId, provider: "stripe",
+          providerObjectId: newSubscriptionId || undefined,
+          metadata: { accessGranted: granted.accessGranted, grantMarker: granted.grantMarker, pricePointId: row.pricePointId ? String(row.pricePointId) : null },
+          createdAt: nowMs,
+        });
+      } catch (error) {
+        // Blocked or no longer allowed: the return page shows it; nothing is lost.
+        console.error("community_checkout_grant_failed", { sessionId: row.sessionId, error: error instanceof Error ? error.message : String(error) });
+      }
+    }
+  }
+}
+
+async function verifiedUserIdForEmail(ctx: any, email: string): Promise<any | null> {
+  const users = await ctx.db.query("users").withIndex("by_normalizedEmail", (q: any) => q.eq("normalizedEmail", email)).take(2);
+  return users.length === 1 && typeof users[0].emailVerifiedAt === "number" ? users[0]._id : null;
+}
+
+// A checkout paid before signing in becomes this account's: the buyer's own
+// browser (its secret) or a sign-in that verified the email given to Stripe.
+// Joining accepts the terms; then, if Stripe has confirmed it, it settles.
+export async function attachCommunityCheckoutToUser(ctx: any, sessionId: string, userId: any, nowMs: number): Promise<boolean> {
+  const row = await ctx.db.query("checkoutSessions").withIndex("by_sessionId", (q: any) => q.eq("sessionId", sessionId)).first();
+  if (!row || row.mode !== "community_join" || !row.communityId) return false;
+  if (row.ownerUserId) return String(row.ownerUserId) === String(userId);
+  try {
+    await requireCommunityUserNotBlocked({ ctx, communityId: row.communityId, userId });
+  } catch {
+    return false;
+  }
+  await ctx.db.patch(row._id, { ownerUserId: userId, buyerEmailNormalized: undefined, updatedAt: nowMs });
+  await acceptCommunityJoin(ctx, userId, nowMs);
+  await recordCriticalAuditEventBestEffort(ctx, {
+    eventKey: `community_checkout_attached:${sessionId}`, eventType: "community_checkout_attached", status: "succeeded",
+    actorUserId: userId, subjectUserId: userId, communityId: row.communityId, checkoutSessionId: sessionId, provider: "polynet",
+    metadata: { paid: row.status === "complete" }, createdAt: nowMs,
+  });
+  if (row.status === "complete") await settleCommunityCheckout(ctx, sessionId, nowMs);
+  return true;
+}
+
+// Signing in with a verified email collects every payment made with it before
+// signing in (another device, a closed tab).
+export async function attachPaidCheckoutsForVerifiedEmail(ctx: any, userId: any, email: unknown, nowMs: number): Promise<number> {
+  const normalized = normalizeAuthRelinkEmail(email);
+  if (!normalized) return 0;
+  // Only payments still waiting for their buyer (attaching clears the email), oldest first.
+  const rows = await ctx.db.query("checkoutSessions")
+    .withIndex("by_buyerEmailNormalized", (q: any) => q.eq("buyerEmailNormalized", normalized))
+    .filter((q: any) => q.and(q.eq(q.field("ownerUserId"), undefined), q.eq(q.field("status"), "complete")))
+    .take(20);
+  let attached = 0;
+  for (const row of rows) {
+    if (row.mode !== "community_join" || row.ownerUserId || row.status !== "complete") continue;
+    if (await attachCommunityCheckoutToUser(ctx, row.sessionId, userId, nowMs)) attached += 1;
+  }
+  return attached;
+}
+
+export const revokeUngrantedCommunityCheckoutInternal = internalMutation({
+  args: { providerAccountId: v.string(), providerSubscriptionId: v.string(), revokedReason: v.string() },
+  handler: async (ctx, args) => {
+    const rows = await ctx.db.query("checkoutSessions")
+      .withIndex("by_providerSubscriptionId", (q: any) => q.eq("providerSubscriptionId", args.providerSubscriptionId))
+      .take(5);
+    let revoked = false;
+    for (const row of rows) {
+      if (row.mode !== "community_join" || String(row.providerAccountId ?? "") !== args.providerAccountId) continue;
+      if (typeof row.membershipGrantedAt === "number") continue;
+      // A refund is final: a dispute recorded after it never replaces it (so
+      // winning that dispute can't lift the refund's block).
+      const existing = String(row.communityRiskRevokedReason ?? "");
+      if (!existing || existing.startsWith("subscription_dispute_")) {
+        await ctx.db.patch(row._id, { communityRiskRevokedReason: args.revokedReason, updatedAt: Date.now() });
+      }
+      revoked = true;
+    }
+    return { revoked };
+  },
+});
+
+// A dispute the founder won (or funds reinstated) on a payment not granted yet:
+// only a dispute's block lifts; a refund stays.
+export const restoreUngrantedCommunityCheckoutInternal = internalMutation({
+  args: { providerAccountId: v.string(), providerSubscriptionId: v.string() },
+  handler: async (ctx, args) => {
+    const rows = await ctx.db.query("checkoutSessions")
+      .withIndex("by_providerSubscriptionId", (q: any) => q.eq("providerSubscriptionId", args.providerSubscriptionId))
+      .take(5);
+    let restored = false;
+    for (const row of rows) {
+      if (row.mode !== "community_join" || String(row.providerAccountId ?? "") !== args.providerAccountId) continue;
+      if (!String(row.communityRiskRevokedReason ?? "").startsWith("subscription_dispute_")) continue;
+      await ctx.db.patch(row._id, { communityRiskRevokedReason: undefined, updatedAt: Date.now() });
+      restored = true;
+      if (row.ownerUserId) await settleCommunityCheckout(ctx, row.sessionId, Date.now());
+    }
+    return { restored };
+  },
+});
+
+export const attachPaidCheckoutsForVerifiedEmailInternal = internalMutation({
+  args: { userId: v.id("users"), email: v.string() },
+  handler: async (ctx, args) => ({ attached: await attachPaidCheckoutsForVerifiedEmail(ctx, args.userId, args.email, Date.now()) }),
+});
+
 async function checkoutAlreadyGranted(ctx: any, session: any): Promise<boolean> {
   if (typeof session.membershipGrantedAt === "number") return true;
   if (!session.claimToken) return false;

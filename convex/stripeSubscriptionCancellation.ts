@@ -12,7 +12,7 @@ export type StripeCheckoutExpirationTarget = {
   providerAccountId?: string | null;
 };
 
-type StripeCancellationClient = Pick<Stripe, "checkout" | "subscriptions"> & Partial<Pick<Stripe, "refunds">>;
+type StripeCancellationClient = Pick<Stripe, "checkout" | "subscriptions"> & Partial<Pick<Stripe, "refunds" | "invoices">>;
 
 function normalizeStripeId(value: unknown): string {
   return String(value ?? "").trim();
@@ -68,56 +68,75 @@ function readObjectId(value: unknown): string {
   return normalizeStripeId((value as { id?: unknown } | null)?.id);
 }
 
-async function readFirstInvoicePayment(
+// Every payment a subscription has taken (a duplicate attached late may have
+// renewed): "not_found_yet" while a payment is still settling.
+async function readPaidInvoicePayments(
   target: StripeSubscriptionCancellationTarget,
   stripe: StripeCancellationClient,
   options: Stripe.RequestOptions | undefined,
-): Promise<{ paymentIntentId: string; chargeId: string } | "nothing_paid"> {
-  const subscription = await stripe.subscriptions.retrieve(
-    normalizeStripeId(target.providerSubscriptionId),
-    { expand: ["latest_invoice.payments"] },
+): Promise<Array<{ invoiceId: string; paymentIntentId: string; chargeId: string }> | "nothing_paid" | "not_found_yet"> {
+  const listed = await stripe.invoices!.list(
+    { subscription: normalizeStripeId(target.providerSubscriptionId), limit: 100, expand: ["data.payments"] },
     options,
   );
-  const invoice = (subscription as any)?.latest_invoice;
-  if (!invoice || typeof invoice !== "object") return { paymentIntentId: "", chargeId: "" };
-  if (invoice.status === "paid" && Number(invoice.amount_paid ?? 0) === 0) return "nothing_paid";
-  const payment = invoice.payments?.data?.find((row: any) => row?.status === "paid")?.payment
-    ?? invoice.payments?.data?.[0]?.payment;
-  return {
-    paymentIntentId: readObjectId(invoice.payment_intent) || readObjectId(payment?.payment_intent),
-    chargeId: readObjectId(invoice.charge) || readObjectId(payment?.charge),
-  };
+  const invoices = ((listed as any)?.data ?? []) as any[];
+  const paid = invoices.filter((invoice) => invoice?.status === "paid" && Number(invoice.amount_paid ?? 0) > 0);
+  if (!paid.length) {
+    const settled = invoices.length > 0 && invoices.every((invoice) => invoice?.status === "paid" || invoice?.status === "void");
+    return settled ? "nothing_paid" : "not_found_yet";
+  }
+  const payments = paid.map((invoice) => {
+    const payment = invoice.payments?.data?.find((row: any) => row?.status === "paid")?.payment
+      ?? invoice.payments?.data?.[0]?.payment;
+    return {
+      invoiceId: readObjectId(invoice),
+      paymentIntentId: readObjectId(invoice.payment_intent) || readObjectId(payment?.payment_intent),
+      chargeId: readObjectId(invoice.charge) || readObjectId(payment?.charge),
+    };
+  });
+  return payments.some((payment) => !payment.paymentIntentId && !payment.chargeId) ? "not_found_yet" : payments;
+}
+
+async function refundDuplicatePayment(
+  stripe: StripeCancellationClient,
+  options: Stripe.RequestOptions | undefined,
+  payment: { paymentIntentId: string; chargeId: string },
+  idempotencyKey: string,
+): Promise<void> {
+  try {
+    await stripe.refunds!.create(
+      { ...(payment.paymentIntentId ? { payment_intent: payment.paymentIntentId } : { charge: payment.chargeId }), reason: "duplicate", refund_application_fee: true },
+      { ...(options ?? {}), idempotencyKey },
+    );
+  } catch (error: any) {
+    if (error?.code !== "charge_already_refunded") throw error;
+  }
 }
 
 // A second subscription for someone who is already a paying member: cancel it
-// now and refund its first payment in full (the platform fee too). Safe to repeat.
+// now and refund what it took in full (the platform fee too): the payment the
+// notice named, or, without one, every invoice it was paid. Safe to repeat.
 export async function cancelAndRefundDuplicateSubscription(
   target: StripeSubscriptionCancellationTarget & { paymentIntentId?: string | null; chargeId?: string | null },
   stripe: StripeCancellationClient = getStripeClient(),
 ): Promise<{ cancelled: "canceled" | "already_inactive" | "missing"; refunded: boolean }> {
   const cancelled = await cancelStripeSubscriptionIfActive(target, stripe);
   const options = stripeRequestOptions(target.providerAccountId);
-  let paymentIntentId = normalizeStripeId(target.paymentIntentId);
-  let chargeId = normalizeStripeId(target.chargeId);
-  if (!paymentIntentId && !chargeId) {
-    // The checkout notice didn't name the payment: find it on the first invoice.
-    const recovered = await readFirstInvoicePayment(target, stripe, options);
-    if (recovered === "nothing_paid") return { cancelled, refunded: false };
-    paymentIntentId = recovered.paymentIntentId;
-    chargeId = recovered.chargeId;
-    // Not found yet: throw so the caller's retry chain tries again.
-    if (!paymentIntentId && !chargeId) throw new Error("duplicate_refund_payment_not_found");
-  }
-  try {
-    await stripe.refunds!.create(
-      { ...(paymentIntentId ? { payment_intent: paymentIntentId } : { charge: chargeId }), reason: "duplicate", refund_application_fee: true },
-      { ...(options ?? {}), idempotencyKey: `duplicate-subscription-refund:${normalizeStripeId(target.providerSubscriptionId)}` },
-    );
+  const subscriptionId = normalizeStripeId(target.providerSubscriptionId);
+  const paymentIntentId = normalizeStripeId(target.paymentIntentId);
+  const chargeId = normalizeStripeId(target.chargeId);
+  if (paymentIntentId || chargeId) {
+    await refundDuplicatePayment(stripe, options, { paymentIntentId, chargeId }, `duplicate-subscription-refund:${subscriptionId}`);
     return { cancelled, refunded: true };
-  } catch (error: any) {
-    if (error?.code === "charge_already_refunded") return { cancelled, refunded: true };
-    throw error;
   }
+  const payments = await readPaidInvoicePayments(target, stripe, options);
+  if (payments === "nothing_paid") return { cancelled, refunded: false };
+  // Not found yet: throw so the caller's retry chain tries again.
+  if (payments === "not_found_yet") throw new Error("duplicate_refund_payment_not_found");
+  for (const payment of payments) {
+    await refundDuplicatePayment(stripe, options, payment, `duplicate-subscription-refund:${subscriptionId}:${payment.invoiceId}`);
+  }
+  return { cancelled, refunded: true };
 }
 
 // Leaving a paid community: Stripe stops renewing and the member keeps what they

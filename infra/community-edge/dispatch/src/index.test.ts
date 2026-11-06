@@ -1441,22 +1441,59 @@ test("twin join: each action goes to Studio's core with the twin's session; chec
   expect(await act("/__polynet/me/join/checkout", checkoutBody)).toEqual([409, { ok: false, code: "community_checkout_unavailable" }]);
 });
 
-test("twin join: no checkout before signing in; Finish sends only the checkout, and site code never sees a Polynet cookie", async () => {
+test("twin join, cash first: a signed-out buyer goes straight to Stripe; only this browser keeps the payment, and signing in here makes it theirs", async () => {
   resetEdgeCaches();
-  const backend = vi.fn(async (_url: string, _init?: RequestInit) => Response.json({ ...JOIN_ANSWER, status: "joined" }));
+  const BUYER = `buyer_${"c".repeat(32)}`;
+  const answers: Record<string, unknown> = {
+    "/runtime/app/join/checkout": { ok: true, checkout_url: "https://checkout.stripe.com/c/pay/cs_test_g1", session_id: `chk_${"b".repeat(32)}`, buyer_secret: BUYER },
+    "/runtime/app/me/join/finish": { ...JOIN_ANSWER, status: "joined" },
+  };
+  const backend = vi.fn(async (url: string, _init?: RequestInit) => Response.json(answers[new URL(url).pathname] ?? { ok: false }));
   vi.stubGlobal("fetch", backend);
   const e = sitesEnv();
-  // The old guest checkout is gone: signed out, it never reaches the backend.
-  const guest = await edge.fetch(at(TWIN, "/__polynet/me/join/guest-checkout", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" }), e);
-  expect(guest.status).not.toBe(200);
+  const guest = (origin: string, headers: Record<string, string> = {}, body = JSON.stringify({ billing_period: "monthly" })) =>
+    edge.fetch(at(origin, "/__polynet/me/join/guest-checkout", { method: "POST", headers: { "content-type": "application/json", ...headers }, body }), e);
+  // Never on the site, never cross-site, JSON only.
+  expect((await guest(SITE)).status).toBe(404);
+  expect((await guest(TWIN, { "sec-fetch-site": "cross-site" })).status).toBe(403);
+  expect((await guest(TWIN, { "content-type": "application/x-www-form-urlencoded" }, "a=1")).status).toBe(415);
   expect(backend).not.toHaveBeenCalled();
-  // Signed in, Finish forwards the page's checkout id and sets no cookie.
+  // No session needed: the page gets Stripe's address only; the buyer secret is an HttpOnly cookie on the twin.
+  const started = await guest(TWIN);
+  expect([started.status, await started.json()]).toEqual([200, { ok: true, checkout_url: "https://checkout.stripe.com/c/pay/cs_test_g1" }]);
+  expect(started.headers.get("set-cookie")).toBe(`__Host-polynet_buyer_${"b".repeat(32)}=${BUYER}; Path=/; HttpOnly; SameSite=Lax; Max-Age=1209600; Secure`);
+  expect(backend.mock.calls[0][1]?.headers).toEqual({ "Content-Type": "application/json", Origin: TWIN, "x-polynet-edge-secret": "edge-secret" });
+  // A checkout address anywhere but Stripe's own page, or no buyer secret, and nothing is kept.
+  for (const answer of [{ ...answers["/runtime/app/join/checkout"] as object, checkout_url: "https://evil.example.com/pay" },
+    { ...answers["/runtime/app/join/checkout"] as object, buyer_secret: "buyer_nope" }]) {
+    answers["/runtime/app/join/checkout"] = answer;
+    const refused = await guest(TWIN);
+    expect([refused.status, refused.headers.get("set-cookie")]).toEqual([502, null]);
+  }
+  // Signed in on the twin, Finish carries the buyer secret from the cookie (never from the page), and drops it once joined.
+  backend.mockClear();
   const finish = await edge.fetch(settingsCall(TWIN, "/__polynet/me/join/finish", "POST",
-    { cookie: `__Host-polynet_session=${TOKEN}` }, JSON.stringify({ session_id: `chk_${"b".repeat(32)}` })), e);
-  expect([finish.status, finish.headers.get("set-cookie")]).toEqual([200, null]);
+    { cookie: `__Host-polynet_session=${TOKEN}; __Host-polynet_buyer_${"b".repeat(32)}=${BUYER}` }, JSON.stringify({ session_id: `chk_${"b".repeat(32)}`, buyer_secret: "buyer_forged" })), e);
+  expect(finish.status).toBe(200);
+  expect(JSON.parse(String(backend.mock.calls[0][1]?.body))).toEqual({ session_id: `chk_${"b".repeat(32)}`, buyer_secret: BUYER });
+  expect(finish.headers.get("set-cookie")).toBe(`__Host-polynet_buyer_${"b".repeat(32)}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0; Secure`);
+  // Still pending: the secret stays for the next try.
+  answers["/runtime/app/me/join/finish"] = { ...JOIN_ANSWER, status: "pending" };
+  const pending = await edge.fetch(settingsCall(TWIN, "/__polynet/me/join/finish", "POST",
+    { cookie: `__Host-polynet_session=${TOKEN}; __Host-polynet_buyer_${"b".repeat(32)}=${BUYER}` }, JSON.stringify({ session_id: `chk_${"b".repeat(32)}` })), e);
+  expect([pending.status, pending.headers.get("set-cookie")]).toEqual([200, null]);
+  // Another checkout's secret (another tab) is never sent for this one.
+  backend.mockClear();
+  await edge.fetch(settingsCall(TWIN, "/__polynet/me/join/finish", "POST",
+    { cookie: `__Host-polynet_session=${TOKEN}; __Host-polynet_buyer_${"e".repeat(32)}=${BUYER}` }, JSON.stringify({ session_id: `chk_${"b".repeat(32)}` })), e);
   expect(JSON.parse(String(backend.mock.calls[0][1]?.body))).toEqual({ session_id: `chk_${"b".repeat(32)}` });
-  const forwarded = withoutPolynetCookies(new Request(TWIN, { headers: { cookie: `a=1; __Host-polynet_session=${TOKEN}; __HOST-POLYNET_whatever=x; b=2` } }));
+  // A founder's site code never sees a buyer secret (or any Polynet cookie) on the requests the edge forwards.
+  const forwarded = withoutPolynetCookies(new Request(TWIN, { headers: { cookie: `a=1; __Host-polynet_buyer_${"b".repeat(32)}=${BUYER}; __HOST-POLYNET_whatever=x; b=2` } }));
   expect(forwarded.headers.get("cookie")).toBe("a=1; b=2");
+  // Without the cookie, a secret the page names never reaches the backend.
+  backend.mockClear();
+  await edge.fetch(settingsCall(TWIN, "/__polynet/me/join/finish", "POST", {}, JSON.stringify({ session_id: `chk_${"b".repeat(32)}`, buyer_secret: BUYER })), e);
+  expect(JSON.parse(String(backend.mock.calls[0][1]?.body))).toEqual({ session_id: `chk_${"b".repeat(32)}` });
 });
 
 // Moderation on the twin: removing a post and reviewing join requests, through

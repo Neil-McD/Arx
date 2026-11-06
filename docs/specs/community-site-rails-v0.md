@@ -405,15 +405,22 @@ Studio's core (`convex/communityAppJoin.ts`). No second gate logic:
   Stripe's verified notice itself made the buyer a member (recorded on the
   checkout, once), and the page only reads that. A return alone grants nothing. After a minute it offers
   "Check again".
-- **Paid, identify then pay (Nov 5, membership redesign; replaced the
-  short-lived cash-first guest checkout):** who's paying is known before
-  Stripe. Signed out, "Join $X" goes to sign in first (the normal hop, back to
-  `/join?plan=<period>`), and back signed in the page carries straight on to
-  Stripe with that plan: no second click. Stripe's verified notice makes the
-  signed-in buyer a member; from Stripe to the site's chat the member sees one
-  screen, "Finishing your membership…". Back from Stripe signed out (a
-  session that ended meanwhile), the page signs in and finishes. There is no
-  guest checkout, no claim cookie and no "finish joining" email.
+- **Paid, cash first (Nov 5, membership redesign):** "Join $X" goes
+  straight to Stripe, signed in or not; the line under it says joining accepts
+  Polynet's Terms and Privacy & AI Data Policy. Signed out, the edge starts the
+  checkout without a session (`POST /__polynet/me/join/guest-checkout`,
+  forwarded to `/runtime/app/join/checkout`) and keeps the buyer secret in an
+  HttpOnly cookie on the twin, one per checkout
+  (`__Host-polynet_buyer_<checkout hex>`, 14 days); the page only ever gets
+  Stripe's address, and no `__Host-polynet_` cookie reaches the founder's site
+  code. Back from Stripe signed out, the page goes straight to sign in (the
+  normal hop, back to `/join?checkout=<id>`). Finish carries the secret from
+  the cookie (the edge drops any the page sends), makes the payment this
+  member's, asks Stripe directly if Polynet hasn't heard yet, and drops the
+  cookie once they've joined. From Stripe to the site's chat it's one screen,
+  "Finishing your membership…". Signing in later anywhere with the email given
+  to Stripe (verified) also collects it. There's no setup form: sign-in fills
+  the profile (name, photo, handle).
 - **Already a member:** "You're in." with a link into the site.
 - **Blocked, denied, cooldown, unavailable, account not set up:** Studio's
   words (or, where Studio shows a raw code, plain ones), and for an
@@ -427,7 +434,8 @@ Endpoints: `GET /__polynet/me/join` (signed out too) and `POST
 /__polynet/me/join`, `/join/cancel`, `/join/checkout`, `/join/finish`, twin
 only, same-origin, small JSON POSTs (1 KB), forwarded to
 `/runtime/app/me/join*`; every action requires a private session (the site's
-own session, which its code holds, is refused).
+own session, which its code holds, is refused), except
+`/join/guest-checkout`, the cash-first checkout, which needs none.
 
 ## Moderation (3c-1, Oct 28)
 

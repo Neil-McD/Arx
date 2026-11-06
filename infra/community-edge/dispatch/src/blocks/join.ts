@@ -5,10 +5,11 @@
 // out, and its gate exactly as Studio's public funnel decides it: the backend
 // projects it with Studio's own functions and every action runs Studio's own
 // core, so this page only draws what it's told. Free: sign in, then Join.
-// Approval: sign in, ask, then wait (or withdraw). Paid: pick a plan, sign in
-// (back here, it carries straight on), then Stripe's own checkout (the address
-// the backend returned, never one built here); back here, "Finishing up…" until
-// Polynet has the payment from Stripe itself. Joined: into the site, signed in
+// Approval: sign in, ask, then wait (or withdraw). Paid, cash first: pick a
+// plan, then Stripe's own checkout (the address the backend returned, never one
+// built here), signed in or not; back here, sign in if they weren't (this
+// browser holds the payment until then), and "Finishing your membership…"
+// until Polynet has the payment from Stripe. Joined: into the site, signed in
 // there too. Kept as text (a
 // String.raw literal: no backticks or template placeholders inside) so the
 // edge serves exactly what is reviewed.
@@ -112,8 +113,6 @@ class Join {
     this.checkout = CHECKOUT_SESSION.test(checkout) ? checkout : null;
     this.canceled = checkout === "canceled";
     this.plan = params.get("plan") === "annual" ? "annual" : params.get("plan") === "monthly" ? "monthly" : null;
-    // Picked a plan, then signed in: carry straight on to Stripe.
-    this.continueToCheckout = Boolean(this.plan);
     block.teardown = () => this.stop();
   }
 
@@ -147,7 +146,7 @@ class Join {
     }
     this.data = res.body;
     if (this.checkout && this.data.signed_in) return this.finish(0);
-    // Back from Stripe but signed out here: sign in, then finish.
+    // Paid before signing in: straight on to sign in, then it's theirs.
     if (this.checkout) return this.signInToFinish();
     this.render(this.canceled ? { note: "Checkout canceled. You haven't been charged." } : {});
     if (this.canceled) { this.canceled = false; this.address(""); }
@@ -240,13 +239,8 @@ class Join {
     action.addEventListener("click", () => this.startCheckout(action));
     out.push(h("div", { class: "actions" }, [action]));
     out.push(h("p", { class: "muted", part: "gate-note", text: this.data.viewer ? "You'll pay on Stripe's secure checkout, then come back here."
-      : "You'll sign in with Polynet, then pay on Stripe's secure checkout." }));
+      : "You'll pay on Stripe's secure checkout, then sign in to get in." }));
     out.push(this.terms());
-    if (this.continueToCheckout && this.data.viewer) {
-      this.continueToCheckout = false;
-      this.address("");
-      queueMicrotask(() => this.startCheckout(action));
-    }
     return out;
   }
 
@@ -282,12 +276,12 @@ class Join {
     this.render({});
   }
 
-  // Who's paying is known before Stripe: signed out, sign in first (with the
-  // plan, so they come back and carry on); signed in, straight to Stripe.
+  // Cash first: signed in or not, straight to Stripe. Signed out, this
+  // browser keeps the payment (an HttpOnly cookie) until they sign in.
   async startCheckout(button) {
-    if (!this.data.viewer) return signIn(this.plan);
     button.disabled = true;
-    const res = await call("/__polynet/me/join/checkout", { billing_period: this.plan });
+    const guest = !this.data.viewer;
+    const res = await call(guest ? "/__polynet/me/join/guest-checkout" : "/__polynet/me/join/checkout", { billing_period: this.plan });
     if (!this.current()) return;
     if (res.status === 401) return signIn(this.plan);
     const url = res.status === 200 && res.body.ok === true && typeof res.body.checkout_url === "string" ? res.body.checkout_url : "";
@@ -330,8 +324,8 @@ class Join {
       ])])]);
   }
 
-  // From Stripe to chat it's one screen, whatever runs underneath (Stripe's
-  // confirmation, signing in on the site).
+  // From Stripe to chat it's one screen, whatever runs underneath (signing in,
+  // Stripe's confirmation, signing in on the site).
   finishing() {
     this.block.show("finishing", [h("div", { class: "join", part: "join" }, [this.pitch(),
       h("section", { class: "gate", part: "gate" }, [h("p", { part: "join-status", role: "status", text: FINISHING })])])]);
