@@ -182,7 +182,7 @@ export function WebCreateCommunityModal(props: WebCreateCommunityModalProps) {
                   />
                 </div>
                 <span className="create-community-hint">
-                  Your community gets its own site at {communitySiteAddress(props.createCommunitySlug)}. 3–32 characters: lowercase letters, numbers and dashes.
+                  Your community's public page will be {communitySiteAddress(props.createCommunitySlug)}. 3–32 characters: lowercase letters, numbers and dashes.
                 </span>
               </label>
               <label className="create-community-field">
