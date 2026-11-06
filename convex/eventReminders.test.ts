@@ -1,6 +1,7 @@
 /// <reference types="vite/client" />
 
 import { convexTest } from "convex-test";
+import { readFileSync } from "node:fs";
 import { expect, test } from "vitest";
 
 import { internal } from "./_generated/api";
@@ -27,7 +28,10 @@ test("every member of a big community is reminded, in batches, not just the firs
       locationType: "online", visibility: "members", status: "live", createdAt: NOW, updatedAt: NOW,
     });
   });
-  const batches = await t.query(internal.eventReminders.buildEventReminderBatchesInternal, { nowMs: NOW }) as Array<{ recipientUserIds: unknown[] }>;
+  // Exactly the scheduled job's arguments (convex/crons.ts).
+  const crons = readFileSync(new URL("./crons.ts", import.meta.url), "utf8");
+  expect(crons).toMatch(/enqueueEventReminderEmailsInternal,\s*\/\/[^\n]*\n\s*\{ lookaheadMs: 20 \* 60 \* 1000 \},/);
+  const batches = await t.query(internal.eventReminders.buildEventReminderBatchesInternal, { nowMs: NOW, lookaheadMs: 20 * 60 * 1000 }) as Array<{ recipientUserIds: unknown[] }>;
   const everyone = new Set(batches.flatMap((batch) => batch.recipientUserIds.map(String)));
   expect(batches.length).toBe(2);
   expect(batches.every((batch) => batch.recipientUserIds.length <= 500)).toBe(true);

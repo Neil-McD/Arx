@@ -31,11 +31,8 @@ crons.interval(
   "enqueue 24h event reminder emails",
   { minutes: 15 },
   (internal as any).eventReminders.enqueueEventReminderEmailsInternal,
-  {
-    lookaheadMs: 20 * 60 * 1000,
-    limitEvents: 500,
-    limitRecipientsPerEvent: 500,
-  },
+  // Every member, in batches; the job's own event limit (logged if hit).
+  { lookaheadMs: 20 * 60 * 1000 },
 );
 
 // Mention email pings: mentions still "pending" after the in-app grace window
