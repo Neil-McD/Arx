@@ -450,8 +450,10 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
 
 ### 17. Polynet Studio — Keep
 
-- **Does:** founders' admin (settings, members, billing, analytics), DMs, the
-  Agent page, and today's member experience inside Polynet.
+- **Does:** the back office: founders' admin (settings, members, billing,
+  analytics), DMs and the Agent page. A member who only belongs is handed to
+  the community's site from Studio's member screens (Nov 6,
+  `useWebMemberSiteHandoff`); the screens themselves are retired next.
 - **Code:** `apps/web` (React, Vite: `App.tsx`, `components/`, `controllers/`),
   `shared/` (gateways and shared UI), `api/` (Vercel functions); backend helper
   `publicAppUrl`.

@@ -109,6 +109,13 @@ community lives on its site, where joining and paying (cash first) happen. A
 community with no site yet shows a short note. Studio has no join page or
 checkout of its own any more (`WebCommunityHandoff`).
 
+Studio's member screens, `/c/:slug/home`, `/c/:slug/chat`, `/c/:slug/events`,
+`/c/:slug/resources` and `/c/:slug/agent`, hand someone who only belongs to
+the site's matching page (`/`, `/chat`, `/events`, `/learn`, `/ask`) once
+their access has loaded (`useWebMemberSiteHandoff`). The owner and anyone with
+settings, members, analytics, join-request or moderation rights stay in
+Studio, the back office; so does everyone in a community with no site yet.
+
 The retired draft-preview URL `/c/:slug/preview` resolves to `/c/:slug`. The
 retired editor URLs `/c/:slug/funnel` and `/c/:slug/settings/funnel` redirect to
 the community's settings.

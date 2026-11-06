@@ -45,6 +45,7 @@ import { useWebAuthErrorToastLifecycle } from "./controllers/useWebAuthErrorToas
 import { useWebCommunityAgentSurfaceController } from "./controllers/useWebCommunityAgentSurfaceController";
 import { useWebDirectMessagesChromeController } from "./controllers/useWebDirectMessagesChromeController";
 import { useWebCommunityTabAccessGuard } from "./controllers/useWebCommunityTabAccessGuard";
+import { useWebMemberSiteHandoff } from "./controllers/useWebMemberSiteHandoff";
 import { useWebMobileChromeReadingModeLifecycle } from "./controllers/useWebMobileChromeReadingModeLifecycle";
 import { useWebShellActionController } from "./controllers/useWebShellActionController";
 import { useWebPendingAuthIntentController } from "./controllers/useWebPendingAuthIntentController";
@@ -693,6 +694,24 @@ export default function App() {
     canViewAnalytics: canViewActiveCommunityAnalytics,
     setCommunityResourceModuleId,
     applyCommunityShellState,
+  });
+
+  useWebMemberSiteHandoff({
+    activePage,
+    activeView,
+    communityTab,
+    activeCommunityId,
+    activeCommunityAccessId: activeCommunityAccess?.community_id ?? null,
+    activeCommunitySiteUrl: (activeCommunity as { site_url?: string | null } | null)?.site_url,
+    isLoadingCommunityAccess,
+    communityAccessLoadError,
+    runsCommunity:
+      isActiveCommunityOwner ||
+      canViewActiveCommunitySettings ||
+      canManageMembersActiveCommunity ||
+      canViewActiveCommunityAnalytics ||
+      canReviewJoinRequestsActiveCommunity ||
+      canModerateContentActiveCommunity,
   });
 
   const {
