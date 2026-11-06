@@ -867,7 +867,12 @@ function legalUrl(value: unknown, env: Env): string | null {
 // public page, Join, Discover, moderation and anything else the site serves.
 const APP_TAB_FOR_PAGE: Record<string, string> = { chat: "chat", events: "events", learn: "resources", knowledge: "resources", ask: "agent", people: "home" };
 export function appPageFor(url: URL, slug: string, env: Env): string | null {
-  const app = (path: string) => new URL(path, env.POLYNET_AUTH_URL).toString();
+  // Marked as sent from the site, so Studio never sends it straight back.
+  const app = (path: string) => {
+    const target = new URL(path, env.POLYNET_AUTH_URL);
+    target.searchParams.set("pn_from", "site");
+    return target.toString();
+  };
   const community = `/c/${encodeURIComponent(slug)}`;
   const standard = standardPage(url.pathname);
   if (standard && Object.hasOwn(APP_TAB_FOR_PAGE, standard.page.name)) {
@@ -1226,7 +1231,8 @@ async function serve(request: Request, url: URL, route: Route, place: Place, env
   const read = request.method === "GET" || request.method === "HEAD";
   // Members use Polynet's app (the owner's switch): a member page sends them to
   // the same place there. The public page, joining, checkout and Discover stay.
-  const inApp = read ? appPageFor(url, route.community, env) : null;
+  // Studio just sent them here (pn_from=app): never send them straight back.
+  const inApp = read && url.searchParams.get("pn_from") !== "app" ? appPageFor(url, route.community, env) : null;
   if (inApp && (await publicIdentity(env, place.siteOrigin))?.members_use === "app") {
     return new Response(null, { status: 302, headers: { Location: inApp, "Cache-Control": "no-store" } });
   }

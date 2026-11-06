@@ -292,6 +292,20 @@ const MEMBER_TAB_SITE_PATHS: Partial<Record<CommunityTab, string>> = {
   agent: "/ask",
 };
 
+// Each side marks the visit it sends to the other (pn_from=app here, pn_from=site
+// from the site's edge), and neither sends a marked visit back. So right after
+// the owner switches, while one side still has the old choice cached, a member
+// is moved at most once and the page opens: never a loop.
+export const HANDOFF_MARK = "pn_from";
+
+export function cameFromSite(search: string | null | undefined): boolean {
+  try {
+    return new URLSearchParams(String(search ?? "")).get(HANDOFF_MARK) === "site";
+  } catch {
+    return false;
+  }
+}
+
 export function communityMemberSiteUrl(
   siteUrl: unknown,
   view: AppView,
@@ -303,7 +317,7 @@ export function communityMemberSiteUrl(
   if (!path) return null;
   // A chat link to one channel opens that channel (the site reads ?channel=).
   const channel = path === "/chat" ? String(channelSlug ?? "").trim().toLowerCase() : "";
-  const query = channel && channel !== "general" ? `?channel=${encodeURIComponent(channel)}` : "";
+  const query = channel && channel !== "general" ? `?channel=${encodeURIComponent(channel)}&${HANDOFF_MARK}=app` : `?${HANDOFF_MARK}=app`;
   try {
     const site = new URL(siteUrl);
     return site.protocol === "https:" ? `${site.origin}${path}${query}` : null;

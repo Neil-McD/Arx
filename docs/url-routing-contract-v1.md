@@ -118,7 +118,10 @@ link follows it: emails and DM links (`communitySitePageUrl` and
 edge, which in app mode sends member pages (`/chat`, `/events`, `/learn`,
 `/knowledge`, `/ask`, `/people`, and the twin's `/messages`, `/settings`,
 `/communities`) to the same place in the app (`appPageFor`). The public page,
-`/join`, checkout, Discover and moderation never move.
+`/join`, checkout, Discover and moderation never move. Each side marks the visit
+it sends (`pn_from=site` from the edge, `pn_from=app` from Studio) and never
+sends a marked visit back, so in the minute after a switch, while one side may
+still have the old choice cached, a member is moved at most once: no loops.
 
 In site mode, Studio's member screens, `/c/:slug/home`, `/c/:slug/chat`,
 `/c/:slug/events`, `/c/:slug/resources` and `/c/:slug/agent`, hand someone who

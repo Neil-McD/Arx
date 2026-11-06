@@ -1606,15 +1606,17 @@ test("members use Polynet's app: member pages go to the same place there; the pu
     return [res.status, res.headers.get("location")];
   };
   const app = "https://polynet.example.com";
-  expect(await open("/chat")).toEqual([302, `${app}/c/apps-community/chat`]);
-  expect(await open("/chat?channel=Crew")).toEqual([302, `${app}/c/apps-community/chat/crew`]);
-  expect(await open("/chat?channel=general")).toEqual([302, `${app}/c/apps-community/chat`]);
-  expect(await open("/events")).toEqual([302, `${app}/c/apps-community/events`]);
-  expect(await open("/learn")).toEqual([302, `${app}/c/apps-community/resources`]);
-  expect(await open("/ask")).toEqual([302, `${app}/c/apps-community/agent`]);
-  expect(await open("/people")).toEqual([302, `${app}/c/apps-community/home`]);
+  expect(await open("/chat")).toEqual([302, `${app}/c/apps-community/chat?pn_from=site`]);
+  expect(await open("/chat?channel=Crew")).toEqual([302, `${app}/c/apps-community/chat/crew?pn_from=site`]);
+  expect(await open("/chat?channel=general")).toEqual([302, `${app}/c/apps-community/chat?pn_from=site`]);
+  expect(await open("/events")).toEqual([302, `${app}/c/apps-community/events?pn_from=site`]);
+  expect(await open("/learn")).toEqual([302, `${app}/c/apps-community/resources?pn_from=site`]);
+  expect(await open("/ask")).toEqual([302, `${app}/c/apps-community/agent?pn_from=site`]);
+  expect(await open("/people")).toEqual([302, `${app}/c/apps-community/home?pn_from=site`]);
   // Never moved: the public page, Join, Discover, and anything else the site serves.
   for (const path of ["/", "/join", "/discover", "/about", "/__polynet/ui.css"]) expect((await open(path))[0], path).not.toBe(302);
+  // Studio just sent them here (pn_from=app): never straight back, even if this edge still thinks "app".
+  expect((await open("/chat?pn_from=app"))[0]).not.toBe(302);
   // Writes are never redirected.
   expect((await edge.fetch(new Request(`${ORIGIN}/chat`, { method: "POST", body: "x" }), env())).status).not.toBe(302);
   // The site again (after the identity cache): member pages stay on the site.
@@ -1626,10 +1628,10 @@ test("members use Polynet's app: member pages go to the same place there; the pu
 test("the app's version of the member's own pages", () => {
   const e = env();
   const at = (path: string) => appPageFor(new URL(`https://x--me.polynet.page${path}`), "club", e);
-  expect(at("/messages")).toBe("https://polynet.example.com/?dm=inbox");
-  expect(at("/messages/k97abcdefghijklmnopqrst")).toBe("https://polynet.example.com/?dm=k97abcdefghijklmnopqrst");
-  expect(at("/messages/new")).toBe("https://polynet.example.com/?dm=inbox");
-  expect(at("/settings")).toBe("https://polynet.example.com/settings/profile");
-  expect(at("/communities")).toBe("https://polynet.example.com/");
+  expect(at("/messages")).toBe("https://polynet.example.com/?dm=inbox&pn_from=site");
+  expect(at("/messages/k97abcdefghijklmnopqrst")).toBe("https://polynet.example.com/?dm=k97abcdefghijklmnopqrst&pn_from=site");
+  expect(at("/messages/new")).toBe("https://polynet.example.com/?dm=inbox&pn_from=site");
+  expect(at("/settings")).toBe("https://polynet.example.com/settings/profile?pn_from=site");
+  expect(at("/communities")).toBe("https://polynet.example.com/?pn_from=site");
   for (const stays of ["/join", "/moderate", "/requests", "/", "/discover"]) expect(at(stays), stays).toBeNull();
 });
