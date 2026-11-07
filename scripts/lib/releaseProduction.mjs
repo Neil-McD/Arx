@@ -211,7 +211,6 @@ async function verifyCandidate(deps, options) {
   if (parity.forbidden.length) throw new ReleaseError("production_release_settings_forbidden", parity.forbidden.join(","));
   if (parity.missing.length) throw new ReleaseError("production_release_settings_missing", parity.missing.join(","));
   stage("settings_parity", { unused: parity.unused });
-  deps.run("npm", ["run", "smoke:workspace-credit-accounting-prod-data"], releaseEnv);
   const previous = await inspectProductionDeployment(deps, PRODUCTION_AUTHORITY.productionOrigin);
   if (previous.name !== PRODUCTION_AUTHORITY.vercelProjectName || !previous.id.startsWith("dpl_")) {
     throw new ReleaseError("production_release_current_deployment_unexpected", JSON.stringify(previous));

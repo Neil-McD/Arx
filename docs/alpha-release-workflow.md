@@ -415,28 +415,8 @@ deploy or promote Vercel, mutate production, or roll back a release.
 
 ### Runtime Credit Accounting Gate
 
-Before a production release that touches runtime execution, provider-cost
-tracking, credits, checkout, or accounting diagnostics, run the read-only production accounting
-smoke. The command retains its legacy internal name:
-
-```bash
-cd /Users/neilmcdevitt/code/arx
-npm run smoke:workspace-credit-accounting-prod-data
-```
-
-Treat `health: "pass"` as the accounting release gate. A failure means the release should stop
-until the critical fields in the smoke output are understood.
-
-The reconciliation planner is diagnostic-only:
-
-```bash
-cd /Users/neilmcdevitt/code/arx
-npm run plan:workspace-credit-accounting-reconciliation-backlog:prod
-```
-
-Do not use the planner as permission to mutate production accounting history. Historical
-provider-cost mirror cleanup requires a separate operator-reviewed plan and must not retroactively
-debit users.
+Retired Nov 7 2026: the old Workspace credit tables it checked were emptied
+(backed up) and dropped, so the release no longer runs the accounting smoke.
 
 ## Post-Deploy Smoke Test
 

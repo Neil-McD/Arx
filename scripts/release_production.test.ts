@@ -105,7 +105,6 @@ function commandOrder(calls: Call[]): string[] {
     .map((call) => {
       const text = `${call.command} ${call.args.join(" ")}`;
       if (text.includes("release:gate")) return "gate";
-      if (text.includes("smoke:workspace-credit")) return "accounting_smoke";
       if (text.includes("convex deploy")) return "convex_deploy";
       if (text.includes("wrangler deploy")) return "edge_deploy";
       if (text.includes(" deploy --prod")) return "vercel_deploy";
@@ -163,7 +162,7 @@ describe("production release flow", () => {
     const result = await runProductionRelease(deps, { verifyOnly: true });
     expect(result.status).toBe("verified");
     expect(commandOrder(calls)).toEqual([
-      "gate", "vercel_project", "vercel_env", "convex_env", "convex_env", "accounting_smoke", "vercel_inspect",
+      "gate", "vercel_project", "vercel_env", "convex_env", "convex_env", "vercel_inspect",
     ]);
     expect(result.rollbackDeployment.id).toBe("dpl_previous");
   });
@@ -178,7 +177,7 @@ describe("production release flow", () => {
     const result = await runProductionRelease(deps, {});
     expect(result.status).toBe("released");
     expect(commandOrder(calls)).toEqual([
-      "gate", "vercel_project", "vercel_env", "convex_env", "convex_env", "accounting_smoke", "vercel_inspect",
+      "gate", "vercel_project", "vercel_env", "convex_env", "convex_env", "vercel_inspect",
       "convex_deploy", "vercel_deploy", "edge_deploy",
     ]);
     const edge = calls.find((call) => call.args.includes("wrangler"))!;
