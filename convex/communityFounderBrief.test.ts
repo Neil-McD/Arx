@@ -2,7 +2,7 @@
 
 import { convexTest } from "convex-test";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { internal } from "./_generated/api";
+import { api, internal } from "./_generated/api";
 import schema from "./schema";
 import {
   briefMarkdown,
@@ -127,6 +127,30 @@ describe("founder brief delivery", () => {
     const stranger = await t.run((ctx) => ctx.db.insert("users", { authSubject: "x", createdAt: 0, updatedAt: 0 } as any));
     await expect(set({ actorUserId: stranger })).rejects.toThrow(/owner_required/);
     await expect(set({})).resolves.toEqual({ ok: true });
+  });
+
+  it("the owner turns their brief on and off in Studio; nobody else can read or change it", async () => {
+    const t = convexTest(schema, modules);
+    const f = await fixture(t, Date.now());
+    const asOwner = t.withIdentity({ subject: "brief-Owner" });
+    await expect(asOwner.query(api.communityFounderBrief.getFounderBriefSettings, { communityId: f.communityId }))
+      .resolves.toEqual({ enabled: false, local_hour: 8, time_zone: null });
+    await expect(asOwner.mutation(api.communityFounderBrief.setFounderBriefSettings, {
+      communityId: f.communityId, enabled: true, localHour: 7, timeZone: "Europe/London",
+    })).resolves.toEqual({ enabled: true, local_hour: 7, time_zone: "Europe/London" });
+    const due = await t.query(internalRefs.communityFounderBrief.listDueFounderBriefsInternal, { nowMs: Date.now() + 2 * DAY });
+    expect(due.map((row: any) => row.communityId)).toEqual([f.communityId]);
+    await expect(asOwner.mutation(api.communityFounderBrief.setFounderBriefSettings, {
+      communityId: f.communityId, enabled: false, localHour: 7, timeZone: "Europe/London",
+    })).resolves.toMatchObject({ enabled: false });
+    expect(await t.query(internalRefs.communityFounderBrief.listDueFounderBriefsInternal, { nowMs: Date.now() + 2 * DAY })).toEqual([]);
+
+    await t.run((ctx) => ctx.db.insert("users", { authSubject: "brief-stranger", createdAt: 0, updatedAt: 0 } as any));
+    const asStranger = t.withIdentity({ subject: "brief-stranger" });
+    await expect(asStranger.query(api.communityFounderBrief.getFounderBriefSettings, { communityId: f.communityId })).rejects.toThrow(/owner_required/);
+    await expect(asStranger.mutation(api.communityFounderBrief.setFounderBriefSettings, {
+      communityId: f.communityId, enabled: true, localHour: 7, timeZone: "UTC",
+    })).rejects.toThrow(/owner_required/);
   });
 
   it("schedules the next brief at the founder's next local hour", () => {

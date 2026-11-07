@@ -24,6 +24,7 @@ import {
 } from "./WebPlatformChoiceControls";
 import { CommunityMemberExperienceSection } from "./CommunityMemberExperienceSection";
 import { CommunityPublicPageSection } from "./CommunityPublicPageSection";
+import { CommunityFounderBriefSection } from "./CommunityFounderBriefSection";
 import { communitySiteAddress } from "../../../../shared/communitySlug";
 
 type CommunityPricingMode = "free" | "monthly" | "annual";
@@ -892,6 +893,13 @@ export function WebCommunitySettingsSection(props: WebCommunitySettingsSectionPr
                         session={props.session}
                         ensureSession={props.ensureSession}
                         onSaved={props.onMemberExperienceSaved}
+                      />
+                    ) : null}
+                    {isOwnerSettingsLayer ? (
+                      <CommunityFounderBriefSection
+                        communityId={resolvedActiveCommunity.id}
+                        session={props.session}
+                        ensureSession={props.ensureSession}
                       />
                     ) : null}
                     <CommunityMonetizationConfigSection

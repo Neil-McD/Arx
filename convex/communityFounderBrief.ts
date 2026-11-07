@@ -7,7 +7,8 @@
 // a model call.
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
-import { internalAction, internalMutation, internalQuery } from "./_generated/server";
+import { internalAction, internalMutation, internalQuery, mutation, query } from "./_generated/server";
+import { resolveUserIdForAuthenticatedRequest } from "./authActor";
 import { listSharedChannelReadableRows } from "./communityChannelCore";
 import { readCanonicalUserIdentityProjection } from "./profileCore";
 import { communityIsActive, normalizeCommunityLifecycle } from "../shared/communityLifecycle";
@@ -283,6 +284,33 @@ async function scheduleNext(ctx: any, communityId: any, nowMs: number, retry: bo
   });
 }
 
+const DEFAULT_BRIEF_LOCAL_HOUR = 8;
+
+// Only the community's owner turns the brief on, picks its hour and time zone.
+async function saveFounderBriefSettings(ctx: any, args: {
+  communityId: any; enabled: boolean; localHour: number; timeZone: string; actorUserId: any;
+}) {
+  const community = await ctx.db.get(args.communityId);
+  if (!community || String(community.ownerId) !== String(args.actorUserId)) throw new Error("founder_brief_owner_required");
+  if (!Number.isInteger(args.localHour) || args.localHour < 0 || args.localHour > 23) throw new Error("founder_brief_hour_invalid");
+  if (!validTimeZone(args.timeZone)) throw new Error("founder_brief_time_zone_invalid");
+  const nowMs = Date.now();
+  const existing = await readSettings(ctx, args.communityId);
+  const fields = {
+    enabled: args.enabled, localHour: args.localHour, timeZone: args.timeZone, updatedByUserId: args.actorUserId,
+    nextDueAt: firstDueAtMs(nowMs, args.localHour, args.timeZone), updatedAt: nowMs,
+  };
+  if (existing) await ctx.db.patch(existing._id, fields);
+  else await ctx.db.insert("communityFounderBriefSettings", { communityId: args.communityId, ...fields, createdAt: nowMs });
+  return { ok: true };
+}
+
+function mapFounderBriefSettings(settings: any) {
+  return settings
+    ? { enabled: Boolean(settings.enabled), local_hour: settings.localHour, time_zone: settings.timeZone }
+    : { enabled: false, local_hour: DEFAULT_BRIEF_LOCAL_HOUR, time_zone: null };
+}
+
 export const setFounderBriefSettingsInternal = internalMutation({
   args: {
     communityId: v.id("communities"),
@@ -291,20 +319,32 @@ export const setFounderBriefSettingsInternal = internalMutation({
     timeZone: v.string(),
     actorUserId: v.id("users"),
   },
+  handler: async (ctx, args) => await saveFounderBriefSettings(ctx, args),
+});
+
+// Studio: the owner reads and changes their brief in Settings.
+export const getFounderBriefSettings = query({
+  args: { authSubject: v.optional(v.string()), communityId: v.id("communities") },
   handler: async (ctx, args) => {
+    const userId = await resolveUserIdForAuthenticatedRequest({ ctx, authSubject: args.authSubject ?? null });
     const community = await ctx.db.get(args.communityId);
-    if (!community || String(community.ownerId) !== String(args.actorUserId)) throw new Error("founder_brief_owner_required");
-    if (!Number.isInteger(args.localHour) || args.localHour < 0 || args.localHour > 23) throw new Error("founder_brief_hour_invalid");
-    if (!validTimeZone(args.timeZone)) throw new Error("founder_brief_time_zone_invalid");
-    const nowMs = Date.now();
-    const existing = await readSettings(ctx, args.communityId);
-    const fields = {
-      enabled: args.enabled, localHour: args.localHour, timeZone: args.timeZone, updatedByUserId: args.actorUserId,
-      nextDueAt: firstDueAtMs(nowMs, args.localHour, args.timeZone), updatedAt: nowMs,
-    };
-    if (existing) await ctx.db.patch(existing._id, fields);
-    else await ctx.db.insert("communityFounderBriefSettings", { communityId: args.communityId, ...fields, createdAt: nowMs });
-    return { ok: true };
+    if (!community || String(community.ownerId) !== String(userId)) throw new Error("founder_brief_owner_required");
+    return mapFounderBriefSettings(await readSettings(ctx, args.communityId));
+  },
+});
+
+export const setFounderBriefSettings = mutation({
+  args: {
+    authSubject: v.optional(v.string()),
+    communityId: v.id("communities"),
+    enabled: v.boolean(),
+    localHour: v.number(),
+    timeZone: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const userId = await resolveUserIdForAuthenticatedRequest({ ctx, authSubject: args.authSubject ?? null });
+    await saveFounderBriefSettings(ctx, { ...args, actorUserId: userId });
+    return mapFounderBriefSettings(await readSettings(ctx, args.communityId));
   },
 });
 

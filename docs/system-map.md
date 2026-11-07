@@ -255,7 +255,8 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
 
 - **Does:** the founder's daily brief today; member outreach, journey board and
   programs next ([spec](specs/proactive-community-agent-v0.md)).
-- **Code:** `communityFounderBrief` (cron "send due founder briefs", every 15 minutes);
+- **Code:** `communityFounderBrief` (cron "send due founder briefs", every 15 minutes;
+  the owner turns it on in Settings → Daily brief, `CommunityFounderBriefSection`);
   `stagingSeedBriefLab` (hand-run staging seed).
 - **Tables:** `communityFounderBriefSettings`, `communityFounderBriefs`.
 - **Handbook:** `communityHandbook` (the founder-approved handbook: owners and admins
