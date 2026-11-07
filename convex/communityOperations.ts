@@ -1,4 +1,4 @@
-// A change to the community itself (or its tags) from a person's own AI (the MCP), applied
+// A change to the community itself from a person's own AI (the MCP), applied
 // with its receipt in one transaction: if either fails, neither happens, so a
 // retry after a crash replays the answer instead of making the change again.
 import { v } from "convex/values";
@@ -38,12 +38,6 @@ export const applyCommunityOperationInternal = internalMutation({
         ? await ctx.runMutation(refs.communityHandbook.saveCommunityHandbookDraftForTrustedUserInternal, { ...scope, text: input.text })
       : args.operation === "community.handbook.approve"
         ? await ctx.runMutation(refs.communityHandbook.approveCommunityHandbookForTrustedUserInternal, { ...scope, text: input.text })
-      : args.operation === "community.tags.create"
-        ? await ctx.runMutation(refs.communityTags.createCommunityTagForTrustedUserInternal, { ...scope, name: input.name })
-      : args.operation === "community.tags.rename"
-        ? await ctx.runMutation(refs.communityTags.renameCommunityTagForTrustedUserInternal, { ...scope, tag: input.tag, name: input.name })
-      : args.operation === "community.tags.delete"
-        ? await ctx.runMutation(refs.communityTags.deleteCommunityTagForTrustedUserInternal, { ...scope, tag: input.tag })
       : (() => { throw new Error("operation_not_found"); })();
     const value = { ...args.answer, result };
     const completed = await ctx.runMutation(refs.polynetCanonicalReceipts.completeCanonicalOperationReceiptInternal, {

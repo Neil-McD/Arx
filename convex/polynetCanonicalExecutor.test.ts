@@ -217,7 +217,7 @@ const modules = import.meta.glob([
   "./communityOntologyCards.ts",
   "./communitySearchDocs.ts",
   "./communityMemberTimeline.ts",
-  "./communityHandbook.ts", "./communityNotes.ts", "./communityLessonProgress.ts", "./memberWriteRateLimit.ts", "./communityLifecycle.ts", "./communityOperations.ts", "./communityTags.ts", "./communityPeople.ts", "./userProfileProjection.ts",
+  "./communityHandbook.ts", "./communityNotes.ts", "./communityLessonProgress.ts", "./memberWriteRateLimit.ts", "./communityLifecycle.ts", "./communityOperations.ts", "./communityPeople.ts", "./userProfileProjection.ts",
   "./communityAccessQueries.ts",
   "./communityAdmin.ts",
   "./email.ts",
@@ -3016,10 +3016,10 @@ test("a moderator reviews a selection of join requests: each is decided on its o
   await t.run(ctx => ctx.db.patch(f.communityId, { entryPolicy: "approval" }));
   await makeModerator(t, f);
   const moderator = { userId: f.memberId, authSubject: f.memberSubject };
-  // The moderator's builder/ holds the join requests and the tags, nothing a builder manages.
+  // The moderator's builder/ holds the join requests, nothing a builder manages.
   const builder = await f.call("polynet_list", { path: "/communities/canonical-community/builder/" }, moderator);
   expect(builder.ok && (builder.value.entries as any[]).map(e => e.path)).toEqual([
-    "/communities/canonical-community/builder/join-requests/", "/communities/canonical-community/builder/tags/"]);
+    "/communities/canonical-community/builder/join-requests/"]);
   const rows = await t.run(async ctx => Promise.all(f.requests.map(id => ctx.db.get(id))));
   const observed = (row: any) => ({ request_ref: `join-request:${row._id}`, expected_created_at: new Date(row.createdAt).toISOString(),
     expected_updated_at: new Date(row.updatedAt).toISOString() });
@@ -3283,7 +3283,7 @@ test("a change to the community and its receipt commit together; a retry after a
   expect(await revision()).toBe(before + 1);
 });
 
-test("people: owners and admins tag, re-role, remove, ban and unban a selection; moderators read tags; members and the agent never see them", async () => {
+test("people: owners and admins re-role, remove, ban and unban a selection", async () => {
   vi.stubEnv("ARX_PUBLIC_APP_URL", "https://polynet.test");
   const t = convexTest(schema, modules);
   const f = await createFixture(t);
@@ -3320,33 +3320,14 @@ test("people: owners and admins tag, re-role, remove, ban and unban a selection;
   const memberAi = as(f.memberSubject, f.memberId);
   const ref = (id: any) => `user:${id}`;
 
-  // Tags: created by owners and admins; the same name twice is the same tag.
-  expect(await owner.call("community.tags.create", { name: "Beginner" }, "t1")).toMatchObject({ ok: true, value: { result: { slug: "beginner", created: true } } });
-  expect(await adminAi.call("community.tags.create", { name: "beginner" }, "t2")).toMatchObject({ ok: true, value: { result: { slug: "beginner", created: false } } });
-  expect(await modAi.call("community.tags.create", { name: "Coach" }, "t3")).toMatchObject({ ok: false, code: "operation_not_found" });
-
-  // Tag a selection: someone who isn't a member is refused, the rest are tagged.
-  const tagged = await adminAi.call("community.members.tag", { tag: "beginner", on: true,
-    members: [ref(f.memberId), ref(extra.quiet.userId), ref(extra.outsider)] }, "tag-1");
-  expect(tagged, JSON.stringify(tagged)).toMatchObject({ ok: true, value: { receipt: { authority_lane: "builder" }, result: { succeeded: 2, failed: 1,
-    results: [{ ok: true }, { ok: true }, { member: ref(extra.outsider), ok: false, code: "member_not_found" }] } } });
-
-  // Moderators and up see tags on the member list and in builder/tags/; members and the agent don't.
-  const tagsOf = async (who: any, id: any) => ((await who.list("members/")).value.entries as any[]).find(e => e.ref === ref(id))?.tags;
-  expect(await tagsOf(owner, f.memberId)).toEqual([{ slug: "beginner", name: "Beginner" }]);
-  expect(await tagsOf(modAi, extra.quiet.userId)).toEqual([{ slug: "beginner", name: "Beginner" }]);
-  expect(await tagsOf(memberAi, f.memberId)).toBeUndefined();
-  expect(await tagsOf(as(f.ownerSubject, f.ownerId, "community_agent"), f.memberId)).toBeUndefined();
-  expect((await modAi.list("builder/tags/") as any).value.entries).toMatchObject([{ slug: "beginner", name: "Beginner", people: 2 }]);
-  expect(((await modAi.list("builder/tags/beginner/") as any).value.entries as any[]).map(e => e.ref).sort())
-    .toEqual([ref(f.memberId), ref(extra.quiet.userId)].sort());
-  expect(await memberAi.list("builder/tags/")).toMatchObject({ ok: false });
-
   // Roles: only the owner makes admins.
   expect(await adminAi.call("community.members.set_role", { members: [ref(extra.quiet.userId)], role: "admin" }, "r1"))
     .toMatchObject({ ok: true, value: { result: { failed: 1, results: [{ ok: false, code: "owner_only" }] } } });
-  expect(await adminAi.call("community.members.set_role", { members: [ref(extra.quiet.userId)], role: "moderator" }, "r2"))
-    .toMatchObject({ ok: true, value: { result: { succeeded: 1 } } });
+  // Someone who isn't a member is refused; the rest of the selection still goes through.
+  const reroled = await adminAi.call("community.members.set_role", { members: [ref(extra.quiet.userId), ref(extra.outsider)], role: "moderator" }, "r2");
+  expect(reroled, JSON.stringify(reroled)).toMatchObject({ ok: true, value: { receipt: { authority_lane: "builder" }, result: { succeeded: 1, failed: 1,
+    results: [{ ok: true }, { member: ref(extra.outsider), ok: false, code: "member_not_found" }] } } });
+  expect(await modAi.call("community.members.set_role", { members: [ref(f.memberId)], role: "member" }, "r-mod")).toMatchObject({ ok: false });
   expect(await owner.call("community.members.set_role", { members: [ref(f.ownerId)], role: "member" }, "r3"))
     .toMatchObject({ ok: true, value: { result: { failed: 1 } } });
 
@@ -3399,16 +3380,10 @@ test("people: owners and admins tag, re-role, remove, ban and unban a selection;
       activationSequence: 1, activatedAt: 1, createdAt: 1, updatedAt: 1 } as any);
     return userId;
   });
-  expect(await owner.call("community.members.tag", { tag: "beginner", on: true, members: [ref(legacy)] }, "legacy-tag"))
-    .toMatchObject({ ok: true, value: { result: { succeeded: 1 } } });
   expect(await owner.call("community.members.remove", { members: [ref(legacy)] }, "legacy-rm"))
     .toMatchObject({ ok: true, value: { result: { succeeded: 1, results: [{ removed: true }] } } });
   expect(await t.run(async ctx => (await ctx.db.query("communityMemberships").collect()).find(m => String(m.userId) === String(legacy))!.active)).toBe(false);
 
-  // Rename and delete a tag; deleting untags everyone.
-  expect(await owner.call("community.tags.rename", { tag: "beginner", name: "New runner" }, "t4")).toMatchObject({ ok: true, value: { result: { slug: "new-runner" } } });
-  expect(await owner.call("community.tags.delete", { tag: "new-runner" }, "t5")).toMatchObject({ ok: true, value: { result: { deleted: true } } });
-  expect(await t.run(async ctx => (await ctx.db.query("communityMemberTags").collect()).length)).toBe(0);
   // Bad selections are refused whole.
   expect(await owner.call("community.members.remove", { members: ["not-a-ref"] }, "x1")).toMatchObject({ ok: false, code: "invalid_tool_args" });
   expect(await owner.call("community.members.set_role", { members: [ref(f.memberId)], role: "owner" }, "x2")).toMatchObject({ ok: false, code: "invalid_tool_args" });

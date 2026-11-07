@@ -76,11 +76,6 @@ assert.match(
   "provider cost entries must be idempotent and queryable by component over time",
 );
 assert.match(
-  schema,
-  /\.index\("by_status_settledAt", \["status", "settledAt"\]\)/,
-  "credit ledger entries must be queryable by settled period for margin diagnostics",
-);
-assert.match(
   providerCostCore,
   /quantity: roundProviderCostQuantity[\s\S]*rawVendorCostUsd: roundProviderCostUsd[\s\S]*ctx\.db\.insert\("providerCostEntries"/,
   "provider cost recording must preserve sub-cent provider cost precision",

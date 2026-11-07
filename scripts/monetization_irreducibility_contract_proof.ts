@@ -330,10 +330,10 @@ assert.match(
   /63f0cc88984aadbb40999e100d370381a8fe84f57d5b3e6651edf9460091b11a/,
 );
 
-// Historical financial schemas stay readable until liabilities are reconciled.
+// Historical checkout kinds stay readable; the old Workspace credit tables were
+// emptied (backed up) and dropped Nov 7.
 assert.match(schema, /v\.literal\("premium_subscription"\)/);
 assert.match(schema, /v\.literal\("workspace_credit_topup"\)/);
-assert.match(schema, /workspaceCreditBalances: defineTable/);
-assert.match(schema, /creditLedgerEntries: defineTable/);
+assert.doesNotMatch(schema, /workspaceCreditBalances: defineTable|creditLedgerEntries: defineTable/);
 
 console.log("monetization_irreducibility_contract_proof: ok");

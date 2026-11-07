@@ -81,9 +81,7 @@ export const applyMemberSelectionItemInternal = internalMutation({
     itemKey: v.string(),
     requestFingerprint: v.string(),
     targetUserId: v.id("users"),
-    action: v.union(v.literal("tag"), v.literal("set_role"), v.literal("remove"), v.literal("ban"), v.literal("unban")),
-    tag: v.optional(v.string()),
-    on: v.optional(v.boolean()),
+    action: v.union(v.literal("set_role"), v.literal("remove"), v.literal("ban"), v.literal("unban")),
     role: v.optional(v.union(v.literal("admin"), v.literal("moderator"), v.literal("member"))),
     reason: v.optional(v.string()),
   },
@@ -94,10 +92,7 @@ export const applyMemberSelectionItemInternal = internalMutation({
     if (!reservation.ok) throw new Error(String(reservation.code ?? "member_action_refused"));
     if (reservation.status === "completed") return { ...(reservation.result ?? {}), deduped: true };
     const scope = { userId: args.userId, communityId: args.communityId };
-    const result: Record<string, unknown> = args.action === "tag"
-      ? await ctx.runMutation(refs.internal.communityTags.setCommunityMemberTagForTrustedUserInternal,
-        { ...scope, tag: args.tag ?? "", targetUserId: args.targetUserId, on: args.on === true })
-      : await ctx.runMutation(refs.internal.communityPeople.applyPersonActionForTrustedUserInternal, {
+    const result: Record<string, unknown> = await ctx.runMutation(refs.internal.communityPeople.applyPersonActionForTrustedUserInternal, {
         ...scope, authSubject: args.authSubject, targetUserId: args.targetUserId, action: args.action,
         ...(args.role ? { role: args.role } : {}), ...(args.reason ? { reason: args.reason } : {}) });
     await ctx.runMutation(refs.internal.polynetCanonicalReceipts.completeCanonicalOperationReceiptInternal,
