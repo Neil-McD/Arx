@@ -64,7 +64,7 @@ export async function settleCommunityCheckout(
   evidence: { paymentIntentId: string | null; chargeId: string | null } = { paymentIntentId: null, chargeId: null },
 ): Promise<void> {
   const row = await ctx.db.query("checkoutSessions").withIndex("by_sessionId", (q: any) => q.eq("sessionId", sessionId)).first();
-  if (row && row.communityRiskRevokedReason === "buyer_blocked" && row.status === "complete" && row.providerSubscriptionId) {
+  if (row && row.communityHold === "buyer_blocked" && row.status === "complete" && row.providerSubscriptionId) {
     const providerSubscriptionId = String(row.providerSubscriptionId);
     await ctx.scheduler.runAfter(0, internal.communityCommerce.refundDuplicateCommunitySubscriptionInternal, {
       providerSubscriptionId, providerAccountId: String(row.providerAccountId ?? ""),
@@ -134,7 +134,7 @@ export async function attachCommunityCheckoutToUser(ctx: any, sessionId: string,
   } catch {
     // Blocked from this community, but they paid: theirs, never granted, and
     // the payment cancelled and refunded (now, or once Stripe confirms it).
-    await ctx.db.patch(row._id, { ownerUserId: userId, buyerEmailNormalized: undefined, communityRiskRevokedReason: "buyer_blocked", updatedAt: nowMs });
+    await ctx.db.patch(row._id, { ownerUserId: userId, buyerEmailNormalized: undefined, communityHold: "buyer_blocked", updatedAt: nowMs });
     if (row.status === "complete") await settleCommunityCheckout(ctx, sessionId, nowMs);
     return false;
   }
@@ -179,9 +179,9 @@ export const revokeUngrantedCommunityCheckoutInternal = internalMutation({
       if (typeof row.membershipGrantedAt === "number") continue;
       // A refund is final: a dispute recorded after it never replaces it (so
       // winning that dispute can't lift the refund's block).
-      const existing = String(row.communityRiskRevokedReason ?? "");
-      if (!existing || existing.startsWith("subscription_dispute_")) {
-        await ctx.db.patch(row._id, { communityRiskRevokedReason: args.revokedReason, updatedAt: Date.now() });
+      const hold = args.revokedReason === "subscription_refunded" ? "refunded" : "disputed";
+      if (!row.communityHold || row.communityHold === "disputed") {
+        await ctx.db.patch(row._id, { communityHold: hold, updatedAt: Date.now() });
       }
       revoked = true;
     }
@@ -200,8 +200,8 @@ export const restoreUngrantedCommunityCheckoutInternal = internalMutation({
     let restored = false;
     for (const row of rows) {
       if (row.mode !== "community_join" || String(row.providerAccountId ?? "") !== args.providerAccountId) continue;
-      if (!String(row.communityRiskRevokedReason ?? "").startsWith("subscription_dispute_")) continue;
-      await ctx.db.patch(row._id, { communityRiskRevokedReason: undefined, updatedAt: Date.now() });
+      if (row.communityHold !== "disputed") continue;
+      await ctx.db.patch(row._id, { communityHold: undefined, updatedAt: Date.now() });
       restored = true;
       if (row.ownerUserId) await settleCommunityCheckout(ctx, row.sessionId, Date.now());
     }

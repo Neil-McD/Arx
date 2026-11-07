@@ -43,16 +43,10 @@ assert.doesNotMatch(
   "retired tool credits must not be presented as a current product or revenue rail",
 );
 
-for (const label of [
-  "Historical tool-credit liabilities",
-  "Audit evidence only; this product is retired.",
-]) {
-  assert.match(operatorPanel, new RegExp(label), `missing historical audit boundary: ${label}`);
-}
-assert.match(
+assert.doesNotMatch(
   operatorPanel,
-  /Current platform net revenue is not instrumented; retired tool-credit sales are excluded\./,
-  "platform revenue must exclude archived tool-credit sales",
+  /tool-credit|top-up/i,
+  "retired tool credits are gone from the operator panel (their checkouts were deleted Nov 7)",
 );
 
 assert.match(voiceCostAccounting, /billingDisposition: "platform_absorbed"/);

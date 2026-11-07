@@ -406,6 +406,11 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
   recovery email, `founderCheckoutReceiptCore` and the email-hash receipt
   claim) was deleted Nov 6. A founder checkout now needs a signed-in owner;
   one without an owner fails (`founder_subscription_owner_missing`).
+- A checkout is a `community_join` or a `founder_subscription`. A join paid
+  before signing in can carry a typed `communityHold` (refunded, disputed,
+  buyer_blocked) and never grants while held; only a won dispute lifts one.
+  The retired credit top-up and premium checkouts (15 prod rows) were backed
+  up and deleted Nov 7, with their operator-panel figures.
 - **Tables:** `founderSubscriptions`, `founderUsageCycles`, `checkoutSessions`,
   `userStripeCustomers`, `communityStripeCustomers`,
   `userStripeConnectAccounts`, `communityPricePoints`, `communitySubscriptions`,

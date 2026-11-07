@@ -490,8 +490,6 @@ export default defineSchema({
     mode: v.union(
       v.literal("community_join"),
       v.literal("founder_subscription"),
-      v.literal("premium_subscription"),
-      v.literal("workspace_credit_topup"),
     ),
     provider: v.optional(v.literal("stripe")),
     providerCheckoutSessionId: v.optional(v.string()),
@@ -518,9 +516,6 @@ export default defineSchema({
     amountBaseUnits: v.optional(v.number()),
     currency: v.optional(v.string()),
     currencyDecimals: v.optional(v.number()),
-    workspaceCreditsAmount: v.optional(v.number()),
-    workspaceCreditsGrantedAt: v.optional(v.number()),
-    workspaceCreditsUncollectedPaid: v.optional(v.number()),
     // community_join: when Stripe's notice made the buyer a member (once).
     membershipGrantedAt: v.optional(v.number()),
     // community_join paid before signing in (cash first): the SHA-256 of the
@@ -531,9 +526,10 @@ export default defineSchema({
     // Who started a checkout before signing in, as a keyed hash of their
     // address (from the edge): the per-visitor limit counts these.
     buyerVisitorHash: v.optional(v.string()),
-    // community_join refunded or disputed before it was granted (a payment made
-    // before signing in has no subscription row yet): never grants.
-    communityRiskRevokedReason: v.optional(v.string()),
+    // community_join held before it was granted (a payment made before signing
+    // in has no subscription row yet): never grants while held. A refund is
+    // final; only a dispute's hold lifts (when the dispute is won).
+    communityHold: v.optional(v.union(v.literal("refunded"), v.literal("disputed"), v.literal("buyer_blocked"))),
     ownerUserId: v.optional(v.id("users")),
     founderSubscriptionId: v.optional(v.id("founderSubscriptions")),
     founderRiskState: v.optional(
