@@ -1,8 +1,6 @@
 import {
-  lazy,
   useMemo,
   useRef,
-  Suspense,
 } from "react";
 import "highlight.js/styles/github-dark.css";
 import {

@@ -1,16 +1,5 @@
 /* Left nav rail — seamless with search row above */
 
-.model-picker-nav-logo-img {
-  width: 20px;
-  height: 20px;
-  object-fit: contain;
-  display: block;
-}
-
-:root[data-theme="dark"] .model-picker-nav-logo-img.monochrome {
-  filter: invert(1);
-}
-
 /* Checkmark for selected row */
 
 .workspace-body {
@@ -371,7 +360,6 @@
   margin-top: 8px;
   width: fit-content;
 }
-
 
 /* Running tools stack (during execution) */
 
@@ -1118,28 +1106,6 @@
 }
 
 /* Activity narrator: molecule + crossfading verb */
-.activity-narrator {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.activity-verb {
-  display: inline-block;
-  font-size: 13px;
-  color: var(--text-primary);
-  opacity: 1;
-  transition: opacity 0.35s ease;
-}
-
-.activity-verb.visible {
-  opacity: 0.85;
-}
-
-.runtime-tool-trace-copy {
-  min-width: 0;
-  flex: 0 1 auto;
-}
 
 /* Diff-colored tool output */
 
@@ -1151,7 +1117,6 @@
   color: var(--text-primary);
   flex-shrink: 0;
 }
-
 
 .session-list {
   display: flex;
@@ -1185,10 +1150,6 @@
   background: var(--status-approved);
 }
 
-.status.executed {
-  background: var(--status-executed);
-}
-
 .status.canceled {
   background: var(--danger-surface);
   color: var(--danger-text);
@@ -1197,28 +1158,6 @@
 .status.failed {
   background: var(--danger-surface);
   color: var(--danger-text);
-}
-
-.diff-copy {
-  background: transparent;
-  border: 1px solid var(--border-muted);
-  color: #e8e3da;
-  font-size: 11px;
-  padding: 4px 8px;
-  border-radius: 999px;
-}
-
-.diff-copy:hover {
-  background: var(--hover-overlay);
-}
-
-.action-error {
-  color: var(--danger-text);
-  font-size: 12px;
-  border: 1px solid var(--danger-border);
-  background: var(--danger-surface);
-  padding: 6px 8px;
-  border-radius: 6px;
 }
 
 /* Settings Panel - calm, warm control room aesthetic */
@@ -1466,39 +1405,6 @@
 }
 
 /* Model list - simple rows, no card backgrounds */
-.model-list {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.model-toggle {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  font-size: 13px;
-  color: var(--text-primary);
-  padding: 10px 8px;
-  border-radius: 6px;
-  background: transparent;
-  cursor: pointer;
-  transition: background 0.1s ease;
-}
-
-.model-toggle:hover {
-  background: var(--bg-card-hover);
-}
-
-.model-toggle input[type="checkbox"] {
-  width: 16px;
-  height: 16px;
-  accent-color: var(--accent-gold);
-  cursor: pointer;
-}
-
-.model-toggle span {
-  flex: 1;
-}
 
 /* Analytics cards + charts */
 
@@ -1612,13 +1518,6 @@
 
 .analytics-chart-metric-switcher {
   min-width: min(100%, 260px);
-}
-
-.analytics-chart-copy {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  margin-bottom: 12px;
 }
 
 .analytics-line-chart {
@@ -1945,14 +1844,6 @@
   display: flex;
   flex-direction: column;
   gap: 24px;
-}
-
-.memory-import-prompt-label {
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: var(--text-muted);
 }
 
 /* API Key row - simplified layout */
@@ -3201,11 +3092,6 @@
   gap: 18px;
 }
 
-.builder-purchase-modal {
-  width: min(520px, calc(100vw - 32px));
-  padding: 30px;
-}
-
 .builder-offer-summary.is-compact {
   gap: 14px;
 }
@@ -3360,17 +3246,11 @@
   letter-spacing: -0.04em;
 }
 
-.builder-create-heading p,
-.builder-purchase-note {
+.builder-create-heading p {
   margin: 0;
   color: var(--text-muted);
   font-size: 12px;
   line-height: 1.5;
-}
-
-.builder-purchase-note {
-  margin-top: 12px;
-  text-align: center;
 }
 
 .builder-create-url-input {
@@ -3882,10 +3762,6 @@ button.settings-primary-action svg {
   text-align: center;
 }
 
-.guest-signup-rail-copy {
-  min-width: 0;
-}
-
 /* -------------------------------------------------------------------------- */
 /* Community Agent editor */
 /* -------------------------------------------------------------------------- */
@@ -3997,16 +3873,6 @@ button.settings-primary-action svg {
   color: var(--text-primary);
 }
 
-.agent-onboarding-fields {
-  display: grid;
-  gap: 14px;
-}
-
-.agent-onboarding-copy {
-  display: grid;
-  gap: 4px;
-}
-
 .agent-editor-intro {
   margin: 4px 0 0;
   max-width: 64ch;
@@ -4043,11 +3909,6 @@ button.settings-primary-action svg {
 
 .system-prompt-input::placeholder {
   color: var(--text-faint);
-}
-
-.community-app-tool-copy {
-  display: grid;
-  gap: 4px;
 }
 
 @media (max-width: 700px) {
@@ -4216,11 +4077,6 @@ button.settings-primary-action svg {
   padding: 8px 12px calc(env(safe-area-inset-bottom, 0px) + var(--mobile-bottom-rail-height) + 8px);
   border-top: 1px solid color-mix(in srgb, var(--border-subtle) 82%, transparent);
   background: color-mix(in srgb, var(--bg-workspace) 96%, var(--bg-card) 4%);
-}
-
-.app-root.mobile-shell .community-chat .community-interaction-root {
-  grid-template-columns: 34px minmax(0, 1fr);
-  padding: 10px 8px;
 }
 
 .app-root.mobile-shell .community-chat .community-interaction-avatar {
@@ -4545,11 +4401,6 @@ button.settings-primary-action svg {
 .app-root.mobile-shell .community-utility-panel {
   padding: 0;
   gap: 12px;
-}
-
-.app-root.mobile-shell .community-utility-panel.workflow-pipeline-shell {
-  padding: var(--mobile-topbar-clearance) 14px
-    calc(env(safe-area-inset-bottom, 0px) + 14px);
 }
 
 .app-root.mobile-shell .feed-header-row {
@@ -5566,12 +5417,6 @@ button.settings-primary-action svg {
 :root[data-theme="light"] .status.canceled,
 :root[data-theme="light"] .status.failed {
   background: color-mix(in srgb, var(--accent-error) 14%, transparent);
-  color: var(--accent-error);
-}
-
-:root[data-theme="light"] .action-error {
-  border-color: color-mix(in srgb, var(--accent-error) 34%, transparent);
-  background: color-mix(in srgb, var(--accent-error) 10%, transparent);
   color: var(--accent-error);
 }
 

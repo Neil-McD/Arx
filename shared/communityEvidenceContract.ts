@@ -1,6 +1,5 @@
 import { type StoredInteractionActorType } from "./communityAgentIdentity.ts";
 
-
 export const COMMUNITY_EVIDENCE_SURFACES = [
   "member_agent_dock",
   "coding_harness",
@@ -9,18 +8,11 @@ export const COMMUNITY_EVIDENCE_SURFACES = [
   "community_funnel_builder",
 ] as const;
 
-export const COMMUNITY_MEMORY_RETRIEVAL_RECEIPT_VERSION =
-  "community_memory_retrieval_receipt:v1" as const;
-
 export type CommunityEvidenceSurface =
   (typeof COMMUNITY_EVIDENCE_SURFACES)[number];
-export type CommunityMemoryRetrievalReceiptVersion =
-  typeof COMMUNITY_MEMORY_RETRIEVAL_RECEIPT_VERSION;
 export type CommunityInteractionEvidenceObjectType = "root" | "reply";
 
 export type CommunityResourceEvidenceRef = `resource:${string}`;
-export type CommunityAiFeedEvidenceRef = `ai_feed:${string}`;
-export type CommunitySourceTraceEvidenceRef = `trace:${string}`;
 
 export type CommunityResourceLineageEnvelope = {
   authority: { type: "community"; community_id: string };
@@ -34,35 +26,6 @@ export type CommunityResourceLineageEnvelope = {
 
 export type CommunityInteractionEvidenceRef =
   `interaction:${CommunityInteractionEvidenceObjectType}:${string}`;
-
-export type CommunityEvidenceRef =
-  | CommunityInteractionEvidenceRef
-  | CommunityResourceEvidenceRef
-  | CommunityAiFeedEvidenceRef
-  | CommunitySourceTraceEvidenceRef;
-
-export type ParsedCommunityEvidenceRef =
-  | {
-      source_type: "interaction";
-      ref: CommunityInteractionEvidenceRef;
-      object_type: CommunityInteractionEvidenceObjectType;
-      object_id: string;
-    }
-  | {
-      source_type: "resource";
-      ref: CommunityResourceEvidenceRef;
-      resource_id: string;
-    }
-  | {
-      source_type: "ai_feed";
-      ref: CommunityAiFeedEvidenceRef;
-      post_id: string;
-    }
-  | {
-      source_type: "source_trace";
-      ref: CommunitySourceTraceEvidenceRef;
-      source_trace_id: string;
-    };
 
 export type CommunityInteractionLineageActorType =
   | StoredInteractionActorType;
@@ -138,72 +101,6 @@ export function parseCommunityResourceEvidenceRef(raw: unknown): string | null {
   const value = String(raw ?? "").trim();
   const match = /^resource:([^\s:]+)$/.exec(value);
   return match?.[1] ?? null;
-}
-
-export function buildCommunityAiFeedEvidenceRef(
-  postId: string,
-): CommunityAiFeedEvidenceRef {
-  const normalized = String(postId ?? "").trim();
-  if (!normalized) throw new Error("community_ai_feed_evidence_id_required");
-  return `ai_feed:${normalized}`;
-}
-
-export function parseCommunityAiFeedEvidenceRef(raw: unknown): string | null {
-  const value = String(raw ?? "").trim();
-  const match = /^ai_feed:([^\s:]+)$/.exec(value);
-  return match?.[1] ?? null;
-}
-
-export function buildCommunitySourceTraceEvidenceRef(
-  sourceTraceId: string,
-): CommunitySourceTraceEvidenceRef {
-  const normalized = String(sourceTraceId ?? "").trim();
-  if (!normalized) throw new Error("community_source_trace_evidence_id_required");
-  return `trace:${normalized}`;
-}
-
-export function parseCommunitySourceTraceEvidenceRef(raw: unknown): string | null {
-  const value = String(raw ?? "").trim();
-  const match = /^trace:([^\s:]+)$/.exec(value);
-  return match?.[1] ?? null;
-}
-
-export function parseCommunityEvidenceRef(raw: unknown): ParsedCommunityEvidenceRef | null {
-  const value = String(raw ?? "").trim();
-  const interaction = parseCommunityInteractionEvidenceRef(value);
-  if (interaction) {
-    return {
-      source_type: "interaction",
-      ref: value as CommunityInteractionEvidenceRef,
-      object_type: interaction.objectType,
-      object_id: interaction.objectId,
-    };
-  }
-  const resourceId = parseCommunityResourceEvidenceRef(value);
-  if (resourceId) {
-    return {
-      source_type: "resource",
-      ref: value as CommunityResourceEvidenceRef,
-      resource_id: resourceId,
-    };
-  }
-  const postId = parseCommunityAiFeedEvidenceRef(value);
-  if (postId) {
-    return {
-      source_type: "ai_feed",
-      ref: value as CommunityAiFeedEvidenceRef,
-      post_id: postId,
-    };
-  }
-  const sourceTraceId = parseCommunitySourceTraceEvidenceRef(value);
-  if (sourceTraceId) {
-    return {
-      source_type: "source_trace",
-      ref: value as CommunitySourceTraceEvidenceRef,
-      source_trace_id: sourceTraceId,
-    };
-  }
-  return null;
 }
 
 /**

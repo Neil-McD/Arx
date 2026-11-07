@@ -850,9 +850,6 @@ export const claimAuthSessionRefreshInternal = internalMutation({
       args.nowMs,
     );
     const row = resolved.row;
-    const generation = normalizeAuthSessionRefreshGeneration(
-      row.refreshGeneration,
-    );
     const refreshRequestedAt =
       typeof args.refreshRequestedAt === "number" &&
       Number.isFinite(args.refreshRequestedAt)

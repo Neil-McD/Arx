@@ -1,7 +1,6 @@
 import { type StoredInteractionActorType } from "../shared/communityAgentIdentity";
 import {
   communityInteractionVisibilityIsEvidenceReadable,
-  parseCommunityInteractionEvidenceRef,
   type CommunityInteractionEvidenceObjectType,
 } from "../shared/communityEvidenceContract.ts";
 import { interactionBelongsToChannel, requireSharedChannelForInteraction } from "./communityChannelCore";

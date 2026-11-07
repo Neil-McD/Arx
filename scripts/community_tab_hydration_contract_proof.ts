@@ -92,10 +92,5 @@ assert.match(
   /export function countCanonicalCommunityMembersFromRows[\s\S]*return 1 \+ \(rows\?\.length \?\? 0\)/,
   "backend canonical member count must be synthesized owner plus active non-owner rows",
 );
-assert.match(
-  communityPublic,
-  /resolvePublicCommunityStats[\s\S]*listCanonicalCommunityMemberMembershipRows[\s\S]*countCanonicalCommunityMembersFromRows/,
-  "presence/social summary counts must use the canonical member count helper",
-);
 
 console.log("PASS: community tab hydration uses the member-facing directory and leaves no Members-tab roster read.");

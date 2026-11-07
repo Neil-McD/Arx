@@ -517,20 +517,6 @@ export type OperatorRuntimeToolFailureBucket = {
   severity: "warning" | "error";
 };
 
-export type OperatorPaidToolLane = {
-  toolName: string;
-  label: string;
-  reservations: number;
-  succeeded: number;
-  released: number;
-  stillReserved: number;
-  failures: number;
-  reservedCredits: number;
-  settledCredits: number;
-  releasedCredits: number;
-  latestAt: number | null;
-};
-
 export type OperatorRuntimeToolDiagnosticsSnapshot = {
   computedAt: number;
   range: OperatorRange;

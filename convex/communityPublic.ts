@@ -5,9 +5,7 @@ import {
   type CommunityPricePointLike,
   type PublicPlanSummaryLike,
   communityMembershipRowIsActive,
-  countCanonicalCommunityMembersFromRows,
   getUniqueCommunityMembershipByPair,
-  listCanonicalCommunityMemberMembershipRows,
   mapActivePlanSummaries,
   normalizeSlug,
   pickPreferredActivePlan,
@@ -16,13 +14,11 @@ import {
   resolveCommunityBrandingFields,
   buildCommunityVisualIdentity,
   resolveCommunityEntryPolicy,
-  resolvePublicUserId,
   resolveUserIdForAuthenticatedRequest,
   toIsoString,
 } from "./communityCore";
 import {
   assertCanonicalCommunityJoinRequest,
-  cancelPendingCommunityJoinRequest,
   communityJoinRequestCanReapply,
   deleteCommunityJoinRequestByPair,
   ensurePendingCommunityJoinRequest,
@@ -37,10 +33,8 @@ import {
 import { resolveUserProfileDisplayProjection } from "./userProfileProjection";
 import { activateCommunityMembershipCore } from "./communityMembershipLifecycle";
 import {
-  COMMUNITY_PRESENCE_FACE_LIMIT,
   listCommunityOnlineMembers,
   renewCommunityPresenceLease,
-  resolveAuthorizedCommunityPresenceWindow,
   resolveMemberCommunityPresenceSummary,
 } from "./communityPresenceCore";
 import { communityIsActive } from "../shared/communityLifecycle";
@@ -63,7 +57,6 @@ const COMMUNITY_FUNNEL_PUBLIC_CONFIG = {
   published_content_v2: null,
 };
 
-
 async function resolvePublicProfileFaceFields(ctx: any, userId: any): Promise<Omit<CommunityPublicFace, "user_id">> {
   return await resolveUserProfileDisplayProjection(ctx, userId);
 }
@@ -75,117 +68,6 @@ export async function listCurrentCommunitySellablePlans(ctx: any, communityId: a
     .collect()) as CommunityPricePointLike[];
   const activePricePoints = currentPricePoints.filter((row) => !row.archivedAt);
   return mapActivePlanSummaries(activePricePoints);
-}
-
-const PUBLIC_MEMBER_FACES_PREVIEW_LIMIT = 5;
-const PUBLIC_JOINED_RECENTLY_WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
-
-async function resolvePublicCommunityStats(ctx: any, community: CommunityLike): Promise<{
-  memberCount: number;
-  adminCount: number;
-  onlineCount: number;
-  onlineCountCapped: boolean;
-  onlineFaces: CommunityPublicFace[];
-  joinedLast30dCount: number;
-  memberFacesPreview: CommunityPublicFace[];
-}> {
-  const { rows: activeMemberships } = await listCanonicalCommunityMemberMembershipRows({
-    ctx,
-    communityId: community._id,
-    community,
-  });
-
-  const adminUserIds = new Set<string>([String(community.ownerId)]);
-  for (const membership of activeMemberships) {
-    if (String(membership.role ?? "").trim().toLowerCase() === "admin") {
-      adminUserIds.add(String(membership.userId));
-    }
-  }
-  const memberCount = countCanonicalCommunityMembersFromRows(activeMemberships);
-  const presenceWindow = await resolveAuthorizedCommunityPresenceWindow(
-    ctx,
-    community,
-  );
-  const userIdCache = new Map<string, string | null>();
-
-  const onlineFaces = (
-    await Promise.all(
-      presenceWindow.entries
-        .slice(0, COMMUNITY_PRESENCE_FACE_LIMIT)
-        .map(async ({ userId }): Promise<CommunityPublicFace | null> => {
-          const user = await ctx.db.get(userId);
-          if (!user) return null;
-          return {
-            user_id:
-              (await resolvePublicUserId(ctx, user._id, userIdCache))
-              ?? String(user._id),
-            ...(await resolvePublicProfileFaceFields(ctx, user._id)),
-          };
-        }),
-    )
-  ).filter(Boolean) as CommunityPublicFace[];
-
-  const joinedSinceMs = Date.now() - PUBLIC_JOINED_RECENTLY_WINDOW_MS;
-  const joinedLast30dCount = activeMemberships.reduce(
-    (count, membership) => count + (membership.createdAt >= joinedSinceMs ? 1 : 0),
-    0,
-  );
-
-  /* Visitor members preview: owner + the most recent joins, capped at 5.
-     Same public exposure as online_faces (display name + avatar only). */
-  const previewUserIds: any[] = [community.ownerId];
-  const seenPreviewIds = new Set<string>([String(community.ownerId)]);
-  for (const membership of [...activeMemberships].sort((a, b) => b.createdAt - a.createdAt)) {
-    if (previewUserIds.length >= PUBLIC_MEMBER_FACES_PREVIEW_LIMIT) break;
-    const normalizedUserId = String(membership.userId);
-    if (seenPreviewIds.has(normalizedUserId)) continue;
-    seenPreviewIds.add(normalizedUserId);
-    previewUserIds.push(membership.userId);
-  }
-  const memberFacesPreview = (
-    await Promise.all(
-      previewUserIds.slice(0, PUBLIC_MEMBER_FACES_PREVIEW_LIMIT).map(
-        async (userId): Promise<CommunityPublicFace | null> => {
-          const user = await ctx.db.get(userId);
-          if (!user) return null;
-          return {
-            user_id: (await resolvePublicUserId(ctx, user._id, userIdCache)) ?? String(user._id),
-            ...(await resolvePublicProfileFaceFields(ctx, user._id)),
-          };
-        },
-      ),
-    )
-  ).filter(Boolean) as CommunityPublicFace[];
-
-  return {
-    memberCount,
-    adminCount: adminUserIds.size,
-    onlineCount: presenceWindow.entries.length,
-    onlineCountCapped: presenceWindow.countCapped,
-    onlineFaces,
-    joinedLast30dCount,
-    memberFacesPreview,
-  };
-}
-
-function mapPublicCommunityStats(stats: {
-  memberCount: number;
-  adminCount: number;
-  onlineCount: number;
-  onlineCountCapped: boolean;
-  onlineFaces: CommunityPublicFace[];
-  joinedLast30dCount: number;
-  memberFacesPreview: CommunityPublicFace[];
-}) {
-  return {
-    member_count: stats.memberCount,
-    admin_count: stats.adminCount,
-    online_count: stats.onlineCount,
-    online_count_capped: stats.onlineCountCapped,
-    online_faces: stats.onlineFaces,
-    joined_last_30d_count: stats.joinedLast30dCount,
-    member_faces_preview: stats.memberFacesPreview,
-  };
 }
 
 export const resolvePublicFunnelBySlug = query({
@@ -235,8 +117,6 @@ export const resolvePublicFunnelBySlug = query({
     };
   },
 });
-
-
 
 export const heartbeatCommunityPresence = mutation({
   args: {
@@ -556,6 +436,4 @@ export async function joinPublicCommunityInternal(args: {
     community_id: String(args.community._id),
   };
 }
-
-
 

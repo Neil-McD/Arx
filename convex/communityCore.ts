@@ -83,34 +83,6 @@ export type CommunityMembershipLike = {
   updatedAt: number;
 };
 
-export type CommunityChatThreadLike = {
-  _id: any;
-  communityId: any;
-  lastSeq: number;
-  createdAt: number;
-  updatedAt: number;
-};
-
-export type CommunityChatMessageLike = {
-  _id: any;
-  threadId: any;
-  seq: number;
-  role: "user";
-  contentJson: unknown;
-  senderUserId?: any;
-  replyToMessageId?: any;
-  createdAt: number;
-  updatedAt: number;
-};
-
-export type CommunityMessageReactionLike = {
-  _id: any;
-  messageId: any;
-  userId: any;
-  emoji: string;
-  createdAt: number;
-};
-
 export type CommunityTypingPresenceLike = {
   _id: any;
   communityId: any;

@@ -1,6 +1,5 @@
 import { type StoredInteractionActorType } from "../shared/communityAgentIdentity";
 import { internalMutation, internalQuery, mutation, query } from "./_generated/server";
-import { internal } from "./_generated/api";
 import { resolveNotificationRecipientSource } from "./communityNotificationAccess";
 import { fingerprintCommunityComposerPayload } from "./communityComposerReplay";
 import { v } from "convex/values";

@@ -9,10 +9,7 @@ import { requireCommunityChatAccess, requireCommunityManager } from "./community
 import {
   buildCommunityNoteSearchText,
   communityNoteSourceWords,
-  COMMUNITY_NOTE_BODY_MAX_CHARS,
-  COMMUNITY_NOTE_SLUG_PATTERN,
   COMMUNITY_NOTES_MAX_PER_COMMUNITY,
-  communityNoteSlug,
   normalizeCommunityNoteBody,
   normalizeCommunityNoteTitle,
 } from "../shared/communityNotes";

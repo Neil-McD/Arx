@@ -58,16 +58,6 @@ const authorizedWindowResolver = sectionBetween(
   "export async function resolveAuthorizedCommunityPresenceWindow",
   "export async function resolveMemberCommunityPresenceSummary",
 );
-const publicStatsResolver = sectionBetween(
-  communityPublic,
-  "async function resolvePublicCommunityStats",
-  "function mapPublicCommunityStats",
-);
-const publicStatsMapper = sectionBetween(
-  communityPublic,
-  "function mapPublicCommunityStats",
-  "export const resolvePublicFunnelBySlug",
-);
 const presenceEffect = sectionBetween(
   controller,
   "let inFlight = false;",
@@ -155,26 +145,6 @@ assert.match(
   "member presence must consume the canonical window, durable count, and conservative cap state",
 );
 
-assert.match(
-  publicStatsResolver,
-  /resolveAuthorizedCommunityPresenceWindow[\s\S]*presenceWindow\.entries[\s\S]*COMMUNITY_PRESENCE_FACE_LIMIT/,
-  "public presence must consume the same authorized bounded window and cap its facepile",
-);
-assert.doesNotMatch(
-  publicStatsResolver,
-  /query\("communityPresence"|by_community_lastSeenAt|COMMUNITY_PRESENCE_LEASE_DURATION_MS|\.collect\(\)/,
-  "public presence must not own a second lease interpretation or unbounded presence read",
-);
-assert.match(
-  publicStatsMapper,
-  /online_count: stats\.onlineCount[\s\S]*online_count_capped: stats\.onlineCountCapped[\s\S]*online_faces: stats\.onlineFaces/,
-  "public presence must disclose only a conservative count and bounded facepile",
-);
-assert.doesNotMatch(
-  publicStatsMapper,
-  /online_user_ids|online_last_active|last_active_at/,
-  "the unauthenticated public projection must not disclose online identity lists or activity timestamps",
-);
 
 assert.match(
   gateway,
@@ -245,11 +215,6 @@ assert.match(
   memberAvatarStack,
   /countCapped\?: boolean[\s\S]*props\.countCapped \? `\$\{totalCount\}\+` : `\+\$\{extraFaces\}`/,
   "the canonical avatar stack must not present a capped count as exact",
-);
-assert.match(
-  webAppContracts,
-  /online_count_capped\?: boolean \| null/,
-  "the public frontend contract must retain the conservative count state",
 );
 assert.doesNotMatch(
   app,

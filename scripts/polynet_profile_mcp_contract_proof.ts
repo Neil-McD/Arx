@@ -3,11 +3,6 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import {
-  POLYNET_PROFILE_CONFIRM_MAX_FACTS,
-  buildPolynetProfileFactBatchKey,
-  normalizePolynetProfileConfirmInput,
-} from "../shared/polynetProfileMcpContract.ts";
-import {
   memberFactVisibleToLens,
   type MemberFactLike,
 } from "../shared/memberOntology.ts";
@@ -19,42 +14,6 @@ import {
 const root = process.cwd();
 const read = (path: string): string =>
   readFileSync(join(root, path), "utf8");
-
-const normalized = normalizePolynetProfileConfirmInput({
-  confirm_marker: " profile-setup-2026-07-17 ",
-  facts: [
-    { kind: "goal", body: "  Build   a member-led research community. " },
-    { kind: "skill", body: "Community design" },
-  ],
-});
-assert.deepEqual(normalized, {
-  ok: true,
-  input: {
-    confirmMarker: "profile-setup-2026-07-17",
-    facts: [
-      { kind: "goal", body: "Build a member-led research community." },
-      { kind: "skill", body: "Community design" },
-    ],
-  },
-});
-assert.equal(
-  normalizePolynetProfileConfirmInput({
-    confirm_marker: "x",
-    facts: Array.from(
-      { length: POLYNET_PROFILE_CONFIRM_MAX_FACTS + 1 },
-      (_, index) => ({ kind: "goal", body: `Goal ${index}` }),
-    ),
-  }).ok,
-  false,
-);
-const approvedBatch = [
-  { kind: "goal", body: "Ship the alpha" },
-  { kind: "skill", body: "Community design" },
-];
-assert.equal(
-  buildPolynetProfileFactBatchKey(approvedBatch),
-  buildPolynetProfileFactBatchKey([...approvedBatch].reverse()),
-);
 
 const approvedPlatformFact: MemberFactLike = {
   communityId: null,

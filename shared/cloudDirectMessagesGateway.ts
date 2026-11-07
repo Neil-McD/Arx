@@ -17,10 +17,6 @@ type CloudDirectMessagesGatewayParams<SessionT> = {
   session: SessionT;
 };
 
-type DirectMessageUploadableFile = {
-  type?: string;
-};
-
 export type CloudDirectMessagesLiveClient = {
   client: ConvexReactClient;
   authSubject: string;

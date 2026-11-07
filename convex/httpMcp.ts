@@ -7,7 +7,6 @@ import {
   isSupportedPolynetMcpProtocolVersion,
 } from "../shared/polynetMcp";
 import { executePolynetCanonicalTool } from "./polynetCanonicalExecutor.ts";
-import { internal } from "./_generated/api";
 import {
   POLYNET_CANONICAL_TOOL_NAMES,
   type PolynetCanonicalToolName,

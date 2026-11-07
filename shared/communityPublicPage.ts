@@ -59,19 +59,6 @@ export function communityPublicPageVideoFromUrl(raw: unknown): CommunityPublicPa
   return null;
 }
 
-export function communityPublicPageVideoIsValid(video: unknown): video is CommunityPublicPageVideo {
-  const row = (video ?? {}) as Record<string, unknown>;
-  const provider = row.provider;
-  return (provider === "youtube" || provider === "vimeo" || provider === "loom") && typeof row.id === "string" && VIDEO_ID[provider].test(row.id);
-}
-
-// The player's address for a video: what the doorstep embeds.
-export function communityPublicPageVideoEmbedUrl(video: CommunityPublicPageVideo): string {
-  if (video.provider === "youtube") return `https://www.youtube-nocookie.com/embed/${video.id}`;
-  if (video.provider === "vimeo") return `https://player.vimeo.com/video/${video.id}?dnt=1`;
-  return `https://www.loom.com/embed/${video.id}`;
-}
-
 // The link a founder would recognise, for Settings.
 export function communityPublicPageVideoWatchUrl(video: CommunityPublicPageVideo): string {
   if (video.provider === "youtube") return `https://www.youtube.com/watch?v=${video.id}`;

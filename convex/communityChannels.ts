@@ -18,7 +18,6 @@ import {
   listAuthorizedCommunityChannels,
   listAuthorizedCommunityChannelPage,
   moveActiveCommunityChannel,
-  normalizeCommunityChannelName,
   renameActiveCommunityChannel,
   resolveAuthorizedCommunityChannel,
   setActiveCommunityChannelPinnedRoot,

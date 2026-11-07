@@ -97,7 +97,6 @@ import type * as communitySemanticMembers from "../communitySemanticMembers.js";
 import type * as communitySiteDeploy from "../communitySiteDeploy.js";
 import type * as communitySites from "../communitySites.js";
 import type * as communitySourceUrlPolicy from "../communitySourceUrlPolicy.js";
-import type * as communityTags from "../communityTags.js";
 import type * as communityText from "../communityText.js";
 import type * as communityTypingPresenceCore from "../communityTypingPresenceCore.js";
 import type * as communityWeeklyDigestSchedule from "../communityWeeklyDigestSchedule.js";
@@ -294,7 +293,6 @@ declare const fullApi: ApiFromModules<{
   communitySiteDeploy: typeof communitySiteDeploy;
   communitySites: typeof communitySites;
   communitySourceUrlPolicy: typeof communitySourceUrlPolicy;
-  communityTags: typeof communityTags;
   communityText: typeof communityText;
   communityTypingPresenceCore: typeof communityTypingPresenceCore;
   communityWeeklyDigestSchedule: typeof communityWeeklyDigestSchedule;

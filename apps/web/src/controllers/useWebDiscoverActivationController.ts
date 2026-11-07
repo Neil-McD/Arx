@@ -5,9 +5,7 @@ import {
 } from "react";
 
 import type {
-  CommunityAccess,
   DiscoverCommunitySnapshot,
-  PublicPlanSummary,
 } from "../../../../shared/communityTypes";
 
 

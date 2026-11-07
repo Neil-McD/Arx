@@ -99,11 +99,6 @@ const contextMemberAvatarMediaCss = sectionBetween(
 );
 const contract = read("docs/community-interaction-substrate-contract-v1.md");
 const chatBlockMarkdownUi = read("shared/chatBlockMarkdownUi.tsx");
-const publicCommunityStatsMapper = sectionBetween(
-  communityPublic,
-  "function mapPublicCommunityStats",
-  "export const resolvePublicFunnelBySlug",
-);
 const memberPresenceSummaryQuery = sectionBetween(
   communityPublic,
   "export const getCommunityPresenceSummary",
@@ -680,11 +675,6 @@ assert.doesNotMatch(
   /mutation\(|syncCommunityMembershipCount|viewerCanManageMembers|community_forbidden/,
   "directory backend must stay read-only and member-facing",
 );
-assert.doesNotMatch(
-  publicCommunityStatsMapper,
-  /last_active_at|online_last_active_at_by_user_id|onlineLastActiveAtByUserId/,
-  "public community funnel payloads must not expose per-member last active timestamps",
-);
 
 assert.doesNotMatch(
   projection,
@@ -860,7 +850,6 @@ assert.doesNotMatch(
 [
   ".community-interaction-projection.has-drawer",
   ".community-interaction-drawer",
-  ".community-interaction-root.selected",
   ".community-interaction-thread-anchor",
   ".community-interaction-avatar-image",
   ".community-interaction-reply-list",

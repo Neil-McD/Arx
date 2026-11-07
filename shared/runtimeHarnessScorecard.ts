@@ -21,21 +21,6 @@ export type RuntimeHarnessTelemetrySummary = {
   toolDurationMaxMs: Record<string, number>;
 };
 
-export type RuntimeHarnessScorecardRunSummary = {
-  runId: string;
-  status: string;
-  visibility: string;
-  startedAt: number;
-  finishedAt: number | null;
-  wallTimeMs: number | null;
-  scheduleEventCount: number;
-  batchTelemetryEventCount: number;
-  scheduledCallCount: number;
-  parallelExecutedBatchCount: number;
-  totalEstimatedParallelSavingsMs: number;
-  blockerReasonCounts: Record<string, number>;
-};
-
 function asRecord(value: unknown): Record<string, unknown> | null {
   return value && typeof value === "object" && !Array.isArray(value)
     ? (value as Record<string, unknown>)
