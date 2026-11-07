@@ -45,7 +45,7 @@ test("typing leases stay isolated by channel", async () => {
         userId,
         role: "member",
         accessSource: "manual_grant",
-        active: true,
+        state: "active",
         createdAt: nowMs,
         updatedAt: nowMs,
       });

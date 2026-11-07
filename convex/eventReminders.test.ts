@@ -21,7 +21,7 @@ test("every member of a big community is reminded, in batches, not just the firs
     });
     for (let n = 0; n < 650; n += 1) {
       const userId = await ctx.db.insert("users", { authSubject: `m-${n}`, displayName: `m${n}`, createdAt: NOW, updatedAt: NOW });
-      await ctx.db.insert("communityMemberships", { communityId, userId, role: "member", active: true, createdAt: NOW, updatedAt: NOW });
+      await ctx.db.insert("communityMemberships", { communityId, userId, role: "member", state: "active", createdAt: NOW, updatedAt: NOW });
     }
     await ctx.db.insert("communityEvents", {
       communityId, createdByUserId: ownerId, title: "Saturday ride", startsAt: NOW + DAY + 5 * 60 * 1000, timezone: "UTC",

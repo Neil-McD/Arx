@@ -112,7 +112,7 @@ function assertSourceAnchors() {
   assertIncludes(billingCore, "String(session.status ?? \"\").trim().toLowerCase() !== \"complete\"", "the checkout grant requires a complete checkout");
   assertIncludes(billingCore, "await requireCommunityUserNotBlocked({", "the checkout grant rejects blocked users");
   assertIncludes(communityAdmin, "revokedReason:", "manager removal keeps revoked membership evidence");
-  assertIncludes(communityAdmin, "await ctx.db.delete(membership._id as any);", "member leave deletes own membership row intentionally");
+  assertIncludes(communityAdmin, 'endedCommunityMembershipFields({ membership, to: "left"', "member leave keeps the membership row as left");
   assertIncludes(audit, "active_membership_with_active_block", "state audit checks active block drift");
   assertIncludes(audit, "active_paid_membership_without_granting_subscription", "state audit checks paid subscription drift");
   assertIncludes(audit, "join_request_not_canonical", "state audit checks legacy request drift");

@@ -36,8 +36,8 @@ async function setup() {
     });
     const communityId = await community("attachments");
     const otherCommunityId = await community("elsewhere");
-    const membershipId = await ctx.db.insert("communityMemberships", { communityId, userId: memberId, role: "member", active: true, createdAt: 1, updatedAt: 1 });
-    await ctx.db.insert("communityMemberships", { communityId, userId: otherId, role: "member", active: true, createdAt: 1, updatedAt: 1 });
+    const membershipId = await ctx.db.insert("communityMemberships", { communityId, userId: memberId, role: "member", state: "active", createdAt: 1, updatedAt: 1 });
+    await ctx.db.insert("communityMemberships", { communityId, userId: otherId, role: "member", state: "active", createdAt: 1, updatedAt: 1 });
     const channel = (position: number) => ctx.db.insert("communityChannels", { communityId,
       name: `Room ${position}`, slug: `room-${position}`, position, accessMode: "all_members", postingPolicy: "members", status: "active", createdAt: 1, updatedAt: 1 });
     const channelId = await channel(1);
@@ -195,7 +195,7 @@ test.each(["membership", "posting", "archive"])("revocation during upload (%s) r
   const { t, f, prepare, store } = await setup();
   const a = await prepare();
   const storageId = await store();
-  await t.run(ctx => kind === "membership" ? ctx.db.patch(f.membershipId, { active: false })
+  await t.run(ctx => kind === "membership" ? ctx.db.patch(f.membershipId, { state: "lapsed" })
     : ctx.db.patch(f.channelId, kind === "posting" ? { postingPolicy: "managers" } : { status: "archived" }));
   await expect(t.mutation(refs.finishInternal, { ownerId: f.memberId, attachmentId: a.attachmentId, storageId })).rejects.toThrow();
   await t.mutation(refs.cleanupInternal, { attachmentId: a.attachmentId, cancelOwnerId: f.memberId, storageId });
@@ -205,7 +205,7 @@ test.each(["membership", "posting", "archive"])("revocation during upload (%s) r
 test("revocation after upload but before send blocks claiming", async () => {
   const { t, f, upload } = await setup();
   const a = await upload();
-  await t.run(ctx => ctx.db.patch(f.membershipId, { active: false }));
+  await t.run(ctx => ctx.db.patch(f.membershipId, { state: "lapsed" }));
   await expect(t.withIdentity({ subject: "member" }).mutation(api.communityInteractions.createCommunityInteractionComposerMessage, {
     communityId: f.communityId, channelId: f.channelId, idempotencyKey: "send-one", text: "send",
     attachments: [{ attachmentId: a.attachmentId }],
@@ -405,7 +405,7 @@ test("an unauthorized HTTP upload never reaches storage and removes its reservat
     storageId = await t.run(async ctx => {
       const id = await ctx.storage.store(blob);
       await ctx.db.patch(id as any, { contentType: blob.type } as any);
-      await ctx.db.patch(f.membershipId, { active: false });
+      await ctx.db.patch(f.membershipId, { state: "lapsed" });
       return id;
     });
     return Response.json({ storageId });

@@ -3,7 +3,7 @@ import { describe, expect, test, vi } from "vitest";
 import { api, internal } from "./_generated/api";
 import { COMMUNITY_REMOVAL_REAPPLY_COOLDOWN_MS } from "./communityJoinRequestCore";
 import { activateCommunityMembershipCore } from "./communityMembershipLifecycle";
-import { PLATFORM_HOME_MEMBER_LEFT_REVOKED_REASON } from "./platformHomeCommunity";
+import { COMMUNITY_MEMBER_LEFT_REASON } from "./communityMembershipLifecycle";
 import { PLATFORM_LEGAL_DOCUMENTS } from "../shared/legalDocuments";
 import schema from "./schema";
 
@@ -147,9 +147,9 @@ describe("platform-home admission authority", () => {
     const current = await state(t, f);
     expect(current.memberships).toHaveLength(1);
     expect(current.memberships[0]?._id).toEqual(activated.membership._id);
-    expect(current.memberships[0]?.active).toBe(false);
+    expect(current.memberships[0]?.state).not.toBe("active");
     expect(current.memberships[0]?.revokedReason).toBe(
-      PLATFORM_HOME_MEMBER_LEFT_REVOKED_REASON,
+      COMMUNITY_MEMBER_LEFT_REASON,
     );
     expect(current.requests).toHaveLength(0);
   });
@@ -166,7 +166,7 @@ describe("platform-home admission authority", () => {
     const current = await state(t, f);
     expect(current.memberships).toHaveLength(1);
     expect(current.memberships[0]?._id).toEqual(activated.membership._id);
-    expect(current.memberships[0]?.active).not.toBe(false);
+    expect(current.memberships[0]?.state).toBe("active");
     expect(current.memberships[0]?.revokedReason).toBeUndefined();
   });
 
@@ -178,7 +178,7 @@ describe("platform-home admission authority", () => {
     await revoke(t, f, activated.membership._id, f.nowMs + 50);
     const current = await state(t, f);
     expect(current.memberships).toHaveLength(1);
-    expect(current.memberships[0]?.active).toBe(false);
+    expect(current.memberships[0]?.state).not.toBe("active");
     expect(current.memberships[0]?.revokedAt).toBe(f.nowMs + 2);
     expect(current.memberships[0]?.revokedReason).toBe("removed_by_manager");
     expect(current.requests).toHaveLength(1);

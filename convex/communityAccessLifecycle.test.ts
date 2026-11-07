@@ -275,7 +275,7 @@ test("open public join is authenticated, immediately authorized, and idempotent"
   expect(state.memberships[0]).toMatchObject({
     userId: fixture.memberId,
     accessSource: "free_grant",
-    active: true,
+    state: "active",
     activationSequence: 1,
   });
   expect(state.arrivalEvents).toEqual([
@@ -738,7 +738,7 @@ test("approval join fails closed until manager approval and closes again after r
   expect(approvedState.request).toBeNull();
   expect(approvedState.memberships).toHaveLength(1);
   expect(approvedState.memberships[0]).toMatchObject({
-    active: true,
+    state: "active",
     activationSequence: 1,
   });
   expect(approvedState.arrivalEvents).toEqual([
@@ -791,7 +791,7 @@ test("approval join fails closed until manager approval and closes again after r
   }));
   expect(revokedState.community?.activeMemberCount).toBe(1);
   expect(revokedState.membership).toMatchObject({
-    active: false,
+    state: "removed",
     activationSequence: 1,
     revokedReason: "removed_by_manager",
   });

@@ -29,7 +29,7 @@ async function fixture() {
     } as any);
     for (const [userId, role] of [[adminId, "admin"]] as const) {
       await ctx.db.insert("communityMemberships", {
-        communityId, userId, role, accessSource: "free_grant", active: true, activationSequence: 1, activatedAt: NOW, createdAt: NOW, updatedAt: NOW,
+        communityId, userId, role, accessSource: "free_grant", state: "active", activationSequence: 1, activatedAt: NOW, createdAt: NOW, updatedAt: NOW,
       } as any);
     }
     await registerCommunitySiteAddresses(ctx, { _id: communityId, slug: "dawn-club" });

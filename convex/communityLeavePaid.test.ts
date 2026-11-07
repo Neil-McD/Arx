@@ -28,7 +28,7 @@ async function fixture() {
     } as any);
     const membership = (userId: any, accessSource: string) => ctx.db.insert("communityMemberships", {
       communityId, userId, role: "member", accessSource, ...(accessSource === "paid_subscription" ? { pricePointId } : {}),
-      active: true, activationSequence: 1, activatedAt: NOW, createdAt: NOW, updatedAt: NOW,
+      state: "active", activationSequence: 1, activatedAt: NOW, createdAt: NOW, updatedAt: NOW,
     } as any);
     const payerMembershipId = await membership(payerId, "paid_subscription");
     await membership(freeId, "manual_grant");

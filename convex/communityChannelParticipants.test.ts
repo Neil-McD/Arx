@@ -33,7 +33,7 @@ test("roster pages newest activity first, includes unknowns last, and reorders a
     for (const [userId, lastSeenAt] of [[f.ownerId, 10], [f.memberId, 30]] as const) {
       ids.push(await ctx.db.insert("communityPresence", { communityId: f.communityId, userId, lastSeenAt, createdAt: 1, updatedAt: 1 }));
     }
-    await ctx.db.insert("communityMemberships", { communityId: f.communityId, userId: f.outsiderId, role: "member", active: true, createdAt: 2, updatedAt: 2 });
+    await ctx.db.insert("communityMemberships", { communityId: f.communityId, userId: f.outsiderId, role: "member", state: "active", createdAt: 2, updatedAt: 2 });
     return ids;
   });
   const readAll = async () => {
@@ -55,7 +55,7 @@ test("roster pages newest activity first, includes unknowns last, and reorders a
   const tied = await readAll();
   expect(tied.map(r => r.user_id)).toEqual((await readAll()).map(r => r.user_id));
   expect(new Set(tied.map(r => r.user_id)).size).toBe(3);
-  await t.run(ctx => ctx.db.patch(f.membershipId, { active: false }));
+  await t.run(ctx => ctx.db.patch(f.membershipId, { state: "lapsed" }));
   expect((await readAll()).map(r => r.user_id)).toEqual(["owner", "outsider"]);
 });
 
@@ -64,7 +64,7 @@ test("equal timestamps cross page boundaries without lost people", async () => {
   await t.run(async ctx => {
     for (let i = 0; i < 6; i++) {
       const userId = await ctx.db.insert("users", { authSubject: `recent-${i}`, displayName: `recent-${i}`, createdAt: 1, updatedAt: 1 });
-      await ctx.db.insert("communityMemberships", { communityId: f.communityId, userId, role: "member", active: true, createdAt: i + 2, updatedAt: 1 });
+      await ctx.db.insert("communityMemberships", { communityId: f.communityId, userId, role: "member", state: "active", createdAt: i + 2, updatedAt: 1 });
       await ctx.db.insert("communityPresence", { communityId: f.communityId, userId, lastSeenAt: 100, createdAt: 1, updatedAt: 1 });
     }
   });
@@ -136,7 +136,7 @@ test("General roster is paginated, includes owner once, and filters inactive mem
   const { t, f, owner } = await fixture();
   await t.run(async ctx => {
     await ctx.db.patch(f.channelId, { accessMode: "all_members", systemRole: "general", slug: "general", name: "General", position: 0 });
-    await ctx.db.insert("communityMemberships", { communityId: f.communityId, userId: f.outsiderId, role: "member", active: false, createdAt: 2, updatedAt: 2 });
+    await ctx.db.insert("communityMemberships", { communityId: f.communityId, userId: f.outsiderId, role: "member", state: "lapsed", createdAt: 2, updatedAt: 2 });
   });
   const request = { communityId: f.communityId, channelId: f.channelId, paginationOpts: { numItems: 2, cursor: null } };
   const first: any = await owner.query(roster, request);
@@ -154,7 +154,7 @@ test("roster rejects foreign channel IDs and excludes revoked membership even wi
     visibility: "unlisted", entryPolicy: "open", inferenceFundingPolicy: "managed_required", createdAt: 1, updatedAt: 1 }));
   const request = { communityId: f.communityId, channelId: f.channelId, paginationOpts: { numItems: 10, cursor: null } };
   await expect(owner.query(roster, { ...request, communityId: otherCommunityId })).rejects.toThrow();
-  await t.run(ctx => ctx.db.patch(f.membershipId, { active: false, revokedAt: Date.now() }));
+  await t.run(ctx => ctx.db.patch(f.membershipId, { state: "lapsed", revokedAt: Date.now() }));
   expect((await owner.query(roster, request) as any).page.map((p: any) => p.user_id)).toEqual(["owner"]);
   await expect(t.withIdentity({ subject: "member" }).query(roster, request)).rejects.toThrow();
 });
@@ -168,7 +168,7 @@ async function fixture() {
       visibility: "unlisted", entryPolicy: "open", inferenceFundingPolicy: "managed_required", createdAt: 1, updatedAt: 1 });
     await ensureGeneralChannel({ ctx, communityId, nowMs: 1 });
     const membershipId = await ctx.db.insert("communityMemberships", { communityId, userId: memberId, role: "member",
-      active: true, activationSequence: 1, accessSource: "manual_grant", createdAt: 1, updatedAt: 1 });
+      state: "active", activationSequence: 1, accessSource: "manual_grant", createdAt: 1, updatedAt: 1 });
     const channelId = await ctx.db.insert("communityChannels", { communityId, name: "Client", slug: "client", position: 1,
       accessMode: "restricted", postingPolicy: "members", status: "active", createdAt: 1, updatedAt: 1 });
     return { ownerId, memberId, outsiderId, communityId, membershipId, channelId };
@@ -197,9 +197,9 @@ test("participant upserts and revocations are idempotent and cannot confer manag
 test("rejoining a community cannot resurrect an old private-room grant", async () => {
   const { t, f, args, owner, canRead } = await fixture();
   await owner.mutation(set, args);
-  await t.run(ctx => ctx.db.patch(f.membershipId, { active: false, revokedAt: 2 }));
+  await t.run(ctx => ctx.db.patch(f.membershipId, { state: "lapsed", revokedAt: 2 }));
   await expect(canRead()).rejects.toThrow();
-  await t.run(ctx => ctx.db.patch(f.membershipId, { active: true, revokedAt: undefined, activationSequence: 2 }));
+  await t.run(ctx => ctx.db.patch(f.membershipId, { state: "active", revokedAt: undefined, activationSequence: 2 }));
   expect((await canRead()).canRead).toBe(false);
   await owner.mutation(set, args);
   expect((await canRead()).canRead).toBe(true);

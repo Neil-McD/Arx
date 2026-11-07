@@ -69,7 +69,7 @@ async function createFixture(t: ReturnType<typeof convexTest>) {
       role: "member",
       accessSource: "paid_subscription",
       pricePointId,
-      active: true,
+      state: "active",
       activationSequence: 1,
       activatedAt: NOW_MS,
       createdAt: NOW_MS,
@@ -196,7 +196,7 @@ test("only the owner can archive and repeated commands preserve one generation a
     lifecycleStatus: "archived",
     lifecycleGeneration: 1,
   });
-  expect(state.membership).toMatchObject({ active: true });
+  expect(state.membership).toMatchObject({ state: "active" });
   expect(state.message).toMatchObject({ contentSummary: "Preserve me" });
   expect(state.jobs).toHaveLength(1);
   expect(state.digestSchedule).toMatchObject({
@@ -352,7 +352,7 @@ test("cleanup work is ordered checkouts then connected members then founder and 
     status: "ended",
     revokedReason: "community_archived",
   });
-  expect(state.membership).toMatchObject({ active: true });
+  expect(state.membership).toMatchObject({ state: "active" });
   expect(state.message).toMatchObject({ contentSummary: "Preserve me" });
   expect(state.job).toMatchObject({ status: "complete" });
 });

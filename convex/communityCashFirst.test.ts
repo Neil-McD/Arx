@@ -54,7 +54,7 @@ async function fixture() {
   const state = () => t.run(async (ctx) => {
     const row = await ctx.db.query("checkoutSessions").withIndex("by_sessionId", (q) => q.eq("sessionId", SESSION)).first();
     const members = (await ctx.db.query("communityMemberships").collect())
-      .filter((m) => m.communityId === ids.communityId && m.active).map((m) => m.userId);
+      .filter((m) => m.communityId === ids.communityId && m.state === "active").map((m) => m.userId);
     return { owner: row?.ownerUserId ?? null, granted: typeof row?.membershipGrantedAt === "number", members };
   });
   return { t, ids, finish, paid, state };
@@ -111,7 +111,7 @@ test("someone already paying who pays again before signing in is refunded, not c
   await t.run(async (ctx) => {
     const now = Date.now();
     const membershipId = await ctx.db.insert("communityMemberships", {
-      communityId: ids.communityId, userId: ids.buyerId, role: "member", accessSource: "paid_subscription", active: true,
+      communityId: ids.communityId, userId: ids.buyerId, role: "member", accessSource: "paid_subscription", state: "active",
       createdAt: now, updatedAt: now,
     } as any);
     await ctx.db.insert("communitySubscriptions", {

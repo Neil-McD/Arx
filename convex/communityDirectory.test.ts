@@ -60,7 +60,7 @@ test("member directory pages membership with owner once and activity as annotati
       userId: ownerId,
       role: "admin",
       accessSource: "manual_grant",
-      active: true,
+      state: "active",
       createdAt: 200,
       updatedAt: 200,
     });
@@ -88,7 +88,7 @@ test("member directory pages membership with owner once and activity as annotati
         userId,
         role: "member",
         accessSource: "free_grant",
-        active: true,
+        state: "active",
         createdAt: 1_000 + index,
         updatedAt: 1_000 + index,
       });
@@ -117,7 +117,7 @@ test("member directory pages membership with owner once and activity as annotati
       userId: revokedUserId,
       role: "member",
       accessSource: "free_grant",
-      active: false,
+      state: "lapsed",
       revokedAt: 2_000,
       createdAt: 1_015.5,
       updatedAt: 2_000,
@@ -215,7 +215,7 @@ test("never-present members and owner are included without inventing activity; r
   const memberId = await createUser(t, "never-present", 200);
   const fixture = await t.run(async ctx => {
     const communityId = await ctx.db.insert("communities", { ownerId, slug: "never-present", name: "Never present", visibility: "unlisted", inferenceFundingPolicy: "managed_required", entryPolicy: "open", createdAt: 100, updatedAt: 100, activeMemberCount: 2 });
-    const membershipId = await ctx.db.insert("communityMemberships", { communityId, userId: memberId, role: "member", accessSource: "free_grant", active: true, createdAt: 200, updatedAt: 200 });
+    const membershipId = await ctx.db.insert("communityMemberships", { communityId, userId: memberId, role: "member", accessSource: "free_grant", state: "active", createdAt: 200, updatedAt: 200 });
     return { communityId, membershipId };
   });
   const asOwner = t.withIdentity({ subject: OWNER_SUBJECT });
@@ -225,7 +225,7 @@ test("never-present members and owner are included without inventing activity; r
   // A cached activity cursor restarts the new reader instead of entering the wrong index.
   const restarted = await asOwner.query(api.communityDirectory.listCommunityDirectoryPage, { communityId: fixture.communityId, cursor: "legacy-presence-cursor", pageSize: 2 });
   expect(restarted.page).toEqual(page.page);
-  await t.run(ctx => ctx.db.patch(fixture.membershipId, { active: false, revokedAt: 300 }));
+  await t.run(ctx => ctx.db.patch(fixture.membershipId, { state: "lapsed", revokedAt: 300 }));
   const revoked = await asOwner.query(api.communityDirectory.listCommunityDirectoryPage, { communityId: fixture.communityId });
   expect(revoked.page.map(row => row.id)).toEqual([`owner:${fixture.communityId}`]);
 });

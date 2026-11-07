@@ -96,7 +96,7 @@ test("self context excludes private, other-member, other-community, and unapprov
       await ctx.db.insert("memberFacts", { ...base, consentState, body: `SECRET_${consentState}` });
     }
     await ctx.db.insert("communityMemberships", { communityId: f.otherCommunityId, userId: f.memberId,
-      role: "member", active: true, accessSource: "free_grant", createdAt: 100, updatedAt: 100 });
+      role: "member", state: "active", accessSource: "free_grant", createdAt: 100, updatedAt: 100 });
   });
   const actor = t.withIdentity({ subject: f.memberSubject });
   for (const [communityId, body] of [[f.communityId, "Shared goal A"], [f.otherCommunityId, "Shared goal B"]] as const) {
@@ -112,7 +112,7 @@ test.each(["spoof_user", "spoof_subject", "revoked", "duplicate_membership", "ot
   const f = await createFixture(t);
   await t.run(async (ctx) => {
     const membership = (await ctx.db.query("communityMemberships").first())!;
-    if (failure === "revoked") await ctx.db.patch(membership._id, { active: false });
+    if (failure === "revoked") await ctx.db.patch(membership._id, { state: "lapsed" });
     if (failure === "duplicate_membership") {
       const { _id, _creationTime, ...row } = membership;
       await ctx.db.insert("communityMemberships", row);
@@ -198,7 +198,7 @@ test("self-context query rechecks access after path resolution and refuses direc
       const result = await base.runQuery(reference, args);
       if (++queryCount === 1) await t.run(async (ctx) => {
         const membership = (await ctx.db.query("communityMemberships").first())!;
-        await ctx.db.patch(membership._id, { active: false });
+        await ctx.db.patch(membership._id, { state: "lapsed" });
       });
       return result;
     } },
@@ -362,7 +362,7 @@ async function createFixture(t: ReturnType<typeof convexTest>) {
       userId: memberId,
       role: "member",
       accessSource: "free_grant",
-      active: true,
+      state: "active",
       activationSequence: 1,
       activatedAt: nowMs,
       createdAt: nowMs,
@@ -402,7 +402,7 @@ async function createAdminFixture(
       userId,
       role: "admin",
       accessSource: "free_grant",
-      active: true,
+      state: "active",
       activationSequence: 2,
       activatedAt: nowMs,
       createdAt: nowMs,
@@ -1062,7 +1062,7 @@ test("community activity and events list directly and round-trip through read", 
       )
       .unique();
     if (!membership) throw new Error("test_membership_missing");
-    await ctx.db.patch(membership._id, { active: false, updatedAt: Date.now() });
+    await ctx.db.patch(membership._id, { state: "lapsed", updatedAt: Date.now() });
   });
   await expect(
     executePolynetCanonicalTool({
@@ -2534,7 +2534,7 @@ test.each(["role", "entitlement", "block", "archived"])("admission queue reautho
   await t.run(async ctx => {
     const membership = await ctx.db.query("communityMemberships").withIndex("by_community_user", q => q.eq("communityId", f.communityId).eq("userId", f.admin.userId)).unique();
     if (mode === "role") await ctx.db.patch(membership!._id, { role: "member" });
-    if (mode === "entitlement") await ctx.db.patch(membership!._id, { active: false });
+    if (mode === "entitlement") await ctx.db.patch(membership!._id, { state: "lapsed" });
     if (mode === "block") await ctx.db.insert("communityBlocks", { communityId: f.communityId, userId: f.admin.userId, createdByUserId: f.ownerId, createdAt: 1, updatedAt: 1 });
     if (mode === "archived") await ctx.db.patch(f.communityId, { lifecycleStatus: "archived" });
   });
@@ -2616,13 +2616,13 @@ test.each(["owner", "admin", "moderator"])("fresh admission %s grants once, stor
   expect(capability, JSON.stringify(capability)).toMatchObject({ ok: true, value: { deduped: false, result: { status: "approved" } } });
   const state = await f.snapshot();
   expect(state.request).toBeNull(); expect(state.memberships).toHaveLength(1);
-  expect(state.memberships[0]).toMatchObject({ active: true, role: "member", accessSource: "free_grant", activationSequence: 1 });
+  expect(state.memberships[0]).toMatchObject({ state: "active", role: "member", accessSource: "free_grant", activationSequence: 1 });
   expect(state.audit).toHaveLength(1); expect(state.receipts).toHaveLength(1); expect(state.receipts[0].status).toBe("completed");
   expect(state.email).toHaveLength(1); expect(state.activity).toHaveLength(1);
   const replay = await approve(); expect(replay).toMatchObject({ ok: true, value: { deduped: true } });
   expect(await f.snapshot()).toEqual(state);
   expect(await approve()).toMatchObject({ ok: true, value: { result: (capability as any).value.result, deduped: true } });
-  await t.run(ctx => ctx.db.patch(state.memberships[0]._id, { active: false, revokedAt: Date.now(), revokedReason: "test_revocation" }));
+  await t.run(ctx => ctx.db.patch(state.memberships[0]._id, { state: "lapsed", revokedAt: Date.now(), revokedReason: "test_revocation" }));
   const revoked = await f.snapshot(); expect(await approve()).toMatchObject({ ok: true, value: { deduped: true } });
   expect(await f.snapshot()).toEqual(revoked);
   expect(await approve({ ...f.input, idempotency_key: "different" })).toMatchObject({ ok: false });
@@ -2661,7 +2661,7 @@ test.each(["paid", "open", "cancelled", "denied", "reopened", "duplicate", "lega
     if (mode === "blocked") await ctx.db.insert("communityBlocks", { communityId: f.communityId, userId: f.row.userId, createdByUserId: f.ownerId, createdAt: 1, updatedAt: 1 });
     if (mode === "owner-applicant") await ctx.db.patch(f.row._id, { userId: f.ownerId });
     if (mode.startsWith("membership")) await ctx.db.insert("communityMemberships", { communityId: f.communityId, userId: f.row.userId,
-      role: mode === "membership-admin" ? "admin" : "member", active: mode !== "membership-inactive",
+      role: mode === "membership-admin" ? "admin" : "member", state: "active", active: mode !== "membership-inactive",
       accessSource: mode === "membership-paid" ? "paid_subscription" : "free_grant", createdAt: 1, updatedAt: 1 });
     if (mode === "subscription") {
       const membership = (await ctx.db.query("communityMemberships").withIndex("by_community_user", q => q.eq("communityId", f.communityId).eq("userId", f.memberId)).unique())!;
@@ -2679,7 +2679,7 @@ test.each(["role", "entitlement", "block", "funding", "archived"].flatMap(mode =
   await t.run(async ctx => {
     const membership = (await ctx.db.query("communityMemberships").withIndex("by_community_user", q => q.eq("communityId", f.communityId).eq("userId", f.admin.userId)).unique())!;
     if (mode === "role") await ctx.db.patch(membership._id, { role: "member" });
-    if (mode === "entitlement") await ctx.db.patch(membership._id, { active: false });
+    if (mode === "entitlement") await ctx.db.patch(membership._id, { state: "lapsed" });
     if (mode === "block") await ctx.db.insert("communityBlocks", { communityId: f.communityId, userId: f.admin.userId, createdByUserId: f.ownerId, createdAt: 1, updatedAt: 1 });
     if (mode === "funding") await ctx.db.patch(f.communityId, { builderAccessMode: "subscription_required" });
     if (mode === "archived") await ctx.db.patch(f.communityId, { lifecycleStatus: "archived" });
@@ -3291,7 +3291,7 @@ test("people: owners and admins re-role, remove, ban and unban a selection", asy
   const extra = await t.run(async ctx => {
     const join = async (handle: string, role: "member" | "moderator") => {
       const userId = await ctx.db.insert("users", { authSubject: `${handle}-subject`, displayName: handle, handle, normalizedHandle: handle, createdAt: 1, updatedAt: 1 });
-      const membershipId = await ctx.db.insert("communityMemberships", { communityId: f.communityId, userId, role, accessSource: "free_grant", active: true,
+      const membershipId = await ctx.db.insert("communityMemberships", { communityId: f.communityId, userId, role, accessSource: "free_grant", state: "active",
         activationSequence: 1, activatedAt: 1, createdAt: 1, updatedAt: 1 });
       return { userId, membershipId, authSubject: `${handle}-subject` };
     };
@@ -3337,7 +3337,7 @@ test("people: owners and admins re-role, remove, ban and unban a selection", asy
     { member: ref(extra.payer.userId), ok: false, code: "paid_member_use_studio" }, { member: ref(extra.quiet.userId), ok: true, removed: true } ] } } });
   expect(await adminAi.call("community.members.remove", { members: [ref(extra.quiet.userId)] }, "rm2"))
     .toMatchObject({ ok: true, value: { result: { results: [{ ok: true, already_gone: true }] } } });
-  const active = (id: any) => t.run(async ctx => (await ctx.db.query("communityMemberships").collect()).some(m => String(m.userId) === String(id) && m.active));
+  const active = (id: any) => t.run(async ctx => (await ctx.db.query("communityMemberships").collect()).some(m => String(m.userId) === String(id) && m.state === "active"));
   expect(await active(extra.payer.userId)).toBe(true);
   expect(await active(extra.quiet.userId)).toBe(false);
   // An admin can't remove an admin.
@@ -3356,7 +3356,7 @@ test("people: owners and admins re-role, remove, ban and unban a selection", asy
   const solo = await t.run(async ctx => {
     const userId = await ctx.db.insert("users", { authSubject: "solo-subject", displayName: "solo", handle: "solo", normalizedHandle: "solo", createdAt: 1, updatedAt: 1 });
     const membershipId = await ctx.db.insert("communityMemberships", { communityId: f.communityId, userId, role: "member", accessSource: "free_grant",
-      active: true, activationSequence: 1, activatedAt: 1, createdAt: 1, updatedAt: 1 });
+      state: "active", activationSequence: 1, activatedAt: 1, createdAt: 1, updatedAt: 1 });
     return { userId, membershipId };
   });
   const original = (completeCanonicalOperationReceiptInternal as any)._handler;
@@ -3367,7 +3367,7 @@ test("people: owners and admins re-role, remove, ban and unban a selection", asy
   await expect(adminAi.call("community.members.remove", { members: [ref(solo.userId)] }, "rm-crash")).rejects.toThrow();
   crash.mockRestore();
   expect(await active(solo.userId)).toBe(false);
-  await t.run(ctx => ctx.db.patch(solo.membershipId, { active: true, revokedAt: undefined, revokedReason: undefined }));
+  await t.run(ctx => ctx.db.patch(solo.membershipId, { state: "active", revokedAt: undefined, revokedReason: undefined }));
   await expireCanonicalReceipt(t, { toolName: "polynet_call", idempotencyKey: "rm-crash" });
   expect(await adminAi.call("community.members.remove", { members: [ref(solo.userId)] }, "rm-crash"))
     .toMatchObject({ ok: true, value: { result: { succeeded: 1, results: [{ ok: true, deduped: true }] } } });
@@ -3376,13 +3376,13 @@ test("people: owners and admins re-role, remove, ban and unban a selection", asy
   // An older membership row without the active field still counts as active.
   const legacy = await t.run(async ctx => {
     const userId = await ctx.db.insert("users", { authSubject: "legacy-subject", displayName: "legacy", handle: "legacy", normalizedHandle: "legacy", createdAt: 1, updatedAt: 1 });
-    await ctx.db.insert("communityMemberships", { communityId: f.communityId, userId, role: "member", accessSource: "free_grant",
+    await ctx.db.insert("communityMemberships", { communityId: f.communityId, userId, role: "member", state: "active", accessSource: "free_grant",
       activationSequence: 1, activatedAt: 1, createdAt: 1, updatedAt: 1 } as any);
     return userId;
   });
   expect(await owner.call("community.members.remove", { members: [ref(legacy)] }, "legacy-rm"))
     .toMatchObject({ ok: true, value: { result: { succeeded: 1, results: [{ removed: true }] } } });
-  expect(await t.run(async ctx => (await ctx.db.query("communityMemberships").collect()).find(m => String(m.userId) === String(legacy))!.active)).toBe(false);
+  expect(await t.run(async ctx => (await ctx.db.query("communityMemberships").collect()).find(m => String(m.userId) === String(legacy))!.state === "active")).toBe(false);
 
   // Bad selections are refused whole.
   expect(await owner.call("community.members.remove", { members: ["not-a-ref"] }, "x1")).toMatchObject({ ok: false, code: "invalid_tool_args" });

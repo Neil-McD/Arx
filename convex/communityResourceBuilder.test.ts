@@ -24,7 +24,7 @@ async function createFixture(t: ReturnType<typeof convexTest>) {
     });
     for (const [userId, role] of [[adminId, "admin"], [memberId, "member"]] as const) {
       await ctx.db.insert("communityMemberships", {
-        communityId, userId, role, accessSource: "free_grant", active: true, createdAt: NOW, updatedAt: NOW,
+        communityId, userId, role, accessSource: "free_grant", state: "active", createdAt: NOW, updatedAt: NOW,
       });
     }
     const moduleId = await ctx.db.insert("communityResourceModules", {

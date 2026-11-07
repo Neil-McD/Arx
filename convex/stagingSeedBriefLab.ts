@@ -76,9 +76,9 @@ export const seedBriefLabInternal = internalMutation({
       const membership = await ctx.db.query("communityMemberships")
         .withIndex("by_community_user" as any, (q: any) => q.eq("communityId", args.communityId).eq("userId", userId)).unique();
       const joinedAt = ago(member.joinedHoursAgo);
-      if (membership) await ctx.db.patch(membership._id, { createdAt: joinedAt, updatedAt: nowMs, state: "active", active: true } as any);
+      if (membership) await ctx.db.patch(membership._id, { createdAt: joinedAt, updatedAt: nowMs, state: "active" } as any);
       else await ctx.db.insert("communityMemberships", {
-        communityId: args.communityId, userId, role: "member", accessSource: "free_grant", state: "active", active: true, createdAt: joinedAt, updatedAt: nowMs,
+        communityId: args.communityId, userId, role: "member", accessSource: "free_grant", state: "active", createdAt: joinedAt, updatedAt: nowMs,
       } as any);
     }
 

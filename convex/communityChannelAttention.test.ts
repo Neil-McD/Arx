@@ -62,7 +62,7 @@ test("attention and acknowledgements remain independent per channel", async () =
       userId: memberId,
       role: "member",
       accessSource: "manual_grant",
-      active: true,
+      state: "active",
       createdAt: 1_000,
       updatedAt: 1_000,
     });

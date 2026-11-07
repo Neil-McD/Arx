@@ -68,7 +68,7 @@ async function fixture() {
     const otherClub = await community("other-club", outsider);
     for (const [communityId, userId] of [[runClub, member], [otherClub, owner]] as const) {
       await ctx.db.insert("communityMemberships", {
-        communityId, userId, role: "member", accessSource: "free_grant", active: true,
+        communityId, userId, role: "member", accessSource: "free_grant", state: "active",
         activationSequence: 1, activatedAt: nowMs, createdAt: nowMs, updatedAt: nowMs,
       });
     }

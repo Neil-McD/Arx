@@ -287,7 +287,6 @@ describe("canonical join-request kernel", () => {
     await t.run(async (ctx) => {
       await ctx.db.patch(first.membership._id, {
         state: "lapsed",
-        active: false,
         revokedAt: fixture.nowMs + 4,
         revokedReason: "test_reactivation",
         updatedAt: fixture.nowMs + 4,
@@ -336,12 +335,12 @@ describe("canonical join-request kernel", () => {
     expect((await activate(fixture.nowMs + 2)).membership.role).toBe("admin");
     // Removed, left or lapsed, then back in: a member again.
     for (const state of ["removed", "left", "lapsed"] as const) {
-      await t.run(async (ctx) => ctx.db.patch(row._id, { role: "admin", state, active: false, revokedAt: fixture.nowMs + 3, revokedReason: state }));
+      await t.run(async (ctx) => ctx.db.patch(row._id, { role: "admin", state, revokedAt: fixture.nowMs + 3, revokedReason: state }));
       const back = await activate(fixture.nowMs + 4);
-      expect(back.membership).toMatchObject({ role: "member", active: true });
+      expect(back.membership).toMatchObject({ role: "member", state: "active" });
     }
     // An explicit role is still honored.
-    await t.run(async (ctx) => ctx.db.patch(row._id, { state: "left", active: false, revokedAt: fixture.nowMs + 5, revokedReason: "left" }));
+    await t.run(async (ctx) => ctx.db.patch(row._id, { state: "left", revokedAt: fixture.nowMs + 5, revokedReason: "left" }));
     const moderator = await t.run(async (ctx) => activateCommunityMembershipCore({
       ctx, communityId: fixture.communityId, userId: fixture.userId, role: "moderator",
       accessSource: "manual_grant", activationReason: "test", nowMs: fixture.nowMs + 6,
@@ -359,7 +358,7 @@ describe("canonical join-request kernel", () => {
           userId: fixture.userId,
           role: "member",
           accessSource: "free_grant",
-          active: false,
+          state: "lapsed",
           activationSequence: 0,
           createdAt: fixture.nowMs + index,
           updatedAt: fixture.nowMs + index,

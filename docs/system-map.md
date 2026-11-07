@@ -76,7 +76,8 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
   for the audit trail and never decides access. A payment update never brings
   back someone who left or was removed, and a payment hold (refund or dispute)
   lifts only on a new paid invoice or a won dispute. A ban is a
-  `communityBlocks` row on top of `removed`.
+  `communityBlocks` row on top of `removed`. Leaving keeps the row as `left`
+  in every community; leaving again, or "leaving" after a removal, changes nothing.
   Rejoining starts as `member` (an earlier role is never restored);
   an active membership keeps its role through checkout. See
   [community-member-arrival-v1.md](community-member-arrival-v1.md).

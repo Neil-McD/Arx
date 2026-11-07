@@ -19,7 +19,7 @@ async function fixture() {
     for (const slug of ["one", "two"]) {
       const communityId = await ctx.db.insert("communities", { ownerId, name: slug, slug, visibility: "unlisted", inferenceFundingPolicy: "managed_required", entryPolicy: "open", activeMemberCount: 2, createdAt: 1, updatedAt: 1 });
       communities.push(communityId);
-      for (const userId of [a, b]) memberships.push(await ctx.db.insert("communityMemberships", { communityId, userId, role: "member", active: true, createdAt: 1, updatedAt: 1 }));
+      for (const userId of [a, b]) memberships.push(await ctx.db.insert("communityMemberships", { communityId, userId, role: "member", state: "active", createdAt: 1, updatedAt: 1 }));
     }
     return { communities, memberships };
   });
@@ -101,7 +101,7 @@ test("closed sessions remain readable but reject writes; history is member scope
   await expect(f.a.mutation(api.threads.addCloudThreadMessage, { threadId: first.thread_id as any, role: "user", contentJson: { text: "Late message" } })).rejects.toThrow("member_agent_episode_not_active");
   expect(await f.a.query(api.threads.listNewestCloudThreadMessages, { threadId: first.thread_id as any })).toHaveLength(1);
   await expect(f.b.query(api.threads.listNewestCloudThreadMessages, { threadId: second.thread_id as any })).rejects.toThrow();
-  await f.t.run(ctx => ctx.db.patch(f.memberships[0], { active: false, revokedAt: Date.now() }));
+  await f.t.run(ctx => ctx.db.patch(f.memberships[0], { state: "lapsed", revokedAt: Date.now() }));
   await expect(f.a.query(api.threads.listNewestCloudThreadMessages, { threadId: second.thread_id as any })).rejects.toThrow();
   await expect(f.a.mutation(api.threads.startNewCommunityAgentConversation, { communityId, expectedActiveEpisodeId: second.episode_id as any })).rejects.toThrow();
 });
@@ -124,6 +124,6 @@ test("runtime records use the bound community and running turns prevent rollover
   const run = await f.a.mutation(api.threads.ensureCloudRuntimeRunStarted, { threadId: first.thread_id as any, runId: "scoped-runtime" });
   expect(run.communityId).toBe(communityId);
   await expect(f.a.mutation(api.threads.startNewCommunityAgentConversation, { communityId, expectedActiveEpisodeId: first.episode_id as any })).rejects.toThrow("community_conversation_turn_running");
-  await f.t.run(ctx => ctx.db.patch(f.memberships[0], { active: false, revokedAt: Date.now() }));
+  await f.t.run(ctx => ctx.db.patch(f.memberships[0], { state: "lapsed", revokedAt: Date.now() }));
   await expect(f.t.query(internal.threads.listCommunityAgentRuntimeMessagesInternal, { ownerId: run.ownerId, threadId: first.thread_id as any, expectedUserMessageKey: "runtime-user" })).rejects.toThrow();
 });

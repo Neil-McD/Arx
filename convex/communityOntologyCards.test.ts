@@ -30,7 +30,7 @@ async function fixture() {
       inferenceFundingPolicy: "managed_required", entryPolicy: "approval", activeMemberCount: 4, createdAt: NOW - 90 * 86_400_000, updatedAt: NOW,
     } as any);
     const membership = (userId: any, role: string, active = true) => ctx.db.insert("communityMemberships", {
-      communityId, userId, role, accessSource: "free_grant", active, activationSequence: 1, activatedAt: NOW - 30 * 86_400_000, createdAt: NOW - 30 * 86_400_000, updatedAt: NOW,
+      communityId, userId, role, accessSource: "free_grant", state: active ? "active" : "removed", activationSequence: 1, activatedAt: NOW - 30 * 86_400_000, createdAt: NOW - 30 * 86_400_000, updatedAt: NOW,
     } as any);
     await membership(admin, "admin");
     await membership(moderator, "moderator");
@@ -39,8 +39,8 @@ async function fixture() {
     // Older leaders: no active field at all (reads as active), unless revoked.
     const legacyMod = await user("old-mod", "Old Mod");
     const revokedMod = await user("revoked", "Revoked Mod");
-    for (const [userId, extra] of [[legacyMod, {}], [revokedMod, { revokedAt: NOW - 1 }]] as const) {
-      await ctx.db.insert("communityMemberships", { communityId, userId, role: "moderator", accessSource: "free_grant", createdAt: NOW - 60 * 86_400_000, updatedAt: NOW, ...extra } as any);
+    for (const [userId, extra] of [[legacyMod, {}], [revokedMod, { state: "removed", revokedAt: NOW - 1 }]] as const) {
+      await ctx.db.insert("communityMemberships", { communityId, userId, role: "moderator", state: "active", accessSource: "free_grant", createdAt: NOW - 60 * 86_400_000, updatedAt: NOW, ...extra } as any);
     }
     const channel = (slug: string, accessMode: string) => ctx.db.insert("communityChannels", {
       communityId, slug, name: slug, normalizedName: slug, accessMode, postingPolicy: "members", status: "active", position: 0, createdAt: NOW, updatedAt: NOW,

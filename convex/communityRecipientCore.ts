@@ -1,9 +1,9 @@
+import { communityMembershipRowIsActive } from "./communityCore";
 type CommunityMembershipRow = {
   _id: any;
   communityId: any;
   userId: any;
-  active?: boolean;
-  revokedAt?: number;
+  state?: string;
   createdAt: number;
 };
 
@@ -46,7 +46,7 @@ export async function listActiveCommunityRecipientUserIds(ctx: any, params: {
 
   addRecipient(params.communityOwnerId);
   for (const membership of memberships.sort((a, b) => a.createdAt - b.createdAt)) {
-    if (membership.active === false || typeof membership.revokedAt === "number") continue;
+    if (!communityMembershipRowIsActive(membership as any)) continue;
     addRecipient(membership.userId);
     if (recipientUserIds.length >= params.limit) break;
   }

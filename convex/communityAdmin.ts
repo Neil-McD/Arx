@@ -51,13 +51,12 @@ import {
 import { logStructuredError } from "./errorLogging";
 import { enqueueCommunityAccessGrantedEmailInternal } from "./emailEvents";
 import {
-  isPlatformHomeCommunity,
-  PLATFORM_HOME_MEMBER_LEFT_REVOKED_REASON,
 } from "./platformHomeCommunity";
 import { cancelStripeSubscriptionAtPeriodEnd, cancelStripeSubscriptionIfActive } from "./stripeSubscriptionCancellation";
 import {
   activateCommunityMembershipCore,
   endedCommunityMembershipFields,
+  COMMUNITY_MEMBER_LEFT_REASON,
 } from "./communityMembershipLifecycle";
 import { deleteCommunityReadCursorsForUserCommunity } from "./communityReadCursorCore";
 import { deleteCommunityPresenceForUser } from "./communityPresenceCore";
@@ -2322,24 +2321,14 @@ async function leaveCommunityForUser(ctx: any, args: { communityId: any; userId:
           membershipId: membership._id,
           nowMs,
         });
-        const preservePlatformHomeRelationship = isPlatformHomeCommunity({
-          communitySlug: community.slug,
-        });
-        // Only an active member leaves. Someone already gone stays as they are:
-        // a retried leave changes nothing, and a removed member can't erase the
-        // removal by "leaving".
-        const isActive = communityMembershipRowIsActive(membership);
-        const leaving = preservePlatformHomeRelationship && isActive
-          ? endedCommunityMembershipFields({ membership, to: "left", reason: PLATFORM_HOME_MEMBER_LEFT_REVOKED_REASON, nowMs })
+        // The row stays as `left`. Only an active member leaves: someone already
+        // gone stays as they are, so a retried leave changes nothing and a removed
+        // member can't erase the removal by "leaving".
+        const leaving = communityMembershipRowIsActive(membership)
+          ? endedCommunityMembershipFields({ membership, to: "left", reason: COMMUNITY_MEMBER_LEFT_REASON, nowMs })
           : null;
-        const after = preservePlatformHomeRelationship || !isActive
-          ? ({ ...membership, ...leaving } as CommunityMembershipLike)
-          : null;
-        if (leaving) {
-          await ctx.db.patch(membership._id as any, leaving);
-        } else if (!after) {
-          await ctx.db.delete(membership._id as any);
-        }
+        const after = { ...membership, ...leaving } as CommunityMembershipLike;
+        if (leaving) await ctx.db.patch(membership._id as any, leaving);
         await adjustCommunityActiveMemberCountForMembershipTransition({
           ctx,
           communityId: args.communityId,

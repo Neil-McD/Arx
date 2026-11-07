@@ -97,7 +97,7 @@ async function fixture(t: ReturnType<typeof convexTest>, nowMs: number) {
     const member = async (name: string, joinedAgoHours: number) => {
       const userId = await user(name);
       await ctx.db.insert("communityMemberships", {
-        communityId, userId, role: "member", accessSource: "free_grant", active: true,
+        communityId, userId, role: "member", accessSource: "free_grant", state: "active",
         createdAt: nowMs - joinedAgoHours * HOUR_MS, updatedAt: nowMs,
       } as any);
       return userId;
@@ -216,7 +216,7 @@ describe("founder brief delivery", () => {
     await t.run(async (ctx) => {
       for (let index = 0; index < 210; index += 1) {
         const userId = await ctx.db.insert("users", { authSubject: `bulk-${index}`, displayName: `Bulk ${index}`, createdAt: nowMs, updatedAt: nowMs } as any);
-        await ctx.db.insert("communityMemberships", { communityId: f.communityId, userId, role: "member", accessSource: "free_grant", active: true, createdAt: nowMs - 10 * DAY + index, updatedAt: nowMs } as any);
+        await ctx.db.insert("communityMemberships", { communityId: f.communityId, userId, role: "member", accessSource: "free_grant", state: "active", createdAt: nowMs - 10 * DAY + index, updatedAt: nowMs } as any);
       }
     });
     // Notes the agent saved in the window are listed; the founder's own and older ones aren't.

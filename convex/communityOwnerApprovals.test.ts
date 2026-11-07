@@ -29,7 +29,7 @@ async function fixture(opts: { deployed?: boolean } = {}) {
       entryPolicy: "open", activeMemberCount: 2, builderAccessMode: "free", createdAt: NOW, updatedAt: NOW,
     } as any);
     await ctx.db.insert("communityMemberships", {
-      communityId, userId: adminId, role: "admin", accessSource: "free_grant", active: true, activationSequence: 1, activatedAt: NOW, createdAt: NOW, updatedAt: NOW,
+      communityId, userId: adminId, role: "admin", accessSource: "free_grant", state: "active", activationSequence: 1, activatedAt: NOW, createdAt: NOW, updatedAt: NOW,
     } as any);
     await registerCommunitySiteAddresses(ctx, { _id: communityId, slug: "dawn-club" });
     if (opts.deployed !== false) {

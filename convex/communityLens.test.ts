@@ -32,7 +32,7 @@ async function fixture(canRun: boolean) {
       ...(canRun ? {} : { builderAccessMode: COMMUNITY_BUILDER_ACCESS_SUBSCRIPTION_REQUIRED }),
     } as any);
     const membership = (person: Person, role: string, extra: Record<string, unknown> = {}) => ctx.db.insert("communityMemberships", {
-      communityId, userId: people[person], role, accessSource: "free_grant", active: true,
+      communityId, userId: people[person], role, accessSource: "free_grant", state: "active",
       activationSequence: 1, activatedAt: NOW, createdAt: NOW, updatedAt: NOW, ...extra,
     } as any);
     await membership("admin", "admin");
@@ -42,7 +42,7 @@ async function fixture(canRun: boolean) {
     await membership("lapsedPaidAdmin", "admin", { accessSource: "paid_subscription" });
     await membership("blockedAdmin", "admin");
     await ctx.db.insert("communityBlocks", { communityId, userId: people.blockedAdmin, createdByUserId: people.owner, createdAt: NOW, updatedAt: NOW });
-    await membership("removedAdmin", "admin", { active: false, revokedAt: NOW, revokedReason: "removed_by_manager" });
+    await membership("removedAdmin", "admin", { state: "removed", revokedAt: NOW, revokedReason: "removed_by_manager" });
     return { communityId, people };
   });
   // Paid entry, so the lapsed paid membership isn't entitled (everyone else holds a free grant).

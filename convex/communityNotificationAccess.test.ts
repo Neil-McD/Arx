@@ -92,7 +92,7 @@ test("revoked queued mail never reaches the provider adapter", async () => {
   const t = convexTest(schema, modules);
   const f = await t.run(fixture);
   await t.mutation(refs.email.enqueueEmailJobInternal, enqueueArgs(f));
-  await t.run((ctx) => ctx.db.patch(f.membershipId, { active: false }));
+  await t.run((ctx) => ctx.db.patch(f.membershipId, { state: "lapsed" }));
   expect(
     await t.action(refs.email.processPendingEmailOutboxInternal, {
       nowMs: NOW,
@@ -150,7 +150,7 @@ async function fixture(ctx: MutationCtx) {
     communityId,
     userId: memberId,
     role: "member",
-    active: true,
+    state: "active",
     createdAt: 1,
     updatedAt: 1,
   });
@@ -158,7 +158,7 @@ async function fixture(ctx: MutationCtx) {
     communityId,
     userId: outsiderId,
     role: "member",
-    active: true,
+    state: "active",
     createdAt: 1,
     updatedAt: 1,
   });
@@ -279,7 +279,7 @@ test("room grants, community access, owner access and source lineage govern noti
     await ctx.db.patch(f.grantId, { status: "revoked" });
     expect(await resolveNotificationRecipientSource(args)).toBeNull();
     await ctx.db.patch(f.grantId, { status: "active" });
-    await ctx.db.patch(f.membershipId, { active: false });
+    await ctx.db.patch(f.membershipId, { state: "lapsed" });
     expect(await resolveNotificationRecipientSource(args)).toBeNull();
   });
 });
@@ -342,7 +342,7 @@ test("outbox carries identity, refreshes content on claim, and suppresses revoca
   });
   expect(jobs).toHaveLength(1);
   expect(jobs[0].payload.snippet).toBe("Edited message");
-  await t.run((ctx) => ctx.db.patch(f.membershipId, { active: false }));
+  await t.run((ctx) => ctx.db.patch(f.membershipId, { state: "lapsed" }));
   expect(
     await t.mutation(refs.email.prepareMentionEmailDispatchInternal, {
       outboxId: enqueued.outboxId,
@@ -621,7 +621,7 @@ test("direct mention validation rolls back the whole write for an ineligible rec
     mentions: (await ctx.db.query("communityInteractionMentions").collect())
       .length,
   }));
-  await t.run((ctx) => ctx.db.patch(f.membershipId, { active: false }));
+  await t.run((ctx) => ctx.db.patch(f.membershipId, { state: "lapsed" }));
   await expect(
     owner.mutation(
       api.communityInteractions.createCommunityInteractionComposerMessage,

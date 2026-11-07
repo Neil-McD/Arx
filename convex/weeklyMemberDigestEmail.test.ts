@@ -221,7 +221,7 @@ test("weekly digest rechecks community membership before delivery", async () => 
       userId,
       role: "member",
       accessSource: "free_grant",
-      active: true,
+      state: "active",
       createdAt: fixture.nowMs,
       updatedAt: fixture.nowMs,
     });
@@ -245,7 +245,7 @@ test("weekly digest rechecks community membership before delivery", async () => 
       )
       .unique();
     await ctx.db.patch(membership!._id, {
-      active: false,
+      state: "lapsed",
       revokedAt: fixture.nowMs + 1,
       updatedAt: fixture.nowMs + 1,
     });

@@ -26,7 +26,7 @@ async function fixture(t: any) {
       ownerId: owner, slug: "sunrise", name: "Sunrise", visibility: "unlisted", inferenceFundingPolicy: "managed_required", entryPolicy: "open", activeMemberCount: 3, createdAt: NOW, updatedAt: NOW,
     });
     const membership = (userId: any) => ctx.db.insert("communityMemberships", {
-      communityId, userId, role: "member", accessSource: "free_grant", active: true, activationSequence: 1, activatedAt: NOW - 1e9, createdAt: NOW - 1e9, updatedAt: NOW,
+      communityId, userId, role: "member", accessSource: "free_grant", state: "active", activationSequence: 1, activatedAt: NOW - 1e9, createdAt: NOW - 1e9, updatedAt: NOW,
     });
     const mayaMembership = await membership(maya);
     await membership(theo);

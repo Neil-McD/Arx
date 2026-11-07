@@ -87,7 +87,7 @@ async function createFixture(t: ReturnType<typeof convexTest>) {
       userId: memberId,
       role: "member",
       accessSource: "free_grant",
-      active: true,
+      state: "active",
       activationSequence: 1,
       activatedAt: nowMs,
       createdAt: nowMs,
@@ -98,7 +98,7 @@ async function createFixture(t: ReturnType<typeof convexTest>) {
       userId: peerId,
       role: "member",
       accessSource: "free_grant",
-      active: true,
+      state: "active",
       activationSequence: 2,
       activatedAt: nowMs,
       createdAt: nowMs + 1,
@@ -109,7 +109,7 @@ async function createFixture(t: ReturnType<typeof convexTest>) {
       userId: legacyMemberId,
       role: "member",
       accessSource: "free_grant",
-      active: true,
+      state: "active",
       activationSequence: 3,
       activatedAt: nowMs,
       createdAt: nowMs + 2,
@@ -526,7 +526,7 @@ test("canonical executor keeps bound and explicit community selectors behavioral
 
   await t.run(async (dbCtx) => {
     await dbCtx.db.patch(fixture.membershipId, {
-      active: false,
+      state: "lapsed",
       revokedAt: 1_750_000_000_100,
       revokedReason: "semantic_executor_parity_test",
     });
@@ -801,7 +801,7 @@ test("platform mount exposes communities and permissioned users without leaking 
 
   await t.run(async (dbCtx) => {
     await dbCtx.db.patch(fixture.membershipId, {
-      active: false,
+      state: "lapsed",
       revokedAt: 1_750_000_000_200,
       revokedReason: "platform_semantic_mount_revocation_test",
     });
@@ -881,7 +881,7 @@ test("platform communities directory paginates bounded authorization results wit
         userId: fixture.memberId,
         role: index === 0 ? "moderator" : "member",
         accessSource: "free_grant",
-        active: true,
+        state: "active",
         activationSequence: index + 2,
         activatedAt: nowMs + index + 1,
         createdAt: nowMs + index + 1,
@@ -906,7 +906,7 @@ test("platform communities directory paginates bounded authorization results wit
       userId: fixture.memberId,
       role: "member",
       accessSource: "free_grant",
-      active: false,
+      state: "lapsed",
       revokedAt: nowMs + 11,
       revokedReason: "pagination_test",
       createdAt: nowMs + 10,
@@ -931,7 +931,7 @@ test("platform communities directory paginates bounded authorization results wit
       userId: fixture.memberId,
       role: "member",
       accessSource: "free_grant",
-      active: true,
+      state: "active",
       activationSequence: 6,
       activatedAt: nowMs + 12,
       createdAt: nowMs + 12,
@@ -1219,7 +1219,7 @@ test("resource semantic traversal is bounded, complete, collision-safe, and revo
   expect(legacyMemberProfile.result.body).not.toMatch(/Not provided|timeline\.md/);
   await t.run(async (dbCtx) => {
     await dbCtx.db.patch(fixture.legacyMembershipId, {
-      active: false,
+      state: "lapsed",
       revokedAt: 1_750_000_000_150,
       revokedReason: "legacy_member_projection_revocation_test",
     });
@@ -1366,7 +1366,7 @@ test("resource semantic traversal is bounded, complete, collision-safe, and revo
 
   await t.run(async (ctx) => {
     await ctx.db.patch(fixture.membershipId, {
-      active: false,
+      state: "lapsed",
       revokedAt: 1_750_000_000_100,
       revokedReason: "semantic_resource_traversal_test",
     });

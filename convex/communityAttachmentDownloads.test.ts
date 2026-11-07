@@ -17,7 +17,7 @@ async function fixture() {
     const ownerId = await user("owner"), memberId = await user("member"), strangerId = await user("stranger");
     const communityId = await ctx.db.insert("communities", { ownerId, name: "Files", slug: "files", visibility: "unlisted",
       entryPolicy: "open", inferenceFundingPolicy: "managed_required", createdAt: 1, updatedAt: 1 });
-    const membershipId = await ctx.db.insert("communityMemberships", { communityId, userId: memberId, role: "member", active: true,
+    const membershipId = await ctx.db.insert("communityMemberships", { communityId, userId: memberId, role: "member", state: "active",
       activationSequence: 1, accessSource: "manual_grant", createdAt: 1, updatedAt: 1 });
     const channelId = await ctx.db.insert("communityChannels", { communityId, name: "Private", slug: "private", position: 1,
       accessMode: "restricted", postingPolicy: "members", status: "active", createdAt: 1, updatedAt: 1 });

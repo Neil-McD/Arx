@@ -22,7 +22,7 @@ test("@everybody: only the owner and admins, only on a new post, only as written
     } as any);
     const member = async (handle: string, role: string) => {
       const userId = await user(handle);
-      await ctx.db.insert("communityMemberships", { communityId, userId, role, active: true, createdAt: 1, updatedAt: 1 } as any);
+      await ctx.db.insert("communityMemberships", { communityId, userId, role, state: "active", createdAt: 1, updatedAt: 1 } as any);
       return userId;
     };
     return {
