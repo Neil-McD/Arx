@@ -160,9 +160,7 @@ for (const queryName of operatorQueryNames.filter((queryName) => queryName !== "
 }
 
 assert.doesNotMatch(operatorDashboard, /export const \w+ = action/, "operator dashboard must not expose public actions");
-const operatorMaintenanceMutationNames = [
-  "backfillCommunityMembershipActiveFlags",
-];
+const operatorMaintenanceMutationNames: string[] = [];
 assert.deepEqual(
   [...operatorDashboard.matchAll(/export const (\w+) = mutation/g)].map((match) => match[1]),
   operatorMaintenanceMutationNames,
