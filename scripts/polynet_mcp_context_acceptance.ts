@@ -84,10 +84,6 @@ export async function runContextAcceptance(fixture: ContextFixture, call: ReadCa
   }
   const memberSelf = selfContext(await read("member", root + "members/me/context.md"));
   assert.match(String(memberSelf.membership_id), /^[a-zA-Z0-9]+$/, "ordinary member must have one canonical membership");
-  const dossierPath = root + `builder/workflow-members/${memberSelf.membership_id}.md`;
-  const dossier = await read("builder", dossierPath);
-  assert.equal((dossier.context as { user_id?: string } | undefined)?.user_id, identities.member, "builder dossier must resolve the actual fixture member");
-  await read("member", dossierPath, true);
   assert.ok(body(await read("builder", fixture.privateDocumentPath)).includes(fixture.privateCanary), "control must prove the private document exists");
   await read("member", fixture.privateDocumentPath, true);
   // Community-wide chat search deliberately scans shared channels only, even
@@ -104,7 +100,7 @@ export async function runContextAcceptance(fixture: ContextFixture, call: ReadCa
   assert.ok(body(await read("builder", deniedRoot + "community.md")).length > 0, "control must prove the denied community exists");
   await list("member", deniedRoot, true);
   await read("member", deniedRoot + "community.md", true);
-  return { identity_fingerprints: { member: contextFingerprint(identities.member), builder: contextFingerprint(identities.builder) }, distinct_canonical_users: "passed", server_derived_roles: "passed", caller_bound_self_context: "passed", published_resource_read_search_round_trip: "passed", builder_dossier_denial: "passed", private_document_and_search_denial: "passed", control_proven_cross_community_denial: "passed" };
+  return { identity_fingerprints: { member: contextFingerprint(identities.member), builder: contextFingerprint(identities.builder) }, distinct_canonical_users: "passed", server_derived_roles: "passed", caller_bound_self_context: "passed", published_resource_read_search_round_trip: "passed", private_document_and_search_denial: "passed", control_proven_cross_community_denial: "passed" };
 }
 
 type ContextCases = Awaited<ReturnType<typeof runContextAcceptance>>;
@@ -119,7 +115,7 @@ export type ContextBaseline = {
 };
 type ContextBaselineMatch = { fixture: ContextFixture; runtimeSha: string; memberBearerSha256: string };
 export type ContextRevocationLink = Omit<ContextBaselineMatch, "fixture"> & { baseline: unknown };
-const positiveCaseNames = ["distinct_canonical_users", "server_derived_roles", "caller_bound_self_context", "published_resource_read_search_round_trip", "builder_dossier_denial", "private_document_and_search_denial", "control_proven_cross_community_denial"] as const;
+const positiveCaseNames = ["distinct_canonical_users", "server_derived_roles", "caller_bound_self_context", "published_resource_read_search_round_trip", "private_document_and_search_denial", "control_proven_cross_community_denial"] as const;
 
 function baselineRecord(value: unknown): Record<string, unknown> {
   assert.ok(value && typeof value === "object" && !Array.isArray(value), "positive baseline must contain valid records");

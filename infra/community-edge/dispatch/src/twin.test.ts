@@ -90,6 +90,10 @@ async function backend(request: Request): Promise<Response> {
     dm.held += 1;
     await hold;
   }
+  // A slow server: every thread read answers after this delay.
+  if (dm.slowConversationMs && url.pathname === "/runtime/app/me/messages/conversation") {
+    await new Promise((resolve) => setTimeout(resolve, dm.slowConversationMs));
+  }
   // Held after the backend did the work: the reply arrives late.
   const replyHold = url.pathname === "/runtime/app/me/messages/send" ? dm.holdNextSendReply
     : url.pathname === "/runtime/app/me/messages/conversation" ? dm.holdNextConversation : null;
@@ -165,6 +169,7 @@ const dm = {
   conversations: [] as any[], messages: {} as Record<string, any[]>, calls: [] as Array<[string, any]>, failSend: null as string | null,
   holdNextSend: null as Promise<void> | null, held: 0, pageSize: 50, failRead: false,
   holdNextSendReply: null as Promise<void> | null, holdNextConversation: null as Promise<void> | null,
+  slowConversationMs: 0,
 };
 function resetMessages() {
   const at = (minutes: number) => new Date(Date.now() - minutes * 60_000).toISOString();
@@ -189,6 +194,7 @@ function resetMessages() {
   dm.failRead = false;
   dm.holdNextSendReply = null;
   dm.holdNextConversation = null;
+  dm.slowConversationMs = 0;
 }
 function messagesBackend(path: string, body: Record<string, any>): Response {
   dm.calls.push([path, body]);
@@ -1075,6 +1081,9 @@ test("Messages: unblocked or muted elsewhere, the open thread follows on refresh
     // Unblocked and muted in Studio; this tab comes back into view.
     dm.conversations[0].blocked = false;
     dm.conversations[0].muted = true;
+    // The server now answers slower than the tab refreshes, so every answer is
+    // overtaken by a newer refresh; the thread must still follow.
+    dm.slowConversationMs = 1_500;
     // The tab comes back into view (forced visible: a headless tab under CI load
     // can report hidden), again until the refresh lands, since one lost request
     // would otherwise leave nothing else to refresh it (live updates are faked).
@@ -1085,6 +1094,7 @@ test("Messages: unblocked or muted elsewhere, the open thread follows on refresh
     await expect.poll(async () => { await refresh(); return personal.locator("[part=input]").count(); }, { timeout: 15_000, intervals: [1_000] }).toBe(1);
     expect(await personal.locator("[part=block]").textContent()).toBe("Block");
     expect(await personal.locator("[part=mute]").getAttribute("aria-pressed")).toBe("true");
+    dm.slowConversationMs = 0;
     // A draft survives the next change.
     await personal.locator("[part=input]").fill("Sorry about that");
     dm.conversations[0].muted = false;

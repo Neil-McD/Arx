@@ -30,7 +30,7 @@ test("paged directory isolates member grants from 120 private rooms and bounds m
     const membership = (await ctx.db.query("communityMemberships").collect()).find(m => m.role === "member")!;
     let last: any;
     for (let i = 0; i < 120; i++) last = await ctx.db.insert("communityChannels", {
-      communityId: f.communityId, name: `Client ${i}`, slug: `client-${i}`, accessMode: "restricted",
+      communityId: f.communityId, name: `Client ${i}`, normalizedName: `client ${i}`, slug: `client-${i}`, accessMode: "restricted",
       postingPolicy: "members", status: "active", position: i + 2, createdByUserId: f.ownerId, createdAt: i, updatedAt: i,
     });
     const grant = await ctx.db.insert("communityChannelParticipants", { communityId: f.communityId, channelId: last,
@@ -259,24 +259,11 @@ test("indexed names and neighbor moves work beyond the retained creation cap", a
   const ids = await t.run(async ctx => {
     const ids = [];
     for (let i = 0; i < 120; i++) ids.push(await ctx.db.insert("communityChannels", {
-      communityId: f.communityId, name: `Client ${i}`, slug: `client-${i}`, accessMode: "restricted",
+      communityId: f.communityId, name: `Client ${i}`, normalizedName: `client ${i}`, slug: `client-${i}`, accessMode: "restricted",
       postingPolicy: "members", status: "active", position: i + 2, createdAt: i, updatedAt: i,
     }));
     return ids;
   });
-  await expect(owner.mutation(api.communityChannels.renameCommunityChannel, {
-    communityId: f.communityId, channelId: ids[119]!, name: "Renamed",
-  })).rejects.toThrow("community_channel_name_migration_required");
-  let cursor: string | null = null;
-  let updated = 0;
-  do {
-    const result: { updated: number; isDone: boolean; continueCursor: string } = await t.mutation(internal.communityChannels.backfillChannelNamesInternal, {
-      paginationOpts: { cursor, numItems: 40 },
-    });
-    updated += result.updated;
-    cursor = result.isDone ? null : result.continueCursor;
-  } while (cursor);
-  expect(updated).toBe(120);
   await expect(owner.mutation(api.communityChannels.renameCommunityChannel, {
     communityId: f.communityId, channelId: ids[119]!, name: "  CLIENT   118 ",
   })).rejects.toThrow("community_channel_name_taken");

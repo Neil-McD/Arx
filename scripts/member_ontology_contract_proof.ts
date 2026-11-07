@@ -366,16 +366,6 @@ assert.match(
   /\| Founder\/admin \| one community \|[^\n]*`approved` facts scoped to that community; nothing pending, rejected, retracted, superseded, or observed/,
   "human founder/admin reads must remain community-scoped and exclude unapproved, withdrawn, and observed facts",
 );
-assert.match(
-  contractDoc,
-  /The distinct\s+`workflow_execution` lens is available only behind the internal execution-context\s+reader: canonical running serve request, current attempt and lease, exact linked\s+run\/member\/action, active community membership and agent\/source\/destination access/,
-  "the separate workflow lens must require current execution, lease, membership, and target authority",
-);
-assert.match(
-  contractDoc,
-  /Clients cannot choose an arbitrary subject or inherit a sponsor's manager role\.\s+The reader is not registered as a member-agent or MCP tool/,
-  "the internal workflow reader must not become a client-selected subject or a public tool",
-);
 assert.doesNotMatch(
   contractDoc,
   /Founder agent \(admin lens\)[^\n]*any consent state/,

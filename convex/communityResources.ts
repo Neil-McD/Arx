@@ -120,8 +120,6 @@ const COMMUNITY_RESOURCE_SOURCE_CRAWLER_MAX_DEPTH = 0;
 const COMMUNITY_RESOURCE_WEB_CRAWL_CONTEXT_DEFAULT_CHARS = 40_000;
 const COMMUNITY_RESOURCE_WEB_CRAWL_CONTEXT_MAX_CHARS = 80_000;
 const COMMUNITY_RESOURCE_WEB_CRAWL_CONTEXT_PAGE_CHARS = 8_000;
-const GOOGLE_DRIVE_SOURCE_PROVIDER = "google_drive" as const;
-const GITHUB_SOURCE_PROVIDER = "github" as const;
 
 async function mapCommunityResourceRowWithBody(
   ctx: any,
@@ -297,47 +295,22 @@ function compareCommunityResources(a: CommunityResourceLike, b: CommunityResourc
   return b.createdAt - a.createdAt;
 }
 
-function normalizeSourceIntegrationString(value: unknown, maxLength = 2_000): string {
+function normalizeSourceString(value: unknown, maxLength = 2_000): string {
   return String(value ?? "").trim().slice(0, maxLength);
-}
-
-function isGoogleDriveSourceResource(row: CommunityResourceLike): boolean {
-  return normalizeResourceSourceIngestionKind(row) === "google_drive" &&
-    normalizeSourceIntegrationString(row.sourceExternalProvider, 80) === GOOGLE_DRIVE_SOURCE_PROVIDER;
-}
-
-function isGitHubSourceResource(row: CommunityResourceLike): boolean {
-  return normalizeResourceSourceIngestionKind(row) === "github" &&
-    normalizeSourceIntegrationString(row.sourceExternalProvider, 80) === GITHUB_SOURCE_PROVIDER;
-}
-
-function isSourceIntegrationSource(row: CommunityResourceLike): boolean {
-  const kind = normalizeResourceSourceIngestionKind(row);
-  const provider = normalizeSourceIntegrationString(row.sourceExternalProvider, 80);
-  return (
-    kind === "google_drive" ||
-    kind === "github" ||
-    provider === GOOGLE_DRIVE_SOURCE_PROVIDER ||
-    provider === GITHUB_SOURCE_PROVIDER
-  );
 }
 
 function isPlainUrlSource(row: CommunityResourceLike): boolean {
   const kind = normalizeResourceSourceIngestionKind(row);
   return Boolean(String(row.url ?? "").trim()) &&
-    kind !== "file" &&
-    !isSourceIntegrationSource(row);
+    kind !== "file";
 }
 
 function isPlainFileSource(row: CommunityResourceLike): boolean {
   const kind = normalizeResourceSourceIngestionKind(row);
   return Boolean(String(row.fileKey ?? "").trim()) &&
-    kind !== "url" &&
-    !isSourceIntegrationSource(row);
+    kind !== "url";
 }
 
-// GitHub and Google Drive import is retired (POL-22): sources imported that way
-// keep their text but are never fetched again.
 function isIngestibleCommunitySource(row: CommunityResourceLike): boolean {
   return isPlainUrlSource(row) || isPlainFileSource(row);
 }
@@ -423,7 +396,7 @@ function resolveSourceUrlFetcherEndpoint(): string {
 }
 
 function sourceUrlFetcherHeaders(): Record<string, string> {
-  const secret = normalizeSourceIntegrationString(readEnv(COMMUNITY_RESOURCE_SOURCE_URL_FETCHER_SECRET_ENV), 4_000);
+  const secret = normalizeSourceString(readEnv(COMMUNITY_RESOURCE_SOURCE_URL_FETCHER_SECRET_ENV), 4_000);
   if (!secret) throw new Error("community_source_url_fetcher_secret_not_configured");
   return {
     "user-agent": COMMUNITY_RESOURCE_SOURCE_INGESTION_USER_AGENT,
@@ -461,10 +434,10 @@ async function fetchSourceUrlViaConfiguredFetcher(rawUrl: string): Promise<{
     throw new Error("community_source_url_fetcher_invalid_response");
   }
   if (payload.ok === false) {
-    throw new Error(normalizeSourceIntegrationString(payload.error_code, 160) || "community_source_url_fetch_failed");
+    throw new Error(normalizeSourceString(payload.error_code, 160) || "community_source_url_fetch_failed");
   }
   const finalUrl = requireSafeSourceIngestionUrl(payload.final_url || requestedUrl);
-  const contentType = normalizeSourceIntegrationString(payload.content_type, 180).toLowerCase() || "text/plain";
+  const contentType = normalizeSourceString(payload.content_type, 180).toLowerCase() || "text/plain";
   if (contentType.includes("application/pdf") || finalUrl.toLowerCase().includes(".pdf")) {
     throw new Error("community_source_pdf_ingestion_not_supported");
   }
@@ -558,7 +531,7 @@ async function crawlSourceRootWithConfiguredProvider(args: {
 }
 
 function normalizeWebCrawlStrategyProvider(raw: unknown): CommunitySourceCrawlerProvider | undefined {
-  const strategy = normalizeSourceIntegrationString(raw, 20).toLowerCase();
+  const strategy = normalizeSourceString(raw, 20).toLowerCase();
   if (strategy === "simple") return "simple";
   if (strategy === "crawl") return "simple";
   return undefined;
@@ -2253,17 +2226,10 @@ function mapCompactCommunityResourceBuilderListRow(
     resource_status: normalizeResourceStatus(row.status),
     title: row.title,
     type: String(row.type ?? "").trim().toLowerCase() || "post",
-    provider: row.sourceExternalProvider ?? null,
     url: row.url ?? null,
     source_resource_id: row.sourceResourceId ? normalizeIdValue(row.sourceResourceId) : null,
     source_ingestion_status: normalizeResourceSourceIngestionStatus(row),
     source_ingestion_kind: normalizeResourceSourceIngestionKind(row),
-    source_external_provider: row.sourceExternalProvider ?? null,
-    source_external_name: row.sourceExternalName ?? null,
-    source_external_url: row.sourceExternalUrl ?? null,
-    source_external_mime_type: row.sourceExternalMimeType ?? null,
-    source_external_modified_at:
-      typeof row.sourceExternalModifiedAt === "number" ? toIsoString(row.sourceExternalModifiedAt) : null,
     has_file: Boolean(row.fileKey),
     body_chars: communityResourceBodyChars(row),
     summary: compactResourceSummary(row),
@@ -4316,51 +4282,14 @@ export const listCommunityResources = query({
   },
 });
 
-// Retired GitHub and Google Drive sources no longer have a connection.
-function resolveCommunityLaunchKnowledgeSourceCredentialStatus(
-  row: CommunityResourceLike,
-): "available" | "missing" {
-  const provider = normalizeSourceIntegrationString(row.sourceExternalProvider, 80);
-  return provider === GOOGLE_DRIVE_SOURCE_PROVIDER || provider === GITHUB_SOURCE_PROVIDER
-    ? "missing"
-    : "available";
-}
-
 function mapCommunityLaunchKnowledgeSourceRow(row: CommunityResourceLike) {
-  const provider = normalizeSourceIntegrationString(row.sourceExternalProvider, 80);
-  const sourceIngestionKind = normalizeResourceSourceIngestionKind(row);
-  const sourceIngestionStatus = normalizeResourceSourceIngestionStatus(row);
-  const credentialStatus = resolveCommunityLaunchKnowledgeSourceCredentialStatus(row);
-  const providerLabel = provider === GITHUB_SOURCE_PROVIDER
-    ? "GitHub"
-    : provider === GOOGLE_DRIVE_SOURCE_PROVIDER
-      ? "Google Drive"
-      : "Link";
   return {
     id: normalizeIdValue(row._id),
-    title: String(row.title ?? "").trim() || `${providerLabel} source`,
-    source_ingestion_status: sourceIngestionStatus,
-    source_ingestion_kind: sourceIngestionKind,
+    title: String(row.title ?? "").trim() || "Link source",
+    source_ingestion_status: normalizeResourceSourceIngestionStatus(row),
+    source_ingestion_kind: normalizeResourceSourceIngestionKind(row),
     source_ingestion_error: normalizeOptionalText(row.sourceIngestionError, 500) ?? null,
-    source_external_provider:
-      provider === GITHUB_SOURCE_PROVIDER
-        ? GITHUB_SOURCE_PROVIDER
-        : provider === GOOGLE_DRIVE_SOURCE_PROVIDER
-          ? GOOGLE_DRIVE_SOURCE_PROVIDER
-          : null,
-    source_external_id: normalizeSourceIntegrationString(row.sourceExternalId, 1_000) || null,
-    source_external_name: normalizeSourceIntegrationString(row.sourceExternalName, 500) || null,
-    source_external_url: normalizeOptionalUrl(row.sourceExternalUrl) ?? normalizeOptionalUrl(row.url) ?? null,
-    source_external_mime_type: normalizeSourceIntegrationString(row.sourceExternalMimeType, 300) || null,
-    source_external_modified_at:
-      typeof row.sourceExternalModifiedAt === "number" && Number.isFinite(row.sourceExternalModifiedAt)
-        ? toIsoString(row.sourceExternalModifiedAt)
-        : null,
-    credential_status: credentialStatus,
-    credential_message:
-      credentialStatus === "missing" && sourceIngestionStatus !== "ready"
-        ? `Reconnect ${providerLabel} before processing this source.`
-        : null,
+    source_external_url: normalizeOptionalUrl(row.url) ?? null,
     updated_at: toIsoString(row.updatedAt),
   };
 }
@@ -4395,9 +4324,7 @@ export const listCommunityLaunchKnowledgeSources = query({
         .filter((row) => normalizeResourceRole(row.role) === "source")
         .filter((row) =>
           isPlainUrlSource(row) ||
-          isPlainFileSource(row) ||
-          isGoogleDriveSourceResource(row) ||
-          isGitHubSourceResource(row)
+          isPlainFileSource(row)
         )
         .sort(compareCommunityResources)
         .slice(0, limit)
@@ -4492,10 +4419,6 @@ export const getCommunitySourceIngestionStateInternal = internalQuery({
     const readySources = sources.filter(communityResourceSourceHasReadyText);
     const urlSources = sources.filter(isPlainUrlSource);
     const fileSources = sources.filter(isPlainFileSource);
-    const googleDriveSources = sources.filter(isGoogleDriveSourceResource);
-    const githubSources = sources.filter(isGitHubSourceResource);
-    // Retired GitHub and Google Drive sources are never claimed or retried again,
-    // so they count as neither pending nor failed work; their text stays.
     const failedSources = sources.filter(
       (row) => isIngestibleCommunitySource(row) && normalizeResourceSourceIngestionStatus(row) === "failed",
     );
@@ -4510,8 +4433,6 @@ export const getCommunitySourceIngestionStateInternal = internalQuery({
       ready_sources: readySources.length,
       url_sources: urlSources.length,
       file_sources: fileSources.length,
-      google_drive_sources: googleDriveSources.length,
-      github_sources: githubSources.length,
       failed_sources: failedSources.length,
       pending_sources: pendingSources.length,
       pending_url_sources: urlSources.filter((row) => {
@@ -4519,14 +4440,6 @@ export const getCommunitySourceIngestionStateInternal = internalQuery({
         return status === "queued" || status === "processing";
       }).length,
       pending_file_sources: fileSources.filter((row) => {
-        const status = normalizeResourceSourceIngestionStatus(row);
-        return status === "queued" || status === "processing";
-      }).length,
-      pending_google_drive_sources: googleDriveSources.filter((row) => {
-        const status = normalizeResourceSourceIngestionStatus(row);
-        return status === "queued" || status === "processing";
-      }).length,
-      pending_github_sources: githubSources.filter((row) => {
         const status = normalizeResourceSourceIngestionStatus(row);
         return status === "queued" || status === "processing";
       }).length,
@@ -4618,13 +4531,6 @@ export const claimNextCommunitySourceIngestionInternal = internalMutation({
           title: String(row.title ?? ""),
           url: String(row.url ?? "").trim(),
           fileKey: String(row.fileKey ?? "").trim(),
-          sourceExternalProvider: normalizeSourceIntegrationString(row.sourceExternalProvider, 80),
-          sourceExternalConnectionUserId: normalizeIdValue(
-            row.sourceExternalConnectionUserId ?? row.createdByUserId,
-          ),
-          sourceExternalId: normalizeSourceIntegrationString(row.sourceExternalId, 1_000),
-          sourceExternalUrl: normalizeSourceIntegrationString(row.sourceExternalUrl, 2_000),
-          sourceExternalMimeType: normalizeSourceIntegrationString(row.sourceExternalMimeType, 300),
           sourceIngestionKind: normalizeResourceSourceIngestionKind(row),
         },
       };
@@ -4642,8 +4548,6 @@ export const finalizeCommunitySourceIngestionInternal = internalMutation({
     kind: v.union(
       v.literal("url"),
       v.literal("file"),
-      v.literal("google_drive"),
-      v.literal("github"),
     ),
     bodyMd: v.optional(v.union(v.string(), v.null())),
     url: v.optional(v.union(v.string(), v.null())),
@@ -4789,13 +4693,8 @@ async function runCommunitySourceIngestion(args: {
       const url = String(candidate.url ?? "").trim();
       const fileKey = String(candidate.fileKey ?? "").trim();
       const title = String(candidate.title ?? "").trim();
-      const externalUrl = String(candidate.sourceExternalUrl ?? "").trim();
       const ingestionKind = String(candidate.sourceIngestionKind ?? "").trim();
-      const kind = ingestionKind === "google_drive" || ingestionKind === "github"
-        ? "retired_provider"
-        : ingestionKind === "file" || (!url && fileKey)
-          ? "file"
-          : "url";
+      const kind = ingestionKind === "file" || (!url && fileKey) ? "file" : "url";
       const invalidMessage =
         !resourceId
           ? "community_source_resource_not_found"
@@ -4803,9 +4702,7 @@ async function runCommunitySourceIngestion(args: {
             ? "community_source_url_required"
             : kind === "file" && !fileKey
               ? "community_source_file_required"
-              : kind === "retired_provider"
-                ? "community_source_provider_retired"
-                : null;
+              : null;
       const finalizeClaim = async (payload: Record<string, unknown>) => {
         return await args.ctx.runMutation(
           (internal as any).communityResources.finalizeCommunitySourceIngestionInternal,
@@ -4830,7 +4727,7 @@ async function runCommunitySourceIngestion(args: {
           failures.push({
             resource_id: resourceId,
             title,
-            url: url || externalUrl || null,
+            url: url || null,
             message: invalidMessage,
           });
         } else {
@@ -4892,7 +4789,7 @@ async function runCommunitySourceIngestion(args: {
           failures.push({
             resource_id: resourceId,
             title,
-            url: url || externalUrl || null,
+            url: url || null,
             message,
           });
         } else {
@@ -4935,8 +4832,6 @@ async function runCommunitySourceIngestion(args: {
       total_sources: totalSources,
       pending_url_sources: Number(after?.pending_url_sources ?? 0),
       pending_file_sources: Number(after?.pending_file_sources ?? 0),
-      pending_google_drive_sources: Number(after?.pending_google_drive_sources ?? 0),
-      pending_github_sources: Number(after?.pending_github_sources ?? 0),
       pending_sources: remainingPendingSources,
       failures,
       duration_ms: Date.now() - startedAt,

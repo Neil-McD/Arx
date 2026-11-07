@@ -76,7 +76,6 @@ import {
   type CommunityAgentThreadActorType,
   type CommunityAgentThreadParticipantInput,
   type CommunityAgentThreadTurnInput,
-  type CommunityAgentWorkflowOrientation,
 } from "../shared/communityAgentThreadContext";
 import { readMemberFactsForLens, readMemberSpine } from "./memberOntologyCore";
 import { readCanonicalUserIdentityProjection } from "./profileCore";
@@ -124,7 +123,6 @@ const SERVE_PROMPT_SECTION_IDS = [
   "concierge_operating_policy",
   "community_system_prompt",
 ] as const;
-const SERVE_WORKFLOW_PROMPT_SECTION_ID = "community_workflow_action";
 // A tag's shared layers (card and handbook), when present, sit between the
 // operating policy and the community instructions.
 const SERVE_SHARED_LAYERS_SECTION_ID = "community_shared_layers";
@@ -167,8 +165,7 @@ function parseServeContextSnapshot(
       : SERVE_PROMPT_SECTION_IDS;
     if (
       !Array.isArray(promptSections) ||
-      (promptSections.length !== expectedIds.length &&
-        promptSections.length !== expectedIds.length + 1) ||
+      promptSections.length !== expectedIds.length ||
       JSON.stringify(promptSections).length >
         SERVE_CONTEXT_SNAPSHOT_PROMPT_SECTIONS_MAX_CHARS
     ) {
@@ -184,10 +181,7 @@ function parseServeContextSnapshot(
       if (
         Object.keys(record).sort().join("|") !==
           [...SERVE_PROMPT_SECTION_KEYS].sort().join("|") ||
-        record.id !==
-          (index < expectedIds.length
-            ? expectedIds[index]
-            : SERVE_WORKFLOW_PROMPT_SECTION_ID) ||
+        record.id !== expectedIds[index] ||
         !["stable", "scoped", "volatile"].includes(
           String(record.layer ?? ""),
         ) ||
@@ -235,10 +229,6 @@ function communityAgentMentionReceiptKey(requestId: unknown): string {
   return `community_agent_mention:${normalizeIdValue(requestId)}`;
 }
 
-function communityWorkflowActionReceiptKey(requestId: unknown): string {
-  return `community_workflow_action:${normalizeIdValue(requestId)}`;
-}
-
 async function sha256HexText(value: string): Promise<string> {
   const digest = await crypto.subtle.digest(
     "SHA-256",
@@ -252,22 +242,12 @@ async function sha256HexText(value: string): Promise<string> {
 type VisibilityScope = "private" | "admin" | "community" | "public";
 
 type ServeRequestRow = {
-  workflowAssessment?: boolean;
-  workflowCompletionReview?: boolean;
   _id: any;
   communityId: any;
   agentKey: string;
   sourceMentionId?: any;
   invocationKey?: string;
-  triggerKind?: "mention" | "direct_reply" | "workflow";
-  workflowRunId?: any;
-  workflowActionKey?: string;
-  workflowPromptSnapshot?: string;
-  workflowPreviousRunId?: any;
-  workflowTimerId?: any;
-  workflowFormRequestId?: any;
-  serviceChannelId?: any;
-  serviceChannelRevision?: number;
+  triggerKind?: "mention" | "direct_reply";
   sourceRootId?: any;
   sourceReplyId?: any;
   requesterUserId?: any;
@@ -549,7 +529,7 @@ function serveRequestIsClaimable(request: ServeRequestRow): boolean {
   return (
     request.agentKey === CANONICAL_COMMUNITY_AGENT_KEY &&
     request.intakeReason === "accepted" &&
-    Boolean(request.sourceRootId || (request.triggerKind === "workflow" && ((request.workflowAssessment && request.workflowCompletionReview) || ((request.workflowPreviousRunId || request.workflowTimerId || request.workflowFormRequestId) && (request.serviceChannelId || (request.workflowAssessment && request.workflowFormRequestId)))))) &&
+    Boolean(request.sourceRootId) &&
     Boolean(request.requesterUserId) &&
     Boolean(request.sponsorUserId) &&
     normalizeIdValue(request.requesterUserId) ===
@@ -759,7 +739,6 @@ async function loadCommunityAgentThreadContext(args: {
   sourceReply: InteractionReplyRow | null;
   communityOwnerId: any;
   agentDisplayName: string;
-  workflowOrientation?: CommunityAgentWorkflowOrientation;
 }) {
   const sourceSeq = args.sourceReply
     ? Math.max(0, Math.floor(Number(args.sourceReply.seq ?? 0)))
@@ -927,15 +906,6 @@ async function loadCommunityAgentThreadContext(args: {
   const requesterIdentity =
     identities.get(normalizeIdValue(args.request.requesterUserId)) ??
     (await loadThreadActorIdentity(args.ctx, args.request.requesterUserId));
-  if (args.workflowOrientation) {
-    const requester = participants.find(
-      (participant) => participant.userId === normalizeIdValue(args.request.requesterUserId),
-    );
-    if (!requester?.activeInCommunity) {
-      throw new Error("community_agent_workflow_requester_context_required");
-    }
-    requester.workflow = args.workflowOrientation;
-  }
   return compileCommunityAgentThreadContext({
     capturedAt: Date.now(),
     selfAgentKey: args.request.agentKey,
@@ -1109,12 +1079,6 @@ export const readCommunityAgentServeRequestContextInternal = internalQuery({
       };
     }
 
-    let workflowOrientation: CommunityAgentWorkflowOrientation | undefined;
-    // Workflows are retired: a request that still carries one never runs.
-    if (request.triggerKind === "workflow" || request.workflowPreviousRunId || request.workflowTimerId || request.workflowFormRequestId || request.workflowCompletionReview) {
-      return { ok: false as const, errorCode: "workflow_retired", errorMessage: "Workflows are retired." };
-    }
-
     const canonicalContext = await readCanonicalCommunityAgentContext(
       ctx,
       request.communityId,
@@ -1273,7 +1237,6 @@ export const readCommunityAgentServeRequestContextInternal = internalQuery({
       sourceReply: reply,
       communityOwnerId: community.ownerId,
       agentDisplayName: canonicalContext.agentDisplayName,
-      workflowOrientation,
     });
     return {
       ok: true as const,
@@ -1305,14 +1268,13 @@ export const readCommunityAgentServeRequestContextInternal = internalQuery({
           4_000,
         ),
       },
-      workflowPrompt: null,
       threadContext,
       funding,
     };
   },
 });
 
-// The run log of one agent turn (tags and workflow turns): prompts, tool
+// The run log of one agent turn: prompts, tool
 // calls, input budget and projection evidence, the final answer or error.
 const RUN_EVENT_CONTENT_MAX_CHARS = 8_000;
 const RUN_EVENT_MAX_SEQ = 240;
@@ -1443,17 +1405,13 @@ export const recordCommunityAgentServeContextSnapshotInternal =
     } catch {
       return { ok: false, errorCode: "requester_access_missing" };
     }
-    // Workflows are retired: a request that still carries one never runs.
-    if (request.triggerKind === "workflow" || request.workflowPreviousRunId || request.workflowTimerId || request.workflowFormRequestId || request.workflowCompletionReview) {
-      return { ok: false, errorCode: "workflow_retired" };
-    } else {
-      const root = (await ctx.db.get(
-        request.sourceRootId as any,
-      )) as InteractionRootRow | null;
+    const root = (await ctx.db.get(
+      request.sourceRootId as any,
+    )) as InteractionRootRow | null;
     if (
       !root ||
-        normalizeIdValue(root.communityId) !==
-          normalizeIdValue(request.communityId) ||
+      normalizeIdValue(root.communityId) !==
+        normalizeIdValue(request.communityId) ||
       root.status !== "live"
     ) {
       return { ok: false, errorCode: "source_not_live" };
@@ -1506,8 +1464,6 @@ export const recordCommunityAgentServeContextSnapshotInternal =
       }))
     ) {
       return { ok: false, errorCode: "source_not_readable" };
-    }
-
     }
     const runId = buildCommunityAgentServeRunId(
       normalizeIdValue(request._id),
@@ -1622,10 +1578,6 @@ export const finalizeCommunityAgentServeReplyInternal = internalMutation({
       return { ok: false, errorCode: "requester_access_missing" };
     }
 
-    if (request.triggerKind === "workflow" || request.workflowPreviousRunId || request.workflowTimerId || request.workflowFormRequestId || request.workflowCompletionReview) {
-      await failServeRequest(ctx, request, "workflow_retired", "Workflows are retired.", nowMs);
-      return { ok: false, errorCode: "workflow_retired" };
-    }
     const root = (await ctx.db.get(
       request.sourceRootId as any,
     )) as InteractionRootRow | null;
@@ -1840,10 +1792,6 @@ export const processQueuedCommunityAgentServeRequestsInternal = internalAction({
         const message = error instanceof Error ? error.message : String(error);
         const invariant = [
           "community_membership_pair_not_unique",
-          "community_member_workflow_ambiguous",
-          "community_member_workflow_member_milestone_ambiguous",
-          "community_member_workflow_member_milestone_invalid",
-          "community_agent_workflow_requester_context_required",
           "community_agent_thread_context_required_content_too_large",
         ].find((code) => message.includes(code));
         // Only deterministic corruption/budget failures are terminal here.
@@ -1880,9 +1828,8 @@ export const processQueuedCommunityAgentServeRequestsInternal = internalAction({
       // An ordinary tag answers to its channel (the turn contract): it gets the
       // community card drawn for the channel and the approved handbook, read
       // through the same checked door as its tools, and never anyone's
-      // private context. Timed check-ins and workflow turns keep their inputs.
-      const isTag = context.delivery !== "service_channel" && !context.privateAssessment && !String(context.workflowPrompt ?? "").trim();
-      const turnContract = isTag && context.request.communityId
+      // private context.
+      const turnContract = context.request.communityId
         ? buildCommunityTurnContract({
           surface: "tag",
           communityId: normalizeIdValue(context.request.communityId),
@@ -1908,7 +1855,6 @@ export const processQueuedCommunityAgentServeRequestsInternal = internalAction({
         messages: initialMessages,
         prompt_sections: servePromptBundle.systemPromptBundle.sections,
         ...(turnContract ? { turn_contract: summarizeCommunityTurnContract(turnContract) } : {}),
-        ...(context.delivery === "service_channel" ? { timed_member_context: context.timedMemberContext } : {}),
       });
       const contextSnapshot = await ctx.runMutation(
         internalRefs.communityAgentServeWorker
@@ -1949,13 +1895,8 @@ export const processQueuedCommunityAgentServeRequestsInternal = internalAction({
         requestId,
         attempt: context.request.attempt,
       });
-      const conciergeProviderTools =
-        (context.privateAssessment || context.request.workflowPreviousRunId || context.request.workflowTimerId || context.request.workflowFormRequestId) ? [] : buildCommunityAgentConciergeFunctionTools();
-
-      const isWorkflowAction = context.request.triggerKind === "workflow";
-      const receiptKey = isWorkflowAction
-        ? communityWorkflowActionReceiptKey(requestId)
-        : communityAgentMentionReceiptKey(requestId);
+      const conciergeProviderTools = buildCommunityAgentConciergeFunctionTools();
+      const receiptKey = communityAgentMentionReceiptKey(requestId);
       let usage = createFounderInferenceUsageTotals(COMMUNITY_OWNER_FUNDED_MODEL_ID);
       let providerStarted = false;
 
@@ -1968,7 +1909,7 @@ export const processQueuedCommunityAgentServeRequestsInternal = internalAction({
         });
         const admittedModelId = await ctx.runQuery(internalRefs.founderInference.resolveCommunityInferenceModelInternal, {
           communityId: context.request.communityId, receiptKey,
-          surface: isWorkflowAction ? "community_workflow_action" : "community_agent_mention",
+          surface: "community_agent_mention",
         });
         usage = createFounderInferenceUsageTotals(admittedModelId);
         completion =
@@ -2019,9 +1960,7 @@ export const processQueuedCommunityAgentServeRequestsInternal = internalAction({
                   sourceRunId: `community-agent-serve:${normalizeIdValue(requestId)}`,
                   communityId: context.request.communityId,
                   actorUserId: context.request.requesterUserId,
-                  surface: isWorkflowAction
-                    ? "community_workflow_action"
-                    : "community_agent_mention",
+                  surface: "community_agent_mention",
                   admission: context.funding,
                 });
               }

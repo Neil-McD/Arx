@@ -708,55 +708,7 @@ export default defineSchema({
 
 
 
-  userSourceIntegrationConnections: defineTable({
-    userId: v.id("users"),
-    provider: v.union(v.literal("google_drive"), v.literal("github")),
-    authKind: v.literal("oauth_tokens"),
-    encryptedSecretHex: v.string(),
-    secretIvHex: v.string(),
-    secretVersion: v.number(),
-    accountId: v.optional(v.string()),
-    accountLogin: v.optional(v.string()),
-    email: v.optional(v.string()),
-    scope: v.optional(v.string()),
-    accessTokenExpiresAt: v.optional(v.number()),
-    validatedAt: v.number(),
-    createdAt: v.number(),
-    updatedAt: v.number(),
-  })
-    .index("by_user", ["userId"])
-    .index("by_user_provider", ["userId", "provider"]),
 
-  userSourceIntegrationAuthStates: defineTable({
-    userId: v.id("users"),
-    provider: v.union(v.literal("google_drive"), v.literal("github")),
-    communityId: v.optional(v.id("communities")),
-    state: v.string(),
-    codeVerifier: v.string(),
-    redirectUri: v.string(),
-    returnToPath: v.string(),
-    returnContextKind: v.optional(v.literal("community_launch_knowledge")),
-    callbackCodeEncryptedHex: v.optional(v.string()),
-    callbackCodeIvHex: v.optional(v.string()),
-    callbackCodeVersion: v.optional(v.number()),
-    finalizeTokenHash: v.optional(v.string()),
-    callbackReceivedAt: v.optional(v.number()),
-    finalizeStatus: v.optional(
-      v.union(
-        v.literal("processing"),
-        v.literal("completed"),
-        v.literal("failed"),
-      ),
-    ),
-    finalizeStartedAt: v.optional(v.number()),
-    finalizeCompletedAt: v.optional(v.number()),
-    finalizeResultJson: v.optional(v.string()),
-    finalizeErrorMessage: v.optional(v.string()),
-    createdAt: v.number(),
-    expiresAt: v.number(),
-  })
-    .index("by_state", ["state"])
-    .index("by_user_provider", ["userId", "provider"]),
 
   userProfileDetails: defineTable({
     userId: v.id("users"),
@@ -886,7 +838,6 @@ export default defineSchema({
      column IS the cross-community isolation mechanism). consentState is
      derived from provenance at birth; transitions are member-driven only. */
   memberFacts: defineTable({
-    contextKind: v.optional(v.union(v.literal("profile"), v.literal("workflow"))),
     userId: v.id("users"),
     communityId: v.optional(v.id("communities")),
     kind: v.union(
@@ -1062,8 +1013,6 @@ export default defineSchema({
   communityMemberships: defineTable({
     communityId: v.id("communities"),
     userId: v.id("users"),
-    serviceChannelId: v.optional(v.id("communityChannels")),
-    serviceChannelRevision: v.optional(v.number()),
     role: v.union(v.literal("admin"), v.literal("moderator"), v.literal("member")),
     accessSource: v.optional(
       v.union(
@@ -1757,22 +1706,11 @@ export default defineSchema({
     triggerKind: v.optional(v.union(
       v.literal("mention"),
       v.literal("direct_reply"),
-      v.literal("workflow"),
     )),
     sourceRootId: v.optional(v.id("communityInteractionRoots")),
     sourceReplyId: v.optional(v.id("communityInteractionReplies")),
     requesterUserId: v.optional(v.id("users")),
     sponsorUserId: v.optional(v.id("users")),
-    workflowRunId: v.optional(v.string()),
-    workflowActionKey: v.optional(v.string()),
-    workflowPromptSnapshot: v.optional(v.string()),
-    workflowPreviousRunId: v.optional(v.string()),
-    workflowTimerId: v.optional(v.string()),
-    workflowFormRequestId: v.optional(v.string()),
-    workflowAssessment: v.optional(v.boolean()),
-    workflowCompletionReview: v.optional(v.boolean()),
-    serviceChannelId: v.optional(v.id("communityChannels")),
-    serviceChannelRevision: v.optional(v.number()),
     status: v.union(
       v.literal("queued"),
       v.literal("skipped"),
@@ -2291,8 +2229,6 @@ export default defineSchema({
         v.literal("manual"),
         v.literal("url"),
         v.literal("file"),
-        v.literal("google_drive"),
-        v.literal("github"),
       ),
     ),
     sourceIngestionError: v.optional(v.string()),
@@ -2304,13 +2240,6 @@ export default defineSchema({
     sourceOriginalFilename: v.optional(v.string()),
     sourceOriginalMimeType: v.optional(v.string()),
     sourceOriginalBytes: v.optional(v.number()),
-    sourceExternalProvider: v.optional(v.union(v.literal("google_drive"), v.literal("github"))),
-    sourceExternalConnectionUserId: v.optional(v.id("users")),
-    sourceExternalId: v.optional(v.string()),
-    sourceExternalName: v.optional(v.string()),
-    sourceExternalUrl: v.optional(v.string()),
-    sourceExternalMimeType: v.optional(v.string()),
-    sourceExternalModifiedAt: v.optional(v.number()),
     pinned: v.boolean(),
     sortOrder: v.optional(v.number()),
     createdAt: v.number(),
@@ -2322,14 +2251,6 @@ export default defineSchema({
     .index("by_community_role_status", ["communityId", "role", "status"])
     .index("by_community_status_createdAt", ["communityId", "status", "createdAt"])
     .index("by_community_createdAt", ["communityId", "createdAt"])
-    .index("by_community_source_external", ["communityId", "sourceExternalProvider", "sourceExternalId"])
-    .index("by_community_role_source_provider_status_updatedAt", [
-      "communityId",
-      "role",
-      "sourceExternalProvider",
-      "sourceIngestionStatus",
-      "updatedAt",
-    ])
     .index("by_createdBy", ["createdByUserId"]),
 
   communityResourceContents: defineTable({

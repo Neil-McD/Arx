@@ -46,12 +46,9 @@ an exhausted numeric gap fails explicitly, without a hidden rebalance. Stale,
 foreign, archived, or duplicate neighbors are rejected. The old full-array write
 implementation is deleted; its cached-client endpoint only asks for a refresh.
 
-Deployment prerequisite: run `communityChannels:backfillChannelNamesInternal`
-with `paginationOpts` (cursor starts null, at most 100 rows), following returned
-cursors until `isDone`. It is internal-only, idempotent, preserves names/content,
-and rejects existing duplicate active names. Communities with missing normalized
-names fail closed for creation/rename until backfilled. This slice targets only
-`dev:quick-porcupine-949`; production migration is not authorized.
+Every channel has a normalized name: the one-off backfill ran in staging and
+production and was deleted on Nov 7 2026. A channel row missing one still fails
+closed for creation/rename in its community.
 
 Directory, attention, and agent discovery now share the same authorized page
 reader. Attention reads at most 10 stored rooms/grants per query; directory reads
@@ -173,11 +170,3 @@ triggers, per-channel knowledge ingestion, or public access without membership.
   `https://polynet-staging.vercel.app/c/concierge-welcome-canary-2026-08-20-b/chat/private-channel-canary`.
   It contains only synthetic test messages/files. `test` and the community agent
   remain invited for the remaining acceptance run.
-
-### Production migration preparation
-
-Before production deployment, use the staged bridge sequence in
-[attachment-compatibility-and-channel-migration-20260916.md](archive/attachment-compatibility-and-channel-migration-20260916.md).
-`inspectChannelNamesInternal` is read-only and paginated; aggregate every page with
-`scripts/channelNameMigrationPreflight.ts` before authorizing the backfill.
-Installing the full candidate before backfill is not the migration bridge.

@@ -547,7 +547,6 @@ export function validateCommunitySemanticOperationInput(args: {
     /^\/integrations\/hubspot\/contacts\/[0-9]{1,32}$/.test(parsed.path) ||
     parsed.path === POLYNET_BUILDER_COMMUNITY_PATH ||
     /^\/builder\/join-requests\/[A-Za-z0-9]+\.md$/.test(parsed.path) ||
-    /^\/builder\/workflow-members\/[A-Za-z0-9]+(?:\.md|\/forms\.md)$/.test(parsed.path) ||
     parseCommunityChannelSemanticPath(parsed.path)?.kind === "document" ||
     /^\/events\/event:[A-Za-z0-9_-]+:[0-9]{1,16}\.md$/.test(parsed.path) ||
     /^\/memory\/[A-Za-z0-9_-]+\.md$/.test(parsed.path) ||

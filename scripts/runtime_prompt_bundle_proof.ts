@@ -71,9 +71,8 @@ const memberLane = buildPlatformHarnessRuntimePromptBundle({ ...params,
 });
 assert.doesNotMatch(memberLane.text, /authorized owner\/admin dossier/);
 assert.match(bundle.text, /first list \/communities\/bundle-community\/members\/, follow the returned me\/ directory, and read its returned context\.md document/);
-assert.match(bundle.text, /global profile, not their community workflow progress/);
+assert.match(bundle.text, /global profile, not their community context/);
 assert.match(bundle.text, /on-demand retrieval, not a required read for unrelated turns/);
-assert.match(bundle.text, /Unavailable means the action's outcome cannot be verified/);
 const switchedCommunity = buildPlatformHarnessRuntimePromptBundle({
   ...params, communityId: "community_2", communityName: "Second", communitySlug: "second-community",
   communityAgentSurfaceContext: { ...params.communityAgentSurfaceContext, community_slug: "second-community" },

@@ -63,13 +63,13 @@ type InteractionReplyRow = {
 export type ConciergeIntakeResult = {
   mention_id: string | null;
   invocation_key: string;
-  trigger_kind: "mention" | "direct_reply" | "workflow" | null;
+  trigger_kind: "mention" | "direct_reply" | null;
   status: "queued" | "skipped" | "duplicate" | "ignored";
   intake_reason: ServeRequestIntakeReason;
   request_id: string | null;
 };
 
-type CommunityAgentTriggerKind = "mention" | "direct_reply" | "workflow";
+type CommunityAgentTriggerKind = "mention" | "direct_reply";
 
 function boundedText(raw: unknown, maxLength: number): string {
   return String(raw ?? "").trim().slice(0, maxLength);
@@ -163,8 +163,6 @@ async function scheduleImmediateServeWorker(args: {
 }
 
 async function insertServeRequest(args: {
-  workflowCompletionReview?: boolean;
-  workflowAssessment?: boolean;
   ctx: any;
   communityId: any;
   invocationKey: string;
@@ -175,14 +173,6 @@ async function insertServeRequest(args: {
   sourceRootId?: any;
   sourceReplyId?: any;
   requesterUserId?: any;
-  workflowRunId?: any;
-  workflowActionKey?: string;
-  workflowPromptSnapshot?: string;
-  workflowPreviousRunId?: any;
-  workflowTimerId?: any;
-  workflowFormRequestId?: any;
-  serviceChannelId?: any;
-  serviceChannelRevision?: number;
   sourceVisibilityScope?: VisibilityScope;
   responseVisibilityScope?: VisibilityScope;
   skipReason?: string;
@@ -198,8 +188,6 @@ async function insertServeRequest(args: {
     }
   }
   return await args.ctx.db.insert("communityAgentServeRequests" as any, {
-    ...(args.workflowCompletionReview ? { workflowCompletionReview: true } : {}),
-    ...(args.workflowAssessment ? { workflowAssessment: true } : {}),
     communityId: args.communityId,
     agentKey: CANONICAL_COMMUNITY_AGENT_KEY,
     ...(args.mention ? { sourceMentionId: args.mention._id } : {}),
@@ -208,13 +196,6 @@ async function insertServeRequest(args: {
     ...(args.sourceRootId ? { sourceRootId: args.sourceRootId } : {}),
     ...(args.sourceReplyId ? { sourceReplyId: args.sourceReplyId } : {}),
     ...(args.requesterUserId ? { requesterUserId: args.requesterUserId, sponsorUserId } : {}),
-    ...(args.workflowRunId ? { workflowRunId: args.workflowRunId } : {}),
-    ...((args.workflowPreviousRunId || args.workflowTimerId || args.workflowFormRequestId) ? { workflowPreviousRunId: args.workflowPreviousRunId, workflowTimerId: args.workflowTimerId, workflowFormRequestId: args.workflowFormRequestId,
-      serviceChannelId: args.serviceChannelId, serviceChannelRevision: args.serviceChannelRevision } : {}),
-    ...(args.workflowActionKey ? { workflowActionKey: args.workflowActionKey } : {}),
-    ...(args.workflowPromptSnapshot
-      ? { workflowPromptSnapshot: args.workflowPromptSnapshot }
-      : {}),
     status: args.status,
     intakeReason: args.intakeReason,
     ...(args.sourceVisibilityScope ? { sourceVisibilityScope: args.sourceVisibilityScope } : {}),
@@ -226,8 +207,6 @@ async function insertServeRequest(args: {
 }
 
 async function skipInvocation(args: {
-  workflowCompletionReview?: boolean;
-  workflowAssessment?: boolean;
   ctx: any;
   communityId: any;
   invocationKey: string;
@@ -237,22 +216,12 @@ async function skipInvocation(args: {
   sourceRootId?: any;
   sourceReplyId?: any;
   requesterUserId?: any;
-  workflowRunId?: any;
-  workflowActionKey?: string;
-  workflowPromptSnapshot?: string;
-  workflowPreviousRunId?: any;
-  workflowTimerId?: any;
-  workflowFormRequestId?: any;
-  serviceChannelId?: any;
-  serviceChannelRevision?: number;
   sourceVisibilityScope?: VisibilityScope;
   responseVisibilityScope?: VisibilityScope;
   skipReason?: string;
   nowMs: number;
 }): Promise<{ status: "skipped"; intake_reason: ServeRequestIntakeReason; request_id: string }> {
   const requestId = await insertServeRequest({
-    workflowCompletionReview: args.workflowCompletionReview,
-    workflowAssessment: args.workflowAssessment,
     ctx: args.ctx,
     communityId: args.communityId,
     invocationKey: args.invocationKey,
@@ -263,13 +232,6 @@ async function skipInvocation(args: {
     sourceRootId: args.sourceRootId,
     sourceReplyId: args.sourceReplyId,
     requesterUserId: args.requesterUserId,
-    workflowRunId: args.workflowRunId,
-    workflowActionKey: args.workflowActionKey,
-    workflowPromptSnapshot: args.workflowPromptSnapshot,
-    workflowPreviousRunId: args.workflowPreviousRunId, workflowTimerId: args.workflowTimerId,
-    workflowFormRequestId: args.workflowFormRequestId,
-    serviceChannelId: args.serviceChannelId,
-    serviceChannelRevision: args.serviceChannelRevision,
     sourceVisibilityScope: args.sourceVisibilityScope,
     responseVisibilityScope: args.responseVisibilityScope,
     skipReason: args.skipReason,

@@ -449,16 +449,14 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
   deleted once production ran 150828216 (POL-30).
 - **Deleted Oct 28 (POL-22):** GitHub and Google Drive source import (OAuth,
   listing, import and fetch in `communityResources`, the `httpCommunitySourceIntegrations`
-  callback routes, the web gateway calls). Sources imported that way keep their
-  text and are labelled by provider, but are never fetched again; a claimed one
-  fails closed with `community_source_provider_retired`.
+  callback routes, the web gateway calls). Nov 7: the leftover provider kinds and
+  external-source fields went too (no source used them); sources are links and files.
 - **Tables:** `communityIntegrationConnections`, `skillPackages`,
   `skillPackageRevisions`, `userPlatformSkillInstalls` and `communitySkillAttachments`
-  were emptied and dropped Nov 7. Still retiring: `userSourceIntegrationConnections` and `userSourceIntegrationAuthStates`
-  (encrypted OAuth tokens: delete with the backup, Neil's sign-off).
-- **Retiring tables:** `userProviderConnections`, `userProviderAuthStates`,
-  `userProviderDeviceAuthStates` (own-account payment, deleted Oct 27 in POL-10;
-  they hold encrypted keys, deleted with Neil's sign-off).
+  were emptied and dropped Nov 7, and so were `userSourceIntegrationConnections` and
+  `userSourceIntegrationAuthStates` (14 rows of stale OAuth tokens, backed up locally first).
+- **Dropped Nov 7:** `userProviderConnections`, `userProviderAuthStates`,
+  `userProviderDeviceAuthStates` (own-account payment, deleted Oct 27 in POL-10).
 - Deleted Oct 27: `providerConnectionProbes`.
 
 ### 16. Voice — Keep

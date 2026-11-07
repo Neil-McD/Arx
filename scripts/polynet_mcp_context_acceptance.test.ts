@@ -29,7 +29,6 @@ function mockReadCall(change?: (request: ContextRequest, value: Record<string, u
     else if (path === "/users/me/profile.md") value = { ref: `user:${request.actor}Id`, body: "# User profile" };
     else if (request.name === "polynet_list") value = { authority: { lane: request.actor }, entries: [] };
     else if (path === root + "members/me/context.md") value = { body: `# Context\n${JSON.stringify({ user_id: request.actor + "Id", membership_id: "membershipId" })}` };
-    else if (path.includes("builder/workflow-members/")) value = { context: { user_id: "memberId" }, body: "Private dossier" };
     else if (request.name === "polynet_search") {
       const privateQuery = request.input.query === fixture.privateCanary;
       value = { results: privateQuery && request.actor === "member" ? [] : [{ path: privateQuery ? fixture.privateDocumentPath : fixture.publicDocumentPath, snippet: request.input.query }] };
@@ -192,7 +191,6 @@ function cliFixture() {
       if (path === '/users/me/profile.md') value = { ref: 'user:' + (actor === 'member' && process.env.SYNTHETIC_FAULT === 'wrong-member' ? 'unrelatedId' : actor + 'Id'), body: '# User profile' };
       else if (name === 'polynet_list') value = { authority: { lane: actor }, entries: [] };
       else if (path.endsWith('/members/me/context.md')) value = { body: '# Context\\n' + JSON.stringify({ user_id: actor + 'Id', membership_id: 'membershipId' }) };
-      else if (path.includes('/builder/workflow-members/')) value = { context: { user_id: 'memberId' }, body: 'Synthetic dossier' };
       else if (name === 'polynet_search') value = { results: args.query === fixture.privateCanary && actor === 'member' ? [] : [{ path: args.query === fixture.privateCanary ? fixture.privateDocumentPath : fixture.publicDocumentPath, snippet: args.query }] };
       else value = { body: path === fixture.publicDocumentPath ? fixture.publicCanary : path === fixture.privateDocumentPath ? fixture.privateCanary : 'Synthetic control community' };
       return response({ result: { isError: false, structuredContent: value } });

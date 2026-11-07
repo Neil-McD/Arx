@@ -126,7 +126,6 @@ function sourceIntentMatchScore(source: CommunityResourceLike, intentTerms: stri
   if (intentTerms.length === 0) return 0;
   const titleText = [
     source.title,
-    source.sourceExternalName,
     source.sourceOriginalFilename,
   ].join(" ").toLowerCase();
   const bodyText = String(source.bodyMd ?? "").slice(0, 5_000).toLowerCase();
@@ -144,12 +143,8 @@ function buildArchitectSourceCard(args: {
   sourceUnits: ArchitectSourceUnitsForSource | null;
 }): Record<string, unknown> {
   const source = args.source;
-  const externalUrl = String(source.sourceExternalUrl ?? "").trim();
-  const url = String(source.url ?? "").trim() || externalUrl || null;
-  const provider =
-    String(source.sourceExternalProvider ?? "").trim() ||
-    String(source.sourceIngestionKind ?? "").trim() ||
-    null;
+  const url = String(source.url ?? "").trim() || null;
+  const provider = String(source.sourceIngestionKind ?? "").trim() || null;
 
   const sourceUnitCards = args.sourceUnits?.cards ?? [];
   const sourceUnitTotal = Math.max(0, Math.floor(Number(args.sourceUnits?.total) || 0));
@@ -162,9 +157,6 @@ function buildArchitectSourceCard(args: {
     status: normalizeResourceStatus(source.status),
     source_ingestion_status: normalizeResourceSourceIngestionStatus(source),
     url,
-    source_external_name: String(source.sourceExternalName ?? "").trim() || null,
-    source_external_provider: String(source.sourceExternalProvider ?? "").trim() || null,
-    source_external_url: externalUrl || null,
     length_chars: communityResourceBodyChars(source),
     excerpt: buildSourceExcerpt(source.bodyMd),
     source_unit_count: sourceUnitTotal,
@@ -522,9 +514,10 @@ async function buildCommunityWikiArchitectSourceRevision(
       type: String(source.type ?? ""),
       status: normalizeResourceStatus(source.status),
       source_ingestion_status: normalizeResourceSourceIngestionStatus(source),
-      provider: String(source.sourceExternalProvider ?? source.sourceIngestionKind ?? "").trim() || null,
-      url: String(source.url ?? (source as any).sourceExternalUrl ?? "").trim() || null,
-      source_external_name: String(source.sourceExternalName ?? "").trim() || null,
+      provider: String(source.sourceIngestionKind ?? "").trim() || null,
+      url: String(source.url ?? "").trim() || null,
+      // Kept so existing revision hashes stay stable.
+      source_external_name: null,
       body_hash: sourceBodyHash,
       units: unitRevisions,
       assigned_pages: assignedPages.slice().sort(),
@@ -661,8 +654,7 @@ function buildCommunityWikiArchitectureQuality(args: {
     moduleDistribution.set(pageModuleName, (moduleDistribution.get(pageModuleName) ?? 0) + 1);
 
     const sourceKind = String(
-      row.source.sourceExternalProvider ||
-        row.source.sourceIngestionKind ||
+      row.source.sourceIngestionKind ||
         row.source.type ||
         "",
     ).trim();
@@ -742,7 +734,7 @@ function buildCommunityResourceContentWriterSourceInput(args: {
   return {
     id: normalizeIdValue(args.source._id),
     title: String(args.source.title ?? ""),
-    url: String(args.source.url ?? (args.source as any).sourceExternalUrl ?? "").trim() || null,
+    url: String(args.source.url ?? "").trim() || null,
     body_md: String(args.bodyMd ?? ""),
   };
 }
@@ -771,7 +763,7 @@ function markdownLinkLabel(raw: unknown): string {
 
 function buildSourceAttributionLine(source: CommunityResourceLike): string {
   const title = markdownLinkLabel(source.title);
-  const url = String(source.url ?? (source as any).sourceExternalUrl ?? "").trim();
+  const url = String(source.url ?? "").trim();
   return url ? `Source: [${title}](${url})` : `Source: ${title}`;
 }
 
@@ -1657,7 +1649,7 @@ export const buildCommunityResourceContentWriterRunContextInternal = internalQue
           expected_updated_at: Number(page.updatedAt),
           source_resource_id: sourceId,
           source_title: String(source.title ?? ""),
-          source_url: String(source.url ?? (source as any).sourceExternalUrl ?? "").trim() || null,
+          source_url: String(source.url ?? "").trim() || null,
           source_ingestion_status: normalizeResourceSourceIngestionStatus(source),
           source_units: unitContext.sourceUnits,
           source_body_md: sourceInput.body_md,

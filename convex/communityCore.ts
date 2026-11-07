@@ -235,13 +235,6 @@ export type CommunityResourceLike = {
   sourceOriginalFilename?: string;
   sourceOriginalMimeType?: string;
   sourceOriginalBytes?: number;
-  sourceExternalProvider?: string;
-  sourceExternalConnectionUserId?: any;
-  sourceExternalId?: string;
-  sourceExternalName?: string;
-  sourceExternalUrl?: string;
-  sourceExternalMimeType?: string;
-  sourceExternalModifiedAt?: number;
   pinned: boolean;
   sortOrder?: number;
   createdAt: number;
@@ -258,9 +251,7 @@ export type CommunityResourceSourceIngestionStatus =
 export type CommunityResourceSourceIngestionKind =
   | "manual"
   | "url"
-  | "file"
-  | "google_drive"
-  | "github";
+  | "file";
 
 export type CommunityResourceModuleLike = {
   _id: any;
@@ -637,8 +628,6 @@ export function parseResourceSourceIngestionKindForWrite(
   if (kind === "manual") return "manual";
   if (kind === "url" || kind === "link" || kind === "web") return "url";
   if (kind === "file" || kind === "upload") return "file";
-  if (kind === "google_drive" || kind === "google-drive" || kind === "drive") return "google_drive";
-  if (kind === "github" || kind === "git_hub") return "github";
   return null;
 }
 
@@ -659,8 +648,7 @@ export function normalizeResourceSourceIngestionStatus(
   if (communityResourceBodyChars(row) > 0) return "ready";
   if (
     String(row.url ?? "").trim() ||
-    String(row.fileKey ?? "").trim() ||
-    String(row.sourceExternalId ?? "").trim()
+    String(row.fileKey ?? "").trim()
   ) return "queued";
   return "not_required";
 }
@@ -670,8 +658,6 @@ export function normalizeResourceSourceIngestionKind(
 ): CommunityResourceSourceIngestionKind {
   const explicit = parseResourceSourceIngestionKindForWrite(row.sourceIngestionKind);
   if (explicit) return explicit;
-  if (String(row.sourceExternalProvider ?? "").trim() === "google_drive") return "google_drive";
-  if (String(row.sourceExternalProvider ?? "").trim() === "github") return "github";
   if (String(row.fileKey ?? "").trim()) return "file";
   if (String(row.url ?? "").trim()) return "url";
   return "manual";
@@ -1046,13 +1032,6 @@ export async function mapCommunityResourceRow(
       typeof row.sourceOriginalBytes === "number" && Number.isFinite(row.sourceOriginalBytes)
         ? row.sourceOriginalBytes
         : null,
-    source_external_provider: row.sourceExternalProvider ?? null,
-    source_external_id: row.sourceExternalId ?? null,
-    source_external_name: row.sourceExternalName ?? null,
-    source_external_url: row.sourceExternalUrl ?? null,
-    source_external_mime_type: row.sourceExternalMimeType ?? null,
-    source_external_modified_at:
-      typeof row.sourceExternalModifiedAt === "number" ? toIsoString(row.sourceExternalModifiedAt) : null,
     pinned: Boolean(row.pinned),
     sort_order: Number.isFinite(row.sortOrder) ? row.sortOrder : null,
     created_by: (await resolvePublicUserId(ctx, row.createdByUserId, userIdCache)) ?? String(row.createdByUserId),
