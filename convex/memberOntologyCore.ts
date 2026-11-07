@@ -51,7 +51,6 @@ export type MissingBridgeSocialLinkFactInsertResult = {
 
 function toFactLike(row: any): MemberFactLike {
   return {
-    contextKind: row.contextKind,
     communityId: row.communityId ? String(row.communityId) : null,
     kind: row.kind,
     body: row.body,
@@ -106,7 +105,6 @@ export async function insertMemberFacts(ctx: any, args: {
     /* Same-kind same-body duplicates supersede the older row instead of
        accumulating — idempotent writes for replayed bridges/interviews. */
     for (const existing of existingRows) {
-      if (existing.contextKind === "workflow") continue;
       if (existing.kind !== normalized.kind || existing.body !== normalized.body) continue;
       if (supersededIds.has(String(existing._id))) continue;
       if (

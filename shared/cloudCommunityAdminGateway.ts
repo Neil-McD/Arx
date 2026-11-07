@@ -198,8 +198,6 @@ export type CloudCommunitySourceIngestionResult = {
   total_sources: number;
   pending_url_sources: number;
   pending_file_sources?: number;
-  pending_google_drive_sources?: number;
-  pending_github_sources?: number;
   pending_sources?: number;
   failures: Array<{
     resource_id: string;
@@ -272,16 +270,9 @@ export type CloudCommunityLaunchKnowledgeSource = {
   id: string;
   title: string;
   source_ingestion_status: "not_required" | "queued" | "processing" | "ready" | "failed";
-  source_ingestion_kind: "manual" | "url" | "file" | "google_drive" | "github";
+  source_ingestion_kind: "manual" | "url" | "file";
   source_ingestion_error: string | null;
-  source_external_provider: "google_drive" | "github" | null;
-  source_external_id: string | null;
-  source_external_name: string | null;
   source_external_url: string | null;
-  source_external_mime_type: string | null;
-  source_external_modified_at: string | null;
-  credential_status: "available" | "missing";
-  credential_message: string | null;
   updated_at: string | null;
 };
 
@@ -438,11 +429,6 @@ function normalizeCommunityLaunchKnowledgeSources(payload: unknown): CloudCommun
       const record = (row ?? null) as Record<string, unknown> | null;
       const id = typeof record?.id === "string" ? record.id.trim() : "";
       const title = typeof record?.title === "string" ? record.title.trim() : "";
-      const provider = record?.source_external_provider === "github"
-        ? "github"
-        : record?.source_external_provider === "google_drive"
-          ? "google_drive"
-          : null;
       const status = (
         record?.source_ingestion_status === "not_required" ||
         record?.source_ingestion_status === "queued" ||
@@ -455,12 +441,10 @@ function normalizeCommunityLaunchKnowledgeSources(payload: unknown): CloudCommun
       const kind = (
         record?.source_ingestion_kind === "manual" ||
         record?.source_ingestion_kind === "url" ||
-        record?.source_ingestion_kind === "file" ||
-        record?.source_ingestion_kind === "google_drive" ||
-        record?.source_ingestion_kind === "github"
+        record?.source_ingestion_kind === "file"
       )
         ? record.source_ingestion_kind
-        : provider ?? "manual";
+        : "manual";
       if (!id || !title) return null;
       return {
         id,
@@ -471,31 +455,9 @@ function normalizeCommunityLaunchKnowledgeSources(payload: unknown): CloudCommun
           typeof record?.source_ingestion_error === "string" && record.source_ingestion_error.trim()
             ? record.source_ingestion_error.trim()
             : null,
-        source_external_provider: provider,
-        source_external_id:
-          typeof record?.source_external_id === "string" && record.source_external_id.trim()
-            ? record.source_external_id.trim()
-            : null,
-        source_external_name:
-          typeof record?.source_external_name === "string" && record.source_external_name.trim()
-            ? record.source_external_name.trim()
-            : null,
         source_external_url:
           typeof record?.source_external_url === "string" && record.source_external_url.trim()
             ? record.source_external_url.trim()
-            : null,
-        source_external_mime_type:
-          typeof record?.source_external_mime_type === "string" && record.source_external_mime_type.trim()
-            ? record.source_external_mime_type.trim()
-            : null,
-        source_external_modified_at:
-          typeof record?.source_external_modified_at === "string" && record.source_external_modified_at.trim()
-            ? record.source_external_modified_at.trim()
-            : null,
-        credential_status: !provider || record?.credential_status === "available" ? "available" : "missing",
-        credential_message:
-          typeof record?.credential_message === "string" && record.credential_message.trim()
-            ? record.credential_message.trim()
             : null,
         updated_at:
           typeof record?.updated_at === "string" && record.updated_at.trim()

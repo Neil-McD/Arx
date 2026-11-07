@@ -289,15 +289,14 @@ assert.match(
 assert.match(intake, /resolveCommunityInferenceFundingAdmission/);
 assert.doesNotMatch(intake, /connect an OpenAI API key|activate an OpenAI API key/);
 assert.doesNotMatch(intake + worker + admissionResolver, /legacy_requester_chatgpt|requesterHasChatgptConnection|owner_api_key/);
-assert.match(worker, /const isWorkflowAction = context\.request\.triggerKind === "workflow"/);
-assert.match(worker, /const receiptKey = isWorkflowAction[\s\S]*communityWorkflowActionReceiptKey\(requestId\)[\s\S]*communityAgentMentionReceiptKey\(requestId\)/);
+assert.match(worker, /const receiptKey = communityAgentMentionReceiptKey\(requestId\)/);
 assert.match(worker, /runOpenAiNativeToolCompletion\(\{[\s\S]*modelId: fundingSession\.modelId/);
 assert.doesNotMatch(worker, /userProviderConnections|getOpenAiConnectionForUserInternal|decryptStoredSecret|runChatgptNativeToolCompletion|apiKeyOverride/);
 assert.match(worker, /observeFounderProviderResult\(usage, toolCompletion/);
 assert.match(usageCollector, /recordFounderProviderSuccess\(totals, result\)/);
 assert.doesNotMatch(worker, /claimCommunityInferenceReceiptInternal|markCommunityInferenceProviderStartedInternal|finalizeCommunityInferenceFailureInternal/);
 assert.match(worker, /claimCommunityInferenceFundingSession/);
-assert.match(worker, /surface: isWorkflowAction[\s\S]*"community_workflow_action"[\s\S]*"community_agent_mention"/);
+assert.match(worker, /claimCommunityInferenceFundingSession\(\{[\s\S]*surface: "community_agent_mention"/);
 assert.match(
   worker,
   /runCompletion: async[\s\S]*if \(!providerStarted\)[\s\S]*markCommunityInferenceFundingSessionProviderStarted\([\s\S]*providerStarted = true[\s\S]*runOpenAiNativeToolCompletion/,

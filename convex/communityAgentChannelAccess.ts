@@ -20,10 +20,6 @@ export const authorizeServeToolsInternal = internalQuery({
     if (!request || request.status !== "running" || request.attempt !== args.expectedAttempt || !request.requesterUserId) {
       throw new Error("community_agent_serve_request_unavailable");
     }
-    // Workflows are retired: a request that still carries one never runs.
-    if (request.triggerKind === "workflow" || request.workflowPreviousRunId || request.workflowTimerId || request.workflowFormRequestId || request.workflowCompletionReview) {
-      throw new Error("community_agent_serve_request_unavailable");
-    }
     if (!request.sourceRootId) throw new Error("community_agent_serve_source_unavailable");
     const root = await ctx.db.get(request.sourceRootId);
     if (!root || root.communityId !== request.communityId || root.status !== "live") throw new Error("community_agent_serve_source_unavailable");

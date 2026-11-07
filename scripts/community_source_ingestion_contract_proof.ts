@@ -31,12 +31,7 @@ assert.match(
 assert.match(
   resources,
   /function isIngestibleCommunitySource\(row: CommunityResourceLike\): boolean \{\n  return isPlainUrlSource\(row\) \|\| isPlainFileSource\(row\);\n\}/,
-  "only manual link and file sources are ingested; GitHub and Google Drive import is retired",
-);
-assert.match(
-  resources,
-  /ingestionKind === "google_drive" \|\| ingestionKind === "github"[\s\S]*"retired_provider"[\s\S]*"community_source_provider_retired"/,
-  "a claimed GitHub or Google Drive source fails closed instead of being fetched",
+  "only manual link and file sources are ingested",
 );
 assert.doesNotMatch(
   resources + http + gateway,
@@ -122,8 +117,8 @@ assert.match(
 );
 assert.match(
   schema,
-  /sourceIngestionKind:[\s\S]*"url"[\s\S]*"file"[\s\S]*"google_drive"[\s\S]*"github"/,
-  "source ingestion should share one kind contract for links, files, Drive, and GitHub",
+  /sourceIngestionKind:[\s\S]*"url"[\s\S]*"file"/,
+  "source ingestion should share one kind contract for links and files",
 );
 assert.match(
   schema,
@@ -144,11 +139,6 @@ assert.match(
   schema,
   /communitySourceCrawlJobs:[\s\S]*provider: v\.union\(v\.literal\("simple"\), v\.literal\("crawl4ai"\), v\.literal\("firecrawl"\)\)[\s\S]*rootUrl: v\.string\(\)[\s\S]*status: v\.union\([\s\S]*v\.literal\("queued"\)[\s\S]*v\.literal\("crawling"\)[\s\S]*v\.literal\("saving_sources"\)[\s\S]*v\.literal\("ready"\)[\s\S]*v\.literal\("failed"\)[\s\S]*sourceResourceIds:[\s\S]*\.index\("by_community_status_createdAt", \["communityId", "status", "createdAt"\]\)/,
   "source crawling should persist durable crawl job state, tolerate legacy firecrawl rows, and keep status, limits, counts, and saved source ids",
-);
-assert.match(
-  schema,
-  /sourceExternalProvider:[\s\S]*sourceExternalConnectionUserId:[\s\S]*sourceExternalId:[\s\S]*sourceExternalName:[\s\S]*sourceExternalUrl:[\s\S]*sourceExternalMimeType:[\s\S]*sourceExternalModifiedAt:[\s\S]*\.index\("by_community_source_external", \["communityId", "sourceExternalProvider", "sourceExternalId"\]\)/,
-  "community source resources should carry external source identity and credential authority for integrations",
 );
 assert.match(
   schema,
@@ -197,24 +187,9 @@ assert.match(
   "resource rows mapped to the web should expose ingestion state",
 );
 assert.match(
-  core,
-  /source_external_provider:[\s\S]*source_external_id:[\s\S]*source_external_name:[\s\S]*source_external_url:[\s\S]*source_external_mime_type:[\s\S]*source_external_modified_at:/,
-  "resource rows mapped to the web should expose external integration source identity",
-);
-assert.match(
   resources,
-  /(?=[\s\S]*listCommunityLaunchKnowledgeSources = query\(\{[\s\S]*by_community_role_status[\s\S]*isPlainUrlSource\(row\)[\s\S]*isPlainFileSource\(row\)[\s\S]*isGoogleDriveSourceResource\(row\)[\s\S]*isGitHubSourceResource\(row\))(?=[\s\S]*source_ingestion_kind: sourceIngestionKind)(?=[\s\S]*source_external_url:[\s\S]*normalizeOptionalUrl\(row\.url\))/,
-  "launch Knowledge focused source query should return saved files, URL links, and Drive/GitHub rows with openable source URLs when available",
-);
-assert.doesNotMatch(
-  core,
-  /source_external_connection_user_id/,
-  "resource rows mapped to the web must not expose the private integration credential owner",
-);
-assert.match(
-  core,
-  /normalizeResourceSourceIngestionKind[\s\S]*sourceExternalProvider[\s\S]*"google_drive"[\s\S]*sourceExternalProvider[\s\S]*"github"/,
-  "legacy integration source rows should infer Drive and GitHub ingestion kinds from external providers",
+  /(?=[\s\S]*listCommunityLaunchKnowledgeSources = query\(\{[\s\S]*by_community_role_status[\s\S]*isPlainUrlSource\(row\)[\s\S]*isPlainFileSource\(row\))(?=[\s\S]*source_ingestion_kind: normalizeResourceSourceIngestionKind\(row\))(?=[\s\S]*source_external_url:[\s\S]*normalizeOptionalUrl\(row\.url\))/,
+  "launch Knowledge focused source query should return saved files and URL links with openable source URLs",
 );
 
 assert.match(
@@ -384,11 +359,6 @@ assert.match(
   resources,
   /export const getCommunitySourceIngestionStateInternal = internalQuery\(/,
   "source ingestion should read source readiness through an internal query",
-);
-assert.match(
-  resources,
-  /function isPlainUrlSource[\s\S]*!isSourceIntegrationSource\(row\)[\s\S]*function isPlainFileSource[\s\S]*!isSourceIntegrationSource\(row\)/,
-  "manual link/file source filters should exclude Drive and GitHub integration rows",
 );
 assert.doesNotMatch(
   resources,

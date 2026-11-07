@@ -428,14 +428,17 @@ class Messages {
     const read = this.reads = (this.reads || 0) + 1;
     const res = await call("/__polynet/me/messages/conversation?id=" + encodeURIComponent(id));
     if (!this.current() || !this.view || this.view.id !== id) return false;
-    // A refresh started after this one answers with newer state; drop this one.
-    if (!first && read !== this.reads) return false;
+    // A newer refresh already answered with newer state; drop this one. An
+    // older answer still lands while newer ones are in flight, so refreshes
+    // repeated faster than the server answers can't starve the thread.
+    if (!first && read < (this.shownRead || 0)) return false;
     if (res.status === 401) { this.signedOut(); return false; }
     if (res.status === 403 && res.body.code === "not_a_member") { this.notMember(); return false; }
     if (!ok(res) || !res.body.conversation) {
       if (first || res.status === 404) this.threadProblem(says(res.body.code, "Couldn't load this conversation. Try again."));
       return false;
     }
+    this.shownRead = read;
     const fresh = res.body.messages || [];
     const oldest = fresh.length ? fresh[0].seq : Infinity;
     const newestShown = this.messages.length ? this.messages[this.messages.length - 1].seq : 0;

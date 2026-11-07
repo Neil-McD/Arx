@@ -19,8 +19,6 @@ const ALLOWED = new Map<string, string>([
   ["communityApps:removeCommunityDomainInternal", "operator tool: removes a site domain by hand"],
   ["communitySites:registerSitePrivateTwinsInternal", "operator tool: one-off backfill of site private twins, run by hand"],
   ["communitySites:registerCommunitySiteAddressesInternal", "operator tool: one-off backfill of every community's site addresses, run by hand"],
-  ["communityChannels:inspectChannelNamesInternal", "hand-run: channel name backfill"],
-  ["communityChannels:backfillChannelNamesInternal", "hand-run: channel name backfill"],
   ["communityChannels:listCommunityChannels", "channel access tests read through it; replace in the channel slice"],
   ["communityResources:listCommunityResourceBuilderDirectory", "protected core (resources): deleting needs Neil's confirmation"],
   ["communityResources:readCommunityResourceBuilderResource", "protected core (resources): deleting needs Neil's confirmation"],

@@ -1,4 +1,4 @@
-import { internalMutation, internalQuery, mutation, query } from "./_generated/server";
+import { internalQuery, mutation, query } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { v } from "convex/values";
 import { paginationOptsValidator } from "convex/server";
@@ -197,48 +197,6 @@ export const moveCommunityChannel = mutation({
       ...args,
     });
     return mapCommunityChannel(channel);
-  },
-});
-
-// Read-only preparation. The operator must aggregate ALL pages to detect
-// duplicate normalized names across page boundaries before running the backfill.
-export const inspectChannelNamesInternal = internalQuery({
-  args: { paginationOpts: paginationOptsValidator },
-  handler: async (ctx, args) => {
-    const result = await ctx.db.query("communityChannels").paginate({
-      ...args.paginationOpts, numItems: Math.max(1, Math.min(100, args.paginationOpts.numItems)),
-    });
-    return { ...result, page: result.page.map(channel => {
-      let normalizedName: string | null = null;
-      try { normalizedName = normalizeCommunityChannelName(channel.name).toLocaleLowerCase("en-US"); } catch { /* report invalid; never rename */ }
-      return { channelId: String(channel._id), communityId: String(channel.communityId), status: channel.status,
-        normalizedName, needsBackfill: normalizedName !== channel.normalizedName };
-    }) };
-  },
-});
-
-// Bounded, resumable deployment migration. No public identity can invoke it.
-export const backfillChannelNamesInternal = internalMutation({
-  args: { paginationOpts: paginationOptsValidator },
-  handler: async (ctx, args) => {
-    const result = await ctx.db.query("communityChannels").paginate({
-      ...args.paginationOpts, numItems: Math.min(100, args.paginationOpts.numItems),
-    });
-    let updated = 0;
-    for (const channel of result.page) {
-      const normalizedName = normalizeCommunityChannelName(channel.name).toLocaleLowerCase("en-US");
-      if (channel.normalizedName === normalizedName) continue;
-      if (channel.status === "active") {
-        const collision = await ctx.db.query("communityChannels").withIndex(
-          "by_community_status_normalizedName",
-          (q) => q.eq("communityId", channel.communityId).eq("status", "active").eq("normalizedName", normalizedName),
-        ).first();
-        if (collision && collision._id !== channel._id) throw new Error("community_channel_name_taken");
-      }
-      await ctx.db.patch(channel._id, { normalizedName });
-      updated += 1;
-    }
-    return { updated, isDone: result.isDone, continueCursor: result.continueCursor };
   },
 });
 
