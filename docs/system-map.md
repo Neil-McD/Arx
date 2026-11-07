@@ -393,7 +393,7 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
 - **Does:** founder plan, paid memberships through Stripe Connect, the 2.9%
   application fee, refunds, payouts, usage and cost receipts.
 - **Code:** `founderBilling`, `founderPlanCore`, `founderPlanPricing`,
-  `communityBuilderAccessCore`, `billingCore`,
+  `billingCore`,
   `communityCommerce*`, `communityCheckoutBuyer` (who a paid join belongs to, and settling it), `creatorCommerce`, `stripe*`, `httpBilling`,
   `communityApplicationFeeRefundCore`, `founderPaidTool*`, `providerCostCore`,
   `voiceProviderCostAccounting`.

@@ -5,7 +5,6 @@ import { api } from "./_generated/api";
 import schema from "./schema";
 import { PLATFORM_LEGAL_DOCUMENTS } from "../shared/legalDocuments";
 import { getCommunityAndMembership, requireCommunityChatAccess, resolveCommunityLens } from "./communityCore";
-import { resolveCommunityBuilderAccess } from "./communityBuilderAccessCore";
 import { resolveCommunityInferenceFundingAdmission } from "./founderInferenceCore";
 import { FREE_COMMUNITIES_PER_OWNER } from "./communityCore";
 
@@ -34,15 +33,14 @@ test("free dashboard: a founder with no plan creates a community that runs; only
   const communityId = created.id as any;
   const result = await t.run(async (ctx) => {
     const community = (await ctx.db.get(communityId)) as any;
-    const access = await resolveCommunityBuilderAccess({ ctx, community });
     const { membership } = await getCommunityAndMembership({ ctx, communityId, userId: ownerId });
     const lens = await resolveCommunityLens({ ctx, community, membership, userId: ownerId });
     await requireCommunityChatAccess({ ctx, communityId, userId: ownerId });
     const agent = await resolveCommunityInferenceFundingAdmission(ctx, communityId);
-    return { mode: community.builderAccessMode, operational: access.operational, source: access.source, relation: lens.relation, manage: lens.can.manageMembers, agent };
+    return { operational: lens.operational, relation: lens.relation, manage: lens.can.manageMembers, agent };
   });
   expect(result).toEqual({
-    mode: "free", operational: true, source: "free", relation: "owner", manage: true,
+    operational: true, relation: "owner", manage: true,
     agent: { ok: false, code: "founder_plan_required" },
   });
 });
@@ -84,7 +82,7 @@ test("free dashboard: restoring a free community counts against the cap, as crea
   const asOwner = t.withIdentity({ subject: "restore-founder-subject" });
   const archivedId = await t.run(async (ctx) => {
     const id = await ctx.db.insert("communities", { ownerId, slug: "restore-me", name: "Restore me", lifecycleStatus: "archived", lifecycleGeneration: 1,
-      builderAccessMode: "free", visibility: "unlisted", inferenceFundingPolicy: "managed_required", entryPolicy: "open", activeMemberCount: 1,
+      visibility: "unlisted", inferenceFundingPolicy: "managed_required", entryPolicy: "open", activeMemberCount: 1,
       createdAt: NOW, updatedAt: NOW } as any);
     await ctx.db.insert("communityArchiveBillingJobs", { communityId: id, lifecycleGeneration: 1, status: "complete", attemptCount: 0,
       nextAttemptAt: NOW, completedAt: NOW, createdAt: NOW, updatedAt: NOW } as any);

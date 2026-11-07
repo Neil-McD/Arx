@@ -411,7 +411,7 @@ assert.match(
 );
 assert.match(billingContract, /\$79 USD monthly for the Agent plan on each community that uses Polynet-hosted AI/);
 assert.match(billingContract, /Visibility, membership, roles, paid-member commerce, Agent plan payment, AI allowance, and lifecycle remain separate canonical facts/);
-assert.match(billingContract, /Every community operates free: new communities are created `free`, grandfathered communities keep operating/);
+assert.match(billingContract, /Every community operates free; there is no per-community plan requirement/);
 assert.doesNotMatch(billingContract, /Newly created non-operator communities are subscription-required/);
 assert.match(billingContract, /Hosted AI requires an Agent plan attached to that community/);
 assert.match(billingContract, /Operating free grants platform operation, not hosted AI/);

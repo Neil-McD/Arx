@@ -62,8 +62,8 @@ for (const projection of [
 }
 assert.match(
   publicCommunity,
-  /published\.map\(async \(community\) => \{[\s\S]*communityIsActive\(community\)[\s\S]*resolveCommunityBuilderAccess[\s\S]*builderAccess\.operational[\s\S]*slice\(0, limit\)/,
-  "Discover must remain bounded while omitting archived and commercially unavailable communities",
+  /published\.map\(async \(community\) => \{[\s\S]*communityIsActive\(community\)[\s\S]*slice\(0, limit\)/,
+  "Discover must remain bounded while omitting archived communities",
 );
 assert.match(
   publicCommunity,

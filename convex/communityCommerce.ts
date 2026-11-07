@@ -61,7 +61,6 @@ import {
   cancelStripeSubscriptionIfActive,
   expireStripeCheckoutSessionIfOpen,
 } from "./stripeSubscriptionCancellation";
-import { requireCommunityBuilderAccess } from "./communityBuilderAccessCore";
 import { recordCommunityJoinStarted } from "./communityFunnelEvents";
 
 type CommunityCheckoutSessionRow = {
@@ -511,7 +510,6 @@ export const resolvePublicCommunityCheckoutConfigInternal = internalQuery({
     if (!community) throw new Error("community_not_found");
     const lifecycle = normalizeCommunityLifecycle(community);
     if (lifecycle.status !== "active") throw new Error("community_archived");
-    await requireCommunityBuilderAccess({ ctx, community, nowMs });
     const entryPolicy = resolveCommunityEntryPolicy(community as any);
     if (entryPolicy !== "paid_subscription") {
       throw new Error("paid_plan_required");

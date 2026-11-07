@@ -45,7 +45,6 @@ import { ensureGeneralChannel } from "./communityChannelCore";
 import { syncCommunityWeeklyDigestScheduleForCommunity } from "./communityWeeklyDigestSchedule";
 import { ensureCommunityPresenceBaseline } from "./communityPresenceCore";
 import {
-  COMMUNITY_BUILDER_ACCESS_FREE,
   founderSubscriptionStatusGrantsAccess,
 } from "../shared/founderPlan";
 import {
@@ -713,7 +712,6 @@ export const createCommunity = mutation({
       name,
       lifecycleStatus: "active",
       lifecycleGeneration: 0,
-      builderAccessMode: COMMUNITY_BUILDER_ACCESS_FREE,
       builderKnowledgeSetupPending: true,
       oneLiner,
       avatarUrl,
@@ -1029,5 +1027,21 @@ export const deleteCommunity = mutation({
       code: COMMUNITY_DELETION_QUARANTINE_CODE,
       reason: COMMUNITY_DELETION_QUARANTINE_CODE,
     });
+  },
+});
+
+// One-off, run by hand until it reports done: clears the retired
+// builderAccessMode so the schema can drop it.
+export const stripCommunityBuilderAccessModeInternal = internalMutation({
+  args: { cursor: v.optional(v.union(v.string(), v.null())) },
+  handler: async (ctx, args) => {
+    const page = await ctx.db.query("communities").paginate({ numItems: 100, cursor: args.cursor ?? null });
+    let stripped = 0;
+    for (const row of page.page) {
+      if ((row as any).builderAccessMode === undefined) continue;
+      await ctx.db.patch(row._id, { builderAccessMode: undefined } as any);
+      stripped += 1;
+    }
+    return { done: page.isDone, cursor: page.continueCursor, stripped };
   },
 });

@@ -18,11 +18,6 @@ import {
   communityIsActive,
   type CommunityLifecycleStatus,
 } from "../shared/communityLifecycle";
-import type { CommunityBuilderAccessMode } from "../shared/founderPlan";
-import {
-  requireCommunityBuilderAccess,
-  resolveCommunityBuilderAccess,
-} from "./communityBuilderAccessCore";
 import {
   getCurrentCommunityJoinRequestByPair,
   resolveCommunityJoinRequestReapplyAtMs,
@@ -36,7 +31,6 @@ export type CommunityLike = {
   name: string;
   lifecycleStatus?: CommunityLifecycleStatus;
   lifecycleGeneration?: number;
-  builderAccessMode?: CommunityBuilderAccessMode;
   builderKnowledgeSetupPending?: boolean;
   builderKnowledgeBuildStage?: "architecture" | "content";
   builderKnowledgeBuildLeaseToken?: string;
@@ -1156,8 +1150,8 @@ export type CommunityLens = {
   community: CommunityLike;
   membership: CommunityMembershipLike | null;
   operational: boolean;
-  /** Why the community can't run, when it can't (as requireCommunityBuilderAccess throws it). */
-  unavailableCode: "community_archived" | "community_temporarily_unavailable" | null;
+  /** Why the community can't run, when it can't. */
+  unavailableCode: "community_archived" | null;
   isOwner: boolean;
   isBlocked: boolean;
   /** The membership row's role, whether or not it grants anything now. */
@@ -1193,8 +1187,8 @@ export async function resolveCommunityLens(args: {
   userId: any;
 }): Promise<CommunityLens> {
   const { community, membership } = args;
-  const builderAccess = await resolveCommunityBuilderAccess({ ctx: args.ctx, community });
-  const operational = builderAccess.operational;
+  // Every community runs while it isn't archived; no plan is needed.
+  const operational = communityIsActive(community);
   const isOwner = String(community.ownerId) === String(args.userId);
   const isBlocked = isOwner
     ? false
@@ -1225,11 +1219,7 @@ export async function resolveCommunityLens(args: {
     community,
     membership,
     operational,
-    unavailableCode: operational
-      ? null
-      : builderAccess.reason === "community_archived"
-        ? "community_archived"
-        : "community_temporarily_unavailable",
+    unavailableCode: operational ? null : "community_archived",
     isOwner,
     isBlocked,
     storedRole,
@@ -1414,7 +1404,7 @@ export async function requireCommunityOwner(args: {
   userId: any;
 }): Promise<{ community: CommunityLike }> {
   const { community } = await getCommunityAndMembership(args);
-  await requireCommunityBuilderAccess({ ctx: args.ctx, community });
+  if (!communityIsActive(community)) throw new Error("community_archived");
   if (String(community.ownerId) !== String(args.userId)) {
     throw new Error("community_owner_required");
   }

@@ -1,7 +1,6 @@
 /// <reference types="vite/client" />
 import { buildCommunityNoteSearchText } from "../shared/communityNotes";
 import { convexTest } from "convex-test";
-import { COMMUNITY_BUILDER_ACCESS_SUBSCRIPTION_REQUIRED } from "../shared/founderPlan";
 import { afterEach, expect, test, vi } from "vitest";
 import { api, internal } from "./_generated/api";
 import schema from "./schema";
@@ -1223,8 +1222,8 @@ test("twin pages follow Studio's access: a lapsed paid membership or a community
   await open(f.owner);
   await f.t.run((c) => c.db.patch(f.ids.membershipId, { accessSource: "free_grant" }));
   await open(f.member);
-  // The community can't run (its builder plan is required and missing): nobody's twin pages work.
-  await f.t.run((c) => c.db.patch(f.ids.communityId, { builderAccessMode: COMMUNITY_BUILDER_ACCESS_SUBSCRIPTION_REQUIRED } as any));
+  // The community can't run (it's archived): nobody's twin pages work.
+  await f.t.run((c) => c.db.patch(f.ids.communityId, { lifecycleStatus: "archived" } as any));
   await shut(f.member);
   await shut(f.owner);
 });

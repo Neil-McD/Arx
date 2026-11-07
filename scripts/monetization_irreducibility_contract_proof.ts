@@ -14,7 +14,6 @@ const founderBilling = read("convex/founderBilling.ts");
 const founderInference = read("convex/founderInferenceCore.ts");
 const founderInferenceApi = read("convex/founderInference.ts");
 const communityLifecycle = read("convex/communityLifecycle.ts");
-const communityBuilderAccessCore = read("convex/communityBuilderAccessCore.ts");
 const communityCommerce = read("convex/communityCommerce.ts");
 const auth = read("convex/auth.ts");
 const httpBilling = read("convex/httpBilling.ts");
@@ -58,15 +57,10 @@ assert.match(founderPlan, /MONTHLY_PRICE_BASE_UNITS = 7_900/);
 assert.match(founderPlan, /INCLUDED_COST_MICROS = 20_000_000/);
 assert.match(founderPlan, /COMMUNITY_PLATFORM_FEE_BPS = 290/);
 assert.match(founderPlan, /POLYNET_BUILDER_OFFER_NAME = "Agent plan"/);
-assert.match(founderPlan, /COMMUNITY_BUILDER_ACCESS_FREE = "free"/);
-assert.match(founderPlan, /COMMUNITY_BUILDER_ACCESS_GRANDFATHERED = "grandfathered"/);
-assert.match(founderPlan, /COMMUNITY_BUILDER_ACCESS_SUBSCRIPTION_REQUIRED/);
-assert.match(schema, /builderAccessMode: v\.optional/);
-assert.match(communityBuilderAccessCore, /normalizeCommunityLifecycle/);
-assert.match(communityBuilderAccessCore, /reason: "community_archived"/);
-assert.match(communityBuilderAccessCore, /parseCommunityBuilderAccessMode/);
-assert.match(communityBuilderAccessCore, /getFounderSubscriptionByCommunity/);
-assert.match(communityBuilderAccessCore, /hasPlatformOwnerComplimentaryAccess/);
+// Every community runs free: there is no per-community access mode, and a
+// community that can't run is an archived one.
+assert.doesNotMatch(founderPlan, /COMMUNITY_BUILDER_ACCESS_|grandfathered|subscription_required/);
+assert.equal(existsSync(new URL("../convex/communityBuilderAccessCore.ts", import.meta.url)), false);
 for (const lane of ["builder_included", "builder"]) {
   assert.match(builderFunding, new RegExp(`"${lane}"`));
 }
@@ -87,11 +81,11 @@ assert.match(founderBilling, /POLYNET_FOUNDER_PLAN_MONTHLY_PRICE_BASE_UNITS/);
 assert.match(founderBilling, /resolveBuilderFundingProjection/);
 assert.match(founderBilling, /funding_lane: fundingProjection\.lane/);
 assert.match(founderBilling, /funding_state: fundingProjection\.state/);
-assert.match(founderBilling, /builder_access_mode: builderAccessMode \?\? "invalid"/);
+assert.doesNotMatch(founderBilling, /builder_access_mode|builderAccessMode/);
 assert.match(
   founderBilling,
-  /allowed_actions:[\s\S]*?lifecycle\.status === "active"[\s\S]*?archiveJob\?\.status === "complete" &&[\s\S]*?!operatorComped &&[\s\S]*?builderAccessMode === "subscription_required"[\s\S]*?pendingCheckout \? "resume_checkout" as const : "buy_builder" as const/,
-  "archived communities must fail closed until cleanup completes; only subscription-required communities expose the canonical Builder purchase action",
+  /allowed_actions: lifecycle\.status === "active" \? fundingProjection\.allowedActions : \[\]/,
+  "an archived community offers no plan action",
 );
 assert.match(founderBillingGateway, /BuilderFundingLane/);
 assert.match(founderBillingGateway, /BuilderFundingState/);
@@ -128,7 +122,7 @@ assert.doesNotMatch(communityLifecycle, /resolveAdditionalManagedCommunityAdmiss
 assert.match(communityLifecycle, /founderSubscriptionId: v\.optional\(v\.id\("founderSubscriptions"\)\)/);
 assert.match(communityLifecycle, /founderSubscriptionStatusGrantsAccess/);
 assert.match(communityLifecycle, /founder_subscription_already_attached/);
-assert.match(communityLifecycle, /builderAccessMode: COMMUNITY_BUILDER_ACCESS_FREE,/);
+assert.doesNotMatch(communityLifecycle, /builderAccessMode: COMMUNITY_BUILDER_ACCESS/);
 // Pricing v2: creating is free; the brake is a live-community cap per owner.
 assert.doesNotMatch(communityLifecycle, /community_funding_required_before_create/);
 assert.match(communityLifecycle, /requireOwnerBelowFreeCommunityLimit/);
@@ -303,7 +297,7 @@ assert.doesNotMatch(currentTerms, /DRAFT|requires its own current Builder subscr
 assert.match(v3SupersessionNotice, /superseded_by: terms_of_service_v4/);
 assert.match(v3SupersessionNotice, /do not satisfy current v4\s+acceptance/);
 assert.match(v3SupersessionNotice, /New acceptance\s+writes require `terms_of_service_v4`/);
-assert.match(billingDocs, /Every community operates free: new communities are created `free`, grandfathered communities keep operating/);
+assert.match(billingDocs, /Every community operates free; there is no per-community plan requirement/);
 assert.doesNotMatch(billingDocs, /Newly created non-operator communities are subscription-required/);
 assert.match(billingDocs, /Hosted AI requires an Agent plan attached to that community/);
 assert.match(billingDocs, /Archive is a lifecycle action, not a billing status/);

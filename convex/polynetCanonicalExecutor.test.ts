@@ -2673,7 +2673,7 @@ test.each(["paid", "open", "cancelled", "denied", "reopened", "duplicate", "lega
   const before = await f.snapshot(); expect(await f.call()).toMatchObject({ ok: false }); expect(await f.snapshot()).toEqual(before);
 });
 
-test.each(["role", "entitlement", "block", "funding", "archived"].flatMap(mode => ["approve", "deny"].map(operation => ({ mode, operation }))))("admission $operation reauthorizes $mode even for a completed receipt", async ({ mode, operation }) => {
+test.each(["role", "entitlement", "block", "archived"].flatMap(mode => ["approve", "deny"].map(operation => ({ mode, operation }))))("admission $operation reauthorizes $mode even for a completed receipt", async ({ mode, operation }) => {
   const t = convexTest(schema, modules); const f = await approvalFixture(t, operation);
   expect(await f.call(f.input, f.admin)).toMatchObject({ ok: true });
   await t.run(async ctx => {
@@ -2681,7 +2681,6 @@ test.each(["role", "entitlement", "block", "funding", "archived"].flatMap(mode =
     if (mode === "role") await ctx.db.patch(membership._id, { role: "member" });
     if (mode === "entitlement") await ctx.db.patch(membership._id, { state: "lapsed" });
     if (mode === "block") await ctx.db.insert("communityBlocks", { communityId: f.communityId, userId: f.admin.userId, createdByUserId: f.ownerId, createdAt: 1, updatedAt: 1 });
-    if (mode === "funding") await ctx.db.patch(f.communityId, { builderAccessMode: "subscription_required" });
     if (mode === "archived") await ctx.db.patch(f.communityId, { lifecycleStatus: "archived" });
   });
   const before = await f.snapshot();

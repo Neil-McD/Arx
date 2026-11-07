@@ -44,8 +44,6 @@ async function createArchivedFixture(
   t: ReturnType<typeof convexTest>,
   suffix: string,
   cleanupStatus: "pending" | "complete" | "blocked" = "complete",
-  builderAccessMode: "grandfathered" | "subscription_required" | null =
-    "subscription_required",
 ) {
   return await t.run(async (ctx) => {
     const ownerId = await ctx.db.insert("users", {
@@ -62,7 +60,6 @@ async function createArchivedFixture(
       name: "Restore community",
       lifecycleStatus: "archived",
       lifecycleGeneration: 1,
-      ...(builderAccessMode ? { builderAccessMode } : {}),
       visibility: "unlisted",
       inferenceFundingPolicy: "managed_required",
       entryPolicy: "approval",
@@ -99,53 +96,10 @@ async function grantOperatorOwner(
   });
 }
 
-async function prepareAndAttachRestoreCheckout(
-  t: ReturnType<typeof convexTest>,
-  fixture: Awaited<ReturnType<typeof createArchivedFixture>>,
-  sessionId: string,
-) {
-  await t.mutation(
-    (internal as any).founderBilling.createPendingFounderSubscriptionCheckoutInternal,
-    {
-      sessionId,
-      ownerUserId: fixture.ownerId,
-      communityId: fixture.communityId,
-      expiresAt: NOW_MS + 24 * 60 * 60 * 1_000,
-      nowMs: NOW_MS,
-    },
-  );
-  await t.mutation(
-    (internal as any).founderBilling.attachFounderStripeCheckoutSessionInternal,
-    {
-      sessionId,
-      providerCheckoutSessionId: `cs_${sessionId}`,
-      providerCustomerId: `cus_${sessionId}`,
-      providerSubscriptionId: null,
-      providerPriceId: PRICE_ID,
-      nowMs: NOW_MS + 1,
-    },
-  );
-}
-
-function paidSyncArgs(sessionId: string) {
-  return {
-    localSessionId: sessionId,
-    providerCheckoutSessionId: `cs_${sessionId}`,
-    providerCustomerId: `cus_${sessionId}`,
-    providerSubscriptionId: `sub_${sessionId}`,
-    providerPriceId: PRICE_ID,
-    subscriptionStatus: "active",
-    currentPeriodStartAt: NOW_MS + 2,
-    currentPeriodEndAt: NOW_MS + 30 * 24 * 60 * 60 * 1_000,
-    cancelAtPeriodEnd: false,
-    providerEventCreatedAt: NOW_MS + 2,
-  };
-}
-
-test.sequential("restoration requires completed archive billing cleanup", async () => {
+test.sequential("a plan can't be bought for an archived community, whatever its cleanup", async () => {
   const restoreEnv = installFounderPricingEnv();
   try {
-    for (const status of ["pending", "blocked"] as const) {
+    for (const status of ["pending", "blocked", "complete"] as const) {
       const t = convexTest(schema, modules);
       const fixture = await createArchivedFixture(t, status, status);
       await expect(
@@ -159,14 +113,14 @@ test.sequential("restoration requires completed archive billing cleanup", async 
             nowMs: NOW_MS,
           },
         ),
-      ).rejects.toThrow("community_restore_billing_cleanup_incomplete");
+      ).rejects.toThrow("community_restore_payment_not_required");
     }
   } finally {
     restoreEnv();
   }
 });
 
-test.sequential("billing exposes restore only after archive cleanup completes", async () => {
+test.sequential("billing offers no plan action for an archived community, before or after cleanup", async () => {
   const restoreEnv = installFounderPricingEnv();
   try {
     const t = convexTest(schema, modules);
@@ -197,149 +151,8 @@ test.sequential("billing exposes restore only after archive cleanup completes", 
     expect(complete.communities[0]).toMatchObject({
       lifecycle_status: "archived",
       archive_billing_cleanup_status: "complete",
-      allowed_actions: ["buy_builder"],
+      allowed_actions: [],
     });
-  } finally {
-    restoreEnv();
-  }
-});
-
-test.sequential("only verified paid checkout fulfillment restores exactly once", async () => {
-  const restoreEnv = installFounderPricingEnv();
-  try {
-    const t = convexTest(schema, modules);
-    const fixture = await createArchivedFixture(t, "verified");
-    const sessionId = "restore-verified";
-    await prepareAndAttachRestoreCheckout(t, fixture, sessionId);
-    const syncArgs = paidSyncArgs(sessionId);
-
-    await expect(
-      t.mutation(
-        (internal as any).founderBilling.syncFounderSubscriptionFromStripeInternal,
-        syncArgs,
-      ),
-    ).resolves.toMatchObject({ ignored: true });
-    await expect(
-      t.mutation(
-        (internal as any).founderBilling.syncFounderSubscriptionFromStripeInternal,
-        {
-          ...syncArgs,
-          subscriptionStatus: "past_due",
-          verifiedCheckoutPayment: true,
-        },
-      ),
-    ).resolves.toMatchObject({
-      ignored: true,
-      reason: "community_restore_subscription_inactive",
-    });
-
-    const restored = await t.mutation(
-      (internal as any).founderBilling.syncFounderSubscriptionFromStripeInternal,
-      { ...syncArgs, verifiedCheckoutPayment: true },
-    );
-    expect(restored).toMatchObject({
-      ok: true,
-      ignored: false,
-      communityRestored: true,
-      lifecycleGeneration: 2,
-    });
-
-    const replay = await t.mutation(
-      (internal as any).founderBilling.syncFounderSubscriptionFromStripeInternal,
-      { ...syncArgs, verifiedCheckoutPayment: true },
-    );
-    expect(replay).toMatchObject({
-      ok: true,
-      ignored: false,
-      founderSubscriptionId: restored.founderSubscriptionId,
-      communityRestored: false,
-      lifecycleGeneration: null,
-    });
-
-    const state = await t.run(async (ctx) => ({
-      community: await ctx.db.get(fixture.communityId),
-      subscriptions: await ctx.db.query("founderSubscriptions").collect(),
-      usageCycles: await ctx.db.query("founderUsageCycles").collect(),
-      checkout: await ctx.db
-        .query("checkoutSessions")
-        .withIndex("by_sessionId", (q) => q.eq("sessionId", sessionId))
-        .first(),
-      audits: await ctx.db
-        .query("criticalAuditEvents")
-        .withIndex("by_type_createdAt", (q) =>
-          q.eq("eventType", "community_restored"),
-        )
-        .collect(),
-      digestSchedules: await ctx.db
-        .query("communityWeeklyDigestSchedules")
-        .withIndex("by_community", (q) => q.eq("communityId", fixture.communityId))
-        .collect(),
-    }));
-    expect(state.community).toMatchObject({
-      lifecycleStatus: "active",
-      lifecycleGeneration: 2,
-      inferenceFundingPolicy: "managed_required",
-    });
-    expect(state.subscriptions).toHaveLength(1);
-    expect(state.usageCycles).toHaveLength(1);
-    expect(state.checkout).toMatchObject({
-      status: "complete",
-      communityLifecycleGeneration: 1,
-    });
-    expect(state.audits).toHaveLength(1);
-    expect(state.digestSchedules).toHaveLength(1);
-    expect(state.digestSchedules[0]).toMatchObject({
-      communityLifecycleGeneration: 2,
-      status: "scheduled",
-      failureCount: 0,
-    });
-    expect(state.digestSchedules[0]!.nextAttemptAt).toBeGreaterThan(NOW_MS);
-    expect(state.audits[0]).toMatchObject({
-      communityId: fixture.communityId,
-      provider: "stripe",
-      providerObjectId: `sub_${sessionId}`,
-      metadata: { lifecycleGeneration: 2 },
-    });
-  } finally {
-    restoreEnv();
-  }
-});
-
-test.sequential("a stale archived generation cannot be restored", async () => {
-  const restoreEnv = installFounderPricingEnv();
-  try {
-    const t = convexTest(schema, modules);
-    const fixture = await createArchivedFixture(t, "stale");
-    const sessionId = "restore-stale";
-    await prepareAndAttachRestoreCheckout(t, fixture, sessionId);
-    await t.run(async (ctx) => {
-      await ctx.db.patch(fixture.communityId, {
-        lifecycleStatus: "archived",
-        lifecycleGeneration: 2,
-        updatedAt: NOW_MS + 2,
-      });
-    });
-    await expect(
-      t.mutation(
-        (internal as any).founderBilling.syncFounderSubscriptionFromStripeInternal,
-        {
-          ...paidSyncArgs(sessionId),
-          verifiedCheckoutPayment: true,
-        },
-      ),
-    ).resolves.toMatchObject({
-      ignored: true,
-      reason: "founder_subscription_not_local",
-    });
-    const state = await t.run(async (ctx) => ({
-      community: await ctx.db.get(fixture.communityId),
-      subscriptions: await ctx.db.query("founderSubscriptions").collect(),
-    }));
-    expect(state.community).toMatchObject({
-      lifecycleStatus: "archived",
-      lifecycleGeneration: 2,
-    });
-    expect(state.subscriptions).toHaveLength(0);
   } finally {
     restoreEnv();
   }
@@ -412,15 +225,10 @@ test.sequential("operator owner restoration is direct and idempotent", async () 
   });
 });
 
-test.sequential("grandfathered owner restoration is free after cleanup and does not create AI funding", async () => {
+test.sequential("owner restoration is free after cleanup and does not create AI funding", async () => {
   const t = convexTest(schema, modules);
-  const fixture = await createArchivedFixture(
-    t,
-    "grandfathered",
-    "complete",
-    null,
-  );
-  const asOwner = t.withIdentity({ subject: "restore-owner-grandfathered" });
+  const fixture = await createArchivedFixture(t, "free", "complete");
+  const asOwner = t.withIdentity({ subject: "restore-owner-free" });
 
   const overview = await asOwner.query(
     (api as any).founderBilling.getFounderBillingOverview,
@@ -428,7 +236,6 @@ test.sequential("grandfathered owner restoration is free after cleanup and does 
   );
   expect(overview.communities[0]).toMatchObject({
     lifecycle_status: "archived",
-    builder_access_mode: "grandfathered",
     archive_billing_cleanup_status: "complete",
     allowed_actions: [],
   });
@@ -445,7 +252,7 @@ test.sequential("grandfathered owner restoration is free after cleanup and does 
     changed: true,
     lifecycle_status: "active",
     lifecycle_generation: 2,
-    restoration_authority: "grandfathered",
+    restoration_authority: "free",
   });
 
   const state = await t.run(async (ctx) => ({
@@ -457,44 +264,6 @@ test.sequential("grandfathered owner restoration is free after cleanup and does 
     lifecycleGeneration: 2,
   });
   expect(state.subscriptions).toHaveLength(0);
-});
-
-test.sequential("direct restoration requires payment for subscription-required communities", async () => {
-  const t = convexTest(schema, modules);
-  const fixture = await createArchivedFixture(t, "operator-auth");
-  const asOwner = t.withIdentity({ subject: "restore-owner-operator-auth" });
-
-  await expect(
-    asOwner.mutation(
-      (api as any).communityColdArchive.restoreCommunityWithoutPayment,
-      {
-        communityId: fixture.communityId,
-        lifecycleGeneration: 1,
-      },
-    ),
-  ).rejects.toThrow("community_restore_payment_required");
-
-  const other = await t.run(async (ctx) => {
-    return await ctx.db.insert("users", {
-      authSubject: "restore-other-operator-auth",
-      displayName: "Other operator",
-      handle: "restore-other-operator-auth",
-      normalizedHandle: "restore-other-operator-auth",
-      createdAt: NOW_MS,
-      updatedAt: NOW_MS,
-    });
-  });
-  await grantOperatorOwner(t, other);
-  const asOther = t.withIdentity({ subject: "restore-other-operator-auth" });
-  await expect(
-    asOther.mutation(
-      (api as any).communityColdArchive.restoreCommunityWithoutPayment,
-      {
-        communityId: fixture.communityId,
-        lifecycleGeneration: 1,
-      },
-    ),
-  ).rejects.toThrow("community_restore_forbidden");
 });
 
 test.sequential("operator restoration requires current completed cleanup", async () => {

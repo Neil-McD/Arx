@@ -8,12 +8,9 @@ import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 
-const PARTS = ["resolveCommunityMembershipEntitlementState", "communityUserIsBlocked", "resolveCommunityBuilderAccess"];
+const PARTS = ["resolveCommunityMembershipEntitlementState", "communityUserIsBlocked"];
 const ALLOWED = new Map<string, string>([
   ["convex/communityCore.ts", "the lens itself, and requireCommunityUserNotBlocked"],
-  ["convex/communityBuilderAccessCore.ts", "the can-run decision the lens reads"],
-  ["convex/communityPublic.ts", "Discover lists only communities that can run; no person involved"],
-  ["convex/communityAppJoin.ts", "the join page says whether the community can run, to anyone (signed out too); a person's access comes from the lens"],
 ]);
 
 const files = execFileSync("git", ["ls-files", "convex", "shared"], { encoding: "utf8" })

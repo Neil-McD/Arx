@@ -1171,7 +1171,7 @@ export type CloudCommunityRestoreResult = {
   community_id: string;
   lifecycle_status: "active";
   lifecycle_generation: number;
-  restoration_authority?: "grandfathered" | "operator_comp";
+  restoration_authority?: "free" | "operator_comp";
 };
 
 export async function restoreCloudCommunityWithoutPayment<SessionT>(

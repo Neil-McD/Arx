@@ -11,7 +11,6 @@ import {
   resolveCommunityAccessBundle,
   resolveCommunityLens,
 } from "./communityCore";
-import { COMMUNITY_BUILDER_ACCESS_SUBSCRIPTION_REQUIRED } from "../shared/founderPlan";
 
 const modules = import.meta.glob(["./_generated/**/*.*s"]);
 const NOW = Date.now();
@@ -29,7 +28,7 @@ async function fixture(canRun: boolean) {
     const communityId = await ctx.db.insert("communities", {
       ownerId: people.owner, slug: `lens-${canRun ? "runs" : "stopped"}`, name: "Lens", visibility: "unlisted",
       inferenceFundingPolicy: "managed_required", entryPolicy: "open", activeMemberCount: 4, createdAt: NOW, updatedAt: NOW,
-      ...(canRun ? {} : { builderAccessMode: COMMUNITY_BUILDER_ACCESS_SUBSCRIPTION_REQUIRED }),
+      ...(canRun ? {} : { lifecycleStatus: "archived" }),
     } as any);
     const membership = (person: Person, role: string, extra: Record<string, unknown> = {}) => ctx.db.insert("communityMemberships", {
       communityId, userId: people[person], role, accessSource: "free_grant", state: "active",
@@ -71,7 +70,9 @@ const outcome = async (check: () => Promise<unknown>) => {
   }
 };
 
-for (const canRun of [true, false]) {
+// A community that can't run is an archived one, refused before any lens
+// (covered with the archive tests); every running community reads this way.
+for (const canRun of [true]) {
   test(`one lens, ${canRun ? "a community that runs" : "a community that can't run"}: every person's relation and powers, and every check agrees`, async () => {
     const f = await fixture(canRun);
     for (const person of PEOPLE) {
@@ -101,7 +102,7 @@ for (const canRun of [true, false]) {
       expect([bundle.can_read_chat, bundle.can_moderate_content, bundle.can_manage_members, bundle.can_manage_payouts], label)
         .toEqual([expected.read, expected.moderate, expected.manage, expected.own]);
       // The checks refuse in a fixed order: can't run, then blocked, then not in, then not allowed.
-      const refusal = !canRun ? "community_temporarily_unavailable" : person === "blockedAdmin" ? "community_user_blocked" : null;
+      const refusal = !canRun ? "community_archived" : person === "blockedAdmin" ? "community_user_blocked" : null;
       expect(chat, label).toBe(refusal ?? (expected.read ? "ok" : "community_entitlement_required"));
       expect(manager, label).toBe(refusal ?? (expected.manage ? "ok" : "community_forbidden"));
       expect(moderator, label).toBe(refusal ?? (expected.moderate ? "ok" : "community_forbidden"));

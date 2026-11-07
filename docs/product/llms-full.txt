@@ -2014,12 +2014,11 @@ The Agent plan is not an account-wide tier. One subscription belongs to one comm
 
 Community operation is resolved in this order:
 
-1. Lifecycle: archived communities are unavailable regardless of payment, grandfathering, membership, or operator status.
-2. Commercial mode: `free` (every new community) and legacy `grandfathered` (a missing value) always operate; legacy `subscription_required` is migrated to `free`; malformed values fail closed.
-3. Funding: only Polynet-hosted AI needs funding (the operator grant, or one correctly attached, paid-through Agent plan). Community operation never does.
-4. Membership and role: only after the community is operational do membership and role determine what a user may do.
+1. Lifecycle: a community operates unless it is archived, regardless of payment, membership, or operator status.
+2. Funding: only Polynet-hosted AI needs funding (the operator grant, or one correctly attached, paid-through Agent plan). Community operation never does.
+3. Membership and role: only after the community is operational do membership and role determine what a user may do.
 
-Every community operates free: new communities are created `free`, grandfathered communities keep operating, and subscription-required communities are migrated to free. Hosted AI requires an Agent plan attached to that community. An owner may have at most 10 live communities created free; a community created with its own Agent plan is never capped, the operator is exempt, and archived ones don't count.
+Every community operates free; there is no per-community plan requirement (the old `free`/`grandfathered`/`subscription_required` modes were retired Nov 7). Hosted AI requires an Agent plan attached to that community. An owner may have at most 10 live communities created free; a community created with its own Agent plan is never capped, the operator is exempt, and archived ones don't count.
 
 When an Agent plan lapses or its cycle's AI allowance is spent, hosted AI pauses; nothing else changes. A past-due plan keeps the community operating while Stripe retries within the period, but hosted AI pauses until payment succeeds. Funding never mutates or deletes the community, memberships, visibility, content, or history.
 
@@ -2039,8 +2038,7 @@ An unassigned subscription grants setup, not access to any existing community. T
 
 Archive is a lifecycle action, not a billing status. It immediately freezes ordinary runtime access and starts durable asynchronous billing cleanup. Cleanup completion is required before any restoration but grants no access by itself.
 
-- An owner may restore an archived free or grandfathered community without payment after cleanup. Hosted AI remains off unless an Agent plan is separately current.
-- A legacy subscription-required community (before its migration to free) restores only from verified active `$79` payment bound to the current archived lifecycle generation.
+- An owner may restore an archived community without payment after cleanup. Hosted AI remains off unless an Agent plan is separately current. A plan can't be bought for an archived community.
 - The canonical operator may restore an operator-owned community after cleanup without simulated Stripe state.
 - Every restoration increments `lifecycleGeneration`. Checkout and webhook evidence from an earlier generation cannot restore or mutate the newer generation.
 
@@ -2070,7 +2068,7 @@ Paid-member pricing and payouts are independent from AI funding, but checkout re
 
 While the owner's account can't take card payments, the community can't set a price, its join page offers no plan and says checkout is unavailable, checkout refuses with `community_checkout_unavailable`, and Studio tells the owner that members can't pay to join yet (free joining still works). Stripe refusing what the owner's account can sell (a currency or capability it lacks) is the same refusal, never a server error.
 
-Stripe processing fees are separate from Polynet's 2.9% application fee. A grandfathered community can collect member revenue while hosted AI is off. An archived or commercially suspended subscription-required community cannot start new member checkout. Full refunds revoke paid access; partial refunds retain access unless subscription state says otherwise. Each successful refund reverses the cumulative proportional share of Polynet's application fee idempotently.
+Stripe processing fees are separate from Polynet's 2.9% application fee. A community can collect member revenue while hosted AI is off. An archived community cannot start new member checkout. Full refunds revoke paid access; partial refunds retain access unless subscription state says otherwise. Each successful refund reverses the cumulative proportional share of Polynet's application fee idempotently.
 
 ## Legal Acceptance
 
@@ -2080,7 +2078,7 @@ Terms v3 is the current commercial contract. Terms v1 and v2 acceptances remain 
 
 1. Redirects are UX only; verified provider/webhook state is authoritative.
 2. Archive always wins over commercial and access state.
-3. Communities operate free; missing legacy mode is grandfathered (also free); malformed mode fails closed.
+3. Communities operate free unless archived.
 4. One `$79` Agent plan attaches to one community.
 5. Operating free grants platform operation, not hosted AI.
 6. Agent plan funding never widens member permissions.
