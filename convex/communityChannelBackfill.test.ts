@@ -5,12 +5,13 @@ import { convexTest } from "convex-test";
 import { expect, test } from "vitest";
 
 import { internal } from "./_generated/api";
+import { ensureGeneralChannel } from "./communityChannelCore";
 import schema from "./schema";
 
 const modules = import.meta.glob(["./**/*.ts", "!./**/*.test.ts"]);
 const NOW = 1_760_000_000_000;
 
-test("the backfill creates General, scopes old cursors and carries old read positions, and is safe to rerun", async () => {
+test("the backfill creates General, scopes old cursors and carries old read positions up to the latest message, and is safe to rerun", async () => {
   const t = convexTest(schema, modules);
   const f = await t.run(async (ctx) => {
     const user = (subject: string) => ctx.db.insert("users", {
@@ -28,7 +29,20 @@ test("the backfill creates General, scopes old cursors and carries old read posi
         communityId, userId, role: "member", accessSource: "free_grant", active: true, createdAt: NOW, updatedAt: NOW,
       });
     }
+    // This community already has General with one message; its reader's old position is past it.
+    const general = await ensureGeneralChannel({ ctx, communityId, nowMs: NOW });
+    await ctx.db.insert("communityInteractionRoots", {
+      communityId, channelId: general._id, actorType: "human", actorUserId: ownerId, kind: "discussion", status: "live",
+      visibilityScope: "community", contentSummary: "Hello", replyCount: 0, reactionSummary: [], idempotencyKey: "backfill-root",
+      createdAt: NOW - 7, updatedAt: NOW - 7,
+    });
     await ctx.db.insert("communityMemberSettings", { communityId, userId: readerId, muted: false, chatLastSeenAt: NOW - 5, createdAt: NOW, updatedAt: NOW } as any);
+    // A second community has no General yet and nothing to read.
+    const emptyId = await ctx.db.insert("communities", {
+      ownerId, slug: "backfill-empty", name: "Backfill empty", lifecycleStatus: "active", visibility: "unlisted",
+      inferenceFundingPolicy: "managed_required", entryPolicy: "open", activeMemberCount: 1, createdAt: NOW, updatedAt: NOW,
+    });
+    await ctx.db.insert("communityMemberSettings", { communityId: emptyId, userId: readerId, muted: false, chatLastSeenAt: NOW - 5, createdAt: NOW, updatedAt: NOW } as any);
     const unscopedCursorId = await ctx.db.insert("communityReadCursors", {
       communityId, userId: unscopedId, streamKind: "chat", seenThroughAt: NOW - 9, createdAt: NOW, updatedAt: NOW,
     });
@@ -42,11 +56,12 @@ test("the backfill creates General, scopes old cursors and carries old read posi
     channels: await ctx.db.query("communityChannels").collect(),
     cursors: await ctx.db.query("communityReadCursors").collect(),
   }));
-  expect(state.channels).toHaveLength(1);
-  const general = state.channels[0]!;
-  expect(general.systemRole).toBe("general");
+  expect(state.channels).toHaveLength(2);
+  expect(state.channels.every((row) => row.systemRole === "general")).toBe(true);
+  const general = state.channels.find((row) => row.communityId === f.communityId)!;
+  expect(state.cursors).toHaveLength(2);
   expect(state.cursors.every((row) => row.channelId === general._id)).toBe(true);
-  expect(state.cursors.find((row) => row.userId === f.readerId)?.seenThroughAt).toBe(NOW - 5);
+  expect(state.cursors.find((row) => row.userId === f.readerId)?.seenThroughAt).toBe(NOW - 7);
 
   const second: any = await t.mutation(internal.communityChannels.backfillChannelsAndReadCursorsInternal, {});
   expect(second).toMatchObject({ general_created: 0, cursors_scoped: 0, cursors_created: 0 });

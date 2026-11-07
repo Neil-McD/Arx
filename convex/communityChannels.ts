@@ -28,6 +28,8 @@ import {
   requireCommunityManager,
   resolveUserIdForAuthenticatedRequest,
 } from "./communityCore";
+import { getLatestCommunityChannelChatActivityAt } from "./communityAttention";
+import { clampCommunityReadPosition } from "./communityReadCursorCore";
 import { MAX_TOTAL_COMMUNITY_CHANNELS } from "../shared/communityChannelCapacity";
 
 function mapCommunityChannel(channel: CommunityChannelLike) {
@@ -371,12 +373,14 @@ export const backfillChannelsAndReadCursorsInternal = internalMutation({
         cursorsScoped += 1;
       }
 
+      // Like the lazy migration: never carry a position past General's latest message.
+      const latestReadableAt = await getLatestCommunityChannelChatActivityAt(ctx, community._id, general);
       const settings = await ctx.db.query("communityMemberSettings")
         .withIndex("by_community", (q) => q.eq("communityId", community._id))
         .collect();
       for (const row of settings) {
-        const seenThroughAt = Math.floor(Number(row.chatLastSeenAt ?? 0));
-        if (!Number.isFinite(seenThroughAt) || seenThroughAt <= 0) continue;
+        const seenThroughAt = clampCommunityReadPosition(row.chatLastSeenAt, latestReadableAt);
+        if (seenThroughAt === 0) continue;
         const existing = await ctx.db.query("communityReadCursors")
           .withIndex("by_community_channel_user_stream", (q) =>
             q.eq("communityId", community._id).eq("channelId", general._id).eq("userId", row.userId).eq("streamKind", "chat"))
