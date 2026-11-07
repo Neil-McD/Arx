@@ -53,16 +53,6 @@ assert.match(
 );
 assert.match(
   schema,
-  /resourceRole: v\.optional\(v\.union\(v\.literal\("page"\), v\.literal\("source"\)\)\)/,
-  "archive documents must preserve resource role for agent-facing citations",
-);
-assert.match(
-  schema,
-  /resourceStatus: v\.optional\([\s\S]*v\.literal\("published"\)/,
-  "archive documents must preserve legacy resource lifecycle status",
-);
-assert.match(
-  schema,
   /communityResourceModules:[\s\S]*status: v\.optional\(v\.union\(v\.literal\("draft"\), v\.literal\("live"\)\)\)/,
   "community resource modules must own the member visibility state",
 );

@@ -11,7 +11,6 @@ const root = join(import.meta.dirname, "..");
 const read = (path: string) => readFileSync(join(root, path), "utf8");
 
 const ALLOWED = new Map<string, string>([
-  ["convex/schema.ts", "AI feed posts keep the stored value until those tables drop"],
 ]);
 
 const productFiles = execFileSync("git", ["ls-files", "convex", "shared", "apps"], { cwd: root, encoding: "utf8" })
@@ -21,7 +20,7 @@ const offenders = productFiles.filter((path) => !ALLOWED.has(path) && read(path)
 assert.deepEqual(offenders, [], `the retired personal_agent name must not spread: ${offenders.join(", ")}`);
 
 const schema = read("convex/schema.ts");
-assert.equal((schema.match(/"personal_agent"/g) ?? []).length, 1, "schema keeps the retired value only on the retired AI feed's posts");
+assert.equal((schema.match(/"personal_agent"/g) ?? []).length, 0, "the retired value left the schema with the AI feed's tables");
 
 const authority = read("shared/polynetAuthority.ts");
 assert.match(authority, /\| "community_agent_for_member"\n\s*\| "external_mcp"\n\s*\| "community_agent"/, "the agent has two permission modes");

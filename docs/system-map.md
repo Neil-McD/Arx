@@ -49,10 +49,9 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
 - **Contracts:** [auth-runtime-setup-workos-authkit.md](auth-runtime-setup-workos-authkit.md),
   [auth-session-target-architecture-v1.md](auth-session-target-architecture-v1.md),
   [auth-money-access-matrix.md](auth-money-access-matrix.md).
-- **Hand-run:** `anonymousUserCleanup` (data deletion); `retiredTablesCleanup`
-  (one-off, Nov 7 2026: empties the retired AI feed, old memory compiler, its
-  evidence trail, old archive documents and link-preview embeds before the
-  release that drops them). The retired onboarding,
+- **Hand-run:** `anonymousUserCleanup` (data deletion). The retired AI feed, the
+  old memory compiler's tables and evidence trail, old archive documents and
+  link-preview embeds were emptied and dropped on Nov 7 2026 (local backup kept). The retired onboarding,
   legacy-grant, personal-memory and provider-connection tables were emptied and
   dropped on Nov 7 2026.
 

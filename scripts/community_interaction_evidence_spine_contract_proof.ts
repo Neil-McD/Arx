@@ -55,7 +55,6 @@ const [
 ]);
 
 assert.match(schema, /communityEvidenceRetrievalLogs: defineTable/);
-assert.match(schema, /v\.literal\("interaction"\)/);
 assert.match(evidence, /buildCommunityInteractionEvidenceRef/);
 assert.match(evidence, /requireCommunityChatAccess/);
 assert.match(evidence, /communityEvidenceAudit\.recordCommunityEvidenceRetrievalInternal/);

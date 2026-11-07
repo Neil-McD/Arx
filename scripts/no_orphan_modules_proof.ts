@@ -13,7 +13,6 @@ const ENTRY_MODULES = new Set(["auth.config", "crons", "http", "schema"]);
 // Named exceptions, each with its reason. Keep this list short: every entry
 // is either a hand-run operator tool or waiting on a decision or a later slice.
 const ALLOWED = new Map([
-  ["retiredTablesCleanup", "hand-run once: empties the Nov 7 retired AI feed and old memory tables before the release that drops them"],
   ["stagingSeedBriefLab", "operator tool: seeds staging by hand"],
   ["stagingSeedSunrise", "operator tool: seeds and simulates the staging Sunrise community by hand"],
   ["anonymousUserCleanup", "operator tool: data deletion, run by hand"],
