@@ -1,4 +1,4 @@
-import { internalQuery, mutation, query } from "./_generated/server";
+import { internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { v } from "convex/values";
 import { paginationOptsValidator } from "convex/server";
@@ -15,6 +15,7 @@ import {
   requireCommunityChannelCapacity,
   archiveActiveCommunityChannel,
   createActiveCommunityChannel,
+  ensureGeneralChannel,
   listAuthorizedCommunityChannels,
   listAuthorizedCommunityChannelPage,
   moveActiveCommunityChannel,
@@ -27,6 +28,8 @@ import {
   requireCommunityManager,
   resolveUserIdForAuthenticatedRequest,
 } from "./communityCore";
+import { getLatestCommunityChannelChatActivityAt } from "./communityAttention";
+import { clampCommunityReadPosition } from "./communityReadCursorCore";
 import { MAX_TOTAL_COMMUNITY_CHANNELS } from "../shared/communityChannelCapacity";
 
 function mapCommunityChannel(channel: CommunityChannelLike) {
@@ -340,5 +343,63 @@ export const resolveCommunityChannelBySlugInternal = internalQuery({
     if (args.actorKind === "community_agent" && channel.accessMode !== "all_members") return null;
     const capabilities = await getCommunityChannelCapabilities({ ctx, channel, actor });
     return capabilities.canRead ? { ...mapCommunityChannelForRepository(channel), capabilities } : null;
+  },
+});
+
+// One-off, run by hand until it reports done: every community gets a General
+// channel, every chat read cursor names its channel, and read positions still
+// kept only on member settings become General cursors. Once it has run in
+// production, the legacy read paths can go.
+export const backfillChannelsAndReadCursorsInternal = internalMutation({
+  args: { cursor: v.optional(v.union(v.string(), v.null())) },
+  handler: async (ctx, args) => {
+    const page = await ctx.db.query("communities").paginate({ numItems: 10, cursor: args.cursor ?? null });
+    const nowMs = Date.now();
+    let generalCreated = 0;
+    let cursorsScoped = 0;
+    let cursorsCreated = 0;
+    for (const community of page.page) {
+      const hadGeneral = Boolean(await ctx.db.query("communityChannels")
+        .withIndex("by_community_systemRole", (q) => q.eq("communityId", community._id).eq("systemRole", GENERAL_CHANNEL_SYSTEM_ROLE))
+        .first());
+      const general = await ensureGeneralChannel({ ctx, communityId: community._id, nowMs });
+      if (!hadGeneral) generalCreated += 1;
+
+      const unscoped = await ctx.db.query("communityReadCursors")
+        .withIndex("by_community_channel_user_stream", (q) => q.eq("communityId", community._id).eq("channelId", undefined))
+        .collect();
+      for (const row of unscoped) {
+        await ctx.db.patch(row._id, { channelId: general._id });
+        cursorsScoped += 1;
+      }
+
+      // Like the lazy migration: never carry a position past General's latest message.
+      const latestReadableAt = await getLatestCommunityChannelChatActivityAt(ctx, community._id, general);
+      const settings = await ctx.db.query("communityMemberSettings")
+        .withIndex("by_community", (q) => q.eq("communityId", community._id))
+        .collect();
+      for (const row of settings) {
+        const seenThroughAt = clampCommunityReadPosition(row.chatLastSeenAt, latestReadableAt);
+        if (seenThroughAt === 0) continue;
+        const existing = await ctx.db.query("communityReadCursors")
+          .withIndex("by_community_channel_user_stream", (q) =>
+            q.eq("communityId", community._id).eq("channelId", general._id).eq("userId", row.userId).eq("streamKind", "chat"))
+          .first();
+        if (existing) continue;
+        await ctx.db.insert("communityReadCursors", {
+          communityId: community._id, channelId: general._id, userId: row.userId, streamKind: "chat",
+          seenThroughAt, createdAt: nowMs, updatedAt: nowMs,
+        });
+        cursorsCreated += 1;
+      }
+    }
+    return {
+      done: page.isDone,
+      cursor: page.continueCursor,
+      communities: page.page.length,
+      general_created: generalCreated,
+      cursors_scoped: cursorsScoped,
+      cursors_created: cursorsCreated,
+    };
   },
 });

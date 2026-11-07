@@ -265,11 +265,6 @@ assert.match(
   /withIndex\("by_channel_displayUntil", \(q: any\) =>[\s\S]*\.gt\("displayUntil", nowMs\)[\s\S]*\.order\("desc"\)[\s\S]*\.take\(COMMUNITY_TYPING_PRESENCE_SCAN_LIMIT \+ 1\)/,
   "typing presence reads should use the canonical channel active-window index and bounded take",
 );
-assert.match(
-  communityTypingCore,
-  /withIndex\("by_community_channel_displayUntil", \(q: any\) =>[\s\S]*\.eq\("channelId", undefined\)[\s\S]*\.gt\("displayUntil", nowMs\)[\s\S]*\.take\(COMMUNITY_TYPING_PRESENCE_SCAN_LIMIT \+ 1\)/,
-  "temporary general-channel compatibility reads should also remain bounded",
-);
 assert.doesNotMatch(
   communityTypingCore,
   /\.collect\(\)/,

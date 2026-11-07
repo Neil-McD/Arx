@@ -29,6 +29,7 @@ const ALLOWED = new Map<string, string>([
   ["communityWeeklyDigestSchedule:ensureCommunityWeeklyDigestScheduleInternal", "weekly digest: dormant until a cron is added or it is deleted"],
   ["communityWeeklyDigestSchedule:resumeCommunityWeeklyDigestScheduleInternal", "weekly digest: dormant until a cron is added or it is deleted"],
   ["communityWeeklyDigestWorker:processDueCommunityWeeklyDigestsInternal", "weekly digest: dormant until a cron is added or it is deleted"],
+  ["communityChannels:backfillChannelsAndReadCursorsInternal", "hand-run once per deployment: General channels and read cursors"],
   ["criticalAudit:listCriticalAuditEventsInternal", "operator diagnostic, run by hand"],
   ["distributionAttribution:resumeDeliveryInternal", "operator tool: resumes a stopped delivery"],
   ["operatorAccess:listOperatorRoles", "operator tool: role management by hand"],

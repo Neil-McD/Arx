@@ -1178,8 +1178,7 @@ export default defineSchema({
 
   communityTypingPresence: defineTable({
     communityId: v.id("communities"),
-    // Optional only for rolling compatibility with pre-channel leases.
-    channelId: v.optional(v.id("communityChannels")),
+    channelId: v.id("communityChannels"),
     userId: v.id("users"),
     // Thread scope: present when typing inside a thread, absent for channel-level typing.
     rootId: v.optional(v.id("communityInteractionRoots")),
@@ -1191,8 +1190,6 @@ export default defineSchema({
     .index("by_user", ["userId"])
     .index("by_community_user", ["communityId", "userId"])
     .index("by_community_displayUntil", ["communityId", "displayUntil"])
-    .index("by_community_channel_user", ["communityId", "channelId", "userId"])
-    .index("by_community_channel_displayUntil", ["communityId", "channelId", "displayUntil"])
     .index("by_channel_user", ["channelId", "userId"])
     .index("by_channel_displayUntil", ["channelId", "displayUntil"]),
 
@@ -1639,7 +1636,6 @@ export default defineSchema({
     responseRootId: v.optional(v.id("communityInteractionRoots")),
     responseReplyId: v.optional(v.id("communityInteractionReplies")),
     attempt: v.optional(v.number()),
-    runId: v.optional(v.id("communityAgentRuns")),
     sourceTraceId: v.optional(v.string()),
     skipReason: v.optional(v.string()),
     errorCode: v.optional(v.string()),
@@ -1824,69 +1820,9 @@ export default defineSchema({
     .index("by_community", ["communityId"])
     .index("by_community_updatedAt", ["communityId", "updatedAt"]),
 
-  communityAgentRuns: defineTable({
-    communityId: v.id("communities"),
-    agentKey: v.string(),
-    // Current runs use `steward`; other values are historical compatibility.
-    role: v.optional(v.string()),
-    triggerType: v.union(
-      v.literal("manual_internal"),
-      v.literal("heartbeat"),
-      v.literal("event"),
-    ),
-    heartbeatId: v.optional(v.string()),
-    sponsorUserId: v.id("users"),
-    modelId: v.optional(v.string()),
-    status: v.union(
-      v.literal("skipped"),
-      v.literal("running"),
-      v.literal("ok"),
-      v.literal("error"),
-    ),
-    wakeReason: v.optional(v.string()),
-    wakeEvidence: v.optional(v.object({
-      reason: v.string(),
-      pendingTotal: v.number(),
-      pendingTraceTotal: v.optional(v.number()),
-      pendingContinuation: v.optional(v.number()),
-      pendingStandard: v.number(),
-      pendingStrong: v.number(),
-      pendingCritical: v.number(),
-      oldestPendingAt: v.optional(v.string()),
-      hasMorePending: v.boolean(),
-      countsAreLowerBound: v.boolean(),
-      compilerDigestId: v.optional(v.string()),
-      compilerDigestVersionKey: v.optional(v.string()),
-      compilerWorkItemCount: v.optional(v.number()),
-    })),
-    stopReason: v.optional(v.string()),
-    toolStepCount: v.number(),
-    // Legacy approval-loop fields remain optional until historical rows are
-    // cleared. New runs write only appliedChangeRequestIds.
-    candidateProposalIds: v.optional(v.array(v.string())),
-    acceptedChangeRequestIds: v.optional(v.array(v.string())),
-    rejectedChangeRequestIds: v.optional(v.array(v.string())),
-    appliedChangeRequestIds: v.optional(v.array(v.string())),
-    errorCode: v.optional(v.string()),
-    errorMessage: v.optional(v.string()),
-    startedAt: v.number(),
-    finishedAt: v.optional(v.number()),
-    createdAt: v.number(),
-    updatedAt: v.number(),
-  })
-    .index("by_community_createdAt", ["communityId", "createdAt"])
-    .index("by_community_status_createdAt", ["communityId", "status", "createdAt"])
-    .index("by_community_role_triggerType_createdAt", [
-      "communityId",
-      "role",
-      "triggerType",
-      "createdAt",
-    ])
-    .index("by_sponsor_createdAt", ["sponsorUserId", "createdAt"]),
-
-  // Per-run event log for community agent runs: prompts, reasoning summaries,
-  // tool calls/results, and the final outcome, in sequence. This is the audit
-  // trail that makes a headless steward run reconstructable after the fact.
+  // Per-run event log for community agent runs (@mentions): prompts, tool
+  // calls and results, and the final outcome, in sequence. The audit trail that
+  // makes a run reconstructable after the fact.
   communityAgentRunEvents: defineTable({
     communityId: v.id("communities"),
     runId: v.string(),

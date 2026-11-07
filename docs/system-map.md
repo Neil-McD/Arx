@@ -179,8 +179,8 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
   `communityIntelligenceNodes`, `communityIntelligenceEdges`,
   `communityIntelligenceMutations`, `communityIntelligenceChangeRequests`,
   `communityIntelligenceRetrievalLogs`, `communitySourceTraces`,
-  `communityCompilerDigests`, `communityMemoryMetabolizerRuns`, `communityAgentRuns`,
-  `communityOutcomeObservations`.
+  `communityCompilerDigests`, `communityMemoryMetabolizerRuns`,
+  `communityOutcomeObservations`, and `communityAgentRuns` (the old steward's run log; 1,383 rows backed up, emptied and dropped Nov 7).
   The steward, the 6-hour memory sweep, the compiler and the metabolizer were
   deleted on 2026-11-03.
 - **Contracts:** [community-agent-cognition-contract-v1.md](community-agent-cognition-contract-v1.md),
@@ -216,7 +216,7 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
   `/runtime/app/agent` from sites; mention serve requests.
 - **Tables:** `threads`, `cloudMessages`, `cloudThreadAttachments`,
   `cloudThreadAttachmentUploadTickets`,
-  `runtimeRuns`, `runtimeRunEvents`, `communityAgentConfigs`, `communityAgentRuns`,
+  `runtimeRuns`, `runtimeRunEvents`, `communityAgentConfigs`,
   `communityAgentRunEvents`, `communityAgentServeRequests`, `memberAgentChannels`,
   `memberAgentEpisodes`.
 - **Contracts:** [native-agent-runtime-context-contract-v1.md](native-agent-runtime-context-contract-v1.md),

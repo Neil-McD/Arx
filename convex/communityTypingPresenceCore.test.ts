@@ -12,7 +12,7 @@ import {
 
 const modules = import.meta.glob(["./_generated/**/*.*s"]);
 
-test("typing leases remain isolated by channel and legacy leases belong only to General", async () => {
+test("typing leases stay isolated by channel", async () => {
   const t = convexTest(schema, modules);
   await t.run(async (ctx) => {
     const nowMs = Date.now();
@@ -76,13 +76,6 @@ test("typing leases remain isolated by channel and legacy leases belong only to 
       userId: ownerId,
       nowMs: nowMs + 1,
     });
-    await ctx.db.insert("communityTypingPresence", {
-      communityId,
-      userId: legacyUserId,
-      displayUntil: nowMs + 20_000,
-      createdAt: nowMs,
-      updatedAt: nowMs,
-    });
     const community = await ctx.db.get(communityId);
     if (!community) throw new Error("typing_channel_community_missing");
 
@@ -103,7 +96,7 @@ test("typing leases remain isolated by channel and legacy leases belong only to 
     });
     expect(
       generalPresence.users.map((row) => row.user_id).sort(),
-    ).toEqual(["typing-channel-legacy", "typing-channel-owner"]);
+    ).toEqual(["typing-channel-owner"]);
 
     await expect(
       clearCommunityTypingLease({
