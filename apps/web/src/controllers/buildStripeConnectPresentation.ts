@@ -19,6 +19,8 @@ export function buildStripeConnectPresentation(args: {
   const stripeConnect = args.accountCommerceStatus?.stripe_connect ?? null;
   const status = stripeConnect?.status ?? "not_connected";
   const isReady = stripeConnect?.can_receive_community_revenue === true;
+  // Stripe's cross-border accounts (e.g. Kuwait) get payouts but not card payments.
+  const payoutsOnly = stripeConnect?.service_agreement === "recipient";
   const requirementsPreview = stripeConnect?.requirements_currently_due?.slice(0, 3) ?? [];
   const hasRequirementsPreview = requirementsPreview.length > 0;
   const platformFeePercent = Number(
@@ -31,6 +33,8 @@ export function buildStripeConnectPresentation(args: {
       : "Connect Stripe";
   const statusTitle = isReady
     ? "Ready for paid community subscriptions"
+    : status === "ready" && payoutsOnly
+      ? "Members can't pay to join yet"
     : status === "ready"
       ? "Direct card charges are not enabled"
     : status === "restricted"
@@ -44,6 +48,9 @@ export function buildStripeConnectPresentation(args: {
   const statusMessage = (() => {
     if (isReady) {
       return `Polynet owns pricing, access, and community revenue reporting. Stripe Connect Express handles payment processing, verification, and payouts. Polynet keeps ${platformFeePercent.toFixed(1)}%; Stripe processing fees are charged separately to your connected account.`;
+    }
+    if (status === "ready" && payoutsOnly) {
+      return "Stripe sets up accounts in your country for payouts only, not card payments, so paid joining is closed for now and your join page says so. Free joining still works.";
     }
     if (status === "ready") {
       return "This connected account can receive transfers, but it cannot create the direct card charges required for paid community subscriptions.";
