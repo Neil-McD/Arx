@@ -108,12 +108,13 @@ function assertScenario(
 function assertSourceAnchors() {
   const communityCore = readText(new URL("../convex/communityCore.ts", import.meta.url));
   const communityAdmin = readText(new URL("../convex/communityAdmin.ts", import.meta.url));
+  const subscriptionLifecycle = readText(new URL("../convex/communitySubscriptionLifecycle.ts", import.meta.url));
   const communityResources = readCommunityResourceSources();
   const resourceViewer = readText(new URL("../apps/web/src/components/WebCommunityResourceViewerContent.tsx", import.meta.url));
   const linkEmbedUi = readText(new URL("../shared/linkEmbedUi.tsx", import.meta.url));
 
   assertIncludes(
-    communityCore,
+    subscriptionLifecycle,
     "return status === \"active\" || status === \"past_due\" || status === \"cancel_at_period_end\";",
     "community subscription access policy",
   );

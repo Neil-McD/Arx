@@ -1,5 +1,3 @@
-import { v } from "convex/values";
-import { internalMutation } from "./_generated/server";
 import {
   type CommunityMembershipLike,
   type CommunityMembershipState,
@@ -179,19 +177,3 @@ export function communityMembershipStateAfterSubscriptionUpdate(args: {
   if (args.grantsAccess) return "active";
   return COMMUNITY_MEMBERSHIP_PAYMENT_HOLD_REASONS.has(args.reason) ? "payment_hold" : "lapsed";
 }
-
-// One-off, run by hand until it reports done: clears the retired `active`
-// field so the schema can drop it.
-export const stripCommunityMembershipActiveInternal = internalMutation({
-  args: { cursor: v.optional(v.union(v.string(), v.null())) },
-  handler: async (ctx, args) => {
-    const page = await ctx.db.query("communityMemberships").paginate({ numItems: 200, cursor: args.cursor ?? null });
-    let stripped = 0;
-    for (const row of page.page) {
-      if ((row as any).active === undefined) continue;
-      await ctx.db.patch(row._id, { active: undefined });
-      stripped += 1;
-    }
-    return { done: page.isDone, cursor: page.continueCursor, stripped };
-  },
-});

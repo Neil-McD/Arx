@@ -4,6 +4,7 @@ import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import type { MutationCtx } from "./_generated/server";
+import { communitySubscriptionStatusFields, endCommunitySubscription } from "./communitySubscriptionLifecycle";
 import {
   type CommunityBlockLike,
   type CommunityLike,
@@ -299,14 +300,7 @@ async function endCommunitySubscriptionsForMembership(args: {
       q.eq("membershipId", args.membershipId),
     )
     .collect();
-  for (const row of rows) {
-    await args.ctx.db.patch(row._id, {
-      status: "ended",
-      cancelAtPeriodEnd: false,
-      endedAt: args.nowMs,
-      updatedAt: args.nowMs,
-    });
-  }
+  for (const row of rows) await endCommunitySubscription(args.ctx, row, args.nowMs);
 }
 
 async function listCommunitySubscriptionRowsForMembership(args: {
@@ -2307,7 +2301,11 @@ async function leaveCommunityForUser(ctx: any, args: { communityId: any; userId:
         const targets: Array<{ providerSubscriptionId: string; providerAccountId: string | null }> = [];
         for (const row of paidRows as any[]) {
           if (row.status !== "cancel_at_period_end") {
-            await ctx.db.patch(row._id, { status: "cancel_at_period_end", cancelAtPeriodEnd: true, cancelRequestedAt: nowMs, updatedAt: nowMs });
+            await ctx.db.patch(row._id, {
+              ...communitySubscriptionStatusFields({ status: "cancel_at_period_end", current: row, nowMs }),
+              cancelRequestedAt: nowMs,
+              updatedAt: nowMs,
+            });
           }
           targets.push({ providerSubscriptionId: String(row.providerSubscriptionId), providerAccountId: row.providerAccountId ?? null });
         }

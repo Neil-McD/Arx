@@ -382,6 +382,7 @@ function assertSourceAnchors() {
   const httpBilling = readText(new URL("../convex/httpBilling.ts", import.meta.url));
   const communityAdmin = readText(new URL("../convex/communityAdmin.ts", import.meta.url));
   const communityCore = readText(new URL("../convex/communityCore.ts", import.meta.url));
+  const subscriptionLifecycle = readText(new URL("../convex/communitySubscriptionLifecycle.ts", import.meta.url));
   const communityJoinRequestCore = readText(
     new URL("../convex/communityJoinRequestCore.ts", import.meta.url),
   );
@@ -564,7 +565,7 @@ function assertSourceAnchors() {
     "unknown Stripe community subscription statuses fail closed",
   );
   assertIncludes(
-    communityCore,
+    subscriptionLifecycle,
     "return status === \"active\" || status === \"past_due\" || status === \"cancel_at_period_end\";",
     "community subscription status grant policy",
   );

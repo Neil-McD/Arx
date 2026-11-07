@@ -1,3 +1,9 @@
+import {
+  type CommunitySubscriptionStatus,
+  communitySubscriptionStatusGrantsAccess,
+  normalizeCommunitySubscriptionStatus,
+} from "./communitySubscriptionLifecycle";
+export { communitySubscriptionStatusGrantsAccess, normalizeCommunitySubscriptionStatus };
 import { resolveUserIdForAuthenticatedRequest } from "./authActor";
 import {
   buildCommunityResourceDirectoryFields,
@@ -160,7 +166,7 @@ export type CommunitySubscriptionLike = {
   membershipId: any;
   pricePointId: any;
   source?: "stripe" | "external_sync";
-  status: "active" | "past_due" | "cancel_at_period_end" | "canceled" | "ended";
+  status: CommunitySubscriptionStatus;
   providerSubscriptionId?: string;
   providerAccountId?: string;
   providerCustomerId?: string;
@@ -446,24 +452,6 @@ export function normalizeMembershipAccessSource(
     return value;
   }
   return "";
-}
-
-export function normalizeCommunitySubscriptionStatus(
-  raw: unknown,
-): CommunitySubscriptionLike["status"] | null {
-  const value = String(raw ?? "")
-    .trim()
-    .toLowerCase();
-  if (
-    value === "active" ||
-    value === "past_due" ||
-    value === "cancel_at_period_end" ||
-    value === "canceled" ||
-    value === "ended"
-  ) {
-    return value;
-  }
-  return null;
 }
 
 export function normalizeCommunityRoleForOutput(raw: unknown): "admin" | "moderator" | "member" | "" {
@@ -899,11 +887,6 @@ export async function requireCommunityUserNotBlocked(args: {
   }
 }
 
-export function communitySubscriptionStatusGrantsAccess(
-  status: CommunitySubscriptionLike["status"] | null,
-): boolean {
-  return status === "active" || status === "past_due" || status === "cancel_at_period_end";
-}
 
 function communityAccessSourceIsDurable(
   source: ReturnType<typeof normalizeMembershipAccessSource>,
