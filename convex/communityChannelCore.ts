@@ -237,30 +237,9 @@ export async function requireActiveCommunityChannel(args: {
   return channel;
 }
 
-export function legacyGeneralChannelSelection(
-  communityId: any,
-): CommunityChannelLike {
-  return {
-    // A semantic General selection lets read-only queries preserve the
-    // rolling-deployment lane before a stored General row has been backfilled.
-    // Mutations must request ensureGeneralForWrite and receive a durable id.
-    _id: undefined,
-    communityId,
-    systemRole: GENERAL_CHANNEL_SYSTEM_ROLE,
-    slug: GENERAL_CHANNEL_SLUG,
-    name: GENERAL_CHANNEL_NAME,
-    accessMode: "all_members",
-    postingPolicy: "members",
-    status: "active",
-    position: 0,
-    createdAt: 0,
-    updatedAt: 0,
-  };
-}
-
 // Callers must authorize community access before resolving a requested
 // channel. That ordering prevents a cross-community channel id from becoming
-// an enumeration oracle. Omission is the only compatibility path to General.
+// an enumeration oracle. Omitting the channel means General.
 export async function resolveRequestedCommunityChannel(args: {
   ctx: { db: any };
   communityId: any;
@@ -292,10 +271,9 @@ export async function resolveRequestedCommunityChannel(args: {
       nowMs: args.nowMs,
     });
   }
-  return (
-    (await getGeneralChannel(args.ctx, args.communityId)) ??
-    legacyGeneralChannelSelection(args.communityId)
-  );
+  const general = await getGeneralChannel(args.ctx, args.communityId);
+  if (!general) throw new Error("community_general_channel_missing");
+  return general;
 }
 
 // Interactive entry points must use an authenticated actor. Unscoped helpers
@@ -380,22 +358,13 @@ export async function listAuthorizedCommunityChannelPage(args: {
     assertChannelForCommunity(channel, communityId);
     if ((await getCommunityChannelCapabilities({ ctx, channel, actor })).canRead) page.push(channel);
   }
-  if (section === "shared" && args.paginationOpts.cursor === null && !await getGeneralChannel(ctx, communityId)) {
-    const general = legacyGeneralChannelSelection(communityId);
-    if ((await getCommunityChannelCapabilities({ ctx, channel: general, actor })).canRead) page.unshift(general);
-  }
   return { ...result, page };
 }
 
 export async function listAuthorizedCommunityChannels(args: {
   ctx: any; communityId: any; actor: ChannelActor;
 }): Promise<CommunityChannelLike[]> {
-  const general = await getGeneralChannel(args.ctx, args.communityId);
   const rows = await listActiveCommunityChannels(args);
-  if (!general) {
-    if (rows.length >= LEGACY_CHANNEL_LIST_LIMIT) throw new Error("community_channel_refresh_required");
-    rows.unshift(legacyGeneralChannelSelection(args.communityId));
-  }
   const visible = await Promise.all(rows.map(async channel =>
     (await getCommunityChannelCapabilities({ ...args, channel })).canRead ? channel : null));
   return visible.filter((row): row is CommunityChannelLike => row !== null);
@@ -419,13 +388,8 @@ export async function listSharedCommunityChannels(args: {
   activeChannels.sort((left, right) =>
     left.position - right.position || normalizeIdValue(left._id).localeCompare(normalizeIdValue(right._id)),
   );
-  if (generalChannel) return activeChannels;
-  if (activeChannels.length >= MAX_SHARED_COMMUNITY_CHANNELS) {
-    // A missing General row still consumes the required system-channel slot.
-    // Refuse to project an eleventh readable channel from drifted storage.
-    throw new Error("community_channel_limit_invalid");
-  }
-  return [legacyGeneralChannelSelection(args.communityId), ...activeChannels];
+  if (!generalChannel) throw new Error("community_general_channel_missing");
+  return activeChannels;
 }
 
 export function requireSharedChannelForAddressableRow(args: {
@@ -466,7 +430,7 @@ export function requireChannelFromAuthorizedSet(args: {
 }
 
 // Direct evidence lookup checks only the source room, not the full directory.
-// The missing-channel lane is strictly the existing General migration adapter.
+// A row without a channel (a private dock root) resolves to General.
 export async function requireSharedChannelForInteraction(args: {
   ctx: { db: any };
   communityId: any;
@@ -474,7 +438,7 @@ export async function requireSharedChannelForInteraction(args: {
 }): Promise<CommunityChannelLike> {
   const channel = args.row.channelId
     ? await args.ctx.db.get(args.row.channelId)
-    : (await getGeneralChannel(args.ctx, args.communityId)) ?? legacyGeneralChannelSelection(args.communityId);
+    : await getGeneralChannel(args.ctx, args.communityId);
   return requireSharedChannelForAddressableRow({
     row: args.row, communityId: args.communityId, channels: channel ? [channel] : [],
   });

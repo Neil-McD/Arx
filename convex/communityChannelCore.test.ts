@@ -382,16 +382,11 @@ test("requested channels default only omission to General and resolve explicit a
   const t = convexTest(schema, modules);
   const fixture = await createFixture(t);
   await t.run(async (ctx) => {
-    const legacyGeneral = await resolveRequestedCommunityChannel({
+    // A community without a stored General is refused, never given a stand-in.
+    await expect(resolveRequestedCommunityChannel({
       ctx,
       communityId: fixture.communityId,
-    });
-    expect(legacyGeneral).toMatchObject({
-      _id: undefined,
-      systemRole: "general",
-      slug: "general",
-      status: "active",
-    });
+    })).rejects.toThrow("community_general_channel_missing");
     const storedGeneral = await resolveRequestedCommunityChannel({
       ctx,
       communityId: fixture.communityId,
@@ -399,6 +394,7 @@ test("requested channels default only omission to General and resolve explicit a
       nowMs: 2_000,
     });
     expect(storedGeneral._id).toBeTruthy();
+    expect((await resolveRequestedCommunityChannel({ ctx, communityId: fixture.communityId }))._id).toBe(storedGeneral._id);
 
     const customChannelId = await ctx.db.insert("communityChannels", {
       communityId: fixture.communityId,

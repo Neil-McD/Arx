@@ -1976,9 +1976,7 @@ export default defineSchema({
   // server-visible chat head before this projection advances.
   communityReadCursors: defineTable({
     communityId: v.id("communities"),
-    // Optional only while legacy community-wide chat cursors are upgraded in
-    // place. New cursor writes always bind a channel.
-    channelId: v.optional(v.id("communityChannels")),
+    channelId: v.id("communityChannels"),
     userId: v.id("users"),
     streamKind: v.literal("chat"),
     seenThroughAt: v.number(),

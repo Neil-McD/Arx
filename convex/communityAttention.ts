@@ -96,7 +96,7 @@ async function getCommunityMemberSettingsRow(
     .first()) as CommunityMemberSettingsLike | null;
 }
 
-export async function getLatestCommunityChannelChatActivityAt(
+async function getLatestCommunityChannelChatActivityAt(
   ctx: any,
   communityId: any,
   channel: CommunityChannelLike,
