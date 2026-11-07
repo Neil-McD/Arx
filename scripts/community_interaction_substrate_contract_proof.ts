@@ -161,7 +161,7 @@ const replyTable = schemaTable("communityInteractionReplies", "communityInteract
 assertExcludes(schemaPath, replyTable, "parentReplyId");
 assertExcludes(schemaPath, replyTable, "replyId: v.id(\"communityInteractionReplies\")");
 
-const attachmentsTable = schemaTable("communityInteractionAttachments", "communityInteractionEmbeds");
+const attachmentsTable = schemaTable("communityInteractionAttachments", "communityInteractionContentBlocks");
 [
   'attachmentKind: v.union(v.literal("image"), v.literal("video"), v.literal("file"))',
   'storageId: v.optional(v.id("_storage"))',
@@ -170,26 +170,8 @@ const attachmentsTable = schemaTable("communityInteractionAttachments", "communi
   '.index("by_contentHash", ["contentHash"])',
 ].forEach((needle) => assertIncludes(schemaPath, attachmentsTable, needle));
 
-const embedsTable = schemaTable("communityInteractionEmbeds", "communityInteractionContentBlocks");
-[
-  'embedKind: v.union(v.literal("link"), v.literal("workspace_ref"))',
-  'v.literal("pending")',
-  'v.literal("ready")',
-  'v.literal("unavailable")',
-  'v.literal("redacted")',
-  "normalizedSourceUrl: v.optional(v.string())",
-  "workspaceRefKind: v.optional(",
-  "providerPostId: v.optional(v.string())",
-  "publishedAt: v.optional(v.number())",
-  "postContext: v.optional(",
-  "nextRefreshAt: v.optional(v.number())",
-  "refreshFailureCount: v.optional(v.number())",
-  '.index("by_provider_status_nextRefreshAt", ["provider", "status", "nextRefreshAt"])',
-  '.index("by_community_normalizedSourceUrl", ["communityId", "normalizedSourceUrl"])',
-  '.index("by_community_workspaceRef", ["communityId", "workspaceRefKind", "workspaceRefId"])',
-].forEach((needle) => assertIncludes(schemaPath, embedsTable, needle));
-assertExcludes(schemaPath, embedsTable, "payloadJson");
-assertExcludes(schemaPath, embedsTable, "v.any()");
+// Link-preview and workspace-reference embeds are retired (Nov 7 2026).
+assertExcludes(schemaPath, schema, "communityInteractionEmbeds: defineTable");
 
 const contentTable = schemaTable("communityInteractionContentBlocks", "communityInteractionMentions");
 [
@@ -201,7 +183,7 @@ const contentTable = schemaTable("communityInteractionContentBlocks", "community
   'v.literal("workspace_ref")',
   'v.literal("mention")',
   'attachmentId: v.optional(v.id("communityInteractionAttachments"))',
-  'embedId: v.optional(v.id("communityInteractionEmbeds"))',
+  "embedId: v.optional(v.string())",
   '.index("by_root_order", ["rootId", "blockOrder"])',
   '.index("by_reply_order", ["replyId", "blockOrder"])',
 ].forEach((needle) => assertIncludes(schemaPath, contentTable, needle));
@@ -247,11 +229,10 @@ assertExcludes(schemaPath, schema, "communityInteractionReadStates: defineTable"
 assertExcludes(schemaPath, schema, "communityInteractionSourceTraceLinks: defineTable");
 
 // The old thread chat and its mapping to interactions were dropped (Nov 7).
-for (const dropped of ["communityChatThreads", "communityChatMessages", "communityInteractionLegacyChatLinks"]) {
+for (const dropped of ["communityChatThreads", "communityChatMessages", "communityInteractionLegacyChatLinks",
+  // Retired with the old memory compiler (Nov 7 2026).
+  "communitySourceTraces", "communityIntelligenceNodes", "communityInteractionEmbeds"]) {
   assertExcludes(schemaPath, schema, `${dropped}: defineTable`);
 }
-
-const sourceTraceTable = schemaTable("communitySourceTraces", "communityIntelligenceNodes");
-assertIncludes(schemaPath, sourceTraceTable, 'v.literal("interaction")');
 
 console.log("community_interaction_substrate_contract_proof: ok");
