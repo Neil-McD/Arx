@@ -406,6 +406,11 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
   recovery email, `founderCheckoutReceiptCore` and the email-hash receipt
   claim) was deleted Nov 6. A founder checkout now needs a signed-in owner;
   one without an owner fails (`founder_subscription_owner_missing`).
+- A community subscription is `active`, `past_due`, `cancel_at_period_end`
+  or `ended` (Stripe's `canceled` is stored as `ended`). Only
+  `communitySubscriptionLifecycle` writes its status, `cancelAtPeriodEnd` and
+  `endedAt`, so they can't disagree; the membership follows through
+  `communityMembershipLifecycle`.
 - A checkout is a `community_join` or a `founder_subscription`. A join paid
   before signing in can carry a typed `communityHold` (refunded, disputed,
   buyer_blocked) and never grants while held; only a won dispute lifts one.
