@@ -32,6 +32,7 @@ import {
   communityMembershipStateAfterSubscriptionUpdate,
   endedCommunityMembershipFields,
 } from "./communityMembershipLifecycle";
+import { communitySubscriptionStatusFields } from "./communitySubscriptionLifecycle";
 import { enqueueCommunityBillingIssueEmailInternal } from "./emailEvents";
 import { recordCriticalAuditEventBestEffort } from "./criticalAudit";
 import {
@@ -383,10 +384,7 @@ export const syncCommunitySubscriptionLifecycleInternal = internalMutation({
       cancelAtPeriodEnd = true;
       reCancel = Boolean(String(args.providerSubscriptionId ?? current?.providerSubscriptionId ?? "").trim());
     }
-    const endedAt =
-      status === "canceled" || status === "ended"
-        ? nowMs
-        : undefined;
+    const statusFields = communitySubscriptionStatusFields({ status, cancelAtPeriodEnd, current: current as any, nowMs });
     const nextProviderSubscriptionId =
       String(args.providerSubscriptionId ?? "").trim() ||
       String(current?.providerSubscriptionId ?? "").trim() ||
@@ -399,7 +397,6 @@ export const syncCommunitySubscriptionLifecycleInternal = internalMutation({
     const patch = {
       source: currentSource === "stripe" || currentSource === "external_sync" ? current?.source : source,
       pricePointId,
-      status,
       providerAccountId: providerAccountId || current?.providerAccountId,
       providerSubscriptionId: nextProviderSubscriptionId,
       providerCustomerId: nextProviderCustomerId,
@@ -411,8 +408,7 @@ export const syncCommunitySubscriptionLifecycleInternal = internalMutation({
         typeof currentPeriodEndAt === "number"
           ? currentPeriodEndAt
           : current?.currentPeriodEndAt,
-      cancelAtPeriodEnd,
-      endedAt,
+      ...statusFields,
       updatedAt: nowMs,
     };
 

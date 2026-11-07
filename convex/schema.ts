@@ -913,9 +913,6 @@ export default defineSchema({
       v.literal("lapsed"),
       v.literal("payment_hold"),
     ),
-    // No longer written or read; stays only until stripCommunityMembershipActiveInternal
-    // has cleared it from every row, then it is dropped.
-    active: v.optional(v.boolean()),
     activationSequence: v.optional(v.number()),
     activatedAt: v.optional(v.number()),
     // History only: when and why a membership last ended. Never decides access.
@@ -1086,11 +1083,12 @@ export default defineSchema({
     membershipId: v.id("communityMemberships"),
     pricePointId: v.id("communityPricePoints"),
     source: v.optional(v.union(v.literal("stripe"), v.literal("external_sync"))),
+    // See communitySubscriptionLifecycle: the only writer of status,
+    // cancelAtPeriodEnd and endedAt. Stripe's "canceled" is stored as ended.
     status: v.union(
       v.literal("active"),
       v.literal("past_due"),
       v.literal("cancel_at_period_end"),
-      v.literal("canceled"),
       v.literal("ended"),
     ),
     providerSubscriptionId: v.optional(v.string()),

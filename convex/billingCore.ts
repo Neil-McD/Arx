@@ -1,5 +1,6 @@
 
 export { resolveUserIdForAuthenticatedRequest } from "./authActor";
+import { communitySubscriptionStatusFields } from "./communitySubscriptionLifecycle";
 import {
   communitySubscriptionStatusGrantsAccess,
   normalizeCommunitySubscriptionStatus,
@@ -207,14 +208,13 @@ export async function createCommunitySubscriptionForMembership(args: {
   providerCustomerId?: string | null;
   currentPeriodStartAt?: number | null;
   currentPeriodEndAt?: number | null;
-  status?: "active" | "past_due" | "cancel_at_period_end" | "canceled" | "ended";
+  status?: string;
   cancelAtPeriodEnd?: boolean | null;
   nowMs: number;
 }): Promise<void> {
   const source = args.source ?? "stripe";
-  const status = args.status ?? "active";
-  const cancelAtPeriodEnd = Boolean(args.cancelAtPeriodEnd ?? status === "cancel_at_period_end");
-  const endedAt = status === "canceled" || status === "ended" ? args.nowMs : undefined;
+  const status = normalizeCommunitySubscriptionStatus(args.status ?? "active");
+  if (!status) throw new Error("community_subscription_status_invalid");
   const providerAccountId = String(args.providerAccountId ?? "").trim();
   if (source === "stripe" && !providerAccountId) {
     throw new Error("community_subscription_provider_account_required");
@@ -229,10 +229,10 @@ export async function createCommunitySubscriptionForMembership(args: {
       ) ?? null
     : existingRows[0] ?? null;
   if (existing) {
+    const statusFields = communitySubscriptionStatusFields({ status, cancelAtPeriodEnd: args.cancelAtPeriodEnd, current: existing, nowMs: args.nowMs });
     await args.ctx.db.patch(existing._id, {
       source,
       pricePointId: args.pricePointId,
-      status,
       providerAccountId: providerAccountId || existing.providerAccountId,
       providerSubscriptionId:
         String(args.providerSubscriptionId ?? "").trim() || existing.providerSubscriptionId,
@@ -247,8 +247,7 @@ export async function createCommunitySubscriptionForMembership(args: {
         typeof args.currentPeriodStartAt === "number" ? args.currentPeriodStartAt : undefined,
       currentPeriodEndAt:
         typeof args.currentPeriodEndAt === "number" ? args.currentPeriodEndAt : undefined,
-      cancelAtPeriodEnd,
-      endedAt,
+      ...statusFields,
       updatedAt: args.nowMs,
     });
     await recordCriticalAuditEventBestEffort(args.ctx, {
@@ -266,19 +265,19 @@ export async function createCommunitySubscriptionForMembership(args: {
         subscriptionStatus: status,
         source,
         providerAccountId: providerAccountId || null,
-        cancelAtPeriodEnd,
+        cancelAtPeriodEnd: statusFields.cancelAtPeriodEnd,
       },
       createdAt: args.nowMs,
     });
     return;
   }
+  const statusFields = communitySubscriptionStatusFields({ status, cancelAtPeriodEnd: args.cancelAtPeriodEnd, nowMs: args.nowMs });
   await args.ctx.db.insert("communitySubscriptions" as any, {
     communityId: args.communityId,
     userId: args.userId,
     membershipId: args.membershipId,
     pricePointId: args.pricePointId,
     source,
-    status,
     providerAccountId: providerAccountId || undefined,
     providerSubscriptionId: String(args.providerSubscriptionId ?? "").trim() || undefined,
     providerCustomerId: String(args.providerCustomerId ?? "").trim() || undefined,
@@ -286,8 +285,7 @@ export async function createCommunitySubscriptionForMembership(args: {
       typeof args.currentPeriodStartAt === "number" ? args.currentPeriodStartAt : undefined,
     currentPeriodEndAt:
       typeof args.currentPeriodEndAt === "number" ? args.currentPeriodEndAt : undefined,
-    cancelAtPeriodEnd,
-    endedAt,
+    ...statusFields,
     createdAt: args.nowMs,
     updatedAt: args.nowMs,
   });
@@ -306,7 +304,7 @@ export async function createCommunitySubscriptionForMembership(args: {
       subscriptionStatus: status,
       source,
       providerAccountId: providerAccountId || null,
-      cancelAtPeriodEnd,
+      cancelAtPeriodEnd: statusFields.cancelAtPeriodEnd,
     },
     createdAt: args.nowMs,
   });

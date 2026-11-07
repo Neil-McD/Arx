@@ -2661,7 +2661,7 @@ test.each(["paid", "open", "cancelled", "denied", "reopened", "duplicate", "lega
     if (mode === "blocked") await ctx.db.insert("communityBlocks", { communityId: f.communityId, userId: f.row.userId, createdByUserId: f.ownerId, createdAt: 1, updatedAt: 1 });
     if (mode === "owner-applicant") await ctx.db.patch(f.row._id, { userId: f.ownerId });
     if (mode.startsWith("membership")) await ctx.db.insert("communityMemberships", { communityId: f.communityId, userId: f.row.userId,
-      role: mode === "membership-admin" ? "admin" : "member", state: "active", active: mode !== "membership-inactive",
+      role: mode === "membership-admin" ? "admin" : "member", state: mode === "membership-inactive" ? "removed" : "active",
       accessSource: mode === "membership-paid" ? "paid_subscription" : "free_grant", createdAt: 1, updatedAt: 1 });
     if (mode === "subscription") {
       const membership = (await ctx.db.query("communityMemberships").withIndex("by_community_user", q => q.eq("communityId", f.communityId).eq("userId", f.memberId)).unique())!;

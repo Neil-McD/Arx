@@ -1,4 +1,5 @@
 import { internal } from "./_generated/api";
+import { endCommunitySubscription } from "./communitySubscriptionLifecycle";
 import {
   internalAction,
   internalMutation,
@@ -482,12 +483,7 @@ export const applyCommunityArchiveBillingBatchInternal = internalMutation({
     for (const communitySubscriptionId of args.communitySubscriptionIds) {
       const row = await ctx.db.get(communitySubscriptionId);
       if (!row || String(row.communityId) !== String(job.communityId)) continue;
-      await ctx.db.patch(communitySubscriptionId, {
-        status: "ended",
-        cancelAtPeriodEnd: false,
-        endedAt: row.endedAt ?? args.nowMs,
-        updatedAt: args.nowMs,
-      });
+      await endCommunitySubscription(ctx, row, args.nowMs);
     }
     for (const founderSubscriptionId of args.founderSubscriptionIds) {
       const row = await ctx.db.get(founderSubscriptionId);

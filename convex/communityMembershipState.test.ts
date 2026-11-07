@@ -71,7 +71,7 @@ test("a refund puts a payer on hold; a routine update can't lift it, a new paid 
 test("a lapsed payer comes back when the subscription grants access again", async () => {
   const { sync, membership, canChat } = await fixture();
   await sync("canceled");
-  expect(await membership()).toMatchObject({ state: "lapsed", revokedReason: "subscription_canceled" });
+  expect(await membership()).toMatchObject({ state: "lapsed", revokedReason: "subscription_ended" });
   expect(await canChat()).toBe(false);
   await sync("active");
   expect(await membership()).toMatchObject({ state: "active", activationSequence: 2 });
@@ -127,16 +127,4 @@ test("only an active membership can end, and nothing ends a removal or a departu
   expect(update("payment_hold", true, false)).toBe("payment_hold");
   expect(update("payment_hold", false, false)).toBe("payment_hold");
   expect(update("active", false, false, "subscription_dispute_opened")).toBe("payment_hold");
-});
-
-test("the strip clears the retired active field once and changes nothing else", async () => {
-  const { t, ids, membership } = await fixture();
-  await t.run((ctx) => ctx.db.patch(ids.membershipId, { active: true } as any));
-  const first: any = await t.mutation(internal.communityMembershipLifecycle.stripCommunityMembershipActiveInternal, {});
-  expect(first).toMatchObject({ done: true, stripped: 1 });
-  const row: any = await membership();
-  expect(row).not.toHaveProperty("active");
-  expect(row.state).toBe("active");
-  const second: any = await t.mutation(internal.communityMembershipLifecycle.stripCommunityMembershipActiveInternal, {});
-  expect(second.stripped).toBe(0);
 });
