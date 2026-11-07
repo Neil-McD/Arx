@@ -16,6 +16,12 @@ test("the doorstep's data: live courses with lesson counts, the host by name, th
       authSubject: "rashid-subject", displayName: "rashid_h", handle: "rashid", normalizedHandle: "rashid", createdAt: now, updatedAt: now,
     });
     await ctx.db.insert("userProfileDetails", { userId: ownerId, displayName: "Rashid", createdAt: now, updatedAt: now } as any);
+    // The owner's Stripe account can take card payments, so the plan is on sale.
+    await ctx.db.insert("userStripeConnectAccounts", {
+      userId: ownerId, stripeAccountId: "acct_club", accountType: "express", country: "US", transfersEnabled: true, status: "ready",
+      detailsSubmitted: true, chargesEnabled: true, payoutsEnabled: true, requirementsCurrentlyDue: [], requirementsEventuallyDue: [],
+      createdAt: now, updatedAt: now,
+    });
     const communityId = await ctx.db.insert("communities", {
       ownerId, slug: "club", name: "Club", oneLiner: "Get 12 hours of work done in 2.", visibility: "published",
       inferenceFundingPolicy: "managed_required", entryPolicy: "paid_subscription", activeMemberCount: 2, createdAt: now, updatedAt: now,

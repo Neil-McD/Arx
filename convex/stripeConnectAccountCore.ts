@@ -19,6 +19,7 @@ export type StripeConnectRevenueDestinationLike = {
   chargesEnabled?: unknown;
   payoutsEnabled?: unknown;
   transfersEnabled?: unknown;
+  serviceAgreement?: unknown;
 };
 
 export function normalizeStripeConnectRequirementList(raw: unknown): string[] {
@@ -62,6 +63,10 @@ export function getStripeConnectDestinationAccountId(
   return accountId || null;
 }
 
+// Community checkout charges directly on the founder's own Stripe account. A
+// recipient-only account (Stripe's cross-border service agreement, e.g. Kuwait)
+// can receive transfers and payouts but can't take those card payments, even
+// when Stripe reports it ready.
 export function canReceiveCommunityRevenue(
   account: StripeConnectRevenueDestinationLike | null | undefined,
 ): boolean {
@@ -70,8 +75,19 @@ export function canReceiveCommunityRevenue(
     getStripeConnectDestinationAccountId(account) !== null &&
     connectStatus === "ready" &&
     account?.payoutsEnabled === true &&
-    account?.chargesEnabled === true
+    account?.chargesEnabled === true &&
+    String(account?.serviceAgreement ?? "").trim().toLowerCase() !== "recipient"
   );
+}
+
+// Stripe refusing a charge on the founder's account because of what that account
+// can do (currency, capability), not because of the buyer: checkout is closed
+// for this community, not "try again".
+export function isStripeConnectCheckoutCapabilityError(error: unknown): boolean {
+  const record = (error ?? {}) as { type?: unknown; message?: unknown };
+  if (String(record.type ?? "") !== "StripeInvalidRequestError") return false;
+  return /do(?:es)? not support|currently supports these currencies|card_payments|cannot (?:create|accept) (?:charges|payments)/i
+    .test(String(record.message ?? ""));
 }
 
 export function buildStripeConnectAccountSnapshot(

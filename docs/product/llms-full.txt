@@ -2062,11 +2062,13 @@ In the platform-home community (`polynet`), each member other than the owner get
 
 Paid-member pricing and payouts are independent from AI funding, but checkout requires an operational community:
 
-1. The owner completes Stripe Connect payout onboarding.
+1. The owner completes Stripe Connect payout onboarding, on an account that can take card payments directly. Checkout charges on the owner's account, so a payouts-only account (Stripe's cross-border `recipient` service agreement, e.g. Kuwait) doesn't qualify even when Stripe reports it ready (`canReceiveCommunityRevenue`).
 2. The builder configures `paid_subscription` entry and an active price point.
 3. A member enters through the community's join page and completes `community_join` checkout on the builder's connected account.
 4. Provider/webhook verification creates the purchase claim, subscription lifecycle, membership, and access truth.
 5. The connected account owns the customer, subscription, charge, processor fee, and payout. Polynet keeps its 2.9% application fee.
+
+While the owner's account can't take card payments, the community can't set a price, its join page offers no plan and says checkout is unavailable, checkout refuses with `community_checkout_unavailable`, and Studio tells the owner that members can't pay to join yet (free joining still works). Stripe refusing what the owner's account can sell (a currency or capability it lacks) is the same refusal, never a server error.
 
 Stripe processing fees are separate from Polynet's 2.9% application fee. A grandfathered community can collect member revenue while hosted AI is off. An archived or commercially suspended subscription-required community cannot start new member checkout. Full refunds revoke paid access; partial refunds retain access unless subscription state says otherwise. Each successful refund reverses the cumulative proportional share of Polynet's application fee idempotently.
 
