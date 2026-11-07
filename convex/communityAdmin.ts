@@ -2325,13 +2325,19 @@ async function leaveCommunityForUser(ctx: any, args: { communityId: any; userId:
         const preservePlatformHomeRelationship = isPlatformHomeCommunity({
           communitySlug: community.slug,
         });
-        const leaving = preservePlatformHomeRelationship
+        // Only an active member leaves. Someone already gone stays as they are:
+        // a retried leave changes nothing, and a removed member can't erase the
+        // removal by "leaving".
+        const isActive = communityMembershipRowIsActive(membership);
+        const leaving = preservePlatformHomeRelationship && isActive
           ? endedCommunityMembershipFields({ membership, to: "left", reason: PLATFORM_HOME_MEMBER_LEFT_REVOKED_REASON, nowMs })
           : null;
-        const after = leaving ? ({ ...membership, ...leaving } as CommunityMembershipLike) : null;
+        const after = preservePlatformHomeRelationship || !isActive
+          ? ({ ...membership, ...leaving } as CommunityMembershipLike)
+          : null;
         if (leaving) {
           await ctx.db.patch(membership._id as any, leaving);
-        } else {
+        } else if (!after) {
           await ctx.db.delete(membership._id as any);
         }
         await adjustCommunityActiveMemberCountForMembershipTransition({

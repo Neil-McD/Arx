@@ -4,7 +4,7 @@
 import { convexTest } from "convex-test";
 import { expect, test } from "vitest";
 
-import { internal } from "./_generated/api";
+import { api, internal } from "./_generated/api";
 import schema from "./schema";
 import { communityMembershipState, requireCommunityChatAccess } from "./communityCore";
 import {
@@ -86,6 +86,32 @@ test("a removed member is never brought back by a payment update", async () => {
   await sync("active");
   expect((await membership()).state).toBe("removed");
   expect(await canChat()).toBe(false);
+});
+
+test("leaving is for active members: a retry changes nothing and a removal can't be erased by leaving", async () => {
+  const { t, ids, membership } = await fixture();
+  const asPayer = t.withIdentity({ subject: "payer-subject" });
+  await t.run((ctx) => ctx.db.patch(ids.membershipId, {
+    state: "removed", active: false, revokedAt: NOW, revokedReason: "removed_by_manager",
+  } as any));
+  await asPayer.mutation(api.communityAdmin.leaveCommunity, { communityId: ids.communityId });
+  expect((await membership())?.state).toBe("removed");
+
+  // The platform home community keeps a departure as `left`; leaving again is fine.
+  const homeMembershipId = await t.run(async (ctx) => {
+    const homeId = await ctx.db.insert("communities", {
+      ownerId: ids.ownerId, slug: "polynet", name: "Polynet", lifecycleStatus: "active", lifecycleGeneration: 0, visibility: "published",
+      inferenceFundingPolicy: "managed_required", entryPolicy: "open", activeMemberCount: 2, createdAt: NOW, updatedAt: NOW,
+    } as any);
+    const id = await ctx.db.insert("communityMemberships", {
+      communityId: homeId, userId: ids.payerId, role: "member", accessSource: "free_grant",
+      state: "active", active: true, activationSequence: 1, activatedAt: NOW, createdAt: NOW, updatedAt: NOW,
+    } as any);
+    return { homeId, id };
+  });
+  await asPayer.mutation(api.communityAdmin.leaveCommunity, { communityId: homeMembershipId.homeId });
+  await asPayer.mutation(api.communityAdmin.leaveCommunity, { communityId: homeMembershipId.homeId });
+  expect((await t.run((ctx) => ctx.db.get(homeMembershipId.id)) as any).state).toBe("left");
 });
 
 test("only an active membership can end, and nothing ends a removal or a departure", () => {
