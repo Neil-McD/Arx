@@ -125,8 +125,8 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
   `communityInteractionLegacyChatLinks`, `communityFeaturedMessages`. The composer's old inline attachment shape, the `ai_feed` attention
   surface and the `reorderCommunityChannels` stub were deleted once production
   ran 150828216 (POL-30); the composer takes uploaded attachment ids only.
-- **Hand-run:** `communityChannelAudit`, `communityChannelBackfill` (General channel
-  migration: delete after two clean production audits, residue map R-009).
+- The General-channel migration finished in production (Nov 7 2026: 453 rows,
+  two clean audits) and its backfill and audit are deleted (residue map R-009).
 
 ### 4. Direct messages — Keep (Studio only)
 

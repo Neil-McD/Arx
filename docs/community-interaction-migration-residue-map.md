@@ -13,7 +13,7 @@ This map is the deletion queue for the community chat substrate migration. It se
 | ID | Residue | Classification | Current Owner | Delete Condition |
 |---|---|---|---|---|
 | R-008 | Null `pinned_at` compatibility field in mapped root bundles | `KEEP TEMPORARILY` | `convex/communityInteractions.ts`, `shared/cloudCommunityInteractionsGateway.ts` | Delete after the cached-client compatibility window closes and no shipped client expects the field. Channel `pinnedRootId` remains the only pin authority. |
-| R-009 | Temporary unchanneled General migration lane | `KEEP TEMPORARILY` | `convex/communityChannelBackfill.ts`, `convex/communityChannelAudit.ts`, `convex/communityInteractions.ts` | Delete only after two consecutive production audits report zero readable unchanneled roots/replies and the backfill is complete. |
+| R-009 | Temporary unchanneled General migration lane | `PARTLY REMOVED` | `convex/communityChannelCore.ts`, `convex/communityInteractions.ts` | The backfill ran in production (Nov 7 2026, 453 rows) and two consecutive audits reported zero drift; `communityChannelBackfill` and `communityChannelAudit` are deleted. The read-side "no channel reads as General" lane stays: private dock rows are unchanneled by design. |
 
 ## Removed Residue
 

@@ -256,26 +256,6 @@ assert.match(
   /requireResourceStatusForWrite\(nextStatusRaw\)/,
   "resource updates with explicit status must fail closed on invalid values",
 );
-assert.match(
-  resources,
-  /export const backfillCommunityResourceModuleStatusesInternal = internalMutation/,
-  "legacy module visibility must have an idempotent internal status backfill",
-);
-assert.match(
-  resources,
-  /hasPersistedResourceModuleStatus/,
-  "module status backfill must only patch modules without explicit draft/live status",
-);
-assert.match(
-  resources,
-  /normalizeResourceRole\(row\.role\) === "page"[\s\S]*normalizeResourceStatus\(row\.status\) === "published"[\s\S]*communityResourceHasUsableKnowledgeContent\(row\)/,
-  "module status backfill must infer live only from usable legacy-published pages",
-);
-assert.match(
-  resources,
-  /backfillCommunityResourceModuleStatusesInternal/,
-  "module status backfill must resync resource memory projections after canonicalizing visibility",
-);
 assert.doesNotMatch(
   resources,
   /buildPageDraftBodyFromSource|extractDraftSummary|extractDraftKeyIdeas/,

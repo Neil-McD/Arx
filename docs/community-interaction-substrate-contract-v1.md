@@ -496,6 +496,12 @@ Migration order:
 
 No big-bang rewrite. No duplicated product truth.
 
+The General-channel migration ran in production on Nov 7 2026 (453 rows across
+10 of 15 communities, dry run first per phase), and two consecutive read-only
+audits then reported zero drift. Its backfill (`communityChannelBackfill`) and
+audit (`communityChannelAudit`) are deleted. What follows records how it was
+bounded.
+
 The General-channel migration is independently bounded and inventory-first.
 The additive schema, compatibility functions, and read-only internal audit are
 deployed before any data mutation. The audit enumerates community ids and then

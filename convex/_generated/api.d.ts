@@ -45,8 +45,6 @@ import type * as communityBuilderAccessCore from "../communityBuilderAccessCore.
 import type * as communityBuilderKnowledgeSetup from "../communityBuilderKnowledgeSetup.js";
 import type * as communityCapabilityContext from "../communityCapabilityContext.js";
 import type * as communityChannelAccess from "../communityChannelAccess.js";
-import type * as communityChannelAudit from "../communityChannelAudit.js";
-import type * as communityChannelBackfill from "../communityChannelBackfill.js";
 import type * as communityChannelCore from "../communityChannelCore.js";
 import type * as communityChannelParticipants from "../communityChannelParticipants.js";
 import type * as communityChannelValidators from "../communityChannelValidators.js";
@@ -263,8 +261,6 @@ declare const fullApi: ApiFromModules<{
   communityBuilderKnowledgeSetup: typeof communityBuilderKnowledgeSetup;
   communityCapabilityContext: typeof communityCapabilityContext;
   communityChannelAccess: typeof communityChannelAccess;
-  communityChannelAudit: typeof communityChannelAudit;
-  communityChannelBackfill: typeof communityChannelBackfill;
   communityChannelCore: typeof communityChannelCore;
   communityChannelParticipants: typeof communityChannelParticipants;
   communityChannelValidators: typeof communityChannelValidators;
