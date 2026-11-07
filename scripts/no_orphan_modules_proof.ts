@@ -17,6 +17,7 @@ const ALLOWED = new Map([
   ["stagingSeedSunrise", "operator tool: seeds and simulates the staging Sunrise community by hand"],
   ["anonymousUserCleanup", "operator tool: data deletion, run by hand"],
   ["communityMaintenance", "operator tool: purges orphaned user artifacts, run by hand"],
+  ["retiredTablesCleanup", "hand-run once: empties the Nov 7 retired tables before the release that drops them"],
   ["communityMemoryMigration", "operator tool: one-time copy of old memory into community notes, run by hand"],
   ["communityAiFeedRetirement", "data retirement job; removed with the AI feed tables"],
   ["communityWeeklyDigestWorker", "dormant by design until the weekly digest gets a cron"],
