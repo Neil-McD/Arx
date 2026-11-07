@@ -30,10 +30,6 @@ const coreSource = read("convex/communityCore.ts");
 assert.match(coreSource, /FREE_COMMUNITIES_PER_OWNER = \d+;[\s\S]*requireOwnerBelowFreeCommunityLimit[\s\S]*community_owner_limit_reached/);
 assert.match(read("convex/communityColdArchive.ts"), /requireOwnerBelowFreeCommunityLimit\(ctx, community\.ownerId\)/);
 assert.doesNotMatch(lifecycle, /max_communities/);
-assert.match(
-  founderInference,
-  /resolveAdditionalManagedCommunityAdmission[\s\S]*query\("communities"[\s\S]*by_owner[\s\S]*resolveCommunityInferenceFundingAdmission/,
-);
 assert.doesNotMatch(founderInference, /MAX_COMMUNITIES|fundedCommunityCount\s*[><=]/);
 assert.match(createController, /community_owner_limit_reached/);
 assert.doesNotMatch(createController, /max_communities|community_funding_required_before_create|onOwnedCommunityLimitReached/);

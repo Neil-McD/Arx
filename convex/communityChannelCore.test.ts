@@ -11,9 +11,7 @@ import {
   ensureReplyChannelMatchesRoot,
   getGeneralChannel,
   listSharedChannelReadableRows,
-  listChannelProjectionRows,
   listChannelReadableRows,
-  listGeneralChannelReadableRows,
   listSharedCommunityChannels,
   requireActiveCommunityChannel,
   requireChannelForAddressableRoot,
@@ -241,7 +239,7 @@ test("channel-facing roots and replies acquire General while private dock rows r
   });
 });
 
-test("General reads merge legacy rows without admitting private or other-channel activity", async () => {
+test("channel reads never admit private or other-channel activity", async () => {
   const t = convexTest(schema, modules);
   const fixture = await createFixture(t);
   await t.run(async (ctx) => {
@@ -304,15 +302,6 @@ test("General reads merge legacy rows without admitting private or other-channel
       channelId: otherChannelId,
       visibilityScope: "community",
     });
-
-    const rows = await listGeneralChannelReadableRows({
-      ctx,
-      tableName: "communityInteractionRoots",
-      communityId: fixture.communityId,
-      generalChannel: general,
-      limit: 10,
-    });
-    expect(rows.map((row) => row._id)).toEqual([canonicalId, legacyId]);
 
     const otherChannel = await requireActiveCommunityChannel({
       ctx,
@@ -505,59 +494,3 @@ test("community aggregate reads merge active channels and preserve exact row own
   });
 });
 
-test("custom channel projections never absorb the legacy General lane", async () => {
-  const t = convexTest(schema, modules);
-  const fixture = await createFixture(t);
-  await t.run(async (ctx) => {
-    await ensureGeneralChannel({
-      ctx,
-      communityId: fixture.communityId,
-      nowMs: 2_000,
-    });
-    const customChannelId = await ctx.db.insert("communityChannels", {
-      communityId: fixture.communityId,
-      slug: "custom",
-      name: "Custom",
-      accessMode: "all_members",
-      postingPolicy: "members",
-      status: "active",
-      position: 1,
-      createdByUserId: fixture.ownerId,
-      createdAt: 2_000,
-      updatedAt: 2_000,
-    });
-    const legacyCursorId = await ctx.db.insert("communityReadCursors", {
-      communityId: fixture.communityId,
-      userId: fixture.ownerId,
-      streamKind: "chat",
-      seenThroughAt: 100,
-      createdAt: 2_000,
-      updatedAt: 2_000,
-    });
-    const customCursorId = await ctx.db.insert("communityReadCursors", {
-      communityId: fixture.communityId,
-      channelId: customChannelId,
-      userId: fixture.ownerId,
-      streamKind: "chat",
-      seenThroughAt: 200,
-      createdAt: 2_000,
-      updatedAt: 2_000,
-    });
-    const customChannel = await requireActiveCommunityChannel({
-      ctx,
-      communityId: fixture.communityId,
-      channelId: customChannelId,
-    });
-
-    const rows = await listChannelProjectionRows({
-      ctx,
-      tableName: "communityReadCursors",
-      communityId: fixture.communityId,
-      channel: customChannel,
-      userId: fixture.ownerId,
-      streamKind: "chat",
-    });
-    expect(rows.map((row) => row._id)).toEqual([customCursorId]);
-    expect(rows.map((row) => row._id)).not.toContain(legacyCursorId);
-  });
-});

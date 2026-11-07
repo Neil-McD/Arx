@@ -648,17 +648,6 @@ export function communityResourceSourceHasReadyText(row: CommunityResourceLike):
     communityResourceBodyChars(row) > 0;
 }
 
-export function communityResourceHasUsableKnowledgeContent(row: CommunityResourceLike): boolean {
-  return Boolean(
-    String(row.title ?? "").trim() &&
-      (
-        communityResourceBodyChars(row) > 0 ||
-        String(row.url ?? "").trim() ||
-        String(row.fileKey ?? "").trim()
-      ),
-  );
-}
-
 export function communityResourceModuleIsLive(row: CommunityResourceModuleLike): boolean {
   return communityResourceModuleIsMemberLive(row);
 }

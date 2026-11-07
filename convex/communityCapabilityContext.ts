@@ -5,7 +5,6 @@ import { internalAction, internalQuery } from "./_generated/server";
 import {
   buildResolvedCommunityCapabilityContext,
   normalizeCommunityCapabilitySlug,
-  type CommunityMembershipProjection,
   type ResolvedCommunityCapabilityContext,
 } from "../shared/communityCapabilityContextContract";
 import type { CommunityAccess } from "../shared/communityTypes";
@@ -322,20 +321,6 @@ export const listAccessibleCommunityDirectoryPageInternal = internalQuery({
       limit: args.limit,
     }),
 });
-
-export function findCommunityMembershipBySlug(
-  rows: CommunityMembershipProjection[],
-  communitySlug: string,
-): CommunityMembershipProjection | null {
-  const normalized = normalizeCommunityCapabilitySlug(communitySlug);
-  if (!normalized) return null;
-  return (
-    rows.find(
-      (row) =>
-        normalizeCommunityCapabilitySlug(row.communities?.slug) === normalized,
-    ) ?? null
-  );
-}
 
 async function buildCommunityCapabilityContextForActor(args: {
   ctx: any;

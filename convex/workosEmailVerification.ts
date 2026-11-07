@@ -222,29 +222,3 @@ export async function resolveTrustedWorkosEmailVerification(args: {
   };
 }
 
-export async function resolveTrustedEmailVerification(args: {
-  authSubject: string | null;
-  email: string | null;
-  identityEmail?: string | null;
-  identityEmailVerified?: boolean | null;
-  identityEmailVerificationSource?: "oauth_provider" | null;
-}): Promise<TrustedEmailVerificationResolution> {
-  const normalizedEmail = normalizeEmailForVerification(args.email);
-  const normalizedIdentityEmail = normalizeEmailForVerification(args.identityEmail);
-  if (
-    args.identityEmailVerified === true &&
-    normalizedEmail &&
-    normalizedIdentityEmail === normalizedEmail
-  ) {
-    return {
-      emailVerified: true,
-      emailVerificationSource: args.identityEmailVerificationSource ?? "oauth_provider",
-      reason: null,
-    };
-  }
-
-  return await resolveTrustedWorkosEmailVerification({
-    authSubject: args.authSubject,
-    email: args.email,
-  });
-}

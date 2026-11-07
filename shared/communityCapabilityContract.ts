@@ -188,10 +188,3 @@ export function communityAccessIsOpen(access: CommunityCapabilityAccessInput): b
     (access.can_enter_community === true || access.can_read_chat === true)
   );
 }
-
-export function hasCommunityCapability(
-  authority: CommunityCapabilityAuthority,
-  capability: CommunityCapabilityName,
-): boolean {
-  return authority.availableCapabilities.includes(capability);
-}

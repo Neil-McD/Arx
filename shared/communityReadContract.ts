@@ -54,12 +54,6 @@ function normalizeMembershipRelation(
     : "member";
 }
 
-export function normalizeCommunityReadScope(value: unknown): CommunityReadScope | null {
-  if (value === undefined || value === null || value === "") return "joined";
-  const normalized = typeof value === "string" ? value.trim().toLowerCase() : "";
-  return normalized === "joined" || normalized === "discover" ? normalized : null;
-}
-
 export function projectCommunityMembershipReadSummary(
   row: CommunityMembershipProjection,
 ): CommunityReadSummary | null {
@@ -78,20 +72,3 @@ export function projectCommunityMembershipReadSummary(
   };
 }
 
-export function projectPublicDiscoverCommunityReadSummary(args: {
-  community: PublicDiscoverCommunityProjection;
-  accessibleSummary?: CommunityReadSummary | null;
-}): CommunityReadSummary | null {
-  const slug = normalizeCommunityCapabilitySlug(args.community.slug);
-  if (!slug || String(args.community.visibility ?? "").trim().toLowerCase() !== "published") {
-    return null;
-  }
-  return {
-    slug,
-    name: boundedString(args.community.name, 180) ?? "Community",
-    one_liner: boundedString(args.community.one_liner, 280),
-    visibility: "published",
-    entry_policy: normalizeEntryPolicy(args.community.entry_policy),
-    relation: args.accessibleSummary?.relation ?? "no_access",
-  };
-}

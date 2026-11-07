@@ -56,7 +56,6 @@ const retiredPremiumStyles = [
 
 assert.match(founderPlan, /MONTHLY_PRICE_BASE_UNITS = 7_900/);
 assert.match(founderPlan, /INCLUDED_COST_MICROS = 20_000_000/);
-assert.match(founderPlan, /INCLUDED_COMMUNITIES = 1/);
 assert.match(founderPlan, /COMMUNITY_PLATFORM_FEE_BPS = 290/);
 assert.match(founderPlan, /POLYNET_BUILDER_OFFER_NAME = "Agent plan"/);
 assert.match(founderPlan, /COMMUNITY_BUILDER_ACCESS_FREE = "free"/);
@@ -124,10 +123,6 @@ assert.doesNotMatch(
 );
 assert.match(founderInference, /founder_usage_cycle_community_mismatch/);
 assert.doesNotMatch(founderInference, /legacy_requester_chatgpt/);
-assert.match(
-  founderInference,
-  /resolveAdditionalManagedCommunityAdmission[\s\S]*query\("communities"[\s\S]*by_owner[\s\S]*resolveCommunityInferenceFundingAdmission/,
-);
 assert.doesNotMatch(founderInference, /MAX_COMMUNITIES|fundedCommunityCount\s*[><=]/);
 assert.doesNotMatch(communityLifecycle, /resolveAdditionalManagedCommunityAdmission\(ctx, ownerId\)/);
 assert.match(communityLifecycle, /founderSubscriptionId: v\.optional\(v\.id\("founderSubscriptions"\)\)/);

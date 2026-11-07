@@ -109,14 +109,6 @@ export function requireSafeCommunitySourceUrl(raw: unknown, maxLength = 2_000): 
   return parsed.toString();
 }
 
-export function maybeSafeCommunitySourceUrl(raw: unknown, maxLength = 2_000): string | null {
-  try {
-    return requireSafeCommunitySourceUrl(raw, maxLength);
-  } catch {
-    return null;
-  }
-}
-
 export function requireSafeCommunitySourceFetcherEndpoint(raw: unknown, maxLength = 2_000): string {
   const input = normalizeCommunitySourcePolicyString(raw, maxLength);
   if (!input) throw new Error("community_source_url_fetcher_not_configured");

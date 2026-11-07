@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import {
   buildPlatformHarnessRuntimePromptBundle,
-  buildPlatformHarnessRuntimeSystemPrompt,
 } from "../shared/runtimePrompt.ts";
 import { buildRuntimeTurnContextPacket } from "../shared/runtimeTurnContextPacket.ts";
 
@@ -79,7 +78,6 @@ const switchedCommunity = buildPlatformHarnessRuntimePromptBundle({
 });
 assert.match(switchedCommunity.text, /first list \/communities\/second-community\/members\//);
 assert.doesNotMatch(switchedCommunity.text, /first list \/communities\/bundle-community\/members\//);
-assert.equal(bundle.text, buildPlatformHarnessRuntimeSystemPrompt(params));
 assert.deepEqual(
   bundle.sections.map((section) => section.id),
   [

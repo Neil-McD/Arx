@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import {
-  chatTextHasInlineMarkdown,
   stripChatInlineMarkdown,
   tokenizeChatInlineMarkdown,
   type ChatInlineToken,
@@ -110,8 +109,8 @@ assert.equal(stripChatInlineMarkdown(null), "");
 assert.equal(stripChatInlineMarkdown(undefined), "");
 
 // Detection helper.
-assert.equal(chatTextHasInlineMarkdown("plain"), false);
-assert.equal(chatTextHasInlineMarkdown("**b**"), true);
+assert.equal(tokenizeChatInlineMarkdown("plain").some((token) => token.kind !== "text"), false);
+assert.equal(tokenizeChatInlineMarkdown("**b**").some((token) => token.kind !== "text"), true);
 
 // Multiline bold does not span newlines... unless within one line run it stays
 // inline-only: markers containing a newline render literally.

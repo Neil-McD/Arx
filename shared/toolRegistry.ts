@@ -33,16 +33,6 @@ export type ToolRegistryEntry = {
   inputSchema: JsonSchema;
 };
 
-type OpenAiFunctionTool = {
-  type: "function";
-  function: {
-    name: string;
-    description: string;
-    parameters: JsonSchema;
-    strict: boolean;
-  };
-};
-
 export type ResponsesApiFunctionTool = {
   type: "function";
   name: string;
@@ -314,20 +304,6 @@ const SERVER_VALIDATED_TOOL_NAMES: ReadonlySet<RetrievalToolName> = new Set(["po
 
 export function isServerValidatedTool(name: RetrievalToolName): boolean {
   return SERVER_VALIDATED_TOOL_NAMES.has(name);
-}
-
-export function buildOpenAiFunctionTools(
-  names: readonly RetrievalToolName[],
-): OpenAiFunctionTool[] {
-  return getToolDefinitions(names).map((tool) => ({
-    type: "function",
-    function: {
-      name: tool.name,
-      description: tool.description,
-      parameters: tool.inputSchema,
-      strict: !isServerValidatedTool(tool.name),
-    },
-  }));
 }
 
 function isSchemaRecord(value: JsonSchema): value is Record<string, unknown> {

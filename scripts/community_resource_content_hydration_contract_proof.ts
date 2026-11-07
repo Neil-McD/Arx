@@ -79,11 +79,6 @@ assert.match(
   /async function readCommunityResourceBuilderResourceCore[\s\S]*target_type: "resource"[\s\S]*resource: await mapCommunityResourceRowWithBody\(args\.ctx, resolved\.resource\)/,
   "builder resource reads must hydrate split body content before exposing draft or source rows",
 );
-assert.match(
-  core,
-  /export function communityResourceHasUsableKnowledgeContent[\s\S]*communityResourceBodyChars\(row\) > 0/,
-  "visibility checks must trust body_chars so split-body pages are not treated as empty",
-);
 
 assert.doesNotMatch(
   [contracts, app, webContentController, panel, viewer].join("\n"),

@@ -167,19 +167,6 @@ export type CommunityInteractionRootPage = {
   nextBeforeCreatedAt: number | null;
 };
 
-export async function listCloudCommunityInteractionRoots<SessionT>(
-  params: CloudCommunityInteractionsGatewayParams<SessionT> & {
-    communityId: string;
-    channelId?: string | null;
-    beforeCreatedAt?: number | null;
-    limit?: number;
-    kind?: string | null;
-  },
-): Promise<CommunityInteractionRootBundle[]> {
-  const page = await listCloudCommunityInteractionRootsPage(params);
-  return page.roots;
-}
-
 export async function listCloudCommunityInteractionRootsPage<SessionT>(
   params: CloudCommunityInteractionsGatewayParams<SessionT> & {
     communityId: string;

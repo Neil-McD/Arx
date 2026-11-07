@@ -83,8 +83,8 @@ assert.match(
   "late founder billing webhooks must not reopen archived funding",
 );
 assert.match(
-  founderInferenceCore,
-  /withIndex\("by_owner"[\s\S]*\.filter\(\(community\) => communityIsActive\(community\)\)/,
+  read("convex/communityCore.ts"),
+  /requireOwnerBelowFreeCommunityLimit[\s\S]*withIndex\("by_owner"[\s\S]*if \(!communityIsActive\(row as any\)\) continue;/,
   "archived communities must not block creation of another active community",
 );
 assert.match(

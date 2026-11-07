@@ -83,67 +83,6 @@ export type CommunityFunnelRenderModel = {
   vslUrl: string | null;
 };
 
-type CommunityFunnelRenderInput = {
-  communityName: string;
-  oneLiner?: string | null;
-  about?: string | null;
-  funnel?: {
-    hero_media_url?: string | null;
-    hero_media_kind?: "image" | "video" | null;
-    active_slot?: "default" | "custom_1" | "custom_2" | null;
-    published_vsl_url?: string | null;
-    published_content_v2?: {
-      version: 2;
-      headline: string;
-      subheadline: string;
-      pillars: readonly CommunityFunnelRenderPillar[];
-      long_form_markdown: string;
-    } | null;
-  } | null;
-};
-
-function cleanOptionalCopy(value: string | null | undefined): string | null {
-  const cleaned = typeof value === "string" ? value.trim() : "";
-  return cleaned || null;
-}
-
-/**
- * One public render decision. Draft state never enters this projection: the
- * public route receives only the explicitly published snapshot from Convex.
- */
-export function buildCommunityFunnelRenderModel(
-  input: CommunityFunnelRenderInput,
-): CommunityFunnelRenderModel {
-  const published = input.funnel?.published_content_v2 ?? null;
-  const isCustom = input.funnel?.active_slot !== "default" && published?.version === 2;
-  if (isCustom && published) {
-    return {
-      mode: "custom",
-      headline: published.headline.trim(),
-      subheadline: cleanOptionalCopy(published.subheadline),
-      pillars: published.pillars.slice(0, 3).map((pillar) => ({
-        title: pillar.title.trim(),
-        body: pillar.body.trim(),
-      })),
-      longFormMarkdown: cleanOptionalCopy(published.long_form_markdown),
-      vslUrl:
-        cleanOptionalCopy(input.funnel?.published_vsl_url) ??
-        (input.funnel?.hero_media_kind === "video"
-          ? cleanOptionalCopy(input.funnel?.hero_media_url)
-          : null),
-    };
-  }
-
-  return {
-    mode: "default",
-    headline: cleanOptionalCopy(input.oneLiner) ?? input.communityName.trim(),
-    subheadline: null,
-    pillars: [],
-    longFormMarkdown: null,
-    vslUrl: null,
-  };
-}
-
 export function formatMemberCount(value: number): string {
   return `${new Intl.NumberFormat().format(value)} members`;
 }
@@ -156,32 +95,3 @@ export type CommunityFunnelMemberProofView<TFace> = {
   ariaLabel: string;
 };
 
-export function buildCommunityFunnelMemberProofView<
-  TFace extends CommunityFunnelUiFaceLike,
->(params: {
-  memberCount: number | null | undefined;
-  faces: TFace[] | null | undefined;
-  maxFaces?: number;
-}): CommunityFunnelMemberProofView<TFace> | null {
-  if (typeof params.memberCount !== "number" || !Number.isFinite(params.memberCount)) return null;
-  const memberCount = Math.max(0, Math.floor(params.memberCount));
-  if (memberCount === 0) return null;
-  const seen = new Set<string>();
-  const faceLimit = Math.min(
-    memberCount,
-    Math.max(0, Math.floor(params.maxFaces ?? 5)),
-  );
-  const faces = (params.faces ?? []).filter((face) => {
-    const id = String(face.user_id ?? "").trim();
-    if (!id || seen.has(id)) return false;
-    seen.add(id);
-    return true;
-  }).slice(0, faceLimit);
-  return {
-    memberCount,
-    faces,
-    hiddenFaceCount: Math.max(0, memberCount - faces.length),
-    label: memberCount === 1 ? "1 member" : `${memberCount.toLocaleString()} members and growing`,
-    ariaLabel: `${memberCount.toLocaleString()} community ${memberCount === 1 ? "member" : "members"}`,
-  };
-}
