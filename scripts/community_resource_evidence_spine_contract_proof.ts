@@ -10,6 +10,7 @@ import {
   resolveCommunityResourceEvidenceSource,
   resolveExactCommunityResourceEvidenceSelector,
 } from "../convex/communityResourceEvidenceCore.ts";
+import { readCommunityResourceSources } from "./lib/communityResourceSources.ts";
 
 const root = process.cwd();
 
@@ -32,7 +33,7 @@ const [
   interactionContract,
 ] = await Promise.all([
   read("convex/schema.ts"),
-  read("convex/communityResources.ts"),
+  Promise.resolve(readCommunityResourceSources()),
   read("convex/communityResourceEvidence.ts"),
   read("convex/communityResourceEvidenceCore.ts"),
   read("convex/communityEvidenceAudit.ts"),

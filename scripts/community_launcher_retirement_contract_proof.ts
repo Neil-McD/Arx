@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
+import { readCommunityResourceSources } from "./lib/communityResourceSources.ts";
 
 const root = process.cwd();
 
@@ -35,7 +36,7 @@ const createController = read("shared/useCommunityCreateController.ts");
 const settings = read("apps/web/src/components/WebCommunitySettingsSection.tsx");
 const agent = read("apps/web/src/components/WebCommunityAiAgentSection.tsx");
 const resources = read("apps/web/src/components/CommunityResourcesPanel.tsx");
-const protectedResources = read("convex/communityResources.ts");
+const protectedResources = readCommunityResourceSources();
 const protectedGateway = read("shared/cloudCommunityAdminGateway.ts");
 const retiredRuntimePaths = [
   "convex/communityLaunchSetup.ts",

@@ -142,7 +142,13 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
 ### 5. Courses and resources — Keep
 
 - **Does:** courses, lessons, files and source material a community learns from.
-- **Code:** `communityResources` (10k lines, a known hot spot),
+- **Code:** `communityResources` registers every resources function (names and
+  paths unchanged by the Nov 7 split); its helpers live in
+  `communityResourceConstants`, `communityResourceShared`,
+  `communityResourceDirectory` (what the agent, MCP and builders read),
+  `communityResourceChangesets` (staged builder edits and the health report),
+  `communitySourceFetch` (Polynet's URL fetcher, the crawler, text extraction) and
+  `communitySourceIngestion` (running ingestion, saving crawled pages);
   `communityResourceContent`, `communityResourceEvidence*`,
   `communityResourceMemoryProjection`, `communitySourceUrlPolicy`,
   `communityBuilderKnowledgeSetup`, `communityLessonProgress` (lessons a member

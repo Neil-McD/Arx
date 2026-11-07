@@ -4,6 +4,7 @@ import {
   buildCommunityResourceDirectoryFields,
   buildCommunityResourceModuleDirectoryFields,
 } from "../shared/communityResourceDirectory.ts";
+import { readCommunityResourceSources } from "./lib/communityResourceSources.ts";
 
 function read(path: string): string {
   return readFileSync(path, "utf8");
@@ -11,7 +12,7 @@ function read(path: string): string {
 
 const schema = read("convex/schema.ts");
 const communityCore = read("convex/communityCore.ts");
-const resources = read("convex/communityResources.ts");
+const resources = readCommunityResourceSources();
 const communityMaintenance = read("convex/communityMaintenance.ts");
 const resourceEvidence = read("convex/communityResourceEvidence.ts");
 const runtimeAgentLoop = read("convex/runtimeAgentLoop.ts");

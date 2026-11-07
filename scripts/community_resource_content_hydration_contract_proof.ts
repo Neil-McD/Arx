@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { readCommunityResourceSources } from "./lib/communityResourceSources.ts";
 
 const root = process.cwd();
 
@@ -18,7 +19,7 @@ const controller = read("shared/useCommunityResourceController.ts");
 const panel = read("apps/web/src/components/CommunityResourcesPanel.tsx");
 const viewer = read("apps/web/src/components/WebCommunityResourceViewerContent.tsx");
 const deferredYouTube = read("apps/web/src/components/DeferredYouTubeEmbed.tsx");
-const resources = read("convex/communityResources.ts");
+const resources = readCommunityResourceSources();
 const resourceEvidence = read("convex/communityResourceEvidence.ts");
 const core = read("convex/communityCore.ts");
 const content = read("convex/communityResourceContent.ts");

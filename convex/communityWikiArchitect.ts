@@ -31,9 +31,7 @@ import {
   resolveUserIdForAuthenticatedRequest,
   toIsoString,
 } from "./communityCore";
-import {
-  buildCommunityResourceBuilderHealthReport,
-} from "./communityResources";
+import { buildCommunityResourceBuilderHealthReport } from "./communityResourceChangesets";
 import {
   hydrateCommunityResourceBody,
   writeCommunityResourceBodyContent,

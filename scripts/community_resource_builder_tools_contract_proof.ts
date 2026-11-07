@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { readCommunityResourceSources } from "./lib/communityResourceSources.ts";
 
 const root = process.cwd();
 
@@ -9,7 +10,7 @@ function read(path: string): string {
 }
 
 const packageJson = read("package.json");
-const resources = read("convex/communityResources.ts");
+const resources = readCommunityResourceSources(root);
 const schema = read("convex/schema.ts");
 const gateway = read("shared/cloudCommunityAdminGateway.ts");
 const app = read("apps/web/src/App.tsx");
@@ -139,7 +140,7 @@ assert.doesNotMatch(
 );
 const builderListBody = resources.slice(
   resources.indexOf("async function listCommunityResourceBuilderDirectoryCore"),
-  resources.indexOf("export const listCommunityResourceBuilderDirectoryInternal"),
+  resources.indexOf("async function readCommunityResourceBuilderResourceCore"),
 );
 assert.ok(builderListBody.length > 0, "builder list body should be discoverable");
 assert.doesNotMatch(
@@ -149,8 +150,13 @@ assert.doesNotMatch(
 );
 assert.match(
   resources,
-  /readCommunityResourceBuilderResourceCore[\s\S]*ref\?: string[\s\S]*resolveCommunityResourceBuilderRef[\s\S]*readCommunityResourceBuilderResource[\s\S]*ref: v\.optional\(v\.string\(\)\)/,
+  /readCommunityResourceBuilderResourceCore[\s\S]*ref\?: string[\s\S]*resolveCommunityResourceBuilderRef/,
   "builder read backend should accept and resolve semantic refs",
+);
+assert.match(
+  resources,
+  /export const readCommunityResourceBuilderResource = query\(\{[\s\S]*ref: v\.optional\(v\.string\(\)\)/,
+  "the builder read function should accept a semantic ref",
 );
 assert.match(
   resources,

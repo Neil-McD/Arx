@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { readCommunityResourceSources } from "./lib/communityResourceSources.ts";
 
 const root = process.cwd();
 const packageJson = readFileSync(join(root, "package.json"), "utf8");
@@ -10,7 +11,7 @@ const membershipLifecycle = readFileSync(
   join(root, "convex/communityMembershipLifecycle.ts"),
   "utf8",
 );
-const resources = readFileSync(join(root, "convex/communityResources.ts"), "utf8");
+const resources = readCommunityResourceSources(root);
 const chatGateway = readFileSync(join(root, "shared/cloudCommunityChatGateway.ts"), "utf8");
 const interactionController = readFileSync(
   join(root, "apps/web/src/controllers/useWebCommunityInteractionProjection.ts"),
