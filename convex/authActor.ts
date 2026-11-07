@@ -459,8 +459,6 @@ async function ensureActorByResolvedSubject(args: {
     if (requestedUserId && requestedUserId !== resolvedUserId) {
       throw new Error("user_id_mismatch");
     }
-    const authSubjectChanged =
-      normalizeIdValue(relinkCandidate.authSubject) !== normalizeIdValue(args.authSubject);
     const patch = buildUserPatch({
       existing: relinkCandidate,
       authSubject: args.authSubject,

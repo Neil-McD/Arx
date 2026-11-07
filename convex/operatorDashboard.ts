@@ -16,10 +16,6 @@ async function requireOperatorAccess(ctx: any, authSubject: string | null | unde
   return await requireOperatorRole(ctx, authSubject, "readonly");
 }
 
-async function requireOperatorWriteAccess(ctx: any, authSubject: string | null | undefined) {
-  return await requireOperatorRole(ctx, authSubject, "operator");
-}
-
 function isExpectedOperatorAccessProbeMiss(error: unknown): boolean {
   const message = error instanceof Error ? error.message : String(error ?? "");
   const normalized = message.trim().toLowerCase();
@@ -163,20 +159,6 @@ export const getOperatorRuntimeToolDiagnostics = query({
     return await ctx.runQuery((internal as any).operatorIntelligence.getOperatorRuntimeToolDiagnosticsInternal, {
       range: args.range,
     });
-  },
-});
-
-// The old Workspace tool economics panel is gone (its tables were dropped
-// Nov 7). Kept for the cached production client only; delete once the
-// compatibility contract is re-pinned past this release.
-export const getOperatorToolEconomics = query({
-  args: {
-    authSubject: v.optional(v.string()),
-    range: operatorRange,
-  },
-  handler: async (ctx, args): Promise<null> => {
-    await requireOperatorAccess(ctx, args.authSubject);
-    return null;
   },
 });
 

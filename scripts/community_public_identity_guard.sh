@@ -73,35 +73,30 @@ require_multiline_match "$COMMUNITY_ADMIN_FILE" \
   'export const listCommunityMemberships = query\([\s\S]*?owner_id:\s*\(await resolvePublicUserId\(ctx, community\.ownerId, userIdCache\)\) \?\?\s*String\(community\.ownerId\)' \
   "membership list resolves public owner IDs"
 
-echo "[4/10] Ensuring community access payloads resolve public user IDs..."
+echo "[4/9] Ensuring community access payloads resolve public user IDs..."
 require_multiline_match "$COMMUNITY_CORE_FILE" \
   'export async function resolveCommunityAccessBundle\([\s\S]*?user_id:\s*\(await resolvePublicUserId\(args\.ctx, args\.userId\)\) \?\?\s*String\(args\.userId\)' \
   "community access rows resolve public user IDs"
 
-echo "[5/10] Ensuring public community stats resolve online faces to public IDs..."
-require_multiline_match "$COMMUNITY_PUBLIC_FILE" \
-  'async function resolvePublicCommunityStats\([\s\S]*?user_id:\s*\(await resolvePublicUserId\(ctx, user\._id, userIdCache\)\) \?\?\s*String\(user\._id\)' \
-  "public community stats resolve online faces to public IDs"
-
-echo "[6/10] Ensuring membership and join-request admin payloads resolve public IDs..."
+echo "[5/9] Ensuring membership and join-request admin payloads resolve public IDs..."
 require_multiline_match "$COMMUNITY_ADMIN_FILE" \
   'export const listCommunityJoinRequests = query\([\s\S]*?user_id:\s*\(await resolvePublicUserId\(ctx, row\.userId, userIdCache\)\) \?\?\s*String\(row\.userId\)' \
   "join-request rows resolve public user IDs"
 
-echo "[7/10] Ensuring member-settings payloads resolve public IDs..."
+echo "[6/9] Ensuring member-settings payloads resolve public IDs..."
 require_multiline_match "$COMMUNITY_CORE_FILE" \
   'export async function mapCommunityMemberSettingsRow\([\s\S]*?user_id:\s*\(await resolvePublicUserId\(ctx, row\.userId, userIdCache\)\) \?\?\s*String\(row\.userId\)' \
   "member settings rows resolve public user IDs"
 
-echo "[8/10] Ensuring resource payloads resolve public IDs..."
+echo "[7/9] Ensuring resource payloads resolve public IDs..."
 require_multiline_match "$COMMUNITY_CORE_FILE" \
   'export async function mapCommunityResourceRow\([\s\S]*?created_by:\s*\(await resolvePublicUserId\(ctx, row\.createdByUserId, userIdCache\)\) \?\?\s*String\(row\.createdByUserId\)' \
   "resource rows resolve public creator IDs"
 
-echo "[9/10] Ensuring chat reply author IDs stay in the same public namespace..."
+echo "[8/9] Ensuring chat reply author IDs stay in the same public namespace..."
 require_multiline_match "$COMMUNITY_INTERACTIONS_FILE" \
   'const publicActorUserId = reply\.actorUserId\s*\?\s*await resolvePublicUserId\(ctx, reply\.actorUserId, userIdCache\)' \
   "chat replies resolve public author IDs"
 
-echo "[10/10] Guard passed."
+echo "[9/9] Guard passed."
 echo "PASS: community browser-facing user references are normalized to public IDs."

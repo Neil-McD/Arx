@@ -1343,7 +1343,6 @@ export function registerRuntimeBillingRoutes(
             disputeEvidence.sourceProviderChargeId,
             providerAccountId,
           );
-          const chargeEvidence = charge ? readStripeChargeEvidence(charge) : null;
           if (event.type === "charge.dispute.created") {
             const communityAccessResult = await syncCommunityAccessForDispute(ctx, event, {
               charge,

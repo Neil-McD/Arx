@@ -175,17 +175,6 @@ export function resolveEntitledCapabilityFamiliesForGate(input: {
   return [...AUTHENTICATED_PLATFORM_CAPABILITIES];
 }
 
-export function resolveActiveCapabilityFamiliesForGate(
-  input: Partial<CanonicalGateInput>,
-): CapabilityFamily[] {
-  const entitled = resolveEntitledCapabilityFamiliesForGate(input);
-  return resolveActiveCapabilityFamiliesFromEntitlements({
-    entitledCapabilityFamilies: entitled,
-    hasCommunityContext: input?.hasCommunityContext,
-    hasProjectContext: input?.hasProjectContext,
-  });
-}
-
 function deny(code: GateCode, cta: GateCta): Omit<CanonicalGateDecision, "effectiveTier"> {
   return {
     allowed: false,

@@ -8,7 +8,6 @@ import {
   type CommunityResourceModuleLike,
   type CommunityResourceLike,
   communityResourceBodyChars,
-  communityResourceHasUsableKnowledgeContent,
   communityResourceIsLiveModulePage,
   communityResourceSourceHasReadyText,
   communityResourceModuleIsLive,

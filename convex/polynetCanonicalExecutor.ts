@@ -1,7 +1,7 @@
 import { COMMUNITY_HANDBOOK_MAX_CHARS } from "../shared/communityHandbook";
 import { DRAFT_ONLY_REFUSAL_MESSAGE } from "../shared/communityTurnContract";
 import { renderCommunityNote, type CommunityNote } from "../shared/communityNotes";
-import { api, internal } from "./_generated/api";
+import { internal } from "./_generated/api";
 import { renderCommunityHandbook } from "../shared/communityHandbook";
 import { buildCommunitySearchQuery } from "../shared/communitySearchText";
 import { hashSiteFile, publishSite, readSitesConfig, startSiteUpload, uploadSiteFiles } from "./communitySiteDeploy";
@@ -480,18 +480,6 @@ async function failMutatingOperation(args: {
     // Preserve the original operation error. A crashed or superseded attempt is
     // recoverable through the bounded receipt lease.
   }
-}
-
-// A community app is the member's own interface, so channel access and
-// attribution treat it as the human. Agents keep their own actor kinds.
-// A community front end and the background mention worker have no Convex
-// identity; the executor already resolved the member they act for, so memory
-// calls take that member as trusted. Interactive surfaces keep the caller's
-// own Convex identity.
-function trustedMemberArgs(args: { principalKind: PolynetPrincipalKind; userId: string }) {
-  return args.principalKind === "community_app" || args.principalKind === "community_agent"
-    ? { trustedUserId: args.userId }
-    : {};
 }
 
 // The card's reader-dependent parts come through the same lens-filtered reads
@@ -2030,7 +2018,6 @@ async function executeCanonicalWrite(args: {
   if (target.localPath === POLYNET_MEMORY_DIRECTORY_PATH || /^\/memory\//.test(target.localPath)) {
     return canonicalError("community_write_forbidden", "Community notes are kept by the founder in Studio. Read them; don't write them.");
   }
-
 
   const writableChannelPath = parseCommunityChannelSemanticPath(
     target.localPath,

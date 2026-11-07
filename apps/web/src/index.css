@@ -608,17 +608,6 @@
   stroke-linejoin: round;
 }
 
-.model-picker-nav-logo-img {
-  width: 20px;
-  height: 20px;
-  object-fit: contain;
-  display: block;
-}
-
-:root[data-theme="dark"] .model-picker-nav-logo-img.monochrome {
-  filter: invert(1);
-}
-
 .ask-send-btn {
   width: 40px;
   height: 40px;
@@ -643,13 +632,9 @@
     padding: 12px 12px 24px 0;
   }
 
-  .chat-date-separator {
-    margin: 12px 12px 6px;
-  }
+  
 
-  .chat-date-separator span {
-    padding: 0 10px;
-  }
+  
 
   /* Chat: prevent header overflow + tighten spacing */
 
@@ -712,18 +697,6 @@
 .feed-header-subtitle {
   font-size: 13px;
   color: var(--text-muted);
-}
-
-.feed-header-badge {
-  border: 1px solid var(--border-default);
-  border-radius: 999px;
-  background: var(--bg-card-alt);
-  color: var(--text-muted);
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  padding: 4px 8px;
 }
 
 /* Desktop: one continuous fluid nav width — scales smoothly with the window

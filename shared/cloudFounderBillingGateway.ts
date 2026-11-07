@@ -1,5 +1,4 @@
 import { bootstrapGatewayAuthContext } from "./cloudGateway";
-import { createConvexClient } from "./convexAuthenticatedClient";
 import type {
   BuilderFundingAction,
   BuilderFundingLane,

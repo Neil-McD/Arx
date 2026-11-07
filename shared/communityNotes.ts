@@ -58,8 +58,6 @@ export function communityNoteSlug(title: string): string {
   return slug || "note";
 }
 
-export const COMMUNITY_NOTE_SLUG_PATTERN = /^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/;
-
 export function buildCommunityNoteSearchText(note: { title: string; bodyMd: string }): string {
   return buildCommunitySearchText({ body: `${note.title}\n${note.bodyMd}` });
 }

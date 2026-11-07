@@ -7,11 +7,6 @@ import type {
   DirectMessageNetworkPerson,
 } from "../../../../shared/communityTypes";
 import {
-  isLikelyImageFile,
-  isSupportedChatRasterImage,
-  readChatImageAsDataUrl,
-} from "../../../../shared/attachmentHelpers";
-import {
   blockCloudDirectMessageUser,
   createCloudDirectMessagesLiveClient,
   ensureCloudDirectConversationFromCommunity,
@@ -38,7 +33,6 @@ type DirectMessageAttachmentDraft = DirectMessageAttachment & {
   uploadStatus?: "queued" | "uploading" | "ready" | "failed";
   uploadError?: string | null;
 };
-
 
 type DirectMessageLocalEcho = DirectMessage & {
   local_id: string;
@@ -165,7 +159,6 @@ async function resolveDirectMessageSession<SessionT>(
   return ensureSession(session, source);
 }
 
-const MAX_DM_IMAGE_DATA_URL_CHARS = 600_000;
 const DIRECT_MESSAGE_COMPOSER_FOCUS_MEDIA_QUERY = "(min-width: 901px)";
 
 function isDirectMessageComposerEditableElement(element: Element | null): boolean {
@@ -197,7 +190,6 @@ function shouldPreserveDirectMessageComposerFocus(activeElement: Element | null,
     ),
   );
 }
-
 
 function createLocalDirectMessageId(): string {
   if (typeof globalThis.crypto?.randomUUID === "function") {
@@ -298,8 +290,6 @@ function buildLocalEchoContentJson(
   };
 }
 
-
-
 function getDirectAttachmentUploadStatus(attachment: DirectMessageAttachmentDraft): "queued" | "uploading" | "ready" | "failed" {
   if (String(attachment.storage_id ?? "").trim()) return "ready";
   if (attachment.uploadStatus) return attachment.uploadStatus;
@@ -310,7 +300,6 @@ function getDirectAttachmentUploadStatus(attachment: DirectMessageAttachmentDraf
 function hasUnreadyDirectAttachments(attachments: DirectMessageAttachmentDraft[]): boolean {
   return attachments.some((attachment) => getDirectAttachmentUploadStatus(attachment) !== "ready");
 }
-
 
 function serializeDirectAttachmentsForWrite(attachments: DirectMessageAttachmentDraft[]): unknown[] {
   const out: unknown[] = [];
@@ -1282,10 +1271,6 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
       sessionUserId,
     ],
   );
-
-
-
-
 
   const deliverDirectMessageEcho = useCallback(
     async (conversationId: string, echo: DirectMessageLocalEcho) => {

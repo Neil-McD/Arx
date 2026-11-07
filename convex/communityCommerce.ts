@@ -1,5 +1,5 @@
 import { internal } from "./_generated/api";
-import { action, internalAction, internalMutation, internalQuery, mutation, query } from "./_generated/server";
+import { internalAction, internalMutation, internalQuery } from "./_generated/server";
 import { v } from "convex/values";
 import {
   getStripeClient,
@@ -14,9 +14,7 @@ import {
   normalizeSessionId,
   normalizeSlug,
   normalizeStripeCommunitySubscriptionStatus,
-  requireCanonicalCheckoutReturnUrl,
   resolveCheckoutPricePoint,
-  resolveUserIdForAuthenticatedRequest,
 } from "./billingCore";
 import {
   adjustCommunityActiveMemberCountForMembershipTransition,

@@ -18,15 +18,6 @@ export function formatMoney(metric: { currency: string; amountBaseUnits: number;
   }).format(amount);
 }
 
-export function formatUsdAmount(value: number | null | undefined): string {
-  const amount = Number(value ?? 0);
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "usd",
-    maximumFractionDigits: amount < 100 ? 2 : 0,
-  }).format(Number.isFinite(amount) ? amount : 0);
-}
-
 export function formatPercent(value: number | null | undefined): string {
   if (typeof value !== "number" || !Number.isFinite(value)) return "-";
   return `${Math.round(value * 100)}%`;
@@ -220,11 +211,6 @@ export function formatIsoEventTime(value: string | null): string {
 export function formatBoundedCount(value: number | null | undefined, isTruncated: boolean | undefined): string {
   if (typeof value !== "number" || !Number.isFinite(value)) return "-";
   return isTruncated ? `${value}+` : String(value);
-}
-
-export function formatCredits(value: number | null | undefined): string {
-  if (typeof value !== "number" || !Number.isFinite(value)) return "0";
-  return value.toLocaleString("en-US", { maximumFractionDigits: 2 });
 }
 
 export function formatOptionalCount(value: number | null | undefined): string {

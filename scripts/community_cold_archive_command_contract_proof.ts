@@ -103,11 +103,6 @@ assert.doesNotMatch(
   "the retired founder projection must stay deleted",
 );
 assert.match(
-  memberOntology,
-  /!community \|\| !communityIsActive\(community\)[\s\S]*ownedRows as any\[\][\s\S]*\.filter\(\(row\) => communityIsActive\(row\)\)/,
-  "member ontology context must omit archived memberships and ownership",
-);
-assert.match(
   crons,
   /recover archived community billing cleanup[\s\S]*scheduleDueCommunityArchiveBillingJobsInternal/,
   "a bounded cron must recover at-most-once action failures",

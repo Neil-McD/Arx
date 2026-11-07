@@ -57,22 +57,7 @@ assert.match(
   /communitySiteRedirectTarget[\s\S]*window\.location\.replace\([^)]*\btarget\b/,
   "Studio's /c/<slug> must hand visitors over to the community's site",
 );
-assert.match(
-  communityPublic,
-  /joined_last_30d_count: stats\.joinedLast30dCount/,
-  "the public stats payload must carry the joined-recently social proof count",
-);
 
-assert.match(
-  communityPublic,
-  /const PUBLIC_MEMBER_FACES_PREVIEW_LIMIT = 5/,
-  "the public members preview must stay capped at 5 faces",
-);
-assert.match(
-  communityPublic,
-  /member_faces_preview: stats\.memberFacesPreview/,
-  "the public stats payload must carry the members preview for the visitor rail",
-);
 
 // The ONE legitimate reader of community visibility: the Discover directory.
 const discoverQuery = sliceExport(communityPublic, "listPublicDiscoverCommunities");

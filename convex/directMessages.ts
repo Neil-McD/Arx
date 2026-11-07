@@ -1454,7 +1454,6 @@ export const listDirectMessages = query({
   },
 });
 
-
 async function sendDirectMessageForUser(
   ctx: any,
   viewerUserId: any,
@@ -1681,8 +1680,6 @@ export const unblockDirectMessageUser = mutation({
 // run Studio's helpers above for that member. The twin addresses a
 // conversation by its id and a person by their handle, and gets back only the
 // site shapes (shared/directMessageSiteShape.ts): no user ids, no storage ids.
-
-const SITE_DM_UPLOAD_MAX_AGE_MS = 60 * 60 * 1000;
 
 function siteConversationId(ctx: any, raw: string): any {
   const id = ctx.db.normalizeId("dmConversations", String(raw ?? ""));

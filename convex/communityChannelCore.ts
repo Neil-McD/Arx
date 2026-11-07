@@ -511,26 +511,6 @@ async function resolveAvailableChannelSlug(args: {
   throw new Error("community_channel_slug_unavailable");
 }
 
-/** Allocate a readable generated label in the same transaction as channel creation. */
-export async function resolveGeneratedCommunityChannelName(args: {
-  ctx: { db: any }; communityId: any; name: string;
-}): Promise<string> {
-  await ensureGeneralChannel(args);
-  const base = normalizeCommunityChannelName(args.name.slice(0, MAX_COMMUNITY_CHANNEL_NAME_CHARS));
-  // There cannot be more occupied names than the combined active-channel capacity.
-  for (let index = 0; index <= MAX_SHARED_COMMUNITY_CHANNELS + MAX_PRIVATE_COMMUNITY_CHANNELS; index++) {
-    const suffix = index === 0 ? "" : ` (${index + 1})`;
-    const candidate = `${base.slice(0, MAX_COMMUNITY_CHANNEL_NAME_CHARS - suffix.length).trimEnd()}${suffix}`;
-    try {
-      await requireAvailableChannelName({ ...args, name: candidate });
-      return candidate;
-    } catch (error) {
-      if (!(error instanceof Error) || error.message !== "community_channel_name_taken") throw error;
-    }
-  }
-  throw new Error("community_channel_name_unavailable");
-}
-
 async function requireAvailableChannelName(args: {
   ctx: { db: any }; communityId: any; name: string; excludeId?: any;
 }): Promise<string> {
@@ -986,57 +966,6 @@ export async function listChannelProjectionRows(args: {
   const channelIds = args.channel.systemRole === GENERAL_CHANNEL_SYSTEM_ROLE
     ? [undefined, args.channel._id]
     : [args.channel._id];
-  const batches = await Promise.all(
-    channelIds.map(async (channelId) => {
-      if (args.tableName === "communityReadCursors") {
-        return await args.ctx.db
-          .query("communityReadCursors" as any)
-          .withIndex("by_community_channel_user_stream", (q: any) =>
-            q
-              .eq("communityId", args.communityId)
-              .eq("channelId", channelId)
-              .eq("userId", args.userId)
-              .eq("streamKind", args.streamKind),
-          )
-          .take(2);
-      }
-      return await args.ctx.db
-        .query("communityTypingPresence" as any)
-        .withIndex("by_community_channel_user", (q: any) =>
-          q
-            .eq("communityId", args.communityId)
-            .eq("channelId", channelId)
-            .eq("userId", args.userId),
-        )
-        .take(2);
-    }),
-  );
-  return Array.from(
-    new Map(
-      batches
-        .flat()
-        .map((row: any) => [normalizeIdValue(row._id), row]),
-    ).values(),
-  );
-}
-
-// A cursor or typing lease is one semantic projection per user and General
-// lane. Inspect both the rolling legacy lane and the canonical lane before any
-// mutation so duplicate legacy rows cannot be upgraded by choosing a winner.
-export async function listGeneralChannelProjectionRows(args: {
-  ctx: { db: any };
-  tableName: "communityReadCursors" | "communityTypingPresence";
-  communityId: any;
-  generalChannelId: any | null;
-  userId: any;
-  streamKind?: "chat";
-}): Promise<any[]> {
-  if (args.tableName === "communityReadCursors" && args.streamKind !== "chat") {
-    throw new Error("community_channel_projection_stream_required");
-  }
-  const channelIds = args.generalChannelId
-    ? [undefined, args.generalChannelId]
-    : [undefined];
   const batches = await Promise.all(
     channelIds.map(async (channelId) => {
       if (args.tableName === "communityReadCursors") {

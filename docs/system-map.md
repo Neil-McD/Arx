@@ -76,8 +76,7 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
 - **Tables:** `communities`, `communityMemberships`, `communityJoinRequests`,
   `communityBlocks`, `communityMemberSettings`, `communityPresence`,
   `communityOnboardingConfigs`, `communityArchiveBillingJobs`. Tags on people
-  (`communityTags`, `communityMemberTags`) were never used and were dropped Nov 7;
-  the `communityTags` module is a one-release stand-in for the cached production client.
+  (`communityTags`, `communityMemberTags`) were never used and were dropped Nov 7.
 - **Contracts:** [community-join-request-canonicalization.md](community-join-request-canonicalization.md),
   [community-member-arrival-v1.md](community-member-arrival-v1.md),
   [destructive-lifecycle-quarantine-contract-v1.md](destructive-lifecycle-quarantine-contract-v1.md),

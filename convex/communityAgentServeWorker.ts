@@ -5,7 +5,6 @@ import { createFounderInferenceUsageTotals, founderProviderRequests, observeFoun
 import { assertPaidLuna6ProviderHeadroom, founderInferenceBudgetFailureCode } from "./founderInferenceBudget";
 import { COMMUNITY_OWNER_FUNDED_MODEL_ID } from "../shared/founderInference";
 import { internal } from "./_generated/api";
-import type { Doc } from "./_generated/dataModel";
 import {
   internalAction,
   internalMutation,
@@ -79,7 +78,6 @@ import {
 } from "../shared/communityAgentThreadContext";
 import { readMemberFactsForLens, readMemberSpine } from "./memberOntologyCore";
 import { readCanonicalUserIdentityProjection } from "./profileCore";
-import { buildCommunityInteractionEvidenceRef } from "../shared/communityEvidenceContract";
 
 const SERVE_WORKER_DEFAULT_LIMIT = 3;
 const SERVE_WORKER_MAX_LIMIT = 5;

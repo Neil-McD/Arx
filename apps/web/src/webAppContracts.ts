@@ -36,34 +36,6 @@ export type WebCommunityRecord = {
   has_custom_site?: boolean;
 };
 
-export type WebPublicCommunityRecord = {
-  id?: string;
-  slug: string;
-  name: string;
-  one_liner: string | null;
-  about: string | null;
-  avatar_url: string | null;
-  avatar_focus_x?: number | null;
-  avatar_focus_y?: number | null;
-  avatar_zoom?: number | null;
-  banner_url: string | null;
-  banner_focus_x?: number | null;
-  banner_focus_y?: number | null;
-  banner_zoom?: number | null;
-  visibility: string;
-  entry_policy?: "open" | "approval" | "paid_subscription" | null;
-  host?: Omit<CommunityPublicFace, "user_id"> | null;
-  funnel?: CommunityFunnelConfig | null;
-  member_count?: number | null;
-  member_faces_preview?: CommunityPublicFace[] | null;
-  admin_count?: number | null;
-  online_count?: number | null;
-  online_count_capped?: boolean | null;
-  online_faces?: CommunityPublicFace[] | null;
-  branding_revision?: number | null;
-  visual_identity?: CommunityVisualIdentity | null;
-};
-
 export type WebCommunityVoiceTranscriptTarget = {
   appendTranscript: (transcript: string) => void;
   focusInput?: () => void;

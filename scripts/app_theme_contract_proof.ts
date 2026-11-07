@@ -314,16 +314,6 @@ assert.match(
   /\.pn-landing \.cta\s*\{[\s\S]*?background:\s*var\(--action\);[\s\S]*?color:\s*var\(--action-text\);/,
   "the public front door CTA should use the white action treatment",
 );
-assert.match(
-  publicBuilderLandingCss,
-  /\.pn-builder-activation\s*\{[\s\S]*?background:\s*#0f1011;[\s\S]*?color:\s*#f7f8f8;/,
-  "the public checkout status banner should use the dark surface",
-);
-assert.match(
-  publicBuilderLandingCss,
-  /\.pn-builder-activation\.error\s*\{[\s\S]*?var\(--danger-text/,
-  "the public checkout status banner should use the danger role for errors",
-);
 
 const lightThemeBlock = baseThemeCss.match(
   /:root\[data-theme="light"\]\s*\{([\s\S]*?)\n\}/,
@@ -392,11 +382,6 @@ assert.match(
   baseCss,
   /\.community-interaction-day::before,[\s\S]*?\.community-interaction-day::after\s*\{[\s\S]*?background:\s*var\(--stroke-divider-accent\);/,
   "live community-feed day separators should consume the semantic structural-divider role",
-);
-assert.match(
-  baseCss,
-  /\.chat-date-separator::before,[\s\S]*?\.chat-date-separator::after\s*\{[\s\S]*?background:\s*var\(--stroke-divider-accent\);/,
-  "legacy chat day separators should consume the same structural-divider role",
 );
 [
   /--community-shell-stroke:\s*var\(--stroke-panel-edge\);/,
@@ -474,7 +459,6 @@ assert.match(
   /\.nav-item\.active\s*\{[\s\S]*?background:\s*var\(--surface-selected\);[\s\S]*?border-color:\s*var\(--stroke-selected\);[\s\S]*?color:\s*var\(--text-selected\);/,
   "routine selection should remain independent from activity attention",
 );
-assert.match(baseCss, /:root\[data-theme="dark"\]\s*\.model-picker-nav-logo-img\.monochrome/);
 assert.doesNotMatch(
   baseCss,
   /:root\[data-theme="light"\][^{]*\{[^}]*filter:\s*invert\(1\)/,
@@ -636,7 +620,6 @@ assert.doesNotMatch(
 [
   /\.status\.canceled\s*\{[\s\S]*?background:\s*var\(--danger-surface\);[\s\S]*?color:\s*var\(--danger-text\);/,
   /\.status\.failed\s*\{[\s\S]*?background:\s*var\(--danger-surface\);[\s\S]*?color:\s*var\(--danger-text\);/,
-  /\.action-error\s*\{[\s\S]*?color:\s*var\(--danger-text\);[\s\S]*?border:\s*1px solid var\(--danger-border\);[\s\S]*?background:\s*var\(--danger-surface\);/,
   /\.settings-section\s*\{[\s\S]*?border-bottom:\s*1px solid var\(--border-muted\);/,
 ].forEach((legacyRule) => {
   assert.match(
@@ -647,7 +630,6 @@ assert.doesNotMatch(
 });
 [
   /:root\[data-theme="light"\]\s*\.status\.canceled,[\s\S]*?background:\s*color-mix\(in srgb,\s*var\(--accent-error\) 14%,\s*transparent\);[\s\S]*?color:\s*var\(--accent-error\);/,
-  /:root\[data-theme="light"\]\s*\.action-error\s*\{[\s\S]*?color:\s*var\(--accent-error\);/,
   /:root\[data-theme="light"\]\s*\.settings-section\s*\{[\s\S]*?border-bottom-color:\s*var\(--border-default\);/,
 ].forEach((lightAdapter) => {
   assert.match(

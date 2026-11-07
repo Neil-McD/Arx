@@ -45,7 +45,6 @@ import {
 import { requireCompletedCommunityArchiveBillingCleanup } from "./communityColdArchive";
 import { syncCommunityWeeklyDigestScheduleForCommunity } from "./communityWeeklyDigestSchedule";
 import { recordCriticalAuditEvent } from "./criticalAudit";
-import { readCanonicalPublicAppOrigin } from "./publicAppUrl";
 
 const FOUNDER_CHECKOUT_TTL_MS = 24 * 60 * 60 * 1000;
 const FOUNDER_RISK_REVOKED_REASONS = new Set([

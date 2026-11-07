@@ -18,7 +18,6 @@ const ALLOWED = new Map([
   ["anonymousUserCleanup", "operator tool: data deletion, run by hand"],
   ["communityMaintenance", "operator tool: purges orphaned user artifacts, run by hand"],
   ["communityWeeklyDigestWorker", "dormant by design until the weekly digest gets a cron"],
-  ["communityTags", "stand-in for the cached production client; delete once the contract is re-pinned"],
 ]);
 
 const tracked = execFileSync("git", ["ls-files"], { cwd: root, encoding: "utf8" })

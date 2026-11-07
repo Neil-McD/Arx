@@ -63,16 +63,6 @@ function renderCenteredPane(children: ReactNode) {
   );
 }
 
-function renderWorkspacePane(children: ReactNode) {
-  return (
-    <div className="community-tab-workspace">
-      <div className="web-community-centered-pane web-community-centered-pane-workspace">
-        {children}
-      </div>
-    </div>
-  );
-}
-
 export function WebCommunitySecondaryPanels(props: WebCommunitySecondaryPanelsProps) {
   const settingsSectionProps: ComponentProps<typeof WebCommunitySettingsSection> = {
     ...props.settings,
@@ -111,7 +101,6 @@ export function WebCommunitySecondaryPanels(props: WebCommunitySecondaryPanelsPr
           <WebCommunityBannerEditorModal {...bannerEditorModalProps} />
         </>
       ) : null}
-
 
       {props.communityTab === "analytics" &&
         renderCenteredPane(<WebCommunityAnalyticsSection {...props.analytics} />)}

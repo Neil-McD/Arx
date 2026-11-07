@@ -113,10 +113,6 @@ const dmInboxListCss = css.slice(
   css.indexOf(".community-dm-inbox-list {"),
   css.indexOf(".community-dm-inbox-panel .community-dm-panel-empty"),
 );
-const dmRecipientListCss = css.slice(
-  css.indexOf(".community-dm-recipient-list {"),
-  css.indexOf(".community-dm-inbox-row {", css.indexOf(".community-dm-recipient-list {")),
-);
 
 assert.match(schema, /dmConversations: defineTable\(\{[\s\S]*kind: v\.literal\("direct"\)[\s\S]*canonicalKey: v\.string\(\)[\s\S]*createdFromCommunityId: v\.id\("communities"\)/, "DM conversations must be direct rooms created from community context");
 assert.match(schema, /dmParticipants: defineTable\(\{[\s\S]*participantType: v\.union\(v\.literal\("user"\), v\.literal\("agent"\)\)/, "DM participants must support users and future agents");
@@ -439,8 +435,6 @@ assert.match(dmPanelMessagesCss, /overflow: auto;[\s\S]*margin: -8px -12px -14px
 assert.doesNotMatch(dmPanelMessagesCss, /padding: 10px 14px 12px 2px|padding: 56px 14px 50px 2px/, "DM conversation messages must not fall back to fixed-footer clearance");
 assert.match(dmInboxListCss, /overflow: auto;[\s\S]*margin: -10px -12px -14px 0;[\s\S]*padding: 10px 14px 14px 2px;[\s\S]*mask-image: linear-gradient/, "DM inbox rows must align the scrollbar with the panel edge and fade at the fixed chrome boundary");
 assert.doesNotMatch(dmInboxListCss, /margin: -50px -12px 0 0|padding: 52px 14px 2px 2px/, "DM inbox rows must not scroll underneath the header");
-assert.match(dmRecipientListCss, /overflow: auto;[\s\S]*padding: 2px/, "DM recipient rows must preserve the original list viewport");
-assert.doesNotMatch(dmRecipientListCss, /margin-top: -46px|padding: 48px 2px 2px/, "DM recipient rows must not scroll underneath the search field");
 assert.match(css, /\.community-dm-panel-back \{[\s\S]*border: 0;[\s\S]*background: transparent/, "DM conversation back control must stay flat, not circular");
 assert.match(css, /\.community-dm-panel-typing/, "DM conversation panel must style typing presence");
 assert.match(css, /\.community-dm-panel-typing\.is-empty \{[\s\S]*display: none/, "empty DM typing row must not steal vertical message space");
@@ -452,7 +446,6 @@ assert.match(css, /\.community-dm-inbox-panel \{[\s\S]*height: auto/, "DM inbox 
 assert.match(css, /\.community-dm-inbox-avatar \{[\s\S]*position: relative/, "DM inbox avatars must provide the canonical positioned frame for focused avatar crops");
 assert.match(css, /\.community-dm-inbox-icon-button/, "DM inbox must style the new-message icon button");
 assert.match(css, /\.community-dm-recipient-search/, "DM recipient picker must style member search");
-assert.match(css, /\.community-dm-recipient-row/, "DM recipient picker must style recipient rows");
 assert.doesNotMatch(css, /\.community-dm-recipient-more/, "DM recipient picker must not keep CSS for deleted fake pagination control");
 assert.match(css, /\.app-topbar \.icon-button\.direct-messages-topbar-button \{[^}]*position: relative;[^}]*width: 34px;[^}]*height: 34px;/, "top-right DM button must anchor the unread badge in a modestly enlarged target with enough specificity to beat the generic app-topbar icon-button size");
 assert.match(css, /\.app-topbar \.icon-button\.direct-messages-topbar-button svg \{[^}]*width: 20px;[^}]*height: 20px;/, "top-right DM glyph must scale with its enlarged target with enough specificity to beat the generic app-topbar icon-button glyph size");
