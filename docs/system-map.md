@@ -49,7 +49,9 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
 - **Contracts:** [auth-runtime-setup-workos-authkit.md](auth-runtime-setup-workos-authkit.md),
   [auth-session-target-architecture-v1.md](auth-session-target-architecture-v1.md),
   [auth-money-access-matrix.md](auth-money-access-matrix.md).
-- **Hand-run:** `anonymousUserCleanup` (data deletion).
+- **Hand-run:** `anonymousUserCleanup` (data deletion); `retiredTablesCleanup`
+  (one-off, Nov 7 2026: empties the retired onboarding, legacy-grant, personal
+  memory and provider-connection tables before the release that drops them).
 
 ### 2. Communities, membership and joining — Keep
 
