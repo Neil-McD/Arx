@@ -22,7 +22,6 @@ export type CloudFounderBillingCommunity = {
   community_slug: string;
   lifecycle_status: "active" | "archived";
   lifecycle_generation: number;
-  builder_access_mode: "free" | "grandfathered" | "subscription_required" | "invalid";
   archive_billing_cleanup_status: "pending" | "complete" | "blocked" | null;
   funding_lane: BuilderFundingLane;
   funding_state: BuilderFundingState;
@@ -132,12 +131,6 @@ function coerceCommunity(value: unknown): CloudFounderBillingCommunity | null {
     community_slug: nullableString(row.community_slug) ?? "",
     lifecycle_status: row.lifecycle_status === "archived" ? "archived" : "active",
     lifecycle_generation: Math.max(0, Math.floor(finiteNumber(row.lifecycle_generation))),
-    builder_access_mode:
-      row.builder_access_mode === "free" ||
-      row.builder_access_mode === "grandfathered" ||
-      row.builder_access_mode === "subscription_required"
-        ? row.builder_access_mode
-        : "invalid",
     archive_billing_cleanup_status:
       row.archive_billing_cleanup_status === "pending" ||
       row.archive_billing_cleanup_status === "complete" ||

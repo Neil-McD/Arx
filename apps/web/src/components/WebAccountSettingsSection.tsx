@@ -91,9 +91,6 @@ export function WebAccountSettingsSection(
         allowedActions: builderAttentionCommunity.allowed_actions,
       })
     : null;
-  const builderIsOptional =
-    builderAttentionCommunity?.builder_access_mode === "free" ||
-    builderAttentionCommunity?.builder_access_mode === "grandfathered";
 
   return (
     <>
@@ -160,14 +157,10 @@ export function WebAccountSettingsSection(
                 ) : builderAttentionCommunity ? (
                   <>
                     <strong>
-                      {builderIsOptional
-                        ? `The agent is optional for ${builderAttentionCommunity.community_name}`
-                        : `${builderAttentionCommunity.community_name} needs attention`}
+                      {`The agent is optional for ${builderAttentionCommunity.community_name}`}
                     </strong>
                     <span>
-                      {builderIsOptional
-                        ? "Your community stays free. Turn on the Agent plan to give it an AI agent."
-                        : "Turn on the Agent plan to bring back its AI agent."}
+                      Your community stays free. Turn on the Agent plan to give it an AI agent.
                     </span>
                   </>
                 ) : (
@@ -205,7 +198,6 @@ export function WebAccountSettingsSection(
           error={props.founderBillingError}
           retryCommunityArchive={props.retryCommunityArchive}
           restoreCommunityWithoutPayment={props.restoreCommunityWithoutPayment}
-          onOpenBuilderOffer={props.onOpenBuilderOffer}
         />
       ) : null}
 

@@ -30,8 +30,8 @@ assert.match(
 );
 assert.match(
   archive,
-  /restoreCommunityWithoutPaymentHandler[\s\S]*community_restore_forbidden[\s\S]*parseCommunityBuilderAccessMode[\s\S]*communityRunsFree\(builderAccessMode\)[\s\S]*community_restore_payment_required[\s\S]*community_restore_lifecycle_generation_conflict[\s\S]*requireCompletedCommunityArchiveBillingCleanup[\s\S]*restoreCommunityLifecycle\(community\)[\s\S]*eventType: "community_restored"/,
-  "non-payment restoration must be owner-only, grandfather-or-operator authorized, generation-bound, cleanup-gated, and audited",
+  /restoreCommunityWithoutPaymentHandler[\s\S]*community_restore_forbidden[\s\S]*community_restore_lifecycle_generation_conflict[\s\S]*requireCompletedCommunityArchiveBillingCleanup[\s\S]*restoreCommunityLifecycle\(community\)[\s\S]*eventType: "community_restored"/,
+  "restoration is free: owner-only, generation-bound, cleanup-gated, and audited",
 );
 assert.match(
   archive,
@@ -41,19 +41,10 @@ assert.match(
 assert.doesNotMatch(archive, /restoreOperatorCommunity/);
 assert.match(
   founderBilling,
-  /createPendingFounderSubscriptionCheckoutInternal[\s\S]*requireFounderCheckoutLifecycle\(ctx, community\)[\s\S]*mode: "founder_subscription"[\s\S]*communityLifecycleGeneration: lifecycle\.generation/,
-  "archived restoration must reuse the existing generation-bound founder subscription checkout",
+  /requireFounderCheckoutLifecycle[\s\S]*lifecycle\.status === "archived"\) throw new Error\("community_restore_payment_not_required"\)/,
+  "a plan is never bought for an archived community; restoring it is free",
 );
-assert.match(
-  founderBilling,
-  /communityLifecycleGenerationMatches\([\s\S]*checkout\.communityLifecycleGeneration[\s\S]*verifiedCheckoutPayment !== true[\s\S]*requireCompletedCommunityArchiveBillingCleanup/,
-  "only a verified paid checkout for the exact archived generation may gain restoration authority",
-);
-assert.match(
-  founderBilling,
-  /community_restore_subscription_inactive[\s\S]*restoreCommunityLifecycle\(community\)[\s\S]*eventType: "community_restored"/,
-  "inactive billing must fail before the atomic lifecycle transition and critical audit",
-);
+assert.doesNotMatch(founderBilling, /restoreCommunityLifecycle|restoresArchivedCommunity/, "billing never restores a community");
 assert.match(
   criticalAudit,
   /"community_restored"[\s\S]*community_restored: \["lifecycleGeneration"\]/,
@@ -61,8 +52,8 @@ assert.match(
 );
 assert.match(
   founderBilling,
-  /allowed_actions:[\s\S]*lifecycle\.status === "active"[\s\S]*archiveJob\?\.status === "complete"[\s\S]*pendingCheckout \? "resume_checkout" as const : "buy_builder" as const/,
-  "the server billing projection must expose restoration only after cleanup completes",
+  /allowed_actions: lifecycle\.status === "active" \? fundingProjection\.allowedActions : \[\]/,
+  "the server billing projection offers no plan action for an archived community",
 );
 assert.match(
   settingsUi,
@@ -77,12 +68,12 @@ assert.match(
 assert.match(
   communityGateway,
   /restoreCloudCommunityWithoutPayment[\s\S]*communityColdArchive:restoreCommunityWithoutPayment[\s\S]*lifecycleGeneration/,
-  "grandfathered and operator restoration must use one authenticated community gateway command",
+  "restoration must use one authenticated community gateway command",
 );
 assert.match(
   archivedUi,
-  /canRestoreWithoutPayment[\s\S]*funding_mode === "operator_comp"[\s\S]*builder_access_mode === "grandfathered"[\s\S]*cleanupStatus === "blocked"[\s\S]*Retry cleanup[\s\S]*cleanupStatus !== "complete"[\s\S]*restoreCommunityWithoutPayment[\s\S]*canRestoreWithPayment[\s\S]*onOpenBuilderOffer[\s\S]*Restore unavailable/,
-  "Account archive management must separate free, paid, pending, blocked, and invalid restoration",
+  /cleanupStatus === "blocked"[\s\S]*Retry cleanup[\s\S]*cleanupStatus !== "complete"[\s\S]*restoreCommunityWithoutPayment/,
+  "Account archive management: retry a blocked cleanup, wait for a pending one, then restore for free",
 );
 assert.match(
   billingUi,

@@ -21,9 +21,7 @@ import { recordCriticalAuditEvent } from "./criticalAudit";
 import { hasPlatformOwnerComplimentaryAccess } from "./operatorEntitlementsCore";
 import { isPlatformHomeCommunity } from "./platformHomeCommunity";
 import {
-  communityRunsFree,
   founderSubscriptionStatusGrantsAccess,
-  parseCommunityBuilderAccessMode,
 } from "../shared/founderPlan";
 import {
   cancelStripeSubscriptionIfActive,
@@ -261,18 +259,6 @@ async function restoreCommunityWithoutPaymentHandler(ctx: any, args: {
     ctx,
     actorUserId,
   );
-  const builderAccessMode = parseCommunityBuilderAccessMode(
-    community.builderAccessMode,
-  );
-  if (!builderAccessMode) {
-    throw new Error("community_restore_access_mode_invalid");
-  }
-  if (
-    !operatorComped &&
-    !communityRunsFree(builderAccessMode)
-  ) {
-    throw new Error("community_restore_payment_required");
-  }
   // Coming back counts against the owner's free communities, as creating does,
   // unless it brings its own Agent plan.
   if (!operatorComped) {
@@ -338,7 +324,7 @@ async function restoreCommunityWithoutPaymentHandler(ctx: any, args: {
     community_id: String(args.communityId),
     lifecycle_status: transition.next.status,
     lifecycle_generation: transition.next.generation,
-    restoration_authority: operatorComped ? "operator_comp" : "grandfathered",
+    restoration_authority: operatorComped ? "operator_comp" : "free",
   };
 }
 

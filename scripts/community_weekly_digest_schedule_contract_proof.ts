@@ -98,11 +98,6 @@ assert.match(
   "grandfathered and operator restore must reschedule through the canonical lifecycle sync",
 );
 assert.match(
-  founderBilling,
-  /restoresArchivedCommunity[\s\S]*syncCommunityWeeklyDigestScheduleForCommunity\(args\.ctx, \{[\s\S]*communityId,[\s\S]*nowMs: args\.providerEventCreatedAt/,
-  "verified paid restore must reschedule through the canonical lifecycle sync",
-);
-assert.match(
   schedule,
   /row\.leaseToken !== args\.leaseToken[\s\S]*status: "stale_lease"/,
   "settlement must reject stale or overlapping workers",

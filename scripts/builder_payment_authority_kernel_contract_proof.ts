@@ -53,11 +53,10 @@ assert.match(
 // Pricing v2: creating needs no plan (a plan bought first still attaches);
 // every new community is free and only its agent needs a plan.
 assert.doesNotMatch(lifecycle, /community_funding_required_before_create/);
-assert.match(lifecycle, /builderAccessMode: COMMUNITY_BUILDER_ACCESS_FREE,/);
+assert.doesNotMatch(lifecycle, /builderAccessMode: COMMUNITY_BUILDER_ACCESS/);
 assert.match(lifecycle, /founder_subscription_already_attached/);
 assert.match(lifecycle, /founder_subscription_risk_revoked/);
 assert.match(lifecycle, /founder_subscription_price_mismatch/);
-assert.doesNotMatch(lifecycle, /builderAccessMode: COMMUNITY_BUILDER_ACCESS_SUBSCRIPTION_REQUIRED,/);
 assert.match(lifecycle, /ctx\.db\.patch\(founderSubscription\._id,[\s\S]*communityId,[\s\S]*attachedAt: nowMs/);
 assert.match(lifecycle, /syncFounderUsageCycle\(/);
 assert.match(gateway, /founderSubscriptionId: params\.founderSubscriptionId \?\? undefined/);

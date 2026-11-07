@@ -18,7 +18,6 @@ import {
   resolveCommunityBrandingFields,
   resolveCommunityEntryPolicy,
 } from "./communityCore";
-import { resolveCommunityBuilderAccess } from "./communityBuilderAccessCore";
 import { joinPublicCommunityInternal, listCurrentCommunitySellablePlans } from "./communityPublic";
 import { cancelPendingCommunityJoinRequest } from "./communityJoinRequestCore";
 import { loadAccountSetupStatusForUserId } from "./accountSetupCore";
@@ -105,7 +104,6 @@ function plansByPeriod(plans: PublicPlanSummaryLike[]): PublicPlanSummaryLike[] 
 }
 
 export async function communityAppJoinProjection(ctx: any, community: CommunityLike, userId: any | null) {
-  const builder = await resolveCommunityBuilderAccess({ ctx, community });
   const gate: CommunityFunnelAction = deriveCommunityFunnelAction({ entry_policy: resolveCommunityEntryPolicy(community) });
   // A plan is on sale only while the owner's Stripe account can take the payment;
   // otherwise the join card says checkout is unavailable instead of failing on click.
@@ -175,7 +173,7 @@ export async function communityAppJoinProjection(ctx: any, community: CommunityL
       page,
     },
     gate,
-    available: builder.operational,
+    available: communityIsActive(community),
     action_label: action.label,
     // Only plans Studio would sell (a valid price); each with Studio's "Join $10/month".
     plans: plans.flatMap((plan) => {

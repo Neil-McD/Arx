@@ -38,10 +38,6 @@ import {
 import { communityIsActive } from "../shared/communityLifecycle";
 import { communityMemberExperience, communitySiteUrl, registeredSiteOrigin } from "./communitySites";
 import type { CommunityPublicFace } from "../shared/communityTypes";
-import {
-  requireCommunityBuilderAccess,
-  resolveCommunityBuilderAccess,
-} from "./communityBuilderAccessCore";
 import { requireAccountSetupCompleteForUser } from "./accountSetupCore";
 import { acceptCommunityJoin } from "./starterProfile";
 
@@ -247,9 +243,7 @@ async function listDiscoverableCommunities(ctx: QueryCtx, limit: number): Promis
     .order("desc")
     .take(200)) as CommunityLike[];
   const listed = await Promise.all(published.map(async (community) => {
-    if (community.visibility !== "published" || !communityIsActive(community)) return null;
-    const builderAccess = await resolveCommunityBuilderAccess({ ctx, community });
-    return builderAccess.operational ? community : null;
+    return community.visibility === "published" && communityIsActive(community) ? community : null;
   }));
   return listed.filter((community): community is CommunityLike => community !== null).slice(0, limit);
 }
@@ -297,11 +291,6 @@ export async function joinPublicCommunityInternal(args: {
   if (!communityIsActive(args.community)) {
     throw new Error("community_archived");
   }
-  await requireCommunityBuilderAccess({
-    ctx: args.ctx,
-    community: args.community,
-    nowMs: args.nowMs,
-  });
   if (String(args.community.ownerId) === String(args.userId)) {
     return {
       outcome: "joined",

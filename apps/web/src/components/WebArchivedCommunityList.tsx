@@ -1,4 +1,3 @@
-import { formatBuilderOfferPrice } from "../../../../shared/builderOffer";
 import type { CloudFounderBillingCommunity } from "../../../../shared/cloudFounderBillingGateway";
 
 export type WebArchivedCommunityListProps = {
@@ -10,7 +9,6 @@ export type WebArchivedCommunityListProps = {
     communityId: string,
     lifecycleGeneration: number,
   ) => Promise<void> | void;
-  onOpenBuilderOffer: (community: CloudFounderBillingCommunity) => void;
 };
 
 export function WebArchivedCommunityList(props: WebArchivedCommunityListProps) {
@@ -26,16 +24,6 @@ export function WebArchivedCommunityList(props: WebArchivedCommunityListProps) {
         {props.communities.map((community) => {
           const cleanupStatus = community.archive_billing_cleanup_status;
           const isActing = props.actionCommunityId === community.community_id;
-          const canRestoreWithoutPayment =
-            community.funding_mode === "operator_comp" ||
-            community.builder_access_mode === "free" ||
-            community.builder_access_mode === "grandfathered";
-          const canRestoreWithPayment =
-            community.allowed_actions.includes("buy_builder") ||
-            community.allowed_actions.includes("resume_checkout");
-          const shouldResumeCheckout =
-            community.allowed_actions.includes("resume_checkout") ||
-            community.checkout_pending;
 
           return (
             <div className="builder-community-row" key={community.community_id}>
@@ -70,7 +58,7 @@ export function WebArchivedCommunityList(props: WebArchivedCommunityListProps) {
                   <button className="secondary" type="button" disabled>
                     Finishing archive…
                   </button>
-                ) : canRestoreWithoutPayment ? (
+                ) : (
                   <button
                     className="settings-primary-action"
                     type="button"
@@ -81,23 +69,6 @@ export function WebArchivedCommunityList(props: WebArchivedCommunityListProps) {
                     )}
                   >
                     {isActing ? "Restoring…" : "Restore community"}
-                  </button>
-                ) : canRestoreWithPayment ? (
-                  <button
-                    className="settings-primary-action"
-                    type="button"
-                    disabled={isActing}
-                    onClick={() => props.onOpenBuilderOffer(community)}
-                  >
-                    {isActing
-                      ? "Opening…"
-                      : shouldResumeCheckout
-                        ? "Resume checkout"
-                        : `Restore — ${formatBuilderOfferPrice(community.monthly_price_base_units)}`}
-                  </button>
-                ) : (
-                  <button className="secondary" type="button" disabled>
-                    Restore unavailable
                   </button>
                 )}
               </div>

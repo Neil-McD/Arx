@@ -4,9 +4,7 @@ import { v } from "convex/values";
 import {
   POLYNET_FOUNDER_PLAN_MONTHLY_PRICE_BASE_UNITS,
   POLYNET_COMMUNITY_PLATFORM_FEE_BPS,
-  communityRunsFree,
   founderSubscriptionStatusGrantsAccess,
-  parseCommunityBuilderAccessMode,
   type FounderSubscriptionStatus,
 } from "../shared/founderPlan";
 import { COMMUNITY_FUNDING_POLICY_MANAGED } from "../shared/founderInference";
@@ -36,13 +34,11 @@ import {
   communityIsActive,
   communityLifecycleGenerationMatches,
   normalizeCommunityLifecycle,
-  restoreCommunityLifecycle,
 } from "../shared/communityLifecycle";
 import {
   cancelStripeSubscriptionIfActive,
   expireStripeCheckoutSessionIfOpen,
 } from "./stripeSubscriptionCancellation";
-import { requireCompletedCommunityArchiveBillingCleanup } from "./communityColdArchive";
 import { syncCommunityWeeklyDigestScheduleForCommunity } from "./communityWeeklyDigestSchedule";
 import { recordCriticalAuditEvent } from "./criticalAudit";
 
@@ -125,23 +121,10 @@ async function requireFounderCheckoutLifecycle(
   ctx: any,
   community: any,
 ) {
+  // A plan is bought for a running community; an archived one is restored
+  // without paying (communityColdArchive).
   const lifecycle = normalizeCommunityLifecycle(community);
-  if (lifecycle.status === "archived") {
-    const builderAccessMode = parseCommunityBuilderAccessMode(
-      community.builderAccessMode,
-    );
-    if (!builderAccessMode) {
-      throw new Error("community_restore_access_mode_invalid");
-    }
-    if (communityRunsFree(builderAccessMode)) {
-      throw new Error("community_restore_payment_not_required");
-    }
-    await requireCompletedCommunityArchiveBillingCleanup(
-      ctx,
-      community._id,
-      lifecycle.generation,
-    );
-  }
+  if (lifecycle.status === "archived") throw new Error("community_restore_payment_not_required");
   return lifecycle;
 }
 
@@ -405,7 +388,6 @@ async function syncFounderSubscription(args: {
     args.ctx,
     providerSubscriptionId,
   );
-  let restoresArchivedCommunity = false;
   if (checkout?.communityId) {
     const checkoutCommunity = checkout.communityId
       ? await args.ctx.db.get(checkout.communityId)
@@ -419,17 +401,8 @@ async function syncFounderSubscription(args: {
     ) {
       checkout = null;
     } else if (!communityIsActive(checkoutCommunity)) {
-      if (args.verifiedCheckoutPayment !== true) {
-        checkout = null;
-      } else {
-        const lifecycle = normalizeCommunityLifecycle(checkoutCommunity);
-        await requireCompletedCommunityArchiveBillingCleanup(
-          args.ctx,
-          checkoutCommunity._id,
-          lifecycle.generation,
-        );
-        restoresArchivedCommunity = true;
-      }
+      // A plan is never bought for an archived community.
+      checkout = null;
     }
   }
   const expectedPriceId = String(
@@ -515,10 +488,8 @@ async function syncFounderSubscription(args: {
   if (community && String(community.ownerId) !== String(ownerUserId)) {
     throw new Error("founder_subscription_community_owner_mismatch");
   }
-  // Only a payment-authoritative checkout event for this exact archived
-  // generation may cross the lifecycle boundary. Ordinary subscription
-  // webhooks remain billing evidence and cannot restore product access.
-  if (community && !communityIsActive(community) && !restoresArchivedCommunity) {
+  // Billing evidence for an archived community never touches it.
+  if (community && !communityIsActive(community)) {
     return { ok: true, ignored: true, reason: "community_archived" };
   }
   if (
@@ -581,20 +552,6 @@ async function syncFounderSubscription(args: {
   const status = preserveRiskRevocation
     ? existing?.status ?? checkout?.communitySubscriptionStatus ?? "ended"
     : incomingStatus;
-  if (
-    restoresArchivedCommunity &&
-    !founderSubscriptionStatusGrantsAccess({
-      status,
-      currentPeriodEndAt: cycleEndAt,
-      nowMs: args.providerEventCreatedAt,
-    })
-  ) {
-    return {
-      ok: true,
-      ignored: true,
-      reason: "community_restore_subscription_inactive",
-    };
-  }
   const endedAt = preserveRiskRevocation
     ? existing?.endedAt ?? args.providerEventCreatedAt
     : status === "canceled" || status === "ended"
@@ -703,36 +660,7 @@ async function syncFounderSubscription(args: {
       updatedAt: args.providerEventCreatedAt,
     });
   }
-  let restoredLifecycleGeneration: number | null = null;
-  if (communityId && community && restoresArchivedCommunity) {
-    const transition = restoreCommunityLifecycle(community);
-    if (!transition.changed) {
-      throw new Error("community_restore_lifecycle_conflict");
-    }
-    restoredLifecycleGeneration = transition.next.generation;
-    await args.ctx.db.patch(communityId, {
-      lifecycleStatus: transition.next.status,
-      lifecycleGeneration: transition.next.generation,
-      inferenceFundingPolicy: COMMUNITY_FUNDING_POLICY_MANAGED,
-      updatedAt: args.providerEventCreatedAt,
-    });
-    await syncCommunityWeeklyDigestScheduleForCommunity(args.ctx, {
-      communityId,
-      nowMs: args.providerEventCreatedAt,
-    });
-    await recordCriticalAuditEvent(args.ctx, {
-      eventKey: `community_restored:${String(communityId)}:${transition.next.generation}`,
-      eventType: "community_restored",
-      status: "succeeded",
-      actorUserId: ownerUserId,
-      communityId,
-      checkoutSessionId: checkout?.sessionId ?? null,
-      provider: "stripe",
-      providerObjectId: providerSubscriptionId,
-      metadata: { lifecycleGeneration: transition.next.generation },
-      createdAt: args.providerEventCreatedAt,
-    });
-  } else if (communityId) {
+  if (communityId) {
     await args.ctx.db.patch(communityId, {
       inferenceFundingPolicy: COMMUNITY_FUNDING_POLICY_MANAGED,
       updatedAt: args.providerEventCreatedAt,
@@ -746,8 +674,6 @@ async function syncFounderSubscription(args: {
     ownerUserId,
     communityId: communityId ?? null,
     subscriptionStatus: status,
-    communityRestored: restoresArchivedCommunity,
-    lifecycleGeneration: restoredLifecycleGeneration,
   };
 }
 
@@ -958,9 +884,6 @@ export const getFounderBillingOverview = query({
             throw new Error("community_archive_billing_job_ambiguous");
           }
           const archiveJob = archiveJobs[0] ?? null;
-          const builderAccessMode = parseCommunityBuilderAccessMode(
-            community.builderAccessMode,
-          );
           const pendingCheckout = pendingCheckouts
             .filter(
               (checkout) =>
@@ -1019,17 +942,9 @@ export const getFounderBillingOverview = query({
               lifecycle.status === "archived"
                 ? archiveJob?.status ?? "pending"
                 : null,
-            builder_access_mode: builderAccessMode ?? "invalid",
             funding_lane: fundingProjection.lane,
             funding_state: fundingProjection.state,
-            allowed_actions:
-              lifecycle.status === "active"
-                ? fundingProjection.allowedActions
-                : archiveJob?.status === "complete" &&
-                    !operatorComped &&
-                    builderAccessMode === "subscription_required"
-                  ? [pendingCheckout ? "resume_checkout" as const : "buy_builder" as const]
-                  : [],
+            allowed_actions: lifecycle.status === "active" ? fundingProjection.allowedActions : [],
             funding_mode: subscription
               ? "managed"
               : operatorComped
