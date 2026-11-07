@@ -1,6 +1,11 @@
+import { v } from "convex/values";
+import { internalMutation } from "./_generated/server";
 import {
   type CommunityMembershipLike,
+  type CommunityMembershipState,
+  COMMUNITY_MEMBERSHIP_PAYMENT_HOLD_REASONS,
   communityMembershipRowIsActive,
+  communityMembershipState,
   getUniqueCommunityMembershipByPair,
   normalizeCommunityRoleForOutput,
   syncCommunityActiveMemberCount,
@@ -39,6 +44,7 @@ export async function activateCommunityMembershipCore(args: {
       role,
       accessSource: args.accessSource,
       ...(args.pricePointId ? { pricePointId: args.pricePointId } : {}),
+      state: "active",
       updatedAt: args.nowMs,
     });
     const refreshed = (await args.ctx.db.get(existing._id)) as CommunityMembershipLike | null;
@@ -72,6 +78,7 @@ export async function activateCommunityMembershipCore(args: {
       role,
       accessSource: args.accessSource,
       ...(args.pricePointId ? { pricePointId: args.pricePointId } : {}),
+      state: "active",
       active: true,
       activationSequence,
       activatedAt: args.nowMs,
@@ -86,6 +93,7 @@ export async function activateCommunityMembershipCore(args: {
       role,
       accessSource: args.accessSource,
       ...(args.pricePointId ? { pricePointId: args.pricePointId } : {}),
+      state: "active",
       active: true,
       activationSequence,
       activatedAt: args.nowMs,
@@ -123,3 +131,70 @@ export async function activateCommunityMembershipCore(args: {
     activationMarker: `${String(membershipId)}:${activationSequence}:${args.activationReason}`,
   };
 }
+
+// Every move out of `active`. Granting (above) is the only way back in.
+const ENDING_MOVES: Record<CommunityMembershipState, readonly CommunityMembershipState[]> = {
+  active: ["left", "removed", "lapsed", "payment_hold"],
+  left: [],
+  removed: [],
+  lapsed: ["payment_hold"],
+  // Only once an event that lifts holds has arrived (see below).
+  payment_hold: ["lapsed"],
+};
+
+export function canEndCommunityMembership(from: CommunityMembershipState, to: CommunityMembershipState): boolean {
+  return ENDING_MOVES[from].includes(to);
+}
+
+// The fields a membership ending writes. `active` is kept in step until it is
+// dropped from the schema.
+export function endedCommunityMembershipFields(args: {
+  membership: CommunityMembershipLike;
+  to: CommunityMembershipState;
+  reason: string;
+  nowMs: number;
+}) {
+  const from = communityMembershipState(args.membership);
+  if (!from || !canEndCommunityMembership(from, args.to)) {
+    throw new Error(`community_membership_transition_invalid:${from}->${args.to}`);
+  }
+  return {
+    state: args.to,
+    active: false,
+    revokedAt: args.nowMs,
+    revokedReason: args.reason,
+    updatedAt: args.nowMs,
+  };
+}
+
+// What a subscription update from the payment provider does to a membership.
+// It never brings back someone who left or was removed, and only an event that
+// lifts holds (a new paid invoice, a won dispute) clears a payment hold.
+export function communityMembershipStateAfterSubscriptionUpdate(args: {
+  current: CommunityMembershipState;
+  grantsAccess: boolean;
+  liftsHold: boolean;
+  reason: string;
+}): CommunityMembershipState {
+  if (args.current === "left" || args.current === "removed") return args.current;
+  if (args.current === "payment_hold" && !args.liftsHold) return "payment_hold";
+  if (args.grantsAccess) return "active";
+  return COMMUNITY_MEMBERSHIP_PAYMENT_HOLD_REASONS.has(args.reason) ? "payment_hold" : "lapsed";
+}
+
+// One-off, run by hand until it reports done: gives every membership written
+// before `state` existed its state, read from its old fields.
+export const backfillCommunityMembershipStateInternal = internalMutation({
+  args: { cursor: v.optional(v.union(v.string(), v.null())) },
+  handler: async (ctx, args) => {
+    const page = await ctx.db.query("communityMemberships").paginate({ numItems: 200, cursor: args.cursor ?? null });
+    const counts: Record<string, number> = {};
+    for (const row of page.page) {
+      if (row.state) continue;
+      const state = communityMembershipState(row)!;
+      await ctx.db.patch(row._id, { state });
+      counts[state] = (counts[state] ?? 0) + 1;
+    }
+    return { done: page.isDone, cursor: page.continueCursor, filled: counts };
+  },
+});

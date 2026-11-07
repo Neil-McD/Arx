@@ -182,9 +182,9 @@ async function upsertSeedMember(ctx: any, communityId: any, member: (typeof MEMB
   const joinedAt = nowMs - member.joinedDaysAgo * DAY_MS;
   // A real membership's activation fields, so every lens read sees them as active members.
   const activation = { activationSequence: membership?.activationSequence ?? 1, activatedAt: membership?.activatedAt ?? joinedAt };
-  if (membership) await ctx.db.patch(membership._id, { role: member.role, active: true, createdAt: joinedAt, updatedAt: nowMs, ...activation });
+  if (membership) await ctx.db.patch(membership._id, { role: member.role, state: "active", active: true, createdAt: joinedAt, updatedAt: nowMs, ...activation });
   else await ctx.db.insert("communityMemberships", {
-    communityId, userId, role: member.role, accessSource: "free_grant", active: true, createdAt: joinedAt, updatedAt: nowMs, ...activation,
+    communityId, userId, role: member.role, accessSource: "free_grant", state: "active", active: true, createdAt: joinedAt, updatedAt: nowMs, ...activation,
   } as any);
   return userId;
 }

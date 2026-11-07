@@ -585,7 +585,7 @@ function assertSourceAnchors() {
   );
   assertIncludes(
     communityAdmin,
-    "active: false,",
+    'endedCommunityMembershipFields({ membership, to: "removed"',
     "member removal revokes membership access",
   );
   assertIncludes(

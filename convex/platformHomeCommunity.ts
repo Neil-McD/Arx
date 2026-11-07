@@ -1,17 +1,11 @@
 import {
   type CommunityMembershipLike,
   communityMembershipRowIsActive,
+  communityMembershipState,
 } from "./communityCore";
 
 const PLATFORM_HOME_COMMUNITY_SLUG = "polynet";
 export const PLATFORM_HOME_MEMBER_LEFT_REVOKED_REASON = "left_by_member";
-
-const PLATFORM_HOME_REAPPROVAL_REVOKED_REASONS = new Set([
-  "removed_by_manager",
-  "removed_by_manager_stripe_canceled",
-  "banned_by_manager",
-  "banned_by_manager_stripe_canceled",
-]);
 
 export function isPlatformHomeCommunity(args: {
   communitySlug?: string | null;
@@ -30,10 +24,7 @@ export function communityMembershipIsInactive(
 export function communityMembershipRequiresManagerReapproval(
   membership: CommunityMembershipLike | null | undefined,
 ): boolean {
-  if (!communityMembershipIsInactive(membership)) return false;
-  return PLATFORM_HOME_REAPPROVAL_REVOKED_REASONS.has(
-    String(membership?.revokedReason ?? "").trim().toLowerCase(),
-  );
+  return communityMembershipState(membership) === "removed";
 }
 
 export function platformHomeMembershipRequiresReapproval(
