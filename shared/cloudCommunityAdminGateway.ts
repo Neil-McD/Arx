@@ -1298,6 +1298,47 @@ export async function saveCloudCommunityMemberSettings<SessionT>(
 }
 
 // The owner's switch: where the community's members spend time.
+export type CloudFounderBriefSettings = { enabled: boolean; local_hour: number; time_zone: string | null };
+
+function normalizeFounderBriefSettings(payload: unknown): CloudFounderBriefSettings {
+  const record = (payload ?? {}) as Record<string, unknown>;
+  const hour = Number(record.local_hour);
+  return {
+    enabled: record.enabled === true,
+    local_hour: Number.isInteger(hour) && hour >= 0 && hour <= 23 ? hour : 8,
+    time_zone: typeof record.time_zone === "string" && record.time_zone ? record.time_zone : null,
+  };
+}
+
+// The owner's daily brief (convex/communityFounderBrief.ts).
+export async function getCloudFounderBriefSettings<SessionT>(
+  params: CloudCommunityAdminGatewayParams<SessionT> & { communityId: string },
+): Promise<CloudFounderBriefSettings> {
+  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
+  return normalizeFounderBriefSettings(await client.query("communityFounderBrief:getFounderBriefSettings" as any, {
+    authSubject,
+    communityId: params.communityId,
+  }));
+}
+
+export async function setCloudFounderBriefSettings<SessionT>(
+  params: CloudCommunityAdminGatewayParams<SessionT> & {
+    communityId: string;
+    enabled: boolean;
+    localHour: number;
+    timeZone: string;
+  },
+): Promise<CloudFounderBriefSettings> {
+  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
+  return normalizeFounderBriefSettings(await client.mutation("communityFounderBrief:setFounderBriefSettings" as any, {
+    authSubject,
+    communityId: params.communityId,
+    enabled: params.enabled,
+    localHour: params.localHour,
+    timeZone: params.timeZone,
+  }));
+}
+
 export async function setCloudCommunityMemberExperience<SessionT>(
   params: CloudCommunityAdminGatewayParams<SessionT> & {
     communityId: string;
