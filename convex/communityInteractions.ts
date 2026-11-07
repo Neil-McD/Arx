@@ -1278,15 +1278,6 @@ async function createCommunityInteractionComposerMessageCore(
         throw new Error("interaction_channel_mismatch");
       }
 
-      if (actorType === "human" && !deduped) {
-        await ctx.scheduler.runAfter(
-          0,
-          internal.communityMemberWorkflows
-            .handleChannelContributionRootInternal,
-          { rootId: root._id },
-        );
-      }
-
       if (actorType === "human") {
         await intakeCommunityAgentTurn({
           ctx,
@@ -1425,15 +1416,6 @@ async function createCommunityInteractionComposerMessageCore(
     }
 
     await ensureReplyChannelMatchesRoot({ ctx, root, reply, actor: channelActor });
-
-    if (actorType === "human" && !deduped) {
-      await ctx.scheduler.runAfter(
-        0,
-        internal.communityMemberWorkflows
-          .handleChannelContributionReplyInternal,
-        { replyId: reply._id },
-      );
-    }
 
     if (actorType === "human") {
       await intakeCommunityAgentTurn({

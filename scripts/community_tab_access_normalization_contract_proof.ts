@@ -54,12 +54,9 @@ assert.equal(
 assert.equal(isCommunityTabAllowedForAccess("analytics", memberAccess), false);
 assert.equal(normalizeCommunityTabForAccess("analytics", memberAccess), "chat");
 assert.equal(normalizeCommunityTabForAccess("analytics", builderAccess), "analytics");
-assert.equal(isCommunityTabAllowedForAccess("workflows", memberAccess), false);
-assert.equal(normalizeCommunityTabForAccess("workflows", memberAccess), "chat");
-assert.equal(normalizeCommunityTabForAccess("workflows", builderAccess), "workflows");
 assert.equal(parseCommunityTab("ai_agent"), "settings");
 assert.equal(parseCommunityTab("funnel"), "settings");
-assert.equal(parseCommunityTab("workflows"), "workflows");
+assert.equal(parseCommunityTab("workflows"), "chat");
 assert.deepEqual(
   listCommunitySettingsPanesForAccess({
     canViewSettings: true,
@@ -105,11 +102,7 @@ assert.doesNotMatch(
   /canViewMembers: boolean;/,
   "CommunityTabAccess must not keep a deleted Members-tab permission",
 );
-assert.match(
-  navigation,
-  /case "workflows":[\s\S]*return access\.canManageMembers;/,
-  "Workflows must remain builder-only",
-);
+assert.doesNotMatch(navigation, /"workflows"/, "Workflows are retired: there is no workflows tab");
 assert.match(
   navigation,
   /case "agent":[\s\S]*return access\.canManageMembers;/,

@@ -254,14 +254,15 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
 - **Handbook:** `communityHandbook` (the founder-approved handbook: owners and admins
   draft it with the agent, edit and approve it in Studio; members and the agent read
   only the approved text at `handbook.md`). Table: `communityHandbooks`.
-- **Going:** member workflows and forms (Studio Workflows tab, rule editor, forms):
-  `communityMemberWorkflow*`, `communityWorkflow*`, `communityForm*`,
-  `communityAgentServiceWorkflowCore`, `communityMemberServiceChannelCore`; tables
-  `communityMemberWorkflows`, `communityMemberWorkflowMemberMilestones`,
+- **Retired (Nov 7 2026):** member workflows and forms (the Studio Workflows tab,
+  rule editor, forms, member service channels, their MCP actions and the 1-minute
+  milestone cron). No workflow ever ran in production. The proactive agent with
+  heartbeats does that job, and members' notes and progress live on the members
+  page. Their tables (`communityMemberWorkflows`, `communityMemberWorkflowMemberMilestones`,
   `communityMemberWorkflowTimers`, `communityMemberWorkflowRuns`,
-  `communityMemberWorkflowTransitions`,
-  `communityForms`, `communityFormVersions`, `communityFormRequests`; cron "advance due
-  workflow milestones". The journey-stage idea moves into the agent's board.
+  `communityMemberWorkflowTransitions`, `communityForms`, `communityFormVersions`,
+  `communityFormRequests`) are emptied with `retiredTablesCleanup` and then dropped;
+  `communityFormValidators` stays only until then (the schema still names them).
 
 ### 10. Official Polynet MCP — Keep (protected; every role in its own lens)
 
@@ -496,15 +497,14 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
 | Enqueue 24-hour event reminder emails | 15 min | `eventReminders` |
 | Process pending mention emails | 15 min | `communityMentionEmails` |
 | Send due founder briefs | 15 min | `communityFounderBrief` |
-| Advance due workflow milestones | 1 min | `communityMemberWorkflows` (going) |
 
 ## Cleanup plan this map drives
 
 1. **Dead code:** done Oct 27 (POL-17). `no_orphan_modules_proof` and
    `system_map_coverage_proof` keep orphans and unmapped modules and tables out.
    Personal-agent leftovers: done Oct 27 (POL-19).
-2. **Old features:** Workflows and Forms, the funnel editor, skills and harness,
-   integrations. Read-only production usage check first; tables retire over two
+2. **Old features:** the funnel editor, skills and harness, integrations;
+   Workflows and Forms retired Nov 7 2026. Read-only production usage check first; tables retire over two
    releases.
 3. **Legacy chat** retirement: code done Oct 28 (POL-26); tables drop in step 5.
 4. **One agent name:** identity done Oct 28 (POL-27); "community agent" code names next.

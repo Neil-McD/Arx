@@ -63,7 +63,8 @@ const readOnlyBuilder = buildPlatformHarnessRuntimePromptBundle({ ...params,
   runtimeTurnContext: buildRuntimeTurnContextPacket({ latestUserText: "Tell me about Rashid." }),
 });
 assert.match(readOnlyBuilder.text, /For a question about a specific member of this community/);
-assert.match(readOnlyBuilder.text, /builder\/workflow-members\//);
+assert.match(readOnlyBuilder.text, /members\/<handle>\.json/);
+assert.doesNotMatch(readOnlyBuilder.text, /workflow-members/);
 const memberLane = buildPlatformHarnessRuntimePromptBundle({ ...params,
   allowedToolNames: ["polynet_list", "polynet_read"],
   communityResourceLane: { lane: "member", can_read_live_resources: true, can_use_resource_builder: false },
