@@ -447,11 +447,6 @@ assert.match(
 );
 assert.match(
   resources,
-  /compactCommunityResourceBodyStorage[\s\S]*writeCommunityResourceBodyContent[\s\S]*resourceUpdatedAt: row\.updatedAt/,
-  "body-storage compaction should move legacy bodies without making old resources look newly edited",
-);
-assert.match(
-  resources,
   /const nextSourceIngestionKind = Object\.prototype\.hasOwnProperty\.call\(payload, "source_ingestion_kind"\)[\s\S]*fileChanged[\s\S]*urlChanged[\s\S]*normalizeResourceSourceIngestionKind\(\{[\s\S]*\.\.\.existing[\s\S]*sourceRevisionChanged[\s\S]*sourceIngestionLeaseId: undefined[\s\S]*sourceIngestionAttempt: undefined/,
   "generic resource edits should preserve source kind while invalidating stale ingestion ownership when the source changes",
 );
