@@ -25,7 +25,7 @@ async function fixture() {
     const adminId = await user("admin-subject", "admin");
     const communityId = await ctx.db.insert("communities", {
       ownerId, slug: "dawn-club", name: "Dawn Club", visibility: "published", inferenceFundingPolicy: "managed_required",
-      entryPolicy: "open", activeMemberCount: 2, builderAccessMode: "free", createdAt: NOW, updatedAt: NOW,
+      entryPolicy: "open", activeMemberCount: 2, createdAt: NOW, updatedAt: NOW,
     } as any);
     for (const [userId, role] of [[adminId, "admin"]] as const) {
       await ctx.db.insert("communityMemberships", {
