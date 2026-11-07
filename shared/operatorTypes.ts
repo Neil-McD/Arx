@@ -531,18 +531,6 @@ export type OperatorPaidToolLane = {
   latestAt: number | null;
 };
 
-export type OperatorPaidToolEconomicsLane = {
-  toolName: string;
-  label: string;
-  settledRows: number;
-  revenueUsd: number;
-  vendorCostUsd: number;
-  grossMarginUsd: number;
-  grossMarginRate: number | null;
-  missingCostRows: number;
-  latestAt: number | null;
-};
-
 export type OperatorRuntimeToolDiagnosticsSnapshot = {
   computedAt: number;
   range: OperatorRange;
@@ -590,88 +578,6 @@ export type OperatorRuntimeToolDiagnosticsSnapshot = {
     sourceTables: string[];
     scannedRunLimit: number;
     scannedEventLimit: number;
-    isTruncated: boolean;
-  };
-};
-
-export type OperatorToolBalanceAccountingIssue = {
-  kind:
-    | "negative_balance"
-    | "duplicate_balance"
-    | "stale_reservation"
-    | "pending_settlement"
-    | "unbilled_compute"
-    | "missing_cost"
-    | "price_drift"
-    | "balance_mismatch"
-    | "reconciliation_coverage_gap";
-  severity: "warning" | "error";
-  label: string;
-  userId: string | null;
-  creditKey: string | null;
-  amountCredits: number | null;
-  amountUsd: number | null;
-  latestAt: number | null;
-};
-
-export type OperatorToolEconomicsSnapshot = {
-  computedAt: number;
-  range: OperatorRange;
-  usageIntegrity: {
-    health: "healthy" | "degraded" | "incident" | "unknown";
-    score: number | null;
-    workspaceCreditFailures: number;
-    paidToolLedgerFailures: number;
-    unbilledComputeCharges: number;
-    topFailureCodes: OperatorRuntimeToolFailureBucket[];
-  };
-  paidTools: {
-    totals: {
-      reservations: number;
-      succeeded: number;
-      released: number;
-      stillReserved: number;
-      failures: number;
-      reservedCredits: number;
-      settledCredits: number;
-      releasedCredits: number;
-      unbilledComputeCharges: number;
-    };
-    lanes: OperatorPaidToolLane[];
-  };
-  paidToolEconomics: {
-    targets: {
-      grossMarginBps: number;
-    };
-    totals: OperatorPaidToolEconomicsLane & {
-      costEvidenceCoverage: number | null;
-    };
-    lanes: OperatorPaidToolEconomicsLane[];
-  };
-  accountingIntegrity: {
-    health: "healthy" | "degraded" | "incident" | "unknown";
-    score: number | null;
-    totals: {
-      sampledBalanceRows: number;
-      duplicateBalanceUsers: number;
-      negativeBalanceRows: number;
-      uncollectedBalanceRows: number;
-      staleReservations: number;
-      pendingSettlementsDue: number;
-      unbilledComputeCharges: number;
-      settledRowsMissingVendorCost: number;
-      priceDriftRows: number;
-      balanceMismatchUsers: number;
-      reconciliationCoverageGaps: number;
-    };
-    issues: OperatorToolBalanceAccountingIssue[];
-  };
-  evidence: {
-    sourceTables: string[];
-    scannedCreditLimit: number;
-    scannedComputeLimit: number;
-    scannedBalanceLimit: number;
-    scannedIntegritySampleLimit: number;
     isTruncated: boolean;
   };
 };

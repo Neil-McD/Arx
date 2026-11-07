@@ -29,7 +29,7 @@ assert.match(paidToolPricing, /providerCostUsdToMicros[\s\S]*Math\.ceil\(numeric
 
 const receiptSchema = schema.slice(
   schema.indexOf("communityPaidToolReceipts: defineTable"),
-  schema.indexOf("workspaceCreditBalances: defineTable"),
+  schema.indexOf("providerCostEntries: defineTable"),
 );
 assert.match(receiptSchema, /receiptKey: v\.string\(\)/);
 assert.match(receiptSchema, /usageCycleId: v\.optional\(v\.id\("founderUsageCycles"\)\)/);

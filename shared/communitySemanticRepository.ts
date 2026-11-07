@@ -29,11 +29,6 @@ export const POLYNET_BUILDER_DIRECTORY_PATH = "/builder/";
 export const POLYNET_JOIN_REQUESTS_DIRECTORY_PATH = "/builder/join-requests/";
 // The community itself, for its owners and admins.
 export const POLYNET_BUILDER_COMMUNITY_PATH = "/builder/community.json";
-// Tags on people, and each tag's members (owners, admins and moderators).
-export const POLYNET_BUILDER_TAGS_DIRECTORY_PATH = "/builder/tags/";
-export function isBuilderTagsDirectoryPath(value: string): boolean {
-  return value === POLYNET_BUILDER_TAGS_DIRECTORY_PATH || /^\/builder\/tags\/[a-z0-9-]{1,40}\/$/.test(value);
-}
 export const POLYNET_BUILDER_RESOURCES_DIRECTORY_PATH = "/builder/resources/";
 
 export type ParsedCommunityChannelSemanticPath =
@@ -375,8 +370,7 @@ export function parsePolynetSemanticPath(value: unknown) {
       value !== POLYNET_CAPABILITIES_DIRECTORY_PATH &&
       value !== POLYNET_BUILDER_DIRECTORY_PATH &&
       value !== POLYNET_JOIN_REQUESTS_DIRECTORY_PATH &&
-      value !== POLYNET_BUILDER_RESOURCES_DIRECTORY_PATH &&
-      !isBuilderTagsDirectoryPath(value)) ||
+      value !== POLYNET_BUILDER_RESOURCES_DIRECTORY_PATH) ||
     value.split("/").some((part) => part === "." || part === "..")
   ) {
     return semanticError(
@@ -407,7 +401,6 @@ export function parsePolynetSemanticPath(value: unknown) {
     value === POLYNET_BUILDER_RESOURCES_DIRECTORY_PATH ||
     value === POLYNET_JOIN_REQUESTS_DIRECTORY_PATH ||
     value === POLYNET_BUILDER_COMMUNITY_PATH ||
-    isBuilderTagsDirectoryPath(value) ||
     /^\/builder\/join-requests\/[A-Za-z0-9]+\.md$/.test(value) ||
     /^\/events\/event:[A-Za-z0-9_-]+:[0-9]{1,16}\.md$/.test(value) ||
     /^\/memory\/[A-Za-z0-9_-]+\.md$/.test(value) ||
@@ -500,7 +493,6 @@ export function validateCommunitySemanticOperationInput(args: {
       parsed.path === POLYNET_CAPABILITIES_DIRECTORY_PATH ||
       parsed.path === POLYNET_BUILDER_DIRECTORY_PATH ||
       parsed.path === POLYNET_BUILDER_RESOURCES_DIRECTORY_PATH ||
-      isBuilderTagsDirectoryPath(parsed.path) ||
       Boolean(resourceDirectory && !resourceDirectory.resourceId) ||
       resourceAlias?.kind === "module";
     if (!listable) {

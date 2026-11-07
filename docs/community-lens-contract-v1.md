@@ -69,24 +69,16 @@ of the slices that follow.
   profile. A: DM, block.
 - Moderator: A on a selection: approve or deny join requests.
 - Admin: A on a selection: change role (not admins), remove, ban, unban,
-  invite; W tags.
+  invite.
 - Owner: as admin, including admins.
 - MCP now: reads; moderator join review on a selection; owners and admins
-  tag and untag (`community.members.tag`), change role
-  (`community.members.set_role`), remove, ban and unban
-  (`community.members.remove`, `.ban`, `.unban`) a selection of up to 50, and
-  manage tags (`community.tags.create`, `.rename`, `.delete`). Through an AI,
+  change role (`community.members.set_role`), remove, ban and unban
+  (`community.members.remove`, `.ban`, `.unban`) a selection of up to 50. Through an AI,
   removing or banning a paying member is refused (`paid_member_use_studio`:
   it cancels their subscription, so a person does it in Studio). Planned: own
   profile; invite.
-- Tags: the owner's labels on people ("beginner", "coach"), up to 100 a
-  community. Owners and admins write them; moderators read them
-  (`builder/tags/`, and `tags` on the member list through their own AI);
-  members and the community agent never see them. A tag is a saved selection
-  that other things can point at (planned: a private channel, a course, an
-  announcement).
-  A selection never sends direct messages in bulk; an announcement to a tag
-  is one post.
+- Tags on people were built and never used; they were deleted Nov 7.
+  A selection never sends direct messages in bulk.
 
 ### 3. Conversations
 - Member: R the channels they can see, posts, threads. W own posts and

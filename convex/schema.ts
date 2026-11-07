@@ -359,49 +359,7 @@ export default defineSchema({
     .index("by_cycle_createdAt", ["usageCycleId", "createdAt"])
     .index("by_community_createdAt", ["communityId", "createdAt"]),
 
-  workspaceCreditBalances: defineTable({
-    userId: v.id("users"),
-    includedCreditsBalance: v.number(),
-    purchasedCreditsBalance: v.number(),
-    uncollectedCreditsBalance: v.optional(v.number()),
-    pendingCardCollectionCreditsBalance: v.optional(v.number()),
-    includedCycleCredits: v.number(),
-    includedCycleStartedAt: v.number(),
-    includedCycleEndsAt: v.number(),
-    createdAt: v.number(),
-    updatedAt: v.number(),
-  })
-    .index("by_user", ["userId"])
-    .index("by_updatedAt", ["updatedAt"]),
 
-  workspaceComputeCharges: defineTable({
-    chargeKey: v.string(),
-    userId: v.id("users"),
-    projectId: v.optional(v.string()),
-    runId: v.string(),
-    providerSandboxId: v.string(),
-    startedAt: v.number(),
-    endedAt: v.number(),
-    durationSeconds: v.number(),
-    sandboxCpu: v.number(),
-    sandboxMemoryGiB: v.number(),
-    sandboxDiskGiB: v.number(),
-    computeCostUsd: v.number(),
-    creditsDebited: v.number(),
-    creditReservationKey: v.optional(v.string()),
-    debitSource: v.union(
-      v.literal("included"),
-      v.literal("purchased"),
-      v.literal("mixed"),
-      v.literal("unbilled"),
-    ),
-    createdAt: v.number(),
-  })
-    .index("by_chargeKey", ["chargeKey"])
-    .index("by_user", ["userId"])
-    .index("by_run", ["runId"])
-    .index("by_providerSandboxId", ["providerSandboxId"])
-    .index("by_debitSource_createdAt", ["debitSource", "createdAt"]),
 
   providerCostEntries: defineTable({
     costKey: v.string(),
@@ -454,78 +412,7 @@ export default defineSchema({
     .index("by_component_period", ["component", "periodStart"])
     .index("by_linkedCreditKey", ["linkedCreditKey"]),
 
-  workspaceUsageCollections: defineTable({
-    collectionKey: v.string(),
-    userId: v.id("users"),
-    status: v.union(
-      v.literal("prepared"),
-      v.literal("processing"),
-      v.literal("succeeded"),
-      v.literal("failed"),
-      v.literal("released"),
-    ),
-    creditsAmount: v.number(),
-    provider: v.optional(v.literal("stripe")),
-    providerCustomerId: v.optional(v.string()),
-    providerPaymentIntentId: v.optional(v.string()),
-    failureReason: v.optional(v.string()),
-    metadata: v.optional(v.any()),
-    completedAt: v.optional(v.number()),
-    createdAt: v.number(),
-    updatedAt: v.number(),
-  })
-    .index("by_collectionKey", ["collectionKey"])
-    .index("by_user_status", ["userId", "status"])
-    .index("by_user_createdAt", ["userId", "createdAt"])
-    .index("by_status_updatedAt", ["status", "updatedAt"])
-    .index("by_providerPaymentIntent", ["provider", "providerPaymentIntentId"]),
 
-  creditLedgerEntries: defineTable({
-    creditKey: v.string(),
-    userId: v.id("users"),
-    communityId: v.optional(v.id("communities")),
-    projectId: v.optional(v.string()),
-    runId: v.optional(v.string()),
-    toolName: v.string(),
-    action: v.optional(v.string()),
-    vendor: v.optional(v.string()),
-    status: v.union(
-      v.literal("reserved"),
-      v.literal("succeeded"),
-      v.literal("refunded"),
-    ),
-    creditsReserved: v.number(),
-    creditsSettled: v.optional(v.number()),
-    includedCreditsDebited: v.number(),
-    purchasedCreditsDebited: v.number(),
-    includedCycleStartedAt: v.optional(v.number()),
-    includedCycleEndsAt: v.optional(v.number()),
-    includedCreditsRefunded: v.optional(v.number()),
-    purchasedCreditsRefunded: v.optional(v.number()),
-    pendingSettlementStatus: v.optional(v.literal("succeeded")),
-    pendingCreditsSettled: v.optional(v.number()),
-    pendingRawVendorCostUsd: v.optional(v.number()),
-    pendingSettlementMetadata: v.optional(v.any()),
-    pendingSettlementAttempts: v.optional(v.number()),
-    pendingSettlementNextAttemptAt: v.optional(v.number()),
-    pendingSettlementError: v.optional(v.string()),
-    pendingSettlementUpdatedAt: v.optional(v.number()),
-    rawVendorCostUsd: v.optional(v.number()),
-    polynetPriceUsd: v.optional(v.number()),
-    failureReason: v.optional(v.string()),
-    metadata: v.optional(v.any()),
-    expiresAt: v.optional(v.number()),
-    settledAt: v.optional(v.number()),
-    createdAt: v.number(),
-    updatedAt: v.number(),
-  })
-    .index("by_creditKey", ["creditKey"])
-    .index("by_user_createdAt", ["userId", "createdAt"])
-    .index("by_run", ["runId"])
-    .index("by_tool_createdAt", ["toolName", "createdAt"])
-    .index("by_status_settledAt", ["status", "settledAt"])
-    .index("by_status_expiresAt", ["status", "expiresAt"])
-    .index("by_pendingSettlementStatus_nextAttemptAt", ["pendingSettlementStatus", "pendingSettlementNextAttemptAt"]),
 
   criticalAuditEvents: defineTable({
     eventKey: v.string(),
@@ -1891,30 +1778,6 @@ export default defineSchema({
   })
     .index("by_blocker_blocked", ["blockerUserId", "blockedUserId"])
     .index("by_blocked_blocker", ["blockedUserId", "blockerUserId"]),
-
-  // An owner's labels on people (convex/communityTags.ts). Owners, admins and
-  // moderators see them; members and the community agent never do.
-  communityTags: defineTable({
-    communityId: v.id("communities"),
-    slug: v.string(),
-    name: v.string(),
-    // How many people carry it, kept as they're tagged and untagged.
-    peopleCount: v.optional(v.number()),
-    createdByUserId: v.optional(v.id("users")),
-    createdAt: v.number(),
-    updatedAt: v.number(),
-  })
-    .index("by_community", ["communityId"])
-    .index("by_community_slug", ["communityId", "slug"]),
-
-  communityMemberTags: defineTable({
-    communityId: v.id("communities"),
-    tagId: v.id("communityTags"),
-    userId: v.id("users"),
-    createdAt: v.number(),
-  })
-    .index("by_tag_user", ["tagId", "userId"])
-    .index("by_community_user", ["communityId", "userId"]),
 
   // Writes a person makes through their own AI (the MCP) or their site, per
   // minute (convex/memberWriteRateLimit.ts).

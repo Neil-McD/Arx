@@ -4,14 +4,6 @@
   margin: 0 6px 8px;
 }
 
-.members-bulk-filter {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  color: var(--text-muted);
-  font-size: 12px;
-}
-
 .members-bulk-actions {
   display: flex;
   flex-wrap: wrap;
@@ -30,9 +22,7 @@
 }
 
 .members-bulk-actions select,
-.members-bulk-actions button,
-.members-bulk-filter select,
-.members-bulk-new-tag input {
+.members-bulk-actions button {
   font: inherit;
   padding: 3px 8px;
   border: 1px solid var(--border-muted);
@@ -47,7 +37,6 @@
   cursor: default;
 }
 
-.members-bulk-new-tag,
 .members-bulk-confirm {
   display: inline-flex;
   flex-wrap: wrap;
@@ -71,20 +60,4 @@
   margin: 0 2px 0 0;
   accent-color: var(--text-primary);
   cursor: pointer;
-}
-
-.community-context-member-tags {
-  display: inline-flex;
-  flex-wrap: wrap;
-  gap: 4px;
-  margin-left: 6px;
-}
-
-.community-context-member-tag {
-  padding: 0 6px;
-  border: 1px solid var(--border-muted);
-  border-radius: 999px;
-  color: var(--text-muted);
-  font-size: 10px;
-  line-height: 16px;
 }

@@ -45,8 +45,6 @@ assert.doesNotMatch(
 
 for (const label of [
   "Historical tool-credit liabilities",
-  "Historical tool-credit reconciliation",
-  "Historical tool-credit cost evidence",
   "Audit evidence only; this product is retired.",
 ]) {
   assert.match(operatorPanel, new RegExp(label), `missing historical audit boundary: ${label}`);
@@ -67,10 +65,10 @@ for (const runtimeSource of [runtimeAgentLoop, runtimeTurnHandlers, httpVoice]) 
   );
 }
 
-assert.match(
+assert.doesNotMatch(
   operatorIntelligence,
-  /buildToolBalanceAccountingIntegrity/,
-  "historical balances and reservations must remain available for liability reconciliation",
+  /creditLedgerEntries|workspaceCreditBalances|workspaceComputeCharges|workspaceUsageCollections/,
+  "the old Workspace credit tables were dropped Nov 7; nothing reads them",
 );
 assert.match(
   packageJson,

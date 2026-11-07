@@ -98,7 +98,7 @@ assert.doesNotMatch(admissionResolver, /userProviderConnections|founderInference
 assert.doesNotMatch(founderBilling, /setCommunityFundingPolicyInternal/);
 const receiptSchema = schema.slice(
   schema.indexOf("communityInferenceReceipts: defineTable"),
-  schema.indexOf("workspaceCreditBalances: defineTable"),
+  schema.indexOf("communityPaidToolReceipts: defineTable"),
 );
 assert.match(receiptSchema, /fundingMode: v\.union\([\s\S]*platform_subscription[\s\S]*platform_operator_grant/);
 assert.match(receiptSchema, /founderSubscriptionId: v\.optional\(v\.id\("founderSubscriptions"\)\)/);

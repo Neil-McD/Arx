@@ -67,8 +67,7 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
   `communityAccessAudit`, `communityAccessQueries`, `communityMembershipContextCore`,
   `communityNotificationAccess`, `communityRecipientCore`, `communitySemanticMembers`,
   `communityOntologyCards` (the community card the agent reads, shared/communityOntology.ts),
-  `memberEntryDestination`, `platformHomeCommunity`, `communityTags` (an owner's
-  labels on people), `communityPeople` (one person, one action, from someone's
+  `memberEntryDestination`, `platformHomeCommunity`, `communityPeople` (one person, one action, from someone's
   own AI).
 - **Reached by:** community sites' `/join` (their private twin); Studio's `/c/<slug>` hands over to it.
 - **Rules:** rejoining starts as `member` (an earlier role is never restored);
@@ -76,8 +75,9 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
   [community-member-arrival-v1.md](community-member-arrival-v1.md).
 - **Tables:** `communities`, `communityMemberships`, `communityJoinRequests`,
   `communityBlocks`, `communityMemberSettings`, `communityPresence`,
-  `communityOnboardingConfigs`, `communityArchiveBillingJobs`, `communityTags`,
-  `communityMemberTags`.
+  `communityOnboardingConfigs`, `communityArchiveBillingJobs`. Tags on people
+  (`communityTags`, `communityMemberTags`) were never used and were dropped Nov 7;
+  the `communityTags` module is a one-release stand-in for the cached production client.
 - **Contracts:** [community-join-request-canonicalization.md](community-join-request-canonicalization.md),
   [community-member-arrival-v1.md](community-member-arrival-v1.md),
   [destructive-lifecycle-quarantine-contract-v1.md](destructive-lifecycle-quarantine-contract-v1.md),
@@ -408,12 +408,11 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
   records its platform-absorbed provider cost through
   `voiceProviderCostAccounting.recordVoiceProviderCostInternal` into the shared
   provider cost ledger (`providerCostCore`).
-- **Retiring tables (Neil, Oct 27):** `workspaceCreditBalances`,
-  `workspaceComputeCharges`, `workspaceUsageCollections`, `creditLedgerEntries`,
-  `legacyProgramGrants`; no writers. Still read directly by the operator
-  dashboard's credits section and the production release preflight's accounting
-  smoke. The 5 customers' unspent credits are recorded privately. Production
-  backup first; Neil signs off on the data deletion.
+- **Dropped Nov 7 (Neil, Oct 27 and Nov 7):** `workspaceCreditBalances`,
+  `workspaceComputeCharges`, `workspaceUsageCollections`, `creditLedgerEntries`
+  (358 production rows, last written July 7, backed up locally first) and the
+  operator dashboard's tool economics panel that read them. The 5 customers'
+  unspent credits are recorded privately.
 - **Deleted Oct 27:** `entitlements`.
 
 ### 13. Email — Keep
@@ -433,7 +432,9 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
 
 - **Code:** `operatorAccess`, `operatorDashboard`, `operatorEntitlementsCore`,
   `operatorGrantUsageCore`, `operatorIntelligence`, `operatorSentryDiagnostics`,
-  `platformDiagnostics`, `businessAnalytics*`, `distributionAttribution*` (cron),
+  `platformDiagnostics`, `businessAnalytics*`, `distributionAttribution*` (cron;
+  kept on purpose, Nov 7: it forwards sign-ups that arrive from Distribution
+  Engineer, Neil's own product, and has had none yet),
   `criticalAudit`, `errorLogging`, `probe` (health check).
 - **Tables:** `operatorRoles`, `operatorGrantUsageCycles`, `platformDiagnosticEvents`,
   `criticalAuditEvents`, `communityAnalyticsEvents`, `platformBusinessVisits`,

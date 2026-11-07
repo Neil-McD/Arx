@@ -4,18 +4,15 @@ import type {
   OperatorMonetizationSnapshot,
   OperatorOverviewSnapshot,
   OperatorRiskItem,
-  OperatorToolEconomicsSnapshot,
 } from "../../../../shared/operatorTypes";
 import {
   formatAccountSetupMissing,
   formatAccountSetupStep,
-  formatCredits,
   formatEventTime,
   formatMoney,
   formatOptionalCount,
   formatPercent,
   formatRiskFlag,
-  formatUsdAmount,
 } from "./workspaceRightPanelOperatorShared";
 
 const OPERATOR_ACCOUNT_SETUP_STEP_ORDER = ["identity", "complete"] as const;
@@ -30,7 +27,6 @@ export function OperatorBusinessPanelView(props: {
   overview: OperatorOverviewSnapshot | null;
   monetization: OperatorMonetizationSnapshot | null;
   accountSetup: OperatorAccountSetupSnapshot | null;
-  toolEconomics: OperatorToolEconomicsSnapshot | null;
   risks: OperatorRiskItem[];
   events: OperatorEventRecord[];
 }) {
@@ -44,9 +40,6 @@ export function OperatorBusinessPanelView(props: {
     props.monetization && props.monetization.communityCheckoutStarts > 0
       ? props.monetization.communityCheckoutCompletions / props.monetization.communityCheckoutStarts
       : null;
-  const runtimeUsage = props.toolEconomics?.usageIntegrity ?? null;
-  const toolEconomics = props.toolEconomics?.paidToolEconomics ?? null;
-  const accountingIntegrity = props.toolEconomics?.accountingIntegrity ?? null;
   const platformRevenueMetric =
     businessKpis?.revenue.platformNetRevenueAvailability === "available"
       ? businessKpis.revenue.platformNetRevenueInRange
@@ -84,11 +77,6 @@ export function OperatorBusinessPanelView(props: {
           <span>Community rev share</span>
           <strong>{formatMoney(businessKpis?.revenue.communityPlatformRevShareInRange ?? null)}</strong>
           <span className="operator-dashboard__metric-note">{communityRevShareNote}</span>
-        </div>
-        <div>
-          <span>Historical provider cost</span>
-          <strong>{formatUsdAmount(toolEconomics?.totals.vendorCostUsd)}</strong>
-          <span className="operator-dashboard__metric-note">Provider cost reconstructed from the retired tool-credit ledger.</span>
         </div>
         <div>
           <span>Platform revenue</span>
@@ -182,156 +170,6 @@ export function OperatorBusinessPanelView(props: {
             <span>Archived top-up completions</span>
             <strong>{props.monetization?.creditTopupCheckoutCompletions ?? 0}</strong>
           </div>
-          <div className="operator-dashboard__row">
-            <span>Credits settled</span>
-            <strong>{formatCredits(props.toolEconomics?.paidTools.totals.settledCredits)}</strong>
-          </div>
-          <div className="operator-dashboard__row">
-            <span>Credits released</span>
-            <strong>{formatCredits(props.toolEconomics?.paidTools.totals.releasedCredits)}</strong>
-          </div>
-          <div className="operator-dashboard__row">
-            <span>Still reserved</span>
-            <strong>{props.toolEconomics?.paidTools.totals.stillReserved ?? 0}</strong>
-          </div>
-          <div className="operator-dashboard__row">
-            <span>Credit failures</span>
-            <strong>{runtimeUsage?.workspaceCreditFailures ?? 0}</strong>
-          </div>
-          <div className="operator-dashboard__row">
-            <span>Paid-tool failures</span>
-            <strong>{runtimeUsage?.paidToolLedgerFailures ?? 0}</strong>
-          </div>
-          <div className="operator-dashboard__row">
-            <span>Unbilled compute</span>
-            <strong>{runtimeUsage?.unbilledComputeCharges ?? 0}</strong>
-          </div>
-          {props.toolEconomics?.paidTools.lanes.some((lane) => lane.reservations > 0) ? (
-            props.toolEconomics.paidTools.lanes
-              .filter((lane) => lane.reservations > 0)
-              .slice(0, 3)
-              .map((lane) => (
-                <div className="operator-dashboard__row" key={lane.toolName}>
-                  <div>
-                    <strong>{lane.label}</strong>
-                    <span>
-                      {[
-                        `${lane.succeeded} settled`,
-                        `${lane.released} released`,
-                        `${formatCredits(lane.settledCredits)} credits`,
-                        lane.latestAt ? formatEventTime(lane.latestAt) : null,
-                      ]
-                        .filter(Boolean)
-                        .join(" · ")}
-                    </span>
-                  </div>
-                  <span>{lane.failures > 0 ? `${lane.failures} failures` : "ok"}</span>
-                </div>
-              ))
-          ) : (
-            <div className="operator-dashboard__empty">No historical tool-credit activity returned.</div>
-          )}
-        </div>
-      </section>
-
-      <section className="operator-dashboard__panel">
-        <h2>Historical tool-credit reconciliation</h2>
-        <div className="operator-dashboard__table">
-          <div className="operator-dashboard__row">
-            <span>Health</span>
-            <strong>{accountingIntegrity?.health ?? "unknown"}</strong>
-          </div>
-          <div className="operator-dashboard__row">
-            <span>Score</span>
-            <strong>{accountingIntegrity?.score ?? "--"}</strong>
-          </div>
-          <div className="operator-dashboard__row">
-            <span>Balance mismatches</span>
-            <strong>{accountingIntegrity?.totals.balanceMismatchUsers ?? 0}</strong>
-          </div>
-          <div className="operator-dashboard__row">
-            <span>Stale reservations</span>
-            <strong>{accountingIntegrity?.totals.staleReservations ?? 0}</strong>
-          </div>
-          <div className="operator-dashboard__row">
-            <span>Settlement retries due</span>
-            <strong>{accountingIntegrity?.totals.pendingSettlementsDue ?? 0}</strong>
-          </div>
-          <div className="operator-dashboard__row">
-            <span>Coverage gaps</span>
-            <strong>{accountingIntegrity?.totals.reconciliationCoverageGaps ?? 0}</strong>
-          </div>
-          {accountingIntegrity?.issues.length ? (
-            accountingIntegrity.issues.slice(0, 4).map((issue, index) => (
-              <div className="operator-dashboard__row" key={`${issue.kind}:${issue.creditKey ?? issue.userId ?? index}`}>
-                <div>
-                  <strong>{issue.label}</strong>
-                  <span>
-                    {[
-                      issue.kind.replaceAll("_", " "),
-                      issue.userId ? `user ${issue.userId.slice(0, 8)}` : null,
-                      issue.creditKey ? issue.creditKey.slice(0, 18) : null,
-                      issue.latestAt ? formatEventTime(issue.latestAt) : null,
-                    ]
-                      .filter(Boolean)
-                      .join(" · ")}
-                  </span>
-                </div>
-                <span>{issue.severity}</span>
-              </div>
-            ))
-          ) : (
-            <div className="operator-dashboard__empty">No sampled historical credit-liability issues returned.</div>
-          )}
-        </div>
-      </section>
-
-      <section className="operator-dashboard__panel">
-        <h2>Historical tool-credit cost evidence</h2>
-        <div className="operator-dashboard__table">
-          <div className="operator-dashboard__row">
-            <span>Archived ledger price</span>
-            <strong>{formatUsdAmount(toolEconomics?.totals.revenueUsd)}</strong>
-          </div>
-          <div className="operator-dashboard__row">
-            <span>Vendor cost</span>
-            <strong>{formatUsdAmount(toolEconomics?.totals.vendorCostUsd)}</strong>
-          </div>
-          <div className="operator-dashboard__row">
-            <span>Historical gross margin</span>
-            <strong>{formatPercent(toolEconomics?.totals.grossMarginRate ?? null)}</strong>
-          </div>
-          <div className="operator-dashboard__row">
-            <span>Cost evidence</span>
-            <strong>{formatPercent(toolEconomics?.totals.costEvidenceCoverage ?? null)}</strong>
-          </div>
-          {props.toolEconomics?.evidence.isTruncated ? (
-            <div className="operator-dashboard__empty">Tool economics are sampled for this window.</div>
-          ) : null}
-          {toolEconomics?.lanes.some((lane) => lane.settledRows > 0) ? (
-            toolEconomics.lanes
-              .filter((lane) => lane.settledRows > 0)
-              .slice(0, 3)
-              .map((lane) => (
-                <div className="operator-dashboard__row" key={lane.toolName}>
-                  <div>
-                    <strong>{lane.label}</strong>
-                    <span>
-                      {[
-                        `${lane.settledRows} settled`,
-                        formatUsdAmount(lane.revenueUsd),
-                        `${formatPercent(lane.grossMarginRate)} margin`,
-                      ]
-                        .filter(Boolean)
-                        .join(" · ")}
-                    </span>
-                  </div>
-                  <span>{lane.missingCostRows > 0 ? `${lane.missingCostRows} missing cost` : "ok"}</span>
-                </div>
-              ))
-          ) : (
-            <div className="operator-dashboard__empty">No settled historical tool-credit rows returned.</div>
-          )}
           <div className="operator-dashboard__empty">Audit evidence only; this product is retired.</div>
         </div>
       </section>

@@ -166,16 +166,17 @@ export const getOperatorRuntimeToolDiagnostics = query({
   },
 });
 
+// The old Workspace tool economics panel is gone (its tables were dropped
+// Nov 7). Kept for the cached production client only; delete once the
+// compatibility contract is re-pinned past this release.
 export const getOperatorToolEconomics = query({
   args: {
     authSubject: v.optional(v.string()),
     range: operatorRange,
   },
-  handler: async (ctx, args): Promise<any> => {
+  handler: async (ctx, args): Promise<null> => {
     await requireOperatorAccess(ctx, args.authSubject);
-    return await ctx.runQuery((internal as any).operatorIntelligence.getOperatorToolEconomicsInternal, {
-      range: args.range,
-    });
+    return null;
   },
 });
 

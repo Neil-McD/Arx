@@ -134,7 +134,6 @@ for (const queryName of [
   "getOperatorAuthAccessDiagnostics",
   "getOperatorSecurityAuditDiagnostics",
   "getOperatorRuntimeToolDiagnostics",
-  "getOperatorToolEconomics",
   "listOperatorRisks",
   "listOperatorEvents",
 ]) {

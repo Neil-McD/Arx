@@ -390,17 +390,14 @@ session; an approval applies only if members still use what it was asked from
 `builder/community.json` shows `member_experience` (`members_use`,
 `has_custom_site`, `waiting_for_owner_approval`).
 
-People (builder lens): `community.tags.create`, `.rename`, `.delete` change
-one tag (with the community operations' one-transaction receipt);
-`community.members.tag` (`tag`, `members`, `on`), `.set_role` (`members`,
+People (builder lens): `community.members.set_role` (`members`,
 `role`), `.remove`, `.ban` (`reason` optional) and `.unban` take a selection of
 `user:<id>` refs and run Studio's own functions per person
 (`communityPeople.applyPersonActionForTrustedUserInternal`): only the owner
 makes, unmakes or removes admins; the owner can't change. A paying member is
 refused with `paid_member_use_studio` (removal cancels their subscription;
 a person does it in Studio). Each is a state, so a retried item changes
-nothing. Moderators and up read `builder/tags/`, `builder/tags/<tag>/` and
-`tags` on `members/` entries; members and the community agent never do.
+nothing.
 
 Every `polynet_call` answers in the published output shape:
 `{ ok, operation, result, receipt }`. A test lists every role's actions and
