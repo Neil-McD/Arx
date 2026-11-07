@@ -136,8 +136,8 @@ assert.doesNotMatch(
 const mapRootBundle = functionBlock(interactions, "mapRootBundle");
 assert.match(
   mapRootBundle,
-  /listContentBlocksForRoot\(ctx, root\._id\)[\s\S]*listEmbedsForRoot\(ctx, root\._id\)[\s\S]*listMentionsForRoot\(ctx, root\._id\)/,
-  "root bundle mapper should hydrate bounded content blocks, embeds, and mentions",
+  /listContentBlocksForRoot\(ctx, root\._id\)[\s\S]*listMentionsForRoot\(ctx, root\._id\)[\s\S]*embeds: \[\]/,
+  "root bundle mapper should hydrate bounded content blocks and mentions (embeds are retired: always empty)",
 );
 assert.match(
   mapRootBundle,
@@ -158,8 +158,8 @@ assert.match(
 const mapReplyBundle = functionBlock(interactions, "mapReplyBundle");
 assert.match(
   mapReplyBundle,
-  /listContentBlocksForReply\(ctx, reply\._id\)[\s\S]*listEmbedsForReply\(ctx, reply\._id\)[\s\S]*listMentionsForReply\(ctx, reply\._id\)/,
-  "reply bundle mapper should hydrate bounded content blocks, embeds, and mentions",
+  /listContentBlocksForReply\(ctx, reply\._id\)[\s\S]*listMentionsForReply\(ctx, reply\._id\)[\s\S]*embeds: \[\]/,
+  "reply bundle mapper should hydrate bounded content blocks and mentions (embeds are retired: always empty)",
 );
 assert.match(
   mapReplyBundle,
@@ -194,8 +194,6 @@ assert.doesNotMatch(
 for (const [helper, pattern] of [
   ["listContentBlocksForRoot", /withIndex\("by_root_order"[\s\S]*\.take\(MAX_INTERACTION_BLOCKS_PER_WRITE\)/],
   ["listContentBlocksForReply", /withIndex\("by_reply_order"[\s\S]*\.take\(MAX_INTERACTION_BLOCKS_PER_WRITE\)/],
-  ["listEmbedsForRoot", /withIndex\("by_root"[\s\S]*\.take\(MAX_INTERACTION_EMBEDS_PER_BUNDLE\)/],
-  ["listEmbedsForReply", /withIndex\("by_reply"[\s\S]*\.take\(MAX_INTERACTION_EMBEDS_PER_BUNDLE\)/],
   ["listMentionsForRoot", /withIndex\("by_root"[\s\S]*\.take\(MAX_INTERACTION_MENTIONS_PER_BUNDLE\)/],
   ["listMentionsForReply", /withIndex\("by_reply"[\s\S]*\.take\(MAX_INTERACTION_MENTIONS_PER_BUNDLE\)/],
 ] as const) {

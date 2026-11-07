@@ -23,27 +23,6 @@ const node = (communityId: any, title: string, extra: Record<string, unknown> = 
   createdAt: NOW, updatedAt: NOW, ...extra,
 });
 
-test("old memory members could read becomes notes once; admin-only and archived memory doesn't", async () => {
-  const t = convexTest(schema, modules);
-  const { communityId } = await community(t);
-  await t.run(async (ctx: any) => {
-    await ctx.db.insert("communityIntelligenceNodes", node(communityId, "Warm up before crimps"));
-    await ctx.db.insert("communityIntelligenceNodes", node(communityId, "Founder pricing", { visibilityScope: "admin" }));
-    await ctx.db.insert("communityIntelligenceNodes", node(communityId, "Old idea", { status: "archived" }));
-    await ctx.db.insert("communityIntelligenceNodes", node(communityId, "Warm up before crimps", { bodyMd: "Second node, same title." }));
-    // Compiler memory whose sources are gone was hidden from members; it stays hidden.
-    await ctx.db.insert("communityIntelligenceNodes", node(communityId, "Orphaned compiler note", { tags: ["compiler_memory"] }));
-  });
-  const migrate = (dryRun: boolean) => t.mutation(internal.communityMemoryMigration.migrateMemoryNodesToNotesInternal, { dryRun });
-  expect(await migrate(true)).toMatchObject({ copied: 2, skipped: 3, isDone: true });
-  expect(await t.run((ctx: any) => ctx.db.query("communityNotes").collect())).toHaveLength(0);
-  expect(await migrate(false)).toMatchObject({ copied: 2, skipped: 3 });
-  const notes: any[] = await t.run((ctx: any) => ctx.db.query("communityNotes").collect());
-  expect(notes.map((n: any) => n.slug).sort()).toEqual(["warm-up-before-crimps", "warm-up-before-crimps-2"]);
-  expect(notes.every((n: any) => n.source === "migrated")).toBe(true);
-  expect(await migrate(false)).toMatchObject({ copied: 0, skipped: 5 });
-});
-
 test("members read the notes in Studio; only owners and admins edit or delete them", async () => {
   const t = convexTest(schema, modules);
   const { ownerId, communityId } = await community(t);

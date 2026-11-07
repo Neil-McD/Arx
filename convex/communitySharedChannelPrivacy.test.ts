@@ -5,8 +5,7 @@ import schema from "./schema";
 import { internal } from "./_generated/api";
 import type { MutationCtx } from "./_generated/server";
 import { ensureGeneralChannel, listSharedCommunityChannels, listSharedChannelReadableRows, listChannelReadableRows } from "./communityChannelCore";
-import { interactionTraceHasSharedSource } from "./communityInteractionEvidenceCore";
-import { resolveCommunityEvidenceRefCore } from "./communityEvidenceCore";
+import { requireSharedInteractionEvidenceChannel, resolveCommunityInteractionEvidenceSource } from "./communityInteractionEvidenceCore";
 
 const modules = import.meta.glob(["./communityWeeklyDigestWorker.ts", "./_generated/**/*.*s"]);
 const NOW = Date.parse("2026-08-14T12:00:00Z");
@@ -36,15 +35,6 @@ async function fixture(ctx: MutationCtx) {
   const sharedRoot = await root(shared, "Shared announcement");
   const privateRoot = await root(restricted, "PRIVATE SECRET", ACTIVITY + 1);
   return { ownerId, communityId, general, shared, restricted, sharedRoot, privateRoot, root };
-}
-
-async function trace(ctx: MutationCtx, f: Awaited<ReturnType<typeof fixture>>, rootId: any, channelId: any) {
-  return ctx.db.insert("communitySourceTraces", {
-    communityId: f.communityId, channelId, sourceType: "interaction", sourceId: `interaction:root:${rootId}`,
-    summary: "Captured interaction", visibilityScope: "community", sourceVisibility: "community",
-    artifactIds: [], outcomeObservationIds: [], actorType: "member", actorUserId: f.ownerId,
-    compilerState: "pending", compilerPendingSince: ACTIVITY, createdAt: ACTIVITY, updatedAt: ACTIVITY,
-  });
 }
 
 test("shared audience is selected before channel/message limits, including manager-post announcement rooms", async () => {
@@ -93,26 +83,29 @@ test("weekly digest keeps shared activity despite newer private volume", async (
   expect(JSON.stringify(result.digestSnapshot)).not.toContain("PRIVATE");
 });
 
-test("direct evidence and captured source refs revalidate audience, archive, provenance, and community", async () => {
+test("direct evidence revalidates audience, archive and community at the moment it's read", async () => {
   const t = convexTest(schema, modules);
   await t.run(async (ctx) => {
     const f = await fixture(ctx);
-    const traceId = await trace(ctx, f, f.sharedRoot, f.shared);
-    const row = (await ctx.db.get(traceId))!;
-    const args = { ctx, communityId: f.communityId, trace: row };
-    expect(await interactionTraceHasSharedSource(args)).toBe(true);
+    const shared = (communityId = f.communityId) => resolveCommunityInteractionEvidenceSource({ ctx, communityId, objectType: "root", objectId: f.sharedRoot })
+      .then(async (source) => {
+        if (!source) return false;
+        try { await requireSharedInteractionEvidenceChannel({ ctx, communityId, source }); return true; } catch { return false; }
+      });
+    expect(await shared()).toBe(true);
     const otherCommunityId = await ctx.db.insert("communities", {
       ownerId: f.ownerId, name: "Other", slug: "other", visibility: "unlisted", inferenceFundingPolicy: "managed_required",
       entryPolicy: "open", createdAt: NOW, updatedAt: NOW,
-    });
-    expect(await interactionTraceHasSharedSource({ ...args, communityId: otherCommunityId })).toBe(false);
-    expect(await interactionTraceHasSharedSource({ ...args, trace: { ...row, channelId: f.restricted } })).toBe(false);
-    expect((await resolveCommunityEvidenceRefCore({ ctx, communityId: f.communityId, ref: `interaction:root:${f.privateRoot}` })).status).toBe("revoked");
+    } as any);
+    expect(await shared(otherCommunityId)).toBe(false);
+    // A post in a private room is never shared evidence.
+    const privateSource = await resolveCommunityInteractionEvidenceSource({ ctx, communityId: f.communityId, objectType: "root", objectId: f.privateRoot });
+    await expect(requireSharedInteractionEvidenceChannel({ ctx, communityId: f.communityId, source: privateSource! })).rejects.toThrow();
+    // A room that turns private, or is archived, stops being shared at once.
     await ctx.db.patch(f.shared, { accessMode: "restricted" });
-    expect(await interactionTraceHasSharedSource(args)).toBe(false);
-    expect((await resolveCommunityEvidenceRefCore({ ctx, communityId: f.communityId, ref: `trace:${traceId}` })).status).toBe("revoked");
+    expect(await shared()).toBe(false);
     await ctx.db.patch(f.shared, { accessMode: "all_members", status: "archived" });
-    expect(await interactionTraceHasSharedSource(args)).toBe(false);
-    expect(await interactionTraceHasSharedSource({ ...args, trace: { ...row, sourceId: "interaction:root:invalid" } })).toBe(false);
+    expect(await shared()).toBe(false);
+    expect(await resolveCommunityInteractionEvidenceSource({ ctx, communityId: f.communityId, objectType: "root", objectId: "invalid" })).toBeNull();
   });
 });
