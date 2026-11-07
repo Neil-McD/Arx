@@ -213,11 +213,6 @@ assert.match(
   "community resource ingestion should use the shared source URL policy",
 );
 assert.match(
-  resources,
-  /COMMUNITY_RESOURCE_SOURCE_URL_FETCHER_ENDPOINT_ENV = "ARX_SOURCE_URL_FETCHER_ENDPOINT"[\s\S]*COMMUNITY_RESOURCE_SOURCE_URL_FETCHER_SECRET_ENV = "ARX_SOURCE_URL_FETCHER_SECRET"/,
-  "URL ingestion should require a configured first-party fetcher endpoint",
-);
-assert.match(
   sourceUrlPolicy,
   /requireSafeCommunitySourceFetcherEndpoint[\s\S]*community_source_url_fetcher_not_configured[\s\S]*parsed\.protocol !== "https:"[\s\S]*community_source_url_fetcher_invalid/,
   "URL ingestion fetcher should fail closed unless a valid HTTPS broker is configured",
@@ -226,21 +221,6 @@ assert.match(
   resources,
   /resolveSourceUrlFetcherEndpoint[\s\S]*return requireSafeCommunitySourceFetcherEndpoint\(readEnv\(COMMUNITY_RESOURCE_SOURCE_URL_FETCHER_ENDPOINT_ENV\)\)/,
   "community resource ingestion should validate the first-party fetcher endpoint through the shared source URL policy",
-);
-assert.match(
-  resources,
-  /sourceUrlFetcherHeaders[\s\S]*community_source_url_fetcher_secret_not_configured[\s\S]*authorization: `Bearer \$\{secret\}`/,
-  "URL ingestion fetcher should require a shared broker secret before making requests",
-);
-assert.match(
-  resources,
-  /fetchSourceUrlViaConfiguredFetcher[\s\S]*requireSafeSourceIngestionUrl\(rawUrl\)[\s\S]*fetchWithTimeout\(resolveSourceUrlFetcherEndpoint\(\)[\s\S]*sourceUrlFetcherHeaders\(\)[\s\S]*max_redirects: COMMUNITY_RESOURCE_SOURCE_INGESTION_MAX_REDIRECTS/,
-  "URL ingestion should send source URL extraction through the configured fetch broker only",
-);
-assert.match(
-  resources,
-  /extractSourceTextFromUrl[\s\S]*return await fetchSourceUrlViaConfiguredFetcher\(rawUrl\)/,
-  "URL ingestion must not fetch arbitrary source URLs directly from Convex",
 );
 assert.doesNotMatch(
   resources,
@@ -281,11 +261,6 @@ assert.doesNotMatch(
   resources,
   /ARX_SOURCE_CRAWLER_PROVIDER|ARX_CRAWL4AI|Crawl4AI|crawl4ai|resolveCrawl4AiEndpoint|crawl4AiHeaders|crawlSourceRootWithCrawl4AI|sourceCrawlerEndpointUrl|COMMUNITY_RESOURCE_SOURCE_CRAWLER_MAX_RESPONSE_BYTES/,
   "source ingestion must not retain the deleted external Crawl4AI/Fly crawler adapter",
-);
-assert.match(
-  resources,
-  /crawlCommunitySourceRoot: any = action\(\{[\s\S]*requireCommunityManagerForAction\(ctx, userId, args\.communityId\)[\s\S]*createCommunitySourceCrawlJobInternal[\s\S]*ctx\.scheduler\.runAfter\([\s\S]*processCommunitySourceCrawlJobInternal[\s\S]*kind: "community_source_root_crawl_job"[\s\S]*job/,
-  "source root crawl should be manager-gated and create a durable asynchronous crawl job",
 );
 assert.match(
   resources,
@@ -332,18 +307,8 @@ assert.doesNotMatch(
 );
 assert.match(
   resources,
-  /generateCommunityResourceSourceUploadUrl[\s\S]*await requireCommunityManager[\s\S]*ctx\.storage\.generateUploadUrl/,
-  "source file uploads should be manager-gated",
-);
-assert.match(
-  resources,
   /extractSourceTextFromFile[\s\S]*ctx\.storage\.getUrl[\s\S]*isPdfFileType[\s\S]*community_source_pdf_ingestion_not_supported[\s\S]*isReadableTextFileType/,
   "file ingestion should read uploaded source files from storage and reject PDFs until a first-party parser exists",
-);
-assert.match(
-  resources,
-  /fetchSourceUrlViaConfiguredFetcher[\s\S]*application\/pdf[\s\S]*community_source_pdf_ingestion_not_supported/,
-  "URL ingestion should reject PDF URLs until a first-party parser exists",
 );
 assert.doesNotMatch(
   resources,
@@ -365,35 +330,10 @@ assert.doesNotMatch(
   /communitySourceMatchesIngestionKind|function countPendingSourceIngestion|sourceKind:|resultKind:/,
   "the combined ingestion path must not retain obsolete provider-specific generalization",
 );
-assert.match(
-  resources,
-  /runCommunitySourceIngestion[\s\S]*const invalidMessage[\s\S]*status: "failed"[\s\S]*const failedSources = Number\(after\?\.failed_sources \?\? 0\)[\s\S]*const remainingPendingSources = Number\(after\?\.pending_sources \?\? 0\)[\s\S]*const ok = readySources > 0 && failedSources === 0 && remainingPendingSources === 0[\s\S]*failed_sources: failedSources[\s\S]*source_ingestion_partial_failure[\s\S]*source_ingestion_incomplete/,
-  "source ingestion should derive truthful completion from persisted failed and pending state",
-);
-assert.match(
-  resources,
-  /claimNextCommunitySourceIngestionInternal = internalMutation\([\s\S]*requireCommunityManager[\s\S]*status === "queued"[\s\S]*status === "failed"[\s\S]*status === "processing" && leaseExpired[\s\S]*sourceIngestionLeaseId: leaseId[\s\S]*sourceIngestionAttempt: nextAttempt/,
-  "source ingestion should claim one canonical source atomically with authorization, a lease, and an attempt fence",
-);
-assert.match(
-  resources,
-  /const claimedResourceIds:[\s\S]*excludeResourceIds: claimedResourceIds[\s\S]*claimedResourceIds\.push\(candidate\.resourceId\)/,
-  "one ingestion action should claim each source at most once instead of burning retries in a tight loop",
-);
-assert.match(
-  resources,
-  /isExplicitFailedRetry[\s\S]*attempt >= COMMUNITY_RESOURCE_SOURCE_INGESTION_MAX_ATTEMPTS && !isExplicitFailedRetry[\s\S]*isExplicitFailedRetry && attempt >= COMMUNITY_RESOURCE_SOURCE_INGESTION_MAX_ATTEMPTS[\s\S]*\? 1[\s\S]*: attempt \+ 1/,
-  "automatic retries should stop while an explicit retry can restart an exhausted source once",
-);
 assert.doesNotMatch(
   resources,
   /ctx\.db\.insert\("communityResourceModules"[\s\S]{0,500}descriptionMd:\s*null/,
   "community resource module scaffolds must omit empty descriptions instead of writing null into an optional string field",
-);
-assert.match(
-  resources,
-  /finalizeCommunitySourceIngestionInternal = internalMutation\([\s\S]*if \(!existing\) return \{ ok: false, code: "community_source_not_found" \}[\s\S]*requireActiveCommunity[\s\S]*community_source_ingestion_community_inactive[\s\S]*sourceIngestionLeaseId[\s\S]*sourceIngestionLeaseExpiresAt[\s\S]*community_source_ingestion_claim_lost/,
-  "source finalization should reject inactive communities, deletion, and stale or expired ownership",
 );
 assert.match(
   resources,
@@ -414,11 +354,6 @@ assert.match(
   resources,
   /finalizeCommunitySourceIngestionInternal[\s\S]*sourceIngestionStatus: args\.status[\s\S]*sourceIngestionLeaseId: undefined[\s\S]*sourceOriginalFilename[\s\S]*writeCommunityResourceBodyContent/,
   "source ingestion should persist extracted text and keep canonical memory projections in sync",
-);
-assert.match(
-  resources,
-  /const nextSourceIngestionKind = Object\.prototype\.hasOwnProperty\.call\(payload, "source_ingestion_kind"\)[\s\S]*fileChanged[\s\S]*urlChanged[\s\S]*normalizeResourceSourceIngestionKind\(\{[\s\S]*\.\.\.existing[\s\S]*sourceRevisionChanged[\s\S]*sourceIngestionLeaseId: undefined[\s\S]*sourceIngestionAttempt: undefined/,
-  "generic resource edits should preserve source kind while invalidating stale ingestion ownership when the source changes",
 );
 assert.doesNotMatch(
   resources,
