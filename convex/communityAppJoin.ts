@@ -1,3 +1,4 @@
+import { canReceiveCommunityRevenue } from "./stripeConnectAccountCore";
 import { v } from "convex/values";
 import { internalMutation, internalQuery } from "./_generated/server";
 import { communityIsActive } from "../shared/communityLifecycle";
@@ -106,7 +107,14 @@ function plansByPeriod(plans: PublicPlanSummaryLike[]): PublicPlanSummaryLike[] 
 export async function communityAppJoinProjection(ctx: any, community: CommunityLike, userId: any | null) {
   const builder = await resolveCommunityBuilderAccess({ ctx, community });
   const gate: CommunityFunnelAction = deriveCommunityFunnelAction({ entry_policy: resolveCommunityEntryPolicy(community) });
-  const plans = gate === "checkout" ? plansByPeriod(await listCurrentCommunitySellablePlans(ctx, community._id)) : [];
+  // A plan is on sale only while the owner's Stripe account can take the payment;
+  // otherwise the join card says checkout is unavailable instead of failing on click.
+  const ownerConnectAccount = gate === "checkout"
+    ? await ctx.db.query("userStripeConnectAccounts").withIndex("by_user", (q: any) => q.eq("userId", community.ownerId)).first()
+    : null;
+  const plans = gate === "checkout" && canReceiveCommunityRevenue(ownerConnectAccount)
+    ? plansByPeriod(await listCurrentCommunitySellablePlans(ctx, community._id))
+    : [];
   let viewer: null | {
     state: CommunityAppJoinViewerState; can_request_again: boolean; reapply_at: string | null; setup_required: boolean;
   } = null;

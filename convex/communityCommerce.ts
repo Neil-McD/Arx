@@ -40,6 +40,7 @@ import { normalizeAuthRelinkEmail } from "../shared/authRelinkPolicy";
 import {
   canReceiveCommunityRevenue,
   getStripeConnectDestinationAccountId,
+  isStripeConnectCheckoutCapabilityError,
   type StripeConnectRevenueDestinationLike,
 } from "./stripeConnectAccountCore";
 import { POLYNET_COMMUNITY_PLATFORM_FEE_BPS } from "../shared/founderPlan";
@@ -1117,7 +1118,7 @@ export async function startCommunityJoinCheckoutCore(
     )) as { providerPriceId?: string | null; providerAccountId?: string | null } | null;
     providerPriceId = String(existingProviderPrice?.providerPriceId ?? "").trim() || null;
   }
-  if (!providerPriceId) {
+  if (!providerPriceId) try {
     const stripe = getStripeClient();
     const pricePointId = String(checkoutConfig.pricePointId);
     const productIdempotencyKey = `community-price-product:${checkoutConfig.providerAccountId}:${pricePointId}`;
@@ -1163,6 +1164,10 @@ export async function startCommunityJoinCheckoutCore(
     )) as { providerPriceId?: string | null; providerAccountId?: string | null } | null;
     providerPriceId = String(attachResult?.providerPriceId ?? price.id).trim();
     if (!providerPriceId) throw new Error("provider_price_id_required");
+  } catch (error) {
+    // The founder's account can't sell this price (say, a currency it doesn't support).
+    if (isStripeConnectCheckoutCapabilityError(error)) throw new Error("community_checkout_unavailable");
+    throw error;
   }
   await ctx.runMutation(
     internal.communityCommerce.createPendingPublicCommunityCheckoutSessionInternal as any,
@@ -1305,6 +1310,7 @@ export async function startCommunityJoinCheckoutCore(
         },
       );
     }
+    if (isStripeConnectCheckoutCapabilityError(error)) throw new Error("community_checkout_unavailable");
     throw error;
   }
 }
