@@ -77,21 +77,6 @@ type AttachmentRow = {
   externalUrl?: string;
 };
 
-type EmbedRow = {
-  _id: any;
-  communityId: any;
-  rootId?: any;
-  replyId?: any;
-  embedKind: string;
-  status: string;
-  visibilityScope: "private" | "admin" | "community" | "public";
-  sourceUrl?: string;
-  workspaceRefKind?: string;
-  workspaceRefId?: string;
-  title?: string;
-  description?: string;
-};
-
 const RECENT_ROOT_SCAN_LIMIT = 80;
 const RECENT_REPLY_SCAN_LIMIT = 160;
 
@@ -855,7 +840,7 @@ export const readCommunityInteractionEvidenceInternal = internalQuery({
     }
     const community = (await ctx.db.get(args.communityId)) as CommunityRow | null;
     if (!community) throw new Error("community_not_found");
-    const [blocks, attachments, embeds] = (await Promise.all([
+    const [blocks, attachments] = (await Promise.all([
       ctx.db
         .query("communityInteractionContentBlocks" as any)
         .withIndex(
@@ -870,15 +855,9 @@ export const readCommunityInteractionEvidenceInternal = internalQuery({
           q.eq(parsed.objectType === "root" ? "rootId" : "replyId", row._id),
         )
         .take(32),
-      ctx.db
-        .query("communityInteractionEmbeds" as any)
-        .withIndex(parsed.objectType === "root" ? "by_root" : "by_reply", (q: any) =>
-          q.eq(parsed.objectType === "root" ? "rootId" : "replyId", row._id),
-        )
-        .take(32),
-    ])) as [ContentBlockRow[], AttachmentRow[], EmbedRow[]];
+    ])) as [ContentBlockRow[], AttachmentRow[]];
     if (
-      [...blocks, ...attachments, ...embeds].some(
+      [...blocks, ...attachments].some(
         (child) =>
           !interactionChildBelongsToEvidence({
             child,
@@ -925,23 +904,7 @@ export const readCommunityInteractionEvidenceInternal = internalQuery({
           size_bytes: attachment.sizeBytes,
           external_url: channel.accessMode === "restricted" ? null : attachment.externalUrl ?? null,
         })),
-      embeds: embeds
-        .filter(
-          (embed) =>
-            embed.embedKind === "workspace_ref" &&
-            embed.status !== "redacted" &&
-            communityInteractionVisibilityIsEvidenceReadable(embed.visibilityScope),
-        )
-        .map((embed) => ({
-          id: normalizeIdValue(embed._id),
-          kind: embed.embedKind,
-          status: embed.status,
-          source_url: embed.sourceUrl ?? null,
-          workspace_ref_kind: embed.workspaceRefKind ?? null,
-          workspace_ref_id: embed.workspaceRefId ?? null,
-          title: embed.title ?? null,
-          description: embed.description ?? null,
-        })),
+      embeds: [],
       edited_at: typeof row.editedAt === "number" ? toIsoString(row.editedAt) : null,
     };
   },

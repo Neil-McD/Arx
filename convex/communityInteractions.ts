@@ -133,41 +133,6 @@ type ContentBlockRow = {
   updatedAt: number;
 };
 
-type EmbedRow = {
-  _id: any;
-  communityId: any;
-  rootId?: any;
-  replyId?: any;
-  embedKind: "link" | "workspace_ref";
-  status: "pending" | "ready" | "failed" | "unavailable" | "redacted";
-  visibilityScope: InteractionVisibilityScope;
-  sourceUrl?: string;
-  normalizedSourceUrl?: string;
-  workspaceRefKind?: WorkspaceRefKind;
-  workspaceRefId?: string;
-  previewKind?: "video" | "social_post" | "link";
-  authorName?: string;
-  authorHandle?: string;
-  authorAvatarUrl?: string;
-  authorVerified?: boolean;
-  provider?: string;
-  providerPostId?: string;
-  publishedAt?: number;
-  postContext?: "post" | "reply" | "quote";
-  title?: string;
-  description?: string;
-  imageUrl?: string;
-  imageAlt?: string;
-  videoUrl?: string;
-  resolverVersion?: number;
-  fetchedAt?: number;
-  nextRefreshAt?: number;
-  refreshFailureCount?: number;
-  error?: string;
-  createdAt: number;
-  updatedAt: number;
-};
-
 type MentionRow = {
   _id: any;
   communityId: any;
@@ -208,7 +173,6 @@ const MAX_INTERACTION_IDEMPOTENCY_KEY_CHARS = 160;
 const MAX_INTERACTION_URL_CHARS = 2048;
 const MAX_INTERACTION_ROOT_READ_LIMIT = 50;
 const MAX_INTERACTION_REPLY_READ_LIMIT = 100;
-const MAX_INTERACTION_EMBEDS_PER_BUNDLE = 24;
 const MAX_INTERACTION_MENTIONS_PER_BUNDLE = 24;
 const MAX_VIEWER_REACTIONS_PER_TARGET = 24;
 const MAX_INTERACTION_MENTIONS_PER_WRITE = 24;
@@ -494,22 +458,6 @@ async function listContentBlocksForReply(ctx: any, replyId: any): Promise<Conten
     .take(MAX_INTERACTION_BLOCKS_PER_WRITE)) as ContentBlockRow[];
 }
 
-async function listEmbedsForRoot(ctx: any, rootId: any): Promise<EmbedRow[]> {
-  return (await ctx.db
-    .query("communityInteractionEmbeds" as any)
-    .withIndex("by_root", (q: any) => q.eq("rootId", rootId))
-    .filter((q: any) => q.eq(q.field("embedKind"), "workspace_ref"))
-    .take(MAX_INTERACTION_EMBEDS_PER_BUNDLE)) as EmbedRow[];
-}
-
-async function listEmbedsForReply(ctx: any, replyId: any): Promise<EmbedRow[]> {
-  return (await ctx.db
-    .query("communityInteractionEmbeds" as any)
-    .withIndex("by_reply", (q: any) => q.eq("replyId", replyId))
-    .filter((q: any) => q.eq(q.field("embedKind"), "workspace_ref"))
-    .take(MAX_INTERACTION_EMBEDS_PER_BUNDLE)) as EmbedRow[];
-}
-
 async function listMentionsForRoot(ctx: any, rootId: any): Promise<MentionRow[]> {
   return (await ctx.db
     .query("communityInteractionMentions" as any)
@@ -675,35 +623,6 @@ function mapContentBlock(row: ContentBlockRow) {
   };
 }
 
-function mapEmbed(row: EmbedRow) {
-  return {
-    id: normalizeIdValue(row._id),
-    embed_kind: row.embedKind,
-    status: row.status,
-    visibility_scope: row.visibilityScope,
-    source_url: row.sourceUrl ?? null,
-    normalized_source_url: row.normalizedSourceUrl ?? null,
-    workspace_ref_kind: row.workspaceRefKind ?? null,
-    workspace_ref_id: row.workspaceRefId ?? null,
-    preview_kind: row.previewKind ?? null,
-    author_name: row.authorName ?? null,
-    author_handle: row.authorHandle ?? null,
-    author_avatar_url: row.authorAvatarUrl ?? null,
-    provider: row.provider ?? null,
-    provider_post_id: row.providerPostId ?? null,
-    published_at: typeof row.publishedAt === "number" ? toIsoString(row.publishedAt) : null,
-    post_context: row.postContext ?? null,
-    title: row.title ?? null,
-    description: row.description ?? null,
-    image_url: row.previewKind === "video" ? row.imageUrl ?? null : null,
-    image_alt: row.previewKind === "video" ? row.imageAlt ?? null : null,
-    video_url: row.previewKind === "video" ? row.videoUrl ?? null : null,
-    resolver_version: typeof row.resolverVersion === "number" ? row.resolverVersion : null,
-    fetched_at: typeof row.fetchedAt === "number" ? toIsoString(row.fetchedAt) : null,
-    error: row.error ?? null,
-  };
-}
-
 async function mapMention(ctx: any, row: MentionRow, userIdCache?: Map<string, string | null>) {
   return {
     id: normalizeIdValue(row._id),
@@ -734,7 +653,6 @@ async function mapRootBundle(
   viewerEmojis?: string[],
 ) {
   const blocks = await listContentBlocksForRoot(ctx, root._id);
-  const embeds = await listEmbedsForRoot(ctx, root._id);
   const mentions = await listMentionsForRoot(ctx, root._id);
   const attachments = await listCanonicalInteractionAttachmentsForTarget({ ctx, rootId: root._id });
   const publicActorUserId = root.actorUserId
@@ -782,7 +700,7 @@ async function mapRootBundle(
       edited_at: typeof root.editedAt === "number" ? toIsoString(root.editedAt) : null,
     },
     content_blocks: blocks.map(mapContentBlock),
-    embeds: embeds.map(mapEmbed),
+    embeds: [],
     mentions: await mapMentions(ctx, mentions, userIdCache),
     attachments,
   };
@@ -796,7 +714,6 @@ async function mapReplyBundle(
   viewerEmojis?: string[],
 ) {
   const blocks = await listContentBlocksForReply(ctx, reply._id);
-  const embeds = await listEmbedsForReply(ctx, reply._id);
   const mentions = await listMentionsForReply(ctx, reply._id);
   const attachments = await listCanonicalInteractionAttachmentsForTarget({ ctx, replyId: reply._id });
   const publicActorUserId = reply.actorUserId
@@ -825,7 +742,7 @@ async function mapReplyBundle(
       edited_at: typeof reply.editedAt === "number" ? toIsoString(reply.editedAt) : null,
     },
     content_blocks: blocks.map(mapContentBlock),
-    embeds: embeds.map(mapEmbed),
+    embeds: [],
     mentions: await mapMentions(ctx, mentions, userIdCache),
     attachments,
   };
@@ -847,21 +764,6 @@ async function insertContentBlocksForTarget(args: {
   }
   for (let index = 0; index < args.blocks.length; index += 1) {
     const block = args.blocks[index]!;
-    let embedId: any | undefined;
-    if (block.blockType === "workspace_ref") {
-      embedId = await args.ctx.db.insert("communityInteractionEmbeds" as any, {
-        communityId: args.communityId,
-        ...(args.rootId ? { rootId: args.rootId } : {}),
-        ...(args.replyId ? { replyId: args.replyId } : {}),
-        embedKind: "workspace_ref",
-        status: "pending",
-        visibilityScope: args.visibilityScope,
-        workspaceRefKind: block.workspaceRefKind,
-        workspaceRefId: block.workspaceRefId,
-        createdAt: args.nowMs,
-        updatedAt: args.nowMs,
-      });
-    }
     const contentBlockId = await args.ctx.db.insert("communityInteractionContentBlocks" as any, {
       communityId: args.communityId,
       ...(args.rootId ? { rootId: args.rootId } : {}),
@@ -870,7 +772,6 @@ async function insertContentBlocksForTarget(args: {
       blockType: block.blockType,
       ...("text" in block && block.text ? { text: block.text } : {}),
       ...(block.blockType === "link" ? { url: block.url } : {}),
-      ...(embedId ? { embedId } : {}),
       ...(block.blockType === "workspace_ref"
         ? { workspaceRefKind: block.workspaceRefKind, workspaceRefId: block.workspaceRefId }
         : {}),

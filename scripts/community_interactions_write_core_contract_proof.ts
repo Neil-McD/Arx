@@ -380,8 +380,13 @@ assert.doesNotMatch(
 );
 assert.match(
   interactions,
-  /insertContentBlocksForTarget[\s\S]*block\.blockType === "workspace_ref"[\s\S]*embedKind: "workspace_ref"[\s\S]*block\.blockType === "link" \? \{ url: block\.url \} : \{\}/,
-  "content blocks should store link URL semantics while reserving embed rows for protected workspace references",
+  /insertContentBlocksForTarget[\s\S]*block\.blockType === "link" \? \{ url: block\.url \} : \{\}/,
+  "content blocks should store link URL semantics on the block itself",
+);
+assert.doesNotMatch(
+  interactions,
+  /communityInteractionEmbeds/,
+  "link-preview and workspace-reference embed rows are retired (Nov 7 2026): chat writes none",
 );
 assert.match(
   interactions,

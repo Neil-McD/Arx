@@ -35,7 +35,6 @@ const INDEXED_USER_REFERENCES: IndexedReferenceSpec[] = [
   { table: "communitySubscriptions", index: "by_user", field: "userId" },
   { table: "communityTypingPresence", index: "by_user", field: "userId" },
   { table: "dmTypingPresence", index: "by_user", field: "userId" },
-  { table: "communityAiFeedReactions", index: "by_actorUser", field: "actorUserId" },
   { table: "communityMemberSettings", index: "by_user", field: "userId" },
   { table: "communityReadCursors", index: "by_user", field: "userId" },
   { table: "communityResources", index: "by_createdBy", field: "createdByUserId" },
@@ -53,7 +52,6 @@ const SCANNED_USER_REFERENCES: ScanReferenceSpec[] = [
   { table: "criticalAuditEvents", field: "subjectUserId" },
   { table: "communityBlocks", field: "createdByUserId" },
   { table: "communityAnalyticsEvents", field: "userId" },
-  { table: "communityAiFeedPosts", field: "authorUserId" },
 ];
 
 function normalizeLimit(raw: unknown): number {

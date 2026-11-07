@@ -12,7 +12,6 @@ const read = (path: string) => readFileSync(join(root, path), "utf8");
 
 const ALLOWED = new Map<string, string>([
   ["convex/schema.ts", "AI feed posts keep the stored value until those tables drop"],
-  ["convex/communityAiFeedEvidenceCore.ts", "AI feed lineage; goes with the AI feed tables"],
 ]);
 
 const productFiles = execFileSync("git", ["ls-files", "convex", "shared", "apps"], { cwd: root, encoding: "utf8" })

@@ -139,29 +139,3 @@ export async function requireSharedInteractionEvidenceChannel(args: {
   }
   return channel;
 }
-
-// Read source truth again at consumption time: a captured trace's visibility
-// is not proof of its room's current audience. Non-interaction trace handling
-// remains owned by its existing domain policy.
-export async function interactionTraceHasSharedSource(args: {
-  ctx: { db: any };
-  communityId: any;
-  trace: { sourceType: string; sourceId?: string; channelId?: any };
-}): Promise<boolean> {
-  if (args.trace.sourceType !== "interaction") return true;
-  const parsed = parseCommunityInteractionEvidenceRef(args.trace.sourceId);
-  if (!parsed) return false;
-  const source = await resolveCommunityInteractionEvidenceSource({
-    ctx: args.ctx,
-    communityId: args.communityId,
-    objectType: parsed.objectType,
-    objectId: parsed.objectId,
-  });
-  if (!source) return false;
-  try {
-    const channel = await requireSharedInteractionEvidenceChannel({ ...args, source });
-    return !args.trace.channelId || normalizeIdValue(args.trace.channelId) === normalizeIdValue(channel._id);
-  } catch {
-    return false;
-  }
-}
