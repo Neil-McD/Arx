@@ -18,7 +18,6 @@ export function WebCommunityNavSurface({
 
   return (
     <CommunityNav
-      memberNextStep={communityShell.memberNextStep}
       activeCommunity={communityShell.activeCommunity}
       hideIdentitySettings={isMobileHome}
       communityTab={communityShell.communityTab}

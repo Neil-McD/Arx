@@ -32,7 +32,6 @@ const ALLOWED = new Map<string, string>([
   ["communityFounderBrief:setFounderBriefSettingsInternal", "operator tool: brief settings for the staging lab"],
   ["communityFounderBrief:sendFounderBriefNowInternal", "operator tool: send a brief now"],
   ["communityMaintenance:purgeOrphanedCommunityUserArtifactsInternal", "operator tool: purges orphaned user artifacts"],
-  ["communityMemberWorkflows:getWorkflowExecutionContextInternal", "workflows: kept for now (Neil, Oct 28)"],
   ["communityWeeklyDigestSchedule:ensureCommunityWeeklyDigestScheduleInternal", "weekly digest: dormant until a cron is added or it is deleted"],
   ["communityWeeklyDigestSchedule:resumeCommunityWeeklyDigestScheduleInternal", "weekly digest: dormant until a cron is added or it is deleted"],
   ["communityWeeklyDigestWorker:processDueCommunityWeeklyDigestsInternal", "weekly digest: dormant until a cron is added or it is deleted"],

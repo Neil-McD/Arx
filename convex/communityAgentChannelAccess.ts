@@ -2,7 +2,6 @@ import { internalQuery } from "./_generated/server";
 import { v } from "convex/values";
 import { interactionIsChannelAddressable, resolveAuthorizedCommunityChannel } from "./communityChannelCore";
 import { resolveCommunityChannelActor } from "./communityChannelAccess";
-import { requireServiceWorkflowDestination } from "./communityAgentServiceWorkflowCore";
 
 export async function requireAgentSourceChannelAccess(args: { ctx: any; root: any; userId: any }) {
   if (!args.root || args.root.status !== "live") throw new Error("community_agent_serve_source_unavailable");
@@ -21,11 +20,9 @@ export const authorizeServeToolsInternal = internalQuery({
     if (!request || request.status !== "running" || request.attempt !== args.expectedAttempt || !request.requesterUserId) {
       throw new Error("community_agent_serve_request_unavailable");
     }
-    if (request.workflowPreviousRunId || request.workflowTimerId || request.workflowFormRequestId || request.workflowCompletionReview) {
-      // Revalidate the explicit review origin before funding/provider dispatch.
-      // Keep the existing prompt-only restriction (also used by form actions).
-      await requireServiceWorkflowDestination(ctx, request);
-      return { restricted: true, timed: true };
+    // Workflows are retired: a request that still carries one never runs.
+    if (request.triggerKind === "workflow" || request.workflowPreviousRunId || request.workflowTimerId || request.workflowFormRequestId || request.workflowCompletionReview) {
+      throw new Error("community_agent_serve_request_unavailable");
     }
     if (!request.sourceRootId) throw new Error("community_agent_serve_source_unavailable");
     const root = await ctx.db.get(request.sourceRootId);

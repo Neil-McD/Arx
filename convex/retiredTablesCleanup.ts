@@ -21,6 +21,16 @@ export const RETIRED_TABLES = [
   "userProviderConnections",
   "userProviderAuthStates",
   "userProviderDeviceAuthStates",
+  // Member workflows and forms (Nov 7): retired; the heartbeat agent and the
+  // members page take over. No workflow ever ran in production.
+  "communityMemberWorkflows",
+  "communityMemberWorkflowMemberMilestones",
+  "communityMemberWorkflowTimers",
+  "communityMemberWorkflowRuns",
+  "communityMemberWorkflowTransitions",
+  "communityForms",
+  "communityFormVersions",
+  "communityFormRequests",
 ] as const;
 
 const retiredTable = v.union(...RETIRED_TABLES.map((table) => v.literal(table)));

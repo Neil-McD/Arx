@@ -44,163 +44,6 @@ test("scoped interactive harness reads member context without gaining builder or
   expect((await executeRetrievalHarnessTool({ ctx: executionContext(t.withIdentity({ subject: f.memberSubject })), userId: f.memberId, authSubject: f.memberSubject, runId: "wrong-mount", communityId: "other-community", communityBoundConversation: true, toolName: "polynet_read", args: { path: selfContextPath }, evidenceSurface: "member_agent_dock" })).errorCode).toBe("community_context_mismatch");
 });
 
-test("builder context discovery paginates and rechecks administrator authority", async () => {
-  const t = convexTest(schema, modules);
-  const f = await createFixture(t);
-  const memberId = await t.run(async ctx => {
-    const membership = (await ctx.db.query("communityMemberships").withIndex("by_community_user", q => q.eq("communityId", f.communityId).eq("userId", f.memberId)).first())!;
-    await ctx.db.patch(membership._id, { role: "admin" });
-    for (let i = 0; i < 51; i++) {
-      const userId = await ctx.db.insert("users", { authSubject: `page-${i}`, displayName: "Same name", createdAt: i, updatedAt: i });
-      await ctx.db.insert("communityMemberships", { communityId: f.communityId, userId, role: "member", active: true, createdAt: i, updatedAt: i });
-    }
-    return membership._id;
-  });
-  const client = t.withIdentity({ subject: f.memberSubject });
-  const first = await client.query(api.communityMemberWorkflows.listBuilderWorkflowContextMembers, { communityId: f.communityId });
-  expect(first.members).toHaveLength(50);
-  expect(first.next_cursor).toBeTruthy();
-  const second = await client.query(api.communityMemberWorkflows.listBuilderWorkflowContextMembers, { communityId: f.communityId, cursor: first.next_cursor! });
-  expect(second.next_cursor).toBeNull();
-  const all = [...first.members, ...second.members];
-  expect(new Set(all.map(m => m.membership_id)).size).toBe(all.length);
-  await t.run(ctx => ctx.db.patch(memberId, { role: "member" }));
-  await expect(client.query(api.communityMemberWorkflows.listBuilderWorkflowContextMembers, { communityId: f.communityId })).rejects.toThrow();
-  await expect(client.query(api.communityMemberWorkflows.getBuilderWorkflowMemberSuccessDossier, { communityId: f.communityId, membershipId: memberId })).rejects.toThrow();
-});
-
-test.each(["community_agent_for_member", "external_mcp"] as const)("%s reads builder workflow dossiers with current authority", async principalKind => {
-  const t = convexTest(schema, modules);
-  const f = await createFixture(t);
-  const directory = "/communities/canonical-community/builder/workflow-members/";
-  const execute = (subject: string, userId: any, toolName: "polynet_list" | "polynet_read", path: string, kind = principalKind as "community_agent_for_member" | "external_mcp" | "community_agent") => executePolynetCanonicalTool({
-    ctx: executionContext(t.withIdentity({ subject })), authSubject: subject, userId, principalKind: kind,
-    evidenceSurface: "member_agent_dock", toolName, input: { path },
-  });
-  const listed = await execute(f.ownerSubject, f.ownerId, "polynet_list", directory);
-  expect(listed, JSON.stringify(listed)).toMatchObject({ ok: true, value: { writable: false, next_cursor: null } });
-  if (!listed.ok) throw new Error(listed.code);
-  const entry = (listed.value.entries as any[]).find(e => e.user_id === f.memberId);
-  expect(entry.name).toBe("canonical-member");
-  const versionId = await t.run(async ctx => {
-    const now = Date.now();
-    const workflowId = await ctx.db.insert("communityMemberWorkflows", { communityId: f.communityId,
-      milestones: [{ key: "new", name: "New", automations: [] }], revision: 1, createdByUserId: f.ownerId, updatedByUserId: f.ownerId, createdAt: now, updatedAt: now });
-    const runId = await ctx.db.insert("communityMemberWorkflowRuns", { communityId: f.communityId, workflowId,
-      membershipId: entry.membership_id, milestoneKey: "new", milestoneName: "New", milestoneEnteredAt: now,
-      workflowRevision: 1, automationKey: "intake", triggerType: "member_contributed", triggerReceiptRef: "fixture",
-      actionSnapshot: { key: "request", type: "request_form", formKey: "intake" }, status: "finished", createdAt: now, updatedAt: now });
-    const questions = [{ key: "q", title: "What help?", description: "", type: "short_text" as const, required: true, options: [] }];
-    const formId = await ctx.db.insert("communityForms", { communityId: f.communityId, key: "intake", name: "Changed draft", questions: [], revision: 2, createdAt: now, updatedAt: now });
-    const versionId = await ctx.db.insert("communityFormVersions", { communityId: f.communityId, formId, revision: 1,
-      name: "Original intake", questions, publishedBy: f.ownerId, publishedAt: now });
-    await ctx.db.insert("communityFormRequests", { communityId: f.communityId, membershipId: entry.membership_id,
-      workflowId, workflowRunId: runId, automationKey: "intake", milestoneKey: "new", milestoneEnteredAt: now,
-      activationSequence: (await ctx.db.get(entry.membership_id) as any).activationSequence ?? 0, formKey: "intake", versionId, status: "submitted", answers: { q: "PRIVATE_PRICING_HELP" },
-      revision: 1, createdAt: now, updatedAt: now, submittedAt: now });
-    return versionId;
-  });
-  const read = await execute(f.ownerSubject, f.ownerId, "polynet_read", entry.path);
-  expect(read, JSON.stringify(read)).toMatchObject({ ok: true, value: { writable: false, context: {
-    user_id: f.memberId, community_id: f.communityId, submitted_form_evidence: { submissions: [expect.objectContaining({ form_name: "Original intake", form_revision: 1 })] },
-  } } });
-  expect(JSON.stringify(read)).toContain("PRIVATE_PRICING_HELP");
-  expect(JSON.stringify(read)).toContain(versionId);
-  expect(JSON.stringify(read)).not.toContain("Changed draft");
-  const selfRead = await execute(f.memberSubject, f.memberId, "polynet_read", selfContextPath);
-  expect(selfRead).toMatchObject({ ok: true, value: { writable: false } });
-  expect(JSON.stringify(selfRead)).toContain("PRIVATE_PRICING_HELP");
-  expect(JSON.stringify(selfRead)).toContain(versionId);
-  expect(JSON.stringify(selfRead)).not.toContain("Changed draft");
-  const ownerSelf = await execute(f.ownerSubject, f.ownerId, "polynet_read", selfContextPath);
-  expect(JSON.stringify(ownerSelf)).not.toContain("PRIVATE_PRICING_HELP");
-  expect(await execute(f.memberSubject, f.memberId, "polynet_read", selfContextPath, "community_agent")).toMatchObject({ ok: false });
-  expect(entry.forms_path).toBe(`${directory}${entry.membership_id}/forms.md`);
-  expect(JSON.stringify(read)).toContain(entry.forms_path);
-  const forms = await execute(f.ownerSubject, f.ownerId, "polynet_read", entry.forms_path);
-  expect(forms).toMatchObject({ ok: true, value: { writable: false, context: {
-    membership_id: entry.membership_id, user_id: f.memberId,
-    submitted_form_evidence: { submissions: [expect.objectContaining({ version_id: versionId, form_name: "Original intake" })] },
-  } } });
-  expect(JSON.stringify(forms)).toContain("PRIVATE_PRICING_HELP");
-  expect(JSON.stringify(forms)).not.toContain("Changed draft");
-  expect(JSON.stringify(forms)).not.toContain("recent_workflow_activity");
-  expect(JSON.stringify(forms)).not.toContain("approved_community_context");
-  expect((await execute(f.ownerSubject, f.ownerId, "polynet_list", entry.forms_path)).ok).toBe(false);
-  expect((await execute(f.ownerSubject, f.ownerId, "polynet_read", `${directory}${entry.membership_id}/../forms.md`)).ok).toBe(false);
-  expect((await execute(f.memberSubject, f.ownerId, "polynet_read", entry.forms_path)).ok).toBe(false);
-  expect((await execute(f.memberSubject, f.ownerId, "polynet_read", entry.path)).ok).toBe(false);
-  for (const [tool, path] of [["polynet_list", directory], ["polynet_read", entry.path], ["polynet_read", entry.forms_path]] as const) {
-    expect((await execute(f.memberSubject, f.memberId, tool, path)).ok).toBe(false);
-    expect((await execute(f.ownerSubject, f.ownerId, tool, path, "community_agent")).ok).toBe(false);
-  }
-  await t.run(async ctx => { await ctx.db.patch(entry.membership_id, { active: false }); });
-  expect((await execute(f.ownerSubject, f.ownerId, "polynet_read", entry.path)).ok).toBe(false);
-  expect((await execute(f.ownerSubject, f.ownerId, "polynet_read", entry.forms_path)).ok).toBe(false);
-});
-
-test("owner member dossier reports current channels, milestone and profile-visible relationships only", async () => {
-  const t = convexTest(schema, modules);
-  const f = await createFixture(t);
-  const { membershipId, grantId } = await t.run(async ctx => {
-    const now = Date.now();
-    const membership = (await ctx.db.query("communityMemberships")
-      .withIndex("by_community_user", q => q.eq("communityId", f.communityId).eq("userId", f.memberId)).first())!;
-    const privateChannelId = await ctx.db.insert("communityChannels", { communityId: f.communityId, slug: "test", name: "test",
-      accessMode: "restricted", postingPolicy: "members", status: "active", position: 2,
-      createdAt: now, updatedAt: now });
-    await ctx.db.insert("communityChannels", { communityId: f.communityId, slug: "denied", name: "denied",
-      accessMode: "restricted", postingPolicy: "members", status: "active", position: 3,
-      createdAt: now, updatedAt: now });
-    const grantId = await ctx.db.insert("communityChannelParticipants", { communityId: f.communityId,
-      channelId: privateChannelId, principalKey: `user:${f.memberId}`, membershipId: membership._id,
-      membershipActivationSequence: membership.activationSequence, status: "active",
-      createdByUserId: f.ownerId, createdAt: now, updatedAt: now });
-    await ctx.db.insert("communityMemberWorkflows", { communityId: f.communityId,
-      milestones: [{ key: "onboarding", name: "Onboarding", automations: [] }], revision: 1,
-      createdByUserId: f.ownerId, updatedByUserId: f.ownerId, createdAt: now, updatedAt: now });
-    const detail = (await ctx.db.query("userProfileDetails").withIndex("by_user", q => q.eq("userId", f.memberId)).first())!;
-    await ctx.db.patch(detail._id, { bio: "Public Rashid bio" });
-    await ctx.db.insert("communities", { ownerId: f.memberId, slug: "hidden-owned", name: "Hidden owned",
-      visibility: "unlisted", inferenceFundingPolicy: "managed_required", entryPolicy: "open",
-      activeMemberCount: 1, createdAt: now, updatedAt: now });
-    await ctx.db.insert("communities", { ownerId: f.memberId, slug: "public-owned", name: "Public owned",
-      visibility: "published", inferenceFundingPolicy: "managed_required", entryPolicy: "open",
-      activeMemberCount: 1, createdAt: now, updatedAt: now });
-    return { membershipId: membership._id, grantId };
-  });
-  const read = () => t.withIdentity({ subject: f.ownerSubject }).query(api.communityMemberWorkflows.getBuilderWorkflowMemberSuccessDossier,
-    { communityId: f.communityId, membershipId });
-  const dossier = await read();
-  expect(dossier.channel_access).toMatchObject({ status: "available", truncated: false });
-  expect(dossier.channel_access?.channels.map(channel => channel.slug)).toEqual(["general", "wins", "test"]);
-  expect(dossier.workflow?.current_milestone_name).toBe("Onboarding");
-  expect(dossier.visible_profile?.bio).toBe("Public Rashid bio");
-  expect(dossier.visible_profile?.owned_communities.map(community => community.slug)).toContain("public-owned");
-  expect(JSON.stringify(dossier)).not.toContain("hidden-owned");
-  expect(dossier.markdown).toContain("test (private)");
-  const toolRead = await executeRetrievalHarnessTool({
-    ctx: executionContext(t.withIdentity({ subject: f.ownerSubject })), userId: f.ownerId,
-    authSubject: f.ownerSubject, runId: "owner-member-dossier", communityId: f.communityId,
-    communityBoundConversation: true, toolName: "polynet_read",
-    args: { path: `/communities/canonical-community/builder/workflow-members/${membershipId}.md` },
-    evidenceSurface: "member_agent_dock",
-  });
-  expect(toolRead.status, toolRead.errorMessage ?? undefined).toBe("ok");
-  expect(toolRead.outputText).toContain("test (private)");
-  await expect(t.withIdentity({ subject: f.memberSubject }).query(api.communityMemberWorkflows.getBuilderWorkflowMemberSuccessDossier,
-    { communityId: f.communityId, membershipId })).rejects.toThrow();
-  await t.run(ctx => ctx.db.patch(grantId, { status: "revoked" }));
-  expect((await read()).channel_access?.channels.map(channel => channel.slug)).not.toContain("test");
-  await t.run(async ctx => {
-    await ctx.db.patch(grantId, { status: "active" });
-    await ctx.db.patch(membershipId, { activationSequence: 2 });
-  });
-  expect((await read()).channel_access?.channels.map(channel => channel.slug)).not.toContain("test");
-  await t.run(ctx => ctx.db.patch(membershipId, { active: false }));
-  await expect(read()).rejects.toThrow();
-});
-
 test.each(["community_agent_for_member", "external_mcp"] as const)("%s discovers and reads its own community context without writing state", async (principalKind) => {
   vi.stubEnv("ARX_PUBLIC_APP_URL", "https://polynet-staging.vercel.app");
   const t = convexTest(schema, modules);
@@ -212,10 +55,6 @@ test.each(["community_agent_for_member", "external_mcp"] as const)("%s discovers
   });
   const snapshot = () => t.run(async (ctx) => ({
     memberships: await ctx.db.query("communityMemberships").collect(),
-    workflows: await ctx.db.query("communityMemberWorkflows").collect(),
-    states: await ctx.db.query("communityMemberWorkflowMemberMilestones").collect(),
-    runs: await ctx.db.query("communityMemberWorkflowRuns").collect(),
-    transitions: await ctx.db.query("communityMemberWorkflowTransitions").collect(),
     facts: await ctx.db.query("memberFacts").collect(),
   }));
   const before = await snapshot();
@@ -224,16 +63,16 @@ test.each(["community_agent_for_member", "external_mcp"] as const)("%s discovers
     expect.objectContaining({ path: "/communities/canonical-community/members/me/", kind: "directory" }),
   ]) } });
   expect(await execute("polynet_list", "/communities/canonical-community/members/me/")).toMatchObject({
-    ok: true, value: { writable: false, entries: [expect.objectContaining({ path: selfContextPath }), expect.objectContaining({ path: "/communities/canonical-community/members/me/forms/" })] },
+    ok: true, value: { writable: false, entries: [expect.objectContaining({ path: selfContextPath })] },
   });
   const read = await execute("polynet_read", selfContextPath);
   expect(read.ok).toBe(true);
   if (!read.ok) throw new Error(read.code);
   const context = JSON.parse(String(read.value.body).split("\n").slice(-1)[0]);
   expect(context).toMatchObject({ user_id: f.memberId, community_id: f.communityId,
-    role: "member", display_name: "canonical-member", workflow: null,
-    approved_community_context: [], recent_workflow_activity: [], milestone_history: [],
+    role: "member", display_name: "canonical-member", approved_community_context: [],
   });
+  expect(context).not.toHaveProperty("workflow");
   expect(context.membership_id).toBeTruthy();
   expect(Number.isFinite(Date.parse(context.read_at))).toBe(true);
   expect(read.value.body).not.toContain("other-community");
@@ -294,7 +133,7 @@ test("community agent cannot discover or read sponsor self context; owner self h
   const actor = t.withIdentity({ subject: f.ownerSubject });
   const owner = await actor.query(internal.communityCapabilityContext.resolveCommunityMemberSelfContextInternal,
     { authSubject: f.ownerSubject, userId: f.ownerId, communityId: f.communityId });
-  expect(owner).toMatchObject({ ok: true, context: { role: "owner", membership_id: null, joined_at: null, workflow: null } });
+  expect(owner).toMatchObject({ ok: true, context: { role: "owner", membership_id: null, joined_at: null } });
   for (const [toolName, path] of [
     ["polynet_list", "/communities/canonical-community/members/"],
     ["polynet_list", "/communities/canonical-community/members/me/"],
@@ -310,25 +149,13 @@ test("community agent cannot discover or read sponsor self context; owner self h
   }
 });
 
-test("self context bounds facts and omits builder prompt snapshots from activity", async () => {
+test("self context bounds facts and the rendered document", async () => {
   const t = convexTest(schema, modules);
   const f = await createFixture(t);
   await t.run(async (ctx) => {
-    const membership = (await ctx.db.query("communityMemberships").first())!;
-    const workflowId = await ctx.db.insert("communityMemberWorkflows", { communityId: f.communityId,
-      milestones: [{ key: "new", name: "New", instructions: "SECRET_STAGE_INSTRUCTION", goal: "Define an offer", requireHumanApproval: true,
-        automations: [{ key: "help", trigger: { type: "member_joined" }, action: { key: "help", type: "prompt_agent", prompt: "SECRET_BUILDER_INSTRUCTION" } }] }], revision: 1,
-      createdByUserId: f.ownerId, updatedByUserId: f.ownerId, createdAt: 100, updatedAt: 100 });
     for (let i = 0; i < 121; i++) await ctx.db.insert("memberFacts", { userId: f.memberId, communityId: f.communityId,
       kind: "goal", body: "X".repeat(2000), provenance: "form_answer", consentState: "approved",
       confidence: 1, evidenceRefs: [], stalenessScore: 0, createdByActorType: "member", version: 1, createdAt: i, updatedAt: i });
-    for (let i = 0; i < 13; i++) await ctx.db.insert("communityMemberWorkflowRuns", {
-      communityId: f.communityId, workflowId, membershipId: membership._id,
-      milestoneKey: "new", milestoneName: "New", milestoneEnteredAt: 100, workflowRevision: 1,
-      automationKey: `automation-${i}`, triggerType: "member_contributed", triggerReceiptRef: `receipt-${i}`,
-      actionSnapshot: { key: "action", type: "prompt_agent", prompt: "SECRET_BUILDER_INSTRUCTION" },
-      status: "finished", createdAt: i, updatedAt: i,
-    });
   });
   const result = await t.withIdentity({ subject: f.memberSubject }).query(
     internal.communityCapabilityContext.resolveCommunityMemberSelfContextInternal,
@@ -337,15 +164,6 @@ test("self context bounds facts and omits builder prompt snapshots from activity
   if (!result.ok) throw new Error(result.code);
   expect(result.context.facts_truncated).toBe(true);
   expect(result.context.approved_community_context).toHaveLength(12);
-  expect(result.context.recent_workflow_activity).toHaveLength(12);
-  expect(result.context.recent_workflow_activity.every((activity) => activity.status === "unavailable")).toBe(true);
-  expect(JSON.stringify(result)).not.toContain("SECRET_BUILDER_INSTRUCTION");
-  expect(JSON.stringify(result)).not.toContain("SECRET_STAGE_INSTRUCTION");
-  expect(result.context.workflow).toMatchObject({ goal: "Define an offer", require_human_approval: true,
-    action_progress: { actions: [expect.objectContaining({ label: "Agent assistance", status: "unavailable" })] } });
-  expect(result.context.workflow).not.toHaveProperty("goal_review");
-  expect(result.context.workflow).not.toHaveProperty("override_state");
-  expect(result.context.recent_workflow_activity.every((activity) => !("prompt" in activity))).toBe(true);
   const { body } = renderCommunityMemberSelfContext(result.context);
   expect(body.length).toBeLessThan(24_000);
   expect(body).not.toContain("X".repeat(401));
@@ -355,11 +173,6 @@ test("self context bounds facts and omits builder prompt snapshots from activity
   });
   expect(oversized.body.length).toBeLessThanOrEqual(24_000);
   expect(oversized.truncated).toBe(true);
-  expect(JSON.parse(oversized.body.split("\n").slice(-1)[0]).workflow).toEqual(result.context.workflow);
-  const longGoal = renderCommunityMemberSelfContext({ ...result.context,
-    workflow: { ...result.context.workflow!, goal: "X".repeat(30_000) } });
-  expect(longGoal.body.length).toBeLessThanOrEqual(24_000);
-  expect(longGoal.truncated).toBe(true);
 });
 
 test.each(["/self.md", "/communities/canonical-community/self.md", "/communities/canonical-community/members/canonical-owner/context.md"])("retired and other-member self-context paths are denied: %s", async (path) => {
@@ -3165,7 +2978,7 @@ test("community notes are read-only to every agent and connected AI; nothing mar
   expect(JSON.stringify(general)).not.toContain("private_room");
 });
 
-test("the Ask agent can't react or submit a form for the member; the member's own tools can", async () => {
+test("the Ask agent can't react for the member; the member's own tools can, and no form or workflow action remains", async () => {
   const t = convexTest(schema, modules);
   const f = await createFixture(t);
   const memberCtx = executionContext(t.withIdentity({ subject: f.memberSubject }));
@@ -3177,9 +2990,10 @@ test("the Ask agent can't react or submit a form for the member; the member's ow
   const operations = (result: any) => (result.value.entries as any[]).map((entry) => String(entry.path).split("/").pop());
   const agent = operations(await list("community_agent_for_member"));
   expect(agent).not.toContain("community.interaction.react.json");
-  expect(agent).not.toContain("community.form.submit.json");
   const harness = operations(await list("external_mcp"));
-  expect(harness).toEqual(expect.arrayContaining(["community.interaction.react.json", "community.form.submit.json"]));
+  expect(harness).toEqual(expect.arrayContaining(["community.interaction.react.json"]));
+  expect([...agent, ...harness]).not.toContain("community.form.submit.json");
+  expect([...agent, ...harness]).not.toContain("community.workflow.approve_milestone.json");
   await expect(executePolynetCanonicalTool({
     ctx: memberCtx, authSubject: f.memberSubject, userId: f.memberId, principalKind: "community_agent_for_member",
     evidenceSurface: "member_agent_dock", toolName: "polynet_call",

@@ -12,7 +12,6 @@ import { WebCommunityResourceModuleModal } from "./WebCommunityResourceModuleMod
 import { CommunityResourcesPanel } from "./CommunityResourcesPanel";
 import { WebCommunityKnowledgePanel } from "./WebCommunityKnowledgePanel";
 import { WebCommunitySettingsSection } from "./WebCommunitySettingsSection";
-import { WebCommunityWorkflowsSection } from "./WebCommunityWorkflowsSection";
 
 export type WebCommunitySecondaryPanelsProps = {
   communityTab: CommunityTab;
@@ -46,7 +45,6 @@ export type WebCommunitySecondaryPanelsProps = {
     setIsCommunityBannerFocusModalOpen: (value: boolean) => void;
   };
   aiAgent: ComponentProps<typeof WebCommunityAiAgentSection>;
-  workflows: ComponentProps<typeof WebCommunityWorkflowsSection>;
   analytics: ComponentProps<typeof WebCommunityAnalyticsSection>;
   resources: ComponentProps<typeof CommunityResourcesPanel>;
   knowledge: ComponentProps<typeof WebCommunityKnowledgePanel>["context"];
@@ -114,8 +112,6 @@ export function WebCommunitySecondaryPanels(props: WebCommunitySecondaryPanelsPr
         </>
       ) : null}
 
-      {props.communityTab === "workflows" &&
-        renderWorkspacePane(<WebCommunityWorkflowsSection {...props.workflows} />)}
 
       {props.communityTab === "analytics" &&
         renderCenteredPane(<WebCommunityAnalyticsSection {...props.analytics} />)}
