@@ -428,6 +428,9 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
   [legal/](legal/).
 - **Direction:** community free, agent paid (about $49 a month with an included
   budget), pending its spec. Today's code still sells the $79 founder plan.
+  Three kinds of builder (community only, building a product on Polynet,
+  already has a product) and the money rule (2.9% on Polynet's checkout only):
+  [specs/builder-modalities-v0.md](specs/builder-modalities-v0.md).
 - **Deleted Oct 28 (POL-24):** the `workspaceCredits` module. Voice transcription
   records its platform-absorbed provider cost through
   `voiceProviderCostAccounting.recordVoiceProviderCostInternal` into the shared
