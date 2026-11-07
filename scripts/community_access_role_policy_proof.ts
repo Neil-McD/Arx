@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { readCommunityResourceSources } from "./lib/communityResourceSources.ts";
 
 type Role = "admin" | "moderator" | "member" | null;
 type EntryPolicy = "open" | "approval" | "paid_subscription";
@@ -107,7 +108,7 @@ function assertScenario(
 function assertSourceAnchors() {
   const communityCore = readText(new URL("../convex/communityCore.ts", import.meta.url));
   const communityAdmin = readText(new URL("../convex/communityAdmin.ts", import.meta.url));
-  const communityResources = readText(new URL("../convex/communityResources.ts", import.meta.url));
+  const communityResources = readCommunityResourceSources();
   const resourceViewer = readText(new URL("../apps/web/src/components/WebCommunityResourceViewerContent.tsx", import.meta.url));
   const linkEmbedUi = readText(new URL("../shared/linkEmbedUi.tsx", import.meta.url));
 

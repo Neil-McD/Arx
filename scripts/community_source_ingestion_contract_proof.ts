@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { readCommunityResourceSources } from "./lib/communityResourceSources.ts";
 
 const root = process.cwd();
 
@@ -13,7 +14,7 @@ const vercel = read("vercel.json");
 const sourceUrlFetcher = read("api/source-url-fetch.js");
 const schema = read("convex/schema.ts");
 const core = read("convex/communityCore.ts");
-const resources = read("convex/communityResources.ts");
+const resources = readCommunityResourceSources();
 const sourceUrlPolicy = read("convex/communitySourceUrlPolicy.ts");
 const http = read("convex/http.ts");
 const gateway = read("shared/cloudCommunityAdminGateway.ts");
@@ -167,8 +168,13 @@ assert.equal(
 );
 assert.match(
   resources,
-  /saveCommunitySourceUnitsForPage[\s\S]*COMMUNITY_SOURCE_UNIT_MAX_BODY_CHARS \+ 1[\s\S]*bodyOriginalChars = bodyRaw\.length[\s\S]*bodyTruncated = bodyOriginalChars > COMMUNITY_SOURCE_UNIT_MAX_BODY_CHARS[\s\S]*by_community_unit_key[\s\S]*existing\.bodyHash !== bodyHash[\s\S]*writeCommunitySourceUnitContent[\s\S]*planCommunitySourceCrawlerPageSave[\s\S]*existingSourcesByAlias: existingByUrl[\s\S]*seenAliases: seenUrls[\s\S]*decision\.action === "update_existing"[\s\S]*writeCommunityResourceBodyContent/,
-  "crawler source persistence should dedupe source units while preserving the existing source-resource save path",
+  /saveCommunitySourceUnitsForPage[\s\S]*COMMUNITY_SOURCE_UNIT_MAX_BODY_CHARS \+ 1[\s\S]*bodyOriginalChars = bodyRaw\.length[\s\S]*bodyTruncated = bodyOriginalChars > COMMUNITY_SOURCE_UNIT_MAX_BODY_CHARS[\s\S]*by_community_unit_key[\s\S]*existing\.bodyHash !== bodyHash[\s\S]*writeCommunitySourceUnitContent/,
+  "crawler source persistence should dedupe source units",
+);
+assert.match(
+  resources,
+  /planCommunitySourceCrawlerPageSave[\s\S]*existingSourcesByAlias: existingByUrl[\s\S]*seenAliases: seenUrls[\s\S]*decision\.action === "update_existing"[\s\S]*writeCommunityResourceBodyContent/,
+  "crawler page saves should preserve the existing source-resource save path",
 );
 
 assert.match(

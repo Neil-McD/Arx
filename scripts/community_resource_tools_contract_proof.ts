@@ -16,6 +16,7 @@ import {
   normalizeToolArguments,
 } from "../shared/toolRegistry.ts";
 import { getFixedRuntimeToolPolicy } from "../shared/runtimeToolPolicy.ts";
+import { readCommunityResourceSources } from "./lib/communityResourceSources.ts";
 
 const root = process.cwd();
 const read = (path: string): string =>
@@ -93,7 +94,7 @@ for (const name of [
   assert.equal(policy.parallelSafe, false);
 }
 
-const resources = read("convex/communityResources.ts");
+const resources = readCommunityResourceSources();
 const evidence = read("convex/communityResourceEvidence.ts");
 const executor = read("convex/polynetCanonicalExecutor.ts");
 const authority = read("shared/polynetAuthority.ts");

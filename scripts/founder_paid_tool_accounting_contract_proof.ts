@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { readCommunityResourceSources } from "./lib/communityResourceSources.ts";
 
 const root = process.cwd();
 const read = (path: string) => readFileSync(join(root, path), "utf8");
@@ -14,7 +15,7 @@ const paidToolReceipts = read("convex/founderPaidTools.ts");
 const paidToolRuntime = read("convex/founderPaidToolRuntime.ts");
 const providerCostCore = read("convex/providerCostCore.ts");
 const runtimeAgentLoop = read("convex/runtimeAgentLoop.ts");
-const communityResources = read("convex/communityResources.ts");
+const communityResources = readCommunityResourceSources();
 const runtimePolicy = read("shared/runtimeToolPolicy.ts");
 const runtimeInvocationSurface = read("shared/runtimeInvocationSurface.ts");
 const providerPricing = read("shared/providerPricing.ts");

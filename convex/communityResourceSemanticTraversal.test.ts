@@ -6,7 +6,7 @@ import { expect, test, vi } from "vitest";
 import { internal } from "./_generated/api";
 import { executeConciergeTool } from "./communityAgentServeWorker";
 import { executePolynetCanonicalTool } from "./polynetCanonicalExecutor";
-import { listCommunityResourceSemanticDirectoryCore } from "./communityResources";
+import { listCommunityResourceSemanticDirectoryCore } from "./communityResourceDirectory";
 import { executePlatformOperation } from "./platformOperationExecutor";
 import { executeRetrievalHarnessTool } from "./runtimeAgentLoop";
 import schema from "./schema";
