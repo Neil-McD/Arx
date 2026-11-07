@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 
 import {
   isDeniedCommunitySourceHostname,
-  maybeSafeCommunitySourceUrl,
   requireSafeCommunitySourceFetcherEndpoint,
   requireSafeCommunitySourceUrl,
 } from "../convex/communitySourceUrlPolicy.ts";
@@ -38,7 +37,7 @@ assert.equal(
   "https://example.internal/source",
   "https://[::1]/source",
 ].forEach((url) => {
-  assert.equal(maybeSafeCommunitySourceUrl(url), null, `unsafe source URL should be rejected: ${url}`);
+  assert.throws(() => requireSafeCommunitySourceUrl(url), undefined, `unsafe source URL should be rejected: ${url}`);
 });
 
 [

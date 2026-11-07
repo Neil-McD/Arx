@@ -35,9 +35,7 @@ import {
   renderCommunityAgentSurfaceContextForPrompt,
 } from "../shared/communityAgentSurfaceContext.ts";
 import {
-  normalizeCommunityReadScope,
   projectCommunityMembershipReadSummary,
-  projectPublicDiscoverCommunityReadSummary,
 } from "../shared/communityReadContract.ts";
 import { COMMUNITY_OWNER_FUNDED_MODEL_SUPPORTS_IMAGE_INPUT } from "../shared/founderInference.ts";
 
@@ -273,9 +271,6 @@ assert.throws(
   /requires a non-empty query[\s\S]*use polynet_list on the same path[\s\S]*follow the returned paths/,
   "invalid broad searches must tell the agent how to recover without weakening search semantics",
 );
-assert.equal(normalizeCommunityReadScope(undefined), "joined");
-assert.equal(normalizeCommunityReadScope("DISCOVER"), "discover");
-assert.equal(normalizeCommunityReadScope("private"), null);
 assert.deepEqual(
   projectCommunityMembershipReadSummary({
     community_id: "community_1",
@@ -296,32 +291,6 @@ assert.deepEqual(
     entry_policy: "approval",
     relation: "owner",
   },
-);
-assert.deepEqual(
-  projectPublicDiscoverCommunityReadSummary({
-    community: {
-      slug: "polynet",
-      name: "Polynet",
-      one_liner: "Communities with a brain",
-      visibility: "published",
-      entry_policy: "open",
-    },
-  }),
-  {
-    slug: "polynet",
-    name: "Polynet",
-    one_liner: "Communities with a brain",
-    visibility: "published",
-    entry_policy: "open",
-    relation: "no_access",
-  },
-);
-assert.equal(
-  projectPublicDiscoverCommunityReadSummary({
-    community: { slug: "private-one", name: "Private", visibility: "unlisted" },
-  }),
-  null,
-  "Discover projection must fail closed for unlisted communities",
 );
 for (const toolName of [
   "member_conversations_list",

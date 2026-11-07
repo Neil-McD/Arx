@@ -5,7 +5,6 @@ import { expect, test } from "vitest";
 import { api, internal } from "./_generated/api";
 import schema from "./schema";
 import {
-  resolveAdditionalManagedCommunityAdmission,
   resolveCommunityInferenceFundingAdmission,
   settleAuthorizedFounderInferenceReceipt,
 } from "./founderInferenceCore";
@@ -122,101 +121,6 @@ function claimArgs(
     nowMs,
   };
 }
-
-test("founders can add unlimited communities sequentially when every existing community is funded", async () => {
-  const t = convexTest(schema, modules);
-  await t.run(async (ctx) => {
-    const nowMs = Date.now();
-    const ownerId = await insertUser(ctx, "unlimited-paid-owner", nowMs);
-    await expect(
-      resolveAdditionalManagedCommunityAdmission(ctx, ownerId),
-    ).resolves.toEqual({ ok: true, fundedCommunityCount: 0 });
-
-    for (let index = 0; index < 12; index += 1) {
-      const communityId = await insertCommunity(
-        ctx,
-        ownerId,
-        `unlimited-paid-${index}`,
-        nowMs + index,
-      );
-      await ctx.db.patch(communityId, { inferenceFundingPolicy: "managed_required" });
-      await expect(
-        resolveAdditionalManagedCommunityAdmission(ctx, ownerId),
-      ).resolves.toMatchObject({
-        ok: false,
-        blockingCommunityId: communityId,
-        code: "founder_plan_required",
-      });
-      await ctx.db.insert("founderSubscriptions", {
-        ownerUserId: ownerId,
-        communityId,
-        provider: "stripe",
-        providerCustomerId: "cus_unlimited_paid",
-        providerSubscriptionId: `sub_unlimited_paid_${index}`,
-        providerPriceId: "price_founder_79_monthly",
-        status: "active",
-        currentPeriodStartAt: nowMs - 1_000,
-        currentPeriodEndAt: nowMs + 30 * 24 * 60 * 60 * 1_000,
-        cancelAtPeriodEnd: false,
-        lastProviderEventCreatedAt: nowMs,
-        createdAt: nowMs,
-        updatedAt: nowMs,
-      });
-      await expect(
-        resolveAdditionalManagedCommunityAdmission(ctx, ownerId),
-      ).resolves.toEqual({ ok: true, fundedCommunityCount: index + 1 });
-    }
-  });
-});
-
-test("archived communities do not block creation or count as funded active communities", async () => {
-  const t = convexTest(schema, modules);
-  await t.run(async (ctx) => {
-    const nowMs = Date.now();
-    const ownerId = await insertUser(ctx, "archived-admission-owner", nowMs);
-    const communityId = await insertCommunity(
-      ctx,
-      ownerId,
-      "archived-admission",
-      nowMs,
-    );
-    await ctx.db.patch(communityId, {
-      inferenceFundingPolicy: "managed_required",
-      lifecycleStatus: "archived",
-      lifecycleGeneration: 1,
-    });
-    await expect(
-      resolveAdditionalManagedCommunityAdmission(ctx, ownerId),
-    ).resolves.toEqual({ ok: true, fundedCommunityCount: 0 });
-  });
-});
-
-test("the canonical operator owner has unlimited complimentary communities", async () => {
-  const t = convexTest(schema, modules);
-  await t.run(async (ctx) => {
-    const nowMs = Date.now();
-    const ownerId = await insertUser(ctx, "unlimited-operator-owner", nowMs);
-    await ctx.db.insert("operatorRoles", {
-      userId: ownerId,
-      role: "owner",
-      active: true,
-      createdAt: nowMs,
-      updatedAt: nowMs,
-    });
-    for (let index = 0; index < 12; index += 1) {
-      const communityId = await insertCommunity(
-        ctx,
-        ownerId,
-        `unlimited-operator-${index}`,
-        nowMs + index,
-      );
-      await ctx.db.patch(communityId, { inferenceFundingPolicy: "managed_required" });
-    }
-    await expect(
-      resolveAdditionalManagedCommunityAdmission(ctx, ownerId),
-    ).resolves.toEqual({ ok: true, fundedCommunityCount: 12 });
-  });
-});
 
 test("one active platform owner receives metered operator-funded Luna without a subscription or API key", async () => {
   const priorEnv = {

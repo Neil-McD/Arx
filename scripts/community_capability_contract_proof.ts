@@ -5,7 +5,6 @@ import { join } from "node:path";
 import {
   communityAccessIsOpen,
   deriveCommunityCapabilityAuthority,
-  hasCommunityCapability,
   normalizeCommunityCapabilityRelation,
 } from "../shared/communityCapabilityContract.ts";
 import type { CommunityAccess } from "../shared/communityTypes.ts";
@@ -36,8 +35,8 @@ assert.deepEqual(memberAuthority.availableCapabilities, [
   "raw_evidence_search",
   "member_resources",
 ]);
-assert.equal(hasCommunityCapability(memberAuthority, "accepted_memory"), true);
-assert.equal(hasCommunityCapability(memberAuthority, "builder_resources"), false);
+assert.equal(memberAuthority.availableCapabilities.includes("accepted_memory"), true);
+assert.equal(memberAuthority.availableCapabilities.includes("builder_resources"), false);
 
 const ownerAuthority = deriveCommunityCapabilityAuthority({
   relation: "owner",
@@ -48,10 +47,10 @@ const ownerAuthority = deriveCommunityCapabilityAuthority({
   can_manage_members: true,
 });
 assert.equal(ownerAuthority.authorityLens, "owner_builder");
-assert.equal(hasCommunityCapability(ownerAuthority, "builder_resources"), true);
-assert.equal(hasCommunityCapability(ownerAuthority, "join_request_review"), true);
-assert.equal(hasCommunityCapability(ownerAuthority, "community_admin"), true);
-assert.equal(hasCommunityCapability(ownerAuthority, "owner_controls"), true);
+assert.equal(ownerAuthority.availableCapabilities.includes("builder_resources"), true);
+assert.equal(ownerAuthority.availableCapabilities.includes("join_request_review"), true);
+assert.equal(ownerAuthority.availableCapabilities.includes("community_admin"), true);
+assert.equal(ownerAuthority.availableCapabilities.includes("owner_controls"), true);
 
 const pendingAuthority = deriveCommunityCapabilityAuthority({ relation: "pending" });
 assert.deepEqual(pendingAuthority.availableCapabilities, ["community_context"]);

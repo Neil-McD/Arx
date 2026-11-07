@@ -251,41 +251,6 @@ export type AdditionalManagedCommunityAdmission =
       code: Exclude<CommunityInferenceFundingAdmission, { ok: true }>["code"];
     };
 
-/**
- * Community ownership has no account-level cap. A founder may create the next
- * managed community only after every existing community has current funding.
- * This permits unlimited paid communities while preventing stacked unpaid
- * drafts. Operator and hosted Builder communities pass through the same
- * canonical funding admission used by inference.
- */
-export async function resolveAdditionalManagedCommunityAdmission(
-  ctx: any,
-  ownerUserId: any,
-): Promise<AdditionalManagedCommunityAdmission> {
-  const communities = ((await ctx.db
-    .query("communities" as any)
-    .withIndex("by_owner", (q: any) => q.eq("ownerId", ownerUserId))
-    .collect()) as Array<{
-      _id: any;
-      createdAt?: unknown;
-      lifecycleStatus?: "active" | "archived";
-      lifecycleGeneration?: number;
-    }>).filter((community) => communityIsActive(community));
-  communities.sort((left, right) =>
-    Number(left.createdAt ?? 0) - Number(right.createdAt ?? 0));
-  for (const community of communities) {
-    const funding = await resolveCommunityInferenceFundingAdmission(ctx, community._id);
-    if (!funding.ok) {
-      return {
-        ok: false,
-        blockingCommunityId: community._id,
-        code: funding.code,
-      };
-    }
-  }
-  return { ok: true, fundedCommunityCount: communities.length };
-}
-
 export async function settleAuthorizedFounderInferenceReceipt(args: {
   ctx: any;
   receiptKey: string;

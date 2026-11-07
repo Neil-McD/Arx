@@ -104,8 +104,3 @@ export function stripChatInlineMarkdown(rawInput: unknown): string {
     .map((token) => token.text)
     .join("");
 }
-
-export function chatTextHasInlineMarkdown(rawInput: unknown): boolean {
-  const tokens = tokenizeChatInlineMarkdown(rawInput);
-  return tokens.some((token) => token.kind !== "text");
-}

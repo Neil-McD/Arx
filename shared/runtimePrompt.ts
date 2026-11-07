@@ -840,9 +840,3 @@ export function buildPlatformHarnessRuntimePromptBundle(
     },
   };
 }
-
-export function buildPlatformHarnessRuntimeSystemPrompt(
-  params: RuntimePlatformHarnessPromptParams,
-): string {
-  return buildPlatformHarnessRuntimePromptBundle(params).text;
-}

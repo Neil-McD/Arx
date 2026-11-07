@@ -10,7 +10,7 @@ import {
   executeSearchProductDocsTool,
 } from "../shared/productDocsRuntime.ts";
 import type { ProductDocsSearchIndex } from "../shared/productDocsSearch.ts";
-import { buildPlatformHarnessRuntimeSystemPrompt } from "../shared/runtimePrompt.ts";
+import { buildPlatformHarnessRuntimePromptBundle } from "../shared/runtimePrompt.ts";
 import { buildRuntimeTurnContextPacket } from "../shared/runtimeTurnContextPacket.ts";
 import {
   DEFAULT_RUNTIME_KERNEL_BUDGET,
@@ -188,7 +188,7 @@ function proveDocsToolExecution() {
 }
 
 function provePromptGuidance() {
-  const prompt = buildPlatformHarnessRuntimeSystemPrompt({
+  const prompt = buildPlatformHarnessRuntimePromptBundle({
     harnessName: "chat_tools",
     invocationSurface: "member_agent_dock",
     loopBudget: DEFAULT_RUNTIME_KERNEL_BUDGET,
@@ -200,7 +200,7 @@ function provePromptGuidance() {
     communityAbout: null,
     communitySystemPrompt: null,
     runtimeTurnContext: buildRuntimeTurnContextPacket({}),
-  });
+  }).text;
   assert.match(prompt, /Use product documentation tools for canonical Polynet platform definitions/);
   assert.match(prompt, /Search product docs first only when the answer depends on exact platform wording/);
   console.log("PASS: docs tool guidance is injected when docs tools are active");

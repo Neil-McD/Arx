@@ -947,59 +947,6 @@ export function interactionBelongsToChannel(
   return rowChannelId === normalizeIdValue(channel._id);
 }
 
-export async function listChannelProjectionRows(args: {
-  ctx: { db: any };
-  tableName: "communityReadCursors" | "communityTypingPresence";
-  communityId: any;
-  channel: CommunityChannelLike;
-  userId: any;
-  streamKind?: "chat";
-}): Promise<any[]> {
-  assertChannelForCommunity(args.channel, args.communityId);
-  if (args.channel.accessMode !== "all_members") throw new Error("community_channel_unavailable");
-  if (args.channel.status !== "active") {
-    throw new Error("community_channel_inactive");
-  }
-  if (args.tableName === "communityReadCursors" && args.streamKind !== "chat") {
-    throw new Error("community_channel_projection_stream_required");
-  }
-  const channelIds = args.channel.systemRole === GENERAL_CHANNEL_SYSTEM_ROLE
-    ? [undefined, args.channel._id]
-    : [args.channel._id];
-  const batches = await Promise.all(
-    channelIds.map(async (channelId) => {
-      if (args.tableName === "communityReadCursors") {
-        return await args.ctx.db
-          .query("communityReadCursors" as any)
-          .withIndex("by_community_channel_user_stream", (q: any) =>
-            q
-              .eq("communityId", args.communityId)
-              .eq("channelId", channelId)
-              .eq("userId", args.userId)
-              .eq("streamKind", args.streamKind),
-          )
-          .take(2);
-      }
-      return await args.ctx.db
-        .query("communityTypingPresence" as any)
-        .withIndex("by_community_channel_user", (q: any) =>
-          q
-            .eq("communityId", args.communityId)
-            .eq("channelId", channelId)
-            .eq("userId", args.userId),
-        )
-        .take(2);
-    }),
-  );
-  return Array.from(
-    new Map(
-      batches
-        .flat()
-        .map((row: any) => [normalizeIdValue(row._id), row]),
-    ).values(),
-  );
-}
-
 async function listReadableRowsForChannelIds<T extends GeneralChannelReadableRow>(args: {
   ctx: { db: any };
   tableName: "communityInteractionRoots" | "communityInteractionReplies";
@@ -1153,38 +1100,3 @@ export async function listSharedChannelReadableRows<
   });
 }
 
-// Rolling-deployment adapter for existing General-only call paths. New
-// selected-channel reads should use listChannelReadableRows.
-export async function listGeneralChannelReadableRows<
-  T extends GeneralChannelReadableRow,
->(args: {
-  ctx: { db: any };
-  tableName: "communityInteractionRoots" | "communityInteractionReplies";
-  communityId: any;
-  generalChannel: CommunityChannelLike | null;
-  limit: number;
-  beforeCreatedAt?: number | null;
-  kind?: string | null;
-}): Promise<T[]> {
-  if (args.generalChannel) {
-    return await listChannelReadableRows<T>({
-      ctx: args.ctx,
-      tableName: args.tableName,
-      communityId: args.communityId,
-      channel: args.generalChannel,
-      limit: args.limit,
-      beforeCreatedAt: args.beforeCreatedAt,
-      kind: args.kind,
-    });
-  }
-  return await listReadableRowsForChannelIds<T>({
-    ctx: args.ctx,
-    tableName: args.tableName,
-    communityId: args.communityId,
-    channelIds: [undefined],
-    belongsToChannel: (row) => interactionBelongsToGeneralChannel(row, null),
-    limit: args.limit,
-    beforeCreatedAt: args.beforeCreatedAt,
-    kind: args.kind,
-  });
-}

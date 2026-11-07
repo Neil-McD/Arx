@@ -361,7 +361,8 @@ export const seedSunriseInternal = internalMutation({
       if (seedIds.some((id) => normalizeIdValue(id) === normalizeIdValue(event.createdByUserId))) await ctx.db.delete(event._id);
     }
     const at = (weekday: number, hour: number, minute: number) => nextLocalWeekdayAt(nowMs, weekday, hour, minute, timeZone);
-    const lastSaturday = nextLocalWeekdayAt(nowMs - 7 * DAY_MS, 6, 5, 30, timeZone);
+    // A week before the upcoming Saturday, so it is in the past on any day (Saturdays included).
+    const lastSaturday = at(6, 5, 30) - 7 * DAY_MS;
     const EVENTS = [
       { title: "Tuesday Board Session", startsAt: at(2, 5, 45), minutes: 75, locationType: "physical", locationLabel: "Sunrise Bouldering, back board",
         descriptionMd: "Warm-up circuit at 5:45, board in pairs from 6:00. Bring tape." },
