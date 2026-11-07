@@ -9,6 +9,7 @@ import { executePolynetCanonicalTool } from "./polynetCanonicalExecutor";
 import { listCommunityResourceSemanticDirectoryCore } from "./communityResourceDirectory";
 import { executePlatformOperation } from "./platformOperationExecutor";
 import { executeRetrievalHarnessTool } from "./runtimeAgentLoop";
+import { ensureGeneralChannel } from "./communityChannelCore";
 import schema from "./schema";
 import { selectRuntimePolynetSemanticMount } from "../shared/polynetSemanticRepositoryContract";
 
@@ -79,6 +80,8 @@ async function createFixture(t: ReturnType<typeof convexTest>) {
       createdAt: nowMs,
       updatedAt: nowMs,
     });
+    await ensureGeneralChannel({ ctx, communityId, nowMs });
+    await ensureGeneralChannel({ ctx, communityId: otherCommunityId, nowMs });
     const membershipId = await ctx.db.insert("communityMemberships", {
       communityId,
       userId: memberId,

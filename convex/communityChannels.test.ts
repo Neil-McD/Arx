@@ -590,32 +590,6 @@ test("archiving a channel clears its current pin and preserves an audit event", 
   });
 });
 
-test("legacy communities list a synthetic General channel before durable backfill", async () => {
-  const t = convexTest(schema, modules);
-  const fixture = await createFixture(t);
-  const asMember = t.withIdentity({ subject: MEMBER_SUBJECT });
-
-  await expect(
-    asMember.query(api.communityChannels.listCommunityChannels, {
-      communityId: fixture.communityId,
-    }),
-  ).resolves.toEqual({
-    max_active_channels: 10,
-    channels: [
-      expect.objectContaining({
-        id: "",
-        name: "General",
-        slug: "general",
-        position: 0,
-        is_general: true,
-      }),
-    ],
-  });
-  expect(
-    await t.run(async (ctx) => await ctx.db.query("communityChannels").collect()),
-  ).toEqual([]);
-});
-
 test("channel creation is manager-only and listing requires community access", async () => {
   const t = convexTest(schema, modules);
   const fixture = await createFixture(t);

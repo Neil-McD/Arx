@@ -1,6 +1,7 @@
 /// <reference types="vite/client" />
 import { convexTest } from "convex-test";
 import { expect, test } from "vitest";
+import { ensureGeneralChannel } from "./communityChannelCore";
 import schema from "./schema";
 import { getCommunityChannelCapabilities, resolveCommunityChannelActor } from "./communityChannelAccess";
 
@@ -9,7 +10,7 @@ const set = "communityChannelParticipants:setParticipant" as any;
 const list = "communityChannelParticipants:listMemberAccess" as any;
 const roster = "communityChannelParticipants:listChannelRoster" as any;
 
-test("implicit General works without a stored channel and returns canonical presence leases", async () => {
+test("General returns canonical presence leases", async () => {
   const { t, f, owner } = await fixture();
   const now = Date.now();
   await t.run(ctx => ctx.db.insert("communityPresence", { communityId: f.communityId, userId: f.memberId,
@@ -165,6 +166,7 @@ async function fixture() {
     const ownerId = await user("owner"), memberId = await user("member"), outsiderId = await user("outsider");
     const communityId = await ctx.db.insert("communities", { ownerId, name: "Client service", slug: "client-service",
       visibility: "unlisted", entryPolicy: "open", inferenceFundingPolicy: "managed_required", createdAt: 1, updatedAt: 1 });
+    await ensureGeneralChannel({ ctx, communityId, nowMs: 1 });
     const membershipId = await ctx.db.insert("communityMemberships", { communityId, userId: memberId, role: "member",
       active: true, activationSequence: 1, accessSource: "manual_grant", createdAt: 1, updatedAt: 1 });
     const channelId = await ctx.db.insert("communityChannels", { communityId, name: "Client", slug: "client", position: 1,

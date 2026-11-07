@@ -1,5 +1,6 @@
 import { convexTest } from "convex-test";
 import { afterEach, expect, test, vi } from "vitest";
+import { ensureGeneralChannel } from "./communityChannelCore";
 import schema from "./schema";
 import { handleMcpPost } from "./httpMcp";
 import { PLATFORM_LEGAL_DOCUMENTS } from "../shared/legalDocuments";
@@ -55,10 +56,14 @@ async function fixture() {
     const owner = await user("owner");
     const member = await user("member");
     const outsider = await user("outsider");
-    const community = (slug: string, ownerId: any) => ctx.db.insert("communities", {
-      ownerId, slug, name: slug, visibility: "unlisted", inferenceFundingPolicy: "managed_required",
-      entryPolicy: "open", activeMemberCount: 2, createdAt: nowMs, updatedAt: nowMs,
-    });
+    const community = async (slug: string, ownerId: any) => {
+      const communityId = await ctx.db.insert("communities", {
+        ownerId, slug, name: slug, visibility: "unlisted", inferenceFundingPolicy: "managed_required",
+        entryPolicy: "open", activeMemberCount: 2, createdAt: nowMs, updatedAt: nowMs,
+      });
+      await ensureGeneralChannel({ ctx, communityId, nowMs });
+      return communityId;
+    };
     const runClub = await community("run-club", owner);
     const otherClub = await community("other-club", outsider);
     for (const [communityId, userId] of [[runClub, member], [otherClub, owner]] as const) {

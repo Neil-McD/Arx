@@ -6,19 +6,14 @@ import { resolveCommunityChannelActor } from "./communityChannelAccess";
 
 type CommunityReadCursorLike = {
   _id: any;
-  channelId?: any;
+  channelId: any;
   seenThroughAt: number;
-};
-
-type LegacyCommunityReadStateLike = {
-  chatLastSeenAt?: number;
-  mentionsLastSeenAt?: number;
 };
 
 export type CommunityChatReadState = {
   chatSeenThroughAt: number;
   mentionSeenThroughAt: number;
-  source: "cursor" | "legacy" | "none";
+  source: "cursor" | "none";
 };
 
 export function normalizeCommunityReadPosition(value: unknown): number {
@@ -53,43 +48,16 @@ async function getCommunityReadCursor(
   userId: any,
   channel: CommunityChannelLike,
 ): Promise<CommunityReadCursorLike | null> {
-  if (channel._id) {
-    const channelCursor = (await ctx.db
-      .query("communityReadCursors" as any)
-      .withIndex("by_community_channel_user_stream", (q: any) =>
-        q
-          .eq("communityId", communityId)
-          .eq("channelId", channel._id)
-          .eq("userId", userId)
-          .eq("streamKind", "chat"),
-      )
-      .first()) as CommunityReadCursorLike | null;
-    if (channelCursor) return channelCursor;
-  }
-  if (channel.systemRole !== "general") return null;
   return (await ctx.db
     .query("communityReadCursors" as any)
     .withIndex("by_community_channel_user_stream", (q: any) =>
       q
         .eq("communityId", communityId)
-        .eq("channelId", undefined)
+        .eq("channelId", channel._id)
         .eq("userId", userId)
         .eq("streamKind", "chat"),
     )
     .first()) as CommunityReadCursorLike | null;
-}
-
-async function getLegacyCommunityReadState(
-  ctx: any,
-  communityId: any,
-  userId: any,
-): Promise<LegacyCommunityReadStateLike | null> {
-  return (await ctx.db
-    .query("communityMemberSettings" as any)
-    .withIndex("by_community_user", (q: any) =>
-      q.eq("communityId", communityId).eq("userId", userId),
-    )
-    .first()) as LegacyCommunityReadStateLike | null;
 }
 
 export async function readCommunityChatReadState(
@@ -128,19 +96,7 @@ export async function readCommunityChannelReadState(
     };
   }
 
-  const legacy = channel.systemRole === "general"
-    ? await getLegacyCommunityReadState(ctx, communityId, userId)
-    : null;
-  const chatSeenThroughAt = normalizeCommunityReadPosition(legacy?.chatLastSeenAt);
-  const mentionSeenThroughAt = Math.max(
-    chatSeenThroughAt,
-    normalizeCommunityReadPosition(legacy?.mentionsLastSeenAt),
-  );
-  return {
-    chatSeenThroughAt,
-    mentionSeenThroughAt,
-    source: legacy ? "legacy" : "none",
-  };
+  return { chatSeenThroughAt: 0, mentionSeenThroughAt: 0, source: "none" };
 }
 
 export async function advanceCommunityChatReadCursor(args: {
@@ -175,10 +131,6 @@ export async function advanceCommunityChatReadCursor(args: {
   );
 
   if (existing) {
-    if (!existing.channelId) {
-      await ctx.db.patch(existing._id, { channelId: channel._id });
-      existing.channelId = channel._id;
-    }
     const current = normalizeCommunityReadPosition(existing.seenThroughAt);
     const next = nextCommunityReadPosition(
       current,
@@ -199,18 +151,7 @@ export async function advanceCommunityChatReadCursor(args: {
     return { advanced: false, seenThroughAt: 0 };
   }
 
-  const legacy = channel.systemRole === "general"
-    ? await getLegacyCommunityReadState(ctx, communityId, userId)
-    : null;
-  const migratedLegacyPosition = Math.min(
-    normalizeCommunityReadPosition(legacy?.chatLastSeenAt),
-    latestReadableAt,
-  );
-  const next = nextCommunityReadPosition(
-    migratedLegacyPosition,
-    args.requestedThroughAt,
-    latestReadableAt,
-  );
+  const next = clampCommunityReadPosition(args.requestedThroughAt, latestReadableAt);
   if (next === 0) {
     return { advanced: false, seenThroughAt: 0 };
   }
@@ -226,7 +167,7 @@ export async function advanceCommunityChatReadCursor(args: {
     updatedAt: nowMs,
   });
   return {
-    advanced: next > migratedLegacyPosition,
+    advanced: true,
     seenThroughAt: next,
   };
 }
