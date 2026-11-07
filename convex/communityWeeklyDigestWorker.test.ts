@@ -111,7 +111,7 @@ async function insertDigestCommunity(
       userId,
       role: "member",
       accessSource: "free_grant",
-      active: true,
+      state: "active",
       createdAt: NOW_MS - index,
       updatedAt: NOW_MS - index,
     });

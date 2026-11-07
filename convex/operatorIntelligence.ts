@@ -1,3 +1,4 @@
+import { communityMembershipRowIsActive } from "./communityCore";
 import { internalQuery } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { v } from "convex/values";
@@ -179,7 +180,7 @@ async function buildOperatorAccountSetupRecords(ctx: any, nowMs: number) {
   for (const row of legalAcceptances) pushByUserId(legalAcceptancesByUser, row);
   for (const row of communities) incrementStringCount(ownedCommunitiesByUser, row.ownerId);
   for (const row of memberships) {
-    if (row.active === false || row.revokedAt) continue;
+    if (!communityMembershipRowIsActive(row as any)) continue;
     incrementStringCount(joinedCommunitiesByUser, row.userId);
   }
 
@@ -726,8 +727,8 @@ async function buildOperatorCommunityRecord(ctx: any, community: any, nowMs: num
     .query("communityMemberships")
     .withIndex("by_community", (q: any) => q.eq("communityId", community._id))
     .collect();
-  const activeMemberships = memberships.filter((row: any) => row.active !== false && !row.revokedAt);
-  const removedMemberships = memberships.filter((row: any) => row.active === false || Boolean(row.revokedAt));
+  const activeMemberships = memberships.filter((row: any) => communityMembershipRowIsActive(row));
+  const removedMemberships = memberships.filter((row: any) => !communityMembershipRowIsActive(row));
   const price = await ctx.db
     .query("communityPricePoints")
     .withIndex("by_community_current", (q: any) => q.eq("communityId", community._id).eq("isCurrent", true))
@@ -1075,7 +1076,7 @@ export const getOperatorMonetizationInternal = internalQuery({
     const communitiesWithFirstMemberIds = new Set<string>();
     const activatedCommunityCreatorIds = new Set<string>();
     for (const membership of communityMemberships) {
-      if (membership.active === false || membership.revokedAt) continue;
+      if (!communityMembershipRowIsActive(membership as any)) continue;
       const communityId = String(membership.communityId ?? "");
       const community = communityById.get(communityId);
       if (!community) continue;

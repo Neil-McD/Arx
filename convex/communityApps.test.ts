@@ -167,7 +167,7 @@ async function fixture() {
       });
     }
     const membershipId = await ctx.db.insert("communityMemberships", {
-      communityId, userId: memberId, role: "member", accessSource: "free_grant", active: true,
+      communityId, userId: memberId, role: "member", accessSource: "free_grant", state: "active",
       activationSequence: 1, activatedAt: nowMs, createdAt: nowMs, updatedAt: nowMs,
     });
     return { ownerId, memberId, outsiderId, communityId, otherCommunityId, membershipId };
@@ -270,7 +270,7 @@ test("membership lost between handoff and exchange denies the session", async ()
   const f = await fixture();
   await f.register();
   const code = (await f.handoff("apps-member")).body.code;
-  await f.t.run((c) => c.db.patch(f.ids.membershipId, { active: false, revokedAt: Date.now() }));
+  await f.t.run((c) => c.db.patch(f.ids.membershipId, { state: "lapsed", revokedAt: Date.now() }));
   expect(await f.exchange(code)).toMatchObject({ status: 403, body: { code: "not_a_member" } });
   expect(await f.sessions()).toHaveLength(0);
 });
@@ -327,7 +327,7 @@ test("losing membership denies the very next API call", async () => {
   const token = await f.signIn();
   const list = { tool: "polynet_list", input: { path: `${COMMUNITY}/channels/` } };
   expect((await f.call(token, list)).body).toMatchObject({ ok: true });
-  await f.t.run((c) => c.db.patch(f.ids.membershipId, { active: false, revokedAt: Date.now() }));
+  await f.t.run((c) => c.db.patch(f.ids.membershipId, { state: "lapsed", revokedAt: Date.now() }));
   expect((await f.call(token, list)).body).toMatchObject({ ok: false });
 });
 
@@ -378,9 +378,9 @@ test("a front end watches a channel it can read and sees every change, until acc
   }
   expect(restrictedId).toBeTruthy();
 
-  await f.t.run((c) => c.db.patch(f.ids.membershipId, { active: false, revokedAt: Date.now() }));
+  await f.t.run((c) => c.db.patch(f.ids.membershipId, { state: "lapsed", revokedAt: Date.now() }));
   expect(await watch(general)).toEqual({ ok: false, code: "watch_unavailable" });
-  await f.t.run((c) => c.db.patch(f.ids.membershipId, { active: true, revokedAt: undefined }));
+  await f.t.run((c) => c.db.patch(f.ids.membershipId, { state: "active", revokedAt: undefined }));
   expect(await watch(general)).toMatchObject({ ok: true });
 
   await f.post(COMMUNITY_EDGE_REVOKE_PATH, { "x-polynet-edge-secret": EDGE_SECRET }, { token });
@@ -621,7 +621,7 @@ test("the shell shows the member's account: who they are, their role here, and l
   await f.register("https://other.example.com", f.ids.otherCommunityId);
   // The member also belongs to apps-other; this site must not learn that.
   await f.t.run((c) => c.db.insert("communityMemberships", {
-    communityId: f.ids.otherCommunityId, userId: f.ids.memberId, role: "admin", accessSource: "free_grant", active: true,
+    communityId: f.ids.otherCommunityId, userId: f.ids.memberId, role: "admin", accessSource: "free_grant", state: "active",
     activationSequence: 1, activatedAt: 1, createdAt: 1, updatedAt: 1,
   }));
   const token = await f.signIn("apps-member");
@@ -714,7 +714,7 @@ test("a front end keeps its member present, shows who is online, and marks membe
   ]));
 
   // Losing membership closes both the read and the watch.
-  await f.t.run((c) => c.db.patch(f.ids.membershipId, { active: false, revokedAt: Date.now() }));
+  await f.t.run((c) => c.db.patch(f.ids.membershipId, { state: "lapsed", revokedAt: Date.now() }));
   expect(await online(member)).toMatchObject({ ok: false });
   expect(await watchOnline()).toEqual({ ok: false, code: "watch_unavailable" });
   expect((await capability(f, member, "community.presence.heartbeat", {}, "h-3")).body).toMatchObject({ ok: false });
@@ -784,7 +784,7 @@ test("a front end reads a fellow member's profile: only what Studio shows anothe
   // The .md view still works.
   expect((await f.call(member, { tool: "polynet_read", input: { path: `${COMMUNITY}/members/apps-owner.md` } })).body).toMatchObject({ ok: true });
   // A member who leaves disappears, and a reader who leaves reads nothing.
-  await f.t.run((c) => c.db.patch(f.ids.membershipId, { active: false, revokedAt: Date.now() }));
+  await f.t.run((c) => c.db.patch(f.ids.membershipId, { state: "lapsed", revokedAt: Date.now() }));
   expect(await read(owner, "apps-member.json")).toMatchObject({ ok: false, code: "semantic_not_found" });
   expect(await read(member, "apps-owner.json")).toMatchObject({ ok: false });
 });
@@ -801,7 +801,7 @@ test("a site's private twin: its sessions are private, and only they read the me
   })).toEqual({ origin: site, privateOrigin: twin });
   await f.t.run(async (c) => {
     await c.db.insert("communityMemberships", {
-      communityId: f.ids.otherCommunityId, userId: f.ids.memberId, role: "admin", accessSource: "free_grant", active: true,
+      communityId: f.ids.otherCommunityId, userId: f.ids.memberId, role: "admin", accessSource: "free_grant", state: "active",
       activationSequence: 1, activatedAt: 1, createdAt: 2, updatedAt: 2,
     });
     // Another community the member has left, and one that's archived: never listed.
@@ -810,7 +810,7 @@ test("a site's private twin: its sessions are private, and only they read the me
       entryPolicy: "open", activeMemberCount: 1, lifecycleStatus: "archived", lifecycleGeneration: 1, createdAt: 1, updatedAt: 1,
     } as any);
     await c.db.insert("communityMemberships", {
-      communityId: gone, userId: f.ids.memberId, role: "member", accessSource: "free_grant", active: true,
+      communityId: gone, userId: f.ids.memberId, role: "member", accessSource: "free_grant", state: "active",
       activationSequence: 1, activatedAt: 1, createdAt: 3, updatedAt: 3,
     });
   });
@@ -891,7 +891,7 @@ test("twin settings: every route answers only a private session of a member here
   expect(await f.t.run((c) => c.db.get(f.ids.membershipId))).not.toBeNull();
   expect(await f.t.run((c) => c.db.query("communityMemberSettings").collect())).toEqual([]);
   // A session that outlives its member's membership changes nothing here.
-  await f.t.run((c) => c.db.patch(f.ids.membershipId, { active: false, revokedAt: Date.now() }));
+  await f.t.run((c) => c.db.patch(f.ids.membershipId, { state: "lapsed", revokedAt: Date.now() }));
   for (const [path, body] of routes) {
     expect(await f.me(path, twinToken, body), path).toMatchObject({ status: 403, body: { code: "not_a_member" } });
   }
@@ -990,8 +990,8 @@ test("twin settings: a member leaves through Studio's leave; the owner can't", a
   await f.me(COMMUNITY_APP_MY_NOTIFICATIONS_PATH, token, { muted: true });
   // A free member: nothing paid, so no access to run out (access_until null), and out straight away.
   expect(await f.me(COMMUNITY_APP_MY_LEAVE_PATH, token)).toEqual({ status: 200, body: { ok: true, access_until: null } });
-  // Studio's leave: the membership, its member settings and the member count go with it.
-  expect(await f.t.run((c) => c.db.get(f.ids.membershipId))).toBeNull();
+  // Studio's leave: the membership stays as `left`; its member settings and the member count go.
+  expect((await f.t.run((c) => c.db.get(f.ids.membershipId)))?.state).toBe("left");
   expect(await f.t.run((c) => c.db.query("communityMemberSettings").collect())).toEqual([]);
   expect((await f.t.run((c) => c.db.get(f.ids.communityId)))?.activeMemberCount).toBe(1);
   // Gone from here: nothing more to change, and the communities page no longer lists it.
@@ -1043,7 +1043,7 @@ async function messagesFixture() {
   const letIn = (handle: "apps-outsider") => f.t.run(async (c) => {
     const user = await c.db.query("users").withIndex("by_authSubject", (q) => q.eq("authSubject", `${handle}-subject`)).first();
     await c.db.insert("communityMemberships", {
-      communityId: f.ids.communityId, userId: user!._id, role: "member", accessSource: "free_grant", active: true,
+      communityId: f.ids.communityId, userId: user!._id, role: "member", accessSource: "free_grant", state: "active",
       activationSequence: 2, activatedAt: 1, createdAt: 1, updatedAt: 1,
     });
   });
@@ -1074,7 +1074,7 @@ test("twin messages: every route answers only a private session of a member here
   expect(await f.t.run((c) => c.db.query("dmTypingPresence").collect())).toEqual([]);
   expect((await f.t.run((c) => c.db.query("dmParticipants").collect())).every((row) => !row.mutedAt)).toBe(true);
   // A session that outlives its member's membership reads and writes nothing here.
-  await f.t.run((c) => c.db.patch(f.ids.membershipId, { active: false, revokedAt: Date.now() }));
+  await f.t.run((c) => c.db.patch(f.ids.membershipId, { state: "lapsed", revokedAt: Date.now() }));
   for (const [path, body] of routes) {
     expect(await f.me(path, f.member, body), path).toMatchObject({ status: 403, body: { code: "not_a_member" } });
   }
@@ -1263,7 +1263,7 @@ test("twin messages live: only a private session's watch token, versions and typ
   expect(await watch(outsider, id)).toEqual({ ok: false, code: "watch_unavailable" });
   expect(await watch(f.member, "nope")).toEqual({ ok: false, code: "watch_unavailable" });
   // Leaving the community ends the watch live.
-  await f.t.run((c) => c.db.patch(f.ids.membershipId, { active: false, revokedAt: Date.now() }));
+  await f.t.run((c) => c.db.patch(f.ids.membershipId, { state: "lapsed", revokedAt: Date.now() }));
   expect(await watch(f.member)).toEqual({ ok: false, code: "watch_unavailable" });
   // A twin origin that stops being private stops answering too.
   await f.t.run(async (c) => {
@@ -1324,7 +1324,7 @@ test("twin join: someone who isn't a member signs in on the twin only, joins an 
   expect(await f.read(siteToken, f.site)).toMatchObject({ status: 403, body: { code: "private_session_required" } });
   const joined = await f.me(COMMUNITY_APP_MY_JOIN_REQUEST_PATH, token);
   expect(joined).toMatchObject({ status: 200, body: { ok: true, outcome: "joined", viewer: { state: "member" }, action_label: "Enter community" } });
-  expect(await f.membership()).toMatchObject({ active: true, role: "member", accessSource: "free_grant" });
+  expect(await f.membership()).toMatchObject({ state: "active", role: "member", accessSource: "free_grant" });
   // Joining twice is still one membership; and now the site signs them in.
   expect((await f.me(COMMUNITY_APP_MY_JOIN_REQUEST_PATH, token)).body.outcome).toBe("joined");
   expect(await f.handoff("apps-outsider", { origin: f.site })).toMatchObject({ status: 200, body: { ok: true } });
@@ -1417,10 +1417,10 @@ test("twin join: a paid plan goes to Studio's checkout, back only to this twin's
     currentPeriodStartAt: nowMs, currentPeriodEndAt: nowMs + 30 * 86_400_000, markComplete: true,
   });
   // Stripe's notice itself made them a member (the buyer is known): no return needed.
-  expect(await f.membership()).toMatchObject({ active: true });
+  expect(await f.membership()).toMatchObject({ state: "active" });
   expect((await finish({ session_id: sessionId })).body).toMatchObject({ status: "joined", viewer: { state: "member" } });
   expect((await finish({ session_id: sessionId })).body).toMatchObject({ status: "joined", viewer: { state: "member" } });
-  expect(await f.membership()).toMatchObject({ active: true });
+  expect(await f.membership()).toMatchObject({ state: "active" });
   expect(await f.t.run((c) => c.db.query("communityMemberships").withIndex("by_community_user", (q) => q.eq("communityId", f.ids.communityId).eq("userId", f.ids.outsiderId)).collect())).toHaveLength(1);
   // A member doesn't start another checkout.
   expect(await f.me(COMMUNITY_APP_MY_JOIN_CHECKOUT_PATH, token, { billing_period: "monthly" })).toMatchObject({ status: 409, body: { code: "already_member" } });
@@ -1431,14 +1431,14 @@ test("twin join: in an open community, someone a manager removed asks to come ba
   const f = await joinFixture();
   await f.policy("open");
   await f.t.run((c) => c.db.insert("communityMemberships", {
-    communityId: f.ids.communityId, userId: f.ids.outsiderId, role: "member", accessSource: "free_grant", active: false,
+    communityId: f.ids.communityId, userId: f.ids.outsiderId, role: "member", accessSource: "free_grant", state: "removed",
     activationSequence: 1, activatedAt: 1, revokedAt: Date.now(), revokedReason: "removed_by_manager", createdAt: 1, updatedAt: 1,
   }));
   const token = await f.signInAt(f.twin, "apps-outsider");
   const asked = await f.me(COMMUNITY_APP_MY_JOIN_REQUEST_PATH, token);
   expect(asked).toMatchObject({ status: 200, body: { outcome: "approval_pending", viewer: { state: "pending" } } });
   expect((await f.read(token)).body.viewer).toMatchObject({ state: "pending" });
-  expect((await f.membership())?.active).toBe(false);
+  expect((await f.membership())?.state).not.toBe("active");
 });
 
 test("twin join: a community that went from approval to paid shows its checkout, whatever was asked before", async () => {
@@ -1502,7 +1502,7 @@ test("twin moderation: a moderator removes a post of this community; a member an
     }
     await c.db.insert("authSessions", { sessionId: "sess-apps-mod", authSubject: "apps-mod-subject", userId: other, encryptedSecretHex: "x", secretIvHex: "x", secretVersion: 1,
       idleExpiresAt: Date.now() + 86_400_000, absoluteExpiresAt: Date.now() + 86_400_000, createdAt: 1, updatedAt: 1 } as any);
-    await c.db.insert("communityMemberships", { communityId: f.ids.communityId, userId: other, role: "member", accessSource: "free_grant", active: true, activationSequence: 1, activatedAt: 1, createdAt: 1, updatedAt: 1 });
+    await c.db.insert("communityMemberships", { communityId: f.ids.communityId, userId: other, role: "member", accessSource: "free_grant", state: "active", activationSequence: 1, activatedAt: 1, createdAt: 1, updatedAt: 1 });
   });
   const modTwin = await f.signInAt(f.twin, "apps-mod");
   expect(await f.me(COMMUNITY_APP_MY_MODERATION_POST_PATH, modTwin, { ref })).toMatchObject({ status: 403, body: { code: "not_a_moderator" } });
@@ -1553,7 +1553,7 @@ test("twin join review: a moderator lists, approves and denies this community's 
   // Approved: they're in, and the request is gone from the list.
   expect(await f.me(COMMUNITY_APP_MY_REQUEST_APPROVE_PATH, owner, { request_id: requestId })).toEqual({ status: 200, body: { ok: true } });
   const membership = await f.t.run((c) => c.db.query("communityMemberships").withIndex("by_community_user", (q) => q.eq("communityId", f.ids.communityId).eq("userId", f.ids.outsiderId)).first());
-  expect(membership).toMatchObject({ active: true, role: "member" });
+  expect(membership).toMatchObject({ state: "active", role: "member" });
   expect((await f.me(COMMUNITY_APP_MY_REQUESTS_PATH, owner)).body.requests).toEqual([]);
   expect(await f.me(COMMUNITY_APP_MY_REQUEST_APPROVE_PATH, owner, { request_id: requestId })).toMatchObject({ status: 200 });
   // Denied: the next asker waits out Studio's cooldown.

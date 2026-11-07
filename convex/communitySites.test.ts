@@ -55,7 +55,7 @@ async function fixture() {
     const admin = await community("admin");
     const other = await community("other-club", outsider);
     await ctx.db.insert("communityMemberships", {
-      communityId: runClub, userId: member, role: "member", accessSource: "free_grant", active: true,
+      communityId: runClub, userId: member, role: "member", accessSource: "free_grant", state: "active",
       activationSequence: 1, activatedAt: nowMs, createdAt: nowMs, updatedAt: nowMs,
     });
     return { owner, member, outsider, runClub, admin, other };

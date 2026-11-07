@@ -206,7 +206,7 @@ test("bounded presence windows remain conservatively capped after authorization 
         userId,
         role: "member",
         accessSource: "free_grant",
-        active: true,
+        state: "active",
         createdAt: 1_000 + index,
         updatedAt: 1_000 + index,
       });
@@ -253,7 +253,7 @@ test("blocked members disappear from active presence immediately", async () => {
       userId: memberId,
       role: "member",
       accessSource: "free_grant",
-      active: true,
+      state: "active",
       createdAt: 1_000,
       updatedAt: 1_000,
     });

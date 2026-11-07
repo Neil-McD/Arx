@@ -10,6 +10,7 @@ import {
 import {
   communityResourceIsLiveModulePage,
   communityResourceModuleIsLive,
+  communityMembershipRowIsActive,
 } from "./communityCore";
 import { readCanonicalPublicAppOrigin } from "./publicAppUrl";
 import { buildCommunityTabPath } from "../shared/webAppRouteState";
@@ -160,7 +161,7 @@ async function buildDigestSnapshot(ctx: any, params: {
     interactionCount: interactions.length,
     resourceCount: liveResources.length,
     newMemberCount: recentMemberships.filter(
-      (row: any) => row.active !== false && typeof row.revokedAt !== "number",
+      (row: any) => communityMembershipRowIsActive(row),
     ).length,
   };
 
@@ -254,7 +255,7 @@ export const readCommunityWeeklyDigestPageInternal = internalQuery({
     };
     if (includeOwner) addRecipient(community.ownerId);
     for (const membership of page.page) {
-      if (membership.active === false || typeof membership.revokedAt === "number") continue;
+      if (!communityMembershipRowIsActive(membership as any)) continue;
       if (String(membership.userId) === String(community.ownerId)) continue;
       addRecipient(membership.userId);
       if (recipientUserIds.length >= recipientLimit) break;

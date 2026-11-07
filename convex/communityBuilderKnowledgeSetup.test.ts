@@ -66,7 +66,7 @@ async function createFixture(t: ReturnType<typeof convexTest>) {
       userId: memberId,
       role: "member",
       accessSource: "manual_grant",
-      active: true,
+      state: "active",
       createdAt: nowMs,
       updatedAt: nowMs,
     });

@@ -45,7 +45,7 @@ test("mention email suppression reads the exact source channel cursor", async ()
       communityId,
       userId: memberId,
       role: "member",
-      active: true,
+      state: "active",
       createdAt: 1_000,
       updatedAt: 1_000,
     });
@@ -142,7 +142,7 @@ test("mentions held by a recipient's cooldown can't crowd out a newer one that's
       contentSummary: "Hi all", replyCount: 0, reactionSummary: [], idempotencyKey: "crowded-root", createdAt: 2_000, updatedAt: 2_000,
     });
     const mention = async (userId: any, createdAt: number) => {
-      await ctx.db.insert("communityMemberships", { communityId, userId, role: "member", active: true, createdAt: 1_000, updatedAt: 1_000 });
+      await ctx.db.insert("communityMemberships", { communityId, userId, role: "member", state: "active", createdAt: 1_000, updatedAt: 1_000 });
       return await ctx.db.insert("communityInteractionMentions", {
         communityId, channelId, rootId, mentionKind: "user", mentionedUserId: userId, notifyState: "pending", createdAt, updatedAt: createdAt,
       });

@@ -79,7 +79,6 @@ export async function activateCommunityMembershipCore(args: {
       accessSource: args.accessSource,
       ...(args.pricePointId ? { pricePointId: args.pricePointId } : {}),
       state: "active",
-      active: true,
       activationSequence,
       activatedAt: args.nowMs,
       revokedAt: undefined,
@@ -94,7 +93,6 @@ export async function activateCommunityMembershipCore(args: {
       accessSource: args.accessSource,
       ...(args.pricePointId ? { pricePointId: args.pricePointId } : {}),
       state: "active",
-      active: true,
       activationSequence,
       activatedAt: args.nowMs,
       createdAt: args.nowMs,
@@ -132,6 +130,8 @@ export async function activateCommunityMembershipCore(args: {
   };
 }
 
+export const COMMUNITY_MEMBER_LEFT_REASON = "left_by_member";
+
 // Every move out of `active`. Granting (above) is the only way back in.
 const ENDING_MOVES: Record<CommunityMembershipState, readonly CommunityMembershipState[]> = {
   active: ["left", "removed", "lapsed", "payment_hold"],
@@ -146,8 +146,7 @@ export function canEndCommunityMembership(from: CommunityMembershipState, to: Co
   return ENDING_MOVES[from].includes(to);
 }
 
-// The fields a membership ending writes. `active` is kept in step until it is
-// dropped from the schema.
+// The fields a membership ending writes.
 export function endedCommunityMembershipFields(args: {
   membership: CommunityMembershipLike;
   to: CommunityMembershipState;
@@ -160,7 +159,6 @@ export function endedCommunityMembershipFields(args: {
   }
   return {
     state: args.to,
-    active: false,
     revokedAt: args.nowMs,
     revokedReason: args.reason,
     updatedAt: args.nowMs,
@@ -182,19 +180,18 @@ export function communityMembershipStateAfterSubscriptionUpdate(args: {
   return COMMUNITY_MEMBERSHIP_PAYMENT_HOLD_REASONS.has(args.reason) ? "payment_hold" : "lapsed";
 }
 
-// One-off, run by hand until it reports done: gives every membership written
-// before `state` existed its state, read from its old fields.
-export const backfillCommunityMembershipStateInternal = internalMutation({
+// One-off, run by hand until it reports done: clears the retired `active`
+// field so the schema can drop it.
+export const stripCommunityMembershipActiveInternal = internalMutation({
   args: { cursor: v.optional(v.union(v.string(), v.null())) },
   handler: async (ctx, args) => {
     const page = await ctx.db.query("communityMemberships").paginate({ numItems: 200, cursor: args.cursor ?? null });
-    const counts: Record<string, number> = {};
+    let stripped = 0;
     for (const row of page.page) {
-      if (row.state) continue;
-      const state = communityMembershipState(row)!;
-      await ctx.db.patch(row._id, { state });
-      counts[state] = (counts[state] ?? 0) + 1;
+      if ((row as any).active === undefined) continue;
+      await ctx.db.patch(row._id, { active: undefined });
+      stripped += 1;
     }
-    return { done: page.isDone, cursor: page.continueCursor, filled: counts };
+    return { done: page.isDone, cursor: page.continueCursor, stripped };
   },
 });

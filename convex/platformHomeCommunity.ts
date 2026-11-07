@@ -5,7 +5,6 @@ import {
 } from "./communityCore";
 
 const PLATFORM_HOME_COMMUNITY_SLUG = "polynet";
-export const PLATFORM_HOME_MEMBER_LEFT_REVOKED_REASON = "left_by_member";
 
 export function isPlatformHomeCommunity(args: {
   communitySlug?: string | null;
@@ -25,10 +24,4 @@ export function communityMembershipRequiresManagerReapproval(
   membership: CommunityMembershipLike | null | undefined,
 ): boolean {
   return communityMembershipState(membership) === "removed";
-}
-
-export function platformHomeMembershipRequiresReapproval(
-  membership: CommunityMembershipLike | null | undefined,
-): boolean {
-  return communityMembershipRequiresManagerReapproval(membership);
 }

@@ -27,8 +27,6 @@ import {
 import { enqueueCommunityAccessGrantedEmailInternal } from "./emailEvents";
 import {
   communityMembershipRequiresManagerReapproval,
-  isPlatformHomeCommunity,
-  platformHomeMembershipRequiresReapproval,
 } from "./platformHomeCommunity";
 import { resolveUserProfileDisplayProjection } from "./userProfileProjection";
 import { activateCommunityMembershipCore } from "./communityMembershipLifecycle";
@@ -371,11 +369,7 @@ export async function joinPublicCommunityInternal(args: {
     };
   }
 
-  const requiresManagerReapproval = isPlatformHomeCommunity({
-    communitySlug: args.community.slug,
-  })
-    ? platformHomeMembershipRequiresReapproval(existingMembership)
-    : communityMembershipRequiresManagerReapproval(existingMembership);
+  const requiresManagerReapproval = communityMembershipRequiresManagerReapproval(existingMembership);
   if (
     joinRequestStatus === "denied" &&
     !communityJoinRequestCanReapply(joinRequest!, args.nowMs)

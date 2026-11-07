@@ -54,7 +54,7 @@ async function createServeFixture(t: ReturnType<typeof convexTest>, suffix: stri
       userId,
       role: "admin",
       accessSource: "manual_grant",
-      active: true,
+      state: "active",
       createdAt: nowMs,
       updatedAt: nowMs,
     });
@@ -436,7 +436,7 @@ test("thread context is chronological, cutoff-bound, and scoped through member o
       userId: memberId,
       role: "member",
       accessSource: "manual_grant",
-      active: true,
+      state: "active",
       createdAt: 1_100,
       updatedAt: 1_100,
     });

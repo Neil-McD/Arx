@@ -29,7 +29,7 @@ test("members read the notes in Studio; only owners and admins edit or delete th
   const memberId = await t.run(async (ctx: any) => {
     await ctx.db.patch(ownerId, { authSubject: "owner" });
     const memberId = await ctx.db.insert("users", { authSubject: "member", displayName: "Member", createdAt: NOW, updatedAt: NOW });
-    await ctx.db.insert("communityMemberships", { communityId, userId: memberId, role: "member", accessSource: "free_grant", active: true, createdAt: NOW, updatedAt: NOW });
+    await ctx.db.insert("communityMemberships", { communityId, userId: memberId, role: "member", accessSource: "free_grant", state: "active", createdAt: NOW, updatedAt: NOW });
     return memberId;
   });
   await t.run((ctx: any) => ctx.db.insert("communityNotes", {

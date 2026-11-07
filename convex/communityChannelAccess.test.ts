@@ -104,7 +104,7 @@ async function fixture(t: ReturnType<typeof convexTest>) {
     const memberships: Record<string, any> = {};
     for (const name of ["admin", "moderator", "member"] as const) {
       memberships[name] = await ctx.db.insert("communityMemberships", {
-        communityId, userId: users[name], role: name, active: true, accessSource: "manual_grant", createdAt: 1, updatedAt: 1,
+        communityId, userId: users[name], role: name, state: "active", accessSource: "manual_grant", createdAt: 1, updatedAt: 1,
       });
     }
     const channelId = await ctx.db.insert("communityChannels", {
@@ -158,7 +158,7 @@ test("owner/admin oversight is explicit; moderator is not private-room authority
       expect((await getCommunityChannelCapabilities({ ctx, channel, actor })).canManage).toBe(name !== "moderator");
     }
     await expect(resolveCommunityChannelActor({ ctx, communityId: f.communityId, userId: f.users.outsider })).rejects.toThrow();
-    await ctx.db.patch(f.memberships.member, { active: false, revokedAt: 2 });
+    await ctx.db.patch(f.memberships.member, { state: "lapsed", revokedAt: 2 });
     for (const kind of ["human", "community_agent_for_member", "external_mcp", "community_agent"] as const) {
       await expect(resolveCommunityChannelActor({ ctx, communityId: f.communityId, userId: f.users.member, kind })).rejects.toThrow();
     }

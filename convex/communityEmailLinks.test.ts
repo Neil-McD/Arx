@@ -37,7 +37,7 @@ async function fixture(withSite: boolean, opts: { appWithSite?: boolean } = {}) 
       await ctx.db.insert("communitySiteDeploys", { communityId, userId: ownerId, hostname: "night-swimmers-staging.polynet.page", fileCount: 1, totalBytes: 10, createdAt: NOW });
     }
     await ctx.db.insert("communityMemberships", {
-      communityId, userId: memberId, role: "member", accessSource: "free_grant", active: true,
+      communityId, userId: memberId, role: "member", accessSource: "free_grant", state: "active",
       activationSequence: 1, activatedAt: NOW, createdAt: NOW, updatedAt: NOW,
     } as any);
     await registerCommunitySiteAddresses(ctx, { _id: communityId, slug: "night-swimmers" });
@@ -102,7 +102,7 @@ test("a direct message opens on the community's private pages, or this environme
   // Someone who has since left: Messages there would refuse them, so Studio's inbox.
   await withSite.t.run(async (ctx) => {
     const row = (await ctx.db.query("communityMemberships").collect()).find((m) => m.userId === withSite.memberId)!;
-    await ctx.db.patch(row._id, { active: false, revokedAt: NOW });
+    await ctx.db.patch(row._id, { state: "lapsed", revokedAt: NOW });
   });
   expect(await link(withSite, withSite.memberId)).toBe("https://polynet-staging.example.com/?dm=k97abc");
   // Begun outside any community: Studio's inbox, on this environment's own app.

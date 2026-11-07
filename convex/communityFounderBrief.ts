@@ -12,7 +12,7 @@ import { resolveUserIdForAuthenticatedRequest } from "./authActor";
 import { listSharedChannelReadableRows } from "./communityChannelCore";
 import { readCanonicalUserIdentityProjection } from "./profileCore";
 import { communityIsActive, normalizeCommunityLifecycle } from "../shared/communityLifecycle";
-import { readCommunityActiveMemberCount } from "./communityCore";
+import { readCommunityActiveMemberCount, communityMembershipRowIsActive } from "./communityCore";
 import { resolveCommunityInferenceFundingForAction } from "./founderInferenceRuntime";
 import { startFundedInferenceRun } from "./fundedInferenceGateway";
 import { readCanonicalPublicAppOrigin } from "./publicAppUrl";
@@ -114,7 +114,7 @@ async function buildSnapshot(ctx: any, community: any, windowStartMs: number, no
     [...windowRoots, ...windowReplies].filter(human).map((row: any) => String(row.actorUserId)),
   );
 
-  const activeMember = (row: any) => row.active !== false && typeof row.revokedAt !== "number" && String(row.userId) !== ownerId;
+  const activeMember = (row: any) => communityMembershipRowIsActive(row) && String(row.userId) !== ownerId;
   const joined = recentJoins.filter(activeMember);
 
   // Anyone who has posted or replied in the recent scan is not quiet.

@@ -39,7 +39,7 @@ async function fixture(t: ReturnType<typeof convexTest>) {
         userId,
         role: "member",
         accessSource: "free_grant",
-        active: true,
+        state: "active",
         activationSequence: 1,
         activatedAt: nowMs,
         createdAt: nowMs,

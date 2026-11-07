@@ -8,6 +8,7 @@ import {
   resolveCommunityBrandingFields,
   resolveCommunityEntryPolicy,
   resolveCommunityLens,
+  communityMembershipRowIsActive,
 } from "./communityCore";
 import { readCanonicalCommunityAgentContext } from "./communityAgentContext";
 import { communityMemberExperience, registeredSiteOrigin } from "./communitySites";
@@ -61,7 +62,7 @@ export async function communityAppMemberRole(ctx: any, community: any, userId: a
     .query("communityMemberships")
     .withIndex("by_community_user", (q: any) => q.eq("communityId", community._id).eq("userId", userId))
     .first();
-  return membership?.active === true ? membership.role : null;
+  return communityMembershipRowIsActive(membership as any) ? membership!.role : null;
 }
 
 // Operator setup until the CLI registers domains. One domain belongs to one community.

@@ -44,7 +44,7 @@ const seededState = (t: ReturnType<typeof convexTest>, communityId: any) => t.ru
   const roots = (await ctx.db.query("communityInteractionRoots").collect()).filter((row) => row.communityId === communityId);
   return {
     seedUserIds: seedUsers.map((user) => user._id).sort(),
-    memberships: memberships.map((row) => ({ role: row.role, active: row.active })),
+    memberships: memberships.map((row) => ({ role: row.role, active: row.state === "active" })),
     channels: (await ctx.db.query("communityChannels").collect()).map((row) => row.slug).sort(),
     rootIds: roots.map((row) => row._id),
     roots: roots.length,

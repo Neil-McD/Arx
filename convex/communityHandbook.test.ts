@@ -28,7 +28,7 @@ async function fixture(t: any) {
       ownerId: owner, slug: "sunrise", name: "Sunrise", oneLiner: "Early climbers.", about: "We meet at 5:30.", visibility: "unlisted",
       inferenceFundingPolicy: "managed_required", entryPolicy: "open", activeMemberCount: 2, createdAt: NOW, updatedAt: NOW,
     });
-    await ctx.db.insert("communityMemberships", { communityId, userId: theo, role: "member", accessSource: "free_grant", active: true, activationSequence: 1, activatedAt: NOW, createdAt: NOW, updatedAt: NOW });
+    await ctx.db.insert("communityMemberships", { communityId, userId: theo, role: "member", accessSource: "free_grant", state: "active", activationSequence: 1, activatedAt: NOW, createdAt: NOW, updatedAt: NOW });
     const channel = (slug: string, accessMode: string, general = false) => ctx.db.insert("communityChannels", {
       communityId, ...(general ? { systemRole: "general" } : { createdByUserId: owner }), slug, name: general ? "General" : slug, normalizedName: slug,
       accessMode, postingPolicy: "members", status: "active", position: general ? 0 : 1, createdAt: NOW, updatedAt: NOW,

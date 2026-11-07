@@ -74,8 +74,7 @@ export type CommunityMembershipLike = {
   role: string;
   accessSource?: string;
   pricePointId?: any;
-  state?: CommunityMembershipState;
-  active?: boolean;
+  state: CommunityMembershipState;
   activationSequence?: number;
   activatedAt?: number;
   revokedAt?: number;
@@ -88,7 +87,7 @@ export type CommunityMembershipLike = {
 // communityMembershipLifecycle moves a membership between them; revokedReason
 // explains a change for the audit trail and never decides anything.
 //   active        in the community
-//   left          left by choice (kept only for the platform home community)
+//   left          left by choice
 //   removed       removed by a manager; coming back needs a manager's approval
 //   lapsed        the paid subscription stopped granting access
 //   payment_hold  a refund or dispute; a later subscription update can't lift it
@@ -100,24 +99,10 @@ export const COMMUNITY_MEMBERSHIP_PAYMENT_HOLD_REASONS = new Set([
   "subscription_dispute_lost",
 ]);
 
-// Rows written before `state` existed carry their state in active/revokedReason.
-// Removed once every row has `state`.
-function deriveCommunityMembershipState(membership: CommunityMembershipLike): CommunityMembershipState {
-  const revoked = membership.active === false ||
-    (typeof membership.revokedAt === "number" && membership.revokedAt > 0);
-  if (!revoked) return "active";
-  const reason = String(membership.revokedReason ?? "").trim().toLowerCase();
-  if (reason === "left_by_member") return "left";
-  if (reason.startsWith("removed_by_manager") || reason.startsWith("banned_by_manager")) return "removed";
-  if (COMMUNITY_MEMBERSHIP_PAYMENT_HOLD_REASONS.has(reason)) return "payment_hold";
-  return "lapsed";
-}
-
 export function communityMembershipState(
   membership: CommunityMembershipLike | null | undefined,
 ): CommunityMembershipState | null {
-  if (!membership) return null;
-  return membership.state ?? deriveCommunityMembershipState(membership);
+  return membership?.state ?? null;
 }
 
 export type CommunityTypingPresenceLike = {

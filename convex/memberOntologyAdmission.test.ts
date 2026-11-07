@@ -116,7 +116,7 @@ test("a block supersedes active membership for community interview writes", asyn
       userId: fixture.applicantId,
       role: "member",
       accessSource: "manual_grant",
-      active: true,
+      state: "active",
       activationSequence: 1,
       activatedAt: fixture.nowMs,
       createdAt: fixture.nowMs,

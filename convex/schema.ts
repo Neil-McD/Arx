@@ -909,18 +909,20 @@ export default defineSchema({
       ),
     ),
     pricePointId: v.optional(v.id("communityPricePoints")),
-    // See CommunityMembershipState in communityCore. Optional only until the
-    // backfill has given every row a state; then active is dropped.
-    state: v.optional(v.union(
+    // See CommunityMembershipState in communityCore.
+    state: v.union(
       v.literal("active"),
       v.literal("left"),
       v.literal("removed"),
       v.literal("lapsed"),
       v.literal("payment_hold"),
-    )),
+    ),
+    // No longer written or read; stays only until stripCommunityMembershipActiveInternal
+    // has cleared it from every row, then it is dropped.
     active: v.optional(v.boolean()),
     activationSequence: v.optional(v.number()),
     activatedAt: v.optional(v.number()),
+    // History only: when and why a membership last ended. Never decides access.
     revokedAt: v.optional(v.number()),
     revokedReason: v.optional(v.string()),
     createdAt: v.number(),
@@ -932,7 +934,6 @@ export default defineSchema({
     .index("by_community_user", ["communityId", "userId"])
     .index("by_community_createdAt", ["communityId", "createdAt"])
     // Who holds a role (the community card names its admins and moderators).
-    .index("by_community_role_active", ["communityId", "role", "active"])
     .index("by_community_role_state", ["communityId", "role", "state"]),
 
 

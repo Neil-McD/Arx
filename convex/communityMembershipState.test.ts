@@ -6,7 +6,7 @@ import { expect, test } from "vitest";
 
 import { api, internal } from "./_generated/api";
 import schema from "./schema";
-import { communityMembershipState, requireCommunityChatAccess } from "./communityCore";
+import { requireCommunityChatAccess } from "./communityCore";
 import {
   canEndCommunityMembership,
   communityMembershipStateAfterSubscriptionUpdate,
@@ -33,7 +33,7 @@ async function fixture() {
     } as any);
     const membershipId = await ctx.db.insert("communityMemberships", {
       communityId, userId: payerId, role: "member", accessSource: "paid_subscription", pricePointId,
-      state: "active", active: true, activationSequence: 1, activatedAt: NOW, createdAt: NOW, updatedAt: NOW,
+      state: "active", activationSequence: 1, activatedAt: NOW, createdAt: NOW, updatedAt: NOW,
     } as any);
     await ctx.db.insert("communitySubscriptions", {
       communityId, userId: payerId, membershipId, pricePointId, source: "stripe", status: "active",
@@ -64,14 +64,14 @@ test("a refund puts a payer on hold; a routine update can't lift it, a new paid 
   expect(await canChat()).toBe(false);
 
   await sync("active");
-  expect(await membership()).toMatchObject({ state: "active", active: true, activationSequence: 2 });
+  expect(await membership()).toMatchObject({ state: "active", activationSequence: 2 });
   expect(await canChat()).toBe(true);
 });
 
 test("a lapsed payer comes back when the subscription grants access again", async () => {
   const { sync, membership, canChat } = await fixture();
   await sync("canceled");
-  expect(await membership()).toMatchObject({ state: "lapsed", active: false, revokedReason: "subscription_canceled" });
+  expect(await membership()).toMatchObject({ state: "lapsed", revokedReason: "subscription_canceled" });
   expect(await canChat()).toBe(false);
   await sync("active");
   expect(await membership()).toMatchObject({ state: "active", activationSequence: 2 });
@@ -81,7 +81,7 @@ test("a removed member is never brought back by a payment update", async () => {
   const { t, ids, sync, membership, canChat } = await fixture();
   // As a manager's removal leaves it (the removal itself is covered with the admin tests).
   await t.run((ctx) => ctx.db.patch(ids.membershipId, {
-    state: "removed", active: false, revokedAt: NOW, revokedReason: "removed_by_manager",
+    state: "removed", revokedAt: NOW, revokedReason: "removed_by_manager",
   } as any));
   await sync("active");
   expect((await membership()).state).toBe("removed");
@@ -92,12 +92,12 @@ test("leaving is for active members: a retry changes nothing and a removal can't
   const { t, ids, membership } = await fixture();
   const asPayer = t.withIdentity({ subject: "payer-subject" });
   await t.run((ctx) => ctx.db.patch(ids.membershipId, {
-    state: "removed", active: false, revokedAt: NOW, revokedReason: "removed_by_manager",
+    state: "removed", revokedAt: NOW, revokedReason: "removed_by_manager",
   } as any));
   await asPayer.mutation(api.communityAdmin.leaveCommunity, { communityId: ids.communityId });
   expect((await membership())?.state).toBe("removed");
 
-  // The platform home community keeps a departure as `left`; leaving again is fine.
+  // A departure is kept as `left`; leaving again is fine.
   const homeMembershipId = await t.run(async (ctx) => {
     const homeId = await ctx.db.insert("communities", {
       ownerId: ids.ownerId, slug: "polynet", name: "Polynet", lifecycleStatus: "active", lifecycleGeneration: 0, visibility: "published",
@@ -105,7 +105,7 @@ test("leaving is for active members: a retry changes nothing and a removal can't
     } as any);
     const id = await ctx.db.insert("communityMemberships", {
       communityId: homeId, userId: ids.payerId, role: "member", accessSource: "free_grant",
-      state: "active", active: true, activationSequence: 1, activatedAt: NOW, createdAt: NOW, updatedAt: NOW,
+      state: "active", activationSequence: 1, activatedAt: NOW, createdAt: NOW, updatedAt: NOW,
     } as any);
     return { homeId, id };
   });
@@ -129,23 +129,14 @@ test("only an active membership can end, and nothing ends a removal or a departu
   expect(update("active", false, false, "subscription_dispute_opened")).toBe("payment_hold");
 });
 
-test("rows from before `state` read as the state their old fields meant, and the backfill writes it once", async () => {
-  const old = (fields: Record<string, unknown>) =>
-    ({ _id: "m", communityId: "c", userId: "u", role: "member", createdAt: 1, updatedAt: 1, ...fields }) as any;
-  expect(communityMembershipState(old({ active: true }))).toBe("active");
-  expect(communityMembershipState(old({}))).toBe("active");
-  expect(communityMembershipState(old({ active: false, revokedAt: 5, revokedReason: "left_by_member" }))).toBe("left");
-  expect(communityMembershipState(old({ active: false, revokedAt: 5, revokedReason: "removed_by_manager_stripe_canceled" }))).toBe("removed");
-  expect(communityMembershipState(old({ active: false, revokedAt: 5, revokedReason: "banned_by_manager" }))).toBe("removed");
-  expect(communityMembershipState(old({ active: false, revokedAt: 5, revokedReason: "subscription_dispute_lost" }))).toBe("payment_hold");
-  expect(communityMembershipState(old({ active: false, revokedAt: 5, revokedReason: "subscription_canceled" }))).toBe("lapsed");
-
-  const { t, ids } = await fixture();
-  await t.run((ctx) => ctx.db.patch(ids.membershipId, {
-    state: undefined, active: false, revokedAt: NOW, revokedReason: "removed_by_manager",
-  } as any));
-  const first: any = await t.mutation(internal.communityMembershipLifecycle.backfillCommunityMembershipStateInternal, {});
-  expect(first).toMatchObject({ done: true, filled: { removed: 1 } });
-  const second: any = await t.mutation(internal.communityMembershipLifecycle.backfillCommunityMembershipStateInternal, {});
-  expect(second.filled).toEqual({});
+test("the strip clears the retired active field once and changes nothing else", async () => {
+  const { t, ids, membership } = await fixture();
+  await t.run((ctx) => ctx.db.patch(ids.membershipId, { active: true } as any));
+  const first: any = await t.mutation(internal.communityMembershipLifecycle.stripCommunityMembershipActiveInternal, {});
+  expect(first).toMatchObject({ done: true, stripped: 1 });
+  const row: any = await membership();
+  expect(row).not.toHaveProperty("active");
+  expect(row.state).toBe("active");
+  const second: any = await t.mutation(internal.communityMembershipLifecycle.stripCommunityMembershipActiveInternal, {});
+  expect(second.stripped).toBe(0);
 });

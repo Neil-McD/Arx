@@ -32,7 +32,7 @@ async function createFixture(t: ReturnType<typeof convexTest>, url = "https://ex
       inferenceFundingPolicy: "managed_required", entryPolicy: "open", activeMemberCount: 2, createdAt: NOW, updatedAt: NOW,
     });
     await ctx.db.insert("communityMemberships", {
-      communityId, userId: memberId, role: "member", accessSource: "free_grant", active: true, createdAt: NOW, updatedAt: NOW,
+      communityId, userId: memberId, role: "member", accessSource: "free_grant", state: "active", createdAt: NOW, updatedAt: NOW,
     });
     const sourceId = await ctx.db.insert("communityResources", {
       communityId, createdByUserId: ownerId, type: "link", role: "source", status: "review", title: "Founder guide",

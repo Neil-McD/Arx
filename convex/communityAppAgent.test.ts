@@ -63,7 +63,7 @@ async function fixture() {
       postingPolicy: "members", status: "active", position: 0, createdAt: nowMs, updatedAt: nowMs,
     });
     await ctx.db.insert("communityMemberships", {
-      communityId, userId: memberId, role: "member", accessSource: "free_grant", active: true,
+      communityId, userId: memberId, role: "member", accessSource: "free_grant", state: "active",
       activationSequence: 1, activatedAt: nowMs, createdAt: nowMs, updatedAt: nowMs,
     });
     const founderSubscriptionId = await ctx.db.insert("founderSubscriptions", {
@@ -403,7 +403,7 @@ test("front-end agent turns are refused without the edge, without input, or with
   expect((await f.post(COMMUNITY_APP_AGENT_PATH, f.asEdge(token), { text: "hi" })).status).toBe(400);
   await f.t.run(async (c) => {
     const membership = (await c.db.query("communityMemberships").collect()).find((row) => row.userId === f.ids.memberId)!;
-    await c.db.patch(membership._id, { active: false, revokedAt: Date.now() });
+    await c.db.patch(membership._id, { state: "lapsed", revokedAt: Date.now() });
   });
   const lost = await f.post(COMMUNITY_APP_AGENT_PATH, f.asEdge(token), { text: "hi", message_key: "lost-member-1" });
   expect(lost.status).toBe(403);

@@ -448,7 +448,7 @@ export const syncCommunitySubscriptionLifecycleInternal = internalMutation({
     const stateFields = next === before
       ? {}
       : next === "active"
-        ? { state: "active" as const, active: true, revokedAt: undefined, revokedReason: undefined, updatedAt: nowMs }
+        ? { state: "active" as const, revokedAt: undefined, revokedReason: undefined, updatedAt: nowMs }
         : endedCommunityMembershipFields({ membership, to: next, reason: revokedReason, nowMs });
     const updatedMembership = {
       ...membership,

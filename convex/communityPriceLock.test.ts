@@ -28,7 +28,7 @@ test("raising the price leaves existing members on the price they joined at", as
     } as any);
     const membershipId = await ctx.db.insert("communityMemberships", {
       communityId, userId: payerId, role: "member", accessSource: "paid_subscription", pricePointId: oldPriceId,
-      active: true, activationSequence: 1, activatedAt: NOW, createdAt: NOW, updatedAt: NOW,
+      state: "active", activationSequence: 1, activatedAt: NOW, createdAt: NOW, updatedAt: NOW,
     } as any);
     await ctx.db.insert("communitySubscriptions", {
       communityId, userId: payerId, membershipId, pricePointId: oldPriceId, source: "stripe", status: "active",
