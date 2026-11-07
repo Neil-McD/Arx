@@ -78,14 +78,19 @@ assert.doesNotMatch(
 );
 assert.match(
   typingSchema,
-  /\.index\("by_community_channel_user", \["communityId", "channelId", "userId"\]\)[\s\S]*\.index\("by_community_channel_displayUntil", \["communityId", "channelId", "displayUntil"\]\)/,
+  /\.index\("by_channel_user", \["channelId", "userId"\]\)[\s\S]*\.index\("by_channel_displayUntil", \["channelId", "displayUntil"\]\)/,
   "community typing must retain channel identity and bounded active-window indexes",
 );
 
 assert.match(
   core,
-  /renewCommunityTypingLease[\s\S]*withIndex\("by_channel_user"[\s\S]*withIndex\("by_community_channel_user"[\s\S]*ctx\.db\.patch[\s\S]*ctx\.db\.insert/,
-  "typing renewals must coalesce through General channel-user identity with legacy fallback",
+  /renewCommunityTypingLease[\s\S]*withIndex\("by_channel_user"[\s\S]*ctx\.db\.patch[\s\S]*ctx\.db\.insert/,
+  "typing renewals must coalesce through one channel-user identity",
+);
+assert.doesNotMatch(
+  core,
+  /by_community_channel_(user|displayUntil)|legacyPresence|legacyRows/,
+  "typing has no unscoped legacy fallback: every lease belongs to a channel",
 );
 assert.match(
   core,
@@ -99,8 +104,8 @@ assert.match(
 );
 assert.match(
   core,
-  /withIndex\("by_channel_displayUntil"[\s\S]*withIndex\("by_community_channel_displayUntil"[\s\S]*\.take\(COMMUNITY_TYPING_PRESENCE_SCAN_LIMIT \+ 1\)/,
-  "typing reads must merge exact General and legacy active-window indexes with bounded overfetch",
+  /withIndex\("by_channel_displayUntil"[\s\S]*\.take\(COMMUNITY_TYPING_PRESENCE_SCAN_LIMIT \+ 1\)/,
+  "typing reads must use the channel's active-window index with bounded overfetch",
 );
 assert.match(
   core,

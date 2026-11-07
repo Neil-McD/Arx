@@ -35,6 +35,8 @@ const MODULE_LOAD_ERROR_PATTERNS = [
   "chunk load failed",
   "loading css chunk",
   "css chunk load failed",
+  // An old tab calling a backend function a newer release removed: reload onto the new build.
+  "could not find public function",
   "unable to preload css",
   "preloaderror",
   "vite:preloaderror",

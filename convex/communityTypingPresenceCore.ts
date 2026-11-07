@@ -95,18 +95,7 @@ export async function renewCommunityTypingLease(args: {
       q.eq("channelId", channel._id).eq("userId", args.userId),
     )
     .first()) as CommunityTypingPresenceLike | null;
-  const legacyPresence = channel.systemRole === "general"
-    ? ((await args.ctx.db
-        .query("communityTypingPresence" as any)
-        .withIndex("by_community_channel_user", (q: any) =>
-          q
-            .eq("communityId", args.communityId)
-            .eq("channelId", undefined)
-            .eq("userId", args.userId),
-        )
-        .first()) as CommunityTypingPresenceLike | null)
-    : null;
-  const existing = channelPresence ?? legacyPresence;
+  const existing = channelPresence;
 
   if (existing) {
     const currentUpdatedAt =
@@ -163,18 +152,7 @@ export async function clearCommunityTypingLease(args: {
       q.eq("channelId", channel._id).eq("userId", args.userId),
     )
     .first()) as CommunityTypingPresenceLike | null;
-  const legacyPresence = channel.systemRole === "general"
-    ? ((await args.ctx.db
-        .query("communityTypingPresence" as any)
-        .withIndex("by_community_channel_user", (q: any) =>
-          q
-            .eq("communityId", args.communityId)
-            .eq("channelId", undefined)
-            .eq("userId", args.userId),
-        )
-        .first()) as CommunityTypingPresenceLike | null)
-    : null;
-  const existing = channelPresence ?? legacyPresence;
+  const existing = channelPresence;
   if (!existing) return { cleared: false };
   if (
     normalizeTypingRootId(existing.rootId)
@@ -259,21 +237,9 @@ export async function resolveCommunityTypingPresence(args: {
         .order("desc")
         .take(COMMUNITY_TYPING_PRESENCE_SCAN_LIMIT + 1)) as CommunityTypingPresenceLike[])
     : [];
-  const legacyRows = channel.systemRole === "general"
-    ? ((await args.ctx.db
-        .query("communityTypingPresence" as any)
-        .withIndex("by_community_channel_displayUntil", (q: any) =>
-          q
-            .eq("communityId", args.community._id)
-            .eq("channelId", undefined)
-            .gt("displayUntil", nowMs),
-        )
-        .order("desc")
-        .take(COMMUNITY_TYPING_PRESENCE_SCAN_LIMIT + 1)) as CommunityTypingPresenceLike[])
-    : [];
   const rows = Array.from(
     new Map(
-      [...channelRows, ...legacyRows]
+      channelRows
         .filter((row) => interactionBelongsToChannel(row, channel))
         .map((row) => [normalizeIdValue(row._id), row]),
     ).values(),
