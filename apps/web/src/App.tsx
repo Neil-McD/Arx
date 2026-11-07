@@ -5,7 +5,6 @@ import {
   Suspense,
 } from "react";
 import "highlight.js/styles/github-dark.css";
-import { WebCommunityNextStep } from "./components/WebCommunityNextStep";
 import {
   beginBrowserSignedOutState,
   type AuthSession,
@@ -57,7 +56,6 @@ import { useWebAccountGraphLifecycle } from "./controllers/useWebAccountGraphLif
 import { useWebAuthenticatedIdentityController } from "./controllers/useWebAuthenticatedIdentityController";
 import { useWebCommunityMemberManagementController } from "./controllers/useWebCommunityMemberManagementController";
 import { useWebCommunityAgentSettingsController } from "./controllers/useWebCommunityAgentSettingsController";
-import { useWebCommunityWorkflowsController } from "./controllers/useWebCommunityWorkflowsController";
 import { useWebCommunitySettingsController } from "./controllers/useWebCommunitySettingsController";
 import { useWebShellState } from "./controllers/useWebShellState";
 import { useWebOnboardingProfileController } from "./controllers/useWebOnboardingProfileController";
@@ -958,14 +956,6 @@ export default function App() {
   const {
     handleSaveCommunityAgentConfig,
   } = communityAgentSettings;
-  const communityWorkflows = useWebCommunityWorkflowsController({
-    activeCommunityId,
-    activePage,
-    canManageMembers: canManageMembersActiveCommunity,
-    communityTab,
-    ensureSession: ensureUsableAuthSession,
-    session,
-  });
   const communitySettingsController = useWebCommunitySettingsController({
     activeCommunity,
     activeCommunityId,
@@ -1816,46 +1806,6 @@ export default function App() {
         markCommunityAgentConfigDirty,
       },
       aiAgentHandbookEditorProps: { communityId: activeCommunityId, session, ensureSession: ensureUsableAuthSession },
-      workflows: {
-        forms: communityWorkflows.forms,
-        channels: activeCommunityChannels.filter((channel) => channel.id && channel.community_id === activeCommunityId),
-        channelsUnavailable: isLoadingActiveCommunityChannels || Boolean(activeCommunityChannelsError),
-        board: communityWorkflows.board,
-        members: communityWorkflows.members,
-        totalCount: communityWorkflows.totalCount,
-        hasMore: communityWorkflows.hasMore,
-        hasLoaded: communityWorkflows.hasLoaded,
-        isLoading: communityWorkflows.isLoading,
-        isLoadingMore: communityWorkflows.isLoadingMore,
-        error: communityWorkflows.error,
-        isSaving: communityWorkflows.isSaving,
-        actionError: communityWorkflows.actionError,
-        selectedMembershipId: communityWorkflows.selectedMembershipId,
-        memberDossier: communityWorkflows.memberDossier,
-        isMemberDossierLoading: communityWorkflows.isMemberDossierLoading,
-        memberDossierError: communityWorkflows.memberDossierError,
-        onReload: communityWorkflows.reload,
-        onLoadMore: communityWorkflows.loadMore,
-        onCreateMilestone: communityWorkflows.createMilestone,
-        onUpdateMilestone: communityWorkflows.updateMilestone,
-        onDeleteMilestone: communityWorkflows.deleteMilestone,
-        onClearActionError: communityWorkflows.clearActionError,
-        onOpenMemberDossier: communityWorkflows.openMemberDossier,
-        onCloseMemberDossier: communityWorkflows.closeMemberDossier,
-        onRetryMemberDossier: communityWorkflows.retryMemberDossier,
-        isServiceChannelSaving: communityWorkflows.isServiceChannelSaving,
-        serviceChannelError: communityWorkflows.serviceChannelError,
-        onSetServiceChannel: communityWorkflows.setServiceChannel,
-        onForceMove: communityWorkflows.forceMove,
-        onApproveMilestone: communityWorkflows.approveMilestone,
-        onRetryGoalReview: communityWorkflows.retryGoalReview,
-        onOpenServiceChannel: (expectedChannelId: string) => communityWorkflows.openServiceChannel(expectedChannelId, (channelId) => {
-          const channel = activeCommunityChannels.find(item => item.id === channelId && item.community_id === activeCommunityId);
-          if (!channel) return;
-          const path = buildCommunityTabPath(selectedActiveCommunitySlug, "chat", null, null, channel.slug);
-          if (path) { communityWorkflows.closeMemberDossier(); navigateTo(path); }
-        }),
-      },
       canViewActiveCommunityAnalytics,
       canViewPlatformAnalytics: hasOperatorAccess,
       analyticsState: {
@@ -2395,8 +2345,6 @@ export default function App() {
     communityTab,
     communityTabIndicators,
     communityChannels: activeCommunityChannels,
-    memberNextStep: session && activeCommunityId && canViewMembersActiveCommunity && !isPublicCommunityFunnel
-      ? <WebCommunityNextStep key={`${activeCommunityId}:${session.user.id}`} communityId={activeCommunityId} session={session} ensureSession={ensureUsableAuthSession} /> : null,
     isLoadingCommunityChannels: isLoadingActiveCommunityChannels,
     selectedCommunityChannelSlug: activeCommunityChannelSlug,
     communityChannelIndicators,

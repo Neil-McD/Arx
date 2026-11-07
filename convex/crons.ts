@@ -44,8 +44,6 @@ crons.interval(
   {},
 );
 
-crons.interval("advance due workflow milestones", { minutes: 1 },
-  internal.communityMemberWorkflows.processDueMilestoneTimersInternal, {});
 
 // The founder's daily brief: due when the founder's local hour arrives.
 crons.interval("send due founder briefs", { minutes: 15 },

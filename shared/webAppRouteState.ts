@@ -66,7 +66,6 @@ export type WebDestination =
   | { kind: "community_events"; slug: string }
   | { kind: "community_agent"; slug: string }
   | { kind: "community_settings"; slug: string; pane: CommunitySettingsPane }
-  | { kind: "community_workflows"; slug: string }
   | { kind: "community_analytics"; slug: string };
 
 export const DEFAULT_POST_SIGN_IN_PATH = "/";
@@ -658,8 +657,6 @@ export function deriveWebDestinationFromAppRoute(
             slug,
             pane: parseCommunitySettingsPane(route.communitySettingsPane),
           };
-        case "workflows":
-          return { kind: "community_workflows", slug };
         case "analytics":
           return { kind: "community_analytics", slug };
       }
@@ -706,7 +703,6 @@ export function isWebCommunityDetailDestination(
     case "community_events":
     case "community_agent":
     case "community_settings":
-    case "community_workflows":
     case "community_analytics":
       return true;
     default:
@@ -733,7 +729,6 @@ export function webDestinationHasCommunityNavSelection(
     case "community_events":
     case "community_agent":
     case "community_settings":
-    case "community_workflows":
     case "community_analytics":
       return true;
     default:

@@ -207,7 +207,6 @@ describe("canonical web destinations", () => {
     ["/m/c/polynet/resources/module-1", { kind: "community_resources", slug: "polynet", moduleId: "module-1" }],
     ["/m/c/polynet/events", { kind: "community_events", slug: "polynet" }],
     ["/m/c/polynet/settings/agent", { kind: "community_settings", slug: "polynet", pane: "agent" }],
-    ["/m/c/polynet/workflows", { kind: "community_workflows", slug: "polynet" }],
     ["/m/c/polynet/funnel", { kind: "community_settings", slug: "polynet", pane: "community" }],
     ["/m/c/polynet/analytics", { kind: "community_analytics", slug: "polynet" }],
   ] as const)("derives %s without changing desktop/mobile semantics", (path, expected) => {
@@ -264,10 +263,6 @@ describe("canonical web destinations", () => {
     })).toBe(true);
     expect(webDestinationHasCommunityNavSelection({
       kind: "community_events",
-      slug: "polynet",
-    })).toBe(true);
-    expect(webDestinationHasCommunityNavSelection({
-      kind: "community_workflows",
       slug: "polynet",
     })).toBe(true);
   });

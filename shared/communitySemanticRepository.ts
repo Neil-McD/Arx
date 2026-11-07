@@ -34,7 +34,6 @@ export const POLYNET_BUILDER_TAGS_DIRECTORY_PATH = "/builder/tags/";
 export function isBuilderTagsDirectoryPath(value: string): boolean {
   return value === POLYNET_BUILDER_TAGS_DIRECTORY_PATH || /^\/builder\/tags\/[a-z0-9-]{1,40}\/$/.test(value);
 }
-export const WORKFLOW_MEMBERS_DIRECTORY = "/builder/workflow-members/";
 export const POLYNET_BUILDER_RESOURCES_DIRECTORY_PATH = "/builder/resources/";
 
 export type ParsedCommunityChannelSemanticPath =
@@ -376,7 +375,6 @@ export function parsePolynetSemanticPath(value: unknown) {
       value !== POLYNET_CAPABILITIES_DIRECTORY_PATH &&
       value !== POLYNET_BUILDER_DIRECTORY_PATH &&
       value !== POLYNET_JOIN_REQUESTS_DIRECTORY_PATH &&
-      value !== WORKFLOW_MEMBERS_DIRECTORY &&
       value !== POLYNET_BUILDER_RESOURCES_DIRECTORY_PATH &&
       !isBuilderTagsDirectoryPath(value)) ||
     value.split("/").some((part) => part === "." || part === "..")
@@ -411,8 +409,6 @@ export function parsePolynetSemanticPath(value: unknown) {
     value === POLYNET_BUILDER_COMMUNITY_PATH ||
     isBuilderTagsDirectoryPath(value) ||
     /^\/builder\/join-requests\/[A-Za-z0-9]+\.md$/.test(value) ||
-    value === WORKFLOW_MEMBERS_DIRECTORY ||
-    /^\/builder\/workflow-members\/[A-Za-z0-9]+(?:\.md|\/forms\.md)$/.test(value) ||
     /^\/events\/event:[A-Za-z0-9_-]+:[0-9]{1,16}\.md$/.test(value) ||
     /^\/memory\/[A-Za-z0-9_-]+\.md$/.test(value) ||
     /^\/integrations\/hubspot\/contacts\/[0-9]{1,32}$/.test(value) ||
@@ -493,7 +489,6 @@ export function validateCommunitySemanticOperationInput(args: {
     }
     const listable =
       parsed.path === POLYNET_JOIN_REQUESTS_DIRECTORY_PATH ||
-      parsed.path === WORKFLOW_MEMBERS_DIRECTORY ||
       parsed.path === POLYNET_SEMANTIC_ROOT_PATH ||
       parsed.path === POLYNET_MEMBERS_DIRECTORY_PATH ||
       parsed.path === POLYNET_RESOURCES_DIRECTORY_PATH ||
@@ -601,14 +596,14 @@ export function validatePolynetSemanticRepositoryOperationInput(args: {
   if (repositoryPath.kind === "community") {
     // This self-only subtree is served by the canonical executor, not the
     // legacy local-path reader. Reuse fixed document/directory input rules.
-    if (repositoryPath.localPath === "/members/me/forms/" || /^\/members\/me\/forms\/[A-Za-z0-9]+\.json$/.test(repositoryPath.localPath) ||
+    if (
       // Who is online, and members' profiles as JSON, are executor documents too.
       repositoryPath.localPath === POLYNET_PRESENCE_DOCUMENT_PATH ||
       /^\/members\/(?:by-user\/[A-Za-z0-9_-]+|[^/]+)\.json$/.test(repositoryPath.localPath) ||
       // A member's activity (members/<handle>/timeline.md) and the approved handbook too.
       MEMBER_TIMELINE_PATH.test(repositoryPath.localPath) || repositoryPath.localPath === COMMUNITY_HANDBOOK_PATH) {
       const validated = validateCommunitySemanticOperationInput({ ...args,
-        path: repositoryPath.localPath === "/members/me/forms/" ? POLYNET_JOIN_REQUESTS_DIRECTORY_PATH : "/community.md" });
+        path: "/community.md" });
       if (!validated.ok) return validated;
       // A timeline pages by offset (whole readable items, 0-500).
       if (args.operation === "read" && MEMBER_TIMELINE_PATH.test(repositoryPath.localPath) && args.offset !== undefined && args.offset !== null) {

@@ -49,7 +49,6 @@ export const COMMUNITY_TABS = [
   "resources",
   "events",
   "settings",
-  "workflows",
   "analytics",
 ] as const;
 
@@ -76,8 +75,6 @@ export function isCommunityTabAllowedForAccess(
   switch (tab) {
     case "settings":
       return access.canViewSettings;
-    case "workflows":
-      return access.canManageMembers;
     case "analytics":
       return access.canViewAnalytics;
     case "chat":
@@ -115,10 +112,6 @@ export function parseCommunityTab(
       return "events";
     case "settings":
       return "settings";
-    case "workflows":
-    case "workflow":
-    case "success":
-      return "workflows";
     case "agent":
       return "agent";
     case "ai_agent":

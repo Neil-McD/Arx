@@ -5,7 +5,6 @@ import {
   ChevronDown,
   ChevronUp,
   ExternalLink,
-  GitFork,
   GripVertical,
   Hash,
   LockKeyhole,
@@ -40,7 +39,6 @@ type CommunityNavChannel = {
 };
 
 type CommunityNavProps = {
-  memberNextStep?: ReactNode;
   activeCommunity: CommunityNavCommunityLike;
   hideIdentity?: boolean;
   hideIdentitySettings?: boolean;
@@ -166,7 +164,6 @@ export const CommunityNav = memo(function CommunityNav({
   canViewActiveCommunityAnalytics,
   isLoadingAccess = false,
   onSelectTab,
-  memberNextStep,
   onCopyCommunityJoinLink,
   channels = [],
   isLoadingChannels = false,
@@ -427,7 +424,6 @@ export const CommunityNav = memo(function CommunityNav({
           />
         </div>
       ) : null}
-      {memberNextStep}
       <div
         className="community-channel-list"
         aria-label="Channels"
@@ -618,19 +614,6 @@ export const CommunityNav = memo(function CommunityNav({
       ) : showManagementSection ? (
         <>
           <div className="community-nav-divider" />
-          {canManageMembersActiveCommunity && (
-            <button
-              className={showActiveSelection && communityTab === "workflows" ? "nav-item active" : "nav-item"}
-              type="button"
-              onClick={() => onSelectTab("workflows")}
-              title="Workflows"
-            >
-              <span className="nav-icon" aria-hidden="true">
-                <GitFork size={18} strokeWidth={1.7} />
-              </span>
-              Workflows
-            </button>
-          )}
           {canViewActiveCommunityAnalytics && (
             <button
               className={showActiveSelection && communityTab === "analytics" ? "nav-item active" : "nav-item"}

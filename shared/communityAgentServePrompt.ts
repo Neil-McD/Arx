@@ -1,6 +1,5 @@
 import { COMMUNITY_NOTES_SHARING_RULES } from "./communityNotes.ts";
 import type { NativeToolAwareMessage } from "./nativeToolProtocol";
-import { WORKFLOW_ASSESSMENT_POLICY } from "./communityWorkflowAssessment";
 import { buildCommunityAgentIdentityPrompt } from "./communityAgentRuntimeBoundary";
 import {
   compileRuntimePromptSections,
@@ -52,7 +51,7 @@ export function buildCommunityAgentServePromptBundle(
   ).trim()}/`;
   const workflowInstructions = String(context.workflowPrompt ?? "").trim();
   const timed = context.delivery === "service_channel";
-  const operatingPolicy = (context.privateAssessment ? [WORKFLOW_ASSESSMENT_POLICY] : timed ? [
+  const operatingPolicy = (timed ? [
     "Write one proactive check-in in the member's assigned service channel. This is not a reply to a member message.",
     "Use only the supplied community and workflow instructions and member-facing context. Tools are unavailable for this check-in.",
     "Personalize help using relevant approved facts, without reciting a profile. Stated goals and preferences are not evidence of completed work. Missing or truncated context is not evidence of inactivity.",
