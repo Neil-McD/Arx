@@ -909,6 +909,15 @@ export default defineSchema({
       ),
     ),
     pricePointId: v.optional(v.id("communityPricePoints")),
+    // See CommunityMembershipState in communityCore. Optional only until the
+    // backfill has given every row a state; then active is dropped.
+    state: v.optional(v.union(
+      v.literal("active"),
+      v.literal("left"),
+      v.literal("removed"),
+      v.literal("lapsed"),
+      v.literal("payment_hold"),
+    )),
     active: v.optional(v.boolean()),
     activationSequence: v.optional(v.number()),
     activatedAt: v.optional(v.number()),
@@ -923,7 +932,8 @@ export default defineSchema({
     .index("by_community_user", ["communityId", "userId"])
     .index("by_community_createdAt", ["communityId", "createdAt"])
     // Who holds a role (the community card names its admins and moderators).
-    .index("by_community_role_active", ["communityId", "role", "active"]),
+    .index("by_community_role_active", ["communityId", "role", "active"])
+    .index("by_community_role_state", ["communityId", "role", "state"]),
 
 
 
@@ -991,9 +1001,9 @@ export default defineSchema({
   communityJoinRequests: defineTable({
     communityId: v.id("communities"),
     userId: v.id("users"),
-    // Migration compatibility only. Tighten this to the canonical pending/denied
-    // union and remove message after the production preflight + migration receipt.
-    status: v.string(),
+    // Code writes pending and denied; approved and canceled are old rows that
+    // readers skip (an approved request becomes a membership and is deleted).
+    status: v.union(v.literal("pending"), v.literal("denied"), v.literal("approved"), v.literal("canceled")),
     message: v.optional(v.string()),
     deniedAt: v.optional(v.number()),
     reapplyAt: v.optional(v.number()),

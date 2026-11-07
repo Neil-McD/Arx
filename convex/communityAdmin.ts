@@ -13,6 +13,7 @@ import {
   type CommunitySubscriptionLike,
   adjustCommunityActiveMemberCountForMembershipTransition,
   communityMembershipRowIsActive,
+  communityMembershipState,
   communitySubscriptionStatusGrantsAccess,
   countCanonicalCommunityMembers,
   getCommunityAndMembership,
@@ -56,6 +57,7 @@ import {
 import { cancelStripeSubscriptionAtPeriodEnd, cancelStripeSubscriptionIfActive } from "./stripeSubscriptionCancellation";
 import {
   activateCommunityMembershipCore,
+  endedCommunityMembershipFields,
 } from "./communityMembershipLifecycle";
 import { deleteCommunityReadCursorsForUserCommunity } from "./communityReadCursorCore";
 import { deleteCommunityPresenceForUser } from "./communityPresenceCore";
@@ -1668,9 +1670,7 @@ export const revokeCommunityMemberInternal = internalMutation({
           actorUserId: userId,
           targetMembership: membership,
         });
-        const alreadyManagerRevoked =
-          !communityMembershipRowIsActive(membership) &&
-          String(membership.revokedReason ?? "").startsWith("removed_by_manager");
+        const alreadyManagerRevoked = communityMembershipState(membership) === "removed";
         if (!communityMembershipRowIsActive(membership) && !alreadyManagerRevoked) {
           return { ok: true };
         }
@@ -1687,20 +1687,12 @@ export const revokeCommunityMemberInternal = internalMutation({
             nowMs,
           });
         }
-        const revokedMembership = {
-          ...membership,
-          active: false,
-          revokedAt,
-          revokedReason,
-          updatedAt: alreadyManagerRevoked ? membership.updatedAt : nowMs,
-        } as CommunityMembershipLike;
-        if (!alreadyManagerRevoked) {
-          await ctx.db.patch(membership._id as any, {
-            active: false,
-            revokedAt,
-            revokedReason,
-            updatedAt: nowMs,
-          });
+        const removal = alreadyManagerRevoked
+          ? null
+          : endedCommunityMembershipFields({ membership, to: "removed", reason: revokedReason, nowMs });
+        const revokedMembership = { ...membership, ...removal } as CommunityMembershipLike;
+        if (removal) {
+          await ctx.db.patch(membership._id as any, removal);
           await adjustCommunityActiveMemberCountForMembershipTransition({
             ctx,
             communityId: args.communityId,
@@ -2333,22 +2325,12 @@ async function leaveCommunityForUser(ctx: any, args: { communityId: any; userId:
         const preservePlatformHomeRelationship = isPlatformHomeCommunity({
           communitySlug: community.slug,
         });
-        const after = preservePlatformHomeRelationship
-          ? ({
-              ...membership,
-              active: false,
-              revokedAt: nowMs,
-              revokedReason: PLATFORM_HOME_MEMBER_LEFT_REVOKED_REASON,
-              updatedAt: nowMs,
-            } as CommunityMembershipLike)
+        const leaving = preservePlatformHomeRelationship
+          ? endedCommunityMembershipFields({ membership, to: "left", reason: PLATFORM_HOME_MEMBER_LEFT_REVOKED_REASON, nowMs })
           : null;
-        if (after) {
-          await ctx.db.patch(membership._id as any, {
-            active: false,
-            revokedAt: nowMs,
-            revokedReason: PLATFORM_HOME_MEMBER_LEFT_REVOKED_REASON,
-            updatedAt: nowMs,
-          });
+        const after = leaving ? ({ ...membership, ...leaving } as CommunityMembershipLike) : null;
+        if (leaving) {
+          await ctx.db.patch(membership._id as any, leaving);
         } else {
           await ctx.db.delete(membership._id as any);
         }

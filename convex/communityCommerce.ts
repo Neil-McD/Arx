@@ -20,6 +20,7 @@ import {
   adjustCommunityActiveMemberCountForMembershipTransition,
   type CommunityMembershipLike,
   communityMembershipRowIsActive,
+  communityMembershipState,
   communitySubscriptionStatusGrantsAccess,
   normalizeCommunitySubscriptionStatus,
   parseIsoMs,
@@ -27,6 +28,10 @@ import {
   requireCommunityUserNotBlocked,
   resolveCommunityEntryPolicy,
 } from "./communityCore";
+import {
+  communityMembershipStateAfterSubscriptionUpdate,
+  endedCommunityMembershipFields,
+} from "./communityMembershipLifecycle";
 import { enqueueCommunityBillingIssueEmailInternal } from "./emailEvents";
 import { recordCriticalAuditEventBestEffort } from "./criticalAudit";
 import {
@@ -431,44 +436,35 @@ export const syncCommunitySubscriptionLifecycleInternal = internalMutation({
     const grantsAccess = communitySubscriptionStatusGrantsAccess(status);
     const revokedReason = String(args.revokedReason ?? "")
       .trim()
-      .slice(0, 160);
-    const existingRevokedReason = String(membership.revokedReason ?? "").trim();
-    const shouldPreserveRiskRevocation =
-      grantsAccess &&
-      args.preserveRiskRevocation === true &&
-      membership.active === false &&
-      (
-        existingRevokedReason === "subscription_refunded" ||
-        existingRevokedReason === "subscription_dispute_opened" ||
-        existingRevokedReason === "subscription_dispute_lost"
-      );
-    const wasActive = communityMembershipRowIsActive(membership);
-    const willBeActive = !shouldPreserveRiskRevocation && grantsAccess;
+      .slice(0, 160) || `subscription_${status}`;
+    const before = communityMembershipState(membership)!;
+    const next = communityMembershipStateAfterSubscriptionUpdate({
+      current: before,
+      grantsAccess,
+      liftsHold: args.preserveRiskRevocation !== true,
+      reason: revokedReason,
+    });
+    const reactivated = before !== "active" && next === "active";
+    const stateFields = next === before
+      ? {}
+      : next === "active"
+        ? { state: "active" as const, active: true, revokedAt: undefined, revokedReason: undefined, updatedAt: nowMs }
+        : endedCommunityMembershipFields({ membership, to: next, reason: revokedReason, nowMs });
     const updatedMembership = {
       ...membership,
       pricePointId,
-      active: willBeActive,
-      activationSequence:
-        !wasActive && willBeActive
-          ? Math.max(0, Math.floor(Number(membership.activationSequence ?? 0))) + 1
-          : membership.activationSequence,
-      activatedAt:
-        !wasActive && willBeActive ? nowMs : membership.activatedAt,
-      revokedAt: shouldPreserveRiskRevocation
-        ? membership.revokedAt ?? nowMs
-        : grantsAccess ? undefined : nowMs,
-      revokedReason: shouldPreserveRiskRevocation
-        ? existingRevokedReason
-        : grantsAccess ? undefined : revokedReason || `subscription_${status}`,
+      ...stateFields,
+      activationSequence: reactivated
+        ? Math.max(0, Math.floor(Number(membership.activationSequence ?? 0))) + 1
+        : membership.activationSequence,
+      activatedAt: reactivated ? nowMs : membership.activatedAt,
       updatedAt: nowMs,
     } as CommunityMembershipLike;
     await ctx.db.patch(membership._id, {
       pricePointId,
-      active: updatedMembership.active,
+      ...stateFields,
       activationSequence: updatedMembership.activationSequence,
       activatedAt: updatedMembership.activatedAt,
-      revokedAt: updatedMembership.revokedAt,
-      revokedReason: updatedMembership.revokedReason,
       updatedAt: nowMs,
     });
     await adjustCommunityActiveMemberCountForMembershipTransition({

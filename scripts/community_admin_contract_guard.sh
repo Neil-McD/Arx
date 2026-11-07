@@ -401,7 +401,7 @@ require_multiline_match "$STRIPE_SUBSCRIPTION_CANCELLATION_FILE" \
   'stripe\.subscriptions\.cancel\(subscriptionId, \{\}, options\)' \
   "canonical cancellation reaches Stripe with request scope"
 require_multiline_match "$COMMUNITY_ADMIN_FILE" \
-  'await ctx\.db\.patch\(membership\._id as any, \{\s*active: false,\s*revokedAt: nowMs,\s*revokedReason:' \
+  'endedCommunityMembershipFields\(\{ membership, to: "removed"[\s\S]*?await ctx\.db\.patch\(membership\._id as any, removal\)' \
   "remove member preserves revoked membership row"
 if ! awk '
   /export const revokeCommunityMemberInternal = internalMutation\(/ { in_block = 1 }
