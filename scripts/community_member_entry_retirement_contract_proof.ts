@@ -63,8 +63,8 @@ assert.deepEqual(
   { kind: "community_chat", slug: "polynet", channelSlug: null },
 );
 
-assert.match(schema, /communityOnboardingConfigs: defineTable/);
-assert.match(schema, /communityOnboardingSessions: defineTable/);
+// The retired onboarding tables were emptied and dropped (Nov 7 2026).
+assert.doesNotMatch(schema, /communityOnboardingConfigs: defineTable|communityOnboardingSessions: defineTable/);
 assert.match(contract, /does not create a separate onboarding\s+session/);
 
 console.log("community member entry retirement contract: PASS");
