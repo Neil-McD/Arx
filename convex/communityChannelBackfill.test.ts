@@ -589,3 +589,32 @@ test("dry-run detects a General slug collision before any write", async () => {
     expect(await ctx.db.query("communityChannels").collect()).toHaveLength(1);
   });
 });
+
+// The operator's runner (no founder identity) is the same backfill: a dry run
+// unless told otherwise, and only an explicit dryRun: false writes.
+test("the operator runner dry-runs by default and writes only when told", async () => {
+  const t = convexTest(schema, import.meta.glob(["./**/*.ts", "!./**/*.test.ts"]));
+  const { communityId, rootId } = await t.run(async (ctx) => {
+    const ownerId = await ctx.db.insert("users", {
+      authSubject: "runner-owner", displayName: "Owner", handle: "runner-owner", normalizedHandle: "runner-owner", createdAt: 1_000, updatedAt: 1_000,
+    });
+    const communityId = await ctx.db.insert("communities", {
+      ownerId, slug: "runner", name: "Runner", visibility: "unlisted", inferenceFundingPolicy: "managed_required",
+      entryPolicy: "open", activeMemberCount: 1, createdAt: 1_000, updatedAt: 1_000,
+    });
+    const rootId = await ctx.db.insert("communityInteractionRoots", {
+      communityId, actorType: "human", actorUserId: ownerId, kind: "discussion", status: "live", visibilityScope: "community",
+      contentSummary: "Legacy root", replyCount: 0, reactionSummary: [], idempotencyKey: "runner-root", createdAt: 2_000, updatedAt: 2_000,
+    });
+    return { communityId, rootId };
+  });
+  const { internal } = await import("./_generated/api");
+  const run = (dryRun?: boolean) => t.mutation(internal.communityChannelBackfill.backfillGeneralChannelBatchInternal, {
+    communityId, phase: "roots", paginationOpts: { numItems: 50, cursor: null }, ...(dryRun === undefined ? {} : { dryRun }),
+  });
+  expect(await run()).toMatchObject({ wouldUpdate: 1 });
+  expect((await t.run((ctx) => ctx.db.get(rootId)))?.channelId).toBeUndefined();
+  expect(await run(false)).toMatchObject({ updated: 1 });
+  expect((await t.run((ctx) => ctx.db.get(rootId)))?.channelId).toBeDefined();
+  expect(await run()).toMatchObject({ wouldUpdate: 0, invalid: 0 });
+});
