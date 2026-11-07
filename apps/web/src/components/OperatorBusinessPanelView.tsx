@@ -47,7 +47,7 @@ export function OperatorBusinessPanelView(props: {
   const platformRevenueNote =
     businessKpis?.revenue.platformNetRevenueAvailability === "available"
       ? "Net platform revenue in the selected window."
-      : "Current platform net revenue is not instrumented; retired tool-credit sales are excluded.";
+      : "Current platform net revenue is not instrumented.";
   const communityRevShareNote =
     businessKpis?.revenue.communityPlatformRevShareAvailability === "estimated_from_current_fee_policy"
       ? "Estimated Polynet share of completed community checkouts."
@@ -156,21 +156,6 @@ export function OperatorBusinessPanelView(props: {
           {businessKpis?.revenue.platformNetRevenueAvailability !== "available" ? (
             <div className="operator-dashboard__empty">Community subscription revenue stays in Communities until platform fee/revenue-share attribution is instrumented.</div>
           ) : null}
-        </div>
-      </section>
-
-      <section className="operator-dashboard__panel">
-        <h2>Historical tool-credit liabilities</h2>
-        <div className="operator-dashboard__table">
-          <div className="operator-dashboard__row">
-            <span>Archived top-up starts</span>
-            <strong>{props.monetization?.creditTopupCheckoutStarts ?? 0}</strong>
-          </div>
-          <div className="operator-dashboard__row">
-            <span>Archived top-up completions</span>
-            <strong>{props.monetization?.creditTopupCheckoutCompletions ?? 0}</strong>
-          </div>
-          <div className="operator-dashboard__empty">Audit evidence only; this product is retired.</div>
         </div>
       </section>
 

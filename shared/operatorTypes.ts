@@ -133,8 +133,6 @@ export type OperatorAccountSetupSnapshot = {
 
 export type OperatorMonetizationSnapshot = {
   computedAt: number;
-  creditTopupCheckoutStarts: number;
-  creditTopupCheckoutCompletions: number;
   communityCheckoutStarts: number;
   communityCheckoutCompletions: number;
   activeCommunitySubscriptions: number;
@@ -151,7 +149,6 @@ export type OperatorMonetizationSnapshot = {
       total: number;
       newInRange: number;
       activePayingCustomers: number;
-      usageBuyersInRange: number;
       checkoutPurchasersInRange: number;
       knownPayingCustomers: number;
       visitorToUserConversionRate: number | null;
@@ -176,7 +173,6 @@ export type OperatorMonetizationSnapshot = {
       communityCheckoutRevenueInRange: OperatorMoneyMetric | null;
       communityPlatformRevShareInRange: OperatorMoneyMetric | null;
       communityPlatformRevShareAvailability: "estimated_from_current_fee_policy" | "not_instrumented";
-      creditTopupRevenueInRange: OperatorMoneyMetric | null;
       grossRevenueInRange: OperatorMoneyMetric | null;
       averageRecordedLifetimeValue: OperatorMoneyMetric | null;
       platformNetRevenueInRange: OperatorMoneyMetric | null;
@@ -191,8 +187,6 @@ export type OperatorMonetizationSnapshot = {
       expired: number;
       communityStarts: number;
       communityCompletions: number;
-      creditTopupStarts: number;
-      creditTopupCompletions: number;
     };
     email: {
       sent: number;

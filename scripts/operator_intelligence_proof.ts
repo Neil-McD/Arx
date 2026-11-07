@@ -87,10 +87,10 @@ assert.ok(
 );
 assert.match(operatorTypes, /export type OperatorOverviewSnapshot = /, "operator overview contract is missing");
 assert.match(operatorTypes, /export type OperatorMonetizationSnapshot = /, "operator monetization contract is missing");
-assert.match(
+assert.doesNotMatch(
   operatorTypes,
-  /creditTopupCheckoutStarts: number/,
-  "operator monetization should retain historical credit top-up starts for reconciliation",
+  /creditTopup|usageBuyers/,
+  "retired credit top-ups are gone from operator monetization (rows deleted Nov 7; Stripe keeps the history)",
 );
 assert.doesNotMatch(
   operatorTypes,
@@ -152,11 +152,6 @@ assert.match(
   "operator checkout starts must include expired checkout sessions",
 );
 assert.match(
-  operatorIntelligence,
-  /row\.mode === "workspace_credit_topup"/,
-  "operator monetization should retain the retired checkout classifier for historical audit",
-);
-assert.match(
   operatorTypes,
   /businessKpis\?:/,
   "operator monetization should expose the canonical business KPI contract",
@@ -175,11 +170,6 @@ assert.doesNotMatch(
   operatorTypes,
   /accountSetupCompleted: number|accountSetupCompletionRate: number \| null/,
   "operator monetization KPIs must not duplicate account setup snapshot fields",
-);
-assert.match(
-  operatorTypes,
-  /usageBuyersInRange: number/,
-  "operator business KPIs should expose usage buyers",
 );
 assert.match(
   operatorTypes,

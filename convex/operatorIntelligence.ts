@@ -2,7 +2,6 @@ import { internalQuery } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { v } from "convex/values";
 import { sanitizeCriticalAuditMetadata } from "./criticalAudit";
-import { WORKSPACE_CREDITS_PER_USD } from "../shared/historicalToolCredits";
 import {
   ACCOUNT_SETUP_MISSING_FIELDS,
   ACCOUNT_SETUP_STEPS,
@@ -342,15 +341,6 @@ function applyBpsToMoneyMetric(metric: MoneyMetric | null, bps: number): MoneyMe
   };
 }
 
-function moneyFromUsd(value: number): MoneyMetric | null {
-  const dollars = Number(value);
-  if (!Number.isFinite(dollars) || dollars <= 0) return null;
-  return {
-    currency: "usd",
-    amountBaseUnits: Math.round(dollars * 100),
-    currencyDecimals: 2,
-  };
-}
 
 function moneyFromCheckout(row: any): MoneyMetric | null {
   const amountBaseUnits = Number(row?.amountBaseUnits ?? 0);
@@ -1138,8 +1128,6 @@ export const getOperatorMonetizationInternal = internalQuery({
     const completedCommunityCheckouts = checkouts.filter(
       (row: any) => row.status === "complete" && row.mode === "community_join",
     );
-    const creditTopupCheckouts = inRangeCheckouts.filter((row: any) => row.mode === "workspace_credit_topup");
-    const creditTopupCompletions = creditTopupCheckouts.filter((row: any) => row.status === "complete");
     const communityJoinCheckouts = inRangeCheckouts.filter((row: any) => row.mode === "community_join");
     const communityJoinCompletions = communityJoinCheckouts.filter((row: any) => row.status === "complete");
     const totalCompletions = communityJoinCompletions.length;
@@ -1158,11 +1146,6 @@ export const getOperatorMonetizationInternal = internalQuery({
     for (const row of communityJoinCompletions) {
       const userId = String(row.ownerUserId ?? "");
       if (accountUserIds.has(userId)) checkoutPurchaserIds.add(userId);
-    }
-    const usageBuyerIds = new Set<string>();
-    for (const row of creditTopupCompletions) {
-      const userId = String(row.ownerUserId ?? "");
-      if (accountUserIds.has(userId)) usageBuyerIds.add(userId);
     }
     const knownPayingCustomerIds = new Set<string>([
       ...Array.from(activePayingCustomerIds),
@@ -1191,11 +1174,6 @@ export const getOperatorMonetizationInternal = internalQuery({
         ),
       );
     }
-    const creditTopupRevenueInRange = creditTopupCompletions.reduce((total: MoneyMetric | null, row: any) => {
-      const credits = Number(row.workspaceCreditsAmount ?? 0);
-      const usd = credits > 0 ? credits / WORKSPACE_CREDITS_PER_USD : 0;
-      return addMoney(total, moneyFromUsd(usd));
-    }, null);
     const lifetimeCommunityCheckoutRevenue = completedCommunityCheckouts
       .reduce((total: MoneyMetric | null, row: any) => addMoney(total, moneyFromCheckout(row)), null);
     const emailSent = inRangeEmailOutboxRows.filter((row: any) => row.status === "sent").length;
@@ -1221,8 +1199,6 @@ export const getOperatorMonetizationInternal = internalQuery({
     const grossRevenueInRange = communityCheckoutRevenueInRange;
     return {
       computedAt: nowMs,
-      creditTopupCheckoutStarts: creditTopupCheckouts.length,
-      creditTopupCheckoutCompletions: creditTopupCompletions.length,
       communityCheckoutStarts: communityJoinCheckouts.length,
       communityCheckoutCompletions: communityJoinCompletions.length,
       activeCommunitySubscriptions: activeSubscriptions.length,
@@ -1239,7 +1215,6 @@ export const getOperatorMonetizationInternal = internalQuery({
           total: accountUsers.length,
           newInRange: newUsers.length,
           activePayingCustomers: activePayingCustomerIds.size,
-          usageBuyersInRange: usageBuyerIds.size,
           checkoutPurchasersInRange: checkoutPurchaserIds.size,
           knownPayingCustomers: knownPayingCustomerIds.size,
           visitorToUserConversionRate: conversionRate(identifiedVisitorCount, uniqueVisitorCount),
@@ -1267,7 +1242,6 @@ export const getOperatorMonetizationInternal = internalQuery({
           communityCheckoutRevenueInRange,
           communityPlatformRevShareInRange,
           communityPlatformRevShareAvailability: "estimated_from_current_fee_policy",
-          creditTopupRevenueInRange,
           grossRevenueInRange,
           averageRecordedLifetimeValue: divideMoney(
             lifetimeCommunityCheckoutRevenue,
@@ -1285,8 +1259,6 @@ export const getOperatorMonetizationInternal = internalQuery({
           expired: expiredCheckouts.length,
           communityStarts: communityJoinCheckouts.length,
           communityCompletions: communityJoinCompletions.length,
-          creditTopupStarts: creditTopupCheckouts.length,
-          creditTopupCompletions: creditTopupCompletions.length,
         },
         email: {
           sent: emailSent,
