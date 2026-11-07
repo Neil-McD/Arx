@@ -1,37 +1,10 @@
 import { founderProviderRequestUsageValidator } from "./founderPlanPricing";
 import { defineSchema, defineTable } from "convex/server";
-import { communityFormQuestionValidator } from "./communityFormValidators";
 import { v } from "convex/values";
 import { communityWeeklyDigestSnapshotValidator } from "./communityWeeklyDigestValidators";
 import { channelAccessModeValidator, channelPostingPolicyValidator, channelReplyPolicyValidator } from "./communityChannelValidators";
 
-const workflowRequirementEvidenceValidator = v.array(v.object({
-  automationKey: v.string(), generation: v.string(), activationSequence: v.number(),
-  sourceRef: v.string(), satisfiedAt: v.number(),
-}));
-
 export default defineSchema({
-  communityFormRequests: defineTable({
-    communityId: v.id("communities"), membershipId: v.id("communityMemberships"),
-    workflowId: v.id("communityMemberWorkflows"), workflowRunId: v.id("communityMemberWorkflowRuns"),
-    automationKey: v.string(), milestoneKey: v.string(), milestoneEnteredAt: v.number(),
-    activationSequence: v.number(), formKey: v.string(), versionId: v.id("communityFormVersions"),
-    status: v.union(v.literal("pending"), v.literal("submitted"), v.literal("cancelled")),
-    answers: v.record(v.string(), v.union(v.string(), v.array(v.string()))),
-    revision: v.number(), createdAt: v.number(), updatedAt: v.number(), submittedAt: v.optional(v.number()),
-  }).index("by_member_status", ["membershipId", "status"])
-    .index("by_member_visit_status", ["membershipId", "workflowId", "activationSequence", "milestoneKey", "milestoneEnteredAt", "status"])
-    .index("by_assignment", ["workflowId", "membershipId", "activationSequence", "milestoneKey", "milestoneEnteredAt", "automationKey"]),
-  communityForms: defineTable({
-    communityId: v.id("communities"), key: v.string(), name: v.string(),
-    questions: v.array(communityFormQuestionValidator), revision: v.number(),
-    publishedRevision: v.optional(v.number()), createdAt: v.number(), updatedAt: v.number(),
-  }).index("by_community_key", ["communityId", "key"]),
-  communityFormVersions: defineTable({
-    communityId: v.id("communities"), formId: v.id("communityForms"), revision: v.number(),
-    name: v.string(), questions: v.array(communityFormQuestionValidator),
-    publishedBy: v.id("users"), publishedAt: v.number(),
-  }).index("by_form_revision", ["formId", "revision"]),
   users: defineTable({
     authSubject: v.string(),
     email: v.optional(v.string()),
@@ -186,20 +159,6 @@ export default defineSchema({
     .index("by_user_document_version", ["userId", "documentKey", "documentVersion"])
     .index("by_document_version_acceptedAt", ["documentKey", "documentVersion", "acceptedAt"]),
 
-  legacyProgramGrants: defineTable({
-    userId: v.id("users"),
-    grantKey: v.string(),
-    sourceProgram: v.string(),
-    sourceRecordId: v.string(),
-    sourceStatus: v.string(),
-    acceptedTermsVersion: v.string(),
-    acceptedTermsAt: v.number(),
-    capturedAt: v.number(),
-    createdAt: v.number(),
-    updatedAt: v.number(),
-  })
-    .index("by_user_grantKey", ["userId", "grantKey"])
-    .index("by_grantKey_capturedAt", ["grantKey", "capturedAt"]),
 
   founderSubscriptions: defineTable({
     ownerUserId: v.id("users"),
@@ -745,62 +704,9 @@ export default defineSchema({
     .index("by_account_customer", ["providerAccountId", "providerCustomerId"]),
 
 
-  userMemorySettings: defineTable({
-    userId: v.id("users"),
-    memoryMode: v.union(v.literal("off"), v.literal("suggest"), v.literal("auto")),
-    rememberIntentEnabled: v.boolean(),
-    agentName: v.optional(v.string()),
-    agentSoul: v.optional(v.string()),
-    createdAt: v.number(),
-    updatedAt: v.number(),
-  }).index("by_user", ["userId"]),
 
-  userProviderConnections: defineTable({
-    userId: v.id("users"),
-    provider: v.union(v.literal("openrouter"), v.literal("openai"), v.literal("chatgpt")),
-    authKind: v.union(v.literal("api_key"), v.literal("oauth_tokens")),
-    encryptedSecretHex: v.string(),
-    secretIvHex: v.string(),
-    secretVersion: v.number(),
-    keyLastFour: v.optional(v.string()),
-    keyFingerprint: v.optional(v.string()),
-    accountId: v.optional(v.string()),
-    email: v.optional(v.string()),
-    accessTokenExpiresAt: v.optional(v.number()),
-    validatedAt: v.number(),
-    createdAt: v.number(),
-    updatedAt: v.number(),
-  })
-    .index("by_user", ["userId"])
-    .index("by_user_provider", ["userId", "provider"]),
 
-  userProviderAuthStates: defineTable({
-    userId: v.id("users"),
-    provider: v.literal("chatgpt"),
-    state: v.string(),
-    codeVerifier: v.string(),
-    returnToPath: v.optional(v.string()),
-    expiresAt: v.number(),
-    createdAt: v.number(),
-    updatedAt: v.number(),
-  })
-    .index("by_state", ["state"])
-    .index("by_user_provider", ["userId", "provider"]),
 
-  userProviderDeviceAuthStates: defineTable({
-    userId: v.id("users"),
-    provider: v.literal("chatgpt"),
-    deviceAuthId: v.string(),
-    userCode: v.string(),
-    verificationUrl: v.string(),
-    pollIntervalSeconds: v.number(),
-    returnToPath: v.optional(v.string()),
-    expiresAt: v.number(),
-    createdAt: v.number(),
-    updatedAt: v.number(),
-  })
-    .index("by_user_provider", ["userId", "provider"])
-    .index("by_device_auth_id", ["deviceAuthId"]),
 
   userSourceIntegrationConnections: defineTable({
     userId: v.id("users"),
@@ -974,18 +880,6 @@ export default defineSchema({
     .index("by_outbox", ["outboxId"])
     .index("by_providerMessageId", ["providerMessageId"]),
 
-  personalMemoryItems: defineTable({
-    userId: v.id("users"),
-    content: v.string(),
-    scope: v.union(v.literal("global"), v.literal("workspace")),
-    scopeId: v.optional(v.string()),
-    pinned: v.boolean(),
-    createdAt: v.number(),
-    updatedAt: v.number(),
-  })
-    .index("by_user", ["userId"])
-    .index("by_user_scope", ["userId", "scope"])
-    .index("by_user_scope_updatedAt", ["userId", "scope", "updatedAt"]),
 
   /* Member ontology ledger — docs/member-ontology-contract-v1.md.
      communityId null = platform-wide; set = scoped to that community (this
@@ -1195,41 +1089,7 @@ export default defineSchema({
     // Who holds a role (the community card names its admins and moderators).
     .index("by_community_role_active", ["communityId", "role", "active"]),
 
-  communityOnboardingConfigs: defineTable({
-    communityId: v.id("communities"),
-    enabled: v.boolean(),
-    introVideoUrl: v.optional(v.string()),
-    updatedByUserId: v.id("users"),
-    createdAt: v.number(),
-    updatedAt: v.number(),
-  }).index("by_community", ["communityId"]),
 
-  communityOnboardingSessions: defineTable({
-    communityId: v.id("communities"),
-    membershipId: v.id("communityMemberships"),
-    userId: v.id("users"),
-    activationSequence: v.number(),
-    introVideoUrlSnapshot: v.optional(v.string()),
-    status: v.union(
-      v.literal("active"),
-      v.literal("completed"),
-      v.literal("dismissed"),
-      v.literal("superseded"),
-    ),
-    activatedAt: v.number(),
-    orientationCompletedAt: v.optional(v.number()),
-    firstCommunityPostAt: v.optional(v.number()),
-    firstAgentDockTurnAt: v.optional(v.number()),
-    agentTurnAcknowledgedAt: v.optional(v.number()),
-    mcpHandoffCompletedAt: v.optional(v.number()),
-    completedAt: v.optional(v.number()),
-    dismissedAt: v.optional(v.number()),
-    supersededAt: v.optional(v.number()),
-    createdAt: v.number(),
-    updatedAt: v.number(),
-  })
-    .index("by_membership_activation", ["membershipId", "activationSequence"])
-    .index("by_user_community_status_createdAt", ["userId", "communityId", "status", "createdAt"]),
 
   // The founder's daily brief (docs/specs/proactive-community-agent-v0.md, slice A).
   communityFounderBriefSettings: defineTable({
@@ -1271,179 +1131,10 @@ export default defineSchema({
   }).index("by_community_date", ["communityId", "briefDate"])
     .index("by_community_status_windowEnd", ["communityId", "status", "windowEndMs"]),
 
-  communityMemberWorkflows: defineTable({
-    communityId: v.id("communities"),
-    milestones: v.array(
-      v.object({
-        key: v.string(),
-        name: v.string(),
-        instructions: v.optional(v.string()),
-        goal: v.optional(v.string()),
-        requireHumanApproval: v.optional(v.boolean()),
-        automations: v.array(v.object({
-          key: v.string(),
-          timerGeneration: v.optional(v.string()),
-          sequenceEnabledAt: v.optional(v.number()),
-          sequenceEnabledRevision: v.optional(v.number()),
-          trigger: v.union(
-            v.object({ type: v.literal("member_joined") }),
-      v.object({ type: v.literal("previous_action_completed"), predecessorActionKey: v.string() }),
-            v.object({ type: v.literal("form_submitted"), formKey: v.string() }),
-            v.object({ type: v.literal("member_contributed"), channelId: v.optional(v.string()) }),
-            v.object({ type: v.literal("milestone_elapsed"), delayMinutes: v.number() }),
-          ),
-          action: v.union(
-            v.object({ key: v.string(), type: v.literal("create_service_channel") }),
-            v.object({ key: v.string(), type: v.literal("request_form"), formKey: v.string() }),
-            v.object({
-              key: v.string(),
-              type: v.literal("prompt_agent"),
-              prompt: v.string(),
-            }),
-          ),
-        })),
-      }),
-    ),
-    revision: v.number(),
-    createdByUserId: v.id("users"),
-    updatedByUserId: v.id("users"),
-    createdAt: v.number(),
-    updatedAt: v.number(),
-  }).index("by_community", ["communityId"]),
 
-  communityMemberWorkflowMemberMilestones: defineTable({
-    requirementEvidence: v.optional(workflowRequirementEvidenceValidator),
-    workflowId: v.id("communityMemberWorkflows"),
-    membershipId: v.id("communityMemberships"),
-    currentMilestoneKey: v.string(),
-    milestoneEnteredAt: v.number(),
-    transitionSeq: v.number(),
-    completedAt: v.optional(v.number()),
-    createdAt: v.number(),
-    updatedAt: v.number(),
-  })
-    .index("by_workflow", ["workflowId"])
-    .index("by_workflow_membership", ["workflowId", "membershipId"])
-    .index("by_workflow_milestone", ["workflowId", "currentMilestoneKey"])
-    .index("by_membership", ["membershipId"]),
 
-  communityMemberWorkflowTimers: defineTable({
-    workflowId: v.id("communityMemberWorkflows"),
-    communityLifecycleGeneration: v.number(),
-    membershipId: v.id("communityMemberships"),
-    milestoneKey: v.string(),
-    milestoneEnteredAt: v.number(),
-    transitionSeq: v.number(),
-    activationSequence: v.number(),
-    automationKey: v.string(),
-    timerGeneration: v.string(),
-    dueAt: v.number(),
-    status: v.union(v.literal("pending"), v.literal("consumed"), v.literal("obsolete")),
-    createdAt: v.number(),
-    finishedAt: v.optional(v.number()),
-  })
-    .index("by_status_dueAt", ["status", "dueAt"])
-    .index("by_workflow_milestone_status", ["workflowId", "milestoneKey", "status"])
-    .index("by_member_entry", ["workflowId", "membershipId", "activationSequence", "transitionSeq"]),
 
-  communityMemberWorkflowRuns: defineTable({
-    completionReviewSnapshot: v.optional(v.string()),
-    completionReviewRetry: v.optional(v.object({ requestedAt: v.number(), requestedByUserId: v.id("users"), originalIntakeReason: v.string() })),
-    // Old receipts remain history, not proof for a current activation/visit.
-    activationSequence: v.optional(v.number()),
-    transitionSeq: v.optional(v.number()),
-    goalAssessment: v.optional(v.object({ verdict: v.union(v.literal("achieved"), v.literal("not_yet"), v.literal("insufficient_evidence")), reason: v.string(), evidenceRefs: v.array(v.string()), assessedAt: v.number() })),
-    milestoneContextSnapshot: v.optional(v.object({ instructions: v.string(), goal: v.string() })),
-    communityId: v.id("communities"),
-    workflowId: v.id("communityMemberWorkflows"),
-    membershipId: v.id("communityMemberships"),
-    milestoneKey: v.string(),
-    milestoneName: v.string(),
-    milestoneEnteredAt: v.number(),
-    workflowRevision: v.number(),
-    automationKey: v.string(),
-    triggerType: v.union(v.literal("member_joined"), v.literal("member_contributed"), v.literal("milestone_elapsed"), v.literal("form_submitted"), v.literal("all_actions_complete"), v.literal("previous_action_completed")),
-    // Optional for historical runs. New runs capture the condition that matched.
-    triggerSnapshot: v.optional(v.union(
-      v.object({ type: v.literal("member_joined") }),
-      v.object({ type: v.literal("previous_action_completed"), predecessorActionKey: v.string() }),
-      v.object({ type: v.literal("form_submitted"), formKey: v.string() }),
-      v.object({ type: v.literal("member_contributed"), channelId: v.optional(v.string()) }),
-      v.object({ type: v.literal("milestone_elapsed"), delayMinutes: v.number() }),
-    )),
-    triggerReceiptRef: v.string(),
-    predecessorRunId: v.optional(v.id("communityMemberWorkflowRuns")),
-    actionSnapshot: v.union(
-      v.object({ key: v.string(), type: v.literal("evaluate_goal") }),
-      v.object({ key: v.string(), type: v.literal("create_service_channel") }),
-      v.object({ key: v.string(), type: v.literal("request_form"), formKey: v.string() }),
-      v.object({ key: v.string(), type: v.literal("prompt_agent"), prompt: v.string() }),
-      v.object({
-        key: v.string(),
-        type: v.literal("move_member"),
-        destination: v.literal("next_or_complete"),
-      }),
-    ),
-    status: v.union(
-      v.literal("running"),
-      v.literal("finished"),
-      v.literal("failed"),
-    ),
-    actionResult: v.optional(v.object({
-      actionKey: v.string(),
-      status: v.union(v.literal("complete"), v.literal("failed")),
-      resultCode: v.optional(v.string()),
-      serveRequestId: v.optional(v.id("communityAgentServeRequests")),
-      formRequestId: v.optional(v.id("communityFormRequests")),
-      serviceChannelId: v.optional(v.id("communityChannels")),
-      transitionId: v.optional(v.id("communityMemberWorkflowTransitions")),
-      errorCode: v.optional(v.string()),
-    })),
-    errorCode: v.optional(v.string()),
-    createdAt: v.number(),
-    updatedAt: v.number(),
-    finishedAt: v.optional(v.number()),
-  })
-    .index("by_workflow_membership_trigger_automation", [
-      "workflowId",
-      "membershipId",
-      "triggerReceiptRef",
-      "automationKey",
-    ])
-    .index("by_workflow_membership_createdAt", [
-      "workflowId",
-      "membershipId",
-      "createdAt",
-    ])
-    .index("by_workflow_updatedAt", ["workflowId", "updatedAt"]),
 
-  communityMemberWorkflowTransitions: defineTable({
-    approval: v.optional(v.object({ actorUserId: v.id("users"), goal: v.string(), activationSequence: v.number() })),
-    completionEvidence: v.optional(v.array(v.object({ actionKey: v.string(), automationKey: v.string(),
-      run_id: v.string(), source_id: v.string(), completed_at: v.number() }))),
-    forcedByUserId: v.optional(v.id("users")),
-    bypassedRequirementKeys: v.optional(v.array(v.string())),
-    bypassedRequirements: v.optional(v.array(v.object({ key: v.string(), label: v.string(), definition: v.string() }))),
-    requirementEvidence: v.optional(workflowRequirementEvidenceValidator),
-    communityId: v.id("communities"),
-    workflowId: v.id("communityMemberWorkflows"),
-    membershipId: v.id("communityMemberships"),
-    seq: v.number(),
-    fromMilestoneKey: v.string(),
-    fromMilestoneName: v.string(),
-    toMilestoneKey: v.optional(v.string()),
-    toMilestoneName: v.optional(v.string()),
-    completedWorkflow: v.boolean(),
-    workflowRevision: v.number(),
-    milestoneEnteredAt: v.number(),
-    workflowRunId: v.optional(v.id("communityMemberWorkflowRuns")),
-    actionKey: v.string(),
-    occurredAt: v.number(),
-    createdAt: v.number(),
-  })
-    .index("by_workflow_membership_seq", ["workflowId", "membershipId", "seq"])
-    .index("by_workflowRun_action", ["workflowRunId", "actionKey"])
-    .index("by_community_occurredAt", ["communityId", "occurredAt"]),
 
   communityPresence: defineTable({
     communityId: v.id("communities"),
@@ -2136,12 +1827,12 @@ export default defineSchema({
     sourceReplyId: v.optional(v.id("communityInteractionReplies")),
     requesterUserId: v.optional(v.id("users")),
     sponsorUserId: v.optional(v.id("users")),
-    workflowRunId: v.optional(v.id("communityMemberWorkflowRuns")),
+    workflowRunId: v.optional(v.string()),
     workflowActionKey: v.optional(v.string()),
     workflowPromptSnapshot: v.optional(v.string()),
-    workflowPreviousRunId: v.optional(v.id("communityMemberWorkflowRuns")),
-    workflowTimerId: v.optional(v.id("communityMemberWorkflowTimers")),
-    workflowFormRequestId: v.optional(v.id("communityFormRequests")),
+    workflowPreviousRunId: v.optional(v.string()),
+    workflowTimerId: v.optional(v.string()),
+    workflowFormRequestId: v.optional(v.string()),
     workflowAssessment: v.optional(v.boolean()),
     workflowCompletionReview: v.optional(v.boolean()),
     serviceChannelId: v.optional(v.id("communityChannels")),

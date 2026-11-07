@@ -49,9 +49,9 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
 - **Contracts:** [auth-runtime-setup-workos-authkit.md](auth-runtime-setup-workos-authkit.md),
   [auth-session-target-architecture-v1.md](auth-session-target-architecture-v1.md),
   [auth-money-access-matrix.md](auth-money-access-matrix.md).
-- **Hand-run:** `anonymousUserCleanup` (data deletion); `retiredTablesCleanup`
-  (one-off, Nov 7 2026: empties the retired onboarding, legacy-grant, personal
-  memory and provider-connection tables before the release that drops them).
+- **Hand-run:** `anonymousUserCleanup` (data deletion). The retired onboarding,
+  legacy-grant, personal-memory and provider-connection tables were emptied and
+  dropped on Nov 7 2026.
 
 ### 2. Communities, membership and joining — Keep
 
@@ -261,8 +261,7 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
   page. Their tables (`communityMemberWorkflows`, `communityMemberWorkflowMemberMilestones`,
   `communityMemberWorkflowTimers`, `communityMemberWorkflowRuns`,
   `communityMemberWorkflowTransitions`, `communityForms`, `communityFormVersions`,
-  `communityFormRequests`) are emptied with `retiredTablesCleanup` and then dropped;
-  `communityFormValidators` stays only until then (the schema still names them).
+  `communityFormRequests`) were emptied (backup kept locally) and dropped the same day.
 
 ### 10. Official Polynet MCP — Keep (protected; every role in its own lens)
 
