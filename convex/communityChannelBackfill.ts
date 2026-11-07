@@ -1,5 +1,5 @@
 import { paginationOptsValidator } from "convex/server";
-import { mutation } from "./_generated/server";
+import { internalMutation, mutation } from "./_generated/server";
 import { v } from "convex/values";
 import {
   ensureGeneralChannel,
@@ -476,4 +476,24 @@ export const backfillGeneralChannelBatch = mutation({
       dryRun: args.dryRun !== false,
     });
   },
+});
+
+// The same backfill, run by an operator from the command line (dry run unless
+// told otherwise), so no founder's identity is used. Phases in order: roots,
+// replies, mentions, mention_broadcasts, read_cursors, typing_presence.
+export const backfillGeneralChannelBatchInternal = internalMutation({
+  args: {
+    communityId: v.id("communities"),
+    phase: backfillPhaseValidator,
+    paginationOpts: paginationOptsValidator,
+    dryRun: v.optional(v.boolean()),
+  },
+  handler: async (ctx, args) =>
+    await backfillGeneralChannelBatchCore({
+      ctx,
+      communityId: args.communityId,
+      phase: args.phase,
+      paginationOpts: args.paginationOpts,
+      dryRun: args.dryRun !== false,
+    }),
 });

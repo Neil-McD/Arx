@@ -3998,39 +3998,51 @@ export const compactCommunityResourceBodyStorage = mutation({
       communityId: args.communityId,
       userId,
     });
-    const limit = Math.max(1, Math.min(250, Math.floor(args.limit ?? 50)));
-    const rows = (await ctx.db
-      .query("communityResources" as any)
-      .withIndex("by_community", (q: any) => q.eq("communityId", args.communityId))
-      .collect()) as CommunityResourceLike[];
-    const candidates = rows
-      .filter((row) => String(row.bodyMd ?? "").trim())
-      .sort((left, right) => left.updatedAt - right.updatedAt || left.createdAt - right.createdAt)
-      .slice(0, limit);
-    if (!args.dryRun) {
-      const nowMs = Date.now();
-      for (const row of candidates) {
-        await writeCommunityResourceBodyContent(ctx, {
-          communityId: row.communityId,
-          resourceId: row._id,
-          bodyMd: row.bodyMd,
-          nowMs,
-          maxChars: 20_000,
-          resourceUpdatedAt: row.updatedAt,
-        });
-      }
-    }
-    return {
-      ok: true,
-      kind: "community_resource_body_storage_compaction",
-      dry_run: Boolean(args.dryRun),
-      limit,
-      compacted: args.dryRun ? 0 : candidates.length,
-      candidates: candidates.length,
-      remaining_candidates: Math.max(0, rows.filter((row) => String(row.bodyMd ?? "").trim()).length - candidates.length),
-    };
+    return await compactResourceBodyStorageForCommunity(ctx, args.communityId, args.limit, Boolean(args.dryRun));
   },
 });
+
+// The same compaction, run by an operator from the command line (dry run unless
+// told otherwise); no member or founder identity is involved.
+export const compactCommunityResourceBodyStorageInternal = internalMutation({
+  args: { communityId: v.id("communities"), limit: v.optional(v.number()), dryRun: v.optional(v.boolean()) },
+  handler: async (ctx, args) =>
+    await compactResourceBodyStorageForCommunity(ctx, args.communityId, args.limit, args.dryRun !== false),
+});
+
+async function compactResourceBodyStorageForCommunity(ctx: any, communityId: any, limitArg: number | undefined, dryRun: boolean) {
+  const limit = Math.max(1, Math.min(250, Math.floor(limitArg ?? 50)));
+  const rows = (await ctx.db
+    .query("communityResources" as any)
+    .withIndex("by_community", (q: any) => q.eq("communityId", communityId))
+    .collect()) as CommunityResourceLike[];
+  const candidates = rows
+    .filter((row) => String(row.bodyMd ?? "").trim())
+    .sort((left, right) => left.updatedAt - right.updatedAt || left.createdAt - right.createdAt)
+    .slice(0, limit);
+  if (!dryRun) {
+    const nowMs = Date.now();
+    for (const row of candidates) {
+      await writeCommunityResourceBodyContent(ctx, {
+        communityId: row.communityId,
+        resourceId: row._id,
+        bodyMd: row.bodyMd,
+        nowMs,
+        maxChars: 20_000,
+        resourceUpdatedAt: row.updatedAt,
+      });
+    }
+  }
+  return {
+    ok: true,
+    kind: "community_resource_body_storage_compaction",
+    dry_run: dryRun,
+    limit,
+    compacted: dryRun ? 0 : candidates.length,
+    candidates: candidates.length,
+    remaining_candidates: Math.max(0, rows.filter((row) => String(row.bodyMd ?? "").trim()).length - candidates.length),
+  };
+}
 
 export async function buildCommunityResourceBuilderHealthReport(args: {
   ctx: any;

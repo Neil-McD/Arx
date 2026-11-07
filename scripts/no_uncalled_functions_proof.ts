@@ -25,6 +25,8 @@ const ALLOWED = new Map<string, string>([
   ["communityChannelAudit:listGeneralChannelAuditCommunitiesInternal", "hand-run: General channel migration audit (residue map R-009)"],
   ["communityChannelAudit:auditGeneralChannelMigrationBatchInternal", "hand-run: General channel migration audit (residue map R-009)"],
   ["communityChannelBackfill:backfillGeneralChannelBatch", "hand-run: General channel migration (residue map R-009)"],
+  ["communityChannelBackfill:backfillGeneralChannelBatchInternal", "hand-run by an operator: General channel backfill"],
+  ["communityResources:compactCommunityResourceBodyStorageInternal", "hand-run by an operator: lesson body compaction"],
   ["communityChannels:inspectChannelNamesInternal", "hand-run: channel name backfill"],
   ["communityChannels:backfillChannelNamesInternal", "hand-run: channel name backfill"],
   ["communityChannels:listCommunityChannels", "channel access tests read through it; replace in the channel slice"],
