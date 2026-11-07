@@ -26,7 +26,7 @@ async function fixture(opts: { deployed?: boolean } = {}) {
     const adminId = await user("admin-subject", "admin");
     const communityId = await ctx.db.insert("communities", {
       ownerId, slug: "dawn-club", name: "Dawn Club", visibility: "published", inferenceFundingPolicy: "managed_required",
-      entryPolicy: "open", activeMemberCount: 2, builderAccessMode: "free", createdAt: NOW, updatedAt: NOW,
+      entryPolicy: "open", activeMemberCount: 2, createdAt: NOW, updatedAt: NOW,
     } as any);
     await ctx.db.insert("communityMemberships", {
       communityId, userId: adminId, role: "admin", accessSource: "free_grant", state: "active", activationSequence: 1, activatedAt: NOW, createdAt: NOW, updatedAt: NOW,

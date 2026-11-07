@@ -791,9 +791,6 @@ export default defineSchema({
       v.union(v.literal("active"), v.literal("archived")),
     ),
     lifecycleGeneration: v.optional(v.number()),
-    // Retired: every community runs free. No longer read or written; cleared by
-    // stripCommunityBuilderAccessModeInternal, then dropped.
-    builderAccessMode: v.optional(v.string()),
     builderKnowledgeSetupPending: v.optional(v.boolean()),
     builderKnowledgeBuildStage: v.optional(
       v.union(v.literal("architecture"), v.literal("content")),
