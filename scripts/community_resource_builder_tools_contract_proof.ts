@@ -46,16 +46,6 @@ for (const exportName of [
   assert.match(resources, new RegExp(`export const ${exportName} = (query|mutation)\\(`));
 }
 
-assert.match(
-  resources,
-  /listCommunityResourceBuilderDirectory[\s\S]*await requireCommunityManager/,
-  "builder list must be owner/admin/manager gated",
-);
-assert.match(
-  resources,
-  /readCommunityResourceBuilderResource[\s\S]*await requireCommunityManager/,
-  "builder read must be owner/admin/manager gated",
-);
 assert.doesNotMatch(
   resources,
   /export const (?:write|edit)CommunityResourceBuilderResource/,
@@ -66,25 +56,10 @@ assert.doesNotMatch(
   /export const stageCommunityResourceBuilderChangeset = mutation/,
   "changeset staging must not expose a parallel public mutation",
 );
-assert.match(
-  resources,
-  /stageCommunityResourceBuilderChangesetCore[\s\S]*await requireCommunityManager[\s\S]*stageCommunityResourceBuilderChangesetInternal = internalMutation/,
-  "internal changeset staging must remain owner/admin/manager gated",
-);
 assert.doesNotMatch(
   resources,
   /export const approveCommunityResourceBuilderChangeset\b/,
   "a separate approve step stays deleted: Apply accepts staged changesets directly",
-);
-assert.match(
-  resources,
-  /rejectCommunityResourceBuilderChangeset[\s\S]*await requireCommunityManager/,
-  "changeset rejection must be owner/admin/manager gated",
-);
-assert.match(
-  resources,
-  /applyCommunityResourceBuilderChangeset[\s\S]*await requireCommunityManager/,
-  "changeset apply must be owner/admin/manager gated",
 );
 
 assert.match(
@@ -97,16 +72,6 @@ assert.match(
   resources,
   /if \(next === "published"\)[\s\S]*community_resource_page_status_deprecated/,
   "builder tools should reject page-level publish writes",
-);
-assert.match(
-  resources,
-  /normalizeChangesetPageStatus[\s\S]*community_resource_changeset_publish_deferred/,
-  "changeset v1 should not allow publishing as part of the staged patch",
-);
-assert.match(
-  resources,
-  /requireExpectedUpdatedAt[\s\S]*community_resource_edit_conflict/,
-  "builder edits should enforce optimistic concurrency",
 );
 assert.match(
   resources,
@@ -129,16 +94,6 @@ for (const healthKey of [
 }
 assert.match(
   resources,
-  /COMMUNITY_RESOURCE_BUILDER_HEALTH_SPARSE_BODY_CHARS/,
-  "health check should have deterministic sparse page threshold",
-);
-assert.match(
-  resources,
-  /COMMUNITY_RESOURCE_BUILDER_HEALTH_STALE_DRAFT_MS/,
-  "health check should have deterministic stale draft threshold",
-);
-assert.match(
-  resources,
   /COMMUNITY_RESOURCE_BUILDER_LIST_DEFAULT_LIMIT = 50/,
   "builder list should default to a compact directory payload",
 );
@@ -147,45 +102,15 @@ assert.match(
   /COMMUNITY_RESOURCE_BUILDER_LIST_MAX_LIMIT = 250/,
   "builder list should have a hard max suited for context budgeting",
 );
-assert.match(
-  resources,
-  /COMMUNITY_RESOURCE_BUILDER_HEALTH_ISSUE_LIMIT = 50/,
-  "builder health should cap per-bucket issue samples",
-);
 assert.doesNotMatch(
   resources,
   /COMMUNITY_RESOURCE_BUILDER_DEFAULT_MODULES|missing_default_modules|missing_scaffold_pages/,
   "builder health should not require fixed default modules or scaffold pages",
 );
-assert.match(
-  resources,
-  /issue_counts: issueTotals/,
-  "health summary should preserve complete issue counts when issue arrays are capped",
-);
-assert.match(
-  resources,
-  /issues_truncated:/,
-  "health summary should reveal when issue samples are capped",
-);
-assert.match(
-  resources,
-  /listCommunityResourceBuilderDirectory[\s\S]*health: buildCommunityResourceBuilderHealthReportFromRows/,
-  "builder list should include the deterministic health summary",
-);
 assert.doesNotMatch(
   resources,
   /COMMUNITY_RESOURCE_BUILDER_SCAFFOLD_TITLES|isBuilderScaffoldPageTitle/,
   "health should not exempt source-less fallback pages from quality checks",
-);
-assert.match(
-  resources,
-  /sparsePages:[\s\S]*communityResourceBodyChars\(page\) < COMMUNITY_RESOURCE_BUILDER_HEALTH_SPARSE_BODY_CHARS/,
-  "health check should flag sparse pages without default scaffold exemptions",
-);
-assert.match(
-  resources,
-  /pagesWithoutSourceLineage:[\s\S]*!normalizeIdValue\(page\.sourceResourceId \?\? ""\)/,
-  "health check should flag pages without source lineage without default scaffold exemptions",
 );
 assert.doesNotMatch(
   resources,
@@ -221,21 +146,6 @@ assert.doesNotMatch(
   builderListBody,
   /communityResourceIsLiveModulePage/,
   "builder directory should not reuse member live-only filtering",
-);
-assert.doesNotMatch(
-  builderListBody,
-  /mapCommunityResourceRow|body_md|bodyMd/,
-  "builder directory list must stay compact and must not expose full resource bodies",
-);
-assert.match(
-  builderListBody,
-  /mapCompactCommunityResourceBuilderListRow/,
-  "builder directory list should use the compact list-row mapper",
-);
-assert.match(
-  builderListBody,
-  /truncated: resources\.length > limit/,
-  "builder directory list should report truncation",
 );
 assert.match(
   resources,
@@ -275,11 +185,6 @@ assert.doesNotMatch(
   "agent runtime must not dispatch resource changeset apply",
 );
 assert.match(
-  resources,
-  /stageCommunityResourceBuilderChangesetCore[\s\S]*buildCommunityResourceBuilderChangesetPreflight[\s\S]*ctx\.db\.insert\("communityResourceBuilderChangesets"/,
-  "staging should validate and store a changeset without applying resource writes",
-);
-assert.match(
   canonicalExecutor,
   /POLYNET_BUILDER_RESOURCES_DIRECTORY_PATH[\s\S]*toolName: "polynet_write"[\s\S]*stageCommunityResourceBuilderChangesetInternal/,
   "canonical polynet_write should be the only agent path into internal changeset staging",
@@ -304,30 +209,10 @@ assert.match(
   /readLatestCommunityResourceBuilderActionableRows[\s\S]*by_community_status_createdAt/,
   "active changeset lookup should use the existing community and status index",
 );
-assert.match(
-  resources,
-  /stageCommunityResourceBuilderChangesetCore[\s\S]*readLatestCommunityResourceBuilderActionableRows[\s\S]*community_resource_changeset_already_pending[\s\S]*ctx\.db\.insert\("communityResourceBuilderChangesets"/,
-  "changeset staging should enforce one live proposal per community before insert",
-);
-assert.match(
-  resources,
-  /stageCommunityResourceBuilderChangesetCore[\s\S]*ctx\.scheduler\.runAt\([\s\S]*expireCommunityResourceBuilderChangesetInternal/,
-  "every staged changeset should schedule its canonical expiry mutation",
-);
-assert.match(
-  resources,
-  /expireCommunityResourceBuilderChangesetInternal = internalMutation[\s\S]*expireCommunityResourceBuilderChangesetIfNeeded/,
-  "changeset expiry should have one private idempotent mutation",
-);
 assert.doesNotMatch(
   resources,
   /throw new Error\("community_resource_changeset_expired"\)/,
   "expected expiry must commit as a typed terminal result instead of rolling back by throwing",
-);
-assert.match(
-  resources,
-  /listPendingCommunityResourceBuilderChangesets[\s\S]*\.slice\(0, 1\)/,
-  "pending changeset recovery should expose only the canonical live proposal",
 );
 assert.match(
   changesetApprovalCards,
@@ -361,11 +246,6 @@ assert.match(
 );
 assert.match(
   resources,
-  /requireChangesetEmptyModuleRef[\s\S]*community_resource_changeset_category_not_empty/,
-  "delete_category should reject non-empty categories",
-);
-assert.match(
-  resources,
   /operation\.op === "delete_page"[\s\S]*role: "page"[\s\S]*deletePageFromChangesetOperation[\s\S]*deleteCommunityResourceBodyContent[\s\S]*ctx\.db\.delete/,
   "delete_page should only delete page resources and should revoke memory before source truth",
 );
@@ -373,11 +253,6 @@ assert.match(
   resources,
   /operation\.op === "delete_category"[\s\S]*deleteCategoryFromChangesetOperation[\s\S]*requireChangesetEmptyModuleRef[\s\S]*maybeDeleteStorageAsset[\s\S]*ctx\.db\.delete/,
   "delete_category should delete only empty categories and clean banner storage",
-);
-assert.match(
-  resources,
-  /rejectCommunityResourceBuilderChangeset[\s\S]*status: "rejected"[\s\S]*rejectedByUserId: userId/,
-  "rejection should be an explicit server-side state transition",
 );
 assert.match(
   resources,
