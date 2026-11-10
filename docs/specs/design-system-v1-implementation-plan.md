@@ -152,6 +152,14 @@ old app with new paint.
   the shared channels, and events. No join requests and no names of who joined
   or who has been quiet. A member's Home has rows, not a card.
 
+### The page's structure (after Neil's review of staging, 2026-11-10)
+
+- The left column sits on the ground colour with no frame. The content is one
+  raised panel, a shade lighter, with its own edge and rounded corners.
+- Home has no header band; the new-conversation button floats in the corner.
+- Home's right-hand column is a real column: full height, at the panel's right
+  edge, with a dividing line. Under 1180px wide it folds under the rows.
+
 ### Slice 4: Home
 
 Home is today's agent page with three things above the conversation.

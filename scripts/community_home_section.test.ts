@@ -126,3 +126,16 @@ test("an event soon is told in minutes or hours", () => {
   expect(homeEventTimeFor("2026-11-13T17:40:00.000Z", now)).toBe("In 3 hours");
   expect(homeEventTimeFor("not a date", now)).toBe("");
 });
+
+test("without a rail to fill, the panel renders once, inline", async () => {
+  const { renderToStaticMarkup } = await import("react-dom/server");
+  const { WebCommunityHomeSection } = await import("../apps/web/src/components/WebCommunityHomeSection");
+  const html = renderToStaticMarkup(React.createElement(WebCommunityHomeSection, {
+    communityId: "c1", communityName: "Kiln", firstName: "Neil", audience: "host" as const,
+    session: null, ensureSession: async () => null,
+    onOpenJoinRequests: () => {}, onOpenChannelByName: () => {}, onOpenEvents: () => {},
+  }));
+  // Nothing is loaded on the server, so there is a greeting and no panel yet.
+  expect(html).toContain("Kiln, your guide");
+  expect(html).not.toContain("community-home-aside");
+});
