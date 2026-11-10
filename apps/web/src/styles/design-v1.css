@@ -1234,7 +1234,7 @@
 }
 
 :root[data-design="v1"] .channel-roster-panel.is-v1 {
-  padding: 22px 22px 24px;
+  padding: 20px 24px 24px;
   overflow-y: auto;
 }
 
@@ -1472,7 +1472,7 @@
  * one width, one edge, inside the raised panel.
  */
 :root[data-design="v1"] {
-  --right-column-width: clamp(320px, 26vw, 400px);
+  --right-column-width: 328px;
 }
 
 /* The member list, in the column. Its header is the thread's, in the flow. */
@@ -1563,7 +1563,7 @@
  * column beside it. The left column stays as it is.
  */
 :root[data-design="v1"] {
-  --left-column-width: clamp(224px, 18vw, 264px);
+  --left-column-width: clamp(224px, 18.4vw, 264px);
 }
 
 @media (min-width: 721px) {
@@ -1642,35 +1642,96 @@
   font-weight: 600;
 }
 
+/*
+ * The measurements below are the mock's (polynet-design/hifi/style.css):
+ * header 52px with 56px gutters; feed 8px 44px 18px; a message 10px 12px with a
+ * 36px avatar and a 12px gap, so avatars sit on the header's left edge; name
+ * 14/600, time 12, body 15/1.55, the guide 17/1.45 serif; composer one 52px row
+ * in a 56px-gutter dock.
+ */
 @media (min-width: 721px) {
-  /* One column for messages and composer: wide enough to read, never a wall. */
+  :root[data-design="v1"] .community-channel-header {
+    flex-basis: 52px;
+    height: 52px;
+    padding: 0 56px;
+  }
+
   :root[data-design="v1"] .community-chat .community-interaction-feed-scroll {
-    padding-inline: max(28px, calc((100% - 880px) / 2));
+    /* The composer floats over the feed and is measured as it grows. */
+    padding: 8px 44px calc(var(--mobile-community-composer-height, 86px) + 18px);
   }
 
   :root[data-design="v1"] .community-chat .community-interaction-main-composer {
-    padding-inline: max(28px, calc((100% - 880px) / 2));
+    padding: 0 56px 26px;
   }
 
   :root[data-design="v1"] .community-chat .community-interaction-main-composer > .chat-input-bar {
     width: 100%;
-    margin-inline: 0;
+    margin: 0;
   }
 }
 
-/* Air between people; one person's consecutive messages stay together. */
+:root[data-design="v1"] .community-channel-header h1 {
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: -0.005em;
+}
+
+/* A message: 10px 12px, 36px avatar, 12px gap, 12px corners, a quiet hover. */
 :root[data-design="v1"] .community-chat .community-interaction-feed {
-  gap: 10px;
+  gap: 0;
 }
 
 :root[data-design="v1"] .community-chat .community-interaction-group {
-  column-gap: 14px;
+  grid-template-columns: 36px minmax(0, 1fr);
+  column-gap: 12px;
+  padding: 10px 12px;
+  border-radius: 12px;
 }
 
-/* Day dividers: a word on a hairline. */
+:root[data-design="v1"] .community-chat .community-interaction-group:hover {
+  background: var(--hover-overlay);
+}
+
+:root[data-design="v1"] .community-chat .community-interaction-group-gutter .community-interaction-avatar-trigger,
+:root[data-design="v1"] .community-chat .community-interaction-group-gutter .community-interaction-avatar-hover,
+:root[data-design="v1"] .community-chat .community-interaction-group-gutter .community-interaction-avatar {
+  width: 36px;
+  height: 36px;
+}
+
+/* Text keeps a readable measure on wide windows; the row itself is full width. */
+:root[data-design="v1"] .community-chat .community-interaction-group-body {
+  max-width: 760px;
+}
+
+:root[data-design="v1"] .community-chat .community-interaction-meta-row {
+  gap: 8px;
+  font-size: 12px;
+}
+
+:root[data-design="v1"] .community-chat .community-interaction-author {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+:root[data-design="v1"] .community-chat [data-actor-type="human"] .community-interaction-body {
+  margin-top: 2px;
+  color: var(--text-ink-primary);
+  font-size: 15px;
+  line-height: 1.55;
+}
+
+:root[data-design="v1"] .community-chat [data-actor-type="community_agent"] .community-interaction-body {
+  margin-top: 2px;
+  font-size: 17px;
+  line-height: 1.45;
+}
+
+/* Day dividers: a word on a hairline (8px 12px 10px). */
 :root[data-design="v1"] .community-interaction-day {
   gap: 14px;
-  margin: 14px 0 6px;
+  margin: 8px 12px 10px;
 }
 
 :root[data-design="v1"] .community-interaction-day::before,
@@ -1684,6 +1745,46 @@
   font-weight: 400;
   letter-spacing: 0;
   text-transform: none;
+}
+
+/* The composer: one 52px row. Tools at the left, the text, then mic and send. */
+@media (min-width: 721px) {
+  :root[data-design="v1"] .community-chat .community-interaction-main-composer > .chat-input-bar {
+    min-height: 52px;
+    padding: 0 8px 0 10px;
+    border-radius: 14px;
+    border: 1px solid var(--border-strong);
+    align-items: center;
+  }
+
+  :root[data-design="v1"] .community-chat .community-interaction-main-composer .community-composer-authoring-row {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    grid-template-rows: auto;
+    align-items: center;
+    column-gap: 6px;
+  }
+
+  :root[data-design="v1"] .community-chat .community-interaction-main-composer .community-composer-toolbar {
+    display: contents;
+  }
+
+  :root[data-design="v1"] .community-chat .community-interaction-main-composer .community-composer-tools {
+    order: 1;
+  }
+
+  :root[data-design="v1"] .community-chat .community-interaction-main-composer .community-composer-editor-row {
+    order: 2;
+    padding: 6px 4px;
+  }
+
+  :root[data-design="v1"] .community-chat .community-interaction-main-composer .community-composer-submit-tools {
+    order: 3;
+  }
+
+  :root[data-design="v1"] .community-chat .community-interaction-main-composer .mention-composer-field {
+    min-height: 38px;
+    font-size: 15px;
+  }
 }
 
 /* Tags by a name: "guide" in the guide's colour, "host" in plain ink. */
