@@ -321,7 +321,9 @@ function RosterSurface(props: RosterProps & {
       {scope ? <WebCommunityNotes communityId={scope.communityId} session={scope.session} compact /> : null}
     </section>
     <section className="channel-rail-section">
-      <h3 className="channel-rail-label">In this channel{!error && ready && complete ? ` · ${rosterMembers.length}` : ""}</h3>
+      {/* No count here yet: the roster loads a page at a time as the full list
+          scrolls, so this short panel has no honest total to show. */}
+      <h3 className="channel-rail-label">In this channel</h3>
       <div className="channel-rail-here">
         <CommunityPresenceFacepile faces={props.presenceSummary?.online_faces} onlineCount={onlineCount}
           onlineCountCapped={Boolean(props.presenceSummary?.online_count_capped)} isLoading={props.isLoadingPresence} decorative />
