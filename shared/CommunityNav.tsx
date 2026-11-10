@@ -1,6 +1,7 @@
 import { memo, useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import {
   Brain,
+  ChartNoAxesColumn,
   Check,
   ChevronDown,
   ChevronUp,
@@ -8,10 +9,13 @@ import {
   GripVertical,
   Hash,
   House,
+  Inbox,
   LockKeyhole,
   Plus,
   Settings,
+  SlidersHorizontal,
   UserPlus,
+  Users,
   X,
 } from "lucide-react";
 import type { CommunityTab } from "./appShellNavigation";
@@ -73,6 +77,14 @@ type CommunityNavProps = {
   // column and stays the default until v1 is accepted.
   layout?: "classic" | "v1";
   accountSlot?: ReactNode;
+  // v1 only. The switcher takes the place of the community's name on the
+  // banner (and of the settings gear, which becomes the Manage row).
+  identitySlot?: ReactNode;
+  onOpenInbox?: () => void;
+  isInboxOpen?: boolean;
+  inboxUnreadCount?: number;
+  onOpenMembers?: () => void;
+  memberCount?: number | null;
 };
 
 function moveChannelId(
@@ -188,6 +200,12 @@ export const CommunityNav = memo(function CommunityNav({
   clearReorderChannelsError,
   layout = "classic",
   accountSlot = null,
+  identitySlot = null,
+  onOpenInbox,
+  isInboxOpen = false,
+  inboxUnreadCount = 0,
+  onOpenMembers,
+  memberCount = null,
 }: CommunityNavProps) {
   const isV1 = layout === "v1";
   const [didCopyJoinLink, setDidCopyJoinLink] = useState(false);
@@ -399,10 +417,12 @@ export const CommunityNav = memo(function CommunityNav({
         <div
           className={`community-nav-identity${activeCommunityBannerUrl ? " has-banner" : ""}${!activeCommunityBannerUrl || isCommunityIdentityCondensed ? " is-condensed" : ""}`}
         >
-          <span className="community-nav-identity-name" title={activeCommunityName}>
-            {activeCommunityName}
-          </span>
-          {showSettingsButton ? (
+          {isV1 && identitySlot ? identitySlot : (
+            <span className="community-nav-identity-name" title={activeCommunityName}>
+              {activeCommunityName}
+            </span>
+          )}
+          {showSettingsButton && !isV1 ? (
             <button
               className={`community-nav-settings${showActiveSelection && communityTab === "settings" ? " active" : ""}`}
               type="button"
@@ -444,6 +464,15 @@ export const CommunityNav = memo(function CommunityNav({
             <span className="nav-icon" aria-hidden="true"><House size={17} strokeWidth={1.7} /></span>
             <span className="nav-item-label">Home</span>
           </button>
+          {onOpenInbox ? (
+            <button className={isInboxOpen ? "nav-item active" : "nav-item"} type="button" onClick={onOpenInbox} aria-expanded={isInboxOpen} title="Inbox">
+              <span className="nav-icon" aria-hidden="true"><Inbox size={17} strokeWidth={1.7} /></span>
+              <span className="nav-item-label">Inbox</span>
+              {inboxUnreadCount > 0 ? (
+                <span className="nav-item-count" aria-label={`${inboxUnreadCount} unread`}>{inboxUnreadCount > 99 ? "99+" : inboxUnreadCount}</span>
+              ) : null}
+            </button>
+          ) : null}
         </div>
       ) : null}
       {isV1 ? <div className="community-nav-section-label">Channels</div> : null}
@@ -627,6 +656,13 @@ export const CommunityNav = memo(function CommunityNav({
             <span className="nav-item-label">Events</span>
             {communityTab !== "events" && tabIndicators.events ? <span className="nav-item-dot" aria-hidden="true" /> : null}
           </button>
+          {isV1 && onOpenMembers && canViewMembersActiveCommunity ? (
+            <button className="nav-item" type="button" onClick={onOpenMembers} title="Members">
+              <span className="nav-icon" aria-hidden="true"><Users size={17} strokeWidth={1.7} /></span>
+              <span className="nav-item-label">Members</span>
+              {memberCount ? <span className="nav-item-hint">{memberCount}</span> : null}
+            </button>
+          ) : null}
         </>
       ) : null}
       {isLoadingAccess ? (
@@ -638,7 +674,7 @@ export const CommunityNav = memo(function CommunityNav({
             ))}
           </div>
         </>
-      ) : showManagementSection ? (
+      ) : showManagementSection && !isV1 ? (
         <>
           <div className="community-nav-divider" />
           {canViewActiveCommunityAnalytics && (
@@ -666,7 +702,7 @@ export const CommunityNav = memo(function CommunityNav({
         <div className="community-nav-footer" aria-hidden="true">
           <div className="community-nav-invite-loading web-skeleton-block" />
         </div>
-      ) : canCopyJoinLink || siteUrl ? (
+      ) : canCopyJoinLink || siteUrl || (isV1 && (canViewActiveCommunityAnalytics || showSettingsButton)) ? (
         <div className="community-nav-footer">
           {siteUrl ? (
             <a
@@ -699,6 +735,28 @@ export const CommunityNav = memo(function CommunityNav({
             </span>
             <span className="nav-item-label">{didCopyJoinLink ? "Copied" : "Invite people"}</span>
           </button>
+          ) : null}
+          {isV1 && canViewActiveCommunityAnalytics ? (
+            <button
+              className={showActiveSelection && communityTab === "analytics" ? "nav-item active" : "nav-item"}
+              type="button"
+              onClick={() => onSelectTab("analytics")}
+              title="Analytics"
+            >
+              <span className="nav-icon" aria-hidden="true"><ChartNoAxesColumn size={16} strokeWidth={1.9} /></span>
+              <span className="nav-item-label">Analytics</span>
+            </button>
+          ) : null}
+          {isV1 && showSettingsButton ? (
+            <button
+              className={showActiveSelection && communityTab === "settings" ? "nav-item active" : "nav-item"}
+              type="button"
+              onClick={() => onSelectTab("settings")}
+              title="Manage"
+            >
+              <span className="nav-icon" aria-hidden="true"><SlidersHorizontal size={16} strokeWidth={1.9} /></span>
+              <span className="nav-item-label">Manage</span>
+            </button>
           ) : null}
         </div>
       ) : null}
