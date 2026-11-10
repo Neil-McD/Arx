@@ -2,6 +2,8 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, typ
 import {
   Users,
 } from "lucide-react";
+import { CommunityThreadHeader } from "./CommunityThreadHeader";
+import { isDesignV1Active } from "../../../../shared/designSystem";
 import {
   EmojiPickerButton,
   ReactionSummary,
@@ -655,8 +657,20 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
         <ThreadSurface
           className={`community-interaction-drawer community-interaction-thread-drawer${isMobileThreadPage ? " community-interaction-thread-page" : ""}`}
           aria-label={isMobileThreadPage ? "Thread" : "Thread replies"}
+          onKeyDown={(event) => {
+            // Esc closes the thread, unless something inside (a menu, the
+            // mention picker) already used the key.
+            if (event.key !== "Escape" || event.defaultPrevented || isMobileThreadPage || !isDesignV1Active()) return;
+            // An open picker or menu in the thread (emoji, mentions) closes
+            // itself on Esc from its own listener; this press belongs to it.
+            if (event.currentTarget.querySelector('[aria-expanded="true"]')) return;
+            event.preventDefault();
+            props.onCloseDrawer();
+          }}
         >
-          {!isMobileThreadPage ? <div className="community-interaction-drawer-back">
+          {!isMobileThreadPage && isDesignV1Active() ? (
+            <CommunityThreadHeader channelName={props.activeChannel?.name} onClose={props.onCloseDrawer} />
+          ) : !isMobileThreadPage ? <div className="community-interaction-drawer-back">
             <button
               className="back-to-workspace"
               type="button"
