@@ -72,7 +72,8 @@ test("design v1: asking for members shows the Members page, not a pop-up", () =>
   expect(html).toContain("<h1>Members</h1>");
   expect(html).toContain("Search community members");
   expect([...html.matchAll(/class="members-page-chip[^"]*"[^>]*>([^<]+)</g)].map((match) => match[1]))
-    .toEqual(["Everyone", "Here now", "Hosts", "New this week"]);
+    // "New this week" is only offered to people who are sent join dates (managers).
+    .toEqual(["Everyone", "Here now", "Hosts"]);
   // Until someone is chosen, the right column says so.
   expect(html).toContain("Choose someone to see their profile.");
   // The short channel panel steps aside for it.

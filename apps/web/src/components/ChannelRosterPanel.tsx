@@ -78,7 +78,11 @@ function ChannelRosterWorkspace(props: RosterProps) {
     setAskedNarrow(Boolean(props.narrowOpen));
     if (props.narrowOpen) setMembersOpen(true);
   }
-  if (isDesignV1Active() && membersOpen) {
+  // The page is a desktop layout. A narrow window keeps the list it had, with
+  // its own way back.
+  const wideEnoughForPage = typeof window === "undefined" || typeof window.matchMedia !== "function"
+    || window.matchMedia("(min-width: 721px)").matches;
+  if (isDesignV1Active() && membersOpen && wideEnoughForPage) {
     const close = () => { setMembersOpen(false); props.onCloseNarrow?.(); };
     return <><MembersPageLeaver onLeave={close} /><RosterSurface {...props} channelId={undefined} narrowOpen={false}
       onCloseNarrow={undefined} directory inline onCloseMembers={close}
@@ -214,6 +218,9 @@ function RosterSurface(props: RosterProps & {
     membership_created_at: member.created_at,
     profile: member, last_seen_at: null, active_until: null,
   })) : rosterMembers;
+  // Join dates are only sent to people who manage members, so only they are
+  // offered "New this week".
+  const knowsJoinDates = members.some(member => Boolean((member as { membership_created_at?: unknown }).membership_created_at));
   const selectedMember = props.memberSettings.canManageMembers
     ? members.find(member => member.membership_id === selectedMembershipId && member.role !== "owner") : undefined;
   // In the members list, owners and admins select people and act on them together.
@@ -290,7 +297,7 @@ function RosterSurface(props: RosterProps & {
             <input ref={searchRef} type="search" aria-label="Search community members" placeholder="Search community members" value={search} maxLength={128} onChange={event => setSearch(event.target.value)} />
           </label>
           {props.inline && !searching ? <div className="members-page-filters" role="group" aria-label="Show">
-            {MEMBER_FILTERS.map(filter => <button key={filter.id} type="button"
+            {MEMBER_FILTERS.filter(filter => filter.id !== "new" || knowsJoinDates).map(filter => <button key={filter.id} type="button"
               className={`members-page-chip${memberFilter === filter.id ? " is-selected" : ""}`}
               aria-pressed={memberFilter === filter.id} onClick={() => setMemberFilter(filter.id)}>{filter.label}</button>)}
           </div> : null}
