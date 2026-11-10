@@ -530,8 +530,18 @@
     padding: 0;
   }
 
-  :root[data-design="v1"] .app-shell.community-layout.with-community-rail.sessions-compact.no-right .account-menu-trigger > :not(.account-menu-avatar) {
+  :root[data-design="v1"] .app-shell.community-layout.with-community-rail.sessions-compact.no-right .account-menu-trigger > svg {
     display: none;
+  }
+
+  /* The name stays readable to screen readers; it is only hidden visually. */
+  :root[data-design="v1"] .app-shell.community-layout.with-community-rail.sessions-compact.no-right .account-menu-identity {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
   }
 
   /* The column clips overflow, so the menu opens beside it instead. */
