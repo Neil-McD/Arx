@@ -1155,7 +1155,10 @@
     background: var(--surface-app);
   }
 
-  :root[data-design="v1"] .product-shell-surface--community > :not(.community-nav):not(.sessions) {
+  /* Pages other than Home sit inside a display:contents slot, which cannot
+     carry a box, so the panel is the page inside it. */
+  :root[data-design="v1"] .product-shell-surface--community > main,
+  :root[data-design="v1"] .product-shell-surface--community > .web-main-surface-slot > * {
     --bg-workspace: var(--surface-raised);
     --surface-workspace: var(--surface-raised);
     --surface-panel: var(--surface-raised);

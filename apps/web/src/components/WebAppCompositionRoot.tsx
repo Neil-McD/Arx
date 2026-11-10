@@ -61,7 +61,7 @@ export function WebAppCompositionRoot(props: {
   );
   const mainSurface = (
     <>
-    <div style={{ display: showAgentWorkspace ? "none" : "contents" }}>
+    <div className="web-main-surface-slot" style={{ display: showAgentWorkspace ? "none" : "contents" }}>
     <Suspense
       fallback={<WebAppMainSurfaceFallback {...props.mainSurfaceHostProps} />}
     >
