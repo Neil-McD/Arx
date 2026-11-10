@@ -1217,3 +1217,114 @@
     display: none;
   }
 }
+
+/*
+ * Design system v1: beside a channel (spec section 6). A quiet header, and a
+ * short right-hand panel: what is pinned, the community's notes, who is here.
+ * A thread opens in the same column and takes the panel's place.
+ */
+:root[data-design="v1"] .community-channel-header {
+  border-bottom-color: var(--surface-raised-edge);
+  background: transparent;
+}
+
+:root[data-design="v1"] .community-context-panel,
+:root[data-design="v1"] .community-interaction-drawer {
+  border-left-color: var(--surface-raised-edge);
+}
+
+:root[data-design="v1"] .channel-roster-panel.is-v1 {
+  padding: 22px 22px 24px;
+  overflow-y: auto;
+}
+
+:root[data-design="v1"] .channel-rail-section {
+  display: grid;
+  justify-items: start;
+  gap: 10px;
+  min-width: 0;
+  padding-bottom: 22px;
+  margin-bottom: 22px;
+  border-bottom: 1px solid var(--border-default);
+}
+
+:root[data-design="v1"] .channel-rail-section:last-child {
+  margin-bottom: 0;
+  border-bottom: 0;
+}
+
+:root[data-design="v1"] .channel-rail-section > * {
+  min-width: 0;
+  max-width: 100%;
+}
+
+:root[data-design="v1"] .channel-rail-label {
+  margin: 0;
+  color: var(--text-faint);
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+:root[data-design="v1"] .channel-rail-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: calc(100% + 16px);
+  max-width: none;
+  margin: -2px -8px;
+  padding: 7px 8px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-ink-secondary);
+  font-size: 14px;
+  text-align: left;
+  cursor: pointer;
+}
+
+:root[data-design="v1"] .channel-rail-row svg {
+  flex: 0 0 auto;
+  color: var(--icon-default);
+}
+
+:root[data-design="v1"] .channel-rail-row span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+:root[data-design="v1"] .channel-rail-row:hover,
+:root[data-design="v1"] .channel-rail-row:focus-visible {
+  outline: none;
+  background: var(--hover-overlay);
+  color: var(--text-ink-primary);
+}
+
+:root[data-design="v1"] .channel-rail-here {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: var(--text-ink-secondary);
+  font-size: 13px;
+}
+
+:root[data-design="v1"] .channel-rail-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-ink-secondary);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+:root[data-design="v1"] .channel-rail-link:hover,
+:root[data-design="v1"] .channel-rail-link:focus-visible {
+  outline: none;
+  color: var(--text-ink-primary);
+}

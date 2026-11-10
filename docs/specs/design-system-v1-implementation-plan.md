@@ -160,6 +160,17 @@ old app with new paint.
 - Home's right-hand column is a real column: full height, at the panel's right
   edge, with a dividing line. Under 1180px wide it folds under the rows.
 
+### Beside a channel (first half of slice 5)
+
+- The channel header is one quiet line inside the raised panel.
+- The right-hand panel is short: Pinned (the channel's pinned post, when there
+  is one), Community notes, and "In this channel" as a count, faces of who is
+  here, and View all. The full member list, with roles, removal and join
+  reviews, is unchanged behind View all.
+- A thread opens in the same column and takes the panel's place, as before.
+- Not yet: "Catch up", the guide's short summary of the channel. Nothing writes
+  one today; it is its own slice.
+
 ### Slice 4: Home
 
 Home is today's agent page with three things above the conversation.

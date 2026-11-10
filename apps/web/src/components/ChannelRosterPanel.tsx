@@ -1,5 +1,6 @@
 import { Fragment, useContext, useEffect, useRef, useState, type ComponentProps, type KeyboardEvent, type CSSProperties } from "react";
-import { MessageCircle, MoreHorizontal, Search, X } from "lucide-react";
+import { ArrowRight, MessageCircle, MoreHorizontal, Pin, Search, X } from "lucide-react";
+import { isDesignV1Active } from "../../../../shared/designSystem";
 import { createPortal } from "react-dom";
 import { useWebMemberDirectorySearch } from "../controllers/useWebMemberDirectorySearch";
 import { CommunityMemberSettingsDialog } from "./CommunityMemberSettingsDialog";
@@ -35,6 +36,8 @@ function trapTab(event: KeyboardEvent, container: HTMLElement | null) {
 
 type RosterProps = {
   memberDetailOpen?: boolean;
+  // Design system v1: the channel's pinned post, shown as one row that opens it.
+  pinned?: { label: string; onOpen: () => void } | null;
   narrowOpen?: boolean;
   onCloseNarrow?: () => void;
   joinReview?: ComponentProps<typeof CommunityJoinRequestReview>;
@@ -291,8 +294,47 @@ function RosterSurface(props: RosterProps & {
     </div>
   </aside>
   </>;
+  // Design system v1 (docs/specs/design-system-v1.md, section 6): beside a
+  // channel the panel is short. What is pinned, the community's notes, and who
+  // is here as faces; the full list, with its member tools, is one click away.
+  const onlineCount = props.presenceSummary?.online_count;
+  const v1Rail = !props.directory && isDesignV1Active() ? <aside className="community-context-panel channel-roster-panel is-v1" aria-label="About this channel"
+    style={props.memberDetailOpen ? { display: "none" } : undefined}
+    onKeyDown={event => {
+      if (event.key === "Escape" && !event.defaultPrevented && props.narrowOpen) {
+        event.preventDefault(); props.onCloseNarrow?.();
+      }
+    }}>
+    {props.onCloseNarrow ? <div className="channel-people-back">
+      <button ref={backRef} className="back-to-workspace" type="button" aria-label="Back to channel" onClick={props.onCloseNarrow}>
+        <svg viewBox="0 0 24 24" className="back-icon" aria-hidden="true"><path d="M19 12H5M12 19l-7-7 7-7" /></svg>
+      </button>
+    </div> : null}
+    {props.pinned ? <section className="channel-rail-section">
+      <h3 className="channel-rail-label">Pinned</h3>
+      <button type="button" className="channel-rail-row" onClick={props.pinned.onOpen}>
+        <Pin size={15} aria-hidden="true" /><span>{props.pinned.label}</span>
+      </button>
+    </section> : null}
+    <section className="channel-rail-section">
+      <h3 className="channel-rail-label">Community notes</h3>
+      {scope ? <WebCommunityNotes communityId={scope.communityId} session={scope.session} compact /> : null}
+    </section>
+    <section className="channel-rail-section">
+      <h3 className="channel-rail-label">In this channel{!error && ready && complete ? ` · ${rosterMembers.length}` : ""}</h3>
+      <div className="channel-rail-here">
+        <CommunityPresenceFacepile faces={props.presenceSummary?.online_faces} onlineCount={onlineCount}
+          onlineCountCapped={Boolean(props.presenceSummary?.online_count_capped)} isLoading={props.isLoadingPresence} decorative />
+        {typeof onlineCount === "number" ? <span>{onlineCount}{props.presenceSummary?.online_count_capped ? "+" : ""} here now</span> : null}
+      </div>
+      <button type="button" className="channel-rail-link" onClick={props.onOpenMembers}>
+        View all <ArrowRight size={14} aria-hidden="true" />
+      </button>
+    </section>
+  </aside> : null;
   // The chat shell isolates its stacking context beneath the community rail.
   // Keep overlays outside that shell, as the directory already does below.
+  if (v1Rail) return v1Rail;
   if (!props.directory) return <>{content}{selectedMember ? createPortal(settings, document.body) : null}</>;
   // Keep search and pagination mounted while the existing profile inspector is open.
   return createPortal(<><div className="modal-overlay" style={props.memberDetailOpen ? { display: "none" } : undefined} onMouseDown={props.onCloseMembers}>
