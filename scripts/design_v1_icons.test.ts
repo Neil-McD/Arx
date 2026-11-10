@@ -9,7 +9,7 @@ test("with the switch on, every tab and home-screen icon is the colour logo", ()
   const hrefs = [...out.matchAll(/<link\b[^>]*rel="(?:icon|apple-touch-icon|manifest)"[^>]*>/g)]
     .map((match) => match[0].match(/href="([^"]+)"/)![1]);
   expect(hrefs.length).toBeGreaterThanOrEqual(7);
-  for (const href of hrefs) expect(href).toMatch(/^%BASE_URL%brand\/v1\//);
+  for (const href of hrefs) expect(href).toMatch(/^%BASE_URL%brand\/v1\/[^?]+\?v=\w+$/);
   // Every rewritten file exists.
   for (const href of hrefs) {
     const file = href.replace("%BASE_URL%", "").split("?")[0];
