@@ -143,3 +143,9 @@ test("the switcher names the community, closed, and flags news elsewhere", () =>
   const quiet = renderToStaticMarkup(React.createElement(WebCommunitySwitcher, { ...props, attentionById: { a: true } }));
   expect(quiet).not.toContain("community-switcher-news");
 });
+
+test("design v1 words the add row 'Add a channel'; classic keeps 'Add Channel'", () => {
+  const host = { ...baseProps, canManageMembersActiveCommunity: true, onCreateChannel: async () => true };
+  expect(renderToStaticMarkup(React.createElement(CommunityNav, { ...host, layout: "v1" as const }))).toContain(">Add a channel<");
+  expect(renderToStaticMarkup(React.createElement(CommunityNav, host))).toContain(">Add Channel<");
+});

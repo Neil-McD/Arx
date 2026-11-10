@@ -1629,3 +1629,112 @@
     color: var(--text-ink-secondary);
   }
 }
+
+/*
+ * Design system v1: a channel, as it reads (spec section 6). A readable
+ * column, air between people, quiet dividers and tags, and the composer in
+ * the same column as the messages.
+ */
+
+/* Left column: a channel with something new is bold, beside its dot. */
+:root[data-design="v1"] .community-channel-item:has(.nav-item-dot) .nav-item-label {
+  color: var(--text-ink-primary);
+  font-weight: 600;
+}
+
+@media (min-width: 721px) {
+  /* One column for messages and composer: wide enough to read, never a wall. */
+  :root[data-design="v1"] .community-chat .community-interaction-feed-scroll {
+    padding-inline: max(28px, calc((100% - 880px) / 2));
+  }
+
+  :root[data-design="v1"] .community-chat .community-interaction-main-composer {
+    padding-inline: max(28px, calc((100% - 880px) / 2));
+  }
+
+  :root[data-design="v1"] .community-chat .community-interaction-main-composer > .chat-input-bar {
+    width: 100%;
+    margin-inline: 0;
+  }
+}
+
+/* Air between people; one person's consecutive messages stay together. */
+:root[data-design="v1"] .community-chat .community-interaction-feed {
+  gap: 10px;
+}
+
+:root[data-design="v1"] .community-chat .community-interaction-group {
+  column-gap: 14px;
+}
+
+/* Day dividers: a word on a hairline. */
+:root[data-design="v1"] .community-interaction-day {
+  gap: 14px;
+  margin: 14px 0 6px;
+}
+
+:root[data-design="v1"] .community-interaction-day::before,
+:root[data-design="v1"] .community-interaction-day::after {
+  background: var(--border-default);
+}
+
+:root[data-design="v1"] .community-interaction-day > span {
+  color: var(--text-faint);
+  font-size: 12px;
+  font-weight: 400;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+/* Tags by a name: "guide" in the guide's colour, "host" in plain ink. */
+:root[data-design="v1"] .community-interaction-badge {
+  padding: 1px 6px;
+  border-radius: 5px;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+:root[data-design="v1"] .community-interaction-badge.is-host {
+  border: 1px solid var(--border-strong);
+  background: transparent;
+  color: var(--text-ink-secondary);
+}
+
+/* The replies line: a small face, the count as the link, the time in grey. */
+:root[data-design="v1"] .community-interaction-thread-row {
+  gap: 8px;
+  align-items: center;
+}
+
+:root[data-design="v1"] .community-interaction-thread-row .community-interaction-thread-avatar {
+  width: 20px;
+  height: 20px;
+  font-size: 9px;
+}
+
+:root[data-design="v1"] .community-interaction-reply-pill {
+  padding: 2px 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-ink-primary);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+:root[data-design="v1"] .community-interaction-reply-pill:hover {
+  text-decoration: underline;
+}
+
+:root[data-design="v1"] .community-interaction-thread-time {
+  color: var(--text-faint);
+  font-size: 12px;
+}
+
+/* People arriving is context, not conversation. */
+:root[data-design="v1"] .community-interaction-member-arrivals {
+  opacity: 0.6;
+  font-size: 12px;
+  transform: scale(0.94);
+}

@@ -35,6 +35,7 @@ import { CommunityChatMediaGrid, type CommunityChatMediaImage } from "../../../.
 import { CommunityChatMediaPlayers } from "../../../../shared/CommunityChatMediaPlayers";
 import type { CommunityTypingPresenceUser, UserProfile } from "../../../../shared/communityTypes";
 import { UserAvatar } from "../../../../shared/UserAvatar";
+import { isDesignV1Active } from "../../../../shared/designSystem";
 import { interactionMentionsViewer } from "../controllers/communityMentionAttention";
 import { resolveCommunityInteractionOverflowMenuPlacement } from "../controllers/resolveCommunityInteractionOverflowMenuPlacement";
 
@@ -73,9 +74,19 @@ export function kindChipLabel(kind: string): string | null {
   );
 }
 
+// Design system v1 calls the community's agent its guide.
 export function agentBadgeLabel(actorType: string): string | null {
-  if (actorType === "community_agent") return "Agent";
+  if (actorType === "community_agent") return isDesignV1Active() ? "guide" : "Agent";
   return null;
+}
+
+// Design system v1: the owner's own posts carry a quiet "host" tag.
+export function hostBadgeLabel(
+  root: { actor_type: string; actor_user_id: string | null },
+  communityOwnerId: string | null | undefined,
+): string | null {
+  if (!isDesignV1Active() || root.actor_type !== "human") return null;
+  return communityOwnerId && root.actor_user_id === communityOwnerId ? "host" : null;
 }
 
 export function sortedBlocks(blocks: CommunityInteractionContentBlock[]): CommunityInteractionContentBlock[] {
@@ -1046,6 +1057,9 @@ export function CommunityInteractionFeedList(
                           <span className="community-interaction-author">{label}</span>
                         </ProfileHoverCard>
                         {badge ? <span className="community-interaction-badge">{badge}</span> : null}
+                        {hostBadgeLabel(first.root, props.communityOwnerId) ? (
+                          <span className="community-interaction-badge is-host">host</span>
+                        ) : null}
                         {chip ? <span className="community-interaction-kind">{chip}</span> : null}
                         <span>{props.formatChatTime(first.root.created_at)}</span>
                       </div>
