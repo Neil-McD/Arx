@@ -1196,7 +1196,7 @@
 
 @media (min-width: 1180px) {
   :root[data-design="v1"] .community-agent-dock-panel.has-home-rail {
-    grid-template-columns: minmax(0, 1fr) 312px;
+    grid-template-columns: minmax(0, 1fr) var(--right-column-width);
   }
 
   :root[data-design="v1"] .community-agent-dock-panel.has-home-rail > * {
@@ -1337,7 +1337,7 @@
 @media (min-width: 641px) {
   :root[data-design="v1"] .community-interaction-projection.has-drawer,
   :root[data-design="v1"] .community-interaction-projection.has-channel-context {
-    grid-template-columns: minmax(0, 1fr) clamp(320px, 26vw, 400px);
+    grid-template-columns: minmax(0, 1fr) var(--right-column-width);
   }
 }
 
@@ -1464,4 +1464,53 @@
   margin-inline: 0;
   padding-inline: 0;
   padding-top: 0;
+}
+
+/*
+ * Design system v1: one right column (spec section 4). Home's panel, the
+ * channel panel, a thread, the member list and Inbox all use the same slot:
+ * one width, one edge, inside the raised panel.
+ */
+:root[data-design="v1"] {
+  --right-column-width: clamp(320px, 26vw, 400px);
+}
+
+/* The member list, in the column. Its header is the thread's, in the flow. */
+:root[data-design="v1"] .channel-roster-panel.is-v1.is-member-list {
+  padding: 0;
+  overflow: hidden;
+}
+
+:root[data-design="v1"] .community-interaction-drawer-back.is-v1.is-static {
+  position: static;
+  flex: 0 0 var(--web-topbar-height, 48px);
+}
+
+:root[data-design="v1"] .channel-roster-panel.is-member-list > .members-directory-content {
+  flex: 1 1 auto;
+  min-height: 0;
+  padding-top: 12px;
+}
+
+/* Inbox: the messages panel docks into the column instead of floating. */
+@media (min-width: 721px) {
+  :root[data-design="v1"] .web-direct-messages-host:not(.mobile-root) .community-dm-panel {
+    top: 9px;
+    right: 9px;
+    bottom: 9px;
+    width: var(--right-column-width);
+    height: auto;
+    max-height: none;
+    border: 0;
+    border-left: 1px solid var(--surface-raised-edge);
+    border-radius: 0 11px 11px 0;
+    background: var(--surface-raised);
+    box-shadow: none;
+  }
+
+  /* Pages with no column of their own make room, so nothing sits under it. */
+  :root[data-design="v1"] .app-root:has(.web-direct-messages-host:not(.mobile-root) .community-dm-panel) .community-page-header,
+  :root[data-design="v1"] .app-root:has(.web-direct-messages-host:not(.mobile-root) .community-dm-panel) .community-page-header + .community-tab-scroll {
+    margin-right: var(--right-column-width);
+  }
 }

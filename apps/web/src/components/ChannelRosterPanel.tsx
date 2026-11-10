@@ -67,6 +67,15 @@ function ChannelRosterWorkspace(props: RosterProps) {
     setChannel(props.channelId);
     setMembersOpen(false);
   }
+  // Design system v1: the member list opens in the right column, in the
+  // panel's place, instead of in a pop-up. The Members row in the left column
+  // asks for it through narrowOpen, as the people button does on a phone.
+  if (isDesignV1Active() && (membersOpen || props.narrowOpen) && !props.memberDetailOpen) {
+    const close = () => { setMembersOpen(false); props.onCloseNarrow?.(); };
+    return <RosterSurface {...props} channelId={undefined} narrowOpen={false}
+      onCloseNarrow={undefined} directory inline onCloseMembers={close}
+      onMessageUser={props.onMessageUser ? id => { close(); props.onMessageUser?.(id); } : undefined} />;
+  }
   return <>
     <RosterSurface {...props} onOpenMembers={() => setMembersOpen(true)} />
     {membersOpen ? <RosterSurface {...props} channelId={undefined} narrowOpen={false}
@@ -78,6 +87,8 @@ function ChannelRosterWorkspace(props: RosterProps) {
 // Both presentations share the same authorized readers, row rendering and actions.
 function RosterSurface(props: RosterProps & {
   directory?: boolean;
+  // With directory: render in the right column instead of a pop-up (v1).
+  inline?: boolean;
   onOpenMembers?: () => void;
   onCloseMembers?: () => void;
 }) {
@@ -338,6 +349,25 @@ function RosterSurface(props: RosterProps & {
   // Keep overlays outside that shell, as the directory already does below.
   if (v1Rail) return v1Rail;
   if (!props.directory) return <>{content}{selectedMember ? createPortal(settings, document.body) : null}</>;
+  if (props.inline) return <>
+    <div className="community-context-panel channel-roster-panel is-v1 is-member-list" role="region" aria-label="Community members"
+      onKeyDown={event => {
+        if (event.key !== "Escape" || event.defaultPrevented || selectedMember) return;
+        event.preventDefault(); props.onCloseMembers?.();
+      }}>
+      <div className="community-interaction-drawer-back is-v1 is-static">
+        <h2 className="community-thread-title">Members</h2>
+        <button className="community-thread-close" type="button" onClick={props.onCloseMembers} aria-label="Close members" title="Close members">
+          <X size={17} aria-hidden="true" />
+        </button>
+      </div>
+      {content}
+    </div>
+    {selectedMember ? createPortal(<div ref={settingsRef} onKeyDown={event => {
+      if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); setSelectedMembershipId(null); searchRef.current?.focus(); }
+      trapTab(event, settingsRef.current);
+    }}>{settings}</div>, document.body) : null}
+  </>;
   // Keep search and pagination mounted while the existing profile inspector is open.
   return createPortal(<><div className="modal-overlay" style={props.memberDetailOpen ? { display: "none" } : undefined} onMouseDown={props.onCloseMembers}>
     <section ref={dialogRef} className="modal members-directory-modal" role="dialog" aria-modal="true"

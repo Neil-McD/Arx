@@ -63,3 +63,20 @@ test("design v1: a thread names itself and its channel, and has a close button",
   const bare = renderToStaticMarkup(React.createElement(CommunityThreadHeader, { onClose: () => {} }));
   expect(bare).toContain('<h2 class="community-thread-title">Thread</h2>');
 });
+
+test("design v1: asking for members shows the full list in the column, not a pop-up", () => {
+  design.v1 = true;
+  const html = renderToStaticMarkup(React.createElement(ChannelRosterPanel, { ...props, narrowOpen: true, onCloseNarrow: () => {} }));
+  expect(html).toContain('class="community-context-panel channel-roster-panel is-v1 is-member-list"');
+  expect(html).toContain('<h2 class="community-thread-title">Members</h2>');
+  expect(html).toMatch(/aria-label="Close members"/);
+  expect(html).toContain("Search community members");
+  // The short panel steps aside for it.
+  expect(html).not.toContain("channel-rail-label");
+});
+
+test("design v1: an open thread still wins over the member list", () => {
+  design.v1 = true;
+  const html = renderToStaticMarkup(React.createElement(ChannelRosterPanel, { ...props, narrowOpen: true, memberDetailOpen: true }));
+  expect(html).not.toContain("is-member-list");
+});

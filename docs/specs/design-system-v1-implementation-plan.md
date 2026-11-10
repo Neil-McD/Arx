@@ -180,8 +180,12 @@ then each left-column button's page, then each page's right column.
   header's line (`CommunityPageFrame` and `CommunityPageHeader`): title on the
   left, the page's own actions on the right. Home stays without a line.
 - One content column: those pages share a 920px column with the same padding.
-- Still to do in the shell: one right-column slot (Inbox and the member list
-  inside it), the pages outside a community, and narrow, light and banner checks.
+- One right column: Home's panel, the channel panel, a thread, the member list
+  and Inbox share one slot and one width (`--right-column-width`). The member
+  list opens in the column (no pop-up); the messages panel docks into it and
+  pages without a column of their own make room.
+- Still to do in the shell: the pages outside a community, and narrow, light
+  and banner checks.
 
 ### Slice 4: Home
 
