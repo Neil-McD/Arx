@@ -12,7 +12,7 @@ import { resolveUserIdForAuthenticatedRequest } from "./authActor";
 import { listSharedChannelReadableRows } from "./communityChannelCore";
 import { readCanonicalUserIdentityProjection } from "./profileCore";
 import { communityIsActive, normalizeCommunityLifecycle } from "../shared/communityLifecycle";
-import { readCommunityActiveMemberCount, communityMembershipRowIsActive } from "./communityCore";
+import { readCommunityActiveMemberCount, communityMembershipRowIsActive, requireCommunityChatAccess } from "./communityCore";
 import { resolveCommunityInferenceFundingForAction } from "./founderInferenceRuntime";
 import { startFundedInferenceRun } from "./fundedInferenceGateway";
 import { readCanonicalPublicAppOrigin } from "./publicAppUrl";
@@ -344,6 +344,26 @@ export const getCommunityHomeSnapshot = query({
     if (!communityIsActive(community)) return null;
     const nowMs = Date.now();
     return await buildSnapshot(ctx, community, nowMs - DAY_MS, nowMs);
+  },
+});
+
+// Home for a member (design system v1): only what any member can already see
+// in the shared channels and on Events. No join requests, no names of who
+// joined or who has been quiet; those stay with the owner.
+export const getCommunityMemberHomeSnapshot = query({
+  args: { authSubject: v.optional(v.string()), communityId: v.id("communities") },
+  handler: async (ctx, args): Promise<FounderBriefSnapshot | null> => {
+    const userId = await resolveUserIdForAuthenticatedRequest({ ctx, authSubject: args.authSubject ?? null });
+    const { community } = await requireCommunityChatAccess({ ctx, communityId: args.communityId, userId });
+    if (!communityIsActive(community as any)) return null;
+    const nowMs = Date.now();
+    const snapshot = await buildSnapshot(ctx, community, nowMs - DAY_MS, nowMs);
+    return {
+      ...snapshot,
+      newMembers: { count: snapshot.newMembers.count, names: [] },
+      quietNewcomers: { count: 0, names: [] },
+      joinRequestsPending: 0,
+    };
   },
 });
 

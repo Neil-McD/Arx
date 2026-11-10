@@ -1339,7 +1339,8 @@ export async function setCloudFounderBriefSettings<SessionT>(
   }));
 }
 
-// Home's facts for the owner (convex/communityFounderBrief.ts getCommunityHomeSnapshot).
+// Home's facts (convex/communityFounderBrief.ts): getCommunityHomeSnapshot for the
+// owner, getCommunityMemberHomeSnapshot for a member.
 export type CloudCommunityHomeSnapshot = {
   memberCount: number;
   newMembers: { count: number; names: string[] };
@@ -1386,10 +1387,14 @@ export function normalizeCommunityHomeSnapshot(payload: unknown): CloudCommunity
 }
 
 export async function getCloudCommunityHomeSnapshot<SessionT>(
-  params: CloudCommunityAdminGatewayParams<SessionT> & { communityId: string },
+  params: CloudCommunityAdminGatewayParams<SessionT> & { communityId: string; audience?: "host" | "member" },
 ): Promise<CloudCommunityHomeSnapshot | null> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
-  return normalizeCommunityHomeSnapshot(await client.query("communityFounderBrief:getCommunityHomeSnapshot" as any, {
+  // A member's Home reads the member-safe facts; the owner's reads the brief's.
+  const operation = params.audience === "member"
+    ? "communityFounderBrief:getCommunityMemberHomeSnapshot"
+    : "communityFounderBrief:getCommunityHomeSnapshot";
+  return normalizeCommunityHomeSnapshot(await client.query(operation as any, {
     authSubject,
     communityId: params.communityId,
   }));

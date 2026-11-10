@@ -4,7 +4,7 @@ import * as React from "react";
 const web = createRequire(new URL("../apps/web/package.json", import.meta.url));
 const root = createRequire(import.meta.url);
 if (web.resolve("react") !== root.resolve("react")) vi.doMock(web.resolve("react"), () => React);
-const { greetingFor, homeCardFor, homeRowsFor, homeSentenceFor } = await import("../apps/web/src/components/WebCommunityHomeSection");
+const { greetingFor, homeCardFor, homeEventTimeFor, homeFiguresFor, homeRowsFor, homeSentenceFor } = await import("../apps/web/src/components/WebCommunityHomeSection");
 const { normalizeCommunityHomeSnapshot } = await import("../shared/cloudCommunityAdminGateway");
 
 const quiet = normalizeCommunityHomeSnapshot({
@@ -90,4 +90,39 @@ test("the snapshot is read defensively", () => {
     newMembers: { count: 0, names: ["Ana"] },
     unanswered: [],
   });
+});
+
+test("a member's Home has no card, no join requests, and asks for help rather than action", () => {
+  expect(homeCardFor(busy, actions, "member")).toBeNull();
+  expect(homeSentenceFor(busy, null, "member")).toBe("3 people joined since yesterday, and there are 30 new messages.");
+  expect(homeSentenceFor(quiet, null, "member")).toBe("It's quiet today.");
+  const rows = homeRowsFor(busy, actions, "member");
+  expect(rows.filter((row) => row.kind === "Can you help?").map((row) => row.title)).toEqual([
+    "Rafael asked in #general",
+    "Sara asked in #wins",
+  ]);
+  expect(rows.some((row) => row.kind === "Waiting")).toBe(false);
+  expect(homeFiguresFor(busy, "member").map((figure) => figure.label)).toEqual(["Members", "Active today"]);
+});
+
+test("the host's panel counts what the page already knows", () => {
+  expect(homeFiguresFor(busy, "host")).toEqual([
+    { label: "Members", value: "214", note: "3 joined since yesterday" },
+    { label: "Active today", value: "14", note: "9 posts, 21 replies" },
+    { label: "Waiting to join", value: "2", note: "requests" },
+    { label: "Unanswered", value: "2", note: "questions" },
+  ]);
+});
+
+test("a full list of unanswered questions reads as 5 or more", () => {
+  const question = { author: "A", channel: "general", text: "?", hoursAgo: 3 };
+  const full = { ...busy, unanswered: [question, question, question, question, question] };
+  expect(homeFiguresFor(full, "host")[3]).toMatchObject({ label: "Unanswered", value: "5+" });
+});
+
+test("an event soon is told in minutes or hours", () => {
+  const now = new Date("2026-11-13T14:40:00.000Z");
+  expect(homeEventTimeFor("2026-11-13T15:00:00.000Z", now)).toBe("In 20 minutes");
+  expect(homeEventTimeFor("2026-11-13T17:40:00.000Z", now)).toBe("In 3 hours");
+  expect(homeEventTimeFor("not a date", now)).toBe("");
 });

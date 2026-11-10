@@ -176,6 +176,18 @@ describe("founder brief delivery", () => {
     await expect(t.withIdentity({ subject: "home-stranger" }).query(api.communityFounderBrief.getCommunityHomeSnapshot, { communityId: f.communityId }))
       .rejects.toThrow(/community_home_owner_required/);
 
+    // A member's Home has the shared facts and none of the owner's.
+    const memberHome = await asMember.query(api.communityFounderBrief.getCommunityMemberHomeSnapshot, { communityId: f.communityId });
+    expect(memberHome).toMatchObject({
+      newMembers: { count: 1, names: [] },
+      activity: { posts: 1, replies: 0, activePeople: 1 },
+      unanswered: [{ author: "Ana", channel: "general" }],
+      quietNewcomers: { count: 0, names: [] },
+      joinRequestsPending: 0,
+    });
+    await expect(t.withIdentity({ subject: "home-stranger" }).query(api.communityFounderBrief.getCommunityMemberHomeSnapshot, { communityId: f.communityId }))
+      .rejects.toThrow();
+
     await t.run((ctx) => ctx.db.patch(f.communityId, { lifecycleStatus: "archived" } as any));
     await expect(asOwner.query(api.communityFounderBrief.getCommunityHomeSnapshot, { communityId: f.communityId })).resolves.toBeNull();
   });
