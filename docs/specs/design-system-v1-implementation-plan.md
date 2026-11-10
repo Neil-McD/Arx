@@ -116,12 +116,29 @@ Sizes are relative: S is a day's work or less for the factory, M a few, L more.
   Knowledge and Events; rows a community does not use are hidden; Analytics,
   Visit site and Invite move to the host's rows.
 - The account row and its menu: light or dark, profile and settings, sign out.
-- The rail stays until slice 8 gives it a replacement.
+- The rail stays until slice 8 gives it a replacement. (Brought forward on
+  2026-11-10, see "The frame" below: Neil asked for structure before polish.)
 - Checks to update: `community_channel_ui_contract_proof.ts`,
   `app_shell_decomposition_contract_proof.ts`, `compact_community_shell.test.ts`.
   Where a check only matches text, replace it with a behaviour test first, then
   change it.
 - Done when: every row opens what it opened before.
+
+### The frame (brought forward from slices 6 to 9)
+
+Done right after the first half of slice 4, because staging still read as the
+old app with new paint.
+
+- Inside a community the rail of community icons is gone. The community's name
+  on the banner is the switcher: your communities (a dot where something is
+  new), Discover, and starting one. Discover and global settings keep the rail
+  for now, since they have no left column of their own.
+- Inbox is a row under Home (it opens direct messages, with the unread count),
+  so the floating messages button is not shown beside the left column.
+- Members is a row under Events (it opens the people panel).
+- The settings gear on the name is replaced by a Manage row. Visit site, Invite
+  people, Analytics and Manage are plain rows above the account row.
+- The account row says "Host" only for the owner.
 
 ### Slice 4: Home
 

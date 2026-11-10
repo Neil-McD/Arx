@@ -10,6 +10,7 @@ import { WebMobileCommunityShell } from "./WebMobileCommunityShell";
 import { WebMobileGlobalShell } from "./WebMobileGlobalShell";
 import { WebCommunityNavSurface } from "./WebCommunityNavSurface";
 import { WebSettingsSidebar } from "./WebSettingsSidebar";
+import { isDesignV1Active } from "../../../../shared/designSystem";
 import type {
   MobileOverlay,
   WebCommunityShellProps,
@@ -97,6 +98,11 @@ export function WebShellChromeHost(props: WebShellChromeHostProps) {
   const desktopSettingsSidebar = (
     <WebSettingsSidebar settingsSidebar={props.settingsSidebar} />
   );
+  // Design system v1: inside a community there is one left column and no rail.
+  // Switching community lives in that column's banner (WebCommunitySwitcher).
+  const showDesktopCommunityRail =
+    props.communityShell.showDesktopCommunityRail &&
+    !(desktopCommunityNav && isDesignV1Active());
   const desktopFrameMode = desktopCommunityNav
     ? "community"
     : props.isGlobalSettings
@@ -111,7 +117,7 @@ export function WebShellChromeHost(props: WebShellChromeHostProps) {
     mobileOverlay: Boolean(props.mobileOverlay),
     mobileChromeAutoHideEnabled: props.mobileChromeAutoHideEnabled,
     mobileChromeReadingMode: props.mobileChromeReadingMode,
-    showDesktopCommunityRail: props.communityShell.showDesktopCommunityRail,
+    showDesktopCommunityRail,
     showDesktopCommunityNav: props.communityShell.showDesktopCommunityNav,
     isGlobalSettings: props.isGlobalSettings,
     hasLeftPanel: props.hasLeftPanel,
@@ -127,11 +133,13 @@ export function WebShellChromeHost(props: WebShellChromeHostProps) {
       <WebMobileCommunityShell communityShell={props.communityShell} />
 
       <div className={shellClassName}>
-        <WebCommunityRail
-          communityShell={props.communityShell}
-          presentation="desktop"
-        />
-        {props.communityShell.showDesktopCommunityRail ? (
+        {showDesktopCommunityRail ? (
+          <WebCommunityRail
+            communityShell={props.communityShell}
+            presentation="desktop"
+          />
+        ) : null}
+        {showDesktopCommunityRail ? (
           <div
             className={`product-shell-surface product-shell-surface--${desktopFrameMode}`}
           >

@@ -362,7 +362,11 @@ assert.match(
   /activeSelectionMode = "route"[\s\S]*const showActiveSelection = activeSelectionMode === "route"[\s\S]*const isSelected =[\s\S]*showActiveSelection &&[\s\S]*communityTab === "chat"/,
   "the shared navigation should distinguish an actual route selection from the mobile directory's no-selection state",
 );
-assert.doesNotMatch(communityNavSurface, /onOpenMembers=|memberCount=/, "Members page navigation is retired");
+// The classic column has no Members entry (members live in the channel's right
+// panel). Design system v1 adds a Members row that opens that same panel, so
+// it may only be wired behind the v1 layout.
+assert.doesNotMatch(communityNavSurface, /onOpenMembers=\{(?!useV1Layout \? )/, "Members navigation stays retired outside design v1");
+assert.match(communityNav, /isV1 && onOpenMembers && canViewMembersActiveCommunity/, "the Members row is v1-only and respects who may see members");
 assert.doesNotMatch(communityNav, /community-nav-members/, "no duplicate Members tab remains");
 
 

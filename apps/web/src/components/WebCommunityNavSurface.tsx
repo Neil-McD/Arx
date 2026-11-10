@@ -2,6 +2,7 @@ import { CommunityNav } from "../../../../shared/CommunityNav";
 import { webDestinationHasCommunityNavSelection } from "../../../../shared/webAppRouteState";
 import { isDesignV1Active } from "../../../../shared/designSystem";
 import { WebAccountMenu } from "./WebAccountMenu";
+import { WebCommunitySwitcher } from "./WebCommunitySwitcher";
 import type { WebCommunityShellProps } from "./webShellChromeShared";
 
 type WebCommunityNavSurfaceProps = {
@@ -54,6 +55,24 @@ export function WebCommunityNavSurface({
       }
       layout={useV1Layout ? "v1" : "classic"}
       accountSlot={useV1Layout && communityShell.account ? <WebAccountMenu {...communityShell.account} /> : null}
+      identitySlot={
+        useV1Layout && communityShell.account && communityShell.activeCommunity ? (
+          <WebCommunitySwitcher
+            activeCommunityName={communityShell.activeCommunity.name}
+            communities={communityShell.railCommunities}
+            selectedCommunitySlug={communityShell.selectedActiveCommunitySlug}
+            attentionById={communityShell.communityRailAttentionById}
+            onSelectCommunity={communityShell.onSelectActiveCommunity}
+            onOpenDiscover={communityShell.onOpenDiscover}
+            onCreateCommunity={communityShell.onOpenCommunityCreateCta}
+          />
+        ) : null
+      }
+      onOpenInbox={useV1Layout && communityShell.canOpenDirectMessages ? communityShell.onToggleDirectMessages : undefined}
+      isInboxOpen={communityShell.isDirectMessagesOpen}
+      inboxUnreadCount={communityShell.directMessagesUnreadCount}
+      onOpenMembers={useV1Layout ? communityShell.onOpenMembers : undefined}
+      memberCount={communityShell.activeCommunityMemberCount}
     />
   );
 }
