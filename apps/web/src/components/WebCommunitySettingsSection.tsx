@@ -1,3 +1,4 @@
+import { CommunityPageHeader } from "./CommunityPageHeader";
 import { useEffect, useState, type ComponentProps } from "react";
 import type { DragEvent } from "react";
 import type { CommunitySettingsLayer } from "../../../../shared/communityAccessViewModel";
@@ -829,11 +830,22 @@ export function WebCommunitySettingsSection(props: WebCommunitySettingsSectionPr
       ) : canManageCommunitySettings ? (
         <>
           <div className="create-community-form community-settings-form">
-            <CommunitySettingsPaneSwitcher
-              activePane={selectedSettingsPane}
-              panes={availableSettingsPanes}
-              onSelectPane={onSelectPane}
-            />
+            <CommunityPageHeader
+              title="Manage"
+              actions={
+                <CommunitySettingsPaneSwitcher
+                  activePane={selectedSettingsPane}
+                  panes={availableSettingsPanes}
+                  onSelectPane={onSelectPane}
+                />
+              }
+            >
+              <CommunitySettingsPaneSwitcher
+                activePane={selectedSettingsPane}
+                panes={availableSettingsPanes}
+                onSelectPane={onSelectPane}
+              />
+            </CommunityPageHeader>
             <div
               id={platformTabPanelId("community-settings", selectedSettingsPane)}
               role="tabpanel"
