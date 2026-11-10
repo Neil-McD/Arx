@@ -1566,9 +1566,14 @@
   --left-column-width: clamp(224px, 18.4vw, 264px);
 }
 
+/*
+ * Measurements are the mock's (polynet-design/hifi/style.css): header 52px,
+ * 56px gutters, a 328px conversation column padded 20px 24px 24px; a row is a
+ * 36px avatar, 14px gap, 14px 12px padding and 12px corners, name 14/600,
+ * kind 13, message 15/1.45, a 7px unread dot; bubbles 15/1.45 at 9px 13px.
+ */
 @media (min-width: 721px) {
   :root[data-design="v1"] .web-direct-messages-host.is-page .community-dm-inbox-panel {
-    --inbox-pad: max(32px, calc((100vw - var(--left-column-width) - 8px - 856px) / 2));
     top: 8px;
     right: 8px;
     bottom: 8px;
@@ -1577,36 +1582,27 @@
     width: auto;
     height: auto;
     max-height: none;
-    padding: calc(var(--web-topbar-height, 48px) + 28px) var(--inbox-pad) 40px;
+    gap: 0;
+    padding: 52px calc(var(--right-column-width) + 56px) 0 56px;
     border: 1px solid var(--surface-raised-edge);
     border-radius: 12px;
     background: var(--surface-raised);
     box-shadow: none;
   }
 
-  /* With a conversation open the list keeps to the left of it. */
-  :root[data-design="v1"] .web-direct-messages-host.is-page.has-conversation .community-dm-inbox-panel {
-    padding-right: calc(var(--right-column-width) + 32px);
-    padding-left: 32px;
-  }
-
   /* The page's header line, like every other page's. */
   :root[data-design="v1"] .web-direct-messages-host.is-page .community-dm-inbox-header {
     position: absolute;
     top: 0;
-    right: 0;
+    right: var(--right-column-width);
     left: 0;
     flex: none;
-    height: var(--web-topbar-height, 48px);
+    height: 52px;
     margin: 0;
-    padding: 0 10px 0 18px;
+    padding: 0 20px 0 56px;
     align-items: center;
     border-bottom: 1px solid var(--surface-raised-edge);
     border-radius: 0;
-  }
-
-  :root[data-design="v1"] .web-direct-messages-host.is-page.has-conversation .community-dm-inbox-header {
-    right: var(--right-column-width);
   }
 
   :root[data-design="v1"] .web-direct-messages-host.is-page .community-dm-inbox-header > div:first-child {
@@ -1616,11 +1612,217 @@
     min-width: 0;
   }
 
+  :root[data-design="v1"] .web-direct-messages-host.is-page .community-dm-inbox-title {
+    font-size: 14px;
+    font-weight: 600;
+    letter-spacing: -0.005em;
+  }
+
   :root[data-design="v1"] .web-direct-messages-host.is-page .community-dm-inbox-subtitle {
     display: block;
     margin: 0;
     color: var(--text-faint);
     font-size: 13px;
+  }
+
+  /* Finding someone is a small field in the header line, not a bar in the list. */
+  :root[data-design="v1"] .web-direct-messages-host.is-page .community-dm-inbox-search {
+    position: absolute;
+    top: 10px;
+    right: calc(var(--right-column-width) + 60px);
+    z-index: 3;
+    width: 220px;
+    height: 32px;
+    min-height: 0;
+    margin: 0;
+    padding: 0 10px;
+    border: 1px solid var(--border-default);
+    border-radius: 8px;
+    background: var(--bg-input);
+    font-size: 13px;
+  }
+
+  :root[data-design="v1"] .web-direct-messages-host.is-page .community-dm-inbox-search input {
+    font-size: 13px;
+  }
+
+  /* Smaller windows: the title keeps its room. The second line of the title
+     goes first, then the field narrows. */
+  @media (max-width: 1240px) {
+    :root[data-design="v1"] .web-direct-messages-host.is-page .community-dm-inbox-subtitle {
+      display: none;
+    }
+
+    :root[data-design="v1"] .web-direct-messages-host.is-page .community-dm-inbox-search {
+      width: clamp(120px, 16vw, 200px);
+    }
+  }
+
+  :root[data-design="v1"] .web-direct-messages-host.is-page .community-dm-inbox-list {
+    gap: 0;
+    margin: 0 -12px;
+    padding: 0 0 40px;
+    mask-image: none;
+  }
+
+  :root[data-design="v1"] .web-direct-messages-host.is-page .community-dm-inbox-label {
+    margin: 22px 12px 8px;
+    color: var(--text-faint);
+    font-size: 12px;
+    font-weight: 500;
+  }
+
+  :root[data-design="v1"] .web-direct-messages-host.is-page .community-dm-inbox-row {
+    flex: 0 0 auto;
+    min-height: 0;
+    gap: 14px;
+    padding: 14px 12px;
+    border: 0;
+    border-radius: 12px;
+  }
+
+  :root[data-design="v1"] .web-direct-messages-host.is-page .community-dm-inbox-row:hover {
+    background: var(--hover-overlay);
+  }
+
+  :root[data-design="v1"] .web-direct-messages-host.is-page .community-dm-inbox-row.is-selected {
+    background: var(--bg-card);
+  }
+
+  :root[data-design="v1"] .web-direct-messages-host.is-page .community-dm-inbox-avatar-wrap,
+  :root[data-design="v1"] .web-direct-messages-host.is-page .community-dm-inbox-avatar {
+    width: 36px;
+    height: 36px;
+    flex: 0 0 36px;
+  }
+
+  :root[data-design="v1"] .web-direct-messages-host.is-page .community-dm-inbox-row-body {
+    gap: 2px;
+  }
+
+  :root[data-design="v1"] .web-direct-messages-host.is-page .community-dm-inbox-row-name-line {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    min-width: 0;
+  }
+
+  :root[data-design="v1"] .web-direct-messages-host.is-page .community-dm-inbox-row-name {
+    color: var(--text-ink-primary);
+    font-size: 14px;
+    font-weight: 600;
+  }
+
+  :root[data-design="v1"] .web-direct-messages-host.is-page .community-dm-inbox-row-kind,
+  :root[data-design="v1"] .web-direct-messages-host.is-page .community-dm-inbox-row.is-person .community-dm-inbox-row-meta {
+    color: var(--text-faint);
+    font-size: 13px;
+    font-weight: 400;
+  }
+
+  :root[data-design="v1"] .web-direct-messages-host.is-page .community-dm-inbox-row-time {
+    color: var(--text-faint);
+    font-size: 12px;
+  }
+
+  :root[data-design="v1"] .web-direct-messages-host.is-page .community-dm-inbox-row-meta {
+    color: var(--text-ink-primary);
+    font-size: 15px;
+    line-height: 1.45;
+  }
+
+  :root[data-design="v1"] .web-direct-messages-host.is-page .community-dm-inbox-row-unread {
+    width: 7px;
+    height: 7px;
+    margin-left: 6px;
+    border-radius: 50%;
+    background: var(--text-ink-primary);
+    box-shadow: none;
+  }
+
+  /* The conversation column: 328px, padded 20px 24px 24px. */
+  :root[data-design="v1"] .web-direct-messages-host.is-page .community-dm-panel:not(.community-dm-inbox-panel) {
+    top: 9px;
+    right: 9px;
+    bottom: 9px;
+    width: var(--right-column-width);
+    height: auto;
+    max-height: none;
+    gap: 0;
+    padding: 20px 24px 24px;
+    border: 0;
+    border-left: 1px solid var(--surface-raised-edge);
+    border-radius: 0 11px 11px 0;
+    background: var(--surface-raised);
+    box-shadow: none;
+  }
+
+  :root[data-design="v1"] .web-direct-messages-host.is-page .community-dm-panel-header {
+    gap: 12px;
+    padding-bottom: 18px;
+    border-bottom: 1px solid var(--border-default);
+  }
+
+  :root[data-design="v1"] .web-direct-messages-host.is-page .community-dm-panel-avatar-wrap,
+  :root[data-design="v1"] .web-direct-messages-host.is-page .community-dm-panel-avatar {
+    width: 36px;
+    height: 36px;
+  }
+
+  :root[data-design="v1"] .web-direct-messages-host.is-page .community-dm-panel-title {
+    font-size: 15px;
+    font-weight: 600;
+  }
+
+  :root[data-design="v1"] .web-direct-messages-host.is-page .community-dm-panel-context {
+    color: var(--text-ink-secondary);
+    font-size: 13px;
+  }
+
+  :root[data-design="v1"] .web-direct-messages-host.is-page .community-dm-panel-message-bubble {
+    max-width: 300px;
+    padding: 9px 13px;
+    border: 0;
+    border-radius: 14px;
+    background: var(--bg-card);
+    color: var(--text-ink-primary);
+    font-size: 15px;
+    line-height: 1.45;
+  }
+
+  :root[data-design="v1"] .web-direct-messages-host.is-page .community-dm-panel-message-time {
+    color: var(--text-faint);
+    font-size: 12px;
+  }
+
+  :root[data-design="v1"] .web-direct-messages-host.is-page .community-dm-composer-float {
+    right: 24px;
+    bottom: 24px;
+    left: 24px;
+  }
+
+  :root[data-design="v1"] .web-direct-messages-host.is-page .community-dm-panel-composer {
+    align-items: center;
+    min-height: 46px;
+    padding: 0 8px 0 12px;
+    border: 1px solid var(--border-strong);
+    border-radius: 14px;
+    box-shadow: none;
+  }
+
+  /* No conversation yet: the column is there, with one line in it. */
+  :root[data-design="v1"] .web-direct-messages-host.is-page .community-dm-empty-column {
+    align-items: center;
+    justify-content: center;
+    color: var(--text-faint);
+    font-size: 14px;
+    text-align: center;
+  }
+
+  :root[data-design="v1"] .web-direct-messages-host.is-page .community-dm-empty-column p {
+    max-width: 220px;
+    margin: 0;
+    line-height: 1.5;
   }
 
   /* While Inbox is the page, it is the one selected row in the left column. */
