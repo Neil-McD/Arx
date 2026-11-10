@@ -803,6 +803,8 @@ function topLevelSelectors(selectorList: string): string[] {
 }
 
 for (const selector of designV1Css.replace(/\/\*[\s\S]*?\*\//g, "").matchAll(/([^{}]+)\{/g)) {
+  // Media queries only wrap rules; the rules inside are checked themselves.
+  if (selector[1].trim().startsWith("@media")) continue;
   for (const part of topLevelSelectors(selector[1])) {
     assert.match(part.trim(), /^:root\[data-design="v1"\]/, `v1 rule must be scoped: ${part.trim()}`);
   }
