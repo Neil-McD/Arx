@@ -465,7 +465,7 @@ export const CommunityNav = memo(function CommunityNav({
             <span className="nav-item-label">Home</span>
           </button>
           {onOpenInbox ? (
-            <button className={isInboxOpen ? "nav-item active" : "nav-item"} type="button" onClick={onOpenInbox} aria-expanded={isInboxOpen} title="Inbox">
+            <button className={isInboxOpen ? "nav-item community-nav-inbox active" : "nav-item community-nav-inbox"} type="button" onClick={onOpenInbox} aria-expanded={isInboxOpen} title="Inbox">
               <span className="nav-icon" aria-hidden="true"><Inbox size={17} strokeWidth={1.7} /></span>
               <span className="nav-item-label">Inbox</span>
               {inboxUnreadCount > 0 ? (

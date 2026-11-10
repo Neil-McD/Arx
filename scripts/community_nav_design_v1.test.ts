@@ -87,6 +87,9 @@ test("design v1 adds Inbox under Home and Members under Events, with their count
   ]);
   expect(html).toContain('<span class="nav-item-count" aria-label="4 unread">4</span>');
   expect(html).toContain('<span class="nav-item-hint">214</span>');
+  // The direct messages panel closes on outside clicks but spares this class,
+  // so pressing Inbox again closes it instead of closing and reopening.
+  expect(html).toMatch(/<button class="nav-item community-nav-inbox"[^>]*title="Inbox"/);
 });
 
 test("design v1 swaps the name and settings gear for the switcher; Manage opens settings", () => {

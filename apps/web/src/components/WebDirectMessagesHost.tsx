@@ -1167,7 +1167,7 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
       if (!(target instanceof Node)) return;
       const host = document.querySelector(".web-direct-messages-host");
       if (host?.contains(target)) return;
-      if (target instanceof Element && target.closest(".direct-messages-topbar-button")) return;
+      if (target instanceof Element && target.closest(".direct-messages-topbar-button, .community-nav-inbox")) return;
       onClose();
     };
     const handleKeyDown = (event: KeyboardEvent) => {
