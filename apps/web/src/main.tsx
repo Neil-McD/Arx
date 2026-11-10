@@ -13,6 +13,12 @@ import { buildTelemetryRouteLabel } from "../../../shared/routePrivacy";
 import { CommunityVisualIdentityRegistryProvider } from "../../../shared/CommunityVisualIdentityRegistry";
 import { captureDistributionAttributionFromLocation } from '../../../shared/distributionAttribution';
 
+// Design system v1's second voice (the agent) is loaded only when the build
+// enabled v1, so the default app downloads nothing new.
+if (document.documentElement.dataset.design === "v1") {
+  void import("@fontsource-variable/newsreader/opsz.css");
+}
+
 captureDistributionAttributionFromLocation();
 
 type ErrorBoundaryState = {
