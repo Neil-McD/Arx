@@ -1646,6 +1646,18 @@
     font-size: 13px;
   }
 
+  /* Smaller windows: the title keeps its room. The second line of the title
+     goes first, then the field narrows. */
+  @media (max-width: 1240px) {
+    :root[data-design="v1"] .web-direct-messages-host.is-page .community-dm-inbox-subtitle {
+      display: none;
+    }
+
+    :root[data-design="v1"] .web-direct-messages-host.is-page .community-dm-inbox-search {
+      width: clamp(120px, 16vw, 200px);
+    }
+  }
+
   :root[data-design="v1"] .web-direct-messages-host.is-page .community-dm-inbox-list {
     gap: 0;
     margin: 0 -12px;

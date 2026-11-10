@@ -784,9 +784,16 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
     if (!inboxIsPage || autoOpenedRef.current || isLoadingInbox) return;
     autoOpenedRef.current = true;
     if (activeConversationId) return;
+    // Someone asked for a particular conversation (a profile's Message button,
+    // a notification): that one opens, and nothing else is touched or marked read.
+    const personAsked = Boolean(openRequest && openRequest.requestId !== directMessageOpenRequestRef.current);
+    const conversationAsked = Boolean(
+      openConversationRequest && openConversationRequest.requestId !== openConversationRequestHandledRef.current,
+    );
+    if (personAsked || conversationAsked) return;
     const latest = conversations.find((conversation) => Math.floor(Number(conversation.last_seq ?? 0)) > 0);
     if (latest) openConversationRef.current?.(latest);
-  }, [activeConversationId, conversations, inboxIsPage, isLoadingInbox, isOpen]);
+  }, [activeConversationId, conversations, inboxIsPage, isLoadingInbox, isOpen, openConversationRequest, openRequest]);
   useEffect(() => {
     if (!isOpen || (activeConversationId && !listStaysVisible)) return;
     const timeoutId = window.setTimeout(
