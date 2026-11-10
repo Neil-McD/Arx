@@ -784,8 +784,26 @@ assert.equal(
 const designV1Css = read("apps/web/src/styles/design-v1.css");
 const indexCssImports = [...read("apps/web/src/index.css").matchAll(/^@import "([^"]+)";$/gm)].map((m) => m[1]);
 assert.equal(indexCssImports.at(-1), "./styles/design-v1.css", "the v1 stylesheet must be imported last");
+function topLevelSelectors(selectorList: string): string[] {
+  const parts: string[] = [];
+  let depth = 0;
+  let current = "";
+  for (const character of selectorList) {
+    if (character === "(") depth += 1;
+    if (character === ")") depth -= 1;
+    if (character === "," && depth === 0) {
+      parts.push(current);
+      current = "";
+    } else {
+      current += character;
+    }
+  }
+  parts.push(current);
+  return parts;
+}
+
 for (const selector of designV1Css.replace(/\/\*[\s\S]*?\*\//g, "").matchAll(/([^{}]+)\{/g)) {
-  for (const part of selector[1].split(",")) {
+  for (const part of topLevelSelectors(selector[1])) {
     assert.match(part.trim(), /^:root\[data-design="v1"\]/, `v1 rule must be scoped: ${part.trim()}`);
   }
 }
@@ -829,5 +847,24 @@ for (const [mode, selector] of [
     );
   }
 }
+
+// The agent's voice: Newsreader is fetched only when v1 is on, and channel rows
+// say who wrote them so the voice can follow the author.
+const webMain = read("apps/web/src/main.tsx");
+assert.doesNotMatch(webMain, /^import\s+["']@fontsource-variable\/newsreader/m, "Newsreader must not load by default");
+assert.match(
+  webMain,
+  /if \(document\.documentElement\.dataset\.design === "v1"\) \{\s*void import\("@fontsource-variable\/newsreader\/opsz\.css"\);/,
+  "Newsreader loads only when the build enabled v1",
+);
+assert.match(
+  read("apps/web/src/components/communityInteractionFeed.tsx"),
+  /className="community-interaction-group" data-actor-type=\{first\.root\.actor_type\}/,
+);
+assert.match(
+  read("apps/web/src/components/WebCommunityInteractionProjection.tsx"),
+  /data-actor-type=\{reply\.actor_type\} className=\{`community-interaction-reply/,
+);
+assert.match(designV1Css, /\[data-actor-type="community_agent"\] \.community-interaction-body/);
 
 console.log("app_theme_contract_proof: ok");

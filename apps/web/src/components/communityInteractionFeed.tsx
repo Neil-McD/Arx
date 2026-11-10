@@ -1015,7 +1015,7 @@ export function CommunityInteractionFeedList(
                 return (
                   <Fragment key={segment.key}>
                     {dividerBefore}
-                    <div className="community-interaction-group">
+                    <div className="community-interaction-group" data-actor-type={first.root.actor_type}>
                     <div className="community-interaction-group-gutter">
                       <ProfileHoverCard
                         userId={first.root.actor_user_id}
