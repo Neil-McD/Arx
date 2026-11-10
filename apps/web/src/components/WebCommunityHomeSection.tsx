@@ -2,7 +2,7 @@
 // section 5): a greeting in the guide's voice, the one thing that needs them,
 // and what happened across the community in the last day. The facts are the
 // daily brief's, read live (convex/communityFounderBrief.ts).
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ArrowRight, Sparkles } from "lucide-react";
 import {
   getCloudCommunityHomeSnapshot,
@@ -18,6 +18,8 @@ export type WebCommunityHomeSectionProps = {
   onOpenJoinRequests: () => void;
   onOpenChannelByName: (channelName: string) => void;
   onOpenEvents: () => void;
+  // Changes each time Home is opened, so the facts are read again.
+  refreshKey?: number;
   now?: Date;
 };
 
@@ -92,7 +94,9 @@ export function homeRowsFor(
       detail: listNames(snapshot.newMembers.names, snapshot.newMembers.count),
     });
   }
-  for (const question of snapshot.unanswered.slice(1, 3)) {
+  // The oldest question is skipped only when it is the card (no join requests).
+  const firstQuestion = snapshot.joinRequestsPending > 0 ? 0 : 1;
+  for (const question of snapshot.unanswered.slice(firstQuestion, firstQuestion + 2)) {
     rows.push({
       kind: "Waiting",
       title: `${question.author} asked in #${question.channel}`,
@@ -132,10 +136,16 @@ export function homeRowsFor(
 export function WebCommunityHomeSection(props: WebCommunityHomeSectionProps) {
   const [snapshot, setSnapshot] = useState<CloudCommunityHomeSnapshot | null>(null);
   const [failed, setFailed] = useState(false);
+  const loadedCommunityIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
-    setSnapshot(null);
+    // A new community starts blank; reopening the same one keeps what is shown
+    // until the fresh facts arrive.
+    if (loadedCommunityIdRef.current !== props.communityId) {
+      loadedCommunityIdRef.current = props.communityId;
+      setSnapshot(null);
+    }
     setFailed(false);
     void (async () => {
       try {
@@ -149,7 +159,7 @@ export function WebCommunityHomeSection(props: WebCommunityHomeSectionProps) {
     return () => {
       cancelled = true;
     };
-  }, [props.communityId]);
+  }, [props.communityId, props.refreshKey]);
 
   // Home is extra; if its facts can't load, the conversation below still works.
   if (failed) return null;

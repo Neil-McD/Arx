@@ -67,12 +67,20 @@ test("the rows say what happened, and the card's question is not repeated", () =
   const rows = homeRowsFor(busy, actions);
   expect(rows.map((row) => [row.kind, row.title])).toEqual([
     ["Joined", "3 new members"],
+    ["Waiting", "Rafael asked in #general"],
     ["Waiting", "Sara asked in #wins"],
     ["Quiet", "1 newcomer hasn't said hello yet"],
     ["Coming up", "Friday build call"],
     ["Activity", "9 posts and 21 replies from 14 people"],
   ]);
   expect(rows[0].detail).toBe("Tessa, Dev and 1 more");
+});
+
+test("when join requests take the card, the oldest question stays in the rows", () => {
+  const rows = homeRowsFor(busy, actions).filter((row) => row.kind === "Waiting");
+  expect(rows.map((row) => row.title)).toEqual(["Rafael asked in #general", "Sara asked in #wins"]);
+  const withoutRequests = homeRowsFor({ ...busy, joinRequestsPending: 0 }, actions).filter((row) => row.kind === "Waiting");
+  expect(withoutRequests.map((row) => row.title)).toEqual(["Sara asked in #wins"]);
 });
 
 test("the snapshot is read defensively", () => {
