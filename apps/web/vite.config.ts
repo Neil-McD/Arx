@@ -5,6 +5,7 @@ import { sentryVitePlugin } from "@sentry/vite-plugin";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { pdfAssetsPlugin } from "./pdfAssetsPlugin";
+import { applyDesignAttribute, DESIGN_V1_ENV_KEY, isDesignV1Enabled } from "./designSystemFlag";
 
 const webRoot = fileURLToPath(new URL(".", import.meta.url));
 const repoRoot = resolve(webRoot, "../..");
@@ -27,10 +28,20 @@ function deriveAppBuildId(env: Record<string, string>, mode: string): string {
   return `${mode}-${Date.now().toString(36)}`;
 }
 
+function designSystemPlugin(enabled: boolean): Plugin {
+  return {
+    name: "polynet-design-system",
+    transformIndexHtml(html) {
+      return applyDesignAttribute(html, enabled);
+    },
+  };
+}
+
 function polynetBuildVersionPlugin(params: {
   buildId: string;
   sentryRelease: string | null;
   environment: string | null;
+  design: "v1" | null;
 }): Plugin {
   return {
     name: "polynet-build-version",
@@ -82,6 +93,7 @@ export default defineConfig(({ mode }) => {
     env.VITE_SENTRY_ENVIRONMENT ?? process.env.VERCEL_ENV ?? mode,
   ).trim();
   const appBuildId = deriveAppBuildId(env, mode);
+  const designV1 = isDesignV1Enabled(env[DESIGN_V1_ENV_KEY] ?? process.env[DESIGN_V1_ENV_KEY]);
   const isReleaseGateBuild = Boolean(
     String(process.env.POLYNET_RELEASE_GATE_BUILD_ID ?? "").trim(),
   );
@@ -93,10 +105,12 @@ export default defineConfig(({ mode }) => {
     plugins: [
       react(),
       pdfAssetsPlugin(),
+      designSystemPlugin(designV1),
       polynetBuildVersionPlugin({
         buildId: appBuildId,
         sentryRelease: sentryRelease || null,
         environment: sentryEnvironment || null,
+        design: designV1 ? "v1" : null,
       }),
       ...(sentryBuildEnabled
         ? [

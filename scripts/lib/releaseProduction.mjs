@@ -27,6 +27,13 @@ export const REQUIRED_PRODUCTION_ENV = Object.freeze([
   "ARX_AUTH_BRIDGE_SECRET",
 ]);
 
+// Staging-only switches. Design system v1 is built only on polynet-staging
+// until Neil accepts it there (docs/specs/design-system-v1-implementation-plan.md);
+// the last slice of that plan removes this guard along with the switch.
+export const FORBIDDEN_PRODUCTION_ENV = Object.freeze([
+  "VITE_DESIGN_V1",
+]);
+
 const LIVE_POLL_INTERVAL_MS = 15_000;
 const LIVE_POLL_ATTEMPTS_BEFORE_PROMOTE = 12;
 const LIVE_POLL_ATTEMPTS_AFTER_PROMOTE = 12;
@@ -73,6 +80,16 @@ export function assertRequiredProductionEnv(payload, required = REQUIRED_PRODUCT
   });
   if (missing.length) {
     throw new ReleaseError("production_release_environment_missing_or_ambiguous", missing.join(","));
+  }
+}
+
+export function assertForbiddenProductionEnvAbsent(payload, forbidden = FORBIDDEN_PRODUCTION_ENV) {
+  if (!payload || !Array.isArray(payload.envs)) {
+    throw new ReleaseError("production_release_environment_unreadable");
+  }
+  const present = forbidden.filter((key) => payload.envs.some((row) => row?.key === key));
+  if (present.length) {
+    throw new ReleaseError("production_release_environment_has_staging_only_setting", present.join(","));
   }
 }
 
@@ -195,6 +212,7 @@ async function verifyCandidate(deps, options) {
     throw new ReleaseError("production_release_environment_unreadable");
   }
   assertRequiredProductionEnv(envPayload);
+  assertForbiddenProductionEnvAbsent(envPayload);
   // Backend settings: what staging has and the code reads must be in production.
   const convexNames = (deployment) => {
     try {

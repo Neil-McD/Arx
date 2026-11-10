@@ -1,0 +1,233 @@
+/*
+ * Design system v1: colour (docs/specs/design-system-v1.md, section 3).
+ *
+ * Applies only when the build sets data-design="v1" on <html>, which only the
+ * staging project does for now. Each block re-points the existing token names,
+ * so components change colour without being edited. Colour means something:
+ * blue is "you can act", purple is the agent, red is "something is wrong", and
+ * ink is text and unread. Selection stays a tint of ink.
+ *
+ * The selectors carry three parts so they win over the per-theme blocks in
+ * base.css and index.css, whatever the import order.
+ */
+
+:root[data-design="v1"]:not([data-theme="light"]) {
+  /* Ground: one near-black for the app, the rail and the workspace. */
+  --bg-app: #030406;
+  --bg-header: rgba(3, 4, 6, 0.95);
+  --bg-panel: #030406;
+  --bg-modal: #0d0f14;
+  --bg-workspace: #030406;
+  --bg-card: #0e0f12;
+  --bg-card-solid: #0e0f12;
+  --bg-card-alt: #0b0c0f;
+  --bg-card-hover: #15161a;
+  --bg-input: #08090c;
+  --surface-app: #030406;
+  --surface-rail: #030406;
+  --surface-workspace: #030406;
+  --surface-panel: #030406;
+  --surface-nav: #030406;
+
+  /* Primary action: blue. White text on it measures 4.6 to 5.5. */
+  --bg-button: #1077d2;
+  --bg-button-hover: #0b69c4;
+  --bg-button-text: #ffffff;
+  --conversation-primary-action-surface: #1077d2;
+  --conversation-primary-action-hover-surface: #0b69c4;
+  --conversation-primary-action-foreground: #ffffff;
+
+  /* Identity and selection stay ink. */
+  --accent-gold: #eef0f4;
+  --accent-gold-subtle: #7d7f82;
+  --accent-gold-glow: rgba(238, 240, 244, 0.08);
+  --accent-brand: #eef0f4;
+  --accent-selection: #eef0f4;
+  --accent-attention: #eef0f4;
+  --text-on-attention: #030406;
+  --accent-global-attention: #eef0f4;
+  --text-on-global-attention: #030406;
+
+  /* The agent: purple. */
+  --accent-agent: #a78bfa;
+  --accent-agent-strong: #c4b2fc;
+  --accent-agent-foreground: #c4b2fc;
+  --accent-agent-surface: rgba(167, 139, 250, 0.12);
+
+  /* You can act: blue. */
+  --focus-ring: #1d9bf0;
+  --stroke-focus: #1d9bf0;
+  --text-link: #6cbef7;
+  --text-link-hover: #8fcdf9;
+  --chat-link: #6cbef7;
+  --chat-link-hover: #8fcdf9;
+  --accent-cyan: #1d9bf0;
+  --accent-cyan-subtle: #6cbef7;
+  --accent-cyan-glow: rgba(29, 155, 240, 0.14);
+
+  /* Something is wrong: red. */
+  --accent-error: #ff8a7a;
+  --danger-text: #ff8a7a;
+  --danger-surface: rgba(255, 138, 122, 0.1);
+  --danger-border: rgba(255, 138, 122, 0.42);
+
+  /* Ink: 100, 88, 66 and 52 percent over the ground. */
+  --text-primary: #eef0f4;
+  --text-secondary: #d2d4d7;
+  --text-muted: #9ea0a3;
+  --text-faint: #7d7f82;
+
+  /* Hairlines and surfaces: ink at 5, 7 and 12 percent. */
+  --border-default: #131416;
+  --border-strong: #1f2022;
+  --border-muted: #0e0f11;
+  --border-active: #6e7073;
+  --divider-accent: rgba(238, 240, 244, 0.06);
+  --icon-default: #7d7f82;
+  --icon-hover: #d2d4d7;
+  --hover-overlay: rgba(238, 240, 244, 0.035);
+  --surface-subtle: rgba(238, 240, 244, 0.03);
+  --active-overlay: rgba(238, 240, 244, 0.09);
+  --surface-selected: rgba(238, 240, 244, 0.06);
+
+  --composer-surface: #0b0c0f;
+  --composer-focus-ring: rgba(29, 155, 240, 0.5);
+}
+
+:root[data-design="v1"][data-theme="light"] {
+  --bg-app: #f6f7f9;
+  --bg-header: rgba(246, 247, 249, 0.94);
+  --bg-panel: #f6f7f9;
+  --bg-modal: #ffffff;
+  --bg-workspace: #f6f7f9;
+  --bg-card: #ffffff;
+  --bg-card-solid: #ffffff;
+  --bg-card-alt: #ffffff;
+  --bg-card-hover: #eef0f3;
+  --bg-input: #ffffff;
+  --surface-app: #f6f7f9;
+  --surface-rail: #f6f7f9;
+  --surface-workspace: #f6f7f9;
+  --surface-panel: #f6f7f9;
+  --surface-nav: #f6f7f9;
+  --workspace-composer-bg: #ffffff;
+  --workspace-landing-action-bg: #ffffff;
+  --workspace-landing-action-hover-bg: #eef0f3;
+
+  --bg-button: #1077d2;
+  --bg-button-hover: #0b69c4;
+  --bg-button-text: #ffffff;
+  --conversation-primary-action-surface: #1077d2;
+  --conversation-primary-action-hover-surface: #0b69c4;
+  --conversation-primary-action-foreground: #ffffff;
+
+  --accent-gold: #0d1117;
+  --accent-gold-subtle: #65686d;
+  --accent-gold-glow: rgba(13, 17, 23, 0.08);
+  --accent-brand: #0d1117;
+  --accent-selection: #0d1117;
+  --accent-attention: #0d1117;
+  --text-on-attention: #ffffff;
+  --accent-global-attention: #0d1117;
+  --text-on-global-attention: #ffffff;
+
+  --accent-agent: #7c5cf0;
+  --accent-agent-strong: #5b3fd0;
+  --accent-agent-foreground: #5b3fd0;
+  --accent-agent-surface: rgba(124, 92, 240, 0.1);
+
+  --focus-ring: #1583dd;
+  --stroke-focus: #1583dd;
+  --text-link: #0a66c2;
+  --text-link-hover: #0858a8;
+  --chat-link: #0a66c2;
+  --chat-link-hover: #0858a8;
+  --accent-cyan: #1583dd;
+  --accent-cyan-subtle: #0a66c2;
+  --accent-cyan-glow: rgba(21, 131, 221, 0.12);
+
+  --accent-error: #be3527;
+  --danger-text: #be3527;
+  --danger-surface: rgba(190, 53, 39, 0.08);
+  --danger-border: rgba(190, 53, 39, 0.38);
+
+  /* Ink: 100, 92, 72 and 62 percent over the ground. */
+  --text-primary: #0d1117;
+  --text-secondary: #202329;
+  --text-muted: #4e5156;
+  --text-faint: #65686d;
+
+  --border-default: rgba(13, 17, 23, 0.08);
+  --border-strong: rgba(13, 17, 23, 0.14);
+  --border-muted: rgba(13, 17, 23, 0.05);
+  --border-active: #8a8d92;
+  --divider-accent: rgba(13, 17, 23, 0.08);
+  --stroke-panel-edge: rgba(13, 17, 23, 0.08);
+  --icon-default: #65686d;
+  --icon-hover: #0d1117;
+  --icon-active: #0d1117;
+  --hover-overlay: rgba(13, 17, 23, 0.035);
+  --surface-subtle: rgba(13, 17, 23, 0.03);
+  --active-overlay: rgba(13, 17, 23, 0.07);
+  --surface-selected: rgba(13, 17, 23, 0.06);
+  --text-selected: #0d1117;
+
+  --composer-surface: #ffffff;
+  --composer-focus-ring: rgba(21, 131, 221, 0.5);
+}
+
+/* Primary buttons that were written as white-on-dark take the primary action
+   colour. Third-party marks (Google sign-in) keep their own colours. */
+:root[data-design="v1"] .knowledge-source-intake-primary,
+:root[data-design="v1"] .builder-knowledge-setup-next,
+:root[data-design="v1"] .web-social-profile-modal-primary,
+:root[data-design="v1"] .platform-save-button:not(.is-saved):not(.synced) {
+  border-color: transparent;
+  background: var(--bg-button);
+  color: var(--bg-button-text);
+}
+
+:root[data-design="v1"] .knowledge-source-intake-primary:hover:not(:disabled),
+:root[data-design="v1"] .builder-knowledge-setup-next:hover:not(:disabled),
+:root[data-design="v1"] .web-social-profile-modal-primary:hover:not(:disabled),
+:root[data-design="v1"] .platform-save-button:not(.is-saved):not(.synced):hover:not(:disabled) {
+  background: var(--bg-button-hover);
+}
+
+/* Settings primary and submit buttons pair the button text with the accent;
+   under v1 the accent is ink, so they take the primary action colour too. */
+:root[data-design="v1"] .settings-panel button.primary:not(.platform-save-button),
+:root[data-design="v1"] .settings-panel button[type="submit"]:not(.platform-save-button) {
+  border-color: var(--bg-button);
+  background: var(--bg-button);
+  color: var(--bg-button-text);
+}
+
+:root[data-design="v1"] .settings-panel button.primary:not(.platform-save-button):hover:not(:disabled),
+:root[data-design="v1"] .settings-panel button[type="submit"]:not(.platform-save-button):hover:not(:disabled) {
+  border-color: var(--bg-button-hover);
+  background: var(--bg-button-hover);
+  filter: none;
+}
+
+/* Your own messages sit on a quiet raised surface, not the action colour. */
+:root[data-design="v1"] .community-dm-panel-message.is-own .community-dm-panel-message-bubble {
+  border-color: transparent;
+  background: var(--bg-card-hover);
+  color: var(--text-primary);
+}
+
+:root[data-design="v1"] .community-dm-panel-message.is-own .community-dm-panel-message-bubble a:not(:where(dialog a)) {
+  color: var(--text-link);
+  text-decoration-color: color-mix(in srgb, var(--text-link) 42%, transparent);
+}
+
+:root[data-design="v1"] .community-dm-panel-message.is-own .community-dm-panel-message-bubble .chat-inline-code {
+  border-color: var(--border-strong);
+  background: var(--surface-subtle);
+}
+
+:root[data-design="v1"] .community-dm-panel-message.is-own.is-media-only .community-dm-panel-message-bubble,
+:root[data-design="v1"] .community-dm-panel-message.is-own .community-dm-panel-message-bubble:has(> .community-dm-media-grid:only-child) {
+  background: transparent;
+}

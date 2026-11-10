@@ -6,6 +6,7 @@ import {
   assertAutodeployDisabled,
   assertCleanWorktree,
   assertExactOriginMain,
+  assertForbiddenProductionEnvAbsent,
   assertRequiredProductionEnv,
   lastDeploymentUrl,
   parseLiveBuildId,
@@ -145,6 +146,15 @@ describe("production release guards", () => {
     expect(() => assertRequiredProductionEnv({
       envs: [row("VITE_CONVEX_URL"), row("VITE_CONVEX_URL"), row("VITE_PUBLIC_APP_URL"), row("ARX_AUTH_BRIDGE_SECRET")],
     })).toThrow("VITE_CONVEX_URL");
+  });
+
+  test("staging-only settings must not exist in production", () => {
+    const row = (key: string) => ({ key, target: ["production"] });
+    const required = [row("VITE_CONVEX_URL"), row("VITE_PUBLIC_APP_URL"), row("ARX_AUTH_BRIDGE_SECRET")];
+    expect(() => assertForbiddenProductionEnvAbsent(null)).toThrow("production_release_environment_unreadable");
+    expect(() => assertForbiddenProductionEnvAbsent({ envs: required })).not.toThrow();
+    expect(() => assertForbiddenProductionEnvAbsent({ envs: [...required, row("VITE_DESIGN_V1")] }))
+      .toThrow("production_release_environment_has_staging_only_setting");
   });
 
   test("build ids and deployment urls are parsed strictly", () => {
