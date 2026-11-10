@@ -12,6 +12,7 @@ import {
   parseAppTheme,
   type AppTheme,
 } from "../shared/theme.ts";
+import { applyDesignAttribute, isDesignV1Enabled } from "../apps/web/designSystemFlag.ts";
 
 function read(path: string): string {
   return readFileSync(path, "utf8");
@@ -762,6 +763,71 @@ for (const [label, foreground, background] of accessiblePairs) {
     contrastRatio(foreground, background) >= 4.5,
     `${label} should meet WCAG AA contrast for normal text`,
   );
+}
+
+// Design system v1 (docs/specs/design-system-v1.md) ships behind a build-time
+// switch. Without it the app must render exactly as before: nothing in the v1
+// stylesheet may apply unless the root carries data-design="v1".
+assert.equal(isDesignV1Enabled("1"), true);
+for (const off of [undefined, null, "", "0", "true", "v1", " 2 "]) {
+  assert.equal(isDesignV1Enabled(off), false, `VITE_DESIGN_V1=${String(off)} must leave v1 off`);
+}
+const sourceIndexHtml = read("apps/web/index.html");
+assert.doesNotMatch(sourceIndexHtml, /data-design=/, "only the build may stamp data-design");
+assert.equal(applyDesignAttribute(sourceIndexHtml, false), sourceIndexHtml);
+assert.match(applyDesignAttribute('<html lang="en">', true), /^<html lang="en" data-design="v1">$/);
+assert.equal(
+  applyDesignAttribute('<html lang="en" data-design="v1">', true),
+  '<html lang="en" data-design="v1">',
+);
+
+const designV1Css = read("apps/web/src/styles/design-v1.css");
+const indexCssImports = [...read("apps/web/src/index.css").matchAll(/^@import "([^"]+)";$/gm)].map((m) => m[1]);
+assert.equal(indexCssImports.at(-1), "./styles/design-v1.css", "the v1 stylesheet must be imported last");
+for (const selector of designV1Css.replace(/\/\*[\s\S]*?\*\//g, "").matchAll(/([^{}]+)\{/g)) {
+  for (const part of selector[1].split(",")) {
+    assert.match(part.trim(), /^:root\[data-design="v1"\]/, `v1 rule must be scoped: ${part.trim()}`);
+  }
+}
+
+function v1Tokens(selector: string): Map<string, string> {
+  const start = designV1Css.indexOf(`${selector} {`);
+  assert.ok(start >= 0, `design-v1.css should define ${selector}`);
+  const block = designV1Css.slice(start, designV1Css.indexOf("}", start));
+  return new Map(
+    [...block.matchAll(/(--[a-z0-9-]+):\s*(#[0-9a-f]{6});/gi)].map((match) => [match[1], match[2]]),
+  );
+}
+
+for (const [mode, selector] of [
+  ["dark", ':root[data-design="v1"]:not([data-theme="light"])'],
+  ["light", ':root[data-design="v1"][data-theme="light"]'],
+] as const) {
+  const tokens = v1Tokens(selector);
+  const token = (name: string) => {
+    const value = tokens.get(name);
+    assert.ok(value, `v1 ${mode} should set ${name} to a six-digit colour`);
+    return value;
+  };
+  const ground = token("--bg-app");
+  const pairs: Array<[string, string, string]> = [
+    ["primary text", token("--text-primary"), ground],
+    ["secondary text", token("--text-secondary"), ground],
+    ["muted text", token("--text-muted"), ground],
+    ["faint text", token("--text-faint"), ground],
+    ["primary button", token("--bg-button-text"), token("--bg-button")],
+    ["primary button, hover", token("--bg-button-text"), token("--bg-button-hover")],
+    ["link", token("--text-link"), ground],
+    ["agent text", token("--accent-agent-foreground"), ground],
+    ["error text", token("--danger-text"), ground],
+    ["text on attention", token("--text-on-attention"), token("--accent-attention")],
+  ];
+  for (const [label, foreground, background] of pairs) {
+    assert.ok(
+      contrastRatio(foreground, background) >= 4.5,
+      `v1 ${mode}: ${label} should meet WCAG AA contrast (${foreground} on ${background})`,
+    );
+  }
 }
 
 console.log("app_theme_contract_proof: ok");
