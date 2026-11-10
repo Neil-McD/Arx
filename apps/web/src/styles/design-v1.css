@@ -574,7 +574,8 @@
   gap: 40px;
   width: 100%;
   max-width: 720px;
-  margin: 0 auto 32px;
+  /* Left edge shared with the composer below, not centred on its own. */
+  margin: 0 auto 32px 0;
   padding-top: 28px;
 }
 
