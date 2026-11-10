@@ -1,3 +1,4 @@
+import { CommunityPageHeader } from "./CommunityPageHeader";
 import { useEffect, useState, type ComponentProps } from "react";
 import { buildPlatformSwitcherStyle } from "../../../../shared/platformSwitcherUi";
 import { WebPlatformTabList, platformTabId, platformTabPanelId } from "./WebPlatformChoiceControls";
@@ -27,19 +28,24 @@ export function WebCommunityKnowledgePanel({ resources, context }: Props) {
     { id: "resources", label: "Resources" },
     ...(context.canViewGraph ? [{ id: "notes" as const, label: "Notes" }] : []),
   ];
+  const tabList = (
+    <WebPlatformTabList
+      tabs={tabs}
+      activeTab={notesOpen ? "notes" : "resources"}
+      onSelectTab={setView}
+      ariaLabel="Knowledge view"
+      idPrefix="community-knowledge"
+      style={buildPlatformSwitcherStyle(tabs.length, notesOpen ? 1 : 0)}
+    />
+  );
   return (
     <section className="community-knowledge-page" aria-label="Knowledge">
-      <div className="community-knowledge-header">
-        <h1>Knowledge</h1>
-        <WebPlatformTabList
-          tabs={tabs}
-          activeTab={notesOpen ? "notes" : "resources"}
-          onSelectTab={setView}
-          ariaLabel="Knowledge view"
-          idPrefix="community-knowledge"
-          style={buildPlatformSwitcherStyle(tabs.length, notesOpen ? 1 : 0)}
-        />
-      </div>
+      <CommunityPageHeader title="Knowledge" actions={tabs.length > 1 ? tabList : null}>
+        <div className="community-knowledge-header">
+          <h1>Knowledge</h1>
+          {tabList}
+        </div>
+      </CommunityPageHeader>
       <div hidden={notesOpen} role="tabpanel" id={platformTabPanelId("community-knowledge", "resources")} aria-labelledby={platformTabId("community-knowledge", "resources")}>
         <CommunityResourcesPanel {...resources} />
       </div>

@@ -1,3 +1,4 @@
+import { CommunityPageHeader } from "./CommunityPageHeader";
 import { useMemo, useState, type FormEvent } from "react";
 import { communityEventDisplayEnd, communityEventPhase, DEFAULT_COMMUNITY_EVENT_DURATION_MS } from "../../../../shared/communityEventLifecycle";
 import { useCommunityEventClock } from "../../../../shared/useCommunityEventClock";
@@ -514,16 +515,7 @@ export function WebCommunityEventsSection(props: WebCommunityEventsSectionProps)
     }
   };
 
-  return (
-    <div className="community-panel community-events-panel">
-      <div className="feed-header-row">
-        <div className="feed-header-copy">
-          <div className="resources-header">Events</div>
-          <div className="feed-header-subtitle">
-            Calls and community events for {capabilities.activeCommunityName ?? "this community"}.
-          </div>
-        </div>
-        {capabilities.hasActiveCommunity && capabilities.canManageEvents ? (
+  const newEventButton = capabilities.hasActiveCommunity && capabilities.canManageEvents ? (
           <button
             className="community-events-new-btn"
             type="button"
@@ -531,8 +523,21 @@ export function WebCommunityEventsSection(props: WebCommunityEventsSectionProps)
           >
             New event
           </button>
-        ) : null}
-      </div>
+        ) : null;
+
+  return (
+    <div className="community-panel community-events-panel">
+      <CommunityPageHeader title="Events" actions={newEventButton}>
+        <div className="feed-header-row">
+          <div className="feed-header-copy">
+            <div className="resources-header">Events</div>
+            <div className="feed-header-subtitle">
+              Calls and community events for {capabilities.activeCommunityName ?? "this community"}.
+            </div>
+          </div>
+          {newEventButton}
+        </div>
+      </CommunityPageHeader>
 
       <div className="community-events-month-nav" role="group" aria-label="Event month">
         <button

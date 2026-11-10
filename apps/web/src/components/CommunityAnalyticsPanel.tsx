@@ -1,3 +1,4 @@
+import { CommunityPageHeader } from "./CommunityPageHeader";
 import { useMemo, useState } from "react";
 import { AnalyticsLineChart } from "../../../../shared/AnalyticsLineChart";
 import { formatCount, formatMoneyBaseUnits, formatPercent } from "../../../../shared/contentFormatting";
@@ -59,19 +60,16 @@ export function CommunityAnalyticsPanel(props: CommunityAnalyticsPanelProps) {
     return <div className="chat-empty">Only owners and admins can view community analytics.</div>;
   }
 
-  return (
-    <>
-      <div className="analytics-header-row">
-        <div className="analytics-title-stack">
-          <div className="panel-title">Analytics</div>
-          <WebAnalyticsScopeSwitcher
+  const scopeSwitcher = (
+    <WebAnalyticsScopeSwitcher
             activeScope="community"
             showPlatformScope={capabilities.canViewPlatformAnalytics}
             onOpenCommunityScope={() => undefined}
             onOpenPlatformScope={actions.openPlatformAnalytics}
           />
-        </div>
-        <div
+  );
+  const rangeSwitcher = (
+    <div
           className="platform-switcher platform-switcher-compact"
           role="tablist"
           aria-label="Time range"
@@ -93,7 +91,19 @@ export function CommunityAnalyticsPanel(props: CommunityAnalyticsPanelProps) {
             </button>
           ))}
         </div>
-      </div>
+  );
+
+  return (
+    <>
+      <CommunityPageHeader title="Analytics" actions={<>{scopeSwitcher}{rangeSwitcher}</>}>
+        <div className="analytics-header-row">
+          <div className="analytics-title-stack">
+            <div className="panel-title">Analytics</div>
+            {scopeSwitcher}
+          </div>
+          {rangeSwitcher}
+        </div>
+      </CommunityPageHeader>
       <div className="settings-section">
         {state.isLoadingCommunityAnalytics && (
           <div className="chat-loading">
