@@ -1,3 +1,4 @@
+import { isDesignV1Active } from "../../../../shared/designSystem";
 import {
   useCallback,
   useEffect,
@@ -89,7 +90,19 @@ function normalizeEventsMonthIso(raw: string | null | undefined): string {
   return new Date(normalized.getFullYear(), normalized.getMonth(), 1).toISOString();
 }
 
+// Design system v1 lists events instead of showing a month: the last three
+// weeks and the next six, from the start of today (the server allows 62 days).
+export function getWebCommunityEventsListRange(now: Date = new Date()): CommunityEventsRange {
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const start = new Date(today);
+  start.setDate(today.getDate() - 21);
+  const end = new Date(today);
+  end.setDate(today.getDate() + 41);
+  return { startIso: start.toISOString(), endIso: end.toISOString() };
+}
+
 export function getWebCommunityEventsMonthRange(monthIso: string): CommunityEventsRange {
+  if (isDesignV1Active()) return getWebCommunityEventsListRange();
   const monthStart = new Date(normalizeEventsMonthIso(monthIso));
   const start = new Date(monthStart);
   start.setDate(monthStart.getDate() - monthStart.getDay());
