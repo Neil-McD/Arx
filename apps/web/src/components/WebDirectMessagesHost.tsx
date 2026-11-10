@@ -771,8 +771,11 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
     [],
   );
 
+  // In design v1 the list stays beside an open conversation, so its people
+  // search keeps working there. Elsewhere the list is hidden behind it.
+  const listStaysVisible = !props.mobileRoot && isDesignV1Active();
   useEffect(() => {
-    if (!isOpen || activeConversationId) return;
+    if (!isOpen || (activeConversationId && !listStaysVisible)) return;
     const timeoutId = window.setTimeout(
       () => {
         void loadNetworkPeople(searchValue);
