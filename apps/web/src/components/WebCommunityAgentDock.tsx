@@ -12,6 +12,7 @@ import {
   type FormEvent,
   type SetStateAction,
 } from "react";
+import { WebCommunityHomeSection, type WebCommunityHomeSectionProps } from "./WebCommunityHomeSection";
 import {
   LoaderCircle,
   MessageSquarePlus,
@@ -131,6 +132,8 @@ export type WebCommunityAgentDockProps = {
   voiceButtonProps: ComponentProps<typeof VoiceInputButton>;
   finalizeVoiceInputForSubmit?: () => Promise<string>;
   onStartBuilder?: () => void;
+  // Design system v1: the owner's Home above the conversation (page mode only).
+  home?: Omit<WebCommunityHomeSectionProps, "session" | "ensureSession"> | null;
 };
 
 const COMMUNITY_AGENT_LIMIT_CODE = COMMUNITY_AGENT_LIMIT_REACHED_CODE;
@@ -756,16 +759,34 @@ function WebCommunityAgentDock(props, ref) {
     retryRef.current = null;
   }, [clearAttachmentDrafts, observeThreadContext]);
 
+  // With Home above the conversation, opening the page shows Home first; the
+  // transcript follows the bottom again once a turn is under way.
+  const homeActive = Boolean(props.pageMode && props.home);
+  const followConversationRef = useRef(false);
+  const [homeRefreshKey, setHomeRefreshKey] = useState(0);
+  useEffect(() => {
+    if (!isOpenSurface) {
+      followConversationRef.current = false;
+      return;
+    }
+    setHomeRefreshKey((key) => key + 1);
+  }, [isOpenSurface]);
+  if (streamedText || runtimeEvents.length > 0) followConversationRef.current = true;
+
   useEffect(() => {
     if (!isOpenSurface) return;
     const frame = window.requestAnimationFrame(() => {
+      if (homeActive && !followConversationRef.current) {
+        scrollRef.current?.scrollTo({ top: 0 });
+        return;
+      }
       scrollRef.current?.scrollTo({
         top: scrollRef.current.scrollHeight,
         behavior: "smooth",
       });
     });
     return () => window.cancelAnimationFrame(frame);
-  }, [isOpenSurface, messages.length, runtimeEvents.length, streamedText]);
+  }, [homeActive, isOpenSurface, messages.length, runtimeEvents.length, streamedText]);
 
   const startNewChat = async () => {
     if (
@@ -1157,7 +1178,16 @@ function WebCommunityAgentDock(props, ref) {
         </header>
 
         <div className="community-agent-dock-transcript" ref={scrollRef}>
-          {visibleMessages.length === 0 &&
+          {props.pageMode && props.home ? (
+            <WebCommunityHomeSection
+              {...props.home}
+              session={props.session}
+              ensureSession={props.ensureSession}
+              refreshKey={homeRefreshKey}
+            />
+          ) : null}
+          {!(props.pageMode && props.home) &&
+          visibleMessages.length === 0 &&
           !composerIsBusy &&
           !isPreparing &&
           !isStartingNewChat ? (

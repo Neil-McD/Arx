@@ -2,6 +2,7 @@ import {
   useMemo,
   useRef,
 } from "react";
+import { isDesignV1Active } from "../../../shared/designSystem";
 import "highlight.js/styles/github-dark.css";
 import {
   beginBrowserSignedOutState,
@@ -2460,6 +2461,24 @@ export default function App() {
       globalOverlayHostProps={globalOverlayHostProps}
       communityAgentDockRef={communityAgentComposerApiRef}
       communityAgentDockProps={{
+        home:
+          !showMobileShell &&
+          isDesignV1Active() &&
+          activeCommunity &&
+          canonicalSessionUserId &&
+          activeCommunity.owner_id === canonicalSessionUserId
+            ? {
+                communityId: activeCommunity.id,
+                communityName: activeCommunity.name,
+                firstName: displayName(canonicalSessionUserId).trim().split(/\s+/)[0] || "there",
+                onOpenJoinRequests: shellChromeHostProps.communityShell.onOpenMembers,
+                onOpenChannelByName: (channelName: string) => {
+                  const channel = activeCommunityChannels.find((candidate) => candidate.name === channelName);
+                  if (channel) shellChromeHostProps.communityShell.onSelectCommunityChannel(channel);
+                },
+                onOpenEvents: () => handleSelectCommunityTab("events"),
+              }
+            : null,
         pageMode: !showMobileShell,
         pageActive: activePage === "community" && communityTab === "agent",
         isVisible: isCommunityAgentDockVisible,

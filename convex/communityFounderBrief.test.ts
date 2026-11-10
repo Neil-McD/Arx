@@ -153,6 +153,33 @@ describe("founder brief delivery", () => {
     })).rejects.toThrow(/owner_required/);
   });
 
+  it("Home shows the owner the brief's facts for the last day, and nobody else", async () => {
+    const t = convexTest(schema, modules);
+    const f = await fixture(t, Date.now());
+    const asOwner = t.withIdentity({ subject: "brief-Owner" });
+    const home = await asOwner.query(api.communityFounderBrief.getCommunityHomeSnapshot, { communityId: f.communityId });
+    expect(home).toMatchObject({
+      communityName: "Dawn Patrol",
+      windowHours: 24,
+      newMembers: { count: 1, names: ["Ana"] },
+      activity: { posts: 1, replies: 0, activePeople: 1 },
+      unanswered: [{ author: "Ana", channel: "general", text: "Where do we meet on Saturday?", hoursAgo: 4 }],
+      quietNewcomers: { count: 1, names: ["Ben"] },
+      joinRequestsPending: 1,
+      upcomingEvents: [],
+    });
+
+    const asMember = t.withIdentity({ subject: "brief-Ana" });
+    await expect(asMember.query(api.communityFounderBrief.getCommunityHomeSnapshot, { communityId: f.communityId }))
+      .rejects.toThrow(/community_home_owner_required/);
+    await t.run((ctx) => ctx.db.insert("users", { authSubject: "home-stranger", createdAt: 0, updatedAt: 0 } as any));
+    await expect(t.withIdentity({ subject: "home-stranger" }).query(api.communityFounderBrief.getCommunityHomeSnapshot, { communityId: f.communityId }))
+      .rejects.toThrow(/community_home_owner_required/);
+
+    await t.run((ctx) => ctx.db.patch(f.communityId, { lifecycleStatus: "archived" } as any));
+    await expect(asOwner.query(api.communityFounderBrief.getCommunityHomeSnapshot, { communityId: f.communityId })).resolves.toBeNull();
+  });
+
   it("schedules the next brief at the founder's next local hour", () => {
     expect(new Date(nextOccurrenceMs(Date.parse("2026-10-26T08:30:00.000Z"), 8, "UTC")).toISOString()).toBe("2026-10-27T08:00:00.000Z");
     expect(new Date(nextOccurrenceMs(Date.parse("2026-10-26T13:30:00.000Z"), 8, "America/New_York")).toISOString()).toBe("2026-10-27T12:00:00.000Z");
