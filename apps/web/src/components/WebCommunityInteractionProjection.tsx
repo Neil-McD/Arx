@@ -957,6 +957,10 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
       {props.communityId && props.activeChannel ? <ChannelRosterPanel
         onCloseNarrow={closePeople}
         narrowOpen={peopleOpen}
+        pinned={props.pinnedRoot ? {
+          label: (props.pinnedRoot.root.title || props.pinnedRoot.root.content_summary || "Pinned post").trim().slice(0, 80),
+          onOpen: () => props.onSelectRoot(props.pinnedRoot!.root.id),
+        } : null}
         joinReview={{
           canReviewJoinRequests: props.canReviewCommunityJoinRequests,
           joinReviewMode: props.communityJoinReviewMode,
