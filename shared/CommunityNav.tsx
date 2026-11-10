@@ -657,7 +657,7 @@ export const CommunityNav = memo(function CommunityNav({
             {communityTab !== "events" && tabIndicators.events ? <span className="nav-item-dot" aria-hidden="true" /> : null}
           </button>
           {isV1 && onOpenMembers && canViewMembersActiveCommunity ? (
-            <button className="nav-item" type="button" onClick={onOpenMembers} title="Members">
+            <button className="nav-item nav-item-members" type="button" onClick={onOpenMembers} title="Members">
               <span className="nav-icon" aria-hidden="true"><Users size={17} strokeWidth={1.7} /></span>
               <span className="nav-item-label">Members</span>
               {memberCount ? <span className="nav-item-hint">{memberCount}</span> : null}
