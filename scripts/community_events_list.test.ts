@@ -37,3 +37,13 @@ test("the date block shows the day and the weekday, or the month once it is past
   expect(eventDateBlock(at(17, 18), false)).toEqual({ number: "17", word: new Date(at(17, 18)).toLocaleDateString(undefined, { weekday: "short" }) });
   expect(eventDateBlock(at(6, 10), true)).toEqual({ number: "6", word: new Date(at(6, 10)).toLocaleDateString(undefined, { month: "short" }) });
 });
+
+test("the list window never exceeds the server's 62-day limit, even across a clock change", async () => {
+  const { getWebCommunityEventsListRange } = await import("../apps/web/src/controllers/useWebCommunityContentController");
+  for (const day of [new Date(2026, 9, 25), new Date(2026, 10, 10), new Date(2027, 2, 20), new Date(2027, 5, 1)]) {
+    const range = getWebCommunityEventsListRange(day);
+    const span = Date.parse(range.endIso) - Date.parse(range.startIso);
+    expect(span).toBeLessThanOrEqual(62 * 86_400_000);
+    expect(span).toBeGreaterThan(60 * 86_400_000);
+  }
+});

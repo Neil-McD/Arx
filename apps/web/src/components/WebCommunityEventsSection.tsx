@@ -1,7 +1,7 @@
 import { CommunityPageHeader, CommunityPageRail } from "./CommunityPageHeader";
 import { isDesignV1Active } from "../../../../shared/designSystem";
 import { eventDateBlock, eventDayWord, featuredEventLabel, splitCommunityEvents } from "./communityEventsList";
-import { useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { communityEventDisplayEnd, communityEventPhase, DEFAULT_COMMUNITY_EVENT_DURATION_MS } from "../../../../shared/communityEventLifecycle";
 import { useCommunityEventClock } from "../../../../shared/useCommunityEventClock";
 import {
@@ -383,6 +383,29 @@ export function WebCommunityEventsSection(props: WebCommunityEventsSectionProps)
   const [hasFocusedEvent, setHasFocusedEvent] = useState(false);
   // Do not move/remove the focused row or interrupt an open event editor.
   const now = useCommunityEventClock(state.events, Boolean(draft) || hasFocusedEvent);
+  // The featured card counts down by the minute in the hour before an event,
+  // which the event clock (starts, ends, month changes) does not tick for.
+  const [minuteNow, setMinuteNow] = useState(() => Date.now());
+  const paused = Boolean(draft) || hasFocusedEvent;
+  const nextStart = useMemo(() => {
+    const upcoming = state.events
+      .filter((event) => event.status !== "cancelled" && Date.parse(event.starts_at) > Date.now())
+      .map((event) => Date.parse(event.starts_at));
+    return upcoming.length ? Math.min(...upcoming) : null;
+  }, [state.events]);
+  useEffect(() => {
+    if (paused || !isDesignV1Active() || nextStart === null) return;
+    const untilCountdown = nextStart - 60 * 60_000 - Date.now();
+    const tick = () => setMinuteNow(Date.now());
+    if (untilCountdown > 0) {
+      const timer = window.setTimeout(tick, Math.min(untilCountdown + 500, 2_147_000_000));
+      return () => window.clearTimeout(timer);
+    }
+    // One step at a time: the effect runs again after each tick.
+    const timer = window.setTimeout(tick, 30_000);
+    return () => window.clearTimeout(timer);
+  }, [paused, nextStart, minuteNow]);
+  const listNow = paused ? now : Math.max(now, minuteNow);
 
   const monthDate = useMemo(() => startOfLocalMonth(new Date(state.visibleMonthIso)), [state.visibleMonthIso]);
   const visibleMonthEvents = useMemo(
@@ -518,12 +541,17 @@ export function WebCommunityEventsSection(props: WebCommunityEventsSectionProps)
   };
 
   // Design system v1: the soonest event as a card, then Coming up and Past.
-  const listParts = splitCommunityEvents(state.events, now);
+  const listParts = splitCommunityEvents(state.events, listNow);
   const renderEventActions = (event: CommunityEvent) =>
     capabilities.canManageEvents ? (
-      <button type="button" className="community-events-row-edit" onClick={() => openEditEvent(event)}>
-        {isRecurringCommunityEvent(event) ? "Edit series" : "Edit"}
-      </button>
+      <>
+        <button type="button" className="community-events-row-edit" onClick={() => openEditEvent(event)}>
+          {isRecurringCommunityEvent(event) ? "Edit series" : "Edit"}
+        </button>
+        <button type="button" className="community-events-row-cancel" onClick={() => confirmCancelEvent(event)}>
+          {isRecurringCommunityEvent(event) ? "Cancel series" : "Cancel"}
+        </button>
+      </>
     ) : null;
   const renderEventRow = (event: CommunityEvent, isPast: boolean) => {
     const block = eventDateBlock(event.starts_at, isPast);
@@ -551,7 +579,7 @@ export function WebCommunityEventsSection(props: WebCommunityEventsSectionProps)
   const renderEventsList = () => {
     if (showInitialEventsLoading) return <div className="community-events-state" role="status">Loading events…</div>;
     const { featured, comingUp, past } = listParts;
-    const featuredLabel = featured ? featuredEventLabel(featured, now) : null;
+    const featuredLabel = featured ? featuredEventLabel(featured, listNow) : null;
     return (
       <div className="community-events-v1">
         {featured && featuredLabel ? (
@@ -603,7 +631,7 @@ export function WebCommunityEventsSection(props: WebCommunityEventsSectionProps)
               [featured, ...comingUp].slice(0, 3).map((event) => (
                 <a key={event.id} className="community-page-rail-row" href={`#community-event-${event.id}`}>
                   <span>{event.title}</span>
-                  <em>{eventDayWord(event.starts_at, now)}</em>
+                  <em>{eventDayWord(event.starts_at, listNow)}</em>
                 </a>
               ))
             ) : (
