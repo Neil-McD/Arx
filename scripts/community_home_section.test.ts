@@ -114,6 +114,12 @@ test("the host's panel counts what the page already knows", () => {
   ]);
 });
 
+test("a full list of unanswered questions reads as 5 or more", () => {
+  const question = { author: "A", channel: "general", text: "?", hoursAgo: 3 };
+  const full = { ...busy, unanswered: [question, question, question, question, question] };
+  expect(homeFiguresFor(full, "host")[3]).toMatchObject({ label: "Unanswered", value: "5+" });
+});
+
 test("an event soon is told in minutes or hours", () => {
   const now = new Date("2026-11-13T14:40:00.000Z");
   expect(homeEventTimeFor("2026-11-13T15:00:00.000Z", now)).toBe("In 20 minutes");

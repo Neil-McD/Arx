@@ -175,7 +175,8 @@ export function homeFiguresFor(snapshot: CloudCommunityHomeSnapshot, audience: "
     });
     figures.push({
       label: "Unanswered",
-      value: String(snapshot.unanswered.length),
+      // The list is capped at 5 (it feeds the brief), so 5 means "5 or more".
+      value: snapshot.unanswered.length >= 5 ? "5+" : String(snapshot.unanswered.length),
       note: snapshot.unanswered.length === 1 ? "question" : "questions",
     });
   }
