@@ -212,15 +212,13 @@ Do not invent these during the build; ask.
 - How real profile photos sit next to the muted avatars.
 - Presence ("here now") as a mark on an avatar.
 
-## 9. Open questions for Neil
+## 9. Decided with Neil on 2026-11-10
 
-1. **"Guide" or "agent"?** The mock says "your guide" to members. The product,
-   the code and the docs say "agent". One word should win in the interface.
-2. **Numbers in the agent's voice.** The mock spells them out ("forty people").
-   Numerals scan faster. Recommendation: numerals.
-3. **The suggestion chips above the composer** are always visible in the mock.
-   Recommendation: show them only when the composer is focused, or on a quiet
-   day.
+1. **"Guide", not "agent", in the interface.** The community's agent introduces
+   itself as "{community}, your guide". The code and the docs keep "agent".
+2. **Numerals in the guide's voice:** "3 people joined", not "three".
+3. **Suggestion chips** above the composer show only when the composer is
+   focused, or on a quiet day.
 
 ## 10. Reference and source
 

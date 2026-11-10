@@ -1339,6 +1339,62 @@ export async function setCloudFounderBriefSettings<SessionT>(
   }));
 }
 
+// Home's facts for the owner (convex/communityFounderBrief.ts getCommunityHomeSnapshot).
+export type CloudCommunityHomeSnapshot = {
+  memberCount: number;
+  newMembers: { count: number; names: string[] };
+  activity: { posts: number; replies: number; activePeople: number };
+  unanswered: Array<{ author: string; channel: string; text: string; hoursAgo: number }>;
+  quietNewcomers: { count: number; names: string[] };
+  joinRequestsPending: number;
+  upcomingEvents: Array<{ title: string; startsAt: string }>;
+};
+
+function count(value: unknown): number {
+  const number = Number(value);
+  return Number.isFinite(number) && number > 0 ? Math.floor(number) : 0;
+}
+
+function names(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((name): name is string => typeof name === "string" && name.length > 0).slice(0, 5) : [];
+}
+
+export function normalizeCommunityHomeSnapshot(payload: unknown): CloudCommunityHomeSnapshot | null {
+  if (!payload || typeof payload !== "object") return null;
+  const record = payload as Record<string, any>;
+  return {
+    memberCount: count(record.memberCount),
+    newMembers: { count: count(record.newMembers?.count), names: names(record.newMembers?.names) },
+    activity: {
+      posts: count(record.activity?.posts),
+      replies: count(record.activity?.replies),
+      activePeople: count(record.activity?.activePeople),
+    },
+    unanswered: (Array.isArray(record.unanswered) ? record.unanswered : []).slice(0, 5).map((row: any) => ({
+      author: String(row?.author ?? ""),
+      channel: String(row?.channel ?? ""),
+      text: String(row?.text ?? ""),
+      hoursAgo: count(row?.hoursAgo),
+    })),
+    quietNewcomers: { count: count(record.quietNewcomers?.count), names: names(record.quietNewcomers?.names) },
+    joinRequestsPending: count(record.joinRequestsPending),
+    upcomingEvents: (Array.isArray(record.upcomingEvents) ? record.upcomingEvents : []).slice(0, 5).map((row: any) => ({
+      title: String(row?.title ?? ""),
+      startsAt: String(row?.startsAt ?? ""),
+    })),
+  };
+}
+
+export async function getCloudCommunityHomeSnapshot<SessionT>(
+  params: CloudCommunityAdminGatewayParams<SessionT> & { communityId: string },
+): Promise<CloudCommunityHomeSnapshot | null> {
+  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
+  return normalizeCommunityHomeSnapshot(await client.query("communityFounderBrief:getCommunityHomeSnapshot" as any, {
+    authSubject,
+    communityId: params.communityId,
+  }));
+}
+
 export async function setCloudCommunityMemberExperience<SessionT>(
   params: CloudCommunityAdminGatewayParams<SessionT> & {
     communityId: string;

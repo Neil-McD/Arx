@@ -12,6 +12,7 @@ import {
   type FormEvent,
   type SetStateAction,
 } from "react";
+import { WebCommunityHomeSection, type WebCommunityHomeSectionProps } from "./WebCommunityHomeSection";
 import {
   LoaderCircle,
   MessageSquarePlus,
@@ -131,6 +132,8 @@ export type WebCommunityAgentDockProps = {
   voiceButtonProps: ComponentProps<typeof VoiceInputButton>;
   finalizeVoiceInputForSubmit?: () => Promise<string>;
   onStartBuilder?: () => void;
+  // Design system v1: the owner's Home above the conversation (page mode only).
+  home?: Omit<WebCommunityHomeSectionProps, "session" | "ensureSession"> | null;
 };
 
 const COMMUNITY_AGENT_LIMIT_CODE = COMMUNITY_AGENT_LIMIT_REACHED_CODE;
@@ -1157,7 +1160,11 @@ function WebCommunityAgentDock(props, ref) {
         </header>
 
         <div className="community-agent-dock-transcript" ref={scrollRef}>
-          {visibleMessages.length === 0 &&
+          {props.pageMode && props.home ? (
+            <WebCommunityHomeSection {...props.home} session={props.session} ensureSession={props.ensureSession} />
+          ) : null}
+          {!(props.pageMode && props.home) &&
+          visibleMessages.length === 0 &&
           !composerIsBusy &&
           !isPreparing &&
           !isStartingNewChat ? (
