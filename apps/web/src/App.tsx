@@ -2466,7 +2466,10 @@ export default function App() {
           isDesignV1Active() &&
           activeCommunity &&
           canonicalSessionUserId &&
-          activeCommunity.owner_id === canonicalSessionUserId
+          // owner_id is the database user id and canonicalSessionUserId is the
+          // sign-in subject, so ownership comes from the server's access answer.
+          activeCommunityAccess?.community_id === activeCommunity.id &&
+          activeCommunityAccess.is_owner === true
             ? {
                 communityId: activeCommunity.id,
                 communityName: activeCommunity.name,
