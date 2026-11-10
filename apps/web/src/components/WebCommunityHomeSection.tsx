@@ -4,6 +4,7 @@
 // stand. The owner sees the daily brief's facts read live; a member sees only
 // what any member can already see (convex/communityFounderBrief.ts).
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { ArrowRight, Sparkles } from "lucide-react";
 import {
   getCloudCommunityHomeSnapshot,
@@ -22,6 +23,9 @@ export type WebCommunityHomeSectionProps = {
   onOpenEvents: () => void;
   // Changes each time Home is opened, so the facts are read again.
   refreshKey?: number;
+  // Where the right-hand column goes on wide windows (the page's own rail).
+  // The same panel also renders inline, for windows too narrow for a rail.
+  asideContainer?: HTMLElement | null;
   now?: Date;
 };
 
@@ -232,6 +236,34 @@ export function WebCommunityHomeSection(props: WebCommunityHomeSectionProps) {
   const figures = snapshot ? homeFiguresFor(snapshot, props.audience) : [];
   const nextEvent = snapshot?.upcomingEvents[0] ?? null;
 
+  const aside = (placement: "inline" | "rail") => snapshot ? (
+        <aside className={`community-home-aside${placement === "rail" ? " is-rail" : " is-inline"}`} aria-label="The community right now">
+          <div className="community-home-figures">
+            {figures.map((figure) => (
+              <div className="community-home-figure" key={figure.label}>
+                <span>{figure.label}</span>
+                <b>{figure.value}</b>
+                <em>{figure.note}</em>
+              </div>
+            ))}
+          </div>
+          <div className="community-home-aside-section">
+            <span className="community-home-rows-label">Coming up</span>
+            {nextEvent ? (
+              <>
+                <h3>{nextEvent.title}</h3>
+                <p>{homeEventTimeFor(nextEvent.startsAt, now)}</p>
+              </>
+            ) : (
+              <p>Nothing in the next 2 days.</p>
+            )}
+            <button type="button" className="community-home-aside-link" onClick={props.onOpenEvents}>
+              All events <ArrowRight size={14} aria-hidden="true" />
+            </button>
+          </div>
+        </aside>
+  ) : null;
+
   return (
     <section className="community-home" aria-label={`${props.communityName} home`}>
       <div className="community-home-main">
@@ -276,33 +308,8 @@ export function WebCommunityHomeSection(props: WebCommunityHomeSectionProps) {
         </div>
       ) : null}
       </div>
-      {snapshot ? (
-        <aside className="community-home-aside" aria-label="The community right now">
-          <div className="community-home-figures">
-            {figures.map((figure) => (
-              <div className="community-home-figure" key={figure.label}>
-                <span>{figure.label}</span>
-                <b>{figure.value}</b>
-                <em>{figure.note}</em>
-              </div>
-            ))}
-          </div>
-          <div className="community-home-aside-section">
-            <span className="community-home-rows-label">Coming up</span>
-            {nextEvent ? (
-              <>
-                <h3>{nextEvent.title}</h3>
-                <p>{homeEventTimeFor(nextEvent.startsAt, now)}</p>
-              </>
-            ) : (
-              <p>Nothing in the next 2 days.</p>
-            )}
-            <button type="button" className="community-home-aside-link" onClick={props.onOpenEvents}>
-              All events <ArrowRight size={14} aria-hidden="true" />
-            </button>
-          </div>
-        </aside>
-      ) : null}
+      {aside("inline")}
+      {props.asideContainer ? createPortal(aside("rail"), props.asideContainer) : null}
     </section>
   );
 }

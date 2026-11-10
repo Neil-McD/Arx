@@ -764,6 +764,9 @@ function WebCommunityAgentDock(props, ref) {
   // With Home above the conversation, opening the page shows Home first; the
   // transcript follows the bottom again once a turn is under way.
   const homeActive = Boolean(props.pageMode && props.home);
+  // Home's right-hand column lives beside the conversation, full height; Home
+  // fills it through this element (WebCommunityHomeSection's asideContainer).
+  const [homeRailElement, setHomeRailElement] = useState<HTMLElement | null>(null);
   const followConversationRef = useRef(false);
   const [homeRefreshKey, setHomeRefreshKey] = useState(0);
   useEffect(() => {
@@ -1147,7 +1150,7 @@ function WebCommunityAgentDock(props, ref) {
       aria-live="polite"
     >
 
-      <section className="community-agent-dock-panel" aria-label={presentation.title}>
+      <section className={`community-agent-dock-panel${homeActive ? " has-home-rail" : ""}`} aria-label={presentation.title}>
         <header className={props.pageMode ? "community-channel-header community-agent-page-header" : "community-agent-dock-header"}>
           {props.pageMode ? <div className="community-channel-header-identity">{guideWording && props.home ? <House size={18} aria-hidden="true" /> : <Sparkles size={18} aria-hidden="true" />}<h1>{presentation.title}</h1></div> : <div className="community-agent-dock-identity">
             {!props.pageMode && <span className="community-agent-dock-avatar" aria-hidden="true">
@@ -1190,6 +1193,7 @@ function WebCommunityAgentDock(props, ref) {
               session={props.session}
               ensureSession={props.ensureSession}
               refreshKey={homeRefreshKey}
+              asideContainer={homeRailElement}
             />
           ) : null}
           {!(props.pageMode && props.home) &&
@@ -1283,6 +1287,7 @@ function WebCommunityAgentDock(props, ref) {
           ) : null}
         </div>
 
+        {homeActive ? <div className="community-home-rail" ref={setHomeRailElement} /> : null}
         <div className="community-agent-dock-composer-shell">
           {attachments.length > 0 ? (
             <div className="community-agent-dock-composer-attachments">

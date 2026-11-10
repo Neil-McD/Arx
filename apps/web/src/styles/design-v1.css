@@ -1024,7 +1024,14 @@
 /* Home needs no title bar of its own: the left column already says where you
    are. The title stays for screen readers; the new-conversation button stays. */
 :root[data-design="v1"] .community-agent-page-header {
-  border-bottom-color: transparent;
+  position: absolute;
+  top: 8px;
+  left: 10px;
+  z-index: 3;
+  flex: none;
+  height: auto;
+  padding: 0;
+  border: 0;
   background: transparent;
 }
 
@@ -1118,17 +1125,91 @@
   color: var(--text-ink-primary);
 }
 
-/* Wide windows: the panel sits beside the greeting, as a right-hand column. */
-@media (min-width: 1360px) {
-  :root[data-design="v1"] .community-home {
-    grid-template-columns: minmax(0, 720px) 264px;
-    gap: 56px;
-    max-width: 1040px;
+
+/*
+ * Design system v1: the page's structure. The left column sits on the ground;
+ * the content is one raised panel, a shade lighter, with its own edge. On Home
+ * there is no header band, and the right-hand column runs the full height.
+ */
+:root[data-design="v1"]:not([data-theme="light"]) {
+  --surface-raised: #0a0b0f;
+  --surface-raised-edge: #18191e;
+}
+
+:root[data-design="v1"][data-theme="light"] {
+  --surface-raised: #fcfcfd;
+  --surface-raised-edge: rgba(13, 17, 23, 0.1);
+}
+
+@media (min-width: 721px) {
+  :root[data-design="v1"] .product-shell-surface--community {
+    margin: 0;
+    border: 0;
+    border-radius: 0;
+    background: var(--surface-app);
   }
 
-  :root[data-design="v1"] .community-home-aside {
-    padding: 4px 0 0 28px;
-    border-top: 0;
-    border-left: 1px solid var(--border-default);
+  :root[data-design="v1"] .product-shell-surface--community > .community-nav {
+    border-right: 0;
+    border-left: 0;
+    background: var(--surface-app);
+  }
+
+  :root[data-design="v1"] .product-shell-surface--community > :not(.community-nav):not(.sessions) {
+    --bg-workspace: var(--surface-raised);
+    --surface-workspace: var(--surface-raised);
+    --surface-panel: var(--surface-raised);
+    --bg-panel: var(--surface-raised);
+    --community-chat-surface: var(--surface-raised);
+    margin: 8px 8px 8px 0;
+    overflow: hidden;
+    border: 1px solid var(--surface-raised-edge);
+    border-radius: 12px;
+    background: var(--surface-raised);
+  }
+}
+
+/* The header no longer takes a row, so the conversation gets the first one. */
+:root[data-design="v1"] .community-agent-page .community-agent-dock-panel {
+  position: relative;
+  grid-template-rows: minmax(0, 1fr);
+  grid-auto-rows: auto;
+}
+
+/* Home's conversation starts under the greeting, with no band above it. */
+:root[data-design="v1"] .community-agent-dock-panel.has-home-rail .community-agent-dock-transcript {
+  padding-top: 40px;
+}
+
+:root[data-design="v1"] .community-home-rail {
+  display: none;
+}
+
+:root[data-design="v1"] .community-home-aside.is-rail {
+  padding: 40px 28px 28px;
+  border-top: 0;
+}
+
+@media (min-width: 1180px) {
+  :root[data-design="v1"] .community-agent-dock-panel.has-home-rail {
+    grid-template-columns: minmax(0, 1fr) 312px;
+  }
+
+  :root[data-design="v1"] .community-agent-dock-panel.has-home-rail > * {
+    grid-column: 1;
+  }
+
+  :root[data-design="v1"] .community-agent-dock-panel.has-home-rail > .community-home-rail {
+    display: block;
+    grid-column: 2;
+    grid-row: 1 / span 8;
+    min-height: 0;
+    overflow-y: auto;
+    border-left: 1px solid var(--surface-raised-edge);
+  }
+
+  /* The rail carries the panel, so the copy under the rows is not shown. */
+  :root[data-design="v1"] .community-home-aside.is-inline {
+    display: none;
   }
 }
