@@ -3,6 +3,8 @@
 Status: agreed with Neil on 2026-11-07. These judge every Polynet screen, for
 members, builders and connected apps. Written from the product's goal, not from
 today's UI. Companion to [builder-modalities-v0.md](builder-modalities-v0.md).
+The look and the screens that apply these principles are specified in
+[design-system-v1.md](design-system-v1.md).
 
 ## The concept: one path, one guide, your people
 
