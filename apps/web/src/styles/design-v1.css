@@ -513,3 +513,43 @@
   margin: 4px 6px;
   background: var(--border-default);
 }
+
+/* Narrow windows collapse the left column to icons: section labels go, and
+   the account row shows only the avatar, its menu opening to the right. */
+@media (max-width: 720px) {
+  :root[data-design="v1"] .app-shell.community-layout.with-community-rail.sessions-compact.no-right .community-nav-section-label {
+    display: none;
+  }
+
+  :root[data-design="v1"] .app-shell.community-layout.with-community-rail.sessions-compact.no-right .community-nav-v1-primary {
+    margin-bottom: 8px;
+  }
+
+  :root[data-design="v1"] .app-shell.community-layout.with-community-rail.sessions-compact.no-right .account-menu-trigger {
+    justify-content: center;
+    padding: 0;
+  }
+
+  :root[data-design="v1"] .app-shell.community-layout.with-community-rail.sessions-compact.no-right .account-menu-trigger > svg {
+    display: none;
+  }
+
+  /* The name stays readable to screen readers; it is only hidden visually. */
+  :root[data-design="v1"] .app-shell.community-layout.with-community-rail.sessions-compact.no-right .account-menu-identity {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  /* The column clips overflow, so the menu opens beside it instead. */
+  :root[data-design="v1"] .app-shell.community-layout.with-community-rail.sessions-compact.no-right .account-menu-popover {
+    position: fixed;
+    right: auto;
+    bottom: 12px;
+    left: calc(var(--web-rail-width, 72px) + 64px);
+    width: 220px;
+  }
+}
