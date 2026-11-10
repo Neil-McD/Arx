@@ -62,6 +62,7 @@ export function ChannelRosterPanel(props: RosterProps) {
 
 function ChannelRosterWorkspace(props: RosterProps) {
   const [membersOpen, setMembersOpen] = useState(false);
+  const [askedNarrow, setAskedNarrow] = useState(false);
   const [channel, setChannel] = useState(props.channelId);
   if (channel !== props.channelId) {
     setChannel(props.channelId);
@@ -70,7 +71,13 @@ function ChannelRosterWorkspace(props: RosterProps) {
   // Design system v1: the member list opens in the right column, in the
   // panel's place, instead of in a pop-up. The Members row in the left column
   // asks for it through narrowOpen, as the people button does on a phone.
-  if (isDesignV1Active() && (membersOpen || props.narrowOpen) && !props.memberDetailOpen) {
+  // Once open it stays open (hidden while a profile or thread has the column)
+  // until it is closed, so looking at one member never loses the list.
+  if (isDesignV1Active() && Boolean(props.narrowOpen) !== askedNarrow) {
+    setAskedNarrow(Boolean(props.narrowOpen));
+    if (props.narrowOpen) setMembersOpen(true);
+  }
+  if (isDesignV1Active() && membersOpen) {
     const close = () => { setMembersOpen(false); props.onCloseNarrow?.(); };
     return <RosterSurface {...props} channelId={undefined} narrowOpen={false}
       onCloseNarrow={undefined} directory inline onCloseMembers={close}
@@ -351,6 +358,7 @@ function RosterSurface(props: RosterProps & {
   if (!props.directory) return <>{content}{selectedMember ? createPortal(settings, document.body) : null}</>;
   if (props.inline) return <>
     <div className="community-context-panel channel-roster-panel is-v1 is-member-list" role="region" aria-label="Community members"
+      style={props.memberDetailOpen ? { display: "none" } : undefined}
       onKeyDown={event => {
         if (event.key !== "Escape" || event.defaultPrevented || selectedMember) return;
         event.preventDefault(); props.onCloseMembers?.();

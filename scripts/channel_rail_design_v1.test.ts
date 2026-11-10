@@ -75,8 +75,9 @@ test("design v1: asking for members shows the full list in the column, not a pop
   expect(html).not.toContain("channel-rail-label");
 });
 
-test("design v1: an open thread still wins over the member list", () => {
+test("design v1: a profile or thread takes the column, and the member list waits behind it", () => {
   design.v1 = true;
   const html = renderToStaticMarkup(React.createElement(ChannelRosterPanel, { ...props, narrowOpen: true, memberDetailOpen: true }));
-  expect(html).not.toContain("is-member-list");
+  // Still mounted (search and loaded pages survive), only hidden.
+  expect(html).toMatch(/class="community-context-panel channel-roster-panel is-v1 is-member-list"[^>]*style="display:none"/);
 });
