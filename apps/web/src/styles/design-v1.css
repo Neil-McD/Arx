@@ -374,6 +374,17 @@
   margin-bottom: 6px;
 }
 
+/* Home now follows the community name, so it takes the spacing the channel
+   list had there (shell-and-onboarding.css gives the list 20px). */
+:root[data-design="v1"] .community-nav-identity:not(.has-banner) + .community-nav-v1-primary {
+  margin-top: 20px;
+}
+
+/* With Home above them, the channels no longer need that offset. */
+:root[data-design="v1"] .community-nav-v1-primary ~ .community-channel-list {
+  margin-top: 0;
+}
+
 :root[data-design="v1"] .community-nav-section-label {
   padding: 14px 10px 6px;
   color: var(--text-faint);
