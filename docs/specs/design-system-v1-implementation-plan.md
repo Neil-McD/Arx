@@ -211,6 +211,19 @@ then each left-column button's page, then each page's right column.
 - Not yet: channel descriptions in the header (no field exists), and more than
   one face on the replies line (only the last replier is known).
 
+### Left column and Home at the mock's measurements (2026-11-10)
+
+Values read from the mock's stylesheet, previewed on live staging first.
+
+- Left column: a 28px community mark and a 15/600 name in the 48px name row, no
+  line under it; rows 32px with a 10px gap and weight 450, no gap between them;
+  section labels at 18px 10px 6px.
+- Home: left-aligned on the 56px gutter (it was centred); greeting 92px from the
+  top; right column padded 20px 24px 24px with 26px between sections; the
+  composer is one 52px row.
+- Not done: the banner version of the name row (112px card), untested without a
+  community that has a banner.
+
 ### Slice 4: Home
 
 Home is today's agent page with three things above the conversation.

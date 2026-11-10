@@ -1,10 +1,12 @@
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { Check, ChevronsUpDown, Compass, Plus } from "lucide-react";
 import { CommunityAvatar } from "../../../../shared/CommunityAvatar";
 import type { CommunityLike } from "./webShellChromeShared";
 
 export type WebCommunitySwitcherProps = {
   activeCommunityName: string;
+  // The community's own mark, shown before its name (the mock's 28px tile).
+  mark?: ReactNode;
   communities: CommunityLike[];
   selectedCommunitySlug: string | null;
   attentionById: Record<string, boolean>;
@@ -62,6 +64,7 @@ export function WebCommunitySwitcher(props: WebCommunitySwitcherProps) {
         title="Switch community"
         onClick={() => setIsOpen((open) => !open)}
       >
+        {props.mark ? <span className="community-switcher-mark" aria-hidden="true">{props.mark}</span> : null}
         <span className="community-switcher-name">{props.activeCommunityName}</span>
         {othersHaveNews ? (
           <span className="community-switcher-news" aria-label="New in another community" />

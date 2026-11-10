@@ -1,3 +1,4 @@
+import { CommunityAvatar } from "../../../../shared/CommunityAvatar";
 import { CommunityNav } from "../../../../shared/CommunityNav";
 import { webDestinationHasCommunityNavSelection } from "../../../../shared/webAppRouteState";
 import { isDesignV1Active } from "../../../../shared/designSystem";
@@ -59,6 +60,18 @@ export function WebCommunityNavSurface({
         useV1Layout && communityShell.account && communityShell.activeCommunity ? (
           <WebCommunitySwitcher
             activeCommunityName={communityShell.activeCommunity.name}
+            mark={
+              <CommunityAvatar
+                communityId={communityShell.activeCommunity.id}
+                visualIdentity={communityShell.activeCommunity.visual_identity}
+                className="community-switcher-mark-avatar"
+                imageUrl={communityShell.activeCommunity.avatar_url}
+                focusX={communityShell.activeCommunity.avatar_focus_x}
+                focusY={communityShell.activeCommunity.avatar_focus_y}
+                zoom={communityShell.activeCommunity.avatar_zoom}
+                name={communityShell.activeCommunity.name}
+              />
+            }
             communities={communityShell.railCommunities}
             selectedCommunitySlug={communityShell.selectedActiveCommunitySlug}
             attentionById={communityShell.communityRailAttentionById}

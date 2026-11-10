@@ -2041,3 +2041,170 @@
   font-size: 12px;
   transform: scale(0.94);
 }
+
+/*
+ * Design system v1: the left column and Home at the mock's measurements
+ * (polynet-design/hifi/style.css).
+ * Left column: 264px, 12px padding; the name row is 48px with a 28px mark and a
+ * 15/600 name; rows are 32px, 0 10px, 10px gap, weight 450, stacked with no gap;
+ * section labels sit 18px 10px 6px; the account row is 48px.
+ * Home: 56px gutters; eyebrow 40px from the top; greeting 40/1.1 then 24/1.3;
+ * card and rows 28px apart; the right column is padded 20px 24px 24px with 26px
+ * between sections; the composer is one 52px row in a 56px-gutter dock.
+ */
+:root[data-design="v1"] .community-nav-identity:has(.community-switcher) {
+  border-bottom-color: transparent;
+}
+
+:root[data-design="v1"] .community-switcher-trigger {
+  gap: 10px;
+  min-height: 40px;
+  padding: 0 6px;
+}
+
+:root[data-design="v1"] .community-switcher-mark,
+:root[data-design="v1"] .community-switcher-mark-avatar {
+  flex: 0 0 28px;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  overflow: hidden;
+  border-radius: 8px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+:root[data-design="v1"] .community-switcher-name {
+  font-size: 15px;
+  letter-spacing: -0.005em;
+}
+
+:root[data-design="v1"] .community-nav-identity:not(.has-banner) + .community-nav-v1-primary,
+:root[data-design="v1"] .global-nav-v1 .community-nav-identity + .community-nav-v1-primary {
+  margin-top: 10px;
+}
+
+:root[data-design="v1"] .community-nav-v1-primary {
+  margin-bottom: 0;
+}
+
+:root[data-design="v1"] .community-nav .nav-item {
+  gap: 10px;
+  margin-bottom: 0;
+  padding: 0 10px;
+  font-weight: 450;
+}
+
+:root[data-design="v1"] .community-nav .nav-item.active {
+  background: var(--bg-card);
+  color: var(--text-ink-primary);
+}
+
+:root[data-design="v1"] .community-nav-section-label {
+  padding: 18px 10px 6px;
+}
+
+:root[data-design="v1"] .community-nav-footer {
+  gap: 2px;
+}
+
+@media (min-width: 721px) {
+  /* Home: left-aligned on a 56px gutter, like every other page. */
+  :root[data-design="v1"] .community-agent-page .community-agent-dock-panel.has-home-rail .community-agent-dock-transcript {
+    padding: 0 56px 24px;
+  }
+
+  /* The mock's eyebrow sits 40px under a 52px header line. Home has no line,
+     so the same 92px keeps the greeting where the mock has it and leaves the
+     new-conversation button its own row, on the gutter. */
+  :root[data-design="v1"] .community-agent-page .community-home {
+    max-width: 760px;
+    margin: 0 0 32px;
+    padding-top: 92px;
+  }
+
+  :root[data-design="v1"] .community-agent-page .community-agent-page-header {
+    top: 10px;
+    left: 48px;
+  }
+
+  :root[data-design="v1"] .community-agent-page .community-agent-dock-panel.has-home-rail .community-agent-dock-composer-shell {
+    width: auto;
+    max-width: 872px;
+    margin: 0;
+    padding: 0 56px 26px;
+  }
+
+  /* One 52px row: attach, the text, then mic and send. */
+  :root[data-design="v1"] .community-agent-page .community-agent-dock-composer {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    grid-template-rows: auto;
+    align-items: center;
+    column-gap: 6px;
+    min-height: 52px;
+    padding: 0 8px 0 10px;
+    border: 1px solid var(--border-strong);
+    border-radius: 14px;
+  }
+
+  :root[data-design="v1"] .community-agent-page .community-agent-dock-composer .community-composer-toolbar {
+    display: contents;
+  }
+
+  :root[data-design="v1"] .community-agent-page .community-agent-dock-composer .community-composer-tools {
+    order: 1;
+  }
+
+  :root[data-design="v1"] .community-agent-page .community-agent-dock-composer .community-composer-editor-row {
+    order: 2;
+    padding: 6px 4px;
+  }
+
+  :root[data-design="v1"] .community-agent-page .community-agent-dock-composer .community-composer-submit-tools {
+    order: 3;
+  }
+
+  :root[data-design="v1"] .community-agent-page .community-agent-dock-composer .mention-composer-field {
+    min-height: 38px;
+    font-size: 15px;
+  }
+}
+
+:root[data-design="v1"] .community-home-hello {
+  max-width: 680px;
+  margin-top: 14px;
+}
+
+:root[data-design="v1"] .community-home-aside.is-rail {
+  gap: 26px;
+  padding: 20px 24px 24px;
+}
+
+:root[data-design="v1"] .community-home-figures {
+  gap: 20px 16px;
+}
+
+:root[data-design="v1"] .community-home-figure {
+  gap: 0;
+}
+
+:root[data-design="v1"] .community-home-figure b {
+  margin-top: 4px;
+  letter-spacing: -0.025em;
+  line-height: 1.1;
+}
+
+:root[data-design="v1"] .community-home-figure em {
+  margin-top: 3px;
+}
+
+:root[data-design="v1"] .community-home-aside-section {
+  gap: 8px;
+  padding-top: 26px;
+}
+
+:root[data-design="v1"] .community-home-aside-section h3 {
+  font-weight: 550;
+  letter-spacing: -0.005em;
+}
