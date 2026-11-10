@@ -1,5 +1,7 @@
-import { CommunityPageHeader } from "./CommunityPageHeader";
-import { useMemo, useState, type FormEvent } from "react";
+import { CommunityPageHeader, CommunityPageRail } from "./CommunityPageHeader";
+import { isDesignV1Active } from "../../../../shared/designSystem";
+import { eventDateBlock, eventDayWord, featuredEventLabel, splitCommunityEvents } from "./communityEventsList";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { communityEventDisplayEnd, communityEventPhase, DEFAULT_COMMUNITY_EVENT_DURATION_MS } from "../../../../shared/communityEventLifecycle";
 import { useCommunityEventClock } from "../../../../shared/useCommunityEventClock";
 import {
@@ -381,6 +383,29 @@ export function WebCommunityEventsSection(props: WebCommunityEventsSectionProps)
   const [hasFocusedEvent, setHasFocusedEvent] = useState(false);
   // Do not move/remove the focused row or interrupt an open event editor.
   const now = useCommunityEventClock(state.events, Boolean(draft) || hasFocusedEvent);
+  // The featured card counts down by the minute in the hour before an event,
+  // which the event clock (starts, ends, month changes) does not tick for.
+  const [minuteNow, setMinuteNow] = useState(() => Date.now());
+  const paused = Boolean(draft) || hasFocusedEvent;
+  const nextStart = useMemo(() => {
+    const upcoming = state.events
+      .filter((event) => event.status !== "cancelled" && Date.parse(event.starts_at) > Date.now())
+      .map((event) => Date.parse(event.starts_at));
+    return upcoming.length ? Math.min(...upcoming) : null;
+  }, [state.events]);
+  useEffect(() => {
+    if (paused || !isDesignV1Active() || nextStart === null) return;
+    const untilCountdown = nextStart - 60 * 60_000 - Date.now();
+    const tick = () => setMinuteNow(Date.now());
+    if (untilCountdown > 0) {
+      const timer = window.setTimeout(tick, Math.min(untilCountdown + 500, 2_147_000_000));
+      return () => window.clearTimeout(timer);
+    }
+    // One step at a time: the effect runs again after each tick.
+    const timer = window.setTimeout(tick, 30_000);
+    return () => window.clearTimeout(timer);
+  }, [paused, nextStart, minuteNow]);
+  const listNow = paused ? now : Math.max(now, minuteNow);
 
   const monthDate = useMemo(() => startOfLocalMonth(new Date(state.visibleMonthIso)), [state.visibleMonthIso]);
   const visibleMonthEvents = useMemo(
@@ -515,6 +540,109 @@ export function WebCommunityEventsSection(props: WebCommunityEventsSectionProps)
     }
   };
 
+  // Design system v1: the soonest event as a card, then Coming up and Past.
+  const listParts = splitCommunityEvents(state.events, listNow);
+  const renderEventActions = (event: CommunityEvent) =>
+    capabilities.canManageEvents ? (
+      <>
+        <button type="button" className="community-events-row-edit" onClick={() => openEditEvent(event)}>
+          {isRecurringCommunityEvent(event) ? "Edit series" : "Edit"}
+        </button>
+        <button type="button" className="community-events-row-cancel" onClick={() => confirmCancelEvent(event)}>
+          {isRecurringCommunityEvent(event) ? "Cancel series" : "Cancel"}
+        </button>
+      </>
+    ) : null;
+  const renderEventRow = (event: CommunityEvent, isPast: boolean) => {
+    const block = eventDateBlock(event.starts_at, isPast);
+    const recurrence = event.recurrence_frequency !== "none" ? event.recurrence_frequency : null;
+    const details = [formatEventTime(event).primary, recurrence, event.location_label].filter(Boolean).join(" · ");
+    return (
+      <div key={event.id} id={`community-event-${event.id}`} className={`community-events-row${isPast ? " is-past" : ""}`}>
+        <time className="community-events-row-date" dateTime={event.starts_at}>
+          <b>{block.number}</b>
+          <span>{block.word}</span>
+        </time>
+        <div className="community-events-row-copy">
+          <b>{event.title}</b>
+          <span>{details}</span>
+        </div>
+        <div className="community-events-row-actions">
+          {!isPast && event.url ? (
+            <a className="community-events-row-join" href={event.url} target="_blank" rel="noreferrer">Join</a>
+          ) : null}
+          {renderEventActions(event)}
+        </div>
+      </div>
+    );
+  };
+  const renderEventsList = () => {
+    if (showInitialEventsLoading) return <div className="community-events-state" role="status">Loading events…</div>;
+    const { featured, comingUp, past } = listParts;
+    const featuredLabel = featured ? featuredEventLabel(featured, listNow) : null;
+    return (
+      <div className="community-events-v1">
+        {featured && featuredLabel ? (
+          <section className="community-events-featured" aria-label="Next event">
+            <div className="community-events-featured-meta">
+              <span className={featuredLabel.live ? "community-events-live" : undefined}>
+                {featuredLabel.live ? <i aria-hidden="true" /> : null}
+                {featuredLabel.text}
+              </span>
+              <span>
+                {[formatEventTime(featured).primary, featured.recurrence_frequency !== "none" ? featured.recurrence_frequency : null]
+                  .filter(Boolean)
+                  .join(" · ")}
+              </span>
+            </div>
+            <h2>{featured.title}</h2>
+            {featured.description_md ? <p className="community-events-featured-say">{featured.description_md}</p> : null}
+            <div className="community-events-featured-acts">
+              {featured.url ? (
+                <a className="community-events-featured-join" href={featured.url} target="_blank" rel="noreferrer">
+                  {featuredLabel.live ? "Join" : "Join when it starts"}
+                </a>
+              ) : null}
+              <a className="community-events-featured-calendar" href={buildGoogleCalendarUrl(featured)} target="_blank" rel="noreferrer">
+                Add to calendar
+              </a>
+              {renderEventActions(featured)}
+            </div>
+          </section>
+        ) : (
+          <div className="community-events-state">Nothing is planned yet.</div>
+        )}
+        {comingUp.length ? (
+          <section className="community-events-group" aria-label="Coming up">
+            <h3 className="community-events-group-label">Coming up</h3>
+            {comingUp.map((event) => renderEventRow(event, false))}
+          </section>
+        ) : null}
+        {past.length ? (
+          <section className="community-events-group" aria-label="Past">
+            <h3 className="community-events-group-label">Past</h3>
+            {past.map((event) => renderEventRow(event, true))}
+          </section>
+        ) : null}
+        <CommunityPageRail label="Coming up next">
+          <section className="community-page-rail-section">
+            <h3 className="channel-rail-label">Coming up next</h3>
+            {featured ? (
+              [featured, ...comingUp].slice(0, 3).map((event) => (
+                <a key={event.id} className="community-page-rail-row" href={`#community-event-${event.id}`}>
+                  <span>{event.title}</span>
+                  <em>{eventDayWord(event.starts_at, listNow)}</em>
+                </a>
+              ))
+            ) : (
+              <p className="community-page-rail-empty">Nothing is planned yet.</p>
+            )}
+          </section>
+        </CommunityPageRail>
+      </div>
+    );
+  };
+
   const newEventButton = capabilities.hasActiveCommunity && capabilities.canManageEvents ? (
           <button
             className="community-events-new-btn"
@@ -539,6 +667,18 @@ export function WebCommunityEventsSection(props: WebCommunityEventsSectionProps)
         </div>
       </CommunityPageHeader>
 
+      {isDesignV1Active() ? (
+        <>
+          {state.eventsError ? (
+            <div className="community-event-error" role="alert">
+              <span>{state.eventsError}</span>
+              <button type="button" onClick={() => void actions.reloadEvents(currentRange)}>Retry</button>
+            </div>
+          ) : null}
+          {renderEventsList()}
+        </>
+      ) : (
+        <>
       <div className="community-events-month-nav" role="group" aria-label="Event month">
         <button
           className="community-events-month-btn"
@@ -681,6 +821,9 @@ export function WebCommunityEventsSection(props: WebCommunityEventsSectionProps)
           </div>
         )}
       </div>
+
+        </>
+      )}
 
       {draft ? (
         <EventModal

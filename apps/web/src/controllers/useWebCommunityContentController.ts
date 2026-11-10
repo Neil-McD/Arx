@@ -1,3 +1,4 @@
+import { isDesignV1Active } from "../../../../shared/designSystem";
 import {
   useCallback,
   useEffect,
@@ -89,7 +90,21 @@ function normalizeEventsMonthIso(raw: string | null | undefined): string {
   return new Date(normalized.getFullYear(), normalized.getMonth(), 1).toISOString();
 }
 
+// Design system v1 lists events instead of showing a month: the last three
+// weeks and the next six, from the start of today (the server allows 62 days).
+// The span is counted in elapsed time, not calendar days, so a daylight-saving
+// change inside the window can never push it past the server's 62-day limit.
+const EVENTS_LIST_SPAN_MS = 61 * 86_400_000;
+
+export function getWebCommunityEventsListRange(now: Date = new Date()): CommunityEventsRange {
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const start = new Date(today);
+  start.setDate(today.getDate() - 21);
+  return { startIso: start.toISOString(), endIso: new Date(start.getTime() + EVENTS_LIST_SPAN_MS).toISOString() };
+}
+
 export function getWebCommunityEventsMonthRange(monthIso: string): CommunityEventsRange {
+  if (isDesignV1Active()) return getWebCommunityEventsListRange();
   const monthStart = new Date(normalizeEventsMonthIso(monthIso));
   const start = new Date(monthStart);
   start.setDate(monthStart.getDate() - monthStart.getDay());

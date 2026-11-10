@@ -224,6 +224,20 @@ Values read from the mock's stylesheet, previewed on live staging first.
 - Not done: the banner version of the name row (112px card), untested without a
   community that has a banner.
 
+### Events as a list (2026-11-10)
+
+- The soonest event is a card (Happening now / Live in N minutes / its day,
+  the time, its description, Join and Add to calendar); then Coming up and
+  Past as rows with a date block, at the mock's measurements.
+- The month calendar is gone under v1; events load for the last three weeks and
+  the next six (`getWebCommunityEventsListRange`).
+- The right column ("Coming up next") lists the next three. It stands in for
+  the mock's "You're going to" until members can say they're going.
+- `CommunityPageFrame` gained a right-column slot (`CommunityPageRail`); a page
+  without one keeps the single centred column.
+- Not yet: Going (no RSVP exists), who is hosting (not sent to the page),
+  attendance and recaps.
+
 ### Slice 4: Home
 
 Home is today's agent page with three things above the conversation.
