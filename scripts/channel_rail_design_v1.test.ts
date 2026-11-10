@@ -54,3 +54,12 @@ test("the classic panel is unchanged", () => {
   expect(html).toContain("community-context-members");
   expect(html).toContain("Kiln");
 });
+
+test("design v1: a thread names itself and its channel, and has a close button", async () => {
+  const { CommunityThreadHeader } = await import("../apps/web/src/components/CommunityThreadHeader");
+  const html = renderToStaticMarkup(React.createElement(CommunityThreadHeader, { channelName: "wins", onClose: () => {} }));
+  expect(html).toContain('<h2 class="community-thread-title">Thread<span> · #wins</span></h2>');
+  expect(html).toMatch(/<button class="community-thread-close"[^>]*aria-label="Close thread"/);
+  const bare = renderToStaticMarkup(React.createElement(CommunityThreadHeader, { onClose: () => {} }));
+  expect(bare).toContain('<h2 class="community-thread-title">Thread</h2>');
+});

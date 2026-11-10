@@ -1328,3 +1328,84 @@
   outline: none;
   color: var(--text-ink-primary);
 }
+
+/*
+ * Design system v1: a thread (spec section 6). It takes the channel panel's
+ * place at the same width, names itself in a header level with the channel's,
+ * and keeps its reply box at the bottom.
+ */
+@media (min-width: 641px) {
+  :root[data-design="v1"] .community-interaction-projection.has-drawer,
+  :root[data-design="v1"] .community-interaction-projection.has-channel-context {
+    grid-template-columns: minmax(0, 1fr) clamp(320px, 26vw, 400px);
+  }
+}
+
+:root[data-design="v1"] .community-interaction-drawer {
+  background: transparent;
+}
+
+:root[data-design="v1"] .community-interaction-drawer-back.is-v1,
+:root[data-design="v1"] .community-member-chat .community-interaction-thread-drawer .community-interaction-drawer-back.is-v1 {
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  height: var(--web-topbar-height, 48px);
+  padding: 0 10px 0 18px;
+  border: 0;
+  border-bottom: 1px solid var(--surface-raised-edge);
+  border-radius: 0;
+  background: var(--surface-raised);
+  box-shadow: none;
+}
+
+:root[data-design="v1"] .community-thread-title {
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  color: var(--text-ink-primary);
+  font-size: 14px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+:root[data-design="v1"] .community-thread-title span {
+  color: var(--text-faint);
+  font-weight: 400;
+}
+
+:root[data-design="v1"] .community-thread-close {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--icon-default);
+  cursor: pointer;
+}
+
+:root[data-design="v1"] .community-thread-close:hover,
+:root[data-design="v1"] .community-thread-close:focus-visible {
+  outline: none;
+  background: var(--hover-overlay);
+  color: var(--text-ink-primary);
+}
+
+/* The post and its replies take the room; the reply box stays at the bottom. */
+:root[data-design="v1"] .community-interaction-thread-drawer:not(.community-interaction-thread-page) .community-interaction-drawer-scroll {
+  flex: 1 1 auto;
+}
+
+:root[data-design="v1"] .community-interaction-thread-drawer:not(.community-interaction-thread-page) .community-interaction-drawer-composer {
+  padding: 0 12px 12px;
+}
