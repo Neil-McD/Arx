@@ -1657,7 +1657,8 @@
   }
 
   :root[data-design="v1"] .community-chat .community-interaction-feed-scroll {
-    padding: 8px 44px 104px;
+    /* The composer floats over the feed and is measured as it grows. */
+    padding: 8px 44px calc(var(--mobile-community-composer-height, 86px) + 18px);
   }
 
   :root[data-design="v1"] .community-chat .community-interaction-main-composer {
