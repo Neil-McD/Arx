@@ -661,6 +661,9 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
             // Esc closes the thread, unless something inside (a menu, the
             // mention picker) already used the key.
             if (event.key !== "Escape" || event.defaultPrevented || isMobileThreadPage || !isDesignV1Active()) return;
+            // An open picker or menu in the thread (emoji, mentions) closes
+            // itself on Esc from its own listener; this press belongs to it.
+            if (event.currentTarget.querySelector('[aria-expanded="true"]')) return;
             event.preventDefault();
             props.onCloseDrawer();
           }}

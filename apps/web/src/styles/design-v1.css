@@ -1341,8 +1341,9 @@
   }
 }
 
+/* Opaque: in a narrow window the thread lies over the channel. */
 :root[data-design="v1"] .community-interaction-drawer {
-  background: transparent;
+  background: var(--surface-raised);
 }
 
 :root[data-design="v1"] .community-interaction-drawer-back.is-v1,
