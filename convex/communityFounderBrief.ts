@@ -333,6 +333,20 @@ export const getFounderBriefSettings = query({
   },
 });
 
+// Home (design system v1): the same facts the brief reads, live, for the last
+// day. Owner only, like the brief itself, and nothing the brief doesn't send.
+export const getCommunityHomeSnapshot = query({
+  args: { authSubject: v.optional(v.string()), communityId: v.id("communities") },
+  handler: async (ctx, args): Promise<FounderBriefSnapshot | null> => {
+    const userId = await resolveUserIdForAuthenticatedRequest({ ctx, authSubject: args.authSubject ?? null });
+    const community = await ctx.db.get(args.communityId);
+    if (!community || String(community.ownerId) !== String(userId)) throw new Error("community_home_owner_required");
+    if (!communityIsActive(community)) return null;
+    const nowMs = Date.now();
+    return await buildSnapshot(ctx, community, nowMs - DAY_MS, nowMs);
+  },
+});
+
 export const setFounderBriefSettings = mutation({
   args: {
     authSubject: v.optional(v.string()),
