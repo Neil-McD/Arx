@@ -774,6 +774,19 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
   // In design v1 the list stays beside an open conversation, so its people
   // search keeps working there. Elsewhere the list is hidden behind it.
   const listStaysVisible = !props.mobileRoot && isDesignV1Active();
+  const inboxIsPage = listStaysVisible;
+  // Opening Inbox shows your most recent conversation beside the list, once.
+  // Closing it, or having none, leaves the column on its empty state.
+  const autoOpenedRef = useRef(false);
+  const openConversationRef = useRef<((conversation: DirectMessageConversation) => void) | null>(null);
+  useEffect(() => {
+    if (!isOpen) { autoOpenedRef.current = false; return; }
+    if (!inboxIsPage || autoOpenedRef.current || isLoadingInbox) return;
+    autoOpenedRef.current = true;
+    if (activeConversationId) return;
+    const latest = conversations.find((conversation) => Math.floor(Number(conversation.last_seq ?? 0)) > 0);
+    if (latest) openConversationRef.current?.(latest);
+  }, [activeConversationId, conversations, inboxIsPage, isLoadingInbox, isOpen]);
   useEffect(() => {
     if (!isOpen || (activeConversationId && !listStaysVisible)) return;
     const timeoutId = window.setTimeout(
@@ -1247,6 +1260,8 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
     [ensureSession, openPanelForConversation, session],
   );
 
+  openConversationRef.current = openConversation;
+
   const openPersonConversation = useCallback(
     (person: DirectMessageNetworkPerson) => {
       if (!session) return;
@@ -1642,14 +1657,14 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
   }, [directMessagePanel]);
 
   if (!isOpen) return null;
-  const inboxIsPage = !props.mobileRoot && isDesignV1Active();
 
   return (
-    <div className={`web-direct-messages-host${props.mobileRoot ? " mobile-root" : ""}${inboxIsPage ? " is-page" : ""}${inboxIsPage && directMessagePanel ? " has-conversation" : ""}`}>
+    <div className={`web-direct-messages-host${props.mobileRoot ? " mobile-root" : ""}${inboxIsPage ? " is-page" : ""}${inboxIsPage ? " has-conversation" : ""}`}>
       {/* Design system v1: Inbox is a page. The list fills the main area and
           stays there; the open conversation sits beside it in the right column. */}
       {directMessagePanel ? (
         <WebDirectMessagePanel
+          besideInbox={inboxIsPage}
           conversation={directMessagePanel.conversation}
           messages={mergedPanelMessages}
           input={directMessagePanel.input}
@@ -1718,6 +1733,11 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
           }}
         />
       ) : null}
+      {inboxIsPage && !directMessagePanel ? (
+        <aside className="community-dm-panel community-dm-empty-column" aria-label="No conversation open">
+          <p>Choose someone on the left to read or send a message.</p>
+        </aside>
+      ) : null}
       {!directMessagePanel || inboxIsPage ? (
         <WebDirectMessageInboxPanel
           conversations={conversations}
@@ -1738,6 +1758,7 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
           getInitials={getInitials}
           getAvatarColor={getAvatarColor}
           onSearchValueChange={setSearchValue}
+          activeConversationId={activeConversationId}
           onSelectConversation={openConversation}
           onSelectPerson={openPersonConversation}
         />

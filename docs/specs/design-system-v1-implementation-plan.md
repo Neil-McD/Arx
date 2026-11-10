@@ -188,6 +188,11 @@ then each left-column button's page, then each page's right column.
   fills the main area with the standard header line; the open conversation is
   the right column. It is still direct messages only, and it has no address of
   its own yet.
+- Inbox layout to the mock's measurements (2026-11-10): the right column is
+  always there (the latest conversation opens with the page, or an empty
+  state); 56px gutters and a 52px header; rows are a 36px avatar, name, kind,
+  time, the last message and an unread dot; "Messages" and "People in your
+  communities" labels; finding someone is a small field in the header line.
 - Outside a community: Discover and your own settings use the same frame, with
   `WebGlobalNavV1` as their left column (Discover: your communities; settings:
   Back and the settings sections). The rail is gone there too. Operator and

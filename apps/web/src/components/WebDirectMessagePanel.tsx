@@ -65,6 +65,8 @@ type WebDirectMessagePanelProps = {
   onDiscardLocalMessage?: (localId: string) => void;
   onComposerBlur?: () => void | Promise<void>;
   onReadThroughSeq?: (seq: number) => void | Promise<void>;
+  // Design system v1: shown beside the Inbox list, so it needs no way back.
+  besideInbox?: boolean;
   onBackToInbox?: () => void;
 };
 
@@ -617,7 +619,7 @@ export function WebDirectMessagePanel(props: WebDirectMessagePanelProps) {
         </div>
       ) : null}
       <div className="community-dm-panel-header">
-        {props.onBackToInbox ? (
+        {props.onBackToInbox && !props.besideInbox ? (
           <button
             className="community-dm-panel-back"
             type="button"
@@ -892,7 +894,7 @@ export function WebDirectMessagePanel(props: WebDirectMessagePanelProps) {
                 void props.onSend();
               }
             }}
-            placeholder={isPeerBlocked ? "You blocked this person" : `Message ${peerLabel}`}
+            placeholder={isPeerBlocked ? "You blocked this person" : `${props.besideInbox ? "Reply to" : "Message"} ${peerLabel}`}
             rows={1}
             disabled={props.isSending || isPeerBlocked}
           />
