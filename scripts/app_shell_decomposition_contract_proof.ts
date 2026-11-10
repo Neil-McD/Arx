@@ -144,7 +144,7 @@ assert.doesNotMatch(
 );
 assert.match(
   shellChromeHost,
-  /showDesktopCommunityRail: props\.communityShell\.showDesktopCommunityRail,[\s\S]*showDesktopCommunityNav: props\.communityShell\.showDesktopCommunityNav/,
+  /showDesktopCommunityRail,[\s\S]*showDesktopCommunityNav: props\.communityShell\.showDesktopCommunityNav/,
   "shell rendering and grid classes must read one canonical visibility projection",
 );
 assert.doesNotMatch(

@@ -528,25 +528,25 @@
 /* Narrow windows collapse the left column to icons: section labels go, and
    the account row shows only the avatar, its menu opening to the right. */
 @media (max-width: 720px) {
-  :root[data-design="v1"] .app-shell.community-layout.with-community-rail.sessions-compact.no-right .community-nav-section-label {
+  :root[data-design="v1"] .app-shell.community-layout.sessions-compact.no-right .community-nav-section-label {
     display: none;
   }
 
-  :root[data-design="v1"] .app-shell.community-layout.with-community-rail.sessions-compact.no-right .community-nav-v1-primary {
+  :root[data-design="v1"] .app-shell.community-layout.sessions-compact.no-right .community-nav-v1-primary {
     margin-bottom: 8px;
   }
 
-  :root[data-design="v1"] .app-shell.community-layout.with-community-rail.sessions-compact.no-right .account-menu-trigger {
+  :root[data-design="v1"] .app-shell.community-layout.sessions-compact.no-right .account-menu-trigger {
     justify-content: center;
     padding: 0;
   }
 
-  :root[data-design="v1"] .app-shell.community-layout.with-community-rail.sessions-compact.no-right .account-menu-trigger > svg {
+  :root[data-design="v1"] .app-shell.community-layout.sessions-compact.no-right .account-menu-trigger > svg {
     display: none;
   }
 
   /* The name stays readable to screen readers; it is only hidden visually. */
-  :root[data-design="v1"] .app-shell.community-layout.with-community-rail.sessions-compact.no-right .account-menu-identity {
+  :root[data-design="v1"] .app-shell.community-layout.sessions-compact.no-right .account-menu-identity {
     position: absolute;
     width: 1px;
     height: 1px;
@@ -556,11 +556,11 @@
   }
 
   /* The column clips overflow, so the menu opens beside it instead. */
-  :root[data-design="v1"] .app-shell.community-layout.with-community-rail.sessions-compact.no-right .account-menu-popover {
+  :root[data-design="v1"] .app-shell.community-layout.sessions-compact.no-right .account-menu-popover {
     position: fixed;
     right: auto;
     bottom: 12px;
-    left: calc(var(--web-rail-width, 72px) + 64px);
+    left: 64px;
     width: 220px;
   }
 }
@@ -764,4 +764,243 @@
 
 :root[data-design="v1"] .community-home-row svg {
   color: var(--text-faint);
+}
+
+/*
+ * Design system v1: the frame (spec section 4). Inside a community there is no
+ * rail of community icons; the name on the banner is the switcher, Inbox and
+ * Members are rows, and the host's tools sit quietly above the account row.
+ */
+:root[data-design="v1"] .community-nav-identity:has(.community-switcher) {
+  padding: 0 6px;
+}
+
+:root[data-design="v1"] .community-switcher {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+:root[data-design="v1"] .community-switcher-trigger {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 34px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  text-shadow: inherit;
+  cursor: pointer;
+}
+
+:root[data-design="v1"] .community-switcher-trigger:hover,
+:root[data-design="v1"] .community-switcher-trigger:focus-visible,
+:root[data-design="v1"] .community-switcher-trigger.is-open {
+  outline: none;
+  background: var(--hover-overlay);
+}
+
+:root[data-design="v1"] .community-nav-identity.has-banner:not(.is-condensed) .community-switcher-trigger:hover,
+:root[data-design="v1"] .community-nav-identity.has-banner:not(.is-condensed) .community-switcher-trigger:focus-visible,
+:root[data-design="v1"] .community-nav-identity.has-banner:not(.is-condensed) .community-switcher-trigger.is-open {
+  background: rgba(0, 0, 0, 0.42);
+}
+
+:root[data-design="v1"] .community-switcher-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  font-size: 14px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+:root[data-design="v1"] .community-switcher-trigger > svg {
+  flex: 0 0 auto;
+  opacity: 0.72;
+}
+
+:root[data-design="v1"] .community-switcher-news,
+:root[data-design="v1"] .community-switcher-dot {
+  flex: 0 0 auto;
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: var(--text-ink-primary);
+}
+
+:root[data-design="v1"] .community-nav-identity.has-banner:not(.is-condensed) .community-switcher-news {
+  background: #fff;
+}
+
+:root[data-design="v1"] .community-switcher-popover {
+  position: absolute;
+  top: calc(100% + 2px);
+  right: 6px;
+  left: 6px;
+  z-index: 30;
+  display: grid;
+  gap: 2px;
+  max-height: min(60vh, 420px);
+  padding: 6px;
+  overflow-y: auto;
+  border: 1px solid var(--border-strong);
+  border-radius: 12px;
+  background: var(--bg-modal);
+  box-shadow: 0 24px 60px -20px rgba(0, 0, 0, 0.55);
+  text-shadow: none;
+}
+
+:root[data-design="v1"][data-theme="light"] .community-switcher-popover {
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.06), 0 24px 60px -24px rgba(16, 24, 40, 0.3);
+}
+
+:root[data-design="v1"] .community-nav-identity.has-banner:not(.is-condensed) > .community-switcher {
+  position: static;
+}
+
+:root[data-design="v1"] .community-switcher-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 36px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-ink-secondary);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 400;
+  text-align: left;
+  cursor: pointer;
+}
+
+:root[data-design="v1"] .community-switcher-item:hover,
+:root[data-design="v1"] .community-switcher-item:focus-visible,
+:root[data-design="v1"] .community-switcher-item[aria-checked="true"] {
+  outline: none;
+  background: var(--hover-overlay);
+  color: var(--text-ink-primary);
+}
+
+:root[data-design="v1"] .community-switcher-item-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+:root[data-design="v1"] .community-switcher-avatar,
+:root[data-design="v1"] .community-switcher-icon {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  overflow: hidden;
+  border-radius: 6px;
+  font-size: 10px;
+}
+
+:root[data-design="v1"] .community-switcher-icon,
+:root[data-design="v1"] .community-switcher-item > svg {
+  color: var(--icon-default);
+}
+
+:root[data-design="v1"] .community-switcher-separator {
+  height: 1px;
+  margin: 4px 6px;
+  background: var(--border-default);
+}
+
+/* Inbox's unread count and the member count: ink, never colour. */
+:root[data-design="v1"] .nav-item-count,
+:root[data-design="v1"] .nav-item-hint {
+  margin-left: auto;
+  flex: 0 0 auto;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+:root[data-design="v1"] .nav-item-count {
+  color: var(--text-ink-primary);
+  font-weight: 600;
+}
+
+:root[data-design="v1"] .nav-item-hint {
+  color: var(--text-faint);
+}
+
+/* Inbox is a row now, so the floating messages button is not repeated. */
+:root[data-design="v1"] .app-root:has(.community-nav-v1-primary) .direct-messages-topbar-button {
+  display: none;
+}
+
+/* The host's tools are plain rows, not buttons. */
+:root[data-design="v1"] .community-nav-v1-primary ~ .community-nav-footer {
+  gap: 0;
+}
+
+:root[data-design="v1"] .community-nav-v1-primary ~ .community-nav-footer .nav-item {
+  justify-content: flex-start;
+  gap: 10px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-ink-secondary);
+  font-weight: 400;
+}
+
+:root[data-design="v1"] .community-nav-v1-primary ~ .community-nav-footer .nav-item:hover,
+:root[data-design="v1"] .community-nav-v1-primary ~ .community-nav-footer .nav-item.active {
+  background: var(--hover-overlay);
+  color: var(--text-ink-primary);
+}
+
+/* Narrow windows: without the rail the column still collapses to icons. */
+@media (max-width: 720px) {
+  /* The banner goes; the switcher stays as one small button whose list opens
+     beside the column, so moving between communities is never lost. */
+  :root[data-design="v1"] .app-shell.community-layout.sessions-compact.no-right .community-nav-header,
+  :root[data-design="v1"] .app-shell.community-layout.sessions-compact.no-right .community-switcher-name {
+    display: none;
+  }
+
+  :root[data-design="v1"] .app-shell.community-layout.sessions-compact.no-right .community-nav-identity:has(.community-switcher) {
+    margin: 0 0 8px;
+    padding: 0;
+    border-bottom: 0;
+  }
+
+  :root[data-design="v1"] .app-shell.community-layout.sessions-compact.no-right .community-switcher-trigger {
+    justify-content: center;
+    padding: 0;
+  }
+
+  :root[data-design="v1"] .app-shell.community-layout.sessions-compact.no-right .community-switcher-popover {
+    position: fixed;
+    top: 12px;
+    right: auto;
+    left: 64px;
+    width: 240px;
+  }
+
+  :root[data-design="v1"] .app-shell.community-layout.sessions-compact.no-right .community-nav .nav-item {
+    justify-content: center;
+    gap: 0;
+    padding: 10px 6px;
+    font-size: 0;
+  }
+
+  :root[data-design="v1"] .app-shell.community-layout.sessions-compact.no-right .community-nav .nav-item-count,
+  :root[data-design="v1"] .app-shell.community-layout.sessions-compact.no-right .community-nav .nav-item-hint {
+    display: none;
+  }
 }

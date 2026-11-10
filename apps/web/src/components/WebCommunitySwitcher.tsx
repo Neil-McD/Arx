@@ -1,0 +1,126 @@
+import { useEffect, useId, useRef, useState } from "react";
+import { Check, ChevronsUpDown, Compass, Plus } from "lucide-react";
+import { CommunityAvatar } from "../../../../shared/CommunityAvatar";
+import type { CommunityLike } from "./webShellChromeShared";
+
+export type WebCommunitySwitcherProps = {
+  activeCommunityName: string;
+  communities: CommunityLike[];
+  selectedCommunitySlug: string | null;
+  attentionById: Record<string, boolean>;
+  onSelectCommunity: (community: CommunityLike) => void;
+  onOpenDiscover: () => void;
+  onCreateCommunity: () => void;
+};
+
+// Design system v1: the community's name on its banner is also how you move
+// between communities. It replaces the rail of community icons: your
+// communities (a dot where something is new), Discover, and starting one.
+export function WebCommunitySwitcher(props: WebCommunitySwitcherProps) {
+  const [isOpen, setIsOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement | null>(null);
+  const triggerRef = useRef<HTMLButtonElement | null>(null);
+  const menuId = useId();
+  const othersHaveNews = props.communities.some(
+    (community) =>
+      props.attentionById[community.id] &&
+      String(community.slug ?? "") !== props.selectedCommunitySlug,
+  );
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const onPointerDown = (event: PointerEvent) => {
+      if (!rootRef.current?.contains(event.target as Node)) setIsOpen(false);
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      setIsOpen(false);
+      triggerRef.current?.focus();
+    };
+    document.addEventListener("pointerdown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [isOpen]);
+
+  const choose = (action: () => void) => {
+    setIsOpen(false);
+    action();
+  };
+
+  return (
+    <div className="community-switcher" ref={rootRef}>
+      <button
+        ref={triggerRef}
+        className={`community-switcher-trigger${isOpen ? " is-open" : ""}`}
+        type="button"
+        aria-haspopup="menu"
+        aria-expanded={isOpen}
+        aria-controls={isOpen ? menuId : undefined}
+        title="Switch community"
+        onClick={() => setIsOpen((open) => !open)}
+      >
+        <span className="community-switcher-name">{props.activeCommunityName}</span>
+        {othersHaveNews ? (
+          <span className="community-switcher-news" aria-label="New in another community" />
+        ) : null}
+        <ChevronsUpDown size={15} aria-hidden="true" />
+      </button>
+      {isOpen ? (
+        <div className="community-switcher-popover" id={menuId} role="menu" aria-label="Your communities">
+          {props.communities.map((community) => {
+            const isCurrent = String(community.slug ?? "") === props.selectedCommunitySlug;
+            return (
+              <button
+                key={community.id}
+                className="community-switcher-item"
+                type="button"
+                role="menuitemradio"
+                aria-checked={isCurrent}
+                onClick={() => choose(() => props.onSelectCommunity(community))}
+              >
+                <CommunityAvatar
+                  communityId={community.id}
+                  visualIdentity={community.visual_identity}
+                  className="community-switcher-avatar"
+                  imageUrl={community.avatar_url}
+                  focusX={community.avatar_focus_x}
+                  focusY={community.avatar_focus_y}
+                  zoom={community.avatar_zoom}
+                  name={community.name}
+                />
+                <span className="community-switcher-item-name">{community.name}</span>
+                {isCurrent ? (
+                  <Check size={15} aria-hidden="true" />
+                ) : props.attentionById[community.id] ? (
+                  <span className="community-switcher-dot" aria-label="Something new" />
+                ) : null}
+              </button>
+            );
+          })}
+          <div className="community-switcher-separator" role="separator" />
+          <button
+            className="community-switcher-item"
+            type="button"
+            role="menuitem"
+            onClick={() => choose(props.onOpenDiscover)}
+          >
+            <span className="community-switcher-icon" aria-hidden="true"><Compass size={16} /></span>
+            <span className="community-switcher-item-name">Discover communities</span>
+          </button>
+          <button
+            className="community-switcher-item"
+            type="button"
+            role="menuitem"
+            onClick={() => choose(props.onCreateCommunity)}
+          >
+            <span className="community-switcher-icon" aria-hidden="true"><Plus size={16} /></span>
+            <span className="community-switcher-item-name">Start a community</span>
+          </button>
+        </div>
+      ) : null}
+    </div>
+  );
+}

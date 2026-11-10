@@ -2305,13 +2305,22 @@ export default function App() {
       ? {
           name: displayName(canonicalSessionUserId),
           avatarUrl: savedProfilesByUserId[canonicalSessionUserId]?.avatar_url ?? null,
-          roleLabel: canViewActiveCommunitySettings ? "Host" : "Member",
+          // "Host" is the owner. Being able to see settings is not enough: a
+          // Polynet operator can, in communities where they are only a member.
+          roleLabel:
+            activeCommunity &&
+            activeCommunityAccess?.community_id === activeCommunity.id &&
+            activeCommunityAccess.is_owner === true
+              ? "Host"
+              : "Member",
           appTheme,
           onSetAppTheme: setAppTheme,
           onSignOut: handleSignOut,
         }
       : undefined,
     onOpenCommunityMembers: handleOpenCommunityMembers,
+    onToggleDirectMessages: handleToggleDirectMessages,
+    isDirectMessagesOpen,
     showMobileAppShell,
     showMobileSettingsShell,
     showMobilePublicFunnel,

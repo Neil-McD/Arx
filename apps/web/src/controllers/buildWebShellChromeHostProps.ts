@@ -16,6 +16,8 @@ type CommunityLike = CommunityShellCommunity;
 
 export function buildWebShellChromeHostProps(params: {
   account?: Omit<WebAccountMenuProps, "onOpenSettings">;
+  onToggleDirectMessages: () => void;
+  isDirectMessagesOpen: boolean;
   onOpenCommunityMembers: () => void;
   showMobileAppShell: boolean;
   showMobileSettingsShell: boolean;
@@ -239,6 +241,8 @@ export function buildWebShellChromeHostProps(params: {
       onCopyCommunityJoinLink: params.onCopyCommunityJoinLink,
       canOpenDirectMessages: params.canOpenDirectMessages,
       directMessagesUnreadCount: params.directMessagesUnreadCount,
+      onToggleDirectMessages: params.onToggleDirectMessages,
+      isDirectMessagesOpen: params.isDirectMessagesOpen,
       onOpenDiscover: () => {
         if (params.showMobileGlobalShell) params.prepareMobileGlobalNavigation();
         params.handleOpenDiscover();

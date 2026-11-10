@@ -97,6 +97,8 @@ export type WebCommunityShellProps = {
   onCopyCommunityJoinLink: (joinUrl: string) => Promise<void> | void;
   canOpenDirectMessages: boolean;
   directMessagesUnreadCount: number;
+  onToggleDirectMessages: () => void;
+  isDirectMessagesOpen: boolean;
   onOpenDiscover: () => void;
   onOpenMobileCreateCommunity: () => void;
   communities: CommunityLike[];
