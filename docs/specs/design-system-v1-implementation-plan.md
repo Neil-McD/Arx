@@ -194,6 +194,18 @@ then each left-column button's page, then each page's right column.
   docs pages keep the old frame.
 - Still to do in the shell: narrow and banner checks.
 
+### Channels, as they read (left-column walk, 2026-11-10)
+
+- Left column: a channel with something new is bold beside its dot; hosts see
+  "Add a channel".
+- Messages and composer share one readable column (880px at most).
+- More air between people; day dividers are a word on a hairline; people
+  arriving is quieter.
+- The agent's tag reads "guide"; the owner's own posts carry "host".
+- The replies line is a small face, the count as the link, and the time.
+- Not yet: channel descriptions in the header (no field exists), and more than
+  one face on the replies line (only the last replier is known).
+
 ### Slice 4: Home
 
 Home is today's agent page with three things above the conversation.
