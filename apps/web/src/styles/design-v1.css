@@ -1410,3 +1410,58 @@
 :root[data-design="v1"] .community-interaction-thread-drawer:not(.community-interaction-thread-page) .community-interaction-drawer-composer {
   padding: 0 12px 12px;
 }
+
+/*
+ * Design system v1: one header line and one content column on every page in a
+ * community (spec section 4). The line is the channel header's: same height,
+ * same title, the page's own actions at the right.
+ */
+:root[data-design="v1"] .community-page-header {
+  gap: 16px;
+}
+
+/* Until a page fills it, the line holds its height and nothing else. */
+:root[data-design="v1"] .community-page-header:empty {
+  border-bottom-color: transparent;
+}
+
+:root[data-design="v1"] .community-page-header-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  min-width: 0;
+}
+
+/* Actions sit inside a 48px line, so they take its compact size. */
+:root[data-design="v1"] .community-page-header-actions :where(button, .platform-switcher) {
+  margin: 0;
+}
+
+:root[data-design="v1"] .community-page-header-actions .community-events-new-btn {
+  min-height: 30px;
+  padding: 0 12px;
+  font-size: 13px;
+}
+
+:root[data-design="v1"] .community-page-header-actions .platform-switcher {
+  width: auto;
+  flex: 0 0 auto;
+}
+
+/* One column for every such page: same left edge, same width, same top. */
+:root[data-design="v1"] .community-page-header + .community-tab-scroll > .web-community-centered-pane {
+  box-sizing: border-box;
+  width: min(100%, 920px);
+  margin-inline: auto;
+  padding: 28px 32px 56px;
+}
+
+:root[data-design="v1"] .community-page-header + .community-tab-scroll > .web-community-centered-pane > * {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: none;
+  margin-inline: 0;
+  padding-inline: 0;
+  padding-top: 0;
+}

@@ -1,3 +1,4 @@
+import { CommunityPageFrame } from "./CommunityPageHeader";
 import type { ComponentProps, ReactNode } from "react";
 import type { CommunityTab } from "../../../../shared/appShellNavigation";
 import { communityInitials } from "../../../../shared/messageMetadataUi";
@@ -54,13 +55,7 @@ export type WebCommunitySecondaryPanelsProps = {
 };
 
 function renderCenteredPane(children: ReactNode) {
-  return (
-    <div className="community-tab-scroll">
-      <div className="web-community-centered-pane">
-        {children}
-      </div>
-    </div>
-  );
+  return <CommunityPageFrame>{children}</CommunityPageFrame>;
 }
 
 export function WebCommunitySecondaryPanels(props: WebCommunitySecondaryPanelsProps) {

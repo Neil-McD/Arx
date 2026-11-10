@@ -171,6 +171,18 @@ old app with new paint.
 - Not yet: "Catch up", the guide's short summary of the channel. Nothing writes
   one today; it is its own slice.
 
+### The shell on every page (Neil, 2026-11-10: shell first, then pages)
+
+Order agreed: the shell to done on every page, then the left column exactly,
+then each left-column button's page, then each page's right column.
+
+- One header line: Knowledge, Events, Analytics and Manage use the channel
+  header's line (`CommunityPageFrame` and `CommunityPageHeader`): title on the
+  left, the page's own actions on the right. Home stays without a line.
+- One content column: those pages share a 920px column with the same padding.
+- Still to do in the shell: one right-column slot (Inbox and the member list
+  inside it), the pages outside a community, and narrow, light and banner checks.
+
 ### Slice 4: Home
 
 Home is today's agent page with three things above the conversation.
