@@ -571,11 +571,17 @@
  */
 :root[data-design="v1"] .community-home {
   display: grid;
-  gap: 0;
+  gap: 40px;
   width: 100%;
   max-width: 720px;
   margin: 0 auto 32px;
   padding-top: 28px;
+}
+
+:root[data-design="v1"] .community-home-main {
+  display: grid;
+  gap: 0;
+  min-width: 0;
 }
 
 :root[data-design="v1"] .community-home-eyebrow {
@@ -1002,5 +1008,127 @@
   :root[data-design="v1"] .app-shell.community-layout.sessions-compact.no-right .community-nav .nav-item-count,
   :root[data-design="v1"] .app-shell.community-layout.sessions-compact.no-right .community-nav .nav-item-hint {
     display: none;
+  }
+}
+
+/*
+ * Design system v1: Home's layout (spec section 5). A narrower left column, a
+ * quiet header, and beside the greeting a panel of where things stand.
+ */
+@media (min-width: 721px) {
+  :root[data-design="v1"] .product-shell-surface--community {
+    grid-template-columns: clamp(224px, 18vw, 264px) minmax(0, 1fr);
+  }
+}
+
+/* Home needs no title bar of its own: the left column already says where you
+   are. The title stays for screen readers; the new-conversation button stays. */
+:root[data-design="v1"] .community-agent-page-header {
+  border-bottom-color: transparent;
+  background: transparent;
+}
+
+:root[data-design="v1"] .community-agent-page-header .community-channel-header-identity {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+:root[data-design="v1"] .community-home-aside {
+  display: grid;
+  align-content: start;
+  gap: 24px;
+  min-width: 0;
+  padding-top: 24px;
+  border-top: 1px solid var(--border-default);
+}
+
+:root[data-design="v1"] .community-home-figures {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 22px 16px;
+}
+
+:root[data-design="v1"] .community-home-figure {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+:root[data-design="v1"] .community-home-figure span {
+  color: var(--text-faint);
+  font-size: 12px;
+}
+
+:root[data-design="v1"] .community-home-figure b {
+  color: var(--text-ink-primary);
+  font-size: 24px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+}
+
+:root[data-design="v1"] .community-home-figure em {
+  color: var(--text-ink-secondary);
+  font-size: 12px;
+  font-style: normal;
+}
+
+:root[data-design="v1"] .community-home-aside-section {
+  display: grid;
+  justify-items: start;
+  gap: 6px;
+  padding-top: 22px;
+  border-top: 1px solid var(--border-default);
+}
+
+:root[data-design="v1"] .community-home-aside-section h3 {
+  margin: 0;
+  color: var(--text-ink-primary);
+  font-size: 15px;
+  font-weight: 600;
+}
+
+:root[data-design="v1"] .community-home-aside-section p {
+  margin: 0;
+  color: var(--text-ink-secondary);
+  font-size: 13px;
+}
+
+:root[data-design="v1"] .community-home-aside-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-ink-secondary);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+:root[data-design="v1"] .community-home-aside-link:hover,
+:root[data-design="v1"] .community-home-aside-link:focus-visible {
+  outline: none;
+  color: var(--text-ink-primary);
+}
+
+/* Wide windows: the panel sits beside the greeting, as a right-hand column. */
+@media (min-width: 1360px) {
+  :root[data-design="v1"] .community-home {
+    grid-template-columns: minmax(0, 720px) 264px;
+    gap: 56px;
+    max-width: 1040px;
+  }
+
+  :root[data-design="v1"] .community-home-aside {
+    padding: 4px 0 0 28px;
+    border-top: 0;
+    border-left: 1px solid var(--border-default);
   }
 }

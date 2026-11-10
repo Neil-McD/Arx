@@ -2477,9 +2477,11 @@ export default function App() {
           canonicalSessionUserId &&
           // owner_id is the database user id and canonicalSessionUserId is the
           // sign-in subject, so ownership comes from the server's access answer.
+          // Members get Home too, with member-safe facts; visitors do not.
           activeCommunityAccess?.community_id === activeCommunity.id &&
-          activeCommunityAccess.is_owner === true
+          (activeCommunityAccess.is_owner === true || activeCommunityAccess.can_read_chat === true)
             ? {
+                audience: activeCommunityAccess.is_owner === true ? ("host" as const) : ("member" as const),
                 communityId: activeCommunity.id,
                 communityName: activeCommunity.name,
                 firstName: displayName(canonicalSessionUserId).trim().split(/\s+/)[0] || "there",

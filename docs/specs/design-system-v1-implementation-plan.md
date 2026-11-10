@@ -140,6 +140,18 @@ old app with new paint.
   people, Analytics and Manage are plain rows above the account row.
 - The account row says "Host" only for the owner.
 
+### Home's layout and the member's Home (second half of slice 4)
+
+- The left column is narrower (224 to 264px).
+- Home has no title bar; the interface says "guide", not "agent", on this page.
+- Beside the greeting, a panel of where things stand: members, active today,
+  and for the owner, requests to join and unanswered questions; then what is
+  coming up. Money figures wait for the payments slice.
+- Members get Home too. `getCommunityMemberHomeSnapshot` requires chat access
+  and returns only what any member can already see: counts, questions asked in
+  the shared channels, and events. No join requests and no names of who joined
+  or who has been quiet. A member's Home has rows, not a card.
+
 ### Slice 4: Home
 
 Home is today's agent page with three things above the conversation.

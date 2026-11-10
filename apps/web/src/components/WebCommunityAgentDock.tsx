@@ -19,7 +19,9 @@ import {
   Sparkles,
   Square,
   X,
+  House,
 } from "lucide-react";
+import { isDesignV1Active } from "../../../../shared/designSystem";
 import { getAuthUrl, type AuthSession } from "../auth";
 import { CommunityComposerControls } from "./CommunityComposerControls";
 import { renderMarkdown } from "../../../../shared/markdownUi";
@@ -1119,7 +1121,11 @@ function WebCommunityAgentDock(props, ref) {
     props.surfaceContext,
     communityName,
   );
-  const presentation = { ...legacyPresentation, title: "Agent", surfaceLabel: communityName, emptyLabel: "How can I help?", composerLabel: "Message the community agent", loadingLabel: "Loading conversation" };
+  // Design system v1 calls it the guide, and its page is Home.
+  const guideWording = isDesignV1Active() && props.pageMode;
+  const presentation = guideWording
+    ? { ...legacyPresentation, title: props.home ? "Home" : "Your guide", surfaceLabel: communityName, emptyLabel: "How can I help?", composerLabel: "Ask your guide anything", loadingLabel: "Loading conversation" }
+    : { ...legacyPresentation, title: "Agent", surfaceLabel: communityName, emptyLabel: "How can I help?", composerLabel: "Message the community agent", loadingLabel: "Loading conversation" };
   const shouldRenderStreamedText =
     Boolean(streamedText) && !hasSequencedAssistantText(runtimeEvents);
 
@@ -1143,7 +1149,7 @@ function WebCommunityAgentDock(props, ref) {
 
       <section className="community-agent-dock-panel" aria-label={presentation.title}>
         <header className={props.pageMode ? "community-channel-header community-agent-page-header" : "community-agent-dock-header"}>
-          {props.pageMode ? <div className="community-channel-header-identity"><Sparkles size={18} aria-hidden="true" /><h1>{presentation.title}</h1></div> : <div className="community-agent-dock-identity">
+          {props.pageMode ? <div className="community-channel-header-identity">{guideWording && props.home ? <House size={18} aria-hidden="true" /> : <Sparkles size={18} aria-hidden="true" />}<h1>{presentation.title}</h1></div> : <div className="community-agent-dock-identity">
             {!props.pageMode && <span className="community-agent-dock-avatar" aria-hidden="true">
               <Sparkles />
             </span>}
