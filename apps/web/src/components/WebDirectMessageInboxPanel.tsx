@@ -27,6 +27,8 @@ type WebDirectMessageInboxPanelProps = {
   getInitials: (value: string) => string;
   getAvatarColor: (seed: string) => string;
   onSearchValueChange: (value: string) => void;
+  // Design system v1: the conversation open beside the list, if any.
+  activeConversationId?: string | null;
   onSelectConversation: (conversation: DirectMessageConversation) => void;
   onSelectPerson: (person: DirectMessageNetworkPerson) => void | Promise<void>;
 };
@@ -149,7 +151,7 @@ export function WebDirectMessageInboxPanel(props: WebDirectMessageInboxPanelProp
             value={props.searchValue}
             onChange={(event) => props.onSearchValueChange(event.target.value)}
             aria-label="Search people and messages"
-            placeholder="Search people and messages"
+            placeholder={isDesignV1Active() ? "Find someone" : "Search people and messages"}
           />
         </label>
       ) : null}
@@ -179,6 +181,9 @@ export function WebDirectMessageInboxPanel(props: WebDirectMessageInboxPanelProp
           <div className="community-dm-panel-empty">Loading messages...</div>
         ) : null}
 
+        {isDesignV1Active() && filteredConversations.length > 0 ? (
+          <div className="community-dm-inbox-label">Messages</div>
+        ) : null}
         {filteredConversations.map((conversation) => {
           const peer = resolveDirectMessagePeer(conversation, props.sessionUserId);
           const peerLabel = String(peer?.display_name ?? peer?.user_id ?? "Direct message").trim() || "Direct message";
@@ -201,7 +206,8 @@ export function WebDirectMessageInboxPanel(props: WebDirectMessageInboxPanelProp
             <button
               key={conversation.id}
               type="button"
-              className={`community-dm-inbox-row${hasUnread ? " is-unread" : ""}`}
+              className={`community-dm-inbox-row${hasUnread ? " is-unread" : ""}${props.activeConversationId === conversation.id ? " is-selected" : ""}`}
+              aria-current={props.activeConversationId === conversation.id ? "true" : undefined}
               aria-label={`${peerLabel}, ${hasUnread ? "unread, " : ""}${previewText}`}
               onClick={() => props.onSelectConversation(conversation)}
             >
@@ -229,6 +235,7 @@ export function WebDirectMessageInboxPanel(props: WebDirectMessageInboxPanelProp
                 <span className="community-dm-inbox-row-top">
                   <span className="community-dm-inbox-row-name-line">
                     <span className="community-dm-inbox-row-name">{peerLabel}</span>
+                    {isDesignV1Active() ? <span className="community-dm-inbox-row-kind">Direct message</span> : null}
                   </span>
                   <span className="community-dm-inbox-row-meta-group">
                     {isMuted ? (
@@ -249,6 +256,9 @@ export function WebDirectMessageInboxPanel(props: WebDirectMessageInboxPanelProp
           );
         })}
 
+        {isDesignV1Active() && props.canBrowsePeople && !hasZeroCommunities && visiblePeople.length > 0 ? (
+          <div className="community-dm-inbox-label">People in your communities</div>
+        ) : null}
         {props.canBrowsePeople && !hasZeroCommunities
           ? visiblePeople.map((person) => {
               const displayName =
