@@ -1,3 +1,4 @@
+import type { WebAccountMenuProps } from "../components/WebAccountMenu";
 import type { ReactNode } from "react";
 import type {
   AppPage,
@@ -14,6 +15,7 @@ import type { CommunityShellCommunity } from "../../../../shared/communityTypes"
 type CommunityLike = CommunityShellCommunity;
 
 export function buildWebShellChromeHostProps(params: {
+  account?: Omit<WebAccountMenuProps, "onOpenSettings">;
   onOpenCommunityMembers: () => void;
   showMobileAppShell: boolean;
   showMobileSettingsShell: boolean;
@@ -271,6 +273,9 @@ export function buildWebShellChromeHostProps(params: {
         if (params.showMobileGlobalShell) params.prepareMobileGlobalNavigation();
         params.handleOpenGlobalSettings();
       },
+      account: params.account
+        ? { ...params.account, onOpenSettings: params.handleOpenGlobalSettings }
+        : undefined,
     },
     settingsSidebar: {
       showMobileSettingsShell: params.showMobileSettingsShell,

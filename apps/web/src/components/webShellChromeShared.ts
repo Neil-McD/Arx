@@ -1,3 +1,4 @@
+import type { WebAccountMenuProps } from "./WebAccountMenu";
 import type {
   CSSProperties,
   MouseEventHandler,
@@ -118,6 +119,9 @@ export type WebCommunityShellProps = {
   communityCreateCtaLabel: string;
   communityCreateCtaTitle: string;
   onOpenGlobalSettings: () => void;
+  // Design system v1's account row (left column). Absent where there is no
+  // signed-in account to show.
+  account?: WebAccountMenuProps;
 };
 
 export type WebSettingsSidebarProps = {

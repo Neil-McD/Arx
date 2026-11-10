@@ -1,4 +1,4 @@
-import { memo, useEffect, useRef, useState, type FormEvent } from "react";
+import { memo, useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import {
   Brain,
   Check,
@@ -7,6 +7,7 @@ import {
   ExternalLink,
   GripVertical,
   Hash,
+  House,
   LockKeyhole,
   Plus,
   Settings,
@@ -67,6 +68,11 @@ type CommunityNavProps = {
   isReorderingChannels?: boolean;
   reorderChannelsError?: string | null;
   clearReorderChannelsError?: () => void;
+  // Design system v1 (docs/specs/design-system-v1.md, section 4): Home first,
+  // labelled sections, and an account row at the bottom. "classic" is today's
+  // column and stays the default until v1 is accepted.
+  layout?: "classic" | "v1";
+  accountSlot?: ReactNode;
 };
 
 function moveChannelId(
@@ -180,7 +186,10 @@ export const CommunityNav = memo(function CommunityNav({
   isReorderingChannels = false,
   reorderChannelsError = null,
   clearReorderChannelsError,
+  layout = "classic",
+  accountSlot = null,
 }: CommunityNavProps) {
+  const isV1 = layout === "v1";
   const [didCopyJoinLink, setDidCopyJoinLink] = useState(false);
   const [isAddChannelOpen, setIsAddChannelOpen] = useState(false);
   const [reorderControlsChannelId, setReorderControlsChannelId] = useState<string | null>(null);
@@ -424,6 +433,20 @@ export const CommunityNav = memo(function CommunityNav({
           />
         </div>
       ) : null}
+      {isV1 && !isLoadingAccess ? (
+        <div className="community-nav-v1-primary">
+          <button
+            className={showActiveSelection && communityTab === "agent" ? "nav-item active" : "nav-item"}
+            type="button"
+            onClick={() => onSelectTab("agent")}
+            title="Home"
+          >
+            <span className="nav-icon" aria-hidden="true"><House size={17} strokeWidth={1.7} /></span>
+            <span className="nav-item-label">Home</span>
+          </button>
+        </div>
+      ) : null}
+      {isV1 ? <div className="community-nav-section-label">Channels</div> : null}
       <div
         className="community-channel-list"
         aria-label="Channels"
@@ -554,7 +577,7 @@ export const CommunityNav = memo(function CommunityNav({
           </button>
         ) : null}
       </div>
-      <div className="community-nav-divider" aria-hidden="true" />
+      {isV1 ? null : <div className="community-nav-divider" aria-hidden="true" />}
       {isLoadingAccess ? (
         <div className="community-nav-access-loading community-nav-utility-loading" aria-label="Loading community navigation">
           {Array.from({ length: 3 }).map((_, index) => (
@@ -564,10 +587,14 @@ export const CommunityNav = memo(function CommunityNav({
       ) : null}
       {!isLoadingAccess ? (
         <>
-          <button className={showActiveSelection && communityTab === "agent" ? "nav-item active" : "nav-item"} type="button" onClick={() => onSelectTab("agent")} title="Agent">
-            <span className="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="m12 3 2.5 6.5L21 12l-6.5 2.5L12 21l-2.5-6.5L3 12l6.5-2.5Z" /></svg></span>
-            <span className="nav-item-label">Agent</span>
-          </button>
+          {isV1 ? (
+            <div className="community-nav-section-label">Community</div>
+          ) : (
+            <button className={showActiveSelection && communityTab === "agent" ? "nav-item active" : "nav-item"} type="button" onClick={() => onSelectTab("agent")} title="Agent">
+              <span className="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="m12 3 2.5 6.5L21 12l-6.5 2.5L12 21l-2.5-6.5L3 12l6.5-2.5Z" /></svg></span>
+              <span className="nav-item-label">Agent</span>
+            </button>
+          )}
           <button
             className={showActiveSelection && communityTab === "resources" ? "nav-item active" : "nav-item"}
             type="button"
@@ -675,6 +702,7 @@ export const CommunityNav = memo(function CommunityNav({
           ) : null}
         </div>
       ) : null}
+      {isV1 && accountSlot ? <div className="community-nav-account">{accountSlot}</div> : null}
       {isAddChannelOpen ? (
         <div
           className="community-channel-modal-backdrop"
