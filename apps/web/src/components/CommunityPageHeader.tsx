@@ -9,20 +9,38 @@ import { isDesignV1Active } from "../../../../shared/designSystem";
 // undefined: not inside a frame. null: inside one whose line has not mounted yet.
 const HeaderSlotContext = createContext<HTMLElement | null | undefined>(undefined);
 
+const RailSlotContext = createContext<HTMLElement | null | undefined>(undefined);
+
 export function CommunityPageFrame(props: { children: ReactNode }) {
   const [slot, setSlot] = useState<HTMLElement | null>(null);
+  const [rail, setRail] = useState<HTMLElement | null>(null);
   const body = (
     <div className="community-tab-scroll">
       <div className="web-community-centered-pane">{props.children}</div>
     </div>
   );
   if (!isDesignV1Active()) return body;
+  // The right column is a slot too: a page that has one fills it with
+  // <CommunityPageRail>; an empty slot takes no room.
   return (
     <>
       <header className="community-channel-header community-page-header" ref={setSlot} />
-      <HeaderSlotContext.Provider value={slot}>{body}</HeaderSlotContext.Provider>
+      <HeaderSlotContext.Provider value={slot}>
+        <RailSlotContext.Provider value={rail}>
+          <div className="community-page-body">
+            {body}
+            <aside className="community-page-rail" ref={setRail} />
+          </div>
+        </RailSlotContext.Provider>
+      </HeaderSlotContext.Provider>
     </>
   );
+}
+
+export function CommunityPageRail(props: { label: string; children: ReactNode }) {
+  const rail = useContext(RailSlotContext);
+  if (!rail) return null;
+  return createPortal(<div className="community-page-rail-content" aria-label={props.label}>{props.children}</div>, rail);
 }
 
 // `children` is the page's classic title row, shown when v1 is off (and where

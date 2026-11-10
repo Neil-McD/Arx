@@ -1851,7 +1851,10 @@ export default function App() {
       },
       eventsActions: {
         setVisibleMonthIso: setCommunityEventsVisibleMonthIso,
-        getVisibleRange: getWebCommunityEventsMonthRange,
+        // The range the controller loaded, so a reload after midnight asks
+        // for the same window it is showing.
+        getVisibleRange: (monthIso: string) =>
+          monthIso === communityEventsVisibleMonthIso ? communityContent.eventsVisibleRange : getWebCommunityEventsMonthRange(monthIso),
         reloadEvents: reloadActiveEvents,
         saveEvent: handleSaveCommunityEvent,
         cancelEvent: handleCancelCommunityEvent,
