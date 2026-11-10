@@ -1,5 +1,7 @@
 import { CommunityNav } from "../../../../shared/CommunityNav";
 import { webDestinationHasCommunityNavSelection } from "../../../../shared/webAppRouteState";
+import { isDesignV1Active } from "../../../../shared/designSystem";
+import { WebAccountMenu } from "./WebAccountMenu";
 import type { WebCommunityShellProps } from "./webShellChromeShared";
 
 type WebCommunityNavSurfaceProps = {
@@ -12,6 +14,7 @@ export function WebCommunityNavSurface({
   presentation,
 }: WebCommunityNavSurfaceProps) {
   const isMobileHome = presentation === "mobile-home";
+  const useV1Layout = !isMobileHome && isDesignV1Active();
   const hasDestinationSelection =
     !isMobileHome &&
     webDestinationHasCommunityNavSelection(communityShell.destination);
@@ -49,6 +52,8 @@ export function WebCommunityNavSurface({
           ? communityShell.onSelectCommunityTabFromMobile
           : communityShell.onSelectCommunityTab
       }
+      layout={useV1Layout ? "v1" : "classic"}
+      accountSlot={useV1Layout && communityShell.account ? <WebAccountMenu {...communityShell.account} /> : null}
     />
   );
 }

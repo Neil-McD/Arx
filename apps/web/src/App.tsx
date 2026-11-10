@@ -2300,6 +2300,16 @@ export default function App() {
     }
   }
   const shellChromeHostProps = buildWebShellChromeHostProps({
+    account: canonicalSessionUserId
+      ? {
+          name: displayName(canonicalSessionUserId),
+          avatarUrl: savedProfilesByUserId[canonicalSessionUserId]?.avatar_url ?? null,
+          roleLabel: canViewActiveCommunitySettings ? "Host" : "Member",
+          appTheme,
+          onSetAppTheme: setAppTheme,
+          onSignOut: handleSignOut,
+        }
+      : undefined,
     onOpenCommunityMembers: handleOpenCommunityMembers,
     showMobileAppShell,
     showMobileSettingsShell,
