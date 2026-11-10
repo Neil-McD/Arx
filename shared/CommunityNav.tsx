@@ -601,7 +601,7 @@ export const CommunityNav = memo(function CommunityNav({
               <Plus size={17} strokeWidth={1.8} />
             </span>
             <span className="nav-item-label">
-              {isAtChannelLimit ? `${maxActiveChannels} channel limit` : "Add Channel"}
+              {isAtChannelLimit ? `${maxActiveChannels} channel limit` : isV1 ? "Add a channel" : "Add Channel"}
             </span>
           </button>
         ) : null}
