@@ -193,3 +193,41 @@
 :root[data-design="v1"] .platform-save-button:not(.is-saved):not(.synced):hover:not(:disabled) {
   background: var(--bg-button-hover);
 }
+
+/* Settings primary and submit buttons pair the button text with the accent;
+   under v1 the accent is ink, so they take the primary action colour too. */
+:root[data-design="v1"] .settings-panel button.primary:not(.platform-save-button),
+:root[data-design="v1"] .settings-panel button[type="submit"]:not(.platform-save-button) {
+  border-color: var(--bg-button);
+  background: var(--bg-button);
+  color: var(--bg-button-text);
+}
+
+:root[data-design="v1"] .settings-panel button.primary:not(.platform-save-button):hover:not(:disabled),
+:root[data-design="v1"] .settings-panel button[type="submit"]:not(.platform-save-button):hover:not(:disabled) {
+  border-color: var(--bg-button-hover);
+  background: var(--bg-button-hover);
+  filter: none;
+}
+
+/* Your own messages sit on a quiet raised surface, not the action colour. */
+:root[data-design="v1"] .community-dm-panel-message.is-own .community-dm-panel-message-bubble {
+  border-color: transparent;
+  background: var(--bg-card-hover);
+  color: var(--text-primary);
+}
+
+:root[data-design="v1"] .community-dm-panel-message.is-own .community-dm-panel-message-bubble a:not(:where(dialog a)) {
+  color: var(--text-link);
+  text-decoration-color: color-mix(in srgb, var(--text-link) 42%, transparent);
+}
+
+:root[data-design="v1"] .community-dm-panel-message.is-own .community-dm-panel-message-bubble .chat-inline-code {
+  border-color: var(--border-strong);
+  background: var(--surface-subtle);
+}
+
+:root[data-design="v1"] .community-dm-panel-message.is-own.is-media-only .community-dm-panel-message-bubble,
+:root[data-design="v1"] .community-dm-panel-message.is-own .community-dm-panel-message-bubble:has(> .community-dm-media-grid:only-child) {
+  background: transparent;
+}
