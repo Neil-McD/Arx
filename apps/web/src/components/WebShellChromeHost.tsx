@@ -11,6 +11,7 @@ import { WebMobileGlobalShell } from "./WebMobileGlobalShell";
 import { WebCommunityNavSurface } from "./WebCommunityNavSurface";
 import { WebSettingsSidebar } from "./WebSettingsSidebar";
 import { isDesignV1Active } from "../../../../shared/designSystem";
+import { WebGlobalNavV1 } from "./WebGlobalNavV1";
 import type {
   MobileOverlay,
   WebCommunityShellProps,
@@ -100,9 +101,24 @@ export function WebShellChromeHost(props: WebShellChromeHostProps) {
   );
   // Design system v1: inside a community there is one left column and no rail.
   // Switching community lives in that column's banner (WebCommunitySwitcher).
+  // Discover and your own settings get the same frame, with their own left
+  // column in the rail's place.
+  const destinationKind = props.communityShell.destination.kind;
+  const globalNavMode =
+    !props.showMobileAppShell &&
+    isDesignV1Active() &&
+    !desktopCommunityNav &&
+    props.communityShell.showDesktopCommunityRail &&
+    props.communityShell.account
+      ? destinationKind === "discover"
+        ? ("discover" as const)
+        : destinationKind === "global_settings"
+          ? ("settings" as const)
+          : null
+      : null;
   const showDesktopCommunityRail =
     props.communityShell.showDesktopCommunityRail &&
-    !(desktopCommunityNav && isDesignV1Active());
+    !((desktopCommunityNav || globalNavMode) && isDesignV1Active());
   const desktopFrameMode = desktopCommunityNav
     ? "community"
     : props.isGlobalSettings
@@ -118,9 +134,9 @@ export function WebShellChromeHost(props: WebShellChromeHostProps) {
     mobileChromeAutoHideEnabled: props.mobileChromeAutoHideEnabled,
     mobileChromeReadingMode: props.mobileChromeReadingMode,
     showDesktopCommunityRail,
-    showDesktopCommunityNav: props.communityShell.showDesktopCommunityNav,
+    showDesktopCommunityNav: props.communityShell.showDesktopCommunityNav || Boolean(globalNavMode),
     isGlobalSettings: props.isGlobalSettings,
-    hasLeftPanel: props.hasLeftPanel,
+    hasLeftPanel: props.hasLeftPanel || Boolean(globalNavMode),
     reserveCommunityNavTopbarSpace:
       !props.showMobileAppShell &&
       props.desktopHeader.isPublicCommunityFunnel &&
@@ -145,6 +161,16 @@ export function WebShellChromeHost(props: WebShellChromeHostProps) {
           >
             {desktopFrameMode === "settings" ? desktopSettingsSidebar : null}
             {desktopCommunityNav}
+            {mainSurface}
+          </div>
+        ) : globalNavMode ? (
+          <div className="product-shell-surface product-shell-surface--community">
+            <WebGlobalNavV1
+              mode={globalNavMode}
+              communityShell={props.communityShell}
+              settingsSidebar={props.settingsSidebar}
+              onBackFromSettings={props.desktopHeader.onBackFromSettings}
+            />
             {mainSurface}
           </div>
         ) : desktopCommunityNav ? (

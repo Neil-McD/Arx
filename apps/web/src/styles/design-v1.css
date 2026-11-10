@@ -1514,3 +1514,50 @@
     margin-right: var(--right-column-width);
   }
 }
+
+/*
+ * Design system v1: the pages outside a community (Discover, your settings)
+ * share the frame, with their own left column where the rail used to be.
+ */
+:root[data-design="v1"] .global-nav-v1 .community-nav-identity {
+  margin-bottom: 12px;
+}
+
+:root[data-design="v1"] .global-nav-v1 .global-nav-community {
+  gap: 10px;
+}
+
+/* The left column's Back row replaces the floating back button. */
+:root[data-design="v1"] .app-root:has(.global-nav-v1) .app-topbar .topbar-left {
+  display: none;
+}
+
+/* Inbox's header matches the Members and Thread headers: one 48px line. */
+@media (min-width: 721px) {
+  :root[data-design="v1"] .web-direct-messages-host:not(.mobile-root) .community-dm-inbox-panel {
+    padding-top: 0;
+  }
+
+  :root[data-design="v1"] .web-direct-messages-host:not(.mobile-root) .community-dm-inbox-header {
+    flex: 0 0 var(--web-topbar-height, 48px);
+    align-items: center;
+    margin: 0 -14px 4px;
+    padding: 0 10px 0 18px;
+    border-bottom: 1px solid var(--surface-raised-edge);
+    border-radius: 0;
+  }
+
+  :root[data-design="v1"] .web-direct-messages-host:not(.mobile-root) .community-dm-inbox-title {
+    font-size: 14px;
+    font-weight: 600;
+  }
+
+  :root[data-design="v1"] .web-direct-messages-host:not(.mobile-root) .community-dm-inbox-subtitle {
+    display: none;
+  }
+}
+
+/* With "New event" in the header line, the empty month does not repeat it. */
+:root[data-design="v1"] .community-page-header + .community-tab-scroll .community-events-state > button {
+  display: none;
+}

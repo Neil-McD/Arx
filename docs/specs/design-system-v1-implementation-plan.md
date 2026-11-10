@@ -184,8 +184,11 @@ then each left-column button's page, then each page's right column.
   and Inbox share one slot and one width (`--right-column-width`). The member
   list opens in the column (no pop-up); the messages panel docks into it and
   pages without a column of their own make room.
-- Still to do in the shell: the pages outside a community, and narrow, light
-  and banner checks.
+- Outside a community: Discover and your own settings use the same frame, with
+  `WebGlobalNavV1` as their left column (Discover: your communities; settings:
+  Back and the settings sections). The rail is gone there too. Operator and
+  docs pages keep the old frame.
+- Still to do in the shell: narrow and banner checks.
 
 ### Slice 4: Home
 
