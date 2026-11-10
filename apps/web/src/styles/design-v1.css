@@ -231,3 +231,136 @@
 :root[data-design="v1"] .community-dm-panel-message.is-own .community-dm-panel-message-bubble:has(> .community-dm-media-grid:only-child) {
   background: transparent;
 }
+
+/*
+ * Design system v1: type and the agent's voice (spec sections 2 and 3).
+ * The agent speaks in Newsreader, people and the interface in Geist. Labels are
+ * sentence case. Only the sizes people notice are set here.
+ */
+:root[data-design="v1"] {
+  --font-voice: "Newsreader Variable", "Newsreader", Georgia, serif;
+  --composer-radius: 14px;
+}
+
+/* The agent's voice: same visual size as a person's 15px text. */
+:root[data-design="v1"] [data-actor-type="community_agent"] .community-interaction-body,
+:root[data-design="v1"] .community-agent-dock-message.is-assistant {
+  font-family: var(--font-voice);
+  font-size: 17px;
+  font-weight: 400;
+  line-height: 1.45;
+  font-optical-sizing: auto;
+}
+
+:root[data-design="v1"] .community-agent-dock-message {
+  font-size: 15px;
+}
+
+:root[data-design="v1"] .community-agent-dock-empty svg {
+  color: var(--accent-agent);
+}
+
+:root[data-design="v1"] .community-agent-dock-empty p {
+  font-family: var(--font-voice);
+  font-size: 24px;
+  font-weight: 350;
+  color: var(--text-ink-primary);
+}
+
+/* Code keeps its monospace, even when the agent writes it. */
+:root[data-design="v1"] [data-actor-type="community_agent"] .community-interaction-body :is(code, pre, .chat-inline-code, .chat-inline-code-block, .chat-md-code-block),
+:root[data-design="v1"] .community-agent-dock-message.is-assistant :is(code, pre, .md-inline-code, .md-code-block) {
+  font-family: var(--font-mono);
+  font-size: 13px;
+}
+
+/* Navigation rows: 14px, 32px tall. */
+:root[data-design="v1"] .nav-item {
+  min-height: 32px;
+  padding: 6px 10px;
+  font-size: 14px;
+}
+
+/* Labels are sentence case: no uppercase, tracking or monospace. Initials in
+   avatars and headings inside documents keep their own case. */
+:root[data-design="v1"] :is(
+  .mobile-community-selector-section-label,
+  .account-setup-kicker,
+  .discover-tag,
+  .discover-price-free,
+  .community-chat-page-loading-title,
+  .community-context-section,
+  .community-interaction-badge,
+  .community-interaction-unread-divider > span,
+  .community-profile-panel-section-label,
+  .resources-header,
+  .resource-delete-label,
+  .resource-field-label,
+  .knowledge-source-intake-eyebrow,
+  .builder-knowledge-setup-step,
+  .resources-preview-mode-label,
+  .resource-course-card-status,
+  .resource-course-outline-header,
+  .resource-viewer-eyebrow,
+  .member-settings-block-label,
+  .member-settings-danger-label,
+  .member-settings-payment-title,
+  .modal-title,
+  .analytics-chart-tooltip-label,
+  .builder-offer-kicker,
+  .builder-create-heading > span,
+  .agent-canvas-target-kicker,
+  .operator-dashboard__eyebrow,
+  .community-knowledge-header h1,
+  .product-docs-kicker,
+  .product-docs-nav-section h2,
+  .product-docs-reader-section,
+  .back-to-workspace,
+  .resources-back-btn,
+  .md-table-label,
+  .md-artifact-label,
+  .md-table-action,
+  .md-artifact-action,
+  .code-block-lang,
+  .code-block-copy
+) {
+  font-family: var(--font-sans);
+  text-transform: none;
+  letter-spacing: normal;
+}
+
+/* Figures are the interface's sans, with tabular numbers. */
+:root[data-design="v1"] :is(.analytics-kpi-value-big, .analytics-chart-stat, .analytics-chart-tooltip-value) {
+  font-family: var(--font-sans);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Corners: composers 14, send buttons 10, tags and chips 7. Avatars, dots and
+   icon buttons stay round. */
+:root[data-design="v1"] :is(
+  .chat-input-bar,
+  .community-chat .chat-input-bar,
+  .community-agent-composer.chat-input-bar,
+  .community-member-chat .community-interaction-main-composer .chat-input-bar,
+  .community-member-chat .community-interaction-drawer-composer .chat-input-bar,
+  .community-member-chat .community-interaction-reply-input-bar,
+  .web-direct-messages-host.mobile-root .community-dm-panel-composer,
+  .app-root.mobile-shell .community-chat .community-interaction-reply-input-bar,
+  .app-root.mobile-shell .community-member-chat .community-interaction-reply-input-bar
+) {
+  border-radius: 14px;
+}
+
+:root[data-design="v1"] :is(.ask-send-btn, .ask-send-btn.ask-send-btn-v2, .chat-send, .community-dm-panel-send) {
+  border-radius: 10px;
+}
+
+:root[data-design="v1"] :is(
+  .discover-tag,
+  .member-settings-role-badge,
+  .integration-status-pill,
+  .operator-dashboard__chip,
+  .web-social-profile-link-button
+) {
+  border-radius: 7px;
+}
