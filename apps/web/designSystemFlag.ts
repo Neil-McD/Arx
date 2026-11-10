@@ -31,11 +31,16 @@ const DESIGN_ICON_FILES = [
   "manifest.webmanifest",
 ];
 
+// Browsers keep favicons for a long time; change this when the files change.
+const DESIGN_ICON_VERSION = "20261110c";
+
 export function applyDesignIcons(html: string): string {
   return html.replace(/<link\b[^>]*>/g, (tag) => {
     if (!/\brel="(icon|apple-touch-icon|manifest)"/.test(tag)) return tag;
     return tag.replace(/href="([^"]*?)([A-Za-z0-9._-]+)(\?[^"]*)?"/, (match, prefix: string, file: string) =>
-      DESIGN_ICON_FILES.includes(file) && !prefix.endsWith("brand/v1/") ? `href="${prefix}brand/v1/${file}"` : match,
+      DESIGN_ICON_FILES.includes(file) && !prefix.endsWith("brand/v1/")
+        ? `href="${prefix}brand/v1/${file}?v=${DESIGN_ICON_VERSION}"`
+        : match,
     );
   });
 }
