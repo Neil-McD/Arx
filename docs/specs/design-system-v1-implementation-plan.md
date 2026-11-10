@@ -182,8 +182,12 @@ then each left-column button's page, then each page's right column.
 - One content column: those pages share a 920px column with the same padding.
 - One right column: Home's panel, the channel panel, a thread, the member list
   and Inbox share one slot and one width (`--right-column-width`). The member
-  list opens in the column (no pop-up); the messages panel docks into it and
-  pages without a column of their own make room.
+  list opens in the column (no pop-up).
+- Inbox is a page, as in the mock (corrected 2026-11-10 after Neil's review:
+  docking the whole messages panel into the right column was wrong). The list
+  fills the main area with the standard header line; the open conversation is
+  the right column. It is still direct messages only, and it has no address of
+  its own yet.
 - Outside a community: Discover and your own settings use the same frame, with
   `WebGlobalNavV1` as their left column (Discover: your communities; settings:
   Back and the settings sections). The rail is gone there too. Operator and

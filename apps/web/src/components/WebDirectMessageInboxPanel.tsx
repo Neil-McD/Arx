@@ -1,3 +1,4 @@
+import { isDesignV1Active } from "../../../../shared/designSystem";
 import { Bell, BellOff, MessageCircle, MessageCirclePlus, Search, UsersRound } from "lucide-react";
 import { formatRelativeTimeFromIso } from "../../../../shared/contentFormatting";
 import type {
@@ -110,8 +111,8 @@ export function WebDirectMessageInboxPanel(props: WebDirectMessageInboxPanelProp
     <aside className="community-dm-panel community-dm-inbox-panel" role="dialog" aria-label="Direct messages">
       <div className="community-dm-inbox-header">
         <div>
-          <div className="community-dm-inbox-title">Messages</div>
-          <div className="community-dm-inbox-subtitle">People from your communities</div>
+          <div className="community-dm-inbox-title">{isDesignV1Active() ? "Inbox" : "Messages"}</div>
+          <div className="community-dm-inbox-subtitle">{isDesignV1Active() ? "Across your communities" : "People from your communities"}</div>
         </div>
         {props.notificationsState && props.notificationsState !== "hidden" && props.onToggleNotifications ? (
           <button

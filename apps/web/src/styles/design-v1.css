@@ -1018,7 +1018,7 @@
  */
 @media (min-width: 721px) {
   :root[data-design="v1"] .product-shell-surface--community {
-    grid-template-columns: clamp(224px, 18vw, 264px) minmax(0, 1fr);
+    grid-template-columns: var(--left-column-width) minmax(0, 1fr);
   }
 }
 
@@ -1508,11 +1508,6 @@
     box-shadow: none;
   }
 
-  /* Pages with no column of their own make room, so nothing sits under it. */
-  :root[data-design="v1"] .app-root:has(.web-direct-messages-host:not(.mobile-root) .community-dm-panel) .community-page-header,
-  :root[data-design="v1"] .app-root:has(.web-direct-messages-host:not(.mobile-root) .community-dm-panel) .community-page-header + .community-tab-scroll {
-    margin-right: var(--right-column-width);
-  }
 }
 
 /*
@@ -1560,4 +1555,77 @@
 /* With "New event" in the header line, the empty month does not repeat it. */
 :root[data-design="v1"] .community-page-header + .community-tab-scroll .community-events-state > button {
   display: none;
+}
+
+/*
+ * Design system v1: Inbox is a page (spec section 7). The list fills the main
+ * area, over whatever page was there; the open conversation is the right
+ * column beside it. The left column stays as it is.
+ */
+:root[data-design="v1"] {
+  --left-column-width: clamp(224px, 18vw, 264px);
+}
+
+@media (min-width: 721px) {
+  :root[data-design="v1"] .web-direct-messages-host.is-page .community-dm-inbox-panel {
+    --inbox-pad: max(32px, calc((100vw - var(--left-column-width) - 8px - 856px) / 2));
+    top: 8px;
+    right: 8px;
+    bottom: 8px;
+    left: var(--left-column-width);
+    z-index: 48;
+    width: auto;
+    height: auto;
+    max-height: none;
+    padding: calc(var(--web-topbar-height, 48px) + 28px) var(--inbox-pad) 40px;
+    border: 1px solid var(--surface-raised-edge);
+    border-radius: 12px;
+    background: var(--surface-raised);
+    box-shadow: none;
+  }
+
+  /* With a conversation open the list keeps to the left of it. */
+  :root[data-design="v1"] .web-direct-messages-host.is-page.has-conversation .community-dm-inbox-panel {
+    padding-right: calc(var(--right-column-width) + 32px);
+    padding-left: 32px;
+  }
+
+  /* The page's header line, like every other page's. */
+  :root[data-design="v1"] .web-direct-messages-host.is-page .community-dm-inbox-header {
+    position: absolute;
+    top: 0;
+    right: 0;
+    left: 0;
+    flex: none;
+    height: var(--web-topbar-height, 48px);
+    margin: 0;
+    padding: 0 10px 0 18px;
+    align-items: center;
+    border-bottom: 1px solid var(--surface-raised-edge);
+    border-radius: 0;
+  }
+
+  :root[data-design="v1"] .web-direct-messages-host.is-page.has-conversation .community-dm-inbox-header {
+    right: var(--right-column-width);
+  }
+
+  :root[data-design="v1"] .web-direct-messages-host.is-page .community-dm-inbox-header > div:first-child {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    min-width: 0;
+  }
+
+  :root[data-design="v1"] .web-direct-messages-host.is-page .community-dm-inbox-subtitle {
+    display: block;
+    margin: 0;
+    color: var(--text-faint);
+    font-size: 13px;
+  }
+
+  /* While Inbox is the page, it is the one selected row in the left column. */
+  :root[data-design="v1"] .community-nav:has(.community-nav-inbox.active) .nav-item.active:not(.community-nav-inbox) {
+    background: transparent;
+    color: var(--text-ink-secondary);
+  }
 }

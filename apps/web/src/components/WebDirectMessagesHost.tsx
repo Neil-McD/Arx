@@ -25,6 +25,7 @@ import { useDirectMessageTypingPresence } from "../../../../shared/useDirectMess
 import { useWebVoiceInputController } from "../../../../shared/useWebVoiceInputController";
 import { mergeVoiceTranscript } from "../../../../shared/voiceCapture";
 import { WebDirectMessageInboxPanel } from "./WebDirectMessageInboxPanel";
+import { isDesignV1Active } from "../../../../shared/designSystem";
 import { WebDirectMessagePanel } from "./WebDirectMessagePanel";
 
 type DirectMessageAttachmentDraft = DirectMessageAttachment & {
@@ -770,8 +771,11 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
     [],
   );
 
+  // In design v1 the list stays beside an open conversation, so its people
+  // search keeps working there. Elsewhere the list is hidden behind it.
+  const listStaysVisible = !props.mobileRoot && isDesignV1Active();
   useEffect(() => {
-    if (!isOpen || activeConversationId) return;
+    if (!isOpen || (activeConversationId && !listStaysVisible)) return;
     const timeoutId = window.setTimeout(
       () => {
         void loadNetworkPeople(searchValue);
@@ -1638,9 +1642,12 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
   }, [directMessagePanel]);
 
   if (!isOpen) return null;
+  const inboxIsPage = !props.mobileRoot && isDesignV1Active();
 
   return (
-    <div className={`web-direct-messages-host${props.mobileRoot ? " mobile-root" : ""}`}>
+    <div className={`web-direct-messages-host${props.mobileRoot ? " mobile-root" : ""}${inboxIsPage ? " is-page" : ""}${inboxIsPage && directMessagePanel ? " has-conversation" : ""}`}>
+      {/* Design system v1: Inbox is a page. The list fills the main area and
+          stays there; the open conversation sits beside it in the right column. */}
       {directMessagePanel ? (
         <WebDirectMessagePanel
           conversation={directMessagePanel.conversation}
@@ -1710,7 +1717,8 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
             setDirectMessagePanel(null);
           }}
         />
-      ) : (
+      ) : null}
+      {!directMessagePanel || inboxIsPage ? (
         <WebDirectMessageInboxPanel
           conversations={conversations}
           isLoading={isLoadingInbox}
@@ -1733,7 +1741,7 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
           onSelectConversation={openConversation}
           onSelectPerson={openPersonConversation}
         />
-      )}
+      ) : null}
     </div>
   );
 }
