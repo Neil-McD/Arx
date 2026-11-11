@@ -1284,8 +1284,9 @@ function WebCommunityAgentDock(props, ref) {
     <section className="community-agent-dock-panel has-home-rail is-kit-home" aria-label={presentation.title}>
       <KitApp view="home" host part="main" talking={kitTalking || conversationNeedsYou}>
         <View index={0}>
-          <Top search={false} />
+          {/* The top row scrolls with Home, so the eyebrow's glow is never cut. */}
           <Scroll ref={scrollRef}>
+            <Top search={false} />
             <WebCommunityHomeSection
               {...props.home}
               session={props.session}
