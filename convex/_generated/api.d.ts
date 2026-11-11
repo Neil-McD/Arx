@@ -190,6 +190,7 @@ import type * as runtimeTurnPersistence from "../runtimeTurnPersistence.js";
 import type * as runtimeTurnResolution from "../runtimeTurnResolution.js";
 import type * as secretCrypto from "../secretCrypto.js";
 import type * as stagingSeedBriefLab from "../stagingSeedBriefLab.js";
+import type * as stagingSeedPolynetDemo from "../stagingSeedPolynetDemo.js";
 import type * as stagingSeedSunrise from "../stagingSeedSunrise.js";
 import type * as starterProfile from "../starterProfile.js";
 import type * as stripeConnectAccountCore from "../stripeConnectAccountCore.js";
@@ -392,6 +393,7 @@ declare const fullApi: ApiFromModules<{
   runtimeTurnResolution: typeof runtimeTurnResolution;
   secretCrypto: typeof secretCrypto;
   stagingSeedBriefLab: typeof stagingSeedBriefLab;
+  stagingSeedPolynetDemo: typeof stagingSeedPolynetDemo;
   stagingSeedSunrise: typeof stagingSeedSunrise;
   starterProfile: typeof starterProfile;
   stripeConnectAccountCore: typeof stripeConnectAccountCore;
