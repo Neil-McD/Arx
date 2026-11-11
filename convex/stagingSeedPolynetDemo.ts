@@ -327,3 +327,104 @@ export const seedPolynetDemoMessagesInternal = internalMutation({
     return { to: ownerHandle, sent };
   },
 });
+
+// Members as a host sees them (docs/design/members-invariants.md): two prices
+// side by side (a founding rate no longer offered), a card on hold, someone
+// leaving, someone comped, what people have said about themselves, and people
+// who are out. Run after seedPolynetDemoInternal. Demo users only.
+const DEMO_PLANS: Partial<Record<MemberKey, { plan: "founding" | "member" | "comped"; status?: "past_due" | "cancel_at_period_end" }>> = {
+  jon: { plan: "founding" }, priya: { plan: "founding" }, ana: { plan: "founding" },
+  maya: { plan: "member" }, sara: { plan: "member" }, ines: { plan: "member" }, lena: { plan: "member" },
+  rashid: { plan: "member", status: "cancel_at_period_end" }, mira: { plan: "member", status: "past_due" },
+  tom: { plan: "comped" },
+};
+const DEMO_FACTS: Partial<Record<MemberKey, Array<{ kind: "goal" | "skill" | "situation"; body: string; provenance: "stated_interview" | "stated_bridge" | "form_answer" }>>> = {
+  jon: [{ kind: "goal", body: "Just passed 100 members with a three-line invitation", provenance: "stated_interview" }, { kind: "skill", body: "Writing invitations that get answered", provenance: "stated_bridge" }],
+  priya: [{ kind: "goal", body: "Pricing her founding tier", provenance: "stated_interview" }, { kind: "skill", body: "Pricing and founding tiers", provenance: "form_answer" }],
+  maya: [{ kind: "goal", body: "Sending her first ten invitations this week", provenance: "stated_interview" }],
+  rashid: [{ kind: "goal", body: "Turning his first paid member into ten", provenance: "stated_bridge" }],
+  sara: [{ kind: "goal", body: "Running a live call every Thursday", provenance: "stated_interview" }, { kind: "situation", body: "Coaches studio owners in Austin", provenance: "form_answer" }],
+  mira: [{ kind: "goal", body: "Building a community for illustrators", provenance: "form_answer" }],
+  ana: [{ kind: "goal", body: "Moving her group over from Skool", provenance: "stated_bridge" }],
+};
+const DEMO_PAST = [
+  { key: "kira", name: "Kira Vance", handle: "kira-vance-demo", plan: "member" as const, state: "left" as const, daysAgo: 9 },
+  { key: "ben", name: "Ben Hollis", handle: "ben-hollis-demo", plan: "founding" as const, state: "lapsed" as const, daysAgo: 16 },
+];
+
+export const seedPolynetDemoMembersInternal = internalMutation({
+  args: {},
+  handler: async (ctx: any): Promise<Record<string, any>> => {
+    assertSeedAllowed();
+    const nowMs = Date.now();
+    const community = await ctx.db.query("communities").withIndex("by_slug", (q: any) => q.eq("slug", DEMO_SLUG)).unique();
+    if (!community) throw new Error("seed_demo_community_missing");
+    const communityId = community._id;
+    const price = async (name: string, amountBaseUnits: number, isCurrent: boolean) => {
+      const existing = (await ctx.db.query("communityPricePoints").withIndex("by_community", (q: any) => q.eq("communityId", communityId)).collect())
+        .find((row: any) => row.name === name);
+      if (existing) return existing._id;
+      return await ctx.db.insert("communityPricePoints", { communityId, billingPeriod: "monthly", name, amountBaseUnits, currency: "usd",
+        currencyDecimals: 2, isCurrent, ...(isCurrent ? {} : { archivedAt: nowMs - 60 * DAY_MS }), createdAt: nowMs - 150 * DAY_MS, updatedAt: nowMs });
+    };
+    const prices = { founding: await price("Founding", 700, false), member: await price("Member", 2700, true) };
+    const userFor = async (key: string) => await ctx.db.query("users").withIndex("by_authSubject", (q: any) => q.eq("authSubject", `${PREFIX}${key}`)).unique();
+    const membershipFor = async (userId: any) => await ctx.db.query("communityMemberships")
+      .withIndex("by_community_user", (q: any) => q.eq("communityId", communityId).eq("userId", userId)).unique();
+    const subscribe = async (membership: any, pricePointId: any, status: "active" | "past_due" | "cancel_at_period_end" | "ended", endedAt?: number) => {
+      for (const row of await ctx.db.query("communitySubscriptions").withIndex("by_membership", (q: any) => q.eq("membershipId", membership._id)).collect()) {
+        await ctx.db.delete(row._id);
+      }
+      await ctx.db.insert("communitySubscriptions", { communityId, userId: membership.userId, membershipId: membership._id, pricePointId,
+        source: "external_sync", status, cancelAtPeriodEnd: status === "cancel_at_period_end", currentPeriodStartAt: nowMs - 10 * DAY_MS,
+        currentPeriodEndAt: nowMs + 20 * DAY_MS, ...(status === "cancel_at_period_end" ? { cancelRequestedAt: nowMs - 2 * DAY_MS } : {}),
+        ...(endedAt ? { endedAt } : {}), createdAt: nowMs - 30 * DAY_MS, updatedAt: status === "past_due" ? nowMs - 10 * DAY_MS : nowMs });
+    };
+    const done: string[] = [];
+    for (const [key, setup] of Object.entries(DEMO_PLANS)) {
+      const user = await userFor(key);
+      const membership = user ? await membershipFor(user._id) : null;
+      if (!membership || !setup) continue;
+      if (setup.plan === "comped") {
+        await ctx.db.patch(membership._id, { accessSource: "manual_grant", pricePointId: undefined, updatedAt: nowMs });
+      } else {
+        await ctx.db.patch(membership._id, { accessSource: "paid_subscription", pricePointId: prices[setup.plan],
+          state: setup.status === "past_due" ? "payment_hold" : "active", updatedAt: nowMs });
+        await subscribe({ ...membership }, prices[setup.plan], setup.status ?? "active");
+      }
+      done.push(key);
+    }
+    for (const [key, facts] of Object.entries(DEMO_FACTS)) {
+      const user = await userFor(key);
+      if (!user || !facts) continue;
+      for (const row of await ctx.db.query("memberFacts").withIndex("by_user_community", (q: any) => q.eq("userId", user._id).eq("communityId", communityId)).collect()) {
+        await ctx.db.delete(row._id);
+      }
+      for (const fact of facts) {
+        await ctx.db.insert("memberFacts", { userId: user._id, communityId, kind: fact.kind, body: fact.body, provenance: fact.provenance,
+          confidence: 1, evidenceRefs: [], stalenessScore: 0, consentState: "approved", createdByActorType: "member", createdByUserId: user._id,
+          version: 1, createdAt: nowMs - 5 * DAY_MS, updatedAt: nowMs - 5 * DAY_MS });
+      }
+    }
+    for (const past of DEMO_PAST) {
+      const authSubject = `${PREFIX}${past.key}`;
+      const existing = await userFor(past.key);
+      const userId = existing?._id ?? await ctx.db.insert("users", { authSubject, displayName: past.name, handle: past.handle, normalizedHandle: past.handle, createdAt: nowMs - 120 * DAY_MS, updatedAt: nowMs });
+      const at = nowMs - past.daysAgo * DAY_MS;
+      const fields = { role: "member", accessSource: "paid_subscription", pricePointId: prices[past.plan], state: past.state, revokedAt: at,
+        revokedReason: past.state, activationSequence: 1, activatedAt: nowMs - 100 * DAY_MS, updatedAt: at };
+      const membership = await membershipFor(userId);
+      const membershipId = membership?._id ?? await ctx.db.insert("communityMemberships", { communityId, userId, ...fields, createdAt: nowMs - 100 * DAY_MS });
+      if (membership) await ctx.db.patch(membership._id, fields);
+      await subscribe({ _id: membershipId, userId }, prices[past.plan], "ended", at);
+      done.push(past.key);
+    }
+    const danaSubject = `${PREFIX}dana`;
+    const dana = await userFor("dana") ?? null;
+    const danaId = dana?._id ?? await ctx.db.insert("users", { authSubject: danaSubject, displayName: "Dana Whit", handle: "dana-whit-demo", normalizedHandle: "dana-whit-demo", createdAt: nowMs - 30 * DAY_MS, updatedAt: nowMs });
+    const request = await ctx.db.query("communityJoinRequests").withIndex("by_community_user", (q: any) => q.eq("communityId", communityId).eq("userId", danaId)).first();
+    if (!request) await ctx.db.insert("communityJoinRequests", { communityId, userId: danaId, status: "denied", message: "Want to sell my course here.", deniedAt: nowMs - 21 * DAY_MS, createdAt: nowMs - 22 * DAY_MS, updatedAt: nowMs - 21 * DAY_MS });
+    await syncCommunityActiveMemberCount({ ctx, communityId });
+    return { prices, seeded: done };
+  },
+});
