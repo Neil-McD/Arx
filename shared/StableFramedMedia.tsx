@@ -76,9 +76,9 @@ export function StableFramedMedia(props: StableFramedMediaProps) {
     const root = rootRef.current;
     if (!root || !url || (!shouldLoad && imageResource.status !== "ready")) return;
     const syncRootSize = () => {
-      // Layout size (CSS pixels), unaffected by design v1's page scale.
-      const width = Math.max(0, root.offsetWidth);
-      const height = Math.max(0, root.offsetHeight);
+      const rect = root.getBoundingClientRect();
+      const width = Math.max(0, rect.width);
+      const height = Math.max(0, rect.height);
       setRootSize((current) => current.width === width && current.height === height
         ? current
         : { width, height });

@@ -9,7 +9,6 @@ import "./index.css";
 import { isLoginTrampolinePathname, LoginTrampolineRoute } from "./auth/loginTrampoline";
 import { LegalDocumentPage, legalDocumentKeyForPathname } from "./legal/LegalDocumentPage";
 import { bootConvexProbe } from "../../../shared/convexRuntime";
-import { startDesignScale } from "../../../shared/designScale";
 import { buildTelemetryRouteLabel } from "../../../shared/routePrivacy";
 import { CommunityVisualIdentityRegistryProvider } from "../../../shared/CommunityVisualIdentityRegistry";
 import { captureDistributionAttributionFromLocation } from '../../../shared/distributionAttribution';
@@ -18,8 +17,6 @@ import { captureDistributionAttributionFromLocation } from '../../../shared/dist
 // enabled v1, so the default app downloads nothing new.
 if (document.documentElement.dataset.design === "v1") {
   void import("@fontsource-variable/newsreader/opsz.css");
-  // Wide desktop windows show the mock's 1440px proportions, enlarged.
-  startDesignScale();
 }
 
 captureDistributionAttributionFromLocation();

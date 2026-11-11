@@ -6,7 +6,6 @@ import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { pdfAssetsPlugin } from "./pdfAssetsPlugin";
 import { applyDesignAttribute, DESIGN_V1_ENV_KEY, isDesignV1Enabled } from "./designSystemFlag";
-import { designViewportUnitsPostcssPlugin } from "./designViewportUnits";
 
 const webRoot = fileURLToPath(new URL(".", import.meta.url));
 const repoRoot = resolve(webRoot, "../..");
@@ -130,8 +129,6 @@ export default defineConfig(({ mode }) => {
           ]
         : []),
     ],
-    // Design v1 only: viewport units follow the app's scale (designViewportUnits.ts).
-    css: designV1 ? { postcss: { plugins: [designViewportUnitsPostcssPlugin()] } } : undefined,
     define: {
       __SENTRY_RELEASE__: JSON.stringify(sentryRelease || null),
       __SENTRY_ENVIRONMENT__: JSON.stringify(sentryEnvironment || null),
