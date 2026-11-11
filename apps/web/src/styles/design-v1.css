@@ -2647,6 +2647,29 @@
   }
 }
 
+/* Members for the people who run it: the kit page, and the member's record
+   as a wider right column (a record has more to say than a profile). */
+@media (min-width: 721px) {
+  :root[data-design="v1"] .community-interaction-projection:has(> .members-page-record) {
+    grid-template-columns: minmax(0, 1fr) max(440px, var(--right-column-width));
+  }
+
+  :root[data-design="v1"] .members-page.is-kit {
+    background: var(--surface-app);
+  }
+
+  :root[data-design="v1"] .members-page-record {
+    grid-column: 2;
+    grid-row: 1;
+    display: flex;
+    min-height: 0;
+    padding: 0;
+    overflow: hidden;
+    border-left: 1px solid var(--surface-raised-edge);
+    background: var(--surface-app);
+  }
+}
+
 :root[data-design="v1"] .members-page-header h1 small {
   margin-left: 8px;
   color: var(--text-faint);

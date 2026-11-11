@@ -21,6 +21,7 @@ import { CommunityChannelSessionContext } from "./CommunityChannelSessionContext
 import { CommunityPresenceFacepile } from "./CommunityPresenceFacepile";
 import { WebCommunityNotes } from "./WebCommunityNotes";
 import { KitChannelRail } from "../v1/KitChannelRail";
+import { KitMembersPage } from "../v1/KitMembersPage";
 import { CommunityMembersBulkBar, type SelectedMember } from "./CommunityMembersBulkBar";
 import type { CommunityPresenceSummary } from "../../../../shared/communityTypes";
 import { resolveAuthSubject, type AuthSessionLike } from "../../../../shared/authSession";
@@ -138,6 +139,7 @@ function RosterSurface(props: RosterProps & {
   }, [props.directory, props.memberDetailOpen]);
   const [search, setSearch] = useState("");
   const [memberFilter, setMemberFilter] = useState<MemberFilter>("everyone");
+  const [recordEl, setRecordEl] = useState<HTMLElement | null>(null);
   const [openedUserId, setOpenedUserId] = useState<string | null>(null);
   const searching = Boolean(search.trim());
   const searchResult = useWebMemberDirectorySearch({
@@ -407,6 +409,23 @@ function RosterSurface(props: RosterProps & {
   // Keep overlays outside that shell, as the directory already does below.
   if (v1Rail) return v1Rail;
   if (!props.directory) return <>{content}{selectedMember ? createPortal(settings, document.body) : null}</>;
+  // Design system v1, for the people who run it: the members table and one
+  // member's record (docs/design/members-invariants.md).
+  if (props.inline && isDesignV1Active() && props.memberSettings.canManageMembers) return <>
+    <KitMembersPage communityName={props.communityName}
+      joinRequests={props.joinReview?.canReviewJoinRequests ? props.joinReview.pendingJoinRequests ?? [] : []}
+      decidingJoinRequestId={props.joinReview?.decidingJoinRequestId ?? null}
+      onApprove={id => void props.joinReview?.onApproveJoinRequest?.(id)}
+      onDecline={id => void props.joinReview?.onDenyJoinRequest?.(id)}
+      onMessage={props.onMessageUser} onManage={id => setSelectedMembershipId(id)}
+      currentUserId={props.currentUserId ?? null} recordContainer={recordEl}
+      getAvatarColor={props.getAvatarColor} getInitials={props.getInitials} />
+    <aside ref={setRecordEl} className="community-context-panel members-page-record" aria-label="Member record" />
+    {selectedMember ? createPortal(<div ref={settingsRef} onKeyDown={event => {
+      if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); setSelectedMembershipId(null); }
+      trapTab(event, settingsRef.current);
+    }}>{settings}</div>, document.body) : null}
+  </>;
   // Design system v1: Members is a page. The list fills the main area under
   // the standard header line; the person you open is the right column.
   if (props.inline) return <>
