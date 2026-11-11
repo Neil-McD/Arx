@@ -1755,7 +1755,8 @@
   :root[data-design="v1"] .web-direct-messages-host.is-page .community-dm-panel-header {
     gap: 12px;
     padding-bottom: 18px;
-    border-bottom: 1px solid var(--border-default);
+    /* The mock's .sep: its hairline, not the old stronger border. */
+    border-bottom: 1px solid var(--surface-raised-edge);
   }
 
   :root[data-design="v1"] .web-direct-messages-host.is-page .community-dm-panel-avatar-wrap,
@@ -1774,15 +1775,31 @@
     font-size: 13px;
   }
 
+  /* The mock's .bub: theirs on the left with a small corner, yours (the
+     mock's .mine) on the right, a shade brighter. */
   :root[data-design="v1"] .web-direct-messages-host.is-page .community-dm-panel-message-bubble {
     max-width: 300px;
     padding: 9px 13px;
     border: 0;
-    border-radius: 14px;
-    background: var(--bg-card);
+    border-radius: 14px 14px 14px 4px;
+    background: rgba(255, 255, 255, 0.06);
     color: var(--text-ink-primary);
     font-size: 15px;
     line-height: 1.45;
+  }
+
+  :root[data-design="v1"] .web-direct-messages-host.is-page .community-dm-panel-message.is-own .community-dm-panel-message-bubble {
+    border-radius: 14px 14px 4px 14px;
+    background: rgba(255, 255, 255, 0.09);
+  }
+
+  :root[data-design="v1"][data-theme="light"] .web-direct-messages-host.is-page .community-dm-panel-message-bubble {
+    background: rgba(13, 17, 23, 0.06);
+  }
+
+  :root[data-design="v1"][data-theme="light"] .web-direct-messages-host.is-page .community-dm-panel-message.is-own .community-dm-panel-message-bubble {
+    background: #0d1117;
+    color: #f6f7f9;
   }
 
   :root[data-design="v1"] .web-direct-messages-host.is-page .community-dm-panel-message-time {
@@ -1796,13 +1813,41 @@
     left: 24px;
   }
 
+  /* The mock's reply box: a 46px .ask, a quiet send that turns blue while
+     you type in it. */
   :root[data-design="v1"] .web-direct-messages-host.is-page .community-dm-panel-composer {
     align-items: center;
     min-height: 46px;
     padding: 0 8px 0 12px;
-    border: 1px solid var(--border-strong);
+    border: 1px solid rgba(255, 255, 255, 0.12);
     border-radius: 14px;
+    background: rgba(10, 12, 16, 0.6);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  }
+
+  :root[data-design="v1"] .web-direct-messages-host.is-page .community-dm-panel-composer:focus-within {
+    border-color: rgba(167, 139, 250, 0.5);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 0 0 4px rgba(167, 139, 250, 0.1);
+  }
+
+  :root[data-design="v1"] .web-direct-messages-host.is-page .community-dm-panel-composer .community-dm-panel-send {
+    width: 30px;
+    height: 30px;
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.06);
+    color: rgba(238, 240, 244, 0.52);
     box-shadow: none;
+  }
+
+  :root[data-design="v1"] .web-direct-messages-host.is-page .community-dm-panel-composer:focus-within .community-dm-panel-send:not(:disabled) {
+    background: linear-gradient(180deg, #1077d2, #0b69c4);
+    color: #fff;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.28);
+  }
+
+  :root[data-design="v1"][data-theme="light"] .web-direct-messages-host.is-page .community-dm-panel-composer {
+    border-color: rgba(13, 17, 23, 0.14);
+    background: #ffffff;
   }
 
   /* No conversation yet: the column is there, with one line in it. */

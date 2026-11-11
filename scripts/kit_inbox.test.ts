@@ -6,7 +6,7 @@ const root = createRequire(import.meta.url);
 if (web.resolve("react") !== root.resolve("react")) vi.doMock(web.resolve("react"), () => React);
 (globalThis as any).document ??= { documentElement: { dataset: { design: "v1" } } };
 const { renderToStaticMarkup } = await import("react-dom/server");
-const { WebDirectMessageInboxPanel, inboxLeadFor } = await import("../apps/web/src/components/WebDirectMessageInboxPanel");
+const { WebDirectMessageInboxPanel, inboxLeadFor, inboxTimeFor } = await import("../apps/web/src/components/WebDirectMessageInboxPanel");
 
 const has = (html: string, ...names: string[]) =>
   new RegExp(`class="${names.map((name) => `_${name}_[^ "]*`).join(" ")}"`).test(html);
@@ -33,10 +33,20 @@ function render(conversations: unknown[]) {
   } as any));
 }
 
-test("the guide's line counts what needs a reply", () => {
+test("the guide's line counts what needs a reply and names the newest", () => {
   expect(inboxLeadFor(0)).toBe("Nothing here needs a reply.");
-  expect(inboxLeadFor(1)).toBe("1 of these needs a reply.");
+  expect(inboxLeadFor(1, "Priya Nair")).toBe("Priya is waiting on a reply.");
+  expect(inboxLeadFor(3, "Priya Nair")).toBe("3 of these need a reply. The newest is from Priya.");
   expect(inboxLeadFor(2)).toBe("2 of these need a reply.");
+});
+
+test("times read like the mock's", () => {
+  const now = new Date(2026, 10, 11, 15, 0);
+  expect(inboxTimeFor(new Date(2026, 10, 11, 14, 59, 30).toISOString(), now)).toBe("now");
+  expect(inboxTimeFor(new Date(2026, 10, 11, 14, 40).toISOString(), now)).toBe("20 min");
+  expect(inboxTimeFor(new Date(2026, 10, 11, 12, 0).toISOString(), now)).toBe("3 h");
+  expect(inboxTimeFor(new Date(2026, 10, 10, 20, 0).toISOString(), now)).toBe("Yesterday");
+  expect(inboxTimeFor(new Date(2026, 9, 3, 9, 0).toISOString(), now)).toBe("Oct 3");
 });
 
 test("the Inbox page is the mock's: the line, the chips, and rows with a badge from elsewhere", () => {
@@ -44,7 +54,7 @@ test("the Inbox page is the mock's: the line, the chips, and rows with a badge f
     conversation("a", "Jon", true, { id: "polynet", name: "Polynet" }),
     conversation("b", "Ray", false, { id: "de", name: "Distribution Engineer" }),
   ]);
-  expect(html).toContain("1 of these needs a reply.");
+  expect(html).toContain("Jon is waiting on a reply.");
   // "Needs a reply" opens first when something does: only Jon shows.
   expect(html).toContain("Needs a reply · 1");
   expect(html).toContain("<b>Jon</b>");

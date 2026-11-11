@@ -65,6 +65,8 @@ type WebDirectMessagePanelProps = {
   onDiscardLocalMessage?: (localId: string) => void;
   onComposerBlur?: () => void | Promise<void>;
   onReadThroughSeq?: (seq: number) => void | Promise<void>;
+  // The first touch of a conversation that was opened for you (design v1).
+  onEngage?: () => void;
   // Design system v1: shown beside the Inbox list, so it needs no way back.
   besideInbox?: boolean;
   onBackToInbox?: () => void;
@@ -611,6 +613,8 @@ export function WebDirectMessagePanel(props: WebDirectMessagePanelProps) {
       onDragEnter={canAcceptAttachmentDrop ? onAttachmentDragEnter : undefined}
       onDragOver={canAcceptAttachmentDrop ? onAttachmentDragOver : undefined}
       onDragLeave={canAcceptAttachmentDrop ? onAttachmentDragLeave : undefined}
+      onPointerDownCapture={props.onEngage}
+      onFocusCapture={props.onEngage}
     >
       {isAttachmentDragOver ? (
         <div className="drop-overlay community-dm-drop-overlay" aria-hidden="true">
