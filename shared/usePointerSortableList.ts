@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties, type MouseEvent, type PointerEvent } from "react";
-import { cssZoomOf } from "./designScale";
 
 const DRAG_START_THRESHOLD_PX = 4;
 const AUTO_SCROLL_EDGE_PX = 32;
@@ -22,10 +21,6 @@ type DragSession = {
   baseMinDeltaY: number;
   baseMaxDeltaY: number;
   hasMoved: boolean;
-  // The page's CSS zoom (design v1's scale, shared/designScale.ts). Pointer
-  // and rect positions are already zoomed; scrollTop and CSS transforms are
-  // not, so both are converted at the edges.
-  zoom: number;
 };
 
 type DragVisualState = {
@@ -204,7 +199,7 @@ export function usePointerSortableList(args: UsePointerSortableListArgs) {
         container.scrollTop += autoScrollStep;
       }
 
-      const scrollDeltaY = (container.scrollTop - session.startScrollTop) * session.zoom;
+      const scrollDeltaY = container.scrollTop - session.startScrollTop;
       const rawDeltaY = event.clientY - session.startClientY + scrollDeltaY;
       const minDeltaY = session.baseMinDeltaY + scrollDeltaY;
       const maxDeltaY = session.baseMaxDeltaY + scrollDeltaY;
@@ -316,7 +311,6 @@ export function usePointerSortableList(args: UsePointerSortableListArgs) {
         baseMinDeltaY: firstSortableRect.top - draggedRect.top,
         baseMaxDeltaY: lastSortableRect.bottom - draggedRect.bottom,
         hasMoved: false,
-        zoom: cssZoomOf(container),
       };
 
       setDragVisual({
@@ -347,14 +341,14 @@ export function usePointerSortableList(args: UsePointerSortableListArgs) {
         if (session) {
           if (isDraggingThisItem) {
             style = {
-              transform: `translateY(${dragVisual.deltaY / session.zoom}px)`,
+              transform: `translateY(${dragVisual.deltaY}px)`,
               transition: "none",
               zIndex: 12,
             };
           } else {
             const shift = computeSiblingShift(session, id, dragVisual.projectedIndex);
             style = {
-              transform: `translateY(${shift / session.zoom}px)`,
+              transform: `translateY(${shift}px)`,
               transition: "transform 120ms ease",
             };
           }

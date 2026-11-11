@@ -28,8 +28,7 @@ export function AnalyticsLineChart({
     if (!node) return;
 
     const measure = () => {
-      // Layout width (CSS pixels), unaffected by design v1's page scale.
-      const nextWidth = node.offsetWidth;
+      const nextWidth = node.getBoundingClientRect().width;
       if (nextWidth > 0) {
         setChartWidth((current) =>
           current != null && Math.abs(current - nextWidth) < 0.5 ? current : nextWidth,
