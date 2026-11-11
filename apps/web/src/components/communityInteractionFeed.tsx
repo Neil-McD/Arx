@@ -36,6 +36,7 @@ import { CommunityChatMediaPlayers } from "../../../../shared/CommunityChatMedia
 import type { CommunityTypingPresenceUser, UserProfile } from "../../../../shared/communityTypes";
 import { UserAvatar } from "../../../../shared/UserAvatar";
 import { isDesignV1Active } from "../../../../shared/designSystem";
+import { cssZoomOf } from "../../../../shared/designScale";
 import { interactionMentionsViewer } from "../controllers/communityMentionAttention";
 import { resolveCommunityInteractionOverflowMenuPlacement } from "../controllers/resolveCommunityInteractionOverflowMenuPlacement";
 
@@ -435,8 +436,11 @@ export function ProfileHoverCard(props: {
     const vRect = viewport instanceof HTMLElement ? viewport.getBoundingClientRect() : null;
     const top = Math.max(0, vRect?.top ?? 0);
     const bottom = Math.min(window.innerHeight, vRect?.bottom ?? window.innerHeight);
-    const cardHeight = Math.min(cardRef.current?.getBoundingClientRect().height || 188, 188);
-    const required = cardHeight + 10;
+    // Rects come back already scaled by design v1's page zoom, so the card's
+    // 188px cap and the 10px gap are scaled to match (shared/designScale.ts).
+    const zoom = cssZoomOf(anchor);
+    const cardHeight = Math.min(cardRef.current?.getBoundingClientRect().height || 188 * zoom, 188 * zoom);
+    const required = cardHeight + 10 * zoom;
     const spaceAbove = rect.top - top;
     const spaceBelow = bottom - rect.bottom;
     return spaceAbove < required && spaceBelow > spaceAbove ? "bottom" : "top";

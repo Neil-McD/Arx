@@ -365,7 +365,8 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
     const syncComposerHeight = () => {
       main.style.setProperty(
         "--mobile-community-composer-height",
-        `${Math.ceil(composer.getBoundingClientRect().height)}px`,
+        // Layout height, so the padding is right when design v1 scales the page.
+        `${Math.ceil(composer.offsetHeight)}px`,
       );
       if (props.floatingComposers && isNearBottomRef.current) {
         requestAnimationFrame(() => {
