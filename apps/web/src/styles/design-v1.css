@@ -1454,9 +1454,9 @@
   /* The mock is drawn at 1440px wide (328px there). Wider screens get a wider
      column, up to 440px. */
   --right-column-width: clamp(328px, 23vw, 440px);
-  /* The middle column: the mock's 848px main area less its 56px gutters. It is
-     centred in the space it has, and its header, content and composer share
-     its two edges. */
+  /* Home's column: the mock's 848px main area less its 56px gutters, centred
+     in the space it has, with the composer on the same two edges. Every other
+     page uses the mock's fixed 56px gutters across the whole width. */
   --main-measure: 736px;
   --main-gutter: max(56px, calc((100% - var(--main-measure)) / 2));
 }
@@ -1526,7 +1526,8 @@
     height: auto;
     max-height: none;
     gap: 0;
-    --inbox-gutter: max(56px, calc((100vw - var(--left-column-width) - 8px - var(--right-column-width) - var(--main-measure)) / 2));
+    /* Fixed gutters, like a channel; only Home is centred. */
+    --inbox-gutter: 56px;
     padding: 52px calc(var(--right-column-width) + var(--inbox-gutter)) 0 var(--inbox-gutter);
     border: 1px solid var(--surface-raised-edge);
     border-radius: 12px;
@@ -1799,17 +1800,19 @@
   :root[data-design="v1"] .community-channel-header {
     flex-basis: 52px;
     height: 52px;
-    padding: 0 var(--main-gutter);
+    padding: 0 56px;
   }
 
   :root[data-design="v1"] .community-chat .community-interaction-feed-scroll {
     /* The composer floats over the feed and is measured as it grows. */
-    /* Rows carry 12px of their own padding, so the feed sits 12px wider. */
-    padding: 8px calc(var(--main-gutter) - 12px) calc(var(--mobile-community-composer-height, 86px) + 18px);
+    /* A channel uses the whole width on fixed gutters, as in the mock; it is
+       not a centred column (Neil, 2026-11-10 and again 2026-11-11). Only
+       Home is centred. */
+    padding: 8px 44px calc(var(--mobile-community-composer-height, 86px) + 18px);
   }
 
   :root[data-design="v1"] .community-chat .community-interaction-main-composer {
-    padding: 0 var(--main-gutter) 26px;
+    padding: 0 56px 26px;
   }
 
   :root[data-design="v1"] .community-chat .community-interaction-main-composer > .chat-input-bar {
@@ -2193,7 +2196,7 @@
   }
 
   :root[data-design="v1"] .community-page-body:has(.community-page-rail-content) > .community-page-header {
-    padding: 0 var(--main-gutter);
+    padding: 0 56px;
   }
 
   :root[data-design="v1"] .community-page-body > .community-tab-scroll {
@@ -2211,12 +2214,12 @@
     border-left: 1px solid var(--surface-raised-edge);
   }
 
-  /* With a right column the page is the centred middle measure, like a channel. */
+  /* With a right column the page sits on the 56px gutter, like a channel. */
   :root[data-design="v1"] .community-page-body:has(.community-page-rail-content) > .community-tab-scroll > .web-community-centered-pane {
     width: 100%;
     max-width: none;
     margin: 0;
-    padding: 28px var(--main-gutter) 56px;
+    padding: 28px 56px 56px;
   }
 }
 
@@ -2461,7 +2464,7 @@
     flex: 1 1 auto;
     min-height: 0;
     overflow-y: auto;
-    padding: 28px var(--main-gutter) 56px;
+    padding: 28px 56px 56px;
   }
 
   :root[data-design="v1"] .members-page .community-context-members {
