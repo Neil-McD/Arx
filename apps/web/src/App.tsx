@@ -2523,6 +2523,7 @@ export default function App() {
         onStartBuilder: () => openNewCommunityPurchaseFlow(),
       }}
       directMessagesHostProps={{
+        activeCommunityId: activeCommunity?.id ?? null,
         isOpen: isDirectMessagesOpen,
         mobileRoot:
           showMobileShell && mobileRootPage === "messages",

@@ -414,7 +414,7 @@
 
 
 .app{height:100vh;--rail-w:clamp(328px,calc(328px + (100vw - 1440px) * .24),440px);--measure:736px}
-.app .rail{width:var(--rail-w)}
+.app .rail{width:var(--rail-w)}.app .r3{width:max(400px,var(--rail-w))}
 .app .home,.app .v0 .dock{padding-left:max(56px,calc((100% - var(--measure)) / 2));padding-right:max(56px,calc((100% - var(--measure)) / 2))}
 
 /* Kit addition (see the script): browser defaults off, at zero specificity. */
