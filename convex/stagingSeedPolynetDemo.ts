@@ -1,0 +1,281 @@
+// Staging only: a demo community with the hi-fi mock's own content
+// (docs/design/hifi-mock), so staging and the mock can be compared like for
+// like (Neil, Nov 11). Creates "Polynet" (slug polynet-demo), owned by the
+// owner of a source community, with the Earth banner, the mock's channels,
+// members, the #wins conversation, an event and two notes.
+// Refuses unless the deployment sets POLYNET_ALLOW_SEED=1.
+//
+// Everything is marked: simulated users have auth subject `seed:demo:<key>`,
+// posts carry a `seed:demo:` idempotency key. Running it again re-dates the
+// posts and the event to now; the community, users and channels are reused.
+//
+// Hand-run (staging):
+//   npx convex run stagingSeedPolynetDemo:seedPolynetDemoInternal '{"sourceCommunitySlug":"founder-walk-nov7"}'
+import { v } from "convex/values";
+import { internalMutation } from "./_generated/server";
+import { PRIVACY_AI_DATA_POLICY_DOCUMENT, TERMS_OF_SERVICE_DOCUMENT } from "../shared/legalDocuments";
+import { createActiveCommunityChannel, ensureGeneralChannel } from "./communityChannelCore";
+import { setChannelParticipantCore } from "./communityChannelParticipants";
+import { normalizeIdValue, syncCommunityActiveMemberCount } from "./communityCore";
+import { scheduleCommunityInteractionEvidenceSync } from "./communityInteractionEvidence";
+import { buildCommunityNoteSearchText, communityNoteSlug } from "../shared/communityNotes";
+import { recordCurrentPlatformLegalAcceptance } from "./legalAcceptances";
+import { getUniqueUserProfileDetailByUserId } from "./profileCore";
+import { nextLocalWeekdayAt } from "./stagingSeedSunrise";
+
+const HOUR_MS = 60 * 60 * 1000;
+const DAY_MS = 24 * HOUR_MS;
+const PREFIX = "seed:demo:";
+const DEMO_SLUG = "polynet-demo";
+const DEMO_NAME = "Polynet";
+const TIME_ZONE = "America/Los_Angeles";
+const BANNER_URL = "https://polynet-staging.vercel.app/design-lab/polynet-earth.webp";
+
+const MEMBERS = [
+  { key: "jon", name: "Jon Park", handle: "jon-park", joinedDaysAgo: 140, bio: "Runs a 100-member founder circle. Invitations are my thing." },
+  { key: "priya", name: "Priya Nair", handle: "priya-nair", joinedDaysAgo: 120, bio: "Priced three founding tiers. Ask me." },
+  { key: "maya", name: "Maya Chen", handle: "maya-chen-demo", joinedDaysAgo: 60, bio: "Sending my first ten this week." },
+  { key: "rashid", name: "Rashid Omar", handle: "rashid-omar", joinedDaysAgo: 90, bio: "First paid member just landed." },
+  { key: "sara", name: "Sara Lind", handle: "sara-lind", joinedDaysAgo: 75, bio: "Live calls, every Thursday." },
+  { key: "mira", name: "Mira Santos", handle: "mira-santos", joinedDaysAgo: 2, bio: "New here. Building a community for illustrators." },
+  { key: "ana", name: "Ana Ruiz", handle: "ana-ruiz-demo", joinedDaysAgo: 50, bio: "" },
+  { key: "tom", name: "Tom Becker", handle: "tom-becker", joinedDaysAgo: 44, bio: "" },
+  { key: "ines", name: "Ines Duarte", handle: "ines-duarte", joinedDaysAgo: 38, bio: "" },
+  { key: "dev", name: "Dev Patel", handle: "dev-patel-demo", joinedDaysAgo: 31, bio: "" },
+  { key: "lena", name: "Lena Wolf", handle: "lena-wolf", joinedDaysAgo: 20, bio: "" },
+  { key: "omar", name: "Omar Haddad", handle: "omar-haddad", joinedDaysAgo: 12, bio: "" },
+] as const;
+type MemberKey = (typeof MEMBERS)[number]["key"];
+type Author = MemberKey | "owner" | "guide";
+
+// The mock's #wins, then a little life in the other channels.
+const POSTS: Array<{
+  key: string; channel: "general" | "wins" | "tech" | "biz" | "founders"; by: Author; hoursAgo: number; text: string;
+  replies: Array<{ by: Author; hoursAgo: number; text: string }>; reactions: Array<{ emoji: string; by: MemberKey[] }>;
+}> = [
+  { key: "rashid-first", channel: "wins", by: "rashid", hoursAgo: 17,
+    text: "First paid member came in from the new door. Seventy-nine dollars never felt so good.",
+    replies: [], reactions: [{ emoji: "🎉", by: ["jon", "priya", "maya", "sara", "ana", "tom", "ines", "dev", "lena"] }] },
+  { key: "sara-call", channel: "wins", by: "sara", hoursAgo: 15,
+    text: "Ran my first live call with eleven people. Nobody left early, which I'm counting as a win.",
+    replies: [], reactions: [] },
+  { key: "jon-100", channel: "wins", by: "jon", hoursAgo: 0.6,
+    text: "We passed 100 members last night. The invitation that worked was three lines: the result, who it's for, one link.",
+    replies: [
+      { by: "priya", hoursAgo: 0.5, text: "Can you share the exact three lines?" },
+      { by: "jon", hoursAgo: 0.45, text: "Sure: \"I got my first ten paying members in a month. This is for solo founders. Here's the door.\"" },
+      { by: "maya", hoursAgo: 0.3, text: "Using this today." },
+      { by: "owner", hoursAgo: 0.17, text: "Bring this to Friday, please." },
+    ],
+    reactions: [{ emoji: "🎉", by: ["priya", "maya", "rashid", "sara", "ana", "tom", "ines", "dev", "lena", "omar", "mira", "rashid"] }, { emoji: "🔥", by: ["priya", "maya", "rashid", "sara", "ana"] }] },
+  { key: "priya-steal", channel: "wins", by: "priya", hoursAgo: 0.4, text: "Huge. Stealing that second line.", replies: [], reactions: [] },
+  { key: "guide-saved", channel: "wins", by: "guide", hoursAgo: 0.38,
+    text: "I've saved Jon's invitation to Knowledge, with his numbers. Two members asked for exactly this last week.",
+    replies: [], reactions: [] },
+  { key: "owner-play", channel: "wins", by: "owner", hoursAgo: 0.2,
+    text: "This is the play. Jon, bring it to Friday's call so everyone can see it.", replies: [], reactions: [] },
+  { key: "maya-ten", channel: "wins", by: "maya", hoursAgo: 0.05,
+    text: "Sending my first ten today. Wish me luck.", replies: [], reactions: [{ emoji: "🚀", by: ["jon", "priya", "sara"] }] },
+  { key: "mira-hello", channel: "general", by: "mira", hoursAgo: 30,
+    text: "Hi everyone, I'm Mira. I'm building a community for illustrators and I'm here to learn how you all got your first members.",
+    replies: [
+      { by: "jon", hoursAgo: 29, text: "Welcome Mira! Start with ten people you already know." },
+      { by: "priya", hoursAgo: 28, text: "Welcome! Happy to look at your pricing when you're ready." },
+      { by: "sara", hoursAgo: 27, text: "Come to Friday's call, it's the best hour of the week." },
+      { by: "guide", hoursAgo: 26.5, text: "Welcome, Mira. Jon's invitation note in Knowledge is a good first read." },
+    ],
+    reactions: [{ emoji: "👋", by: ["jon", "priya", "sara", "rashid", "maya"] }] },
+  { key: "tech-stack", channel: "tech", by: "dev", hoursAgo: 40,
+    text: "What are people using for the welcome email? Mine lands in promotions every time.",
+    replies: [{ by: "tom", hoursAgo: 38, text: "Plain text, no images, and send it from a person. Fixed it for me." }], reactions: [] },
+  { key: "biz-price", channel: "biz", by: "rashid", hoursAgo: 52,
+    text: "How did you price your founding tier? Thinking $79 and doubling it after the first fifty.",
+    replies: [{ by: "priya", hoursAgo: 50, text: "That's close to what worked for me. Say the date it goes up, and keep it." }], reactions: [] },
+  { key: "founders-note", channel: "founders", by: "owner", hoursAgo: 20,
+    text: "Founders only: Friday we'll look at three real invitations. Bring yours.", replies: [], reactions: [] },
+];
+
+const NOTES = [
+  { title: "Invitations that work",
+    body: "Lead with the result, say who it's for, and end with one link. Three lines beat longer invitations: Jon's reached 100 members this way." },
+  { title: "Your first ten members",
+    body: "Start with people who already trust you. Ask each of them personally, one at a time, and give them a reason to join this week." },
+] as const;
+
+function assertSeedAllowed() {
+  if (process.env.POLYNET_ALLOW_SEED !== "1") throw new Error("seed_not_allowed_on_this_deployment");
+}
+
+async function upsertMember(ctx: any, communityId: any, member: (typeof MEMBERS)[number], nowMs: number) {
+  const authSubject = `${PREFIX}${member.key}`;
+  const holder = await ctx.db.query("users").withIndex("by_normalizedHandle", (q: any) => q.eq("normalizedHandle", member.handle)).first();
+  if (holder && holder.authSubject !== authSubject) throw new Error(`seed_handle_taken:${member.handle}`);
+  // No photo: the app draws the initials, as the mock does.
+  const fields = { displayName: member.name, handle: member.handle, normalizedHandle: member.handle, updatedAt: nowMs };
+  const existing = await ctx.db.query("users").withIndex("by_authSubject", (q: any) => q.eq("authSubject", authSubject)).unique();
+  const userId = existing?._id ?? await ctx.db.insert("users", { authSubject, ...fields, createdAt: nowMs });
+  if (existing) await ctx.db.patch(userId, fields);
+  const detail = await getUniqueUserProfileDetailByUserId<any>(ctx, userId);
+  const profile = { displayName: member.name, bio: member.bio, onboardingCompletedAt: nowMs, updatedAt: nowMs };
+  if (detail) await ctx.db.patch(detail._id, profile);
+  else await ctx.db.insert("userProfileDetails", { userId, ...profile, createdAt: nowMs });
+  await recordCurrentPlatformLegalAcceptance(ctx, {
+    userId, termsVersion: TERMS_OF_SERVICE_DOCUMENT.version, privacyPolicyVersion: PRIVACY_AI_DATA_POLICY_DOCUMENT.version,
+    source: "staging_seed", acceptedAt: nowMs,
+  });
+  const joinedAt = nowMs - member.joinedDaysAgo * DAY_MS;
+  const membership = await ctx.db.query("communityMemberships")
+    .withIndex("by_community_user", (q: any) => q.eq("communityId", communityId).eq("userId", userId)).unique();
+  const activation = { activationSequence: membership?.activationSequence ?? 1, activatedAt: membership?.activatedAt ?? joinedAt };
+  if (membership) await ctx.db.patch(membership._id, { role: "member", state: "active", createdAt: joinedAt, updatedAt: nowMs, ...activation });
+  else await ctx.db.insert("communityMemberships", {
+    communityId, userId, role: "member", accessSource: "free_grant", state: "active", createdAt: joinedAt, updatedAt: nowMs, ...activation,
+  } as any);
+  return userId;
+}
+
+async function ensureChannel(ctx: any, communityId: any, ownerId: any, name: string, nowMs: number, accessMode?: "restricted") {
+  const existing = await ctx.db.query("communityChannels")
+    .withIndex("by_community_status_normalizedName", (q: any) =>
+      q.eq("communityId", communityId).eq("status", "active").eq("normalizedName", name.toLowerCase())).first();
+  return existing ?? await createActiveCommunityChannel({ ctx, communityId, createdByUserId: ownerId, name, nowMs, ...(accessMode ? { accessMode } : {}) });
+}
+
+async function clearSeededPosts(ctx: any, communityId: any) {
+  let removed = 0;
+  {
+    const roots = await ctx.db.query("communityInteractionRoots")
+      .withIndex("by_community_createdAt", (q: any) => q.eq("communityId", communityId)).collect();
+    for (const root of roots.filter((row: any) => String(row.idempotencyKey ?? "").startsWith(PREFIX))) {
+      for (const reply of await ctx.db.query("communityInteractionReplies").withIndex("by_root_seq", (q: any) => q.eq("rootId", root._id)).collect()) {
+        for (const row of await ctx.db.query("communityInteractionContentBlocks").withIndex("by_reply_order", (q: any) => q.eq("replyId", reply._id)).collect()) await ctx.db.delete(row._id);
+        await ctx.db.delete(reply._id);
+      }
+      for (const table of ["communityInteractionContentBlocks", "communityInteractionReactions"] as const) {
+        const index = table === "communityInteractionContentBlocks" ? "by_root_order" : "by_root";
+        for (const row of await ctx.db.query(table).withIndex(index, (q: any) => q.eq("rootId", root._id)).collect()) await ctx.db.delete(row._id);
+      }
+      await ctx.db.delete(root._id);
+      await scheduleCommunityInteractionEvidenceSync({ ctx, communityId, objectType: "root", objectId: root._id });
+      removed += 1;
+    }
+  }
+  return removed;
+}
+
+export const seedPolynetDemoInternal = internalMutation({
+  args: { sourceCommunitySlug: v.string() },
+  handler: async (ctx: any, args): Promise<Record<string, any>> => {
+    assertSeedAllowed();
+    const nowMs = Date.now();
+    const ago = (hours: number) => Math.round(nowMs - hours * HOUR_MS);
+    const source = await ctx.db.query("communities").withIndex("by_slug", (q: any) => q.eq("slug", args.sourceCommunitySlug)).unique();
+    if (!source) throw new Error("seed_source_community_not_found");
+    const ownerId = source.ownerId;
+
+    // The community: the source's settings, its own name, slug and banner.
+    let community = await ctx.db.query("communities").withIndex("by_slug", (q: any) => q.eq("slug", DEMO_SLUG)).unique();
+    const identity = {
+      name: DEMO_NAME, bannerUrl: BANNER_URL, bannerFocusX: 0.72, bannerFocusY: 0.38, bannerZoom: 1, visibility: "unlisted", updatedAt: nowMs,
+    };
+    if (!community) {
+      const { _id, _creationTime, bannerStorageId, avatarStorageId, avatarUrl, ...fields } = source;
+      void _id; void _creationTime; void bannerStorageId; void avatarStorageId; void avatarUrl;
+      const communityId = await ctx.db.insert("communities", { ...fields, ...identity, slug: DEMO_SLUG, createdAt: nowMs });
+      const ownerMembership = await ctx.db.query("communityMemberships")
+        .withIndex("by_community_user", (q: any) => q.eq("communityId", source._id).eq("userId", ownerId)).unique();
+      if (ownerMembership) {
+        const { _id: mid, _creationTime: mct, communityId: mcid, ...membership } = ownerMembership;
+        void mid; void mct; void mcid;
+        await ctx.db.insert("communityMemberships", { ...membership, communityId, createdAt: nowMs - 200 * DAY_MS, updatedAt: nowMs });
+      }
+      community = await ctx.db.get(communityId);
+    } else {
+      await ctx.db.patch(community._id, identity);
+    }
+    const communityId = community._id;
+
+    const ids = {} as Record<Author, any>;
+    for (const member of MEMBERS) ids[member.key] = await upsertMember(ctx, communityId, member, nowMs);
+    ids.owner = ownerId;
+    await syncCommunityActiveMemberCount({ ctx, communityId });
+
+    const channels = {
+      general: await ensureGeneralChannel({ ctx, communityId, nowMs }),
+      wins: await ensureChannel(ctx, communityId, ownerId, "wins", nowMs),
+      tech: await ensureChannel(ctx, communityId, ownerId, "tech", nowMs),
+      biz: await ensureChannel(ctx, communityId, ownerId, "biz", nowMs),
+      founders: await ensureChannel(ctx, communityId, ownerId, "founders", nowMs, "restricted"),
+    };
+    for (const key of ["jon", "priya"] as const) {
+      await setChannelParticipantCore(ctx, { communityId, channelId: channels.founders._id, createdByUserId: ownerId,
+        active: true, target: { kind: "member", userId: ids[key] } });
+    }
+
+    const removedPosts = await clearSeededPosts(ctx, communityId);
+    const actor = (by: Author) => by === "guide"
+      ? { actorType: "community_agent", actorAgentKey: "community_agent" }
+      : { actorType: "human", actorUserId: ids[by] };
+    const block = (target: Record<string, unknown>, text: string, at: number) => ctx.db.insert("communityInteractionContentBlocks", {
+      communityId, ...target, blockOrder: 0, blockType: "markdown_text", text, createdAt: at, updatedAt: at,
+    });
+    for (const post of POSTS) {
+      const channel = channels[post.channel];
+      const at = ago(post.hoursAgo);
+      const lastReply = post.replies[post.replies.length - 1];
+      const reactionSummary = post.reactions.map((reaction) => ({ emoji: reaction.emoji, count: new Set(reaction.by).size }));
+      const rootId = await ctx.db.insert("communityInteractionRoots", {
+        communityId, channelId: channel._id, ...actor(post.by), kind: "discussion", status: "live", visibilityScope: "community",
+        contentSummary: post.text, replyCount: post.replies.length, reactionSummary, idempotencyKey: `${PREFIX}${post.key}`,
+        ...(lastReply ? { lastReplyAt: ago(lastReply.hoursAgo) } : {}),
+        createdAt: at, updatedAt: lastReply ? ago(lastReply.hoursAgo) : at,
+      });
+      await block({ rootId }, post.text, at);
+      await scheduleCommunityInteractionEvidenceSync({ ctx, communityId, objectType: "root", objectId: rootId });
+      for (const reaction of post.reactions) {
+        for (const key of new Set(reaction.by)) {
+          await ctx.db.insert("communityInteractionReactions", {
+            communityId, targetType: "root", rootId, actorType: "human", actorKey: normalizeIdValue(ids[key]), actorUserId: ids[key],
+            emoji: reaction.emoji, createdAt: at,
+          });
+        }
+      }
+      for (const [index, reply] of post.replies.entries()) {
+        const replyAt = ago(reply.hoursAgo);
+        const replyId = await ctx.db.insert("communityInteractionReplies", {
+          communityId, channelId: channel._id, rootId, seq: index + 1, ...actor(reply.by), status: "live", visibilityScope: "community",
+          contentSummary: reply.text, reactionSummary: [], idempotencyKey: `${PREFIX}${post.key}:${index}`, createdAt: replyAt, updatedAt: replyAt,
+        });
+        await block({ replyId }, reply.text, replyAt);
+        await scheduleCommunityInteractionEvidenceSync({ ctx, communityId, objectType: "reply", objectId: replyId });
+      }
+    }
+
+    // The Friday build call, hosted by the owner, re-dated to the next Friday.
+    for (const event of await ctx.db.query("communityEvents").withIndex("by_community", (q: any) => q.eq("communityId", communityId)).collect()) {
+      if (event.title === "Friday build call") await ctx.db.delete(event._id);
+    }
+    const startsAt = nextLocalWeekdayAt(nowMs, 5, 10, 0, TIME_ZONE);
+    await ctx.db.insert("communityEvents", {
+      communityId, createdByUserId: ownerId, title: "Friday build call",
+      descriptionMd: "We look at three real invitations together. Bring yours.",
+      startsAt, endsAt: startsAt + 60 * 60 * 1000, timezone: TIME_ZONE, locationType: "online", locationLabel: "Video call",
+      url: "https://meet.jit.si/polynet-demo-build-call", visibility: "public", status: "live", recurrenceFrequency: "none",
+      createdAt: nowMs, updatedAt: nowMs,
+    });
+
+    for (const note of NOTES) {
+      const slug = communityNoteSlug(note.title);
+      const existing = await ctx.db.query("communityNotes").withIndex("by_community_slug", (q: any) => q.eq("communityId", communityId).eq("slug", slug)).first();
+      const fields = { title: note.title, bodyMd: note.body, searchText: buildCommunityNoteSearchText({ title: note.title, bodyMd: note.body }), updatedByUserId: ownerId, updatedAt: nowMs };
+      if (existing) await ctx.db.patch(existing._id, fields);
+      else await ctx.db.insert("communityNotes", { communityId, slug, source: "founder", createdByUserId: ownerId, createdAt: nowMs, ...fields });
+    }
+
+    return {
+      communityId: normalizeIdValue(communityId), slug: DEMO_SLUG, owner: normalizeIdValue(ownerId),
+      members: MEMBERS.length, channels: Object.keys(channels), posts: POSTS.length, removedPosts,
+      event: new Date(startsAt).toISOString(), notes: NOTES.map((note) => note.title),
+    };
+  },
+});

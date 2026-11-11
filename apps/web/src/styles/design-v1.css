@@ -779,6 +779,35 @@
   min-width: 0;
 }
 
+/* The banner card (the mock's .cover, drawn by the kit): the column's own
+   identity row steps aside, and the card sits 10px above Home as in the mock. */
+:root[data-design="v1"] .community-nav-identity.is-cover {
+  position: relative;
+  display: block;
+  min-height: 0;
+  margin: 0 0 10px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+:root[data-design="v1"] .community-switcher.is-cover {
+  position: relative;
+}
+
+:root[data-design="v1"] .community-switcher-cover .community-switcher-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+:root[data-design="v1"] .community-switcher-cover.is-open,
+:root[data-design="v1"] .community-switcher-cover:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.22);
+}
+
 :root[data-design="v1"] .community-switcher-trigger {
   display: flex;
   align-items: center;

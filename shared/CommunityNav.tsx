@@ -80,6 +80,9 @@ type CommunityNavProps = {
   // v1 only. The switcher takes the place of the community's name on the
   // banner (and of the settings gear, which becomes the Manage row).
   identitySlot?: ReactNode;
+  // v1: the identity slot is the banner card itself, so the column does not
+  // draw its own banner under it.
+  identityIsCover?: boolean;
   onOpenInbox?: () => void;
   isInboxOpen?: boolean;
   inboxUnreadCount?: number;
@@ -201,6 +204,7 @@ export const CommunityNav = memo(function CommunityNav({
   layout = "classic",
   accountSlot = null,
   identitySlot = null,
+  identityIsCover = false,
   onOpenInbox,
   isInboxOpen = false,
   inboxUnreadCount = 0,
@@ -413,7 +417,10 @@ export const CommunityNav = memo(function CommunityNav({
       ref={communityNavRef}
       aria-busy={isLoadingAccess || showChannelLoadingSkeleton}
     >
-      {activeCommunityName && !hideIdentity ? (
+      {isV1 && identityIsCover && identitySlot && activeCommunityName && !hideIdentity ? (
+        // The banner card (WebCommunitySwitcher's cover) carries the banner.
+        <div className="community-nav-identity is-cover">{identitySlot}</div>
+      ) : activeCommunityName && !hideIdentity ? (
         <div
           className={`community-nav-identity${activeCommunityBannerUrl ? " has-banner" : ""}${!activeCommunityBannerUrl || isCommunityIdentityCondensed ? " is-condensed" : ""}`}
         >
@@ -435,7 +442,7 @@ export const CommunityNav = memo(function CommunityNav({
           ) : null}
         </div>
       ) : null}
-      {activeCommunityBannerUrl ? (
+      {activeCommunityBannerUrl && !(isV1 && identityIsCover && identitySlot) ? (
         <div className="community-nav-header" ref={communityBannerHeaderRef}>
           <StableFramedMedia
             className="community-nav-banner has-image"

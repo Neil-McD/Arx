@@ -41,6 +41,7 @@ const ALLOWED = new Map<string, string>([
   ["stagingSeedBriefLab:seedBriefLabInternal", "operator tool: seeds the staging brief lab"],
   ["stagingSeedSunrise:seedSunriseInternal", "operator tool: seeds the staging Sunrise community"],
   ["stagingSeedSunrise:simulateSunriseLiveInternal", "operator tool: a simulated second member for live site checks"],
+  ["stagingSeedPolynetDemo:seedPolynetDemoInternal", "operator tool: seeds the staging Polynet demo community with the mock's content"],
 ]);
 
 const tracked = execFileSync("git", ["ls-files"], { cwd: root, encoding: "utf8" })

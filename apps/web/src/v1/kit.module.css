@@ -412,6 +412,11 @@
 .app .fd ul{margin:0;padding:0;list-style:none}.app .fd li{font-size:14px;color:var(--ink2);padding:9px 0;border-top:1px solid var(--line)}.app .fd li:first-child{border-top:0;padding-top:0}.app .fd li b{color:var(--ink);font-weight:550}
 .app .fd .pulse{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--aurora);box-shadow:0 0 14px var(--aurora);margin-right:10px;animation:breathe 4.8s ease-in-out infinite}
 
+
+.app{height:100vh;--rail-w:clamp(328px,calc(328px + (100vw - 1440px) * .24),440px);--measure:736px}
+.app .rail{width:var(--rail-w)}
+.app .home,.app .v0 .dock{padding-left:max(56px,calc((100% - var(--measure)) / 2));padding-right:max(56px,calc((100% - var(--measure)) / 2))}
+
 /* Kit addition (see the script): browser defaults off, at zero specificity. */
 :where(.app) :where(button){margin:0;padding:0;border:0;background:none;color:inherit;font:inherit;line-height:inherit;letter-spacing:inherit;text-align:inherit;cursor:pointer}
 :where(.app) :where(input,textarea){margin:0;font:inherit;color:inherit}
@@ -429,6 +434,8 @@
    it sits at the bottom of the box, as the newest message should. */
 .app.part.flow-part{height:auto;margin-top:auto;overflow:visible;display:block;flex:none}
 .app.part.flow-part .feed{padding:0}
+/* The banner card on its own in the app's left column; its menu may overflow. */
+.app.part.cover-part{height:auto;display:block;overflow:visible;flex:none}
 
 /* Kit addition: states the mock doesn't draw, in its own terms. */
 .app .msg.cont{padding-top:3px;padding-bottom:3px}
