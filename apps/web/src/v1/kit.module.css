@@ -437,6 +437,8 @@
 .app .msg.mention{background:rgba(29,155,240,.06)}
 .app .tools:focus-within,.app .tools:has([aria-expanded="true"]){opacity:1;transform:none;pointer-events:auto}
 .app .re.mine{border-color:rgba(29,155,240,.45);background:rgba(29,155,240,.10);color:var(--ink)}
+/* Many reactions wrap onto more lines rather than run past the edge. */
+.app .msg .rx{flex-wrap:wrap;row-gap:6px}
 /* The app's own avatar (with its profile card) at the mock's 36px. */
 .app .msg>:global(.community-interaction-avatar-hover),.app .msg>:global(.community-interaction-avatar-hover) :global(.community-interaction-avatar-trigger),.app .msg>:global(.community-interaction-avatar-hover) :global(.community-interaction-avatar){width:36px;height:36px;flex:none}
 
