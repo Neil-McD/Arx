@@ -26,7 +26,8 @@ test("design v1: the frame owns one header line above the content, and the old t
   design.v1 = true;
   const html = renderToStaticMarkup(React.createElement(CommunityPageFrame, null, page));
   // The line is the channel header's element, so every page's header matches a channel's.
-  expect(html).toMatch(/^<header class="community-channel-header community-page-header"><\/header><div class="community-page-body"><div class="community-tab-scroll">/);
+  // The header line is the first row of the content column, so it lines up with the content.
+  expect(html).toMatch(/^<div class="community-page-body"><header class="community-channel-header community-page-header"><\/header><div class="community-tab-scroll">/);
   // The right column's slot follows the content; a page that has nothing for it leaves it empty.
   expect(html).toContain('<aside class="community-page-rail"></aside>');
   expect(html).not.toContain("classic-row");
