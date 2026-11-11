@@ -19,17 +19,18 @@ const props = {
   pinned: { label: "How to post a win", onOpen: () => {} },
 };
 
+// The kit's section labels (hashed CSS Module class names, the mock's .lab).
 function labels(html: string): string[] {
-  return [...html.matchAll(/<h3 class="channel-rail-label">([^<]+)<\/h3>/g)].map((match) => match[1]);
+  return [...html.matchAll(/<span class="_lab_[^"]*">([^<]+)<\/span>/g)].map((match) => match[1]);
 }
 
-test("design v1: the channel panel is pinned, notes, then who is here", () => {
+test("design v1: the channel panel is the mock's: pinned, memory, then who is here", () => {
   design.v1 = true;
   const html = renderToStaticMarkup(React.createElement(ChannelRosterPanel, props));
-  expect(labels(html)).toEqual(["Pinned", "Community notes", "In this channel"]);
+  expect(labels(html)).toEqual(["Pinned", "Memory from this channel", "In this channel"]);
   expect(html).toContain("How to post a win");
   expect(html).toContain("4 here now");
-  expect(html).toContain("View all");
+  expect(html).toContain("Everyone");
   // The long member list and the agents list are not in the short panel.
   expect(html).not.toContain("community-context-members");
   expect(html).not.toContain("Agents");
@@ -38,13 +39,13 @@ test("design v1: the channel panel is pinned, notes, then who is here", () => {
 test("design v1: nothing pinned, no Pinned section", () => {
   design.v1 = true;
   const html = renderToStaticMarkup(React.createElement(ChannelRosterPanel, { ...props, pinned: null }));
-  expect(labels(html)).toEqual(["Community notes", "In this channel"]);
+  expect(labels(html)).toEqual(["Memory from this channel", "In this channel"]);
 });
 
 test("design v1: an open thread takes the panel's place", () => {
   design.v1 = true;
   const html = renderToStaticMarkup(React.createElement(ChannelRosterPanel, { ...props, memberDetailOpen: true }));
-  expect(html).toMatch(/<aside class="community-context-panel channel-roster-panel is-v1"[^>]*style="display:none"/);
+  expect(html).toMatch(/<aside class="community-context-panel channel-roster-panel is-v1 is-kit"[^>]*style="display:none"/);
 });
 
 test("the classic panel is unchanged", () => {
@@ -67,24 +68,21 @@ test("design v1: a thread names itself and its channel, and has a close button",
 test("design v1: asking for members shows the Members page, not a pop-up", () => {
   design.v1 = true;
   const html = renderToStaticMarkup(React.createElement(ChannelRosterPanel, { ...props, narrowOpen: true, onCloseNarrow: () => {} }));
-  expect(html).toContain('<section class="members-page" aria-label="Community members">');
-  expect(html).toContain('<header class="community-channel-header members-page-header">');
-  expect(html).toContain("<h1>Members</h1>");
-  expect(html).toContain("Search community members");
-  expect([...html.matchAll(/class="members-page-chip[^"]*"[^>]*>([^<]+)</g)].map((match) => match[1]))
-    // "New this week" is only offered to people who are sent join dates (managers).
-    .toEqual(["Everyone", "Here now", "Hosts"]);
-  // Until someone is chosen, the right column says so.
-  expect(html).toContain("Choose someone to see their profile.");
+  // A member gets the kit directory (who is here, what they shared); the
+  // person they open is the right column.
+  expect(html).toContain('<section class="members-page is-kit" aria-label="Community members">');
+  expect(html).toContain('class="community-context-panel members-page-record"');
+  expect(html).not.toContain("modal-overlay");
   // The short channel panel steps aside for it.
   expect(html).not.toContain("channel-rail-label");
 });
 
-test("design v1: an open profile takes the right column and the list stays", () => {
+test("design v1: people who manage members get the table and the record", () => {
   design.v1 = true;
-  const html = renderToStaticMarkup(React.createElement(ChannelRosterPanel, { ...props, narrowOpen: true, memberDetailOpen: true }));
-  expect(html).toContain('class="members-page"');
-  expect(html).not.toContain("members-page-empty");
+  const html = renderToStaticMarkup(React.createElement(ChannelRosterPanel, {
+    ...props, narrowOpen: true, memberSettings: { ...props.memberSettings, canManageMembers: true } }));
+  expect(html).toContain('class="members-page is-kit"');
+  expect(html).toContain('aria-label="Member record"');
 });
 
 test("design v1: a thread names itself and its channel, and has a close button", async () => {

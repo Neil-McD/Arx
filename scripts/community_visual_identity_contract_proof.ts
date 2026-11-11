@@ -72,7 +72,8 @@ assert.match(
 );
 assert.match(
   communityNav,
-  /\{activeCommunityBannerUrl \? \([\s\S]*?className="community-nav-header"[\s\S]*?imageUrl=\{activeCommunityBannerUrl\}[\s\S]*?\) : null\}/,
+  // (In design v1 the banner card draws the banner instead, hence the extra condition.)
+  /\{activeCommunityBannerUrl(?: && [^?]+)? \? \([\s\S]*?className="community-nav-header"[\s\S]*?imageUrl=\{activeCommunityBannerUrl\}[\s\S]*?\) : null\}/,
   "community navigation should reserve banner space only when a banner URL exists",
 );
 assert.match(

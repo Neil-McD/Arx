@@ -864,6 +864,8 @@ export default defineSchema({
     status: v.union(v.literal("active"), v.literal("archived")),
     position: v.number(),
     pinnedRootId: v.optional(v.id("communityInteractionRoots")),
+    // A line about the channel, next to its name (design v1's "Share what worked").
+    description: v.optional(v.string()),
     createdByUserId: v.optional(v.id("users")),
     createdAt: v.number(),
     updatedAt: v.number(),
@@ -1054,6 +1056,18 @@ export default defineSchema({
     .index("by_scope_createdAt", ["scopeKey", "createdAt"])
     .index("by_visitor_hash_createdAt", ["visitorKeyHash", "createdAt"])
     .index("by_visitor_scope_bucket", ["visitorKeyHash", "pathKind", "scopeKey", "visitBucketStartAt"]),
+
+  // A host's notes on a member (docs/design/members-invariants.md): only the
+  // people who manage members read or write them; the member never sees them.
+  communityMemberNotes: defineTable({
+    communityId: v.id("communities"),
+    subjectUserId: v.id("users"),
+    authorUserId: v.id("users"),
+    body: v.string(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_community_subject_createdAt", ["communityId", "subjectUserId", "createdAt"]),
 
   communityPricePoints: defineTable({
     communityId: v.id("communities"),

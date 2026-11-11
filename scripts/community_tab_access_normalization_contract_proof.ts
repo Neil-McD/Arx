@@ -116,7 +116,7 @@ assert.match(
 );
 assert.match(
   activeCommunityShellController,
-  /if \(accessSessionIdentityRef\.current !== sessionIdentity\) \{[\s\S]*type: "reset"[\s\S]*\}[\s\S]*const activeCommunityAccess =[\s\S]*isAccessSessionIdentityScoped[\s\S]*scopedCommunityAccessResolution\.access/,
+  /if \(accessSessionIdentityRef\.current !== sessionIdentity\) \{[\s\S]*type: "reset"[\s\S]*\}[\s\S]*const realCommunityAccess =[\s\S]*isAccessSessionIdentityScoped[\s\S]*scopedCommunityAccessResolution\.access[\s\S]*const activeCommunityAccess = useMemo\([\s\S]*memberPreviewAccess\(realCommunityAccess\) : realCommunityAccess/,
   "active community shell must scope retained access to the signed-in presentation identity",
 );
 assert.match(

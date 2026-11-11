@@ -53,6 +53,22 @@
   --accent-agent-strong: #c4b2fc;
   --accent-agent-foreground: #c4b2fc;
   --accent-agent-surface: rgba(167, 139, 250, 0.12);
+  /* The mock's guide focus: a purple edge and halo on a field. */
+  --accent-agent-edge: rgba(167, 139, 250, 0.5);
+  --accent-agent-halo: rgba(167, 139, 250, 0.1);
+  /* The mock's message bubbles and field edge (.bub, .mine, .ask). */
+  --bubble-theirs: rgba(255, 255, 255, 0.06);
+  --bubble-mine: rgba(255, 255, 255, 0.09);
+  --field-edge: rgba(255, 255, 255, 0.12);
+  --surface-field: rgba(10, 12, 16, 0.6);
+  /* The mock's .hline: the faint glow under a page's top bar. */
+  --header-line-glow: rgba(150, 200, 255, 0.34);
+  /* The mock's left column rows (.row): grey until open or new. */
+  --nav-ink: rgba(238, 240, 244, 0.66);
+  --nav-selected: rgba(255, 255, 255, 0.06);
+  /* The mock's focus on a field you write to people in: blue. */
+  --accent-act-edge: rgba(29, 155, 240, 0.55);
+  --accent-act-halo: rgba(29, 155, 240, 0.1);
 
   /* You can act: blue. */
   --focus-ring: #1d9bf0;
@@ -95,6 +111,13 @@
 }
 
 :root[data-design="v1"][data-theme="light"] {
+  --bubble-theirs: rgba(13, 17, 23, 0.06);
+  --bubble-mine: #0d1117;
+  --field-edge: rgba(13, 17, 23, 0.14);
+  --surface-field: #ffffff;
+  --header-line-glow: rgba(21, 131, 221, 0.28);
+  --nav-ink: rgba(13, 17, 23, 0.62);
+  --nav-selected: rgba(13, 17, 23, 0.06);
   --bg-app: #f6f7f9;
   --bg-header: rgba(246, 247, 249, 0.94);
   --bg-panel: #f6f7f9;
@@ -779,6 +802,38 @@
   min-width: 0;
 }
 
+/* The banner card (the mock's .cover, drawn by the kit): the column's own
+   identity row steps aside, and the card sits 10px above Home as in the mock. */
+:root[data-design="v1"] .community-nav .community-nav-identity.is-cover {
+  position: relative;
+  display: block;
+  flex: none;
+  height: auto;
+  min-height: 0;
+  /* The mock's column is padded 12px; the card keeps that space above it. */
+  margin: 12px 0 10px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+:root[data-design="v1"] .community-switcher.is-cover {
+  position: relative;
+}
+
+:root[data-design="v1"] .community-switcher-cover .community-switcher-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+:root[data-design="v1"] .community-switcher-cover.is-open,
+:root[data-design="v1"] .community-switcher-cover:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.22);
+}
+
 :root[data-design="v1"] .community-switcher-trigger {
   display: flex;
   align-items: center;
@@ -949,7 +1004,7 @@
   border: 0;
   border-radius: 8px;
   background: transparent;
-  color: var(--text-ink-secondary);
+  color: var(--nav-ink);
   font-weight: 400;
 }
 
@@ -1124,7 +1179,10 @@
 }
 
 @media (min-width: 721px) {
-  :root[data-design="v1"] .product-shell-surface--community {
+  /* .app-shell too: the old frame's ".app-shell:not(.with-community-rail)"
+     8px left inset ties on specificity and would otherwise win, leaving the
+     app 8px off the window edge and the Inbox page over the column's line. */
+  :root[data-design="v1"] .app-shell .product-shell-surface--community {
     margin: 0;
     border: 0;
     border-radius: 0;
@@ -1707,7 +1765,8 @@
     top: 0;
     right: 0;
     bottom: 0;
-    width: var(--right-column-width);
+    /* The mock's Inbox conversation column is 400px, wider on big windows. */
+    width: max(400px, var(--right-column-width));
     height: auto;
     max-height: none;
     gap: 0;
@@ -1722,7 +1781,8 @@
   :root[data-design="v1"] .web-direct-messages-host.is-page .community-dm-panel-header {
     gap: 12px;
     padding-bottom: 18px;
-    border-bottom: 1px solid var(--border-default);
+    /* The mock's .sep: its hairline, not the old stronger border. */
+    border-bottom: 1px solid var(--surface-raised-edge);
   }
 
   :root[data-design="v1"] .web-direct-messages-host.is-page .community-dm-panel-avatar-wrap,
@@ -1741,15 +1801,31 @@
     font-size: 13px;
   }
 
+  /* The mock's .bub: theirs on the left with a small corner, yours (the
+     mock's .mine) on the right, a shade brighter. */
   :root[data-design="v1"] .web-direct-messages-host.is-page .community-dm-panel-message-bubble {
     max-width: 300px;
     padding: 9px 13px;
     border: 0;
-    border-radius: 14px;
-    background: var(--bg-card);
+    border-radius: 14px 14px 14px 4px;
+    background: var(--bubble-theirs);
     color: var(--text-ink-primary);
     font-size: 15px;
     line-height: 1.45;
+  }
+
+  :root[data-design="v1"] .web-direct-messages-host.is-page .community-dm-panel-message.is-own .community-dm-panel-message-bubble {
+    border-radius: 14px 14px 4px 14px;
+    background: var(--bubble-mine);
+  }
+
+  :root[data-design="v1"][data-theme="light"] .web-direct-messages-host.is-page .community-dm-panel-message-bubble {
+    background: rgba(13, 17, 23, 0.06);
+  }
+
+  :root[data-design="v1"][data-theme="light"] .web-direct-messages-host.is-page .community-dm-panel-message.is-own .community-dm-panel-message-bubble {
+    background: #0d1117;
+    color: #f6f7f9;
   }
 
   :root[data-design="v1"] .web-direct-messages-host.is-page .community-dm-panel-message-time {
@@ -1763,13 +1839,48 @@
     left: 24px;
   }
 
+  /* The mock's reply box: a 46px .ask, a quiet send that turns blue while
+     you type in it. */
   :root[data-design="v1"] .web-direct-messages-host.is-page .community-dm-panel-composer {
     align-items: center;
     min-height: 46px;
     padding: 0 8px 0 12px;
-    border: 1px solid var(--border-strong);
+    border: 1px solid var(--field-edge);
     border-radius: 14px;
+    background: var(--surface-field, rgba(10, 12, 16, 0.6));
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  }
+
+  :root[data-design="v1"] .web-direct-messages-host.is-page .community-dm-panel-composer:focus-within {
+    border-color: var(--accent-agent-edge);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 0 0 4px var(--accent-agent-halo);
+  }
+
+  /* The send button's colours come through the conversation tokens (the
+     older rule sets them with !important), so the mock's are set there. */
+  :root[data-design="v1"] .web-direct-messages-host.is-page .community-dm-panel-composer .community-dm-panel-send {
+    --conversation-primary-action-surface: rgba(255, 255, 255, 0.06);
+    --conversation-primary-action-hover-surface: rgba(255, 255, 255, 0.09);
+    --conversation-primary-action-foreground: rgba(238, 240, 244, 0.52);
+    flex-basis: 30px;
+    width: 30px;
+    height: 30px;
+    min-height: 30px;
+    border-radius: 10px;
     box-shadow: none;
+    opacity: 1;
+  }
+
+  :root[data-design="v1"] .web-direct-messages-host.is-page .community-dm-panel-composer:focus-within .community-dm-panel-send:not(:disabled) {
+    --conversation-primary-action-surface: linear-gradient(180deg, #1077d2, #0b69c4);
+    --conversation-primary-action-hover-surface: linear-gradient(180deg, #0e74ce, #0a66c2);
+    --conversation-primary-action-foreground: #fff;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.28);
+  }
+
+  :root[data-design="v1"][data-theme="light"] .web-direct-messages-host.is-page .community-dm-panel-composer {
+    border-color: rgba(13, 17, 23, 0.14);
+    background: #ffffff;
   }
 
   /* No conversation yet: the column is there, with one line in it. */
@@ -1803,7 +1914,7 @@
 /* Left column: a channel with something new is bold, beside its dot. */
 :root[data-design="v1"] .community-channel-item:has(.nav-item-dot) .nav-item-label {
   color: var(--text-ink-primary);
-  font-weight: 600;
+  font-weight: 550;
 }
 
 /*
@@ -1916,12 +2027,23 @@
 
 /* The composer: one 52px row. Tools at the left, the text, then mic and send. */
 @media (min-width: 721px) {
+  /* The mock's .ask: its edge, field and inner light; blue when you type. */
   :root[data-design="v1"] .community-chat .community-interaction-main-composer > .chat-input-bar {
     min-height: 52px;
-    padding: 0 8px 0 10px;
+    padding: 0 8px 0 8px;
     border-radius: 14px;
-    border: 1px solid var(--border-strong);
+    border: 1px solid var(--field-edge);
+    background: var(--surface-field);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+    -webkit-backdrop-filter: blur(18px);
+    backdrop-filter: blur(18px);
     align-items: center;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  }
+
+  :root[data-design="v1"] .community-chat .community-interaction-main-composer > .chat-input-bar:focus-within {
+    border-color: var(--accent-act-edge);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 0 0 4px var(--accent-act-halo);
   }
 
   :root[data-design="v1"] .community-chat .community-interaction-main-composer .community-composer-authoring-row {
@@ -2058,11 +2180,16 @@
   gap: 10px;
   margin-bottom: 0;
   padding: 0 10px;
+  color: var(--nav-ink);
   font-weight: 450;
 }
 
+:root[data-design="v1"] .community-nav .nav-item:hover {
+  color: var(--text-ink-primary);
+}
+
 :root[data-design="v1"] .community-nav .nav-item.active {
-  background: var(--bg-card);
+  background: var(--nav-selected);
   color: var(--text-ink-primary);
 }
 
@@ -2520,6 +2647,29 @@
   }
 }
 
+/* Members for the people who run it: the kit page, and the member's record
+   as a wider right column (a record has more to say than a profile). */
+@media (min-width: 721px) {
+  :root[data-design="v1"] .community-interaction-projection:has(> .members-page-record) {
+    grid-template-columns: minmax(0, 1fr) max(440px, var(--right-column-width));
+  }
+
+  :root[data-design="v1"] .members-page.is-kit {
+    background: var(--surface-app);
+  }
+
+  :root[data-design="v1"] .members-page-record {
+    grid-column: 2;
+    grid-row: 1;
+    display: flex;
+    min-height: 0;
+    padding: 0;
+    overflow: hidden;
+    border-left: 1px solid var(--surface-raised-edge);
+    background: var(--surface-app);
+  }
+}
+
 :root[data-design="v1"] .members-page-header h1 small {
   margin-left: 8px;
   color: var(--text-faint);
@@ -2710,4 +2860,308 @@
   :root[data-design="v1"] .community-chat .community-interaction-main-composer .community-composer-submit-tools {
     order: 4;
   }
+
+  /* The mock has no @ button: typing @ opens the same list. */
+  :root[data-design="v1"] .community-chat .community-interaction-main-composer .ask-mention {
+    display: none;
+  }
+
+  /* The mock's icon buttons (.ib): 32px, rounded squares, quiet until hovered. */
+  :root[data-design="v1"] .community-chat .community-interaction-main-composer .ask-icon-btn {
+    width: 32px;
+    height: 32px;
+    min-height: 32px;
+    flex: 0 0 32px;
+    border-radius: 8px;
+    color: var(--text-faint);
+  }
+
+  :root[data-design="v1"] .community-chat .community-interaction-main-composer .ask-icon-btn:hover:not(:disabled) {
+    background: var(--hover-overlay);
+    color: var(--text-ink-primary);
+  }
+
+  /* The mock's send: quiet, blue while you type. Its colours come through
+     the conversation tokens, which the older rule sets with !important. */
+  :root[data-design="v1"] .community-chat .community-interaction-main-composer .chat-send.ask-send-btn {
+    --conversation-primary-action-surface: var(--hover-overlay);
+    --conversation-primary-action-hover-surface: var(--hover-overlay);
+    --conversation-primary-action-foreground: var(--text-faint);
+    width: 34px;
+    height: 34px;
+    min-height: 34px;
+    flex: 0 0 34px;
+    border-radius: 10px;
+    opacity: 1;
+    box-shadow: none;
+  }
+
+  :root[data-design="v1"] .community-chat .community-interaction-main-composer > .chat-input-bar:focus-within .chat-send.ask-send-btn:not(:disabled) {
+    --conversation-primary-action-surface: linear-gradient(180deg, #1077d2, #0b69c4);
+    --conversation-primary-action-hover-surface: linear-gradient(180deg, #0e74ce, #0a66c2);
+    --conversation-primary-action-foreground: #ffffff;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.28);
+  }
+}
+
+/* The Inbox page on the kit (WebDirectMessageInboxPanel's KitInboxPage): the
+   kit draws the page; the panel only places it between the left column and
+   the conversation column. */
+@media (min-width: 721px) {
+  :root[data-design="v1"] .web-direct-messages-host.is-page .community-dm-inbox-panel.is-kit {
+    display: block;
+    padding: 0 max(400px, var(--right-column-width)) 0 0;
+    overflow: hidden;
+  }
+}
+
+:root[data-design="v1"] .community-dm-kit-avatar {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  border-radius: 50%;
+  color: rgba(255, 255, 255, 0.86);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+:root[data-design="v1"] .community-dm-kit-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* The Inbox conversation column on the kit (WebDirectMessagePanel, beside
+   the Inbox): the kit draws it, the panel only holds its place. */
+@media (min-width: 721px) {
+  :root[data-design="v1"] .web-direct-messages-host.is-page .community-dm-panel.is-kit:not(.community-dm-inbox-panel) {
+    padding: 0;
+    gap: 0;
+  }
+
+  :root[data-design="v1"] .web-direct-messages-host.is-page .community-dm-panel.is-kit:not(.community-dm-inbox-panel) > :not(.community-dm-drop-overlay) {
+    height: 100%;
+    min-height: 0;
+  }
+}
+
+:root[data-design="v1"] .community-dm-kit-thread {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+/*
+ * Design system v1: avatars as in the mock (.av, .a1-.a6). getAvatarColor
+ * (shared/chatUi.ts) hands out var(--avatar-tint-N); the token is the
+ * gradient's middle, and anything drawn with it gets the gradient itself,
+ * the soft initial and the hairline ring.
+ */
+:root[data-design="v1"] {
+  --avatar-tint-1: #2a303c;
+  --avatar-tint-2: #362e28;
+  --avatar-tint-3: #233335;
+  --avatar-tint-4: #332a38;
+  --avatar-tint-5: #2d3327;
+  --avatar-tint-6: #372a2d;
+}
+
+:root[data-design="v1"][data-theme="light"] {
+  --avatar-tint-1: #cfd9e7;
+  --avatar-tint-2: #e5d7c7;
+  --avatar-tint-3: #c8dede;
+  --avatar-tint-4: #dbcfe4;
+  --avatar-tint-5: #d2ddc7;
+  --avatar-tint-6: #e5d0d3;
+}
+
+:root[data-design="v1"] [style*="--avatar-tint-1)"] {
+  background-image: linear-gradient(140deg, #39414f, #1b2029);
+}
+
+:root[data-design="v1"] [style*="--avatar-tint-2)"] {
+  background-image: linear-gradient(140deg, #4a4038, #221d19);
+}
+
+:root[data-design="v1"] [style*="--avatar-tint-3)"] {
+  background-image: linear-gradient(140deg, #2f4446, #172224);
+}
+
+:root[data-design="v1"] [style*="--avatar-tint-4)"] {
+  background-image: linear-gradient(140deg, #463a4d, #201a24);
+}
+
+:root[data-design="v1"] [style*="--avatar-tint-5)"] {
+  background-image: linear-gradient(140deg, #3e4636, #1c2118);
+}
+
+:root[data-design="v1"] [style*="--avatar-tint-6)"] {
+  background-image: linear-gradient(140deg, #4b3b3e, #231a1c);
+}
+
+:root[data-design="v1"][data-theme="light"] [style*="--avatar-tint-1)"] {
+  background-image: linear-gradient(140deg, #dce4f0, #c3cedf);
+}
+
+:root[data-design="v1"][data-theme="light"] [style*="--avatar-tint-2)"] {
+  background-image: linear-gradient(140deg, #efe3d6, #dccbb8);
+}
+
+:root[data-design="v1"][data-theme="light"] [style*="--avatar-tint-3)"] {
+  background-image: linear-gradient(140deg, #d6e8e8, #bbd4d5);
+}
+
+:root[data-design="v1"][data-theme="light"] [style*="--avatar-tint-4)"] {
+  background-image: linear-gradient(140deg, #e7ddee, #d0c1db);
+}
+
+:root[data-design="v1"][data-theme="light"] [style*="--avatar-tint-5)"] {
+  background-image: linear-gradient(140deg, #dfe8d5, #c6d3b9);
+}
+
+:root[data-design="v1"][data-theme="light"] [style*="--avatar-tint-6)"] {
+  background-image: linear-gradient(140deg, #efdddf, #dcc3c7);
+}
+
+:root[data-design="v1"] [style*="--avatar-tint-"] {
+  color: rgba(238, 240, 244, 0.86);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.1);
+  font-weight: 600;
+}
+
+:root[data-design="v1"][data-theme="light"] [style*="--avatar-tint-"] {
+  color: rgba(13, 17, 23, 0.72);
+  box-shadow: inset 0 0 0 1px rgba(13, 17, 23, 0.08);
+}
+
+/* The channel's right column on the kit (KitChannelRail): the kit pads it. */
+:root[data-design="v1"] .channel-roster-panel.is-v1.is-kit {
+  padding: 0;
+  gap: 0;
+  overflow-y: auto;
+}
+
+:root[data-design="v1"] .channel-roster-panel.is-v1.is-kit > * {
+  min-height: 100%;
+}
+
+/* The channel's top bar, as in the mock: the line about the channel after
+   its name, and "Search or ask" on the right. */
+:root[data-design="v1"] .community-channel-header h1 .community-channel-header-description {
+  margin-left: 8px;
+  color: var(--text-faint);
+  font-size: 13px;
+  font-weight: 400;
+}
+
+:root[data-design="v1"] .community-search-ask {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+  width: 264px;
+  height: 32px;
+  margin-left: auto;
+  padding: 0 8px 0 10px;
+  border: 1px solid var(--surface-raised-edge);
+  border-radius: 8px;
+  background: var(--surface-field);
+  color: var(--text-faint);
+  font: inherit;
+  font-size: 13px;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: border-color 0.18s ease, color 0.18s ease;
+}
+
+:root[data-design="v1"] .community-search-ask:hover,
+:root[data-design="v1"] .community-search-ask:focus-visible {
+  outline: none;
+  border-color: var(--field-edge);
+  color: var(--text-ink-secondary);
+}
+
+:root[data-design="v1"] .community-search-ask kbd {
+  margin-left: auto;
+  padding: 1px 5px;
+  border: 1px solid var(--field-edge);
+  border-radius: 5px;
+  font-family: inherit;
+  font-size: 11px;
+}
+
+@media (max-width: 720px) {
+  :root[data-design="v1"] .community-search-ask {
+    display: none;
+  }
+}
+
+/* The mock's top bar: the channel's name opens its menu (no menu button),
+   and a faint glowing line runs under the bar (.hline). */
+@media (min-width: 721px) {
+  :root[data-design="v1"] .community-channel-header {
+    position: relative;
+  }
+
+  :root[data-design="v1"] .community-chat .community-channel-header::after,
+  :root[data-design="v1"] .community-page-header::after,
+  :root[data-design="v1"] .members-page-header::after {
+    content: "";
+    position: absolute;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    height: 1px;
+    pointer-events: none;
+    background: linear-gradient(90deg, transparent, transparent 8%, var(--header-line-glow) 50%, transparent 92%, transparent);
+  }
+}
+
+:root[data-design="v1"] .community-channel-header-actions.is-title {
+  position: relative;
+  min-width: 0;
+  margin-left: -8px;
+}
+
+:root[data-design="v1"] .community-channel-header-identity.is-button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 100%;
+  padding: 4px 8px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.16s ease;
+}
+
+:root[data-design="v1"] .community-channel-header-identity.is-button:hover,
+:root[data-design="v1"] .community-channel-header-identity.is-button:focus-visible,
+:root[data-design="v1"] .community-channel-header-identity.is-button[aria-expanded="true"] {
+  outline: none;
+  background: var(--hover-overlay);
+}
+
+:root[data-design="v1"] .community-channel-header-chevron {
+  flex: none;
+  color: var(--text-faint);
+  opacity: 0;
+  transition: opacity 0.16s ease;
+}
+
+:root[data-design="v1"] .community-channel-header-identity.is-button:hover .community-channel-header-chevron,
+:root[data-design="v1"] .community-channel-header-identity.is-button:focus-visible .community-channel-header-chevron,
+:root[data-design="v1"] .community-channel-header-identity.is-button[aria-expanded="true"] .community-channel-header-chevron {
+  opacity: 1;
+}
+
+:root[data-design="v1"] .community-channel-header-actions.is-title .community-channel-header-menu {
+  right: auto;
+  left: 0;
 }

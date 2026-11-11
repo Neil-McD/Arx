@@ -15,6 +15,7 @@ const ENTRY_MODULES = new Set(["auth.config", "crons", "http", "schema"]);
 const ALLOWED = new Map([
   ["stagingSeedBriefLab", "operator tool: seeds staging by hand"],
   ["stagingSeedSunrise", "operator tool: seeds and simulates the staging Sunrise community by hand"],
+  ["stagingSeedPolynetDemo", "operator tool: seeds the staging Polynet demo community by hand"],
   ["anonymousUserCleanup", "operator tool: data deletion, run by hand"],
   ["communityMaintenance", "operator tool: purges orphaned user artifacts, run by hand"],
   ["communityWeeklyDigestWorker", "dormant by design until the weekly digest gets a cron"],

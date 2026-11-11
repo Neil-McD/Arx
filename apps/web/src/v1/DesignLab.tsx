@@ -62,7 +62,7 @@ function HostSide() {
 
 function HostHomeQuiet() {
   return (
-    <KitApp view="home" host fillWindow banner={BANNER} bannerPosition="72% 38%" aura={0.08}>
+    <KitApp view="home" host fillWindow scale={labScale()} banner={BANNER} bannerPosition="72% 38%" aura={0.08}>
       <HostSide />
       <Main>
         <Top />
@@ -157,7 +157,7 @@ function HostChannel() {
     editing: null, editText: "", onStartEdit: noop, onEditTextChange: noop, onSaveEdit: noop, onCancelEdit: noop,
   } as any;
   return (
-    <KitApp view="wins" host fillWindow banner={BANNER} bannerPosition="72% 38%" aura={0.08}>
+    <KitApp view="wins" host fillWindow scale={labScale()} banner={BANNER} bannerPosition="72% 38%" aura={0.08}>
       <HostSide />
       <Main>
         <Top title={<># wins <small>Share what worked</small></>} titleView={1} />
@@ -175,6 +175,13 @@ function HostChannel() {
       </Rail>
     </KitApp>
   );
+}
+
+// ?scale=1.25 draws the lab larger, to try a size for big monitors.
+function labScale(): number {
+  if (typeof window === "undefined") return 1;
+  const value = Number(new URLSearchParams(window.location.search).get("scale"));
+  return Number.isFinite(value) && value >= 0.75 && value <= 2 ? value : 1;
 }
 
 export function DesignLab() {

@@ -1,5 +1,5 @@
-import { useEffect, useId, useRef, useState } from "react";
-import { ChevronsUpDown, LogOut, Moon, Settings, Sun } from "lucide-react";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
+import { ChevronsUpDown, Eye, LogOut, Moon, Settings, Sun } from "lucide-react";
 import type { AppTheme } from "../../../../shared/theme";
 import { WebSignOutConfirmModal } from "./WebSignOutConfirmModal";
 
@@ -11,7 +11,14 @@ export type WebAccountMenuProps = {
   onSetAppTheme: (theme: AppTheme) => void;
   onOpenSettings: () => void;
   onSignOut: () => Promise<void>;
+  // Design system v1: the community's own extras (Invite people, Analytics,
+  // Visit site) live here, so the column's foot is the mock's two rows.
+  communityItems?: AccountMenuCommunityItem[];
+  // "View as a member" and back ("Host view"), for the people who run it.
+  memberView?: { active: boolean; onToggle: () => void };
 };
+
+export type AccountMenuCommunityItem = { key: string; label: string; icon: ReactNode; onSelect: () => void };
 
 // Design system v1: the account row at the bottom of the left column. Its menu
 // holds what used to need a trip to settings: light or dark, settings, sign out.
@@ -62,6 +69,26 @@ export function WebAccountMenu(props: WebAccountMenuProps) {
     <div className="account-menu" ref={rootRef}>
       {isOpen ? (
         <div className="account-menu-popover" id={menuId} role="menu" aria-label="Account">
+          {props.communityItems?.length ? (
+            <>
+              {props.communityItems.map((item) => (
+                <button
+                  key={item.key}
+                  className="account-menu-item"
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    setIsOpen(false);
+                    item.onSelect();
+                  }}
+                >
+                  {item.icon}
+                  {item.label}
+                </button>
+              ))}
+              <div className="account-menu-separator" role="separator" />
+            </>
+          ) : null}
           <button
             className="account-menu-item"
             type="button"
@@ -74,6 +101,20 @@ export function WebAccountMenu(props: WebAccountMenuProps) {
             {nextTheme === "light" ? <Sun size={16} aria-hidden="true" /> : <Moon size={16} aria-hidden="true" />}
             {nextTheme === "light" ? "Light mode" : "Dark mode"}
           </button>
+          {props.memberView ? (
+            <button
+              className="account-menu-item"
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                setIsOpen(false);
+                props.memberView?.onToggle();
+              }}
+            >
+              <Eye size={16} aria-hidden="true" />
+              {props.memberView.active ? "Host view" : "View as a member"}
+            </button>
+          ) : null}
           <button
             className="account-menu-item"
             type="button"

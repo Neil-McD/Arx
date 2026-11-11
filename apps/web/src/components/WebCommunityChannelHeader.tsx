@@ -7,7 +7,10 @@ import {
   type FormEvent,
   type ReactNode,
 } from "react";
-import { Ellipsis, Hash, LockKeyhole, Pencil, Trash2, X } from "lucide-react";
+import { ChevronDown, Ellipsis, Hash, LockKeyhole, Pencil, Search, Trash2, X } from "lucide-react";
+import { isDesignV1Active } from "../../../../shared/designSystem";
+import { setCloudCommunityChannelDescription } from "../../../../shared/cloudCommunityChannelsGateway";
+import { openGuideFromSearch } from "./guideSearch";
 import { ChannelAccessSettings } from "./ChannelAccessSettings";
 import { CommunityChannelSessionContext } from "./CommunityChannelSessionContext";
 
@@ -17,6 +20,7 @@ export type WebCommunityChannelHeaderChannel = {
   name: string;
   is_general: boolean;
   access_mode?: "all_members" | "restricted";
+  description?: string | null;
 };
 
 type WebCommunityChannelHeaderProps = {
@@ -78,6 +82,12 @@ export function WebCommunityChannelHeader({
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [managementMode, setManagementMode] = useState<"rename" | "delete" | null>(null);
   const [renamedChannelName, setRenamedChannelName] = useState(channel.name);
+  // Design v1: the line next to the name. What you saved shows at once; the
+  // channel list catches up on its next read.
+  const [savedDescription, setSavedDescription] = useState<{ channelId: string; value: string } | null>(null);
+  const description = savedDescription?.channelId === channel.id ? savedDescription.value : String(channel.description ?? "");
+  const [editedDescription, setEditedDescription] = useState(description);
+  const [descriptionError, setDescriptionError] = useState<string | null>(null);
   const menuRef = useRef<HTMLDivElement | null>(null);
   const menuTriggerRef = useRef<HTMLButtonElement | null>(null);
   const dialogRef = useRef<HTMLElement | null>(null);
@@ -179,6 +189,8 @@ export function WebCommunityChannelHeader({
   const openManagement = (mode: "rename" | "delete") => {
     setIsMenuOpen(false);
     setRenamedChannelName(channel.name);
+    setEditedDescription(description);
+    setDescriptionError(null);
     setManagementMode(mode);
     clearManageChannelError?.();
   };
@@ -188,7 +200,19 @@ export function WebCommunityChannelHeader({
     const normalizedName = renamedChannelName.trim().replace(/\s+/g, " ");
     if (!normalizedName || !onRenameChannel || managingChannelId) return;
     clearManageChannelError?.();
-    const renamed = await onRenameChannel(channel.id, normalizedName);
+    const nextDescription = editedDescription.replace(/\s+/g, " ").trim();
+    if (isDesignV1Active() && sessionScope?.session && nextDescription !== description) {
+      try {
+        await setCloudCommunityChannelDescription({
+          session: sessionScope.session, communityId: sessionScope.communityId, channelId: channel.id, description: nextDescription,
+        });
+        setSavedDescription({ channelId: channel.id, value: nextDescription });
+      } catch {
+        setDescriptionError("The description didn't save. Try again.");
+        return;
+      }
+    }
+    const renamed = normalizedName === channel.name ? true : await onRenameChannel(channel.id, normalizedName);
     if (renamed) closeManagement(true);
   };
 
@@ -199,15 +223,87 @@ export function WebCommunityChannelHeader({
     if (deleted) closeManagement(true);
   };
 
+  const menuPopover = isMenuOpen ? (
+      <div
+        className="community-channel-header-menu"
+        role="menu"
+        aria-label={`Channel options for ${channel.name}`}
+      >
+        {channel.is_general ? (
+          <div
+            className="community-channel-header-menu-system-note"
+            role="menuitem"
+            aria-disabled="true"
+          >
+            <LockKeyhole size={15} aria-hidden="true" />
+            <span>
+              <strong>Default channel</strong>
+              <small>Can’t be renamed or deleted</small>
+            </span>
+          </div>
+        ) : (
+          <>
+            <button type="button" role="menuitem" onClick={() => openManagement("rename")}>
+              <Pencil size={15} aria-hidden="true" />
+              {sessionScope ? "Channel settings" : "Rename channel"}
+            </button>
+            <button
+              className="is-danger"
+              type="button"
+              role="menuitem"
+              onClick={() => openManagement("delete")}
+            >
+              <Trash2 size={15} aria-hidden="true" />
+              Delete channel
+            </button>
+          </>
+        )}
+      </div>
+    ) : null;
+
+  // Design system v1: the mock's top bar has no menu button. The channel's
+  // name opens its menu instead (a small chevron shows it can).
+  const v1Title = isDesignV1Active() && canOpenChannelMenu;
+  const identity = (
+    <>
+      {channel.access_mode === "restricted" ? <LockKeyhole size={17} strokeWidth={1.9} aria-hidden="true" /> : <Hash size={17} strokeWidth={1.9} aria-hidden="true" />}
+      <h1>{channel.name}{isDesignV1Active() && description ? <small className="community-channel-header-description">{description}</small> : null}</h1>
+    </>
+  );
+
   return (
     <>
       <header className="community-channel-header" aria-label={`Channel ${channel.name}`}>
-        <div className="community-channel-header-identity" title={channel.name}>
-          {channel.access_mode === "restricted" ? <LockKeyhole size={17} strokeWidth={1.9} aria-hidden="true" /> : <Hash size={17} strokeWidth={1.9} aria-hidden="true" />}
-          <h1>{channel.name}</h1>
-        </div>
+        {v1Title ? (
+          <div className="community-channel-header-actions is-title" ref={menuRef}>
+            <button
+              ref={menuTriggerRef}
+              className="community-channel-header-identity is-button"
+              type="button"
+              title={`${channel.name}: channel options`}
+              aria-haspopup="menu"
+              aria-expanded={isMenuOpen}
+              disabled={Boolean(managingChannelId)}
+              onClick={() => setIsMenuOpen((open) => !open)}
+            >
+              {identity}
+              <ChevronDown className="community-channel-header-chevron" size={14} aria-hidden="true" />
+            </button>
+            {menuPopover}
+          </div>
+        ) : (
+          <div className="community-channel-header-identity" title={channel.name}>{identity}</div>
+        )}
+        {isDesignV1Active() ? (
+          // The mock's "Search or ask": until search exists it asks your guide.
+          <button type="button" className="community-search-ask" onClick={() => openGuideFromSearch()} aria-keyshortcuts="Meta+K" title="Ask your guide (⌘K)">
+            <Search size={14} aria-hidden="true" />
+            <span>Search or ask</span>
+            <kbd>⌘K</kbd>
+          </button>
+        ) : null}
         {trailingAction}
-        {canOpenChannelMenu ? (
+        {canOpenChannelMenu && !v1Title ? (
           <div className="community-channel-header-actions" ref={menuRef}>
             <button
               ref={menuTriggerRef}
@@ -221,43 +317,7 @@ export function WebCommunityChannelHeader({
             >
               <Ellipsis size={19} strokeWidth={1.9} aria-hidden="true" />
             </button>
-            {isMenuOpen ? (
-              <div
-                className="community-channel-header-menu"
-                role="menu"
-                aria-label={`Channel options for ${channel.name}`}
-              >
-                {channel.is_general ? (
-                  <div
-                    className="community-channel-header-menu-system-note"
-                    role="menuitem"
-                    aria-disabled="true"
-                  >
-                    <LockKeyhole size={15} aria-hidden="true" />
-                    <span>
-                      <strong>Default channel</strong>
-                      <small>Can’t be renamed or deleted</small>
-                    </span>
-                  </div>
-                ) : (
-                  <>
-                    <button type="button" role="menuitem" onClick={() => openManagement("rename")}>
-                      <Pencil size={15} aria-hidden="true" />
-                      {sessionScope ? "Channel settings" : "Rename channel"}
-                    </button>
-                    <button
-                      className="is-danger"
-                      type="button"
-                      role="menuitem"
-                      onClick={() => openManagement("delete")}
-                    >
-                      <Trash2 size={15} aria-hidden="true" />
-                      Delete channel
-                    </button>
-                  </>
-                )}
-              </div>
-            ) : null}
+            {menuPopover}
           </div>
         ) : null}
       </header>
@@ -310,9 +370,21 @@ export function WebCommunityChannelHeader({
                   disabled={Boolean(managingChannelId)}
                 />
               </label>
-              {manageChannelError ? (
+              {isDesignV1Active() && sessionScope ? (
+                <label className="community-channel-modal-field">
+                  <span>Description</span>
+                  <input
+                    value={editedDescription}
+                    maxLength={120}
+                    placeholder="What this channel is for"
+                    onChange={(event) => { setEditedDescription(event.target.value); setDescriptionError(null); }}
+                    disabled={Boolean(managingChannelId)}
+                  />
+                </label>
+              ) : null}
+              {manageChannelError || descriptionError ? (
                 <div className="community-channel-modal-error" role="alert">
-                  {manageChannelError}
+                  {manageChannelError ?? descriptionError}
                 </div>
               ) : null}
               {sessionScope ? <ChannelAccessSettings channelId={channel.id} /> : null}
@@ -329,7 +401,7 @@ export function WebCommunityChannelHeader({
                   className="is-primary"
                   disabled={Boolean(managingChannelId) || !renamedChannelName.trim()}
                 >
-                  {managingChannelId ? "Saving…" : sessionScope ? "Save name" : "Save"}
+                  {managingChannelId ? "Saving…" : sessionScope ? (isDesignV1Active() ? "Save" : "Save name") : "Save"}
                 </button>
               </div>
             </form>

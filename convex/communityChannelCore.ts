@@ -24,6 +24,7 @@ export type CommunityChannelLike = {
   status: "active" | "archived";
   position: number;
   pinnedRootId?: any;
+  description?: string;
   createdByUserId?: any;
   createdAt: number;
   updatedAt: number;

@@ -287,7 +287,7 @@ kbd{margin-left:auto;font-family:var(--sans);font-size:11px;color:var(--ink3);pa
 .fig em{display:block;margin-top:3px;font-style:normal;font-size:12px;color:var(--ink2)}
 .tag.hold{color:var(--ink);border-color:rgba(var(--w),.34)}
 .tbl{margin:12px -12px 0}
-.trow{display:grid;grid-template-columns:28px minmax(0,1.5fr) minmax(0,1.2fr) minmax(0,.7fr) minmax(0,.7fr);gap:0 14px;align-items:center;height:48px;padding:0 12px;border-radius:10px;font-size:13px;color:var(--ink2);position:relative;transition:background .16s var(--ease)}
+.trow{display:grid;grid-template-columns:28px minmax(0,1.35fr) minmax(0,1.45fr) minmax(0,.8fr) minmax(0,.62fr);gap:0 14px;align-items:center;height:48px;padding:0 12px;border-radius:10px;font-size:13px;color:var(--ink2);position:relative;transition:background .16s var(--ease)}
 .trow+.trow::before{content:"";position:absolute;left:12px;right:12px;top:0;height:1px;background:var(--line)}
 .trow:not(.th):hover,.trow.sel{background:var(--s1)}.trow.sel{background:var(--s2)}
 .trow:hover::before,.trow:hover+.trow::before,.trow.sel::before,.trow.sel+.trow::before{opacity:0}
@@ -410,3 +410,45 @@ kbd{margin-left:auto;font-family:var(--sans);font-size:11px;color:var(--ink3);pa
 .fd .rad{display:flex;gap:12px;align-items:flex-end;margin-bottom:14px}.fd .rad div{border:1px solid var(--line2);background:var(--s1);display:flex;align-items:center;justify-content:center;font-size:12px;color:var(--ink2)}
 .fd ul{margin:0;padding:0;list-style:none}.fd li{font-size:14px;color:var(--ink2);padding:9px 0;border-top:1px solid var(--line)}.fd li:first-child{border-top:0;padding-top:0}.fd li b{color:var(--ink);font-weight:550}
 .fd .pulse{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--aurora);box-shadow:0 0 14px var(--aurora);margin-right:10px;animation:breathe 4.8s ease-in-out infinite}
+
+/* ---------- any window, from a laptop to a large monitor (Neil, Nov 11) ----------
+   Sizes stay fixed; the frame fills the window. At 1440 everything is exactly
+   the boards above. Wider: the right column grows to 440px (by 1909), Home's
+   text column stays 736px and centres, and a channel or a page keeps its
+   fixed gutters and uses the whole middle. */
+.app{height:100vh;--rail-w:clamp(328px,calc(328px + (100vw - 1440px) * .24),440px);--measure:736px}
+.rail{width:var(--rail-w)}.r3{width:max(400px,var(--rail-w))}
+.home,.v0 .dock{padding-left:max(56px,calc((100% - var(--measure)) / 2));padding-right:max(56px,calc((100% - var(--measure)) / 2))}
+
+/* Members: what is known about a person, as a record. Label, then the value,
+   then (for a host) where it came from. */
+.kv{display:grid;grid-template-columns:88px minmax(0,1fr);gap:12px 12px;font-size:13px;line-height:1.45}
+.kv>span{color:var(--ink3);font-weight:500;font-size:12px;padding-top:1px}
+.kv>p{margin:0;color:var(--ink)}
+.kv em{display:block;margin-top:2px;font-style:normal;font-size:12px;color:var(--ink3)}
+.trow>span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.trow .none{color:var(--ink3)}
+.lab .priv{float:right;font-style:normal;font-weight:400}
+.hnote{padding:10px 12px;border-radius:10px;background:var(--s1);border:1px solid var(--line)}
+.hnote p{margin:0;font-size:13px;color:var(--ink)}.hnote span{display:block;margin-top:4px;font-size:12px;color:var(--ink3)}
+/* A record can be longer than the window: it scrolls, and nothing squashes. */
+.r5{gap:18px;overflow-y:auto}.r5>*{flex:none}
+
+/* Members, the host's side: saved views, the record at a readable width, the
+   plan under the name, a past-members table, and a second (empty) record. */
+.views{display:flex;flex-wrap:wrap;gap:6px;margin-top:12px}
+.r5.h-only{width:max(440px,var(--rail-w))}
+.rec{display:contents}.rec-j{display:none}.r5 .rec>*{flex:none}
+.app:has(.mem-josh:checked) .rec-t{display:none}.app:has(.mem-josh:checked) .rec-j{display:contents}
+.trow.tt{background:var(--s2)}.app:has(.mem-josh:checked) .trow.tt{background:none}
+.app:has(.mem-josh:checked) .trow.tj{background:var(--s2)}
+label.trow{cursor:pointer}
+.tb-past{display:none}.app:has(.mv-past:checked) .tb-past{display:block}.app:has(.mv-past:checked) .tb-now{display:none}
+.chip.mv-a{background:var(--s2);color:var(--ink);border-color:var(--line2)}
+.app:has(.mv-past:checked) .chip.mv-a{background:none;color:var(--ink2);border-color:var(--line)}
+.app:has(.mv-past:checked) .chip.mv-p{background:var(--s2);color:var(--ink);border-color:var(--line2)}
+.trow.th .ic{width:12px;height:12px;vertical-align:-2px;opacity:.7}
+.plan{display:flex;flex-direction:column;gap:2px;padding:10px 12px;border-radius:10px;border:1px solid var(--line);background:var(--s1);font-size:13px}
+.plan b{font-weight:550;color:var(--ink)}.plan span{color:var(--ink3);font-size:12px}
+.kv .guess{color:var(--ink2)}.kv .guess em{color:var(--aurora-ink);display:flex;align-items:center;gap:5px}
+.p.you>span:last-child{color:var(--ink2)}

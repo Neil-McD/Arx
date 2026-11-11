@@ -268,10 +268,11 @@ export function WebCommunityHomeSection(props: WebCommunityHomeSectionProps) {
 
   if (props.kit) {
     const kit = props.kit;
+    const isHost = props.audience === "host";
+    // The host's column has the figures; a member's is the mock's "Right now".
     const panel = snapshot ? (
       <>
-          <Figs figures={homeKitFiguresFor(snapshot)} />
-          <Sep />
+          {isHost ? <><Figs figures={homeKitFiguresFor(snapshot)} /><Sep /></> : null}
           <Sec label="Next up">
             {nextEvent ? (
               <>
@@ -286,8 +287,8 @@ export function WebCommunityHomeSection(props: WebCommunityHomeSectionProps) {
       </>
     ) : null;
     const rail = panel ? (
-      <KitApp view="home" host part="rail">
-        <Rail index={0} label="The community right now">{panel}</Rail>
+      <KitApp view="home" host={isHost} part="rail">
+        <Rail index={0} label={isHost ? "The community right now" : "Right now"}>{panel}</Rail>
       </KitApp>
     ) : null;
     return (

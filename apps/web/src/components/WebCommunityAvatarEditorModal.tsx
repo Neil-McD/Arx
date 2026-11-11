@@ -1,4 +1,3 @@
-import { cssZoomOf } from "../../../../shared/designScale";
 import {
   useCallback,
   useEffect,
@@ -63,9 +62,7 @@ export function WebCommunityAvatarEditorModal(props: WebCommunityAvatarEditorMod
     const viewport = viewportRef.current;
     if (!viewport) return;
     const syncViewport = () => {
-      // Layout size, not the drawn size: the editor works in CSS pixels even
-      // when design v1 scales the page (shared/designScale.ts).
-      const rect = { width: viewport.offsetWidth, height: viewport.offsetHeight };
+      const rect = viewport.getBoundingClientRect();
       setViewportSize({
         width: Math.max(0, Math.round(rect.width)),
         height: Math.max(0, Math.round(rect.height)),
@@ -134,8 +131,8 @@ export function WebCommunityAvatarEditorModal(props: WebCommunityAvatarEditorMod
       const dragState = dragStateRef.current;
       if (!dragState || dragState.pointerId !== event.pointerId) return;
       commitDraggedPosition(
-        dragState.startLeft + (event.clientX - dragState.startX) / cssZoomOf(event.currentTarget),
-        dragState.startTop + (event.clientY - dragState.startY) / cssZoomOf(event.currentTarget),
+        dragState.startLeft + (event.clientX - dragState.startX),
+        dragState.startTop + (event.clientY - dragState.startY),
       );
     },
     [commitDraggedPosition],

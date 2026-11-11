@@ -42,6 +42,8 @@ import { VoiceInputButton } from "../../../../shared/VoiceInputButton";
 
 // The host's three suggestions on Home (the mock's, made general).
 const HOST_HOME_SUGGESTIONS = ["How was this week?", "Who is at risk of leaving?", "Who should I welcome?"];
+// A member's, as the mock has them.
+const MEMBER_HOME_SUGGESTIONS = ["What did I miss?", "Who should I meet?", "Draft my intro"];
 import {
   ensureCloudCommunityAgentConversation,
   startNewCloudCommunityAgentConversation,
@@ -1263,8 +1265,9 @@ function WebCommunityAgentDock(props, ref) {
   // by itself, so nothing that needs you is hidden behind Home at rest.
   const conversationNeedsYou =
     turnIsActive || isPreparing || Boolean(dockError) || Boolean(memberLimitNotice) || persistentResourceChangesetCards.length > 0;
-  // Home on the kit: the host's Home in design v1 on a wide window.
-  const kitHome = homeActive && guideWording && !props.mobileRoot && props.home?.audience === "host";
+  // Home on the kit: Home in design v1 on a wide window, the host's and a member's.
+  const kitHome = homeActive && guideWording && !props.mobileRoot && Boolean(props.home);
+  const kitHomeIsHost = props.home?.audience === "host";
   const openTalk = () => {
     followConversationRef.current = true;
     setKitTalking(true);
@@ -1282,11 +1285,11 @@ function WebCommunityAgentDock(props, ref) {
   };
   const kitBody = kitHome && props.home ? (
     <section className="community-agent-dock-panel has-home-rail is-kit-home" aria-label={presentation.title}>
-      <KitApp view="home" host part="main" talking={kitTalking || conversationNeedsYou}>
+      <KitApp view="home" host={kitHomeIsHost} part="main" talking={kitTalking || conversationNeedsYou}>
         <View index={0}>
           {/* The top row scrolls with Home, so the eyebrow's glow is never cut. */}
           <Scroll ref={scrollRef}>
-            <Top search={false} />
+            <Top onSearch={() => kitInputRef.current?.focus()} />
             <WebCommunityHomeSection
               {...props.home}
               session={props.session}
@@ -1306,7 +1309,7 @@ function WebCommunityAgentDock(props, ref) {
           </Scroll>
           <Dock>
             {kitTalking ? null : (
-              <Chips chips={HOST_HOME_SUGGESTIONS} onChip={sendSuggestion} />
+              <Chips chips={kitHomeIsHost ? HOST_HOME_SUGGESTIONS : MEMBER_HOME_SUGGESTIONS} onChip={sendSuggestion} />
             )}
             {attachments.length > 0 ? (
               <div className="community-agent-dock-composer-attachments">

@@ -63,6 +63,7 @@ export type WebCommunityShellProps = {
     is_general: boolean;
     position: number;
     access_mode?: "all_members" | "restricted";
+    description?: string | null;
   }>;
   isLoadingCommunityChannels: boolean;
   selectedCommunityChannelSlug: string;
@@ -93,6 +94,8 @@ export type WebCommunityShellProps = {
   isLoadingCommunityAccess: boolean;
   /* Visitor lens: tabs render locked instead of hidden. */
   onSelectCommunityTab: (tab: CommunityTab) => void;
+  // Opens one pane of the community's settings (design v1: "Your guide").
+  onOpenCommunitySettingsPane?: (pane: "community" | "agent" | "danger") => void;
   onSelectCommunityTabFromMobile: (tab: CommunityTab) => void;
   onCopyCommunityJoinLink: (joinUrl: string) => Promise<void> | void;
   canOpenDirectMessages: boolean;

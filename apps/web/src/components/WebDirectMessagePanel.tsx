@@ -20,6 +20,9 @@ import { partitionCommunityAttachments } from "../../../../shared/communityAttac
 import { parseMessageAttachments } from "../../../../shared/communityMessageParsing";
 import { UserAvatar } from "../../../../shared/UserAvatar";
 import { VoiceInputButton } from "../../../../shared/VoiceInputButton";
+import { isDesignV1Active } from "../../../../shared/designSystem";
+import { Icon, KitApp, Rail, cx } from "../v1/kit";
+import { inboxTimeFor } from "./WebDirectMessageInboxPanel";
 
 type DirectMessageComposerAttachment = DirectMessageAttachment & {
   data_url?: string | null;
@@ -65,6 +68,8 @@ type WebDirectMessagePanelProps = {
   onDiscardLocalMessage?: (localId: string) => void;
   onComposerBlur?: () => void | Promise<void>;
   onReadThroughSeq?: (seq: number) => void | Promise<void>;
+  // The first touch of a conversation that was opened for you (design v1).
+  onEngage?: () => void;
   // Design system v1: shown beside the Inbox list, so it needs no way back.
   besideInbox?: boolean;
   onBackToInbox?: () => void;
@@ -488,8 +493,7 @@ export function WebDirectMessagePanel(props: WebDirectMessagePanelProps) {
     const syncComposerClearance = () => {
       messagesElement.style.setProperty(
         "--community-dm-composer-float-height",
-        // Layout height, so the padding is right when design v1 scales the page.
-        `${Math.ceil(composerFloat.offsetHeight)}px`,
+        `${Math.ceil(composerFloat.getBoundingClientRect().height)}px`,
       );
       if (shouldFollowMessagesRef.current) {
         requestAnimationFrame(scrollMessagesToBottom);
@@ -603,6 +607,215 @@ export function WebDirectMessagePanel(props: WebDirectMessagePanelProps) {
     scrollMessagesToBottom,
   ]);
 
+  const optionsMenu = props.showBlockAction && props.onToggleBlockPeer ? (
+      <div className="community-dm-panel-menu-wrap" ref={menuWrapRef}>
+        <button
+          className={`community-dm-panel-menu-button${isMenuOpen ? " is-open" : ""}`}
+          type="button"
+          onClick={() => {
+            setIsMenuOpen((current) => !current);
+            setIsConfirmingBlock(false);
+          }}
+          aria-haspopup="menu"
+          aria-expanded={isMenuOpen}
+          aria-label="Conversation options"
+          title="Options"
+        >
+          <MoreHorizontal aria-hidden="true" />
+        </button>
+        {isMenuOpen ? (
+          <div className="community-dm-panel-menu" role="menu">
+            {props.onToggleMuteConversation ? (
+              <button
+                className="community-dm-panel-menu-item"
+                type="button"
+                role="menuitem"
+                onClick={() => {
+                  setIsMenuOpen(false);
+                  setIsConfirmingBlock(false);
+                  void props.onToggleMuteConversation?.();
+                }}
+              >
+                {props.isConversationMuted ? (
+                  <Bell aria-hidden="true" />
+                ) : (
+                  <BellOff aria-hidden="true" />
+                )}
+                <span>{props.isConversationMuted ? "Unmute conversation" : "Mute conversation"}</span>
+              </button>
+            ) : null}
+            <button
+              className={`community-dm-panel-menu-item${isConfirmingBlock ? " is-confirming" : ""}`}
+              type="button"
+              role="menuitem"
+              onClick={handleBlockActionClick}
+            >
+              <Ban aria-hidden="true" />
+              <span>
+                {isPeerBlocked
+                  ? `Unblock ${peerLabel}`
+                  : isConfirmingBlock
+                    ? "Tap again to block"
+                    : `Block ${peerLabel}`}
+              </span>
+            </button>
+          </div>
+        ) : null}
+      </div>
+    ) : null;
+
+  // Design system v1 beside the Inbox: the mock's conversation column
+  // (docs/design/hifi-mock .rail.r3), drawn from the kit. Same behaviour.
+  if (props.besideInbox && isDesignV1Active()) {
+    return (
+      <aside
+        className={`community-dm-panel is-kit community-dm-attachment-drop-surface${isAttachmentDragOver ? " drag-over" : ""}`}
+        role="dialog"
+        aria-label={`${peerLabel} direct message`}
+        onDrop={canAcceptAttachmentDrop ? onAttachmentDrop : undefined}
+        onDragEnter={canAcceptAttachmentDrop ? onAttachmentDragEnter : undefined}
+        onDragOver={canAcceptAttachmentDrop ? onAttachmentDragOver : undefined}
+        onDragLeave={canAcceptAttachmentDrop ? onAttachmentDragLeave : undefined}
+        // A click or a key press, not focus: the reply box focuses itself.
+        onPointerDownCapture={props.onEngage}
+        onKeyDownCapture={props.onEngage}
+      >
+        {isAttachmentDragOver ? (
+          <div className="drop-overlay community-dm-drop-overlay" aria-hidden="true">
+            <Paperclip aria-hidden="true" />
+            <span>Drop files to attach</span>
+          </div>
+        ) : null}
+        <KitApp view="inbox" part="rail">
+          <Rail index={3} label={`Conversation with ${peerLabel}`}>
+            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+              <span className={cx("av")}>
+                <UserAvatar
+                  className="community-dm-kit-avatar"
+                  readyClassName="has-image"
+                  name={peerLabel}
+                  imageUrl={peer?.avatar_url ?? null}
+                  focusX={peer?.avatar_focus_x ?? 0.5}
+                  focusY={peer?.avatar_focus_y ?? 0.5}
+                  zoom={peer?.avatar_zoom ?? 1}
+                  alt=""
+                  fallback={<span>{props.getInitials(peerLabel)}</span>}
+                  fallbackStyle={{ backgroundColor: props.getAvatarColor(peerAvatarSeed) }}
+                />
+              </span>
+              <div style={{ minWidth: 0, flex: 1 }}>
+                <div style={{ fontSize: 15, fontWeight: 600 }}>{peerLabel}</div>
+                <div className={cx("sub")}>
+                  {peerPresenceKnown && peerActiveNow ? `Active now · ${communityName}` : communityName}
+                </div>
+              </div>
+              {optionsMenu}
+            </div>
+            <div className={cx("sep")} style={{ marginTop: -8 }} />
+            <div ref={messagesRef} className={`${cx("dm")} community-dm-kit-thread`} aria-live="polite" onScroll={(event) => {
+              const target = event.currentTarget;
+              const distanceFromBottom = target.scrollHeight - target.scrollTop - target.clientHeight;
+              const isNearBottom = distanceFromBottom <= DM_AUTO_SCROLL_THRESHOLD_PX;
+              shouldFollowMessagesRef.current = isNearBottom;
+              if (isNearBottom && lastMessageSeq > 0) void props.onReadThroughSeq?.(lastMessageSeq);
+            }}>
+              {props.isLoading ? (
+                <span className={cx("sub")}>Loading messages…</span>
+              ) : props.messages.length === 0 ? (
+                <span className={cx("sub")}>Say hello to {peerLabel}.</span>
+              ) : (
+                threadEntries.map(({ message, isNewDay, isClusterEnd }) => {
+                  const isOwn = message.sender_user_id === props.sessionUserId;
+                  const text = getMessageText(message);
+                  const attachments = getMessageAttachments(message);
+                  const isFailedEcho = message.local_status === "failed";
+                  const echoLocalId = String(message.local_id ?? "").trim();
+                  return (
+                    <Fragment key={message.id}>
+                      {isNewDay ? <div className={cx("day")} style={{ margin: "0 0 4px" }}>{formatDirectMessageDayLabel(message.created_at)}</div> : null}
+                      <div className={`${cx(isOwn ? "mine" : "bub")}${message.local_status === "sending" ? " is-sending" : ""}`}>
+                        {text ? renderChatInlineMarkdown(text, { renderTextRun: props.renderTextWithLinks }) : null}
+                        {text ? <MessageLinkMedia text={text} /> : null}
+                        {attachments.length ? <DirectMessageAttachmentViews attachments={attachments} /> : null}
+                      </div>
+                      {isFailedEcho ? (
+                        <div className="community-dm-panel-message-send-failed" role="alert">
+                          <span>{String(message.local_error ?? "").trim() || "Not sent."}</span>
+                          {echoLocalId && props.onRetryLocalMessage ? <button type="button" onClick={() => props.onRetryLocalMessage?.(echoLocalId)}>Retry</button> : null}
+                          {echoLocalId && props.onDiscardLocalMessage ? <button type="button" onClick={() => props.onDiscardLocalMessage?.(echoLocalId)}>Discard</button> : null}
+                        </div>
+                      ) : isClusterEnd ? (
+                        <span className={cx("sub")} style={{ fontSize: 12, alignSelf: isOwn ? "flex-end" : undefined }}>
+                          {isOwn ? "You" : peerLabel.split(/\s+/)[0]} · {(() => {
+                            const when = inboxTimeFor(message.created_at);
+                            return when === "now" ? "just now" : /(min| h)$/.test(when) ? `${when} ago` : when;
+                          })()}
+                        </span>
+                      ) : null}
+                    </Fragment>
+                  );
+                })
+              )}
+            </div>
+            <div ref={composerFloatRef} style={{ marginTop: "auto", display: "flex", flexDirection: "column", gap: 10 }}>
+              {typingLabel ? <span className={cx("sub")} aria-live="polite">{typingLabel}</span> : null}
+              {props.error ? <div className="community-dm-panel-error">{props.error}</div> : null}
+              {isPeerBlocked ? (
+                <div className="community-dm-panel-blocked-notice">
+                  <span>You blocked this person. Unblock to message them.</span>
+                  {props.onToggleBlockPeer ? <button type="button" onClick={() => { void props.onToggleBlockPeer?.(); }}>Unblock</button> : null}
+                </div>
+              ) : null}
+              {props.attachments.length > 0 ? (
+                <div className="community-dm-composer-attachments">
+                  <DirectMessageAttachmentViews attachments={props.attachments} isComposer={true} onRetryAttachment={props.onRetryAttachment} onRemoveAttachment={props.onRemoveAttachment} />
+                </div>
+              ) : null}
+              <form className={cx("ask")} style={{ height: "auto", minHeight: 46 }} onSubmit={onSubmit}>
+                <input ref={fileInputRef} className="community-dm-panel-file-input" type="file" multiple
+                  accept="image/jpeg,image/png,image/webp,image/gif,application/pdf,text/plain,text/markdown,text/csv,application/json,.csv,.doc,.docx,.json,.md,.pdf,.ppt,.pptx,.rtf,.txt,.xls,.xlsx"
+                  onChange={onFileInputChange} />
+                <button type="button" className={cx("ib")} style={{ marginLeft: -8 }} onClick={() => fileInputRef.current?.click()} disabled={props.isSending || isPeerBlocked} aria-label="Attach files" title="Attach files">
+                  <Icon name="plus" />
+                </button>
+                <textarea
+                  ref={(node) => {
+                    composerTextareaRef.current = node;
+                    if (props.inputRef) props.inputRef.current = node;
+                  }}
+                  value={props.input}
+                  onChange={(event) => props.onInputChange(event.target.value)}
+                  onBlur={() => { void props.onComposerBlur?.(); }}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" && !event.shiftKey) {
+                      event.preventDefault();
+                      if (!canSendDirectMessage) return;
+                      void props.onSend();
+                    }
+                  }}
+                  placeholder={isPeerBlocked ? "You blocked this person" : `Reply to ${peerLabel.split(/\s+/)[0]}`}
+                  aria-label={`Reply to ${peerLabel}`}
+                  rows={1}
+                  disabled={props.isSending || isPeerBlocked}
+                />
+                {props.voiceButtonProps ? (
+                  <button type="button" className={cx("ib")} onClick={props.voiceButtonProps.onClick} disabled={props.voiceButtonProps.disabled}
+                    aria-label={props.voiceButtonProps.title} title={props.voiceButtonProps.title} aria-pressed={props.voiceButtonProps.state === "recording"}
+                    style={props.voiceButtonProps.state === "idle" ? undefined : { color: "var(--aurora-ink)" }}>
+                    <Icon name="mic" />
+                  </button>
+                ) : null}
+                <button type="submit" className={cx("send")} style={{ width: 30, height: 30 }} disabled={!canSendDirectMessage} aria-label="Send direct message" title="Send">
+                  <Icon name="up" />
+                </button>
+              </form>
+            </div>
+          </Rail>
+        </KitApp>
+      </aside>
+    );
+  }
+
   return (
     <aside
       className={`community-dm-panel community-dm-attachment-drop-surface${isAttachmentDragOver ? " drag-over" : ""}`}
@@ -612,6 +825,9 @@ export function WebDirectMessagePanel(props: WebDirectMessagePanelProps) {
       onDragEnter={canAcceptAttachmentDrop ? onAttachmentDragEnter : undefined}
       onDragOver={canAcceptAttachmentDrop ? onAttachmentDragOver : undefined}
       onDragLeave={canAcceptAttachmentDrop ? onAttachmentDragLeave : undefined}
+      // A click or a key press, not focus: the reply box focuses itself.
+      onPointerDownCapture={props.onEngage}
+      onKeyDownCapture={props.onEngage}
     >
       {isAttachmentDragOver ? (
         <div className="drop-overlay community-dm-drop-overlay" aria-hidden="true">
@@ -666,62 +882,7 @@ export function WebDirectMessagePanel(props: WebDirectMessagePanelProps) {
             <div className="community-dm-panel-context">From {communityName}</div>
           )}
         </div>
-        {props.showBlockAction && props.onToggleBlockPeer ? (
-          <div className="community-dm-panel-menu-wrap" ref={menuWrapRef}>
-            <button
-              className={`community-dm-panel-menu-button${isMenuOpen ? " is-open" : ""}`}
-              type="button"
-              onClick={() => {
-                setIsMenuOpen((current) => !current);
-                setIsConfirmingBlock(false);
-              }}
-              aria-haspopup="menu"
-              aria-expanded={isMenuOpen}
-              aria-label="Conversation options"
-              title="Options"
-            >
-              <MoreHorizontal aria-hidden="true" />
-            </button>
-            {isMenuOpen ? (
-              <div className="community-dm-panel-menu" role="menu">
-                {props.onToggleMuteConversation ? (
-                  <button
-                    className="community-dm-panel-menu-item"
-                    type="button"
-                    role="menuitem"
-                    onClick={() => {
-                      setIsMenuOpen(false);
-                      setIsConfirmingBlock(false);
-                      void props.onToggleMuteConversation?.();
-                    }}
-                  >
-                    {props.isConversationMuted ? (
-                      <Bell aria-hidden="true" />
-                    ) : (
-                      <BellOff aria-hidden="true" />
-                    )}
-                    <span>{props.isConversationMuted ? "Unmute conversation" : "Mute conversation"}</span>
-                  </button>
-                ) : null}
-                <button
-                  className={`community-dm-panel-menu-item${isConfirmingBlock ? " is-confirming" : ""}`}
-                  type="button"
-                  role="menuitem"
-                  onClick={handleBlockActionClick}
-                >
-                  <Ban aria-hidden="true" />
-                  <span>
-                    {isPeerBlocked
-                      ? `Unblock ${peerLabel}`
-                      : isConfirmingBlock
-                        ? "Tap again to block"
-                        : `Block ${peerLabel}`}
-                  </span>
-                </button>
-              </div>
-            ) : null}
-          </div>
-        ) : null}
+        {optionsMenu}
       </div>
 
       <div

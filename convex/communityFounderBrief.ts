@@ -130,8 +130,12 @@ async function buildSnapshot(ctx: any, community: any, windowStartMs: number, no
   const everActive = new Set([...roots, ...replies].filter(human).map((row: any) => String(row.actorUserId)));
   const quiet = newcomerRows.filter((row: any) => activeMember(row) && !everActive.has(String(row.userId)));
 
+  // Only a question can be waiting for an answer: a post marked as one, or
+  // one that asks something. A win nobody replied to isn't waiting.
+  const asksSomething = (row: any) => row.kind === "question" || String(row.title ?? row.contentSummary ?? "").includes("?");
   const unansweredRows = roots
     .filter((row: any) => live(row) && human(row) && String(row.actorUserId) !== ownerId
+      && asksSomething(row)
       && Number(row.replyCount ?? 0) === 0
       && Number(row.createdAt) <= nowMs - 2 * HOUR_MS && Number(row.createdAt) >= nowMs - MAX_WINDOW_MS)
     .sort((a: any, b: any) => Number(a.createdAt) - Number(b.createdAt))

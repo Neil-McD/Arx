@@ -1,9 +1,6 @@
 // Match score: how closely a page matches the hi-fi mock, in pixels.
 //
-//   node scripts/design/match_score.mjs <mock-url> <page-url> <out-prefix> [width] [height] [mock-scale]
-//
-// mock-scale draws the mock enlarged (its 1440 frame at width/scale), the way
-// the design canvas shows it on a wide screen; the page is drawn at 1:1.
+//   node scripts/design/match_score.mjs <mock-url> <page-url> <out-prefix> [width] [height]
 //
 // Opens both in headless Chrome at the same size, screenshots them, and
 // compares them inside the browser (canvas), so it needs nothing installed.
@@ -16,8 +13,7 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-const [mockUrl, pageUrl, outPrefix, w = "1440", h = "900", ms = "1"] = process.argv.slice(2);
-const mockScale = Number(ms) || 1;
+const [mockUrl, pageUrl, outPrefix, w = "1440", h = "900"] = process.argv.slice(2);
 if (!mockUrl || !pageUrl || !outPrefix) {
   console.error("usage: match_score.mjs <mock-url> <page-url> <out-prefix> [width] [height]");
   process.exit(2);
@@ -72,16 +68,13 @@ try {
   await send("Page.enable");
   await send("Runtime.enable");
 
-  const shoot = async (url, scale = 1) => {
-    await send("Emulation.setDeviceMetricsOverride", {
-      width: Math.round(width / scale), height: Math.round(height / scale), deviceScaleFactor: scale, mobile: false,
-    });
+  const shoot = async (url) => {
     await send("Page.navigate", { url });
     await sleep(4000); // fonts, the banner, and the arrival animation
     const shot = await send("Page.captureScreenshot", { format: "png" });
     return shot.data;
   };
-  const mock = await shoot(mockUrl, mockScale);
+  const mock = await shoot(mockUrl);
   const page = await shoot(pageUrl);
   writeFileSync(`${outPrefix}-mock.png`, Buffer.from(mock, "base64"));
   writeFileSync(`${outPrefix}-page.png`, Buffer.from(page, "base64"));
