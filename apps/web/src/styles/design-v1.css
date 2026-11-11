@@ -2629,9 +2629,20 @@
 
 :root[data-design="v1"] .members-page .community-context-member-copy {
   display: flex;
+  flex-direction: row;
   align-items: center;
+  justify-content: flex-start;
   gap: 8px;
   min-width: 0;
+}
+
+/* The count is in the header line; it is not repeated above the search. */
+:root[data-design="v1"] .members-page .community-context-members-total > .community-context-section {
+  display: none;
+}
+
+:root[data-design="v1"] .members-page .community-context-member-action {
+  opacity: 1;
 }
 
 :root[data-design="v1"] .members-page .community-context-member-name {
