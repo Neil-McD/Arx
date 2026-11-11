@@ -10,6 +10,10 @@ const EXCLUDED = [
   "apps/web/src/base.css",
   "apps/web/src/components/polynetLanding/ConversionLanding.css",
   "apps/web/src/styles/pdf-text-layer.css",
+  // Design v1 kit: generated verbatim from the hi-fi mock's stylesheet, which
+  // carries its own dark and light palettes (scripts/design_v1_kit.test.ts
+  // proves it is the mock, untouched).
+  "apps/web/src/v1/kit.module.css",
 ];
 
 // Deliberate literals: the internal operator warning.

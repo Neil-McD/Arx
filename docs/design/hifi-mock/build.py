@@ -1,4 +1,14 @@
-import re, base64
+# Builds the hi-fi mock's pages. Run from anywhere:
+#   python3 docs/design/hifi-mock/build.py [out-dir]   (default: /tmp/polynet-hifi-mock)
+# Writes out_<Page>.html plus the banner image they use. Compare a page with
+# the design lab using scripts/design/match_score.mjs.
+import re, base64, os, sys, shutil
+HERE = os.path.dirname(os.path.abspath(__file__))
+OUT = os.path.abspath(sys.argv[1] if len(sys.argv) > 1 else "/tmp/polynet-hifi-mock")
+os.makedirs(OUT, exist_ok=True)
+shutil.copy(os.path.join(HERE, "../../../apps/web/public/design-lab/polynet-earth.webp"), OUT)
+os.chdir(HERE)
+sys.path.insert(0, HERE)
 from lib import icon, MARK, big_map, mini_map
 from hostv import host, hostquiet, hostnew, light, hostlight
 
@@ -149,8 +159,9 @@ class Component extends DCLogic {
 '''
 
 def emit(name, title, body):
-    open('out_' + name + '.html', 'w').write('<!doctype html><html lang="en"><head><meta charset="utf-8"><title>%s</title><link href="%s" rel="stylesheet"><style>%s</style></head><body>%s</body></html>' % (title, FONTS, css, body))
-    open('../project/' + name + '.dc.html', 'w').write(DC.replace('@TITLE@', title).replace('@FONTS@', FONTS.replace('&', '&amp;')).replace('@CSS@', css).replace('@BODY@', body))
+    open(os.path.join(OUT, 'out_' + name + '.html'), 'w').write('<!doctype html><html lang="en"><head><meta charset="utf-8"><title>%s</title><link href="%s" rel="stylesheet"><style>%s</style></head><body>%s</body></html>' % (title, FONTS, css, body))
+    if os.path.isdir('../project'):  # the design tool's copy, when present
+        open('../project/' + name + '.dc.html', 'w').write(DC.replace('@TITLE@', title).replace('@FONTS@', FONTS.replace('&', '&amp;')).replace('@CSS@', css).replace('@BODY@', body))
 
 emit('DefaultApp', 'Polynet default: the app', render('pn'))
 emit('DefaultDE', 'Polynet default: Distribution Engineer', render('de'))
@@ -166,7 +177,8 @@ emit('LightHost', 'Polynet default: light, host', render('pn', hostlight))
 emit('LightDE', 'Polynet default: light, Distribution Engineer', render('de', light))
 emit('LightKiln', 'Polynet default: light, Kiln and Clay', render('kc', light))
 emit('LightBare', 'Polynet default: light, no banner', render('nw', light))
-fd = open('foundations.html').read()
-for k in ('de', 'kc'): fd = fd.replace('{b_%s}' % k, COMMS[k]['banner'])
-emit('DefaultFoundations', 'Polynet default: foundations', fd)
-print('built')
+if os.path.exists('foundations.html'):  # the foundations board is not in the repo
+    fd = open('foundations.html').read()
+    for k in ('de', 'kc'): fd = fd.replace('{b_%s}' % k, COMMS[k]['banner'])
+    emit('DefaultFoundations', 'Polynet default: foundations', fd)
+print('built into', OUT)
