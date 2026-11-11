@@ -24,10 +24,10 @@ export function CommunityPageFrame(props: { children: ReactNode }) {
   // <CommunityPageRail>; an empty slot takes no room.
   return (
     <>
-      <header className="community-channel-header community-page-header" ref={setSlot} />
       <HeaderSlotContext.Provider value={slot}>
         <RailSlotContext.Provider value={rail}>
           <div className="community-page-body">
+            <header className="community-channel-header community-page-header" ref={setSlot} />
             {body}
             <aside className="community-page-rail" ref={setRail} />
           </div>
