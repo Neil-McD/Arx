@@ -100,9 +100,10 @@ Shipped behind the switch: #427 to #452. Production: none of it.
 - Each slice ends with the mock and staging side by side, sent to Neil.
 - The mock is drawn at 1440px wide; Neil's screen is about 1900px. Read the mock
   as proportions: the right column grows with the window
-  (`--right-column-width`, 328 to 440px); the middle is one centred measure
-  (`--main-measure`, 736px) whose header, content and composer share its edges
-  (`--main-gutter`). Check every slice at Neil's width and at 1440.
+  (`--right-column-width`, 328 to 440px). A channel uses the whole middle on
+  fixed gutters (56px header and composer, 44px feed); do not centre it. Home
+  is the one page centred in the middle (`--main-measure`, 736px, and
+  `--main-gutter`). Check every slice at Neil's width and at 1440.
 - No header bars: titles float with no line or band. Every composer is one row
   with its text centred on its icons. One thread with the guide; no "start
   fresh" button.
