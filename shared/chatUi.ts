@@ -1,3 +1,4 @@
+import { isDesignV1Active } from "./designSystem";
 export function shortId(id: string, currentUserId?: string, currentUserEmail?: string): string {
   if (currentUserId && id === currentUserId && currentUserEmail) {
     const prefix = currentUserEmail.split("@")[0];
@@ -15,7 +16,15 @@ function hashCode(str: string): number {
   return hash;
 }
 
+// Design system v1: the mock's six quiet tints (docs/design/hifi-mock .a1-.a6).
+// Each is a theme-aware colour token; design-v1.css adds the mock's gradient,
+// the soft initial and the hairline ring wherever one is used.
+export const DESIGN_V1_AVATAR_TINTS = 6;
+
 export function getAvatarColor(id: string): string {
+  if (isDesignV1Active()) {
+    return `var(--avatar-tint-${(Math.abs(hashCode(id)) % DESIGN_V1_AVATAR_TINTS) + 1})`;
+  }
   const colors = [
     "#e57373",
     "#f06292",
@@ -41,6 +50,8 @@ export function getAvatarColor(id: string): string {
 }
 
 export function getInitials(id: string): string {
+  // Design system v1: one letter, as in the mock ("J" for Jon).
+  if (isDesignV1Active()) return (id.trim().charAt(0) || "?").toUpperCase();
   return id.slice(0, 2).toUpperCase();
 }
 
