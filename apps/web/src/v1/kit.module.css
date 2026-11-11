@@ -436,6 +436,11 @@
 .app.part.flow-part .feed{padding:0}
 /* The banner card on its own in the app's left column; its menu may overflow. */
 .app.part.cover-part{height:auto;display:block;overflow:visible;flex:none}
+/* The reply box with a growing textarea where the mock has a one-line input. */
+.app .ask textarea{flex:1;min-width:0;align-self:center;padding:12px 0;max-height:148px;resize:none;background:transparent;border:0;outline:0;color:var(--ink);font:inherit;font-size:15px;line-height:22px}
+.app .ask textarea::placeholder{color:var(--ink3)}
+.app .ask .send:not(:disabled){cursor:pointer}
+.app .ask:focus-within .send:disabled{background:var(--s2);color:var(--ink3);box-shadow:none}
 
 /* Kit addition: states the mock doesn't draw, in its own terms. */
 .app .msg.cont{padding-top:3px;padding-bottom:3px}
