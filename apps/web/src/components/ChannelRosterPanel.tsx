@@ -141,6 +141,8 @@ function RosterSurface(props: RosterProps & {
   const [search, setSearch] = useState("");
   const [memberFilter, setMemberFilter] = useState<MemberFilter>("everyone");
   const [recordEl, setRecordEl] = useState<HTMLElement | null>(null);
+  const [kitTarget, setKitTarget] = useState<ComponentProps<typeof CommunityMemberSettingsDialog>["member"]>(null);
+  const [kitVersion, setKitVersion] = useState(0);
   const [openedUserId, setOpenedUserId] = useState<string | null>(null);
   const searching = Boolean(search.trim());
   const searchResult = useWebMemberDirectorySearch({
@@ -412,21 +414,33 @@ function RosterSurface(props: RosterProps & {
   if (!props.directory) return <>{content}{selectedMember ? createPortal(settings, document.body) : null}</>;
   // Design system v1, for the people who run it: the members table and one
   // member's record (docs/design/members-invariants.md).
-  if (props.inline && isDesignV1Active() && props.memberSettings.canManageMembers) return <>
+  if (props.inline && isDesignV1Active() && props.memberSettings.canManageMembers) {
+    // The table holds people the paged roster may not have loaded, so the
+    // dialog takes its member from the table; every action refreshes the page.
+    const after = <A extends unknown[]>(run: (...args: A) => Promise<void> | void, close = false) => async (...args: A) => {
+      try { await run(...args); if (close) setKitTarget(null); } finally { setKitVersion(version => version + 1); }
+    };
+    const kitSettings = <CommunityMemberSettingsDialog {...props.memberSettings}
+      handleSetCommunityMemberRole={after(props.memberSettings.handleSetCommunityMemberRole)}
+      handleRemoveCommunityMember={after(props.memberSettings.handleRemoveCommunityMember, true)}
+      handleBanCommunityMember={after(props.memberSettings.handleBanCommunityMember, true)}
+      member={kitTarget} onClose={() => setKitTarget(null)} />;
+    return <>
     <KitMembersPage communityName={props.communityName}
       joinRequests={props.joinReview?.canReviewJoinRequests ? props.joinReview.pendingJoinRequests ?? [] : []}
       decidingJoinRequestId={props.joinReview?.decidingJoinRequestId ?? null}
       onApprove={id => void props.joinReview?.onApproveJoinRequest?.(id)}
       onDecline={id => void props.joinReview?.onDenyJoinRequest?.(id)}
-      onMessage={props.onMessageUser} onManage={id => setSelectedMembershipId(id)}
+      onMessage={props.onMessageUser} onManage={setKitTarget} refreshKey={kitVersion}
       currentUserId={props.currentUserId ?? null} recordContainer={recordEl}
       getAvatarColor={props.getAvatarColor} getInitials={props.getInitials} />
     <aside ref={setRecordEl} className="community-context-panel members-page-record" aria-label="Member record" />
-    {selectedMember ? createPortal(<div ref={settingsRef} onKeyDown={event => {
-      if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); setSelectedMembershipId(null); }
+    {kitTarget ? createPortal(<div ref={settingsRef} onKeyDown={event => {
+      if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); setKitTarget(null); }
       trapTab(event, settingsRef.current);
-    }}>{settings}</div>, document.body) : null}
+    }}>{kitSettings}</div>, document.body) : null}
   </>;
+  }
   // Design system v1, for a member: who is here and what each person shared.
   if (props.inline && isDesignV1Active()) return <>
     <KitMembersDirectory onMessage={props.onMessageUser} profileContainer={recordEl}

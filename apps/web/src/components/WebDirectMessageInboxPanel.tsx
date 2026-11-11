@@ -144,7 +144,9 @@ export function WebDirectMessageInboxPanel(props: WebDirectMessageInboxPanelProp
   const isInitialPeopleLoad = props.isLoadingPeople && visiblePeople.length === 0;
   const hasAnyRows = filteredConversations.length > 0 || visiblePeople.length > 0;
 
-  if (props.kitPage) return <KitInboxPage {...props} kitPage={props.kitPage} conversations={conversationsWithMessages} people={visiblePeople} />;
+  // The kit's "Find someone" hides the list while searching, so it searches
+  // everyone, people you already write to included (they open that chat).
+  if (props.kitPage) return <KitInboxPage {...props} kitPage={props.kitPage} conversations={conversationsWithMessages} people={props.people} />;
 
   return (
     <aside className="community-dm-panel community-dm-inbox-panel" role="dialog" aria-label="Direct messages">

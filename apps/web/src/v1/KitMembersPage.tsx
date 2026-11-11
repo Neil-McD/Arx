@@ -72,7 +72,9 @@ export function KitMembersPage(props: {
   onApprove: (id: string) => void;
   onDecline: (id: string) => void;
   onMessage?: (userId: string) => void;
-  onManage?: (membershipId: string) => void;
+  onManage?: (member: { id: string; user_id: string; display_name: string; avatar_url: string | null; role: string; created_at: string | null }) => void;
+  // Bumped after a role change, removal or block: the table and record reload.
+  refreshKey?: number;
   currentUserId: string | null;
   recordContainer: HTMLElement | null;
   getAvatarColor: (id: string) => string;
@@ -97,7 +99,7 @@ export function KitMembersPage(props: {
       .then((next) => { if (!cancelled) setData(next); })
       .catch(() => { if (!cancelled) setFailed(true); });
     return () => { cancelled = true; };
-  }, [scope?.session, scope?.communityId, props.joinRequests.length]);
+  }, [scope?.session, scope?.communityId, props.joinRequests.length, props.refreshKey]);
 
   // The person who needs the host most opens first: on hold, then cancelling.
   useEffect(() => {
@@ -109,12 +111,12 @@ export function KitMembersPage(props: {
   useEffect(() => {
     if (!scope || !openKey) return;
     let cancelled = false;
-    if (!recordVersion) setRecord(null);
+    if (!recordVersion && !props.refreshKey) setRecord(null);
     getCloudCommunityMemberRecord({ session: scope.session, communityId: scope.communityId, membershipId: openKey === OWNER_KEY ? null : openKey })
       .then((next) => { if (!cancelled) setRecord(next); })
       .catch(() => { if (!cancelled) setRecord(null); });
     return () => { cancelled = true; };
-  }, [scope?.session, scope?.communityId, openKey, recordVersion]);
+  }, [scope?.session, scope?.communityId, openKey, recordVersion, props.refreshKey]);
 
   const rows = useMemo(() => {
     if (!data) return [];
@@ -276,13 +278,15 @@ function MemberRecordView(props: {
   now: number;
   self: boolean;
   onMessage?: (userId: string) => void;
-  onManage?: (membershipId: string) => void;
+  onManage?: (member: { id: string; user_id: string; display_name: string; avatar_url: string | null; role: string; created_at: string | null }) => void;
   getAvatarColor: (id: string) => string;
   getInitials: (name: string) => string;
   onAddNote: (body: string) => Promise<void>;
   onDeleteNote: (noteId: string) => Promise<void>;
 }) {
   const { record } = props;
+  const manage = () => record.membership_id && props.onManage?.({ id: record.membership_id, user_id: record.user_id, display_name: record.name,
+    avatar_url: record.avatar_url, role: record.role, created_at: record.joined_at });
   const [draft, setDraft] = useState("");
   const [saving, setSaving] = useState(false);
   const [noteError, setNoteError] = useState<string | null>(null);
@@ -322,7 +326,7 @@ function MemberRecordView(props: {
         {!props.self ? (
           <div style={{ display: "flex", gap: 8 }}>
             {props.onMessage && !record.out ? <Btn small onClick={() => props.onMessage?.(record.user_id)}>Message</Btn> : null}
-            {props.onManage && record.membership_id && !record.out ? <Btn small onClick={() => props.onManage?.(record.membership_id!)}>Change role</Btn> : null}
+            {props.onManage && record.membership_id && !record.out ? <Btn small onClick={manage}>Change role</Btn> : null}
           </div>
         ) : null}
       </div>
@@ -364,7 +368,7 @@ function MemberRecordView(props: {
       </Sec>
       {props.onManage && record.membership_id && !record.out && !props.self ? (
         <div style={{ marginTop: "auto" }}>
-          <button type="button" className={cx("link")} style={{ color: "var(--ink3)" }} onClick={() => props.onManage?.(record.membership_id!)}>Remove or block</button>
+          <button type="button" className={cx("link")} style={{ color: "var(--ink3)" }} onClick={manage}>Remove or block</button>
         </div>
       ) : null}
     </>
