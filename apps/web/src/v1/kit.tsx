@@ -3,7 +3,7 @@
 // are the mock's own stylesheet turned into a CSS Module
 // (scripts/design/build_v1_kit_css.py), so nothing in the app's older CSS can
 // reach these elements and nothing here can leak out.
-import type { CSSProperties, ReactNode } from "react";
+import { forwardRef, useSyncExternalStore, type CSSProperties, type ReactNode } from "react";
 import k from "./kit.module.css";
 
 export function cx(...names: Array<string | false | null | undefined>): string {
@@ -70,6 +70,20 @@ export function PolynetMark() {
 
 // ---------- the frame ----------
 
+// The app's theme (shared/theme.ts sets data-theme on <html>), read live so a
+// part of a page follows the theme when it changes.
+function subscribeToTheme(onChange: () => void) {
+  const observer = new MutationObserver(onChange);
+  observer.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+  return () => observer.disconnect();
+}
+function readLightTheme() {
+  return document.documentElement.getAttribute("data-theme") === "light";
+}
+export function useAppLightTheme(): boolean {
+  return useSyncExternalStore(subscribeToTheme, readLightTheme, () => false);
+}
+
 export type KitView = "home" | "inbox" | "wins" | "know" | "events" | "members" | "guide" | "manage";
 
 export function KitApp(props: {
@@ -81,15 +95,30 @@ export function KitApp(props: {
   aura?: number;
   // The mock is drawn 900px tall; in the app the frame fills the window.
   fillWindow?: boolean;
+  // One part of a page (its middle, or its right column) inside the app's
+  // own frame, rather than the mock's whole window.
+  part?: "main" | "rail";
+  // The guide conversation is open on Home (the mock's "Talk it over").
+  talking?: boolean;
+  className?: string;
   children: ReactNode;
 }) {
+  const appLight = useAppLightTheme();
+  // A part of a page takes the app's theme unless told otherwise.
+  const light = props.light ?? (props.part ? appLight : false);
   const style: CSSProperties & Record<string, string> = {};
   if (props.fillWindow) style.height = "100vh";
   if (props.banner) style["--banner"] = `url(${props.banner})`;
   if (props.bannerPosition) style["--bpos"] = props.bannerPosition;
   if (props.aura !== undefined) style["--aura"] = String(props.aura);
   return (
-    <div className={cx("app", `on-v-${props.view}`, props.host && "host", props.light && "light")} style={style}>
+    <div
+      className={[
+        cx("app", `on-v-${props.view}`, props.host && "host", light && "light", props.part && "part", props.part === "rail" && "rail-part", props.talking && "on-t-on"),
+        props.className,
+      ].filter(Boolean).join(" ")}
+      style={style}
+    >
       {props.children}
     </div>
   );
@@ -168,14 +197,16 @@ export function Main(props: { children: ReactNode }) {
   return <main className={cx("main")}>{props.children}</main>;
 }
 
-export function Top(props: { title?: ReactNode; titleView?: number; onSearch?: () => void }) {
+export function Top(props: { title?: ReactNode; titleView?: number; search?: boolean; onSearch?: () => void }) {
   return (
     <>
       <header className={cx("top")}>
         {props.title ? <h1 className={cx(`t${props.titleView ?? 1}`)}>{props.title}</h1> : null}
-        <button type="button" className={cx("find")} onClick={props.onSearch}>
-          <Icon name="search" />Search or ask<kbd>⌘K</kbd>
-        </button>
+        {props.search === false ? null : (
+          <button type="button" className={cx("find")} onClick={props.onSearch}>
+            <Icon name="search" />Search or ask<kbd>⌘K</kbd>
+          </button>
+        )}
       </header>
       <div className={cx("hline")} />
     </>
@@ -211,13 +242,52 @@ export function Since(props: { label: string; style?: CSSProperties; children: R
   );
 }
 
-export function SinceItem(props: { kind: string; learned?: boolean; title: string; detail: string; onOpen?: () => void }) {
-  return (
-    <button type="button" className={cx("item")} onClick={props.onOpen}>
+export function SinceItem(props: { kind: string; learned?: boolean; title: string; detail: string; onOpen?: () => void; still?: boolean }) {
+  const body = (
+    <>
       <span className={cx("k", props.learned && "learn")}>{props.learned ? <Icon name="spark" /> : null}{props.kind}</span>
-      <span><b>{props.title}</b><span className={cx("s")}>{props.detail}</span></span>
-      <span className={cx("go")}><Icon name="arrow" /></span>
-    </button>
+      <span><b>{props.title}</b>{props.detail ? <span className={cx("s")}>{props.detail}</span> : null}</span>
+      {props.still ? <span /> : <span className={cx("go")}><Icon name="arrow" /></span>}
+    </>
+  );
+  // A row that opens nothing is not a button (still).
+  return props.still
+    ? <div className={cx("item")}>{body}</div>
+    : <button type="button" className={cx("item")} onClick={props.onOpen}>{body}</button>;
+}
+
+// The part of a page that scrolls (the kit's part mode).
+export const Scroll = forwardRef<HTMLDivElement, { children: ReactNode }>(function Scroll(props, ref) {
+  return <div className={cx("scroll")} ref={ref}>{props.children}</div>;
+});
+
+// The one thing that needs you, on Home.
+export function Card(props: { label: string; note?: ReactNode; title: string; say: string; children?: ReactNode }) {
+  return (
+    <div className={cx("card")}>
+      <div className={cx("meta")}><span>{props.label}</span>{props.note ? <span>{props.note}</span> : null}</div>
+      <h2>{props.title}</h2>
+      <p className={cx("say")}>{props.say}</p>
+      {props.children ? <div className={cx("acts")}>{props.children}</div> : null}
+    </div>
+  );
+}
+
+// The conversation with the guide, on Home (shown while talking).
+export function Talk(props: { children: ReactNode }) {
+  return <div className={cx("talk")}>{props.children}</div>;
+}
+
+export function Mine(props: { children: ReactNode }) {
+  return <div className={cx("mine")}>{props.children}</div>;
+}
+
+export function Theirs(props: { children: ReactNode }) {
+  return (
+    <div className={cx("theirs")}>
+      <span className={cx("av s guide")}><Icon name="spark" /></span>
+      <div>{props.children}</div>
+    </div>
   );
 }
 

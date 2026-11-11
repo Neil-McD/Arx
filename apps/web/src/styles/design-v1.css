@@ -1169,6 +1169,21 @@
   display: none;
 }
 
+/* Home on the kit: the right column's panel, inline under the rows, for
+   windows too narrow for the right column. */
+:root[data-design="v1"] .community-home-kit-inline {
+  display: flex;
+  flex-direction: column;
+  gap: 26px;
+  margin-top: 40px;
+}
+
+@media (min-width: 1180px) {
+  :root[data-design="v1"] .community-home-kit-inline {
+    display: none;
+  }
+}
+
 :root[data-design="v1"] .community-home-aside.is-rail {
   border-top: 0;
 }

@@ -35,6 +35,7 @@ const quiet: FounderBriefSnapshot = {
   windowHours: 24,
   newMembers: { count: 0, names: [] },
   activity: { posts: 0, replies: 0, activePeople: 0 },
+  week: { joined: 0, activePeople: 0 },
   unanswered: [],
   quietNewcomers: { count: 1, names: ["Sam"] },
   joinRequestsPending: 0,
@@ -163,6 +164,8 @@ describe("founder brief delivery", () => {
       windowHours: 24,
       newMembers: { count: 1, names: ["Ana"] },
       activity: { posts: 1, replies: 0, activePeople: 1 },
+      // Ana (5 hours ago) and Ben (5 days ago) both joined this week.
+      week: { joined: 2, activePeople: 1 },
       unanswered: [{ author: "Ana", channel: "general", text: "Where do we meet on Saturday?", hoursAgo: 4 }],
       quietNewcomers: { count: 1, names: ["Ben"] },
       joinRequestsPending: 1,
