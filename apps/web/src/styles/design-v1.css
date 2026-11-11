@@ -1108,18 +1108,19 @@
 }
 
 /*
- * Design system v1: the page's structure. The left column sits on the ground;
- * the content is one raised panel, a shade lighter, with its own edge. On Home
- * there is no header band, and the right-hand column runs the full height.
+ * Design system v1: the page's structure, flat as in the mock (Neil, Nov 11,
+ * replacing the Nov 10 raised panel): one ground colour, the columns divided
+ * by hairlines (the mock's --line). On Home there is no header band, and the
+ * right-hand column runs the full height.
  */
 :root[data-design="v1"]:not([data-theme="light"]) {
-  --surface-raised: #0a0b0f;
-  --surface-raised-edge: #18191e;
+  --surface-raised: var(--surface-app);
+  --surface-raised-edge: rgba(255, 255, 255, 0.07);
 }
 
 :root[data-design="v1"][data-theme="light"] {
-  --surface-raised: #fcfcfd;
-  --surface-raised-edge: rgba(13, 17, 23, 0.1);
+  --surface-raised: var(--surface-app);
+  --surface-raised-edge: rgba(13, 17, 23, 0.08);
 }
 
 @media (min-width: 721px) {
@@ -1131,13 +1132,13 @@
   }
 
   :root[data-design="v1"] .product-shell-surface--community > .community-nav {
-    border-right: 0;
+    border-right: 1px solid var(--surface-raised-edge);
     border-left: 0;
     background: var(--surface-app);
   }
 
   /* Pages other than Home sit inside a display:contents slot, which cannot
-     carry a box, so the panel is the page inside it. */
+     carry a box, so the page inside it is the content area. */
   :root[data-design="v1"] .product-shell-surface--community > main,
   :root[data-design="v1"] .product-shell-surface--community > .web-main-surface-slot > * {
     --bg-workspace: var(--surface-raised);
@@ -1145,10 +1146,10 @@
     --surface-panel: var(--surface-raised);
     --bg-panel: var(--surface-raised);
     --community-chat-surface: var(--surface-raised);
-    margin: 8px 8px 8px 0;
+    margin: 0;
     overflow: hidden;
-    border: 1px solid var(--surface-raised-edge);
-    border-radius: 12px;
+    border: 0;
+    border-radius: 0;
     background: var(--surface-raised);
   }
 }
@@ -1532,9 +1533,9 @@
  */
 @media (min-width: 721px) {
   :root[data-design="v1"] .web-direct-messages-host.is-page .community-dm-inbox-panel {
-    top: 8px;
-    right: 8px;
-    bottom: 8px;
+    top: 0;
+    right: 0;
+    bottom: 0;
     left: var(--left-column-width);
     z-index: 48;
     width: auto;
@@ -1544,8 +1545,9 @@
     /* Fixed gutters, like a channel; only Home is centred. */
     --inbox-gutter: 56px;
     padding: 52px calc(var(--right-column-width) + var(--inbox-gutter)) 0 var(--inbox-gutter);
-    border: 1px solid var(--surface-raised-edge);
-    border-radius: 12px;
+    /* The left column's own line divides it, as on every page. */
+    border: 0;
+    border-radius: 0;
     background: var(--surface-raised);
     box-shadow: none;
   }
@@ -1702,9 +1704,9 @@
 
   /* The conversation column: 328px, padded 20px 24px 24px. */
   :root[data-design="v1"] .web-direct-messages-host.is-page .community-dm-panel:not(.community-dm-inbox-panel) {
-    top: 9px;
-    right: 9px;
-    bottom: 9px;
+    top: 0;
+    right: 0;
+    bottom: 0;
     width: var(--right-column-width);
     height: auto;
     max-height: none;
@@ -1712,7 +1714,7 @@
     padding: 20px 24px 24px;
     border: 0;
     border-left: 1px solid var(--surface-raised-edge);
-    border-radius: 0 11px 11px 0;
+    border-radius: 0;
     background: var(--surface-raised);
     box-shadow: none;
   }
