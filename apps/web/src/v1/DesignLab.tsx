@@ -28,6 +28,7 @@ import {
   View,
   Ask,
 } from "./kit";
+import { KitChannelFeed } from "./KitChannelFeed";
 
 const BANNER = "/design-lab/polynet-earth.webp";
 const SMALL_BUTTON = { height: 32, fontSize: 13 } as const;
@@ -109,6 +110,74 @@ function HostHomeQuiet() {
   );
 }
 
+// The mock's #wins, through the real channel feed (KitChannelFeed) with the
+// mock's messages as data, so the feed is scored against the mock.
+function labRoot(id: string, who: string, hoursAgo: number, text: string, extra: Record<string, unknown> = {}) {
+  const at = new Date(Date.now() - hoursAgo * 3_600_000).toISOString();
+  return {
+    deduped: false,
+    root: {
+      id, kind: "discussion", title: null, content_summary: text, created_at: at, edited_at: null,
+      actor_type: who === "guide" ? "community_agent" : "human",
+      actor_user_id: who === "guide" ? null : who, actor_agent_key: who === "guide" ? "community_agent" : null,
+      reply_count: 0, last_reply_at: null, last_reply_actor_user_id: null,
+      reaction_summary: [], viewer_emojis: [], idempotency_key: id,
+      ...extra,
+    },
+    content_blocks: [{ kind: "text", position: 0, text }],
+    embeds: [], mentions: [], attachments: [],
+  };
+}
+const LAB_NAMES: Record<string, string> = { rashid: "Rashid", sara: "Sara", jon: "Jon", priya: "Priya", neil: "Neil", maya: "Maya" };
+const LAB_COLOURS: Record<string, string> = { rashid: "#5B6CF0", sara: "#E0788C", jon: "#3DAE8C", priya: "#C58B3A", neil: "#7A6FF0", maya: "#3D8FD6" };
+
+function HostChannel() {
+  const roots = [
+    labRoot("r1", "rashid", 17, "First paid member came in from the new door. Seventy-nine dollars never felt so good.", { reaction_summary: [{ emoji: "🎉", count: 9 }] }),
+    labRoot("r2", "sara", 15, "Ran my first live call with eleven people. Nobody left early, which I'm counting as a win."),
+    labRoot("r3", "jon", 0.6, "We passed 100 members last night. The invitation that worked was three lines: the result, who it's for, one link.", {
+      reaction_summary: [{ emoji: "🎉", count: 12 }, { emoji: "🔥", count: 5 }], reply_count: 4,
+      last_reply_at: new Date(Date.now() - 600_000).toISOString(), last_reply_actor_user_id: "priya",
+    }),
+    labRoot("r4", "priya", 0.4, "Huge. Stealing that second line."),
+    labRoot("r5", "guide", 0.38, "I've saved Jon's invitation to Knowledge, with his numbers. Two members asked for exactly this last week."),
+    labRoot("r6", "neil", 0.2, "This is the play. Bring it to Friday's call so everyone can see it."),
+    labRoot("r7", "maya", 0.05, "Sending my first ten today. Wish me luck.", { reaction_summary: [{ emoji: "🚀", count: 3 }] }),
+  ];
+  const noop = () => {};
+  const feedProps = {
+    roots, activityEvents: [], selectedRootId: null, chatLastSeenAt: null, error: null, isLoadingRoots: false,
+    currentUserId: "neil", communityOwnerId: "neil", activeCommunityName: "Polynet",
+    profilesByUserId: Object.fromEntries(Object.keys(LAB_NAMES).map((id) => [id, { user_id: id, display_name: LAB_NAMES[id], avatar_url: null }])),
+    displayName: (id: string) => LAB_NAMES[id] ?? id,
+    getAvatarColor: (id: string) => LAB_COLOURS[id] ?? "#555", getInitials: (name: string) => name.slice(0, 1),
+    formatChatTime: (iso: string) => new Date(iso).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }).replace(/\s+/g, " ").toLowerCase(),
+    renderTextWithLinks: (text: string) => text,
+    onSelectRoot: noop, onRetryRoots: noop,
+    editing: null, editText: "", onStartEdit: noop, onEditTextChange: noop, onSaveEdit: noop, onCancelEdit: noop,
+  } as any;
+  return (
+    <KitApp view="wins" host fillWindow banner={BANNER} bannerPosition="72% 38%" aura={0.08}>
+      <HostSide />
+      <Main>
+        <Top title={<># wins <small>Share what worked</small></>} titleView={1} />
+        <View index={1}>
+          <div style={{ flex: 1, minHeight: 0, overflowY: "auto", display: "flex", flexDirection: "column", padding: "8px 44px 18px" }}>
+            <KitApp view="wins" part="flow"><KitChannelFeed {...feedProps} /></KitApp>
+          </div>
+          <Dock>
+            <Ask placeholder="Message #wins" />
+          </Dock>
+        </View>
+      </Main>
+      <Rail index={1} label="About this channel">
+        <Sec label="In this channel · 48"><p>4 here now</p></Sec>
+      </Rail>
+    </KitApp>
+  );
+}
+
 export function DesignLab() {
-  return <HostHomeQuiet />;
+  const page = typeof window === "undefined" ? "" : new URLSearchParams(window.location.search).get("page");
+  return page === "channel" ? <HostChannel /> : <HostHomeQuiet />;
 }
