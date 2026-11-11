@@ -864,6 +864,8 @@ export default defineSchema({
     status: v.union(v.literal("active"), v.literal("archived")),
     position: v.number(),
     pinnedRootId: v.optional(v.id("communityInteractionRoots")),
+    // A line about the channel, next to its name (design v1's "Share what worked").
+    description: v.optional(v.string()),
     createdByUserId: v.optional(v.id("users")),
     createdAt: v.number(),
     updatedAt: v.number(),

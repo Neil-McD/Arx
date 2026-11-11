@@ -3007,3 +3007,54 @@
 :root[data-design="v1"] .channel-roster-panel.is-v1.is-kit > * {
   min-height: 100%;
 }
+
+/* The channel's top bar, as in the mock: the line about the channel after
+   its name, and "Search or ask" on the right. */
+:root[data-design="v1"] .community-channel-header h1 .community-channel-header-description {
+  margin-left: 8px;
+  color: var(--text-faint);
+  font-size: 13px;
+  font-weight: 400;
+}
+
+:root[data-design="v1"] .community-search-ask {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+  width: 264px;
+  height: 32px;
+  margin-left: auto;
+  padding: 0 8px 0 10px;
+  border: 1px solid var(--surface-raised-edge);
+  border-radius: 8px;
+  background: var(--surface-field);
+  color: var(--text-faint);
+  font: inherit;
+  font-size: 13px;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: border-color 0.18s ease, color 0.18s ease;
+}
+
+:root[data-design="v1"] .community-search-ask:hover,
+:root[data-design="v1"] .community-search-ask:focus-visible {
+  outline: none;
+  border-color: var(--field-edge);
+  color: var(--text-ink-secondary);
+}
+
+:root[data-design="v1"] .community-search-ask kbd {
+  margin-left: auto;
+  padding: 1px 5px;
+  border: 1px solid var(--field-edge);
+  border-radius: 5px;
+  font-family: inherit;
+  font-size: 11px;
+}
+
+@media (max-width: 720px) {
+  :root[data-design="v1"] .community-search-ask {
+    display: none;
+  }
+}

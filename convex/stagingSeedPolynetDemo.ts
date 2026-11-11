@@ -208,6 +208,14 @@ export const seedPolynetDemoInternal = internalMutation({
       biz: await ensureChannel(ctx, communityId, ownerId, "biz", nowMs),
       founders: await ensureChannel(ctx, communityId, ownerId, "founders", nowMs, "restricted"),
     };
+    // The mock's lines next to each channel's name.
+    const DESCRIPTIONS: Record<keyof typeof channels, string> = {
+      general: "Say hello and ask anything", wins: "Share what worked", tech: "Tools, stacks and setups",
+      biz: "Pricing, offers and money", founders: "Hosts only",
+    };
+    for (const [key, description] of Object.entries(DESCRIPTIONS)) {
+      await ctx.db.patch(channels[key as keyof typeof channels]._id, { description });
+    }
     for (const key of ["jon", "priya"] as const) {
       await setChannelParticipantCore(ctx, { communityId, channelId: channels.founders._id, createdByUserId: ownerId,
         active: true, target: { kind: "member", userId: ids[key] } });

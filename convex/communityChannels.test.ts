@@ -905,3 +905,32 @@ test("managers rename and soft-delete custom channels while General stays immuta
     }),
   ).rejects.toThrow("community_channel_unavailable");
 });
+
+test("design v1: a manager sets the line next to a channel's name; members can't", async () => {
+  const t = convexTest(schema, modules);
+  const fixture = await createFixture(t);
+  const asOwner = t.withIdentity({ subject: OWNER_SUBJECT });
+  const asMember = t.withIdentity({ subject: MEMBER_SUBJECT });
+  const created = await asOwner.mutation(api.communityChannels.createCommunityChannel, { communityId: fixture.communityId, name: "Wins" });
+
+  const saved = await asOwner.mutation(api.communityChannels.setCommunityChannelDescription, {
+    communityId: fixture.communityId, channelId: created.id as any, description: "  Share   what worked  ",
+  });
+  expect(saved.description).toBe("Share what worked");
+  const listed = await asMember.query(api.communityChannels.listCommunityChannels, { communityId: fixture.communityId });
+  expect(listed.channels.find((channel: any) => channel.id === created.id)?.description).toBe("Share what worked");
+
+  await expect(asMember.mutation(api.communityChannels.setCommunityChannelDescription, {
+    communityId: fixture.communityId, channelId: created.id as any, description: "Mine now",
+  })).rejects.toThrow();
+
+  // Empty clears it, and it is never longer than 120 characters.
+  const cleared = await asOwner.mutation(api.communityChannels.setCommunityChannelDescription, {
+    communityId: fixture.communityId, channelId: created.id as any, description: "   ",
+  });
+  expect(cleared.description).toBeNull();
+  const long = await asOwner.mutation(api.communityChannels.setCommunityChannelDescription, {
+    communityId: fixture.communityId, channelId: created.id as any, description: "x".repeat(200),
+  });
+  expect(long.description).toHaveLength(120);
+});

@@ -63,6 +63,7 @@ export type WebCommunityShellProps = {
     is_general: boolean;
     position: number;
     access_mode?: "all_members" | "restricted";
+    description?: string | null;
   }>;
   isLoadingCommunityChannels: boolean;
   selectedCommunityChannelSlug: string;
