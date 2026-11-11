@@ -41,10 +41,25 @@ type WebDirectMessageInboxPanelProps = {
 type InboxFilter = "reply" | "all" | "here";
 
 // The guide's line at the top of the Inbox, worked out from the list.
-export function inboxLeadFor(needsReply: number): string {
+export function inboxLeadFor(needsReply: number, newestFrom?: string | null): string {
   if (needsReply === 0) return "Nothing here needs a reply.";
-  if (needsReply === 1) return "1 of these needs a reply.";
-  return `${needsReply} of these need a reply.`;
+  const who = String(newestFrom ?? "").trim().split(/\s+/)[0] ?? "";
+  if (needsReply === 1) return who ? `${who} is waiting on a reply.` : "1 of these needs a reply.";
+  return who ? `${needsReply} of these need a reply. The newest is from ${who}.` : `${needsReply} of these need a reply.`;
+}
+
+// The mock's times: "now", "20 min", "3 h", "Yesterday", "Tue", "Nov 3".
+export function inboxTimeFor(iso: string | null | undefined, now: Date = new Date()): string {
+  const at = new Date(String(iso ?? ""));
+  if (Number.isNaN(at.getTime())) return "";
+  const minutes = Math.floor((now.getTime() - at.getTime()) / 60000);
+  if (minutes < 1) return "now";
+  if (minutes < 60) return `${minutes} min`;
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  if (at.getTime() >= startOfToday) return `${Math.floor(minutes / 60)} h`;
+  if (at.getTime() >= startOfToday - 86_400_000) return "Yesterday";
+  if (at.getTime() >= startOfToday - 6 * 86_400_000) return at.toLocaleDateString("en-US", { weekday: "short" });
+  return at.toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
 
 function communityInitials(name: string): string {
@@ -394,7 +409,12 @@ function KitInboxPage(props: WebDirectMessageInboxPanelProps & { kitPage: { acti
           <div className={cx("page")} style={{ overflowY: "auto" }}>
             <p className={cx("lead")}>
               <span className={cx("aura")}><Icon name="spark" /></span>
-              {props.isLoading && props.conversations.length === 0 ? "Loading your messages." : inboxLeadFor(needsReply)}
+              {props.isLoading && props.conversations.length === 0
+                ? "Loading your messages."
+                : inboxLeadFor(needsReply, (() => {
+                    const newest = props.conversations.find(isUnread);
+                    return newest ? resolveDirectMessagePeer(newest, props.sessionUserId)?.display_name ?? null : null;
+                  })())}
             </p>
             <div className={cx("filters")} style={{ marginTop: 20 }} role="group" aria-label="Show">
               <button type="button" className={cx("chip", activeFilter === "reply" && "sel")} aria-pressed={activeFilter === "reply"} onClick={() => setFilter("reply")}>
@@ -461,7 +481,7 @@ function KitInboxPage(props: WebDirectMessageInboxPanelProps & { kitPage: { acti
                         <div className={cx("h")}>
                           <b>{name}</b>
                           <span>{elsewhere ? `Direct message · ${elsewhere.name}` : "Direct message"}</span>
-                          <time>{formatInboxTime(conversation.last_message_at ?? conversation.updated_at)}</time>
+                          <time>{inboxTimeFor(conversation.last_message_at ?? conversation.updated_at)}</time>
                         </div>
                         <p>{preview}</p>
                       </div>

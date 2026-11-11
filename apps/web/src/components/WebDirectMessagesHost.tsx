@@ -59,6 +59,9 @@ type DirectMessagePanelState = {
   isLoading: boolean;
   isSending: boolean;
   error: string | null;
+  // Opened for you when Inbox opened (design v1): it stays unread until you
+  // touch it, so it doesn't drop out of "Needs a reply" unseen.
+  deferRead?: boolean;
 };
 
 export type DirectMessageOpenRequest = {
@@ -780,7 +783,7 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
   // Opening Inbox shows your most recent conversation beside the list, once.
   // Closing it, or having none, leaves the column on its empty state.
   const autoOpenedRef = useRef(false);
-  const openConversationRef = useRef<((conversation: DirectMessageConversation) => void) | null>(null);
+  const openConversationRef = useRef<((conversation: DirectMessageConversation, options?: { deferRead?: boolean }) => void) | null>(null);
   useEffect(() => {
     if (!isOpen) { autoOpenedRef.current = false; return; }
     if (!inboxIsPage || autoOpenedRef.current || isLoadingInbox) return;
@@ -793,8 +796,12 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
       openConversationRequest && openConversationRequest.requestId !== openConversationRequestHandledRef.current,
     );
     if (personAsked || conversationAsked) return;
-    const latest = conversations.find((conversation) => Math.floor(Number(conversation.last_seq ?? 0)) > 0);
-    if (latest) openConversationRef.current?.(latest);
+    // The list's top row: what needs a reply first, else the latest.
+    const withMessages = conversations.filter((conversation) => Math.floor(Number(conversation.last_seq ?? 0)) > 0);
+    const needsReply = withMessages.find((conversation) =>
+      !conversation.viewer_muted && Boolean(conversation.has_unread || Number(conversation.unread_count ?? 0) > 0));
+    const first = needsReply ?? withMessages[0];
+    if (first) openConversationRef.current?.(first, { deferRead: true });
   }, [activeConversationId, conversations, inboxIsPage, isLoadingInbox, isOpen, openConversationRequest, openRequest]);
   useEffect(() => {
     if (!isOpen || (activeConversationId && !listStaysVisible)) return;
@@ -810,10 +817,14 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
   }, [activeConversationId, isOpen, loadNetworkPeople, searchValue]);
 
   useEffect(() => {
+    // Design v1 counts conversations that need a reply, the same number the
+    // Inbox page shows; the default design counts unread messages.
+    const countConversations = isDesignV1Active();
     const unreadCount = conversations.reduce((total, conversation) => {
       if (conversation.viewer_muted) return total;
       const count = Number(conversation.unread_count ?? 0);
       if (!Number.isFinite(count)) return total;
+      if (countConversations) return total + (conversation.has_unread || count > 0 ? 1 : 0);
       return total + Math.max(0, Math.floor(count));
     }, 0);
     onUnreadCountChange?.(unreadCount);
@@ -902,10 +913,10 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
   );
 
   const openPanelForConversation = useCallback(
-    (conversation: DirectMessageConversation) => {
+    (conversation: DirectMessageConversation, options?: { deferRead?: boolean }) => {
       const panelState = buildPanelStateForConversation(conversation);
-      setDirectMessagePanel(panelState);
-      void markConversationRead(conversation.id, conversation.last_seq);
+      setDirectMessagePanel(options?.deferRead ? { ...panelState, deferRead: true } : panelState);
+      if (!options?.deferRead) void markConversationRead(conversation.id, conversation.last_seq);
     },
     [buildPanelStateForConversation, markConversationRead],
   );
@@ -1213,8 +1224,8 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
   }, [isOpen, onClose, props.mobileRoot]);
 
   const openConversation = useCallback(
-    (conversation: DirectMessageConversation) => {
-      openPanelForConversation(conversation);
+    (conversation: DirectMessageConversation, options?: { deferRead?: boolean }) => {
+      openPanelForConversation(conversation, options);
     },
     [openPanelForConversation],
   );
@@ -1734,8 +1745,15 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
             void clearDirectTypingForConversation(directMessagePanel.conversation.id);
           }}
           onReadThroughSeq={(seq) => {
+            if (directMessagePanel.deferRead) return;
             void markConversationRead(directMessagePanel.conversation.id, seq);
           }}
+          onEngage={directMessagePanel.deferRead ? () => {
+            const conversation = directMessagePanel.conversation;
+            setDirectMessagePanel((previous) =>
+              previous?.conversation.id === conversation.id ? { ...previous, deferRead: false } : previous);
+            void markConversationRead(conversation.id, conversation.last_seq);
+          } : undefined}
           onBackToInbox={() => {
             void clearDirectTypingForConversation(directMessagePanel.conversation.id);
             setDirectMessagePanel(null);
