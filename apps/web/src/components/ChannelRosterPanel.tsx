@@ -22,6 +22,7 @@ import { CommunityPresenceFacepile } from "./CommunityPresenceFacepile";
 import { WebCommunityNotes } from "./WebCommunityNotes";
 import { KitChannelRail } from "../v1/KitChannelRail";
 import { KitMembersPage } from "../v1/KitMembersPage";
+import { KitMembersDirectory } from "../v1/KitMembersDirectory";
 import { CommunityMembersBulkBar, type SelectedMember } from "./CommunityMembersBulkBar";
 import type { CommunityPresenceSummary } from "../../../../shared/communityTypes";
 import { resolveAuthSubject, type AuthSessionLike } from "../../../../shared/authSession";
@@ -425,6 +426,12 @@ function RosterSurface(props: RosterProps & {
       if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); setSelectedMembershipId(null); }
       trapTab(event, settingsRef.current);
     }}>{settings}</div>, document.body) : null}
+  </>;
+  // Design system v1, for a member: who is here and what each person shared.
+  if (props.inline && isDesignV1Active()) return <>
+    <KitMembersDirectory onMessage={props.onMessageUser} profileContainer={recordEl}
+      getAvatarColor={props.getAvatarColor} getInitials={props.getInitials} />
+    <aside ref={setRecordEl} className="community-context-panel members-page-record" aria-label="Member" />
   </>;
   // Design system v1: Members is a page. The list fills the main area under
   // the standard header line; the person you open is the right column.

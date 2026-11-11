@@ -68,7 +68,8 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
   `communityNotificationAccess`, `communityRecipientCore`, `communitySemanticMembers`,
   `communityOntologyCards` (the community card the agent reads, shared/communityOntology.ts),
   `communityMemberRecords` (Members for people who manage members: plan and price per person, money states,
-  past members, one member's record; docs/design/members-invariants.md),
+  past members, one member's record with host-only notes and who did what; docs/design/members-invariants.md),
+  `communityMemberProfiles` (Members for members: who is here and what each person approved sharing),
   `memberEntryDestination`, `platformHomeCommunity`, `communityPeople` (one person, one action, from someone's
   own AI).
 - **Reached by:** community sites' `/join` (their private twin); Studio's `/c/<slug>` hands over to it.
@@ -83,7 +84,7 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
   Rejoining starts as `member` (an earlier role is never restored);
   an active membership keeps its role through checkout. See
   [community-member-arrival-v1.md](community-member-arrival-v1.md).
-- **Tables:** `communities`, `communityMemberships`, `communityJoinRequests`,
+- **Tables:** `communities`, `communityMemberships`, `communityJoinRequests`, `communityMemberNotes`,
   `communityBlocks`, `communityMemberSettings`, `communityPresence`,
   `communityOnboardingConfigs`, `communityArchiveBillingJobs`. Tags on people
   (`communityTags`, `communityMemberTags`) were never used and were dropped Nov 7.

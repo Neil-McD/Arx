@@ -1539,6 +1539,12 @@ export const setCommunityMemberRole = mutation({
           role,
           updatedAt: nowMs,
         });
+        // The member's record shows who did this, and when.
+        await recordCriticalAuditEvent(ctx, {
+          eventKey: `community_member_role_set:${membership._id}:${nowMs}`, eventType: "community_member_role_set",
+          severity: "info", status: "succeeded", actorUserId: args.userId, subjectUserId: membership.userId,
+          communityId: args.communityId, provider: "polynet", providerObjectId: String(membership._id), metadata: { role }, createdAt: nowMs,
+        });
         return { ok: true };
       },
     });
@@ -1686,6 +1692,11 @@ export const revokeCommunityMemberInternal = internalMutation({
         const revokedMembership = { ...membership, ...removal } as CommunityMembershipLike;
         if (removal) {
           await ctx.db.patch(membership._id as any, removal);
+          await recordCriticalAuditEvent(ctx, {
+            eventKey: `community_member_removed:${membership._id}:${nowMs}`, eventType: "community_member_removed",
+            severity: "info", status: "succeeded", actorUserId: userId, subjectUserId: membership.userId,
+            communityId: args.communityId, provider: "polynet", providerObjectId: String(membership._id), createdAt: nowMs,
+          });
           await adjustCommunityActiveMemberCountForMembershipTransition({
             ctx,
             communityId: args.communityId,
@@ -1914,6 +1925,11 @@ export const blockCommunityUserInternal = internalMutation({
       reason,
       createdAt: nowMs,
       updatedAt: nowMs,
+    });
+    await recordCriticalAuditEvent(ctx, {
+      eventKey: `community_member_blocked:${args.targetUserId}:${nowMs}`, eventType: "community_member_blocked",
+      severity: "info", status: "succeeded", actorUserId: userId, subjectUserId: args.targetUserId,
+      communityId: args.communityId, provider: "polynet", createdAt: nowMs,
     });
     return { ok: true };
   },

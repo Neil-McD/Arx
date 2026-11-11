@@ -6,6 +6,8 @@ import { useContext, useEffect, useMemo, useState, type CSSProperties, type Reac
 import { createPortal } from "react-dom";
 import { UserAvatar } from "../../../../shared/UserAvatar";
 import {
+  addCloudCommunityMemberNote,
+  deleteCloudCommunityMemberNote,
   getCloudCommunityMemberRecord,
   listCloudCommunityMemberRecords,
   type CloudMemberRecord,
@@ -84,6 +86,7 @@ export function KitMembersPage(props: {
   const [search, setSearch] = useState("");
   const [openKey, setOpenKey] = useState<string | null>(null);
   const [record, setRecord] = useState<CloudMemberRecord | null>(null);
+  const [recordVersion, setRecordVersion] = useState(0);
   const [now] = useState(Date.now);
 
   useEffect(() => {
@@ -106,12 +109,12 @@ export function KitMembersPage(props: {
   useEffect(() => {
     if (!scope || !openKey) return;
     let cancelled = false;
-    setRecord(null);
+    if (!recordVersion) setRecord(null);
     getCloudCommunityMemberRecord({ session: scope.session, communityId: scope.communityId, membershipId: openKey === OWNER_KEY ? null : openKey })
       .then((next) => { if (!cancelled) setRecord(next); })
       .catch(() => { if (!cancelled) setRecord(null); });
     return () => { cancelled = true; };
-  }, [scope?.session, scope?.communityId, openKey]);
+  }, [scope?.session, scope?.communityId, openKey, recordVersion]);
 
   const rows = useMemo(() => {
     if (!data) return [];
@@ -250,7 +253,17 @@ export function KitMembersPage(props: {
     <KitApp view="members" host part="rail">
       <Rail index={5} label={record ? record.name : "Member"}>
         {record ? <MemberRecordView record={record} now={now} self={record.user_id === props.currentUserId}
-          onMessage={props.onMessage} onManage={props.onManage} getAvatarColor={props.getAvatarColor} getInitials={props.getInitials} /> : null}
+          onMessage={props.onMessage} onManage={props.onManage} getAvatarColor={props.getAvatarColor} getInitials={props.getInitials}
+          onAddNote={async (body) => {
+            if (!scope) return;
+            await addCloudCommunityMemberNote({ session: scope.session, communityId: scope.communityId, membershipId: record.membership_id, body });
+            setRecordVersion((version) => version + 1);
+          }}
+          onDeleteNote={async (noteId) => {
+            if (!scope) return;
+            await deleteCloudCommunityMemberNote({ session: scope.session, communityId: scope.communityId, noteId });
+            setRecordVersion((version) => version + 1);
+          }} /> : null}
       </Rail>
     </KitApp>
   );
@@ -266,8 +279,27 @@ function MemberRecordView(props: {
   onManage?: (membershipId: string) => void;
   getAvatarColor: (id: string) => string;
   getInitials: (name: string) => string;
+  onAddNote: (body: string) => Promise<void>;
+  onDeleteNote: (noteId: string) => Promise<void>;
 }) {
   const { record } = props;
+  const [draft, setDraft] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [noteError, setNoteError] = useState<string | null>(null);
+  const saveNote = async () => {
+    const body = draft.trim();
+    if (!body || saving) return;
+    setSaving(true);
+    setNoteError(null);
+    try {
+      await props.onAddNote(body);
+      setDraft("");
+    } catch {
+      setNoteError("The note couldn't be saved. Try again.");
+    } finally {
+      setSaving(false);
+    }
+  };
   const first = record.name.split(/\s+/)[0] || record.name;
   const joined = record.joined_at ? new Date(record.joined_at).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }) : null;
   const role = record.role === "owner" ? "Host" : record.role === "admin" ? "Admin" : record.role === "moderator" ? "Moderator" : "Member";
@@ -305,6 +337,23 @@ function MemberRecordView(props: {
         <Sec label="What we know"><p>{props.self ? "You haven't told us about yourself yet." : `${first} hasn't told us anything about themselves yet.`}</p></Sec>
       )}
       <Sep />
+      <div className={cx("sec")}>
+        <span className={cx("lab")}>Notes<em className={cx("priv")}>Only hosts see these</em></span>
+        {record.notes.map((note) => (
+          <div key={note.id} className={cx("hnote")}>
+            <p>{note.body}</p>
+            <span>{note.author === "you" ? "You" : note.author} · {memberTimeFor(note.at, props.now)}
+              {note.can_delete ? <button type="button" className={cx("note-del")} onClick={() => void props.onDeleteNote(note.id)}>Delete</button> : null}</span>
+          </div>
+        ))}
+        <form className={cx("note-add")} onSubmit={(event) => { event.preventDefault(); void saveNote(); }}>
+          <textarea value={draft} onChange={(event) => setDraft(event.target.value)} placeholder="Add a note" aria-label="Add a note" rows={draft ? 3 : 1} maxLength={2000}
+            onKeyDown={(event) => { if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) { event.preventDefault(); void saveNote(); } }} />
+          {draft.trim() ? <Btn small onClick={() => void saveNote()}>{saving ? "Saving…" : "Save note"}</Btn> : null}
+        </form>
+        {noteError ? <p className={cx("bad")} role="alert">{noteError}</p> : null}
+      </div>
+      <Sep />
       <Sec label="So far">
         {record.events.map((event, index) => (
           <div key={index} className={cx("src")} style={index ? { marginTop: -8 } : undefined}>
@@ -313,6 +362,11 @@ function MemberRecordView(props: {
         ))}
         <div className={cx("src")} style={{ marginTop: -8 }}><Icon name="spark" />Last active<em>{memberTimeFor(record.last_active_at, props.now)}</em></div>
       </Sec>
+      {props.onManage && record.membership_id && !record.out && !props.self ? (
+        <div style={{ marginTop: "auto" }}>
+          <button type="button" className={cx("link")} style={{ color: "var(--ink3)" }} onClick={() => props.onManage?.(record.membership_id!)}>Remove or block</button>
+        </div>
+      ) : null}
     </>
   );
 }
