@@ -14,6 +14,7 @@ import {
   Plus,
   Settings,
   SlidersHorizontal,
+  Sparkles,
   UserPlus,
   Users,
   X,
@@ -76,7 +77,11 @@ type CommunityNavProps = {
   // labelled sections, and an account row at the bottom. "classic" is today's
   // column and stays the default until v1 is accepted.
   layout?: "classic" | "v1";
-  accountSlot?: ReactNode;
+  // v1: the account row. A function receives the community's extras (Invite
+  // people, Analytics, Visit site) to show in its menu.
+  accountSlot?: ReactNode | ((communityItems: Array<{ key: string; label: string; icon: ReactNode; onSelect: () => void }>) => ReactNode);
+  // v1: "Your guide" at the foot of the column (the guide's settings).
+  onOpenGuide?: () => void;
   // v1 only. The switcher takes the place of the community's name on the
   // banner (and of the settings gear, which becomes the Manage row).
   identitySlot?: ReactNode;
@@ -205,6 +210,7 @@ export const CommunityNav = memo(function CommunityNav({
   accountSlot = null,
   identitySlot = null,
   identityIsCover = false,
+  onOpenGuide,
   onOpenInbox,
   isInboxOpen = false,
   inboxUnreadCount = 0,
@@ -709,7 +715,29 @@ export const CommunityNav = memo(function CommunityNav({
         <div className="community-nav-footer" aria-hidden="true">
           <div className="community-nav-invite-loading web-skeleton-block" />
         </div>
-      ) : canCopyJoinLink || siteUrl || (isV1 && (canViewActiveCommunityAnalytics || showSettingsButton)) ? (
+      ) : isV1 ? (
+        // Design system v1: the mock's foot, Your guide and Manage. Invite
+        // people, Analytics and Visit site are in the account menu below.
+        showSettingsButton ? (
+          <div className="community-nav-footer">
+            {onOpenGuide ? (
+              <button className="nav-item" type="button" onClick={onOpenGuide} title="Your guide">
+                <span className="nav-icon" aria-hidden="true"><Sparkles size={16} strokeWidth={1.9} /></span>
+                <span className="nav-item-label">Your guide</span>
+              </button>
+            ) : null}
+            <button
+              className={showActiveSelection && communityTab === "settings" ? "nav-item active" : "nav-item"}
+              type="button"
+              onClick={() => onSelectTab("settings")}
+              title="Manage"
+            >
+              <span className="nav-icon" aria-hidden="true"><SlidersHorizontal size={16} strokeWidth={1.9} /></span>
+              <span className="nav-item-label">Manage</span>
+            </button>
+          </div>
+        ) : null
+      ) : canCopyJoinLink || siteUrl ? (
         <div className="community-nav-footer">
           {siteUrl ? (
             <a
@@ -767,7 +795,17 @@ export const CommunityNav = memo(function CommunityNav({
           ) : null}
         </div>
       ) : null}
-      {isV1 && accountSlot ? <div className="community-nav-account">{accountSlot}</div> : null}
+      {isV1 && accountSlot ? (
+        <div className="community-nav-account">
+          {typeof accountSlot === "function"
+            ? accountSlot([
+                ...(canCopyJoinLink ? [{ key: "invite", label: didCopyJoinLink ? "Copied the invite link" : "Invite people", icon: <UserPlus size={16} aria-hidden="true" />, onSelect: () => void handleCopyJoinLink() }] : []),
+                ...(canViewActiveCommunityAnalytics ? [{ key: "analytics", label: "Analytics", icon: <ChartNoAxesColumn size={16} aria-hidden="true" />, onSelect: () => onSelectTab("analytics") }] : []),
+                ...(siteUrl ? [{ key: "site", label: "Visit site", icon: <ExternalLink size={16} aria-hidden="true" />, onSelect: () => { window.open(siteUrl, "_blank", "noopener,noreferrer"); } }] : []),
+              ])
+            : accountSlot}
+        </div>
+      ) : null}
       {isAddChannelOpen ? (
         <div
           className="community-channel-modal-backdrop"

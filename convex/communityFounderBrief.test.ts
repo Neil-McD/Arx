@@ -154,6 +154,23 @@ describe("founder brief delivery", () => {
     })).rejects.toThrow(/owner_required/);
   });
 
+  it("a post that asks nothing is never 'waiting for an answer'", async () => {
+    const t = convexTest(schema, modules);
+    const f = await fixture(t, Date.now());
+    await t.run(async (ctx) => {
+      const root = await ctx.db.query("communityInteractionRoots").first();
+      const nowMs = Date.now();
+      // A win, 30 hours old, with no replies: not a question.
+      await ctx.db.insert("communityInteractionRoots", {
+        communityId: f.communityId, channelId: (root as any).channelId, actorType: "human", actorUserId: (root as any).actorUserId,
+        kind: "discussion", status: "live", visibilityScope: "community", contentSummary: "First paid member came in today.",
+        replyCount: 0, reactionSummary: [], idempotencyKey: "brief-root-win", createdAt: nowMs - 30 * HOUR_MS, updatedAt: nowMs - 30 * HOUR_MS,
+      } as any);
+    });
+    const home = await t.withIdentity({ subject: "brief-Owner" }).query(api.communityFounderBrief.getCommunityHomeSnapshot, { communityId: f.communityId });
+    expect(home?.unanswered.map((row: any) => row.text)).toEqual(["Where do we meet on Saturday?"]);
+  });
+
   it("Home shows the owner the brief's facts for the last day, and nobody else", async () => {
     const t = convexTest(schema, modules);
     const f = await fixture(t, Date.now());
