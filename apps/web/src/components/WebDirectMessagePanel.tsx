@@ -22,6 +22,7 @@ import { UserAvatar } from "../../../../shared/UserAvatar";
 import { VoiceInputButton } from "../../../../shared/VoiceInputButton";
 import { isDesignV1Active } from "../../../../shared/designSystem";
 import { Icon, KitApp, Rail, cx } from "../v1/kit";
+import { inboxTimeFor } from "./WebDirectMessageInboxPanel";
 
 type DirectMessageComposerAttachment = DirectMessageAttachment & {
   data_url?: string | null;
@@ -745,7 +746,10 @@ export function WebDirectMessagePanel(props: WebDirectMessagePanelProps) {
                         </div>
                       ) : isClusterEnd ? (
                         <span className={cx("sub")} style={{ fontSize: 12, alignSelf: isOwn ? "flex-end" : undefined }}>
-                          {isOwn ? "You" : peerLabel.split(/\s+/)[0]} · {formatRelativeTimeFromIso(message.created_at)}
+                          {isOwn ? "You" : peerLabel.split(/\s+/)[0]} · {(() => {
+                            const when = inboxTimeFor(message.created_at);
+                            return when === "now" ? "just now" : /(min| h)$/.test(when) ? `${when} ago` : when;
+                          })()}
                         </span>
                       ) : null}
                     </Fragment>
