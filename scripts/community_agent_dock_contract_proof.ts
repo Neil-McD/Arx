@@ -805,11 +805,12 @@ assert.doesNotMatch(
   /aria-label="Your Polynet agent"|<strong>Your agent<\/strong>|<span>Opening Your agent<\/span>/,
   "visible dock identity must remain owned by the canonical presentation",
 );
-assert.match(
-  component,
-  /aria-label=\{presentation\.title\}[\s\S]*?\{presentation\.emptyLabel\}[\s\S]*?\{presentation\.loadingLabel\}/,
-  "all visible dock identity must come from the same presentation snapshot",
-);
+// The conversation is one block shared by the dock and Home on the kit, so
+// these labels no longer sit in one order in the file; each must still come
+// from the same presentation snapshot.
+for (const label of [/aria-label=\{presentation\.title\}/, /\{presentation\.emptyLabel\}/, /\{presentation\.loadingLabel\}/]) {
+  assert.match(component, label, "all visible dock identity must come from the same presentation snapshot");
+}
 assert.doesNotMatch(
   styles,
   /community-agent-dock-empty-avatar|community-agent-dock-launcher img|community-agent-dock-community-avatar/,

@@ -22,6 +22,7 @@ import {
   House,
 } from "lucide-react";
 import { isDesignV1Active } from "../../../../shared/designSystem";
+import { Chips, Dock, Icon, KitApp, Mine, Scroll, Talk, Theirs, Top, View, cx } from "../v1/kit";
 import { getAuthUrl, type AuthSession } from "../auth";
 import { CommunityComposerControls } from "./CommunityComposerControls";
 import { renderMarkdown } from "../../../../shared/markdownUi";
@@ -38,6 +39,9 @@ import {
 } from "../../../../shared/communityAgentAttachments";
 import { mergeVoiceTranscript } from "../../../../shared/voiceCapture";
 import { VoiceInputButton } from "../../../../shared/VoiceInputButton";
+
+// The host's three suggestions on Home (the mock's, made general).
+const HOST_HOME_SUGGESTIONS = ["How was this week?", "Who is at risk of leaving?", "Who should I welcome?"];
 import {
   ensureCloudCommunityAgentConversation,
   startNewCloudCommunityAgentConversation,
@@ -220,6 +224,8 @@ function WebCommunityAgentDock(props, ref) {
   const [, setRuntimeEventsByRunId] = useState<Record<string, ThreadStreamingRuntimeEvent[]>>({});
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  // Home on the kit uses the mock's one-line field instead of the textarea.
+  const kitInputRef = useRef<HTMLInputElement | null>(null);
   const composerFormRef = useRef<HTMLFormElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const attachmentsRef = useRef<CommunityAgentImageDraft[]>([]);
@@ -280,6 +286,10 @@ function WebCommunityAgentDock(props, ref) {
       setInput(next);
     },
     focusInput: () => {
+      if (kitInputRef.current) {
+        kitInputRef.current.focus();
+        return;
+      }
       const inputElement = textareaRef.current;
       if (!inputElement) return;
       inputElement.style.height = "auto";
@@ -769,9 +779,14 @@ function WebCommunityAgentDock(props, ref) {
   const [homeRailElement, setHomeRailElement] = useState<HTMLElement | null>(null);
   const followConversationRef = useRef(false);
   const [homeRefreshKey, setHomeRefreshKey] = useState(0);
+  // Home on the kit (design v1, the host): the conversation opens when you
+  // talk, as the mock's "Talk it over" does, and Home is at rest again each
+  // time you come back to it. It is always the same one thread.
+  const [kitTalking, setKitTalking] = useState(false);
   useEffect(() => {
     if (!isOpenSurface) {
       followConversationRef.current = false;
+      setKitTalking(false);
       return;
     }
     setHomeRefreshKey((key) => key + 1);
@@ -791,7 +806,7 @@ function WebCommunityAgentDock(props, ref) {
       });
     });
     return () => window.cancelAnimationFrame(frame);
-  }, [homeActive, isOpenSurface, messages.length, runtimeEvents.length, streamedText]);
+  }, [homeActive, isOpenSurface, messages.length, runtimeEvents.length, streamedText, kitTalking]);
 
   const startNewChat = async () => {
     if (
@@ -888,7 +903,7 @@ function WebCommunityAgentDock(props, ref) {
     retryRef.current = null;
   }, [setAttachmentDrafts]);
 
-  const handleAttachmentPaste = useCallback((event: ClipboardEvent<HTMLTextAreaElement>) => {
+  const handleAttachmentPaste = useCallback((event: ClipboardEvent<HTMLElement>) => {
     const files = Array.from(event.clipboardData.files ?? []).filter(
       (file): file is File => file instanceof File,
     );
@@ -1142,6 +1157,229 @@ function WebCommunityAgentDock(props, ref) {
       (card) => !liveResourceChangesetIds.has(card.changesetId),
     );
 
+  // Everything said with the guide, live turn included. On Home on the kit it
+  // is drawn as the mock's conversation (yours on the right, the guide's in
+  // its serif voice); everywhere else, as the dock's messages.
+  const conversation = (kit: boolean) => (
+    <>
+          {visibleMessages.map((message) => {
+            const text = extractTextFromContentJson(message.content_json);
+            const messageAttachments = parseMessageAttachments(message.content_json);
+            if (kit) {
+              return message.role === "assistant" ? (
+                <Theirs key={message.id}>
+                  {text ? renderMarkdown(text) : null}
+                  <CommunityAgentAttachmentViews attachments={messageAttachments} />
+                </Theirs>
+              ) : (
+                <Mine key={message.id}>
+                  {text}
+                  <CommunityAgentAttachmentViews attachments={messageAttachments} />
+                </Mine>
+              );
+            }
+            return (
+              <article
+                key={message.id}
+                className={`community-agent-dock-message is-${message.role}${text ? "" : " is-media-only"}`}
+              >
+                {text
+                  ? message.role === "assistant"
+                    ? renderMarkdown(text)
+                    : <p>{text}</p>
+                  : null}
+                <CommunityAgentAttachmentViews attachments={messageAttachments} />
+              </article>
+            );
+          })}
+
+          {persistentResourceChangesetCards.length > 0 ? (
+            <RuntimeResourceChangesetApprovalCards
+              cards={persistentResourceChangesetCards}
+              session={props.session}
+              pendingOnly
+            />
+          ) : null}
+
+          {isPreparing ? (
+            <div className="community-agent-dock-reasoning">
+              <LoaderCircle aria-hidden="true" />
+              <span>{presentation.loadingLabel}</span>
+            </div>
+          ) : null}
+
+          {isStartingNewChat ? (
+            <div className="community-agent-dock-reasoning">
+              <LoaderCircle aria-hidden="true" />
+              <span>Starting fresh</span>
+            </div>
+          ) : null}
+
+          {turnIsActive || shouldRenderStreamedText ? (
+            <div className="community-agent-dock-live-turn">
+              {runtimeEvents.length > 0 ? (
+                <RuntimeLiveTimeline
+                  events={runtimeEvents}
+                  session={props.session}
+                  renderReasoningMarkdown={renderMarkdown}
+                  showActiveIndicators={turnIsActive}
+                  showThinkingFooter={!shouldRenderStreamedText}
+                />
+              ) : turnIsActive ? (
+                <div className="community-agent-dock-reasoning">
+                  <LoaderCircle aria-hidden="true" />
+                  <span>Getting oriented in {presentation.surfaceLabel}</span>
+                </div>
+              ) : null}
+              {shouldRenderStreamedText && kit ? (
+                <Theirs>
+                  {renderMarkdown(streamedText)}
+                  {turnIsActive ? <span className="community-agent-dock-caret" aria-hidden="true" /> : null}
+                </Theirs>
+              ) : shouldRenderStreamedText ? (
+                <article className="community-agent-dock-message is-assistant is-streaming">
+                  {renderMarkdown(streamedText)}
+                  {turnIsActive ? <span className="community-agent-dock-caret" aria-hidden="true" /> : null}
+                </article>
+              ) : null}
+            </div>
+          ) : null}
+
+          {dockError ? <p className="community-agent-dock-error">{dockError}</p> : null}
+          {memberLimitNotice ? (
+            <div className="community-agent-dock-limit" role="status">
+              <p>{memberLimitNotice}</p>
+              {props.onStartBuilder ? (
+                <button type="button" onClick={props.onStartBuilder}>
+                  Build your own community — $79/mo
+                </button>
+              ) : null}
+            </div>
+          ) : null}
+    </>
+  );
+
+  // A turn under way, an approval waiting or an error opens the conversation
+  // by itself, so nothing that needs you is hidden behind Home at rest.
+  const conversationNeedsYou =
+    turnIsActive || isPreparing || Boolean(dockError) || Boolean(memberLimitNotice) || persistentResourceChangesetCards.length > 0;
+  // Home on the kit: the host's Home in design v1 on a wide window.
+  const kitHome = homeActive && guideWording && !props.mobileRoot && props.home?.audience === "host";
+  const openTalk = () => {
+    followConversationRef.current = true;
+    setKitTalking(true);
+  };
+  const kitSubmit = (event: FormEvent) => {
+    if (draftTextRef.current.trim() || attachmentsRef.current.length > 0) openTalk();
+    void submit(event);
+  };
+  const sendSuggestion = (text: string) => {
+    if (composerIsBusy || isPreparing || isStartingNewChat) return;
+    draftTextRef.current = text;
+    setInput(text);
+    openTalk();
+    window.requestAnimationFrame(() => composerFormRef.current?.requestSubmit());
+  };
+  const kitBody = kitHome && props.home ? (
+    <section className="community-agent-dock-panel has-home-rail is-kit-home" aria-label={presentation.title}>
+      <KitApp view="home" host part="main" talking={kitTalking || conversationNeedsYou}>
+        <View index={0}>
+          <Top search={false} />
+          <Scroll ref={scrollRef}>
+            <WebCommunityHomeSection
+              {...props.home}
+              session={props.session}
+              ensureSession={props.ensureSession}
+              refreshKey={homeRefreshKey}
+              asideContainer={homeRailElement}
+              kit={{
+                talking: kitTalking || conversationNeedsYou,
+                hasConversation: visibleMessages.length > 0,
+                talk: <Talk>{conversation(true)}</Talk>,
+                onTalkItOver: () => {
+                  openTalk();
+                  kitInputRef.current?.focus();
+                },
+              }}
+            />
+          </Scroll>
+          <Dock>
+            {kitTalking ? null : (
+              <Chips chips={HOST_HOME_SUGGESTIONS} onChip={sendSuggestion} />
+            )}
+            {attachments.length > 0 ? (
+              <div className="community-agent-dock-composer-attachments">
+                {attachments.map((attachment) => (
+                  <div className="community-agent-dock-composer-image" key={attachment.id}>
+                    <img src={attachment.previewUrl} alt={attachment.name} />
+                    <button type="button" onClick={() => removeAttachment(attachment.id)} disabled={composerIsBusy} aria-label={`Remove ${attachment.name}`} title="Remove">
+                      <X aria-hidden="true" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            ) : null}
+            <form
+              ref={composerFormRef}
+              className={cx("ask")}
+              onSubmit={kitSubmit}
+              onDragOver={(event) => {
+                if (!Array.from(event.dataTransfer.types ?? []).includes("Files")) return;
+                event.preventDefault();
+                event.dataTransfer.dropEffect = "copy";
+              }}
+              onDrop={handleAttachmentDrop}
+            >
+              <Icon name="spark" extra="sp" />
+              <input
+                ref={kitInputRef}
+                type="text"
+                value={input}
+                onChange={(event) => {
+                  draftTextRef.current = event.target.value;
+                  setInput(event.target.value);
+                }}
+                onPaste={handleAttachmentPaste}
+                placeholder={presentation.composerLabel}
+                aria-label={presentation.composerLabel}
+                disabled={composerIsBusy || isPreparing || isStartingNewChat}
+              />
+              <button
+                type="button"
+                className={cx("ib")}
+                onClick={props.voiceButtonProps.onClick}
+                disabled={props.voiceButtonProps.disabled || composerIsBusy || isPreparing || isStartingNewChat}
+                aria-label={props.voiceButtonProps.title}
+                aria-pressed={props.voiceButtonProps.state === "recording"}
+                aria-busy={props.voiceButtonProps.state === "transcribing"}
+                title={props.voiceButtonProps.title}
+                style={props.voiceButtonProps.state === "idle" ? undefined : { color: "var(--aurora-ink)" }}
+              >
+                <Icon name="mic" />
+              </button>
+              {runtimeEvents.length > 0 && threadKey ? (
+                <button type="button" className={cx("send")} onClick={() => stopStreamingTurn(threadKey)} aria-label="Stop" title="Stop">
+                  <Square aria-hidden="true" size={14} />
+                </button>
+              ) : (
+                <button
+                  type="submit"
+                  className={cx("send")}
+                  disabled={(!input.trim() && attachments.length === 0) || isUploadingAttachments || isPreparing || isStartingNewChat}
+                  aria-label="Send message"
+                  title="Send"
+                >
+                  <Icon name="up" />
+                </button>
+              )}
+            </form>
+          </Dock>
+        </View>
+      </KitApp>
+      <div className="community-home-rail" ref={setHomeRailElement} />
+    </section>
+  ) : null;
+
   return (
     <>
     <aside
@@ -1149,8 +1387,7 @@ function WebCommunityAgentDock(props, ref) {
       className={`community-agent-dock${props.pageMode ? " community-agent-page" : ""}${isOpenSurface ? " is-open" : ""}${props.mobileRoot ? " mobile-root" : ""}${props.isSuppressed ? " is-suppressed" : ""}`}
       aria-live="polite"
     >
-
-      <section className={`community-agent-dock-panel${homeActive ? " has-home-rail" : ""}`} aria-label={presentation.title}>
+      {kitBody ?? <section className={`community-agent-dock-panel${homeActive ? " has-home-rail" : ""}`} aria-label={presentation.title}>
         <header className={props.pageMode ? "community-channel-header community-agent-page-header" : "community-agent-dock-header"}>
           {props.pageMode ? <div className="community-channel-header-identity">{guideWording && props.home ? <House size={18} aria-hidden="true" /> : <Sparkles size={18} aria-hidden="true" />}<h1>{presentation.title}</h1></div> : <div className="community-agent-dock-identity">
             {!props.pageMode && <span className="community-agent-dock-avatar" aria-hidden="true">
@@ -1210,82 +1447,7 @@ function WebCommunityAgentDock(props, ref) {
             </div>
           ) : null}
 
-          {visibleMessages.map((message) => {
-            const text = extractTextFromContentJson(message.content_json);
-            const messageAttachments = parseMessageAttachments(message.content_json);
-            return (
-              <article
-                key={message.id}
-                className={`community-agent-dock-message is-${message.role}${text ? "" : " is-media-only"}`}
-              >
-                {text
-                  ? message.role === "assistant"
-                    ? renderMarkdown(text)
-                    : <p>{text}</p>
-                  : null}
-                <CommunityAgentAttachmentViews attachments={messageAttachments} />
-              </article>
-            );
-          })}
-
-          {persistentResourceChangesetCards.length > 0 ? (
-            <RuntimeResourceChangesetApprovalCards
-              cards={persistentResourceChangesetCards}
-              session={props.session}
-              pendingOnly
-            />
-          ) : null}
-
-          {isPreparing ? (
-            <div className="community-agent-dock-reasoning">
-              <LoaderCircle aria-hidden="true" />
-              <span>{presentation.loadingLabel}</span>
-            </div>
-          ) : null}
-
-          {isStartingNewChat ? (
-            <div className="community-agent-dock-reasoning">
-              <LoaderCircle aria-hidden="true" />
-              <span>Starting fresh</span>
-            </div>
-          ) : null}
-
-          {turnIsActive || shouldRenderStreamedText ? (
-            <div className="community-agent-dock-live-turn">
-              {runtimeEvents.length > 0 ? (
-                <RuntimeLiveTimeline
-                  events={runtimeEvents}
-                  session={props.session}
-                  renderReasoningMarkdown={renderMarkdown}
-                  showActiveIndicators={turnIsActive}
-                  showThinkingFooter={!shouldRenderStreamedText}
-                />
-              ) : turnIsActive ? (
-                <div className="community-agent-dock-reasoning">
-                  <LoaderCircle aria-hidden="true" />
-                  <span>Getting oriented in {presentation.surfaceLabel}</span>
-                </div>
-              ) : null}
-              {shouldRenderStreamedText ? (
-                <article className="community-agent-dock-message is-assistant is-streaming">
-                  {renderMarkdown(streamedText)}
-                  {turnIsActive ? <span className="community-agent-dock-caret" aria-hidden="true" /> : null}
-                </article>
-              ) : null}
-            </div>
-          ) : null}
-
-          {dockError ? <p className="community-agent-dock-error">{dockError}</p> : null}
-          {memberLimitNotice ? (
-            <div className="community-agent-dock-limit" role="status">
-              <p>{memberLimitNotice}</p>
-              {props.onStartBuilder ? (
-                <button type="button" onClick={props.onStartBuilder}>
-                  Build your own community — $79/mo
-                </button>
-              ) : null}
-            </div>
-          ) : null}
+          {conversation(false)}
         </div>
 
         {homeActive ? <div className="community-home-rail" ref={setHomeRailElement} /> : null}
@@ -1419,7 +1581,7 @@ function WebCommunityAgentDock(props, ref) {
             />
           </form>
         </div>
-      </section>
+      </section>}
     </aside>
     </>
   );
