@@ -108,6 +108,14 @@ css += """
 .app .ask .send:not(:disabled){cursor:pointer}
 .app .ask:focus-within .send:disabled{background:var(--s2);color:var(--ink3);box-shadow:none}
 
+/* Kit addition: the live Members table (the mock draws it still). */
+.app button.trow{width:100%;text-align:left;cursor:pointer}
+.app button.trow:disabled{cursor:default}
+.app .th-sort{display:flex;align-items:center;gap:4px;color:inherit;font:inherit}
+.app .th-sort .ic{width:12px;height:12px;opacity:.7}
+.app .find input{flex:1;min-width:0;background:transparent;border:0;outline:0;color:var(--ink);font:inherit;font-size:13px}
+.app .find input::placeholder{color:var(--ink3)}
+
 /* Kit addition: states the mock doesn't draw, in its own terms. */
 .app .msg.cont{padding-top:3px;padding-bottom:3px}
 .app .msg.cont>.gap{width:36px;flex:none}

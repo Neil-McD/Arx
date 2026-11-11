@@ -288,7 +288,7 @@
 .app .fig em{display:block;margin-top:3px;font-style:normal;font-size:12px;color:var(--ink2)}
 .app .tag.hold{color:var(--ink);border-color:rgba(var(--w),.34)}
 .app .tbl{margin:12px -12px 0}
-.app .trow{display:grid;grid-template-columns:28px minmax(0,1.5fr) minmax(0,1.2fr) minmax(0,.7fr) minmax(0,.7fr);gap:0 14px;align-items:center;height:48px;padding:0 12px;border-radius:10px;font-size:13px;color:var(--ink2);position:relative;transition:background .16s var(--ease)}
+.app .trow{display:grid;grid-template-columns:28px minmax(0,1.35fr) minmax(0,1.45fr) minmax(0,.8fr) minmax(0,.62fr);gap:0 14px;align-items:center;height:48px;padding:0 12px;border-radius:10px;font-size:13px;color:var(--ink2);position:relative;transition:background .16s var(--ease)}
 .app .trow+.trow::before{content:"";position:absolute;left:12px;right:12px;top:0;height:1px;background:var(--line)}
 .app .trow:not(.th):hover,.app .trow.sel{background:var(--s1)}.app .trow.sel{background:var(--s2)}
 .app .trow:hover::before,.app .trow:hover+.trow::before,.app .trow.sel::before,.app .trow.sel+.trow::before{opacity:0}
@@ -417,6 +417,37 @@
 .app .rail{width:var(--rail-w)}.app .r3{width:max(400px,var(--rail-w))}
 .app .home,.app .v0 .dock{padding-left:max(56px,calc((100% - var(--measure)) / 2));padding-right:max(56px,calc((100% - var(--measure)) / 2))}
 
+
+.app .kv{display:grid;grid-template-columns:88px minmax(0,1fr);gap:12px 12px;font-size:13px;line-height:1.45}
+.app .kv>span{color:var(--ink3);font-weight:500;font-size:12px;padding-top:1px}
+.app .kv>p{margin:0;color:var(--ink)}
+.app .kv em{display:block;margin-top:2px;font-style:normal;font-size:12px;color:var(--ink3)}
+.app .trow>span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.app .trow .none{color:var(--ink3)}
+.app .lab .priv{float:right;font-style:normal;font-weight:400}
+.app .hnote{padding:10px 12px;border-radius:10px;background:var(--s1);border:1px solid var(--line)}
+.app .hnote p{margin:0;font-size:13px;color:var(--ink)}.app .hnote span{display:block;margin-top:4px;font-size:12px;color:var(--ink3)}
+
+.app .r5{gap:18px;overflow-y:auto}.app .r5>*{flex:none}
+
+
+.app .views{display:flex;flex-wrap:wrap;gap:6px;margin-top:12px}
+.app .r5.h-only{width:max(440px,var(--rail-w))}
+.app .rec{display:contents}.app .rec-j{display:none}.app .r5 .rec>*{flex:none}
+.app.on-mem-josh .rec-t{display:none}.app.on-mem-josh .rec-j{display:contents}
+.app .trow.tt{background:var(--s2)}.app.on-mem-josh .trow.tt{background:none}
+.app.on-mem-josh .trow.tj{background:var(--s2)}
+.app label.trow{cursor:pointer}
+.app .tb-past{display:none}.app.on-mv-past .tb-past{display:block}.app.on-mv-past .tb-now{display:none}
+.app .chip.mv-a{background:var(--s2);color:var(--ink);border-color:var(--line2)}
+.app.on-mv-past .chip.mv-a{background:none;color:var(--ink2);border-color:var(--line)}
+.app.on-mv-past .chip.mv-p{background:var(--s2);color:var(--ink);border-color:var(--line2)}
+.app .trow.th .ic{width:12px;height:12px;vertical-align:-2px;opacity:.7}
+.app .plan{display:flex;flex-direction:column;gap:2px;padding:10px 12px;border-radius:10px;border:1px solid var(--line);background:var(--s1);font-size:13px}
+.app .plan b{font-weight:550;color:var(--ink)}.app .plan span{color:var(--ink3);font-size:12px}
+.app .kv .guess{color:var(--ink2)}.app .kv .guess em{color:var(--aurora-ink);display:flex;align-items:center;gap:5px}
+.app .p.you>span:last-child{color:var(--ink2)}
+
 /* Kit addition (see the script): browser defaults off, at zero specificity. */
 :where(.app) :where(button){margin:0;padding:0;border:0;background:none;color:inherit;font:inherit;line-height:inherit;letter-spacing:inherit;text-align:inherit;cursor:pointer}
 :where(.app) :where(input,textarea){margin:0;font:inherit;color:inherit}
@@ -441,6 +472,14 @@
 .app .ask textarea::placeholder{color:var(--ink3)}
 .app .ask .send:not(:disabled){cursor:pointer}
 .app .ask:focus-within .send:disabled{background:var(--s2);color:var(--ink3);box-shadow:none}
+
+/* Kit addition: the live Members table (the mock draws it still). */
+.app button.trow{width:100%;text-align:left;cursor:pointer}
+.app button.trow:disabled{cursor:default}
+.app .th-sort{display:flex;align-items:center;gap:4px;color:inherit;font:inherit}
+.app .th-sort .ic{width:12px;height:12px;opacity:.7}
+.app .find input{flex:1;min-width:0;background:transparent;border:0;outline:0;color:var(--ink);font:inherit;font-size:13px}
+.app .find input::placeholder{color:var(--ink3)}
 
 /* Kit addition: states the mock doesn't draw, in its own terms. */
 .app .msg.cont{padding-top:3px;padding-bottom:3px}
