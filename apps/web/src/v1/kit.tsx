@@ -3,7 +3,7 @@
 // are the mock's own stylesheet turned into a CSS Module
 // (scripts/design/build_v1_kit_css.py), so nothing in the app's older CSS can
 // reach these elements and nothing here can leak out.
-import { forwardRef, type CSSProperties, type ReactNode } from "react";
+import { forwardRef, useSyncExternalStore, type CSSProperties, type ReactNode } from "react";
 import k from "./kit.module.css";
 
 export function cx(...names: Array<string | false | null | undefined>): string {
@@ -70,6 +70,20 @@ export function PolynetMark() {
 
 // ---------- the frame ----------
 
+// The app's theme (shared/theme.ts sets data-theme on <html>), read live so a
+// part of a page follows the theme when it changes.
+function subscribeToTheme(onChange: () => void) {
+  const observer = new MutationObserver(onChange);
+  observer.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+  return () => observer.disconnect();
+}
+function readLightTheme() {
+  return document.documentElement.getAttribute("data-theme") === "light";
+}
+export function useAppLightTheme(): boolean {
+  return useSyncExternalStore(subscribeToTheme, readLightTheme, () => false);
+}
+
 export type KitView = "home" | "inbox" | "wins" | "know" | "events" | "members" | "guide" | "manage";
 
 export function KitApp(props: {
@@ -89,6 +103,9 @@ export function KitApp(props: {
   className?: string;
   children: ReactNode;
 }) {
+  const appLight = useAppLightTheme();
+  // A part of a page takes the app's theme unless told otherwise.
+  const light = props.light ?? (props.part ? appLight : false);
   const style: CSSProperties & Record<string, string> = {};
   if (props.fillWindow) style.height = "100vh";
   if (props.banner) style["--banner"] = `url(${props.banner})`;
@@ -97,7 +114,7 @@ export function KitApp(props: {
   return (
     <div
       className={[
-        cx("app", `on-v-${props.view}`, props.host && "host", props.light && "light", props.part && "part", props.part === "rail" && "rail-part", props.talking && "on-t-on"),
+        cx("app", `on-v-${props.view}`, props.host && "host", light && "light", props.part && "part", props.part === "rail" && "rail-part", props.talking && "on-t-on"),
         props.className,
       ].filter(Boolean).join(" ")}
       style={style}

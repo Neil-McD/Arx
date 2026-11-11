@@ -30,7 +30,9 @@ export type WebCommunityHomeSectionProps = {
   now?: Date;
   // Design system v1, the host's Home on the kit (docs/design/hifi-mock):
   // the dock supplies the conversation and whether it is open.
-  kit?: { talking: boolean; talk: ReactNode; onTalkItOver: () => void } | null;
+  // `hasConversation`: the one thread has something to read, so a quiet Home
+  // still offers a way back into it.
+  kit?: { talking: boolean; talk: ReactNode; onTalkItOver: () => void; hasConversation?: boolean } | null;
 };
 
 type HomeCard = { label: string; title: string; detail: string; action: string; onAction: () => void };
@@ -302,6 +304,9 @@ export function WebCommunityHomeSection(props: WebCommunityHomeSectionProps) {
                 <SinceItem key={index} kind={row.kind} title={row.title} detail={row.detail} onOpen={row.onOpen} still={!row.onOpen} />
               ))}
             </Since>
+          ) : null}
+          {!kit.talking && kit.hasConversation && !card ? (
+            <TextLink style={{ marginTop: 20 }} onClick={kit.onTalkItOver}>Continue your conversation</TextLink>
           ) : null}
           {kit.talk}
         </HomeBody>

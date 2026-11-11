@@ -179,3 +179,17 @@ test("on the kit, Home has the mock's parts and no old Home classes", async () =
   expect(html).toContain('id="talk"');
   expect(html).not.toContain("community-home");
 });
+
+test("a quiet Home on the kit still offers the way back into the conversation", async () => {
+  const { renderToStaticMarkup } = await import("react-dom/server");
+  const { WebCommunityHomeSection } = await import("../apps/web/src/components/WebCommunityHomeSection");
+  const render = (hasConversation: boolean, talking: boolean) => renderToStaticMarkup(React.createElement(WebCommunityHomeSection, {
+    communityId: "c1", communityName: "Kiln", firstName: "Neil", audience: "host" as const,
+    session: null, ensureSession: async () => null,
+    onOpenJoinRequests: () => {}, onOpenChannelByName: () => {}, onOpenEvents: () => {},
+    kit: { talking, hasConversation, talk: null, onTalkItOver: () => {} },
+  }));
+  expect(render(true, false)).toContain("Continue your conversation");
+  expect(render(false, false)).not.toContain("Continue your conversation");
+  expect(render(true, true)).not.toContain("Continue your conversation");
+});

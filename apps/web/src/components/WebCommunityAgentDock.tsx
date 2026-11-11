@@ -1259,6 +1259,10 @@ function WebCommunityAgentDock(props, ref) {
     </>
   );
 
+  // A turn under way, an approval waiting or an error opens the conversation
+  // by itself, so nothing that needs you is hidden behind Home at rest.
+  const conversationNeedsYou =
+    turnIsActive || isPreparing || Boolean(dockError) || Boolean(memberLimitNotice) || persistentResourceChangesetCards.length > 0;
   // Home on the kit: the host's Home in design v1 on a wide window.
   const kitHome = homeActive && guideWording && !props.mobileRoot && props.home?.audience === "host";
   const openTalk = () => {
@@ -1278,7 +1282,7 @@ function WebCommunityAgentDock(props, ref) {
   };
   const kitBody = kitHome && props.home ? (
     <section className="community-agent-dock-panel has-home-rail is-kit-home" aria-label={presentation.title}>
-      <KitApp view="home" host part="main" talking={kitTalking}>
+      <KitApp view="home" host part="main" talking={kitTalking || conversationNeedsYou}>
         <View index={0}>
           <Top search={false} />
           <Scroll ref={scrollRef}>
@@ -1289,7 +1293,8 @@ function WebCommunityAgentDock(props, ref) {
               refreshKey={homeRefreshKey}
               asideContainer={homeRailElement}
               kit={{
-                talking: kitTalking,
+                talking: kitTalking || conversationNeedsYou,
+                hasConversation: visibleMessages.length > 0,
                 talk: <Talk>{conversation(true)}</Talk>,
                 onTalkItOver: () => {
                   openTalk();
