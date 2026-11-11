@@ -1179,7 +1179,10 @@
 }
 
 @media (min-width: 721px) {
-  :root[data-design="v1"] .product-shell-surface--community {
+  /* .app-shell too: the old frame's ".app-shell:not(.with-community-rail)"
+     8px left inset ties on specificity and would otherwise win, leaving the
+     app 8px off the window edge and the Inbox page over the column's line. */
+  :root[data-design="v1"] .app-shell .product-shell-surface--community {
     margin: 0;
     border: 0;
     border-radius: 0;
