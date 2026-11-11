@@ -72,8 +72,14 @@ leaves a trace on the record: who, and when.
 - An admin viewing: manages members, sees no payouts.
 - A price that no longer exists but still has people on it.
 
+## Decided (Neil, 2026-11-11)
+
+- Comp from the record: free members only. Comping a paying member would
+  cancel their subscription, so it is not offered.
+- Moving between prices: a host may move a member down to a cheaper price.
+  Raising someone's price needs the member's agreement (not built yet).
+- Notes: hosts and admins only; the member never sees them.
+
 ## Open
 
-- Moving a member between prices by hand (a $27 member onto the $7 founding
-  rate). Not built; Neil decides.
 - Custom columns and custom views. Fixed columns and saved views first.

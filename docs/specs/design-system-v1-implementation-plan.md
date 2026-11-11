@@ -84,7 +84,7 @@ judgement of the page against the mock, not a measurement.
 | Inbox | 50% | #445 #448 | Mentions and replies across communities, guide line, filters, approvals, "Draft a reply"; an address | Inbox part two (backend); routing |
 | Events | 50% | #450 | Going, counts and faces; who is hosting; recaps | RSVP slice |
 | Members | 45% | #451 #452 | Guide suggestions; bios; host Plan column and Invite; flat list; an address | Routing; member data |
-| Knowledge | 10% | header only (#442) | The whole page | Neil: build for what exists, or bring back guide-written notes behind approval |
+| Knowledge | 10% | header only (#442) | The whole page | Neil (Nov 11): build for what exists first (host notes, documents), so guide-drafted notes behind approval can be added later |
 | Manage, Your guide | 15% / 5% | header only (#442) | Both pages | |
 | Discover, your settings | 60% | #444 | Their own header line and content column | |
 | Command palette | 0% | | | |
@@ -127,7 +127,7 @@ Shipped behind the switch: #427 to #452. Production: none of it.
 ## 5. What is next, in order
 
 1. Addresses for Inbox and Members, in one routing change.
-2. Knowledge, once Neil chooses its scope.
+2. Knowledge: what exists first (decided Nov 11).
 3. Going (RSVP) for Events: one table, one member action, with a security review.
 4. Manage and Your guide.
 5. The right column of each page (Catch up, Home's money and week).
