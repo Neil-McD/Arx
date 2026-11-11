@@ -294,8 +294,9 @@ const DIRECT_MESSAGES: Array<{ from: MemberKey; key: string; text: string }> = [
 ];
 
 export const seedPolynetDemoMessagesInternal = internalMutation({
-  args: {},
-  handler: async (ctx: any): Promise<Record<string, any>> => {
+  // With `from` and `text`: one new message now, e.g. to check unread states.
+  args: { from: v.optional(v.string()), text: v.optional(v.string()) },
+  handler: async (ctx: any, args): Promise<Record<string, any>> => {
     assertSeedAllowed();
     const community = await ctx.db.query("communities").withIndex("by_slug", (q: any) => q.eq("slug", DEMO_SLUG)).unique();
     if (!community) throw new Error("seed_demo_community_missing");
@@ -303,7 +304,10 @@ export const seedPolynetDemoMessagesInternal = internalMutation({
     const ownerHandle = String(owner?.normalizedHandle ?? owner?.handle ?? "").replace(/^@+/, "");
     if (!ownerHandle) throw new Error("seed_owner_has_no_handle");
     const sent = [];
-    for (const message of DIRECT_MESSAGES) {
+    const batch = args.from && args.text
+      ? [{ from: args.from as MemberKey, key: `live:${args.from}:${Date.now()}`, text: args.text }]
+      : DIRECT_MESSAGES;
+    for (const message of batch) {
       const user = await ctx.db.query("users").withIndex("by_authSubject", (q: any) => q.eq("authSubject", `${PREFIX}${message.from}`)).unique();
       if (!user) throw new Error("seed_demo_not_seeded");
       const result: any = await ctx.runMutation(
