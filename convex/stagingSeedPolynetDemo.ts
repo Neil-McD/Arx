@@ -12,6 +12,7 @@
 // Hand-run (staging):
 //   npx convex run stagingSeedPolynetDemo:seedPolynetDemoInternal '{"sourceCommunitySlug":"founder-walk-nov7"}'
 import { v } from "convex/values";
+import { internal } from "./_generated/api";
 import { internalMutation } from "./_generated/server";
 import { PRIVACY_AI_DATA_POLICY_DOCUMENT, TERMS_OF_SERVICE_DOCUMENT } from "../shared/legalDocuments";
 import { createActiveCommunityChannel, ensureGeneralChannel } from "./communityChannelCore";
@@ -277,5 +278,40 @@ export const seedPolynetDemoInternal = internalMutation({
       members: MEMBERS.length, channels: Object.keys(channels), posts: POSTS.length, removedPosts,
       event: new Date(startsAt).toISOString(), notes: NOTES.map((note) => note.title),
     };
+  },
+});
+
+// Direct messages to the owner from demo members, through the real send path,
+// so the Inbox has the mock's conversations. Stable client message ids make a
+// second run a no-op.
+//   npx convex run stagingSeedPolynetDemo:seedPolynetDemoMessagesInternal '{}'
+const DIRECT_MESSAGES: Array<{ from: MemberKey; key: string; text: string }> = [
+  { from: "jon", key: "jon-1", text: "Saw you're sending your first ten today." },
+  { from: "jon", key: "jon-2", text: "Happy to share the full sequence if you want it." },
+  { from: "sara", key: "sara-1", text: "How did you price your founding tier? Thinking about doing the same." },
+  { from: "priya", key: "priya-1", text: "The onboarding thread is worth a read before Friday." },
+  { from: "lena", key: "lena-1", text: "Loved your carousel breakdown. Could you share the template?" },
+];
+
+export const seedPolynetDemoMessagesInternal = internalMutation({
+  args: {},
+  handler: async (ctx: any): Promise<Record<string, any>> => {
+    assertSeedAllowed();
+    const community = await ctx.db.query("communities").withIndex("by_slug", (q: any) => q.eq("slug", DEMO_SLUG)).unique();
+    if (!community) throw new Error("seed_demo_community_missing");
+    const owner = await ctx.db.get(community.ownerId);
+    const ownerHandle = String(owner?.normalizedHandle ?? owner?.handle ?? "").replace(/^@+/, "");
+    if (!ownerHandle) throw new Error("seed_owner_has_no_handle");
+    const sent = [];
+    for (const message of DIRECT_MESSAGES) {
+      const user = await ctx.db.query("users").withIndex("by_authSubject", (q: any) => q.eq("authSubject", `${PREFIX}${message.from}`)).unique();
+      if (!user) throw new Error("seed_demo_not_seeded");
+      const result: any = await ctx.runMutation(
+        (internal as any).directMessages.sendSiteDirectMessageForTrustedUserInternal,
+        { userId: user._id, communityId: community._id, handle: ownerHandle, text: message.text, clientMessageId: `${PREFIX}dm:${message.key}` },
+      );
+      sent.push({ from: message.from, conversationId: result.conversation_id });
+    }
+    return { to: ownerHandle, sent };
   },
 });

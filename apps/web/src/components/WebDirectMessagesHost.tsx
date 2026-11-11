@@ -105,6 +105,8 @@ export type WebDirectMessagesHostProps<SessionT> = {
   notificationsState?: DirectMessageNotificationsUiState;
   onToggleNotifications?: () => void;
   onClose: () => void;
+  // Design v1: the community you're in, so the Inbox can badge the others.
+  activeCommunityId?: string | null;
 };
 
 function toErrorMessage(error: unknown, fallback: string): string {
@@ -1768,6 +1770,7 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
           activeConversationId={activeConversationId}
           onSelectConversation={openConversation}
           onSelectPerson={openPersonConversation}
+          kitPage={inboxIsPage ? { activeCommunityId: props.activeCommunityId ?? null } : null}
         />
       ) : null}
     </div>

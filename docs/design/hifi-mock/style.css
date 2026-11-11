@@ -417,5 +417,5 @@ kbd{margin-left:auto;font-family:var(--sans);font-size:11px;color:var(--ink3);pa
    text column stays 736px and centres, and a channel or a page keeps its
    fixed gutters and uses the whole middle. */
 .app{height:100vh;--rail-w:clamp(328px,calc(328px + (100vw - 1440px) * .24),440px);--measure:736px}
-.rail{width:var(--rail-w)}
+.rail{width:var(--rail-w)}.r3{width:max(400px,var(--rail-w))}
 .home,.v0 .dock{padding-left:max(56px,calc((100% - var(--measure)) / 2));padding-right:max(56px,calc((100% - var(--measure)) / 2))}

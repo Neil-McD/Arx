@@ -7,6 +7,8 @@ import type {
   DirectMessageParticipant,
 } from "../../../../shared/communityTypes";
 import { UserAvatar } from "../../../../shared/UserAvatar";
+import { useState } from "react";
+import { Icon, KitApp, Top, View, cx } from "../v1/kit";
 
 type WebDirectMessageInboxPanelProps = {
   conversations: DirectMessageConversation[];
@@ -31,7 +33,24 @@ type WebDirectMessageInboxPanelProps = {
   activeConversationId?: string | null;
   onSelectConversation: (conversation: DirectMessageConversation) => void;
   onSelectPerson: (person: DirectMessageNetworkPerson) => void | Promise<void>;
+  // Design system v1, the Inbox page on a wide window: drawn from the kit
+  // (the mock's Inbox, docs/design/hifi-mock), the current community first.
+  kitPage?: { activeCommunityId: string | null } | null;
 };
+
+type InboxFilter = "reply" | "all" | "here";
+
+// The guide's line at the top of the Inbox, worked out from the list.
+export function inboxLeadFor(needsReply: number): string {
+  if (needsReply === 0) return "Nothing here needs a reply.";
+  if (needsReply === 1) return "1 of these needs a reply.";
+  return `${needsReply} of these need a reply.`;
+}
+
+function communityInitials(name: string): string {
+  const words = name.trim().split(/\s+/).filter(Boolean);
+  return (words.length > 1 ? words[0][0] + words[1][0] : name.slice(0, 2)).toUpperCase();
+}
 
 const ACTIVE_NOW_WINDOW_MS = 5 * 60 * 1000;
 
@@ -108,6 +127,8 @@ export function WebDirectMessageInboxPanel(props: WebDirectMessageInboxPanelProp
   const isInitialInboxLoad = props.isLoading && props.conversations.length === 0;
   const isInitialPeopleLoad = props.isLoadingPeople && visiblePeople.length === 0;
   const hasAnyRows = filteredConversations.length > 0 || visiblePeople.length > 0;
+
+  if (props.kitPage) return <KitInboxPage {...props} kitPage={props.kitPage} conversations={conversationsWithMessages} people={visiblePeople} />;
 
   return (
     <aside className="community-dm-panel community-dm-inbox-panel" role="dialog" aria-label="Direct messages">
@@ -327,6 +348,137 @@ export function WebDirectMessageInboxPanel(props: WebDirectMessageInboxPanelProp
           </div>
         ) : null}
       </div>
+    </aside>
+  );
+}
+
+function KitInboxPage(props: WebDirectMessageInboxPanelProps & { kitPage: { activeCommunityId: string | null } }) {
+  const isUnread = (conversation: DirectMessageConversation) =>
+    !conversation.viewer_muted && Boolean(conversation.has_unread || Number(conversation.unread_count ?? 0) > 0);
+  const needsReply = props.conversations.filter(isUnread).length;
+  const [filter, setFilter] = useState<InboxFilter | null>(null);
+  const [findingSomeone, setFindingSomeone] = useState(false);
+  const activeFilter: InboxFilter = filter ?? (needsReply > 0 ? "reply" : "all");
+  const here = props.kitPage.activeCommunityId;
+  const hereName = props.conversations.find((conversation) => conversation.created_from_community?.id === here)?.created_from_community?.name ?? null;
+  const fromElsewhere = props.conversations.some((conversation) => conversation.created_from_community && conversation.created_from_community.id !== here);
+  const rows = props.conversations.filter((conversation) =>
+    activeFilter === "reply" ? isUnread(conversation)
+      : activeFilter === "here" ? conversation.created_from_community?.id === here
+        : true);
+  const search = props.searchValue.trim().replace(/^@+/, "").toLowerCase();
+  const people = search
+    ? props.people.filter((person) => [person.display_name, person.handle].filter(Boolean).join(" ").toLowerCase().includes(search))
+    : props.people;
+
+  const avatar = (name: string, seed: string, imageUrl: string | null | undefined, badge?: { label: string; name: string } | null) => (
+    <span className={cx("av", badge && "has")} title={badge ? `From ${badge.name}` : undefined}>
+      <UserAvatar
+        className="community-dm-kit-avatar"
+        readyClassName="has-image"
+        name={name}
+        imageUrl={imageUrl ?? null}
+        alt=""
+        fallback={<span>{props.getInitials(name)}</span>}
+        fallbackStyle={{ backgroundColor: props.getAvatarColor(seed) }}
+      />
+      {badge ? <i className={cx("cb")} style={{ background: props.getAvatarColor(badge.name) }}>{badge.label}</i> : null}
+    </span>
+  );
+
+  return (
+    <aside className="community-dm-panel community-dm-inbox-panel is-kit" role="dialog" aria-label="Inbox">
+      <KitApp view="inbox" part="main">
+        <View index={3}>
+          <Top title={<>Inbox <small>Across your communities</small></>} titleView={3} search={false} />
+          <div className={cx("page")} style={{ overflowY: "auto" }}>
+            <p className={cx("lead")}>
+              <span className={cx("aura")}><Icon name="spark" /></span>
+              {props.isLoading && props.conversations.length === 0 ? "Loading your messages." : inboxLeadFor(needsReply)}
+            </p>
+            <div className={cx("filters")} style={{ marginTop: 20 }} role="group" aria-label="Show">
+              <button type="button" className={cx("chip", activeFilter === "reply" && "sel")} aria-pressed={activeFilter === "reply"} onClick={() => setFilter("reply")}>
+                Needs a reply{needsReply ? ` · ${needsReply}` : ""}
+              </button>
+              <button type="button" className={cx("chip", activeFilter === "all" && "sel")} aria-pressed={activeFilter === "all"} onClick={() => setFilter("all")}>
+                Everything
+              </button>
+              {hereName && fromElsewhere ? (
+                <button type="button" className={cx("chip", activeFilter === "here" && "sel")} aria-pressed={activeFilter === "here"} onClick={() => setFilter("here")}>
+                  Only {hereName}
+                </button>
+              ) : null}
+              {props.canBrowsePeople ? (
+                <button type="button" className={cx("chip")} style={{ marginLeft: "auto" }} aria-pressed={findingSomeone} onClick={() => setFindingSomeone((open) => !open)}>
+                  {findingSomeone ? "Done" : "New message"}
+                </button>
+              ) : null}
+            </div>
+            {props.error ? <div className="community-dm-panel-error">{props.error}</div> : null}
+
+            {findingSomeone ? (
+              <>
+                <label className="community-dm-recipient-search community-dm-inbox-search" style={{ marginTop: 18 }}>
+                  <Search aria-hidden="true" />
+                  <input autoFocus value={props.searchValue} onChange={(event) => props.onSearchValueChange(event.target.value)} aria-label="Find someone" placeholder="Find someone" />
+                </label>
+                {props.peopleError ? <div className="community-dm-panel-error">{props.peopleError}</div> : null}
+                <div className={cx("list")} style={{ marginTop: 14 }}>
+                  {people.map((person) => {
+                    const name = String(person.display_name ?? person.handle ?? "Member").trim() || "Member";
+                    return (
+                      <button key={`person:${person.user_id}`} type="button" className={cx("mrow", "read")} onClick={() => void props.onSelectPerson(person)} aria-label={`Message ${name}`}>
+                        {avatar(name, person.user_id ?? name, person.avatar_url)}
+                        <div><div className={cx("h")}><b>{name}</b><span>{formatPersonPresenceLabel(person)}</span></div></div>
+                        <span />
+                      </button>
+                    );
+                  })}
+                  {props.isLoadingPeople && people.length === 0 ? <p className={cx("sub")}>Finding people…</p> : null}
+                  {!props.isLoadingPeople && people.length === 0 ? <p className={cx("sub")}>No one found.</p> : null}
+                </div>
+              </>
+            ) : (
+              <div className={cx("list")} style={{ marginTop: 14 }}>
+                {rows.map((conversation) => {
+                  const peer = resolveDirectMessagePeer(conversation, props.sessionUserId);
+                  const name = String(peer?.display_name ?? "Direct message").trim() || "Direct message";
+                  const community = conversation.created_from_community;
+                  const elsewhere = community && community.id !== here ? community : null;
+                  const unread = isUnread(conversation);
+                  const preview = String(conversation.last_message_preview ?? "").trim() || (community ? `Started in ${community.name}` : "");
+                  return (
+                    <button
+                      key={conversation.id}
+                      type="button"
+                      className={cx("mrow", props.activeConversationId === conversation.id && "sel", !unread && "read")}
+                      aria-current={props.activeConversationId === conversation.id ? "true" : undefined}
+                      aria-label={`${name}, ${unread ? "unread, " : ""}${preview}`}
+                      onClick={() => props.onSelectConversation(conversation)}
+                    >
+                      {avatar(name, peer?.user_id ?? name, peer?.avatar_url, elsewhere ? { label: communityInitials(elsewhere.name), name: elsewhere.name } : null)}
+                      <div>
+                        <div className={cx("h")}>
+                          <b>{name}</b>
+                          <span>{elsewhere ? `Direct message · ${elsewhere.name}` : "Direct message"}</span>
+                          <time>{formatInboxTime(conversation.last_message_at ?? conversation.updated_at)}</time>
+                        </div>
+                        <p>{preview}</p>
+                      </div>
+                      {unread ? <span className={cx("dot")} aria-hidden="true" /> : <span />}
+                    </button>
+                  );
+                })}
+                {rows.length === 0 && !props.isLoading ? (
+                  <p className={cx("sub")} style={{ marginTop: 6 }}>
+                    {activeFilter === "reply" ? "You're all caught up." : "No messages yet. Start one with New message."}
+                  </p>
+                ) : null}
+              </div>
+            )}
+          </div>
+        </View>
+      </KitApp>
     </aside>
   );
 }

@@ -1739,7 +1739,8 @@
     top: 0;
     right: 0;
     bottom: 0;
-    width: var(--right-column-width);
+    /* The mock's Inbox conversation column is 400px, wider on big windows. */
+    width: max(400px, var(--right-column-width));
     height: auto;
     max-height: none;
     gap: 0;
@@ -2742,4 +2743,33 @@
   :root[data-design="v1"] .community-chat .community-interaction-main-composer .community-composer-submit-tools {
     order: 4;
   }
+}
+
+/* The Inbox page on the kit (WebDirectMessageInboxPanel's KitInboxPage): the
+   kit draws the page; the panel only places it between the left column and
+   the conversation column. */
+@media (min-width: 721px) {
+  :root[data-design="v1"] .web-direct-messages-host.is-page .community-dm-inbox-panel.is-kit {
+    display: block;
+    padding: 0 max(400px, var(--right-column-width)) 0 0;
+    overflow: hidden;
+  }
+}
+
+:root[data-design="v1"] .community-dm-kit-avatar {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  border-radius: 50%;
+  color: rgba(255, 255, 255, 0.86);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+:root[data-design="v1"] .community-dm-kit-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
