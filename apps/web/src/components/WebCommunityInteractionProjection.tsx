@@ -4,6 +4,8 @@ import {
 } from "lucide-react";
 import { CommunityThreadHeader } from "./CommunityThreadHeader";
 import { isDesignV1Active } from "../../../../shared/designSystem";
+import { KitApp, useMinWidth } from "../v1/kit";
+import { KitChannelFeed } from "../v1/KitChannelFeed";
 import {
   EmojiPickerButton,
   ReactionSummary,
@@ -177,6 +179,7 @@ export function communityInteractionRootHasRichContent(
 
 export function WebCommunityInteractionProjection(props: WebCommunityInteractionProjectionProps) {
   const hasChannelContext = Boolean(props.communityId && props.activeChannel);
+  const isDesktopWidth = useMinWidth(721);
   const peopleOpen = Boolean(props.peopleOpen && hasChannelContext);
   const closePeople = useCallback(() => {
     props.onPeopleOpenChange?.(false);
@@ -509,6 +512,7 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
   const isMobileThreadPage = Boolean(props.mobileThreadPage && selectedRoot && !props.profilePanel);
   const ThreadSurface = isMobileThreadPage ? "section" : "aside";
   const hasDetailPanel = Boolean(selectedRoot || props.profilePanel);
+  const kitFeed = isDesignV1Active() && isDesktopWidth && !props.mobileThreadPage;
 
   return (
     <>
@@ -580,15 +584,30 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
           onScroll={handleFeedScroll}
           onTouchStart={handleFeedTouchStart}
         >
-          <CommunityInteractionFeedList
-            {...props}
-            editing={editing}
-            editText={editText}
-            onStartEdit={startEdit}
-            onEditTextChange={setEditText}
-            onSaveEdit={saveEdit}
-            onCancelEdit={cancelEdit}
-          />
+          {kitFeed ? (
+            // Design system v1 on desktop: the mock's feed, from the kit.
+            <KitApp view="wins" part="flow">
+              <KitChannelFeed
+                {...props}
+                editing={editing}
+                editText={editText}
+                onStartEdit={startEdit}
+                onEditTextChange={setEditText}
+                onSaveEdit={saveEdit}
+                onCancelEdit={cancelEdit}
+              />
+            </KitApp>
+          ) : (
+            <CommunityInteractionFeedList
+              {...props}
+              editing={editing}
+              editText={editText}
+              onStartEdit={startEdit}
+              onEditTextChange={setEditText}
+              onSaveEdit={saveEdit}
+              onCancelEdit={cancelEdit}
+            />
+          )}
         </div>
         {showJumpToLatest ? (
           <button type="button" className="community-interaction-jump-latest" onClick={scrollToLatest}>

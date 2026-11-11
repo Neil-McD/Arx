@@ -96,6 +96,22 @@ css += """
 .app.part>.rail{width:auto;flex:1;border-left:0}
 .app.part .scroll{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain}
 .app.part .scroll>.home{padding-bottom:24px}
+/* A part that flows inside the app's own scrolling box (a channel's feed):
+   it sits at the bottom of the box, as the newest message should. */
+.app.part.flow-part{height:auto;margin-top:auto;overflow:visible;display:block;flex:none}
+.app.part.flow-part .feed{padding:0}
+
+/* Kit addition: states the mock doesn't draw, in its own terms. */
+.app .msg.cont{padding-top:3px;padding-bottom:3px}
+.app .msg.cont>.gap{width:36px;flex:none}
+.app .msg.pending{opacity:.6}
+.app .msg.mention{background:rgba(29,155,240,.06)}
+.app .tools:focus-within,.app .tools:has([aria-expanded="true"]){opacity:1;transform:none;pointer-events:auto}
+.app .re.mine{border-color:rgba(29,155,240,.45);background:rgba(29,155,240,.10);color:var(--ink)}
+/* Many reactions wrap onto more lines rather than run past the edge. */
+.app .msg .rx{flex-wrap:wrap;row-gap:6px}
+/* The app's own avatar (with its profile card) at the mock's 36px. */
+.app .msg>:global(.community-interaction-avatar-hover),.app .msg>:global(.community-interaction-avatar-hover) :global(.community-interaction-avatar-trigger),.app .msg>:global(.community-interaction-avatar-hover) :global(.community-interaction-avatar){width:36px;height:36px;flex:none}
 
 /* Decisions on top of the mock (Neil, Nov 10-11). The mock is drawn at 1440,
    where Home's text column is 736px. On wider windows that column stays 736px

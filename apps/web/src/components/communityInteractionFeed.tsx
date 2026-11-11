@@ -283,9 +283,11 @@ export function MessageActions(props: {
   onDelete?: () => void;
   onPin?: () => void;
   isPinned?: boolean;
+  // Design v1's kit draws the bar with its own class (the mock's tools).
+  className?: string;
 }) {
   return (
-    <div className="community-interaction-msg-actions">
+    <div className={props.className ?? "community-interaction-msg-actions"}>
       {QUICK_REACTIONS.map((emoji) => (
         <button
           key={emoji}
@@ -877,17 +879,17 @@ export function InteractionAttachments(props: {
   );
 }
 
-export function CommunityInteractionFeedList(
-  props: WebCommunityInteractionProjectionProps & {
-    showDayDividers?: boolean;
-    editing: { type: "root" | "reply"; id: string } | null;
-    editText: string;
-    onStartEdit: (type: "root" | "reply", id: string, body: string) => void;
-    onEditTextChange: (value: string) => void;
-    onSaveEdit: () => void;
-    onCancelEdit: () => void;
-  },
-) {
+export type CommunityInteractionFeedListProps = WebCommunityInteractionProjectionProps & {
+  showDayDividers?: boolean;
+  editing: { type: "root" | "reply"; id: string } | null;
+  editText: string;
+  onStartEdit: (type: "root" | "reply", id: string, body: string) => void;
+  onEditTextChange: (value: string) => void;
+  onSaveEdit: () => void;
+  onCancelEdit: () => void;
+};
+
+export function CommunityInteractionFeedList(props: CommunityInteractionFeedListProps) {
   const seenRootIds = useRef<Set<string>>(new Set());
   const rootsLoadedOnce = useRef(false);
   useEffect(() => {
