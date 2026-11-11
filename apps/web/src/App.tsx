@@ -157,6 +157,7 @@ import {
   useWebBuilderPurchaseFlowController,
   useWebBuilderSetupSubscriptionController,
 } from "./controllers/useWebBuilderSetupFlowController";
+import { memberPreviewChannels } from "../../../shared/communityMemberPreview";
 
 
 type CommunityRecord = WebCommunityRecord;
@@ -656,6 +657,7 @@ export default function App() {
   } = communityAdministration.directory;
   const {
     activeCommunityAccess,
+    memberPreview,
     isLoadingCommunityAccess,
     communityAccessLoadError,
     retryActiveCommunityAccess,
@@ -2307,6 +2309,14 @@ export default function App() {
       communityRailAttentionById[communityId] = true;
     }
   }
+  // A member has no restricted channel, so a preview leaves one for General.
+  const handleToggleMemberPreview = (on: boolean) => {
+    memberPreview.set(on);
+    if (on && activeCommunityChannel?.access_mode === "restricted") {
+      const path = buildCommunityTabPath(selectedActiveCommunitySlug, "chat");
+      if (path) navigateTo(path);
+    }
+  };
   const shellChromeHostProps = buildWebShellChromeHostProps({
     account: canonicalSessionUserId
       ? {
@@ -2314,12 +2324,16 @@ export default function App() {
           avatarUrl: savedProfilesByUserId[canonicalSessionUserId]?.avatar_url ?? null,
           // "Host" is the owner. Being able to see settings is not enough: a
           // Polynet operator can, in communities where they are only a member.
-          roleLabel:
-            activeCommunity &&
-            activeCommunityAccess?.community_id === activeCommunity.id &&
-            activeCommunityAccess.is_owner === true
+          roleLabel: memberPreview.active
+            ? "Viewing as a member"
+            : activeCommunity &&
+              activeCommunityAccess?.community_id === activeCommunity.id &&
+              activeCommunityAccess.is_owner === true
               ? "Host"
               : "Member",
+          memberView: memberPreview.available
+            ? { active: memberPreview.active, onToggle: () => handleToggleMemberPreview(!memberPreview.active) }
+            : undefined,
           appTheme,
           onSetAppTheme: setAppTheme,
           onSignOut: handleSignOut,
@@ -2369,7 +2383,7 @@ export default function App() {
     handleTopbarBackToCommunity,
     communityTab,
     communityTabIndicators,
-    communityChannels: activeCommunityChannels,
+    communityChannels: memberPreview.active ? memberPreviewChannels(activeCommunityChannels) : activeCommunityChannels,
     isLoadingCommunityChannels: isLoadingActiveCommunityChannels,
     selectedCommunityChannelSlug: activeCommunityChannelSlug,
     communityChannelIndicators,

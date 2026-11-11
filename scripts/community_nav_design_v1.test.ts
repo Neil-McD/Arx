@@ -116,6 +116,18 @@ test("the foot is the mock's Your guide and Manage; Analytics moves to the accou
   expect(items.map((item) => item.key)).toContain("analytics");
 });
 
+test("the foot is the host's: a member who may open their own settings gets no Manage row", () => {
+  const html = renderToStaticMarkup(React.createElement(CommunityNav, {
+    ...hostProps,
+    canManageMembersActiveCommunity: false,
+    canViewActiveCommunityAnalytics: false,
+    onOpenGuide: () => {},
+  }));
+  const labels = labelsInOrder(html);
+  expect(labels).not.toContain("Manage");
+  expect(labels).not.toContain("Your guide");
+});
+
 test("a member sees no host rows, and Members only when they may see members", () => {
   const html = renderToStaticMarkup(React.createElement(CommunityNav, {
     ...baseProps,

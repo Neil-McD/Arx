@@ -24,6 +24,12 @@ import {
   type AuthSessionLike,
 } from "../../../../shared/authSession";
 import { reuseEquivalentValue } from "../../../../shared/reuseEquivalentValue";
+import {
+  canPreviewAsMember,
+  memberPreviewAccess,
+  readMemberPreviewCommunityId,
+  writeMemberPreview,
+} from "../../../../shared/communityMemberPreview";
 import { useResumeEpochEffect } from "../../../../shared/useResumeEpochEffect";
 
 type ScopedPresenceSummary = {
@@ -206,13 +212,32 @@ export function useWebActiveCommunityShellController<SessionT>(params: {
   const isAccessSessionIdentityScoped = Boolean(
     sessionIdentity && accessSessionIdentityRef.current === sessionIdentity,
   );
-  const activeCommunityAccess =
+  const realCommunityAccess =
     isAccessSessionIdentityScoped &&
     (scopedCommunityAccessResolution.status === "resolved" ||
     scopedCommunityAccessResolution.status === "refreshing" ||
     scopedCommunityAccessResolution.status === "failed")
       ? scopedCommunityAccessResolution.access
       : null;
+  // "View as a member": the rest of the app reads only the lensed access, so
+  // every host-or-member choice follows it. It can only take powers away.
+  const [memberPreviewCommunityId, setMemberPreviewCommunityId] = useState<string | null>(readMemberPreviewCommunityId);
+  const canPreviewMember = canPreviewAsMember(realCommunityAccess);
+  const isMemberPreview = canPreviewMember && memberPreviewCommunityId !== null &&
+    memberPreviewCommunityId === params.activeCommunityId;
+  const activeCommunityAccess = useMemo(
+    () => (isMemberPreview && realCommunityAccess ? memberPreviewAccess(realCommunityAccess) : realCommunityAccess),
+    [isMemberPreview, realCommunityAccess],
+  );
+  const setMemberPreview = useCallback((on: boolean) => {
+    const communityId = on ? params.activeCommunityId : null;
+    writeMemberPreview(communityId, on);
+    setMemberPreviewCommunityId(communityId);
+  }, [params.activeCommunityId]);
+  const memberPreview = useMemo(
+    () => ({ available: canPreviewMember, active: isMemberPreview, set: setMemberPreview }),
+    [canPreviewMember, isMemberPreview, setMemberPreview],
+  );
   const isLoadingCommunityAccess =
     Boolean(sessionIdentity) &&
     (!isAccessSessionIdentityScoped ||
@@ -304,6 +329,7 @@ export function useWebActiveCommunityShellController<SessionT>(params: {
 
   return {
     activeCommunityAccess,
+    memberPreview,
     isLoadingCommunityAccess,
     communityAccessLoadError,
     retryActiveCommunityAccess,

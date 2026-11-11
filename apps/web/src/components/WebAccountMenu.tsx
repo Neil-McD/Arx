@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
-import { ChevronsUpDown, LogOut, Moon, Settings, Sun } from "lucide-react";
+import { ChevronsUpDown, Eye, LogOut, Moon, Settings, Sun } from "lucide-react";
 import type { AppTheme } from "../../../../shared/theme";
 import { WebSignOutConfirmModal } from "./WebSignOutConfirmModal";
 
@@ -14,6 +14,8 @@ export type WebAccountMenuProps = {
   // Design system v1: the community's own extras (Invite people, Analytics,
   // Visit site) live here, so the column's foot is the mock's two rows.
   communityItems?: AccountMenuCommunityItem[];
+  // "View as a member" and back ("Host view"), for the people who run it.
+  memberView?: { active: boolean; onToggle: () => void };
 };
 
 export type AccountMenuCommunityItem = { key: string; label: string; icon: ReactNode; onSelect: () => void };
@@ -99,6 +101,20 @@ export function WebAccountMenu(props: WebAccountMenuProps) {
             {nextTheme === "light" ? <Sun size={16} aria-hidden="true" /> : <Moon size={16} aria-hidden="true" />}
             {nextTheme === "light" ? "Light mode" : "Dark mode"}
           </button>
+          {props.memberView ? (
+            <button
+              className="account-menu-item"
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                setIsOpen(false);
+                props.memberView?.onToggle();
+              }}
+            >
+              <Eye size={16} aria-hidden="true" />
+              {props.memberView.active ? "Host view" : "View as a member"}
+            </button>
+          ) : null}
           <button
             className="account-menu-item"
             type="button"
