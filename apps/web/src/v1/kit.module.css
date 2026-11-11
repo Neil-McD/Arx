@@ -430,6 +430,24 @@
 
 .app .r5{gap:18px;overflow-y:auto}.app .r5>*{flex:none}
 
+
+.app .views{display:flex;flex-wrap:wrap;gap:6px;margin-top:12px}
+.app .r5.h-only{width:max(440px,var(--rail-w))}
+.app .rec{display:contents}.app .rec-j{display:none}.app .r5 .rec>*{flex:none}
+.app.on-mem-josh .rec-t{display:none}.app.on-mem-josh .rec-j{display:contents}
+.app .trow.tt{background:var(--s2)}.app.on-mem-josh .trow.tt{background:none}
+.app.on-mem-josh .trow.tj{background:var(--s2)}
+.app label.trow{cursor:pointer}
+.app .tb-past{display:none}.app.on-mv-past .tb-past{display:block}.app.on-mv-past .tb-now{display:none}
+.app .chip.mv-a{background:var(--s2);color:var(--ink);border-color:var(--line2)}
+.app.on-mv-past .chip.mv-a{background:none;color:var(--ink2);border-color:var(--line)}
+.app.on-mv-past .chip.mv-p{background:var(--s2);color:var(--ink);border-color:var(--line2)}
+.app .trow.th .ic{width:12px;height:12px;vertical-align:-2px;opacity:.7}
+.app .plan{display:flex;flex-direction:column;gap:2px;padding:10px 12px;border-radius:10px;border:1px solid var(--line);background:var(--s1);font-size:13px}
+.app .plan b{font-weight:550;color:var(--ink)}.app .plan span{color:var(--ink3);font-size:12px}
+.app .kv .guess{color:var(--ink2)}.app .kv .guess em{color:var(--aurora-ink);display:flex;align-items:center;gap:5px}
+.app .p.you>span:last-child{color:var(--ink2)}
+
 /* Kit addition (see the script): browser defaults off, at zero specificity. */
 :where(.app) :where(button){margin:0;padding:0;border:0;background:none;color:inherit;font:inherit;line-height:inherit;letter-spacing:inherit;text-align:inherit;cursor:pointer}
 :where(.app) :where(input,textarea){margin:0;font:inherit;color:inherit}
