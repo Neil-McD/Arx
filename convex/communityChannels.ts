@@ -39,8 +39,35 @@ function mapCommunityChannel(channel: CommunityChannelLike) {
     name: channel.name,
     position: channel.position,
     access_mode: channel.accessMode,
+    description: channel.description ?? null,
   };
 }
+
+export const COMMUNITY_CHANNEL_DESCRIPTION_MAX = 120;
+
+export function normalizeCommunityChannelDescription(value: string): string {
+  return value.replace(/\s+/g, " ").trim().slice(0, COMMUNITY_CHANNEL_DESCRIPTION_MAX);
+}
+
+// A manager sets the line shown next to the channel's name; empty clears it.
+export const setCommunityChannelDescription = mutation({
+  args: {
+    userId: v.optional(v.id("users")),
+    authSubject: v.optional(v.string()),
+    communityId: v.id("communities"),
+    channelId: v.id("communityChannels"),
+    description: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const userId = await resolveUserIdForAuthenticatedRequest({ ctx, userId: args.userId, authSubject: args.authSubject ?? null });
+    await requireCommunityManager({ ctx, communityId: args.communityId, userId });
+    const actor = await resolveCommunityChannelActor({ ctx, communityId: args.communityId, userId });
+    const channel = await resolveAuthorizedCommunityChannel({ ctx, communityId: args.communityId, channelId: args.channelId, actor, capability: "canManage" });
+    const description = normalizeCommunityChannelDescription(args.description);
+    await ctx.db.patch(args.channelId, { description: description || undefined, updatedAt: Date.now() } as any);
+    return mapCommunityChannel({ ...(channel as any), description: description || undefined });
+  },
+});
 
 export const listCommunityChannels = query({
   args: {

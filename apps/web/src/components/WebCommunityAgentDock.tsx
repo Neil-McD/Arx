@@ -1286,7 +1286,7 @@ function WebCommunityAgentDock(props, ref) {
         <View index={0}>
           {/* The top row scrolls with Home, so the eyebrow's glow is never cut. */}
           <Scroll ref={scrollRef}>
-            <Top search={false} />
+            <Top onSearch={() => kitInputRef.current?.focus()} />
             <WebCommunityHomeSection
               {...props.home}
               session={props.session}

@@ -17,6 +17,7 @@ export type CloudCommunityChannel = {
   name: string;
   position: number;
   access_mode?: "all_members" | "restricted";
+  description?: string | null;
   capabilities?: { canRead: boolean; canPost: boolean; canReply: boolean; canManage: boolean };
 };
 
@@ -53,6 +54,15 @@ export async function createCloudCommunityChannel<SessionT>(
     communityId: params.communityId,
     name: params.name,
     ...(params.accessMode ? { accessMode: params.accessMode } : {}),
+  }) as CloudCommunityChannel;
+}
+
+export async function setCloudCommunityChannelDescription<SessionT>(
+  params: CloudCommunityChannelsGatewayParams<SessionT> & { communityId: string; channelId: string; description: string },
+): Promise<CloudCommunityChannel> {
+  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
+  return await client.mutation("communityChannels:setCommunityChannelDescription" as any, {
+    authSubject, communityId: params.communityId, channelId: params.channelId, description: params.description,
   }) as CloudCommunityChannel;
 }
 

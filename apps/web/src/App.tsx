@@ -1,3 +1,4 @@
+import { useGuideSearchShortcut } from "./controllers/useGuideSearchShortcut";
 import {
   useMemo,
   useRef,
@@ -1629,6 +1630,9 @@ export default function App() {
     navigateTo,
     pushNavSnapshot,
   });
+
+  // Design system v1: "Search or ask" and ⌘K open your guide on Home.
+  useGuideSearchShortcut(handleSelectCommunityTab, communityAgentComposerApiRef);
 
   const { peopleOpen, changeOpen: handlePeoplePanelOpenChange, openMembers: handleOpenCommunityMembers } =
     useWebChannelPeoplePanel({
