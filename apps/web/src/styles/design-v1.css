@@ -787,7 +787,8 @@
   flex: none;
   height: auto;
   min-height: 0;
-  margin: 0 0 10px;
+  /* The mock's column is padded 12px; the card keeps that space above it. */
+  margin: 12px 0 10px;
   padding: 0;
   border: 0;
   background: transparent;
