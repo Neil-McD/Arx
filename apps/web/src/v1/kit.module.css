@@ -417,3 +417,17 @@
 :where(.app) :where(input,textarea){margin:0;font:inherit;color:inherit}
 /* A button never stretches like the mock's block labels did; these do. */
 :where(.app) :where(button.cover,button.row,button.item,button.me){width:-webkit-fill-available;width:stretch}
+
+/* Kit addition: a part of the app (a page's middle, or its right column)
+   inside the app's own frame, instead of the mock's whole 900px window. */
+.app.part{min-width:0;width:100%;height:100%;background:transparent}
+.app.part.rail-part{height:auto;min-height:100%;overflow:visible}
+.app.part>.rail{width:auto;flex:1;border-left:0}
+.app.part .scroll{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain}
+.app.part .scroll>.home{padding-bottom:24px}
+
+/* Decisions on top of the mock (Neil, Nov 10-11). The mock is drawn at 1440,
+   where Home's text column is 736px. On wider windows that column stays 736px
+   and centres in the middle, and the composer keeps the same edges. */
+.app.part{--measure-gutter:max(56px,calc((100% - 736px) / 2))}
+.app.part .home,.app.part .dock{padding-left:var(--measure-gutter);padding-right:var(--measure-gutter)}

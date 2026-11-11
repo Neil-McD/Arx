@@ -20,6 +20,7 @@ import { buildCommunityTabPath } from "../shared/webAppRouteState";
 
 const HOUR_MS = 60 * 60 * 1000;
 const DAY_MS = 24 * HOUR_MS;
+const WEEK_MS = 7 * DAY_MS;
 const MAX_WINDOW_MS = 3 * DAY_MS;
 const CLAIM_LEASE_MS = 10 * 60 * 1000;
 const MAX_BRIEFS_PER_RUN = 25;
@@ -34,6 +35,9 @@ export type FounderBriefSnapshot = {
   windowHours: number;
   newMembers: { count: number; names: string[] };
   activity: { posts: number; replies: number; activePeople: number };
+  // The last seven days, for Home's figures. Active people are read from the
+  // same recent scan as activity, so on a very busy week it is a floor.
+  week: { joined: number; activePeople: number };
   unanswered: Array<{ author: string; channel: string; text: string; hoursAgo: number }>;
   quietNewcomers: { count: number; names: string[] };
   joinRequestsPending: number;
@@ -89,13 +93,14 @@ async function buildSnapshot(ctx: any, community: any, windowStartMs: number, no
   const memberRows = (from: number, to: number) => ctx.db.query("communityMemberships")
     .withIndex("by_community_createdAt", (q: any) => q.eq("communityId", community._id).gte("createdAt", from).lt("createdAt", to))
     .order("desc").take(SCAN_LIMIT);
-  const [roots, replies, recentJoins, newcomerRows, joinRequests, events] = await Promise.all([
+  const [roots, replies, recentJoins, newcomerRows, weekJoins, joinRequests, events] = await Promise.all([
     listSharedChannelReadableRows<any>({ ctx, tableName: "communityInteractionRoots", communityId: community._id, limit: SCAN_LIMIT }),
     listSharedChannelReadableRows<any>({ ctx, tableName: "communityInteractionReplies", communityId: community._id, limit: SCAN_LIMIT }),
     // Joins in the reporting window, and newcomers who joined 3 to 14 days ago,
     // read separately so a busy fortnight can't hide yesterday's joins.
     memberRows(windowStartMs, nowMs),
     memberRows(nowMs - 14 * DAY_MS, nowMs - 3 * DAY_MS),
+    memberRows(nowMs - WEEK_MS, nowMs),
     ctx.db.query("communityJoinRequests")
       .withIndex("by_community_status_createdAt", (q: any) => q.eq("communityId", community._id).eq("status", "pending"))
       .take(SCAN_LIMIT),
@@ -116,6 +121,10 @@ async function buildSnapshot(ctx: any, community: any, windowStartMs: number, no
 
   const activeMember = (row: any) => communityMembershipRowIsActive(row) && String(row.userId) !== ownerId;
   const joined = recentJoins.filter(activeMember);
+  const inWeek = (row: any) => Number(row.createdAt) >= nowMs - WEEK_MS && Number(row.createdAt) < nowMs;
+  const weekActivePeople = new Set(
+    [...roots, ...replies].filter((row: any) => live(row) && human(row) && inWeek(row)).map((row: any) => String(row.actorUserId)),
+  );
 
   // Anyone who has posted or replied in the recent scan is not quiet.
   const everActive = new Set([...roots, ...replies].filter(human).map((row: any) => String(row.actorUserId)));
@@ -155,6 +164,7 @@ async function buildSnapshot(ctx: any, community: any, windowStartMs: number, no
     windowHours: Math.max(1, Math.round((nowMs - windowStartMs) / HOUR_MS)),
     newMembers: { count: joined.length, names: await nameList(joined) },
     activity: { posts: windowRoots.length, replies: windowReplies.length, activePeople: activePeople.size },
+    week: { joined: weekJoins.filter(activeMember).length, activePeople: weekActivePeople.size },
     unanswered,
     quietNewcomers: { count: quiet.length, names: await nameList(quiet) },
     joinRequestsPending: joinRequests.length,

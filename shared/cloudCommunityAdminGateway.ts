@@ -1345,6 +1345,7 @@ export type CloudCommunityHomeSnapshot = {
   memberCount: number;
   newMembers: { count: number; names: string[] };
   activity: { posts: number; replies: number; activePeople: number };
+  week: { joined: number; activePeople: number };
   unanswered: Array<{ author: string; channel: string; text: string; hoursAgo: number }>;
   quietNewcomers: { count: number; names: string[] };
   joinRequestsPending: number;
@@ -1371,6 +1372,7 @@ export function normalizeCommunityHomeSnapshot(payload: unknown): CloudCommunity
       replies: count(record.activity?.replies),
       activePeople: count(record.activity?.activePeople),
     },
+    week: { joined: count(record.week?.joined), activePeople: count(record.week?.activePeople) },
     unanswered: (Array.isArray(record.unanswered) ? record.unanswered : []).slice(0, 5).map((row: any) => ({
       author: String(row?.author ?? ""),
       channel: String(row?.channel ?? ""),

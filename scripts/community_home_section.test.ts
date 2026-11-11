@@ -4,13 +4,14 @@ import * as React from "react";
 const web = createRequire(new URL("../apps/web/package.json", import.meta.url));
 const root = createRequire(import.meta.url);
 if (web.resolve("react") !== root.resolve("react")) vi.doMock(web.resolve("react"), () => React);
-const { greetingFor, homeCardFor, homeEventTimeFor, homeFiguresFor, homeRowsFor, homeSentenceFor } = await import("../apps/web/src/components/WebCommunityHomeSection");
+const { greetingFor, homeCardFor, homeClockFor, homeEventTimeFor, homeFiguresFor, homeKitFiguresFor, homeRowsFor, homeSentenceFor } = await import("../apps/web/src/components/WebCommunityHomeSection");
 const { normalizeCommunityHomeSnapshot } = await import("../shared/cloudCommunityAdminGateway");
 
 const quiet = normalizeCommunityHomeSnapshot({
   memberCount: 12,
   newMembers: { count: 0, names: [] },
   activity: { posts: 0, replies: 0, activePeople: 0 },
+  week: { joined: 0, activePeople: 0 },
   unanswered: [],
   quietNewcomers: { count: 0, names: [] },
   joinRequestsPending: 0,
@@ -21,6 +22,7 @@ const busy = normalizeCommunityHomeSnapshot({
   memberCount: 214,
   newMembers: { count: 3, names: ["Tessa", "Dev", "Mira"] },
   activity: { posts: 9, replies: 21, activePeople: 14 },
+  week: { joined: 3, activePeople: 132 },
   unanswered: [
     { author: "Rafael", channel: "general", text: "How do I price a founding tier?", hoursAgo: 50 },
     { author: "Sara", channel: "wins", text: "Who has a call script?", hoursAgo: 3 },
@@ -138,4 +140,42 @@ test("without a rail to fill, the panel renders once, inline", async () => {
   // Nothing is loaded on the server, so there is a greeting and no panel yet.
   expect(html).toContain("Kiln, your guide");
   expect(html).not.toContain("community-home-aside");
+});
+
+test("on the kit, the host's figures are the week's, as the mock has them", () => {
+  expect(homeKitFiguresFor(busy)).toEqual([
+    { label: "Members", value: "214", note: "3 joined this week" },
+    { label: "Active this week", value: "132", note: "62 percent" },
+    { label: "Waiting to join", value: "2", note: "2 requests" },
+    { label: "Unanswered", value: "2", note: "questions" },
+  ]);
+  expect(homeKitFiguresFor(quiet).slice(0, 3)).toEqual([
+    { label: "Members", value: "12", note: "No one new this week" },
+    { label: "Active this week", value: "0", note: "0 percent" },
+    { label: "Waiting to join", value: "0", note: "Nobody waiting" },
+  ]);
+  // An older backend without the week reads as zero, never as missing.
+  expect(normalizeCommunityHomeSnapshot({ memberCount: 3 })!.week).toEqual({ joined: 0, activePeople: 0 });
+});
+
+test("the eyebrow's clock reads like the mock's", () => {
+  expect(homeClockFor(new Date(2026, 10, 10, 20, 40))).toBe("8:40 pm");
+  expect(homeClockFor(new Date(2026, 10, 10, 7, 2))).toBe("7:02 am");
+});
+
+test("on the kit, Home has the mock's parts and no old Home classes", async () => {
+  const { renderToStaticMarkup } = await import("react-dom/server");
+  const { WebCommunityHomeSection } = await import("../apps/web/src/components/WebCommunityHomeSection");
+  const html = renderToStaticMarkup(React.createElement(WebCommunityHomeSection, {
+    communityId: "c1", communityName: "Kiln", firstName: "Neil", audience: "host" as const,
+    session: null, ensureSession: async () => null,
+    onOpenJoinRequests: () => {}, onOpenChannelByName: () => {}, onOpenEvents: () => {},
+    now: new Date(2026, 10, 10, 20, 40),
+    kit: { talking: false, talk: React.createElement("div", { id: "talk" }), onTalkItOver: () => {} },
+  }));
+  expect(html).toContain("Kiln, your guide");
+  expect(html).toContain("8:40 pm");
+  expect(html).toContain("Good evening, Neil.");
+  expect(html).toContain('id="talk"');
+  expect(html).not.toContain("community-home");
 });
