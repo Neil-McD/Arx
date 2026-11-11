@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { ChevronsUpDown, LogOut, Moon, Settings, Sun } from "lucide-react";
 import type { AppTheme } from "../../../../shared/theme";
 import { WebSignOutConfirmModal } from "./WebSignOutConfirmModal";
@@ -11,7 +11,12 @@ export type WebAccountMenuProps = {
   onSetAppTheme: (theme: AppTheme) => void;
   onOpenSettings: () => void;
   onSignOut: () => Promise<void>;
+  // Design system v1: the community's own extras (Invite people, Analytics,
+  // Visit site) live here, so the column's foot is the mock's two rows.
+  communityItems?: AccountMenuCommunityItem[];
 };
+
+export type AccountMenuCommunityItem = { key: string; label: string; icon: ReactNode; onSelect: () => void };
 
 // Design system v1: the account row at the bottom of the left column. Its menu
 // holds what used to need a trip to settings: light or dark, settings, sign out.
@@ -62,6 +67,26 @@ export function WebAccountMenu(props: WebAccountMenuProps) {
     <div className="account-menu" ref={rootRef}>
       {isOpen ? (
         <div className="account-menu-popover" id={menuId} role="menu" aria-label="Account">
+          {props.communityItems?.length ? (
+            <>
+              {props.communityItems.map((item) => (
+                <button
+                  key={item.key}
+                  className="account-menu-item"
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    setIsOpen(false);
+                    item.onSelect();
+                  }}
+                >
+                  {item.icon}
+                  {item.label}
+                </button>
+              ))}
+              <div className="account-menu-separator" role="separator" />
+            </>
+          ) : null}
           <button
             className="account-menu-item"
             type="button"

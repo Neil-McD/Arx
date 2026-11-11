@@ -2396,6 +2396,7 @@ export default function App() {
     isLoadingCommunityAccess:
       isAuthRecoveringSignedInAppShell || isLoadingCommunityAccess,
     handleSelectCommunityTab,
+    handleSelectCommunitySettingsPane,
     handleSelectCommunityTabFromMobile,
     onCopyCommunityJoinLink: copyTextToClipboard,
     canOpenDirectMessages: Boolean(session),

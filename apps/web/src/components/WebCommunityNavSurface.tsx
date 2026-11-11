@@ -56,7 +56,9 @@ export function WebCommunityNavSurface({
       }
       layout={useV1Layout ? "v1" : "classic"}
       identityIsCover={useV1Layout}
-      accountSlot={useV1Layout && communityShell.account ? <WebAccountMenu {...communityShell.account} /> : null}
+      accountSlot={useV1Layout && communityShell.account
+        ? (communityItems) => <WebAccountMenu {...communityShell.account!} communityItems={communityItems} />
+        : null}
       identitySlot={
         useV1Layout && communityShell.account && communityShell.activeCommunity ? (
           <WebCommunitySwitcher
@@ -92,6 +94,9 @@ export function WebCommunityNavSurface({
       inboxUnreadCount={communityShell.directMessagesUnreadCount}
       onOpenMembers={useV1Layout ? communityShell.onOpenMembers : undefined}
       memberCount={communityShell.activeCommunityMemberCount}
+      onOpenGuide={useV1Layout && communityShell.onOpenCommunitySettingsPane
+        ? () => communityShell.onOpenCommunitySettingsPane?.("agent")
+        : undefined}
     />
   );
 }

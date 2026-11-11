@@ -73,6 +73,7 @@ export function buildWebShellChromeHostProps(params: {
   canViewActiveCommunityAnalytics: boolean;
   isLoadingCommunityAccess: boolean;
   handleSelectCommunityTab: (tab: WebShellChromeHostProps["communityShell"]["communityTab"]) => void;
+  handleSelectCommunitySettingsPane?: (pane: "community" | "agent" | "danger") => void;
   handleSelectCommunityTabFromMobile: (tab: WebShellChromeHostProps["communityShell"]["communityTab"]) => void;
   onCopyCommunityJoinLink: WebShellChromeHostProps["communityShell"]["onCopyCommunityJoinLink"];
   canOpenDirectMessages: boolean;
@@ -237,6 +238,7 @@ export function buildWebShellChromeHostProps(params: {
       canViewActiveCommunityAnalytics: params.canViewActiveCommunityAnalytics,
       isLoadingCommunityAccess: params.isLoadingCommunityAccess,
       onSelectCommunityTab: params.handleSelectCommunityTab,
+      onOpenCommunitySettingsPane: params.handleSelectCommunitySettingsPane,
       onSelectCommunityTabFromMobile: params.handleSelectCommunityTabFromMobile,
       onCopyCommunityJoinLink: params.onCopyCommunityJoinLink,
       canOpenDirectMessages: params.canOpenDirectMessages,
