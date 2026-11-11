@@ -108,6 +108,8 @@ export function KitApp(props: {
   aura?: number;
   // The mock is drawn 900px tall; in the app the frame fills the window.
   fillWindow?: boolean;
+  // Design lab only: draw everything this many times larger, to try sizes.
+  scale?: number;
   // One part of a page (its middle, or its right column) inside the app's
   // own frame, rather than the mock's whole window.
   part?: "main" | "rail" | "flow";
@@ -120,7 +122,8 @@ export function KitApp(props: {
   // A part of a page takes the app's theme unless told otherwise.
   const light = props.light ?? (props.part ? appLight : false);
   const style: CSSProperties & Record<string, string> = {};
-  if (props.fillWindow) style.height = "100vh";
+  if (props.fillWindow) style.height = props.scale && props.scale !== 1 ? `calc(100vh / ${props.scale})` : "100vh";
+  if (props.scale && props.scale !== 1) style.zoom = String(props.scale);
   if (props.banner) style["--banner"] = `url(${props.banner})`;
   if (props.bannerPosition) style["--bpos"] = props.bannerPosition;
   if (props.aura !== undefined) style["--aura"] = String(props.aura);

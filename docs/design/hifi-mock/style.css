@@ -410,3 +410,12 @@ kbd{margin-left:auto;font-family:var(--sans);font-size:11px;color:var(--ink3);pa
 .fd .rad{display:flex;gap:12px;align-items:flex-end;margin-bottom:14px}.fd .rad div{border:1px solid var(--line2);background:var(--s1);display:flex;align-items:center;justify-content:center;font-size:12px;color:var(--ink2)}
 .fd ul{margin:0;padding:0;list-style:none}.fd li{font-size:14px;color:var(--ink2);padding:9px 0;border-top:1px solid var(--line)}.fd li:first-child{border-top:0;padding-top:0}.fd li b{color:var(--ink);font-weight:550}
 .fd .pulse{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--aurora);box-shadow:0 0 14px var(--aurora);margin-right:10px;animation:breathe 4.8s ease-in-out infinite}
+
+/* ---------- any window, from a laptop to a large monitor (Neil, Nov 11) ----------
+   Sizes stay fixed; the frame fills the window. At 1440 everything is exactly
+   the boards above. Wider: the right column grows to 440px (by 1909), Home's
+   text column stays 736px and centres, and a channel or a page keeps its
+   fixed gutters and uses the whole middle. */
+.app{height:100vh;--rail-w:clamp(328px,calc(328px + (100vw - 1440px) * .24),440px);--measure:736px}
+.rail{width:var(--rail-w)}
+.home,.v0 .dock{padding-left:max(56px,calc((100% - var(--measure)) / 2));padding-right:max(56px,calc((100% - var(--measure)) / 2))}
