@@ -120,7 +120,8 @@ export function KitApp(props: {
   // A part of a page takes the app's theme unless told otherwise.
   const light = props.light ?? (props.part ? appLight : false);
   const style: CSSProperties & Record<string, string> = {};
-  if (props.fillWindow) style.height = "100vh";
+  // The scaled window's height (shared/designScale.ts), or the real one.
+  if (props.fillWindow) style.height = "calc(100 * var(--u-vh, 1vh))";
   if (props.banner) style["--banner"] = `url(${props.banner})`;
   if (props.bannerPosition) style["--bpos"] = props.bannerPosition;
   if (props.aura !== undefined) style["--aura"] = String(props.aura);
