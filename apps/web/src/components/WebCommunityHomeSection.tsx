@@ -268,9 +268,8 @@ export function WebCommunityHomeSection(props: WebCommunityHomeSectionProps) {
 
   if (props.kit) {
     const kit = props.kit;
-    const rail = snapshot ? (
-      <KitApp view="home" host part="rail">
-        <Rail index={0} label="The community right now">
+    const panel = snapshot ? (
+      <>
           <Figs figures={homeKitFiguresFor(snapshot)} />
           <Sep />
           <Sec label="Next up">
@@ -284,7 +283,11 @@ export function WebCommunityHomeSection(props: WebCommunityHomeSectionProps) {
             )}
             <TextLink style={{ marginTop: 2 }} onClick={props.onOpenEvents}>All events</TextLink>
           </Sec>
-        </Rail>
+      </>
+    ) : null;
+    const rail = panel ? (
+      <KitApp view="home" host part="rail">
+        <Rail index={0} label="The community right now">{panel}</Rail>
       </KitApp>
     ) : null;
     return (
@@ -309,6 +312,8 @@ export function WebCommunityHomeSection(props: WebCommunityHomeSectionProps) {
             <TextLink style={{ marginTop: 20 }} onClick={kit.onTalkItOver}>Continue your conversation</TextLink>
           ) : null}
           {kit.talk}
+          {/* Windows too narrow for the right column get its panel here. */}
+          {panel && !kit.talking ? <div className="community-home-kit-inline" aria-label="The community right now">{panel}</div> : null}
         </HomeBody>
         {props.asideContainer && rail ? createPortal(rail, props.asideContainer) : null}
       </>
