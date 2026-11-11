@@ -1167,7 +1167,8 @@ function WebCommunityAgentDock(props, ref) {
               </small>
             </span>
           </div>}
-          <div className={props.pageMode ? "community-channel-header-actions" : "community-agent-dock-header-actions"}>
+          {/* Design system v1: one thread with the guide, so no "start fresh". */}
+          {guideWording ? null : <div className={props.pageMode ? "community-channel-header-actions" : "community-agent-dock-header-actions"}>
             <button
               type="button"
               className={props.pageMode ? "community-channel-header-menu-trigger" : undefined}
@@ -1183,7 +1184,7 @@ function WebCommunityAgentDock(props, ref) {
             >
               <MessageSquarePlus size={props.pageMode ? 18 : undefined} aria-hidden="true" />
             </button>
-          </div>
+          </div>}
         </header>
 
         <div className="community-agent-dock-transcript" ref={scrollRef}>

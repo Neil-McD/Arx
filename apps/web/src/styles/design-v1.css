@@ -1202,8 +1202,9 @@
  * short right-hand panel: what is pinned, the community's notes, who is here.
  * A thread opens in the same column and takes the panel's place.
  */
+/* No header bars anywhere: a page's title floats, with no line and no band. */
 :root[data-design="v1"] .community-channel-header {
-  border-bottom-color: var(--surface-raised-edge);
+  border-bottom: 0;
   background: transparent;
 }
 
@@ -1337,9 +1338,8 @@
   justify-content: space-between;
   gap: 12px;
   height: var(--web-topbar-height, 48px);
-  padding: 0 10px 0 18px;
+  padding: 0 10px 0 24px;
   border: 0;
-  border-bottom: 1px solid var(--surface-raised-edge);
   border-radius: 0;
   background: var(--surface-raised);
   box-shadow: none;
@@ -1451,7 +1451,14 @@
  * one width, one edge, inside the raised panel.
  */
 :root[data-design="v1"] {
-  --right-column-width: 328px;
+  /* The mock is drawn at 1440px wide (328px there). Wider screens get a wider
+     column, up to 440px. */
+  --right-column-width: clamp(328px, 23vw, 440px);
+  /* The middle column: the mock's 848px main area less its 56px gutters. It is
+     centred in the space it has, and its header, content and composer share
+     its two edges. */
+  --main-measure: 736px;
+  --main-gutter: max(56px, calc((100% - var(--main-measure)) / 2));
 }
 
 /* The member list, in the column. Its header is the thread's, in the flow. */
@@ -1519,7 +1526,8 @@
     height: auto;
     max-height: none;
     gap: 0;
-    padding: 52px calc(var(--right-column-width) + 56px) 0 56px;
+    --inbox-gutter: max(56px, calc((100vw - var(--left-column-width) - 8px - var(--right-column-width) - var(--main-measure)) / 2));
+    padding: 52px calc(var(--right-column-width) + var(--inbox-gutter)) 0 var(--inbox-gutter);
     border: 1px solid var(--surface-raised-edge);
     border-radius: 12px;
     background: var(--surface-raised);
@@ -1535,9 +1543,9 @@
     flex: none;
     height: 52px;
     margin: 0;
-    padding: 0 20px 0 56px;
+    padding: 0 20px 0 var(--inbox-gutter);
     align-items: center;
-    border-bottom: 1px solid var(--surface-raised-edge);
+    border-bottom: 0;
     border-radius: 0;
   }
 
@@ -1565,7 +1573,7 @@
   :root[data-design="v1"] .web-direct-messages-host.is-page .community-dm-inbox-search {
     position: absolute;
     top: 10px;
-    right: calc(var(--right-column-width) + 60px);
+    right: calc(var(--right-column-width) + var(--inbox-gutter));
     z-index: 3;
     width: 220px;
     height: 32px;
@@ -1791,16 +1799,17 @@
   :root[data-design="v1"] .community-channel-header {
     flex-basis: 52px;
     height: 52px;
-    padding: 0 56px;
+    padding: 0 var(--main-gutter);
   }
 
   :root[data-design="v1"] .community-chat .community-interaction-feed-scroll {
     /* The composer floats over the feed and is measured as it grows. */
-    padding: 8px 44px calc(var(--mobile-community-composer-height, 86px) + 18px);
+    /* Rows carry 12px of their own padding, so the feed sits 12px wider. */
+    padding: 8px calc(var(--main-gutter) - 12px) calc(var(--mobile-community-composer-height, 86px) + 18px);
   }
 
   :root[data-design="v1"] .community-chat .community-interaction-main-composer {
-    padding: 0 56px 26px;
+    padding: 0 var(--main-gutter) 26px;
   }
 
   :root[data-design="v1"] .community-chat .community-interaction-main-composer > .chat-input-bar {
@@ -2048,7 +2057,7 @@
 @media (min-width: 721px) {
   /* Home: left-aligned on a 56px gutter, like every other page. */
   :root[data-design="v1"] .community-agent-page .community-agent-dock-panel.has-home-rail .community-agent-dock-transcript {
-    padding: 0 56px 24px;
+    padding: 0 var(--main-gutter) 24px;
   }
 
   /* The mock's eyebrow sits 40px under a 52px header line. Home has no line,
@@ -2067,9 +2076,8 @@
 
   :root[data-design="v1"] .community-agent-page .community-agent-dock-panel.has-home-rail .community-agent-dock-composer-shell {
     width: auto;
-    max-width: 872px;
     margin: 0;
-    padding: 0 56px 26px;
+    padding: 0 var(--main-gutter) 26px;
   }
 
   /* One 52px row: attach, the text, then mic and send. */
@@ -2160,8 +2168,32 @@
     flex: 1 1 auto;
   }
 
+  :root[data-design="v1"] .community-page-body {
+    grid-template-rows: 52px minmax(0, 1fr);
+  }
+
+  :root[data-design="v1"] .community-page-body > .community-page-header {
+    grid-column: 1;
+    grid-row: 1;
+    padding: 0 max(32px, calc((100% - 920px) / 2 + 32px));
+  }
+
+  :root[data-design="v1"] .community-page-body > .community-tab-scroll {
+    grid-column: 1;
+    grid-row: 2;
+  }
+
+  :root[data-design="v1"] .community-page-body > .community-page-rail {
+    grid-column: 2;
+    grid-row: 1 / span 2;
+  }
+
   :root[data-design="v1"] .community-page-body:has(.community-page-rail-content) {
     grid-template-columns: minmax(0, 1fr) var(--right-column-width);
+  }
+
+  :root[data-design="v1"] .community-page-body:has(.community-page-rail-content) > .community-page-header {
+    padding: 0 var(--main-gutter);
   }
 
   :root[data-design="v1"] .community-page-body > .community-tab-scroll {
@@ -2179,12 +2211,12 @@
     border-left: 1px solid var(--surface-raised-edge);
   }
 
-  /* With a right column the page sits on the 56px gutter, like a channel. */
+  /* With a right column the page is the centred middle measure, like a channel. */
   :root[data-design="v1"] .community-page-body:has(.community-page-rail-content) > .community-tab-scroll > .web-community-centered-pane {
     width: 100%;
-    max-width: 816px;
+    max-width: none;
     margin: 0;
-    padding: 28px 56px 56px;
+    padding: 28px var(--main-gutter) 56px;
   }
 }
 
@@ -2429,7 +2461,7 @@
     flex: 1 1 auto;
     min-height: 0;
     overflow-y: auto;
-    padding: 28px 56px 56px;
+    padding: 28px var(--main-gutter) 56px;
   }
 
   :root[data-design="v1"] .members-page .community-context-members {
@@ -2608,4 +2640,54 @@
 :root[data-design="v1"] .app-root:has(.members-page) .community-nav .nav-item-members {
   background: var(--bg-card);
   color: var(--text-ink-primary);
+}
+
+/*
+ * Design system v1: every composer is one row with its text centred on its
+ * icons. The text box had 2px above the text and about 18px below it, so the
+ * words sat 8px higher than the buttons beside them.
+ */
+:root[data-design="v1"] .chat-input-bar .mention-composer-field {
+  min-height: 40px;
+  align-items: center;
+}
+
+:root[data-design="v1"] .chat-input-bar .mention-composer-highlight,
+:root[data-design="v1"] .chat-input-bar textarea.chat-input {
+  padding: 9px 0;
+  font-size: 15px;
+  line-height: 22px;
+}
+
+/* A channel's composer: the plus at the left; mentions, emoji, voice and send
+   at the right, as in the mock. */
+@media (min-width: 721px) {
+  :root[data-design="v1"] .community-chat .community-interaction-main-composer .community-composer-authoring-row {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  :root[data-design="v1"] .community-chat .community-interaction-main-composer .community-composer-tools {
+    display: contents;
+  }
+
+  :root[data-design="v1"] .community-chat .community-interaction-main-composer .community-composer-add {
+    order: 1;
+  }
+
+  :root[data-design="v1"] .community-chat .community-interaction-main-composer .community-composer-editor-row {
+    order: 2;
+    flex: 1 1 auto;
+    min-width: 0;
+    padding: 0 6px;
+  }
+
+  :root[data-design="v1"] .community-chat .community-interaction-main-composer .community-composer-tools > :not(.community-composer-add) {
+    order: 3;
+  }
+
+  :root[data-design="v1"] .community-chat .community-interaction-main-composer .community-composer-submit-tools {
+    order: 4;
+  }
 }
