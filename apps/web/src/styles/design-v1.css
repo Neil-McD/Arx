@@ -2829,12 +2829,12 @@
 /* The Inbox conversation column on the kit (WebDirectMessagePanel, beside
    the Inbox): the kit draws it, the panel only holds its place. */
 @media (min-width: 721px) {
-  :root[data-design="v1"] .web-direct-messages-host.is-page .community-dm-panel.is-kit {
+  :root[data-design="v1"] .web-direct-messages-host.is-page .community-dm-panel.is-kit:not(.community-dm-inbox-panel) {
     padding: 0;
     gap: 0;
   }
 
-  :root[data-design="v1"] .web-direct-messages-host.is-page .community-dm-panel.is-kit > :not(.community-dm-drop-overlay) {
+  :root[data-design="v1"] .web-direct-messages-host.is-page .community-dm-panel.is-kit:not(.community-dm-inbox-panel) > :not(.community-dm-drop-overlay) {
     height: 100%;
     min-height: 0;
   }
