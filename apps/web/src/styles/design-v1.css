@@ -1830,18 +1830,25 @@
     box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 0 0 4px rgba(167, 139, 250, 0.1);
   }
 
+  /* The send button's colours come through the conversation tokens (the
+     older rule sets them with !important), so the mock's are set there. */
   :root[data-design="v1"] .web-direct-messages-host.is-page .community-dm-panel-composer .community-dm-panel-send {
+    --conversation-primary-action-surface: rgba(255, 255, 255, 0.06);
+    --conversation-primary-action-hover-surface: rgba(255, 255, 255, 0.09);
+    --conversation-primary-action-foreground: rgba(238, 240, 244, 0.52);
+    flex-basis: 30px;
     width: 30px;
     height: 30px;
+    min-height: 30px;
     border-radius: 10px;
-    background: rgba(255, 255, 255, 0.06);
-    color: rgba(238, 240, 244, 0.52);
     box-shadow: none;
+    opacity: 1;
   }
 
   :root[data-design="v1"] .web-direct-messages-host.is-page .community-dm-panel-composer:focus-within .community-dm-panel-send:not(:disabled) {
-    background: linear-gradient(180deg, #1077d2, #0b69c4);
-    color: #fff;
+    --conversation-primary-action-surface: linear-gradient(180deg, #1077d2, #0b69c4);
+    --conversation-primary-action-hover-surface: linear-gradient(180deg, #0e74ce, #0a66c2);
+    --conversation-primary-action-foreground: #fff;
     box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.28);
   }
 

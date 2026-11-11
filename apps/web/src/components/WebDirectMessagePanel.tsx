@@ -613,8 +613,9 @@ export function WebDirectMessagePanel(props: WebDirectMessagePanelProps) {
       onDragEnter={canAcceptAttachmentDrop ? onAttachmentDragEnter : undefined}
       onDragOver={canAcceptAttachmentDrop ? onAttachmentDragOver : undefined}
       onDragLeave={canAcceptAttachmentDrop ? onAttachmentDragLeave : undefined}
+      // A click or a key press, not focus: the reply box focuses itself.
       onPointerDownCapture={props.onEngage}
-      onFocusCapture={props.onEngage}
+      onKeyDownCapture={props.onEngage}
     >
       {isAttachmentDragOver ? (
         <div className="drop-overlay community-dm-drop-overlay" aria-hidden="true">
