@@ -718,7 +718,9 @@ export const CommunityNav = memo(function CommunityNav({
       ) : isV1 ? (
         // Design system v1: the mock's foot, Your guide and Manage. Invite
         // people, Analytics and Visit site are in the account menu below.
-        showSettingsButton ? (
+        // Both are the host's (the mock's h-only): a member's own settings are
+        // in the account menu.
+        showSettingsButton && canManageMembersActiveCommunity ? (
           <div className="community-nav-footer">
             {onOpenGuide ? (
               <button className="nav-item" type="button" onClick={onOpenGuide} title="Your guide">
