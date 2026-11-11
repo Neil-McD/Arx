@@ -10,9 +10,18 @@ export function useGuideSearchShortcut(
 ): void {
   useEffect(() => {
     if (!isDesignV1Active()) return;
+    // Home draws a moment after the switch, so the box is tried for up to a
+    // second until it takes the cursor.
     const openGuide = () => {
       selectTab("agent");
-      window.setTimeout(() => dockRef.current?.focusInput(), 60);
+      let tries = 0;
+      const focusWhenReady = () => {
+        dockRef.current?.focusInput();
+        const active = document.activeElement;
+        const focused = active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement;
+        if (!focused && tries++ < 12) window.setTimeout(focusWhenReady, 80);
+      };
+      window.setTimeout(focusWhenReady, 40);
     };
     const onKeyDown = (event: KeyboardEvent) => {
       if (!isGuideSearchShortcut(event)) return;
