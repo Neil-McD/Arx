@@ -371,13 +371,6 @@
  */
 :root[data-design="v1"] .community-nav-v1-primary {
   display: grid;
-  margin-bottom: 6px;
-}
-
-/* Home now follows the community name, so it takes the spacing the channel
-   list had there (shell-and-onboarding.css gives the list 20px). */
-:root[data-design="v1"] .community-nav-identity:not(.has-banner) + .community-nav-v1-primary {
-  margin-top: 20px;
 }
 
 /* With Home above them, the channels no longer need that offset. */
@@ -386,7 +379,6 @@
 }
 
 :root[data-design="v1"] .community-nav-section-label {
-  padding: 14px 10px 6px;
   color: var(--text-faint);
   font-size: 12px;
   font-weight: 500;
@@ -790,10 +782,7 @@
 :root[data-design="v1"] .community-switcher-trigger {
   display: flex;
   align-items: center;
-  gap: 8px;
   width: 100%;
-  min-height: 34px;
-  padding: 0 8px;
   border: 0;
   border-radius: 8px;
   background: transparent;
@@ -821,7 +810,6 @@
   flex: 1 1 auto;
   min-width: 0;
   overflow: hidden;
-  font-size: 14px;
   font-weight: 600;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1057,12 +1045,10 @@
 :root[data-design="v1"] .community-home-figures {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 22px 16px;
 }
 
 :root[data-design="v1"] .community-home-figure {
   display: grid;
-  gap: 2px;
   min-width: 0;
 }
 
@@ -1076,8 +1062,6 @@
   font-size: 24px;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
-  letter-spacing: -0.02em;
-  line-height: 1.2;
 }
 
 :root[data-design="v1"] .community-home-figure em {
@@ -1089,8 +1073,6 @@
 :root[data-design="v1"] .community-home-aside-section {
   display: grid;
   justify-items: start;
-  gap: 6px;
-  padding-top: 22px;
   border-top: 1px solid var(--border-default);
 }
 
@@ -1098,7 +1080,6 @@
   margin: 0;
   color: var(--text-ink-primary);
   font-size: 15px;
-  font-weight: 600;
 }
 
 :root[data-design="v1"] .community-home-aside-section p {
@@ -1125,7 +1106,6 @@
   outline: none;
   color: var(--text-ink-primary);
 }
-
 
 /*
  * Design system v1: the page's structure. The left column sits on the ground;
@@ -1190,7 +1170,6 @@
 }
 
 :root[data-design="v1"] .community-home-aside.is-rail {
-  padding: 40px 28px 28px;
   border-top: 0;
 }
 
@@ -1492,24 +1471,6 @@
   padding-top: 12px;
 }
 
-/* Inbox: the messages panel docks into the column instead of floating. */
-@media (min-width: 721px) {
-  :root[data-design="v1"] .web-direct-messages-host:not(.mobile-root) .community-dm-panel {
-    top: 9px;
-    right: 9px;
-    bottom: 9px;
-    width: var(--right-column-width);
-    height: auto;
-    max-height: none;
-    border: 0;
-    border-left: 1px solid var(--surface-raised-edge);
-    border-radius: 0 11px 11px 0;
-    background: var(--surface-raised);
-    box-shadow: none;
-  }
-
-}
-
 /*
  * Design system v1: the pages outside a community (Discover, your settings)
  * share the frame, with their own left column where the rail used to be.
@@ -1525,31 +1486,6 @@
 /* The left column's Back row replaces the floating back button. */
 :root[data-design="v1"] .app-root:has(.global-nav-v1) .app-topbar .topbar-left {
   display: none;
-}
-
-/* Inbox's header matches the Members and Thread headers: one 48px line. */
-@media (min-width: 721px) {
-  :root[data-design="v1"] .web-direct-messages-host:not(.mobile-root) .community-dm-inbox-panel {
-    padding-top: 0;
-  }
-
-  :root[data-design="v1"] .web-direct-messages-host:not(.mobile-root) .community-dm-inbox-header {
-    flex: 0 0 var(--web-topbar-height, 48px);
-    align-items: center;
-    margin: 0 -14px 4px;
-    padding: 0 10px 0 18px;
-    border-bottom: 1px solid var(--surface-raised-edge);
-    border-radius: 0;
-  }
-
-  :root[data-design="v1"] .web-direct-messages-host:not(.mobile-root) .community-dm-inbox-title {
-    font-size: 14px;
-    font-weight: 600;
-  }
-
-  :root[data-design="v1"] .web-direct-messages-host:not(.mobile-root) .community-dm-inbox-subtitle {
-    display: none;
-  }
 }
 
 /* With "New event" in the header line, the empty month does not repeat it. */
