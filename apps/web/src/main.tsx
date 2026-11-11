@@ -370,11 +370,19 @@ if (typeof window !== "undefined") {
 // /terms and /privacy: the public legal pages, without the app.
 const legalDocumentKey = legalDocumentKeyForPathname(window.location.pathname || "/");
 
-if (!isLoginTrampoline && !legalDocumentKey) {
+// /design-lab: the design v1 kit with the mock's sample content, on builds
+// with the design switch on (staging) only. It talks to no backend.
+const isDesignLab =
+  document.documentElement.dataset.design === "v1" && window.location.pathname === "/design-lab";
+const DesignLab = React.lazy(() => import("./v1/DesignLab").then((m) => ({ default: m.DesignLab })));
+
+if (!isLoginTrampoline && !legalDocumentKey && !isDesignLab) {
   bootConvexProbe();
 }
 
-const rootView = legalDocumentKey
+const rootView = isDesignLab
+  ? <React.Suspense fallback={null}><DesignLab /></React.Suspense>
+  : legalDocumentKey
   ? <LegalDocumentPage documentKey={legalDocumentKey} />
   : isLoginTrampoline
     ? <LoginTrampolineRoute />
