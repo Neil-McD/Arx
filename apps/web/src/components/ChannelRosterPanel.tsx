@@ -20,6 +20,7 @@ import { formatRelativeTimeFromIso } from "../../../../shared/contentFormatting"
 import { CommunityChannelSessionContext } from "./CommunityChannelSessionContext";
 import { CommunityPresenceFacepile } from "./CommunityPresenceFacepile";
 import { WebCommunityNotes } from "./WebCommunityNotes";
+import { KitChannelRail } from "../v1/KitChannelRail";
 import { CommunityMembersBulkBar, type SelectedMember } from "./CommunityMembersBulkBar";
 import type { CommunityPresenceSummary } from "../../../../shared/communityTypes";
 import { resolveAuthSubject, type AuthSessionLike } from "../../../../shared/authSession";
@@ -354,7 +355,8 @@ function RosterSurface(props: RosterProps & {
   // channel the panel is short. What is pinned, the community's notes, and who
   // is here as faces; the full list, with its member tools, is one click away.
   const onlineCount = props.presenceSummary?.online_count;
-  const v1Rail = !props.directory && isDesignV1Active() ? <aside className="community-context-panel channel-roster-panel is-v1" aria-label="About this channel"
+  const kitRail = !props.onCloseNarrow || !props.narrowOpen;
+  const v1Rail = !props.directory && isDesignV1Active() ? <aside className={`community-context-panel channel-roster-panel is-v1${kitRail ? " is-kit" : ""}`} aria-label="About this channel"
     style={props.memberDetailOpen ? { display: "none" } : undefined}
     onKeyDown={event => {
       if (event.key === "Escape" && !event.defaultPrevented && props.narrowOpen) {
@@ -366,6 +368,16 @@ function RosterSurface(props: RosterProps & {
         <svg viewBox="0 0 24 24" className="back-icon" aria-hidden="true"><path d="M19 12H5M12 19l-7-7 7-7" /></svg>
       </button>
     </div> : null}
+    {kitRail ? (
+      // Design v1 beside a channel on a wide window: the mock's column, from the kit.
+      <KitChannelRail
+        communityId={scope?.communityId ?? null}
+        session={scope?.session ?? null}
+        pinned={props.pinned ?? null}
+        presenceSummary={props.presenceSummary ?? null}
+        onOpenMembers={props.onOpenMembers}
+      />
+    ) : <>
     {props.pinned ? <section className="channel-rail-section">
       <h3 className="channel-rail-label">Pinned</h3>
       <button type="button" className="channel-rail-row" onClick={props.pinned.onOpen}>
@@ -389,6 +401,7 @@ function RosterSurface(props: RosterProps & {
         View all <ArrowRight size={14} aria-hidden="true" />
       </button>
     </section>
+    </>}
   </aside> : null;
   // The chat shell isolates its stacking context beneath the community rail.
   // Keep overlays outside that shell, as the directory already does below.

@@ -2996,3 +2996,14 @@
   color: rgba(13, 17, 23, 0.72);
   box-shadow: inset 0 0 0 1px rgba(13, 17, 23, 0.08);
 }
+
+/* The channel's right column on the kit (KitChannelRail): the kit pads it. */
+:root[data-design="v1"] .channel-roster-panel.is-v1.is-kit {
+  padding: 0;
+  gap: 0;
+  overflow-y: auto;
+}
+
+:root[data-design="v1"] .channel-roster-panel.is-v1.is-kit > * {
+  min-height: 100%;
+}
