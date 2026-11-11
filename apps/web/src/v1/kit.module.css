@@ -434,6 +434,8 @@
    it sits at the bottom of the box, as the newest message should. */
 .app.part.flow-part{height:auto;margin-top:auto;overflow:visible;display:block;flex:none}
 .app.part.flow-part .feed{padding:0}
+/* The banner card on its own in the app's left column; its menu may overflow. */
+.app.part.cover-part{height:auto;display:block;overflow:visible;flex:none}
 
 /* Kit addition: states the mock doesn't draw, in its own terms. */
 .app .msg.cont{padding-top:3px;padding-bottom:3px}

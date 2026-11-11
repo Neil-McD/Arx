@@ -55,6 +55,7 @@ export function WebCommunityNavSurface({
           : communityShell.onSelectCommunityTab
       }
       layout={useV1Layout ? "v1" : "classic"}
+      identityIsCover={useV1Layout}
       accountSlot={useV1Layout && communityShell.account ? <WebAccountMenu {...communityShell.account} /> : null}
       identitySlot={
         useV1Layout && communityShell.account && communityShell.activeCommunity ? (
@@ -78,6 +79,11 @@ export function WebCommunityNavSurface({
             onSelectCommunity={communityShell.onSelectActiveCommunity}
             onOpenDiscover={communityShell.onOpenDiscover}
             onCreateCommunity={communityShell.onOpenCommunityCreateCta}
+            cover={{
+              bannerUrl: communityShell.activeCommunity.banner_url ?? null,
+              focusX: communityShell.activeCommunity.banner_focus_x,
+              focusY: communityShell.activeCommunity.banner_focus_y,
+            }}
           />
         ) : null
       }

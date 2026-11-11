@@ -2,6 +2,7 @@ import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { Check, ChevronsUpDown, Compass, Plus } from "lucide-react";
 import { CommunityAvatar } from "../../../../shared/CommunityAvatar";
 import type { CommunityLike } from "./webShellChromeShared";
+import { Icon, KitApp, cx } from "../v1/kit";
 
 export type WebCommunitySwitcherProps = {
   activeCommunityName: string;
@@ -13,6 +14,10 @@ export type WebCommunitySwitcherProps = {
   onSelectCommunity: (community: CommunityLike) => void;
   onOpenDiscover: () => void;
   onCreateCommunity: () => void;
+  // Design system v1, a community's own left column: the switcher is the
+  // mock's banner card (docs/design/hifi-mock .cover), the banner behind the
+  // name with the dark fade. Without a banner it is the mock's bare card.
+  cover?: { bannerUrl: string | null; focusX?: number | null; focusY?: number | null } | null;
 };
 
 // Design system v1: the community's name on its banner is also how you move
@@ -52,26 +57,27 @@ export function WebCommunitySwitcher(props: WebCommunitySwitcherProps) {
     action();
   };
 
-  return (
-    <div className="community-switcher" ref={rootRef}>
-      <button
-        ref={triggerRef}
-        className={`community-switcher-trigger${isOpen ? " is-open" : ""}`}
-        type="button"
-        aria-haspopup="menu"
-        aria-expanded={isOpen}
-        aria-controls={isOpen ? menuId : undefined}
-        title="Switch community"
-        onClick={() => setIsOpen((open) => !open)}
-      >
-        {props.mark ? <span className="community-switcher-mark" aria-hidden="true">{props.mark}</span> : null}
-        <span className="community-switcher-name">{props.activeCommunityName}</span>
-        {othersHaveNews ? (
-          <span className="community-switcher-news" aria-label="New in another community" />
-        ) : null}
-        <ChevronsUpDown size={15} aria-hidden="true" />
-      </button>
-      {isOpen ? (
+  const cover = props.cover ?? null;
+  const percent = (value: number | null | undefined) => `${Math.round((Number.isFinite(value) ? Number(value) : 0.5) * 100)}%`;
+  const trigger = cover ? (
+    <button
+      ref={triggerRef}
+      className={`${cx("cover", !cover.bannerUrl && "bare")} community-switcher-cover${isOpen ? " is-open" : ""}`}
+      type="button"
+      aria-haspopup="menu"
+      aria-expanded={isOpen}
+      aria-controls={isOpen ? menuId : undefined}
+      title="Switch community"
+      onClick={() => setIsOpen((open) => !open)}
+    >
+      {props.mark ? <span className={cx("mark")} aria-hidden="true">{props.mark}</span> : null}
+      <span className="community-switcher-name">{props.activeCommunityName}</span>
+      {othersHaveNews ? <span className="community-switcher-news" aria-label="New in another community" /> : null}
+      <span className={cx("sw")}><Icon name="updown" /></span>
+    </button>
+  ) : null;
+
+  const menu = isOpen ? (
         <div className="community-switcher-popover" id={menuId} role="menu" aria-label="Your communities">
           {props.communities.map((community) => {
             const isCurrent = String(community.slug ?? "") === props.selectedCommunitySlug;
@@ -104,26 +110,53 @@ export function WebCommunitySwitcher(props: WebCommunitySwitcherProps) {
             );
           })}
           <div className="community-switcher-separator" role="separator" />
-          <button
-            className="community-switcher-item"
-            type="button"
-            role="menuitem"
-            onClick={() => choose(props.onOpenDiscover)}
-          >
+          <button className="community-switcher-item" type="button" role="menuitem" onClick={() => choose(props.onOpenDiscover)}>
             <span className="community-switcher-icon" aria-hidden="true"><Compass size={16} /></span>
             <span className="community-switcher-item-name">Discover communities</span>
           </button>
-          <button
-            className="community-switcher-item"
-            type="button"
-            role="menuitem"
-            onClick={() => choose(props.onCreateCommunity)}
-          >
+          <button className="community-switcher-item" type="button" role="menuitem" onClick={() => choose(props.onCreateCommunity)}>
             <span className="community-switcher-icon" aria-hidden="true"><Plus size={16} /></span>
             <span className="community-switcher-item-name">Start a community</span>
           </button>
         </div>
-      ) : null}
+  ) : null;
+
+  if (cover) {
+    return (
+      <KitApp
+        view="home"
+        part="cover"
+        banner={cover.bannerUrl}
+        bannerPosition={`${percent(cover.focusX)} ${percent(cover.focusY)}`}
+      >
+        <div className="community-switcher is-cover" ref={rootRef}>
+          {trigger}
+          {menu}
+        </div>
+      </KitApp>
+    );
+  }
+
+  return (
+    <div className="community-switcher" ref={rootRef}>
+      <button
+        ref={triggerRef}
+        className={`community-switcher-trigger${isOpen ? " is-open" : ""}`}
+        type="button"
+        aria-haspopup="menu"
+        aria-expanded={isOpen}
+        aria-controls={isOpen ? menuId : undefined}
+        title="Switch community"
+        onClick={() => setIsOpen((open) => !open)}
+      >
+        {props.mark ? <span className="community-switcher-mark" aria-hidden="true">{props.mark}</span> : null}
+        <span className="community-switcher-name">{props.activeCommunityName}</span>
+        {othersHaveNews ? (
+          <span className="community-switcher-news" aria-label="New in another community" />
+        ) : null}
+        <ChevronsUpDown size={15} aria-hidden="true" />
+      </button>
+      {menu}
     </div>
   );
 }
