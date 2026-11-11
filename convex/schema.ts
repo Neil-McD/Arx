@@ -1057,6 +1057,18 @@ export default defineSchema({
     .index("by_visitor_hash_createdAt", ["visitorKeyHash", "createdAt"])
     .index("by_visitor_scope_bucket", ["visitorKeyHash", "pathKind", "scopeKey", "visitBucketStartAt"]),
 
+  // A host's notes on a member (docs/design/members-invariants.md): only the
+  // people who manage members read or write them; the member never sees them.
+  communityMemberNotes: defineTable({
+    communityId: v.id("communities"),
+    subjectUserId: v.id("users"),
+    authorUserId: v.id("users"),
+    body: v.string(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_community_subject_createdAt", ["communityId", "subjectUserId", "createdAt"]),
+
   communityPricePoints: defineTable({
     communityId: v.id("communities"),
     billingPeriod: v.string(),

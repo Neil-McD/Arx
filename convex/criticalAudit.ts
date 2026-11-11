@@ -85,6 +85,8 @@ const CRITICAL_AUDIT_METADATA_ALLOWLIST: Record<string, readonly string[]> = {
   account_delete_blocked: ["reason"],
   // The owner's switch: where members spend time, "app" or "site".
   community_member_experience_changed: ["from", "to", "via"],
+  // A member's record says what their role became.
+  community_member_role_set: ["role"],
   account_delete_completed: [],
   community_archived: ["lifecycleGeneration"],
   community_archive_billing_cleanup_completed: [

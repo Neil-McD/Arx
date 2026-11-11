@@ -68,24 +68,21 @@ test("design v1: a thread names itself and its channel, and has a close button",
 test("design v1: asking for members shows the Members page, not a pop-up", () => {
   design.v1 = true;
   const html = renderToStaticMarkup(React.createElement(ChannelRosterPanel, { ...props, narrowOpen: true, onCloseNarrow: () => {} }));
-  expect(html).toContain('<section class="members-page" aria-label="Community members">');
-  expect(html).toContain('<header class="community-channel-header members-page-header">');
-  expect(html).toContain("<h1>Members</h1>");
-  expect(html).toContain("Search community members");
-  expect([...html.matchAll(/class="members-page-chip[^"]*"[^>]*>([^<]+)</g)].map((match) => match[1]))
-    // "New this week" is only offered to people who are sent join dates (managers).
-    .toEqual(["Everyone", "Here now", "Hosts"]);
-  // Until someone is chosen, the right column says so.
-  expect(html).toContain("Choose someone to see their profile.");
+  // A member gets the kit directory (who is here, what they shared); the
+  // person they open is the right column.
+  expect(html).toContain('<section class="members-page is-kit" aria-label="Community members">');
+  expect(html).toContain('class="community-context-panel members-page-record"');
+  expect(html).not.toContain("modal-overlay");
   // The short channel panel steps aside for it.
   expect(html).not.toContain("channel-rail-label");
 });
 
-test("design v1: an open profile takes the right column and the list stays", () => {
+test("design v1: people who manage members get the table and the record", () => {
   design.v1 = true;
-  const html = renderToStaticMarkup(React.createElement(ChannelRosterPanel, { ...props, narrowOpen: true, memberDetailOpen: true }));
-  expect(html).toContain('class="members-page"');
-  expect(html).not.toContain("members-page-empty");
+  const html = renderToStaticMarkup(React.createElement(ChannelRosterPanel, {
+    ...props, narrowOpen: true, memberSettings: { ...props.memberSettings, canManageMembers: true } }));
+  expect(html).toContain('class="members-page is-kit"');
+  expect(html).toContain('aria-label="Member record"');
 });
 
 test("design v1: a thread names itself and its channel, and has a close button", async () => {

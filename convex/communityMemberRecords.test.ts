@@ -100,3 +100,45 @@ test("only people who manage members can read plans, prices and payments", async
   // A moderator moderates content; they don't see what people pay.
   await expect(t.withIdentity({ subject: "martin" }).query(api.communityMemberRecords.listCommunityMemberRecords, { communityId })).rejects.toThrow(/community_forbidden/);
 });
+
+test("notes are the hosts' alone, and the record shows who did what to a member", async () => {
+  const t = convexTest(schema, modules);
+  const { communityId, tanya, martin } = await seed(t);
+  const asOwner = t.withIdentity({ subject: "owner" });
+  await asOwner.mutation(api.communityMemberRecords.addCommunityMemberNote, { communityId, membershipId: tanya.membershipId, body: "Met her at the Austin meetup." });
+  await expect(t.withIdentity({ subject: "jon" }).mutation(api.communityMemberRecords.addCommunityMemberNote, { communityId, membershipId: tanya.membershipId, body: "x" })).rejects.toThrow(/community_forbidden/);
+  await expect(asOwner.mutation(api.communityMemberRecords.addCommunityMemberNote, { communityId, membershipId: tanya.membershipId, body: "   " })).rejects.toThrow(/community_member_note_empty/);
+  await asOwner.mutation(api.communityAdmin.setCommunityMemberRole, { communityId, targetMembershipId: martin.membershipId, role: "admin" });
+
+  const record = await asOwner.query(api.communityMemberRecords.getCommunityMemberRecord, { communityId, membershipId: tanya.membershipId });
+  expect(record?.notes).toEqual([expect.objectContaining({ body: "Met her at the Austin meetup.", author: "you", can_delete: true })]);
+  const martinRecord = await asOwner.query(api.communityMemberRecords.getCommunityMemberRecord, { communityId, membershipId: martin.membershipId });
+  expect(martinRecord?.events.map((event: any) => event.text)).toContain("Made an admin by you");
+
+  // The member's own profile, as other members see it, has none of it.
+  const seen = await t.withIdentity({ subject: "jon" }).query(api.communityMemberProfiles.getCommunityMemberProfile, { communityId, membershipId: tanya.membershipId });
+  expect(JSON.stringify(seen)).not.toMatch(/Austin meetup|Member · \$27|on_hold|payment|Restaurant owners/);
+
+  await asOwner.mutation(api.communityMemberRecords.deleteCommunityMemberNote, { communityId, noteId: record!.notes[0].id as any });
+  expect((await asOwner.query(api.communityMemberRecords.getCommunityMemberRecord, { communityId, membershipId: tanya.membershipId }))?.notes).toEqual([]);
+});
+
+test("members see who is in and what each person shared, never who is out or what they pay", async () => {
+  const t = convexTest(schema, modules);
+  const { communityId, tanya } = await seed(t);
+  const asJon = t.withIdentity({ subject: "jon" });
+  const { rows } = await asJon.query(api.communityMemberProfiles.listCommunityMemberDirectory, { communityId });
+  const names = rows.map((row: any) => row.name);
+  expect(names).toEqual(expect.arrayContaining(["Neil", "Jon", "Tanya", "Rashid", "Martin"]));
+  // Left, removed and blocked people are not listed.
+  expect(names).not.toContain("Ana");
+  expect(names).not.toContain("Lee");
+  expect(rows.find((row: any) => row.name === "Jon")?.you).toBe(true);
+  expect(rows.find((row: any) => row.name === "Tanya")?.working_on).toBe("Finding her first ten members");
+  const text = JSON.stringify(rows);
+  expect(text).not.toMatch(/plan|price|money|joined_at|last_active|Founding|\$27/);
+
+  const profile = await asJon.query(api.communityMemberProfiles.getCommunityMemberProfile, { communityId, membershipId: tanya.membershipId });
+  expect(profile?.facts).toEqual([{ kind: "goal", label: "Working on", body: "Finding her first ten members" }]);
+  expect(JSON.stringify(profile)).not.toMatch(/Said to the guide|stated_interview/);
+});
