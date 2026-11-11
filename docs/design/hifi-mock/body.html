@@ -1,0 +1,521 @@
+<div class="app{appclass}" style="{appstyle}">
+
+  <nav class="side" aria-label="Community">
+    <label class="cover{bare}"><input type="radio" name="k" class="k-open">{markel}<span>{cname}</span><span class="sw">{i:updown}</span></label>
+
+    <div style="height:10px"></div>
+    <label class="row n-home"><input type="radio" name="v" class="v-home">{i:home}Home<span class="count">1</span></label>
+    <label class="row n-inbox"><input type="radio" name="v" class="v-inbox">{i:inbox}Inbox<span class="hint">4</span></label>
+
+    <div class="grp">Channels</div>
+    <label class="row">{i:hash}general</label>
+    <label class="row unread n-wins"><input type="radio" name="v" class="v-wins">{i:hash}wins<span class="dot"></span></label>
+    <label class="row">{i:hash}tech</label>
+    <label class="row">{i:hash}biz</label>
+    <label class="row">{i:lock}founders</label>
+    <label class="row add h-only">{i:plus}Add a channel</label>
+
+    <div class="grp">Community</div>
+    <label class="row n-know"><input type="radio" name="v" class="v-know">{i:stars}Knowledge<span class="hint">3 new</span></label>
+    <label class="row n-events"><input type="radio" name="v" class="v-events">{i:cal}Events<span class="live"><i></i>20 min</span></label>
+    <label class="row n-members"><input type="radio" name="v" class="v-members">{i:users}Members<span class="hint">214</span></label>
+
+    <div class="foot">
+      <label class="row n-guide h-only"><input type="radio" name="v" class="v-guide">{i:spark}Your guide</label>
+      <label class="row n-manage h-only"><input type="radio" name="v" class="v-manage">{i:sliders}Manage</label>
+      <label class="me m-only"><input type="radio" name="menu" class="m-open"><span class="av s a4">M</span><div><b>Maya Chen</b><span>Member</span></div><span class="sw">{i:updown}</span></label>
+      <label class="me h-only"><input type="radio" name="menu" class="m-open"><span class="av s a2">N</span><div><b>Neil McDevitt</b><span>Host</span></div><span class="sw">{i:updown}</span></label>
+    </div>
+  </nav>
+
+  <main class="main">
+    <header class="top">
+      <h1 class="t1">{i:hash}wins <small>Share what worked</small></h1>
+      <h1 class="t2">Knowledge</h1>
+      <h1 class="t3">Inbox <small>Across your communities</small></h1>
+      <h1 class="t4">Events</h1>
+      <h1 class="t5">Members <small>214 people</small></h1>
+      <h1 class="t6">Your guide <small>What it may do for Polynet</small></h1>
+      <h1 class="t7">Manage</h1>
+      <label class="find"><input type="radio" name="k" class="k-open">{i:search}Search or ask<kbd>⌘K</kbd></label>
+    </header>
+    <div class="hline"></div>
+
+    <!-- HOME -->
+    <section class="view v0">
+      <div class="home m-only">
+        <div class="eyebrow">{i:spark}{cname}, your guide <em>· 7:02 am</em></div>
+        <p class="hello">Good morning, Maya.<span>One thing needs you today.</span></p>
+
+        <div class="card">
+          <div class="c-todo">
+            <div class="meta"><span>Your next step</span><span class="steps">Launch · 3 of 6 <i class="d"></i><i class="d"></i><i class="n"></i><i></i><i></i><i></i></span></div>
+            <h2>Send your first ten invitations</h2>
+            <p class="say">I drafted them from your offer notes and chose forty people from your list who fit. They're ready when you are.</p>
+            <div class="acts">
+              <label class="btn go"><input type="radio" name="a" class="a-yes">Approve and send</label>
+              <label class="btn">Review the drafts</label>
+              <label class="btn txt"><input type="radio" name="t" class="t-on">Talk it over</label>
+            </div>
+          </div>
+          <div class="c-done">
+            <div class="meta"><span>Your next step</span><span class="steps">Launch · 4 of 6 <i class="d"></i><i class="d"></i><i class="d"></i><i class="n"></i><i></i><i></i></span></div>
+            <h2>Invitations go out at 9:00</h2>
+            <p class="say">I'll bring every reply to you here. After that, we open your door to the first ten.</p>
+          </div>
+        </div>
+
+        <div class="since">
+          <span class="lab">Since you were last here</span>
+          <label class="item"><input type="radio" name="v" class="v-wins"><span class="k">#wins</span><span><b>Jon's community passed 100 members</b><span class="s">He shared the invitation that did it · 12 reactions</span></span><span class="go">{i:arrow}</span></label>
+          <label class="item"><span class="k">Asked</span><span><b>Rashid wants to know how to price a founding tier</b><span class="s">You priced yours last month · your answer would help</span></span><span class="go">{i:arrow}</span></label>
+          <label class="item"><input type="radio" name="v" class="v-know"><span class="k learn">{i:spark}Learned</span><span><b>A three-line invitation converts best</b><span class="s">From nine communities this week · saved to Knowledge</span></span><span class="go">{i:arrow}</span></label>
+        </div>
+
+        <div class="talk">
+          <div class="mine">Make the two longest ones shorter, then yes.</div>
+          <div class="theirs"><span class="av s guide">{i:spark}</span><p>Done. Both are under sixty words now. Approve, and I'll send at nine and tell you who replies.</p></div>
+        </div>
+      </div>
+
+      <div class="home h-only">
+        <!--HH--><div class="eyebrow">{i:spark}{cname}, your guide <em>· 7:02 am</em></div>
+        <p class="hello">Good morning, Neil.<span>Three people joined overnight, and one thing needs you.</span></p>
+        <div class="card">
+          <div class="meta"><span>Needs your decision</span><span><i class="baddot"></i>Payment failed · 1 member</span></div>
+          <h2>Tanya's payment has failed twice</h2>
+          <p class="say">Her card was declined on the 1st and again yesterday. I've drafted a short, kind note with a link to update it. She keeps access for five more days either way.</p>
+          <div class="acts"><span class="btn go">Send the note</span><span class="btn">Read it first</span><span class="btn txt">Talk it over</span></div>
+        </div>
+        <div class="since">
+          <span class="lab">Across the community</span>
+          <label class="item"><input type="radio" name="v" class="v-members"><span class="k">Joined</span><span><b>Three new members, and two more are waiting</b><span class="s">Tanya, Dev and Mira · two came through Jon's invitation</span></span><span class="go">{i:arrow}</span></label>
+          <label class="item"><span class="k">Waiting</span><span><b>Rashid's pricing question has no answer after two days</b><span class="s">Priya has priced a founding tier · I can ask her</span></span><span class="go">{i:arrow}</span></label>
+          <label class="item"><input type="radio" name="v" class="v-know"><span class="k learn">{i:spark}Learned</span><span><b>Three notes are waiting for your review</b><span class="s">Nothing is shown to members until you approve it</span></span><span class="go">{i:arrow}</span></label>
+        </div><!--/HH-->
+      </div>
+
+      <div class="dock">
+        <div class="chips m-only"><span class="chip">What did I miss?</span><span class="chip">Who should I meet?</span><span class="chip">Draft my intro</span></div>
+        <div class="chips h-only"><span class="chip">How was this week?</span><span class="chip">Who is at risk of leaving?</span><span class="chip">Draft Friday's agenda</span></div>
+        <div class="ask">{i:spark:sp}<input type="text" placeholder="Ask your guide anything"><span class="ib">{i:mic}</span><span class="send">{i:up}</span></div>
+      </div>
+    </section>
+
+    <!-- CHANNEL -->
+    <section class="view v1">
+      <div class="feed">
+        <div class="day">Yesterday</div>
+        <div class="msg"><span class="av a5">R</span><div class="b"><div class="h"><b>Rashid</b><time>4:18 pm</time></div>
+          <p>First paid member came in from the new door. Seventy-nine dollars never felt so good.</p>
+          <div class="rx"><span class="re">🎉 9</span></div></div>
+          <div class="tools"><span class="ib">{i:smile}</span><span class="ib">{i:reply}</span><span class="ib h-only">{i:pin}</span><span class="ib h-only">{i:trash}</span><span class="ib">{i:more}</span></div></div>
+        <div class="msg"><span class="av a6">S</span><div class="b"><div class="h"><b>Sara</b><time>6:02 pm</time></div>
+          <p>Ran my first live call with eleven people. Nobody left early, which I'm counting as a win.</p></div>
+          <div class="tools"><span class="ib">{i:smile}</span><span class="ib">{i:reply}</span><span class="ib h-only">{i:pin}</span><span class="ib h-only">{i:trash}</span><span class="ib">{i:more}</span></div></div>
+        <div class="day">Today</div>
+        <div class="msg"><span class="av a1">J</span><div class="b"><div class="h"><b>Jon</b><time>8:40 am</time></div>
+          <p>We passed 100 members last night. The invitation that worked was three lines: the result, who it's for, one link.</p>
+          <div class="rx"><span class="re">🎉 12</span><span class="re">🔥 5</span><label class="th"><input type="radio" name="th" class="th-open"><span class="stack"><span class="av xs a3">P</span><span class="av xs a2">N</span></span><b>4 replies</b> · last 10 min ago</label></div></div>
+          <div class="tools"><span class="ib">{i:smile}</span><span class="ib">{i:reply}</span><span class="ib h-only">{i:pin}</span><span class="ib h-only">{i:trash}</span><span class="ib">{i:more}</span></div></div>
+        <div class="msg"><span class="av a3">P</span><div class="b"><div class="h"><b>Priya</b><time>8:52 am</time></div>
+          <p>Huge. Stealing that second line.</p></div>
+          <div class="tools"><span class="ib">{i:smile}</span><span class="ib">{i:reply}</span><span class="ib h-only">{i:pin}</span><span class="ib h-only">{i:trash}</span><span class="ib">{i:more}</span></div></div>
+        <div class="msg g"><span class="av guide">{i:spark}</span><div class="b"><div class="h"><b>{cname}</b><span class="tag g">guide</span><time>8:53 am</time></div>
+          <p>I've saved Jon's invitation to Knowledge, with his numbers. Two members asked for exactly this last week.</p>
+          <label class="note"><input type="radio" name="v" class="v-know">{i:stars}<span><b>Invitations that work</b> · note</span></label></div>
+          <div class="tools"><span class="ib">{i:smile}</span><span class="ib">{i:reply}</span><span class="ib h-only">{i:pin}</span><span class="ib h-only">{i:trash}</span><span class="ib">{i:more}</span></div></div>
+        <div class="msg"><span class="av a2">N</span><div class="b"><div class="h"><b>Neil</b><span class="tag">host</span><time>9:05 am</time></div>
+          <p>This is the play. <span class="at">@Jon</span> bring it to Friday's call so everyone can see it.</p></div>
+          <div class="tools"><span class="ib">{i:smile}</span><span class="ib">{i:reply}</span><span class="ib h-only">{i:pin}</span><span class="ib h-only">{i:trash}</span><span class="ib">{i:more}</span></div></div>
+        <div class="msg"><span class="av a4">M</span><div class="b"><div class="h"><b>Maya</b><time>9:12 am</time></div>
+          <p>Sending my first ten today. Wish me luck.</p>
+          <div class="rx"><span class="re">🚀 3</span></div></div>
+          <div class="tools"><span class="ib">{i:smile}</span><span class="ib">{i:reply}</span><span class="ib h-only">{i:pin}</span><span class="ib h-only">{i:trash}</span><span class="ib">{i:more}</span></div></div>
+      </div>
+      <div class="dock">
+        <div class="ask"><span class="ib" style="margin-left:-8px">{i:plus}</span><input type="text" placeholder="Message #wins"><span class="ib">{i:smile}</span><span class="ib">{i:mic}</span><span class="send">{i:up}</span></div>
+      </div>
+    </section>
+
+    <!-- KNOWLEDGE -->
+    <section class="view v2">
+      <div class="know">
+        {map}
+        <div class="head">
+          <h2>What {cname} has learned</h2>
+          <p>214 notes, drawn from every conversation and call. Three are new this week.</p>
+          <div class="filters"><span class="chip h-only">Waiting for review · 3</span><span class="chip sel">Everything</span><span class="chip">Invitations</span><span class="chip">Pricing</span><span class="chip">Onboarding</span><span class="chip">Calls</span></div>
+        </div>
+      </div>
+    </section>
+    <!-- INBOX -->
+    <section class="view v3">
+      <div class="page">
+        <p class="lead"><span class="aura">{i:spark}</span>Two of these need a reply. I've sorted the rest, and answered nothing for you.</p>
+        <div class="filters" style="margin-top:20px"><span class="chip sel">Needs a reply · 2</span><span class="chip">Everything</span><span class="chip">Only Polynet</span></div>
+        <div class="h-only">
+          <span class="lab" style="display:block;margin-top:22px">Needs your approval · 2</span>
+          <div class="list" style="margin-top:8px">
+            <div class="mrow"><span class="av guide">{i:spark}</span><div><div class="h"><b>Send a payment note to Tanya</b><span>Drafted at 7:02 am</span></div><p class="serif">“Hi Tanya, your card didn't go through. Here's a link to update it, no rush.”</p></div><span class="btn sm">Review</span></div>
+            <div class="mrow"><span class="av guide">{i:spark}</span><div><div class="h"><b>Welcome three new members in #general</b><span>Drafted at 7:40 am</span></div><p class="serif">“Welcome Tanya, Dev and Mira. Tell us what you're building.”</p></div><span class="btn sm">Review</span></div>
+          </div>
+          <span class="lab" style="display:block;margin-top:22px">Messages</span>
+        </div>
+        <div class="list" style="margin-top:14px">
+          <div class="mrow sel"><span class="av a1">J</span><div><div class="h"><b>Jon</b><span>Direct message</span><time>20 min</time></div><p>Happy to share the full sequence if you want it.</p></div><span class="dot"></span></div>
+          <div class="mrow"><span class="av a6">S</span><div><div class="h"><b>Sara</b><span>Mentioned you in #general</span><time>1 h</time></div><p><span class="at">@Maya</span> how did you price your founding tier?</p></div><span class="dot"></span></div>
+          <div class="mrow read"><span class="av a5 has">R<i class="cb" style="background:#E8A33D">DE</i></span><div><div class="h"><b>Ray</b><span>Replied to you · Distribution Engineer</span><time>2 h</time></div><p>The onboarding thread is worth a read before Friday.</p></div></div>
+          <div class="mrow read"><span class="av guide">{i:spark}</span><div><div class="h"><b>Polynet</b><span class="tag g">guide</span><span>Sorted for you</span><time>3 h</time></div><p class="serif">Three reactions on your #wins post, and Priya saved your intro. Nothing needs an answer.</p></div></div>
+          <div class="mrow read"><span class="av a3 has">L<i class="cb" style="background:#7FD1B9">CA</i></span><div><div class="h"><b>Lena</b><span>Mentioned you · Content Academy</span><time>Yesterday</time></div><p>Loved your carousel breakdown. Could you share the template?</p></div></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- EVENTS -->
+    <section class="view v4">
+      <div class="page">
+        <div class="card" style="margin-top:28px;max-width:none">
+          <div class="meta"><span class="livepill"><i></i>Live in 20 minutes</span><span>Today, 10:00 am · weekly</span></div>
+          <h2>Friday build call</h2>
+          <p class="say">Jon is bringing the invitation that took him past 100 members. I'll save the recap to Knowledge afterwards.</p>
+          <div class="acts"><span class="btn go">Join when it starts</span><span class="btn">Add to calendar</span>
+            <span style="margin-left:auto;display:flex;align-items:center;gap:10px"><span class="stack"><span class="av xs a2">N</span><span class="av xs a1">J</span><span class="av xs a3">P</span><span class="av xs a5">R</span></span><span class="sub2">Neil is hosting · 14 going</span></span></div>
+        </div>
+        <div style="display:flex;align-items:center;margin-top:34px"><span class="lab">Coming up</span><span class="btn sm h-only newev">{i:plus}New event</span></div>
+        <div class="list" style="margin-top:8px">
+          <div class="erow"><div class="date"><b>12</b><span>Tue</span></div><div><b>Door teardown: three members' join pages</b><span class="s">6:00 pm · Priya is hosting · 8 going</span></div><span class="btn sm on">{i:check}Going</span></div>
+          <div class="erow"><div class="date"><b>15</b><span>Fri</span></div><div><b>Friday build call</b><span class="s">10:00 am · weekly · Neil is hosting</span></div><span class="btn sm on">{i:check}Going</span></div>
+          <div class="erow"><div class="date"><b>21</b><span>Thu</span></div><div><b>Workshop: pricing your founding tier</b><span class="s">1:00 pm · Neil is hosting · 21 going</span></div><span class="btn sm">I'll be there</span></div>
+        </div>
+        <span class="lab" style="display:block;margin-top:30px">Past calls</span>
+        <div class="list" style="margin-top:8px">
+          <label class="erow"><input type="radio" name="v" class="v-know"><div class="date past"><b>31</b><span>Oct</span></div><div><b>Friday build call</b><span class="s">52 minutes · 16 came</span></div><span class="recap">{i:spark}Recap · 3 notes</span></label>
+          <div class="erow"><div class="date past"><b>24</b><span>Oct</span></div><div><b>Friday build call</b><span class="s">47 minutes · 12 came</span></div><span class="recap">{i:spark}Recap · 2 notes</span></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- MEMBERS -->
+    <section class="view v5">
+      <div class="page m-only">
+        <p class="lead"><span class="aura">{i:spark}</span>Two people you should meet this week.</p>
+        <div class="list" style="margin-top:14px">
+          <div class="mrow"><span class="av a1">J</span><div><div class="h"><b>Jon</b><span>Launched last month</span></div><p>He just passed 100 members with a three-line invitation, and you're about to send your first ten.</p></div><span class="btn sm">Say hello</span></div>
+          <div class="mrow"><span class="av a3">P</span><div><div class="h"><b>Priya</b><span>Same audience as you</span></div><p>She's also building for agency owners, and is two steps ahead of you on pricing.</p></div><span class="btn sm">Say hello</span></div>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;margin-top:30px">
+          <div class="find" style="margin:0;width:240px">{i:search}Find a member</div>
+          <span class="chip sel">Everyone · 214</span><span class="chip">Here now · 6</span><span class="chip">Hosts</span><span class="chip">New this week</span>
+        </div>
+        <div class="ppl">
+          <div class="p sel"><span class="av a2">N</span><b>Neil McDevitt<span class="tag">host</span></b><span>Running the Friday build call</span></div>
+          <div class="p"><span class="av a1">J</span><b>Jon Avery</b><span>Just passed 100 members</span></div>
+          <div class="p"><span class="av a3">P</span><b>Priya Shah</b><span>Pricing her founding tier</span></div>
+          <div class="p"><span class="av a5">R</span><b>Rashid Karim</b><span>First paid member this week</span></div>
+          <div class="p"><span class="av a6">S</span><b>Sara Lind</b><span>Ran her first live call</span></div>
+          <div class="p"><span class="av a4">J</span><b>Josh Universe</b><span>Rebuilding his join page</span></div>
+          <div class="p"><span class="av a1">C</span><b>Christiane B.</b><span>Moving over from Skool</span></div>
+          <div class="p"><span class="av a3">M</span><b>Martin K<span class="tag">moderator</span></b><span>Welcoming new members</span></div>
+          <div class="p"><span class="av a5">T</span><b>Tanya Reyes</b><span>Joined on Tuesday</span></div>
+        </div>
+      </div>
+      <div class="page h-only">
+        <p class="lead"><span class="aura">{i:spark}</span>Two people are waiting to join.</p>
+        <div class="list" style="margin-top:14px">
+          <div class="mrow"><span class="av a5">D</span><div><div class="h"><b>Dev Okafor</b><span>Asked yesterday · came through Jon's invitation</span></div><p>Runs a forty-person design agency and wants a steadier pipeline.</p></div><span style="display:flex;gap:6px"><span class="btn sm go">Approve</span><span class="btn sm no">Decline</span></span></div>
+          <div class="mrow"><span class="av a6">M</span><div><div class="h"><b>Mira Sol</b><span>Asked this morning · no referral</span></div><p>Wants to learn here before starting her own community next year.</p></div><span style="display:flex;gap:6px"><span class="btn sm go">Approve</span><span class="btn sm no">Decline</span></span></div>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;margin-top:30px">
+          <div class="find" style="margin:0;width:200px">{i:search}Find a member</div>
+          <span class="chip sel">Everyone · 214</span><span class="chip">Payment on hold · 1</span><span class="chip">Gone quiet · 4</span><span class="chip">Hosts</span>
+          <span class="btn sm" style="margin-left:auto">{i:plus}Invite</span>
+        </div>
+        <div class="tbl">
+          <div class="trow th"><span></span><span>Member</span><span>Plan</span><span>Joined</span><span>Last active</span></div>
+          <div class="trow"><span class="av s a2">N</span><span><b>Neil McDevitt</b><span class="tag">host</span></span><span>Owner</span><span>May</span><span>Now</span></div>
+          <div class="trow"><span class="av s a1">J</span><span><b>Jon Avery</b></span><span>Founder · $79 a month</span><span>August</span><span>20 min ago</span></div>
+          <div class="trow"><span class="av s a3">P</span><span><b>Priya Shah</b></span><span>Founder · $79 a month</span><span>September</span><span>1 h ago</span></div>
+          <div class="trow sel"><span class="av s a5">T</span><span><b>Tanya Reyes</b><span class="tag hold">payment on hold</span></span><span>Founder · $79 a month</span><span>Tuesday</span><span>Yesterday</span></div>
+          <div class="trow"><span class="av s a3">M</span><span><b>Martin K</b><span class="tag">moderator</span></span><span>Free</span><span>June</span><span>3 h ago</span></div>
+          <div class="trow"><span class="av s a5">R</span><span><b>Rashid Karim</b></span><span>Founder · $79 a month</span><span>July</span><span>Yesterday</span></div>
+          <div class="trow"><span class="av s a1">C</span><span><b>Christiane B.</b><span class="tag">quiet for 2 weeks</span></span><span>Founder · $79 a month</span><span>October</span><span>Oct 26</span></div>
+        </div>
+      </div>
+    </section>
+    <!-- YOUR GUIDE (host) -->
+    <section class="view v6">
+      <div class="page">
+        <p class="lead"><span class="aura">{i:spark}</span>I work for Polynet. This is what I may do alone, and what I bring to you first.</p>
+        <span class="lab" style="display:block;margin-top:30px">With members</span>
+        <div class="list" style="margin-top:6px">
+          <div class="prow"><div><b>Answer questions from Knowledge</b><span class="s">Only from notes you've approved</span></div><span class="seg"><span class="is">On its own</span><span>Asks first</span><span>Never</span></span></div>
+          <div class="prow"><div><b>Welcome new members</b><span class="s">One message in #general, the day they join</span></div><span class="seg"><span>On its own</span><span class="is">Asks first</span><span>Never</span></span></div>
+          <div class="prow"><div><b>Introduce members to each other</b><span class="s">When two people are working on the same thing</span></div><span class="seg"><span class="is">On its own</span><span>Asks first</span><span>Never</span></span></div>
+          <div class="prow"><div><b>Message a member about a payment</b><span class="s">Failed cards and lapsing memberships</span></div><span class="seg"><span>On its own</span><span class="is">Asks first</span><span>Never</span></span></div>
+        </div>
+        <span class="lab" style="display:block;margin-top:26px">With the community</span>
+        <div class="list" style="margin-top:6px">
+          <div class="prow"><div><b>Save what it learns to Knowledge</b><span class="s">From channels, calls and your documents</span></div><span class="seg"><span>On its own</span><span class="is">Asks first</span><span>Never</span></span></div>
+          <div class="prow"><div><b>Post in a channel without being mentioned</b><span class="s">Recaps and reminders</span></div><span class="seg"><span>On its own</span><span class="is">Asks first</span><span>Never</span></span></div>
+          <div class="prow"><div><b>Approve requests to join</b><span class="s">You or a moderator decide who comes in</span></div><span class="seg"><span>On its own</span><span>Asks first</span><span class="is">Never</span></span></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- MANAGE (host) -->
+    <section class="view v7">
+      <div class="mg">
+        <nav class="mnav">
+          <span class="row on">Branding</span><span class="row">The door</span><span class="row">Plans and prices</span><span class="row">Payouts</span><span class="row">Analytics</span><span class="row">Roles</span><span class="row">Connected apps</span>
+        </nav>
+        <div class="mbody">
+          <h2>Branding</h2>
+          <p class="mnote">Three things make Polynet yours. Everything else is the same for every community, so it always looks finished.</p>
+          <div class="field"><div><b>Banner</b><span class="s">Any image works. It sits in a frame at the top of the left column.</span></div>
+            <div style="display:flex;align-items:center;gap:14px"><span class="cover" style="width:240px;height:112px;cursor:default"><span class="mark">{mark}</span><span>{cname}</span></span><span class="btn sm">Replace</span></div></div>
+          <div class="field"><div><b>Logo</b><span class="s">Square, at least 256 pixels.</span></div>
+            <div style="display:flex;align-items:center;gap:14px"><span class="mark" style="width:44px;height:44px;border-radius:12px">{mark}</span><span class="btn sm">Replace</span></div></div>
+          <div class="field"><div><b>Colour</b><span class="s">Used only behind your logo when you have no image.</span></div>
+            <div class="swatches"><i style="background:#EEF0F4" class="is"></i><i style="background:#E8A33D"></i><i style="background:#D9764A"></i><i style="background:#E06C8B"></i><i style="background:#3FA36B"></i><i style="background:#5B8DEF"></i></div></div>
+          <div class="field"><div><b>Name</b><span class="s">Shown to members and on your door.</span></div>
+            <span class="input">{cname}</span></div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- RAIL: HOME -->
+  <aside class="rail r0 m-only" aria-label="Right now">
+    <div class="sec">
+      <span class="livepill"><i></i>Live in 20 minutes</span>
+      <h3>Friday build call</h3>
+      <p>Neil is hosting · 14 going</p>
+      <div style="display:flex;gap:8px;margin-top:6px"><span class="btn" style="height:32px;font-size:13px">Remind me</span><label class="btn txt" style="height:32px;font-size:13px"><input type="radio" name="v" class="v-events">All events</label></div>
+    </div>
+    <div class="sep"></div>
+    <div class="sec">
+      <span class="lab">Here now</span>
+      <div style="display:flex;align-items:center;gap:12px"><span class="stack"><span class="av s a2">N</span><span class="av s a1">J</span><span class="av s a3">P</span><span class="av s a5">R</span><span class="av s a6">S</span></span><span class="sub" style="white-space:nowrap">Neil, Jon and 4 more</span></div>
+    </div>
+    <div class="sep"></div>
+    <div class="sec">
+      <span class="lab">Community memory</span>
+      {mini}
+      <div style="display:flex;align-items:center;justify-content:space-between"><span class="sub">214 notes · 3 learned this week</span><label class="link"><input type="radio" name="v" class="v-know">Open {i:arrow}</label></div>
+    </div>
+  </aside>
+
+  <!-- RAIL: HOME, for the host -->
+  <aside class="rail r0 h-only" aria-label="The community right now">
+    <!--HR--><div class="figs">
+      <div class="fig"><span>Members</span><b>214</b><em>3 joined this week</em></div>
+      <div class="fig"><span>Active this week</span><b>132</b><em>62 percent</em></div>
+      <div class="fig"><span>Revenue this month</span><b>$4,180</b><em>up $320</em></div>
+      <div class="fig"><span>Next payout</span><b>$1,240</b><em>Friday</em></div>
+    </div><!--/HR-->
+    <div class="sep"></div>
+    <div class="sec">
+      <span class="livepill"><i></i>Live in 20 minutes</span>
+      <h3>Friday build call</h3>
+      <p>You're hosting · 14 going</p>
+      <div style="display:flex;gap:8px;margin-top:6px"><span class="btn" style="height:32px;font-size:13px">Open the room</span><label class="btn txt" style="height:32px;font-size:13px"><input type="radio" name="v" class="v-events">All events</label></div>
+    </div>
+    <div class="sep"></div>
+    <div class="sec">
+      <span class="lab">Your guide, this week</span>
+      <p>Answered 41 questions, welcomed 3 members, and saved 3 notes for your review.</p>
+      <label class="link" style="margin-top:2px"><input type="radio" name="v" class="v-guide">What it may do {i:arrow}</label>
+    </div>
+  </aside>
+
+  <!-- RAIL: CHANNEL -->
+  <aside class="rail r1" aria-label="About this channel">
+    <div class="sec">
+      <span class="lab" style="display:flex;align-items:center;gap:6px;color:var(--aurora-ink)">{i:spark:xs}Catch up</span>
+      <p class="say" style="font-size:17px;color:var(--ink)">Jon's community passed 100 members and he shared the invitation that did it. Nothing here needs you.</p>
+    </div>
+    <div class="sep"></div>
+    <div class="sec">
+      <span class="lab">Pinned</span>
+      <div class="src">{i:pin}How to post a win</div>
+      <div class="src" style="margin-top:-8px">{i:pin}Friday call link</div>
+    </div>
+    <div class="sep"></div>
+    <div class="sec">
+      <span class="lab">Memory from this channel</span>
+      {mini}
+      <label class="src"><input type="radio" name="v" class="v-know"><span class="sdot" style="background:var(--aurora);box-shadow:0 0 8px var(--aurora)"></span>Invitations that work<em>new</em></label>
+      <div class="src" style="margin-top:-8px"><span class="sdot"></span>Your first ten members</div>
+    </div>
+    <div class="sep"></div>
+    <div class="sec">
+      <span class="lab">In this channel · 48</span>
+      <div style="display:flex;align-items:center;gap:12px"><span class="stack"><span class="av s a1">J</span><span class="av s a3">P</span><span class="av s a2">N</span><span class="av s a4">M</span></span><span class="sub">4 here now</span></div>
+    </div>
+  </aside>
+
+  <!-- RAIL: KNOWLEDGE -->
+  <aside class="rail r2" aria-label="Open note">
+    <span class="kick">{i:spark}Learned this week<span class="h-only">&nbsp;· waiting for you</span></span>
+    <h2 style="margin-top:-14px">Invitations that work</h2>
+    <p class="body" style="margin-top:-12px">Lead with the result, say who it's for, and end with one link. Three lines beat longer invitations in nine of eleven communities.</p>
+    <div class="sep"></div>
+    <div class="sec">
+      <span class="lab">Learned from</span>
+      <label class="src"><input type="radio" name="v" class="v-wins">{i:hash}Jon in #wins<em>today</em></label>
+      <div class="src" style="margin-top:-8px">{i:cal}Friday build call<em>Oct 31</em></div>
+      <div class="src" style="margin-top:-8px">{i:users}Join data from 9 communities<em>this week</em></div>
+    </div>
+    <div class="sep"></div>
+    <div class="sec">
+      <span class="lab">Connected</span>
+      <div class="src"><span class="sdot"></span>The three-line door</div>
+      <div class="src" style="margin-top:-8px"><span class="sdot"></span>Your first ten members</div>
+      <div class="src" style="margin-top:-8px"><span class="sdot"></span>Founding tier pricing</div>
+    </div>
+    <div class="h-only" style="margin-top:auto;display:flex;flex-direction:column;gap:12px"><div style="display:flex;align-items:center;justify-content:space-between;font-size:13px;color:var(--ink2)"><span>Who can read it</span><span class="btn sm">All members</span></div><div style="display:flex;gap:8px"><span class="btn go" style="flex:1;justify-content:center">Approve</span><span class="btn">Edit</span><span class="btn txt">Dismiss</span></div></div>
+    <div class="m-only" style="margin-top:auto"><div class="ask" style="height:46px">{i:spark:sp}<input type="text" placeholder="Ask about this note"><span class="send" style="width:30px;height:30px">{i:up}</span></div></div>
+  </aside>
+
+  <!-- RAIL: THREAD -->
+  <aside class="rail rT" aria-label="Thread">
+    <div style="display:flex;align-items:center;justify-content:space-between"><span style="font-size:14px;font-weight:600">Thread <span style="font-weight:400;color:var(--ink3)">· #wins</span></span><label class="ib" style="margin-right:-8px"><input type="radio" name="th" class="th-shut">{i:close}</label></div>
+    <div class="tmsg" style="margin-top:-8px"><span class="av s a1">J</span><div><div class="h"><b>Jon</b><time>8:40 am</time></div><p>We passed 100 members last night. The invitation that worked was three lines: the result, who it's for, one link.</p></div></div>
+    <div class="day" style="margin:0">4 replies</div>
+    <div class="tmsg"><span class="av s a3">P</span><div><div class="h"><b>Priya</b><time>8:44 am</time></div><p>Can you paste the exact three lines?</p></div></div>
+    <div class="tmsg"><span class="av s a1">J</span><div><div class="h"><b>Jon</b><time>8:47 am</time></div><p>"Agency owners are filling their pipeline in 30 days here. It's for teams of 5 to 30. Come and see."</p></div></div>
+    <div class="tmsg"><span class="av s a2">N</span><div><div class="h"><b>Neil</b><time>8:51 am</time></div><p>Notice there's no pitch in it. That's why it works.</p></div></div>
+    <div class="tmsg"><span class="av s a5">R</span><div><div class="h"><b>Rashid</b><time>9:31 am</time></div><p>Stealing this for mine today.</p></div></div>
+    <div style="margin-top:auto"><div class="ask" style="height:46px"><input type="text" placeholder="Reply in thread"><span class="send" style="width:30px;height:30px">{i:up}</span></div></div>
+  </aside>
+
+  <!-- RAIL: INBOX, the open conversation -->
+  <aside class="rail r3" aria-label="Conversation with Jon">
+    <div style="display:flex;align-items:center;gap:12px"><span class="av a1">J</span><div><div style="font-size:15px;font-weight:600">Jon Avery</div><div class="sub">Polynet · launched last month</div></div></div>
+    <div class="sep" style="margin-top:-8px"></div>
+    <div class="dm">
+      <div class="day" style="margin:0 0 4px">Today</div>
+      <div class="bub">Saw you're sending your first ten today.</div>
+      <div class="bub">Happy to share the full sequence if you want it.</div>
+      <span class="sub" style="font-size:12px">Jon · 20 min ago</span>
+    </div>
+    <div style="margin-top:auto;display:flex;flex-direction:column;gap:10px">
+      <span class="chip gsug">{i:spark}Draft a reply for me</span>
+      <div class="ask" style="height:46px"><input type="text" placeholder="Reply to Jon"><span class="send" style="width:30px;height:30px">{i:up}</span></div>
+    </div>
+  </aside>
+
+  <!-- RAIL: EVENTS -->
+  <aside class="rail r4" aria-label="Your events">
+    <div class="sec">
+      <span class="lab">You're going to</span>
+      <div class="src">{i:cal}Friday build call<em>today</em></div>
+      <div class="src" style="margin-top:-8px">{i:cal}Door teardown<em>Tue</em></div>
+      <div class="src" style="margin-top:-8px">{i:cal}Friday build call<em>Fri</em></div>
+    </div>
+    <div class="sep"></div>
+    <div class="sec">
+      <span class="lab" style="display:flex;align-items:center;gap:6px;color:var(--aurora-ink)">{i:spark:xs}From the last call</span>
+      <p class="say" style="font-size:17px;color:var(--ink)">Three things came out of October 31: the three-line invitation, how to price a founding tier, and how Jon welcomes new members.</p>
+      <label class="link" style="margin-top:4px"><input type="radio" name="v" class="v-know">Open the notes {i:arrow}</label>
+    </div>
+  </aside>
+
+  <!-- RAIL: MEMBERS, the selected person -->
+  <aside class="rail r5 m-only" aria-label="Neil McDevitt">
+    <div style="display:flex;flex-direction:column;gap:12px"><span class="av a2" style="width:56px;height:56px;font-size:18px">N</span>
+      <div><div style="font-size:20px;font-weight:600;letter-spacing:-.015em">Neil McDevitt <span class="tag" style="vertical-align:middle">host</span></div><div class="sub" style="margin-top:2px">Here now · founded Polynet in May</div></div>
+      <div style="display:flex;gap:8px"><span class="btn go" style="height:32px;font-size:13px">Message</span><span class="btn" style="height:32px;font-size:13px">View profile</span></div></div>
+    <div class="sep"></div>
+    <div class="sec"><span class="lab">Working on</span><p style="color:var(--ink)">Running the Friday build call, and making Polynet open source.</p></div>
+    <div class="sep"></div>
+    <div class="sec"><span class="lab">In common with you</span>
+      <div class="src">{i:hash}wins<em>both active</em></div>
+      <div class="src" style="margin-top:-8px">{i:cal}Friday build call<em>both going</em></div></div>
+    <div class="sep"></div>
+    <div class="sec"><span class="lab">Recently</span>
+      <label class="src"><input type="radio" name="v" class="v-wins">{i:hash}“This is the play. Bring it to Friday's call.”<em>9:05</em></label></div>
+  </aside>
+
+  <!-- RAIL: MEMBERS, for the host -->
+  <aside class="rail r5 h-only" aria-label="Tanya Reyes">
+    <div style="display:flex;flex-direction:column;gap:12px"><span class="av a5" style="width:56px;height:56px;font-size:18px">T</span>
+      <div><div style="font-size:20px;font-weight:600;letter-spacing:-.015em">Tanya Reyes</div><div class="sub" style="margin-top:2px">Member · joined on Tuesday</div></div>
+      <div style="display:flex;gap:8px"><span class="btn" style="height:32px;font-size:13px">Message</span><span class="btn" style="height:32px;font-size:13px">Change role</span></div></div>
+    <div class="sep"></div>
+    <div class="sec"><span class="lab">Plan</span><p style="color:var(--ink)">Founder, $79 a month</p><p class="bad">Payment on hold since November 1. Access ends November 14.</p></div>
+    <div class="sep"></div>
+    <div class="sec"><span class="lab" style="display:flex;align-items:center;gap:6px;color:var(--aurora-ink)">{i:spark:xs}From your guide</span>
+      <p class="say" style="font-size:17px;color:var(--ink)">I've drafted a note about her card. It's waiting for you on Home.</p></div>
+    <div class="sep"></div>
+    <div class="sec"><span class="lab">So far</span>
+      <div class="src">{i:hash}Said hello in #general<em>Tue</em></div>
+      <div class="src" style="margin-top:-8px">{i:cal}Going to Friday's call<em>today</em></div></div>
+    <div style="margin-top:auto"><span class="link no" style="color:var(--ink3)">Remove from the community</span></div>
+  </aside>
+
+  <!-- RAIL: YOUR GUIDE -->
+  <aside class="rail r6" aria-label="About your guide">
+    <div class="sec"><span class="lab">This month</span>
+      <div style="display:flex;align-items:baseline;justify-content:space-between"><b style="font-size:22px;font-weight:600;letter-spacing:-.02em">1,840</b><span class="sub">of 5,000 replies</span></div>
+      <div class="bar"><i style="width:37%"></i></div>
+      <p>At this pace you'll use about 3,900.</p></div>
+    <div class="sep"></div>
+    <div class="sec"><span class="lab">What it knows</span>
+      <label class="src"><input type="radio" name="v" class="v-know">{i:stars}214 notes<em>3 waiting</em></label>
+      <div class="src" style="margin-top:-8px">{i:hash}5 channels<em>all</em></div>
+      <div class="src" style="margin-top:-8px">{i:cal}18 call recordings</div></div>
+    <div class="sep"></div>
+    <div class="sec"><span class="lab">Its voice</span>
+      <p class="say" style="font-size:17px;color:var(--ink)">Warm, brief, plain words. Never salesy.</p>
+      <span class="link" style="margin-top:2px">Change how it speaks {i:arrow}</span></div>
+    <div class="sep"></div>
+    <div class="sec"><span class="lab">Today</span>
+      <div class="src">Saved Jon's invitation as a note<em>8:53</em></div>
+      <div class="src" style="margin-top:-8px">Drafted a welcome for 3 members<em>7:40</em></div>
+      <div class="src" style="margin-top:-8px">Drafted a payment note<em>7:02</em></div></div>
+  </aside>
+
+  <!-- RAIL: MANAGE -->
+  <aside class="rail r7" aria-label="What members see">
+    <div class="sec"><span class="lab" style="display:flex;align-items:center;gap:6px;color:var(--aurora-ink)">{i:spark:xs}A note</span>
+      <p class="say" style="font-size:17px;color:var(--ink)">Your banner and logo appear on every screen. Members never see anything on this page.</p></div>
+    <div class="sep"></div>
+    <div class="sec"><span class="lab">Check your work</span>
+      <label class="link"><input type="radio" name="role" class="role-mem">View as a member {i:arrow}</label></div>
+  </aside>
+
+  <!-- ACCOUNT MENU -->
+  <div class="aveil"><label><input type="radio" name="menu" class="m-shut"></label></div>
+  <div class="amenu">
+    <label class="row l-hide"><input type="radio" name="mode" class="mode-light">{i:sun}Light mode</label>
+    <label class="row d-hide"><input type="radio" name="mode" class="mode-dark">{i:moon}Dark mode</label>
+    <label class="row h-only"><input type="radio" name="role" class="role-mem">{i:eye}View as a member</label>
+    <label class="row m-only"><input type="radio" name="role" class="role-host">{i:eye}Host view</label>
+    <div class="sepm"></div>
+    <span class="row">{i:users}Profile and settings</span>
+    <span class="row">{i:arrow}Sign out</span>
+  </div>
+
+  <!-- COMMAND PALETTE -->
+  <div class="veil">
+    <label class="shut"><input type="radio" name="k" class="k-shut"></label>
+    <div class="pal">
+      <div class="q">{i:search}Search or ask your guide</div>
+      <div class="g"><span class="lab">Go to</span>
+        <label class="opt hot"><input type="radio" name="v" class="v-home">{i:home}Home<em>G then H</em></label>
+        <label class="opt"><input type="radio" name="v" class="v-wins">{i:hash}wins<em>3 new</em></label>
+        <label class="opt"><input type="radio" name="v" class="v-know">{i:stars}Knowledge</label>
+      </div>
+      <div class="g"><span class="lab">Ask your guide</span>
+        <div class="opt askg">{i:spark}What did I miss this week?</div>
+        <div class="opt askg">{i:spark}Who here has priced a founding tier?</div>
+      </div>
+      <div class="g" style="padding-bottom:10px"><span class="lab">Switch community</span>
+        <div class="opt"><span class="mark" style="width:20px;height:20px;border-radius:6px;font-size:9px;font-weight:700">DE</span>Distribution Engineer<em>2 new</em></div>
+      </div>
+      <div class="foot"><span><kbd>↵</kbd>open</span><span><kbd>↑↓</kbd>move</span><span><kbd>esc</kbd>close</span></div>
+    </div>
+  </div>
+</div>
