@@ -53,6 +53,13 @@
   --accent-agent-strong: #c4b2fc;
   --accent-agent-foreground: #c4b2fc;
   --accent-agent-surface: rgba(167, 139, 250, 0.12);
+  /* The mock's guide focus: a purple edge and halo on a field. */
+  --accent-agent-edge: rgba(167, 139, 250, 0.5);
+  --accent-agent-halo: rgba(167, 139, 250, 0.1);
+  /* The mock's message bubbles and field edge (.bub, .mine, .ask). */
+  --bubble-theirs: rgba(255, 255, 255, 0.06);
+  --bubble-mine: rgba(255, 255, 255, 0.09);
+  --field-edge: rgba(255, 255, 255, 0.12);
 
   /* You can act: blue. */
   --focus-ring: #1d9bf0;
@@ -95,6 +102,9 @@
 }
 
 :root[data-design="v1"][data-theme="light"] {
+  --bubble-theirs: rgba(13, 17, 23, 0.06);
+  --bubble-mine: #0d1117;
+  --field-edge: rgba(13, 17, 23, 0.14);
   --bg-app: #f6f7f9;
   --bg-header: rgba(246, 247, 249, 0.94);
   --bg-panel: #f6f7f9;
@@ -1782,7 +1792,7 @@
     padding: 9px 13px;
     border: 0;
     border-radius: 14px 14px 14px 4px;
-    background: rgba(255, 255, 255, 0.06);
+    background: var(--bubble-theirs);
     color: var(--text-ink-primary);
     font-size: 15px;
     line-height: 1.45;
@@ -1790,7 +1800,7 @@
 
   :root[data-design="v1"] .web-direct-messages-host.is-page .community-dm-panel-message.is-own .community-dm-panel-message-bubble {
     border-radius: 14px 14px 4px 14px;
-    background: rgba(255, 255, 255, 0.09);
+    background: var(--bubble-mine);
   }
 
   :root[data-design="v1"][data-theme="light"] .web-direct-messages-host.is-page .community-dm-panel-message-bubble {
@@ -1819,15 +1829,15 @@
     align-items: center;
     min-height: 46px;
     padding: 0 8px 0 12px;
-    border: 1px solid rgba(255, 255, 255, 0.12);
+    border: 1px solid var(--field-edge);
     border-radius: 14px;
-    background: rgba(10, 12, 16, 0.6);
+    background: var(--surface-field, rgba(10, 12, 16, 0.6));
     box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
   }
 
   :root[data-design="v1"] .web-direct-messages-host.is-page .community-dm-panel-composer:focus-within {
-    border-color: rgba(167, 139, 250, 0.5);
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 0 0 4px rgba(167, 139, 250, 0.1);
+    border-color: var(--accent-agent-edge);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 0 0 4px var(--accent-agent-halo);
   }
 
   /* The send button's colours come through the conversation tokens (the
@@ -2844,4 +2854,87 @@
   flex: 1;
   min-height: 0;
   overflow-y: auto;
+}
+
+/*
+ * Design system v1: avatars as in the mock (.av, .a1-.a6). getAvatarColor
+ * (shared/chatUi.ts) hands out var(--avatar-tint-N); the token is the
+ * gradient's middle, and anything drawn with it gets the gradient itself,
+ * the soft initial and the hairline ring.
+ */
+:root[data-design="v1"] {
+  --avatar-tint-1: #2a303c;
+  --avatar-tint-2: #362e28;
+  --avatar-tint-3: #233335;
+  --avatar-tint-4: #332a38;
+  --avatar-tint-5: #2d3327;
+  --avatar-tint-6: #372a2d;
+}
+
+:root[data-design="v1"][data-theme="light"] {
+  --avatar-tint-1: #cfd9e7;
+  --avatar-tint-2: #e5d7c7;
+  --avatar-tint-3: #c8dede;
+  --avatar-tint-4: #dbcfe4;
+  --avatar-tint-5: #d2ddc7;
+  --avatar-tint-6: #e5d0d3;
+}
+
+:root[data-design="v1"] [style*="--avatar-tint-1)"] {
+  background-image: linear-gradient(140deg, #39414f, #1b2029);
+}
+
+:root[data-design="v1"] [style*="--avatar-tint-2)"] {
+  background-image: linear-gradient(140deg, #4a4038, #221d19);
+}
+
+:root[data-design="v1"] [style*="--avatar-tint-3)"] {
+  background-image: linear-gradient(140deg, #2f4446, #172224);
+}
+
+:root[data-design="v1"] [style*="--avatar-tint-4)"] {
+  background-image: linear-gradient(140deg, #463a4d, #201a24);
+}
+
+:root[data-design="v1"] [style*="--avatar-tint-5)"] {
+  background-image: linear-gradient(140deg, #3e4636, #1c2118);
+}
+
+:root[data-design="v1"] [style*="--avatar-tint-6)"] {
+  background-image: linear-gradient(140deg, #4b3b3e, #231a1c);
+}
+
+:root[data-design="v1"][data-theme="light"] [style*="--avatar-tint-1)"] {
+  background-image: linear-gradient(140deg, #dce4f0, #c3cedf);
+}
+
+:root[data-design="v1"][data-theme="light"] [style*="--avatar-tint-2)"] {
+  background-image: linear-gradient(140deg, #efe3d6, #dccbb8);
+}
+
+:root[data-design="v1"][data-theme="light"] [style*="--avatar-tint-3)"] {
+  background-image: linear-gradient(140deg, #d6e8e8, #bbd4d5);
+}
+
+:root[data-design="v1"][data-theme="light"] [style*="--avatar-tint-4)"] {
+  background-image: linear-gradient(140deg, #e7ddee, #d0c1db);
+}
+
+:root[data-design="v1"][data-theme="light"] [style*="--avatar-tint-5)"] {
+  background-image: linear-gradient(140deg, #dfe8d5, #c6d3b9);
+}
+
+:root[data-design="v1"][data-theme="light"] [style*="--avatar-tint-6)"] {
+  background-image: linear-gradient(140deg, #efdddf, #dcc3c7);
+}
+
+:root[data-design="v1"] [style*="--avatar-tint-"] {
+  color: rgba(238, 240, 244, 0.86);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.1);
+  font-weight: 600;
+}
+
+:root[data-design="v1"][data-theme="light"] [style*="--avatar-tint-"] {
+  color: rgba(13, 17, 23, 0.72);
+  box-shadow: inset 0 0 0 1px rgba(13, 17, 23, 0.08);
 }
