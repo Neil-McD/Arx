@@ -84,6 +84,19 @@ export function useAppLightTheme(): boolean {
   return useSyncExternalStore(subscribeToTheme, readLightTheme, () => false);
 }
 
+// True while the window is at least `px` wide (the app's desktop is 721).
+export function useMinWidth(px: number): boolean {
+  return useSyncExternalStore(
+    (onChange) => {
+      const query = window.matchMedia(`(min-width: ${px}px)`);
+      query.addEventListener("change", onChange);
+      return () => query.removeEventListener("change", onChange);
+    },
+    () => window.matchMedia(`(min-width: ${px}px)`).matches,
+    () => false,
+  );
+}
+
 export type KitView = "home" | "inbox" | "wins" | "know" | "events" | "members" | "guide" | "manage";
 
 export function KitApp(props: {
@@ -97,7 +110,7 @@ export function KitApp(props: {
   fillWindow?: boolean;
   // One part of a page (its middle, or its right column) inside the app's
   // own frame, rather than the mock's whole window.
-  part?: "main" | "rail";
+  part?: "main" | "rail" | "flow";
   // The guide conversation is open on Home (the mock's "Talk it over").
   talking?: boolean;
   className?: string;
@@ -114,7 +127,7 @@ export function KitApp(props: {
   return (
     <div
       className={[
-        cx("app", `on-v-${props.view}`, props.host && "host", light && "light", props.part && "part", props.part === "rail" && "rail-part", props.talking && "on-t-on"),
+        cx("app", `on-v-${props.view}`, props.host && "host", light && "light", props.part && "part", props.part === "rail" && "rail-part", props.part === "flow" && "flow-part", props.talking && "on-t-on"),
         props.className,
       ].filter(Boolean).join(" ")}
       style={style}
