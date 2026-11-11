@@ -488,7 +488,8 @@ export function WebDirectMessagePanel(props: WebDirectMessagePanelProps) {
     const syncComposerClearance = () => {
       messagesElement.style.setProperty(
         "--community-dm-composer-float-height",
-        `${Math.ceil(composerFloat.getBoundingClientRect().height)}px`,
+        // Layout height, so the padding is right when design v1 scales the page.
+        `${Math.ceil(composerFloat.offsetHeight)}px`,
       );
       if (shouldFollowMessagesRef.current) {
         requestAnimationFrame(scrollMessagesToBottom);
