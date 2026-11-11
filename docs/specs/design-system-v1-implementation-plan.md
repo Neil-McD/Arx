@@ -238,6 +238,19 @@ Values read from the mock's stylesheet, previewed on live staging first.
 - Not yet: Going (no RSVP exists), who is hosting (not sent to the page),
   attendance and recaps.
 
+### Members is a page (2026-11-10)
+
+- The list fills the main area under the standard header line; the person you
+  open is the right column, with an empty state until you choose. Members is
+  the selected row in the left column, and choosing anything else there leaves.
+- Search, filter chips (Everyone, Here now, Hosts, New this week) that narrow
+  the people already loaded, role tags, and people in three columns at the
+  mock's measurements.
+- Hosts keep join requests, selection and member tools exactly as before; only
+  where they appear changed. No permission rule changed.
+- Not yet: the guide's "people you should meet", bios, the host's Plan column,
+  Invite in the header, an address for the page.
+
 ### Slice 4: Home
 
 Home is today's agent page with three things above the conversation.

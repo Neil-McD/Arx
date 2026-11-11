@@ -1,6 +1,7 @@
 import { Fragment, useContext, useEffect, useRef, useState, type ComponentProps, type KeyboardEvent, type CSSProperties } from "react";
 import { ArrowRight, MessageCircle, MoreHorizontal, Pin, Search, X } from "lucide-react";
 import { isDesignV1Active } from "../../../../shared/designSystem";
+import { MEMBER_FILTERS, memberPassesFilter, type MemberFilter } from "./communityMemberFilters";
 import { createPortal } from "react-dom";
 import { useWebMemberDirectorySearch } from "../controllers/useWebMemberDirectorySearch";
 import { CommunityMemberSettingsDialog } from "./CommunityMemberSettingsDialog";
@@ -77,11 +78,15 @@ function ChannelRosterWorkspace(props: RosterProps) {
     setAskedNarrow(Boolean(props.narrowOpen));
     if (props.narrowOpen) setMembersOpen(true);
   }
-  if (isDesignV1Active() && membersOpen) {
+  // The page is a desktop layout. A narrow window keeps the list it had, with
+  // its own way back.
+  const wideEnoughForPage = typeof window === "undefined" || typeof window.matchMedia !== "function"
+    || window.matchMedia("(min-width: 721px)").matches;
+  if (isDesignV1Active() && membersOpen && wideEnoughForPage) {
     const close = () => { setMembersOpen(false); props.onCloseNarrow?.(); };
-    return <RosterSurface {...props} channelId={undefined} narrowOpen={false}
+    return <><MembersPageLeaver onLeave={close} /><RosterSurface {...props} channelId={undefined} narrowOpen={false}
       onCloseNarrow={undefined} directory inline onCloseMembers={close}
-      onMessageUser={props.onMessageUser ? id => { close(); props.onMessageUser?.(id); } : undefined} />;
+      onMessageUser={props.onMessageUser ? id => { close(); props.onMessageUser?.(id); } : undefined} /></>;
   }
   return <>
     <RosterSurface {...props} onOpenMembers={() => setMembersOpen(true)} />
@@ -89,6 +94,27 @@ function ChannelRosterWorkspace(props: RosterProps) {
       onCloseNarrow={undefined} directory onCloseMembers={() => setMembersOpen(false)}
       onMessageUser={props.onMessageUser ? id => { setMembersOpen(false); props.onMessageUser?.(id); } : undefined} /> : null}
   </>;
+}
+
+function memberRoleTag(role: string): string | null {
+  return role === "owner" ? "host" : role === "admin" ? "admin" : role === "moderator" ? "moderator" : null;
+}
+
+// Members is a page while it is open (design v1). It has no address yet, so
+// choosing anything else in the left column is what leaves it.
+function MembersPageLeaver(props: { onLeave: () => void }) {
+  const onLeaveRef = useRef(props.onLeave);
+  onLeaveRef.current = props.onLeave;
+  useEffect(() => {
+    const onClick = (event: MouseEvent) => {
+      const target = event.target instanceof Element ? event.target : null;
+      const row = target?.closest(".community-nav .nav-item, .community-switcher-item");
+      if (row && !row.closest(".nav-item-members")) onLeaveRef.current();
+    };
+    document.addEventListener("click", onClick, true);
+    return () => document.removeEventListener("click", onClick, true);
+  }, []);
+  return null;
 }
 
 // Both presentations share the same authorized readers, row rendering and actions.
@@ -110,6 +136,8 @@ function RosterSurface(props: RosterProps & {
     return () => { if (opener?.isConnected) opener.focus(); };
   }, [props.directory, props.memberDetailOpen]);
   const [search, setSearch] = useState("");
+  const [memberFilter, setMemberFilter] = useState<MemberFilter>("everyone");
+  const [openedUserId, setOpenedUserId] = useState<string | null>(null);
   const searching = Boolean(search.trim());
   const searchResult = useWebMemberDirectorySearch({
     session: scope?.session,
@@ -190,6 +218,9 @@ function RosterSurface(props: RosterProps & {
     membership_created_at: member.created_at,
     profile: member, last_seen_at: null, active_until: null,
   })) : rosterMembers;
+  // Join dates are only sent to people who manage members, so only they are
+  // offered "New this week".
+  const knowsJoinDates = members.some(member => Boolean((member as { membership_created_at?: unknown }).membership_created_at));
   const selectedMember = props.memberSettings.canManageMembers
     ? members.find(member => member.membership_id === selectedMembershipId && member.role !== "owner") : undefined;
   // In the members list, owners and admins select people and act on them together.
@@ -265,10 +296,16 @@ function RosterSurface(props: RosterProps & {
             <Search aria-hidden="true" />
             <input ref={searchRef} type="search" aria-label="Search community members" placeholder="Search community members" value={search} maxLength={128} onChange={event => setSearch(event.target.value)} />
           </label>
+          {props.inline && !searching ? <div className="members-page-filters" role="group" aria-label="Show">
+            {MEMBER_FILTERS.filter(filter => filter.id !== "new" || knowsJoinDates).map(filter => <button key={filter.id} type="button"
+              className={`members-page-chip${memberFilter === filter.id ? " is-selected" : ""}`}
+              aria-pressed={memberFilter === filter.id} onClick={() => setMemberFilter(filter.id)}>{filter.label}</button>)}
+          </div> : null}
           </> : null}
       {(searching || (!error && ready)) ? <>
           {(["online", "offline", "unknown"] as const).map(group => {
-            const rows = members.filter(member => status(member) === group);
+            const rows = members.filter(member => status(member) === group
+              && (!props.inline || searching || memberPassesFilter(member, status(member), memberFilter, now)));
             if (!rows.length) return null;
             const heading = <h4 className="community-context-section" title="Online status reflects activity in this community">{searching ? "Community matches" : group === "unknown" ? "Presence unavailable" : group === "online" ? "Online" : "Offline"} — {rows.length}{!searching && !complete ? " loaded" : ""}</h4>;
             return <Fragment key={group}>
@@ -280,7 +317,8 @@ function RosterSurface(props: RosterProps & {
                 const lastActive = group === "online" ? "Last active: now"
                   : member.last_seen_at === null ? "Last active: unavailable"
                   : `Last active: ${formatRelativeTimeFromIso(new Date(member.last_seen_at).toISOString())}`;
-                return <div key={member.user_id} className={`community-context-member${group === "offline" ? " is-offline" : ""}`}>
+                return <div key={member.user_id} data-member-user-id={member.user_id}
+                  className={`community-context-member${group === "offline" ? " is-offline" : ""}${props.inline && props.memberDetailOpen && openedUserId === member.user_id ? " is-selected" : ""}`}>
                   {canSelect && member.membership_id && member.role !== "owner" ? <input type="checkbox" className="community-context-member-select"
                     aria-label={`Select ${name}`} checked={picked.has(member.user_id)} onChange={() => togglePicked(member, name)} /> : null}
                   <button type="button" className="community-context-member-trigger" aria-label={`Open ${name}'s profile`} aria-description={lastActive} onClick={() => props.onOpenProfile?.(member.user_id)}>
@@ -291,7 +329,7 @@ function RosterSurface(props: RosterProps & {
                         alt="" aria-hidden={true} fallback={<span>{props.getInitials(name)}</span>} />
                       {group === "online" ? <span className="community-context-member-dot" aria-hidden="true" /> : null}
                     </span>
-                    <span className="community-context-member-copy"><span className={`community-context-member-name${member.role === "owner" || member.role === "admin" ? " is-admin" : ""}`}>{name}</span></span>
+                    <span className="community-context-member-copy"><span className={`community-context-member-name${member.role === "owner" || member.role === "admin" ? " is-admin" : ""}`}>{name}</span>{props.inline && memberRoleTag(member.role) ? <span className="community-interaction-badge is-host">{memberRoleTag(member.role)}</span> : null}</span>
                   </button>
                   <span className="community-context-member-last-active" aria-hidden="true">{lastActive.replace("Last active: ", "")}</span>
                   {props.onMessageUser && member.user_id !== props.currentUserId ? <button type="button" className="community-context-member-action" aria-label={`Message ${name}`} title="Direct message" onClick={() => props.onMessageUser?.(member.user_id)}><MessageCircle size={16} strokeWidth={1.9} aria-hidden="true" /></button> : null}
@@ -356,21 +394,25 @@ function RosterSurface(props: RosterProps & {
   // Keep overlays outside that shell, as the directory already does below.
   if (v1Rail) return v1Rail;
   if (!props.directory) return <>{content}{selectedMember ? createPortal(settings, document.body) : null}</>;
+  // Design system v1: Members is a page. The list fills the main area under
+  // the standard header line; the person you open is the right column.
   if (props.inline) return <>
-    <div className="community-context-panel channel-roster-panel is-v1 is-member-list" role="region" aria-label="Community members"
-      style={props.memberDetailOpen ? { display: "none" } : undefined}
-      onKeyDown={event => {
-        if (event.key !== "Escape" || event.defaultPrevented || selectedMember) return;
-        event.preventDefault(); props.onCloseMembers?.();
-      }}>
-      <div className="community-interaction-drawer-back is-v1 is-static">
-        <h2 className="community-thread-title">Members</h2>
-        <button className="community-thread-close" type="button" onClick={props.onCloseMembers} aria-label="Close members" title="Close members">
-          <X size={17} aria-hidden="true" />
-        </button>
-      </div>
+    <section className="members-page" aria-label="Community members"
+      onClickCapture={event => {
+        const row = (event.target as HTMLElement).closest<HTMLElement>("[data-member-user-id]");
+        if (row) setOpenedUserId(row.dataset.memberUserId ?? null);
+      }}
+      data-opened-user-id={props.memberDetailOpen ? openedUserId ?? undefined : undefined}>
+      <header className="community-channel-header members-page-header">
+        <div className="community-channel-header-identity">
+          <h1>Members{!error && ready && complete && !searching ? <small> {rosterMembers.length === 1 ? "1 person" : `${rosterMembers.length} people`}</small> : null}</h1>
+        </div>
+      </header>
       {content}
-    </div>
+    </section>
+    {!props.memberDetailOpen ? <aside className="community-context-panel members-page-empty" aria-label="No one selected">
+      <p>Choose someone to see their profile.</p>
+    </aside> : null}
     {selectedMember ? createPortal(<div ref={settingsRef} onKeyDown={event => {
       if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); setSelectedMembershipId(null); searchRef.current?.focus(); }
       trapTab(event, settingsRef.current);
