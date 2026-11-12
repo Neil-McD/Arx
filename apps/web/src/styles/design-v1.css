@@ -2928,6 +2928,8 @@
   --bg-button: #6f78d8;
   --bg-button-hover: #7d86e2;
   /* A plain hairline under headers, and a quiet border (no halo) on focus. */
+  /* No serif in the trial. */
+  --font-voice: "Geist Variable", "Geist", system-ui, sans-serif;
   --header-line-glow: rgba(255, 255, 255, 0.06);
   --accent-act-edge: rgba(255, 255, 255, 0.16);
   --accent-act-halo: transparent;

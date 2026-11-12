@@ -525,6 +525,8 @@
   --accent:#6f78d8; --accent-hover:#7d86e2;
   --card-bg:var(--panel2); --card-shadow:none; --field:var(--panel2);
   --go:var(--accent); --go-hover:var(--accent-hover);
+  
+  --serif:var(--sans); --serif-w:600;
   font-size:13px; letter-spacing:0;
 }
 
