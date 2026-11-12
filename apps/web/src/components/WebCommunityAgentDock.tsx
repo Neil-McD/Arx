@@ -237,6 +237,7 @@ function WebCommunityAgentDock(props, ref) {
   const draftTextRef = useRef("");
   const submitInFlightRef = useRef(false);
   const sendSuggestionRef = useRef<(text: string) => void>(() => undefined);
+  const askReadyRef = useRef(false);
   const resourceBuildStartInFlightRef = useRef(false);
   const pendingResourceBuildRef = useRef<{
     communityId: string;
@@ -303,7 +304,7 @@ function WebCommunityAgentDock(props, ref) {
       inputElement.focus();
     },
     ask: (question: string) => {
-      if (!composerFormRef.current) return false;
+      if (!askReadyRef.current || !composerFormRef.current) return false;
       sendSuggestionRef.current(question);
       return true;
     },
@@ -1276,6 +1277,8 @@ function WebCommunityAgentDock(props, ref) {
     turnIsActive || isPreparing || Boolean(dockError) || Boolean(memberLimitNotice) || persistentResourceChangesetCards.length > 0;
   // Home on the kit: Home in design v1 on a wide window, the host's and a member's.
   const kitHome = homeActive && guideWording && !props.mobileRoot && Boolean(props.home);
+  // The palette's question waits for Home's own box and an idle guide.
+  askReadyRef.current = Boolean(kitHome) && !(composerIsBusy || isPreparing || isStartingNewChat);
   const kitHomeIsHost = props.home?.audience === "host";
   const openTalk = () => {
     followConversationRef.current = true;

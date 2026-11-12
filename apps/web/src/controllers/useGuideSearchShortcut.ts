@@ -11,12 +11,12 @@ export function useGuideSearchShortcut(
 ): void {
   useEffect(() => {
     if (!isDesignV1Active()) return;
-    // Home draws a moment after the switch, so each step is tried for up to a
-    // second until Home is ready.
+    // Home draws a moment after the switch, so each step is tried for up to
+    // three seconds until Home is ready.
     const whenReady = (attempt: () => boolean) => {
       let tries = 0;
       const step = () => {
-        if (!attempt() && tries++ < 12) window.setTimeout(step, 80);
+        if (!attempt() && tries++ < 36) window.setTimeout(step, 80);
       };
       window.setTimeout(step, 40);
     };
