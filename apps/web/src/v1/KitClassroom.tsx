@@ -325,7 +325,7 @@ export function KitClassroom(props: {
           </div>
         ) : (
           <div style={{ marginTop: 24 }}>
-            <p className={cx("lead")} style={{ marginTop: 0 }}><span className={cx("aura")}><Icon name="spark" /></span>{props.canManage ? "This course has no lessons yet." : "This course is being written."}</p>
+            <p className={cx("lead")} style={{ marginTop: 0 }}>{agentOn ? <span className={cx("aura")}><Icon name="spark" /></span> : null}{props.canManage ? "This course has no lessons yet." : "This course is being written."}</p>
             {editingTools ? (
               <button type="button" className={cx("btn go")} style={{ marginTop: 18 }} onClick={async () => {
                 const id = await editingTools.addLesson(open.course.id);
@@ -341,7 +341,7 @@ export function KitClassroom(props: {
     const learning = summary.reduce((total, row) => total + row.started, 0);
     page = (
       <div className={cx("page")} style={{ padding: 0, overflow: "visible" }}>
-        <p className={cx("lead")} style={{ marginTop: 0 }}><span className={cx("aura")}><Icon name="spark" /></span>
+        <p className={cx("lead")} style={{ marginTop: 0 }}>{agentOn ? <span className={cx("aura")}><Icon name="spark" /></span> : null}
           {!props.loaded ? " " : props.canManage
             ? (courses.length === 0 ? "Start with one course." : learning > 0 ? `Members have started ${learning} ${learning === 1 ? "course" : "courses"} between them.` : "Your courses are ready for members.")
             : resume ? "Pick up where you left off." : courses.length ? "Pick a course to start." : "Nothing to learn here yet."}
