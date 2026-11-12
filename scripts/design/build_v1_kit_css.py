@@ -127,13 +127,13 @@ css += """
 .app .kn-title{margin:0;font-family:var(--serif);font-weight:var(--serif-w);font-size:34px;letter-spacing:-.02em;line-height:1.1}
 .app .kn-sub{margin:8px 0 0;font-size:13px;color:var(--ink2)}
 .app svg.kn-map{display:block;width:100%;height:auto;margin:6px 0 0}
-.app .kn-pt{cursor:pointer}
+.app .kn-pt{cursor:pointer;outline:none}
 .app button.kn-row{width:100%;text-align:left;display:flex;align-items:center;gap:14px;cursor:pointer}
 .app .kn-row>div{flex:1;min-width:0}
 .app .kn-row .kn-dot{flex:none;margin:0 4px}
 .app .kn-row.sel{background:var(--s2)}
 .app .kn-dot{width:7px;height:7px;border-radius:50%;background:var(--ink3);justify-self:center}
-.app .kn-dot.new{background:var(--aurora);box-shadow:0 0 10px var(--aurora)}
+.app .kn-dot.kn-fresh{background:var(--aurora);box-shadow:0 0 10px var(--aurora)}
 .app .kn-note-title{margin:2px 0 0;font-size:20px;font-weight:600;letter-spacing:-.015em}
 .app .kn-body p{margin:0 0 10px;font-size:15px;line-height:1.55;color:var(--ink2)}
 .app button.src{width:calc(100% + 20px);text-align:left}
