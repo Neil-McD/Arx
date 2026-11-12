@@ -64,7 +64,9 @@ export function KitLessonEditor(props: {
   const save = async () => {
     if (saving) return;
     if (!title.trim()) { setError("Give the lesson a title."); return; }
-    if (video.trim() && !provider) { setError("That link isn't a video we can play. Use YouTube, Loom, Vimeo or Wistia."); return; }
+    // A link the lesson already had (a page to read, not a video) stays as it is.
+    const unchangedLink = video.trim() === (resource.url ?? "").trim();
+    if (video.trim() && !provider && !unchangedLink) { setError("That link isn't a video we can play. Use YouTube, Loom, Vimeo or Wistia."); return; }
     const next = lessonPatchFor(resource, { title, video, body: bodyRef.current });
     if (!next) { props.onCancel(); return; }
     setSaving(true);
@@ -87,7 +89,7 @@ export function KitLessonEditor(props: {
       <div className={cx("kedit-video", provider && "has")}>
         {thumb ? <span className={cx("kedit-thumb")} style={{ backgroundImage: `url(${JSON.stringify(thumb)})` }} /> : <span className={cx("kplay")}><Icon name="play" /></span>}
         <div>
-          <span className={cx("lab")}>{provider ? `${provider} video` : "Lesson video"}</span>
+          <span className={cx("lab")}>{provider ? `${provider} video` : video.trim() ? "Link" : "Lesson video"}</span>
           <input value={video} onChange={(event) => setVideo(event.target.value)} placeholder="Paste a YouTube, Loom, Vimeo or Wistia link" aria-label="Lesson video link" />
         </div>
         {video ? <Btn small txt onClick={() => setVideo("")}>Remove</Btn> : null}

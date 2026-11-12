@@ -383,6 +383,22 @@ function blockFromChunk(schema: Schema, parser: MarkdownParser, chunk: Chunk, so
 }
 
 /** Reads a lesson body into an editor document. */
+// markdown-it's reference label normalisation (normalizeReference).
+const referenceLabel = (label: string) => label.trim().replace(/\s+/g, " ").toLowerCase().toUpperCase();
+
+/** The bullet a Markdown list starts with (-, * or +). */
+function bulletMarker(markdown: string): string | null {
+  return /^ {0,3}([-*+])[ \t]/m.exec(markdown)?.[1] ?? null;
+}
+
+function usesReferenceLink(source: string, labels: ReadonlySet<string>): boolean {
+  if (!labels.size) return false;
+  for (const match of source.matchAll(/\[([^\]\n]+)\]/g)) {
+    if (labels.has(referenceLabel(match[1]))) return true;
+  }
+  return false;
+}
+
 export function parseLessonMarkdown(schema: Schema, markdown: string, options: LessonMarkdownOptions = {}): LessonDocument {
   const original = String(markdown ?? "");
   const text = original.replace(/\r\n?/g, "\n");
@@ -391,12 +407,19 @@ export function parseLessonMarkdown(schema: Schema, markdown: string, options: L
   const sources = new WeakMap<PMNode, SourceRecord>();
   const gaps: string[] = [];
   const blocks: PMNode[] = [];
-  const chunks = groupSlides(lines, chunkSource(lines, tokenizer.parse(text, {})));
+  const env: { references?: Record<string, unknown> } = {};
+  const chunks = groupSlides(lines, chunkSource(lines, tokenizer.parse(text, env)));
+  const referenceLabels = new Set(Object.keys(env.references ?? {}));
   chunks.forEach((chunk, index) => {
     const source = lines.slice(chunk.start, chunk.end).join("\n");
     const nodes = chunk.deck
       ? [schema.nodes.slideDeck.create(chunk.deck)]
-      : blockFromChunk(schema, parser, chunk, source, options);
+      // A block that uses a reference link ([guide][g]) needs the document's
+      // definitions, which a block parsed alone doesn't have: it stays as its
+      // own Markdown so the link survives editing.
+      : usesReferenceLink(source, referenceLabels)
+        ? [rawBlock(schema, source)]
+        : blockFromChunk(schema, parser, chunk, source, options);
     if (nodes.length === 1) sources.set(nodes[0], { index, source });
     blocks.push(...nodes);
     const next = chunks[index + 1];
@@ -413,8 +436,10 @@ export function parseLessonMarkdown(schema: Schema, markdown: string, options: L
     // Nothing changed: hand back exactly what came in.
     if (next === initial || next.eq(initial)) return original;
     const parts: string[] = [];
-    let previous: { record: SourceRecord | undefined; node: PMNode } | null = null;
-    next.forEach((node) => {
+    let previous: { record: SourceRecord | undefined; node: PMNode; text: string } | null = null;
+    const blocks: PMNode[] = [];
+    next.forEach((node) => blocks.push(node));
+    blocks.forEach((node, position) => {
       if (isUnsaved(node)) {
         // Empty lines the writer left between blocks are not content.
         previous = previous ? { ...previous, record: undefined } : null;
@@ -422,16 +447,23 @@ export function parseLessonMarkdown(schema: Schema, markdown: string, options: L
       }
       const record = sources.get(node);
       let markdownText = record ? record.source : serializeBlock(schema, node);
+      // Two lists in a row would merge into one; a rewritten list takes a
+      // bullet that differs from the Markdown on both sides of it.
+      if (!record && node.type.name === "bulletList") {
+        const avoid = new Set<string>();
+        if (previous?.node.type.name === "bulletList") avoid.add(bulletMarker(previous.text) ?? "");
+        const following = blocks.slice(position + 1).find((block) => !isUnsaved(block));
+        const followingRecord = following ? sources.get(following) : undefined;
+        if (following?.type.name === "bulletList" && followingRecord) avoid.add(bulletMarker(followingRecord.source) ?? "");
+        const marker = ["-", "*", "+"].find((candidate) => !avoid.has(candidate)) ?? "-";
+        if (marker !== "-") markdownText = markdownText.replace(/^- /gm, `${marker} `);
+      }
       if (previous) {
         const keepGap = record && previous.record && previous.record.index + 1 === record.index;
-        // Two lists in a row would merge into one; a different bullet keeps them apart.
-        if (!record && node.type.name === "bulletList" && previous.node.type.name === "bulletList") {
-          markdownText = markdownText.replace(/^- /gm, "* ");
-        }
         parts.push(keepGap ? gaps[previous.record!.index] : "\n\n");
       }
       parts.push(markdownText);
-      previous = { record, node };
+      previous = { record, node, text: markdownText };
     });
     const body = parts.join("");
     return body ? `${leading}${body}${trailingText}` : "";

@@ -3,7 +3,7 @@
 // left off, and the courses as cards with progress, in pages. An open course:
 // its lesson, Mark done and Next, with the outline in the right column. Notes
 // only ever appear in the right column ("Learned this week").
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   fetchCourseProgressSummary,
   fetchMyLessonProgress,
@@ -84,6 +84,7 @@ export function KitClassroom(props: {
   renderRail: (rail: ReactNode) => ReactNode;
 }) {
   const [doneAt, setDoneAt] = useState<Map<string, string>>(() => new Map());
+  const [progressLoaded, setProgressLoaded] = useState(false);
   const [summary, setSummary] = useState<CourseProgressSummary[]>([]);
   const [notes, setNotes] = useState<CommunityNoteView[]>([]);
   const [canWriteNotes, setCanWriteNotes] = useState(false);
@@ -100,6 +101,7 @@ export function KitClassroom(props: {
       const rows = await fetchMyLessonProgress({ session: props.session, communityId: props.communityId });
       setDoneAt(new Map(rows.map((row) => [row.resource_id, row.completed_at])));
     } catch { /* The page works without progress; marking a lesson retries. */ }
+    setProgressLoaded(true);
   }, [props.session, props.communityId]);
   const loadNotes = useCallback(async () => {
     try {
@@ -130,13 +132,18 @@ export function KitClassroom(props: {
   const resume = useMemo(() => (props.canManage ? null : continueLesson(courses, doneAt)), [courses, doneAt, props.canManage]);
   const summaryBy = useMemo(() => new Map(summary.map((row) => [row.module_id, row])), [summary]);
 
-  // Opening a course lands on its next lesson (or the first).
+  // Opening a course lands on its next lesson (or the first). Progress may
+  // arrive after the course does: a lesson picked for the reader is picked
+  // again then, but one the reader chose stays.
+  const autoLessonRef = useRef<string | null>(null);
   useEffect(() => {
-    if (!open) { setLessonId(null); return; }
-    if (lessonId && open.lessons.some((lesson) => lesson.id === lessonId)) return;
-    setLessonId(courseProgress(open.lessons, done).nextLessonId ?? open.lessons[0]?.id ?? null);
+    if (!open) { setLessonId(null); autoLessonRef.current = null; return; }
+    if (lessonId && lessonId !== autoLessonRef.current && open.lessons.some((lesson) => lesson.id === lessonId)) return;
+    const next = courseProgress(open.lessons, done).nextLessonId ?? open.lessons[0]?.id ?? null;
+    autoLessonRef.current = next;
+    setLessonId(next);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open?.course.id, open?.lessons.length]);
+  }, [open?.course.id, open?.lessons.length, progressLoaded]);
 
   const mark = async (resourceId: string, value: boolean) => {
     if (saving) return;
