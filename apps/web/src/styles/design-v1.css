@@ -3012,3 +3012,23 @@
   padding: 0;
   color: var(--text-faint);
 }
+
+/* The Inbox draws over the page (fixed), so it takes the frame itself: the
+   same inset, edge and corners, with its conversation column inside. */
+@media (min-width: 721px) {
+  :root[data-design="v1"] .web-direct-messages-host.is-page .community-dm-inbox-panel.is-kit {
+    top: 8px;
+    right: 8px;
+    bottom: 8px;
+    border: 1px solid var(--surface-raised-edge);
+    border-radius: 10px;
+    background: var(--surface-raised);
+  }
+
+  :root[data-design="v1"] .web-direct-messages-host.is-page .community-dm-panel.is-kit:not(.community-dm-inbox-panel) {
+    top: 9px;
+    right: 9px;
+    bottom: 9px;
+    border-radius: 0 9px 9px 0;
+  }
+}
