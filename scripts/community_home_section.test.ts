@@ -4,7 +4,7 @@ import * as React from "react";
 const web = createRequire(new URL("../apps/web/package.json", import.meta.url));
 const root = createRequire(import.meta.url);
 if (web.resolve("react") !== root.resolve("react")) vi.doMock(web.resolve("react"), () => React);
-const { greetingFor, homeCardFor, homeClockFor, homeEventTimeFor, homeFiguresFor, homeKitFiguresFor, homeRowsFor, homeSentenceFor } = await import("../apps/web/src/components/WebCommunityHomeSection");
+const { greetingFor, homeCardFor, homeClockFor, homeEventTimeFor, homeFiguresFor, homeRowsFor, homeSentenceFor } = await import("../apps/web/src/components/WebCommunityHomeSection");
 const { normalizeCommunityHomeSnapshot } = await import("../shared/cloudCommunityAdminGateway");
 
 const quiet = normalizeCommunityHomeSnapshot({
@@ -142,20 +142,10 @@ test("without a rail to fill, the panel renders once, inline", async () => {
   expect(html).not.toContain("community-home-aside");
 });
 
-test("on the kit, the host's figures are the week's, as the mock has them", () => {
-  expect(homeKitFiguresFor(busy)).toEqual([
-    { label: "Members", value: "214", note: "3 joined this week" },
-    { label: "Active this week", value: "132", note: "62 percent" },
-    { label: "Waiting to join", value: "2", note: "2 requests" },
-    { label: "Unanswered", value: "2", note: "questions" },
-  ]);
-  expect(homeKitFiguresFor(quiet).slice(0, 3)).toEqual([
-    { label: "Members", value: "12", note: "No one new this week" },
-    { label: "Active this week", value: "0", note: "0 percent" },
-    { label: "Waiting to join", value: "0", note: "Nobody waiting" },
-  ]);
-  // An older backend without the week reads as zero, never as missing.
+test("an older backend without the week or Today's facts reads as zero and none, never as missing", () => {
   expect(normalizeCommunityHomeSnapshot({ memberCount: 3 })!.week).toEqual({ joined: 0, activePeople: 0 });
+  expect(normalizeCommunityHomeSnapshot({ memberCount: 3 })!.busiest).toBeNull();
+  expect(normalizeCommunityHomeSnapshot({ memberCount: 3 })!.highlight).toBeNull();
 });
 
 test("the eyebrow's clock reads like the mock's", () => {

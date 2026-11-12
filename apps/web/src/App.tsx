@@ -2513,6 +2513,7 @@ export default function App() {
                   if (channel) shellChromeHostProps.communityShell.onSelectCommunityChannel(channel);
                 },
                 onOpenEvents: () => handleSelectCommunityTab("events"),
+                onOpenKnowledge: () => handleSelectCommunityTab("resources"),
                 presence: activeCommunityPresenceSummary,
               }
             : null,

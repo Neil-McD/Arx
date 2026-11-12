@@ -178,6 +178,15 @@ css += """
 .app .pal .opt-label b{font-weight:500;color:var(--ink)}
 .app .pal .pal-mark{width:20px;height:20px;border-radius:6px;font-size:9px}
 
+/* Home's right column: Today's lines (each opens what it names), who is
+   online, and the memory map as a button. */
+.app .today{list-style:none;margin:2px 0 8px;padding:0;display:flex;flex-direction:column;gap:8px}
+.app .today-line{display:block;width:100%;text-align:left;font-size:14px;line-height:1.45;color:var(--ink)}
+.app button.today-line{cursor:pointer}.app button.today-line:hover{color:var(--ink);text-decoration:underline;text-decoration-color:var(--line2);text-underline-offset:3px}
+.app .here-row{display:flex;align-items:center;gap:12px}
+.app button.kmini-btn{width:100%;padding:0}.app button.kmini-btn:disabled{cursor:default}
+.app .kmini+.kline{margin-top:10px}
+
 /* Links drawn as the mock's buttons (Join, Add to calendar). */
 .app a.btn{text-decoration:none}
 .app .btn.sm.on .ic{width:13px;height:13px}

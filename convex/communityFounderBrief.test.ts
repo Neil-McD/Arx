@@ -36,6 +36,8 @@ const quiet: FounderBriefSnapshot = {
   newMembers: { count: 0, names: [] },
   activity: { posts: 0, replies: 0, activePeople: 0 },
   week: { joined: 0, activePeople: 0 },
+  busiest: null,
+  highlight: null,
   unanswered: [],
   quietNewcomers: { count: 1, names: ["Sam"] },
   joinRequestsPending: 0,
@@ -171,6 +173,25 @@ describe("founder brief delivery", () => {
     expect(home?.unanswered.map((row: any) => row.text)).toEqual(["Where do we meet on Saturday?"]);
   });
 
+  it("Home's Today names the post with the most replies, from shared channels", async () => {
+    const t = convexTest(schema, modules);
+    const f = await fixture(t, Date.now());
+    await t.run(async (ctx) => {
+      const root = await ctx.db.query("communityInteractionRoots").first();
+      const nowMs = Date.now();
+      for (const [key, summary, replies] of [["busy", "Jon passed 100 members", 3], ["calm", "Morning all", 1]] as const) {
+        await ctx.db.insert("communityInteractionRoots", {
+          communityId: f.communityId, channelId: (root as any).channelId, actorType: "human", actorUserId: (root as any).actorUserId,
+          kind: "discussion", status: "live", visibilityScope: "community", contentSummary: summary,
+          replyCount: replies, reactionSummary: [], idempotencyKey: `brief-root-${key}`, createdAt: nowMs - 3 * HOUR_MS, updatedAt: nowMs - 3 * HOUR_MS,
+        } as any);
+      }
+    });
+    const memberHome = await t.withIdentity({ subject: "brief-Ana" }).query(api.communityFounderBrief.getCommunityMemberHomeSnapshot, { communityId: f.communityId });
+    expect(memberHome?.highlight).toMatchObject({ title: "Jon passed 100 members", channel: "general", replies: 3 });
+    expect(memberHome?.busiest).toMatchObject({ channel: "general", posts: 3 });
+  });
+
   it("Home shows the owner the brief's facts for the last day, and nobody else", async () => {
     const t = convexTest(schema, modules);
     const f = await fixture(t, Date.now());
@@ -187,6 +208,8 @@ describe("founder brief delivery", () => {
       quietNewcomers: { count: 1, names: ["Ben"] },
       joinRequestsPending: 1,
       upcomingEvents: [],
+      busiest: { channel: "general", posts: 1, replies: 0, people: 1 },
+      highlight: null,
     });
 
     const asMember = t.withIdentity({ subject: "brief-Ana" });
