@@ -133,7 +133,7 @@ css += """
 .app button.kcourse,.app button.kcont,.app button.kl,.app button.src{width:100%;text-align:left}
 .app button.src{width:calc(100% + 20px)}
 .app button.kcont{display:block}
-.app .kask-btn{width:100%;cursor:pointer;color:var(--ink3);font-size:15px}
+.app .kask-btn{width:100%;cursor:pointer;color:var(--ink3);font-size:14px}
 .app .kask-btn span{flex:1;text-align:left}
 .app .kdone{cursor:pointer}.app .kdone.is{background:var(--blue);border-color:var(--blue);color:var(--bg)}
 .app .kl.d .ic{color:var(--ink2)}
