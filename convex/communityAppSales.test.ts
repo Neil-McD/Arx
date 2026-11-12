@@ -169,11 +169,11 @@ test("changing a plan's grants tells the app, for everyone holding that plan", a
   void buyer;
 });
 
-test("someone who left comes back on their app purchase by joining, without paying twice; a removed member doesn't", async () => {
+test("someone who left comes back on their app purchase by joining, without paying twice; a removed member or a payment hold doesn't", async () => {
   const t = convexTest(schema, modules);
   const ids = await setup(t);
   const { communityAppJoinProjection } = await import("./communityAppJoin");
-  for (const [handle, state] of [["leaver", "left"], ["removed", "removed"]] as const) {
+  for (const [handle, state] of [["leaver", "left"], ["removed", "removed"], ["held", "payment_hold"]] as const) {
     const userId = await newUser(t, handle);
     await t.run((ctx) => ctx.db.insert("communityMemberships", {
       communityId: ids.communityId, userId, role: "member", accessSource: "app_grant", state, activationSequence: 1, createdAt: NOW, updatedAt: NOW,
