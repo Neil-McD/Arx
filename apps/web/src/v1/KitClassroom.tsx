@@ -24,34 +24,9 @@ import { WebCommunityResourceViewerContent } from "../components/WebCommunityRes
 import { NoteForm, OpenNote, noteIsNew } from "./KitKnowledgeNotes";
 import { KitLessonEditor, type LessonPatch } from "./KitLessonEditor";
 import { Btn, cx, Icon, KitApp, Rail, Sec, Sep, TextLink } from "./kit";
+import { KitMemoryMap } from "./KitMemoryMap";
 
 const SHELF = 6;
-
-// The mock's small constellation (lib.py mini_map): a quiet picture of memory.
-const NODES: Array<[number, number, "" | "big" | "new"]> = [
-  [40, 96, ""], [92, 48, ""], [150, 84, "big"], [206, 40, "new"], [238, 104, ""], [120, 126, ""], [64, 30, ""], [184, 128, ""],
-];
-const EDGES: Array<[number, number]> = [[0, 1], [1, 2], [2, 3], [2, 4], [2, 5], [1, 6], [4, 7], [5, 0]];
-
-function MiniMap() {
-  return (
-    <svg className={cx("mini")} viewBox="0 0 280 156" aria-hidden="true">
-      <defs>
-        <radialGradient id="kit-class-aurora" cx="50%" cy="50%" r="50%">
-          <stop offset="0" style={{ stopColor: "var(--aurora)" }} stopOpacity=".6" />
-          <stop offset="1" style={{ stopColor: "var(--aurora)" }} stopOpacity="0" />
-        </radialGradient>
-      </defs>
-      {EDGES.map(([a, b]) => <path key={`${a}-${b}`} d={`M${NODES[a][0]} ${NODES[a][1]}L${NODES[b][0]} ${NODES[b][1]}`} stroke="currentColor" strokeOpacity=".16" strokeWidth=".8" />)}
-      {NODES.map(([x, y, kind]) => (
-        <g key={`${x}-${y}`}>
-          {kind === "new" ? <circle cx={x} cy={y} r="16" fill="url(#kit-class-aurora)" /> : null}
-          <circle cx={x} cy={y} r={kind === "big" ? 4 : 2.6} fill="currentColor" opacity={kind ? 1 : 0.8} />
-        </g>
-      ))}
-    </svg>
-  );
-}
 
 function firstLine(markdown: string | null): string {
   const line = String(markdown ?? "").split("\n").map((part) => part.replace(/^#+\s*/, "").trim()).find(Boolean) ?? "";
@@ -198,7 +173,7 @@ export function KitClassroom(props: {
   const libraryRail = (
     <>
       <Sec label={`What ${props.communityName} knows`}>
-        <div className={cx("kmini")}><MiniMap /></div>
+        <div className={cx("kmini")}><KitMemoryMap /></div>
         <span className={cx("sub")}>{notes.length} {notes.length === 1 ? "note" : "notes"} · {courses.length} {courses.length === 1 ? "course" : "courses"}</span>
       </Sec>
       {shownNotes.length || canWriteNotes ? (

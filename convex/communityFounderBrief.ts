@@ -38,6 +38,10 @@ export type FounderBriefSnapshot = {
   // The last seven days, for Home's figures. Active people are read from the
   // same recent scan as activity, so on a very busy week it is a floor.
   week: { joined: number; activePeople: number };
+  // Home's right column ("Today"): the channel with the most said in the
+  // window, and the post there with the most replies. Shared channels only.
+  busiest: { channel: string; channelSlug: string; posts: number; replies: number; people: number } | null;
+  highlight: { title: string; channel: string; channelSlug: string; replies: number } | null;
   unanswered: Array<{ author: string; channel: string; text: string; hoursAgo: number }>;
   quietNewcomers: { count: number; names: string[] };
   joinRequestsPending: number;
@@ -156,6 +160,35 @@ async function buildSnapshot(ctx: any, community: any, windowStartMs: number, no
     });
   }
 
+  const channelRow = async (channelId: any) => {
+    const key = String(channelId ?? "");
+    if (!key) return null;
+    const channel = await ctx.db.get(channelId);
+    return channel ? { name: String(channel.name ?? "a channel"), slug: String(channel.slug ?? "") } : null;
+  };
+  const byChannel = new Map<string, { channelId: any; posts: number; replies: number; people: Set<string> }>();
+  for (const [row, isReply] of [...windowRoots.map((row: any) => [row, false] as const), ...windowReplies.map((row: any) => [row, true] as const)]) {
+    const key = String(row.channelId ?? "");
+    if (!key) continue;
+    const entry = byChannel.get(key) ?? { channelId: row.channelId, posts: 0, replies: 0, people: new Set<string>() };
+    if (isReply) entry.replies += 1; else entry.posts += 1;
+    if (human(row)) entry.people.add(String(row.actorUserId));
+    byChannel.set(key, entry);
+  }
+  const top = [...byChannel.values()].sort((a, b) => (b.posts + b.replies) - (a.posts + a.replies))[0] ?? null;
+  const topChannel = top ? await channelRow(top.channelId) : null;
+  const busiest = top && topChannel
+    ? { channel: topChannel.name, channelSlug: topChannel.slug, posts: top.posts, replies: top.replies, people: top.people.size }
+    : null;
+  const liveRoots = roots.filter((row: any) => live(row) && Number(row.createdAt) >= nowMs - MAX_WINDOW_MS);
+  const repliedTo = [...liveRoots]
+    .filter((row: any) => Number(row.replyCount ?? 0) > 0 && String(row.title || row.contentSummary || "").trim())
+    .sort((a: any, b: any) => Number(b.replyCount ?? 0) - Number(a.replyCount ?? 0) || Number(b.createdAt) - Number(a.createdAt))[0] ?? null;
+  const highlightChannel = repliedTo ? await channelRow(repliedTo.channelId) : null;
+  const highlight = repliedTo && highlightChannel
+    ? { title: clip(repliedTo.title || repliedTo.contentSummary, 140), channel: highlightChannel.name, channelSlug: highlightChannel.slug, replies: Number(repliedTo.replyCount ?? 0) }
+    : null;
+
   const nameList = async (rows: any[]) => {
     const list: string[] = [];
     for (const row of rows.slice(0, LIST_LIMIT)) list.push(await displayName(ctx, row.userId, names));
@@ -169,6 +202,8 @@ async function buildSnapshot(ctx: any, community: any, windowStartMs: number, no
     newMembers: { count: joined.length, names: await nameList(joined) },
     activity: { posts: windowRoots.length, replies: windowReplies.length, activePeople: activePeople.size },
     week: { joined: weekJoins.filter(activeMember).length, activePeople: weekActivePeople.size },
+    busiest,
+    highlight,
     unanswered,
     quietNewcomers: { count: quiet.length, names: await nameList(quiet) },
     joinRequestsPending: joinRequests.length,

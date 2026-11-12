@@ -26,6 +26,9 @@ export function KitNextEvent(props: {
   presence?: CommunityPresenceSummary | null;
   // A member's column also says who is here now.
   showHere?: boolean;
+  // Home's "Today": only an event that is live or starts today, and nothing
+  // at all when there is none.
+  todayOnly?: boolean;
 }) {
   const [event, setEvent] = useState<CloudCommunityEvent | null | undefined>(undefined);
   const [going, setGoing] = useState<CloudCommunityEventGoing | null>(null);
@@ -66,6 +69,12 @@ export function KitNextEvent(props: {
   };
 
   const label = event ? featuredEventLabel(event, props.now) : null;
+  const startsToday = event ? (() => {
+    const starts = new Date(event.starts_at);
+    const today = new Date(props.now);
+    return starts.getFullYear() === today.getFullYear() && starts.getMonth() === today.getMonth() && starts.getDate() === today.getDate();
+  })() : false;
+  if (props.todayOnly && !(event && label && (label.live || startsToday))) return null;
   const faces = props.presence?.online_faces ?? [];
   const hereCount = props.presence?.online_count ?? faces.length;
   return (
