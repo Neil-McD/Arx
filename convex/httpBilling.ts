@@ -269,7 +269,12 @@ async function reverseCommunityApplicationFeesForRefund(args: {
     internal.communityCommerce.getCommunitySubscriptionByProviderSubscriptionIdInternal as any,
     { providerAccountId, providerSubscriptionId },
   );
-  if (!communitySubscription?.communityId) {
+  // A pod payment is community commerce too (same account, same 2.9%).
+  const podPayment = communitySubscription?.communityId ? null : await args.ctx.runQuery(
+    internal.communityPodPayments.getPodPaymentByProviderSubscriptionInternal,
+    { providerAccountId, providerSubscriptionId },
+  );
+  if (!communitySubscription?.communityId && !podPayment) {
     return { ok: true, ignored: true, reason: "application_fee_refund_not_community_commerce" };
   }
 

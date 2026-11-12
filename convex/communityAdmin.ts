@@ -1,4 +1,5 @@
 import { action, internalAction, internalMutation, internalQuery, mutation, query } from "./_generated/server";
+import { schedulePodBillingCheck } from "./communityPodBillingCheck";
 import { communityHasCustomSite, communityMemberExperience, communitySiteUrl } from "./communitySites";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
@@ -1692,6 +1693,7 @@ export const revokeCommunityMemberInternal = internalMutation({
         const revokedMembership = { ...membership, ...removal } as CommunityMembershipLike;
         if (removal) {
           await ctx.db.patch(membership._id as any, removal);
+          await schedulePodBillingCheck(ctx, { communityId: args.communityId, userId: membership.userId });
           await recordCriticalAuditEvent(ctx, {
             eventKey: `community_member_removed:${membership._id}:${nowMs}`, eventType: "community_member_removed",
             severity: "info", status: "succeeded", actorUserId: userId, subjectUserId: membership.userId,
@@ -2343,6 +2345,7 @@ async function leaveCommunityForUser(ctx: any, args: { communityId: any; userId:
           : null;
         const after = { ...membership, ...leaving } as CommunityMembershipLike;
         if (leaving) await ctx.db.patch(membership._id as any, leaving);
+        if (leaving) await schedulePodBillingCheck(ctx, { communityId: args.communityId, userId: membership.userId });
         await adjustCommunityActiveMemberCountForMembershipTransition({
           ctx,
           communityId: args.communityId,

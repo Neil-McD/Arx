@@ -1,4 +1,5 @@
 import { internal } from "./_generated/api";
+import { schedulePodBillingCheck } from "./communityPodBillingCheck";
 import { endCommunitySubscription } from "./communitySubscriptionLifecycle";
 import {
   internalAction,
@@ -156,6 +157,7 @@ export const archiveCommunity = mutation({
         lifecycleGeneration: transition.next.generation,
         updatedAt: nowMs,
       });
+      await schedulePodBillingCheck(ctx, { communityId: args.communityId });
       if (job) throw new Error("community_archive_billing_job_generation_conflict");
       const jobId = await ctx.db.insert("communityArchiveBillingJobs", {
         communityId: args.communityId,

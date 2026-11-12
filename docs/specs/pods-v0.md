@@ -101,9 +101,9 @@ Events:
 - **Refund or dispute**: that pod only loses access, and its subscription
   stops. A won dispute doesn't reopen it; the member can join again.
 - **Can't reach the pod any more** (left or removed from the community,
-  taken off the pod by a host, or the pod closed): access stops at once, and
-  an hourly sweep cancels the pod subscription, refunding in full only a
-  payment that never let them in.
+  taken off the pod by a host, the pod closed, or the community archived):
+  access and billing stop at once (an hourly pass is the safety net),
+  refunding in full only a payment that never let them in.
 - **Price change**: a new price for new joins; existing members keep theirs.
 
 Each pod picks one gate: invite only (hosts add people), ask to join (a host

@@ -50,6 +50,7 @@ import {
   type StripeConnectRevenueDestinationLike,
 } from "./stripeConnectAccountCore";
 import { POLYNET_COMMUNITY_PLATFORM_FEE_BPS } from "../shared/founderPlan";
+import { schedulePodBillingCheck } from "./communityPodBillingCheck";
 import { requireCommunityProviderAccountMatch } from "./communityCommerceCore";
 import {
   communityIsActive,
@@ -455,6 +456,9 @@ export const syncCommunitySubscriptionLifecycleInternal = internalMutation({
       activatedAt: reactivated ? nowMs : membership.activatedAt,
       updatedAt: nowMs,
     } as CommunityMembershipLike;
+    if (before === "active" && next !== "active") {
+      await schedulePodBillingCheck(ctx, { communityId: args.communityId, userId: args.userId });
+    }
     await ctx.db.patch(membership._id, {
       pricePointId,
       ...stateFields,
