@@ -30,6 +30,8 @@ export type HomeMoment = {
   title: string;
   detail: string;
   target: { kind: "channel"; name: string } | { kind: "knowledge" } | { kind: "members" } | { kind: "events" } | null;
+  // An event's start, formatted in the reader's own time zone by the page.
+  when?: string;
 };
 
 const plural = (count: number, one: string, many: string) => `${count} ${count === 1 ? one : many}`;
@@ -80,7 +82,7 @@ export function homeMoments(input: HomeMomentsInput, max = 5): HomeMoment[] {
     });
   }
   if (input.nextEvent) {
-    moments.push({ kind: "event", label: "Coming up", title: input.nextEvent.title, detail: eventWhen(input.nextEvent.startsAt), target: { kind: "events" } });
+    moments.push({ kind: "event", label: "Coming up", title: input.nextEvent.title, detail: "", when: input.nextEvent.startsAt, target: { kind: "events" } });
   }
   return moments.slice(0, max);
 }
@@ -89,15 +91,16 @@ export function homeMoments(input: HomeMomentsInput, max = 5): HomeMoment[] {
 export function homeRecent(input: HomeMomentsInput, max = 4): HomeMoment[] {
   const latest = [...input.posts].sort((a, b) => b.createdAt - a.createdAt).slice(0, max - (input.nextEvent ? 1 : 0)).map(postMoment);
   const event: HomeMoment[] = input.nextEvent
-    ? [{ kind: "event", label: "Coming up", title: input.nextEvent.title, detail: eventWhen(input.nextEvent.startsAt), target: { kind: "events" } }]
+    ? [{ kind: "event", label: "Coming up", title: input.nextEvent.title, detail: "", when: input.nextEvent.startsAt, target: { kind: "events" } }]
     : [];
   return [...latest, ...event];
 }
 
-function eventWhen(startsAtIso: string): string {
+// The page formats an event's time in the reader's own zone.
+export function formatMomentWhen(startsAtIso: string): string {
   const startsAt = new Date(startsAtIso);
   if (Number.isNaN(startsAt.getTime())) return "";
-  return startsAt.toLocaleString("en-US", { weekday: "long", hour: "numeric", minute: "2-digit" });
+  return startsAt.toLocaleString(undefined, { weekday: "long", hour: "numeric", minute: "2-digit" });
 }
 
 // A member's one next step, only when there is a real one.
@@ -107,6 +110,7 @@ export type MemberNextStep = {
   detail: string;
   action: string;
   target: { kind: "knowledge" } | { kind: "channel"; name: string } | { kind: "events" };
+  when?: string;
 };
 
 export function memberNextStep(args: {
@@ -134,7 +138,7 @@ export function memberNextStep(args: {
   if (args.nextEvent && !args.nextEvent.going) {
     return {
       kind: "rsvp", title: `${args.nextEvent.title} is coming up`,
-      detail: `${eventWhen(args.nextEvent.startsAt)}. Let the host know you'll be there.`,
+      detail: "Let the host know you'll be there.", when: args.nextEvent.startsAt,
       action: "See the event", target: { kind: "events" },
     };
   }
