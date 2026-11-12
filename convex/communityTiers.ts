@@ -40,9 +40,12 @@ function tierKeyFor(name: string): string {
   return name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 32) || "tier";
 }
 
+// Every tier the community has had, stopped ones too: keys stay unique for
+// good, and a plan is never dropped from the list. A community has few, so
+// all are read (the live limit is TIERS_MAX).
 async function tierRows(ctx: any, communityId: any) {
   return await ctx.db.query("communityTiers")
-    .withIndex("by_community_key", (q: any) => q.eq("communityId", communityId)).take(TIERS_MAX * 3);
+    .withIndex("by_community_key", (q: any) => q.eq("communityId", communityId)).collect();
 }
 
 async function currentTierPrice(ctx: any, communityId: any, tierKey: string) {
