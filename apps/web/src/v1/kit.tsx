@@ -28,6 +28,7 @@ const ICON_PATHS: Record<string, string> = {
   updown: '<path d="m7 15 5 5 5-5M7 9l5-5 5 5"/>',
   up: '<path d="M12 19V5M5.5 11.5 12 5l6.5 6.5"/>',
   arrow: '<path d="M5 12h14M13 6l6 6-6 6"/>',
+  back: '<path d="M19 12H5M11 18l-6-6 6-6"/>',
   mic: '<rect x="9" y="2.5" width="6" height="11.5" rx="3"/><path d="M5 10.5v.5a7 7 0 0 0 14 0v-.5M12 18v3.5"/>',
   plus: '<path d="M12 5v14M5 12h14"/>',
   smile: '<circle cx="12" cy="12" r="9"/><path d="M8.5 14.5s1.3 1.5 3.5 1.5 3.5-1.5 3.5-1.5M9 9.5h.01M15 9.5h.01"/>',

@@ -589,6 +589,14 @@ label.trow{cursor:pointer}
 .app .item .k{font-size:12px}
 .app .theirs p{font-family:inherit;font-size:14px;line-height:1.55}
 .app .lead{font-family:inherit;font-weight:600;font-size:20px;line-height:1.3;letter-spacing:-.01em}
+/* Knowledge: the ask box spans the page; a lesson (and its crumb) sits in a
+   centred column that stays centred as the window grows; a plain way back. */
+.app .kask{max-width:none}
+.app .kcrumb,.app .klesson{max-width:720px;margin-left:auto;margin-right:auto}
+.app .klesson{width:100%}
+.app .kback{display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 8px 0 6px;margin-left:-6px;border-radius:6px;color:var(--ink2);font-size:13px}
+.app .kback .ic{width:14px;height:14px}
+.app .kback:hover{background:var(--s2);color:var(--ink)}
 .app .mine{font-size:14px;border-radius:10px 10px 4px 10px}
 
 /* the composer, as Linear's "Ask" box */
