@@ -1,3 +1,5 @@
+import { CommunityPlansSection } from "./CommunityPlansSection";
+import { isDesignV1Active } from "../../../../shared/designSystem";
 import { CommunityPageHeader } from "./CommunityPageHeader";
 import { useEffect, useState, type ComponentProps } from "react";
 import type { DragEvent } from "react";
@@ -909,6 +911,14 @@ export function WebCommunitySettingsSection(props: WebCommunitySettingsSectionPr
                     ) : null}
                     {isOwnerSettingsLayer ? (
                       <CommunityFounderBriefSection
+                        communityId={resolvedActiveCommunity.id}
+                        session={props.session}
+                        ensureSession={props.ensureSession}
+                      />
+                    ) : null}
+                    {/* One door: plans with grants. Design v1 only until it ships. */}
+                    {isOwnerSettingsLayer && isDesignV1Active() ? (
+                      <CommunityPlansSection
                         communityId={resolvedActiveCommunity.id}
                         session={props.session}
                         ensureSession={props.ensureSession}

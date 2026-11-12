@@ -3048,3 +3048,10 @@
 :root[data-design="v1"] .community-channel-header-back:hover { color: var(--text-default); }
 /* The pod's name stays beside the arrow (the header spreads its children). */
 :root[data-design="v1"] .community-channel-header-back + * { margin-left: 0; margin-right: auto; }
+
+/* One door: Plans in community settings. */
+:root[data-design="v1"] .community-plan-row { display: flex; justify-content: space-between; gap: 12px; padding: 10px 0; border-top: 1px solid var(--border-subtle, rgba(127,127,127,.18)); }
+:root[data-design="v1"] .community-plan-actions { display: flex; gap: 8px; align-items: flex-start; }
+:root[data-design="v1"] .community-plan-form { display: flex; flex-direction: column; gap: 10px; margin-top: 12px; }
+:root[data-design="v1"] .community-plan-row > div:first-child { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+:root[data-design="v1"] .community-plan-row .settings-section-desc { margin: 0; }

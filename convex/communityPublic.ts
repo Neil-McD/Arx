@@ -60,7 +60,8 @@ export async function listCurrentCommunitySellablePlans(ctx: any, communityId: a
     .query("communityPricePoints" as any)
     .withIndex("by_community_current", (q: any) => q.eq("communityId", communityId).eq("isCurrent", true))
     .collect()) as CommunityPricePointLike[];
-  const activePricePoints = currentPricePoints.filter((row) => !row.archivedAt);
+  // The base membership; tiers are sold from the builder's app (one door).
+  const activePricePoints = currentPricePoints.filter((row) => !row.archivedAt && !row.tierKey);
   return mapActivePlanSummaries(activePricePoints);
 }
 

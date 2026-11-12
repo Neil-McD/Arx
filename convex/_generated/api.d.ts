@@ -114,6 +114,7 @@ import type * as communitySourceIngestion from "../communitySourceIngestion.js";
 import type * as communitySourceUrlPolicy from "../communitySourceUrlPolicy.js";
 import type * as communitySubscriptionLifecycle from "../communitySubscriptionLifecycle.js";
 import type * as communityText from "../communityText.js";
+import type * as communityTiers from "../communityTiers.js";
 import type * as communityTypingPresenceCore from "../communityTypingPresenceCore.js";
 import type * as communityWeeklyDigestSchedule from "../communityWeeklyDigestSchedule.js";
 import type * as communityWeeklyDigestValidators from "../communityWeeklyDigestValidators.js";
@@ -327,6 +328,7 @@ declare const fullApi: ApiFromModules<{
   communitySourceUrlPolicy: typeof communitySourceUrlPolicy;
   communitySubscriptionLifecycle: typeof communitySubscriptionLifecycle;
   communityText: typeof communityText;
+  communityTiers: typeof communityTiers;
   communityTypingPresenceCore: typeof communityTypingPresenceCore;
   communityWeeklyDigestSchedule: typeof communityWeeklyDigestSchedule;
   communityWeeklyDigestValidators: typeof communityWeeklyDigestValidators;

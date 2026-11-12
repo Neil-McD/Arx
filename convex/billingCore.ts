@@ -36,6 +36,7 @@ export type CommunityPricePointLike = {
   amountBaseUnits: number;
   currency: string;
   currencyDecimals: number;
+  tierKey?: string;
   isCurrent: boolean;
   archivedAt?: number;
   providerAccountId?: string;
@@ -310,11 +311,13 @@ export async function createCommunitySubscriptionForMembership(args: {
   });
 }
 
+// The price checkout sells: the base membership's, or (tierKey) that tier's.
 export async function resolveCheckoutPricePoint(args: {
   ctx: any;
   community: CommunityLike;
   billingPeriod: "monthly" | "annual";
   nowMs: number;
+  tierKey?: string | null;
 }): Promise<CommunityPricePointLike | null> {
   const currentRows = (await args.ctx.db
     .query("communityPricePoints" as any)
@@ -324,7 +327,7 @@ export async function resolveCheckoutPricePoint(args: {
     .collect()) as CommunityPricePointLike[];
   const current =
     currentRows
-      .filter((row) => Boolean(row.isCurrent) && !row.archivedAt)
+      .filter((row) => Boolean(row.isCurrent) && !row.archivedAt && (row.tierKey ?? null) === (args.tierKey ?? null))
       .sort((a, b) => b.updatedAt - a.updatedAt)[0] ?? null;
   if (current) return current;
   return null;
