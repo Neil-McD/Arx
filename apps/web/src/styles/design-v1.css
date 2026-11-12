@@ -613,6 +613,22 @@
   color: var(--accent-agent);
 }
 
+/* Light belongs to the guide: one faint glow behind its mark. */
+:root[data-design="v1"] .community-home-eyebrow::before {
+  content: "";
+  position: absolute;
+  left: -150px;
+  top: -120px;
+  width: 420px;
+  height: 300px;
+  pointer-events: none;
+  background: radial-gradient(closest-side, color-mix(in srgb, var(--accent-agent) 10%, transparent), transparent);
+}
+
+:root[data-design="v1"][data-theme="light"] .community-home-eyebrow::before {
+  background: radial-gradient(closest-side, color-mix(in srgb, var(--accent-agent) 6%, transparent), transparent);
+}
+
 :root[data-design="v1"] .community-home-hello {
   position: relative;
   margin: 12px 0 0;
