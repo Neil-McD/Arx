@@ -142,6 +142,32 @@ css += """
 .app .kn-form input:focus,.app .kn-form textarea:focus{border-color:var(--line2)}
 .app .kn-form input::placeholder,.app .kn-form textarea::placeholder{color:var(--ink3)}
 .app .r2 .kick{display:flex}
+/* Editing a lesson where it is read: the outline's move buttons, the title
+   as the lesson's own serif heading, the video slot above the text, and the
+   bar with Published, Cancel and Save. */
+.app .kl-row{display:flex;align-items:center;gap:4px}
+.app .kl-row>.kl{flex:1;min-width:0}
+.app .kl-move{display:flex;gap:2px;opacity:0;transition:opacity .15s var(--ease)}
+.app .kl-row:hover .kl-move,.app .kl-move:focus-within{opacity:1}
+.app .kl-move button{width:22px;height:22px;border-radius:6px;color:var(--ink3);font-size:12px;cursor:pointer}
+.app .kl-move button:hover:not(:disabled){background:var(--s2);color:var(--ink)}
+.app .kl-move button:disabled{opacity:.3;cursor:default}
+.app .kedit-title{display:block;width:100%;box-sizing:border-box;margin:6px 0 0;padding:0;border:0;outline:0;background:transparent;color:var(--ink);font-family:var(--serif);font-weight:var(--serif-w);font-size:30px;letter-spacing:-.018em;line-height:1.15}
+.app .kedit-title::placeholder{color:var(--ink3)}
+.app .kedit-video{display:flex;align-items:center;gap:12px;margin-top:18px;padding:12px;border-radius:14px;border:1px dashed var(--line2);background:var(--s1)}
+.app .kedit-video.has{border-style:solid}
+.app .kedit-video>div{flex:1;min-width:0;display:flex;flex-direction:column;gap:4px}
+.app .kedit-video input{width:100%;padding:0;border:0;outline:0;background:transparent;color:var(--ink);font:inherit;font-size:14px}
+.app .kedit-video input::placeholder{color:var(--ink3)}
+.app .kedit-thumb{flex:none;width:96px;height:54px;border-radius:8px;background:var(--s2) center/cover no-repeat}
+.app .kedit-bar{position:sticky;bottom:0;display:flex;align-items:center;gap:8px;margin-top:16px;padding:12px 0;border-top:1px solid var(--line);background:var(--bg)}
+.app .kedit-pub{display:flex;align-items:center;gap:8px;margin-right:8px;font-size:13px;color:var(--ink2);cursor:pointer}
+.app .kedit-pub input{position:absolute;opacity:0;pointer-events:none}
+.app .kedit-switch{position:relative;width:28px;height:16px;border-radius:999px;background:var(--s2);border:1px solid var(--line2);transition:background .15s var(--ease)}
+.app .kedit-switch::after{content:"";position:absolute;top:2px;left:2px;width:10px;height:10px;border-radius:50%;background:var(--ink3);transition:transform .15s var(--ease),background .15s var(--ease)}
+.app .kedit-pub input:checked+.kedit-switch{background:var(--blue);border-color:var(--blue)}
+.app .kedit-pub input:checked+.kedit-switch::after{transform:translateX(12px);background:#fff}
+.app .kedit-pub input:focus-visible+.kedit-switch{box-shadow:0 0 0 3px rgba(29,155,240,.3)}
 
 /* Links drawn as the mock's buttons (Join, Add to calendar). */
 .app a.btn{text-decoration:none}

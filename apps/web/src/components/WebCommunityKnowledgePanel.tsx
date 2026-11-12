@@ -1,6 +1,7 @@
 import { CommunityPageHeader, CommunityPageRail } from "./CommunityPageHeader";
 import { isDesignV1Active } from "../../../../shared/designSystem";
 import { KitClassroom } from "../v1/KitClassroom";
+import { saveCloudCommunityResource } from "../../../../shared/cloudCommunityAdminGateway";
 import { useEffect, useState, type ComponentProps } from "react";
 import { buildPlatformSwitcherStyle } from "../../../../shared/platformSwitcherUi";
 import { WebPlatformTabList, platformTabId, platformTabPanelId } from "./WebPlatformChoiceControls";
@@ -53,6 +54,22 @@ function KnowledgeV1({ resources, context }: Props) {
           openCourseId={moduleId} onOpenCourse={resources.actions.handleSelectModule}
           onNewCourse={resources.actions.openNewModuleModal}
           onEditCourse={(id) => { resources.actions.handleSelectModule(id); setEditing(true); }}
+          onEditCourseDetails={(id) => {
+            const course = resources.state.modules.find((module) => module.id === id);
+            if (course) resources.actions.handleEditModule(course);
+          }}
+          lessonEditing={canManage ? {
+            save: async (resourceId, patch) => {
+              await saveCloudCommunityResource({ session: context.session, resourceId, isPatch: true, payload: patch });
+              await resources.actions.retryRead("resources");
+            },
+            addLesson: async (id) => {
+              const created = await resources.actions.handleCreateBlankPageDraft(id);
+              return created?.id ?? null;
+            },
+            reorder: async (id, ids) => { await resources.actions.handleReorderResources(id, ids); },
+            remove: async (resourceId) => { await resources.actions.handleDeleteResource(resourceId); },
+          } : null}
           renderRail={(rail) => <CommunityPageRail label="Knowledge">{rail}</CommunityPageRail>} />
       )}
     </section>
