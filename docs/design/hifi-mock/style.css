@@ -452,3 +452,57 @@ label.trow{cursor:pointer}
 .plan b{font-weight:550;color:var(--ink)}.plan span{color:var(--ink3);font-size:12px}
 .kv .guess{color:var(--ink2)}.kv .guess em{color:var(--aurora-ink);display:flex;align-items:center;gap:5px}
 .p.you>span:last-child{color:var(--ink2)}
+
+/* Knowledge: a library first (ask, continue, courses, notes), then an open
+   course with its lesson, all notes in pages, and the map as a chosen view. */
+.kv{display:none}.kv-lib{display:block}.know.kv{display:none}
+.app:has(.k-course:checked) .kv-lib,.app:has(.k-notes:checked) .kv-lib,.app:has(.k-map:checked) .kv-lib{display:none}
+.app:has(.k-course:checked) .kv-course,.app:has(.k-notes:checked) .kv-notes{display:block}
+.app:has(.k-map:checked) .know.kv-map{display:block}
+.kr{display:none;flex-direction:column;gap:26px;flex:1;min-height:0}.kr-lib{display:flex}
+.app:has(.k-course:checked) .kr-lib,.app:has(.k-notes:checked) .kr-lib,.app:has(.k-map:checked) .kr-lib{display:none}
+.app:has(.k-course:checked) .kr-course,.app:has(.k-notes:checked) .kr-note,.app:has(.k-map:checked) .kr-note{display:flex}
+.kv.page{overflow-y:auto;padding-bottom:40px}
+.kask{margin-top:20px;max-width:640px;height:46px}
+.kcont{display:block;margin-top:22px;cursor:pointer}
+.kprog{display:flex;align-items:center;gap:10px;margin-top:12px;font-size:12px;color:var(--ink3)}
+.kprog .bar{flex:none;width:120px}.kprog .ic{width:12px;height:12px;vertical-align:-2px;margin-right:4px}
+.khead{display:flex;align-items:center;margin-top:30px}
+.kgrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-top:10px}
+.kcourse{display:flex;flex-direction:column;gap:4px;padding:10px 10px 14px;border-radius:12px;border:1px solid var(--line);background:var(--s1);transition:border-color .16s var(--ease),background .16s var(--ease);cursor:pointer}
+.kcourse:hover{border-color:var(--line2);background:var(--s2)}
+.kcourse b{font-size:15px;font-weight:550;letter-spacing:-.005em;margin-top:8px}.kcourse .s{font-size:13px;color:var(--ink3)}
+.kcourse .kprog{margin-top:8px}.kcourse .kprog .bar{flex:1;width:auto}
+.kcover{display:flex;align-items:flex-end;height:76px;padding:10px;border-radius:8px;color:rgba(var(--w),.85)}
+.kcover .ic{width:18px;height:18px}
+.kcover.c1{background:linear-gradient(135deg,rgba(var(--au),.42),rgba(29,155,240,.16))}
+.kcover.c2{background:linear-gradient(135deg,rgba(29,155,240,.34),rgba(var(--w),.05))}
+.kcover.c3{background:linear-gradient(135deg,rgba(var(--w),.14),rgba(var(--au),.20))}
+.knotes{margin-top:6px}
+.knote{position:relative;display:grid;grid-template-columns:16px minmax(0,auto) minmax(0,1fr) auto;gap:0 12px;align-items:center;height:44px;padding:0 12px;margin:0 -12px;border-radius:10px;font-size:13px;color:var(--ink3);transition:background .16s var(--ease)}
+.knote+.knote::before{content:"";position:absolute;left:12px;right:12px;top:0;height:1px;background:var(--line)}
+.knote:hover{background:var(--s1)}.knote:hover::before,.knote:hover+.knote::before{opacity:0}
+.knote b{font-size:14px;font-weight:550;color:var(--ink);white-space:nowrap}.knote .s{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.knote em{font-style:normal;font-size:12px}
+.sdot{display:block;width:7px;height:7px;border-radius:50%;background:var(--ink3)}
+.sdot.fresh{background:var(--aurora);box-shadow:0 0 8px var(--aurora)}
+.kcrumb{display:flex;align-items:center;gap:8px;margin-top:22px;font-size:13px;color:var(--ink3)}.kcrumb>span:last-of-type{color:var(--ink)}
+.klesson{max-width:640px;margin-top:22px}
+.klesson h2{margin:6px 0 0;font-family:var(--serif);font-weight:var(--serif-w);font-size:30px;letter-spacing:-.018em;line-height:1.15}
+.klesson p{margin:14px 0 0;font-size:16px;line-height:1.6;color:var(--ink2)}
+.kvideo{display:flex;align-items:flex-end;gap:12px;height:200px;margin-top:18px;padding:16px;border-radius:14px;border:1px solid var(--line2);background:radial-gradient(120% 140% at 80% 0%,rgba(var(--au),.20),transparent 60%),var(--s1);font-size:13px;color:var(--ink2)}
+.kplay{display:flex;align-items:center;justify-content:center;width:40px;height:40px;border-radius:50%;background:var(--ink);color:var(--bg)}.kplay .ic{width:16px;height:16px;margin-left:2px;fill:currentColor}
+.kcheck{display:flex;flex-direction:column;gap:8px;margin-top:22px;padding:14px 16px;border-radius:12px;border:1px solid var(--line);background:var(--s1)}
+.kc{display:flex;align-items:center;gap:10px;font-size:14px;color:var(--ink)}.kc .ic{width:16px;height:16px;padding:2px;border-radius:5px;border:1px solid var(--line2);color:transparent}
+.kc.d{color:var(--ink3);text-decoration:line-through}.kc.d .ic{color:var(--ink);background:var(--s3);border-color:transparent}
+.ksrc{display:flex;flex-direction:column;gap:8px;margin-top:30px;padding-top:20px;border-top:1px solid var(--line)}
+.ktbl .trow{grid-template-columns:16px minmax(0,1.5fr) minmax(0,1.2fr) minmax(0,.7fr) minmax(0,.5fr)}
+.kpager{display:flex;align-items:center;gap:8px;margin-top:14px;font-size:13px;color:var(--ink3)}.kpager>span:first-child{margin-right:auto}
+.kmini{display:block;border-radius:12px;border:1px solid var(--line);background:var(--s1);cursor:pointer}.kmini .mini{display:block;width:100%;height:auto}
+.kline{display:flex;align-items:center;justify-content:space-between;font-size:13px;color:var(--ink2)}.kline em{font-style:normal;color:var(--ink3);font-size:12px}
+.kl{display:flex;align-items:center;gap:10px;height:32px;padding:0 10px;margin:0 -10px;border-radius:8px;font-size:13px;color:var(--ink2)}
+.kl em{margin-left:auto;font-style:normal;font-size:12px;color:var(--ink3)}
+.kl .ic{width:14px;height:14px;color:var(--ink3)}.kl i{width:8px;height:8px;margin:0 3px;border-radius:50%;border:1px solid var(--line2)}
+.kl.d{color:var(--ink3)}.kl.on{background:var(--s2);color:var(--ink);font-weight:500}.kl.on i{border-color:var(--blue);background:var(--blue);box-shadow:0 0 0 3px rgba(29,155,240,.18)}
+.r2 .kr .sec+.sec{margin-top:-8px}
+.v2 .chip.sel{background:var(--s2);color:var(--ink);border-color:var(--line2)}
+.kv-lib .lead{margin-top:30px}

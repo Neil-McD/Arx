@@ -138,14 +138,92 @@
       </div>
     </section>
 
-    <!-- KNOWLEDGE -->
+    <!-- KNOWLEDGE: the library (courses, notes, ask), an open course, all notes, the map -->
     <section class="view v2">
-      <div class="know">
+      <!-- library -->
+      <div class="page kv kv-lib">
+        <p class="lead m-only"><span class="aura">{i:spark}</span>Pick up where you left off.</p>
+        <p class="lead h-only"><span class="aura">{i:spark}</span>Three notes are waiting for you, and 38 people are learning.</p>
+        <div class="ask kask">{i:spark:sp}<input type="text" placeholder="Ask anything Polynet knows"><span class="send" style="width:30px;height:30px">{i:up}</span></div>
+
+        <label class="card kcont m-only"><input type="radio" name="k" class="k-course">
+          <div class="meta"><span>Continue · Launch your community</span><span>Lesson 4 of 9</span></div>
+          <h2>Write your three-line invitation</h2>
+          <div class="kprog"><div class="bar"><i style="width:33%"></i></div><span>8 minutes · you finished “Choose your first ten” on Tuesday</span></div>
+          <div class="acts"><span class="btn go">{i:play}Continue</span><span class="btn txt">See the course</span></div>
+        </label>
+
+        <div class="khead"><span class="lab">Courses</span><span class="btn sm h-only" style="margin-left:auto">{i:plus}New course</span></div>
+        <div class="kgrid">
+          <label class="kcourse"><input type="radio" name="k" class="k-course"><span class="kcover c1">{i:book}</span><b>Launch your community</b><span class="s">9 lessons · 1 h 20</span>
+            <span class="kprog m-only"><span class="bar"><i style="width:33%"></i></span><span>3 of 9</span></span><span class="s h-only">38 started · 12 finished</span></label>
+          <div class="kcourse"><span class="kcover c2">{i:book}</span><b>Pricing your founding tier</b><span class="s">5 lessons · 40 min</span>
+            <span class="kprog m-only"><span class="bar"><i style="width:0%"></i></span><span>Not started</span></span><span class="s h-only">21 started · 9 finished</span></div>
+          <div class="kcourse"><span class="kcover c3">{i:book}</span><b>Running a live call</b><span class="s">6 lessons · 55 min</span>
+            <span class="kprog m-only"><span class="bar"><i style="width:100%"></i></span><span>{i:check}Finished</span></span><span class="s h-only">17 started · 11 finished</span></div>
+        </div>
+
+        <div class="khead"><span class="lab">Notes</span><span class="tag g h-only" style="margin-left:8px">3 waiting for review</span>
+          <label class="link" style="margin-left:auto"><input type="radio" name="k" class="k-notes">All 214 notes {i:arrow}</label></div>
+        <div class="list knotes">
+          <label class="knote"><input type="radio" name="k" class="k-notes"><span class="sdot fresh"></span><b>Invitations that work</b><span class="s">Lead with the result, say who it's for, end with one link.</span><em>today</em></label>
+          <div class="knote"><span class="sdot fresh"></span><b>The three-line door</b><span class="s">A short join page converts better than a long one.</span><em>Mon</em></div>
+          <div class="knote"><span class="sdot"></span><b>Founding tier pricing</b><span class="s">Start low and say plainly that it goes up.</span><em>Nov 3</em></div>
+          <div class="knote"><span class="sdot"></span><b>Friday call rhythm</b><span class="s">Same time every week. Open with one win.</span><em>Oct 31</em></div>
+        </div>
+      </div>
+
+      <!-- an open course: the lesson -->
+      <div class="page kv kv-course">
+        <div class="kcrumb"><label class="link"><input type="radio" name="k" class="k-lib">Knowledge</label><span>›</span><span>Launch your community</span><span class="btn sm h-only" style="margin-left:auto">Edit lesson</span></div>
+        <div class="klesson">
+          <span class="lab">Lesson 4 of 9 · 8 minutes</span>
+          <h2>Write your three-line invitation</h2>
+          <div class="kvideo"><span class="kplay">{i:play}</span><span>Neil walks through three real invitations · 5:12</span></div>
+          <p>An invitation that gets answered has three lines. The first says the result someone will get. The second says who it's for. The third is one link.</p>
+          <p>Longer invitations read like a pitch. Three lines read like a message from a person.</p>
+          <div class="kcheck"><span class="lab">Try it</span>
+            <div class="kc d">{i:check}Write the result in one sentence</div>
+            <div class="kc">{i:check}Say who it's for</div>
+            <div class="kc">{i:check}Send it to one person from your first ten</div></div>
+          <div class="acts" style="margin-top:22px"><span class="btn go m-only">{i:check}Mark done</span><span class="btn">Next: Send your first ten {i:arrow}</span><span class="sub2 h-only" style="margin-left:auto">24 of 38 have finished this lesson</span></div>
+          <div class="ksrc"><span class="lab">From the community</span>
+            <label class="src"><input type="radio" name="k" class="k-notes">{i:stars}Invitations that work<em>note</em></label>
+            <label class="src" style="margin-top:-8px"><input type="radio" name="v" class="v-wins">{i:hash}Jon's invitation in #wins<em>today</em></label></div>
+        </div>
+      </div>
+
+      <!-- all notes: pages, never an endless list -->
+      <div class="page kv kv-notes">
+        <div class="kcrumb"><label class="link"><input type="radio" name="k" class="k-lib">Knowledge</label><span>›</span><span>Notes</span><span class="btn sm h-only" style="margin-left:auto">{i:plus}New note</span></div>
+        <div style="display:flex;align-items:center;gap:8px;margin-top:18px;flex-wrap:wrap">
+          <div class="find" style="margin:0;width:220px">{i:search}Search notes</div>
+          <span class="chip h-only">Waiting for review · 3</span><span class="chip sel">Everything</span><span class="chip">New this week</span><span class="chip">Invitations</span><span class="chip">Pricing</span><span class="chip">Calls</span>
+          <label class="link" style="margin-left:auto"><input type="radio" name="k" class="k-map">{i:stars}See the map</label>
+        </div>
+        <div class="tbl ktbl">
+          <div class="trow th"><span></span><span>Note</span><span>Learned from</span><span>Topic</span><span>Updated</span></div>
+          <div class="trow sel"><span class="sdot fresh"></span><span><b>Invitations that work</b><span class="tag g h-only">waiting</span></span><span>Jon in #wins · Friday call</span><span>Invitations</span><span>Today</span></div>
+          <div class="trow"><span class="sdot fresh"></span><span><b>The three-line door</b></span><span>Written by Neil</span><span>Invitations</span><span>Monday</span></div>
+          <div class="trow"><span class="sdot fresh"></span><span><b>When someone goes quiet</b><span class="tag g h-only">waiting</span></span><span>Priya in #general</span><span>Onboarding</span><span>Monday</span></div>
+          <div class="trow"><span class="sdot"></span><span><b>Founding tier pricing</b></span><span>Written by Neil</span><span>Pricing</span><span>Nov 3</span></div>
+          <div class="trow"><span class="sdot"></span><span><b>Raising your price</b></span><span>Pricing workshop</span><span>Pricing</span><span>Nov 2</span></div>
+          <div class="trow"><span class="sdot"></span><span><b>Friday call rhythm</b></span><span>Written by Neil</span><span>Calls</span><span>Oct 31</span></div>
+          <div class="trow"><span class="sdot"></span><span><b>Your first ten members</b></span><span>Join data · 9 communities</span><span>Invitations</span><span>Oct 30</span></div>
+          <div class="trow"><span class="sdot"></span><span><b>Welcome sequence</b></span><span>Martin in #general</span><span>Onboarding</span><span>Oct 28</span></div>
+          <div class="trow"><span class="sdot"></span><span><b>Pods of five</b></span><span>Sara in #tech</span><span>Onboarding</span><span>Oct 24</span></div>
+          <div class="trow"><span class="sdot"></span><span><b>What to post first</b></span><span>Written by Neil</span><span>Onboarding</span><span>Oct 21</span></div>
+        </div>
+        <div class="kpager"><span>1–10 of 214</span><span class="btn sm" style="opacity:.45">Previous</span><span class="btn sm">Next</span></div>
+      </div>
+
+      <!-- the map: a way to look, chosen on purpose -->
+      <div class="know kv kv-map">
         {map}
         <div class="head">
+          <div class="kcrumb" style="margin:0 0 14px"><label class="link"><input type="radio" name="k" class="k-lib">Knowledge</label><span>›</span><label class="link"><input type="radio" name="k" class="k-notes">Notes</label><span>›</span><span>Map</span></div>
           <h2>What {cname} has learned</h2>
           <p>214 notes, drawn from every conversation and call. Three are new this week.</p>
-          <div class="filters"><span class="chip h-only">Waiting for review · 3</span><span class="chip sel">Everything</span><span class="chip">Invitations</span><span class="chip">Pricing</span><span class="chip">Onboarding</span><span class="chip">Calls</span></div>
         </div>
       </div>
     </section>
@@ -369,7 +447,47 @@
   </aside>
 
   <!-- RAIL: KNOWLEDGE -->
-  <aside class="rail r2" aria-label="Open note">
+  <aside class="rail r2" aria-label="Knowledge">
+   <!-- beside the library: the map, small, and what is new -->
+   <div class="kr kr-lib">
+    <div class="sec"><span class="lab">What {cname} knows</span>
+      <label class="kmini"><input type="radio" name="k" class="k-map">{mini}</label>
+      <div style="display:flex;align-items:center;justify-content:space-between"><span class="sub">214 notes · 6 courses</span><label class="link"><input type="radio" name="k" class="k-map">Open the map {i:arrow}</label></div></div>
+    <div class="sep"></div>
+    <div class="sec"><span class="lab" style="display:flex;align-items:center;gap:6px;color:var(--aurora-ink)">{i:spark:xs}Learned this week</span>
+      <label class="src"><input type="radio" name="k" class="k-notes"><span class="sdot" style="background:var(--aurora);box-shadow:0 0 8px var(--aurora)"></span>Invitations that work<em class="h-only">waiting</em><em class="m-only">new</em></label>
+      <div class="src" style="margin-top:-8px"><span class="sdot" style="background:var(--aurora);box-shadow:0 0 8px var(--aurora)"></span>The three-line door<em>new</em></div>
+      <div class="src" style="margin-top:-8px"><span class="sdot" style="background:var(--aurora);box-shadow:0 0 8px var(--aurora)"></span>When someone goes quiet<em class="h-only">waiting</em><em class="m-only">new</em></div></div>
+    <div class="sep"></div>
+    <div class="sec m-only"><span class="lab">Your progress</span>
+      <div class="kline"><span>Launch your community</span><em>3 of 9</em></div><div class="bar"><i style="width:33%"></i></div>
+      <div class="kline" style="margin-top:8px"><span>Running a live call</span><em>finished</em></div><div class="bar"><i style="width:100%"></i></div></div>
+    <div class="sec h-only"><span class="lab">Learning this week</span>
+      <div class="kline"><span>Started a lesson</span><em>38 people</em></div>
+      <div class="kline"><span>Finished a course</span><em>4 people</em></div>
+      <div class="kline"><span>Stuck longest on</span><em>Lesson 4</em></div></div>
+   </div>
+   <!-- beside a lesson: the course's outline -->
+   <div class="kr kr-course">
+    <div class="sec"><span class="lab">Launch your community</span>
+      <div class="kline m-only"><span>3 of 9 lessons</span><em>33%</em></div><div class="bar m-only"><i style="width:33%"></i></div>
+      <div class="kline h-only"><span>38 started</span><em>12 finished</em></div></div>
+    <div class="sec"><span class="lab">1 · Before you open</span>
+      <div class="kl d">{i:check}What a community is for<em>6 min</em></div>
+      <div class="kl d">{i:check}Name the result<em>7 min</em></div>
+      <div class="kl d">{i:check}Choose your first ten<em>9 min</em></div></div>
+    <div class="sec"><span class="lab">2 · Your first members</span>
+      <div class="kl on"><i></i>Write your three-line invitation<em>8 min</em></div>
+      <div class="kl"><i></i>Send your first ten<em>10 min</em></div>
+      <div class="kl"><i></i>Welcome each person<em>6 min</em></div></div>
+    <div class="sec"><span class="lab">3 · A weekly rhythm</span>
+      <div class="kl"><i></i>Plan your first call<em>12 min</em></div>
+      <div class="kl"><i></i>Run it<em>9 min</em></div>
+      <div class="kl"><i></i>Follow up<em>5 min</em></div></div>
+    <div style="margin-top:auto"><div class="ask" style="height:46px">{i:spark:sp}<input type="text" placeholder="Ask about this lesson"><span class="send" style="width:30px;height:30px">{i:up}</span></div></div>
+   </div>
+   <!-- beside all notes and the map: the open note -->
+   <div class="kr kr-note">
     <span class="kick">{i:spark}Learned this week<span class="h-only">&nbsp;· waiting for you</span></span>
     <h2 style="margin-top:-14px">Invitations that work</h2>
     <p class="body" style="margin-top:-12px">Lead with the result, say who it's for, and end with one link. Three lines beat longer invitations in nine of eleven communities.</p>
@@ -389,6 +507,7 @@
     </div>
     <div class="h-only" style="margin-top:auto;display:flex;flex-direction:column;gap:12px"><div style="display:flex;align-items:center;justify-content:space-between;font-size:13px;color:var(--ink2)"><span>Who can read it</span><span class="btn sm">All members</span></div><div style="display:flex;gap:8px"><span class="btn go" style="flex:1;justify-content:center">Approve</span><span class="btn">Edit</span><span class="btn txt">Dismiss</span></div></div>
     <div class="m-only" style="margin-top:auto"><div class="ask" style="height:46px">{i:spark:sp}<input type="text" placeholder="Ask about this note"><span class="send" style="width:30px;height:30px">{i:up}</span></div></div>
+   </div>
   </aside>
 
   <!-- RAIL: THREAD -->

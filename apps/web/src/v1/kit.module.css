@@ -448,6 +448,59 @@
 .app .kv .guess{color:var(--ink2)}.app .kv .guess em{color:var(--aurora-ink);display:flex;align-items:center;gap:5px}
 .app .p.you>span:last-child{color:var(--ink2)}
 
+
+.app .kv{display:none}.app .kv-lib{display:block}.app .know.kv{display:none}
+.app.on-k-course .kv-lib,.app.on-k-notes .kv-lib,.app.on-k-map .kv-lib{display:none}
+.app.on-k-course .kv-course,.app.on-k-notes .kv-notes{display:block}
+.app.on-k-map .know.kv-map{display:block}
+.app .kr{display:none;flex-direction:column;gap:26px;flex:1;min-height:0}.app .kr-lib{display:flex}
+.app.on-k-course .kr-lib,.app.on-k-notes .kr-lib,.app.on-k-map .kr-lib{display:none}
+.app.on-k-course .kr-course,.app.on-k-notes .kr-note,.app.on-k-map .kr-note{display:flex}
+.app .kv.page{overflow-y:auto;padding-bottom:40px}
+.app .kask{margin-top:20px;max-width:640px;height:46px}
+.app .kcont{display:block;margin-top:22px;cursor:pointer}
+.app .kprog{display:flex;align-items:center;gap:10px;margin-top:12px;font-size:12px;color:var(--ink3)}
+.app .kprog .bar{flex:none;width:120px}.app .kprog .ic{width:12px;height:12px;vertical-align:-2px;margin-right:4px}
+.app .khead{display:flex;align-items:center;margin-top:30px}
+.app .kgrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-top:10px}
+.app .kcourse{display:flex;flex-direction:column;gap:4px;padding:10px 10px 14px;border-radius:12px;border:1px solid var(--line);background:var(--s1);transition:border-color .16s var(--ease),background .16s var(--ease);cursor:pointer}
+.app .kcourse:hover{border-color:var(--line2);background:var(--s2)}
+.app .kcourse b{font-size:15px;font-weight:550;letter-spacing:-.005em;margin-top:8px}.app .kcourse .s{font-size:13px;color:var(--ink3)}
+.app .kcourse .kprog{margin-top:8px}.app .kcourse .kprog .bar{flex:1;width:auto}
+.app .kcover{display:flex;align-items:flex-end;height:76px;padding:10px;border-radius:8px;color:rgba(var(--w),.85)}
+.app .kcover .ic{width:18px;height:18px}
+.app .kcover.c1{background:linear-gradient(135deg,rgba(var(--au),.42),rgba(29,155,240,.16))}
+.app .kcover.c2{background:linear-gradient(135deg,rgba(29,155,240,.34),rgba(var(--w),.05))}
+.app .kcover.c3{background:linear-gradient(135deg,rgba(var(--w),.14),rgba(var(--au),.20))}
+.app .knotes{margin-top:6px}
+.app .knote{position:relative;display:grid;grid-template-columns:16px minmax(0,auto) minmax(0,1fr) auto;gap:0 12px;align-items:center;height:44px;padding:0 12px;margin:0 -12px;border-radius:10px;font-size:13px;color:var(--ink3);transition:background .16s var(--ease)}
+.app .knote+.knote::before{content:"";position:absolute;left:12px;right:12px;top:0;height:1px;background:var(--line)}
+.app .knote:hover{background:var(--s1)}.app .knote:hover::before,.app .knote:hover+.knote::before{opacity:0}
+.app .knote b{font-size:14px;font-weight:550;color:var(--ink);white-space:nowrap}.app .knote .s{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.app .knote em{font-style:normal;font-size:12px}
+.app .sdot{display:block;width:7px;height:7px;border-radius:50%;background:var(--ink3)}
+.app .sdot.fresh{background:var(--aurora);box-shadow:0 0 8px var(--aurora)}
+.app .kcrumb{display:flex;align-items:center;gap:8px;margin-top:22px;font-size:13px;color:var(--ink3)}.app .kcrumb>span:last-of-type{color:var(--ink)}
+.app .klesson{max-width:640px;margin-top:22px}
+.app .klesson h2{margin:6px 0 0;font-family:var(--serif);font-weight:var(--serif-w);font-size:30px;letter-spacing:-.018em;line-height:1.15}
+.app .klesson p{margin:14px 0 0;font-size:16px;line-height:1.6;color:var(--ink2)}
+.app .kvideo{display:flex;align-items:flex-end;gap:12px;height:200px;margin-top:18px;padding:16px;border-radius:14px;border:1px solid var(--line2);background:radial-gradient(120% 140% at 80% 0%,rgba(var(--au),.20),transparent 60%),var(--s1);font-size:13px;color:var(--ink2)}
+.app .kplay{display:flex;align-items:center;justify-content:center;width:40px;height:40px;border-radius:50%;background:var(--ink);color:var(--bg)}.app .kplay .ic{width:16px;height:16px;margin-left:2px;fill:currentColor}
+.app .kcheck{display:flex;flex-direction:column;gap:8px;margin-top:22px;padding:14px 16px;border-radius:12px;border:1px solid var(--line);background:var(--s1)}
+.app .kc{display:flex;align-items:center;gap:10px;font-size:14px;color:var(--ink)}.app .kc .ic{width:16px;height:16px;padding:2px;border-radius:5px;border:1px solid var(--line2);color:transparent}
+.app .kc.d{color:var(--ink3);text-decoration:line-through}.app .kc.d .ic{color:var(--ink);background:var(--s3);border-color:transparent}
+.app .ksrc{display:flex;flex-direction:column;gap:8px;margin-top:30px;padding-top:20px;border-top:1px solid var(--line)}
+.app .ktbl .trow{grid-template-columns:16px minmax(0,1.5fr) minmax(0,1.2fr) minmax(0,.7fr) minmax(0,.5fr)}
+.app .kpager{display:flex;align-items:center;gap:8px;margin-top:14px;font-size:13px;color:var(--ink3)}.app .kpager>span:first-child{margin-right:auto}
+.app .kmini{display:block;border-radius:12px;border:1px solid var(--line);background:var(--s1);cursor:pointer}.app .kmini .mini{display:block;width:100%;height:auto}
+.app .kline{display:flex;align-items:center;justify-content:space-between;font-size:13px;color:var(--ink2)}.app .kline em{font-style:normal;color:var(--ink3);font-size:12px}
+.app .kl{display:flex;align-items:center;gap:10px;height:32px;padding:0 10px;margin:0 -10px;border-radius:8px;font-size:13px;color:var(--ink2)}
+.app .kl em{margin-left:auto;font-style:normal;font-size:12px;color:var(--ink3)}
+.app .kl .ic{width:14px;height:14px;color:var(--ink3)}.app .kl i{width:8px;height:8px;margin:0 3px;border-radius:50%;border:1px solid var(--line2)}
+.app .kl.d{color:var(--ink3)}.app .kl.on{background:var(--s2);color:var(--ink);font-weight:500}.app .kl.on i{border-color:var(--blue);background:var(--blue);box-shadow:0 0 0 3px rgba(29,155,240,.18)}
+.app .r2 .kr .sec+.sec{margin-top:-8px}
+.app .v2 .chip.sel{background:var(--s2);color:var(--ink);border-color:var(--line2)}
+.app .kv-lib .lead{margin-top:30px}
+
 /* Kit addition (see the script): browser defaults off, at zero specificity. */
 :where(.app) :where(button){margin:0;padding:0;border:0;background:none;color:inherit;font:inherit;line-height:inherit;letter-spacing:inherit;text-align:inherit;cursor:pointer}
 :where(.app) :where(input,textarea){margin:0;font:inherit;color:inherit}
