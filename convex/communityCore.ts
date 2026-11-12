@@ -435,18 +435,28 @@ export function normalizeRole(raw: unknown): string {
 
 export function normalizeMembershipAccessSource(
   raw: unknown,
-): "free_grant" | "manual_grant" | "paid_subscription" | "" {
+): "free_grant" | "manual_grant" | "paid_subscription" | "app_grant" | "" {
   const value = String(raw ?? "")
     .trim()
     .toLowerCase();
   if (
     value === "free_grant" ||
     value === "manual_grant" ||
-    value === "paid_subscription"
+    value === "paid_subscription" ||
+    value === "app_grant"
   ) {
     return value;
   }
   return "";
+}
+
+// One door: a sale the community's connected app made and still reports as
+// active (communityAppSales.ts). One of the bases for access, with a live
+// Polynet subscription and a free or comped membership.
+export async function hasActiveAppGrant(ctx: any, communityId: any, userId: any): Promise<boolean> {
+  const rows = await ctx.db.query("communityAppGrants")
+    .withIndex("by_community_user", (q: any) => q.eq("communityId", communityId).eq("userId", userId)).take(20);
+  return rows.some((row: any) => row.active);
 }
 
 export function normalizeCommunityRoleForOutput(raw: unknown): "admin" | "moderator" | "member" | "" {
@@ -1106,6 +1116,15 @@ export async function resolveCommunityMembershipEntitlementState(args: {
   const entryPolicy = resolveCommunityEntryPolicy(args.community);
   const accessSource = normalizeMembershipAccessSource(args.membership?.accessSource);
   if (entryPolicy !== "paid_subscription" || communityAccessSourceIsDurable(accessSource)) {
+    return {
+      isEntitled: true,
+      accessSource: accessSource || null,
+      subscriptionStatus: null,
+      subscriptionCurrentPeriodEndAt: null,
+    };
+  }
+  // A sale the builder's own app reported counts as much as a subscription.
+  if (await hasActiveAppGrant(args.ctx, args.community._id, args.userId)) {
     return {
       isEntitled: true,
       accessSource: accessSource || null,

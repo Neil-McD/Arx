@@ -12,7 +12,7 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { resolveUserIdForAuthenticatedRequest } from "./authActor";
-import { communityMembershipRowIsActive, getUniqueCommunityMembershipByPair, requireCommunityManager } from "./communityCore";
+import { communityMembershipRowIsActive, getUniqueCommunityMembershipByPair, requireCommunityManager, resolveCommunityLens } from "./communityCore";
 
 export const BASE_TIER_KEY = "member";
 const TIERS_MAX = 10;
@@ -183,11 +183,38 @@ export async function resolveMemberGrants(ctx: any, communityId: any, userId: an
 }> {
   const membership = await getUniqueCommunityMembershipByPair({ ctx, communityId, userId });
   if (!membership || !communityMembershipRowIsActive(membership)) return { allowed: false, tier: null, grants: [] };
-  const price = membership.pricePointId ? await ctx.db.get(membership.pricePointId) as any : null;
-  const tierKey = price?.tierKey ?? BASE_TIER_KEY;
-  const tier = await ctx.db.query("communityTiers")
-    .withIndex("by_community_key", (q: any) => q.eq("communityId", communityId).eq("key", tierKey)).first();
-  const grants = ["community", ...(tier?.grants ?? [])];
+  // Allowed exactly when Polynet itself lets them in: the one community lens
+  // (a live subscription, an active app sale, a free or comped membership;
+  // never when blocked or the community is archived).
+  const community = await ctx.db.get(communityId);
+  if (!community || !(await resolveCommunityLens({ ctx, community, membership, userId })).entitled) {
+    return { allowed: false, tier: null, grants: [] };
+  }
+  // Every tier this person holds: the one their Polynet price sells (if that
+  // still lets them in) and each one the community's app reports selling them.
+  const tierKeys = new Set<string>();
+  const subscriptions = membership.accessSource === "paid_subscription"
+    ? await ctx.db.query("communitySubscriptions").withIndex("by_membership", (q: any) => q.eq("membershipId", membership._id)).collect()
+    : [];
+  const polynetPays = membership.accessSource !== "paid_subscription" || subscriptions.some((row: any) => ["active", "past_due", "cancel_at_period_end"].includes(row.status));
+  if (membership.accessSource !== "app_grant" && polynetPays) {
+    const price = membership.pricePointId ? await ctx.db.get(membership.pricePointId) as any : null;
+    tierKeys.add(price?.tierKey ?? BASE_TIER_KEY);
+  }
+  const appSales = (await ctx.db.query("communityAppGrants")
+    .withIndex("by_community_user", (q: any) => q.eq("communityId", communityId).eq("userId", userId)).take(20)).filter((row: any) => row.active);
+  for (const sale of appSales) tierKeys.add(sale.tierKey ?? BASE_TIER_KEY);
+  if (!tierKeys.size) tierKeys.add(BASE_TIER_KEY);
+  const held = [];
+  for (const key of tierKeys) {
+    const row = await ctx.db.query("communityTiers").withIndex("by_community_key", (q: any) => q.eq("communityId", communityId).eq("key", key)).first();
+    held.push({ key, name: row?.name ?? (key === BASE_TIER_KEY ? "Membership" : key), rank: key === BASE_TIER_KEY ? 0 : row?.rank ?? 0, grants: row?.grants ?? [] as string[] });
+  }
+  // The tier shown is the highest held; the grants are all of them.
+  held.sort((a, b) => b.rank - a.rank);
+  const tier = held[0];
+  const grants = ["community"];
+  for (const entry of held) for (const grant of entry.grants) if (!grants.includes(grant)) grants.push(grant);
   const sequence = Math.max(0, Math.floor(Number(membership.activationSequence ?? 0)));
   const rooms = await ctx.db.query("communityChannelParticipants")
     .withIndex("by_community_principal_status", (q: any) => q.eq("communityId", communityId).eq("principalKey", `user:${userId}`).eq("status", "active")).take(100);
@@ -196,5 +223,5 @@ export async function resolveMemberGrants(ctx: any, communityId: any, userId: an
     const room = await ctx.db.get(grant.channelId) as any;
     if (room?.accessMode === "restricted" && room.status === "active" && room.slug) grants.push(`pod:${room.slug}`);
   }
-  return { allowed: true, tier: { key: tierKey, name: tier?.name ?? (tierKey === BASE_TIER_KEY ? "Membership" : tierKey) }, grants };
+  return { allowed: true, tier: { key: tier.key, name: tier.name }, grants };
 }

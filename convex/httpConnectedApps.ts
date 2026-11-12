@@ -5,6 +5,7 @@ import { internal } from "./_generated/api";
 import { sha256Hex } from "./communityCheckoutBuyer";
 
 export const CONNECTED_APP_ACCESS_PATH = "/apps/v1/access";
+export const CONNECTED_APP_SALES_PATH = "/apps/v1/sales";
 
 function json(status: number, payload: unknown): Response {
   return new Response(JSON.stringify(payload), { status, headers: { "content-type": "application/json", "cache-control": "no-store" } });
@@ -31,6 +32,33 @@ export function registerConnectedAppRoutes(args: { http: any; httpAction: any })
       if (!email || email.length > 320 || !email.includes("@")) return json(400, { error: "email_required" });
       const access = await ctx.runQuery(internal.connectedApps.accessForEmailInternal, { communityId: app.communityId, email });
       return json(200, access);
+    }),
+  });
+
+  // A sale the app made through its own checkout (no fee), or its end:
+  // { email, active, tier?, external_ref? }. The latest report per email wins.
+  args.http.route({
+    path: CONNECTED_APP_SALES_PATH,
+    method: "POST",
+    handler: args.httpAction(async (ctx: any, req: Request) => {
+      const app = await requireApp(ctx, req);
+      if (app instanceof Response) return app;
+      let body: any = null;
+      try { body = JSON.parse((await req.text()).slice(0, 4_000)); } catch { body = null; }
+      const email = typeof body?.email === "string" ? body.email.trim().toLowerCase() : "";
+      if (!email || email.length > 320 || !email.includes("@") || typeof body?.active !== "boolean") return json(400, { error: "email_and_active_required" });
+      try {
+        const result = await ctx.runMutation(internal.communityAppSales.recordAppSaleInternal, {
+          appId: app.appId, communityId: app.communityId, email, active: body.active,
+          ...(typeof body.tier === "string" && body.tier ? { tierKey: body.tier } : {}),
+          ...(typeof body.external_ref === "string" && body.external_ref ? { externalRef: body.external_ref } : {}),
+        });
+        return json(200, result);
+      } catch (error) {
+        const code = error instanceof Error ? error.message : "";
+        if (code.includes("community_tier_not_found")) return json(400, { error: "tier_not_found" });
+        throw error;
+      }
     }),
   });
 }

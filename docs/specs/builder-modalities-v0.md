@@ -164,8 +164,19 @@ The builder's app keeps its own login and billing and does most of the selling.
   pod grant: `convex/connectedAppNotify.ts`), each app with a webhook gets a
   thin `access.changed` (Standard Webhooks signature, same id across retries,
   retried 1 min to 24 h) and asks again.
-- **Next:** slice 2b (the app reports its own sales: app-owned grants, invite
-  by verified email, no fee), slice 3 (buy and change tiers through Polynet
+- **Slice 2b (built, staging):** the app reports its own sales
+  (`convex/communityAppSales.ts`): `POST /apps/v1/sales` with
+  `{ email, active, tier?, external_ref? }`, its latest word per email, no fee.
+  A verified account with that email is let in (`accessSource: "app_grant"`);
+  an email with no account waits and lands when that verified email signs in.
+  Access is the union of every basis: a free or comped membership, a live
+  Polynet subscription, an active app sale (the lens counts app sales; a
+  Polynet lapse doesn't end access an app sale still gives; an app sale ending
+  doesn't end access anything else gives). The access check's `allowed` is
+  the lens's own decision; the tier shown is the highest held and the grants
+  are all of them. An app sale never puts back someone who left, was removed,
+  is on a payment hold, or is blocked.
+- **Next:** slice 3 (buy and change tiers through Polynet
   from the app), slice 4 (Distribution Engineer live, both ways). Sign in with
   Polynet waits for a builder with no login of its own.
 
