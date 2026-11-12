@@ -3,7 +3,7 @@
 // across the community in the last day, and a quiet panel of where things
 // stand. The owner sees the daily brief's facts read live; a member sees only
 // what any member can already see (convex/communityFounderBrief.ts).
-import { KitNextEvent } from "../v1/KitNextEvent";
+import { KitHomeRail } from "../v1/KitHomeRail";
 import type { CommunityPresenceSummary } from "../../../../shared/communityTypes";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
@@ -12,7 +12,7 @@ import {
   getCloudCommunityHomeSnapshot,
   type CloudCommunityHomeSnapshot,
 } from "../../../../shared/cloudCommunityAdminGateway";
-import { Btn, Card, Eyebrow, Figs, Hello, HomeBody, KitApp, Rail, Sec, Sep, Since, SinceItem, TextLink } from "../v1/kit";
+import { Btn, Card, Eyebrow, Hello, HomeBody, KitApp, Rail, Since, SinceItem, TextLink } from "../v1/kit";
 
 export type WebCommunityHomeSectionProps = {
   communityId: string;
@@ -24,6 +24,7 @@ export type WebCommunityHomeSectionProps = {
   onOpenJoinRequests: () => void;
   onOpenChannelByName: (channelName: string) => void;
   onOpenEvents: () => void;
+  onOpenKnowledge?: () => void;
   // Changes each time Home is opened, so the facts are read again.
   refreshKey?: number;
   // Where the right-hand column goes on wide windows (the page's own rail).
@@ -197,25 +198,6 @@ export function homeFiguresFor(snapshot: CloudCommunityHomeSnapshot, audience: "
   return figures;
 }
 
-// The host's figures on the kit, as the mock has them: the week, not the day.
-// Money joins these when payments reach Home; nothing here is estimated.
-export function homeKitFiguresFor(snapshot: CloudCommunityHomeSnapshot): HomeFigure[] {
-  const { joined, activePeople } = snapshot.week;
-  const share = snapshot.memberCount > 0 ? Math.min(100, Math.round((activePeople / snapshot.memberCount) * 100)) : 0;
-  const unanswered = snapshot.unanswered.length;
-  return [
-    { label: "Members", value: String(snapshot.memberCount), note: joined > 0 ? `${joined} joined this week` : "No one new this week" },
-    { label: "Active this week", value: String(activePeople), note: snapshot.memberCount > 0 ? `${share} percent` : "" },
-    {
-      label: "Waiting to join",
-      value: String(snapshot.joinRequestsPending),
-      note: snapshot.joinRequestsPending === 0 ? "Nobody waiting" : snapshot.joinRequestsPending === 1 ? "1 request" : `${snapshot.joinRequestsPending} requests`,
-    },
-    // The list is capped at 5 (it feeds the brief), so 5 means "5 or more".
-    { label: "Unanswered", value: unanswered >= 5 ? "5+" : String(unanswered), note: unanswered === 1 ? "question" : "questions" },
-  ];
-}
-
 // "8:40 pm", as the mock's eyebrow has it.
 export function homeClockFor(now: Date): string {
   return now.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }).replace(/\s+/g, " ").toLowerCase();
@@ -273,17 +255,15 @@ export function WebCommunityHomeSection(props: WebCommunityHomeSectionProps) {
   if (props.kit) {
     const kit = props.kit;
     const isHost = props.audience === "host";
-    // The host's column has the figures; a member's is the mock's "Right now".
+    // The right column: Today, who is online, and the community's memory.
     const panel = snapshot ? (
-      <>
-          {isHost ? <><Figs figures={homeKitFiguresFor(snapshot)} /><Sep /></> : null}
-          <KitNextEvent session={props.session} communityId={props.communityId} now={now.getTime()} onOpenEvents={props.onOpenEvents}
-            presence={props.presence} showHere={!isHost} />
-      </>
+      <KitHomeRail session={props.session} communityId={props.communityId} audience={props.audience} snapshot={snapshot}
+        presence={props.presence} now={now.getTime()} onOpenEvents={props.onOpenEvents}
+        onOpenChannelByName={props.onOpenChannelByName} onOpenMembers={props.onOpenJoinRequests} onOpenKnowledge={props.onOpenKnowledge} />
     ) : null;
     const rail = panel ? (
       <KitApp view="home" host={isHost} part="rail">
-        <Rail index={0} label={isHost ? "The community right now" : "Right now"}>{panel}</Rail>
+        <Rail index={0} label="The community today">{panel}</Rail>
       </KitApp>
     ) : null;
     return (

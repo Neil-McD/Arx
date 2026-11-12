@@ -613,7 +613,7 @@
   color: var(--accent-agent);
 }
 
-/* Light belongs to the guide: one soft glow behind its mark. */
+/* Light belongs to the guide: one faint glow behind its mark. */
 :root[data-design="v1"] .community-home-eyebrow::before {
   content: "";
   position: absolute;
@@ -622,11 +622,11 @@
   width: 420px;
   height: 300px;
   pointer-events: none;
-  background: radial-gradient(closest-side, color-mix(in srgb, var(--accent-agent) 20%, transparent), transparent);
+  background: radial-gradient(closest-side, color-mix(in srgb, var(--accent-agent) 10%, transparent), transparent);
 }
 
 :root[data-design="v1"][data-theme="light"] .community-home-eyebrow::before {
-  background: radial-gradient(closest-side, color-mix(in srgb, var(--accent-agent) 11%, transparent), transparent);
+  background: radial-gradient(closest-side, color-mix(in srgb, var(--accent-agent) 6%, transparent), transparent);
 }
 
 :root[data-design="v1"] .community-home-hello {
@@ -2458,7 +2458,7 @@
   }
 
   :root[data-design="v1"] .members-page.is-kit {
-    background: var(--surface-app);
+    background: var(--surface-raised);
   }
 
   :root[data-design="v1"] .members-page-record {
@@ -2469,7 +2469,7 @@
     padding: 0;
     overflow: hidden;
     border-left: 1px solid var(--surface-raised-edge);
-    background: var(--surface-app);
+    background: var(--surface-raised);
   }
 }
 
@@ -2861,7 +2861,7 @@
 
 /* A lesson inside the classroom: the existing lesson reader at the kit's measure. */
 :root[data-design="v1"] .kit-lesson-body .resource-viewer-content {
-  max-width: 640px;
+  max-width: none;
   padding: 0;
 }
 
@@ -2901,7 +2901,7 @@
 }
 
 :root[data-design="v1"] .kit-lesson-editor .lesson-editor {
-  --lesson-reading-measure: 640px;
+  --lesson-reading-measure: none;
   margin-inline: 0;
 }
 
@@ -2910,4 +2910,125 @@
   padding-bottom: 32px;
   font-size: 16px;
   line-height: 1.6;
+}
+
+/* ---------- The finish: Linear-style (Neil, Nov 12) ----------
+   The mock (docs/design/hifi-mock/style.css, "the finish") draws it and the
+   kit takes its rules; the app's frame is here: the window a shade off the
+   page, everything right of the left column in one inset, rounded panel, a
+   tighter left column, one sans typeface and a soft indigo accent. */
+:root[data-design="v1"]:not([data-theme="light"]) {
+  --linear-window: #08090a;
+  --surface-raised: #0f1011;
+  --surface-raised-edge: rgba(255, 255, 255, 0.06);
+  --bg-card: #141516;
+  --bg-card-solid: #141516;
+  --bg-card-hover: #1a1b1d;
+  --bg-input: #141516;
+  --bg-button: #6f78d8;
+  --bg-button-hover: #7d86e2;
+  /* A plain hairline under headers, and a quiet border (no halo) on focus. */
+  /* No serif. */
+  --font-voice: "Geist Variable", "Geist", system-ui, sans-serif;
+  --header-line-glow: rgba(255, 255, 255, 0.06);
+  --accent-act-edge: rgba(255, 255, 255, 0.16);
+  --accent-act-halo: transparent;
+}
+
+:root[data-design="v1"][data-theme="light"] {
+  --linear-window: #f2f3f5;
+  --surface-raised: #ffffff;
+  --surface-raised-edge: rgba(13, 17, 23, 0.07);
+  --bg-card: #f7f8f9;
+  --bg-card-solid: #f7f8f9;
+  --bg-card-hover: #eff0f2;
+  --bg-input: #f7f8f9;
+  --bg-button: #5e6ad2;
+  --bg-button-hover: #4f5bc4;
+  --font-voice: "Geist Variable", "Geist", system-ui, sans-serif;
+  --header-line-glow: rgba(13, 17, 23, 0.07);
+  --accent-act-edge: rgba(13, 17, 23, 0.18);
+  --accent-act-halo: transparent;
+}
+
+@media (min-width: 721px) {
+  :root[data-design="v1"] .community-chat .community-interaction-main-composer > .chat-input-bar:focus-within .chat-send.ask-send-btn:not(:disabled) {
+    --conversation-primary-action-surface: var(--bg-button);
+    --conversation-primary-action-hover-surface: var(--bg-button-hover);
+    box-shadow: none;
+  }
+}
+
+@media (min-width: 721px) {
+  :root[data-design="v1"] .app-shell .product-shell-surface--community {
+    background: var(--linear-window);
+  }
+
+  :root[data-design="v1"] .product-shell-surface--community > .community-nav {
+    border-right: 0;
+    background: var(--linear-window);
+  }
+
+  :root[data-design="v1"] .product-shell-surface--community > main,
+  :root[data-design="v1"] .product-shell-surface--community > .web-main-surface-slot > * {
+    margin: 8px 8px 8px 0;
+    border: 1px solid var(--surface-raised-edge);
+    border-radius: 10px;
+  }
+}
+
+/* The left column, tighter: 28px rows, 13px type. */
+:root[data-design="v1"] .community-nav .nav-item {
+  min-height: 28px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-size: 13px;
+}
+
+:root[data-design="v1"] .community-nav .nav-item .nav-icon svg {
+  width: 14px;
+  height: 14px;
+}
+
+:root[data-design="v1"] .community-nav-section-label {
+  font-size: 12px;
+}
+
+/* Search or ask, at the top of the left column (as Linear has it). */
+:root[data-design="v1"] .community-nav-tools {
+  padding: 8px 0 2px;
+}
+
+:root[data-design="v1"] .community-nav-tools .community-search-ask {
+  width: 100%;
+  height: 28px;
+  margin: 0;
+  border-radius: 6px;
+  background: transparent;
+}
+
+:root[data-design="v1"] .community-nav-tools .community-search-ask kbd {
+  border: 0;
+  padding: 0;
+  color: var(--text-faint);
+}
+
+/* The Inbox draws over the page (fixed), so it takes the frame itself: the
+   same inset, edge and corners, with its conversation column inside. */
+@media (min-width: 721px) {
+  :root[data-design="v1"] .web-direct-messages-host.is-page .community-dm-inbox-panel.is-kit {
+    top: 8px;
+    right: 8px;
+    bottom: 8px;
+    border: 1px solid var(--surface-raised-edge);
+    border-radius: 10px;
+    background: var(--surface-raised);
+  }
+
+  :root[data-design="v1"] .web-direct-messages-host.is-page .community-dm-panel.is-kit:not(.community-dm-inbox-panel) {
+    top: 9px;
+    right: 9px;
+    bottom: 9px;
+    border-radius: 0 9px 9px 0;
+  }
 }

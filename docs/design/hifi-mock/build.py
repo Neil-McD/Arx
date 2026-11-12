@@ -158,6 +158,7 @@ class Component extends DCLogic {
 </html>
 '''
 
+
 def emit(name, title, body):
     open(os.path.join(OUT, 'out_' + name + '.html'), 'w').write('<!doctype html><html lang="en"><head><meta charset="utf-8"><title>%s</title><link href="%s" rel="stylesheet"><style>%s</style></head><body>%s</body></html>' % (title, FONTS, css, body))
     if os.path.isdir('../project'):  # the design tool's copy, when present

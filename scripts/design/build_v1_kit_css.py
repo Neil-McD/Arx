@@ -77,6 +77,9 @@ def split_top(s: str) -> list[str]:
     parts.append(cur)
     return parts
 
+# The block marked "frame" draws the mock's own window; the app draws its
+# frame in design-v1.css, so the kit leaves it out.
+src = re.sub(r"/\* frame:.*?/\* /frame \*/", "", src, flags=re.S)
 # Comments go first: left in, they glue onto the next selector.
 css = convert_block(re.sub(r"/\*.*?\*/", "", src, flags=re.S))
 css = css.replace("--sans:'Geist','Inter',system-ui,sans-serif", "--sans:'Geist Variable','Geist','Inter',system-ui,sans-serif")
@@ -130,7 +133,7 @@ css += """
 .app button.kcourse,.app button.kcont,.app button.kl,.app button.src{width:100%;text-align:left}
 .app button.src{width:calc(100% + 20px)}
 .app button.kcont{display:block}
-.app .kask-btn{width:100%;cursor:pointer;color:var(--ink3);font-size:15px}
+.app .kask-btn{width:100%;cursor:pointer;color:var(--ink3);font-size:14px}
 .app .kask-btn span{flex:1;text-align:left}
 .app .kdone{cursor:pointer}.app .kdone.is{background:var(--blue);border-color:var(--blue);color:var(--bg)}
 .app .kl.d .ic{color:var(--ink2)}
@@ -164,6 +167,31 @@ css += """
 .app .kedit-bar .btn:disabled{opacity:.4;cursor:default;box-shadow:none}
 .app .kedit-pub{margin-right:8px;font-size:13px;color:var(--ink3)}
 
+/* The command palette in the app: the mock's veil and card over the whole
+   window, a real input in its query row, results that scroll, and rows that
+   are buttons. */
+.app.part.palette-part{position:fixed;inset:0;z-index:1000;width:auto;height:auto;display:block;overflow:visible;pointer-events:none}
+.app.palette-part .veil{display:block;position:fixed;pointer-events:auto}
+.app.palette-part .pal{position:fixed;top:min(136px,12vh);width:min(580px,calc(100vw - 32px));margin-left:calc(min(580px,calc(100vw - 32px)) / -2)}
+.app .pal .q input{flex:1;min-width:0;padding:0;border:0;outline:0;background:transparent;color:var(--ink);font:inherit;font-size:16px}
+.app .pal .q input::placeholder{color:var(--ink3)}
+.app .pal .res{max-height:min(480px,62vh);overflow-y:auto;padding-bottom:6px}
+.app .pal button.opt{width:100%;text-align:left;cursor:pointer}
+.app .pal .opt-label{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.app .pal .opt-label b{font-weight:500;color:var(--ink)}
+.app .pal .pal-mark{width:20px;height:20px;border-radius:6px;font-size:9px}
+
+/* Home's right column: Today's lines (each opens what it names), who is
+   online, and the memory map as a button. */
+.app .today{list-style:none;margin:2px 0 10px;padding:0;display:flex;flex-direction:column;gap:12px}
+.app .today-line{display:flex;flex-direction:column;gap:2px;width:100%;text-align:left}
+.app .today-line b{font-weight:500;font-size:14px;line-height:1.4;color:var(--ink)}
+.app .today-line em{font-style:normal;font-size:12px;color:var(--ink3)}
+.app button.today-line{cursor:pointer}.app button.today-line:hover b{text-decoration:underline;text-decoration-color:var(--line2);text-underline-offset:3px}
+.app .here-row{display:flex;align-items:center;gap:12px}
+.app button.kmini-btn{width:100%;padding:0}.app button.kmini-btn:disabled{cursor:default}
+.app .kmini+.kline{margin-top:10px}
+
 /* Links drawn as the mock's buttons (Join, Add to calendar). */
 .app a.btn{text-decoration:none}
 .app .btn.sm.on .ic{width:13px;height:13px}
@@ -185,6 +213,8 @@ css += """
    and centres in the middle, and the composer keeps the same edges. */
 .app.part{--measure-gutter:max(56px,calc((100% - 736px) / 2))}
 .app.part .home,.app.part .dock{padding-left:var(--measure-gutter);padding-right:var(--measure-gutter)}
+/* Home's header bar names the page over the centred column. */
+.app.part.on-v-home .top{padding-left:var(--measure-gutter);padding-right:var(--measure-gutter)}
 /* In the app, pages and messages are just there, as a channel is: the mock's
    fade-and-rise belongs to its demo switching. Menus and the palette still pop. */
 .app.part .view,.app.part .mine,.app.part .theirs,.app.part .c-done{animation:none}

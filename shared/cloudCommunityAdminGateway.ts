@@ -1346,6 +1346,8 @@ export type CloudCommunityHomeSnapshot = {
   newMembers: { count: number; names: string[] };
   activity: { posts: number; replies: number; activePeople: number };
   week: { joined: number; activePeople: number };
+  busiest: { channel: string; channelSlug: string; posts: number; replies: number; people: number } | null;
+  highlight: { title: string; channel: string; channelSlug: string; replies: number } | null;
   unanswered: Array<{ author: string; channel: string; text: string; hoursAgo: number }>;
   quietNewcomers: { count: number; names: string[] };
   joinRequestsPending: number;
@@ -1373,6 +1375,18 @@ export function normalizeCommunityHomeSnapshot(payload: unknown): CloudCommunity
       activePeople: count(record.activity?.activePeople),
     },
     week: { joined: count(record.week?.joined), activePeople: count(record.week?.activePeople) },
+    busiest: record.busiest && typeof record.busiest === "object" && String(record.busiest.channel ?? "")
+      ? {
+          channel: String(record.busiest.channel), channelSlug: String(record.busiest.channelSlug ?? ""),
+          posts: count(record.busiest.posts), replies: count(record.busiest.replies), people: count(record.busiest.people),
+        }
+      : null,
+    highlight: record.highlight && typeof record.highlight === "object" && String(record.highlight.title ?? "")
+      ? {
+          title: String(record.highlight.title), channel: String(record.highlight.channel ?? ""),
+          channelSlug: String(record.highlight.channelSlug ?? ""), replies: count(record.highlight.replies),
+        }
+      : null,
     unanswered: (Array.isArray(record.unanswered) ? record.unanswered : []).slice(0, 5).map((row: any) => ({
       author: String(row?.author ?? ""),
       channel: String(row?.channel ?? ""),

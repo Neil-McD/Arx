@@ -88,6 +88,8 @@ type CommunityNavProps = {
   // v1: the identity slot is the banner card itself, so the column does not
   // draw its own banner under it.
   identityIsCover?: boolean;
+  // v1: under the banner, as Linear has search at the top of its column.
+  toolsSlot?: ReactNode;
   onOpenInbox?: () => void;
   isInboxOpen?: boolean;
   inboxUnreadCount?: number;
@@ -209,6 +211,7 @@ export const CommunityNav = memo(function CommunityNav({
   layout = "classic",
   accountSlot = null,
   identitySlot = null,
+  toolsSlot = null,
   identityIsCover = false,
   onOpenGuide,
   onOpenInbox,
@@ -448,6 +451,7 @@ export const CommunityNav = memo(function CommunityNav({
           ) : null}
         </div>
       ) : null}
+      {isV1 && toolsSlot ? <div className="community-nav-tools">{toolsSlot}</div> : null}
       {activeCommunityBannerUrl && !(isV1 && identityIsCover && identitySlot) ? (
         <div className="community-nav-header" ref={communityBannerHeaderRef}>
           <StableFramedMedia

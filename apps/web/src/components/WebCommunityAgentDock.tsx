@@ -95,6 +95,12 @@ type ActiveThreadContext = {
 export type WebCommunityAgentDockHandle = {
   appendTranscript: (transcript: string) => void;
   focusInput: () => void;
+  // Sends a question from the command palette, only to the community it was
+  // asked in: "sent", "not_ready" (Home's box isn't on the page yet, or the
+  // guide is busy) or "other_community" (stop: never send it elsewhere).
+  ask: (question: string, communityId: string) => "sent" | "not_ready" | "other_community";
+  // When the guide stays busy, the question waits in Home's box instead.
+  draft: (question: string, communityId: string) => boolean;
   startResourceBuild: (request: {
     communityId: string;
     prompt: string;
@@ -233,6 +239,8 @@ function WebCommunityAgentDock(props, ref) {
   const attachmentsRef = useRef<CommunityAgentImageDraft[]>([]);
   const draftTextRef = useRef("");
   const submitInFlightRef = useRef(false);
+  const sendSuggestionRef = useRef<(text: string) => void>(() => undefined);
+  const askReadyRef = useRef(false);
   const resourceBuildStartInFlightRef = useRef(false);
   const pendingResourceBuildRef = useRef<{
     communityId: string;
@@ -297,6 +305,19 @@ function WebCommunityAgentDock(props, ref) {
       inputElement.style.height = "auto";
       inputElement.style.height = `${Math.min(inputElement.scrollHeight, 112)}px`;
       inputElement.focus();
+    },
+    ask: (question: string, askedInCommunityId: string) => {
+      if (!communityId || communityId !== askedInCommunityId) return "other_community";
+      if (!askReadyRef.current || !composerFormRef.current) return "not_ready";
+      sendSuggestionRef.current(question);
+      return "sent";
+    },
+    draft: (question: string, askedInCommunityId: string) => {
+      if (!communityId || communityId !== askedInCommunityId || !composerFormRef.current) return false;
+      draftTextRef.current = question;
+      setInput(question);
+      kitInputRef.current?.focus();
+      return true;
     },
     startResourceBuild: async (request) => {
       const requestedCommunityId = String(request.communityId ?? "").trim();
@@ -1267,6 +1288,8 @@ function WebCommunityAgentDock(props, ref) {
     turnIsActive || isPreparing || Boolean(dockError) || Boolean(memberLimitNotice) || persistentResourceChangesetCards.length > 0;
   // Home on the kit: Home in design v1 on a wide window, the host's and a member's.
   const kitHome = homeActive && guideWording && !props.mobileRoot && Boolean(props.home);
+  // The palette's question waits for Home's own box and an idle guide.
+  askReadyRef.current = Boolean(kitHome) && !(composerIsBusy || isPreparing || isStartingNewChat);
   const kitHomeIsHost = props.home?.audience === "host";
   const openTalk = () => {
     followConversationRef.current = true;
@@ -1283,13 +1306,14 @@ function WebCommunityAgentDock(props, ref) {
     openTalk();
     window.requestAnimationFrame(() => composerFormRef.current?.requestSubmit());
   };
+  sendSuggestionRef.current = sendSuggestion;
   const kitBody = kitHome && props.home ? (
     <section className="community-agent-dock-panel has-home-rail is-kit-home" aria-label={presentation.title}>
       <KitApp view="home" host={kitHomeIsHost} part="main" talking={kitTalking || conversationNeedsYou}>
         <View index={0}>
           {/* The top row scrolls with Home, so the eyebrow's glow is never cut. */}
           <Scroll ref={scrollRef}>
-            <Top onSearch={() => kitInputRef.current?.focus()} />
+            <Top title="Home" titleView={0} />
             <WebCommunityHomeSection
               {...props.home}
               session={props.session}

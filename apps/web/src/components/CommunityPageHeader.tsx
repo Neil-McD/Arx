@@ -69,7 +69,6 @@ export function CommunityPageHeader(props: { title: string; actions?: ReactNode;
         <h1>{props.title}</h1>
       </div>
       {props.actions ? <div className="community-page-header-actions">{props.actions}</div> : null}
-      <SearchOrAskButton />
     </>,
     slot,
   );

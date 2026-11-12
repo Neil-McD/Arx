@@ -28,6 +28,7 @@ const ICON_PATHS: Record<string, string> = {
   updown: '<path d="m7 15 5 5 5-5M7 9l5-5 5 5"/>',
   up: '<path d="M12 19V5M5.5 11.5 12 5l6.5 6.5"/>',
   arrow: '<path d="M5 12h14M13 6l6 6-6 6"/>',
+  back: '<path d="M19 12H5M11 18l-6-6 6-6"/>',
   mic: '<rect x="9" y="2.5" width="6" height="11.5" rx="3"/><path d="M5 10.5v.5a7 7 0 0 0 14 0v-.5M12 18v3.5"/>',
   plus: '<path d="M12 5v14M5 12h14"/>',
   smile: '<circle cx="12" cy="12" r="9"/><path d="M8.5 14.5s1.3 1.5 3.5 1.5 3.5-1.5 3.5-1.5M9 9.5h.01M15 9.5h.01"/>',
@@ -114,7 +115,7 @@ export function KitApp(props: {
   scale?: number;
   // One part of a page (its middle, or its right column) inside the app's
   // own frame, rather than the mock's whole window.
-  part?: "main" | "rail" | "flow" | "cover";
+  part?: "main" | "rail" | "flow" | "cover" | "palette";
   // The guide conversation is open on Home (the mock's "Talk it over").
   talking?: boolean;
   className?: string;
@@ -132,7 +133,7 @@ export function KitApp(props: {
   return (
     <div
       className={[
-        cx("app", `on-v-${props.view}`, props.host && "host", light && "light", props.part && "part", props.part === "rail" && "rail-part", props.part === "flow" && "flow-part", props.part === "cover" && "cover-part", props.talking && "on-t-on"),
+        cx("app", `on-v-${props.view}`, props.host && "host", light && "light", props.part && "part", props.part === "rail" && "rail-part", props.part === "flow" && "flow-part", props.part === "cover" && "cover-part", props.part === "palette" && "palette-part", props.talking && "on-t-on"),
         props.className,
       ].filter(Boolean).join(" ")}
       style={style}
@@ -215,16 +216,13 @@ export function Main(props: { children: ReactNode }) {
   return <main className={cx("main")}>{props.children}</main>;
 }
 
-export function Top(props: { title?: ReactNode; titleView?: number; search?: boolean; onSearch?: () => void }) {
+// The page's header bar names it; Search or ask lives at the top of the left
+// column (Linear-style), not here.
+export function Top(props: { title?: ReactNode; titleView?: number }) {
   return (
     <>
       <header className={cx("top")}>
         {props.title ? <h1 className={cx(`t${props.titleView ?? 1}`)}>{props.title}</h1> : null}
-        {props.search === false ? null : (
-          <button type="button" className={cx("find")} onClick={props.onSearch}>
-            <Icon name="search" />Search or ask<kbd>⌘K</kbd>
-          </button>
-        )}
       </header>
       <div className={cx("hline")} />
     </>
