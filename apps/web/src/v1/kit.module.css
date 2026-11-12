@@ -579,7 +579,7 @@
 
 .app .kask{max-width:none}
 
-.app .kask-btn{min-height:0;height:46px;align-items:center;flex-wrap:nowrap;padding:0 14px}
+.app .ask.kask-btn{min-height:0;height:46px;align-items:center;flex-wrap:nowrap;padding:0 14px}
 .app .kcrumb,.app .klesson{max-width:720px;margin-left:auto;margin-right:auto}
 .app .klesson{width:100%}
 .app .kback{display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 8px 0 6px;margin-left:-6px;border-radius:6px;color:var(--ink2);font-size:13px}
