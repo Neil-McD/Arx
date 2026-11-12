@@ -7,7 +7,7 @@ import { KitHomeRail } from "../v1/KitHomeRail";
 import { dismissOwnerMoment, fetchOwnerMoment, markOwnerMomentShown } from "../../../../shared/cloudCommunityOwnerMomentsGateway";
 import type { OwnerMoment } from "../../../../shared/communityOwnerMoments";
 import { fetchCloudHomeMoments, recordCloudHomeVisit, type CloudHomeMoments } from "../../../../shared/cloudCommunityHomeMomentsGateway";
-import type { HomeMoment, MemberNextStep } from "../../../../shared/communityHomeMoments";
+import { formatMomentWhen, type HomeMoment, type MemberNextStep } from "../../../../shared/communityHomeMoments";
 import type { CommunityPresenceSummary } from "../../../../shared/communityTypes";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
@@ -355,7 +355,7 @@ export function WebCommunityHomeSection(props: WebCommunityHomeSectionProps) {
             </Card>
           ) : null}
           {!isHost && agentOn && homeMoments?.nextStep ? (
-            <Card label="Your next step" title={homeMoments.nextStep.title} say={homeMoments.nextStep.detail}>
+            <Card label="Your next step" title={homeMoments.nextStep.title} say={[homeMoments.nextStep.when ? formatMomentWhen(homeMoments.nextStep.when) : "", homeMoments.nextStep.detail].filter(Boolean).join(". ")}>
               <Btn go onClick={openTarget(homeMoments.nextStep.target)}>{homeMoments.nextStep.action}</Btn>
               <Btn txt onClick={kit.onTalkItOver}>Talk it over</Btn>
             </Card>
@@ -369,7 +369,7 @@ export function WebCommunityHomeSection(props: WebCommunityHomeSectionProps) {
             return (
               <Since label={label} style={hasCard ? undefined : { marginTop: 44 }}>
                 {list.map((moment, index) => (
-                  <SinceItem key={index} kind={moment.label} learned={moment.kind === "learned"} title={moment.title} detail={moment.detail} onOpen={openTarget(moment.target)} still={!moment.target} />
+                  <SinceItem key={index} kind={moment.label} learned={moment.kind === "learned"} title={moment.title} detail={[moment.when ? formatMomentWhen(moment.when) : "", moment.detail].filter(Boolean).join(" · ")} onOpen={openTarget(moment.target)} still={!moment.target} />
                 ))}
               </Since>
             );
