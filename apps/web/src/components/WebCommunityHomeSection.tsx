@@ -266,7 +266,6 @@ export function WebCommunityHomeSection(props: WebCommunityHomeSectionProps) {
         const picked = await fetchOwnerMoment({ session, communityId: props.communityId });
         if (cancelled) return;
         setOwnerMoment(picked);
-        if (picked?.isNew) await markOwnerMomentShown({ session, communityId: props.communityId, key: picked.moment.key }).catch(() => undefined);
       } catch { if (!cancelled) setOwnerMoment(null); }
     })();
     return () => { cancelled = true; };
@@ -280,10 +279,10 @@ export function WebCommunityHomeSection(props: WebCommunityHomeSectionProps) {
       try {
         const session = await props.ensureSession(props.session);
         if (!session) return;
-        // Read first (since the visit before this one), then record this visit.
+        // Record this visit first, so "since" is the visit before it.
+        await recordCloudHomeVisit({ session, communityId: props.communityId }).catch(() => undefined);
         const loaded = await fetchCloudHomeMoments({ session, communityId: props.communityId, asMember: props.audience === "member" });
         if (!cancelled) setHomeMoments(loaded);
-        await recordCloudHomeVisit({ session, communityId: props.communityId }).catch(() => undefined);
       } catch { if (!cancelled) setHomeMoments(null); }
     })();
     return () => { cancelled = true; };
@@ -310,13 +309,31 @@ export function WebCommunityHomeSection(props: WebCommunityHomeSectionProps) {
     } catch { /* It shows again next time; nothing is lost. */ }
   };
 
+  // A new owner moment counts as shown only once its card is on screen (an
+  // urgent card holds the spot first), so a hidden card never uses its week.
+  useEffect(() => {
+    if (!ownerMoment?.isNew || !snapshot || !props.kit) return;
+    const urgentNow = homeCardFor(snapshot, props, props.audience);
+    if (urgentNow && (props.agentOn !== false || urgentNow.label === "Needs your decision")) return;
+    const shown = ownerMoment;
+    setOwnerMoment({ ...shown, isNew: false });
+    void (async () => {
+      const session = await props.ensureSession(props.session).catch(() => null);
+      if (session) await markOwnerMomentShown({ session, communityId: props.communityId, key: shown.moment.key }).catch(() => undefined);
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ownerMoment, snapshot, props.agentOn]);
+
   // Home is extra; if its facts can't load, the conversation below still works.
   if (failed && !props.kit) return null;
 
   const now = props.now ?? new Date();
   const greeting = `${greetingFor(now)}, ${props.firstName}.`;
   const agentOn = props.agentOn !== false;
-  const card = snapshot && agentOn ? homeCardFor(snapshot, props, props.audience) : null;
+  // Without the agent, only the decision that needs a person stays (people
+  // waiting to join); a waiting question is the guide's to bring up.
+  const urgent = snapshot ? homeCardFor(snapshot, props, props.audience) : null;
+  const card = urgent && (agentOn || urgent.label === "Needs your decision") ? urgent : null;
   const rows = snapshot ? homeRowsFor(snapshot, props, props.audience) : [];
   const figures = snapshot ? homeFiguresFor(snapshot, props.audience) : [];
   const nextEvent = snapshot?.upcomingEvents[0] ?? null;
