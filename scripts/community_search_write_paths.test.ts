@@ -16,6 +16,7 @@ const NOT_POST_WRITES: Record<string, string> = {
   "communityChannels.ts": "patches channels; post rows follow through relabelCommunitySearchChannelInternal",
   "communityAttachmentUploads.ts": "patches attachment upload rows' status, not posts",
   "communityMemberWorkflows.ts": "patches workflow runs' status, not posts",
+  "communityPods.ts": "patches pod join requests' status, not posts; reads posts only for last activity",
 };
 
 function sources(): string[] {

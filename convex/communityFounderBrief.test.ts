@@ -502,13 +502,41 @@ describe("pods", () => {
     expect(owner.can_manage).toBe(true);
     expect(owner.pods).toMatchObject([{ name: "Founders pod", members: 1, is_member: false }]);
     expect((await list("brief-Ana")).pods.map((pod: any) => pod.name)).toEqual(["Founders pod"]);
-    expect(await list("brief-Ben")).toEqual({ can_manage: false, pods: [] });
+    // Ben isn't in it, and a hidden pod (every room from before pods) isn't shown from outside either.
+    expect(await list("brief-Ben")).toEqual({ can_manage: false, pods: [], outside: [] });
     // Viewing as a member, the builder sees only pods they are in.
     expect((await list("brief-Owner", true)).pods).toEqual([]);
 
-    await t.withIdentity({ subject: "brief-Owner" }).mutation(api.communityPods.savePodPurpose, { communityId: f.communityId, channelId: podId, purpose: "  Weekly accountability for founders  " });
+    const asOwner = t.withIdentity({ subject: "brief-Owner" });
+    const asAna = t.withIdentity({ subject: "brief-Ana" });
+    const asBen = t.withIdentity({ subject: "brief-Ben" });
+    await asOwner.mutation(api.communityPods.savePodDetails, { communityId: f.communityId, channelId: podId, purpose: "  Weekly accountability for founders  " });
     expect((await list("brief-Ana")).pods[0].purpose).toBe("Weekly accountability for founders");
-    await expect(t.withIdentity({ subject: "brief-Ana" }).mutation(api.communityPods.savePodPurpose, { communityId: f.communityId, channelId: podId, purpose: "mine" }))
-      .rejects.toThrow();
+    await expect(asAna.mutation(api.communityPods.savePodDetails, { communityId: f.communityId, channelId: podId, purpose: "mine" })).rejects.toThrow();
+
+    // Listed with one seat (Ana has it): Ben sees the outside only, and asking puts him on the waitlist.
+    await asOwner.mutation(api.communityPods.savePodDetails, { communityId: f.communityId, channelId: podId, visibility: "listed", seats: 1 });
+    const outside = (await list("brief-Ben")).outside;
+    expect(outside).toEqual([{ channel_id: String(podId), name: "Founders pod", purpose: "Weekly accountability for founders", hosts: [], seats_left: 0, my_request: null }]);
+    expect(JSON.stringify(outside)).not.toContain("Ana");
+    await expect(asBen.query(api.communityPods.getPod, { communityId: f.communityId, channelId: podId })).rejects.toThrow();
+    expect(await asBen.mutation(api.communityPods.requestToJoinPod, { communityId: f.communityId, channelId: podId })).toEqual({ status: "waitlist" });
+    expect((await list("brief-Ben")).outside[0].my_request).toBe("waitlist");
+
+    // Only the pod's managers decide; the owner says yes and Ben is in.
+    const ben = await t.run(async (ctx) => (await ctx.db.query("users").withIndex("by_authSubject" as any, (q: any) => q.eq("authSubject", "brief-Ben")).first())!);
+    await t.run(async (ctx) => {
+      const membership = (await ctx.db.query("communityMemberships").collect()).find((row: any) => String(row.userId) === String(ben._id))!;
+      await ctx.db.patch(membership._id, { activationSequence: 1, activatedAt: Date.now() } as any);
+    });
+    await expect(asAna.mutation(api.communityPods.decidePodRequest, { communityId: f.communityId, channelId: podId, userId: ben._id, approve: true })).rejects.toThrow(/manager_required/);
+    expect((await asOwner.query(api.communityPods.getPod, { communityId: f.communityId, channelId: podId })).requests).toMatchObject([{ name: "Ben", status: "waitlist" }]);
+    await asOwner.mutation(api.communityPods.decidePodRequest, { communityId: f.communityId, channelId: podId, userId: ben._id, approve: true });
+    expect((await list("brief-Ben")).pods.map((pod: any) => pod.name)).toEqual(["Founders pod"]);
+    expect((await asBen.query(api.communityPods.getPod, { communityId: f.communityId, channelId: podId })).members.map((member: any) => member.name).sort()).toEqual(["Ana", "Ben"]);
+
+    // A host the builder names can decide for their pod.
+    await asOwner.mutation(api.communityPods.setPodHost, { communityId: f.communityId, channelId: podId, userId: ben._id, host: true });
+    expect((await asBen.query(api.communityPods.getPod, { communityId: f.communityId, channelId: podId })).can_manage).toBe(true);
   });
 });
