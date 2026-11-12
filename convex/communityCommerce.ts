@@ -1,3 +1,4 @@
+import { notifyConnectedApps } from "./connectedAppNotify";
 import { internal } from "./_generated/api";
 import { internalAction, internalMutation, internalQuery } from "./_generated/server";
 import { v } from "convex/values";
@@ -458,6 +459,9 @@ export const syncCommunitySubscriptionLifecycleInternal = internalMutation({
     } as CommunityMembershipLike;
     if (before === "active" && next !== "active") {
       await schedulePodBillingCheck(ctx, { communityId: args.communityId, userId: args.userId });
+    }
+    if (before !== next || String(pricePointId ?? "") !== String(membership.pricePointId ?? "")) {
+      await notifyConnectedApps(ctx, args.communityId, args.userId);
     }
     await ctx.db.patch(membership._id, {
       pricePointId,
