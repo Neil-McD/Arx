@@ -88,9 +88,12 @@ One server-side layer that turns activity into **moments** and **signals**:
 
 What reads it:
 
-- Home's centre: "Since you were last here" (3 to 5 moments) and the **next
-  step** (one per person; owners: what needs them; members: continue your
-  lesson, say hello, RSVP). No model.
+- With AI on: Home's centre, "Since you were last here" (3 to 5 moments) and
+  the **next step** (one per person; owners: what needs them; members:
+  continue your lesson, say hello, RSVP). No model, but presented as the
+  guide's, so it is part of the paid experience.
+- With AI off: plain lists only (recent, upcoming, counts); see "AI on and
+  off".
 - Skills (below), as their input.
 
 ### 3. Skills (Luna, owner-funded, only when AI is on)
@@ -145,18 +148,37 @@ Build it by moving work onto it, not by rewriting: summaries are the first
 skill born on it; then the serve worker (@mentions) moves; then the turn loop.
 Each move deletes the old path in the same slice.
 
-## AI on and off
+## AI on and off: free is plain, the guide is what you pay for
+
+Neil, Nov 12: the free plan should feel plain on purpose; the guide's voice
+is the reason to upgrade.
 
 - One answer per community: `ai_on` = the funding admission is ok (Agent plan
   active, or the operator grant). Read with the community's access and sent to
   every page.
-- **Off**: no guide conversation on Home (the greeting, next step and moments
-  stay), Search or ask is plain search, right columns show deterministic lines,
-  no "unavailable" messages anywhere, no AI chips. The owner alone sees one
-  quiet "Turn on your community's agent" in Your guide.
-- **On**: everything above appears; members get their session.
-- Turning off (plan lapses) keeps everything written (notes, summaries,
-  sessions) readable; nothing new is generated.
+- **Free (off): plain facts, no guide.**
+  - Home: a simple greeting and plain lists: recent posts, upcoming events,
+    new members, counts. No "Since you were last here" curation, no next-step
+    card, no guide eyebrow, no guide conversation, no chips.
+  - Right columns: plain facts only: the next event, who is online, counts,
+    the latest few posts or notes. No written summaries.
+  - Search or ask is plain search ("Search").
+  - No "unavailable" messages anywhere: the AI parts are simply not on the
+    page.
+  - The signals layer still runs underneath (it is free and also keeps
+    notifications and the owner's views correct), but its curation (ranking,
+    "since your last visit", the next step) is shown only with AI on.
+- **Paid (on): the guide.** Written summaries in every right column, "Since
+  you were last here" chosen for you, a next step for each person, the guide
+  on Home, Ask in the palette, chips, and each member's private session.
+- **The upgrade nudge (owner only).** In Your guide and once on Home, the owner
+  sees what turning the agent on adds, shown as a short example of what it
+  would write about their own community this week (written without a model,
+  from the signals: "Here's what your guide would tell you today"), with
+  "Turn on your community's agent". Members never see upsells; at most,
+  nothing.
+- Turning off (plan lapses) keeps everything already written (notes, summaries,
+  sessions) readable; nothing new is generated and the pages go back to plain.
 
 ## Cost: cheap by design
 
@@ -190,9 +212,10 @@ One model, so cost is controlled by how often and how much we call it:
 
 ## Slices (each ships to staging, then Neil's acceptance)
 
-1. **AI on/off.** `ai_on` on every page; the off state hides AI cleanly; the
-   owner's "Turn on" entry. Acceptance: a free community shows no AI and no
-   errors; turning the plan on brings it all back.
+1. **AI on/off.** `ai_on` on every page; the free state is plain (no guide,
+   no curation, no summaries, no errors); the owner's upgrade nudge with a
+   preview of what the guide would say. Acceptance: a free community looks
+   complete and plain; turning the plan on brings the guide everywhere.
 2. **Signals and Home.** Moments, signals, last visit, next step, server-side
    audiences; Home's centre rebuilt on them (no repeats with the right column).
    Acceptance: a member and an owner each see what changed since their last
