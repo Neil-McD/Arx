@@ -279,7 +279,8 @@ export function KitClassroom(props: {
     page = (
       <div className={cx("page")} style={{ padding: 0, overflow: "visible" }}>
         <div className={cx("kcrumb")} style={{ marginTop: 0 }}>
-          <button type="button" className={cx("link")} onClick={() => props.onOpenCourse(null)}>Knowledge</button><span>›</span><span>{open.course.name}</span>
+          <button type="button" className={cx("kback")} onClick={() => props.onOpenCourse(null)} aria-label="Back to Knowledge"><Icon name="back" />Knowledge</button>
+          <span>›</span><span>{open.course.name}</span>
           {props.canManage ? (
             <span style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
               <button type="button" className={cx("btn sm")} onClick={() => props.onEditCourseDetails(open.course.id)}>Course details</button>
