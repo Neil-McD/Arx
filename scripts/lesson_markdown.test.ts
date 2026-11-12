@@ -132,6 +132,14 @@ Line one\\
 Line two`;
 
 describe("lesson editor Markdown", () => {
+  it("keeps a block with a reference link as its own Markdown, so the link survives editing", () => {
+    const body = "Read the [guide][g] first.\n\nThen write yours.\n\n[g]: https://example.com/guide";
+    const { doc, serialize } = parseLessonMarkdown(schema, body, { isVideoUrl });
+    expect(doc.child(0).type.name).toBe("rawMarkdown");
+    expect(doc.child(1).type.name).toBe("paragraph");
+    expect(serialize(doc)).toBe(body);
+  });
+
   it("gives back exactly the body it read when nothing is edited", () => {
     const { doc, serialize } = parseLessonMarkdown(schema, LESSON, { isVideoUrl });
     expect(serialize(doc)).toBe(LESSON);

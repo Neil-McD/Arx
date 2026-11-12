@@ -383,6 +383,17 @@ function blockFromChunk(schema: Schema, parser: MarkdownParser, chunk: Chunk, so
 }
 
 /** Reads a lesson body into an editor document. */
+// markdown-it's reference label normalisation (normalizeReference).
+const referenceLabel = (label: string) => label.trim().replace(/\s+/g, " ").toLowerCase().toUpperCase();
+
+function usesReferenceLink(source: string, labels: ReadonlySet<string>): boolean {
+  if (!labels.size) return false;
+  for (const match of source.matchAll(/\[([^\]\n]+)\]/g)) {
+    if (labels.has(referenceLabel(match[1]))) return true;
+  }
+  return false;
+}
+
 export function parseLessonMarkdown(schema: Schema, markdown: string, options: LessonMarkdownOptions = {}): LessonDocument {
   const original = String(markdown ?? "");
   const text = original.replace(/\r\n?/g, "\n");
@@ -391,12 +402,19 @@ export function parseLessonMarkdown(schema: Schema, markdown: string, options: L
   const sources = new WeakMap<PMNode, SourceRecord>();
   const gaps: string[] = [];
   const blocks: PMNode[] = [];
-  const chunks = groupSlides(lines, chunkSource(lines, tokenizer.parse(text, {})));
+  const env: { references?: Record<string, unknown> } = {};
+  const chunks = groupSlides(lines, chunkSource(lines, tokenizer.parse(text, env)));
+  const referenceLabels = new Set(Object.keys(env.references ?? {}));
   chunks.forEach((chunk, index) => {
     const source = lines.slice(chunk.start, chunk.end).join("\n");
     const nodes = chunk.deck
       ? [schema.nodes.slideDeck.create(chunk.deck)]
-      : blockFromChunk(schema, parser, chunk, source, options);
+      // A block that uses a reference link ([guide][g]) needs the document's
+      // definitions, which a block parsed alone doesn't have: it stays as its
+      // own Markdown so the link survives editing.
+      : usesReferenceLink(source, referenceLabels)
+        ? [rawBlock(schema, source)]
+        : blockFromChunk(schema, parser, chunk, source, options);
     if (nodes.length === 1) sources.set(nodes[0], { index, source });
     blocks.push(...nodes);
     const next = chunks[index + 1];
