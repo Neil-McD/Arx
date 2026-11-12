@@ -1,5 +1,14 @@
-// Pods (convex/communityPods.ts; docs/specs/pods-v0.md).
+// Pods (convex/communityPods.ts, convex/communityPodPayments.ts; docs/specs/pods-v0.md).
 import { bootstrapConvexAuthenticatedClient } from "./convexAuthenticatedClient";
+
+// A paid pod's monthly price, charged on top of membership. Null: not paid.
+export type CloudPodPrice = { amount_base_units: number; currency: string } | null;
+
+export function formatPodPrice(price: CloudPodPrice): string {
+  if (!price) return "";
+  const amount = price.amount_base_units / 100;
+  return "$" + (Number.isInteger(amount) ? String(amount) : amount.toFixed(2)) + "/month";
+}
 
 export type CloudCommunityPod = {
   channel_id: string;
@@ -8,6 +17,7 @@ export type CloudCommunityPod = {
   purpose: string;
   visibility: "listed" | "hidden";
   seats: number | null;
+  price: CloudPodPrice;
   members: number;
   last_active_at: string | null;
   is_member: boolean;
@@ -22,6 +32,7 @@ export type CloudOutsidePod = {
   purpose: string;
   hosts: string[];
   seats_left: number | null;
+  price: CloudPodPrice;
   my_request: "pending" | "waitlist" | "declined" | null;
 };
 
@@ -31,6 +42,7 @@ export type CloudPodDetail = {
   purpose: string;
   visibility: "listed" | "hidden";
   seats: number | null;
+  price: CloudPodPrice;
   hosts: string[];
   members: Array<{ user_id: string; name: string; is_host: boolean }>;
   can_manage: boolean;
@@ -78,4 +90,24 @@ export async function decideCloudPodRequest(params: { session: unknown; communit
 export async function setCloudPodHost(params: { session: unknown; communityId: string; channelId: string; userId: string; host: boolean }): Promise<void> {
   const { client: convex, authSubject } = await client(params.session);
   await convex.mutation("communityPods:setPodHost" as any, { authSubject, communityId: params.communityId, channelId: params.channelId, userId: params.userId, host: params.host });
+}
+
+// Builders: the pod's monthly price in base units; 0 makes it not paid.
+export async function saveCloudPodPrice(params: { session: unknown; communityId: string; channelId: string; amountBaseUnits: number }): Promise<void> {
+  const { client: convex, authSubject } = await client(params.session);
+  await convex.mutation("communityPodPayments:savePodPrice" as any, { authSubject, communityId: params.communityId, channelId: params.channelId, amountBaseUnits: params.amountBaseUnits });
+}
+
+// Join a paid pod: Stripe's checkout page to send the member to.
+export async function startCloudPodCheckout(params: { session: unknown; communityId: string; channelId: string; successUrl: string; cancelUrl: string }): Promise<{ checkout_url: string }> {
+  const { client: convex, authSubject } = await client(params.session);
+  return await convex.action("communityPodPayments:startPodCheckout" as any, {
+    authSubject, communityId: params.communityId, channelId: params.channelId, successUrl: params.successUrl, cancelUrl: params.cancelUrl,
+  });
+}
+
+// Back from Stripe: asks Polynet to check with Stripe now.
+export async function confirmCloudPodCheckout(params: { session: unknown; paymentId: string }): Promise<{ status: string }> {
+  const { client: convex, authSubject } = await client(params.session);
+  return await convex.action("communityPodPayments:confirmPodCheckout" as any, { authSubject, paymentId: params.paymentId });
 }

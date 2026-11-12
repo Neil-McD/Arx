@@ -768,6 +768,7 @@
 .app .podform-check input{width:auto}
 .app .podform-seats{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--ink2)}
 .app .podform-seats input{width:96px}
+.app .podprice{font-size:13px;color:var(--ink);font-weight:500}
 .app .podreq{display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:32px;font-size:13px;color:var(--ink)}
 .app .podreq em{font-style:normal;color:var(--ink3)}
 .app .podreq-acts{display:flex;gap:4px}

@@ -2,13 +2,14 @@
 // of a channel's. What it is for, its hosts, its members and, for the people
 // who manage it, who is asking to join.
 import { useCallback, useEffect, useState } from "react";
-import { decideCloudPodRequest, fetchCloudPod, saveCloudPodDetails, setCloudPodHost, type CloudPodDetail } from "../../../../shared/cloudCommunityPodsGateway";
+import { decideCloudPodRequest, fetchCloudPod, formatPodPrice, saveCloudPodDetails, saveCloudPodPrice, setCloudPodHost, type CloudPodDetail } from "../../../../shared/cloudCommunityPodsGateway";
 import { Btn, KitApp, Rail, Sec, Sep, cx } from "./kit";
 
 export function KitPodRail(props: { session: unknown; communityId: string; pod: CloudPodDetail; onChanged: () => void }) {
   const { pod } = props;
   const [busy, setBusy] = useState<string | null>(null);
-  const [editing, setEditing] = useState<{ purpose: string; listed: boolean; seats: string } | null>(null);
+  const [editing, setEditing] = useState<{ purpose: string; listed: boolean; seats: string; price: string } | null>(null);
+  const [editError, setEditError] = useState<string | null>(null);
   const act = async (key: string, work: () => Promise<void>) => {
     if (busy) return;
     setBusy(key);
@@ -29,24 +30,46 @@ export function KitPodRail(props: { session: unknown; communityId: string; pod: 
                 Seats
                 <input value={editing.seats} onChange={(event) => setEditing({ ...editing, seats: event.target.value.replace(/[^0-9]/g, "") })} placeholder="No limit" aria-label="Seats" inputMode="numeric" />
               </label>
+              <label className={cx("podform-seats")}>
+                Price $
+                <input value={editing.price} onChange={(event) => setEditing({ ...editing, price: event.target.value.replace(/[^0-9]/g, "") })} placeholder="Free" aria-label="Monthly price in dollars" inputMode="numeric" />
+                <span>/month, on top of membership</span>
+              </label>
+              {editError ? <p className={cx("bad")} role="alert">{editError}</p> : null}
               <div className={cx("acts")}>
-                <Btn go small disabled={Boolean(busy)} onClick={() => void act("edit", async () => {
-                  await saveCloudPodDetails({ session: props.session, communityId: props.communityId, channelId: pod.channel_id, purpose: editing.purpose, visibility: editing.listed ? "listed" : "hidden", seats: Number(editing.seats) || 0 });
-                  setEditing(null);
-                })}>{busy === "edit" ? "Saving…" : "Save"}</Btn>
-                <Btn txt small onClick={() => setEditing(null)}>Cancel</Btn>
+                <Btn go small disabled={Boolean(busy)} onClick={() => void (async () => {
+                  if (busy) return;
+                  setBusy("edit");
+                  setEditError(null);
+                  try {
+                    await saveCloudPodDetails({ session: props.session, communityId: props.communityId, channelId: pod.channel_id, purpose: editing.purpose, visibility: editing.listed ? "listed" : "hidden", seats: Number(editing.seats) || 0 });
+                    const cents = (Number(editing.price) || 0) * 100;
+                    if (cents !== (pod.price?.amount_base_units ?? 0)) {
+                      await saveCloudPodPrice({ session: props.session, communityId: props.communityId, channelId: pod.channel_id, amountBaseUnits: cents });
+                    }
+                    setEditing(null);
+                    props.onChanged();
+                  } catch (error) {
+                    const code = String((error as Error)?.message ?? "");
+                    setEditError(code.includes("community_checkout_unavailable")
+                      ? "To charge for a pod, connect Stripe in Manage first."
+                      : code.includes("community_pod_price_invalid") ? "Use a price from $1 to $10,000 a month." : "Couldn't save. Try again.");
+                  } finally { setBusy(null); }
+                })()}>{busy === "edit" ? "Saving…" : "Save"}</Btn>
+                <Btn txt small onClick={() => { setEditing(null); setEditError(null); }}>Cancel</Btn>
               </div>
             </div>
           ) : (
             <>
               <p className={cx("sub")}>{pod.purpose || (pod.can_edit ? "Add what this pod is for." : "A small group with closer time with its hosts.")}</p>
               <span className={cx("sub2")}>
-                {[pod.visibility === "listed" ? "Listed: members can ask to join" : "Hidden: only its members know it's here",
-                  pod.seats ? `${pod.members.length} of ${pod.seats} seats` : `${pod.members.length} ${pod.members.length === 1 ? "member" : "members"}`].join(" · ")}
+                {[pod.visibility === "listed" ? (pod.price ? "Listed: members can join" : "Listed: members can ask to join") : "Hidden: only its members know it's here",
+                  pod.price ? `${formatPodPrice(pod.price)} on top of membership` : null,
+                  pod.seats ? `${pod.members.length} of ${pod.seats} seats` : `${pod.members.length} ${pod.members.length === 1 ? "member" : "members"}`].filter(Boolean).join(" · ")}
               </span>
               {pod.can_edit ? (
                 <div className={cx("acts")} style={{ marginTop: 10 }}>
-                  <Btn small txt onClick={() => setEditing({ purpose: pod.purpose, listed: pod.visibility === "listed", seats: pod.seats ? String(pod.seats) : "" })}>Edit</Btn>
+                  <Btn small txt onClick={() => setEditing({ purpose: pod.purpose, listed: pod.visibility === "listed", seats: pod.seats ? String(pod.seats) : "", price: pod.price ? String(Math.round(pod.price.amount_base_units / 100)) : "" })}>Edit</Btn>
                 </div>
               ) : null}
             </>
