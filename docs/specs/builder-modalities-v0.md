@@ -154,8 +154,8 @@ The builder's app keeps its own login and billing and does most of the selling.
   webhooks ("changed, re-read"); per-app user IDs bound to the app's
   registration; grants computed, not stored.
 - **Slice 2a (built, staging):** connected apps (`convex/connectedApps.ts`,
-  `convex/httpConnectedApps.ts`). A builder connects their app in Manage →
-  Your app (up to three per community): an app id, a secret kept only as a
+  `convex/httpConnectedApps.ts`). In Manage →
+  Your app, the builder registers their app (up to three per community): an app id, a secret kept only as a
   hash and shown once, an optional webhook address (public https only). The
   app calls `GET /apps/v1/access?email=` on the Convex site with
   `Authorization: Bearer <secret>` and gets `{ allowed, tier, grants }` for a
