@@ -132,6 +132,20 @@ Line one\\
 Line two`;
 
 describe("lesson editor Markdown", () => {
+  it("keeps two lists apart when either one is edited", () => {
+    const body = "* a\n\n- b";
+    const list = (text: string) => schema.nodes.bulletList.create(null, [
+      schema.nodes.listItem.create(null, [schema.nodes.paragraph.create(null, schema.text(text))]),
+    ]);
+    const edit = (index: number, text: string) => {
+      const lesson = parseLessonMarkdown(schema, body, { isVideoUrl });
+      const edited = schema.topNodeType.create(null, lesson.doc.content.replaceChild(index, list(text)));
+      return lesson.serialize(edited);
+    };
+    expect(edit(0, "a2")).toBe("* a2\n\n- b");
+    expect(edit(1, "b2")).toBe("* a\n\n- b2");
+  });
+
   it("keeps a block with a reference link as its own Markdown, so the link survives editing", () => {
     const body = "Read the [guide][g] first.\n\nThen write yours.\n\n[g]: https://example.com/guide";
     const { doc, serialize } = parseLessonMarkdown(schema, body, { isVideoUrl });
