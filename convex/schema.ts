@@ -931,6 +931,17 @@ export default defineSchema({
 
 
   // The founder's daily brief (docs/specs/proactive-community-agent-v0.md, slice A).
+  // Home's "since you were last here" (docs/specs/community-agent-gateway-v0.md):
+  // when this person last opened Home here, kept per account.
+  communityMemberVisits: defineTable({
+    communityId: v.id("communities"),
+    userId: v.id("users"),
+    // The visit before this one; "since you were last here" means since this.
+    previousVisitAt: v.optional(v.number()),
+    currentVisitAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_community_user", ["communityId", "userId"]),
   // Owner moments (docs/specs/community-agent-gateway-v0.md): which milestone
   // or problem card the owner was shown on Home, and when it was dismissed.
   communityOwnerMoments: defineTable({
