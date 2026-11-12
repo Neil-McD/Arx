@@ -2893,9 +2893,15 @@
   margin-top: 18px;
 }
 
+/* The editor and its menus (which open outside the page) act in the app's
+   blue, not a community accent. */
+:root[data-design="v1"] .lesson-editor,
+:root[data-design="v1"] .lesson-editor-menu {
+  --accent-primary: var(--bg-button);
+}
+
 :root[data-design="v1"] .kit-lesson-editor .lesson-editor {
   --lesson-reading-measure: 640px;
-  --lesson-editor-focus: rgba(29, 155, 240, 0.45);
   margin-inline: 0;
 }
 

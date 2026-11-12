@@ -8,8 +8,8 @@
 .lesson-editor,
 .lesson-editor-save-state,
 .lesson-editor-menu {
-  /* The same red as the app's form errors (.auth-error). */
-  --lesson-editor-danger: #b64b3a;
+  /* The app's danger red. */
+  --lesson-editor-danger: var(--danger-text);
 }
 
 .lesson-editor {
@@ -22,7 +22,7 @@
   --lesson-editor-surface: var(--bg-card-solid, var(--web-popover-surface, #fff));
   --lesson-editor-line: color-mix(in srgb, var(--border-default) 72%, transparent);
   --lesson-editor-soft: color-mix(in srgb, var(--bg-card-alt, #f4f4f2) 70%, transparent);
-  --lesson-editor-focus: color-mix(in srgb, var(--accent-primary, var(--accent, #2f7d5b)) 55%, transparent);
+  --lesson-editor-focus: color-mix(in srgb, var(--accent-primary, var(--accent)) 55%, transparent);
   --lesson-editor-radius: var(--pn-radius-card, 12px);
   position: relative;
   min-width: 0;
@@ -49,7 +49,7 @@
 }
 
 .lesson-editor-content ::selection {
-  background: color-mix(in srgb, var(--accent-primary, var(--accent, #2f7d5b)) 22%, transparent);
+  background: color-mix(in srgb, var(--accent-primary, var(--accent)) 22%, transparent);
 }
 
 .lesson-editor-content .ProseMirror-selectednode {
@@ -78,7 +78,7 @@
 }
 
 .lesson-editor-dropcursor {
-  background: var(--accent-primary, var(--accent, #2f7d5b));
+  background: var(--accent-primary, var(--accent));
   border-radius: calc(2px * var(--pn-radius-scale, 1));
 }
 
@@ -293,7 +293,7 @@
 }
 
 .lesson-editor-format-button.is-active {
-  color: var(--accent-primary, var(--accent, #2f7d5b));
+  color: var(--accent-primary, var(--accent));
 }
 
 .lesson-editor-format-button svg {
@@ -355,7 +355,7 @@
 .lesson-editor-field:focus {
   outline: none;
   border-color: var(--lesson-editor-focus, var(--border-active));
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-primary, var(--accent, #2f7d5b)) 14%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-primary, var(--accent)) 14%, transparent);
 }
 
 select.lesson-editor-field {
@@ -391,7 +391,7 @@ select.lesson-editor-field {
 
 .lesson-editor-button.is-primary {
   border-color: transparent;
-  background: var(--bg-button, var(--accent-primary, #1f5c43));
+  background: var(--bg-button, var(--accent-primary, var(--accent)));
   color: var(--bg-button-text, #fff);
 }
 
@@ -493,7 +493,7 @@ select.lesson-editor-field {
 .lesson-editor-block.is-selected,
 .lesson-editor-block:focus-within {
   border-color: var(--lesson-editor-focus);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-primary, var(--accent, #2f7d5b)) 10%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-primary, var(--accent)) 10%, transparent);
 }
 
 .lesson-editor-block-head {
@@ -513,8 +513,8 @@ select.lesson-editor-field {
   width: 24px;
   height: 24px;
   border-radius: calc(6px * var(--pn-radius-scale, 1));
-  background: color-mix(in srgb, var(--accent-primary, var(--accent, #2f7d5b)) 12%, transparent);
-  color: var(--accent-primary, var(--accent, #2f7d5b));
+  background: color-mix(in srgb, var(--accent-primary, var(--accent)) 12%, transparent);
+  color: var(--accent-primary, var(--accent));
 }
 
 .lesson-editor-block-icon svg {
@@ -639,13 +639,13 @@ select.lesson-editor-field {
 }
 
 .lesson-editor-choices li.is-correct .lesson-editor-choice-mark {
-  border-color: var(--accent-primary, #2f7d5b);
-  background: var(--accent-primary, #2f7d5b);
+  border-color: var(--accent-primary, var(--accent));
+  background: var(--accent-primary, var(--accent));
   box-shadow: inset 0 0 0 3px var(--surface-card, var(--bg-card, #fff));
 }
 
 .lesson-editor-choices li.is-correct .lesson-editor-field {
-  border-color: color-mix(in srgb, var(--accent-primary, #2f7d5b) 45%, transparent);
+  border-color: color-mix(in srgb, var(--accent-primary, var(--accent)) 45%, transparent);
 }
 
 .lesson-editor-add {
@@ -696,7 +696,7 @@ select.lesson-editor-field {
 }
 
 .lesson-editor-toggle input:checked + .lesson-editor-toggle-track {
-  background: var(--accent-primary, #2f7d5b);
+  background: var(--accent-primary, var(--accent));
 }
 
 .lesson-editor-toggle input:checked + .lesson-editor-toggle-track::after {
@@ -981,8 +981,8 @@ select.lesson-editor-field {
 }
 
 .lesson-editor-tool.is-active {
-  background: color-mix(in srgb, var(--accent-primary, var(--accent, #2f7d5b)) 12%, transparent);
-  color: var(--accent-primary, var(--accent, #2f7d5b));
+  background: color-mix(in srgb, var(--accent-primary, var(--accent)) 12%, transparent);
+  color: var(--accent-primary, var(--accent));
 }
 
 .lesson-editor-tool:disabled {
@@ -1011,7 +1011,7 @@ select.lesson-editor-field {
   width: 16px;
   height: 16px;
   margin-left: auto;
-  color: var(--accent-primary, var(--accent, #2f7d5b));
+  color: var(--accent-primary, var(--accent));
 }
 
 /* "• Saved": the autosave state beside the editing actions. */
@@ -1034,7 +1034,7 @@ select.lesson-editor-field {
   width: 7px;
   height: 7px;
   border-radius: 999px;
-  background: var(--accent-success, #147a4b);
+  background: var(--accent-success, var(--accent));
 }
 
 .lesson-editor-save-pill.is-pending::before {
@@ -1042,11 +1042,11 @@ select.lesson-editor-field {
 }
 
 .lesson-editor-save-pill.is-blocked {
-  color: #b64b3a;
+  color: var(--lesson-editor-danger);
 }
 
 .lesson-editor-save-pill.is-blocked::before {
-  background: #b64b3a;
+  background: var(--lesson-editor-danger);
 }
 
 .lesson-editor-header-button {
@@ -1076,12 +1076,12 @@ select.lesson-editor-field {
 
 .lesson-editor-header-button.is-primary {
   border-color: transparent;
-  background: var(--bg-button, var(--accent-primary, #1f5c43));
+  background: var(--bg-button, var(--accent-primary, var(--accent)));
   color: var(--bg-button-text, #fff);
 }
 
 .lesson-editor-header-button.is-primary:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--bg-button, var(--accent-primary, #1f5c43)) 88%, #000);
+  background: color-mix(in srgb, var(--bg-button, var(--accent-primary, var(--accent))) 88%, #000);
 }
 
 .lesson-editor-header-button:disabled {
@@ -1096,7 +1096,7 @@ select.lesson-editor-field {
   margin: 0 0 18px;
   padding: 10px 14px;
   border-radius: calc(8px * var(--pn-radius-scale, 1));
-  background: color-mix(in srgb, var(--accent-primary, var(--accent, #2f7d5b)) 9%, transparent);
+  background: color-mix(in srgb, var(--accent-primary, var(--accent)) 9%, transparent);
   color: var(--text-secondary, var(--text-primary));
   font-size: var(--pn-type-small, 13px);
 }
@@ -1421,7 +1421,7 @@ select.lesson-editor-field {
   margin-top: 2.25em;
   padding-top: 1rem;
   border-top: 1px dashed var(--lesson-editor-line);
-  color: var(--accent-primary, var(--accent, #2f7d5b));
+  color: var(--accent-primary, var(--accent));
   font-size: 0.9375rem;
   font-weight: 700;
   letter-spacing: 0.01em;
