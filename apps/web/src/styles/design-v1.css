@@ -2927,6 +2927,18 @@
   --bg-input: #141516;
   --bg-button: #6f78d8;
   --bg-button-hover: #7d86e2;
+  /* A plain hairline under headers, and a quiet border (no halo) on focus. */
+  --header-line-glow: rgba(255, 255, 255, 0.06);
+  --accent-act-edge: rgba(255, 255, 255, 0.16);
+  --accent-act-halo: transparent;
+}
+
+@media (min-width: 721px) {
+  :root[data-design="v1"]:not([data-theme="light"]) .community-chat .community-interaction-main-composer > .chat-input-bar:focus-within .chat-send.ask-send-btn:not(:disabled) {
+    --conversation-primary-action-surface: var(--bg-button);
+    --conversation-primary-action-hover-surface: var(--bg-button-hover);
+    box-shadow: none;
+  }
 }
 
 @media (min-width: 721px) {
