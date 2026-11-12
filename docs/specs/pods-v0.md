@@ -96,8 +96,14 @@ Events:
   page grants nothing.
 - **Renewal**: nothing changes.
 - **Leave the pod**: stops renewing; access lasts to the end of the period.
-- **Failed payment, refund or dispute**: that pod only loses access.
-- **Leaving or losing the community**: their pod subscriptions are cancelled.
+- **Failed payment**: Stripe retries; access stays until Stripe ends the
+  subscription.
+- **Refund or dispute**: that pod only loses access, and its subscription
+  stops. A won dispute doesn't reopen it; the member can join again.
+- **Can't reach the pod any more** (left or removed from the community,
+  taken off the pod by a host, or the pod closed): access stops at once, and
+  an hourly sweep cancels the pod subscription, refunding in full only a
+  payment that never let them in.
 - **Price change**: a new price for new joins; existing members keep theirs.
 
 Each pod picks one gate: invite only (hosts add people), ask to join (a host
@@ -163,9 +169,9 @@ membership); one branch in the Stripe notice handler routes anything carrying
    + who's in it). Hosts add people by hand. Private channels become hidden
    pods and leave the left column.
 2. **Listed pods and paid access.** 2a (built): listed or hidden, the outside
-   view, ask to join, seats and waitlist, hosts. 2b: a pod price and Join
-   through Stripe. 2c: leaving, lapse, refund, dispute and losing the
-   community.
+   view, ask to join, seats and waitlist, hosts. 2b (built): a pod price and
+   Join through Stripe. 2c (built): refunds, disputes and the sweep that
+   stops billing for pods someone can't reach.
 3. **Pod knowledge and pod calls.** Pod-scoped notes with the one-way wall and
    "publish to community"; pod-only events; with the Agent plan, the guide in
    a pod and its catch-up (uses the gateway's summaries).

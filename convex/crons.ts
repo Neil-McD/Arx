@@ -35,6 +35,15 @@ crons.interval(
   { lookaheadMs: 20 * 60 * 1000 },
 );
 
+// Paid pods (docs/specs/pods-v0.md): stop billing anyone who can no longer
+// reach their pod (left the community, taken off the pod, or the pod closed).
+crons.interval(
+  "stop billing for unreachable pods",
+  { minutes: 60 },
+  (internal as any).communityPodPayments.sweepUnreachablePodPaymentsInternal,
+  {},
+);
+
 // Mention email pings: mentions still "pending" after the in-app grace window
 // get one email each, preference-gated and deduped per mention.
 crons.interval(
