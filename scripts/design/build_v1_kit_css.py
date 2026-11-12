@@ -180,9 +180,11 @@ css += """
 
 /* Home's right column: Today's lines (each opens what it names), who is
    online, and the memory map as a button. */
-.app .today{list-style:none;margin:2px 0 8px;padding:0;display:flex;flex-direction:column;gap:8px}
-.app .today-line{display:block;width:100%;text-align:left;font-size:14px;line-height:1.45;color:var(--ink)}
-.app button.today-line{cursor:pointer}.app button.today-line:hover{color:var(--ink);text-decoration:underline;text-decoration-color:var(--line2);text-underline-offset:3px}
+.app .today{list-style:none;margin:2px 0 10px;padding:0;display:flex;flex-direction:column;gap:12px}
+.app .today-line{display:flex;flex-direction:column;gap:2px;width:100%;text-align:left}
+.app .today-line b{font-weight:500;font-size:14px;line-height:1.4;color:var(--ink)}
+.app .today-line em{font-style:normal;font-size:12px;color:var(--ink3)}
+.app button.today-line{cursor:pointer}.app button.today-line:hover b{text-decoration:underline;text-decoration-color:var(--line2);text-underline-offset:3px}
 .app .here-row{display:flex;align-items:center;gap:12px}
 .app button.kmini-btn{width:100%;padding:0}.app button.kmini-btn:disabled{cursor:default}
 .app .kmini+.kline{margin-top:10px}
