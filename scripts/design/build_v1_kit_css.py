@@ -82,6 +82,8 @@ css = convert_block(re.sub(r"/\*.*?\*/", "", src, flags=re.S))
 css = css.replace("--sans:'Geist','Inter',system-ui,sans-serif", "--sans:'Geist Variable','Geist','Inter',system-ui,sans-serif")
 css = css.replace("--serif:'Newsreader',Georgia,serif", "--serif:'Newsreader Variable','Newsreader',Georgia,serif")
 css = css.replace("font-family:'Geist','Inter',sans-serif", "font-family:'Geist Variable','Geist','Inter',sans-serif")
+# The mock's sample course cover is a file beside the mock; the app has it in public/.
+css = css.replace("url(./polynet-earth.webp)", "url(/design-lab/polynet-earth.webp)")
 css += """
 /* Kit addition (see the script): browser defaults off, at zero specificity. */
 :where(.app) :where(button){margin:0;padding:0;border:0;background:none;color:inherit;font:inherit;line-height:inherit;letter-spacing:inherit;text-align:inherit;cursor:pointer}
@@ -122,26 +124,45 @@ css += """
 .app .note-del{margin-left:8px;color:var(--ink3);font-size:12px;text-decoration:underline}
 .app .lab .priv{float:right;font-style:normal;font-weight:400}
 .app button.p{width:100%;text-align:left}
-/* Knowledge in the app: the mock's map in a scrolling page, a plain list of
-   notes under it, and the open note's text and forms in the right column. */
-.app .kn-title{margin:0;font-family:var(--serif);font-weight:var(--serif-w);font-size:34px;letter-spacing:-.02em;line-height:1.1}
-.app .kn-sub{margin:8px 0 0;font-size:13px;color:var(--ink2)}
-.app svg.kn-map{display:block;width:100%;height:auto;margin:6px 0 0}
-.app .kn-pt{cursor:pointer;outline:none}
-.app button.kn-row{width:100%;text-align:left;display:flex;align-items:center;gap:14px;cursor:pointer}
-.app .kn-row>div{flex:1;min-width:0}
-.app .kn-row .kn-dot{flex:none;margin:0 4px}
-.app .kn-row.sel{background:var(--s2)}
-.app .kn-dot{width:7px;height:7px;border-radius:50%;background:var(--ink3);justify-self:center}
-.app .kn-dot.kn-fresh{background:var(--aurora);box-shadow:0 0 10px var(--aurora)}
+/* Knowledge in the app (the classroom): the mock's cards and rows as real
+   buttons, the ask field as a button that opens the guide, the done circle's
+   on state, and the note forms in the right column. */
+.app button.kcourse,.app button.kcont,.app button.kl,.app button.src{width:100%;text-align:left}
+.app button.src{width:calc(100% + 20px)}
+.app button.kcont{display:block}
+.app .kask-btn{width:100%;cursor:pointer;color:var(--ink3);font-size:15px}
+.app .kask-btn span{flex:1;text-align:left}
+.app .kdone{cursor:pointer}.app .kdone.is{background:var(--blue);border-color:var(--blue);color:var(--bg)}
+.app .kl.d .ic{color:var(--ink2)}
+.app .kcover{background-color:var(--s2)}
 .app .kn-note-title{margin:2px 0 0;font-size:20px;font-weight:600;letter-spacing:-.015em}
 .app .kn-body p{margin:0 0 10px;font-size:15px;line-height:1.55;color:var(--ink2)}
-.app button.src{width:calc(100% + 20px);text-align:left}
 .app .kn-form{display:flex;flex-direction:column;gap:10px}
 .app .kn-form input,.app .kn-form textarea{width:100%;box-sizing:border-box;padding:8px 10px;border-radius:9px;border:1px solid var(--line);background:var(--field);color:var(--ink);font:inherit;font-size:14px;line-height:1.5;outline:0;resize:vertical}
 .app .kn-form input:focus,.app .kn-form textarea:focus{border-color:var(--line2)}
 .app .kn-form input::placeholder,.app .kn-form textarea::placeholder{color:var(--ink3)}
 .app .r2 .kick{display:flex}
+/* Editing a lesson where it is read: the outline's move buttons, the title
+   as the lesson's own serif heading, the video slot above the text, and the
+   bar with Cancel and Save. */
+.app .kl-row{display:flex;align-items:center;gap:4px}
+.app .kl-row>.kl{flex:1;min-width:0}
+.app .kl-move{display:flex;gap:2px;opacity:0;transition:opacity .15s var(--ease)}
+.app .kl-row:hover .kl-move,.app .kl-move:focus-within{opacity:1}
+.app .kl-move button{width:22px;height:22px;border-radius:6px;color:var(--ink3);font-size:12px;cursor:pointer}
+.app .kl-move button:hover:not(:disabled){background:var(--s2);color:var(--ink)}
+.app .kl-move button:disabled{opacity:.3;cursor:default}
+.app .kedit-title{display:block;width:100%;box-sizing:border-box;margin:6px 0 0;padding:0;border:0;outline:0;background:transparent;color:var(--ink);font-family:var(--serif);font-weight:var(--serif-w);font-size:30px;letter-spacing:-.018em;line-height:1.15}
+.app .kedit-title::placeholder{color:var(--ink3)}
+.app .kedit-video{display:flex;align-items:center;gap:12px;margin-top:18px;padding:12px;border-radius:14px;border:1px dashed var(--line2);background:var(--s1)}
+.app .kedit-video.has{border-style:solid}
+.app .kedit-video>div{flex:1;min-width:0;display:flex;flex-direction:column;gap:4px}
+.app .kedit-video input{width:100%;padding:0;border:0;outline:0;background:transparent;color:var(--ink);font:inherit;font-size:14px}
+.app .kedit-video input::placeholder{color:var(--ink3)}
+.app .kedit-thumb{flex:none;width:96px;height:54px;border-radius:8px;background:var(--s2) center/cover no-repeat}
+.app .kedit-bar{position:sticky;bottom:0;display:flex;align-items:center;gap:8px;margin-top:16px;padding:12px 0;border-top:1px solid var(--line);background:var(--bg)}
+.app .kedit-bar .btn:disabled{opacity:.4;cursor:default;box-shadow:none}
+.app .kedit-pub{margin-right:8px;font-size:13px;color:var(--ink3)}
 
 /* Links drawn as the mock's buttons (Join, Add to calendar). */
 .app a.btn{text-decoration:none}

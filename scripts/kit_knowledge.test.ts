@@ -4,7 +4,7 @@ import * as React from "react";
 const web = createRequire(new URL("../apps/web/package.json", import.meta.url));
 const root = createRequire(import.meta.url);
 if (web.resolve("react") !== root.resolve("react")) vi.doMock(web.resolve("react"), () => React);
-const { noteOrigin, notesForFilter, noteIsNew } = await import("../apps/web/src/v1/KitKnowledgePage");
+const { noteOrigin, noteIsNew } = await import("../apps/web/src/v1/KitKnowledgeNotes");
 
 const now = Date.parse("2026-11-11T20:00:00Z");
 const note = (slug: string, kind: string, daysAgo: number, written_by: string | null = null) => ({
@@ -19,10 +19,7 @@ test("where a note came from never names the member whose conversation it was sa
   expect(noteOrigin(note("d", "migrated", 1))).toBe("From earlier community memory");
 });
 
-test("filters: new this week counts from when a note was made, not last edited", () => {
-  const notes = [note("fresh", "founder", 2), note("old", "ask", 20), note("older", "migrated", 40)];
-  expect(notesForFilter(notes, "new", now).map((n: any) => n.slug)).toEqual(["fresh"]);
-  expect(notesForFilter(notes, "hosts", now).map((n: any) => n.slug)).toEqual(["fresh"]);
-  expect(notesForFilter(notes, "earlier", now).map((n: any) => n.slug)).toEqual(["old", "older"]);
+test("new this week counts from when a note was made, not last edited", () => {
+  expect(noteIsNew(note("x", "founder", 2), now)).toBe(true);
   expect(noteIsNew(note("x", "founder", 8), now)).toBe(false);
 });

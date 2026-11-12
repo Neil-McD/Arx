@@ -448,6 +448,74 @@
 .app .kv .guess{color:var(--ink2)}.app .kv .guess em{color:var(--aurora-ink);display:flex;align-items:center;gap:5px}
 .app .p.you>span:last-child{color:var(--ink2)}
 
+
+.app .kv{display:none}.app .kv-lib{display:block}.app .know.kv{display:none}
+.app.on-k-course .kv-lib,.app.on-k-notes .kv-lib,.app.on-k-map .kv-lib{display:none}
+.app.on-k-course .kv-course,.app.on-k-notes .kv-notes{display:block}
+.app.on-k-map .know.kv-map{display:block}
+.app .kr{display:none;flex-direction:column;gap:26px;flex:1;min-height:0}.app .kr-lib{display:flex}
+.app.on-k-course .kr-lib,.app.on-k-notes .kr-lib,.app.on-k-map .kr-lib{display:none}
+.app.on-k-course .kr-course,.app.on-k-notes .kr-note,.app.on-k-map .kr-note{display:flex}
+.app .kv.page{overflow-y:auto;padding-bottom:40px}
+.app .kask{margin-top:20px;max-width:640px;height:46px}
+.app .kcont{display:block;margin-top:22px;cursor:pointer}
+.app .kprog{display:flex;align-items:center;gap:10px;margin-top:12px;font-size:12px;color:var(--ink3)}
+.app .kprog .bar{flex:none;width:120px}.app .kprog .ic{width:12px;height:12px;vertical-align:-2px;margin-right:4px}
+.app .khead{display:flex;align-items:center;margin-top:30px}
+.app .kgrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-top:10px}
+.app .kcourse{display:flex;flex-direction:column;gap:4px;padding:10px 10px 14px;border-radius:12px;border:1px solid var(--line);background:var(--s1);transition:border-color .16s var(--ease),background .16s var(--ease);cursor:pointer}
+.app .kcourse:hover{border-color:var(--line2);background:var(--s2)}
+.app .kcourse b{font-size:15px;font-weight:550;letter-spacing:-.005em;margin-top:8px}.app .kcourse .s{font-size:13px;color:var(--ink3)}
+.app .kcourse .kprog{margin-top:8px}.app .kcourse .kprog .bar{flex:1;width:auto}
+.app .kcover{display:flex;align-items:flex-end;height:76px;padding:10px;border-radius:8px;color:rgba(var(--w),.85)}
+.app .kcover .ic{width:18px;height:18px}
+.app .kcover.c1{background:linear-gradient(135deg,rgba(var(--au),.42),rgba(29,155,240,.16))}
+.app .kcover.c2{background:linear-gradient(135deg,rgba(29,155,240,.34),rgba(var(--w),.05))}
+.app .kcover.c3{background:linear-gradient(135deg,rgba(var(--w),.14),rgba(var(--au),.20))}
+.app .knotes{margin-top:6px}
+.app .knote{position:relative;display:grid;grid-template-columns:16px minmax(0,auto) minmax(0,1fr) auto;gap:0 12px;align-items:center;height:44px;padding:0 12px;margin:0 -12px;border-radius:10px;font-size:13px;color:var(--ink3);transition:background .16s var(--ease)}
+.app .knote+.knote::before{content:"";position:absolute;left:12px;right:12px;top:0;height:1px;background:var(--line)}
+.app .knote:hover{background:var(--s1)}.app .knote:hover::before,.app .knote:hover+.knote::before{opacity:0}
+.app .knote b{font-size:14px;font-weight:550;color:var(--ink);white-space:nowrap}.app .knote .s{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.app .knote em{font-style:normal;font-size:12px}
+.app .sdot{display:block;width:7px;height:7px;border-radius:50%;background:var(--ink3)}
+.app .sdot.fresh{background:var(--aurora);box-shadow:0 0 8px var(--aurora)}
+.app .kcrumb{display:flex;align-items:center;gap:8px;margin-top:22px;font-size:13px;color:var(--ink3)}.app .kcrumb>span:last-of-type{color:var(--ink)}
+.app .klesson{max-width:640px;margin-top:22px}
+.app .klesson h2{margin:6px 0 0;font-family:var(--serif);font-weight:var(--serif-w);font-size:30px;letter-spacing:-.018em;line-height:1.15}
+.app .klesson p{margin:14px 0 0;font-size:16px;line-height:1.6;color:var(--ink2)}
+.app .kvideo{display:flex;align-items:flex-end;gap:12px;height:200px;margin-top:18px;padding:16px;border-radius:14px;border:1px solid var(--line2);background:radial-gradient(120% 140% at 80% 0%,rgba(var(--au),.20),transparent 60%),var(--s1);font-size:13px;color:var(--ink2)}
+.app .kplay{display:flex;align-items:center;justify-content:center;width:40px;height:40px;border-radius:50%;background:var(--ink);color:var(--bg)}.app .kplay .ic{width:16px;height:16px;margin-left:2px;fill:currentColor}
+.app .kcheck{display:flex;flex-direction:column;gap:8px;margin-top:22px;padding:14px 16px;border-radius:12px;border:1px solid var(--line);background:var(--s1)}
+.app .kc{display:flex;align-items:center;gap:10px;font-size:14px;color:var(--ink)}.app .kc .ic{width:16px;height:16px;padding:2px;border-radius:5px;border:1px solid var(--line2);color:transparent}
+.app .kc.d{color:var(--ink3);text-decoration:line-through}.app .kc.d .ic{color:var(--ink);background:var(--s3);border-color:transparent}
+.app .ksrc{display:flex;flex-direction:column;gap:8px;margin-top:30px;padding-top:20px;border-top:1px solid var(--line)}
+.app .ktbl .trow{grid-template-columns:16px minmax(0,1.5fr) minmax(0,1.2fr) minmax(0,.7fr) minmax(0,.5fr)}
+.app .kpager{display:flex;align-items:center;gap:8px;margin-top:14px;font-size:13px;color:var(--ink3)}.app .kpager>span:first-child{margin-right:auto}
+.app .kmini{display:block;border-radius:12px;border:1px solid var(--line);background:var(--s1);cursor:pointer}.app .kmini .mini{display:block;width:100%;height:auto}
+.app .kline{display:flex;align-items:center;justify-content:space-between;font-size:13px;color:var(--ink2)}.app .kline em{font-style:normal;color:var(--ink3);font-size:12px}
+.app .kl{display:flex;align-items:center;gap:10px;height:32px;padding:0 10px;margin:0 -10px;border-radius:8px;font-size:13px;color:var(--ink2)}
+.app .kl em{margin-left:auto;font-style:normal;font-size:12px;color:var(--ink3)}
+.app .kl .ic{width:14px;height:14px;color:var(--ink3)}.app .kl i{width:8px;height:8px;margin:0 3px;border-radius:50%;border:1px solid var(--line2)}
+.app .kl.d{color:var(--ink3)}.app .kl.on{background:var(--s2);color:var(--ink);font-weight:500}.app .kl.on i{border-color:var(--blue);background:var(--blue);box-shadow:0 0 0 3px rgba(29,155,240,.18)}
+.app .r2 .kr .sec+.sec{margin-top:-8px}
+.app .v2 .chip.sel{background:var(--s2);color:var(--ink);border-color:var(--line2)}
+.app .kv-lib .lead{margin-top:30px}
+
+
+.app .kcourse{padding:0 0 14px;overflow:hidden}.app .kcourse>b,.app .kcourse>.s,.app .kcourse>.kpct{margin-left:14px;margin-right:14px}
+.app .kcourse>b{margin-top:12px;font-size:16px}.app .kcourse>.s{line-height:1.4;min-height:36px}
+.app .kcover{height:112px;border-radius:0;align-items:center;justify-content:center}.app .kcover .ic{width:26px;height:26px;opacity:.8}
+.app .kcover.c1{background:url(/design-lab/polynet-earth.webp) 72% 38%/cover}
+.app .kpct{position:relative;display:block;height:20px;margin-top:10px;border-radius:10px;background:var(--s3);overflow:hidden}
+.app .kpct i{position:absolute;inset:0 auto 0 0;background:rgba(var(--w),.16);border-radius:10px}
+.app .kpct em{position:relative;display:block;padding:0 10px;font-style:normal;font-size:11px;font-weight:600;line-height:20px;color:var(--ink)}
+.app .knew{align-items:center;justify-content:center;flex-direction:row;gap:8px;min-height:200px;padding:0;border-style:dashed;background:none;color:var(--ink3);font-size:14px}
+.app .knew .ic{width:16px;height:16px}
+.app .ktitle{display:flex;align-items:flex-start;gap:16px;margin-top:6px}.app .ktitle h2{margin:0;flex:1}
+.app .kdone{flex:none;display:flex;align-items:center;justify-content:center;width:30px;height:30px;margin-top:4px;border-radius:50%;border:1.5px solid var(--line2);color:var(--ink3)}.app .kdone .ic{width:14px;height:14px}
+.app .kvideo em{margin-left:auto;font-style:normal;font-size:12px;padding:2px 6px;border-radius:5px;background:var(--bg);color:var(--ink)}
+.app .kchap{display:flex;flex-direction:column;gap:6px;margin-top:14px;font-size:14px;color:var(--ink2)}.app .kchap b{display:inline-block;width:44px;font-weight:500;color:var(--blue-ink)}
+
 /* Kit addition (see the script): browser defaults off, at zero specificity. */
 :where(.app) :where(button){margin:0;padding:0;border:0;background:none;color:inherit;font:inherit;line-height:inherit;letter-spacing:inherit;text-align:inherit;cursor:pointer}
 :where(.app) :where(input,textarea){margin:0;font:inherit;color:inherit}
@@ -487,26 +555,45 @@
 .app .note-del{margin-left:8px;color:var(--ink3);font-size:12px;text-decoration:underline}
 .app .lab .priv{float:right;font-style:normal;font-weight:400}
 .app button.p{width:100%;text-align:left}
-/* Knowledge in the app: the mock's map in a scrolling page, a plain list of
-   notes under it, and the open note's text and forms in the right column. */
-.app .kn-title{margin:0;font-family:var(--serif);font-weight:var(--serif-w);font-size:34px;letter-spacing:-.02em;line-height:1.1}
-.app .kn-sub{margin:8px 0 0;font-size:13px;color:var(--ink2)}
-.app svg.kn-map{display:block;width:100%;height:auto;margin:6px 0 0}
-.app .kn-pt{cursor:pointer;outline:none}
-.app button.kn-row{width:100%;text-align:left;display:flex;align-items:center;gap:14px;cursor:pointer}
-.app .kn-row>div{flex:1;min-width:0}
-.app .kn-row .kn-dot{flex:none;margin:0 4px}
-.app .kn-row.sel{background:var(--s2)}
-.app .kn-dot{width:7px;height:7px;border-radius:50%;background:var(--ink3);justify-self:center}
-.app .kn-dot.kn-fresh{background:var(--aurora);box-shadow:0 0 10px var(--aurora)}
+/* Knowledge in the app (the classroom): the mock's cards and rows as real
+   buttons, the ask field as a button that opens the guide, the done circle's
+   on state, and the note forms in the right column. */
+.app button.kcourse,.app button.kcont,.app button.kl,.app button.src{width:100%;text-align:left}
+.app button.src{width:calc(100% + 20px)}
+.app button.kcont{display:block}
+.app .kask-btn{width:100%;cursor:pointer;color:var(--ink3);font-size:15px}
+.app .kask-btn span{flex:1;text-align:left}
+.app .kdone{cursor:pointer}.app .kdone.is{background:var(--blue);border-color:var(--blue);color:var(--bg)}
+.app .kl.d .ic{color:var(--ink2)}
+.app .kcover{background-color:var(--s2)}
 .app .kn-note-title{margin:2px 0 0;font-size:20px;font-weight:600;letter-spacing:-.015em}
 .app .kn-body p{margin:0 0 10px;font-size:15px;line-height:1.55;color:var(--ink2)}
-.app button.src{width:calc(100% + 20px);text-align:left}
 .app .kn-form{display:flex;flex-direction:column;gap:10px}
 .app .kn-form input,.app .kn-form textarea{width:100%;box-sizing:border-box;padding:8px 10px;border-radius:9px;border:1px solid var(--line);background:var(--field);color:var(--ink);font:inherit;font-size:14px;line-height:1.5;outline:0;resize:vertical}
 .app .kn-form input:focus,.app .kn-form textarea:focus{border-color:var(--line2)}
 .app .kn-form input::placeholder,.app .kn-form textarea::placeholder{color:var(--ink3)}
 .app .r2 .kick{display:flex}
+/* Editing a lesson where it is read: the outline's move buttons, the title
+   as the lesson's own serif heading, the video slot above the text, and the
+   bar with Cancel and Save. */
+.app .kl-row{display:flex;align-items:center;gap:4px}
+.app .kl-row>.kl{flex:1;min-width:0}
+.app .kl-move{display:flex;gap:2px;opacity:0;transition:opacity .15s var(--ease)}
+.app .kl-row:hover .kl-move,.app .kl-move:focus-within{opacity:1}
+.app .kl-move button{width:22px;height:22px;border-radius:6px;color:var(--ink3);font-size:12px;cursor:pointer}
+.app .kl-move button:hover:not(:disabled){background:var(--s2);color:var(--ink)}
+.app .kl-move button:disabled{opacity:.3;cursor:default}
+.app .kedit-title{display:block;width:100%;box-sizing:border-box;margin:6px 0 0;padding:0;border:0;outline:0;background:transparent;color:var(--ink);font-family:var(--serif);font-weight:var(--serif-w);font-size:30px;letter-spacing:-.018em;line-height:1.15}
+.app .kedit-title::placeholder{color:var(--ink3)}
+.app .kedit-video{display:flex;align-items:center;gap:12px;margin-top:18px;padding:12px;border-radius:14px;border:1px dashed var(--line2);background:var(--s1)}
+.app .kedit-video.has{border-style:solid}
+.app .kedit-video>div{flex:1;min-width:0;display:flex;flex-direction:column;gap:4px}
+.app .kedit-video input{width:100%;padding:0;border:0;outline:0;background:transparent;color:var(--ink);font:inherit;font-size:14px}
+.app .kedit-video input::placeholder{color:var(--ink3)}
+.app .kedit-thumb{flex:none;width:96px;height:54px;border-radius:8px;background:var(--s2) center/cover no-repeat}
+.app .kedit-bar{position:sticky;bottom:0;display:flex;align-items:center;gap:8px;margin-top:16px;padding:12px 0;border-top:1px solid var(--line);background:var(--bg)}
+.app .kedit-bar .btn:disabled{opacity:.4;cursor:default;box-shadow:none}
+.app .kedit-pub{margin-right:8px;font-size:13px;color:var(--ink3)}
 
 /* Links drawn as the mock's buttons (Join, Add to calendar). */
 .app a.btn{text-decoration:none}

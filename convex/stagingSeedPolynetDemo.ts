@@ -20,6 +20,7 @@ import { setChannelParticipantCore } from "./communityChannelParticipants";
 import { normalizeIdValue, syncCommunityActiveMemberCount } from "./communityCore";
 import { scheduleCommunityInteractionEvidenceSync } from "./communityInteractionEvidence";
 import { buildCommunityNoteSearchText, communityNoteSlug } from "../shared/communityNotes";
+import { writeCommunityResourceBodyContent } from "./communityResourceContent";
 import { recordCurrentPlatformLegalAcceptance } from "./legalAcceptances";
 import { getUniqueUserProfileDetailByUserId } from "./profileCore";
 import { nextLocalWeekdayAt } from "./stagingSeedSunrise";
@@ -512,5 +513,82 @@ export const seedPolynetDemoKnowledgeInternal = internalMutation({
       written += 1;
     }
     return { written };
+  },
+});
+
+// The classroom as the mock has it: three courses with short lessons, and some
+// demo members part-way through. Run after seedPolynetDemoInternal.
+const DEMO_COURSES: Array<{ name: string; about: string; lessons: Array<[string, string]> }> = [
+  { name: "Launch your community", about: "From your first ten members to a weekly rhythm.", lessons: [
+    ["What a community is for", "A community is a place where people get a result together. Before anything else, decide what that result is."],
+    ["Name the result", "Write the result in one sentence a stranger would understand. If it needs a second sentence, it isn't clear yet."],
+    ["Choose your first ten", "List ten people who already trust you and want this result. You will ask each of them personally."],
+    ["Write your three-line invitation", "An invitation that gets answered has three lines. The first says the result someone will get. The second says who it's for. The third is one link.\n\nLonger invitations read like a pitch. Three lines read like a message from a person."],
+    ["Send your first ten", "Send them one at a time, by hand. Reply to every answer the same day."],
+    ["Welcome each person", "Welcome each new member in #general by name, and ask what they're building."],
+    ["Plan your first call", "Pick one time every week. Open with a win, look at three real examples, end with one thing to try."],
+    ["Run it", "Start on time, keep it to an hour, and record what people decided to try."],
+    ["Follow up", "Post the recap within a day and tag the people whose work you looked at."],
+  ] },
+  { name: "Pricing your founding tier", about: "Pick a price you can raise later, and say so plainly.", lessons: [
+    ["Why a founding price", "A founding price rewards the people who join first, and gives you a reason to raise it later."],
+    ["Pick the number", "Start lower than feels comfortable. You are buying your first conversations."],
+    ["Say it goes up", "Tell people plainly that the price rises, and that theirs never will."],
+    ["Raise it", "Tell founding members first, a month ahead. New members pay the new price."],
+    ["Workshops and extras", "Workshops can be free for members and paid for guests."],
+  ] },
+  { name: "Running a live call", about: "Plan it, run it, and follow up the same day.", lessons: [
+    ["Before the call", "Send the link the day before and again an hour before."],
+    ["The first five minutes", "Open with one win from a member. It sets the tone."],
+    ["Looking at real work", "Three real examples beat any slide."],
+    ["Ending well", "End with one thing each person will try before next week."],
+    ["The recap", "Post what was decided within a day."],
+    ["When few people come", "Run it anyway. A call with three people is a better call."],
+  ] },
+];
+
+export const seedPolynetDemoCoursesInternal = internalMutation({
+  args: {},
+  handler: async (ctx: any): Promise<Record<string, any>> => {
+    assertSeedAllowed();
+    const nowMs = Date.now();
+    const community = await ctx.db.query("communities").withIndex("by_slug", (q: any) => q.eq("slug", DEMO_SLUG)).unique();
+    if (!community) throw new Error("seed_demo_community_missing");
+    const communityId = community._id;
+    const ownerId = community.ownerId;
+    const lessonIds: Record<string, any[]> = {};
+    for (const [courseIndex, course] of DEMO_COURSES.entries()) {
+      const modules = await ctx.db.query("communityResourceModules").withIndex("by_community", (q: any) => q.eq("communityId", communityId)).collect();
+      const existing = modules.find((row: any) => row.name === course.name);
+      const fields = { status: "live", descriptionMd: course.about, sortOrder: (courseIndex + 1) * 1000, updatedAt: nowMs,
+        ...(courseIndex === 0 ? { bannerUrl: BANNER_URL } : {}) };
+      const moduleId = existing?._id ?? await ctx.db.insert("communityResourceModules", { communityId, createdByUserId: ownerId, name: course.name, ...fields, createdAt: nowMs });
+      if (existing) await ctx.db.patch(moduleId, fields);
+      const lessons = await ctx.db.query("communityResources").withIndex("by_community_module", (q: any) => q.eq("communityId", communityId).eq("moduleId", moduleId)).collect();
+      lessonIds[course.name] = [];
+      for (const [index, [title, body]] of course.lessons.entries()) {
+        const lessonFields = { type: "post", role: "page", status: "published", title, pinned: false,
+          sourceIngestionStatus: "not_required", sourceIngestionKind: "manual", sortOrder: (index + 1) * 1000, updatedAt: nowMs };
+        const found = lessons.find((row: any) => row.title === title);
+        const resourceId = found?._id ?? await ctx.db.insert("communityResources", { communityId, moduleId, createdByUserId: ownerId, ...lessonFields, createdAt: nowMs });
+        if (found) await ctx.db.patch(resourceId, lessonFields);
+        await writeCommunityResourceBodyContent(ctx, { communityId, resourceId, bodyMd: body, nowMs });
+        lessonIds[course.name].push(resourceId);
+      }
+    }
+    // Demo members part-way through, so hosts see started and finished counts.
+    const progress: Array<[MemberKey, string, number]> = [
+      ["jon", "Launch your community", 9], ["priya", "Launch your community", 9], ["maya", "Launch your community", 3], ["sara", "Launch your community", 5],
+      ["rashid", "Launch your community", 2], ["priya", "Pricing your founding tier", 5], ["ana", "Pricing your founding tier", 2], ["sara", "Running a live call", 6], ["jon", "Running a live call", 4],
+    ];
+    for (const [key, course, count] of progress) {
+      const user = await ctx.db.query("users").withIndex("by_authSubject", (q: any) => q.eq("authSubject", `${PREFIX}${key}`)).unique();
+      if (!user) continue;
+      for (const resourceId of lessonIds[course].slice(0, count)) {
+        const existing = await ctx.db.query("communityLessonProgress").withIndex("by_user_resource", (q: any) => q.eq("userId", user._id).eq("resourceId", resourceId)).first();
+        if (!existing) await ctx.db.insert("communityLessonProgress", { communityId, userId: user._id, resourceId, completedAt: nowMs - DAY_MS });
+      }
+    }
+    return { courses: Object.fromEntries(Object.entries(lessonIds).map(([name, ids]) => [name, ids.length])) };
   },
 });

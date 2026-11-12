@@ -2858,3 +2858,56 @@
   font-size: 13px;
   cursor: pointer;
 }
+
+/* A lesson inside the classroom: the existing lesson reader at the kit's measure. */
+:root[data-design="v1"] .kit-lesson-body .resource-viewer-content {
+  max-width: 640px;
+  padding: 0;
+}
+
+/* The lesson's title and text as the mock has them: a serif title on the
+   page's own edge, no header band. */
+:root[data-design="v1"] .kit-lesson-body .resource-viewer-header {
+  padding: 0 0 6px;
+  border-bottom: 0;
+}
+
+:root[data-design="v1"] .kit-lesson-body .resource-viewer-title {
+  margin: 0;
+  font-family: var(--font-voice);
+  font-size: 30px;
+  font-weight: 400;
+  line-height: 1.15;
+  letter-spacing: -0.018em;
+}
+
+:root[data-design="v1"] .kit-lesson-body .resource-viewer-prose {
+  padding: 0;
+  font-size: 16px;
+  line-height: 1.6;
+}
+
+/* The lesson editor in the classroom: the same measure and text as the
+   lesson reader above, so what a host writes lines up with what members read. */
+:root[data-design="v1"] .kit-lesson-editor {
+  margin-top: 18px;
+}
+
+/* The editor and its menus (which open outside the page) act in the app's
+   blue, not a community accent. */
+:root[data-design="v1"] .lesson-editor,
+:root[data-design="v1"] .lesson-editor-menu {
+  --accent-primary: var(--bg-button);
+}
+
+:root[data-design="v1"] .kit-lesson-editor .lesson-editor {
+  --lesson-reading-measure: 640px;
+  margin-inline: 0;
+}
+
+:root[data-design="v1"] .kit-lesson-editor .lesson-editor-content {
+  min-height: 200px;
+  padding-bottom: 32px;
+  font-size: 16px;
+  line-height: 1.6;
+}
