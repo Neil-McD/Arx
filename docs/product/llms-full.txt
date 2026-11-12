@@ -1674,7 +1674,7 @@ Buyers should never hunt for the other half of what they bought.
 sees a link to it in your community's left column. Nothing to build.
 
 **Your app → Polynet.** Add a link to your community. Its address is shown
-under Your app (`https://…/c/<your-community>/home`). It is also the invite:
+under Your app (`https://…/c/<your-community>`). It is also the invite:
 someone who bought in your app signs in to Polynet with the same verified email
 and lands inside, no second purchase.
 

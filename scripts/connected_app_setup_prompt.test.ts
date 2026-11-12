@@ -34,9 +34,9 @@ test("the setup prompt is self-contained: the whole guide plus this community's 
 test("the prompt carries the community link and has the agent propose placements, not pick them", () => {
   const prompt = buildConnectedAppSetupPrompt({
     communityName: "X", appName: "App", appId: "app_1", apiOrigin: "https://o", hasWebhook: false, guide, tiers: [],
-    communityUrl: "https://staging.example/c/x/home", hasAppLink: true,
+    communityUrl: "https://staging.example/c/x", hasAppLink: true,
   });
-  expect(prompt).toContain("- Community link: https://staging.example/c/x/home");
+  expect(prompt).toContain("- Community link: https://staging.example/c/x");
   expect(prompt).toContain("Polynet already links members to this app");
   expect(prompt).toContain("Ask me which to add before adding any");
   const without = buildConnectedAppSetupPrompt({ communityName: "X", appName: "App", appId: "app_1", apiOrigin: "https://o", hasWebhook: false, guide, tiers: [] });

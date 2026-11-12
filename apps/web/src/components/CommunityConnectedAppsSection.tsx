@@ -166,7 +166,7 @@ export function CommunityConnectedAppsSection(props: { communityId: string; comm
           </div>
           {props.communitySlug ? (
             <div className="settings-section-desc">
-              Link to your community from your app (the prompt suggests where): <code>{`${window.location.origin}/c/${encodeURIComponent(props.communitySlug)}/home`}</code>
+              Link to your community from your app (the prompt suggests where): <code>{`${window.location.origin}/c/${encodeURIComponent(props.communitySlug)}`}</code>
             </div>
           ) : null}
           <div className="community-plan-actions">
@@ -175,7 +175,7 @@ export function CommunityConnectedAppsSection(props: { communityId: string; comm
                 const prompt = buildConnectedAppSetupPrompt({
                   communityName: props.communityName ?? "your community", appName: app.name, appId: app.app_id, apiOrigin: origin,
                   hasWebhook: Boolean(app.webhook_url), guide: connectYourAppGuide,
-                  communityUrl: props.communitySlug ? `${window.location.origin}/c/${encodeURIComponent(props.communitySlug)}/home` : null,
+                  communityUrl: props.communitySlug ? `${window.location.origin}/c/${encodeURIComponent(props.communitySlug)}` : null,
                   hasAppLink: Boolean(app.app_url),
                   tiers: tiers.filter((tier) => !tier.archived).map((tier) => ({ key: tier.key, name: tier.name, grants: tier.grants })),
                 });
