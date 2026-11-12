@@ -16,7 +16,8 @@ import { deleteCommunityJoinRequestByPair } from "./communityJoinRequestCore";
 export type CommunityMembershipAccessSource =
   | "free_grant"
   | "manual_grant"
-  | "paid_subscription";
+  | "paid_subscription"
+  | "app_grant";
 
 export async function activateCommunityMembershipCore(args: {
   ctx: any;

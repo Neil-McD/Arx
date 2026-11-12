@@ -1,3 +1,4 @@
+import { attachAppGrantsForVerifiedEmail } from "./communityAppSales";
 // Who a community checkout belongs to, and settling it once it's paid: the
 // paying browser's secret or a verified email attaches a payment made before
 // signing in; settling grants the membership once, or cancels and refunds a
@@ -164,6 +165,8 @@ export async function attachPaidCheckoutsForVerifiedEmail(ctx: any, userId: any,
     if (row.mode !== "community_join" || row.ownerUserId || row.status !== "complete") continue;
     if (await attachCommunityCheckoutToUser(ctx, row.sessionId, userId, nowMs)) attached += 1;
   }
+  // One door: sales a connected app reported to this email.
+  attached += await attachAppGrantsForVerifiedEmail(ctx, userId, normalized, nowMs);
   return attached;
 }
 

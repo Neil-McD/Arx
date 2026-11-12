@@ -984,6 +984,8 @@ export default defineSchema({
         v.literal("free_grant"),
         v.literal("manual_grant"),
         v.literal("paid_subscription"),
+        // One door: let in by a sale the builder's app made and reported.
+        v.literal("app_grant"),
       ),
     ),
     pricePointId: v.optional(v.id("communityPricePoints")),
@@ -1235,6 +1237,23 @@ export default defineSchema({
     .index("by_community", ["communityId"])
     .index("by_appId", ["appId"])
     .index("by_secretHash", ["secretHash"]),
+  // Sales a connected app made through its own checkout and reported
+  // (communityAppSales.ts): its latest word per email. No fee. userId is set
+  // once an account with that verified email exists.
+  communityAppGrants: defineTable({
+    appId: v.string(),
+    communityId: v.id("communities"),
+    email: v.string(),
+    userId: v.optional(v.id("users")),
+    tierKey: v.string(),
+    active: v.boolean(),
+    externalRef: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_app_email", ["appId", "email"])
+    .index("by_community_user", ["communityId", "userId"])
+    .index("by_email", ["email"]),
   // access.changed webhooks to connected apps, retried until delivered.
   connectedAppDeliveries: defineTable({
     appId: v.string(),

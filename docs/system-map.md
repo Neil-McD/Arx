@@ -289,6 +289,9 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
   a verified email), `connectedAppNotify` (signed `access.changed` webhooks where
   access may change, delivered and retried by `connectedApps`). Tables:
   `connectedApps`, `connectedAppDeliveries`.
+- **App sales (one door):** `communityAppSales` (sales a connected app made
+  through its own checkout, reported to `POST /apps/v1/sales`; no fee; lets a
+  verified account in, or waits for one). Table: `communityAppGrants`.
 - **Pod knowledge:** `communityPodNotes` (notes that belong to one pod: the pod
   reads, its hosts write, a builder may publish a copy to the community's notes;
   their own table, and `scripts/community_pod_notes_wall.test.ts` lets only this
