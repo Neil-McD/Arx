@@ -61,7 +61,7 @@ export function WebCommunityHandoff(props: { communitySlug: string; membership: 
             {state.status === "no_site" && props.membership === "visitor" && !props.signedIn ? (
               // Someone who already has access (bought in the community's own
               // app, or was invited) signs in and lands inside.
-              <a className="public-funnel-primary" href={`/login?returnTo=${encodeURIComponent(`/c/${props.communitySlug}/home`)}`}>Sign in</a>
+              <a className="public-funnel-primary" href={`/login?returnTo=${encodeURIComponent(`/c/${props.communitySlug}`)}`}>Sign in</a>
             ) : null}
             <a className="public-funnel-secondary" href="/">Go to Polynet</a>
           </div>
