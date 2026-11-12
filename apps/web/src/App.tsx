@@ -1,3 +1,4 @@
+import { useCommunityAppLinksState } from "./controllers/communityAppLinks";
 import { useGuideSearchShortcut } from "./controllers/useGuideSearchShortcut";
 import { useCommunityAgentOnState } from "./controllers/communityAgentOn";
 import {
@@ -1641,6 +1642,7 @@ export default function App() {
   // Design system v1: "Search or ask" and ⌘K open your guide on Home.
   useGuideSearchShortcut(handleSelectCommunityTab, communityAgentComposerApiRef);
   const activeCommunityAgentOn = useCommunityAgentOnState({ session, ensureSession: ensureUsableAuthSession, communityId: activeCommunity?.id ?? null });
+  const activeCommunityAppLinks = useCommunityAppLinksState({ session, ensureSession: ensureUsableAuthSession, communityId: activeCommunity?.id ?? null });
 
   const { peopleOpen, changeOpen: handlePeoplePanelOpenChange, openMembers: handleOpenCommunityMembers } =
     useWebChannelPeoplePanel({
@@ -2511,6 +2513,7 @@ export default function App() {
   return (
     <WebAppCompositionRoot
       communityAgentOn={activeCommunityAgentOn}
+      communityAppLinks={activeCommunityAppLinks}
       globalOverlayHostProps={globalOverlayHostProps}
       communityAgentDockRef={communityAgentComposerApiRef}
       communityAgentDockProps={{

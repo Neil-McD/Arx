@@ -1229,6 +1229,8 @@ export default defineSchema({
     // Signs access.changed webhooks (Standard Webhooks); Polynet signs with it.
     signingSecret: v.string(),
     webhookUrl: v.optional(v.string()),
+    // Where members open the app: shown in the community's left column.
+    appUrl: v.optional(v.string()),
     createdByUserId: v.id("users"),
     revokedAt: v.optional(v.number()),
     createdAt: v.number(),

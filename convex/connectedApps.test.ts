@@ -114,3 +114,25 @@ test("webhooks only go to a public https address", () => {
     "https://box.local/x", "https://user:pw@de.example.com", "https://intranet/x", "not a url",
     "https://localhost./hook", "https://box.internal./hook", "https://de.example.com:8443/x", "https://2130706433/x", "https://0x7f000001/x"]) expect(webhookUrlIsAllowed(bad)).toBe(false);
 });
+
+test("members see the app's name and address to open it, and nothing else; outsiders see nothing", async () => {
+  const t = convexTest(schema, modules);
+  const ids = await setup(t);
+  const asOwner = t.withIdentity({ subject: "owner-subject" });
+  await expect(asOwner.mutation(api.connectedApps.registerConnectedApp, { communityId: ids.communityId, name: "DE", appUrl: "http://localhost:3000" }))
+    .rejects.toThrow(/connected_app_url_invalid/);
+  const app = await asOwner.mutation(api.connectedApps.registerConnectedApp, { communityId: ids.communityId, name: "Distribution Engineer", appUrl: "https://de.example.com" });
+  // An app without an address is connected but not linked.
+  await asOwner.mutation(api.connectedApps.registerConnectedApp, { communityId: ids.communityId, name: "Hidden" });
+  const asBuyer = t.withIdentity({ subject: "buyer-subject" });
+  const links = await asBuyer.query(api.connectedApps.listCommunityAppLinks, { communityId: ids.communityId });
+  expect(links).toEqual({ apps: [{ name: "Distribution Engineer", url: "https://de.example.com" }] });
+  expect(JSON.stringify(links)).not.toContain(app.app_id);
+  // Not a member: refused.
+  await expect(t.withIdentity({ subject: "unverified-subject" }).query(api.connectedApps.listCommunityAppLinks, { communityId: ids.communityId })).rejects.toThrow();
+  // The builder changes or clears the address.
+  await asOwner.mutation(api.connectedApps.updateConnectedApp, { communityId: ids.communityId, appId: app.app_id, appUrl: "https://app.de.example.com" });
+  expect((await asBuyer.query(api.connectedApps.listCommunityAppLinks, { communityId: ids.communityId })).apps).toEqual([{ name: "Distribution Engineer", url: "https://app.de.example.com" }]);
+  await asOwner.mutation(api.connectedApps.updateConnectedApp, { communityId: ids.communityId, appId: app.app_id, appUrl: "" });
+  expect((await asBuyer.query(api.connectedApps.listCommunityAppLinks, { communityId: ids.communityId })).apps).toEqual([]);
+});

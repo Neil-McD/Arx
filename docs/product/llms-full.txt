@@ -1665,6 +1665,34 @@ export async function handlePolynetWebhook(request: Request): Promise<Response> 
 }
 ```
 
+## 4. Link Both Ways
+
+Buyers should never hunt for the other half of what they bought.
+
+**Polynet → your app.** Set your app's address under Your app. Every member then
+sees a link to it in your community's left column. Nothing to build.
+
+**Your app → Polynet.** Add a link to your community. Its address is shown
+under Your app (`https://…/c/<your-community>/home`). It is also the invite:
+someone who bought in your app signs in to Polynet with the same verified email
+and lands inside, no second purchase.
+
+Where to put it is your call. Good places, most useful first:
+
+1. **After purchase**: on your success or welcome screen, "Join the
+   community". This is the moment the buyer is most likely to go.
+2. **Main navigation**: a "Community" item in your sidebar, top bar or app
+   menu, so it is always one click away.
+3. **Onboarding**: a step or checklist item in your first-run flow.
+4. **Account or billing page**: next to the plan, "Your plan includes the
+   community".
+5. **Help menu**: "Ask the community" beside your docs and support.
+6. **Welcome email**: a line with the link.
+
+Open it in a new tab. Show it only to people whose plan includes the community
+(everyone with an active plan, unless you sell plans without it). Use your own
+design system; the word "Community" (or your community's name) is enough.
+
 ## Rules
 
 - The secrets live in server environment variables only.
@@ -1681,6 +1709,8 @@ export async function handlePolynetWebhook(request: Request): Promise<Response> 
 3. Call the access check for that email: `allowed: true` with your plan's grants.
 4. Cancel the test subscription: the report returns `ended` and the access check
    returns `allowed: false`.
+5. Open your community: your app's link is in the left column. Click the
+   community link in your app: it opens your community.
 
 # Manage Access, Billing, And Roles
 

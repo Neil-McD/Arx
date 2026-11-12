@@ -14,7 +14,7 @@ import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import { internalAction, internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import { resolveUserIdForAuthenticatedRequest } from "./authActor";
-import { requireCommunityManager } from "./communityCore";
+import { requireCommunityChatAccess, requireCommunityManager } from "./communityCore";
 import { sha256Hex, verifiedUserIdForEmail } from "./communityCheckoutBuyer";
 import { resolveMemberGrants } from "./communityTiers";
 
@@ -49,6 +49,14 @@ export function webhookUrlIsAllowed(raw: string): boolean {
   return host.includes(".");
 }
 
+// The app's own address, linked from the community: public https only.
+function normalizeAppUrl(raw: string | undefined | null): string | undefined {
+  const value = String(raw ?? "").trim();
+  if (!value) return undefined;
+  if (!webhookUrlIsAllowed(value)) throw new Error("connected_app_url_invalid");
+  return value;
+}
+
 function normalizeWebhookUrl(raw: string | undefined | null): string | undefined {
   const value = String(raw ?? "").trim();
   if (!value) return undefined;
@@ -69,7 +77,7 @@ async function appsOf(ctx: any, communityId: any) {
 
 function appView(row: any) {
   return {
-    app_id: row.appId, name: row.name, webhook_url: row.webhookUrl ?? null,
+    app_id: row.appId, name: row.name, webhook_url: row.webhookUrl ?? null, app_url: row.appUrl ?? null,
     secret_hint: row.secretHint, created_at: new Date(row.createdAt).toISOString(),
   };
 }
@@ -84,9 +92,10 @@ export const listConnectedApps = query({
 
 // Register an app. The secret and signing secret are returned this once.
 export const registerConnectedApp = mutation({
-  args: { authSubject: v.optional(v.string()), communityId: v.id("communities"), name: v.string(), webhookUrl: v.optional(v.string()) },
+  args: { authSubject: v.optional(v.string()), communityId: v.id("communities"), name: v.string(), webhookUrl: v.optional(v.string()), appUrl: v.optional(v.string()) },
   handler: async (ctx, args) => {
     const userId = await manager(ctx, args);
+    const appUrl = normalizeAppUrl(args.appUrl);
     const name = args.name.replace(/\s+/g, " ").trim().slice(0, NAME_MAX);
     if (!name) throw new Error("connected_app_name_required");
     if ((await appsOf(ctx, args.communityId)).length >= APPS_MAX) throw new Error("connected_apps_full");
@@ -97,7 +106,7 @@ export const registerConnectedApp = mutation({
     const nowMs = Date.now();
     await ctx.db.insert("connectedApps", {
       communityId: args.communityId, appId, name, secretHash: await sha256Hex(secret), secretHint: secret.slice(-4),
-      signingSecret, ...(webhookUrl ? { webhookUrl } : {}), createdByUserId: userId, createdAt: nowMs, updatedAt: nowMs,
+      signingSecret, ...(webhookUrl ? { webhookUrl } : {}), ...(appUrl ? { appUrl } : {}), createdByUserId: userId, createdAt: nowMs, updatedAt: nowMs,
     });
     return { app_id: appId, secret, webhook_signing_secret: signingSecret };
   },
@@ -110,7 +119,7 @@ async function ownApp(ctx: any, communityId: any, appId: string) {
 }
 
 export const updateConnectedApp = mutation({
-  args: { authSubject: v.optional(v.string()), communityId: v.id("communities"), appId: v.string(), name: v.optional(v.string()), webhookUrl: v.optional(v.string()) },
+  args: { authSubject: v.optional(v.string()), communityId: v.id("communities"), appId: v.string(), name: v.optional(v.string()), webhookUrl: v.optional(v.string()), appUrl: v.optional(v.string()) },
   handler: async (ctx, args) => {
     await manager(ctx, args);
     const row = await ownApp(ctx, args.communityId, args.appId);
@@ -121,6 +130,7 @@ export const updateConnectedApp = mutation({
       patch.name = name;
     }
     if (args.webhookUrl !== undefined) patch.webhookUrl = normalizeWebhookUrl(args.webhookUrl);
+    if (args.appUrl !== undefined) patch.appUrl = normalizeAppUrl(args.appUrl);
     await ctx.db.patch(row._id, patch);
     return null;
   },
@@ -146,6 +156,17 @@ export const revokeConnectedApp = mutation({
     const row = await ownApp(ctx, args.communityId, args.appId);
     await ctx.db.patch(row._id, { revokedAt: Date.now(), updatedAt: Date.now() });
     return null;
+  },
+});
+
+// The community's apps, for its members: a name and where to open it. Never
+// the app's id, secrets or webhook.
+export const listCommunityAppLinks = query({
+  args: { authSubject: v.optional(v.string()), communityId: v.id("communities") },
+  handler: async (ctx, args) => {
+    const userId = await resolveUserIdForAuthenticatedRequest({ ctx, authSubject: args.authSubject ?? null });
+    await requireCommunityChatAccess({ ctx, communityId: args.communityId, userId });
+    return { apps: (await appsOf(ctx, args.communityId)).filter((row: any) => row.appUrl).map((row: any) => ({ name: row.name, url: row.appUrl })) };
   },
 });
 

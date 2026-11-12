@@ -15,6 +15,7 @@ import {
   Settings,
   SlidersHorizontal,
   Sparkles,
+  SquareArrowOutUpRight,
   UserPlus,
   Users,
   X,
@@ -97,6 +98,8 @@ type CommunityNavProps = {
   // v1: one Pods item (docs/specs/pods-v0.md); private rooms are never listed.
   onOpenPods?: () => void;
   podsActive?: boolean;
+  // One door: the community's own apps, opened in a new tab.
+  appLinks?: Array<{ name: string; url: string }>;
   memberCount?: number | null;
 };
 
@@ -222,6 +225,7 @@ export const CommunityNav = memo(function CommunityNav({
   inboxUnreadCount = 0,
   onOpenMembers,
   onOpenPods,
+  appLinks,
   podsActive = false,
   memberCount = null,
 }: CommunityNavProps) {
@@ -694,6 +698,12 @@ export const CommunityNav = memo(function CommunityNav({
               <span className="nav-item-label">Pods</span>
             </button>
           ) : null}
+          {(appLinks ?? []).map((app) => (
+            <a className="nav-item nav-item-app" key={app.url} href={app.url} target="_blank" rel="noreferrer" title={`Open ${app.name}`}>
+              <span className="nav-icon" aria-hidden="true"><SquareArrowOutUpRight size={16} strokeWidth={1.7} /></span>
+              <span className="nav-item-label">{app.name}</span>
+            </a>
+          ))}
           {isV1 && onOpenMembers && canViewMembersActiveCommunity ? (
             <button className="nav-item nav-item-members" type="button" onClick={onOpenMembers} title="Members">
               <span className="nav-icon" aria-hidden="true"><Users size={17} strokeWidth={1.7} /></span>

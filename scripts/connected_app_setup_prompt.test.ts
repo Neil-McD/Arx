@@ -21,7 +21,7 @@ test("the setup prompt is self-contained: the whole guide plus this community's 
   expect(prompt).toContain("Setter: tier key `setter`; grants `community`, `de:setter`");
   expect(prompt).toContain("POLYNET_WEBHOOK_SECRET");
   // The guide itself, every step, without its front matter.
-  for (const heading of ["## 1. Report Your Own Sales", "## 2. Ask What Someone Has", "## 3. Hear When It Changes (Optional)", "## Rules", "## Check It Works"]) {
+  for (const heading of ["## 1. Report Your Own Sales", "## 2. Ask What Someone Has", "## 3. Hear When It Changes (Optional)", "## 4. Link Both Ways", "## Rules", "## Check It Works"]) {
     expect(prompt).toContain(heading);
   }
   expect(prompt).not.toMatch(/^---\nid: product\.guide/m);
@@ -29,6 +29,18 @@ test("the setup prompt is self-contained: the whole guide plus this community's 
   expect(prompt).not.toMatch(/psk_[a-f0-9]{48}/);
   expect(prompt).not.toMatch(/whsec_[A-Za-z0-9+/=]{20,}/);
   expect(prompt).toContain("never hard-code, log or commit it");
+});
+
+test("the prompt carries the community link and has the agent propose placements, not pick them", () => {
+  const prompt = buildConnectedAppSetupPrompt({
+    communityName: "X", appName: "App", appId: "app_1", apiOrigin: "https://o", hasWebhook: false, guide, tiers: [],
+    communityUrl: "https://staging.example/c/x/home", hasAppLink: true,
+  });
+  expect(prompt).toContain("- Community link: https://staging.example/c/x/home");
+  expect(prompt).toContain("Polynet already links members to this app");
+  expect(prompt).toContain("Ask me which to add before adding any");
+  const without = buildConnectedAppSetupPrompt({ communityName: "X", appName: "App", appId: "app_1", apiOrigin: "https://o", hasWebhook: false, guide, tiers: [] });
+  expect(without).toContain("I'll set its address under Your app");
 });
 
 test("without a webhook the webhook step is optional and no webhook secret is asked for", () => {
