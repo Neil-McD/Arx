@@ -93,7 +93,10 @@ export const listCommunityEventGoing = query({
         occurrence_starts_at: item.occurrenceStartsAt,
         count: Math.min(rows.length, COUNT_CAP),
         count_capped: rows.length > COUNT_CAP,
-        mine: rows.some((row) => String(row.userId) === String(userId)),
+        // Your own answer is read directly, so it is right however many are going.
+        mine: Boolean(await ctx.db.query("communityEventGoing")
+          .withIndex("by_event_occurrence_user", (q) => q.eq("eventId", item.eventId).eq("occurrenceStartsAt", item.occurrenceStartsAt).eq("userId", userId))
+          .first()),
         host_name: (await person(event.createdByUserId)).name,
         faces,
       });
