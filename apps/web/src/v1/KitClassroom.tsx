@@ -22,6 +22,7 @@ import type { CommunityResource, CommunityResourceModule } from "../components/c
 import { openGuideFromSearch } from "../components/guideSearch";
 import { WebCommunityResourceViewerContent } from "../components/WebCommunityResourceViewerContent";
 import { NoteForm, OpenNote, noteIsNew } from "./KitKnowledgeNotes";
+import { KitLessonEditor, type LessonPatch } from "./KitLessonEditor";
 import { Btn, cx, Icon, KitApp, Rail, Sec, Sep, TextLink } from "./kit";
 
 const SHELF = 6;
@@ -71,6 +72,15 @@ export function KitClassroom(props: {
   onOpenCourse: (moduleId: string | null) => void;
   onNewCourse: () => void;
   onEditCourse: (moduleId: string) => void;
+  // A course's name, line and cover (the course form).
+  onEditCourseDetails: (moduleId: string) => void;
+  // Hosts write lessons in place.
+  lessonEditing: {
+    save: (resourceId: string, patch: LessonPatch) => Promise<void>;
+    addLesson: (moduleId: string) => Promise<string | null>;
+    reorder: (moduleId: string, resourceIds: string[]) => Promise<void>;
+    remove: (resourceId: string) => Promise<void>;
+  } | null;
   renderRail: (rail: ReactNode) => ReactNode;
 }) {
   const [doneAt, setDoneAt] = useState<Map<string, string>>(() => new Map());
@@ -81,6 +91,8 @@ export function KitClassroom(props: {
   const [shelfPage, setShelfPage] = useState(0);
   const [note, setNote] = useState<{ slug: string | null; mode: "read" | "edit" | "new" } | null>(null);
   const [saving, setSaving] = useState(false);
+  const [editingLessonId, setEditingLessonId] = useState<string | null>(null);
+  const editingTools = props.canManage ? props.lessonEditing : null;
   const [now] = useState(Date.now);
 
   const loadProgress = useCallback(async () => {
@@ -238,10 +250,27 @@ export function KitClassroom(props: {
       </Sec>
       <div className={cx("sec")}>
         {open.lessons.map((lesson, index) => (
-          <button key={lesson.id} type="button" className={cx("kl", lesson.id === lessonId && "on", done.has(lesson.id) && lesson.id !== lessonId && "d")} onClick={() => setLessonId(lesson.id)}>
-            {done.has(lesson.id) ? <Icon name="check" /> : <i />}{index + 1}. {lesson.title}
-          </button>
+          <div key={lesson.id} className={cx("kl-row")}>
+            <button type="button" className={cx("kl", lesson.id === lessonId && "on", done.has(lesson.id) && lesson.id !== lessonId && "d")} onClick={() => { setEditingLessonId(null); setLessonId(lesson.id); }}>
+              {done.has(lesson.id) ? <Icon name="check" /> : <i />}{index + 1}. {lesson.title}
+              {lesson.resource_status === "draft" ? <span className={cx("tag")} style={{ marginLeft: 6 }}>draft</span> : null}
+            </button>
+            {editingTools ? (
+              <span className={cx("kl-move")}>
+                <button type="button" aria-label={`Move ${lesson.title} up`} disabled={index === 0}
+                  onClick={() => { const ids = open.lessons.map((entry) => entry.id); [ids[index - 1], ids[index]] = [ids[index], ids[index - 1]]; void editingTools.reorder(open.course.id, ids); }}>↑</button>
+                <button type="button" aria-label={`Move ${lesson.title} down`} disabled={index === open.lessons.length - 1}
+                  onClick={() => { const ids = open.lessons.map((entry) => entry.id); [ids[index + 1], ids[index]] = [ids[index], ids[index + 1]]; void editingTools.reorder(open.course.id, ids); }}>↓</button>
+              </span>
+            ) : null}
+          </div>
         ))}
+        {editingTools ? (
+          <TextLink onClick={async () => {
+            const id = await editingTools.addLesson(open.course.id);
+            if (id) { setLessonId(id); setEditingLessonId(id); }
+          }}>+ Add lesson</TextLink>
+        ) : null}
       </div>
       <div style={{ marginTop: "auto" }}>
         <button type="button" className={cx("ask kask-btn")} style={{ height: 46 }} onClick={() => openGuideFromSearch()}>
@@ -267,12 +296,27 @@ export function KitClassroom(props: {
       <div className={cx("page")} style={{ padding: 0, overflow: "visible" }}>
         <div className={cx("kcrumb")} style={{ marginTop: 0 }}>
           <button type="button" className={cx("link")} onClick={() => props.onOpenCourse(null)}>Knowledge</button><span>›</span><span>{open.course.name}</span>
-          {props.canManage ? <button type="button" className={cx("btn sm")} style={{ marginLeft: "auto" }} onClick={() => props.onEditCourse(open.course.id)}>Edit course</button> : null}
+          {props.canManage ? (
+            <span style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
+              <button type="button" className={cx("btn sm")} onClick={() => props.onEditCourseDetails(open.course.id)}>Course details</button>
+              <button type="button" className={cx("btn sm txt")} onClick={() => props.onEditCourse(open.course.id)}>More tools</button>
+            </span>
+          ) : null}
         </div>
-        {lesson ? (
+        {lesson && editingTools && editingLessonId === lesson.id ? (
+          <KitLessonEditor key={lesson.id} resource={lesson} index={index} total={open.lessons.length}
+            onCancel={() => setEditingLessonId(null)}
+            onSave={async (patch) => { await editingTools.save(lesson.id, patch); setEditingLessonId(null); }}
+            onDelete={async () => {
+              await editingTools.remove(lesson.id);
+              setEditingLessonId(null);
+              setLessonId(open.lessons[index + 1]?.id ?? open.lessons[index - 1]?.id ?? null);
+            }} />
+        ) : lesson ? (
           <div className={cx("klesson")}>
             <div className={cx("ktitle")}>
               <span className={cx("lab")} style={{ flex: 1 }}>Lesson {index + 1} of {open.lessons.length}{open.course.module_status === "draft" ? " · draft course" : ""}</span>
+              {editingTools ? <button type="button" className={cx("btn sm")} onClick={() => setEditingLessonId(lesson.id)}>Edit lesson</button> : null}
               {!props.canManage ? (
                 <button type="button" className={cx("kdone", done.has(lesson.id) && "is")} aria-pressed={done.has(lesson.id)} title={done.has(lesson.id) ? "Done. Click to undo." : "Mark done"}
                   disabled={saving} onClick={() => void mark(lesson.id, !done.has(lesson.id))}><Icon name="check" /></button>
@@ -290,7 +334,15 @@ export function KitClassroom(props: {
             </div>
           </div>
         ) : (
-          <p className={cx("lead")} style={{ marginTop: 24 }}><span className={cx("aura")}><Icon name="spark" /></span>{props.canManage ? "This course has no lessons yet." : "This course is being written."}</p>
+          <div style={{ marginTop: 24 }}>
+            <p className={cx("lead")} style={{ marginTop: 0 }}><span className={cx("aura")}><Icon name="spark" /></span>{props.canManage ? "This course has no lessons yet." : "This course is being written."}</p>
+            {editingTools ? (
+              <button type="button" className={cx("btn go")} style={{ marginTop: 18 }} onClick={async () => {
+                const id = await editingTools.addLesson(open.course.id);
+                if (id) { setLessonId(id); setEditingLessonId(id); }
+              }}><Icon name="plus" />Write the first lesson</button>
+            ) : null}
+          </div>
         )}
       </div>
     );

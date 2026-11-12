@@ -6,6 +6,8 @@ import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
 import "katex/dist/katex.min.css";
 import { parseEmbedUrl, StableMediaEmbedFrame, type ParsedEmbed } from "./linkEmbedUi";
+import { lessonCallout, lessonCalloutType, LESSON_CALLOUT_MARKER } from "./lessonCallouts";
+import { LessonCalloutIcon } from "./lessonCalloutUi";
 import hljs from "highlight.js/lib/core";
 import bash from "highlight.js/lib/languages/bash";
 import css from "highlight.js/lib/languages/css";
@@ -407,6 +409,20 @@ function MarkdownTable({
   );
 }
 
+/** The highlighted HTML for a code block, as the reader shows it. The lesson
+ * editor colours its code blocks from this too, so both look the same.
+ * (From Rashid's lesson editor, PR #290.) */
+export function highlightCodeHtml(code: string, language?: string | null): string | null {
+  const normalizedLanguage = normalizeCodeLanguage(language ?? undefined);
+  if (normalizedLanguage && PLAIN_TEXT_LANGUAGES.has(normalizedLanguage)) return null;
+  try {
+    if (normalizedLanguage && hljs.getLanguage(normalizedLanguage)) return hljs.highlight(code, { language: normalizedLanguage }).value;
+    return hljs.highlightAuto(code).value;
+  } catch {
+    return null;
+  }
+}
+
 function CodeBlock({ code, language, onCopyCode }: CodeBlockProps) {
   const [copied, setCopied] = useState(false);
   const normalizedLanguage = useMemo(() => {
@@ -586,6 +602,35 @@ function normalizeMathMarkdown(text: string): string {
   return nextLines.join("\n");
 }
 
+type MdNode = { type: string; value?: string; children?: MdNode[]; data?: { hProperties?: Record<string, unknown> } };
+
+// "> [!TIP]" quotes become callouts: the marker is taken off the text and
+// kept as data-callout for the blockquote renderer below. (From PR #290.)
+function remarkLessonCallouts() {
+  const visit = (node: MdNode) => {
+    node.children?.forEach(visit);
+    if (node.type !== "blockquote") return;
+    const paragraph = node.children?.[0];
+    const first = paragraph?.type === "paragraph" ? paragraph.children?.[0] : undefined;
+    if (!paragraph || first?.type !== "text") return;
+    const match = LESSON_CALLOUT_MARKER.exec(first.value ?? "");
+    const type = match ? lessonCalloutType(match[1]) : null;
+    if (!match || !type) return;
+    let rest = (first.value ?? "").slice(match[0].length);
+    let title = "";
+    const lineEnd = rest.indexOf("\n");
+    if (lineEnd > 0 || (lineEnd < 0 && rest && paragraph.children?.length === 1)) {
+      title = (lineEnd < 0 ? rest : rest.slice(0, lineEnd)).trim();
+      rest = lineEnd < 0 ? "" : rest.slice(lineEnd);
+    }
+    first.value = rest.replace(/^\n/, "");
+    if (!first.value) paragraph.children?.shift();
+    if (!paragraph.children?.length) node.children?.shift();
+    node.data = { ...node.data, hProperties: { ...node.data?.hProperties, dataCallout: type, dataCalloutTitle: title || undefined } };
+  };
+  return (tree: MdNode) => visit(tree);
+}
+
 export function renderMarkdown(text: string, options?: MarkdownRenderOptions): ReactNode {
   const requestedHeadingLevelOffset = options?.headingLevelOffset ?? 0;
   const headingLevelOffset = Number.isFinite(requestedHeadingLevelOffset)
@@ -608,7 +653,21 @@ export function renderMarkdown(text: string, options?: MarkdownRenderOptions): R
         </a>
       );
     },
-    blockquote({ children }) {
+    blockquote({ node, children }) {
+      const type = lessonCalloutType(node?.properties?.dataCallout);
+      const rawTitle = node?.properties?.dataCalloutTitle;
+      const title = typeof rawTitle === "string" ? rawTitle : "";
+      if (type) {
+        return (
+          <aside className={`md-callout is-${type}`} role="note" aria-label={title || lessonCallout(type).label}>
+            <span className="md-callout-icon" aria-hidden="true"><LessonCalloutIcon type={type} /></span>
+            <div className="md-callout-main">
+              {title ? <p className="md-callout-title">{title}</p> : null}
+              <div className="md-callout-body">{children}</div>
+            </div>
+          </aside>
+        );
+      }
       return <blockquote className="md-blockquote">{children}</blockquote>;
     },
     code(props) {
@@ -714,7 +773,7 @@ export function renderMarkdown(text: string, options?: MarkdownRenderOptions): R
     <ReactMarkdown
       components={components}
       rehypePlugins={[rehypeKatex]}
-      remarkPlugins={[remarkGfm, remarkMath]}
+      remarkPlugins={[remarkGfm, remarkMath, remarkLessonCallouts]}
       skipHtml
     >
       {normalizeMathMarkdown(text)}

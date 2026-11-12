@@ -2886,3 +2886,28 @@
   font-size: 16px;
   line-height: 1.6;
 }
+
+/* The lesson editor in the classroom: the same measure and text as the
+   lesson reader above, so what a host writes lines up with what members read. */
+:root[data-design="v1"] .kit-lesson-editor {
+  margin-top: 18px;
+}
+
+/* The editor and its menus (which open outside the page) act in the app's
+   blue, not a community accent. */
+:root[data-design="v1"] .lesson-editor,
+:root[data-design="v1"] .lesson-editor-menu {
+  --accent-primary: var(--bg-button);
+}
+
+:root[data-design="v1"] .kit-lesson-editor .lesson-editor {
+  --lesson-reading-measure: 640px;
+  margin-inline: 0;
+}
+
+:root[data-design="v1"] .kit-lesson-editor .lesson-editor-content {
+  min-height: 200px;
+  padding-bottom: 32px;
+  font-size: 16px;
+  line-height: 1.6;
+}
