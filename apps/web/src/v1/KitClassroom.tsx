@@ -301,7 +301,7 @@ export function KitClassroom(props: {
       <div className={cx("page")} style={{ padding: 0, overflow: "visible" }}>
         <p className={cx("lead")} style={{ marginTop: 0 }}><span className={cx("aura")}><Icon name="spark" /></span>
           {!props.loaded ? " " : props.canManage
-            ? (courses.length === 0 ? "Start with one course." : learning > 0 ? `${learning} ${learning === 1 ? "person has" : "people have"} started a course.` : "Your courses are ready for members.")
+            ? (courses.length === 0 ? "Start with one course." : learning > 0 ? `Members have started ${learning} ${learning === 1 ? "course" : "courses"} between them.` : "Your courses are ready for members.")
             : resume ? "Pick up where you left off." : courses.length ? "Pick a course to start." : "Nothing to learn here yet."}
         </p>
         <button type="button" className={cx("ask kask kask-btn")} onClick={() => openGuideFromSearch()}>
