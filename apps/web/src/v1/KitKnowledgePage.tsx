@@ -52,6 +52,8 @@ export function KitKnowledgePage(props: {
   communityId: string;
   communityName: string;
   session: unknown;
+  // False under "View as a member": no writing controls, whatever the server allows.
+  allowManage?: boolean;
   onOpenResources: () => void;
   renderRail: (rail: ReactNode) => ReactNode;
 }) {
@@ -67,14 +69,14 @@ export function KitKnowledgePage(props: {
     try {
       const view = await fetchCommunityNotes({ session: props.session, communityId: props.communityId, limit: COMMUNITY_NOTES_MAX_PER_COMMUNITY });
       setNotes(view.notes);
-      setCanManage(view.can_manage);
+      setCanManage(view.can_manage && props.allowManage !== false);
       setFailed(false);
       return view.notes;
     } catch {
       setFailed(true);
       return null;
     }
-  }, [props.session, props.communityId]);
+  }, [props.session, props.communityId, props.allowManage]);
   useEffect(() => { setNotes(null); setOpenSlug(null); void load(); }, [load]);
 
   const all = notes ?? [];
