@@ -455,6 +455,9 @@ export const syncCommunitySubscriptionLifecycleInternal = internalMutation({
       activatedAt: reactivated ? nowMs : membership.activatedAt,
       updatedAt: nowMs,
     } as CommunityMembershipLike;
+    if (before === "active" && next !== "active") {
+      await ctx.scheduler.runAfter(0, internal.communityPodPayments.sweepUnreachablePodPaymentsInternal, { communityId: args.communityId, userId: args.userId });
+    }
     await ctx.db.patch(membership._id, {
       pricePointId,
       ...stateFields,

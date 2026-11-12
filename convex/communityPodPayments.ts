@@ -405,32 +405,93 @@ export async function endPodPaymentForRisk(ctx: any, args: { providerAccountId: 
   return { ok: true, pod_payment: true, provider_subscription_id: args.providerSubscriptionId, revoked_reason: args.reason };
 }
 
-const SWEEP_BATCH = 200;
+const SWEEP_PAGE = 100;
 const GRANTING: PodPaymentStatus[] = ["active", "past_due", "cancel_at_period_end"];
+// An unpaid checkout row is kept a day past Stripe's own expiry, then marked.
+const ABANDONED_AFTER_MS = 24 * 60 * 60 * 1000;
 
-// Paying for a pod you can't reach: you left or were removed from the
-// community, a host took you off the pod, or the pod's room closed. One rule
-// covers all of them. Never let in (paid as they left): cancel and refund in
-// full. Let in, then off: cancel, keeping what was already paid.
-export const listUnreachablePodPaymentsInternal = internalQuery({
-  args: {},
-  handler: async (ctx) => {
-    const found: Array<{ paymentId: any; providerAccountId: string; providerSubscriptionId: string; refund: boolean }> = [];
-    for (const status of GRANTING) {
-      const rows = await ctx.db.query("communityPodPayments").withIndex("by_status", (q: any) => q.eq("status", status)).take(SWEEP_BATCH);
-      for (const row of rows) {
-        if (!row.providerSubscriptionId) continue;
-        const room = await ctx.db.get(row.channelId) as any;
-        const membership = await getUniqueCommunityMembershipByPair({ ctx, communityId: row.communityId, userId: row.userId });
-        const grant = (await ctx.db.query("communityChannelParticipants")
-          .withIndex("by_channel_principal", (q: any) => q.eq("channelId", row.channelId).eq("principalKey", `user:${row.userId}`)).first()) as any;
-        const reachable = Boolean(room?.status === "active" && membership && communityMembershipRowIsActive(membership)
-          && grant?.status === "active" && normalizeIdValue(grant.membershipId) === normalizeIdValue(membership._id)
-          && Number(grant.membershipActivationSequence ?? 0) === Math.max(0, Math.floor(Number(membership.activationSequence ?? 0))));
-        if (!reachable) found.push({ paymentId: row._id, providerAccountId: row.providerAccountId, providerSubscriptionId: row.providerSubscriptionId, refund: !row.grantedAt });
-      }
+export const getPodPaymentByProviderSubscriptionInternal = internalQuery({
+  args: { providerAccountId: v.string(), providerSubscriptionId: v.string() },
+  handler: async (ctx, args) => await ctx.db.query("communityPodPayments")
+    .withIndex("by_provider_subscription", (q: any) => q.eq("providerAccountId", args.providerAccountId).eq("providerSubscriptionId", args.providerSubscriptionId)).first(),
+});
+
+// The one rule: a pod payment is reachable while its community runs, the
+// member is an active member, the pod's room is open, and they are on its
+// list under their current membership. Anything else means paying for a pod
+// they can't reach.
+async function reachable(ctx: any, row: any): Promise<boolean> {
+  const community = await ctx.db.get(row.communityId) as any;
+  if (!community || !communityIsActive(community)) return false;
+  const room = await ctx.db.get(row.channelId) as any;
+  if (room?.status !== "active") return false;
+  const membership = await getUniqueCommunityMembershipByPair({ ctx, communityId: row.communityId, userId: row.userId });
+  if (!membership || !communityMembershipRowIsActive(membership)) return false;
+  const grant = (await ctx.db.query("communityChannelParticipants")
+    .withIndex("by_channel_principal", (q: any) => q.eq("channelId", row.channelId).eq("principalKey", `user:${row.userId}`)).first()) as any;
+  return grant?.status === "active" && normalizeIdValue(grant.membershipId) === normalizeIdValue(membership._id)
+    && Number(grant.membershipActivationSequence ?? 0) === Math.max(0, Math.floor(Number(membership.activationSequence ?? 0)));
+}
+
+type SweepTarget = { paymentId: any; providerAccountId: string; providerSubscriptionId: string; refund: boolean };
+
+async function unreachableTargets(ctx: any, rows: any[]): Promise<SweepTarget[]> {
+  const found: SweepTarget[] = [];
+  for (const row of rows) {
+    if (!GRANTING.includes(row.status) || !row.providerSubscriptionId) continue;
+    if (await reachable(ctx, row)) continue;
+    // Never let in (paid as they left): refunded in full. Let in, then off:
+    // what was already paid stays paid.
+    found.push({ paymentId: row._id, providerAccountId: row.providerAccountId, providerSubscriptionId: row.providerSubscriptionId, refund: !row.grantedAt });
+  }
+  return found;
+}
+
+const sweepScope = {
+  communityId: v.optional(v.id("communities")),
+  userId: v.optional(v.id("users")),
+  channelId: v.optional(v.id("communityChannels")),
+};
+
+// A targeted check (one member, one pod, or one community): small, one read.
+export const listUnreachablePodPaymentsForScopeInternal = internalQuery({
+  args: sweepScope,
+  handler: async (ctx, args) => {
+    let rows: any[] = [];
+    if (args.channelId && args.userId) {
+      rows = await ctx.db.query("communityPodPayments").withIndex("by_channel_user", (q: any) => q.eq("channelId", args.channelId).eq("userId", args.userId)).collect();
+    } else if (args.userId) {
+      rows = (await ctx.db.query("communityPodPayments").withIndex("by_user", (q: any) => q.eq("userId", args.userId)).collect())
+        .filter((row: any) => !args.communityId || String(row.communityId) === String(args.communityId));
+    } else if (args.communityId) {
+      rows = await ctx.db.query("communityPodPayments").withIndex("by_community", (q: any) => q.eq("communityId", args.communityId)).collect();
     }
-    return found;
+    return await unreachableTargets(ctx, rows);
+  },
+});
+
+// The hourly pass: one page of paying rows at a time, every status, to the end.
+export const listUnreachablePodPaymentsPageInternal = internalQuery({
+  args: { status: v.string(), cursor: v.union(v.string(), v.null()) },
+  handler: async (ctx, args) => {
+    const page = await ctx.db.query("communityPodPayments").withIndex("by_status", (q: any) => q.eq("status", args.status))
+      .paginate({ cursor: args.cursor, numItems: SWEEP_PAGE });
+    return { targets: await unreachableTargets(ctx, page.page), continueCursor: page.continueCursor, isDone: page.isDone };
+  },
+});
+
+// Checkouts nobody paid: marked expired a day after Stripe closed them.
+export const expireAbandonedPodCheckoutsInternal = internalMutation({
+  args: { nowMs: v.number() },
+  handler: async (ctx, args) => {
+    const rows = await ctx.db.query("communityPodPayments").withIndex("by_status", (q: any) => q.eq("status", "pending")).take(SWEEP_PAGE);
+    let expired = 0;
+    for (const row of rows) {
+      if (row.checkoutExpiresAt + ABANDONED_AFTER_MS > args.nowMs) continue;
+      await ctx.db.patch(row._id, { status: "expired", updatedAt: args.nowMs });
+      expired += 1;
+    }
+    return { expired, more: rows.length === SWEEP_PAGE && expired > 0 };
   },
 });
 
@@ -438,29 +499,65 @@ export const endUnreachablePodPaymentInternal = internalMutation({
   args: { paymentId: v.id("communityPodPayments") },
   handler: async (ctx, args) => {
     const row = await ctx.db.get(args.paymentId);
-    if (row && row.status !== "ended") await endPodPayment(ctx, row, Date.now());
+    if (!row || row.status === "ended") return null;
+    // Checked again inside the write: re-added meanwhile means keep billing.
+    if (await reachable(ctx, row)) return null;
+    await endPodPayment(ctx, row, Date.now());
     return null;
   },
 });
 
+async function stopBilling(ctx: any, targets: SweepTarget[]): Promise<number> {
+  let stopped = 0;
+  for (const target of targets) {
+    try {
+      const stripeTarget = { providerAccountId: target.providerAccountId, providerSubscriptionId: target.providerSubscriptionId };
+      if (target.refund) await cancelAndRefundDuplicateSubscription(stripeTarget);
+      else await cancelStripeSubscriptionIfActive(stripeTarget);
+      await ctx.runMutation(internal.communityPodPayments.endUnreachablePodPaymentInternal, { paymentId: target.paymentId });
+      stopped += 1;
+    } catch (error) {
+      // Left as it was; the hourly pass tries again.
+      console.error("pod_payment_stop_failed", { paymentId: String(target.paymentId), error: error instanceof Error ? error.message : String(error) });
+    }
+  }
+  return stopped;
+}
+
+// Run right after access may have ended (scheduled by the code that ended
+// it), and hourly over everything as the safety net.
 export const sweepUnreachablePodPaymentsInternal = internalAction({
-  args: {},
-  handler: async (ctx): Promise<{ checked: number; stopped: number }> => {
-    const targets: Array<{ paymentId: any; providerAccountId: string; providerSubscriptionId: string; refund: boolean }> =
-      await ctx.runQuery(internal.communityPodPayments.listUnreachablePodPaymentsInternal, {});
+  args: sweepScope,
+  handler: async (ctx, args): Promise<{ checked: number; stopped: number; expired: number }> => {
+    if (args.communityId || args.userId || args.channelId) {
+      const targets: SweepTarget[] = await ctx.runQuery(internal.communityPodPayments.listUnreachablePodPaymentsForScopeInternal, args);
+      return { checked: targets.length, stopped: await stopBilling(ctx, targets), expired: 0 };
+    }
+    let checked = 0;
     let stopped = 0;
-    for (const target of targets) {
-      try {
-        const stripeTarget = { providerAccountId: target.providerAccountId, providerSubscriptionId: target.providerSubscriptionId };
-        if (target.refund) await cancelAndRefundDuplicateSubscription(stripeTarget);
-        else await cancelStripeSubscriptionIfActive(stripeTarget);
-        await ctx.runMutation(internal.communityPodPayments.endUnreachablePodPaymentInternal, { paymentId: target.paymentId });
-        stopped += 1;
-      } catch (error) {
-        // Left as it was; the next sweep tries again.
-        console.error("pod_payment_sweep_failed", { paymentId: String(target.paymentId), error: error instanceof Error ? error.message : String(error) });
+    for (const status of GRANTING) {
+      let cursor: string | null = null;
+      for (;;) {
+        const page: { targets: SweepTarget[]; continueCursor: string; isDone: boolean } =
+          await ctx.runQuery(internal.communityPodPayments.listUnreachablePodPaymentsPageInternal, { status, cursor });
+        checked += page.targets.length;
+        stopped += await stopBilling(ctx, page.targets);
+        if (page.isDone) break;
+        cursor = page.continueCursor;
       }
     }
-    return { checked: targets.length, stopped };
+    let expired = 0;
+    for (let round = 0; round < 50; round += 1) {
+      const result: { expired: number; more: boolean } = await ctx.runMutation(internal.communityPodPayments.expireAbandonedPodCheckoutsInternal, { nowMs: Date.now() });
+      expired += result.expired;
+      if (!result.more) break;
+    }
+    return { checked, stopped, expired };
   },
 });
+
+// Called by the code that may have ended someone's access (leaving, removal,
+// a lapse, a host taking them off a pod, archiving): check those pod payments now.
+export async function schedulePodBillingCheck(ctx: any, scope: { communityId?: any; userId?: any; channelId?: any }) {
+  await ctx.scheduler.runAfter(0, internal.communityPodPayments.sweepUnreachablePodPaymentsInternal, scope);
+}

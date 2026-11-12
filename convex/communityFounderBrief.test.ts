@@ -629,6 +629,19 @@ describe("pods", () => {
       });
       return { paymentId, granted: result.granted };
     };
+    const allUnreachable = async () => {
+      const found: any[] = [];
+      for (const status of ["active", "past_due", "cancel_at_period_end"]) {
+        let cursor: string | null = null;
+        for (;;) {
+          const page: any = await t.query(internalRefs.communityPodPayments.listUnreachablePodPaymentsPageInternal, { status, cursor });
+          found.push(...page.targets);
+          if (page.isDone) break;
+          cursor = page.continueCursor;
+        }
+      }
+      return found;
+    };
     const inPod = (channelId: any, subject: string) => t.withIdentity({ subject }).query(api.communityPods.getPod, { communityId: f.communityId, channelId }).then(() => true, () => false);
     expect((await pay(ids.ana, ids.podA, "sub_a")).granted).toBe(true);
     expect((await pay(ids.ana, ids.podB, "sub_b")).granted).toBe(true);
@@ -639,7 +652,7 @@ describe("pods", () => {
     // A community subscription isn't a pod payment.
     await expect(t.mutation(internalRefs.communityPodPayments.endPodPaymentForRiskInternal, { providerAccountId: "acct_builder", providerSubscriptionId: "sub_community" })).resolves.toEqual({ found: false });
     // Nothing to stop while everyone can reach their pod.
-    await expect(t.query(internalRefs.communityPodPayments.listUnreachablePodPaymentsInternal, {})).resolves.toEqual([]);
+    await expect(allUnreachable()).resolves.toEqual([]);
     // Ben paid, but left the community before Stripe confirmed: never let in, refunded in full.
     await t.run(async (ctx) => {
       const membership = (await ctx.db.query("communityMemberships").collect()).find((row: any) => String(row.userId) === String(ids.ben))!;
@@ -651,9 +664,58 @@ describe("pods", () => {
       const membership = (await ctx.db.query("communityMemberships").collect()).find((row: any) => String(row.userId) === String(ids.ana))!;
       await ctx.db.patch(membership._id, { state: "left" } as any);
     });
-    const unreachable = await t.query(internalRefs.communityPodPayments.listUnreachablePodPaymentsInternal, {});
+    const unreachable = await allUnreachable();
+    // The check scheduled when Ana left finds the same one, for her only.
+    expect((await t.query(internalRefs.communityPodPayments.listUnreachablePodPaymentsForScopeInternal, { communityId: f.communityId, userId: ids.ana }))
+      .map((row: any) => row.providerSubscriptionId)).toEqual(["sub_b"]);
     expect(unreachable.map((row: any) => [row.providerSubscriptionId, row.refund]).sort()).toEqual([["sub_b", false], ["sub_ben", true]]);
     for (const row of unreachable) await t.mutation(internalRefs.communityPodPayments.endUnreachablePodPaymentInternal, { paymentId: row.paymentId });
-    await expect(t.query(internalRefs.communityPodPayments.listUnreachablePodPaymentsInternal, {})).resolves.toEqual([]);
+    await expect(allUnreachable()).resolves.toEqual([]);
+  });
+
+  it("paid pods: a host taking someone off, or archiving, stops their billing; re-added meanwhile keeps it; fees reverse; abandoned checkouts expire", async () => {
+    const t = convexTest(schema, modules);
+    const f = await fixture(t, Date.now());
+    const ids = await t.run(async (ctx) => {
+      const nowMs = Date.now();
+      const ana = (await ctx.db.query("users").withIndex("by_authSubject" as any, (q: any) => q.eq("authSubject", "brief-Ana")).first())!;
+      for (const row of await ctx.db.query("communityMemberships").collect()) await ctx.db.patch(row._id, { activationSequence: 1, activatedAt: nowMs } as any);
+      const channelId = await ctx.db.insert("communityChannels", {
+        communityId: f.communityId, slug: "pod", name: "pod", accessMode: "restricted",
+        postingPolicy: "members", status: "active", position: 1, createdByUserId: f.ownerId, createdAt: nowMs, updatedAt: nowMs,
+      } as any);
+      return { ana: ana._id, channelId };
+    });
+    const paymentId = await t.mutation(internalRefs.communityPodPayments.createPendingPodPaymentInternal, {
+      communityId: f.communityId, channelId: ids.channelId, userId: ids.ana, amountBaseUnits: 10000, currency: "usd", providerAccountId: "acct_builder", providerPriceId: "price_pod", nowMs: Date.now(),
+    });
+    await t.mutation(internalRefs.communityPodPayments.syncPodPaymentInternal, {
+      paymentId, providerAccountId: "acct_builder", providerSubscriptionId: "sub_x", subscriptionStatus: "active", providerEventAt: 1000,
+    });
+    // Polynet's fee reverses on a pod refund: the refund path recognises the payment.
+    await expect(t.query(internalRefs.communityPodPayments.getPodPaymentByProviderSubscriptionInternal, { providerAccountId: "acct_builder", providerSubscriptionId: "sub_x" }))
+      .resolves.toMatchObject({ status: "active" });
+    const scope = (args: Record<string, unknown>) => t.query(internalRefs.communityPodPayments.listUnreachablePodPaymentsForScopeInternal, args);
+    await expect(scope({ channelId: ids.channelId, userId: ids.ana })).resolves.toEqual([]);
+    // The builder takes Ana off the pod (the room's own control).
+    await t.withIdentity({ subject: "brief-Owner" }).mutation(api.communityChannelParticipants.setParticipant, {
+      communityId: f.communityId, channelId: ids.channelId, target: { kind: "member", userId: ids.ana }, active: false,
+    } as any);
+    await expect(scope({ channelId: ids.channelId, userId: ids.ana })).resolves.toMatchObject([{ providerSubscriptionId: "sub_x", refund: false }]);
+    // Put back before the check ran: billing goes on.
+    await t.withIdentity({ subject: "brief-Owner" }).mutation(api.communityChannelParticipants.setParticipant, {
+      communityId: f.communityId, channelId: ids.channelId, target: { kind: "member", userId: ids.ana }, active: true,
+    } as any);
+    await t.mutation(internalRefs.communityPodPayments.endUnreachablePodPaymentInternal, { paymentId });
+    await expect(t.run((ctx) => ctx.db.get(paymentId))).resolves.toMatchObject({ status: "active" });
+    // The community is archived: every pod payment in it is unreachable.
+    await t.run((ctx) => ctx.db.patch(f.communityId, { lifecycleStatus: "archived", lifecycleGeneration: 1 } as any));
+    await expect(scope({ communityId: f.communityId })).resolves.toMatchObject([{ providerSubscriptionId: "sub_x" }]);
+    // An unpaid checkout is marked expired a day after Stripe closed it.
+    const stale = await t.mutation(internalRefs.communityPodPayments.createPendingPodPaymentInternal, {
+      communityId: f.communityId, channelId: ids.channelId, userId: ids.ana, amountBaseUnits: 10000, currency: "usd", providerAccountId: "acct_builder", providerPriceId: "price_pod", nowMs: Date.now() - 3 * DAY,
+    });
+    await expect(t.mutation(internalRefs.communityPodPayments.expireAbandonedPodCheckoutsInternal, { nowMs: Date.now() })).resolves.toMatchObject({ expired: 1 });
+    await expect(t.run((ctx) => ctx.db.get(stale))).resolves.toMatchObject({ status: "expired" });
   });
 });

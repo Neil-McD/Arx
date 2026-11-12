@@ -939,7 +939,8 @@ export default defineSchema({
     .index("by_channel_user", ["channelId", "userId"])
     .index("by_user", ["userId"])
     .index("by_provider_subscription", ["providerAccountId", "providerSubscriptionId"])
-    .index("by_status", ["status"]),
+    .index("by_status", ["status"])
+    .index("by_community", ["communityId"]),
   // Asking to join a listed pod: the pod's hosts approve or decline; a full
   // pod puts the request on its waitlist.
   communityPodRequests: defineTable({
