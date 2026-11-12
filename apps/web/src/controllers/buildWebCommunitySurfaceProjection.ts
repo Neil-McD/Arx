@@ -241,6 +241,8 @@ export function buildWebCommunitySurfaceProjection(
       },
       state: params.eventsState,
       actions: params.eventsActions,
+      going: params.session && params.activeCommunity?.id ? { session: params.session, communityId: params.activeCommunity.id } : null,
+      getAvatarColor: params.getAvatarColor,
     },
     resourceModuleModal: params.resourceModuleModalProps,
     resourceModuleDeleteModal: params.resourceModuleDeleteModalProps,

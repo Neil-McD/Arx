@@ -1,6 +1,20 @@
 import { createContext, useContext, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
+import { Search } from "lucide-react";
 import { isDesignV1Active } from "../../../../shared/designSystem";
+import { openGuideFromSearch } from "./guideSearch";
+
+// The mock's "Search or ask", the same on every page's top bar. Until search
+// exists it asks your guide (⌘K does the same).
+export function SearchOrAskButton() {
+  return (
+    <button type="button" className="community-search-ask" onClick={() => openGuideFromSearch()} aria-keyshortcuts="Meta+K" title="Ask your guide (⌘K)">
+      <Search size={14} aria-hidden="true" />
+      <span>Search or ask</span>
+      <kbd>⌘K</kbd>
+    </button>
+  );
+}
 
 // Design system v1 (docs/specs/design-system-v1.md, section 4): every page in
 // a community has the same header line, level with a channel's: its title on
@@ -55,6 +69,7 @@ export function CommunityPageHeader(props: { title: string; actions?: ReactNode;
         <h1>{props.title}</h1>
       </div>
       {props.actions ? <div className="community-page-header-actions">{props.actions}</div> : null}
+      <SearchOrAskButton />
     </>,
     slot,
   );

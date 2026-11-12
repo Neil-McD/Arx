@@ -104,3 +104,36 @@ export async function cancelCloudCommunityEvent<SessionT>(
     eventId: params.eventId,
   });
 }
+
+// "Going" (design v1 Events): per date of an event.
+export type CloudCommunityEventGoing = {
+  event_id: string;
+  occurrence_starts_at: number;
+  count: number;
+  count_capped: boolean;
+  mine: boolean;
+  host_name: string | null;
+  faces: Array<{ user_id: string; name: string; avatar_url: string | null }>;
+};
+
+export async function listCloudCommunityEventGoing<SessionT>(params: {
+  session: SessionT;
+  communityId: string;
+  items: Array<{ eventId: string; occurrenceStartsAt: number }>;
+}): Promise<CloudCommunityEventGoing[]> {
+  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
+  return await client.query("communityEventGoing:listCommunityEventGoing" as any, { authSubject, communityId: params.communityId, items: params.items }) as CloudCommunityEventGoing[];
+}
+
+export async function setCloudCommunityEventGoing<SessionT>(params: {
+  session: SessionT;
+  communityId: string;
+  eventId: string;
+  occurrenceStartsAt: number;
+  going: boolean;
+}): Promise<void> {
+  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
+  await client.mutation("communityEventGoing:setCommunityEventGoing" as any, {
+    authSubject, communityId: params.communityId, eventId: params.eventId, occurrenceStartsAt: params.occurrenceStartsAt, going: params.going,
+  });
+}

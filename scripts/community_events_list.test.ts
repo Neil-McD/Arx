@@ -20,6 +20,18 @@ test("the soonest event that is not over is featured; the rest are coming up; pa
   expect(parts.past.map((event) => event.id)).toEqual(["old", "older"]);
 });
 
+test("a repeating event shows once: its next date coming up, its latest date in past", () => {
+  const weekly = (id: string, starts: string, ends: string | null = null) => ({ ...ev(id, starts, { ends_at: ends }), parent_event_id: "call" });
+  const parts = splitCommunityEvents([
+    weekly("call:13", at(13, 10)), weekly("call:20", at(20, 10)), weekly("call:27", at(27, 10)),
+    weekly("call:6", at(6, 10), at(6, 11)), weekly("call:30", at(30 - 30 + 1, 10), at(1, 11)),
+    ev("teardown", at(17, 18)),
+  ], now);
+  expect(parts.featured?.id).toBe("call:13");
+  expect(parts.comingUp.map((event) => event.id)).toEqual(["teardown"]);
+  expect(parts.past.map((event) => event.id)).toEqual(["call:6"]);
+});
+
 test("an event that has started is still featured until it ends", () => {
   const parts = splitCommunityEvents([ev("now", at(13, 9), { ends_at: at(13, 10) }), ev("next", at(17, 18))], now);
   expect(parts.featured?.id).toBe("now");

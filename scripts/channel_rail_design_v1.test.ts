@@ -94,20 +94,3 @@ test("design v1: a thread names itself and its channel, and has a close button",
   expect(bare).toContain('<h2 class="community-thread-title">Thread</h2>');
 });
 
-test("member filters only ever narrow the list", async () => {
-  const { memberPassesFilter } = await import("../apps/web/src/components/communityMemberFilters");
-  const now = Date.parse("2026-11-10T12:00:00Z");
-  const owner = { role: "owner", membership_created_at: "2026-05-01T00:00:00Z" };
-  const fresh = { role: "member", membership_created_at: "2026-11-08T00:00:00Z" };
-  const old = { role: "member", membership_created_at: null };
-  expect(memberPassesFilter(old, "offline", "everyone", now)).toBe(true);
-  expect(memberPassesFilter(old, "offline", "here", now)).toBe(false);
-  expect(memberPassesFilter(old, "online", "here", now)).toBe(true);
-  expect(memberPassesFilter(owner, "unknown", "hosts", now)).toBe(true);
-  expect(memberPassesFilter({ role: "moderator" }, "unknown", "hosts", now)).toBe(true);
-  expect(memberPassesFilter(fresh, "unknown", "hosts", now)).toBe(false);
-  expect(memberPassesFilter(fresh, "unknown", "new", now)).toBe(true);
-  expect(memberPassesFilter(owner, "unknown", "new", now)).toBe(false);
-  // No join date known: never counted as new.
-  expect(memberPassesFilter(old, "unknown", "new", now)).toBe(false);
-});

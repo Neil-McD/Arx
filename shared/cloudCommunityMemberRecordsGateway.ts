@@ -30,11 +30,19 @@ export type CloudPastMemberRow = {
   rejoined: boolean;
 };
 
-export type CloudMemberRecords = {
-  rows: CloudMemberRecordRow[];
-  past: CloudPastMemberRow[];
+export type CloudMemberSummary = {
+  counts: { everyone: number; on_hold: number; cancelling: number; comped: number; know_little: number; past: number };
+  // Everyone in, less those whose card is on hold (the left column's number).
+  with_access: number;
   prices: Array<{ price_point_id: string; label: string; count: number; current: boolean }>;
   capped: boolean;
+};
+
+export type CloudMemberRecordsPage = {
+  rows: CloudMemberRecordRow[];
+  past: CloudPastMemberRow[];
+  isDone: boolean;
+  continueCursor: string;
 };
 
 export type CloudMemberRecord = {
@@ -54,9 +62,22 @@ export type CloudMemberRecord = {
   notes: Array<{ id: string; body: string; author: string; at: string; can_delete: boolean }>;
 };
 
-export async function listCloudCommunityMemberRecords<SessionT>(params: { session: SessionT; communityId: string }): Promise<CloudMemberRecords> {
+export async function getCloudCommunityMemberSummary<SessionT>(params: { session: SessionT; communityId: string }): Promise<CloudMemberSummary> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
-  return await client.query("communityMemberRecords:listCommunityMemberRecords" as any, { authSubject, communityId: params.communityId }) as CloudMemberRecords;
+  return await client.query("communityMemberRecords:getCommunityMemberSummary" as any, { authSubject, communityId: params.communityId }) as CloudMemberSummary;
+}
+
+export async function listCloudCommunityMemberRecordsPage<SessionT>(params: { session: SessionT; communityId: string; view: string; cursor: string | null; numItems?: number }): Promise<CloudMemberRecordsPage> {
+  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
+  return await client.query("communityMemberRecords:listCommunityMemberRecordsPage" as any, {
+    authSubject, communityId: params.communityId, view: params.view,
+    paginationOpts: { numItems: params.numItems ?? 100, cursor: params.cursor },
+  }) as CloudMemberRecordsPage;
+}
+
+export async function compCloudCommunityMember<SessionT>(params: { session: SessionT; communityId: string; membershipId: string }): Promise<void> {
+  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
+  await client.mutation("communityMemberRecords:compCommunityMember" as any, { authSubject, communityId: params.communityId, membershipId: params.membershipId });
 }
 
 export async function getCloudCommunityMemberRecord<SessionT>(params: { session: SessionT; communityId: string; membershipId: string | null }): Promise<CloudMemberRecord | null> {

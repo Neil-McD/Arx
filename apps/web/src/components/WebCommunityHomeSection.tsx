@@ -3,6 +3,8 @@
 // across the community in the last day, and a quiet panel of where things
 // stand. The owner sees the daily brief's facts read live; a member sees only
 // what any member can already see (convex/communityFounderBrief.ts).
+import { KitNextEvent } from "../v1/KitNextEvent";
+import type { CommunityPresenceSummary } from "../../../../shared/communityTypes";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { ArrowRight, Sparkles } from "lucide-react";
@@ -33,6 +35,8 @@ export type WebCommunityHomeSectionProps = {
   // `hasConversation`: the one thread has something to read, so a quiet Home
   // still offers a way back into it.
   kit?: { talking: boolean; talk: ReactNode; onTalkItOver: () => void; hasConversation?: boolean } | null;
+  // Who is here now (a member's "Right now" shows the faces).
+  presence?: CommunityPresenceSummary | null;
 };
 
 type HomeCard = { label: string; title: string; detail: string; action: string; onAction: () => void };
@@ -273,17 +277,8 @@ export function WebCommunityHomeSection(props: WebCommunityHomeSectionProps) {
     const panel = snapshot ? (
       <>
           {isHost ? <><Figs figures={homeKitFiguresFor(snapshot)} /><Sep /></> : null}
-          <Sec label="Next up">
-            {nextEvent ? (
-              <>
-                <h3>{nextEvent.title}</h3>
-                <p>{homeEventTimeFor(nextEvent.startsAt, now)}</p>
-              </>
-            ) : (
-              <p>Nothing in the next two days.</p>
-            )}
-            <TextLink style={{ marginTop: 2 }} onClick={props.onOpenEvents}>All events</TextLink>
-          </Sec>
+          <KitNextEvent session={props.session} communityId={props.communityId} now={now.getTime()} onOpenEvents={props.onOpenEvents}
+            presence={props.presence} showHere={!isHost} />
       </>
     ) : null;
     const rail = panel ? (
