@@ -1,7 +1,9 @@
 // Design system v1: editing a lesson where it is read (Skool's classroom,
 // Notion's editing). The lesson's video at the top (a YouTube, Loom, Vimeo or
 // Wistia link), then the lesson itself in the block editor ("/" for blocks),
-// then Published, Cancel and Save. The block editor and its Markdown layer
+// then Cancel and Save. Members see a lesson when its course is live and the
+// lesson has something in it; a lesson has no publish switch of its own (the
+// server refuses one: publication belongs to the course). The block editor and its Markdown layer
 // are Rashid's (PR #290, apps/web/src/components/lessonEditor), trimmed to
 // writing and media blocks.
 import { lazy, Suspense, useMemo, useRef, useState } from "react";
@@ -11,10 +13,10 @@ const LessonEditor = lazy(() => import("../components/lessonEditor/LessonEditor"
 import type { CommunityResource } from "../components/communityResourcesContracts";
 import { Btn, cx, Icon } from "./kit";
 
-export type LessonPatch = { title: string; url: string | null; body_md: string; resource_status: "published" | "draft" };
+export type LessonPatch = { title: string; url: string | null; body_md: string };
 
 // What Save sends: only a real change, and a video link only when it plays.
-export function lessonPatchFor(resource: Pick<CommunityResource, "title" | "url" | "body_md" | "resource_status">, draft: { title: string; video: string; body: string; published: boolean }): LessonPatch | null {
+export function lessonPatchFor(resource: Pick<CommunityResource, "title" | "url" | "body_md">, draft: { title: string; video: string; body: string }): LessonPatch | null {
   const title = draft.title.trim();
   if (!title) return null;
   const video = draft.video.trim();
@@ -22,10 +24,9 @@ export function lessonPatchFor(resource: Pick<CommunityResource, "title" | "url"
     title,
     url: video ? video : null,
     body_md: draft.body.replace(/\s+$/, ""),
-    resource_status: draft.published ? "published" : "draft",
   };
   const same = patch.title === resource.title && (patch.url ?? "") === (resource.url ?? "")
-    && patch.body_md === (resource.body_md ?? "").replace(/\s+$/, "") && patch.resource_status === (resource.resource_status === "draft" ? "draft" : "published");
+    && patch.body_md === (resource.body_md ?? "").replace(/\s+$/, "");
   return same ? null : patch;
 }
 
@@ -39,6 +40,7 @@ export function KitLessonEditor(props: {
   resource: CommunityResource;
   index: number;
   total: number;
+  courseLive: boolean;
   onSave: (patch: LessonPatch) => Promise<void>;
   onCancel: () => void;
   onDelete: () => Promise<void>;
@@ -46,7 +48,6 @@ export function KitLessonEditor(props: {
   const { resource } = props;
   const [title, setTitle] = useState(resource.title);
   const [video, setVideo] = useState(resource.url ?? "");
-  const [published, setPublished] = useState(resource.resource_status !== "draft");
   const bodyRef = useRef(resource.body_md ?? "");
   const [bodyVersion, setBodyVersion] = useState(0);
   const [saving, setSaving] = useState(false);
@@ -57,20 +58,21 @@ export function KitLessonEditor(props: {
     const embed = video.trim() ? parseEmbedUrl(video.trim()) : null;
     return embed && embed.provider === "youtube" ? embed.thumbnailUrl : null;
   }, [video]);
-  const patch = lessonPatchFor(resource, { title, video, body: bodyRef.current, published });
+  const patch = lessonPatchFor(resource, { title, video, body: bodyRef.current });
   void bodyVersion;
 
   const save = async () => {
     if (saving) return;
     if (!title.trim()) { setError("Give the lesson a title."); return; }
     if (video.trim() && !provider) { setError("That link isn't a video we can play. Use YouTube, Loom, Vimeo or Wistia."); return; }
-    const next = lessonPatchFor(resource, { title, video, body: bodyRef.current, published });
+    const next = lessonPatchFor(resource, { title, video, body: bodyRef.current });
     if (!next) { props.onCancel(); return; }
     setSaving(true);
     setError(null);
     try {
       await props.onSave(next);
-    } catch {
+    } catch (cause) {
+      console.error("lesson save failed", cause);
       setError("The lesson couldn't be saved. Try again.");
     } finally {
       setSaving(false);
@@ -101,11 +103,7 @@ export function KitLessonEditor(props: {
 
       {error ? <p className={cx("bad")} role="alert" style={{ marginTop: 12 }}>{error}</p> : null}
       <div className={cx("kedit-bar")}>
-        <label className={cx("kedit-pub")}>
-          <input type="checkbox" checked={published} onChange={(event) => setPublished(event.target.checked)} />
-          <span className={cx("kedit-switch")} aria-hidden="true" />
-          {published ? "Published" : "Draft · only hosts see it"}
-        </label>
+        <span className={cx("kedit-pub")}>{props.courseLive ? "Members can see this course" : "Draft course · only hosts see it"}</span>
         {confirmDelete ? (
           <>
             <button type="button" className={cx("btn sm no")} onClick={() => void props.onDelete()}>Delete lesson for good</button>

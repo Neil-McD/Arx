@@ -110,8 +110,8 @@ export function KitClassroom(props: {
   }, [props.session, props.communityId, props.canManage]);
   useEffect(() => { void loadProgress(); void loadNotes(); }, [loadProgress, loadNotes]);
   // Started and finished depend on which lessons exist, so they're read again
-  // when a host adds, publishes or deletes one.
-  const lessonSetKey = props.resources.map((resource) => `${resource.id}:${resource.resource_status}`).join(",");
+  // when a host adds or deletes one.
+  const lessonSetKey = props.resources.map((resource) => resource.id).join(",");
   useEffect(() => {
     if (!props.canManage) { setSummary([]); return; }
     let cancelled = false;
@@ -256,7 +256,6 @@ export function KitClassroom(props: {
           <div key={lesson.id} className={cx("kl-row")}>
             <button type="button" className={cx("kl", lesson.id === lessonId && "on", done.has(lesson.id) && lesson.id !== lessonId && "d")} onClick={() => { setEditingLessonId(null); setLessonId(lesson.id); }}>
               {done.has(lesson.id) ? <Icon name="check" /> : <i />}{index + 1}. {lesson.title}
-              {lesson.resource_status === "draft" ? <span className={cx("tag")} style={{ marginLeft: 6 }}>draft</span> : null}
             </button>
             {editingTools ? (
               <span className={cx("kl-move")}>
@@ -307,7 +306,7 @@ export function KitClassroom(props: {
           ) : null}
         </div>
         {lesson && editingTools && editingLessonId === lesson.id ? (
-          <KitLessonEditor key={lesson.id} resource={lesson} index={index} total={open.lessons.length}
+          <KitLessonEditor key={lesson.id} resource={lesson} index={index} total={open.lessons.length} courseLive={open.course.module_status !== "draft"}
             onCancel={() => setEditingLessonId(null)}
             onSave={async (patch) => { await editingTools.save(lesson.id, patch); setEditingLessonId(null); }}
             onDelete={async () => {
