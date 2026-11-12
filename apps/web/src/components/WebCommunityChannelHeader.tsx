@@ -7,10 +7,10 @@ import {
   type FormEvent,
   type ReactNode,
 } from "react";
-import { ChevronDown, Ellipsis, Hash, LockKeyhole, Pencil, Search, Trash2, X } from "lucide-react";
+import { SearchOrAskButton } from "./CommunityPageHeader";
+import { ChevronDown, Ellipsis, Hash, LockKeyhole, Pencil, Trash2, X } from "lucide-react";
 import { isDesignV1Active } from "../../../../shared/designSystem";
 import { setCloudCommunityChannelDescription } from "../../../../shared/cloudCommunityChannelsGateway";
-import { openGuideFromSearch } from "./guideSearch";
 import { ChannelAccessSettings } from "./ChannelAccessSettings";
 import { CommunityChannelSessionContext } from "./CommunityChannelSessionContext";
 
@@ -294,14 +294,7 @@ export function WebCommunityChannelHeader({
         ) : (
           <div className="community-channel-header-identity" title={channel.name}>{identity}</div>
         )}
-        {isDesignV1Active() ? (
-          // The mock's "Search or ask": until search exists it asks your guide.
-          <button type="button" className="community-search-ask" onClick={() => openGuideFromSearch()} aria-keyshortcuts="Meta+K" title="Ask your guide (⌘K)">
-            <Search size={14} aria-hidden="true" />
-            <span>Search or ask</span>
-            <kbd>⌘K</kbd>
-          </button>
-        ) : null}
+        {isDesignV1Active() ? <SearchOrAskButton /> : null}
         {trailingAction}
         {canOpenChannelMenu && !v1Title ? (
           <div className="community-channel-header-actions" ref={menuRef}>

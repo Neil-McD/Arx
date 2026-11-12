@@ -5,6 +5,8 @@ import { communityEventPhase, type CommunityEventPhase } from "../../../../share
 
 type ListedEvent = {
   id: string;
+  // A repeating event's dates share it; a one-off's is its own id.
+  parent_event_id?: string;
   starts_at: string;
   ends_at: string | null;
   status: string;
@@ -22,8 +24,14 @@ const byStart = (a: ListedEvent, b: ListedEvent) =>
 export function splitCommunityEvents<T extends ListedEvent>(events: T[], now: number): CommunityEventsListParts<T> {
   const live = events.filter((event) => event.status !== "cancelled");
   const phase = (event: T): CommunityEventPhase => communityEventPhase(event, now);
-  const notOver = live.filter((event) => phase(event) !== "past" && phase(event) !== "invalid").sort(byStart);
-  const past = live.filter((event) => phase(event) === "past").sort((a, b) => byStart(b, a));
+  // A repeating event shows once, on its next date (the row says "weekly").
+  const series = (event: T) => event.parent_event_id ?? event.id;
+  const nextOnly = (list: T[]) => {
+    const seen = new Set<string>();
+    return list.filter((event) => (seen.has(series(event)) ? false : (seen.add(series(event)), true)));
+  };
+  const notOver = nextOnly(live.filter((event) => phase(event) !== "past" && phase(event) !== "invalid").sort(byStart));
+  const past = nextOnly(live.filter((event) => phase(event) === "past").sort((a, b) => byStart(b, a)));
   return { featured: notOver[0] ?? null, comingUp: notOver.slice(1), past };
 }
 
