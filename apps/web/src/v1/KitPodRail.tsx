@@ -15,6 +15,7 @@ import {
   type CloudPodDetail,
 } from "../../../../shared/cloudCommunityPodsGateway";
 import { Btn, KitApp, Rail, Sec, Sep, cx } from "./kit";
+import { KitPodCall } from "./KitPodCall";
 import { askForPodPagePreview, forgetPod, goToPodsPath, rememberPod } from "./podMemory";
 
 type Draft = { purpose: string; whatYouGet: string; listed: boolean; seats: string; price: string };
@@ -143,6 +144,12 @@ export function KitPodRail(props: { session: unknown; communityId: string; pod: 
             </>
           )}
         </Sec>
+        {pod.next_call || pod.can_manage ? (
+          <>
+            <Sep />
+            <KitPodCall session={props.session} communityId={props.communityId} pod={pod} onChanged={props.onChanged} />
+          </>
+        ) : null}
         {mine ? (
           <>
             <Sep />

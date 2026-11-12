@@ -1,3 +1,4 @@
+import { communityWideEvents } from "./communityEventAudience";
 import { v } from "convex/values";
 import { hydrateCommunityResourceBody } from "./communityResourceContent";
 import { internal } from "./_generated/api";
@@ -205,7 +206,8 @@ export const loadCommunityHandbookSourcesInternal = internalQuery({
       .withIndex("by_community_status_startsAt", (q) => q.eq("communityId", args.communityId).eq("status", "live").gte("startsAt", Date.now()))
       .take(5);
     const seenEvents = new Set<string>();
-    for (const event of [...recurring, ...upcoming]) {
+    // The handbook is the whole community's: pod calls stay out of it.
+    for (const event of communityWideEvents([...recurring, ...upcoming])) {
       if (seenEvents.has(String(event._id))) continue;
       seenEvents.add(String(event._id));
       const repeats = event.recurrenceFrequency && event.recurrenceFrequency !== "none" ? `, repeats ${event.recurrenceFrequency}` : "";

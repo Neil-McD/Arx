@@ -1,3 +1,4 @@
+import { isPodEvent, podEventRecipientIds } from "./communityEventAudience";
 import { internal } from "./_generated/api";
 import { internalAction, internalQuery } from "./_generated/server";
 import { v } from "convex/values";
@@ -167,6 +168,13 @@ export const buildEventReminderBatchesInternal = internalQuery({
         nowMs,
         limit: limitRecipientsPerEvent,
       });
+      // A pod's call reminds the pod only.
+      const podRecipients = isPodEvent(event) ? await podEventRecipientIds(ctx, event) : null;
+      if (podRecipients) {
+        for (let index = recipientUserIds.length - 1; index >= 0; index -= 1) {
+          if (!podRecipients.has(String(recipientUserIds[index]))) recipientUserIds.splice(index, 1);
+        }
+      }
       if (recipientUserIds.length === 0) continue;
 
       for (const occurrenceStartsAt of occurrenceStarts) for (let first = 0; first < recipientUserIds.length; first += RECIPIENTS_PER_BATCH) {
@@ -179,7 +187,7 @@ export const buildEventReminderBatchesInternal = internalQuery({
           eventTimezone: String(event.timezone ?? "").trim() || "UTC",
           occurrenceStartsAt,
           recipientUserIds: recipientUserIds.slice(first, first + RECIPIENTS_PER_BATCH),
-          siteEventUrl: await communitySitePageUrl(ctx, community, `/events/${encodeURIComponent(String(event._id))}~${occurrenceStartsAt}`),
+          siteEventUrl: podRecipients ? null : await communitySitePageUrl(ctx, community, `/events/${encodeURIComponent(String(event._id))}~${occurrenceStartsAt}`),
         });
       }
     }

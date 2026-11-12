@@ -2362,6 +2362,9 @@ export default defineSchema({
     locationLabel: v.optional(v.string()),
     url: v.optional(v.string()),
     visibility: v.union(v.literal("members"), v.literal("public")),
+    // A pod's call: visible only to people who can enter that pod
+    // (convex/communityEventAudience.ts is the one rule).
+    podChannelId: v.optional(v.id("communityChannels")),
     status: v.union(v.literal("live"), v.literal("cancelled")),
     recurrenceFrequency: v.optional(v.union(v.literal("none"), v.literal("daily"), v.literal("weekly"), v.literal("monthly"))),
     recurrenceInterval: v.optional(v.number()),
@@ -2377,6 +2380,7 @@ export default defineSchema({
     .index("by_community_status_updatedAt", ["communityId", "status", "updatedAt"])
     .index("by_status_startsAt", ["status", "startsAt"])
     .index("by_status_recurrenceFrequency_startsAt", ["status", "recurrenceFrequency", "startsAt"])
+    .index("by_pod_status", ["podChannelId", "status"])
     .index("by_createdBy", ["createdByUserId"]),
 
 

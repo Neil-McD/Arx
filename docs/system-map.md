@@ -280,6 +280,9 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
   own, then listed pods they could ask to join; a pod is an invite-only room plus
   its purpose, hosts, seats and listed/hidden, [spec](specs/pods-v0.md)).
   Tables: `communityPods`, `communityPodRequests` (asks to join and the waitlist).
+- **Pod calls:** `communityEventAudience` (the one rule: an event with a pod is
+  visible only to people who can enter that pod; every reader of `communityEvents`
+  goes through it, enforced by `scripts/community_event_audience.test.ts`).
 - **Paid pods:** `communityPodPayments` and `communityPodBillingCheck` (the hook the
   code that ends access calls, so pod billing stops at once) (a pod's price on top of membership, its
   Stripe checkout and subscription, and the grant that follows payment; notices
