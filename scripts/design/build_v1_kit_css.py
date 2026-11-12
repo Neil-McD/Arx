@@ -213,6 +213,8 @@ css += """
    and centres in the middle, and the composer keeps the same edges. */
 .app.part{--measure-gutter:max(56px,calc((100% - 736px) / 2))}
 .app.part .home,.app.part .dock{padding-left:var(--measure-gutter);padding-right:var(--measure-gutter)}
+/* Home's header bar names the page over the centred column. */
+.app.part.on-v-home .top{padding-left:var(--measure-gutter);padding-right:var(--measure-gutter)}
 /* In the app, pages and messages are just there, as a channel is: the mock's
    fade-and-rise belongs to its demo switching. Menus and the palette still pop. */
 .app.part .view,.app.part .mine,.app.part .theirs,.app.part .c-done{animation:none}
