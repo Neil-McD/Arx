@@ -38,10 +38,14 @@ function newSigningSecret(): string { return `whsec_${btoa(String.fromCharCode(.
 export function webhookUrlIsAllowed(raw: string): boolean {
   let url: URL;
   try { url = new URL(raw); } catch { return false; }
-  if (url.protocol !== "https:" || url.username || url.password) return false;
-  const host = url.hostname.toLowerCase();
+  if (url.protocol !== "https:" || url.username || url.password || url.port) return false;
+  // "localhost." is localhost: trailing dots are dropped before any check.
+  const host = url.hostname.toLowerCase().replace(/\.+$/, "");
   if (host === "localhost" || host.endsWith(".localhost") || host.endsWith(".local") || host.endsWith(".internal")) return false;
-  if (/^\d{1,3}(\.\d{1,3}){3}$/.test(host) || host.includes(":") || host.startsWith("[")) return false;
+  if (/^\d{1,3}(\.\d{1,3}){3}$/.test(host) || host.includes(":") || host.startsWith("[") || /^0x|^\d+$/.test(host)) return false;
+  // The resolved address can't be checked from here (no DNS in this runtime).
+  // What limits that: the body is fixed (an event id and an email), only the
+  // status is read, and redirects are never followed.
   return host.includes(".");
 }
 

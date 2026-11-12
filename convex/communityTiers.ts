@@ -1,3 +1,4 @@
+import { notifyConnectedApps } from "./connectedAppNotify";
 // Tiers and grants (one door, docs/specs/builder-modalities-v0.md, slice 1).
 // A membership holds one tier at a time; a tier gives grants, the names a
 // connected app reads (for Distribution Engineer: de:connect, de:setter,
@@ -131,6 +132,7 @@ export const saveCommunityTier = mutation({
       key = base;
       for (let n = 2; taken.has(key); n++) key = `${base.slice(0, 28)}-${n}`;
     }
+    const grantsChanged = JSON.stringify(row?.grants ?? []) !== JSON.stringify(grants);
     if (row) await ctx.db.patch(row._id, { name, grants, updatedAt: nowMs });
     else {
       const rank = key === BASE_TIER_KEY ? 0 : Math.max(0, ...rows.map((tier: any) => tier.rank)) + 1;
@@ -155,6 +157,28 @@ export const saveCommunityTier = mutation({
       }
     }
     void community;
+    // Grants changed: everyone holding this plan gets access.changed, so
+    // connected apps re-read what they have (bounded; most communities are small).
+    if (grantsChanged) {
+      const holders = new Set<string>();
+      const memberships = await ctx.db.query("communityMemberships")
+        .withIndex("by_community", (q: any) => q.eq("communityId", args.communityId)).take(2000);
+      const priceTier = new Map<string, string>();
+      for (const membership of memberships) {
+        if (!communityMembershipRowIsActive(membership) || membership.accessSource === "app_grant") continue;
+        let held = BASE_TIER_KEY;
+        if (membership.pricePointId) {
+          const id = String(membership.pricePointId);
+          if (!priceTier.has(id)) priceTier.set(id, ((await ctx.db.get(membership.pricePointId)) as any)?.tierKey ?? BASE_TIER_KEY);
+          held = priceTier.get(id)!;
+        }
+        if (held === key) holders.add(String(membership.userId));
+      }
+      const appSales = await ctx.db.query("communityAppGrants")
+        .withIndex("by_community_user", (q: any) => q.eq("communityId", args.communityId)).take(2000);
+      for (const sale of appSales) if (sale.active && sale.userId && sale.tierKey === key) holders.add(String(sale.userId));
+      for (const userId of [...holders].slice(0, 2000)) await notifyConnectedApps(ctx, args.communityId, userId as any);
+    }
     return { key };
   },
 });

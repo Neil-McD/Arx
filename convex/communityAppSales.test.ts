@@ -150,3 +150,21 @@ test("an app sale never puts back someone who left, was removed or is blocked; a
   expect(await (await report(t, ids.app.secret, { email: "comped@example.com", active: false })).json()).toEqual({ outcome: "kept_by_other_access" });
   expect(await canEnter(t, ids.communityId, comped)).toBe(true);
 });
+
+test("changing a plan's grants tells the app, for everyone holding that plan", async () => {
+  const t = convexTest(schema, modules);
+  const ids = await setup(t);
+  const asOwner = t.withIdentity({ subject: "owner-subject" });
+  await asOwner.mutation(api.connectedApps.updateConnectedApp, { communityId: ids.communityId, appId: ids.app.app_id, webhookUrl: "https://de.example.com/polynet" });
+  const buyer = await newUser(t, "buyer");
+  await report(t, ids.app.secret, { email: "buyer@example.com", active: true, tier: "setter" });
+  const before = (await t.run((ctx) => ctx.db.query("connectedAppDeliveries").collect())).length;
+  // A rename alone tells nobody; changing Setter's grants tells its holder.
+  await asOwner.mutation(api.communityTiers.saveCommunityTier, { communityId: ids.communityId, key: "setter", name: "Setter Pro", grants: ["de:setter"], monthlyAmountBaseUnits: 19700 });
+  expect((await t.run((ctx) => ctx.db.query("connectedAppDeliveries").collect())).length).toBe(before);
+  await asOwner.mutation(api.communityTiers.saveCommunityTier, { communityId: ids.communityId, key: "setter", name: "Setter Pro", grants: ["de:setter", "de:reports"], monthlyAmountBaseUnits: 19700 });
+  const after = await t.run((ctx) => ctx.db.query("connectedAppDeliveries").collect());
+  expect(after.length).toBe(before + 1);
+  expect(after[after.length - 1]).toMatchObject({ email: "buyer@example.com", type: "access.changed" });
+  void buyer;
+});
