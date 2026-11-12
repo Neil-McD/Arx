@@ -4,6 +4,10 @@
 // stand. The owner sees the daily brief's facts read live; a member sees only
 // what any member can already see (convex/communityFounderBrief.ts).
 import { KitHomeRail } from "../v1/KitHomeRail";
+import { dismissOwnerMoment, fetchOwnerMoment, markOwnerMomentShown } from "../../../../shared/cloudCommunityOwnerMomentsGateway";
+import type { OwnerMoment } from "../../../../shared/communityOwnerMoments";
+import { fetchCloudHomeMoments, recordCloudHomeVisit, type CloudHomeMoments } from "../../../../shared/cloudCommunityHomeMomentsGateway";
+import { formatMomentWhen, type HomeMoment, type MemberNextStep } from "../../../../shared/communityHomeMoments";
 import type { CommunityPresenceSummary } from "../../../../shared/communityTypes";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
@@ -36,6 +40,11 @@ export type WebCommunityHomeSectionProps = {
   // `hasConversation`: the one thread has something to read, so a quiet Home
   // still offers a way back into it.
   kit?: { talking: boolean; talk: ReactNode; onTalkItOver: () => void; hasConversation?: boolean } | null;
+  // Whether the community's agent is on (docs/specs/community-agent-gateway-v0.md).
+  // Off: Home is plain (no guide, no next step, no upsell).
+  agentOn?: boolean;
+  // The owner's milestone and problem cards turn the agent on in Billing.
+  onTurnOnAgent?: () => void;
   // Who is here now (a member's "Right now" shows the faces).
   presence?: CommunityPresenceSummary | null;
 };
@@ -215,6 +224,11 @@ export function homeEventTimeFor(startsAtIso: string, now: Date): string {
 export function WebCommunityHomeSection(props: WebCommunityHomeSectionProps) {
   const [snapshot, setSnapshot] = useState<CloudCommunityHomeSnapshot | null>(null);
   const [failed, setFailed] = useState(false);
+  // The owner's moment card (a milestone or a detected problem), when nothing
+  // urgent holds the next-step spot.
+  const [ownerMoment, setOwnerMoment] = useState<{ moment: OwnerMoment; isNew: boolean } | null>(null);
+  // What happened since this person's last visit, and a member's next step.
+  const [homeMoments, setHomeMoments] = useState<CloudHomeMoments | null>(null);
   const loadedCommunityIdRef = useRef<string | null>(null);
 
   useEffect(() => {
@@ -242,12 +256,84 @@ export function WebCommunityHomeSection(props: WebCommunityHomeSectionProps) {
     };
   }, [props.communityId, props.refreshKey, props.audience]);
 
+  useEffect(() => {
+    if (props.audience !== "host" || !props.kit) { setOwnerMoment(null); return; }
+    let cancelled = false;
+    void (async () => {
+      try {
+        const session = await props.ensureSession(props.session);
+        if (!session) return;
+        const picked = await fetchOwnerMoment({ session, communityId: props.communityId });
+        if (cancelled) return;
+        setOwnerMoment(picked);
+      } catch { if (!cancelled) setOwnerMoment(null); }
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [props.communityId, props.refreshKey, props.audience]);
+
+  useEffect(() => {
+    if (!props.kit) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const session = await props.ensureSession(props.session);
+        if (!session) return;
+        // Record this visit first, so "since" is the visit before it.
+        await recordCloudHomeVisit({ session, communityId: props.communityId }).catch(() => undefined);
+        const loaded = await fetchCloudHomeMoments({ session, communityId: props.communityId, asMember: props.audience === "member" });
+        if (!cancelled) setHomeMoments(loaded);
+      } catch { if (!cancelled) setHomeMoments(null); }
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [props.communityId, props.refreshKey, props.audience]);
+
+  const openTarget = (target: HomeMoment["target"] | MemberNextStep["target"] | null) => {
+    if (!target) return undefined;
+    return () => {
+      if (target.kind === "channel") props.onOpenChannelByName(target.name);
+      else if (target.kind === "knowledge") props.onOpenKnowledge?.();
+      else if (target.kind === "events") props.onOpenEvents();
+      else if (target.kind === "members") props.onOpenJoinRequests();
+    };
+  };
+
+  const dismissMoment = async () => {
+    const current = ownerMoment;
+    setOwnerMoment(null);
+    if (!current) return;
+    try {
+      const session = await props.ensureSession(props.session);
+      if (session) await dismissOwnerMoment({ session, communityId: props.communityId, key: current.moment.key });
+    } catch { /* It shows again next time; nothing is lost. */ }
+  };
+
+  // A new owner moment counts as shown only once its card is on screen (an
+  // urgent card holds the spot first), so a hidden card never uses its week.
+  useEffect(() => {
+    if (!ownerMoment?.isNew || !snapshot || !props.kit) return;
+    const urgentNow = homeCardFor(snapshot, props, props.audience);
+    if (urgentNow && (props.agentOn !== false || urgentNow.label === "Needs your decision")) return;
+    const shown = ownerMoment;
+    setOwnerMoment({ ...shown, isNew: false });
+    void (async () => {
+      const session = await props.ensureSession(props.session).catch(() => null);
+      if (session) await markOwnerMomentShown({ session, communityId: props.communityId, key: shown.moment.key }).catch(() => undefined);
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ownerMoment, snapshot, props.agentOn]);
+
   // Home is extra; if its facts can't load, the conversation below still works.
   if (failed && !props.kit) return null;
 
   const now = props.now ?? new Date();
   const greeting = `${greetingFor(now)}, ${props.firstName}.`;
-  const card = snapshot ? homeCardFor(snapshot, props, props.audience) : null;
+  const agentOn = props.agentOn !== false;
+  // Without the agent, only the decision that needs a person stays (people
+  // waiting to join); a waiting question is the guide's to bring up.
+  const urgent = snapshot ? homeCardFor(snapshot, props, props.audience) : null;
+  const card = urgent && (agentOn || urgent.label === "Needs your decision") ? urgent : null;
   const rows = snapshot ? homeRowsFor(snapshot, props, props.audience) : [];
   const figures = snapshot ? homeFiguresFor(snapshot, props.audience) : [];
   const nextEvent = snapshot?.upcomingEvents[0] ?? null;
@@ -257,7 +343,7 @@ export function WebCommunityHomeSection(props: WebCommunityHomeSectionProps) {
     const isHost = props.audience === "host";
     // The right column: Today, who is online, and the community's memory.
     const panel = snapshot ? (
-      <KitHomeRail session={props.session} communityId={props.communityId} audience={props.audience} snapshot={snapshot}
+      <KitHomeRail session={props.session} communityId={props.communityId} audience={props.audience} snapshot={snapshot} agentOn={agentOn}
         presence={props.presence} now={now.getTime()} onOpenEvents={props.onOpenEvents}
         onOpenChannelByName={props.onOpenChannelByName} onOpenMembers={props.onOpenJoinRequests} onOpenKnowledge={props.onOpenKnowledge} />
     ) : null;
@@ -269,22 +355,43 @@ export function WebCommunityHomeSection(props: WebCommunityHomeSectionProps) {
     return (
       <>
         <HomeBody>
-          <Eyebrow community={props.communityName} time={homeClockFor(now)} />
+          <Eyebrow community={props.communityName} time={homeClockFor(now)} plain={!agentOn} />
           <Hello greeting={greeting} line={snapshot ? homeSentenceFor(snapshot, card, props.audience) : failed ? "" : " "} />
+          {!card && ownerMoment ? (
+            <Card label={ownerMoment.moment.kind === "milestone" ? "Milestone" : "Worth a look"} title={ownerMoment.moment.title}
+              say={[ownerMoment.moment.detail, ownerMoment.moment.guide ? (agentOn ? `Your guide ${ownerMoment.moment.guide}.` : `With your community's agent, your guide ${ownerMoment.moment.guide}.`) : ""].filter(Boolean).join(" ")}>
+              {ownerMoment.moment.guide && !agentOn && props.onTurnOnAgent ? <Btn go onClick={props.onTurnOnAgent}>Turn on your community's agent</Btn> : null}
+              {ownerMoment.moment.guide && agentOn ? <Btn go onClick={kit.onTalkItOver}>Talk it over</Btn> : null}
+              <Btn txt onClick={() => void dismissMoment()}>{ownerMoment.moment.guide ? "Not now" : "Thanks"}</Btn>
+            </Card>
+          ) : null}
           {card ? (
             <Card label={card.label} title={card.title} say={card.detail}>
               <Btn go onClick={card.onAction}>{card.action}</Btn>
               <Btn txt onClick={kit.onTalkItOver}>Talk it over</Btn>
             </Card>
           ) : null}
-          {rows.length ? (
-            <Since label="Across the community" style={card ? undefined : { marginTop: 44 }}>
-              {rows.map((row, index) => (
-                <SinceItem key={index} kind={row.kind} title={row.title} detail={row.detail} onOpen={row.onOpen} still={!row.onOpen} />
-              ))}
-            </Since>
+          {!isHost && agentOn && homeMoments?.nextStep ? (
+            <Card label="Your next step" title={homeMoments.nextStep.title} say={[homeMoments.nextStep.when ? formatMomentWhen(homeMoments.nextStep.when) : "", homeMoments.nextStep.detail].filter(Boolean).join(". ")}>
+              <Btn go onClick={openTarget(homeMoments.nextStep.target)}>{homeMoments.nextStep.action}</Btn>
+              <Btn txt onClick={kit.onTalkItOver}>Talk it over</Btn>
+            </Card>
           ) : null}
-          {!kit.talking && kit.hasConversation && !card ? (
+          {(() => {
+            // Paid: chosen for you since your last visit. Free: a plain list of what's new.
+            const list = homeMoments ? (agentOn ? homeMoments.moments : homeMoments.recent) : [];
+            if (!list.length) return null;
+            const label = agentOn ? (homeMoments?.firstVisit ? "This week" : "Since you were last here") : "Recent";
+            const hasCard = Boolean(card || ownerMoment || (!isHost && agentOn && homeMoments?.nextStep));
+            return (
+              <Since label={label} style={hasCard ? undefined : { marginTop: 44 }}>
+                {list.map((moment, index) => (
+                  <SinceItem key={index} kind={moment.label} learned={moment.kind === "learned"} title={moment.title} detail={[moment.when ? formatMomentWhen(moment.when) : "", moment.detail].filter(Boolean).join(" · ")} onOpen={openTarget(moment.target)} still={!moment.target} />
+                ))}
+              </Since>
+            );
+          })()}
+          {agentOn && !kit.talking && kit.hasConversation && !card ? (
             <TextLink style={{ marginTop: 20 }} onClick={kit.onTalkItOver}>Continue your conversation</TextLink>
           ) : null}
           {kit.talk}

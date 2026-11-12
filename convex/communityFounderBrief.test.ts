@@ -35,7 +35,7 @@ const quiet: FounderBriefSnapshot = {
   windowHours: 24,
   newMembers: { count: 0, names: [] },
   activity: { posts: 0, replies: 0, activePeople: 0 },
-  week: { joined: 0, activePeople: 0 },
+  week: { joined: 0, activePeople: 0, messages: 0 },
   busiest: null,
   highlight: null,
   unanswered: [],
@@ -412,5 +412,66 @@ describe("staging seed for the brief", () => {
     } finally {
       delete process.env.POLYNET_ALLOW_SEED;
     }
+  });
+});
+
+describe("owner moments", () => {
+  it("only the owner gets a card; shown, it stays for the week; dismissed, nothing new until next week", async () => {
+    const t = convexTest(schema, modules);
+    const f = await fixture(t, Date.now());
+    const asOwner = t.withIdentity({ subject: "brief-Owner" });
+    const moment = () => asOwner.query(api.communityOwnerMoments.getOwnerMoment, { communityId: f.communityId });
+    // A quiet community with no milestone yet has no card.
+    expect(await moment()).toBeNull();
+    // Ten members besides the owner: the milestone, with no problem to name.
+    await t.run((ctx) => ctx.db.patch(f.communityId, { activeMemberCount: 11 } as any));
+    const first = await moment();
+    expect(first).toMatchObject({ isNew: true, moment: { key: "members_10", kind: "milestone" } });
+    await expect(t.withIdentity({ subject: "brief-Ana" }).query(api.communityOwnerMoments.getOwnerMoment, { communityId: f.communityId }))
+      .rejects.toThrow(/owner_required/);
+
+    await asOwner.mutation(api.communityOwnerMoments.markOwnerMomentShown, { communityId: f.communityId, key: first!.moment.key });
+    expect(await moment()).toMatchObject({ isNew: false, moment: { key: first!.moment.key } });
+
+    await asOwner.mutation(api.communityOwnerMoments.dismissOwnerMoment, { communityId: f.communityId, key: first!.moment.key });
+    expect(await moment()).toBeNull();
+    await expect(asOwner.mutation(api.communityOwnerMoments.dismissOwnerMoment, { communityId: f.communityId, key: "anything" }))
+      .rejects.toThrow(/unknown/);
+  });
+});
+
+describe("Home moments", () => {
+  it("a visit after half an hour away becomes 'since you were last here'; members never get names", async () => {
+    const t = convexTest(schema, modules);
+    const f = await fixture(t, Date.now());
+    const asAna = t.withIdentity({ subject: "brief-Ana" });
+    const asOwner = t.withIdentity({ subject: "brief-Owner" });
+
+    await asAna.mutation(api.communityHomeMoments.recordHomeVisit, { communityId: f.communityId });
+    const first = await asAna.query(api.communityHomeMoments.getHomeMoments, { communityId: f.communityId });
+    expect(first.firstVisit).toBe(true);
+    // Ana asked a question herself: she has posted, so no "say hello".
+    expect(first.nextStep?.kind ?? null).not.toBe("say_hello");
+
+    // Back after an hour: the earlier visit is now the one to count from.
+    const hourAgo = Date.now() - 60 * 60 * 1000;
+    await t.run(async (ctx) => {
+      const row = (await ctx.db.query("communityMemberVisits").collect())[0];
+      await ctx.db.patch(row._id, { currentVisitAt: hourAgo });
+    });
+    await asAna.mutation(api.communityHomeMoments.recordHomeVisit, { communityId: f.communityId });
+    const again = await asAna.query(api.communityHomeMoments.getHomeMoments, { communityId: f.communityId });
+    expect(again.firstVisit).toBe(false);
+    expect(Date.parse(again.since)).toBe(hourAgo);
+
+    // The owner sees who joined by name; viewing as a member, not.
+    const ownerView = await asOwner.query(api.communityHomeMoments.getHomeMoments, { communityId: f.communityId });
+    const memberView = await asOwner.query(api.communityHomeMoments.getHomeMoments, { communityId: f.communityId, asMember: true });
+    expect(ownerView.moments.find((moment: any) => moment.kind === "joined")?.title).toContain("Ana");
+    expect(JSON.stringify(memberView.moments)).not.toContain("Ben");
+
+    await t.run((ctx) => ctx.db.insert("users", { authSubject: "moments-stranger", createdAt: 0, updatedAt: 0 } as any));
+    await expect(t.withIdentity({ subject: "moments-stranger" }).query(api.communityHomeMoments.getHomeMoments, { communityId: f.communityId }))
+      .rejects.toThrow();
   });
 });

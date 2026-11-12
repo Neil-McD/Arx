@@ -4,6 +4,7 @@
 import { useMemo } from "react";
 import type { PaletteCommunity, PalettePlace } from "../../../../shared/commandPalette";
 import { KitCommandPalette } from "../v1/KitCommandPalette";
+import { useCommunityAgentOn } from "../controllers/communityAgentOn";
 import type { WebCommunityShellProps } from "./webShellChromeShared";
 
 // The same questions as Home's chips.
@@ -17,6 +18,7 @@ function initials(name: string): string {
 
 export function WebCommunityCommandPalette({ communityShell }: { communityShell: WebCommunityShellProps }) {
   const shell = communityShell;
+  const agentOn = useCommunityAgentOn();
   const isHost = shell.canManageMembersActiveCommunity || shell.canViewActiveCommunitySettings;
 
   const places = useMemo<PalettePlace[]>(() => {
@@ -74,5 +76,5 @@ export function WebCommunityCommandPalette({ communityShell }: { communityShell:
   }), [shell]);
 
   return <KitCommandPalette places={places} suggestions={isHost ? HOST_SUGGESTIONS : MEMBER_SUGGESTIONS} communities={communities} actions={actions}
-    communityId={shell.activeCommunity?.id ?? null} />;
+    communityId={shell.activeCommunity?.id ?? null} agentOn={agentOn} />;
 }

@@ -237,10 +237,11 @@ export function HomeBody(props: { hostOnly?: boolean; memberOnly?: boolean; chil
   return <div className={cx("home", props.hostOnly && "h-only", props.memberOnly && "m-only")}>{props.children}</div>;
 }
 
-export function Eyebrow(props: { community: string; time?: string }) {
+// `plain`: a community without its agent; just its name and the time.
+export function Eyebrow(props: { community: string; time?: string; plain?: boolean }) {
   return (
     <div className={cx("eyebrow")}>
-      <Icon name="spark" />{props.community}, your guide{props.time ? <> <em>· {props.time}</em></> : null}
+      {props.plain ? null : <Icon name="spark" />}{props.community}{props.plain ? "" : ", your guide"}{props.time ? <> <em>· {props.time}</em></> : null}
     </div>
   );
 }

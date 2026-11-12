@@ -1,4 +1,5 @@
 import { useGuideSearchShortcut } from "./controllers/useGuideSearchShortcut";
+import { useCommunityAgentOnState } from "./controllers/communityAgentOn";
 import {
   useMemo,
   useRef,
@@ -1635,6 +1636,7 @@ export default function App() {
 
   // Design system v1: "Search or ask" and ⌘K open your guide on Home.
   useGuideSearchShortcut(handleSelectCommunityTab, communityAgentComposerApiRef);
+  const activeCommunityAgentOn = useCommunityAgentOnState({ session, ensureSession: ensureUsableAuthSession, communityId: activeCommunity?.id ?? null });
 
   const { peopleOpen, changeOpen: handlePeoplePanelOpenChange, openMembers: handleOpenCommunityMembers } =
     useWebChannelPeoplePanel({
@@ -2489,6 +2491,7 @@ export default function App() {
 
   return (
     <WebAppCompositionRoot
+      communityAgentOn={activeCommunityAgentOn}
       globalOverlayHostProps={globalOverlayHostProps}
       communityAgentDockRef={communityAgentComposerApiRef}
       communityAgentDockProps={{
@@ -2514,6 +2517,8 @@ export default function App() {
                 },
                 onOpenEvents: () => handleSelectCommunityTab("events"),
                 onOpenKnowledge: () => handleSelectCommunityTab("resources"),
+                // The Agent plan is bought in Billing (no trial).
+                onTurnOnAgent: () => openGlobalSettings("billing"),
                 presence: activeCommunityPresenceSummary,
               }
             : null,

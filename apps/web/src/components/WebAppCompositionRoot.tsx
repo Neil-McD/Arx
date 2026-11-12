@@ -1,3 +1,4 @@
+import { CommunityAgentOnProvider } from "../controllers/communityAgentOn";
 import {
   lazy,
   Suspense,
@@ -43,6 +44,8 @@ export function WebAppCompositionRoot(props: {
     WebShellChromeHostProps,
     "mainSurface" | "globalOverlays"
   >;
+  // Whether the active community's agent is on; every page below reads it.
+  communityAgentOn: boolean;
 }) {
   const agentSessionKey = communityAgentSessionKey(props.communityAgentDockProps.session?.user.id, props.communityAgentDockProps.community?.id);
   const showAgentWorkspace = showCommunityAgentWorkspace(props.communityAgentDockProps);
@@ -77,10 +80,12 @@ export function WebAppCompositionRoot(props: {
   );
 
   return (
-    <WebShellChromeHost
-      {...props.shellChromeHostProps}
-      mainSurface={mainSurface}
-      globalOverlays={globalOverlays}
-    />
+    <CommunityAgentOnProvider value={props.communityAgentOn}>
+      <WebShellChromeHost
+        {...props.shellChromeHostProps}
+        mainSurface={mainSurface}
+        globalOverlays={globalOverlays}
+      />
+    </CommunityAgentOnProvider>
   );
 }

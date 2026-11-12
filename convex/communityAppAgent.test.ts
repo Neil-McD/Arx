@@ -408,3 +408,18 @@ test("front-end agent turns are refused without the edge, without input, or with
   const lost = await f.post(COMMUNITY_APP_AGENT_PATH, f.asEdge(token), { text: "hi", message_key: "lost-member-1" });
   expect(lost.status).toBe(403);
 });
+
+test("pages learn whether the agent is on: members see it follow the Agent plan, strangers are refused", async () => {
+  const f = await fixture();
+  const asMember = f.t.withIdentity({ subject: "agent-member-subject" });
+  const agentOn = () => asMember.query(api.communityAgent.getCommunityAgentOn, { communityId: f.ids.communityId });
+  expect(await agentOn()).toEqual({ agent_on: true });
+
+  const plan = await f.t.run(async (c) => (await c.db.query("founderSubscriptions").collect())[0]);
+  await f.t.run((c) => c.db.patch(plan._id, { status: "canceled", currentPeriodEndAt: Date.now() - 1 } as any));
+  expect(await agentOn()).toEqual({ agent_on: false });
+
+  await f.t.run((c) => c.db.insert("users", { authSubject: "agent-stranger-subject", createdAt: 0, updatedAt: 0 } as any));
+  await expect(f.t.withIdentity({ subject: "agent-stranger-subject" }).query(api.communityAgent.getCommunityAgentOn, { communityId: f.ids.communityId }))
+    .rejects.toThrow();
+});

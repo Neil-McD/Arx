@@ -60,6 +60,7 @@ import type * as communityEvidenceAudit from "../communityEvidenceAudit.js";
 import type * as communityFounderBrief from "../communityFounderBrief.js";
 import type * as communityFunnelEvents from "../communityFunnelEvents.js";
 import type * as communityHandbook from "../communityHandbook.js";
+import type * as communityHomeMoments from "../communityHomeMoments.js";
 import type * as communityInteractionAttachmentBridge from "../communityInteractionAttachmentBridge.js";
 import type * as communityInteractionEvidence from "../communityInteractionEvidence.js";
 import type * as communityInteractionEvidenceCore from "../communityInteractionEvidenceCore.js";
@@ -83,6 +84,7 @@ import type * as communityNotificationAccess from "../communityNotificationAcces
 import type * as communityOntologyCards from "../communityOntologyCards.js";
 import type * as communityOperations from "../communityOperations.js";
 import type * as communityOwnerApprovals from "../communityOwnerApprovals.js";
+import type * as communityOwnerMoments from "../communityOwnerMoments.js";
 import type * as communityPeople from "../communityPeople.js";
 import type * as communityPresenceCore from "../communityPresenceCore.js";
 import type * as communityPublic from "../communityPublic.js";
@@ -266,6 +268,7 @@ declare const fullApi: ApiFromModules<{
   communityFounderBrief: typeof communityFounderBrief;
   communityFunnelEvents: typeof communityFunnelEvents;
   communityHandbook: typeof communityHandbook;
+  communityHomeMoments: typeof communityHomeMoments;
   communityInteractionAttachmentBridge: typeof communityInteractionAttachmentBridge;
   communityInteractionEvidence: typeof communityInteractionEvidence;
   communityInteractionEvidenceCore: typeof communityInteractionEvidenceCore;
@@ -289,6 +292,7 @@ declare const fullApi: ApiFromModules<{
   communityOntologyCards: typeof communityOntologyCards;
   communityOperations: typeof communityOperations;
   communityOwnerApprovals: typeof communityOwnerApprovals;
+  communityOwnerMoments: typeof communityOwnerMoments;
   communityPeople: typeof communityPeople;
   communityPresenceCore: typeof communityPresenceCore;
   communityPublic: typeof communityPublic;
