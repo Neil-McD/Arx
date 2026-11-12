@@ -40,6 +40,9 @@ function KnowledgeV1({ resources, context }: Props) {
       </CommunityPageHeader>
       {view === "resources" ? <CommunityResourcesPanel {...resources} /> : (
         <KitKnowledgePage communityId={context.communityId!} communityName={context.communityName ?? "This community"} session={context.session}
+          // The app's own lens ("View as a member" turns it off); the server
+          // still decides who may write.
+          allowManage={resources.capabilities.canOperateResources}
           onOpenResources={() => setView("resources")}
           renderRail={(rail) => <CommunityPageRail label="Open note">{rail}</CommunityPageRail>} />
       )}
