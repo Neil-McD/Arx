@@ -2858,3 +2858,9 @@
   font-size: 13px;
   cursor: pointer;
 }
+
+/* A lesson inside the classroom: the existing lesson reader at the kit's measure. */
+:root[data-design="v1"] .kit-lesson-body .resource-viewer-content {
+  max-width: 640px;
+  padding: 0;
+}
