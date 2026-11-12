@@ -859,7 +859,7 @@ export default function LessonEditor(props: LessonEditorProps) {
     Placeholder.configure({
       placeholder: ({ editor, node }) => {
         if (node.type.name === "heading") return "Heading";
-        return editor.state.doc.childCount <= 1 ? "Write your lesson, or press / for headings, images, quizzes and more" : "Press / for blocks";
+        return editor.state.doc.childCount <= 1 ? (propsRef.current.followAlong === false ? "Write your lesson, or press / for headings, lists, callouts and more" : "Write your lesson, or press / for headings, images, quizzes and more") : "Press / for blocks";
       },
       showOnlyCurrent: true,
     }),

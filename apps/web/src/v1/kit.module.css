@@ -592,6 +592,7 @@
 .app .kedit-video input::placeholder{color:var(--ink3)}
 .app .kedit-thumb{flex:none;width:96px;height:54px;border-radius:8px;background:var(--s2) center/cover no-repeat}
 .app .kedit-bar{position:sticky;bottom:0;display:flex;align-items:center;gap:8px;margin-top:16px;padding:12px 0;border-top:1px solid var(--line);background:var(--bg)}
+.app .kedit-bar .btn:disabled{opacity:.4;cursor:default;box-shadow:none}
 .app .kedit-pub{display:flex;align-items:center;gap:8px;margin-right:8px;font-size:13px;color:var(--ink2);cursor:pointer}
 .app .kedit-pub input{position:absolute;opacity:0;pointer-events:none}
 .app .kedit-switch{position:relative;width:28px;height:16px;border-radius:999px;background:var(--s2);border:1px solid var(--line2);transition:background .15s var(--ease)}

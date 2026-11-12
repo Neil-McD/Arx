@@ -109,13 +109,16 @@ export function KitClassroom(props: {
     } catch { /* The right column goes without notes. */ }
   }, [props.session, props.communityId, props.canManage]);
   useEffect(() => { void loadProgress(); void loadNotes(); }, [loadProgress, loadNotes]);
+  // Started and finished depend on which lessons exist, so they're read again
+  // when a host adds, publishes or deletes one.
+  const lessonSetKey = props.resources.map((resource) => `${resource.id}:${resource.resource_status}`).join(",");
   useEffect(() => {
     if (!props.canManage) { setSummary([]); return; }
     let cancelled = false;
     fetchCourseProgressSummary({ session: props.session, communityId: props.communityId })
       .then((rows) => { if (!cancelled) setSummary(rows); }).catch(() => undefined);
     return () => { cancelled = true; };
-  }, [props.session, props.communityId, props.canManage]);
+  }, [props.session, props.communityId, props.canManage, lessonSetKey]);
 
   // Members see live courses; hosts see drafts too, marked.
   const courses = useMemo(() => props.modules
