@@ -5,7 +5,7 @@
 export type MemberPlanKind = "owner" | "paid" | "comped" | "free";
 export type MemberPlan = { kind: MemberPlanKind; label: string; price_point_id: string | null };
 export type MemberMoney = { kind: "on_hold" | "cancelling"; label: string; since_at: string | null; ends_at: string | null } | null;
-export type MemberOutReason = "left" | "removed" | "lapsed" | "blocked" | "declined";
+export type MemberOutReason = "left" | "removed" | "lapsed" | "blocked" | "refunded" | "disputed" | "declined";
 
 export function formatPrice(amountBaseUnits: number, currency: string, decimals: number): string {
   const amount = amountBaseUnits / Math.pow(10, Math.max(0, decimals));
@@ -60,10 +60,14 @@ export function moneyFor(args: {
   return null;
 }
 
-export function outReasonFor(state: string, blocked: boolean): MemberOutReason | null {
+// Why someone is out. A refund or a card dispute ends access (billing writes
+// it as the membership's revokedReason), so those read as their own reasons.
+export function outReasonFor(state: string, blocked: boolean, revokedReason: string | null | undefined = null): MemberOutReason | null {
   if (blocked) return "blocked";
-  if (state === "left" || state === "removed" || state === "lapsed") return state;
-  return null;
+  if (state !== "left" && state !== "removed" && state !== "lapsed") return null;
+  if (revokedReason === "subscription_refunded") return "refunded";
+  if (revokedReason === "subscription_dispute_opened" || revokedReason === "subscription_dispute_lost") return "disputed";
+  return state;
 }
 
 export const OUT_REASON_TEXT: Record<MemberOutReason, string> = {
@@ -71,6 +75,8 @@ export const OUT_REASON_TEXT: Record<MemberOutReason, string> = {
   removed: "Removed by a host",
   lapsed: "Payment lapsed",
   blocked: "Blocked",
+  refunded: "Refunded",
+  disputed: "Disputed the charge",
   declined: "Asked to join, declined",
 };
 
@@ -102,3 +108,17 @@ export const FACT_SOURCES: Record<string, string> = {
 export function factVisibleToHost(fact: { consentState: string }): boolean {
   return fact.consentState === "approved";
 }
+
+export type MemberView = "everyone" | "on_hold" | "cancelling" | "comped" | "know_little" | "past" | `price:${string}`;
+
+// Which view a person in the community belongs to.
+export function memberInView(view: string, row: { plan: MemberPlan; money: MemberMoney; working_on: string | null }): boolean {
+  if (view === "everyone") return true;
+  if (view === "on_hold") return row.money?.kind === "on_hold";
+  if (view === "cancelling") return row.money?.kind === "cancelling";
+  if (view === "comped") return row.plan.kind === "comped";
+  if (view === "know_little") return !row.working_on;
+  if (view.startsWith("price:")) return row.plan.price_point_id === view.slice("price:".length);
+  return false;
+}
+

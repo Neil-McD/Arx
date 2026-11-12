@@ -37,6 +37,9 @@ async function seed(t: any) {
     await join("ana", "Ana", { accessSource: "paid_subscription", pricePointId: founding, state: "left", revokedAt: NOW - 3 * DAY });
     const lee = await join("lee", "Lee", { accessSource: "free_grant", state: "removed", revokedAt: NOW - 4 * DAY });
     await ctx.db.insert("communityBlocks", { communityId, userId: lee.userId, createdByUserId: ownerId, createdAt: NOW, updatedAt: NOW });
+    await join("omar", "Omar", { accessSource: "paid_subscription", pricePointId: member, state: "lapsed", revokedAt: NOW - 2 * DAY, revokedReason: "subscription_refunded" });
+    await join("kim", "Kim", { accessSource: "paid_subscription", pricePointId: member, state: "lapsed", revokedAt: NOW - DAY, revokedReason: "subscription_dispute_opened" });
+    const freeby = await join("freeby", "Freeby", { accessSource: "free_grant" });
     const dana = await user("dana", "Dana");
     await ctx.db.insert("communityJoinRequests", { communityId, userId: dana, status: "denied", deniedAt: NOW - 6 * DAY, createdAt: NOW - 7 * DAY, updatedAt: NOW });
 
@@ -46,14 +49,27 @@ async function seed(t: any) {
     await fact(tanya.userId, "goal", "Finding her first ten members", "stated_interview", "approved");
     await fact(tanya.userId, "interest", "Restaurant owners", "inferred_agent", "pending");
     await fact(tanya.userId, "skill", "Watches what others post", "observed_behavior", "agent_internal");
-    return { communityId, founding, member, tanya, martin };
+    return { communityId, founding, member, tanya, martin, jon, freeby };
   });
 }
 
 test("the host sees every way someone is in, at which price, and who needs them", async () => {
   const t = convexTest(schema, modules);
   const { communityId, founding, member } = await seed(t);
-  const list = await t.withIdentity({ subject: "owner" }).query(api.communityMemberRecords.listCommunityMemberRecords, { communityId });
+  const asOwner = t.withIdentity({ subject: "owner" });
+  // Small pages, to walk the paging.
+  const all = async (view: string) => {
+    const rows: any[] = []; const past: any[] = []; let cursor: string | null = null;
+    for (let i = 0; i < 20; i++) {
+      const page: any = await asOwner.query(api.communityMemberRecords.listCommunityMemberRecordsPage, { communityId, view, paginationOpts: { numItems: 2, cursor } });
+      rows.push(...page.rows); past.push(...page.past);
+      if (page.isDone) break;
+      cursor = page.continueCursor;
+    }
+    return { rows, past };
+  };
+  const list = await all("everyone");
+  const summary = await asOwner.query(api.communityMemberRecords.getCommunityMemberSummary, { communityId });
   const by = (name: string) => list.rows.find((row: any) => row.name === name);
 
   expect(by("Neil")).toMatchObject({ role: "owner", plan: { kind: "owner", label: "Owner" } });
@@ -67,15 +83,22 @@ test("the host sees every way someone is in, at which price, and who needs them"
   expect(list.rows.map((row: any) => row.name)).not.toContain("Ana");
 
   // A view per price that has people on it, including one no longer offered.
-  expect(list.prices).toEqual(expect.arrayContaining([
+  expect(summary.prices).toEqual(expect.arrayContaining([
     expect.objectContaining({ price_point_id: String(founding), label: "Founding · $7", count: 1, current: false }),
     expect.objectContaining({ price_point_id: String(member), label: "Member · $27", count: 2, current: true }),
   ]));
 
   // People who are out never vanish.
-  const past = Object.fromEntries(list.past.map((row: any) => [row.name, row.reason]));
-  expect(past).toEqual({ Ana: "left", Lee: "blocked", Dana: "declined" });
-  expect(list.capped).toBe(false);
+  const past = Object.fromEntries((await all("past")).past.map((row: any) => [row.name, row.reason]));
+  expect(past).toEqual({ Ana: "left", Lee: "blocked", Dana: "declined", Omar: "refunded", Kim: "disputed" });
+  // Every view's count is true, and matches walking that view page by page.
+  expect(summary.capped).toBe(false);
+  expect(summary.counts).toMatchObject({ everyone: 6, on_hold: 1, cancelling: 1, comped: 1, past: 5 });
+  expect(summary.with_access).toBe(5);
+  for (const view of ["everyone", "on_hold", "cancelling", "comped", "know_little", `price:${member}`]) {
+    const expected = view.startsWith("price:") ? summary.prices.find((p: any) => `price:${p.price_point_id}` === view)!.count : summary.counts[view];
+    expect((await all(view)).rows.length, view).toBe(expected);
+  }
 });
 
 test("the record shows only what the member approved, each with where it came from", async () => {
@@ -95,10 +118,11 @@ test("only people who manage members can read plans, prices and payments", async
   const t = convexTest(schema, modules);
   const { communityId, tanya } = await seed(t);
   const asMember = t.withIdentity({ subject: "jon" });
-  await expect(asMember.query(api.communityMemberRecords.listCommunityMemberRecords, { communityId })).rejects.toThrow(/community_forbidden/);
+  await expect(asMember.query(api.communityMemberRecords.getCommunityMemberSummary, { communityId })).rejects.toThrow(/community_forbidden/);
+  await expect(asMember.query(api.communityMemberRecords.listCommunityMemberRecordsPage, { communityId, view: "everyone", paginationOpts: { numItems: 10, cursor: null } })).rejects.toThrow(/community_forbidden/);
   await expect(asMember.query(api.communityMemberRecords.getCommunityMemberRecord, { communityId, membershipId: tanya.membershipId })).rejects.toThrow(/community_forbidden/);
   // A moderator moderates content; they don't see what people pay.
-  await expect(t.withIdentity({ subject: "martin" }).query(api.communityMemberRecords.listCommunityMemberRecords, { communityId })).rejects.toThrow(/community_forbidden/);
+  await expect(t.withIdentity({ subject: "martin" }).query(api.communityMemberRecords.getCommunityMemberSummary, { communityId })).rejects.toThrow(/community_forbidden/);
 });
 
 test("notes are the hosts' alone, and the record shows who did what to a member", async () => {
@@ -141,4 +165,16 @@ test("members see who is in and what each person shared, never who is out or wha
   const profile = await asJon.query(api.communityMemberProfiles.getCommunityMemberProfile, { communityId, membershipId: tanya.membershipId });
   expect(profile?.facts).toEqual([{ kind: "goal", label: "Working on", body: "Finding her first ten members" }]);
   expect(JSON.stringify(profile)).not.toMatch(/Said to the guide|stated_interview/);
+});
+
+test("a host can comp a free member, never someone paying, and it shows in their trail", async () => {
+  const t = convexTest(schema, modules);
+  const { communityId, jon, freeby } = await seed(t);
+  const asOwner = t.withIdentity({ subject: "owner" });
+  await expect(asOwner.mutation(api.communityMemberRecords.compCommunityMember, { communityId, membershipId: jon.membershipId })).rejects.toThrow(/community_member_is_paying/);
+  await expect(t.withIdentity({ subject: "jon" }).mutation(api.communityMemberRecords.compCommunityMember, { communityId, membershipId: freeby.membershipId })).rejects.toThrow(/community_forbidden/);
+  await asOwner.mutation(api.communityMemberRecords.compCommunityMember, { communityId, membershipId: freeby.membershipId });
+  const record = await asOwner.query(api.communityMemberRecords.getCommunityMemberRecord, { communityId, membershipId: freeby.membershipId });
+  expect(record?.plan).toMatchObject({ kind: "comped", label: "Comped" });
+  expect(record?.events.map((event: any) => event.text)).toContain("Comped by you");
 });
