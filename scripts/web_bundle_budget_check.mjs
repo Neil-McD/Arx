@@ -8,7 +8,13 @@ const limits = {
   maxSingleJsBytes: readLimit("WEB_BUNDLE_MAX_SINGLE_JS_BYTES", 1_600_000),
   maxIndexJsBytes: readLimit("WEB_BUNDLE_MAX_INDEX_JS_BYTES", 1_000_000),
   maxTotalJsBytes: readLimit("WEB_BUNDLE_MAX_TOTAL_JS_BYTES", 3_400_000),
+  maxHostOnlyJsBytes: readLimit("WEB_BUNDLE_MAX_HOST_ONLY_JS_BYTES", 800_000),
 };
+
+// Chunks only hosts load, on demand (the lesson editor). Members never fetch
+// them, so they have their own budget and the total stays what a member can
+// download. (From Rashid's PR #290.)
+const HOST_ONLY_CHUNK = /^LessonEditor-/;
 
 function readLimit(name, fallback) {
   const value = Number(process.env[name]);
@@ -40,7 +46,8 @@ try {
   throw error;
 }
 
-const totalJsBytes = files.reduce((sum, file) => sum + file.bytes, 0);
+const totalJsBytes = files.filter((file) => !HOST_ONLY_CHUNK.test(file.name)).reduce((sum, file) => sum + file.bytes, 0);
+const hostOnlyJsBytes = files.filter((file) => HOST_ONLY_CHUNK.test(file.name)).reduce((sum, file) => sum + file.bytes, 0);
 const largest = files[0] ?? null;
 const indexChunk = files.find((file) => file.name.startsWith("index-"));
 
@@ -60,6 +67,12 @@ if (totalJsBytes > limits.maxTotalJsBytes) {
   );
 }
 
+if (hostOnlyJsBytes > limits.maxHostOnlyJsBytes) {
+  fail(
+    `host-only JS is ${formatBytes(hostOnlyJsBytes)}, limit ${formatBytes(limits.maxHostOnlyJsBytes)}`,
+  );
+}
+
 if (process.exitCode) {
   console.error("Largest JS chunks:");
   for (const file of files.slice(0, 8)) {
@@ -67,6 +80,6 @@ if (process.exitCode) {
   }
 } else {
   console.log(
-    `web_bundle_budget_check: ok (${files.length} JS chunks, total ${formatBytes(totalJsBytes)})`,
+    `web_bundle_budget_check: ok (${files.length} JS chunks, total ${formatBytes(totalJsBytes)}, host-only ${formatBytes(hostOnlyJsBytes)})`,
   );
 }
