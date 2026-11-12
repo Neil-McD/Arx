@@ -13,6 +13,11 @@ import {
 import { eventDateBlock, eventDayWord, featuredEventLabel } from "../components/communityEventsList";
 import { Btn, cx, Icon, KitApp, Rail, Sec } from "./kit";
 
+// "1:00 pm", as the mock has it (the reader's own time).
+export function eventClock(startsAtIso: string): string {
+  return new Date(startsAtIso).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }).replace(/\s+/g, " ").toLowerCase();
+}
+
 export const goingKey = (event: { parent_event_id: string; starts_at: string }) => `${event.parent_event_id}:${Date.parse(event.starts_at)}`;
 
 // "Neil is hosting · 14 going", with only the parts that are known.
@@ -95,7 +100,7 @@ export function KitEventsList(props: {
   const mine = upcoming.filter((event) => going.get(goingKey(event))?.mine);
 
   const rail = (
-    <KitApp view="events" host={props.canManage} part="rail">
+    <KitApp view="events" host={props.canManage} part="rail" className="events-kit-rail">
       <Rail index={4} label="Your events">
         <Sec label="You're going to">
           {mine.length ? mine.slice(0, 6).map((event, index) => (
@@ -111,16 +116,16 @@ export function KitEventsList(props: {
   return (
     <>
       <KitApp view="events" host={props.canManage} part="flow">
-        <div className={cx("page")} style={{ paddingBottom: 56 }}>
+        <div className={cx("page")} style={{ padding: 0, overflow: "visible" }}>
           {featured && label ? (
-            <div className={cx("card")} style={{ marginTop: 28, maxWidth: "none" }} id={`community-event-${featured.id}`}>
+            <div className={cx("card")} style={{ marginTop: 0, maxWidth: "none" }} id={`community-event-${featured.id}`}>
               <div className={cx("meta")}>
                 {label.live ? <span className={cx("livepill")}><i />{label.text}</span> : <span>{label.text}</span>}
-                <span>{[props.timeLabel(featured), recurrence(featured)].filter(Boolean).join(" · ")}</span>
+                <span title={props.timeLabel(featured)}>{[label.live ? `${eventDayWord(featured.starts_at, props.now)}, ${eventClock(featured.starts_at)}` : eventClock(featured.starts_at), recurrence(featured)].filter(Boolean).join(" · ")}</span>
               </div>
               <h2>{featured.title}</h2>
               {featured.description_md ? <p className={cx("say")}>{featured.description_md}</p> : null}
-              <div className={cx("acts")}>
+              <div className={cx("acts")} style={{ flexWrap: "wrap", rowGap: 12 }}>
                 {featured.url ? <a className={cx("btn go")} href={featured.url} target="_blank" rel="noreferrer">{label.live ? "Join" : "Join when it starts"}</a> : null}
                 {goingButton(featured)}
                 <a className={cx("btn")} href={props.calendarUrl(featured)} target="_blank" rel="noreferrer">Add to calendar</a>
@@ -141,7 +146,7 @@ export function KitEventsList(props: {
               </div>
             </div>
           ) : (
-            <p className={cx("lead")} style={{ marginTop: 28 }}><span className={cx("aura")}><Icon name="spark" /></span>Nothing is planned yet.</p>
+            <p className={cx("lead")} style={{ marginTop: 0 }}><span className={cx("aura")}><Icon name="spark" /></span>Nothing is planned yet.</p>
           )}
           <div style={{ display: "flex", alignItems: "center", marginTop: 34 }}>
             <span className={cx("lab")}>Coming up</span>
@@ -153,7 +158,7 @@ export function KitEventsList(props: {
               return (
                 <div key={event.id} className={cx("erow")} id={`community-event-${event.id}`}>
                   <div className={cx("date")}><b>{block.number}</b><span>{block.word}</span></div>
-                  <div><b>{event.title}</b><span className={cx("s")}>{[props.timeLabel(event), recurrence(event), eventPeopleLine(going.get(goingKey(event)))].filter(Boolean).join(" · ")}</span></div>
+                  <div><b>{event.title}</b><span className={cx("s")} title={props.timeLabel(event)}>{[eventClock(event.starts_at), recurrence(event), eventPeopleLine(going.get(goingKey(event)))].filter(Boolean).join(" · ")}</span></div>
                   <span style={{ display: "flex", alignItems: "center", gap: 6 }}>{manage(event)}{goingButton(event)}</span>
                 </div>
               );
@@ -169,7 +174,7 @@ export function KitEventsList(props: {
                   return (
                     <div key={event.id} className={cx("erow")}>
                       <div className={cx("date past")}><b>{block.number}</b><span>{block.word}</span></div>
-                      <div><b>{event.title}</b><span className={cx("s")}>{props.timeLabel(event)}</span></div>
+                      <div><b>{event.title}</b><span className={cx("s")}>{eventClock(event.starts_at)}</span></div>
                       <span />
                     </div>
                   );

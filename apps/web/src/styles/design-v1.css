@@ -2999,3 +2999,8 @@
   right: auto;
   left: 0;
 }
+
+/* Events on the kit: the kit's rail brings its own padding. */
+:root[data-design="v1"] .community-page-rail:has(.events-kit-rail) {
+  padding: 0;
+}
