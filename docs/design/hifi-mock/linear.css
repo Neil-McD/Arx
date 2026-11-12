@@ -10,26 +10,20 @@
    (Today, Online now, Community memory). */
 
 .app.linear{
-  --bg:#08090a; --panel:#0f1011; --panel2:#141516;
+  --bg:#0f1011; --window:#08090a; --panel:#0f1011; --panel2:#141516;
   --ink:#e6e7e9; --ink1:rgba(230,231,233,.9); --ink2:rgba(230,231,233,.62); --ink3:rgba(230,231,233,.44); --ink4:rgba(230,231,233,.22);
   --line:rgba(255,255,255,.06); --line2:rgba(255,255,255,.09);
   --s1:rgba(255,255,255,.03); --s2:rgba(255,255,255,.05); --s3:rgba(255,255,255,.08);
   --accent:#6f78d8; --accent-hover:#7d86e2;
   --card-bg:var(--panel2); --card-shadow:none; --field:var(--panel2);
   --go:var(--accent); --go-hover:var(--accent-hover);
-  padding:8px 8px 8px 0; font-size:13px; letter-spacing:0;
-  font-family:'Inter','Geist',system-ui,sans-serif;
+  font-size:13px; letter-spacing:0;
 }
 
 /* the left column, on the window */
-.app.linear .side{width:244px;padding:8px 10px;border-right:0}
 .app.linear .cover{height:72px;border-radius:8px;font-size:13px;font-weight:600;padding:8px 10px}
 .app.linear .cover::before{background:linear-gradient(to top,rgba(8,9,10,.92) 0,rgba(8,9,10,.55) 45%,rgba(8,9,10,0) 80%)}
 .app.linear .cover .mark{width:20px;height:20px;border-radius:5px;font-size:9px}
-.app.linear .lin-tools{display:flex;align-items:center;gap:2px;margin:8px 0 2px}
-.app.linear .lin-tools .lt{display:flex;align-items:center;gap:8px;flex:1;height:28px;padding:0 8px;border-radius:6px;color:var(--ink3);font-size:13px;border:1px solid var(--line)}
-.app.linear .lin-tools .lt kbd{margin-left:auto;border:0;background:none;padding:0;font-size:11px;color:var(--ink4)}
-.app.linear .lin-tools .ib{width:28px;height:28px;border-radius:6px}
 .app.linear .row{height:28px;gap:9px;padding:0 8px;border-radius:6px;font-size:13px;font-weight:450;color:var(--ink1)}
 .app.linear .row .ic{width:14px;height:14px;color:var(--ink3)}
 .app.linear .row:hover{background:var(--s2)}
@@ -42,13 +36,10 @@
 .app.linear .me{height:40px;border-radius:6px}
 
 /* the inset panel: the middle and the right column read as one surface */
-.app.linear .main{background:var(--panel);border:1px solid var(--line);border-right:0;border-radius:10px 0 0 10px}
-.app.linear .rail{background:var(--panel);border:1px solid var(--line);border-left:1px solid var(--line);border-radius:0 10px 10px 0;width:320px;gap:20px;padding:14px 20px 20px}
 .app.linear .top{height:44px;padding:0 20px;border-bottom:1px solid var(--line)}
 .app.linear .top h1{font-size:13px;font-weight:500}
 .app.linear .top h1::after{content:"▾";font-size:9px;color:var(--ink3);margin-left:2px}
 .app.linear .top h1 small{font-size:12.5px}
-.app.linear .find{display:none}
 .app.linear .hline{display:none}
 
 /* Home: plain words, plain type */
@@ -117,3 +108,16 @@
 /* no serif anywhere: the guide speaks in the same type as everyone */
 .app.linear .msg.g p,.app.linear .say,.app.linear .theirs p,.app.linear .mrow p.serif{font-family:inherit;font-size:14px;line-height:1.55;color:var(--ink1)}
 .app.linear .rail .say{font-size:13.5px !important;line-height:1.55;color:var(--ink1) !important}
+
+/* frame: the mock's whole window (the app draws its own frame, so the kit
+   leaves this block out) */
+.app.linear{padding:8px 8px 8px 0;background:var(--window)}
+.app.linear .side{width:244px;padding:8px 10px;border-right:0}
+.app.linear .lin-tools{display:flex;align-items:center;gap:2px;margin:8px 0 2px}
+.app.linear .lin-tools .lt{display:flex;align-items:center;gap:8px;flex:1;height:28px;padding:0 8px;border-radius:6px;color:var(--ink3);font-size:13px;border:1px solid var(--line)}
+.app.linear .lin-tools .lt kbd{margin-left:auto;border:0;background:none;padding:0;font-size:11px;color:var(--ink4)}
+.app.linear .lin-tools .ib{width:28px;height:28px;border-radius:6px}
+.app.linear .main{background:var(--panel);border:1px solid var(--line);border-right:0;border-radius:10px 0 0 10px}
+.app.linear .rail{background:var(--panel);border:1px solid var(--line);border-left:1px solid var(--line);border-radius:0 10px 10px 0;width:320px;gap:20px;padding:14px 20px 20px}
+.app.linear .find{display:none}
+/* /frame */

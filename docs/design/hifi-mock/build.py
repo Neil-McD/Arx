@@ -201,10 +201,9 @@ class Component extends DCLogic {
 '''
 
 LIN_CSS = open('linear.css').read()
-LIN_FONTS = 'https://fonts.googleapis.com/css2?family=Inter:wght@400;450;500;600&display=swap'
 
 def emit(name, title, body, extra=''):
-    fonts = '<link href="%s" rel="stylesheet">' % FONTS + ('<link href="%s" rel="stylesheet">' % LIN_FONTS if extra else '')
+    fonts = '<link href="%s" rel="stylesheet">' % FONTS
     open(os.path.join(OUT, 'out_' + name + '.html'), 'w').write('<!doctype html><html lang="en"><head><meta charset="utf-8"><title>%s</title>%s<style>%s%s</style></head><body>%s</body></html>' % (title, fonts, css, extra, body))
     if os.path.isdir('../project'):  # the design tool's copy, when present
         open('../project/' + name + '.dc.html', 'w').write(DC.replace('@TITLE@', title).replace('@FONTS@', FONTS.replace('&', '&amp;')).replace('@CSS@', css).replace('@BODY@', body))

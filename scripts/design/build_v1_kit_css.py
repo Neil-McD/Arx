@@ -14,7 +14,7 @@ The visual rules stay exactly the mock's. Only three mechanical changes:
      button styles. It can never outrank a rule from the mock.
 
 Run: python3 scripts/design/build_v1_kit_css.py  (--stdout prints instead of writing)
-Source: docs/design/hifi-mock/style.css  Output: apps/web/src/v1/kit.module.css
+Source: docs/design/hifi-mock/style.css (+ linear.css, the trial)  Output: apps/web/src/v1/kit.module.css
 """
 import re, pathlib, sys
 
@@ -79,6 +79,12 @@ def split_top(s: str) -> list[str]:
 
 # Comments go first: left in, they glue onto the next selector.
 css = convert_block(re.sub(r"/\*.*?\*/", "", src, flags=re.S))
+# The Linear-style trial (Neil, Nov 12), on top of the mock: its rules apply
+# to the whole kit, except the block that draws the mock's own window (the
+# app draws its frame in design-v1.css).
+linear = (ROOT / "docs/design/hifi-mock/linear.css").read_text()
+linear = re.sub(r"/\* frame:.*?/\* /frame \*/", "", linear, flags=re.S).replace(".app.linear", ".app")
+css += convert_block(re.sub(r"/\*.*?\*/", "", linear, flags=re.S))
 css = css.replace("--sans:'Geist','Inter',system-ui,sans-serif", "--sans:'Geist Variable','Geist','Inter',system-ui,sans-serif")
 css = css.replace("--serif:'Newsreader',Georgia,serif", "--serif:'Newsreader Variable','Newsreader',Georgia,serif")
 css = css.replace("font-family:'Geist','Inter',sans-serif", "font-family:'Geist Variable','Geist','Inter',sans-serif")
