@@ -171,12 +171,13 @@ is the reason to upgrade.
 - **Paid (on): the guide.** Written summaries in every right column, "Since
   you were last here" chosen for you, a next step for each person, the guide
   on Home, Ask in the palette, chips, and each member's private session.
-- **The upgrade nudge (owner only).** In Your guide and once on Home, the owner
-  sees what turning the agent on adds, shown as a short example of what it
-  would write about their own community this week (written without a model,
-  from the signals: "Here's what your guide would tell you today"), with
-  "Turn on your community's agent". Members never see upsells; at most,
-  nothing.
+- **No standing upsell.** Neil, Nov 12: few nudges. The owner turns the agent
+  on in Your guide, where they manage it. Beyond that, the only prompts are
+  **milestones**: moments worth marking for the owner (the first ten members,
+  the first paid member, the first hundred posts, the first month). A
+  milestone is shown once, celebrates what happened, and, on a free community,
+  may say in one line what the guide would do next, with a way to turn it on.
+  Milestones come from the signals layer (slice 2). Members never see upsells.
 - Turning off (plan lapses) keeps everything already written (notes, summaries,
   sessions) readable; nothing new is generated and the pages go back to plain.
 
@@ -213,11 +214,12 @@ One model, so cost is controlled by how often and how much we call it:
 ## Slices (each ships to staging, then Neil's acceptance)
 
 1. **AI on/off.** `ai_on` on every page; the free state is plain (no guide,
-   no curation, no summaries, no errors); the owner's upgrade nudge with a
-   preview of what the guide would say. Acceptance: a free community looks
-   complete and plain; turning the plan on brings the guide everywhere.
-2. **Signals and Home.** Moments, signals, last visit, next step, server-side
-   audiences; Home's centre rebuilt on them (no repeats with the right column).
+   no curation, no summaries, no errors, no upsell). Acceptance: a free
+   community looks complete and plain; turning the plan on brings the guide
+   everywhere.
+2. **Signals and Home.** Moments, signals, last visit, next step, milestones,
+   server-side audiences; Home's centre rebuilt on them (no repeats with the
+   right column).
    Acceptance: a member and an owner each see what changed since their last
    visit and one useful next step.
 3. **Summaries on the gateway.** The first skill: `community_today`, then

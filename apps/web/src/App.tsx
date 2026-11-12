@@ -2517,8 +2517,6 @@ export default function App() {
                 },
                 onOpenEvents: () => handleSelectCommunityTab("events"),
                 onOpenKnowledge: () => handleSelectCommunityTab("resources"),
-                // The Agent plan is bought in Billing.
-                onTurnOnAgent: () => openGlobalSettings("billing"),
                 presence: activeCommunityPresenceSummary,
               }
             : null,
