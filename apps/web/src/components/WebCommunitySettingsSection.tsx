@@ -1,3 +1,4 @@
+import { CommunityConnectedAppsSection } from "./CommunityConnectedAppsSection";
 import { CommunityPlansSection } from "./CommunityPlansSection";
 import { isDesignV1Active } from "../../../../shared/designSystem";
 import { CommunityPageHeader } from "./CommunityPageHeader";
@@ -919,6 +920,13 @@ export function WebCommunitySettingsSection(props: WebCommunitySettingsSectionPr
                     {/* One door: plans with grants. Design v1 only until it ships. */}
                     {isOwnerSettingsLayer && isDesignV1Active() ? (
                       <CommunityPlansSection
+                        communityId={resolvedActiveCommunity.id}
+                        session={props.session}
+                        ensureSession={props.ensureSession}
+                      />
+                    ) : null}
+                    {isOwnerSettingsLayer && isDesignV1Active() ? (
+                      <CommunityConnectedAppsSection
                         communityId={resolvedActiveCommunity.id}
                         session={props.session}
                         ensureSession={props.ensureSession}

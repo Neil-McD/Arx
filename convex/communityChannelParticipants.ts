@@ -1,3 +1,4 @@
+import { notifyConnectedApps } from "./connectedAppNotify";
 import { schedulePodBillingCheck } from "./communityPodBillingCheck";
 import { mutation, query } from "./_generated/server";
 import { paginationOptsValidator } from "convex/server";
@@ -136,6 +137,8 @@ export async function setChannelParticipantCore(ctx: any, args: {
     if (previous) await ctx.db.patch(previous._id, { status, ...binding, updatedAt: now });
     else await ctx.db.insert("communityChannelParticipants", { communityId: args.communityId, channelId: args.channelId,
       principalKey, status, ...binding, createdByUserId: args.createdByUserId, createdAt: now, updatedAt: now });
+    // A pod grant is part of a member's access (pod:<slug>) for connected apps.
+    if (args.target.kind === "member") await notifyConnectedApps(ctx, args.communityId, args.target.userId);
     return { changed: true };
 }
 

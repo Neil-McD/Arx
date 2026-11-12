@@ -81,6 +81,13 @@ test("tiers sit beside the base price: Settings, the doorstep and checkout keep 
   expect(await config("setter")).toMatchObject({ amountBaseUnits: 24700 });
   await asOwner.mutation(api.communityTiers.archiveCommunityTier, { communityId: ids.communityId, key: "cris" });
   await expect(config("cris")).rejects.toThrow(/community_tier_not_found/);
+  // Many stopped plans later, a new one is still listed and its key unique.
+  await t.run(async (ctx) => {
+    for (let n = 0; n < 40; n += 1) await ctx.db.insert("communityTiers", { communityId: ids.communityId, key: `old-${n}`, name: `Old ${n}`, rank: 10 + n, grants: [], archivedAt: NOW, createdAt: NOW, updatedAt: NOW });
+  });
+  const again = await asOwner.mutation(api.communityTiers.saveCommunityTier, { communityId: ids.communityId, name: "Old 39", grants: [], monthlyAmountBaseUnits: 1000 });
+  expect(again.key).toBe("old-39-2");
+  expect((await asOwner.query(api.communityTiers.listCommunityTiers, { communityId: ids.communityId })).tiers.map((tier: any) => tier.key)).toContain("old-39-2");
 });
 
 test("a member's grants: community, their tier's, and each pod they can enter; nothing once they're out", async () => {

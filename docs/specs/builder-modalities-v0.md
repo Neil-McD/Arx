@@ -1,7 +1,27 @@
-# Builder modalities: one door, three kinds of builder (v0)
+# Builder modalities: one door (v0)
 
-Status: agreed with Neil on 2026-11-07 as product direction. Nothing here is
-built yet beyond today's community checkout; the build order is at the end.
+Status: agreed with Neil on 2026-11-07 as product direction; simplified with
+Neil on 2026-11-12 to **two modes and one rule** (below). Built so far is
+under "Build status".
+
+## Two modes, one rule (Nov 12)
+
+**The commission follows the checkout.** A sale through Polynet's checkout pays
+Polynet's 2.9%; a sale a builder's app makes through its own checkout, and
+reports to Polynet, pays nothing. A person's access is the union of what each
+side sold them. That gives two modes, with no setting to choose between them:
+
+1. **Polynet is the only checkout:** commission on both sides (community and
+   product). Community-only builders, and products built on Polynet.
+2. **The builder also sells through their own checkout:** commission on the
+   Polynet side only. Someone who finds the product through Polynet buys
+   through Polynet's checkout; someone who finds it on the builder's own site
+   buys there. Distribution Engineer is this mode.
+
+A builder is in mode 2 the moment their app reports its own sales. "Came
+through Polynet" means "paid through Polynet's checkout"; commission on later
+off-Polynet purchases (referral tracking) is the deferred affiliate system.
+The three modalities below are the original Nov 7 framing, kept for history.
 
 ## The thesis
 
@@ -133,8 +153,21 @@ The builder's app keeps its own login and billing and does most of the selling.
   never in the sign-in token (the access check is the authority); thin
   webhooks ("changed, re-read"); per-app user IDs bound to the app's
   registration; grants computed, not stored.
-- **Next:** slice 2 (connected apps, Sign in with Polynet, the access check),
-  slice 3 (buy and change tiers from the app, webhooks), slice 4 (DE cuts over).
+- **Slice 2a (built, staging):** connected apps (`convex/connectedApps.ts`,
+  `convex/httpConnectedApps.ts`). In Manage →
+  Your app, the builder registers their app (up to three per community): an app id, a secret kept only as a
+  hash and shown once, an optional webhook address (public https only). The
+  app calls `GET /apps/v1/access?email=` on the Convex site with
+  `Authorization: Bearer <secret>` and gets `{ allowed, tier, grants }` for a
+  verified email (the same plain "no" for unknown, unverified and non-members).
+  Wherever access may change (joining, a payment change, leaving, removal, a
+  pod grant: `convex/connectedAppNotify.ts`), each app with a webhook gets a
+  thin `access.changed` (Standard Webhooks signature, same id across retries,
+  retried 1 min to 24 h) and asks again.
+- **Next:** slice 2b (the app reports its own sales: app-owned grants, invite
+  by verified email, no fee), slice 3 (buy and change tiers through Polynet
+  from the app), slice 4 (Distribution Engineer live, both ways). Sign in with
+  Polynet waits for a builder with no login of its own.
 
 ## Open questions
 
