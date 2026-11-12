@@ -176,6 +176,13 @@ The builder's app keeps its own login and billing and does most of the selling.
   the lens's own decision; the tier shown is the highest held and the grants
   are all of them. An app sale never puts back someone who left, was removed,
   is on a payment hold, or is blocked.
+- **Builder setup (built):** `docs/product/guides/connect-your-app.md` (in
+  Polynet's docs at `/docs/guides/connect-your-app`) is the one guide, written
+  for people and coding agents. Manage → Your app has "Copy setup prompt": the
+  whole guide plus that community's API address, app and plans with their tier
+  keys and grants (`shared/connectedAppSetupPrompt.ts`), never a secret, to
+  paste into Claude Code, Cursor or Codex in the builder's own codebase. A test
+  proves the guide's webhook check verifies Polynet's real signatures.
 - **Next:** slice 3 (buy and change tiers through Polynet
   from the app), slice 4 (Distribution Engineer live, both ways). Sign in with
   Polynet waits for a builder with no login of its own.

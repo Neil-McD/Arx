@@ -35,6 +35,7 @@ Read only the specific docs needed for the task. Prefer precise slugs over broad
 - `guides/manage-resources` (Builder Guides) — Manage Resources: How builders should curate community knowledge without confusing it with private memory.
 - `guides/configure-community-agent` (Builder Guides) — Configure Community Agent: How builders shape the community agent with instructions and resources.
 - `guides/connect-polynet-mcp` (Builder Guides) — Connect Polynet MCP: How to connect your own AI harness to the official Polynet MCP.
+- `guides/connect-your-app` (Builder Guides) — Connect Your App: Connect your own product to your community: report your own sales (no fee), ask what someone has, and hear when it changes.
 - `guides/manage-access-billing-and-roles` (Builder Guides) — Manage Access, Billing, And Roles: The builder mental model for entitlements, payments, and roles.
 - `guides/member-quickstart` (Member Guides) — Member Quickstart: How members join, use communities, and talk with the community agent.
 - `guides/joining-communities` (Member Guides) — Joining Communities: How members should understand the join page, access, and joining.

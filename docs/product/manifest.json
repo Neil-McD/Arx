@@ -250,6 +250,23 @@
       "source": "docs/product/guides/connect-polynet-mcp.md"
     },
     {
+      "id": "product.guide.connect_your_app",
+      "slug": "guides/connect-your-app",
+      "title": "Connect Your App",
+      "section": "Builder Guides",
+      "summary": "Connect your own product to your community: report your own sales (no fee), ask what someone has, and hear when it changes.",
+      "audience": ["builder", "llm"],
+      "status": "alpha-current",
+      "source": "docs/product/guides/connect-your-app.md",
+      "search": {
+        "aliases": ["one door", "connected app", "app integration", "sell your app", "access check"],
+        "keywords": ["connected app", "grants", "plans", "tiers", "access check", "webhooks", "sales", "app secret", "commission"],
+        "queries": ["how do I connect my app to polynet", "how does my app check access", "how do I report sales to polynet", "polynet webhook signature"],
+        "relatedSlugs": ["guides/manage-access-billing-and-roles", "primitives/entitlement"],
+        "boost": 1.2
+      }
+    },
+    {
       "id": "product.guide.manage_access_billing_and_roles",
       "slug": "guides/manage-access-billing-and-roles",
       "title": "Manage Access, Billing, And Roles",
