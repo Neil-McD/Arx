@@ -1182,6 +1182,11 @@ export default defineSchema({
     amountBaseUnits: v.number(),
     currency: v.string(),
     currencyDecimals: v.number(),
+    // One door (docs/specs/builder-modalities-v0.md): the tier this price sells.
+    // Missing means the community's base membership price, the one Settings
+    // edits and the doorstep shows. Every reader of "the" price reads only
+    // those; a tier's prices are read only through communityTiers.
+    tierKey: v.optional(v.string()),
     isCurrent: v.boolean(),
     archivedAt: v.optional(v.number()),
     providerAccountId: v.optional(v.string()),
@@ -1192,6 +1197,24 @@ export default defineSchema({
     .index("by_community", ["communityId"])
     .index("by_community_billingPeriod", ["communityId", "billingPeriod"])
     .index("by_community_current", ["communityId", "isCurrent"]),
+
+  // Tiers (one door): levels of one membership, held one at a time, each
+  // with the grants it gives (the names a connected app reads, never prices).
+  // The base membership is the tier "member", here only once the builder has
+  // named it or given it grants. A tier's price is a communityPricePoints row
+  // with its key; changing the amount makes a new one (members keep theirs).
+  communityTiers: defineTable({
+    communityId: v.id("communities"),
+    key: v.string(),
+    name: v.string(),
+    rank: v.number(),
+    grants: v.array(v.string()),
+    // No new joins; members on it keep it, and its grants.
+    archivedAt: v.optional(v.number()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_community_key", ["communityId", "key"]),
 
   communitySubscriptions: defineTable({
     communityId: v.id("communities"),

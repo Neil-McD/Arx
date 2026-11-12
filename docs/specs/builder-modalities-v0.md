@@ -115,6 +115,27 @@ The builder's app keeps its own login and billing and does most of the selling.
 2. **Modality 3, minimum version:** the onboarding call and agent-plan billing.
 3. **Later, on request:** modality-3 builders selling in their community.
 
+## Build status
+
+- **Slice 1 (built, staging):** tiers and grants. `convex/communityTiers.ts`.
+  A membership holds one tier; each tier gives grants (`de:setter`), plus
+  `community` for every member and `pod:<slug>` per pod they can enter, worked
+  out when asked, never stored apart. Today's single price is the base tier
+  `member`; Settings, the doorstep and checkout read only it, so existing
+  communities are unchanged. A tier's price is its own price point (a new
+  amount is a new price; members keep theirs). Builders manage Plans in
+  community settings (design v1). Checkout accepts a tier key; buying a tier
+  from an app is slice 3.
+- **Research (Nov 12):** Whop (OAuth 2.1 + PKCE, server `checkAccess`),
+  Patreon (OAuth, gate on entitled tiers; don't trust tier data in webhooks),
+  Clerk and Outseta (plan in the token: fast but stale until expiry), Stripe
+  Entitlements and Polar (features/benefits on products). Decisions: grants
+  never in the sign-in token (the access check is the authority); thin
+  webhooks ("changed, re-read"); per-app user IDs bound to the app's
+  registration; grants computed, not stored.
+- **Next:** slice 2 (connected apps, Sign in with Polynet, the access check),
+  slice 3 (buy and change tiers from the app, webhooks), slice 4 (DE cuts over).
+
 ## Open questions
 
 - Agent plan pricing (flat per community, or a base plus members served), which

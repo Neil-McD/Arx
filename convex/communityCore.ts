@@ -145,6 +145,7 @@ export type CommunityPricePointLike = {
   amountBaseUnits: number;
   currency: string;
   currencyDecimals: number;
+  tierKey?: string;
   isCurrent: boolean;
   archivedAt?: number;
   providerAccountId?: string;
