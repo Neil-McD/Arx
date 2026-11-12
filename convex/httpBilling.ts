@@ -1,4 +1,5 @@
 import { internal } from "./_generated/api";
+import { POD_PAYMENT_METADATA_KEY, syncPodPaymentFromCheckoutSession, syncPodPaymentFromStripeSubscription } from "./communityPodPayments";
 import { v } from "convex/values";
 import { internalAction } from "./_generated/server";
 import {
@@ -1022,6 +1023,19 @@ export function registerRuntimeBillingRoutes(
         // delayed payment succeeds; the pending first notice is ignored below.
         if (event.type === "checkout.session.completed" || event.type === "checkout.session.async_payment_succeeded") {
           const session = event.data.object as Stripe.Checkout.Session;
+          // A paid pod's checkout (communityPodPayments), never a community join.
+          const podPaymentId = readStripeMetadataString(session.metadata, POD_PAYMENT_METADATA_KEY);
+          if (podPaymentId) {
+            if (!providerAccountId) {
+              return processedResponse({ ok: true, ignored: true, event: event.type, reason: "pod_payment_provider_account_required" }, "ignored");
+            }
+            const outcome = await syncPodPaymentFromCheckoutSession(ctx, {
+              paymentId: podPaymentId, providerAccountId, session, providerEventAt: readStripeEventCreatedAtMs(event),
+            });
+            return outcome === "synced"
+              ? processedResponse({ ok: true, received: true, event: event.type })
+              : processedResponse({ ok: true, ignored: true, event: event.type, reason: `pod_payment_${outcome}` }, "ignored");
+          }
           const localSessionId =
             readStripeLocalSessionIdFromCheckoutSession(session);
           if (!localSessionId) {
@@ -1381,6 +1395,16 @@ export function registerRuntimeBillingRoutes(
           event.type === "customer.subscription.deleted"
         ) {
           const subscription = event.data.object as Stripe.Subscription;
+          // A paid pod's subscription: its own row, its own grant.
+          const podPaymentId = readStripeMetadataString(subscription.metadata, POD_PAYMENT_METADATA_KEY);
+          if (podPaymentId && providerAccountId) {
+            const podResult = await syncPodPaymentFromStripeSubscription(ctx, {
+              paymentId: podPaymentId, providerAccountId,
+              subscription: event.type === "customer.subscription.deleted" ? { ...subscription, status: "canceled" } : subscription,
+              providerEventAt: readStripeEventCreatedAtMs(event),
+            });
+            return processedResponse({ ok: true, received: true, event: event.type, podResult });
+          }
           const localSessionId = readStripeMetadataString(
             subscription.metadata,
             "local_session_id",

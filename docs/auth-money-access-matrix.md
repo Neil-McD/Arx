@@ -57,6 +57,7 @@ Archive is the outer authority boundary and always wins over payment, grandfathe
 - Polynet's application fee is always 290 basis points.
 - Member checkout requires an operational community. A community may collect member revenue without hosted AI; an archived community may not start checkout.
 - Full refunds and opened disputes revoke or suspend member access through backend lifecycle state. Successful refunds reverse the cumulative proportional application fee idempotently.
+- Paid pods (Nov 12, [pods spec](specs/pods-v0.md)): a pod's monthly price is charged **on top of** membership, as its own subscription on the builder's Connect account with the same 2.9% fee (`convex/communityPodPayments.ts`, table `communityPodPayments`, kept apart from `communitySubscriptions`). Signed-in community members only. Stripe's verified notice (or Polynet asking Stripe on return) puts the payer on the pod room's access list; an ended subscription takes them off. Active, past due and stopping at period end keep access, as for communities. A price change is for new joins only. An open checkout is reused for 30 minutes so nobody pays twice; a full pod refuses checkout. Refunds, disputes and cancelling pod billing when a member leaves the community come in slice 2c; a grant already stops when the membership does (it is bound to the membership's activation).
 
 ## 5) Canonical Files
 

@@ -11,6 +11,7 @@ import { listAuthorizedCommunityChannelPage } from "./communityChannelCore";
 import { setChannelParticipantCore } from "./communityChannelParticipants";
 import { normalizeIdValue, requireCommunityChatAccess, requireCommunityManager } from "./communityCore";
 import { displayName } from "./communityFounderBrief";
+import { podPriceOf } from "./communityPodPayments";
 
 const PODS_CAP = 50;
 const MEMBERS_CAP = 200;
@@ -102,6 +103,7 @@ export const listCommunityPods = query({
         purpose: record?.purpose ?? "",
         visibility: record?.visibility === "listed" ? "listed" as const : "hidden" as const,
         seats: typeof record?.seats === "number" ? record.seats : null,
+        price: podPriceOf(record),
         members: grants.length,
         last_active_at: latest ? new Date(Number(latest.updatedAt ?? latest.createdAt)).toISOString() : null,
         is_member: isMember,
@@ -129,6 +131,7 @@ export const listCommunityPods = query({
           purpose: record.purpose,
           hosts: await hostNames(ctx, record, names),
           seats_left: typeof record.seats === "number" ? Math.max(0, record.seats - taken) : null,
+          price: podPriceOf(record),
           my_request: request && request.status !== "approved" ? request.status : null,
         });
       }
@@ -167,6 +170,7 @@ export const getPod = query({
       purpose: record?.purpose ?? "",
       visibility: record?.visibility === "listed" ? "listed" as const : "hidden" as const,
       seats: typeof record?.seats === "number" ? record.seats : null,
+      price: podPriceOf(record),
       hosts: await hostNames(ctx, record, names),
       members,
       can_manage: canManage,
@@ -231,6 +235,8 @@ export const requestToJoinPod = mutation({
     await activePodRoom(ctx, args.communityId, args.channelId);
     const record = await podRecord(ctx, args.communityId, args.channelId);
     if (record?.visibility !== "listed") throw new Error("community_pod_not_found");
+    // A paid pod's gate is payment (communityPodPayments.startPodCheckout).
+    if (podPriceOf(record)) throw new Error("community_pod_paid");
     const grants = await memberGrants(ctx, args.channelId);
     if (grants.some((row: any) => row.principalKey === `user:${normalizeIdValue(userId)}`)) return { status: "member" as const };
     const status = typeof record.seats === "number" && grants.length >= record.seats ? "waitlist" as const : "pending" as const;

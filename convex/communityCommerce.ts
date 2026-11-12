@@ -184,7 +184,7 @@ export const attachCommunityStripeCustomerInternal = internalMutation({
   },
 });
 
-async function ensureCommunityStripeCustomerForUser(args: {
+export async function ensureCommunityStripeCustomerForUser(args: {
   ctx: any;
   userId: any;
   email?: string | null;

@@ -76,18 +76,44 @@ Two layers with a one-way wall:
 
 ## Money and access
 
-- A pod's price is a plan that **includes base membership**: one subscription,
-  not two. Joining a pod moves the member to that plan; leaving moves them
-  back.
-- Access follows payment: a lapse, refund or removal ends pod access (the
-  base membership follows its own rules). Hosts can also add someone by hand
-  (a comp).
-- Seats: when a pod is full, "Join" becomes "Join the waitlist".
-- A member in several paid pods: v0 allows one **paid** pod plan per member
-  (plus any number of free or comped pods); stacking paid pods waits for
-  plans with grants.
-- This is the first use of "plans carry grants" from
-  `builder-modalities-v0.md`: a pod plan grants `community` + `pod:<id>`.
+Decided with Neil 2026-11-12, replacing "one plan that includes base
+membership". The irreducible parts:
+
+1. **A price**: one monthly number on the pod, charged **on top of** whatever
+   the member pays for the community ("+$100/month on top of your
+   membership"). The builder picks the number; Polynet never computes a
+   difference, so members on different base prices are all correct.
+2. **A subscription**: the member's payment for that pod, separate from their
+   membership payment, on the builder's Stripe account with Polynet's 2.9%.
+3. **A grant**: the pod room's existing access row
+   (`communityChannelParticipants`). Payment writes and removes it, as a host
+   does by hand. The access rule is unchanged: in the community, and on the
+   pod's list.
+
+Events:
+
+- **Join**: Join → Stripe → Stripe's verified notice adds the row. The return
+  page grants nothing.
+- **Renewal**: nothing changes.
+- **Leave the pod**: stops renewing; access lasts to the end of the period.
+- **Failed payment, refund or dispute**: that pod only loses access.
+- **Leaving or losing the community**: their pod subscriptions are cancelled.
+- **Price change**: a new price for new joins; existing members keep theirs.
+
+Each pod picks one gate: invite only (hosts add people), ask to join (a host
+approves), or paid. A member can be in any number of paid pods. Seats are
+checked when checkout starts; a full paid pod shows "Full" and hosts add
+people by hand.
+
+Not built: plan switching, proration, combined prices, approve-then-pay, seat
+holds during checkout, a paid waitlist, a combined community-plus-pod
+checkout.
+
+Code shape: the price lives on the pod record; `communityPodPayments` holds
+each pod checkout and, once Stripe confirms it, its subscription, apart from
+`checkoutSessions` and `communitySubscriptions` (whose code assumes one per
+membership); one branch in the Stripe notice handler routes anything carrying
+`pod_payment_id` to the pod path. Live community billing is untouched.
 
 ## Agents in pods
 
@@ -136,9 +162,10 @@ Two layers with a one-way wall:
    column, the builder's view of all pods, a member's pods, inside a pod (room
    + who's in it). Hosts add people by hand. Private channels become hidden
    pods and leave the left column.
-2. **Listed pods and paid access.** Listed or hidden, the outside view, seats
-   and waitlist, a pod price that includes base membership, access following
-   payment.
+2. **Listed pods and paid access.** 2a (built): listed or hidden, the outside
+   view, ask to join, seats and waitlist, hosts. 2b: a pod price and Join
+   through Stripe. 2c: leaving, lapse, refund, dispute and losing the
+   community.
 3. **Pod knowledge and pod calls.** Pod-scoped notes with the one-way wall and
    "publish to community"; pod-only events; with the Agent plan, the guide in
    a pod and its catch-up (uses the gateway's summaries).
@@ -157,5 +184,5 @@ Two layers with a one-way wall:
 
 ## Not in v0
 
-Stacking several paid pods on one member, pods on community sites, pod-level
+Pods on community sites, pod-level
 automations, and the agents' table.

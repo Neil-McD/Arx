@@ -891,10 +891,54 @@ export default defineSchema({
     seats: v.optional(v.number()),
     // Members the builder made hosts of this pod (builders and admins always are).
     hostUserIds: v.optional(v.array(v.id("users"))),
+    // Paid pods (slice 2b): the monthly price charged on top of membership.
+    // Missing means not paid. The Stripe product and price on the builder's
+    // account are made on first checkout; a new amount clears the price, so
+    // existing members keep theirs (their subscriptions carry it).
+    priceAmountBaseUnits: v.optional(v.number()),
+    priceCurrency: v.optional(v.string()),
+    providerAccountId: v.optional(v.string()),
+    providerProductId: v.optional(v.string()),
+    providerPriceId: v.optional(v.string()),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
     .index("by_community_channel", ["communityId", "channelId"]),
+  // A member's payment for a paid pod: one row per checkout, which becomes the
+  // subscription once Stripe confirms it. Kept apart from communitySubscriptions
+  // (one per membership). While it grants, the member is on the pod's list.
+  communityPodPayments: defineTable({
+    communityId: v.id("communities"),
+    channelId: v.id("communityChannels"),
+    userId: v.id("users"),
+    status: v.union(
+      v.literal("pending"),
+      v.literal("active"),
+      v.literal("past_due"),
+      v.literal("cancel_at_period_end"),
+      v.literal("ended"),
+      v.literal("expired"),
+    ),
+    amountBaseUnits: v.number(),
+    currency: v.string(),
+    providerAccountId: v.string(),
+    providerPriceId: v.string(),
+    providerCheckoutSessionId: v.optional(v.string()),
+    checkoutUrl: v.optional(v.string()),
+    checkoutExpiresAt: v.number(),
+    providerCustomerId: v.optional(v.string()),
+    providerSubscriptionId: v.optional(v.string()),
+    currentPeriodEndAt: v.optional(v.number()),
+    // When this payment put the member on the pod's list (so ending it takes
+    // them off, and a host's own grant is never touched).
+    grantedAt: v.optional(v.number()),
+    lastProviderEventAt: v.optional(v.number()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_channel_user", ["channelId", "userId"])
+    .index("by_user", ["userId"])
+    .index("by_provider_subscription", ["providerAccountId", "providerSubscriptionId"]),
   // Asking to join a listed pod: the pod's hosts approve or decline; a full
   // pod puts the request on its waitlist.
   communityPodRequests: defineTable({

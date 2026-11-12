@@ -5,8 +5,11 @@
 import { useCallback, useEffect, useState } from "react";
 import { CommunityPageHeader, CommunityPageRail } from "./CommunityPageHeader";
 import {
+  confirmCloudPodCheckout,
   fetchCloudCommunityPods,
+  formatPodPrice,
   requestToJoinCloudPod,
+  startCloudPodCheckout,
   saveCloudPodDetails,
   type CloudCommunityPod,
   type CloudOutsidePod,
@@ -47,6 +50,7 @@ export function WebCommunityPodsSection(props: WebCommunityPodsSectionProps) {
   const [saving, setSaving] = useState(false);
   const [asking, setAsking] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const now = Date.now();
 
   const load = useCallback(async () => {
@@ -61,6 +65,29 @@ export function WebCommunityPodsSection(props: WebCommunityPodsSectionProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [props.communityId, props.asMember]);
   useEffect(() => { void load(); }, [load]);
+
+  // Back from Stripe: ask Polynet to check with Stripe now (its notice may
+  // not have arrived), then show the pod among theirs.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const paymentId = params.get("pod_payment");
+    if (!paymentId) return;
+    params.delete("pod_payment");
+    const rest = params.toString();
+    window.history.replaceState(null, "", window.location.pathname + (rest ? `?${rest}` : ""));
+    setNotice("Finishing your payment…");
+    void (async () => {
+      try {
+        const session = await props.ensureSession(props.session);
+        const result = session ? await confirmCloudPodCheckout({ session, paymentId }) : { status: "pending" };
+        setNotice(result.status === "active" || result.status === "cancel_at_period_end" || result.status === "past_due"
+          ? "You're in. Your pod is below."
+          : "Payment received. Your pod will appear here in a moment.");
+      } catch { setNotice("Payment received. Your pod will appear here in a moment."); }
+      await load();
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const create = async () => {
     const name = draft.name.trim();
@@ -93,11 +120,29 @@ export function WebCommunityPodsSection(props: WebCommunityPodsSectionProps) {
   const ask = async (pod: CloudOutsidePod) => {
     if (asking || !props.communityId) return;
     setAsking(pod.channel_id);
+    setError(null);
     try {
       const session = await props.ensureSession(props.session);
-      if (session) await requestToJoinCloudPod({ session, communityId: props.communityId, channelId: pod.channel_id });
+      if (!session) return;
+      if (pod.price) {
+        // Paid: Stripe's checkout; access comes from Stripe's confirmation.
+        const here = window.location.origin + window.location.pathname;
+        const { checkout_url } = await startCloudPodCheckout({
+          session, communityId: props.communityId, channelId: pod.channel_id,
+          successUrl: `${here}?pod_payment={CHECKOUT_SESSION_ID}`, cancelUrl: here,
+        });
+        window.location.assign(checkout_url);
+        return;
+      }
+      await requestToJoinCloudPod({ session, communityId: props.communityId, channelId: pod.channel_id });
       await load();
-    } catch { /* the button stays; try again */ } finally { setAsking(null); }
+    } catch (failure) {
+      const code = String((failure as Error)?.message ?? "");
+      setError(code.includes("community_pod_full") ? "That pod just filled up."
+        : code.includes("community_checkout_unavailable") ? "This pod can't take payments right now."
+          : pod.price ? "Checkout couldn't start. Try again." : null);
+      await load();
+    } finally { setAsking(null); }
   };
 
   const canManage = Boolean(state?.canManage);
@@ -113,6 +158,7 @@ export function WebCommunityPodsSection(props: WebCommunityPodsSectionProps) {
       <KitApp view="events" host={canManage} part="flow">
         <div className={cx("page")} style={{ padding: 0, overflow: "visible" }}>
           <p className={cx("lead")} style={{ marginTop: 0 }}>{lead}</p>
+          {notice ? <p className={cx("sub")} role="status">{notice}</p> : null}
           {failed ? <p className={cx("sub")} role="alert">Pods couldn't load. <button type="button" className={cx("link")} onClick={() => void load()}>Try again</button></p> : null}
           {pods.length || canManage ? (
             <div className={cx("podgrid")}>
@@ -122,7 +168,7 @@ export function WebCommunityPodsSection(props: WebCommunityPodsSectionProps) {
                   <span className={cx("podpurpose")}>{pod.purpose || (pod.can_manage ? "Add what this pod is for." : "")}</span>
                   {pod.can_manage && pod.waiting ? <span className={cx("podask")}>{pod.waiting} asking to join</span> : null}
                   <span className={cx("podmeta")}>
-                    {[canManage ? (pod.visibility === "listed" ? "Listed" : "Hidden") : null, seatsLabel(pod), activeLabel(pod.last_active_at, now)].filter(Boolean).join(" · ")}
+                    {[canManage ? (pod.visibility === "listed" ? "Listed" : "Hidden") : null, canManage && pod.price ? formatPodPrice(pod.price) : null, seatsLabel(pod), activeLabel(pod.last_active_at, now)].filter(Boolean).join(" · ")}
                   </span>
                 </button>
               ))}
@@ -153,24 +199,31 @@ export function WebCommunityPodsSection(props: WebCommunityPodsSectionProps) {
               </div>
             </div>
           ) : null}
+          {error && !creating ? <p className={cx("bad")} role="alert">{error}</p> : null}
           {outside.length ? (
             <>
               {pods.length ? <span className={cx("lab")} style={{ display: "block", marginTop: 32 }}>Pods you can join</span> : null}
               <div className={cx("podgrid")}>
                 {outside.map((pod) => {
                   const full = pod.seats_left === 0;
+                  const price = formatPodPrice(pod.price);
                   const status = pod.my_request === "pending" ? "Asked · the host will reply"
                     : pod.my_request === "waitlist" ? "On the waitlist" : null;
                   return (
                     <div key={pod.channel_id} className={cx("podcard podout")}>
                       <span className={cx("podname")}><Icon name="lock" />{pod.name}</span>
                       <span className={cx("podpurpose")}>{pod.purpose}</span>
+                      {price ? <span className={cx("podprice")}>+{price} on top of your membership</span> : null}
                       <span className={cx("podmeta")}>
                         {[pod.hosts.length ? `Hosted by ${pod.hosts.join(" and ")}` : null,
                           pod.seats_left === null ? null : full ? "Full" : `${pod.seats_left} ${pod.seats_left === 1 ? "seat" : "seats"} left`].filter(Boolean).join(" · ")}
                       </span>
-                      {status ? <span className={cx("podask")}>{status}</span> : (
-                        <Btn small disabled={asking === pod.channel_id} onClick={() => void ask(pod)}>{full ? "Join the waitlist" : "Ask to join"}</Btn>
+                      {status ? <span className={cx("podask")}>{status}</span> : pod.price && full ? (
+                        <span className={cx("podask")}>Full</span>
+                      ) : (
+                        <Btn small go={Boolean(pod.price)} disabled={asking === pod.channel_id} onClick={() => void ask(pod)}>
+                          {asking === pod.channel_id && pod.price ? "Opening checkout…" : pod.price ? "Join" : full ? "Join the waitlist" : "Ask to join"}
+                        </Btn>
                       )}
                     </div>
                   );

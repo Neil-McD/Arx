@@ -280,6 +280,10 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
   own, then listed pods they could ask to join; a pod is an invite-only room plus
   its purpose, hosts, seats and listed/hidden, [spec](specs/pods-v0.md)).
   Tables: `communityPods`, `communityPodRequests` (asks to join and the waitlist).
+- **Paid pods:** `communityPodPayments` (a pod's price on top of membership, its
+  Stripe checkout and subscription, and the grant that follows payment; notices
+  routed from `httpBilling` by the `pod_payment_id` metadata). Table:
+  `communityPodPayments`.
 - **Home moments:** `communityHomeMoments` ("since you were last here" from the
   visit before this one, and a member's next step; ranked in
   `shared/communityHomeMoments.ts`). Table: `communityMemberVisits`.
