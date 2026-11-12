@@ -17,6 +17,8 @@ export function KitCommandPalette(props: {
   suggestions: string[];
   communities: PaletteCommunity[];
   actions: PaletteActions;
+  // The community the palette's questions belong to.
+  communityId: string | null;
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -49,7 +51,7 @@ export function KitCommandPalette(props: {
     close();
     if (item.kind === "place") props.actions.openPlace(item.id);
     else if (item.kind === "community") props.actions.openCommunity(item.id);
-    else askGuide(item.question);
+    else askGuide(item.question, props.communityId);
   };
   const onKeyDown = (event: React.KeyboardEvent) => {
     if (event.key === "ArrowDown") { event.preventDefault(); setHot((index) => (items.length ? (index + 1) % items.length : 0)); }

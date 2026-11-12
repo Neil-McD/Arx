@@ -95,8 +95,10 @@ type ActiveThreadContext = {
 export type WebCommunityAgentDockHandle = {
   appendTranscript: (transcript: string) => void;
   focusInput: () => void;
-  // Sends a question from the command palette; false until Home's box is on the page.
-  ask: (question: string) => boolean;
+  // Sends a question from the command palette, only to the community it was
+  // asked in: "sent", "not_ready" (Home's box isn't on the page yet, or the
+  // guide is busy) or "other_community" (stop: never send it elsewhere).
+  ask: (question: string, communityId: string) => "sent" | "not_ready" | "other_community";
   startResourceBuild: (request: {
     communityId: string;
     prompt: string;
@@ -302,10 +304,11 @@ function WebCommunityAgentDock(props, ref) {
       inputElement.style.height = `${Math.min(inputElement.scrollHeight, 112)}px`;
       inputElement.focus();
     },
-    ask: (question: string) => {
-      if (!askReadyRef.current || !composerFormRef.current) return false;
+    ask: (question: string, askedInCommunityId: string) => {
+      if (!communityId || communityId !== askedInCommunityId) return "other_community";
+      if (!askReadyRef.current || !composerFormRef.current) return "not_ready";
       sendSuggestionRef.current(question);
-      return true;
+      return "sent";
     },
     startResourceBuild: async (request) => {
       const requestedCommunityId = String(request.communityId ?? "").trim();
