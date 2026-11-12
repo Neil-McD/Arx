@@ -2911,3 +2911,55 @@
   font-size: 16px;
   line-height: 1.6;
 }
+
+/* ---------- The Linear-style trial (Neil, Nov 12) ----------
+   docs/design/hifi-mock/linear.css draws it; the kit takes its rules, and the
+   app's frame is here: the window is a shade darker, everything right of the
+   left column sits in one inset, rounded panel, the left column is tighter,
+   and the accent is a soft indigo. Dark theme only for the trial. */
+:root[data-design="v1"]:not([data-theme="light"]) {
+  --linear-window: #08090a;
+  --surface-raised: #0f1011;
+  --surface-raised-edge: rgba(255, 255, 255, 0.06);
+  --bg-card: #141516;
+  --bg-card-solid: #141516;
+  --bg-card-hover: #1a1b1d;
+  --bg-input: #141516;
+  --bg-button: #6f78d8;
+  --bg-button-hover: #7d86e2;
+}
+
+@media (min-width: 721px) {
+  :root[data-design="v1"]:not([data-theme="light"]) .app-shell .product-shell-surface--community {
+    background: var(--linear-window);
+  }
+
+  :root[data-design="v1"]:not([data-theme="light"]) .product-shell-surface--community > .community-nav {
+    border-right: 0;
+    background: var(--linear-window);
+  }
+
+  :root[data-design="v1"]:not([data-theme="light"]) .product-shell-surface--community > main,
+  :root[data-design="v1"]:not([data-theme="light"]) .product-shell-surface--community > .web-main-surface-slot > * {
+    margin: 8px 8px 8px 0;
+    border: 1px solid var(--surface-raised-edge);
+    border-radius: 10px;
+  }
+}
+
+/* The left column, tighter: 28px rows, 13px type. */
+:root[data-design="v1"] .community-nav .nav-item {
+  min-height: 28px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-size: 13px;
+}
+
+:root[data-design="v1"] .community-nav .nav-item .nav-icon svg {
+  width: 14px;
+  height: 14px;
+}
+
+:root[data-design="v1"] .community-nav-section-label {
+  font-size: 12px;
+}

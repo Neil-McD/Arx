@@ -110,6 +110,48 @@ def dayone(s):
     return s.replace('<span class="chip">What did I miss?</span><span class="chip">Who should I meet?</span><span class="chip">Draft my intro</span>',
                      '<span class="chip">What is this community for?</span><span class="chip">Who should I meet?</span><span class="chip">How do the calls work?</span>')
 
+# The Linear-style trial (linear.css): the same pages in an inset panel, the
+# right column as Today, Online now and Community memory.
+LIN_TOOLS = '<div class="lin-tools"><label class="lt"><input type="radio" name="k" class="k-open">{i:search}Search or ask<kbd>⌘K</kbd></label><span class="ib">{i:plus}</span></div>'
+LIN_RAIL = '''<div class="ev"><span class="when"><i></i>Today · 1:00 pm</span><h3>Friday build call</h3><p>Neil is hosting · 14 going</p>
+      <div style="display:flex;gap:6px;margin-top:4px"><span class="btn go">I'll be there</span><label class="btn txt"><input type="radio" name="v" class="v-events">All events</label></div></div>
+    <div class="sec">
+      <span class="lab">Today</span>
+      <ul class="tl">
+        <li><b>We passed 100 members last night.</b><span>#wins · 4 replies</span></li>
+        <li><b>Busiest in #wins</b><span>10 messages from 5 people</span></li>
+        <li><b>A pricing question in #biz is waiting for an answer</b><span>Asked 2 hours ago</span></li>
+      </ul>
+      <span class="counts">7 posts · 4 replies · 5 people</span>
+    </div>
+    <div class="sep"></div>
+    <div class="sec">
+      <span class="lab">Online now</span>
+      <div style="display:flex;align-items:center;gap:10px"><span class="stack"><span class="av xs a2">N</span><span class="av xs a1">J</span><span class="av xs a3">P</span><span class="av xs a5">R</span><span class="av xs a6">S</span></span><span class="sub" style="white-space:nowrap">Neil, Jon and 4 more</span></div>
+    </div>
+    <div class="sep"></div>
+    <div class="sec">
+      <span class="lab">Community memory</span>
+      {mini}
+      <div style="display:flex;align-items:center;justify-content:space-between"><span class="sub">214 notes · 3 learned this week</span><label class="link"><input type="radio" name="v" class="v-know">Open {i:arrow}</label></div>
+    </div>'''
+
+def linear(s):
+    s = s.replace('{appclass}', ' linear{appclass}', 1)
+    s = s.replace('<div style="height:10px"></div>', LIN_TOOLS, 1)
+    # Both Home rails become the three things (the host's figures go).
+    for start in ('<aside class="rail r0 m-only" aria-label="Right now">', '<aside class="rail r0 h-only" aria-label="The community right now">'):
+        i = s.index(start) + len(start); j = s.index('</aside>', i)
+        s = s[:i] + '\n    ' + LIN_RAIL + '\n  ' + s[j:]
+    # The header bar names the page, as Linear's does.
+    s = s.replace('<h1 class="t1">', '<h1 class="t0">Home</h1>\n      <h1 class="t1">', 1)
+    # Plain words on Home.
+    s = s.replace('One thing needs you today.', 'One thing is waiting for you.')
+    return s
+
+def linear_host(s):
+    return linear(host(s))
+
 def render(key, fn=None):
     d = COMMS[key]; s = open('body.html').read()
     if fn: s = fn(s)
@@ -158,8 +200,11 @@ class Component extends DCLogic {
 </html>
 '''
 
-def emit(name, title, body):
-    open(os.path.join(OUT, 'out_' + name + '.html'), 'w').write('<!doctype html><html lang="en"><head><meta charset="utf-8"><title>%s</title><link href="%s" rel="stylesheet"><style>%s</style></head><body>%s</body></html>' % (title, FONTS, css, body))
+LIN_CSS = open('linear.css').read()
+
+def emit(name, title, body, extra=''):
+    fonts = '<link href="%s" rel="stylesheet">' % FONTS
+    open(os.path.join(OUT, 'out_' + name + '.html'), 'w').write('<!doctype html><html lang="en"><head><meta charset="utf-8"><title>%s</title>%s<style>%s%s</style></head><body>%s</body></html>' % (title, fonts, css, extra, body))
     if os.path.isdir('../project'):  # the design tool's copy, when present
         open('../project/' + name + '.dc.html', 'w').write(DC.replace('@TITLE@', title).replace('@FONTS@', FONTS.replace('&', '&amp;')).replace('@CSS@', css).replace('@BODY@', body))
 
@@ -177,6 +222,9 @@ emit('LightHost', 'Polynet default: light, host', render('pn', hostlight))
 emit('LightDE', 'Polynet default: light, Distribution Engineer', render('de', light))
 emit('LightKiln', 'Polynet default: light, Kiln and Clay', render('kc', light))
 emit('LightBare', 'Polynet default: light, no banner', render('nw', light))
+emit('LinearApp', 'Polynet trial: Linear-style, member', render('pn', linear), LIN_CSS)
+emit('LinearHost', 'Polynet trial: Linear-style, host', render('pn', linear_host), LIN_CSS)
+emit('LinearDE', 'Polynet trial: Linear-style, Distribution Engineer', render('de', linear), LIN_CSS)
 if os.path.exists('foundations.html'):  # the foundations board is not in the repo
     fd = open('foundations.html').read()
     for k in ('de', 'kc'): fd = fd.replace('{b_%s}' % k, COMMS[k]['banner'])
