@@ -37,7 +37,7 @@ export type FounderBriefSnapshot = {
   activity: { posts: number; replies: number; activePeople: number };
   // The last seven days, for Home's figures. Active people are read from the
   // same recent scan as activity, so on a very busy week it is a floor.
-  week: { joined: number; activePeople: number };
+  week: { joined: number; activePeople: number; messages: number };
   // Home's right column ("Today"): the channel with the most said in the
   // window, and the post there with the most replies. Shared channels only.
   busiest: { channel: string; channelSlug: string; posts: number; replies: number; people: number } | null;
@@ -91,7 +91,7 @@ async function displayName(ctx: any, userId: unknown, cache: Map<string, string>
   return cache.get(key)!;
 }
 
-async function buildSnapshot(ctx: any, community: any, windowStartMs: number, nowMs: number): Promise<FounderBriefSnapshot> {
+export async function buildSnapshot(ctx: any, community: any, windowStartMs: number, nowMs: number): Promise<FounderBriefSnapshot> {
   const names = new Map<string, string>();
   const ownerId = String(community.ownerId);
   const memberRows = (from: number, to: number) => ctx.db.query("communityMemberships")
@@ -201,7 +201,11 @@ async function buildSnapshot(ctx: any, community: any, windowStartMs: number, no
     windowHours: Math.max(1, Math.round((nowMs - windowStartMs) / HOUR_MS)),
     newMembers: { count: joined.length, names: await nameList(joined) },
     activity: { posts: windowRoots.length, replies: windowReplies.length, activePeople: activePeople.size },
-    week: { joined: weekJoins.filter(activeMember).length, activePeople: weekActivePeople.size },
+    week: {
+      joined: weekJoins.filter(activeMember).length, activePeople: weekActivePeople.size,
+      // Posts and replies in the last week, from the same recent scan (a floor on a very busy week).
+      messages: [...roots, ...replies].filter((row: any) => live(row) && inWeek(row)).length,
+    },
     busiest,
     highlight,
     unanswered,

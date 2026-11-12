@@ -931,6 +931,17 @@ export default defineSchema({
 
 
   // The founder's daily brief (docs/specs/proactive-community-agent-v0.md, slice A).
+  // Owner moments (docs/specs/community-agent-gateway-v0.md): which milestone
+  // or problem card the owner was shown on Home, and when it was dismissed.
+  communityOwnerMoments: defineTable({
+    communityId: v.id("communities"),
+    key: v.string(),
+    shownAt: v.number(),
+    dismissedAt: v.optional(v.number()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_community_key", ["communityId", "key"]),
   communityFounderBriefSettings: defineTable({
     communityId: v.id("communities"),
     enabled: v.boolean(),
