@@ -40,6 +40,9 @@ type CommunityEventLike = {
   recurrenceInterval?: number;
   recurrenceUntil?: number;
   podChannelId?: any;
+  // Filled by the member list only, for rows its viewer may see.
+  podName?: string;
+  podSlug?: string;
   createdAt: number;
   updatedAt: number;
 };
@@ -125,6 +128,8 @@ function mapCommunityEventRow(row: CommunityEventLike, occurrenceStartsAt?: numb
     visibility: row.visibility,
     // A pod's call (null for a community event).
     pod_channel_id: row.podChannelId ? normalizeIdValue(row.podChannelId) : null,
+    pod_name: row.podName ?? null,
+    pod_slug: row.podSlug ?? null,
     status: row.status,
     recurrence_frequency: recurrenceFrequency,
     recurrence_interval: normalizeCommunityEventRecurrenceInterval(row.recurrenceInterval),
@@ -387,15 +392,17 @@ export const listCommunityEvents = query({
     // A pod's calls carry the pod's name, for the people who may see them.
     const podNames = new Map<string, { name: string; slug: string }>();
     for (const row of rows) {
-      if (!row.podChannelId || podNames.has(String(row.podChannelId))) continue;
-      const channel = await ctx.db.get(row.podChannelId) as any;
-      podNames.set(String(row.podChannelId), { name: String(channel?.name ?? ""), slug: String(channel?.slug ?? "") });
+      if (!row.podChannelId) continue;
+      const key = String(row.podChannelId);
+      if (!podNames.has(key)) {
+        const channel = await ctx.db.get(row.podChannelId) as any;
+        podNames.set(key, { name: String(channel?.name ?? ""), slug: String(channel?.slug ?? "") });
+      }
+      row.podName = podNames.get(key)?.name;
+      row.podSlug = podNames.get(key)?.slug;
     }
-    return expandCommunityEventRows({ rows, startMs, endMs, includeCancelled, limit, overlap }).map((event) => ({
-      ...event,
-      pod_name: event.pod_channel_id ? podNames.get(event.pod_channel_id)?.name ?? null : null,
-      pod_slug: event.pod_channel_id ? podNames.get(event.pod_channel_id)?.slug ?? null : null,
-    }));
+
+    return expandCommunityEventRows({ rows, startMs, endMs, includeCancelled, limit, overlap });
   },
 });
 
