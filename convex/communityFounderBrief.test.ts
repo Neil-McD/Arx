@@ -789,7 +789,7 @@ describe("pods", () => {
       .resolves.toMatchObject({ renewing: [{ providerSubscriptionId: "sub_ben" }], leaving: false });
     await t.mutation(internalRefs.communityPodPayments.markPodPaymentLeavingInternal, { paymentId });
     expect(await mine()).toMatchObject({ state: "leaving" });
-    expect((await asOwner.query(api.communityPods.getPod, { communityId: f.communityId, channelId: ids.channelId })).members.find((m: any) => m.name === "Ben").payment)
+    expect((await asOwner.query(api.communityPods.getPod, { communityId: f.communityId, channelId: ids.channelId })).members.find((m: any) => m.name === "Ben")?.payment)
       .toMatchObject({ state: "leaving" });
     await expect(page("brief-Ben")).resolves.toEqual({ kind: "inside", slug: "founders" });
   });
