@@ -183,6 +183,14 @@ The builder's app keeps its own login and billing and does most of the selling.
   keys and grants (`shared/connectedAppSetupPrompt.ts`), never a secret, to
   paste into Claude Code, Cursor or Codex in the builder's own codebase. A test
   proves the guide's webhook check verifies Polynet's real signatures.
+- **Link both ways (built):** a builder sets the app's address under Your app
+  (`connectedApps.appUrl`, public https only); every member sees it in the
+  community's left column (design v1, desktop and phone) through
+  `listCommunityAppLinks`, which returns only name and address. The other way,
+  the app links to `/c/<slug>/home`, which is also the invite: signing in with
+  the bought email attaches the sale. Where that link goes is the builder's
+  choice: the guide lists placements and the setup prompt has the agent
+  propose them and ask before adding any.
 - **Next:** slice 3 (buy and change tiers through Polynet
   from the app), slice 4 (Distribution Engineer live, both ways). Sign in with
   Polynet waits for a builder with no login of its own.

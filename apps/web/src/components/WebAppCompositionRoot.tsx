@@ -1,4 +1,6 @@
 import { CommunityAgentOnProvider } from "../controllers/communityAgentOn";
+import { CommunityAppLinksProvider } from "../controllers/communityAppLinks";
+import type { CloudCommunityAppLink } from "../../../../shared/cloudConnectedAppsGateway";
 import {
   lazy,
   Suspense,
@@ -46,6 +48,7 @@ export function WebAppCompositionRoot(props: {
   >;
   // Whether the active community's agent is on; every page below reads it.
   communityAgentOn: boolean;
+  communityAppLinks: CloudCommunityAppLink[];
 }) {
   const agentSessionKey = communityAgentSessionKey(props.communityAgentDockProps.session?.user.id, props.communityAgentDockProps.community?.id);
   const showAgentWorkspace = showCommunityAgentWorkspace(props.communityAgentDockProps);
@@ -81,11 +84,13 @@ export function WebAppCompositionRoot(props: {
 
   return (
     <CommunityAgentOnProvider value={props.communityAgentOn}>
-      <WebShellChromeHost
-        {...props.shellChromeHostProps}
-        mainSurface={mainSurface}
-        globalOverlays={globalOverlays}
-      />
+      <CommunityAppLinksProvider value={props.communityAppLinks}>
+        <WebShellChromeHost
+          {...props.shellChromeHostProps}
+          mainSurface={mainSurface}
+          globalOverlays={globalOverlays}
+        />
+      </CommunityAppLinksProvider>
     </CommunityAgentOnProvider>
   );
 }
