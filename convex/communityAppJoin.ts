@@ -13,12 +13,13 @@ import {
   type CommunityLike,
   type CommunityMembershipLike,
   type PublicPlanSummaryLike,
+  hasActiveAppGrant,
   mapCommunityAccessRow,
   pickMostRelevantCommunityMembership,
   resolveCommunityBrandingFields,
   resolveCommunityEntryPolicy,
 } from "./communityCore";
-import { joinPublicCommunityInternal, listCurrentCommunitySellablePlans } from "./communityPublic";
+import { joinPublicCommunityInternal, listCurrentCommunitySellablePlans, rejoinsOnAppPurchase } from "./communityPublic";
 import { cancelPendingCommunityJoinRequest } from "./communityJoinRequestCore";
 import { loadAccountSetupStatusForUserId } from "./accountSetupCore";
 import { accountSetupBlocksJoining } from "../shared/accountSetup";
@@ -104,7 +105,16 @@ function plansByPeriod(plans: PublicPlanSummaryLike[]): PublicPlanSummaryLike[] 
 }
 
 export async function communityAppJoinProjection(ctx: any, community: CommunityLike, userId: any | null) {
-  const gate: CommunityFunnelAction = deriveCommunityFunnelAction({ entry_policy: resolveCommunityEntryPolicy(community) });
+  const policyGate: CommunityFunnelAction = deriveCommunityFunnelAction({ entry_policy: resolveCommunityEntryPolicy(community) });
+  // One door: someone who left while the community's app still reports their
+  // purchase is offered Join, not a second payment (joinPublicCommunityInternal).
+  const rejoinOnApp = userId && policyGate !== "join"
+    ? rejoinsOnAppPurchase(
+      pickMostRelevantCommunityMembership((await ctx.db.query("communityMemberships")
+        .withIndex("by_community_user", (q: any) => q.eq("communityId", community._id).eq("userId", userId)).collect()) as CommunityMembershipLike[]),
+      await hasActiveAppGrant(ctx, community._id, userId))
+    : false;
+  const gate: CommunityFunnelAction = rejoinOnApp ? "join" : policyGate;
   // A plan is on sale only while the owner's Stripe account can take the payment;
   // otherwise the join card says checkout is unavailable instead of failing on click.
   const ownerConnectAccount = gate === "checkout"

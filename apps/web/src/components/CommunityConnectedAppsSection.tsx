@@ -2,6 +2,7 @@
 // community. The app asks Polynet what someone has here, server to server
 // with its secret, and hears when that changes. Secrets are shown once.
 import { useCallback, useEffect, useState } from "react";
+import { announceCommunityAppLinksChanged } from "../controllers/communityAppLinks";
 import connectYourAppGuide from "../../../../docs/product/guides/connect-your-app.md?raw";
 import { buildConnectedAppSetupPrompt } from "../../../../shared/connectedAppSetupPrompt";
 import { fetchCloudCommunityTiers, type CloudCommunityTier } from "../../../../shared/cloudCommunityTiersGateway";
@@ -49,7 +50,7 @@ export function CommunityConnectedAppsSection(props: { communityId: string; comm
     if (busy) return;
     setBusy(true);
     setError(null);
-    try { await work(); await load(); }
+    try { await work(); await load(); announceCommunityAppLinksChanged(); }
     catch (failure) {
       const code = String((failure as Error)?.message ?? "");
       setError(code.includes("webhook_url_invalid") ? "Use your app's public https address for webhooks."

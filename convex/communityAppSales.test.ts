@@ -168,3 +168,32 @@ test("changing a plan's grants tells the app, for everyone holding that plan", a
   expect(after[after.length - 1]).toMatchObject({ email: "buyer@example.com", type: "access.changed" });
   void buyer;
 });
+
+test("someone who left comes back on their app purchase by joining, without paying twice; a removed member doesn't", async () => {
+  const t = convexTest(schema, modules);
+  const ids = await setup(t);
+  const { communityAppJoinProjection } = await import("./communityAppJoin");
+  for (const [handle, state] of [["leaver", "left"], ["removed", "removed"]] as const) {
+    const userId = await newUser(t, handle);
+    await t.run((ctx) => ctx.db.insert("communityMemberships", {
+      communityId: ids.communityId, userId, role: "member", accessSource: "app_grant", state, activationSequence: 1, createdAt: NOW, updatedAt: NOW,
+    } as any));
+    // The app still reports the purchase; the sale alone doesn't put them back.
+    expect(await (await report(t, ids.app.secret, { email: `${handle}@example.com`, active: true, tier: "setter" })).json()).toEqual({ outcome: "kept_out" });
+    const projection = await t.run(async (ctx) => communityAppJoinProjection(ctx, (await ctx.db.get(ids.communityId)) as any, userId));
+    const joined = await t.mutation(internal.communityAppJoin.joinCommunityAppVisitorInternal, { userId, communityId: ids.communityId });
+    if (state === "left") {
+      // Their own choice: Join, not a price, and they're in on the app's plan.
+      expect(projection.gate).toBe("join");
+      expect(projection.plans).toEqual([]);
+      expect(joined.outcome).toBe("joined");
+      expect(await canEnter(t, ids.communityId, userId)).toBe(true);
+      expect((await membership(t, userId)).accessSource).toBe("app_grant");
+      expect((await access(t, ids.app.secret, `${handle}@example.com`)).tier).toEqual({ key: "setter", name: "Setter" });
+    } else {
+      expect(projection.gate).toBe("checkout");
+      expect(joined.outcome).toBe("paid_plan_required");
+      expect(await canEnter(t, ids.communityId, userId)).toBe(false);
+    }
+  }
+});

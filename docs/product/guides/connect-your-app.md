@@ -61,7 +61,8 @@ Content-Type: application/json
 
 The response says what happened: `in`, `waiting_for_account` (no Polynet account
 with that verified email yet; they're let in when they sign up with it),
-`kept_out` (they left, were removed or are blocked; a sale never puts them back),
+`kept_out` (they left, were removed or are blocked; a sale never puts them back,
+but someone who left can join again themselves without paying twice),
 `ended`, or `kept_by_other_access` (something else still lets them in).
 
 Do this after your own billing has recorded the change, and never let it fail
