@@ -1,5 +1,5 @@
 import { action, internalAction, internalMutation, internalQuery, mutation, query } from "./_generated/server";
-import { schedulePodBillingCheck } from "./communityPodPayments";
+import { schedulePodBillingCheck } from "./communityPodBillingCheck";
 import { communityHasCustomSite, communityMemberExperience, communitySiteUrl } from "./communitySites";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";

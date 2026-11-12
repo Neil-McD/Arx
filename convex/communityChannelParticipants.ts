@@ -1,4 +1,4 @@
-import { internal } from "./_generated/api";
+import { schedulePodBillingCheck } from "./communityPodBillingCheck";
 import { mutation, query } from "./_generated/server";
 import { paginationOptsValidator } from "convex/server";
 import { v } from "convex/values";
@@ -102,7 +102,7 @@ export const setParticipant = mutation({
     const result = await setChannelParticipantCore(ctx, { ...args, createdByUserId: manager.userId });
     // Off a paid pod: stop their billing for it now.
     if (!args.active && args.target.kind === "member" && result.changed) {
-      await ctx.scheduler.runAfter(0, internal.communityPodPayments.sweepUnreachablePodPaymentsInternal, { channelId: args.channelId, userId: args.target.userId });
+      await schedulePodBillingCheck(ctx, { channelId: args.channelId, userId: args.target.userId });
     }
     return result;
   },

@@ -1,5 +1,5 @@
 import { internal } from "./_generated/api";
-import { schedulePodBillingCheck } from "./communityPodPayments";
+import { schedulePodBillingCheck } from "./communityPodBillingCheck";
 import { endCommunitySubscription } from "./communitySubscriptionLifecycle";
 import {
   internalAction,

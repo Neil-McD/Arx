@@ -555,9 +555,3 @@ export const sweepUnreachablePodPaymentsInternal = internalAction({
     return { checked, stopped, expired };
   },
 });
-
-// Called by the code that may have ended someone's access (leaving, removal,
-// a lapse, a host taking them off a pod, archiving): check those pod payments now.
-export async function schedulePodBillingCheck(ctx: any, scope: { communityId?: any; userId?: any; channelId?: any }) {
-  await ctx.scheduler.runAfter(0, internal.communityPodPayments.sweepUnreachablePodPaymentsInternal, scope);
-}
