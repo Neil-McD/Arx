@@ -87,9 +87,13 @@ export function KitKnowledgePage(props: {
   const earlierCount = all.length - hostsCount;
 
   // The newest open first; a filter that hides the open note opens its first.
+  // An edit in progress is left (never carried to another note).
   useEffect(() => {
     if (!notes || mode === "new") return;
-    if (!openSlug || !shown.some((note) => note.slug === openSlug)) setOpenSlug(shown[0]?.slug ?? null);
+    if (!openSlug || !shown.some((note) => note.slug === openSlug)) {
+      setMode("read");
+      setOpenSlug(shown[0]?.slug ?? null);
+    }
   }, [notes, shown, openSlug, mode]);
 
   const open = all.find((note) => note.slug === openSlug) ?? null;
@@ -97,7 +101,12 @@ export function KitKnowledgePage(props: {
   const points = useMemo(() => layoutNotes(shown.map((note) => note.slug), labeled, MAP_W, MAP_H), [shown, labeled]);
   const at = useMemo(() => new Map(points.map((point) => [point.slug, point])), [points]);
   const bySlug = useMemo(() => new Map(all.map((note) => [note.slug, note])), [all]);
-  const openNote = (slug: string) => { setMode("read"); setOpenSlug(slug); };
+  // Opening a note the filter hides (a related one) shows everything again.
+  const openNote = (slug: string) => {
+    setMode("read");
+    if (!shown.some((note) => note.slug === slug)) setFilter("all");
+    setOpenSlug(slug);
+  };
 
   const chip = (id: Filter, label: string, count: number) => (
     <button key={id} type="button" className={cx("chip", filter === id && "sel")} aria-pressed={filter === id} onClick={() => setFilter(id)}>{label} · {count}</button>
@@ -210,9 +219,11 @@ export function KitKnowledgePage(props: {
               setOpenSlug(created.slug);
             }} />
         ) : open && mode === "edit" && canManage ? (
-          <NoteForm title={open.title} text={open.body_md} submitLabel="Save changes" onCancel={() => setMode("read")}
+          <NoteForm key={open.slug} title={open.title} text={open.body_md} submitLabel="Save changes" onCancel={() => setMode("read")}
             onSubmit={async (title, text) => {
-              await updateCommunityNote({ session: props.session, communityId: props.communityId, slug: open.slug, title, text });
+              // The note this form was opened for, never whichever is open now.
+              const slug = open.slug;
+              await updateCommunityNote({ session: props.session, communityId: props.communityId, slug, title, text });
               await load();
               setMode("read");
             }} />
