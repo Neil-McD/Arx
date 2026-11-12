@@ -13,13 +13,25 @@ export function useCommunityAppLinks(): CloudCommunityAppLink[] {
   return useContext(CommunityAppLinksContext);
 }
 
-// Read once per community; none until known.
+// Manage → Your app announces a change, so the column shows it without a reload.
+const CHANGED_EVENT = "polynet:community-app-links-changed";
+export function announceCommunityAppLinksChanged(): void {
+  if (typeof window !== "undefined") window.dispatchEvent(new Event(CHANGED_EVENT));
+}
+
+// Read once per community (and again after a change); none until known.
 export function useCommunityAppLinksState(args: {
   session: unknown;
   ensureSession: (session: any) => Promise<any | null>;
   communityId: string | null;
 }): CloudCommunityAppLink[] {
   const [state, setState] = useState<{ communityId: string; apps: CloudCommunityAppLink[] } | null>(null);
+  const [version, setVersion] = useState(0);
+  useEffect(() => {
+    const bump = () => setVersion((value) => value + 1);
+    window.addEventListener(CHANGED_EVENT, bump);
+    return () => window.removeEventListener(CHANGED_EVENT, bump);
+  }, []);
   useEffect(() => {
     const communityId = args.communityId;
     if (!communityId) return;
@@ -34,6 +46,6 @@ export function useCommunityAppLinksState(args: {
     })();
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [args.communityId, args.session]);
+  }, [args.communityId, args.session, version]);
   return state && state.communityId === args.communityId ? state.apps : [];
 }

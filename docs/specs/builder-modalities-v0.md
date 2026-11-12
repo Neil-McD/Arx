@@ -191,6 +191,12 @@ The builder's app keeps its own login and billing and does most of the selling.
   the bought email attaches the sale. Where that link goes is the builder's
   choice: the guide lists placements and the setup prompt has the agent
   propose them and ask before adding any.
+- **Door fixes (built):** someone who left while the app still reports their
+  purchase sees Join (not a price) and comes back on it
+  (`communityPublic.rejoinsOnAppPurchase`); removed members still need a
+  manager. Signed-in non-members no longer see a Sign in that loops. The site's
+  join card says "Already have access? Sign in" (ships with the next edge
+  worker deploy). The left-column link appears as soon as the builder saves.
 - **Next:** slice 3 (buy and change tiers through Polynet
   from the app), slice 4 (Distribution Engineer live, both ways). Sign in with
   Polynet waits for a builder with no login of its own.

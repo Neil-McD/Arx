@@ -6,6 +6,7 @@ import {
   type PublicPlanSummaryLike,
   communityMembershipRowIsActive,
   getUniqueCommunityMembershipByPair,
+  hasActiveAppGrant,
   mapActivePlanSummaries,
   normalizeSlug,
   pickPreferredActivePlan,
@@ -276,6 +277,11 @@ export const listSiteDiscoverCommunitiesInternal = internalQuery({
 
 // The join decision for Studio's funnel and for Join on a community site's
 // private twin (communityAppJoin.ts): one gate, whichever page asks.
+// One door: who may come back on an app purchase (see joinPublicCommunityInternal).
+export function rejoinsOnAppPurchase(membership: Parameters<typeof communityMembershipRequiresManagerReapproval>[0], hasAppGrant: boolean): boolean {
+  return hasAppGrant && !communityMembershipRequiresManagerReapproval(membership);
+}
+
 export async function joinPublicCommunityInternal(args: {
   ctx: any;
   community: CommunityLike;
@@ -332,6 +338,24 @@ export async function joinPublicCommunityInternal(args: {
   };
 
   if (existingMembership && communityMembershipRowIsActive(existingMembership)) {
+    return {
+      outcome: "joined",
+      community_id: String(args.community._id),
+    };
+  }
+
+  // One door: someone who left while the community's own app still reports
+  // their purchase comes back on it, without paying twice. Their own choice
+  // only (a sale never puts anyone back); removed members still need a manager.
+  if (rejoinsOnAppPurchase(existingMembership, await hasActiveAppGrant(args.ctx, args.community._id, args.userId))) {
+    await activateCommunityMembershipCore({
+      ctx: args.ctx,
+      communityId: args.community._id,
+      userId: args.userId,
+      accessSource: "app_grant" as any,
+      activationReason: "connected_app_rejoin",
+      nowMs: args.nowMs,
+    });
     return {
       outcome: "joined",
       community_id: String(args.community._id),

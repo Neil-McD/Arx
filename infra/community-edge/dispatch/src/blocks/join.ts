@@ -353,9 +353,10 @@ class Join {
     return out;
   }
 
-  // Someone who already belongs, signed out here: sign in, and the card says they're in.
+  // Someone who already has access (a member, or a buyer in the community's own
+  // app), signed out here: sign in, and the card says they're in.
   memberSignIn() {
-    return h("p", { class: "muted signin" }, ["Already a member? ",
+    return h("p", { class: "muted signin" }, ["Already have access? ",
       h("button", { class: "quiet", part: "join-signin", type: "button", text: "Sign in", onclick: () => signIn(null) })]);
   }
 
