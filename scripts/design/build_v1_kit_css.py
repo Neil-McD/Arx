@@ -122,6 +122,25 @@ css += """
 .app .note-del{margin-left:8px;color:var(--ink3);font-size:12px;text-decoration:underline}
 .app .lab .priv{float:right;font-style:normal;font-weight:400}
 .app button.p{width:100%;text-align:left}
+/* Knowledge in the app: the mock's map in a scrolling page, a plain list of
+   notes under it, and the open note's text and forms in the right column. */
+.app .kn-title{margin:0;font-family:var(--serif);font-weight:var(--serif-w);font-size:34px;letter-spacing:-.02em;line-height:1.1}
+.app .kn-sub{margin:8px 0 0;font-size:13px;color:var(--ink2)}
+.app svg.kn-map{display:block;width:100%;height:auto;margin:6px 0 0}
+.app .kn-pt{cursor:pointer}
+.app button.kn-row{width:100%;text-align:left;grid-template-columns:20px 1fr auto;cursor:pointer}
+.app .kn-row.sel{background:var(--s2)}
+.app .kn-dot{width:7px;height:7px;border-radius:50%;background:var(--ink3);justify-self:center}
+.app .kn-dot.new{background:var(--aurora);box-shadow:0 0 10px var(--aurora)}
+.app .kn-note-title{margin:2px 0 0;font-size:20px;font-weight:600;letter-spacing:-.015em}
+.app .kn-body p{margin:0 0 10px;font-size:15px;line-height:1.55;color:var(--ink2)}
+.app button.src{width:calc(100% + 20px);text-align:left}
+.app .kn-form{display:flex;flex-direction:column;gap:10px}
+.app .kn-form input,.app .kn-form textarea{width:100%;box-sizing:border-box;padding:8px 10px;border-radius:9px;border:1px solid var(--line);background:var(--field);color:var(--ink);font:inherit;font-size:14px;line-height:1.5;outline:0;resize:vertical}
+.app .kn-form input:focus,.app .kn-form textarea:focus{border-color:var(--line2)}
+.app .kn-form input::placeholder,.app .kn-form textarea::placeholder{color:var(--ink3)}
+.app .r2 .kick{display:flex}
+
 /* Links drawn as the mock's buttons (Join, Add to calendar). */
 .app a.btn{text-decoration:none}
 .app .btn.sm.on .ic{width:13px;height:13px}

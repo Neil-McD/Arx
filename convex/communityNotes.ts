@@ -6,8 +6,10 @@ import { v } from "convex/values";
 import { internalQuery, mutation, query } from "./_generated/server";
 import { resolveUserIdForAuthenticatedRequest } from "./authActor";
 import { requireCommunityChatAccess, requireCommunityManager } from "./communityCore";
+import { resolveUserProfileDisplayProjection } from "./userProfileProjection";
 import {
   buildCommunityNoteSearchText,
+  communityNoteSlug,
   communityNoteSourceWords,
   COMMUNITY_NOTES_MAX_PER_COMMUNITY,
   normalizeCommunityNoteBody,
@@ -82,14 +84,29 @@ export const listCommunityNotes = query({
     const limit = Math.max(1, Math.min(COMMUNITY_NOTES_MAX_PER_COMMUNITY, Math.floor(args.limit ?? 100)));
     const rows = await ctx.db.query("communityNotes")
       .withIndex("by_community_updatedAt", (q) => q.eq("communityId", args.communityId)).order("desc").take(limit + 1);
-    return {
-      can_manage: canManage,
-      has_more: rows.length > limit,
-      notes: rows.slice(0, limit).map((row) => ({
-        slug: row.slug, title: row.title, body_md: row.bodyMd, source: communityNoteSourceWords(row.source),
-        updated_at: new Date(row.updatedAt).toISOString(),
-      })),
+    // Knowledge says who wrote a note only when a host wrote it; a note saved
+    // from someone's conversation never names them.
+    const names = new Map<string, string | null>();
+    const writer = async (row: any) => {
+      if (row.source !== "founder" || !row.createdByUserId) return null;
+      const key = String(row.createdByUserId);
+      if (!names.has(key)) {
+        const profile = await resolveUserProfileDisplayProjection(ctx, row.createdByUserId);
+        const user = await ctx.db.get(row.createdByUserId) as { displayName?: string } | null;
+        names.set(key, profile.display_name ?? user?.displayName ?? null);
+      }
+      return names.get(key) ?? null;
     };
+    const notes = [];
+    for (const row of rows.slice(0, limit)) {
+      notes.push({
+        slug: row.slug, title: row.title, body_md: row.bodyMd, source: communityNoteSourceWords(row.source),
+        kind: row.source, written_by: await writer(row),
+        created_at: new Date(row.createdAt).toISOString(),
+        updated_at: new Date(row.updatedAt).toISOString(),
+      });
+    }
+    return { can_manage: canManage, has_more: rows.length > limit, notes };
   },
 });
 
@@ -108,6 +125,32 @@ export const updateCommunityNote = mutation({
       title, bodyMd: text, searchText: buildCommunityNoteSearchText({ title, bodyMd: text }), updatedByUserId: userId, updatedAt: Date.now(),
     });
     return { slug: row.slug, title };
+  },
+});
+
+// A host writes a note in Studio (Knowledge's New note).
+export const createCommunityNote = mutation({
+  args: { ...viewerArgs, title: v.string(), text: v.string() },
+  handler: async (ctx, args) => {
+    const { userId, canManage } = await viewer(ctx, args);
+    if (!canManage) throw new Error("community_forbidden");
+    const title = normalizeCommunityNoteTitle(args.title);
+    const text = normalizeCommunityNoteBody(args.text);
+    if (!title || !text) throw new Error("invalid_tool_args");
+    const existing = await ctx.db.query("communityNotes")
+      .withIndex("by_community_updatedAt", (q) => q.eq("communityId", args.communityId)).take(COMMUNITY_NOTES_MAX_PER_COMMUNITY + 1);
+    if (existing.length >= COMMUNITY_NOTES_MAX_PER_COMMUNITY) throw new Error("community_notes_full");
+    const base = communityNoteSlug(title) || "note";
+    const taken = new Set(existing.map((row) => row.slug));
+    let slug = base;
+    for (let n = 2; taken.has(slug); n++) slug = `${base.slice(0, 60)}-${n}`;
+    const nowMs = Date.now();
+    await ctx.db.insert("communityNotes", {
+      communityId: args.communityId, slug, title, bodyMd: text, source: "founder",
+      searchText: buildCommunityNoteSearchText({ title, bodyMd: text }),
+      createdByUserId: userId, updatedByUserId: userId, createdAt: nowMs, updatedAt: nowMs,
+    });
+    return { slug, title };
   },
 });
 
