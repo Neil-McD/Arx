@@ -158,7 +158,7 @@ export function KitEventsList(props: {
               return (
                 <div key={event.id} className={cx("erow")} id={`community-event-${event.id}`}>
                   <div className={cx("date")}><b>{block.number}</b><span>{block.word}</span></div>
-                  <div><b>{event.title}</b>{event.pod_name ? <span className={cx("podtag")}>{event.pod_name}</span> : null}<span className={cx("s")} title={props.timeLabel(event)}>{[eventClock(event.starts_at), recurrence(event), eventPeopleLine(going.get(goingKey(event)))].filter(Boolean).join(" · ")}</span></div>
+                  <div><b>{event.title}{event.pod_name ? <span className={cx("podtag")}>{event.pod_name}</span> : null}</b><span className={cx("s")} title={props.timeLabel(event)}>{[eventClock(event.starts_at), recurrence(event), eventPeopleLine(going.get(goingKey(event)))].filter(Boolean).join(" · ")}</span></div>
                   <span style={{ display: "flex", alignItems: "center", gap: 6 }}>{manage(event)}{goingButton(event)}</span>
                 </div>
               );
@@ -174,7 +174,7 @@ export function KitEventsList(props: {
                   return (
                     <div key={event.id} className={cx("erow")}>
                       <div className={cx("date past")}><b>{block.number}</b><span>{block.word}</span></div>
-                      <div><b>{event.title}</b>{event.pod_name ? <span className={cx("podtag")}>{event.pod_name}</span> : null}<span className={cx("s")}>{eventClock(event.starts_at)}</span></div>
+                      <div><b>{event.title}{event.pod_name ? <span className={cx("podtag")}>{event.pod_name}</span> : null}</b><span className={cx("s")}>{eventClock(event.starts_at)}</span></div>
                       <span />
                     </div>
                   );
