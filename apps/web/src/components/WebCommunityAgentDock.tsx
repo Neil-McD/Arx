@@ -37,7 +37,6 @@ import {
   validateCommunityAgentImageDrafts,
   type CommunityAgentImageAttachment,
 } from "../../../../shared/communityAgentAttachments";
-import { openGuideFromSearch } from "./guideSearch";
 import { mergeVoiceTranscript } from "../../../../shared/voiceCapture";
 import { VoiceInputButton } from "../../../../shared/VoiceInputButton";
 
@@ -1302,7 +1301,7 @@ function WebCommunityAgentDock(props, ref) {
         <View index={0}>
           {/* The top row scrolls with Home, so the eyebrow's glow is never cut. */}
           <Scroll ref={scrollRef}>
-            <Top onSearch={openGuideFromSearch} />
+            <Top title="Home" titleView={0} />
             <WebCommunityHomeSection
               {...props.home}
               session={props.session}

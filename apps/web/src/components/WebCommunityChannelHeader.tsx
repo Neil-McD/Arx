@@ -7,7 +7,6 @@ import {
   type FormEvent,
   type ReactNode,
 } from "react";
-import { SearchOrAskButton } from "./CommunityPageHeader";
 import { ChevronDown, Ellipsis, Hash, LockKeyhole, Pencil, Trash2, X } from "lucide-react";
 import { isDesignV1Active } from "../../../../shared/designSystem";
 import { setCloudCommunityChannelDescription } from "../../../../shared/cloudCommunityChannelsGateway";
@@ -294,7 +293,6 @@ export function WebCommunityChannelHeader({
         ) : (
           <div className="community-channel-header-identity" title={channel.name}>{identity}</div>
         )}
-        {isDesignV1Active() ? <SearchOrAskButton /> : null}
         {trailingAction}
         {canOpenChannelMenu && !v1Title ? (
           <div className="community-channel-header-actions" ref={menuRef}>

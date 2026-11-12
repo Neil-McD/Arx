@@ -25,11 +25,9 @@ HN = '''<div class="eyebrow">{i:spark}{cname}, your guide <em>· just now</em></
           <label class="item"><span class="k">Step 3</span><span><b>Invite your first ten members</b><span class="s">I'll help you choose who, and write the invitation</span></span><span class="go">{i:arrow}</span></label>
         </div>'''
 
-FIG_NEW = '''<div class="figs">
-      <div class="fig"><span>Members</span><b>1</b><em>just you, for now</em></div>
-      <div class="fig"><span>Active this week</span><b>1</b><em>&nbsp;</em></div>
-      <div class="fig"><span>Revenue this month</span><b>$0</b><em>no plans yet</em></div>
-      <div class="fig"><span>Next payout</span><b>$0</b><em>&nbsp;</em></div>
+FIG_NEW = '''<div class="sec">
+      <span class="lab">Today</span>
+      <ul class="tl"><li><b>Your community is open</b><span>Just you, for now · invite your first ten</span></li></ul>
     </div>'''
 
 def host(s):

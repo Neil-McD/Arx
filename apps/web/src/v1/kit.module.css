@@ -517,6 +517,7 @@
 .app .kchap{display:flex;flex-direction:column;gap:6px;margin-top:14px;font-size:14px;color:var(--ink2)}.app .kchap b{display:inline-block;width:44px;font-weight:500;color:var(--blue-ink)}
 
 
+
 .app{
   --bg:#0f1011; --window:#08090a; --panel:#0f1011; --panel2:#141516;
   --ink:#e6e7e9; --ink1:rgba(230,231,233,.9); --ink2:rgba(230,231,233,.62); --ink3:rgba(230,231,233,.44); --ink4:rgba(230,231,233,.22);
@@ -552,6 +553,8 @@
 .app .top h1 small{font-size:12.5px}
 .app .hline{display:none}
 
+.app .find{display:none}
+
 
 .app .home{padding:0 48px;max-width:760px}
 .app .eyebrow{margin-top:36px;font-size:12.5px;color:var(--ink3)}
@@ -581,7 +584,7 @@
 .app .chips{gap:6px;margin-bottom:8px}
 .app .chip{height:24px;padding:0 8px;border-radius:6px;font-size:12px}
 .app .ask{height:auto;min-height:76px;align-items:flex-start;flex-wrap:wrap;padding:12px 10px 10px 14px;border-radius:10px;border:1px solid var(--line2);background:var(--panel2);backdrop-filter:none;-webkit-backdrop-filter:none;box-shadow:none}
-.app .ask:focus-within{border-color:rgba(255,255,255,.16);box-shadow:none}
+.app .ask:focus-within{border-color:rgba(var(--w),.16);box-shadow:none}
 .app .ask input{font-size:14px;flex-basis:calc(100% - 40px)}
 .app .ask>.ic.sp{margin-top:2px;width:14px;height:14px}
 .app .ask .ib{width:26px;height:26px;border-radius:6px;margin-top:auto}
@@ -618,6 +621,18 @@
 
 .app .msg.g p,.app .say,.app .theirs p,.app .mrow p.serif{font-family:inherit;font-size:14px;line-height:1.55;color:var(--ink1)}
 .app .rail .say{font-size:13.5px !important;line-height:1.55;color:var(--ink1) !important}
+
+
+
+.app:is(.light:not(.on-mode-dark),.on-mode-light){
+  --window:#F2F3F5; --bg:#FFFFFF; --panel:#FFFFFF; --panel2:#F7F8F9;
+  --ink:#16171A; --ink1:rgba(22,23,26,.9); --ink2:rgba(22,23,26,.64); --ink3:rgba(22,23,26,.52); --ink4:rgba(22,23,26,.3);
+  --line:rgba(13,17,23,.07); --line2:rgba(13,17,23,.11);
+  --s1:rgba(13,17,23,.025); --s2:rgba(13,17,23,.045); --s3:rgba(13,17,23,.07);
+  --accent:#5E6AD2; --accent-hover:#4F5BC4; --go:var(--accent); --go-hover:var(--accent-hover);
+  --card-bg:var(--panel2); --card-shadow:none; --field:var(--panel2);
+}
+.app:is(.light:not(.on-mode-dark),.on-mode-light) .av.guide{background:rgba(109,74,232,.08);box-shadow:inset 0 0 0 1px rgba(109,74,232,.24)}
 
 
 

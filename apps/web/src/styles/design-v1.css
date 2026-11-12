@@ -2912,11 +2912,11 @@
   line-height: 1.6;
 }
 
-/* ---------- The Linear-style trial (Neil, Nov 12) ----------
-   docs/design/hifi-mock/linear.css draws it; the kit takes its rules, and the
-   app's frame is here: the window is a shade darker, everything right of the
-   left column sits in one inset, rounded panel, the left column is tighter,
-   and the accent is a soft indigo. Dark theme only for the trial. */
+/* ---------- The finish: Linear-style (Neil, Nov 12) ----------
+   The mock (docs/design/hifi-mock/style.css, "the finish") draws it and the
+   kit takes its rules; the app's frame is here: the window a shade off the
+   page, everything right of the left column in one inset, rounded panel, a
+   tighter left column, one sans typeface and a soft indigo accent. */
 :root[data-design="v1"]:not([data-theme="light"]) {
   --linear-window: #08090a;
   --surface-raised: #0f1011;
@@ -2928,15 +2928,31 @@
   --bg-button: #6f78d8;
   --bg-button-hover: #7d86e2;
   /* A plain hairline under headers, and a quiet border (no halo) on focus. */
-  /* No serif in the trial. */
+  /* No serif. */
   --font-voice: "Geist Variable", "Geist", system-ui, sans-serif;
   --header-line-glow: rgba(255, 255, 255, 0.06);
   --accent-act-edge: rgba(255, 255, 255, 0.16);
   --accent-act-halo: transparent;
 }
 
+:root[data-design="v1"][data-theme="light"] {
+  --linear-window: #f2f3f5;
+  --surface-raised: #ffffff;
+  --surface-raised-edge: rgba(13, 17, 23, 0.07);
+  --bg-card: #f7f8f9;
+  --bg-card-solid: #f7f8f9;
+  --bg-card-hover: #eff0f2;
+  --bg-input: #f7f8f9;
+  --bg-button: #5e6ad2;
+  --bg-button-hover: #4f5bc4;
+  --font-voice: "Geist Variable", "Geist", system-ui, sans-serif;
+  --header-line-glow: rgba(13, 17, 23, 0.07);
+  --accent-act-edge: rgba(13, 17, 23, 0.18);
+  --accent-act-halo: transparent;
+}
+
 @media (min-width: 721px) {
-  :root[data-design="v1"]:not([data-theme="light"]) .community-chat .community-interaction-main-composer > .chat-input-bar:focus-within .chat-send.ask-send-btn:not(:disabled) {
+  :root[data-design="v1"] .community-chat .community-interaction-main-composer > .chat-input-bar:focus-within .chat-send.ask-send-btn:not(:disabled) {
     --conversation-primary-action-surface: var(--bg-button);
     --conversation-primary-action-hover-surface: var(--bg-button-hover);
     box-shadow: none;
@@ -2944,17 +2960,17 @@
 }
 
 @media (min-width: 721px) {
-  :root[data-design="v1"]:not([data-theme="light"]) .app-shell .product-shell-surface--community {
+  :root[data-design="v1"] .app-shell .product-shell-surface--community {
     background: var(--linear-window);
   }
 
-  :root[data-design="v1"]:not([data-theme="light"]) .product-shell-surface--community > .community-nav {
+  :root[data-design="v1"] .product-shell-surface--community > .community-nav {
     border-right: 0;
     background: var(--linear-window);
   }
 
-  :root[data-design="v1"]:not([data-theme="light"]) .product-shell-surface--community > main,
-  :root[data-design="v1"]:not([data-theme="light"]) .product-shell-surface--community > .web-main-surface-slot > * {
+  :root[data-design="v1"] .product-shell-surface--community > main,
+  :root[data-design="v1"] .product-shell-surface--community > .web-main-surface-slot > * {
     margin: 8px 8px 8px 0;
     border: 1px solid var(--surface-raised-edge);
     border-radius: 10px;
@@ -2976,4 +2992,23 @@
 
 :root[data-design="v1"] .community-nav-section-label {
   font-size: 12px;
+}
+
+/* Search or ask, at the top of the left column (as Linear has it). */
+:root[data-design="v1"] .community-nav-tools {
+  padding: 8px 0 2px;
+}
+
+:root[data-design="v1"] .community-nav-tools .community-search-ask {
+  width: 100%;
+  height: 28px;
+  margin: 0;
+  border-radius: 6px;
+  background: transparent;
+}
+
+:root[data-design="v1"] .community-nav-tools .community-search-ask kbd {
+  border: 0;
+  padding: 0;
+  color: var(--text-faint);
 }
