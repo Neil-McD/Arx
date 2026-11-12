@@ -375,7 +375,7 @@ function RosterSurface(props: RosterProps & {
     </div> : null}
     {kitRail ? (
       // Design v1 beside a channel on a wide window: the mock's column, from the kit.
-      pod && scope?.communityId ? <KitPodRail session={scope.session} communityId={scope.communityId} pod={pod} onChanged={() => void reloadPod()} /> :
+      pod && scope?.communityId ? <KitPodRail key={pod.channel_id} session={scope.session} communityId={scope.communityId} pod={pod} onChanged={() => void reloadPod()} /> :
       <KitChannelRail
         communityId={scope?.communityId ?? null}
         session={scope?.session ?? null}

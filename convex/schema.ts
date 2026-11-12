@@ -1527,6 +1527,9 @@ export default defineSchema({
     updatedByUserId: v.id("users"),
     // The community note this was published as, when a builder published it.
     publishedSlug: v.optional(v.string()),
+    // The published copy's own id, so republishing updates that copy only
+    // (a deleted copy's slug can be reused by an unrelated note).
+    publishedNoteId: v.optional(v.id("communityNotes")),
     publishedAt: v.optional(v.number()),
     createdAt: v.number(),
     updatedAt: v.number(),

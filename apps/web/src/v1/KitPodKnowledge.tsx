@@ -2,7 +2,7 @@
 // its right column. Everyone in the pod reads them; its hosts write them. A
 // builder can publish one to the community's Knowledge, on purpose; nothing
 // else leaves the pod.
-import { Fragment, useCallback, useEffect, useState } from "react";
+import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import {
   deleteCloudPodNote,
   fetchCloudPodNotes,
@@ -25,11 +25,20 @@ export function KitPodKnowledge(props: { session: unknown; communityId: string; 
   const [error, setError] = useState<string | null>(null);
   const call = { session: props.session, communityId: props.communityId, channelId: props.channelId };
 
+  // Answers are kept only for the pod still on screen: switching pods clears
+  // the list at once, and a late answer for the previous pod is dropped.
+  const scope = `${props.communityId}:${props.channelId}`;
+  const current = useRef(scope);
+  current.current = scope;
   const load = useCallback(async () => {
-    try { setState(await fetchCloudPodNotes(call)); } catch { setState(null); }
+    const asked = `${props.communityId}:${props.channelId}`;
+    try {
+      const next = await fetchCloudPodNotes(call);
+      if (current.current === asked) setState(next);
+    } catch { if (current.current === asked) setState(null); }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [props.session, props.communityId, props.channelId]);
-  useEffect(() => { setOpen(null); setDraft(null); setFilter(""); setConfirm(null); void load(); }, [load]);
+  useEffect(() => { setState(null); setOpen(null); setDraft(null); setFilter(""); setConfirm(null); setError(null); void load(); }, [load]);
 
   const run = async (work: () => Promise<void>, failed: string) => {
     if (busy) return;
