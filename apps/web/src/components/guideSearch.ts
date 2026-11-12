@@ -1,9 +1,33 @@
 // Design system v1: "Search or ask" (the mock's top bar) and the ⌘K shortcut.
-// There is no search yet, so it opens your guide on Home, ready to ask.
+// They open the command palette where one is on the page (beside the
+// community's left column); elsewhere they open your guide on Home.
 export const OPEN_GUIDE_EVENT = "polynet:open-guide";
+// The palette's "Ask your guide": open Home and send the question.
+export const ASK_GUIDE_EVENT = "polynet:ask-guide";
+
+let paletteToggle: (() => void) | null = null;
+
+// The palette registers itself while it is mounted; the returned function
+// unregisters it.
+export function registerCommandPalette(toggle: () => void): () => void {
+  paletteToggle = toggle;
+  return () => {
+    if (paletteToggle === toggle) paletteToggle = null;
+  };
+}
 
 export function openGuideFromSearch(): void {
+  if (paletteToggle) {
+    paletteToggle();
+    return;
+  }
   window.dispatchEvent(new CustomEvent(OPEN_GUIDE_EVENT));
+}
+
+export function askGuide(question: string): void {
+  const text = question.trim();
+  if (!text) return;
+  window.dispatchEvent(new CustomEvent<string>(ASK_GUIDE_EVENT, { detail: text }));
 }
 
 export function isGuideSearchShortcut(event: Pick<KeyboardEvent, "key" | "metaKey" | "ctrlKey" | "altKey" | "shiftKey">): boolean {
