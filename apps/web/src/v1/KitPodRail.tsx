@@ -15,6 +15,7 @@ import {
   type CloudPodDetail,
 } from "../../../../shared/cloudCommunityPodsGateway";
 import { Btn, KitApp, Rail, Sec, Sep, cx } from "./kit";
+import { askForPodPagePreview, forgetPod, goToPodsPath, rememberPod } from "./podMemory";
 
 type Draft = { purpose: string; whatYouGet: string; listed: boolean; seats: string; price: string };
 
@@ -77,7 +78,7 @@ export function KitPodRail(props: { session: unknown; communityId: string; pod: 
       const result = await leaveCloudPod({ session: props.session, communityId: props.communityId, channelId: pod.channel_id });
       setConfirmLeave(false);
       // Out now: the room closes, so back to Pods.
-      if (result.left === "now") window.location.assign(window.location.pathname.replace(/\/chat\/.*$/, "/pods"));
+      if (result.left === "now") { forgetPod(); goToPodsPath(); }
       else props.onChanged();
     } catch { setLeaveError("Couldn't leave. Try again."); } finally { setBusy(null); }
   };
@@ -136,6 +137,7 @@ export function KitPodRail(props: { session: unknown; communityId: string; pod: 
                       void navigator.clipboard?.writeText(podLink(pod.slug)).then(() => { setCopied(true); window.setTimeout(() => setCopied(false), 1500); }, () => undefined);
                     }}>{copied ? "Copied" : "Copy link"}</Btn>
                   ) : null}
+                  {pod.slug ? <Btn small txt onClick={() => { askForPodPagePreview(pod.slug); goToPodsPath(pod.slug); }}>See its page</Btn> : null}
                 </div>
               ) : null}
             </>
@@ -215,7 +217,12 @@ export function useCloudPod(session: unknown, communityId: string | null, channe
   const [pod, setPod] = useState<CloudPodDetail | null>(null);
   const load = useCallback(async () => {
     if (!session || !communityId || !channelId) { setPod(null); return; }
-    try { setPod(await fetchCloudPod({ session, communityId, channelId })); } catch { setPod(null); }
+    try {
+      const next = await fetchCloudPod({ session, communityId, channelId });
+      setPod(next);
+      // In a pod: "Pods" in the left column comes back here.
+      if (next?.slug) rememberPod(next.slug);
+    } catch { setPod(null); }
   }, [session, communityId, channelId]);
   useEffect(() => { void load(); }, [load]);
   return { pod, reload: load };

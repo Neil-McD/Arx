@@ -739,14 +739,18 @@ describe("pods", () => {
       } as any);
       return { ana: ana._id, ben: ben._id, channelId };
     });
-    const page = (subject: string, asMember?: boolean) => t.withIdentity({ subject })
-      .query(api.communityPods.getPodPage, { communityId: f.communityId, podSlug: "Founders", ...(asMember ? { asMember } : {}) });
+    const page = (subject: string, preview?: boolean) => t.withIdentity({ subject })
+      .query(api.communityPods.getPodPage, { communityId: f.communityId, podSlug: "Founders", ...(preview ? { preview } : {}) });
     const asOwner = t.withIdentity({ subject: "brief-Owner" });
     // Hidden: Ben (not in it) can't tell it exists; Ana goes into the room.
     await expect(page("brief-Ben")).resolves.toEqual({ kind: "not_found" });
     await expect(page("brief-Ana")).resolves.toEqual({ kind: "inside", slug: "founders" });
-    // The builder sees the outside, with Edit and a way in, even while hidden.
-    await expect(page("brief-Owner")).resolves.toMatchObject({ kind: "outside", visibility: "hidden", can_edit: true, can_enter: true });
+    // The builder can enter every pod, so goes straight in; the outside page
+    // (even a hidden pod's) is theirs to preview on request. Not a member's.
+    await expect(page("brief-Owner")).resolves.toEqual({ kind: "inside", slug: "founders" });
+    await expect(page("brief-Owner", true)).resolves.toMatchObject({ kind: "outside", visibility: "hidden", can_edit: true, can_enter: true });
+    await expect(page("brief-Ana", true)).resolves.toEqual({ kind: "inside", slug: "founders" });
+    await expect(page("brief-Ben", true)).resolves.toEqual({ kind: "not_found" });
     // "What you get": trimmed, at most four lines, blanks dropped.
     await asOwner.mutation(api.communityPods.savePodDetails, {
       communityId: f.communityId, channelId: ids.channelId, visibility: "listed", purpose: "Closer time",
