@@ -101,7 +101,7 @@ export const listCommunityNotes = query({
     for (const row of rows.slice(0, limit)) {
       notes.push({
         slug: row.slug, title: row.title, body_md: row.bodyMd, source: communityNoteSourceWords(row.source),
-        kind: row.source, written_by: await writer(row),
+        kind: row.source, written_by: await writer(row), from_pod: row.fromPodName ?? null,
         created_at: new Date(row.createdAt).toISOString(),
         updated_at: new Date(row.updatedAt).toISOString(),
       });

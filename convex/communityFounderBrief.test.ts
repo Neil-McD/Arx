@@ -969,4 +969,78 @@ describe("pods", () => {
     await asAna.mutation(api.communityEvents.cancelCommunityEvent, { eventId });
     expect((await asAna.query(api.communityPods.getPod, { communityId: f.communityId, channelId: ids.channelId })).next_call).toBeNull();
   });
+
+  it("pod knowledge: the pod reads, its hosts write, nothing leaves except a copy a builder publishes", async () => {
+    const t = convexTest(schema, modules);
+    const nowMs = Date.now();
+    const f = await fixture(t, nowMs);
+    const ids = await t.run(async (ctx) => {
+      const find = async (subject: string) => (await ctx.db.query("users").withIndex("by_authSubject" as any, (q: any) => q.eq("authSubject", subject)).first())!;
+      const ana = await find("brief-Ana");
+      const ben = await find("brief-Ben");
+      for (const row of await ctx.db.query("communityMemberships").collect()) await ctx.db.patch(row._id, { activationSequence: 1, activatedAt: nowMs } as any);
+      const room = (slug: string) => ctx.db.insert("communityChannels", {
+        communityId: f.communityId, slug, name: slug === "founders" ? "Founders" : "Other", accessMode: "restricted",
+        postingPolicy: "members", status: "active", position: 1, createdByUserId: f.ownerId, createdAt: nowMs, updatedAt: nowMs,
+      } as any);
+      const channelId = await room("founders");
+      const otherId = await room("other");
+      const anaMembership = (await ctx.db.query("communityMemberships").collect()).find((row: any) => String(row.userId) === String(ana._id))!;
+      await ctx.db.insert("communityChannelParticipants", {
+        communityId: f.communityId, channelId, principalKey: `user:${ana._id}`, membershipId: anaMembership._id, membershipActivationSequence: 1,
+        status: "active", createdByUserId: f.ownerId, createdAt: nowMs, updatedAt: nowMs,
+      } as any);
+      return { ana: ana._id, ben: ben._id, channelId, otherId };
+    });
+    const pod = { communityId: f.communityId, channelId: ids.channelId };
+    const asOwner = t.withIdentity({ subject: "brief-Owner" });
+    const asAna = t.withIdentity({ subject: "brief-Ana" });
+    const asBen = t.withIdentity({ subject: "brief-Ben" });
+    const secret = "Our launch price is $497, decided on the call.";
+    // The builder writes; a pod member reads but can't write or publish.
+    await asOwner.mutation(api.communityPodNotes.savePodNote, { ...pod, title: "Launch pricing", text: secret });
+    const anaView = await asAna.query(api.communityPodNotes.listPodNotes, pod);
+    expect(anaView).toMatchObject({ can_write: false, can_publish: false, notes: [{ slug: "launch-pricing", title: "Launch pricing", body_md: secret, written_by: "Owner", published: false }] });
+    await expect(asAna.mutation(api.communityPodNotes.savePodNote, { ...pod, title: "Mine", text: "x" })).rejects.toThrow(/community_pod_manager_required/);
+    await expect(asAna.mutation(api.communityPodNotes.deletePodNote, { ...pod, slug: "launch-pricing" })).rejects.toThrow(/community_pod_manager_required/);
+    await expect(asAna.mutation(api.communityPodNotes.publishPodNote, { ...pod, slug: "launch-pricing" })).rejects.toThrow();
+    // A host of the pod writes and edits, but publishing is the builder's.
+    await asOwner.mutation(api.communityPods.setPodHost, { ...pod, userId: ids.ana, host: true });
+    await asAna.mutation(api.communityPodNotes.savePodNote, { ...pod, title: "Call notes", text: "Week one: everyone shipped." });
+    await asAna.mutation(api.communityPodNotes.savePodNote, { ...pod, slug: "call-notes", title: "Call notes", text: "Week one: everyone shipped an offer." });
+    expect((await asAna.query(api.communityPodNotes.listPodNotes, pod))).toMatchObject({ can_write: true, can_publish: false });
+    await expect(asAna.mutation(api.communityPodNotes.publishPodNote, { ...pod, slug: "call-notes" })).rejects.toThrow();
+    // Someone outside the pod: nothing, by any call. Another pod's notes are apart too.
+    for (const call of [
+      asBen.query(api.communityPodNotes.listPodNotes, pod),
+      asBen.mutation(api.communityPodNotes.savePodNote, { ...pod, title: "x", text: "y" }),
+      asBen.mutation(api.communityPodNotes.deletePodNote, { ...pod, slug: "launch-pricing" }),
+      asBen.mutation(api.communityPodNotes.publishPodNote, { ...pod, slug: "launch-pricing" }),
+    ]) await expect(call).rejects.toThrow(/community_pod_not_found/);
+    expect((await asOwner.query(api.communityPodNotes.listPodNotes, { communityId: f.communityId, channelId: ids.otherId })).notes).toEqual([]);
+    // The wall: no reader of the community's knowledge has it.
+    const everywhere = async (who: typeof asOwner) => JSON.stringify([
+      await who.query(api.communityNotes.listCommunityNotes, { communityId: f.communityId }),
+      await t.query(internalRefs.communityNotes.listCommunityNotesInternal, { communityId: f.communityId }),
+      await t.query(internalRefs.communityNotes.searchCommunityNotesInternal, { communityId: f.communityId, query: "launch price" }),
+      await t.query(internalRefs.communityNotes.readCommunityNoteInternal, { communityId: f.communityId, slug: "launch-pricing" }),
+      await who.query(api.communityHomeMoments.getHomeMoments, { communityId: f.communityId }),
+    ]);
+    expect(await everywhere(asBen)).not.toContain("497");
+    expect(await everywhere(asAna)).not.toContain("497");
+    // The builder publishes one note: a copy in Knowledge, marked with its pod.
+    await asOwner.mutation(api.communityPodNotes.publishPodNote, { ...pod, slug: "launch-pricing" });
+    const community = await asBen.query(api.communityNotes.listCommunityNotes, { communityId: f.communityId });
+    expect(community.notes).toMatchObject([{ title: "Launch pricing", body_md: secret, from_pod: "Founders" }]);
+    // The pod's other note stayed in.
+    expect(JSON.stringify(community)).not.toContain("everyone shipped");
+    expect((await asAna.query(api.communityPodNotes.listPodNotes, pod)).notes.find((note: any) => note.slug === "launch-pricing")).toMatchObject({ published: true });
+    // Publishing again updates the same copy; deleting the pod note leaves it.
+    await asOwner.mutation(api.communityPodNotes.savePodNote, { ...pod, slug: "launch-pricing", title: "Launch pricing", text: "Our launch price is $597." });
+    await asOwner.mutation(api.communityPodNotes.publishPodNote, { ...pod, slug: "launch-pricing" });
+    const after = await asBen.query(api.communityNotes.listCommunityNotes, { communityId: f.communityId });
+    expect(after.notes.map((note: any) => note.body_md)).toEqual(["Our launch price is $597."]);
+    await asOwner.mutation(api.communityPodNotes.deletePodNote, { ...pod, slug: "launch-pricing" });
+    expect((await asBen.query(api.communityNotes.listCommunityNotes, { communityId: f.communityId })).notes).toHaveLength(1);
+  });
 });

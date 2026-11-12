@@ -205,7 +205,21 @@ membership); one branch in the Stripe notice handler routes anything carrying
    anything public). Hosts schedule and cancel their pod's calls from its
    right column; the outside page shows the rhythm only, never the link. The
    call is a link the host pastes. Original scope:
-   **Pod knowledge and pod calls.** Pod-scoped notes with the one-way wall and
+   **Pod knowledge and pod calls.**
+   3b slice 1 (built): pod notes in the pod's right column. The pod reads,
+   its hosts and the builders write, and a builder can publish a note to the
+   community's Knowledge as a copy marked "Shared from the X pod". The wall is
+   built in: pod notes are their own table (`communityPodNotes`), so no reader
+   of community notes, search, Home, the handbook or the agent's file system
+   can show them, and a test lets only `convex/communityPodNotes.ts` touch the
+   table. Decided for safety, differing from the first plan: a separate table
+   rather than a scope field (fails closed); members read but don't write yet
+   (a member's text in shared memory is the injection path closed Nov 5); no
+   agent reads pod notes yet (that arrives with the guide in a pod and
+   members' agents, with its own access rule); "save from a message" moves to
+   the provenance slice. Research and reasoning: markdown notes with
+   provenance, supersession and an index, on the file system agents already
+   read; no graph database. Pod-scoped notes with the one-way wall and
    "publish to community"; pod-only events; with the Agent plan, the guide in
    a pod and its catch-up (uses the gateway's summaries).
 4. **Members' own agents.** Connect an agent to a pod, labelled, pod-scoped,

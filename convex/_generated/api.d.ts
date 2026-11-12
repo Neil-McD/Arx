@@ -88,6 +88,7 @@ import type * as communityOwnerApprovals from "../communityOwnerApprovals.js";
 import type * as communityOwnerMoments from "../communityOwnerMoments.js";
 import type * as communityPeople from "../communityPeople.js";
 import type * as communityPodBillingCheck from "../communityPodBillingCheck.js";
+import type * as communityPodNotes from "../communityPodNotes.js";
 import type * as communityPodPayments from "../communityPodPayments.js";
 import type * as communityPods from "../communityPods.js";
 import type * as communityPresenceCore from "../communityPresenceCore.js";
@@ -300,6 +301,7 @@ declare const fullApi: ApiFromModules<{
   communityOwnerMoments: typeof communityOwnerMoments;
   communityPeople: typeof communityPeople;
   communityPodBillingCheck: typeof communityPodBillingCheck;
+  communityPodNotes: typeof communityPodNotes;
   communityPodPayments: typeof communityPodPayments;
   communityPods: typeof communityPods;
   communityPresenceCore: typeof communityPresenceCore;

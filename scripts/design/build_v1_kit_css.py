@@ -220,6 +220,12 @@ css += """
 .app .podlink:hover{text-decoration:underline}
 .app .podtag{margin-left:8px;font-size:11px;color:var(--ink3);border:1px solid var(--line2);border-radius:999px;padding:1px 7px;white-space:nowrap}
 .app .podleave{display:flex;flex-direction:column;gap:8px;margin-top:8px}
+.app .podnote{padding:6px 0;border-bottom:1px solid var(--line)}
+.app .podnote:last-of-type{border-bottom:0}
+.app .podnote-title{background:none;border:0;padding:0;font:inherit;font-size:13px;font-weight:500;color:var(--ink);cursor:pointer;text-align:left;width:100%}
+.app .podnote-title:hover{text-decoration:underline}
+.app .podnote-body{margin:8px 0 6px;font-size:13px;line-height:1.55;color:var(--ink2)}
+.app .podnote-body p{margin:0 0 8px}
 .app .podform select{padding:7px 10px;border-radius:8px;border:1px solid var(--line2);background:var(--field);color:var(--ink);font:inherit;font-size:13px}
 .app .podreq{display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:32px;font-size:13px;color:var(--ink)}
 .app .podreq em{font-style:normal;color:var(--ink3)}

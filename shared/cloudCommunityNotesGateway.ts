@@ -8,6 +8,8 @@ export type CommunityNoteView = {
   // Where it came from (founder, ask, tag, migrated), when it was made, and
   // the host who wrote it (only for notes a host wrote).
   kind?: "ask" | "tag" | "founder" | "migrated"; created_at?: string; written_by?: string | null;
+  // Published from a pod's knowledge by a builder: the pod's name.
+  from_pod?: string | null;
 };
 export type CommunityNotesView = { can_manage: boolean; has_more: boolean; notes: CommunityNoteView[] };
 
