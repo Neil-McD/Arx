@@ -73,7 +73,7 @@ export function CommunityPlansSection(props: { communityId: string; session: unk
         <div key={tier.key} className="community-plan-row">
           <div>
             <strong>{tier.name}</strong>
-            <span className="settings-section-desc"> · {tier.base ? `${money(tier.monthly_amount_base_units)} (set in Pricing)` : money(tier.monthly_amount_base_units)} · {tier.members} {tier.members === 1 ? "member" : "members"}</span>
+            <span className="settings-section-desc">{tier.base ? `${money(tier.monthly_amount_base_units)} (set in Pricing)` : money(tier.monthly_amount_base_units)} · {tier.members} {tier.members === 1 ? "member" : "members"}</span>
             <div className="settings-section-desc">Grants: {["community", ...tier.grants].join(", ")}</div>
           </div>
           <div className="community-plan-actions">
