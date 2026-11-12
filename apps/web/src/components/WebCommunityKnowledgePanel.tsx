@@ -30,8 +30,10 @@ export function WebCommunityKnowledgePanel(props: Props) {
 }
 
 function KnowledgeV1({ resources, context }: Props) {
-  const [view, setView] = useState<"notes" | "resources">("notes");
-  useEffect(() => { setView("notes"); }, [context.communityId]);
+  // A link to a course or document opens Resources; otherwise the notes.
+  const moduleId = resources.state.selectedModuleId;
+  const [view, setView] = useState<"notes" | "resources">(moduleId ? "resources" : "notes");
+  useEffect(() => { setView(moduleId ? "resources" : "notes"); }, [context.communityId, moduleId]);
   return (
     <section className="community-knowledge-page" aria-label="Knowledge">
       <CommunityPageHeader title={view === "resources" ? "Knowledge · Resources" : "Knowledge"}
