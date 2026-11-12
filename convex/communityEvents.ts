@@ -583,7 +583,14 @@ export const cancelCommunityEvent = mutation({
 // A pod's next call (for the pod's own readers, who have already checked the
 // viewer may see the pod, or are showing only its rhythm).
 export async function nextPodCall(ctx: any, channelId: any, nowMs: number) {
-  const rows = (await ctx.db.query("communityEvents")
-    .withIndex("by_pod_status", (q: any) => q.eq("podChannelId", channelId).eq("status", "live")).take(50)) as CommunityEventLike[];
-  return expandCommunityEventRows({ rows, startMs: nowMs, endMs: Number.MAX_SAFE_INTEGER, includeCancelled: false, limit: 1 })[0] ?? null;
+  const pod = (q: any) => q.eq("podChannelId", channelId).eq("status", "live");
+  // Calls that start from now on, soonest first.
+  const upcoming = (await ctx.db.query("communityEvents")
+    .withIndex("by_pod_status_startsAt", (q: any) => pod(q).gte("startsAt", nowMs)).take(20)) as CommunityEventLike[];
+  // Series that began earlier and may still repeat (most recent first). Calls
+  // long past are skipped by date, so they can't crowd out the next one.
+  const earlier = (await ctx.db.query("communityEvents")
+    .withIndex("by_pod_status_startsAt", (q: any) => pod(q).lt("startsAt", nowMs)).order("desc").take(200)) as CommunityEventLike[];
+  const series = earlier.filter((row) => row.recurrenceFrequency && row.recurrenceFrequency !== "none").slice(0, 30);
+  return expandCommunityEventRows({ rows: [...upcoming, ...series], startMs: nowMs, endMs: Number.MAX_SAFE_INTEGER, includeCancelled: false, limit: 1 })[0] ?? null;
 }
