@@ -5,6 +5,7 @@ import { isDesignV1Active } from "../../../../shared/designSystem";
 import { WebAccountMenu } from "./WebAccountMenu";
 import { WebCommunitySwitcher } from "./WebCommunitySwitcher";
 import type { WebCommunityShellProps } from "./webShellChromeShared";
+import { WebCommunityCommandPalette } from "./WebCommunityCommandPalette";
 
 type WebCommunityNavSurfaceProps = {
   communityShell: WebCommunityShellProps;
@@ -22,6 +23,8 @@ export function WebCommunityNavSurface({
     webDestinationHasCommunityNavSelection(communityShell.destination);
 
   return (
+    <>
+    {useV1Layout ? <WebCommunityCommandPalette communityShell={communityShell} /> : null}
     <CommunityNav
       activeCommunity={communityShell.activeCommunity}
       hideIdentitySettings={isMobileHome}
@@ -98,5 +101,6 @@ export function WebCommunityNavSurface({
         ? () => communityShell.onOpenCommunitySettingsPane?.("agent")
         : undefined}
     />
+    </>
   );
 }

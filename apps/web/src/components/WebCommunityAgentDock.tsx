@@ -37,6 +37,7 @@ import {
   validateCommunityAgentImageDrafts,
   type CommunityAgentImageAttachment,
 } from "../../../../shared/communityAgentAttachments";
+import { openGuideFromSearch } from "./guideSearch";
 import { mergeVoiceTranscript } from "../../../../shared/voiceCapture";
 import { VoiceInputButton } from "../../../../shared/VoiceInputButton";
 
@@ -95,6 +96,8 @@ type ActiveThreadContext = {
 export type WebCommunityAgentDockHandle = {
   appendTranscript: (transcript: string) => void;
   focusInput: () => void;
+  // Sends a question from the command palette; false until Home's box is on the page.
+  ask: (question: string) => boolean;
   startResourceBuild: (request: {
     communityId: string;
     prompt: string;
@@ -233,6 +236,7 @@ function WebCommunityAgentDock(props, ref) {
   const attachmentsRef = useRef<CommunityAgentImageDraft[]>([]);
   const draftTextRef = useRef("");
   const submitInFlightRef = useRef(false);
+  const sendSuggestionRef = useRef<(text: string) => void>(() => undefined);
   const resourceBuildStartInFlightRef = useRef(false);
   const pendingResourceBuildRef = useRef<{
     communityId: string;
@@ -297,6 +301,11 @@ function WebCommunityAgentDock(props, ref) {
       inputElement.style.height = "auto";
       inputElement.style.height = `${Math.min(inputElement.scrollHeight, 112)}px`;
       inputElement.focus();
+    },
+    ask: (question: string) => {
+      if (!composerFormRef.current) return false;
+      sendSuggestionRef.current(question);
+      return true;
     },
     startResourceBuild: async (request) => {
       const requestedCommunityId = String(request.communityId ?? "").trim();
@@ -1283,13 +1292,14 @@ function WebCommunityAgentDock(props, ref) {
     openTalk();
     window.requestAnimationFrame(() => composerFormRef.current?.requestSubmit());
   };
+  sendSuggestionRef.current = sendSuggestion;
   const kitBody = kitHome && props.home ? (
     <section className="community-agent-dock-panel has-home-rail is-kit-home" aria-label={presentation.title}>
       <KitApp view="home" host={kitHomeIsHost} part="main" talking={kitTalking || conversationNeedsYou}>
         <View index={0}>
           {/* The top row scrolls with Home, so the eyebrow's glow is never cut. */}
           <Scroll ref={scrollRef}>
-            <Top onSearch={() => kitInputRef.current?.focus()} />
+            <Top onSearch={openGuideFromSearch} />
             <WebCommunityHomeSection
               {...props.home}
               session={props.session}

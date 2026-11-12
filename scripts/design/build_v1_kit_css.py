@@ -164,6 +164,20 @@ css += """
 .app .kedit-bar .btn:disabled{opacity:.4;cursor:default;box-shadow:none}
 .app .kedit-pub{margin-right:8px;font-size:13px;color:var(--ink3)}
 
+/* The command palette in the app: the mock's veil and card over the whole
+   window, a real input in its query row, results that scroll, and rows that
+   are buttons. */
+.app.part.palette-part{position:fixed;inset:0;z-index:1000;width:auto;height:auto;display:block;overflow:visible;pointer-events:none}
+.app.palette-part .veil{display:block;position:fixed;pointer-events:auto}
+.app.palette-part .pal{position:fixed;top:min(136px,12vh);width:min(580px,calc(100vw - 32px));margin-left:calc(min(580px,calc(100vw - 32px)) / -2)}
+.app .pal .q input{flex:1;min-width:0;padding:0;border:0;outline:0;background:transparent;color:var(--ink);font:inherit;font-size:16px}
+.app .pal .q input::placeholder{color:var(--ink3)}
+.app .pal .res{max-height:min(420px,60vh);overflow-y:auto;padding-bottom:6px}
+.app .pal button.opt{width:100%;text-align:left;cursor:pointer}
+.app .pal .opt-label{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.app .pal .opt-label b{font-weight:500;color:var(--ink)}
+.app .pal .pal-mark{width:20px;height:20px;border-radius:6px;font-size:9px}
+
 /* Links drawn as the mock's buttons (Join, Add to calendar). */
 .app a.btn{text-decoration:none}
 .app .btn.sm.on .ic{width:13px;height:13px}

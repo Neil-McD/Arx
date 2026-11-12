@@ -114,7 +114,7 @@ export function KitApp(props: {
   scale?: number;
   // One part of a page (its middle, or its right column) inside the app's
   // own frame, rather than the mock's whole window.
-  part?: "main" | "rail" | "flow" | "cover";
+  part?: "main" | "rail" | "flow" | "cover" | "palette";
   // The guide conversation is open on Home (the mock's "Talk it over").
   talking?: boolean;
   className?: string;
@@ -132,7 +132,7 @@ export function KitApp(props: {
   return (
     <div
       className={[
-        cx("app", `on-v-${props.view}`, props.host && "host", light && "light", props.part && "part", props.part === "rail" && "rail-part", props.part === "flow" && "flow-part", props.part === "cover" && "cover-part", props.talking && "on-t-on"),
+        cx("app", `on-v-${props.view}`, props.host && "host", light && "light", props.part && "part", props.part === "rail" && "rail-part", props.part === "flow" && "flow-part", props.part === "cover" && "cover-part", props.part === "palette" && "palette-part", props.talking && "on-t-on"),
         props.className,
       ].filter(Boolean).join(" ")}
       style={style}
