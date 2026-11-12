@@ -272,6 +272,12 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
   `stagingSeedBriefLab` and `stagingSeedPolynetDemo` (hand-run staging seeds; the demo
   community behind design v1).
 - **Tables:** `communityFounderBriefSettings`, `communityFounderBriefs`.
+- **Owner moments:** `communityOwnerMoments` (Home's milestone and detected-problem
+  cards for the owner, [gateway spec](specs/community-agent-gateway-v0.md); the card
+  is chosen in `shared/communityOwnerMoments.ts`). Table: `communityOwnerMoments`
+  (what was shown and dismissed).
+- **Agent on/off:** `communityAgent.getCommunityAgentOn` (pages show the guide only
+  when the Agent plan is paid and the agent is enabled).
 - **Handbook:** `communityHandbook` (the founder-approved handbook: owners and admins
   draft it with the agent, edit and approve it in Studio; members and the agent read
   only the approved text at `handbook.md`). Table: `communityHandbooks`.

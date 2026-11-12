@@ -4,6 +4,8 @@
 // stand. The owner sees the daily brief's facts read live; a member sees only
 // what any member can already see (convex/communityFounderBrief.ts).
 import { KitHomeRail } from "../v1/KitHomeRail";
+import { dismissOwnerMoment, fetchOwnerMoment, markOwnerMomentShown } from "../../../../shared/cloudCommunityOwnerMomentsGateway";
+import type { OwnerMoment } from "../../../../shared/communityOwnerMoments";
 import type { CommunityPresenceSummary } from "../../../../shared/communityTypes";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
@@ -39,6 +41,8 @@ export type WebCommunityHomeSectionProps = {
   // Whether the community's agent is on (docs/specs/community-agent-gateway-v0.md).
   // Off: Home is plain (no guide, no next step, no upsell).
   agentOn?: boolean;
+  // The owner's milestone and problem cards turn the agent on in Billing.
+  onTurnOnAgent?: () => void;
   // Who is here now (a member's "Right now" shows the faces).
   presence?: CommunityPresenceSummary | null;
 };
@@ -218,6 +222,9 @@ export function homeEventTimeFor(startsAtIso: string, now: Date): string {
 export function WebCommunityHomeSection(props: WebCommunityHomeSectionProps) {
   const [snapshot, setSnapshot] = useState<CloudCommunityHomeSnapshot | null>(null);
   const [failed, setFailed] = useState(false);
+  // The owner's moment card (a milestone or a detected problem), when nothing
+  // urgent holds the next-step spot.
+  const [ownerMoment, setOwnerMoment] = useState<{ moment: OwnerMoment; isNew: boolean } | null>(null);
   const loadedCommunityIdRef = useRef<string | null>(null);
 
   useEffect(() => {
@@ -244,6 +251,33 @@ export function WebCommunityHomeSection(props: WebCommunityHomeSectionProps) {
       cancelled = true;
     };
   }, [props.communityId, props.refreshKey, props.audience]);
+
+  useEffect(() => {
+    if (props.audience !== "host" || !props.kit) { setOwnerMoment(null); return; }
+    let cancelled = false;
+    void (async () => {
+      try {
+        const session = await props.ensureSession(props.session);
+        if (!session) return;
+        const picked = await fetchOwnerMoment({ session, communityId: props.communityId });
+        if (cancelled) return;
+        setOwnerMoment(picked);
+        if (picked?.isNew) await markOwnerMomentShown({ session, communityId: props.communityId, key: picked.moment.key }).catch(() => undefined);
+      } catch { if (!cancelled) setOwnerMoment(null); }
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [props.communityId, props.refreshKey, props.audience]);
+
+  const dismissMoment = async () => {
+    const current = ownerMoment;
+    setOwnerMoment(null);
+    if (!current) return;
+    try {
+      const session = await props.ensureSession(props.session);
+      if (session) await dismissOwnerMoment({ session, communityId: props.communityId, key: current.moment.key });
+    } catch { /* It shows again next time; nothing is lost. */ }
+  };
 
   // Home is extra; if its facts can't load, the conversation below still works.
   if (failed && !props.kit) return null;
@@ -275,6 +309,14 @@ export function WebCommunityHomeSection(props: WebCommunityHomeSectionProps) {
         <HomeBody>
           <Eyebrow community={props.communityName} time={homeClockFor(now)} plain={!agentOn} />
           <Hello greeting={greeting} line={snapshot ? homeSentenceFor(snapshot, card, props.audience) : failed ? "" : " "} />
+          {!card && ownerMoment ? (
+            <Card label={ownerMoment.moment.kind === "milestone" ? "Milestone" : "Worth a look"} title={ownerMoment.moment.title}
+              say={[ownerMoment.moment.detail, ownerMoment.moment.guide ? (agentOn ? `Your guide ${ownerMoment.moment.guide}.` : `With your community's agent, your guide ${ownerMoment.moment.guide}.`) : ""].filter(Boolean).join(" ")}>
+              {ownerMoment.moment.guide && !agentOn && props.onTurnOnAgent ? <Btn go onClick={props.onTurnOnAgent}>Turn on your community's agent</Btn> : null}
+              {ownerMoment.moment.guide && agentOn ? <Btn go onClick={kit.onTalkItOver}>Talk it over</Btn> : null}
+              <Btn txt onClick={() => void dismissMoment()}>{ownerMoment.moment.guide ? "Not now" : "Thanks"}</Btn>
+            </Card>
+          ) : null}
           {card ? (
             <Card label={card.label} title={card.title} say={card.detail}>
               <Btn go onClick={card.onAction}>{card.action}</Btn>

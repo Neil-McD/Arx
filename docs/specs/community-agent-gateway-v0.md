@@ -171,13 +171,34 @@ is the reason to upgrade.
 - **Paid (on): the guide.** Written summaries in every right column, "Since
   you were last here" chosen for you, a next step for each person, the guide
   on Home, Ask in the palette, chips, and each member's private session.
-- **No standing upsell.** Neil, Nov 12: few nudges. The owner turns the agent
-  on in Your guide, where they manage it. Beyond that, the only prompts are
-  **milestones**: moments worth marking for the owner (the first ten members,
-  the first paid member, the first hundred posts, the first month). A
-  milestone is shown once, celebrates what happened, and, on a free community,
-  may say in one line what the guide would do next, with a way to turn it on.
-  Milestones come from the signals layer (slice 2). Members never see upsells.
+- **No standing upsell, and no trial.** Neil, Nov 12: few nudges, no free
+  trials. The owner turns the agent on in Your guide, where they manage it
+  ("Turn on" goes straight to the Agent plan). Beyond that, the only prompts
+  are owner moments (below). Members never see upsells.
+
+### Owner moments: milestones and detected problems
+
+One card at a time, in the owner's next-step spot on Home, only when nothing
+urgent (a failed payment, people waiting to join) is there; at most one new
+card a week; dismissable for good. Every card uses the owner's own numbers.
+
+- **First member**: a congratulations only, no upsell.
+- **10 members** and **50 members**: where the upsell starts; the card names a
+  problem only if the data shows one at that moment.
+- **Detected problems** (shown only while true):
+  - **Questions waiting**: a member's question with no reply for 24 hours.
+  - **Quiet newcomers**: 2 or more people joined 3 to 14 days ago and have
+    not posted.
+  - **Stuck in a course**: 3 or more members last finished the same lesson
+    7 or more days ago, with lessons left.
+  - **A busy week**: 150 or more messages in the last 7 days.
+- **Free**: the problem, what the guide would do about it, and "Turn on your
+  community's agent". **Paid**: the problem and what the guide did (once the
+  guide acts on its own, slices 3 and 6; until then, "Talk it over").
+- Each card records when it was shown and dismissed, so we learn which
+  problems sell the agent.
+- Later: activity dropping week over week (needs a two-week comparison), and
+  the same question asked repeatedly (needs the model).
 - Turning off (plan lapses) keeps everything already written (notes, summaries,
   sessions) readable; nothing new is generated and the pages go back to plain.
 
