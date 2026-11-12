@@ -1,7 +1,6 @@
 import { Fragment, useContext, useEffect, useRef, useState, type ComponentProps, type KeyboardEvent, type CSSProperties } from "react";
 import { ArrowRight, MessageCircle, MoreHorizontal, Pin, Search, X } from "lucide-react";
 import { isDesignV1Active } from "../../../../shared/designSystem";
-import { MEMBER_FILTERS, memberPassesFilter, type MemberFilter } from "./communityMemberFilters";
 import { createPortal } from "react-dom";
 import { useWebMemberDirectorySearch } from "../controllers/useWebMemberDirectorySearch";
 import { CommunityMemberSettingsDialog } from "./CommunityMemberSettingsDialog";
@@ -99,9 +98,6 @@ function ChannelRosterWorkspace(props: RosterProps) {
   </>;
 }
 
-function memberRoleTag(role: string): string | null {
-  return role === "owner" ? "host" : role === "admin" ? "admin" : role === "moderator" ? "moderator" : null;
-}
 
 // Members is a page while it is open (design v1). It has no address yet, so
 // choosing anything else in the left column is what leaves it.
@@ -139,11 +135,9 @@ function RosterSurface(props: RosterProps & {
     return () => { if (opener?.isConnected) opener.focus(); };
   }, [props.directory, props.memberDetailOpen]);
   const [search, setSearch] = useState("");
-  const [memberFilter, setMemberFilter] = useState<MemberFilter>("everyone");
   const [recordEl, setRecordEl] = useState<HTMLElement | null>(null);
   const [kitTarget, setKitTarget] = useState<ComponentProps<typeof CommunityMemberSettingsDialog>["member"]>(null);
   const [kitVersion, setKitVersion] = useState(0);
-  const [openedUserId, setOpenedUserId] = useState<string | null>(null);
   const searching = Boolean(search.trim());
   const searchResult = useWebMemberDirectorySearch({
     session: scope?.session,
@@ -224,9 +218,6 @@ function RosterSurface(props: RosterProps & {
     membership_created_at: member.created_at,
     profile: member, last_seen_at: null, active_until: null,
   })) : rosterMembers;
-  // Join dates are only sent to people who manage members, so only they are
-  // offered "New this week".
-  const knowsJoinDates = members.some(member => Boolean((member as { membership_created_at?: unknown }).membership_created_at));
   const selectedMember = props.memberSettings.canManageMembers
     ? members.find(member => member.membership_id === selectedMembershipId && member.role !== "owner") : undefined;
   // In the members list, owners and admins select people and act on them together.
@@ -314,16 +305,10 @@ function RosterSurface(props: RosterProps & {
             <Search aria-hidden="true" />
             <input ref={searchRef} type="search" aria-label="Search community members" placeholder="Search community members" value={search} maxLength={128} onChange={event => setSearch(event.target.value)} />
           </label>
-          {props.inline && !searching ? <div className="members-page-filters" role="group" aria-label="Show">
-            {MEMBER_FILTERS.filter(filter => filter.id !== "new" || knowsJoinDates).map(filter => <button key={filter.id} type="button"
-              className={`members-page-chip${memberFilter === filter.id ? " is-selected" : ""}`}
-              aria-pressed={memberFilter === filter.id} onClick={() => setMemberFilter(filter.id)}>{filter.label}</button>)}
-          </div> : null}
           </> : null}
       {(searching || (!error && ready)) ? <>
           {(["online", "offline", "unknown"] as const).map(group => {
-            const rows = members.filter(member => status(member) === group
-              && (!props.inline || searching || memberPassesFilter(member, status(member), memberFilter, now)));
+            const rows = members.filter(member => status(member) === group);
             if (!rows.length) return null;
             const heading = <h4 className="community-context-section" title="Online status reflects activity in this community">{searching ? "Community matches" : group === "unknown" ? "Presence unavailable" : group === "online" ? "Online" : "Offline"} — {rows.length}{!searching && !complete ? " loaded" : ""}</h4>;
             return <Fragment key={group}>
@@ -336,7 +321,7 @@ function RosterSurface(props: RosterProps & {
                   : member.last_seen_at === null ? "Last active: unavailable"
                   : `Last active: ${formatRelativeTimeFromIso(new Date(member.last_seen_at).toISOString())}`;
                 return <div key={member.user_id} data-member-user-id={member.user_id}
-                  className={`community-context-member${group === "offline" ? " is-offline" : ""}${props.inline && props.memberDetailOpen && openedUserId === member.user_id ? " is-selected" : ""}`}>
+                  className={`community-context-member${group === "offline" ? " is-offline" : ""}`}>
                   {canSelect && member.membership_id && member.role !== "owner" ? <input type="checkbox" className="community-context-member-select"
                     aria-label={`Select ${name}`} checked={picked.has(member.user_id)} onChange={() => togglePicked(member, name)} /> : null}
                   <button type="button" className="community-context-member-trigger" aria-label={`Open ${name}'s profile`} aria-description={lastActive} onClick={() => props.onOpenProfile?.(member.user_id)}>
@@ -347,7 +332,7 @@ function RosterSurface(props: RosterProps & {
                         alt="" aria-hidden={true} fallback={<span>{props.getInitials(name)}</span>} />
                       {group === "online" ? <span className="community-context-member-dot" aria-hidden="true" /> : null}
                     </span>
-                    <span className="community-context-member-copy"><span className={`community-context-member-name${member.role === "owner" || member.role === "admin" ? " is-admin" : ""}`}>{name}</span>{props.inline && memberRoleTag(member.role) ? <span className="community-interaction-badge is-host">{memberRoleTag(member.role)}</span> : null}</span>
+                    <span className="community-context-member-copy"><span className={`community-context-member-name${member.role === "owner" || member.role === "admin" ? " is-admin" : ""}`}>{name}</span></span>
                   </button>
                   <span className="community-context-member-last-active" aria-hidden="true">{lastActive.replace("Last active: ", "")}</span>
                   {props.onMessageUser && member.user_id !== props.currentUserId ? <button type="button" className="community-context-member-action" aria-label={`Message ${name}`} title="Direct message" onClick={() => props.onMessageUser?.(member.user_id)}><MessageCircle size={16} strokeWidth={1.9} aria-hidden="true" /></button> : null}
@@ -448,30 +433,6 @@ function RosterSurface(props: RosterProps & {
     <KitMembersDirectory onMessage={props.onMessageUser} profileContainer={recordEl}
       getAvatarColor={props.getAvatarColor} getInitials={props.getInitials} />
     <aside ref={setRecordEl} className="community-context-panel members-page-record" aria-label="Member" />
-  </>;
-  // Design system v1: Members is a page. The list fills the main area under
-  // the standard header line; the person you open is the right column.
-  if (props.inline) return <>
-    <section className="members-page" aria-label="Community members"
-      onClickCapture={event => {
-        const row = (event.target as HTMLElement).closest<HTMLElement>("[data-member-user-id]");
-        if (row) setOpenedUserId(row.dataset.memberUserId ?? null);
-      }}
-      data-opened-user-id={props.memberDetailOpen ? openedUserId ?? undefined : undefined}>
-      <header className="community-channel-header members-page-header">
-        <div className="community-channel-header-identity">
-          <h1>Members{!error && ready && complete && !searching ? <small> {rosterMembers.length === 1 ? "1 person" : `${rosterMembers.length} people`}</small> : null}</h1>
-        </div>
-      </header>
-      {content}
-    </section>
-    {!props.memberDetailOpen ? <aside className="community-context-panel members-page-empty" aria-label="No one selected">
-      <p>Choose someone to see their profile.</p>
-    </aside> : null}
-    {selectedMember ? createPortal(<div ref={settingsRef} onKeyDown={event => {
-      if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); setSelectedMembershipId(null); searchRef.current?.focus(); }
-      trapTab(event, settingsRef.current);
-    }}>{settings}</div>, document.body) : null}
   </>;
   // Keep search and pagination mounted while the existing profile inspector is open.
   return createPortal(<><div className="modal-overlay" style={props.memberDetailOpen ? { display: "none" } : undefined} onMouseDown={props.onCloseMembers}>

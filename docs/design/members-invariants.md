@@ -72,6 +72,16 @@ leaves a trace on the record: who, and when.
 - An admin viewing: manages members, sees no payouts.
 - A price that no longer exists but still has people on it.
 
+## Where it stands (Nov 11, slice 2a)
+
+Built: 1 to 3 and 5 to 8, plus paging (a page of 100 at a time; view counts
+are true up to 5,000 people), payment history on the record, refunded and
+disputed in Past, comp for free members, notes, and who did what. The page
+title counts members with access ("12 members · 1 on hold"), the same number
+as the left column.
+Not yet: moving someone down a price (slice 2b), people to meet and the
+guide's observations (an AI slice), a member taking back what they shared.
+
 ## Decided (Neil, 2026-11-11)
 
 - Comp from the record: free members only. Comping a paying member would

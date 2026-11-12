@@ -2,18 +2,23 @@
 // mock's markup (docs/design/hifi-mock, Members). Checked against
 // docs/design/members-invariants.md: every way someone is in and at which
 // price, who needs the host, who is out and why, and one member's record.
-import { useContext, useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
+import { useCallback, useContext, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { UserAvatar } from "../../../../shared/UserAvatar";
 import {
   addCloudCommunityMemberNote,
   deleteCloudCommunityMemberNote,
+  compCloudCommunityMember,
   getCloudCommunityMemberRecord,
-  listCloudCommunityMemberRecords,
+  getCloudCommunityMemberSummary,
+  listCloudCommunityMemberRecordsPage,
   type CloudMemberRecord,
   type CloudMemberRecordRow,
-  type CloudMemberRecords,
+  type CloudMemberSummary,
+  type CloudPastMemberRow,
 } from "../../../../shared/cloudCommunityMemberRecordsGateway";
+import { fetchCloudCommunityMemberBillingHistory, type CloudCommunityMemberBillingHistory } from "../../../../shared/cloudCommunityAdminGateway";
+import { formatPrice } from "../../../../shared/communityMemberRecords";
 import { CommunityChannelSessionContext } from "../components/CommunityChannelSessionContext";
 import type { CommunityAdmissionJoinRequest } from "../components/CommunityJoinRequestReview";
 import { openGuideFromSearch } from "../components/guideSearch";
@@ -36,16 +41,6 @@ export function memberTimeFor(iso: string | null, now: number): string {
   const date = new Date(at);
   if (minutes < 7 * 24 * 60) return date.toLocaleDateString("en-US", { weekday: "long" });
   return date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-}
-
-export function memberRowsForView(data: CloudMemberRecords, view: MembersView): CloudMemberRecordRow[] {
-  if (view === "everyone" || view === "past") return data.rows;
-  if (view === "on_hold") return data.rows.filter((row) => row.money?.kind === "on_hold");
-  if (view === "cancelling") return data.rows.filter((row) => row.money?.kind === "cancelling");
-  if (view === "comped") return data.rows.filter((row) => row.plan.kind === "comped");
-  if (view === "know_little") return data.rows.filter((row) => !row.working_on);
-  const id = view.slice("price:".length);
-  return data.rows.filter((row) => row.plan.price_point_id === id);
 }
 
 function csvFor(rows: CloudMemberRecordRow[]): string {
@@ -81,32 +76,78 @@ export function KitMembersPage(props: {
   getInitials: (name: string) => string;
 }) {
   const scope = useContext(CommunityChannelSessionContext);
-  const [data, setData] = useState<CloudMemberRecords | null>(null);
+  const [summary, setSummary] = useState<CloudMemberSummary | null>(null);
   const [failed, setFailed] = useState(false);
   const [view, setView] = useState<MembersView>("everyone");
-  const [sort, setSort] = useState<{ key: SortKey; desc: boolean }>({ key: "active", desc: true });
+  const [loaded, setLoaded] = useState<{ view: string; rows: CloudMemberRecordRow[]; past: CloudPastMemberRow[]; cursor: string | null; done: boolean } | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [sort, setSort] = useState<{ key: SortKey; desc: boolean } | null>(null);
   const [search, setSearch] = useState("");
   const [openKey, setOpenKey] = useState<string | null>(null);
   const [record, setRecord] = useState<CloudMemberRecord | null>(null);
   const [recordVersion, setRecordVersion] = useState(0);
+  const [tableVersion, setTableVersion] = useState(0);
+  const [payments, setPayments] = useState<{ membershipId: string; history: CloudCommunityMemberBillingHistory | null } | null>(null);
   const [now] = useState(Date.now);
+  const sentinelRef = useRef<HTMLDivElement | null>(null);
+  const loadingRef = useRef(false);
 
+  // The counts behind the saved views: true counts, from the server.
   useEffect(() => {
     if (!scope) return;
     let cancelled = false;
     setFailed(false);
-    listCloudCommunityMemberRecords({ session: scope.session, communityId: scope.communityId })
-      .then((next) => { if (!cancelled) setData(next); })
+    getCloudCommunityMemberSummary({ session: scope.session, communityId: scope.communityId })
+      .then((next) => { if (!cancelled) setSummary(next); })
       .catch(() => { if (!cancelled) setFailed(true); });
     return () => { cancelled = true; };
-  }, [scope?.session, scope?.communityId, props.joinRequests.length, props.refreshKey]);
+  }, [scope?.session, scope?.communityId, props.joinRequests.length, props.refreshKey, tableVersion]);
+
+  // The table, a page at a time, for the view chosen.
+  const loadMore = useCallback(async (reset: boolean) => {
+    if (!scope || loadingRef.current) return;
+    const current = reset ? null : loaded;
+    if (current?.done) return;
+    loadingRef.current = true;
+    setLoading(true);
+    try {
+      const page = await listCloudCommunityMemberRecordsPage({ session: scope.session, communityId: scope.communityId, view, cursor: current?.cursor ?? null });
+      setLoaded((previous) => {
+        const base = reset || previous?.view !== view ? { rows: [], past: [] } : previous!;
+        return { view, rows: [...base.rows, ...page.rows], past: [...base.past, ...page.past], cursor: page.continueCursor, done: page.isDone };
+      });
+    } catch {
+      setFailed(true);
+    } finally {
+      loadingRef.current = false;
+      setLoading(false);
+    }
+  }, [scope?.session, scope?.communityId, view, loaded]);
+
+  useEffect(() => {
+    loadingRef.current = false;
+    setLoaded(null);
+    void loadMore(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scope?.session, scope?.communityId, view, props.joinRequests.length, props.refreshKey, tableVersion]);
+
+  // More as you reach the end of the table; everything while you search.
+  useEffect(() => {
+    if (!loaded || loaded.done || loading) return;
+    if (search.trim()) { void loadMore(false); return; }
+    const target = sentinelRef.current;
+    if (!target) return;
+    const observer = new IntersectionObserver((entries) => { if (entries.some((entry) => entry.isIntersecting)) void loadMore(false); }, { rootMargin: "400px" });
+    observer.observe(target);
+    return () => observer.disconnect();
+  }, [loaded, loading, search, loadMore]);
 
   // The person who needs the host most opens first: on hold, then cancelling.
   useEffect(() => {
-    if (!data || openKey) return;
-    const first = data.rows.find((row) => row.money?.kind === "on_hold") ?? data.rows.find((row) => row.money) ?? data.rows[0];
+    if (!loaded || openKey || loaded.view !== "everyone") return;
+    const first = loaded.rows.find((row) => row.money?.kind === "on_hold") ?? loaded.rows.find((row) => row.money) ?? loaded.rows[0];
     if (first) setOpenKey(keyOf(first));
-  }, [data, openKey]);
+  }, [loaded, openKey]);
 
   useEffect(() => {
     if (!scope || !openKey) return;
@@ -118,26 +159,32 @@ export function KitMembersPage(props: {
     return () => { cancelled = true; };
   }, [scope?.session, scope?.communityId, openKey, recordVersion, props.refreshKey]);
 
+  // Their payments: what the billing history already records.
+  const paymentsFor = record?.membership_id ?? null;
+  useEffect(() => {
+    if (!scope || !paymentsFor) { setPayments(null); return; }
+    let cancelled = false;
+    fetchCloudCommunityMemberBillingHistory({ session: scope.session, communityId: scope.communityId, membershipId: paymentsFor, limit: 12 })
+      .then((history) => { if (!cancelled) setPayments({ membershipId: paymentsFor, history }); })
+      .catch(() => { if (!cancelled) setPayments({ membershipId: paymentsFor, history: null }); });
+    return () => { cancelled = true; };
+  }, [scope?.session, scope?.communityId, paymentsFor, props.refreshKey]);
+
   const rows = useMemo(() => {
-    if (!data) return [];
+    if (!loaded || loaded.view !== view) return [];
     const q = search.trim().toLowerCase();
-    const list = memberRowsForView(data, view).filter((row) => !q || [row.name, row.handle, row.working_on, row.plan.label].some((v) => String(v ?? "").toLowerCase().includes(q)));
+    const list = loaded.rows.filter((row) => !q || [row.name, row.handle, row.working_on, row.plan.label].some((v) => String(v ?? "").toLowerCase().includes(q)));
+    if (!sort) return list;
     const dir = sort.desc ? -1 : 1;
     return [...list].sort((a, b) => {
       if (sort.key === "name") return dir * a.name.localeCompare(b.name);
       if (sort.key === "plan") return dir * a.plan.label.localeCompare(b.plan.label);
       return dir * String(a.last_active_at ?? "").localeCompare(String(b.last_active_at ?? ""));
     });
-  }, [data, view, sort, search]);
-
-  const counts = data ? {
-    everyone: data.rows.length,
-    on_hold: data.rows.filter((row) => row.money?.kind === "on_hold").length,
-    cancelling: data.rows.filter((row) => row.money?.kind === "cancelling").length,
-    comped: data.rows.filter((row) => row.plan.kind === "comped").length,
-    know_little: data.rows.filter((row) => !row.working_on).length,
-    past: data.past.length,
-  } : null;
+  }, [loaded, view, sort, search]);
+  const pastRows = loaded && loaded.view === "past" ? loaded.past : [];
+  const counts = summary?.counts ?? null;
+  const data = summary;
   const needYou = (counts?.on_hold ?? 0) + (counts?.cancelling ?? 0);
   const waiting = props.joinRequests.length;
   const lead = waiting > 0
@@ -152,25 +199,40 @@ export function KitMembersPage(props: {
     </button>
   );
   const header = (key: SortKey, label: string) => (
-    <button type="button" className={cx("th-sort")} onClick={() => setSort((current) => ({ key, desc: current.key === key ? !current.desc : key === "active" }))}>
-      {label}{sort.key === key ? <Icon name="updown" /> : null}
+    <button type="button" className={cx("th-sort")} onClick={() => setSort((current) => ({ key, desc: current?.key === key ? !current.desc : key === "active" }))}>
+      {label}{sort?.key === key ? <Icon name="updown" /> : null}
     </button>
   );
-  const exportCsv = () => {
-    const blob = new Blob([csvFor(data?.rows ?? [])], { type: "text/csv" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `${props.communityName.replace(/[^\w-]+/g, "-").toLowerCase() || "members"}-members.csv`;
-    link.click();
-    URL.revokeObjectURL(url);
+  // Export is everyone in, every page, not just what is loaded.
+  const [exporting, setExporting] = useState(false);
+  const exportCsv = async () => {
+    if (!scope || exporting) return;
+    setExporting(true);
+    try {
+      const all: CloudMemberRecordRow[] = [];
+      let cursor: string | null = null;
+      for (let i = 0; i < 200; i++) {
+        const page: { rows: CloudMemberRecordRow[]; isDone: boolean; continueCursor: string } = await listCloudCommunityMemberRecordsPage({ session: scope.session, communityId: scope.communityId, view: "everyone", cursor });
+        all.push(...page.rows);
+        if (page.isDone) break;
+        cursor = page.continueCursor;
+      }
+      const blob = new Blob([csvFor(all)], { type: "text/csv" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `${props.communityName.replace(/[^\w-]+/g, "-").toLowerCase() || "members"}-members.csv`;
+      link.click();
+      URL.revokeObjectURL(url);
+    } finally {
+      setExporting(false);
+    }
   };
-
   const page = (
     <section className="members-page is-kit" aria-label="Community members">
       <KitApp view="members" host part="main">
         <View index={5}>
-          <Top title={<>Members <small>{data ? `${data.rows.length} ${data.rows.length === 1 ? "person" : "people"}` : ""}</small></>} titleView={5} onSearch={openGuideFromSearch} />
+          <Top title={<>Members <small>{summary ? `${summary.with_access} ${summary.with_access === 1 ? "member" : "members"}${summary.counts.on_hold ? ` · ${summary.counts.on_hold} on hold` : ""}` : ""}</small></>} titleView={5} onSearch={openGuideFromSearch} />
           <div className={cx("page")} style={{ overflowY: "auto" }}>
             <p className={cx("lead")}><span className={cx("aura")}><Icon name="spark" /></span>{lead}</p>
             {waiting > 0 ? (
@@ -195,7 +257,7 @@ export function KitMembersPage(props: {
                 <Icon name="search" />
                 <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Find a member" aria-label="Find a member" />
               </label>
-              <button type="button" className={cx("btn sm")} style={{ marginLeft: "auto" }} onClick={exportCsv} disabled={!data}>Export</button>
+              <button type="button" className={cx("btn sm")} style={{ marginLeft: "auto" }} onClick={() => void exportCsv()} disabled={!summary || exporting}>{exporting ? "Exporting…" : "Export"}</button>
             </div>
             {counts && data ? (
               <div className={cx("views")} role="group" aria-label="Show">
@@ -208,7 +270,7 @@ export function KitMembersPage(props: {
                 {counts.past ? chip("past", "Past", counts.past) : null}
               </div>
             ) : null}
-            {data && view !== "past" ? (
+            {loaded && view !== "past" ? (
               <div className={cx("tbl")} role="table" aria-label="Members">
                 <div className={cx("trow th")} role="row">
                   <span />{header("name", "Member")}<span>Working on</span>{header("plan", "Plan")}{header("active", "Last active")}
@@ -226,13 +288,13 @@ export function KitMembersPage(props: {
                     <span>{memberTimeFor(row.last_active_at, now)}</span>
                   </button>
                 ))}
-                {rows.length === 0 ? <p className={cx("none")} style={{ padding: "14px 12px" }}>No one here.</p> : null}
+                {rows.length === 0 && !loading ? <p className={cx("none")} style={{ padding: "14px 12px" }}>No one here.</p> : null}
               </div>
             ) : null}
-            {data && view === "past" ? (
+            {loaded && view === "past" ? (
               <div className={cx("tbl")} role="table" aria-label="Past members">
                 <div className={cx("trow th")} role="row"><span /><span>Member</span><span>What happened</span><span>Was on</span><span>When</span></div>
-                {data.past.map((row) => (
+                {pastRows.map((row) => (
                   <button key={`${row.user_id}:${row.reason}`} type="button" role="row" className={cx("trow", row.membership_id && openKey === row.membership_id && "sel")}
                     onClick={() => row.membership_id && setOpenKey(row.membership_id)} disabled={!row.membership_id}>
                     <Face size="s" name={row.name} url={row.avatar_url} seed={row.user_id} getAvatarColor={props.getAvatarColor} getInitials={props.getInitials} />
@@ -244,7 +306,9 @@ export function KitMembersPage(props: {
                 ))}
               </div>
             ) : null}
-            {data?.capped ? <p className={cx("none")} style={{ marginTop: 14, fontSize: 13 }}>Showing the first 500 people. Paging the full list is on its way.</p> : null}
+            <div ref={sentinelRef} aria-hidden="true" style={{ height: 1 }} />
+            {loading ? <p className={cx("none")} style={{ marginTop: 14, fontSize: 13 }}>Loading more…</p> : null}
+            {summary?.capped ? <p className={cx("none")} style={{ marginTop: 14, fontSize: 13 }}>Counts cover the first 5,000 people.</p> : null}
           </div>
         </View>
       </KitApp>
@@ -261,6 +325,13 @@ export function KitMembersPage(props: {
             await addCloudCommunityMemberNote({ session: scope.session, communityId: scope.communityId, membershipId: record.membership_id, body });
             setRecordVersion((version) => version + 1);
           }}
+          payments={payments && payments.membershipId === record.membership_id ? payments.history : null}
+          onComp={record.membership_id && record.plan.kind === "free" && !record.out ? async () => {
+            if (!scope) return;
+            await compCloudCommunityMember({ session: scope.session, communityId: scope.communityId, membershipId: record.membership_id! });
+            setRecordVersion((version) => version + 1);
+            setTableVersion((version) => version + 1);
+          } : undefined}
           onDeleteNote={async (noteId) => {
             if (!scope) return;
             await deleteCloudCommunityMemberNote({ session: scope.session, communityId: scope.communityId, noteId });
@@ -283,7 +354,11 @@ function MemberRecordView(props: {
   getInitials: (name: string) => string;
   onAddNote: (body: string) => Promise<void>;
   onDeleteNote: (noteId: string) => Promise<void>;
+  payments: CloudCommunityMemberBillingHistory | null;
+  // Only for someone in for free: comping a paying member is never offered.
+  onComp?: () => Promise<void>;
 }) {
+  const [comping, setComping] = useState(false);
   const { record } = props;
   const manage = () => record.membership_id && props.onManage?.({ id: record.membership_id, user_id: record.user_id, display_name: record.name,
     avatar_url: record.avatar_url, role: record.role, created_at: record.joined_at });
@@ -327,6 +402,7 @@ function MemberRecordView(props: {
           <div style={{ display: "flex", gap: 8 }}>
             {props.onMessage && !record.out ? <Btn small onClick={() => props.onMessage?.(record.user_id)}>Message</Btn> : null}
             {props.onManage && record.membership_id && !record.out ? <Btn small onClick={manage}>Change role</Btn> : null}
+            {props.onComp ? <Btn small onClick={async () => { setComping(true); try { await props.onComp?.(); } finally { setComping(false); } }}>{comping ? "Comping…" : "Comp"}</Btn> : null}
           </div>
         ) : null}
       </div>
@@ -358,6 +434,18 @@ function MemberRecordView(props: {
         {noteError ? <p className={cx("bad")} role="alert">{noteError}</p> : null}
       </div>
       <Sep />
+      {props.payments && props.payments.events.length ? (
+        <>
+          <Sec label="Payments">
+            {props.payments.events.slice(0, 8).map((event, index) => (
+              <div key={event.id} className={cx("src")} style={index ? { marginTop: -8 } : undefined}>
+                <Icon name="check" />{paymentText(event)}<em>{memberTimeFor(event.occurred_at, props.now)}</em>
+              </div>
+            ))}
+          </Sec>
+          <Sep />
+        </>
+      ) : null}
       <Sec label="So far">
         {record.events.map((event, index) => (
           <div key={index} className={cx("src")} style={index ? { marginTop: -8 } : undefined}>
@@ -377,4 +465,22 @@ function MemberRecordView(props: {
 
 function FactRow(props: { label: string; body: string; note: string }) {
   return <><span>{props.label}</span><p>{props.body}{props.note ? <em>{props.note}</em> : null}</p></>;
+}
+
+type PaymentEvent = CloudCommunityMemberBillingHistory["events"][number];
+
+// One line of the payment history, in plain words.
+export function paymentText(event: PaymentEvent): string {
+  const amount = typeof event.amount_base_units === "number" && event.currency
+    ? `${formatPrice(event.amount_base_units, event.currency, event.currency_decimals ?? 2)}${event.billing_period === "annual" ? " a year" : event.billing_period === "monthly" ? " a month" : ""}`
+    : "";
+  const status = String(event.status ?? "").toLowerCase();
+  const what = status.includes("past_due") || status.includes("failed") ? "Payment failed"
+    : status.includes("cancel_at_period_end") || status.includes("cancel_requested") ? "Asked to stop renewing"
+      : status.includes("ended") || status.includes("canceled") ? "Subscription ended"
+        : status.includes("refund") ? "Refunded"
+          : status.includes("dispute") ? "Disputed"
+            : event.kind === "checkout" ? "Paid to join"
+              : "Subscription active";
+  return amount ? `${what} · ${amount}` : what;
 }

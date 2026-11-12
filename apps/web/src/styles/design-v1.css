@@ -2579,11 +2579,9 @@
 }
 
 /*
- * Design system v1: Members is a page (spec section 8), at the mock's
- * measurements: header 52px on the 56px gutter; a 32px search field and 28px
- * chips; people in three columns, each 12px padded with a 40px avatar, a 12px
- * gap, name 14/550 and a 13px second line; the person you open is the 328px
- * right column.
+ * Design system v1: Members is a page (spec section 8). The page itself is the
+ * kit (apps/web/src/v1/KitMembersPage.tsx, KitMembersDirectory.tsx); these
+ * rules only place it in the app's grid, with the record as the right column.
  */
 @media (min-width: 721px) {
   :root[data-design="v1"] .community-interaction-projection:has(> .members-page) > .community-interaction-main {
@@ -2602,38 +2600,6 @@
     min-width: 0;
     min-height: 0;
     overflow: hidden;
-  }
-
-  :root[data-design="v1"] .members-page > .members-directory-content {
-    flex: 1 1 auto;
-    min-height: 0;
-    overflow-y: auto;
-    padding: 28px 56px 56px;
-  }
-
-  :root[data-design="v1"] .members-page .community-context-members {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 4px 8px;
-    align-content: start;
-    margin: 0 -12px;
-    padding: 0;
-    overflow: visible;
-  }
-
-  :root[data-design="v1"] .members-page .community-context-members > :not(.community-context-member) {
-    grid-column: 1 / -1;
-  }
-
-  :root[data-design="v1"] .members-page-empty {
-    grid-column: 2;
-    grid-row: 1;
-    align-items: center;
-    justify-content: center;
-    padding: 24px;
-    color: var(--text-faint);
-    font-size: 14px;
-    text-align: center;
   }
 
   :root[data-design="v1"] .community-interaction-projection:has(> .members-page) > .community-interaction-drawer {
@@ -2668,137 +2634,6 @@
     border-left: 1px solid var(--surface-raised-edge);
     background: var(--surface-app);
   }
-}
-
-:root[data-design="v1"] .members-page-header h1 small {
-  margin-left: 8px;
-  color: var(--text-faint);
-  font-size: 13px;
-  font-weight: 400;
-}
-
-:root[data-design="v1"] .members-page-empty p {
-  max-width: 220px;
-  margin: 0;
-  line-height: 1.5;
-}
-
-:root[data-design="v1"] .members-page .community-dm-inbox-search {
-  width: 240px;
-  height: 32px;
-  min-height: 0;
-  margin: 0 12px 0 0;
-  padding: 0 10px;
-  border: 1px solid var(--border-default);
-  border-radius: 8px;
-  background: var(--bg-input);
-  font-size: 13px;
-}
-
-:root[data-design="v1"] .members-page-filters {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin: 12px 0 14px;
-}
-
-:root[data-design="v1"] .members-page-chip {
-  height: 28px;
-  padding: 0 10px;
-  border: 1px solid var(--border-default);
-  border-radius: 8px;
-  background: transparent;
-  color: var(--text-ink-secondary);
-  font-size: 13px;
-  white-space: nowrap;
-  cursor: pointer;
-}
-
-:root[data-design="v1"] .members-page-chip:hover,
-:root[data-design="v1"] .members-page-chip.is-selected {
-  border-color: var(--border-strong);
-  background: var(--bg-card);
-  color: var(--text-ink-primary);
-}
-
-:root[data-design="v1"] .members-page .community-context-section {
-  margin: 12px 12px 4px;
-  padding: 0;
-  color: var(--text-faint);
-  font-size: 12px;
-  font-weight: 500;
-  letter-spacing: 0;
-  text-transform: none;
-}
-
-:root[data-design="v1"] .members-page .community-context-member {
-  position: relative;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 0 8px;
-  min-width: 0;
-  padding: 12px;
-  border-radius: 12px;
-}
-
-:root[data-design="v1"] .members-page .community-context-member:hover {
-  background: var(--hover-overlay);
-}
-
-:root[data-design="v1"] .members-page .community-context-member.is-selected {
-  background: var(--bg-card);
-}
-
-:root[data-design="v1"] .members-page .community-context-member-trigger {
-  display: grid;
-  grid-template-columns: 40px minmax(0, 1fr);
-  align-items: center;
-  gap: 12px;
-  min-width: 0;
-  padding: 0 0 18px;
-  text-align: left;
-}
-
-:root[data-design="v1"] .members-page .community-context-member-avatar {
-  width: 40px;
-  height: 40px;
-}
-
-:root[data-design="v1"] .members-page .community-context-member-copy {
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-  justify-content: flex-start;
-  gap: 8px;
-  min-width: 0;
-}
-
-/* The count is in the header line; it is not repeated above the search. */
-:root[data-design="v1"] .members-page .community-context-members-total > .community-context-section {
-  display: none;
-}
-
-:root[data-design="v1"] .members-page .community-context-member-action {
-  opacity: 1;
-}
-
-:root[data-design="v1"] .members-page .community-context-member-name {
-  overflow: hidden;
-  color: var(--text-ink-primary);
-  font-size: 14px;
-  font-weight: 550;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-/* The second line: when they were last here. */
-:root[data-design="v1"] .members-page .community-context-member-last-active {
-  position: absolute;
-  bottom: 12px;
-  left: 64px;
-  color: var(--text-ink-secondary);
-  font-size: 13px;
 }
 
 /* Members is the one selected row in the left column while it is the page. */
@@ -3106,8 +2941,7 @@
   }
 
   :root[data-design="v1"] .community-chat .community-channel-header::after,
-  :root[data-design="v1"] .community-page-header::after,
-  :root[data-design="v1"] .members-page-header::after {
+  :root[data-design="v1"] .community-page-header::after {
     content: "";
     position: absolute;
     right: 0;

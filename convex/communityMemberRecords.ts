@@ -3,9 +3,11 @@
 // and one member's record. Only people who manage members read these; plan,
 // price and payment never reach a member-facing read.
 import { v } from "convex/values";
+import { paginationOptsValidator } from "convex/server";
 import { mutation, query } from "./_generated/server";
 import { resolveUserIdForAuthenticatedRequest } from "./authActor";
 import { requireCommunityManager, resolvePublicUserId } from "./communityCore";
+import { recordCriticalAuditEvent } from "./criticalAudit";
 import { resolveUserProfileDisplayProjection } from "./userProfileProjection";
 import {
   FACT_LABELS,
@@ -16,14 +18,16 @@ import {
   moneyFor,
   outReasonFor,
   planFor,
+  memberInView,
   type MemberMoney,
   type MemberOutReason,
   type MemberPlan,
 } from "../shared/communityMemberRecords";
 
-// One read covers a community this size; beyond it the page says it is capped
-// (paging the table is the next step).
-const MEMBER_RECORDS_CAP = 500;
+// Paging: the table loads a page at a time; the summary (view counts) reads
+// only cheap rows, so its counts stay true up to SUMMARY_CAP people.
+const PAGE_MAX = 100;
+const SUMMARY_CAP = 5_000;
 const PAST_CAP = 200;
 const FACTS_CAP = 40;
 
@@ -31,23 +35,26 @@ const iso = (ms: number | null | undefined) => (typeof ms === "number" && Number
 
 type PricePointRow = { _id: any; name: string; amountBaseUnits: number; currency: string; currencyDecimals: number; billingPeriod: string; isCurrent: boolean; archivedAt?: number };
 
+const viewValidator = v.string();
+
 async function latestSubscription(ctx: any, membershipId: any) {
   const rows = await ctx.db.query("communitySubscriptions").withIndex("by_membership", (q: any) => q.eq("membershipId", membershipId)).collect();
   rows.sort((a: any, b: any) => b.updatedAt - a.updatedAt);
   return rows.find((row: any) => row.status !== "ended") ?? rows[0] ?? null;
 }
 
-async function workingOnFor(ctx: any, userId: any, communityId: any): Promise<string | null> {
-  for (const scope of [communityId, undefined]) {
-    const facts = await ctx.db.query("memberFacts")
-      .withIndex("by_user_community", (q: any) => q.eq("userId", userId).eq("communityId", scope))
-      .take(FACTS_CAP);
-    const goal = facts
-      .filter((fact: any) => fact.kind === "goal" && factVisibleToHost(fact))
-      .sort((a: any, b: any) => b.updatedAt - a.updatedAt)[0];
-    if (goal) return String(goal.body).trim().slice(0, 140) || null;
+// "Working on" in the table: what they told this community (approved).
+async function communityGoals(ctx: any, communityId: any): Promise<Map<string, string>> {
+  const facts = await ctx.db.query("memberFacts")
+    .withIndex("by_community_kind", (q: any) => q.eq("communityId", communityId).eq("kind", "goal")).take(SUMMARY_CAP);
+  const goals = new Map<string, { body: string; at: number }>();
+  for (const fact of facts) {
+    if (!factVisibleToHost(fact)) continue;
+    const key = String(fact.userId);
+    const current = goals.get(key);
+    if (!current || current.at < fact.updatedAt) goals.set(key, { body: String(fact.body).trim().slice(0, 140), at: fact.updatedAt });
   }
-  return null;
+  return new Map([...goals].map(([key, value]) => [key, value.body]));
 }
 
 async function context(ctx: any, args: { userId?: any; authSubject?: string; communityId: any }) {
@@ -55,6 +62,20 @@ async function context(ctx: any, args: { userId?: any; authSubject?: string; com
   const { community } = await requireCommunityManager({ ctx, communityId: args.communityId, userId });
   return { userId, community };
 }
+
+// What the community's tables say about everyone, once per request.
+async function lookups(ctx: any, communityId: any) {
+  const blocks = await ctx.db.query("communityBlocks").withIndex("by_community", (q: any) => q.eq("communityId", communityId)).take(SUMMARY_CAP);
+  const pricePoints = await ctx.db.query("communityPricePoints").withIndex("by_community", (q: any) => q.eq("communityId", communityId)).take(100) as PricePointRow[];
+  return {
+    blocked: new Set(blocks.filter((row: any) => !row.liftedAt).map((row: any) => String(row.userId))),
+    priceById: new Map(pricePoints.map((point) => [String(point._id), point])),
+  };
+}
+
+const pointFor = (point: PricePointRow | null) => point
+  ? { id: String(point._id), name: point.name, amountBaseUnits: point.amountBaseUnits, currency: point.currency, currencyDecimals: point.currencyDecimals, billingPeriod: point.billingPeriod }
+  : null;
 
 export type MemberRecordRow = {
   membership_id: string | null;
@@ -82,19 +103,74 @@ export type PastMemberRow = {
   rejoined: boolean;
 };
 
-export const listCommunityMemberRecords = query({
+// The counts behind the saved views: cheap rows only (memberships, their
+// subscriptions, price points, blocks, payment holds, goals), so they are true
+// counts up to SUMMARY_CAP people.
+export const getCommunityMemberSummary = query({
   args: { userId: v.optional(v.id("users")), authSubject: v.optional(v.string()), communityId: v.id("communities") },
   handler: async (ctx, args) => {
     const { community } = await context(ctx, args);
     const memberships = await ctx.db.query("communityMemberships")
-      .withIndex("by_community", (q) => q.eq("communityId", args.communityId)).take(MEMBER_RECORDS_CAP + 1);
-    const capped = memberships.length > MEMBER_RECORDS_CAP;
-    const blocks = await ctx.db.query("communityBlocks").withIndex("by_community", (q) => q.eq("communityId", args.communityId)).take(PAST_CAP);
-    const blocked = new Set(blocks.filter((row) => !row.liftedAt).map((row) => String(row.userId)));
-    const pricePoints = await ctx.db.query("communityPricePoints").withIndex("by_community", (q) => q.eq("communityId", args.communityId)).take(100) as PricePointRow[];
-    const priceById = new Map(pricePoints.map((point) => [String(point._id), point]));
-    const ids = new Map<string, string | null>();
+      .withIndex("by_community", (q) => q.eq("communityId", args.communityId)).take(SUMMARY_CAP + 1);
+    const capped = memberships.length > SUMMARY_CAP;
+    const { blocked, priceById } = await lookups(ctx, args.communityId);
+    const goals = await communityGoals(ctx, args.communityId);
+    const subsByMembership = new Map<string, any>();
+    for (const status of ["active", "past_due", "cancel_at_period_end"] as const) {
+      const subs = await ctx.db.query("communitySubscriptions")
+        .withIndex("by_community_status", (q) => q.eq("communityId", args.communityId).eq("status", status)).take(SUMMARY_CAP);
+      for (const sub of subs) {
+        const key = String(sub.membershipId);
+        const current = subsByMembership.get(key);
+        if (!current || current.updatedAt < sub.updatedAt) subsByMembership.set(key, sub);
+      }
+    }
+    const newest = new Map<string, any>();
+    for (const row of memberships.slice(0, SUMMARY_CAP)) {
+      if (String(row.userId) === String(community.ownerId)) continue;
+      const key = String(row.userId);
+      if (!newest.has(key) || newest.get(key).createdAt < row.createdAt) newest.set(key, row);
+    }
+    const counts: Record<string, number> = { everyone: 1, on_hold: 0, cancelling: 0, comped: 0, know_little: goals.has(String(community.ownerId)) ? 0 : 1, past: 0 };
+    const prices = new Map<string, { price_point_id: string; label: string; count: number; current: boolean }>();
+    for (const membership of newest.values()) {
+      const sub = subsByMembership.get(String(membership._id)) ?? null;
+      const point = priceById.get(String(sub?.pricePointId ?? membership.pricePointId ?? "")) ?? null;
+      const plan = planFor({ isOwner: false, accessSource: membership.accessSource, pricePoint: pointFor(point) });
+      if (outReasonFor(membership.state, blocked.has(String(membership.userId)), membership.revokedReason)) { counts.past += 1; continue; }
+      const row = { plan, money: moneyFor({ membershipState: membership.state, subscription: sub }), working_on: goals.get(String(membership.userId)) ?? null };
+      counts.everyone += 1;
+      for (const view of ["on_hold", "cancelling", "comped", "know_little"]) if (memberInView(view, row)) counts[view] += 1;
+      if (plan.kind === "paid" && plan.price_point_id) {
+        const entry = prices.get(plan.price_point_id) ?? { price_point_id: plan.price_point_id, label: plan.label, count: 0, current: Boolean(point?.isCurrent && !point?.archivedAt) };
+        entry.count += 1;
+        prices.set(plan.price_point_id, entry);
+      }
+    }
+    const declined = await ctx.db.query("communityJoinRequests")
+      .withIndex("by_community_status_createdAt", (q) => q.eq("communityId", args.communityId).eq("status", "denied")).take(PAST_CAP);
+    counts.past += declined.filter((request) => !newest.has(String(request.userId))).length;
+    // "With access": everyone in, less those whose card is on hold (the left
+    // column's number).
+    const withAccess = counts.everyone - counts.on_hold;
+    return { counts, with_access: withAccess, prices: [...prices.values()], capped };
+  },
+});
 
+// One page of the table, newest members first. A view narrows the page, so a
+// page can hold fewer than asked for; isDone says when there is no more.
+export const listCommunityMemberRecordsPage = query({
+  args: {
+    userId: v.optional(v.id("users")),
+    authSubject: v.optional(v.string()),
+    communityId: v.id("communities"),
+    view: viewValidator,
+    paginationOpts: paginationOptsValidator,
+  },
+  handler: async (ctx, args) => {
+    const { community } = await context(ctx, args);
+    const { blocked, priceById } = await lookups(ctx, args.communityId);
+    const ids = new Map<string, string | null>();
     const person = async (userId: any) => {
       const user = await ctx.db.get(userId) as { displayName?: string; handle?: string } | null;
       const profile = await resolveUserProfileDisplayProjection(ctx, userId);
@@ -110,82 +186,68 @@ export const listCommunityMemberRecords = query({
         .withIndex("by_community_user", (q) => q.eq("communityId", args.communityId).eq("userId", userId)).first();
       return iso(presence?.lastSeenAt);
     };
-
+    const goalOf = async (userId: any) => {
+      const facts = await ctx.db.query("memberFacts")
+        .withIndex("by_user_community", (q) => q.eq("userId", userId).eq("communityId", args.communityId)).take(FACTS_CAP);
+      const goal = facts.filter((fact) => fact.kind === "goal" && factVisibleToHost(fact)).sort((a, b) => b.updatedAt - a.updatedAt)[0];
+      return goal ? String(goal.body).trim().slice(0, 140) : null;
+    };
+    const numItems = Math.max(1, Math.min(PAGE_MAX, Math.floor(args.paginationOpts.numItems)));
+    const result = await ctx.db.query("communityMemberships")
+      .withIndex("by_community", (q) => q.eq("communityId", args.communityId)).order("desc")
+      .paginate({ ...args.paginationOpts, numItems });
+    const past = args.view === "past";
     const rows: MemberRecordRow[] = [];
-    const past: PastMemberRow[] = [];
-    const ownerId = String(community.ownerId);
-    rows.push({
-      membership_id: null,
-      ...(await person(community.ownerId)),
-      role: "owner",
-      plan: planFor({ isOwner: true, accessSource: null, pricePoint: null }),
-      money: null,
-      joined_at: iso(community.createdAt),
-      last_active_at: await lastActive(community.ownerId),
-      working_on: await workingOnFor(ctx, community.ownerId, args.communityId),
-    });
-    // A person can hold several rows over time (left, rejoined): the newest one
-    // says where they are now; an older one only marks that they came back.
-    const byUser = new Map<string, any[]>();
-    for (const membership of memberships.slice(0, MEMBER_RECORDS_CAP)) {
-      if (String(membership.userId) === ownerId) continue;
-      const list = byUser.get(String(membership.userId)) ?? [];
-      list.push(membership);
-      byUser.set(String(membership.userId), list);
+    const pastRows: PastMemberRow[] = [];
+    if (!args.paginationOpts.cursor && !past) {
+      const owner: MemberRecordRow = {
+        membership_id: null, ...(await person(community.ownerId)), role: "owner",
+        plan: planFor({ isOwner: true, accessSource: null, pricePoint: null }), money: null,
+        joined_at: iso(community.createdAt), last_active_at: await lastActive(community.ownerId), working_on: await goalOf(community.ownerId),
+      };
+      if (memberInView(args.view, owner)) rows.push(owner);
     }
-    for (const list of byUser.values()) {
-      list.sort((a, b) => b.createdAt - a.createdAt);
-      const membership = list[0];
+    for (const membership of result.page) {
+      if (String(membership.userId) === String(community.ownerId)) continue;
+      // A person can hold several rows over time (left, rejoined): only the
+      // newest says where they are now; older ones mark that they came back.
+      const all = await ctx.db.query("communityMemberships")
+        .withIndex("by_community_user", (q) => q.eq("communityId", args.communityId).eq("userId", membership.userId)).collect();
+      if (all.some((row) => row.createdAt > membership.createdAt)) continue;
       const subscription = await latestSubscription(ctx, membership._id);
       const point = priceById.get(String(subscription?.pricePointId ?? membership.pricePointId ?? "")) ?? null;
-      const plan = planFor({
-        isOwner: false,
-        accessSource: membership.accessSource,
-        pricePoint: point ? { id: String(point._id), name: point.name, amountBaseUnits: point.amountBaseUnits, currency: point.currency, currencyDecimals: point.currencyDecimals, billingPeriod: point.billingPeriod } : null,
-      });
-      const isBlocked = blocked.has(String(membership.userId));
-      const out = outReasonFor(membership.state, isBlocked);
+      const plan = planFor({ isOwner: false, accessSource: membership.accessSource, pricePoint: pointFor(point) });
+      const out = outReasonFor(membership.state, blocked.has(String(membership.userId)), membership.revokedReason);
+      if (past !== Boolean(out)) continue;
       const who = await person(membership.userId);
       if (out) {
-        past.push({
-          membership_id: String(membership._id), user_id: who.user_id, name: who.name, avatar_url: who.avatar_url,
-          reason: out, reason_text: OUT_REASON_TEXT[out], was_on: plan.label,
-          at: iso(membership.revokedAt ?? membership.updatedAt), rejoined: list.length > 1,
-        });
+        pastRows.push({ membership_id: String(membership._id), user_id: who.user_id, name: who.name, avatar_url: who.avatar_url,
+          reason: out, reason_text: OUT_REASON_TEXT[out], was_on: plan.label, at: iso(membership.revokedAt ?? membership.updatedAt), rejoined: all.length > 1 });
         continue;
       }
-      rows.push({
-        membership_id: String(membership._id),
-        ...who,
-        role: membership.role,
-        plan,
+      const row: MemberRecordRow = {
+        membership_id: String(membership._id), ...who, role: membership.role, plan,
         money: moneyFor({ membershipState: membership.state, subscription }),
         joined_at: iso(membership.activatedAt ?? membership.createdAt),
         last_active_at: await lastActive(membership.userId),
-        working_on: await workingOnFor(ctx, membership.userId, args.communityId),
-      });
+        working_on: await goalOf(membership.userId),
+      };
+      if (memberInView(args.view, row)) rows.push(row);
     }
-    const declined = await ctx.db.query("communityJoinRequests")
-      .withIndex("by_community_status_createdAt", (q) => q.eq("communityId", args.communityId).eq("status", "denied"))
-      .order("desc").take(50);
-    for (const request of declined) {
-      if (byUser.has(String(request.userId))) continue;
-      const who = await person(request.userId);
-      past.push({ membership_id: null, user_id: who.user_id, name: who.name, avatar_url: who.avatar_url, reason: "declined",
-        reason_text: OUT_REASON_TEXT.declined, was_on: null, at: iso(request.deniedAt ?? request.updatedAt), rejoined: false });
+    // Declined requests close the Past list (they never became members).
+    if (past && result.isDone) {
+      const declined = await ctx.db.query("communityJoinRequests")
+        .withIndex("by_community_status_createdAt", (q) => q.eq("communityId", args.communityId).eq("status", "denied")).order("desc").take(PAST_CAP);
+      for (const request of declined) {
+        const member = await ctx.db.query("communityMemberships")
+          .withIndex("by_community_user", (q) => q.eq("communityId", args.communityId).eq("userId", request.userId)).first();
+        if (member) continue;
+        const who = await person(request.userId);
+        pastRows.push({ membership_id: null, user_id: who.user_id, name: who.name, avatar_url: who.avatar_url, reason: "declined",
+          reason_text: OUT_REASON_TEXT.declined, was_on: null, at: iso(request.deniedAt ?? request.updatedAt), rejoined: false });
+      }
     }
-    past.sort((a, b) => String(b.at ?? "").localeCompare(String(a.at ?? "")));
-
-    // A saved view per price that has people on it, current or not.
-    const prices = new Map<string, { price_point_id: string; label: string; count: number; current: boolean }>();
-    for (const row of rows) {
-      if (row.plan.kind !== "paid" || !row.plan.price_point_id) continue;
-      const point = priceById.get(row.plan.price_point_id);
-      const entry = prices.get(row.plan.price_point_id) ?? { price_point_id: row.plan.price_point_id, label: row.plan.label, count: 0, current: Boolean(point?.isCurrent && !point?.archivedAt) };
-      entry.count += 1;
-      prices.set(row.plan.price_point_id, entry);
-    }
-    return { rows, past, prices: [...prices.values()], capped };
+    return { rows, past: pastRows, isDone: result.isDone, continueCursor: result.continueCursor };
   },
 });
 
@@ -201,6 +263,7 @@ const ACTION_TEXT: Record<string, (metadata: any) => string> = {
   community_member_role_set: (metadata) => `Made ${roleWithArticle(String(metadata?.role ?? "member"))}`,
   community_member_removed: () => "Removed from the community",
   community_member_blocked: () => "Blocked",
+  community_member_comped: () => "Comped",
 };
 const roleWithArticle = (role: string) => `${/^[aeiou]/.test(role) ? "an" : "a"} ${role}`;
 const AUDIT_SCAN = 400;
@@ -234,7 +297,7 @@ export const getCommunityMemberRecord = query({
     });
     const blockRow = await ctx.db.query("communityBlocks")
       .withIndex("by_community_user", (q) => q.eq("communityId", args.communityId).eq("userId", subjectId)).first();
-    const out = membership ? outReasonFor(membership.state, Boolean(blockRow && !blockRow.liftedAt)) : null;
+    const out = membership ? outReasonFor(membership.state, Boolean(blockRow && !blockRow.liftedAt), membership.revokedReason) : null;
 
     const facts: MemberRecordFact[] = [];
     for (const scope of [args.communityId, undefined]) {
@@ -348,6 +411,37 @@ export const deleteCommunityMemberNote = mutation({
     if (!note || String(note.communityId) !== String(args.communityId)) return { ok: true };
     if (String(note.authorUserId) !== String(userId) && String(community.ownerId) !== String(userId)) throw new Error("community_forbidden");
     await ctx.db.delete(args.noteId);
+    return { ok: true };
+  },
+});
+
+// Comp a member who is in for free (e.g. approved into a paid community): they
+// keep free access whatever the community's settings become. Never offered to
+// someone paying (Neil, Nov 11): that would mean cancelling their subscription.
+export const compCommunityMember = mutation({
+  args: {
+    userId: v.optional(v.id("users")),
+    authSubject: v.optional(v.string()),
+    communityId: v.id("communities"),
+    membershipId: v.id("communityMemberships"),
+  },
+  handler: async (ctx, args) => {
+    const { community, userId } = await context(ctx, args);
+    const membership = await ctx.db.get(args.membershipId);
+    if (!membership || String(membership.communityId) !== String(args.communityId)) throw new Error("community_membership_not_found");
+    if (String(membership.userId) === String(community.ownerId)) throw new Error("community_owner_role_fixed");
+    if (membership.state !== "active") throw new Error("community_member_not_active");
+    if (membership.accessSource === "manual_grant") return { ok: true };
+    const subscription = await latestSubscription(ctx, membership._id);
+    if (membership.accessSource === "paid_subscription" || (subscription && subscription.status !== "ended")) {
+      throw new Error("community_member_is_paying");
+    }
+    const nowMs = Date.now();
+    await ctx.db.patch(membership._id, { accessSource: "manual_grant", updatedAt: nowMs });
+    await recordCriticalAuditEvent(ctx, {
+      eventKey: `community_member_comped:${membership._id}:${nowMs}`, eventType: "community_member_comped", severity: "info", status: "succeeded",
+      actorUserId: userId, subjectUserId: membership.userId, communityId: args.communityId, provider: "polynet", providerObjectId: String(membership._id), createdAt: nowMs,
+    });
     return { ok: true };
   },
 });
