@@ -2,7 +2,7 @@
 // membership reads on the row and in the record. Pure, so the page and the
 // server say the same thing, and so every case is tested.
 
-export type MemberPlanKind = "owner" | "paid" | "comped" | "free";
+export type MemberPlanKind = "owner" | "paid" | "comped" | "free" | "app";
 export type MemberPlan = { kind: MemberPlanKind; label: string; price_point_id: string | null };
 export type MemberMoney = { kind: "on_hold" | "cancelling"; label: string; since_at: string | null; ends_at: string | null } | null;
 export type MemberOutReason = "left" | "removed" | "lapsed" | "blocked" | "refunded" | "disputed" | "declined";
@@ -31,6 +31,8 @@ export function planFor(args: {
 }): MemberPlan {
   if (args.isOwner) return { kind: "owner", label: "Owner", price_point_id: null };
   if (args.accessSource === "manual_grant") return { kind: "comped", label: "Comped", price_point_id: null };
+  // Let in by a sale the builder's own app reported.
+  if (args.accessSource === "app_grant") return { kind: "app", label: "Through your app", price_point_id: null };
   const point = args.pricePoint;
   if (point) {
     const price = formatPrice(point.amountBaseUnits, point.currency, point.currencyDecimals);

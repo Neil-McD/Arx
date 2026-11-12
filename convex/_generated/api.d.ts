@@ -32,6 +32,7 @@ import type * as communityAgentContext from "../communityAgentContext.js";
 import type * as communityAgentServeWorker from "../communityAgentServeWorker.js";
 import type * as communityAppAgentTurn from "../communityAppAgentTurn.js";
 import type * as communityAppJoin from "../communityAppJoin.js";
+import type * as communityAppSales from "../communityAppSales.js";
 import type * as communityApplicationFeeRefundCore from "../communityApplicationFeeRefundCore.js";
 import type * as communityApplicationFeeRefunds from "../communityApplicationFeeRefunds.js";
 import type * as communityApps from "../communityApps.js";
@@ -120,6 +121,8 @@ import type * as communityWeeklyDigestSchedule from "../communityWeeklyDigestSch
 import type * as communityWeeklyDigestValidators from "../communityWeeklyDigestValidators.js";
 import type * as communityWeeklyDigestWorker from "../communityWeeklyDigestWorker.js";
 import type * as communityWikiArchitect from "../communityWikiArchitect.js";
+import type * as connectedAppNotify from "../connectedAppNotify.js";
+import type * as connectedApps from "../connectedApps.js";
 import type * as creatorCommerce from "../creatorCommerce.js";
 import type * as criticalAudit from "../criticalAudit.js";
 import type * as crons from "../crons.js";
@@ -155,6 +158,7 @@ import type * as httpCommunityAgentAttachments from "../httpCommunityAgentAttach
 import type * as httpCommunityApps from "../httpCommunityApps.js";
 import type * as httpCommunityAttachments from "../httpCommunityAttachments.js";
 import type * as httpCommunitySites from "../httpCommunitySites.js";
+import type * as httpConnectedApps from "../httpConnectedApps.js";
 import type * as httpEmail from "../httpEmail.js";
 import type * as httpInferenceConfig from "../httpInferenceConfig.js";
 import type * as httpMcp from "../httpMcp.js";
@@ -246,6 +250,7 @@ declare const fullApi: ApiFromModules<{
   communityAgentServeWorker: typeof communityAgentServeWorker;
   communityAppAgentTurn: typeof communityAppAgentTurn;
   communityAppJoin: typeof communityAppJoin;
+  communityAppSales: typeof communityAppSales;
   communityApplicationFeeRefundCore: typeof communityApplicationFeeRefundCore;
   communityApplicationFeeRefunds: typeof communityApplicationFeeRefunds;
   communityApps: typeof communityApps;
@@ -334,6 +339,8 @@ declare const fullApi: ApiFromModules<{
   communityWeeklyDigestValidators: typeof communityWeeklyDigestValidators;
   communityWeeklyDigestWorker: typeof communityWeeklyDigestWorker;
   communityWikiArchitect: typeof communityWikiArchitect;
+  connectedAppNotify: typeof connectedAppNotify;
+  connectedApps: typeof connectedApps;
   creatorCommerce: typeof creatorCommerce;
   criticalAudit: typeof criticalAudit;
   crons: typeof crons;
@@ -369,6 +376,7 @@ declare const fullApi: ApiFromModules<{
   httpCommunityApps: typeof httpCommunityApps;
   httpCommunityAttachments: typeof httpCommunityAttachments;
   httpCommunitySites: typeof httpCommunitySites;
+  httpConnectedApps: typeof httpConnectedApps;
   httpEmail: typeof httpEmail;
   httpInferenceConfig: typeof httpInferenceConfig;
   httpMcp: typeof httpMcp;

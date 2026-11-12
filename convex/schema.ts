@@ -984,6 +984,8 @@ export default defineSchema({
         v.literal("free_grant"),
         v.literal("manual_grant"),
         v.literal("paid_subscription"),
+        // One door: let in by a sale the builder's app made and reported.
+        v.literal("app_grant"),
       ),
     ),
     pricePointId: v.optional(v.id("communityPricePoints")),
@@ -1215,6 +1217,58 @@ export default defineSchema({
     updatedAt: v.number(),
   })
     .index("by_community_key", ["communityId", "key"]),
+
+  // Connected apps (one door, connectedApps.ts): a builder's own app,
+  // registered with their community. Its secret is kept only as a hash.
+  connectedApps: defineTable({
+    communityId: v.id("communities"),
+    appId: v.string(),
+    name: v.string(),
+    secretHash: v.string(),
+    secretHint: v.string(),
+    // Signs access.changed webhooks (Standard Webhooks); Polynet signs with it.
+    signingSecret: v.string(),
+    webhookUrl: v.optional(v.string()),
+    createdByUserId: v.id("users"),
+    revokedAt: v.optional(v.number()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_community", ["communityId"])
+    .index("by_appId", ["appId"])
+    .index("by_secretHash", ["secretHash"]),
+  // Sales a connected app made through its own checkout and reported
+  // (communityAppSales.ts): its latest word per email. No fee. userId is set
+  // once an account with that verified email exists.
+  communityAppGrants: defineTable({
+    appId: v.string(),
+    communityId: v.id("communities"),
+    email: v.string(),
+    userId: v.optional(v.id("users")),
+    tierKey: v.string(),
+    active: v.boolean(),
+    externalRef: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_app_email", ["appId", "email"])
+    .index("by_community_user", ["communityId", "userId"])
+    .index("by_email", ["email"]),
+  // access.changed webhooks to connected apps, retried until delivered.
+  connectedAppDeliveries: defineTable({
+    appId: v.string(),
+    communityId: v.id("communities"),
+    eventId: v.string(),
+    type: v.literal("access.changed"),
+    email: v.string(),
+    status: v.union(v.literal("pending"), v.literal("delivered"), v.literal("failed")),
+    attempts: v.number(),
+    nextAttemptAt: v.number(),
+    lastError: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_app_status", ["appId", "status"]),
 
   communitySubscriptions: defineTable({
     communityId: v.id("communities"),

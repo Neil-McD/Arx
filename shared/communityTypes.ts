@@ -306,7 +306,7 @@ export type CommunityAccess = {
   primary_cta?: "open_community" | "join" | "checkout";
   is_owner: boolean;
   is_entitled: boolean;
-  access_source?: "free_grant" | "manual_grant" | "paid_subscription" | null;
+  access_source?: "free_grant" | "manual_grant" | "paid_subscription" | "app_grant" | null;
   subscription_status?: "active" | "past_due" | "cancel_at_period_end" | "canceled" | "ended" | null;
   entitlement_role: string | null;
   entitlement_ends_at: string | null;

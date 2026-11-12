@@ -103,6 +103,10 @@ test("a member's grants: community, their tier's, and each pod they can enter; n
       communityId: ids.communityId, userId: ids.payerId, role: "member", accessSource: "paid_subscription", pricePointId: setterPrice._id,
       state: "active", activationSequence: 1, activatedAt: NOW, createdAt: NOW, updatedAt: NOW,
     } as any);
+    await ctx.db.insert("communitySubscriptions", {
+      communityId: ids.communityId, userId: ids.payerId, membershipId, pricePointId: setterPrice._id, source: "stripe", status: "active",
+      providerSubscriptionId: "sub_setter", providerAccountId: "acct_de", currentPeriodEndAt: NOW + 86_400_000, cancelAtPeriodEnd: false, createdAt: NOW, updatedAt: NOW,
+    } as any);
     const pod = await ctx.db.insert("communityChannels", {
       communityId: ids.communityId, slug: "founders", name: "Founders", accessMode: "restricted",
       postingPolicy: "members", status: "active", position: 1, createdByUserId: ids.ownerId, createdAt: NOW, updatedAt: NOW,

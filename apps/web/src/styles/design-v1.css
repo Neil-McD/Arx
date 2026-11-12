@@ -3055,3 +3055,8 @@
 :root[data-design="v1"] .community-plan-form { display: flex; flex-direction: column; gap: 10px; margin-top: 12px; }
 :root[data-design="v1"] .community-plan-row > div:first-child { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 :root[data-design="v1"] .community-plan-row .settings-section-desc { margin: 0; }
+
+/* One door: Your app in community settings. */
+:root[data-design="v1"] .community-app-secret { display: flex; flex-direction: column; gap: 6px; padding: 12px; margin: 10px 0; border: 1px solid var(--border-subtle, rgba(127,127,127,.25)); border-radius: 8px; }
+:root[data-design="v1"] .community-app-secret code, :root[data-design="v1"] .community-app-howto code { font-family: var(--font-mono, ui-monospace, monospace); font-size: 12px; word-break: break-all; user-select: all; }
+:root[data-design="v1"] .community-app-howto { margin-top: 12px; }

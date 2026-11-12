@@ -1,3 +1,4 @@
+import { notifyConnectedApps } from "./connectedAppNotify";
 import { action, internalAction, internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import { schedulePodBillingCheck } from "./communityPodBillingCheck";
 import { communityHasCustomSite, communityMemberExperience, communitySiteUrl } from "./communitySites";
@@ -1694,6 +1695,7 @@ export const revokeCommunityMemberInternal = internalMutation({
         if (removal) {
           await ctx.db.patch(membership._id as any, removal);
           await schedulePodBillingCheck(ctx, { communityId: args.communityId, userId: membership.userId });
+          await notifyConnectedApps(ctx, args.communityId, membership.userId);
           await recordCriticalAuditEvent(ctx, {
             eventKey: `community_member_removed:${membership._id}:${nowMs}`, eventType: "community_member_removed",
             severity: "info", status: "succeeded", actorUserId: userId, subjectUserId: membership.userId,
@@ -2346,6 +2348,7 @@ async function leaveCommunityForUser(ctx: any, args: { communityId: any; userId:
         const after = { ...membership, ...leaving } as CommunityMembershipLike;
         if (leaving) await ctx.db.patch(membership._id as any, leaving);
         if (leaving) await schedulePodBillingCheck(ctx, { communityId: args.communityId, userId: membership.userId });
+        if (leaving) await notifyConnectedApps(ctx, args.communityId, membership.userId);
         await adjustCommunityActiveMemberCountForMembershipTransition({
           ctx,
           communityId: args.communityId,

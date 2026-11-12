@@ -1,3 +1,4 @@
+import { notifyConnectedApps } from "./connectedAppNotify";
 import {
   type CommunityMembershipLike,
   type CommunityMembershipState,
@@ -15,7 +16,8 @@ import { deleteCommunityJoinRequestByPair } from "./communityJoinRequestCore";
 export type CommunityMembershipAccessSource =
   | "free_grant"
   | "manual_grant"
-  | "paid_subscription";
+  | "paid_subscription"
+  | "app_grant";
 
 export async function activateCommunityMembershipCore(args: {
   ctx: any;
@@ -121,6 +123,8 @@ export async function activateCommunityMembershipCore(args: {
     communityId: args.communityId,
     userId: args.userId,
   });
+  // One door: the community's connected apps re-read this person's access.
+  await notifyConnectedApps(args.ctx, args.communityId, args.userId);
   return {
     membership,
     accessGranted: true,

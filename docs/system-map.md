@@ -284,6 +284,14 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
   each gives grants, the names a connected app reads; today's price is the base tier
   "member", and every reader of the price reads only it). Table: `communityTiers`;
   `communityPricePoints.tierKey` marks a tier's prices.
+- **Connected apps (one door):** `connectedApps` (a builder registers their app;
+  `GET /apps/v1/access` in `httpConnectedApps` answers `{ allowed, tier, grants }` for
+  a verified email), `connectedAppNotify` (signed `access.changed` webhooks where
+  access may change, delivered and retried by `connectedApps`). Tables:
+  `connectedApps`, `connectedAppDeliveries`.
+- **App sales (one door):** `communityAppSales` (sales a connected app made
+  through its own checkout, reported to `POST /apps/v1/sales`; no fee; lets a
+  verified account in, or waits for one). Table: `communityAppGrants`.
 - **Pod knowledge:** `communityPodNotes` (notes that belong to one pod: the pod
   reads, its hosts write, a builder may publish a copy to the community's notes;
   their own table, and `scripts/community_pod_notes_wall.test.ts` lets only this
