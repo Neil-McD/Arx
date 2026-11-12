@@ -24,10 +24,13 @@ export function openGuideFromSearch(): void {
   window.dispatchEvent(new CustomEvent(OPEN_GUIDE_EVENT));
 }
 
-export function askGuide(question: string): void {
+export type AskGuideRequest = { question: string; communityId: string };
+
+// The question belongs to the community it was asked in.
+export function askGuide(question: string, communityId: string | null | undefined): void {
   const text = question.trim();
-  if (!text) return;
-  window.dispatchEvent(new CustomEvent<string>(ASK_GUIDE_EVENT, { detail: text }));
+  if (!text || !communityId) return;
+  window.dispatchEvent(new CustomEvent<AskGuideRequest>(ASK_GUIDE_EVENT, { detail: { question: text, communityId } }));
 }
 
 export function isGuideSearchShortcut(event: Pick<KeyboardEvent, "key" | "metaKey" | "ctrlKey" | "altKey" | "shiftKey">): boolean {

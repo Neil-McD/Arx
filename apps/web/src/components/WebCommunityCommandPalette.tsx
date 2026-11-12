@@ -68,9 +68,11 @@ export function WebCommunityCommandPalette({ communityShell }: { communityShell:
       if (!community) return;
       const changed = shell.onSelectActiveCommunity(community);
       const slug = String(community.slug ?? "").trim();
+      if (changed && shell.isDirectMessagesOpen) shell.onToggleDirectMessages();
       if (changed && slug) shell.onOpenCommunityHome(slug);
     },
   }), [shell]);
 
-  return <KitCommandPalette places={places} suggestions={isHost ? HOST_SUGGESTIONS : MEMBER_SUGGESTIONS} communities={communities} actions={actions} />;
+  return <KitCommandPalette places={places} suggestions={isHost ? HOST_SUGGESTIONS : MEMBER_SUGGESTIONS} communities={communities} actions={actions}
+    communityId={shell.activeCommunity?.id ?? null} />;
 }
