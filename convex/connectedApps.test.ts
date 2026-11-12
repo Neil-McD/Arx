@@ -111,5 +111,6 @@ test("access changes send the app a signed, thin access.changed, retried until i
 test("webhooks only go to a public https address", () => {
   for (const ok of ["https://de.example.com/polynet", "https://api.distribution.engineer/hooks/polynet"]) expect(webhookUrlIsAllowed(ok)).toBe(true);
   for (const bad of ["http://de.example.com", "https://localhost/x", "https://127.0.0.1/x", "https://10.0.0.5/x", "https://[::1]/x",
-    "https://box.local/x", "https://user:pw@de.example.com", "https://intranet/x", "not a url"]) expect(webhookUrlIsAllowed(bad)).toBe(false);
+    "https://box.local/x", "https://user:pw@de.example.com", "https://intranet/x", "not a url",
+    "https://localhost./hook", "https://box.internal./hook", "https://de.example.com:8443/x", "https://2130706433/x", "https://0x7f000001/x"]) expect(webhookUrlIsAllowed(bad)).toBe(false);
 });
