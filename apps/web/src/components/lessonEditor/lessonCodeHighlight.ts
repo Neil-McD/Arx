@@ -54,7 +54,12 @@ function buildDecorations(doc: PMNode): DecorationSet {
     if (node.type.name !== "codeBlock") return true;
     const text = node.textContent;
     const start = pos + 1;
-    decorations.push(Decoration.widget(start, () => copyButton(() => text), {
+    // Copy reads the block as it is when clicked: ProseMirror may reuse the
+    // button across edits that keep the same key.
+    decorations.push(Decoration.widget(start, (view, getPos) => copyButton(() => {
+      const at = getPos();
+      return typeof at === "number" ? view.state.doc.resolve(at).parent.textContent : text;
+    }), {
       side: -1, ignoreSelection: true, key: `copy:${text.length}:${text.slice(0, 40)}`,
     }));
     const html = text ? highlightCodeHtml(text, node.attrs.language as string | null) : null;
