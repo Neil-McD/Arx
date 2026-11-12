@@ -206,6 +206,7 @@ describe("canonical web destinations", () => {
     ["/m/c/polynet/chat/wins", { kind: "community_chat", slug: "polynet", channelSlug: "wins" }],
     ["/m/c/polynet/resources/module-1", { kind: "community_resources", slug: "polynet", moduleId: "module-1" }],
     ["/m/c/polynet/events", { kind: "community_events", slug: "polynet" }],
+    ["/c/polynet/pods", { kind: "community_pods", slug: "polynet" }],
     ["/m/c/polynet/settings/agent", { kind: "community_settings", slug: "polynet", pane: "agent" }],
     ["/m/c/polynet/funnel", { kind: "community_settings", slug: "polynet", pane: "community" }],
     ["/m/c/polynet/analytics", { kind: "community_analytics", slug: "polynet" }],

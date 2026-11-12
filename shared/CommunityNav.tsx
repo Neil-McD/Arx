@@ -94,6 +94,9 @@ type CommunityNavProps = {
   isInboxOpen?: boolean;
   inboxUnreadCount?: number;
   onOpenMembers?: () => void;
+  // v1: one Pods item (docs/specs/pods-v0.md); private rooms are never listed.
+  onOpenPods?: () => void;
+  podsActive?: boolean;
   memberCount?: number | null;
 };
 
@@ -218,6 +221,8 @@ export const CommunityNav = memo(function CommunityNav({
   isInboxOpen = false,
   inboxUnreadCount = 0,
   onOpenMembers,
+  onOpenPods,
+  podsActive = false,
   memberCount = null,
 }: CommunityNavProps) {
   const isV1 = layout === "v1";
@@ -673,6 +678,21 @@ export const CommunityNav = memo(function CommunityNav({
             <span className="nav-item-label">Events</span>
             {communityTab !== "events" && tabIndicators.events ? <span className="nav-item-dot" aria-hidden="true" /> : null}
           </button>
+          {isV1 && onOpenPods ? (
+            <button
+              className={showActiveSelection && (communityTab === "pods" || podsActive) ? "nav-item active" : "nav-item"}
+              type="button"
+              onClick={onOpenPods}
+              title="Pods"
+            >
+              <span className="nav-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="8" cy="9" r="3" /><circle cx="16" cy="9" r="3" /><circle cx="12" cy="16" r="3" />
+                </svg>
+              </span>
+              <span className="nav-item-label">Pods</span>
+            </button>
+          ) : null}
           {isV1 && onOpenMembers && canViewMembersActiveCommunity ? (
             <button className="nav-item nav-item-members" type="button" onClick={onOpenMembers} title="Members">
               <span className="nav-icon" aria-hidden="true"><Users size={17} strokeWidth={1.7} /></span>

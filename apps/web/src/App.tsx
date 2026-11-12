@@ -1871,6 +1871,18 @@ export default function App() {
       canModerateContentActiveCommunity,
       resourceModuleModalProps,
       resourceModuleDeleteModalProps,
+      podsProps: {
+        session,
+        ensureSession: ensureUsableAuthSession,
+        communityId: activeCommunity?.id ?? null,
+        communityName: activeCommunity?.name ?? "this community",
+        asMember: memberPreview.active,
+        onOpenPod: (pod) => {
+          const path = buildCommunityTabPath(selectedActiveCommunitySlug, "chat", null, null, pod.slug);
+          if (path) navigateTo(path);
+        },
+        createRoom: handleCreateCommunityChannel,
+      },
       canPostMessagesActiveCommunity: canPostMessagesActiveChannel,
       isProfileSetupComplete: isProfileSetupCompleteForPublicActions,
       onCommunityTypingSignal: signalCommunityTyping,

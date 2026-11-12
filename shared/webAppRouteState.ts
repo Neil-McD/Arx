@@ -64,6 +64,7 @@ export type WebDestination =
   | { kind: "community_chat"; slug: string; channelSlug: string | null }
   | { kind: "community_resources"; slug: string; moduleId: string | null }
   | { kind: "community_events"; slug: string }
+  | { kind: "community_pods"; slug: string }
   | { kind: "community_agent"; slug: string }
   | { kind: "community_settings"; slug: string; pane: CommunitySettingsPane }
   | { kind: "community_analytics"; slug: string };
@@ -649,6 +650,8 @@ export function deriveWebDestinationFromAppRoute(
           };
         case "events":
           return { kind: "community_events", slug };
+        case "pods":
+          return { kind: "community_pods", slug };
         case "agent":
           return { kind: "community_agent", slug };
         case "settings":
@@ -701,6 +704,7 @@ export function isWebCommunityDetailDestination(
     case "community_chat":
     case "community_resources":
     case "community_events":
+    case "community_pods":
     case "community_agent":
     case "community_settings":
     case "community_analytics":
@@ -727,6 +731,7 @@ export function webDestinationHasCommunityNavSelection(
     case "community_chat":
     case "community_resources":
     case "community_events":
+    case "community_pods":
     case "community_agent":
     case "community_settings":
     case "community_analytics":
