@@ -37,8 +37,8 @@ async function seed(t: any) {
     await join("ana", "Ana", { accessSource: "paid_subscription", pricePointId: founding, state: "left", revokedAt: NOW - 3 * DAY });
     const lee = await join("lee", "Lee", { accessSource: "free_grant", state: "removed", revokedAt: NOW - 4 * DAY });
     await ctx.db.insert("communityBlocks", { communityId, userId: lee.userId, createdByUserId: ownerId, createdAt: NOW, updatedAt: NOW });
-    await join("omar", "Omar", { accessSource: "paid_subscription", pricePointId: member, state: "lapsed", revokedAt: NOW - 2 * DAY, revokedReason: "subscription_refunded" });
-    await join("kim", "Kim", { accessSource: "paid_subscription", pricePointId: member, state: "lapsed", revokedAt: NOW - DAY, revokedReason: "subscription_dispute_opened" });
+    await join("omar", "Omar", { accessSource: "paid_subscription", pricePointId: member, state: "payment_hold", revokedAt: NOW - 2 * DAY, revokedReason: "subscription_refunded" });
+    await join("kim", "Kim", { accessSource: "paid_subscription", pricePointId: member, state: "payment_hold", revokedAt: NOW - DAY, revokedReason: "subscription_dispute_opened" });
     const freeby = await join("freeby", "Freeby", { accessSource: "free_grant" });
     const dana = await user("dana", "Dana");
     await ctx.db.insert("communityJoinRequests", { communityId, userId: dana, status: "denied", deniedAt: NOW - 6 * DAY, createdAt: NOW - 7 * DAY, updatedAt: NOW });

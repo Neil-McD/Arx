@@ -104,23 +104,31 @@ export function KitMembersPage(props: {
   }, [scope?.session, scope?.communityId, props.joinRequests.length, props.refreshKey, tableVersion]);
 
   // The table, a page at a time, for the view chosen.
+  // Each reset starts a new generation; an answer from an older one (another
+  // view, community or refresh) is dropped, never mixed into the table.
+  const generationRef = useRef(0);
   const loadMore = useCallback(async (reset: boolean) => {
-    if (!scope || loadingRef.current) return;
+    if (!scope || (loadingRef.current && !reset)) return;
+    if (reset) generationRef.current += 1;
+    const generation = generationRef.current;
     const current = reset ? null : loaded;
     if (current?.done) return;
     loadingRef.current = true;
     setLoading(true);
     try {
       const page = await listCloudCommunityMemberRecordsPage({ session: scope.session, communityId: scope.communityId, view, cursor: current?.cursor ?? null });
+      if (generation !== generationRef.current) return;
       setLoaded((previous) => {
         const base = reset || previous?.view !== view ? { rows: [], past: [] } : previous!;
         return { view, rows: [...base.rows, ...page.rows], past: [...base.past, ...page.past], cursor: page.continueCursor, done: page.isDone };
       });
     } catch {
-      setFailed(true);
+      if (generation === generationRef.current) setFailed(true);
     } finally {
-      loadingRef.current = false;
-      setLoading(false);
+      if (generation === generationRef.current) {
+        loadingRef.current = false;
+        setLoading(false);
+      }
     }
   }, [scope?.session, scope?.communityId, view, loaded]);
 

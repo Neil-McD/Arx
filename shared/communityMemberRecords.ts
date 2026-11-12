@@ -64,10 +64,13 @@ export function moneyFor(args: {
 // it as the membership's revokedReason), so those read as their own reasons.
 export function outReasonFor(state: string, blocked: boolean, revokedReason: string | null | undefined = null): MemberOutReason | null {
   if (blocked) return "blocked";
-  if (state !== "left" && state !== "removed" && state !== "lapsed") return null;
-  if (revokedReason === "subscription_refunded") return "refunded";
-  if (revokedReason === "subscription_dispute_opened" || revokedReason === "subscription_dispute_lost") return "disputed";
-  return state;
+  // Billing holds a refunded or disputed membership as payment_hold (a won
+  // dispute can lift it), but access has ended: they read as out.
+  const ended = state === "left" || state === "removed" || state === "lapsed" || state === "payment_hold";
+  if (ended && revokedReason === "subscription_refunded") return "refunded";
+  if (ended && (revokedReason === "subscription_dispute_opened" || revokedReason === "subscription_dispute_lost")) return "disputed";
+  if (state === "left" || state === "removed" || state === "lapsed") return state;
+  return null;
 }
 
 export const OUT_REASON_TEXT: Record<MemberOutReason, string> = {

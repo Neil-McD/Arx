@@ -30,6 +30,10 @@ test("prices, money states and plans read the way the checklist says", () => {
   expect(outReasonFor("lapsed", false, "subscription_refunded")).toBe("refunded");
   expect(outReasonFor("lapsed", false, "subscription_dispute_opened")).toBe("disputed");
   expect(outReasonFor("removed", true, "subscription_refunded")).toBe("blocked");
+  // Billing holds them as payment_hold, but access has ended.
+  expect(outReasonFor("payment_hold", false, "subscription_refunded")).toBe("refunded");
+  expect(outReasonFor("payment_hold", false, "subscription_dispute_opened")).toBe("disputed");
+  expect(outReasonFor("payment_hold", false, null)).toBeNull();
 });
 
 test("the host's saved views narrow the table to the right people", () => {
