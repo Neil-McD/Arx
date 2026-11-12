@@ -19,7 +19,10 @@ export function KitCommandPalette(props: {
   actions: PaletteActions;
   // The community the palette's questions belong to.
   communityId: string | null;
+  // Without the agent the palette only searches.
+  agentOn?: boolean;
 }) {
+  const placeholder = props.agentOn === false ? "Search" : "Search or ask your guide";
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [hot, setHot] = useState(0);
@@ -37,8 +40,8 @@ export function KitCommandPalette(props: {
   }, [open]);
 
   const sections = useMemo(
-    () => paletteSections({ query, places: props.places, suggestions: props.suggestions, communities: props.communities }),
-    [query, props.places, props.suggestions, props.communities],
+    () => paletteSections({ query, places: props.places, suggestions: props.suggestions, communities: props.communities, ask: props.agentOn !== false }),
+    [query, props.places, props.suggestions, props.communities, props.agentOn],
   );
   const items = useMemo(() => paletteItems(sections), [sections]);
   useEffect(() => { setHot(0); }, [query]);
@@ -64,11 +67,11 @@ export function KitCommandPalette(props: {
   return createPortal(
     <KitApp view="home" part="palette">
       <div className={cx("veil")} onMouseDown={(event) => { if (event.target === event.currentTarget) close(); }}>
-        <div className={cx("pal")} role="dialog" aria-modal="true" aria-label="Search or ask your guide" onKeyDown={onKeyDown}>
+        <div className={cx("pal")} role="dialog" aria-modal="true" aria-label={placeholder} onKeyDown={onKeyDown}>
           <div className={cx("q")}>
             <Icon name="search" />
             <input ref={inputRef} value={query} onChange={(event) => setQuery(event.target.value)}
-              placeholder="Search or ask your guide" aria-label="Search or ask your guide"
+              placeholder={placeholder} aria-label={placeholder}
               role="combobox" aria-expanded="true" aria-controls="kit-palette-list"
               aria-activedescendant={items[hot] ? `kit-palette-${items[hot].id}` : undefined} />
           </div>

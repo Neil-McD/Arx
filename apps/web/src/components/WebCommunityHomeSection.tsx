@@ -4,6 +4,7 @@
 // stand. The owner sees the daily brief's facts read live; a member sees only
 // what any member can already see (convex/communityFounderBrief.ts).
 import { KitHomeRail } from "../v1/KitHomeRail";
+import { todayLines } from "../../../../shared/communityHomeToday";
 import type { CommunityPresenceSummary } from "../../../../shared/communityTypes";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
@@ -36,6 +37,11 @@ export type WebCommunityHomeSectionProps = {
   // `hasConversation`: the one thread has something to read, so a quiet Home
   // still offers a way back into it.
   kit?: { talking: boolean; talk: ReactNode; onTalkItOver: () => void; hasConversation?: boolean } | null;
+  // Whether the community's agent is on (docs/specs/community-agent-gateway-v0.md).
+  // Off: Home is plain (no guide, no next step); the owner sees what the
+  // guide would say, and the way to turn it on.
+  agentOn?: boolean;
+  onTurnOnAgent?: () => void;
   // Who is here now (a member's "Right now" shows the faces).
   presence?: CommunityPresenceSummary | null;
 };
@@ -247,7 +253,8 @@ export function WebCommunityHomeSection(props: WebCommunityHomeSectionProps) {
 
   const now = props.now ?? new Date();
   const greeting = `${greetingFor(now)}, ${props.firstName}.`;
-  const card = snapshot ? homeCardFor(snapshot, props, props.audience) : null;
+  const agentOn = props.agentOn !== false;
+  const card = snapshot && agentOn ? homeCardFor(snapshot, props, props.audience) : null;
   const rows = snapshot ? homeRowsFor(snapshot, props, props.audience) : [];
   const figures = snapshot ? homeFiguresFor(snapshot, props.audience) : [];
   const nextEvent = snapshot?.upcomingEvents[0] ?? null;
@@ -257,7 +264,7 @@ export function WebCommunityHomeSection(props: WebCommunityHomeSectionProps) {
     const isHost = props.audience === "host";
     // The right column: Today, who is online, and the community's memory.
     const panel = snapshot ? (
-      <KitHomeRail session={props.session} communityId={props.communityId} audience={props.audience} snapshot={snapshot}
+      <KitHomeRail session={props.session} communityId={props.communityId} audience={props.audience} snapshot={snapshot} agentOn={agentOn}
         presence={props.presence} now={now.getTime()} onOpenEvents={props.onOpenEvents}
         onOpenChannelByName={props.onOpenChannelByName} onOpenMembers={props.onOpenJoinRequests} onOpenKnowledge={props.onOpenKnowledge} />
     ) : null;
@@ -269,7 +276,7 @@ export function WebCommunityHomeSection(props: WebCommunityHomeSectionProps) {
     return (
       <>
         <HomeBody>
-          <Eyebrow community={props.communityName} time={homeClockFor(now)} />
+          <Eyebrow community={props.communityName} time={homeClockFor(now)} plain={!agentOn} />
           <Hello greeting={greeting} line={snapshot ? homeSentenceFor(snapshot, card, props.audience) : failed ? "" : " "} />
           {card ? (
             <Card label={card.label} title={card.title} say={card.detail}>
@@ -284,7 +291,13 @@ export function WebCommunityHomeSection(props: WebCommunityHomeSectionProps) {
               ))}
             </Since>
           ) : null}
-          {!kit.talking && kit.hasConversation && !card ? (
+          {!agentOn && isHost && snapshot ? (
+            <Card label="Your community's agent" title="Here's what your guide would tell you today"
+              say={todayLines(snapshot, "host").map((line) => line.text).join(" ")}>
+              {props.onTurnOnAgent ? <Btn go onClick={props.onTurnOnAgent}>Turn on your community's agent</Btn> : null}
+            </Card>
+          ) : null}
+          {agentOn && !kit.talking && kit.hasConversation && !card ? (
             <TextLink style={{ marginTop: 20 }} onClick={kit.onTalkItOver}>Continue your conversation</TextLink>
           ) : null}
           {kit.talk}

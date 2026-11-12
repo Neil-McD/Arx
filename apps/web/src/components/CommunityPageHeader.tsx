@@ -3,14 +3,17 @@ import { createPortal } from "react-dom";
 import { Search } from "lucide-react";
 import { isDesignV1Active } from "../../../../shared/designSystem";
 import { openGuideFromSearch } from "./guideSearch";
+import { useCommunityAgentOn } from "../controllers/communityAgentOn";
 
 // The mock's "Search or ask", the same on every page's top bar. Until search
 // exists it asks your guide (⌘K does the same).
 export function SearchOrAskButton() {
+  // Without the agent it only searches.
+  const agentOn = useCommunityAgentOn();
   return (
-    <button type="button" className="community-search-ask" onClick={() => openGuideFromSearch()} aria-keyshortcuts="Meta+K" title="Ask your guide (⌘K)">
+    <button type="button" className="community-search-ask" onClick={() => openGuideFromSearch()} aria-keyshortcuts="Meta+K" title={agentOn ? "Search or ask your guide (⌘K)" : "Search (⌘K)"}>
       <Search size={14} aria-hidden="true" />
-      <span>Search or ask</span>
+      <span>{agentOn ? "Search or ask" : "Search"}</span>
       <kbd>⌘K</kbd>
     </button>
   );

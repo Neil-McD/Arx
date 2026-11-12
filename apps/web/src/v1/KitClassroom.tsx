@@ -25,6 +25,7 @@ import { NoteForm, OpenNote, noteIsNew } from "./KitKnowledgeNotes";
 import { KitLessonEditor, type LessonPatch } from "./KitLessonEditor";
 import { Btn, cx, Icon, KitApp, Rail, Sec, Sep, TextLink } from "./kit";
 import { KitMemoryMap } from "./KitMemoryMap";
+import { useCommunityAgentOn } from "../controllers/communityAgentOn";
 
 const SHELF = 6;
 
@@ -69,6 +70,8 @@ export function KitClassroom(props: {
   const [saving, setSaving] = useState(false);
   const [editingLessonId, setEditingLessonId] = useState<string | null>(null);
   const editingTools = props.canManage ? props.lessonEditing : null;
+  // Asking Knowledge is the guide's; a community without it doesn't offer it.
+  const agentOn = useCommunityAgentOn();
   const [now] = useState(Date.now);
 
   const loadProgress = useCallback(async () => {
@@ -256,11 +259,13 @@ export function KitClassroom(props: {
           }}>+ Add lesson</TextLink>
         ) : null}
       </div>
-      <div style={{ marginTop: "auto" }}>
-        <button type="button" className={cx("ask kask-btn")} style={{ height: 46 }} onClick={() => openGuideFromSearch()}>
-          <Icon name="spark" extra="sp" /><span>Ask about this lesson</span>
-        </button>
-      </div>
+      {agentOn ? (
+        <div style={{ marginTop: "auto" }}>
+          <button type="button" className={cx("ask kask-btn")} style={{ height: 46 }} onClick={() => openGuideFromSearch()}>
+            <Icon name="spark" extra="sp" /><span>Ask about this lesson</span>
+          </button>
+        </div>
+      ) : null}
     </>
   ) : null;
 
@@ -341,9 +346,11 @@ export function KitClassroom(props: {
             ? (courses.length === 0 ? "Start with one course." : learning > 0 ? `Members have started ${learning} ${learning === 1 ? "course" : "courses"} between them.` : "Your courses are ready for members.")
             : resume ? "Pick up where you left off." : courses.length ? "Pick a course to start." : "Nothing to learn here yet."}
         </p>
-        <button type="button" className={cx("ask kask kask-btn")} onClick={() => openGuideFromSearch()}>
-          <Icon name="spark" extra="sp" /><span>Ask anything {props.communityName} knows</span>
-        </button>
+        {agentOn ? (
+          <button type="button" className={cx("ask kask kask-btn")} onClick={() => openGuideFromSearch()}>
+            <Icon name="spark" extra="sp" /><span>Ask anything {props.communityName} knows</span>
+          </button>
+        ) : null}
 
         {resume ? (
           <button type="button" className={cx("card kcont")} onClick={() => { props.onOpenCourse(resume.course.id); setLessonId(resume.lesson.id); }}>

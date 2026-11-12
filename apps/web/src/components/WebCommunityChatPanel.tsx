@@ -1,3 +1,4 @@
+import { useCommunityAgentOn } from "../controllers/communityAgentOn";
 import type {
   ChangeEventHandler,
   ClipboardEventHandler,
@@ -310,6 +311,7 @@ export type WebCommunityChatPanelProps = {
 };
 
 export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
+  const agentOn = useCommunityAgentOn();
   const { upsertCommunityVisualIdentities } =
     useCommunityVisualIdentityRegistryActions();
   const {
@@ -565,7 +567,8 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
     // The community agent is taggable inside its own community, pinned first and
     // always badged. V0 token/name = the community's own name; the backend stores
     // the stable (communityId, community_agent) identity.
-    const agentDisplayName = String(activeCommunity?.name ?? "").trim();
+    // A community without its agent doesn't offer it (docs/specs/community-agent-gateway-v0.md).
+    const agentDisplayName = agentOn ? String(activeCommunity?.name ?? "").trim() : "";
     const agentCandidate: MentionCandidate | null = agentDisplayName
       ? {
           userId: "community_agent",
@@ -577,6 +580,7 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
       : null;
     return { agentCandidate, everybodyCandidate, memberCandidates };
   }, [
+    agentOn,
     activeCommunity?.name,
     canMentionEverybody,
     displayName,

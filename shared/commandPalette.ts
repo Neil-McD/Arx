@@ -65,7 +65,10 @@ export function paletteSections(args: {
   places: PalettePlace[];
   suggestions: string[];
   communities: PaletteCommunity[];
+  // A community without its agent: places and communities only, no asking.
+  ask?: boolean;
 }): PaletteSection[] {
+  const canAsk = args.ask !== false;
   const query = args.query.trim();
   const sections: PaletteSection[] = [];
   if (!query) {
@@ -74,7 +77,7 @@ export function paletteSections(args: {
     const ordered = [...shown.filter((place) => place.fresh), ...shown.filter((place) => !place.fresh)];
     const go = ordered.slice(0, MAX_PLACES).map(placeItem);
     if (go.length) sections.push({ key: "go", label: "Go to", items: go });
-    const ask = args.suggestions.slice(0, 2).map((question, index) => ({ kind: "ask" as const, id: `ask:${index}`, label: question, question }));
+    const ask = (canAsk ? args.suggestions : []).slice(0, 2).map((question, index) => ({ kind: "ask" as const, id: `ask:${index}`, label: question, question }));
     if (ask.length) sections.push({ key: "ask", label: "Ask your guide", items: ask });
     const communities = args.communities.slice(0, MAX_COMMUNITIES).map(communityItem);
     if (communities.length) sections.push({ key: "community", label: "Switch community", items: communities });
@@ -84,7 +87,7 @@ export function paletteSections(args: {
   if (go.length) sections.push({ key: "go", label: "Go to", items: go });
   const communities = ranked(args.communities, query).slice(0, MAX_COMMUNITIES).map(communityItem);
   if (communities.length) sections.push({ key: "community", label: "Switch community", items: communities });
-  sections.push({ key: "ask", label: "Ask your guide", items: [{ kind: "ask", id: "ask:typed", label: query, question: query }] });
+  if (canAsk) sections.push({ key: "ask", label: "Ask your guide", items: [{ kind: "ask", id: "ask:typed", label: query, question: query }] });
   return sections;
 }
 
