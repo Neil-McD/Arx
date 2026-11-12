@@ -8,12 +8,14 @@ import {
 import {
   type CommunityAgentConfigLike,
   getCommunityAndMembership,
+  requireCommunityChatAccess,
   requireCommunityManager,
   resolveCommunityAccessBundle,
   resolveUserIdForAuthenticatedRequest,
   toIsoString,
 } from "./communityCore";
 import { normalizeCommunityLensAuthority } from "../shared/communityLensAuthority";
+import { communityAgentIsOn } from "./communityApps";
 
 function normalizeCommunitySystemPrompt(raw: unknown): string {
   const prompt = String(raw ?? "").trim();
@@ -118,6 +120,18 @@ async function resolveRuntimeCommunityPromptContextForUser(args: {
     system_prompt: config?.systemPrompt ?? null,
   };
 }
+
+// Whether this community's agent is on (docs/specs/community-agent-gateway-v0.md,
+// "AI on and off"): the owner has not switched it off and the Agent plan is
+// paid. Anyone in the community may ask; pages show the guide only when it is.
+export const getCommunityAgentOn = query({
+  args: { authSubject: v.optional(v.string()), communityId: v.id("communities") },
+  handler: async (ctx, args) => {
+    const userId = await resolveUserIdForAuthenticatedRequest({ ctx, authSubject: args.authSubject ?? null });
+    await requireCommunityChatAccess({ ctx, communityId: args.communityId, userId });
+    return { agent_on: await communityAgentIsOn(ctx, args.communityId) };
+  },
+});
 
 export const getCommunityAgentConfig = query({
   args: {

@@ -30,6 +30,8 @@ export function KitHomeRail(props: {
   communityId: string;
   audience: "host" | "member";
   snapshot: CloudCommunityHomeSnapshot;
+  // Off: Today is the day's counts only; the guide's lines are for paid communities.
+  agentOn?: boolean;
   presence?: CommunityPresenceSummary | null;
   now: number;
   onOpenEvents: () => void;
@@ -50,7 +52,7 @@ export function KitHomeRail(props: {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [props.session, props.communityId]);
 
-  const lines = todayLines(props.snapshot, props.audience);
+  const lines = props.agentOn === false ? [] : todayLines(props.snapshot, props.audience);
   const counts = todayCounts(props.snapshot);
   const open = (line: TodayLine) => {
     if (!line.target) return undefined;
@@ -63,7 +65,7 @@ export function KitHomeRail(props: {
     <>
       <KitNextEvent session={props.session} communityId={props.communityId} now={props.now} onOpenEvents={props.onOpenEvents} todayOnly />
       <Sec label="Today">
-        <ul className={cx("today")}>
+        {lines.length ? <ul className={cx("today")}>
           {lines.map((line, index) => {
             const onOpen = open(line);
             return (
@@ -74,8 +76,8 @@ export function KitHomeRail(props: {
               </li>
             );
           })}
-        </ul>
-        {counts ? <span className={cx("sub")}>{counts}</span> : null}
+        </ul> : null}
+        {counts ? <span className={cx("sub")}>{counts}</span> : props.agentOn === false ? <span className={cx("sub")}>No posts yet today.</span> : null}
       </Sec>
       <Sep />
       <Sec label="Online now">

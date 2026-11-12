@@ -1,3 +1,4 @@
+import { useCommunityAgentOn } from "../controllers/communityAgentOn";
 import {
   useCallback,
   useEffect,
@@ -1287,6 +1288,7 @@ function WebCommunityAgentDock(props, ref) {
   const conversationNeedsYou =
     turnIsActive || isPreparing || Boolean(dockError) || Boolean(memberLimitNotice) || persistentResourceChangesetCards.length > 0;
   // Home on the kit: Home in design v1 on a wide window, the host's and a member's.
+  const agentOn = useCommunityAgentOn();
   const kitHome = homeActive && guideWording && !props.mobileRoot && Boolean(props.home);
   // The palette's question waits for Home's own box and an idle guide.
   askReadyRef.current = Boolean(kitHome) && !(composerIsBusy || isPreparing || isStartingNewChat);
@@ -1320,6 +1322,7 @@ function WebCommunityAgentDock(props, ref) {
               ensureSession={props.ensureSession}
               refreshKey={homeRefreshKey}
               asideContainer={homeRailElement}
+              agentOn={agentOn}
               kit={{
                 talking: kitTalking || conversationNeedsYou,
                 hasConversation: visibleMessages.length > 0,
@@ -1331,7 +1334,8 @@ function WebCommunityAgentDock(props, ref) {
               }}
             />
           </Scroll>
-          <Dock>
+          {/* No agent here: Home has no guide box (docs/specs/community-agent-gateway-v0.md). */}
+          {agentOn ? <Dock>
             {kitTalking ? null : (
               <Chips chips={kitHomeIsHost ? HOST_HOME_SUGGESTIONS : MEMBER_HOME_SUGGESTIONS} onChip={sendSuggestion} />
             )}
@@ -1401,7 +1405,7 @@ function WebCommunityAgentDock(props, ref) {
                 </button>
               )}
             </form>
-          </Dock>
+          </Dock> : null}
         </View>
       </KitApp>
       <div className="community-home-rail" ref={setHomeRailElement} />

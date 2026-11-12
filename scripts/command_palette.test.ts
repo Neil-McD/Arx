@@ -47,4 +47,11 @@ describe("command palette", () => {
     expect(matchScore("Distribution Engineer", "ngin")).toBe(1);
     expect(matchScore("Home", "x")).toBe(0);
   });
+
+  it("without the agent, offers places and communities only, and never asking", () => {
+    const empty = paletteSections({ query: "", places, suggestions, communities, ask: false });
+    expect(empty.map((section) => section.key)).toEqual(["go", "community"]);
+    const typed = paletteItems(paletteSections({ query: "who priced a founding tier", places, suggestions, communities, ask: false }));
+    expect(typed).toEqual([]);
+  });
 });

@@ -87,3 +87,13 @@ export async function saveCloudCommunityAgentConfig<SessionT>(
   });
   return parseConfigMutationResult(payload);
 }
+
+// Whether the community's agent is on (the Agent plan is paid and the owner
+// has not switched it off). docs/specs/community-agent-gateway-v0.md.
+export async function fetchCloudCommunityAgentOn<SessionT>(
+  params: CloudCommunityAgentGatewayParams<SessionT> & { communityId: string },
+): Promise<boolean> {
+  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
+  const payload = await client.query("communityAgent:getCommunityAgentOn" as any, { authSubject, communityId: params.communityId });
+  return Boolean((payload as { agent_on?: unknown } | null)?.agent_on);
+}
