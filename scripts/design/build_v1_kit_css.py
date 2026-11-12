@@ -172,7 +172,7 @@ css += """
 .app.palette-part .pal{position:fixed;top:min(136px,12vh);width:min(580px,calc(100vw - 32px));margin-left:calc(min(580px,calc(100vw - 32px)) / -2)}
 .app .pal .q input{flex:1;min-width:0;padding:0;border:0;outline:0;background:transparent;color:var(--ink);font:inherit;font-size:16px}
 .app .pal .q input::placeholder{color:var(--ink3)}
-.app .pal .res{max-height:min(420px,60vh);overflow-y:auto;padding-bottom:6px}
+.app .pal .res{max-height:min(480px,62vh);overflow-y:auto;padding-bottom:6px}
 .app .pal button.opt{width:100%;text-align:left;cursor:pointer}
 .app .pal .opt-label{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .app .pal .opt-label b{font-weight:500;color:var(--ink)}
