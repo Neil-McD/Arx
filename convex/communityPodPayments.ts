@@ -22,9 +22,13 @@ import { enqueueCommunityBillingIssueEmailInternal } from "./emailEvents";
 import { POLYNET_COMMUNITY_PLATFORM_FEE_BPS } from "../shared/founderPlan";
 import { communityIsActive } from "../shared/communityLifecycle";
 
-// Stripe's shortest checkout lifetime. While one is open, Join reopens it
-// rather than starting a second, so nobody pays twice from two tabs.
-const CHECKOUT_LIFETIME_MS = 30 * 60 * 1000;
+// A little over Stripe's shortest checkout lifetime (30 minutes from when
+// Stripe creates it). While one is open, Join reopens it rather than starting
+// a second, so nobody pays twice from two tabs.
+const CHECKOUT_LIFETIME_MS = 35 * 60 * 1000;
+// A reservation with no Stripe checkout yet is another tab mid-request: shared
+// for this long (its expiry still clears Stripe's minimum), then replaced.
+const RESERVATION_SHARED_MS = 3 * 60 * 1000;
 // $1 to $10,000 a month, in base units.
 const PRICE_MIN = 100;
 const PRICE_MAX = 1_000_000;
@@ -147,12 +151,32 @@ export const createPendingPodPaymentInternal = internalMutation({
   args: { communityId: v.id("communities"), channelId: v.id("communityChannels"), userId: v.id("users"), amountBaseUnits: v.number(), currency: v.string(), providerAccountId: v.string(), providerPriceId: v.string(), nowMs: v.number() },
   handler: async (ctx, args) => {
     const { nowMs, ...rest } = args;
-    return await ctx.db.insert("communityPodPayments", { ...rest, status: "pending", checkoutExpiresAt: nowMs + CHECKOUT_LIFETIME_MS, createdAt: nowMs, updatedAt: nowMs });
+    // Reserved in one transaction: two tabs get the same row, so the same
+    // Stripe checkout (one idempotency key), never two subscriptions.
+    const pending = (await ctx.db.query("communityPodPayments")
+      .withIndex("by_channel_user", (q: any) => q.eq("channelId", args.channelId).eq("userId", args.userId)).collect())
+      .filter((row: any) => row.status === "pending");
+    for (const row of pending) {
+      const same = row.amountBaseUnits === args.amountBaseUnits && row.providerAccountId === args.providerAccountId && row.providerPriceId === args.providerPriceId;
+      if (same && row.checkoutUrl && row.checkoutExpiresAt > nowMs + 60_000) {
+        return { paymentId: row._id, checkoutExpiresAt: row.checkoutExpiresAt, checkoutUrl: row.checkoutUrl as string | null };
+      }
+      if (same && !row.checkoutUrl && row.createdAt > nowMs - RESERVATION_SHARED_MS) {
+        return { paymentId: row._id, checkoutExpiresAt: row.checkoutExpiresAt, checkoutUrl: null as string | null };
+      }
+      // Unopened and stale, or for an old price: replaced.
+      if (!row.checkoutUrl) await ctx.db.patch(row._id, { status: "expired", updatedAt: nowMs });
+    }
+    const checkoutExpiresAt = nowMs + CHECKOUT_LIFETIME_MS;
+    const paymentId = await ctx.db.insert("communityPodPayments", { ...rest, status: "pending", checkoutExpiresAt, createdAt: nowMs, updatedAt: nowMs });
+    return { paymentId, checkoutExpiresAt, checkoutUrl: null as string | null };
   },
 });
 
 export const attachPodCheckoutInternal = internalMutation({
-  args: { paymentId: v.id("communityPodPayments"), providerCheckoutSessionId: v.string(), checkoutUrl: v.string(), providerCustomerId: v.optional(v.string()) },
+  args: { paymentId: v.id("communityPodPayments"), providerCheckoutSessionId: v.string(), checkoutUrl: v.string(), providerCustomerId: v.optional(v.string()),
+    // When Stripe says this checkout closes.
+    checkoutExpiresAt: v.optional(v.number()) },
   handler: async (ctx, args) => {
     const { paymentId, ...rest } = args;
     await ctx.db.patch(paymentId, { ...rest, updatedAt: Date.now() });
@@ -164,7 +188,8 @@ export const expirePodPaymentInternal = internalMutation({
   args: { paymentId: v.id("communityPodPayments") },
   handler: async (ctx, args) => {
     const row = await ctx.db.get(args.paymentId);
-    if (row?.status === "pending") await ctx.db.patch(args.paymentId, { status: "expired", updatedAt: Date.now() });
+    // Only a reservation Stripe never opened: another tab's open checkout stays.
+    if (row?.status === "pending" && !row.checkoutUrl) await ctx.db.patch(args.paymentId, { status: "expired", updatedAt: Date.now() });
     return null;
   },
 });
@@ -213,10 +238,13 @@ export const startPodCheckout = action({
         });
       }
       const customer = await ensureCommunityStripeCustomerForUser({ ctx, userId, email: actor?.email ?? null, providerAccountId: stripeAccount, nowMs });
-      const paymentId = await ctx.runMutation(internal.communityPodPayments.createPendingPodPaymentInternal, {
-        communityId: args.communityId, channelId: args.channelId, userId, amountBaseUnits: config.amountBaseUnits,
-        currency: config.currency, providerAccountId: stripeAccount, providerPriceId, nowMs,
-      });
+      const reserved: { paymentId: any; checkoutExpiresAt: number; checkoutUrl: string | null } =
+        await ctx.runMutation(internal.communityPodPayments.createPendingPodPaymentInternal, {
+          communityId: args.communityId, channelId: args.channelId, userId, amountBaseUnits: config.amountBaseUnits,
+          currency: config.currency, providerAccountId: stripeAccount, providerPriceId, nowMs: Date.now(),
+        });
+      const paymentId = reserved.paymentId;
+      if (reserved.checkoutUrl) return { checkout_url: reserved.checkoutUrl, payment_id: String(paymentId) };
       const paymentMetadata = { ...metadata, [POD_PAYMENT_METADATA_KEY]: String(paymentId) };
       try {
         const session = await stripe.checkout.sessions.create({
@@ -225,7 +253,9 @@ export const startPodCheckout = action({
           success_url: fillCheckoutSuccessUrl(successUrl, String(paymentId)),
           cancel_url: cancelUrl,
           client_reference_id: String(paymentId),
-          expires_at: Math.floor((nowMs + CHECKOUT_LIFETIME_MS) / 1000),
+          // The reservation's own expiry (35 minutes from when it was made),
+          // so two tabs send Stripe the same request.
+          expires_at: Math.floor(reserved.checkoutExpiresAt / 1000),
           line_items: [{ price: providerPriceId, quantity: 1 }],
           metadata: paymentMetadata,
           subscription_data: { application_fee_percent: POLYNET_COMMUNITY_PLATFORM_FEE_BPS / 100, metadata: paymentMetadata },
@@ -234,6 +264,7 @@ export const startPodCheckout = action({
         if (!checkoutUrl) throw new Error("stripe_checkout_url_missing");
         await ctx.runMutation(internal.communityPodPayments.attachPodCheckoutInternal, {
           paymentId, providerCheckoutSessionId: session.id, checkoutUrl,
+          ...(typeof session.expires_at === "number" ? { checkoutExpiresAt: session.expires_at * 1000 } : {}),
         });
         return { checkout_url: checkoutUrl, payment_id: String(paymentId) };
       } catch (error) {
@@ -274,14 +305,29 @@ export const syncPodPaymentInternal = internalMutation({
     const grants = communitySubscriptionStatusGrantsAccess(status);
     let grantedAt: number | undefined = row.grantedAt;
     if (grants && !grantedAt) {
-      // A member who has since left the community isn't added; slice 2c stops
-      // their billing.
+      const community = await ctx.db.get(row.communityId) as any;
       const membership = await getUniqueCommunityMembershipByPair({ ctx, communityId: row.communityId, userId: row.userId });
       const room = await ctx.db.get(row.channelId) as any;
-      if (membership && communityMembershipRowIsActive(membership) && room?.status === "active") {
-        await setChannelParticipantCore(ctx, { communityId: row.communityId, channelId: row.channelId, createdByUserId: row.userId, active: true, target: { kind: "member", userId: row.userId } });
-        grantedAt = nowMs;
+      // Already paying for this pod through another subscription.
+      const duplicate = (await ctx.db.query("communityPodPayments")
+        .withIndex("by_channel_user", (q: any) => q.eq("channelId", row.channelId).eq("userId", row.userId)).collect())
+        .some((other: any) => String(other._id) !== String(row._id) && other.grantedAt && GRANTING.includes(other.status));
+      const canLetIn = !duplicate && community && communityIsActive(community)
+        && membership && communityMembershipRowIsActive(membership) && room?.status === "active";
+      if (!canLetIn) {
+        // Paid, but it can't let them in (the community was archived, they
+        // left, the pod closed, or they already pay for it): never granted,
+        // ended, and a full refund is owed until Stripe has made it.
+        await ctx.db.patch(row._id, {
+          status: "ended", refundDue: true, providerSubscriptionId: args.providerSubscriptionId,
+          ...(args.providerCustomerId ? { providerCustomerId: args.providerCustomerId } : {}),
+          lastProviderEventAt: args.providerEventAt, updatedAt: nowMs,
+        });
+        await ctx.scheduler.runAfter(0, internal.communityPodPayments.processPodRefundsInternal, {});
+        return { ok: true, status: "ended" as PodPaymentStatus, granted: false };
       }
+      await setChannelParticipantCore(ctx, { communityId: row.communityId, channelId: row.channelId, createdByUserId: row.userId, active: true, target: { kind: "member", userId: row.userId } });
+      grantedAt = nowMs;
     } else if (!grants && grantedAt) {
       const others = (await ctx.db.query("communityPodPayments")
         .withIndex("by_channel_user", (q: any) => q.eq("channelId", row.channelId).eq("userId", row.userId)).collect())
@@ -507,14 +553,53 @@ export const expireAbandonedPodCheckoutsInternal = internalMutation({
 });
 
 export const endUnreachablePodPaymentInternal = internalMutation({
-  args: { paymentId: v.id("communityPodPayments") },
+  args: { paymentId: v.id("communityPodPayments"), refundDue: v.optional(v.boolean()) },
   handler: async (ctx, args) => {
     const row = await ctx.db.get(args.paymentId);
-    if (!row || row.status === "ended") return null;
+    if (!row || row.status === "ended") return { ended: false };
     // Checked again inside the write: re-added meanwhile means keep billing.
-    if (await reachable(ctx, row)) return null;
+    if (await reachable(ctx, row)) return { ended: false };
     await endPodPayment(ctx, row, Date.now());
+    if (args.refundDue) await ctx.db.patch(row._id, { refundDue: true });
+    return { ended: true };
+  },
+});
+
+// Refunds owed (paid but never let in). Recorded on the payment before Stripe
+// is asked, and kept until Stripe has cancelled and refunded, so a failure
+// partway is retried whatever the payment's status has become.
+export const listPodRefundsDueInternal = internalQuery({
+  args: {},
+  handler: async (ctx) => (await ctx.db.query("communityPodPayments").withIndex("by_refundDue", (q: any) => q.eq("refundDue", true)).take(SWEEP_PAGE))
+    .filter((row: any) => row.providerSubscriptionId)
+    .map((row: any) => ({ paymentId: row._id, providerAccountId: row.providerAccountId as string, providerSubscriptionId: row.providerSubscriptionId as string })),
+});
+
+export const clearPodRefundDueInternal = internalMutation({
+  args: { paymentId: v.id("communityPodPayments") },
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.paymentId, { refundDue: undefined, updatedAt: Date.now() });
     return null;
+  },
+});
+
+export const processPodRefundsInternal = internalAction({
+  args: {},
+  handler: async (ctx): Promise<{ refunded: number; waiting: number }> => {
+    const due: Array<{ paymentId: any; providerAccountId: string; providerSubscriptionId: string }> =
+      await ctx.runQuery(internal.communityPodPayments.listPodRefundsDueInternal, {});
+    let refunded = 0;
+    for (const target of due) {
+      try {
+        await cancelAndRefundDuplicateSubscription({ providerAccountId: target.providerAccountId, providerSubscriptionId: target.providerSubscriptionId });
+        await ctx.runMutation(internal.communityPodPayments.clearPodRefundDueInternal, { paymentId: target.paymentId });
+        refunded += 1;
+      } catch (error) {
+        // Still owed; the hourly pass tries again.
+        console.error("pod_refund_failed", { paymentId: String(target.paymentId), error: error instanceof Error ? error.message : String(error) });
+      }
+    }
+    return { refunded, waiting: due.length - refunded };
   },
 });
 
@@ -522,10 +607,13 @@ async function stopBilling(ctx: any, targets: SweepTarget[]): Promise<number> {
   let stopped = 0;
   for (const target of targets) {
     try {
-      const stripeTarget = { providerAccountId: target.providerAccountId, providerSubscriptionId: target.providerSubscriptionId };
-      if (target.refund) await cancelAndRefundDuplicateSubscription(stripeTarget);
-      else await cancelStripeSubscriptionIfActive(stripeTarget);
-      await ctx.runMutation(internal.communityPodPayments.endUnreachablePodPaymentInternal, { paymentId: target.paymentId });
+      if (target.refund) {
+        // Recorded as owed first; the refund pass (below, and hourly) pays it.
+        await ctx.runMutation(internal.communityPodPayments.endUnreachablePodPaymentInternal, { paymentId: target.paymentId, refundDue: true });
+      } else {
+        await cancelStripeSubscriptionIfActive({ providerAccountId: target.providerAccountId, providerSubscriptionId: target.providerSubscriptionId });
+        await ctx.runMutation(internal.communityPodPayments.endUnreachablePodPaymentInternal, { paymentId: target.paymentId });
+      }
       stopped += 1;
     } catch (error) {
       // Left as it was; the hourly pass tries again.
@@ -542,7 +630,9 @@ export const sweepUnreachablePodPaymentsInternal = internalAction({
   handler: async (ctx, args): Promise<{ checked: number; stopped: number; expired: number }> => {
     if (args.communityId || args.userId || args.channelId) {
       const targets: SweepTarget[] = await ctx.runQuery(internal.communityPodPayments.listUnreachablePodPaymentsForScopeInternal, args);
-      return { checked: targets.length, stopped: await stopBilling(ctx, targets), expired: 0 };
+      const stoppedNow = await stopBilling(ctx, targets);
+      if (targets.some((target) => target.refund)) await ctx.runAction(internal.communityPodPayments.processPodRefundsInternal, {});
+      return { checked: targets.length, stopped: stoppedNow, expired: 0 };
     }
     let checked = 0;
     let stopped = 0;
@@ -557,6 +647,7 @@ export const sweepUnreachablePodPaymentsInternal = internalAction({
         cursor = page.continueCursor;
       }
     }
+    await ctx.runAction(internal.communityPodPayments.processPodRefundsInternal, {});
     let expired = 0;
     for (let round = 0; round < 50; round += 1) {
       const result: { expired: number; more: boolean } = await ctx.runMutation(internal.communityPodPayments.expireAbandonedPodCheckoutsInternal, { nowMs: Date.now() });

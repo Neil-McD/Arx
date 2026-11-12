@@ -934,6 +934,9 @@ export default defineSchema({
     // When this payment put the member on the pod's list (so ending it takes
     // them off, and a host's own grant is never touched).
     grantedAt: v.optional(v.number()),
+    // Paid but never let in (or a second payment for the same pod): a full
+    // refund is owed. Kept until Stripe has refunded, whatever the status.
+    refundDue: v.optional(v.boolean()),
     lastProviderEventAt: v.optional(v.number()),
     createdAt: v.number(),
     updatedAt: v.number(),
@@ -942,6 +945,7 @@ export default defineSchema({
     .index("by_user", ["userId"])
     .index("by_provider_subscription", ["providerAccountId", "providerSubscriptionId"])
     .index("by_status", ["status"])
+    .index("by_refundDue", ["refundDue"])
     .index("by_community", ["communityId"]),
   // Asking to join a listed pod: the pod's hosts approve or decline; a full
   // pod puts the request on its waitlist.
