@@ -183,7 +183,7 @@ export function KitKnowledgePage(props: {
             <div className={cx("list")} style={{ marginTop: 8 }}>
               {shown.map((note) => (
                 <button key={note.slug} type="button" className={cx("erow kn-row", note.slug === openSlug && "sel")} onClick={() => openNote(note.slug)}>
-                  <span className={cx("kn-dot", noteIsNew(note, now) && "new")} aria-hidden="true" />
+                  <span className={cx("kn-dot", noteIsNew(note, now) && "kn-fresh")} aria-hidden="true" />
                   <div><b>{note.title}</b><span className={cx("s")}>{noteOrigin(note)} · {noteDay(note.created_at ?? note.updated_at)}</span></div>
                   {noteIsNew(note, now) ? <span className={cx("recap")}><Icon name="spark" />New</span> : <span />}
                 </button>
