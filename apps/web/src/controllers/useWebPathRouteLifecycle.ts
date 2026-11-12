@@ -40,6 +40,7 @@ export function useWebPathRouteLifecycle(params: {
   communityTab: CommunityTab;
   communityChannelSlug: string | null;
   communityResourceModuleId: string | null;
+  communityPodSlug: string | null;
   communitySettingsPane: CommunitySettingsPane;
   docsSlug: string | null;
   operatorTab: OperatorTab | null;
@@ -54,6 +55,7 @@ export function useWebPathRouteLifecycle(params: {
     communityTab: CommunityTab;
     communityChannelSlug?: string | null;
     communityResourceModuleId?: string | null;
+    communityPodSlug?: string | null;
     communitySettingsPane?: CommunitySettingsPane | null;
     docsSlug: string | null;
     operatorTab?: OperatorTab | null;
@@ -100,6 +102,10 @@ export function useWebPathRouteLifecycle(params: {
         params.activePage === "community" && params.communityTab === "resources"
           ? params.communityResourceModuleId
           : null,
+      communityPodSlug:
+        params.activePage === "community" && params.communityTab === "pods"
+          ? params.communityPodSlug
+          : null,
       communitySettingsPane:
         params.activePage === "community" && params.communityTab === "settings"
           ? params.communitySettingsPane
@@ -122,6 +128,7 @@ export function useWebPathRouteLifecycle(params: {
     params.communityTab,
     params.communityChannelSlug,
     params.communityResourceModuleId,
+    params.communityPodSlug,
     params.communitySettingsPane,
     params.docsSlug,
     params.operatorTab,

@@ -260,6 +260,8 @@ export default function App() {
     setCommunityChannelSlug,
     communityResourceModuleId,
     setCommunityResourceModuleId,
+    communityPodSlug,
+    setCommunityPodSlug,
     communitySettingsPane,
     setCommunitySettingsPane,
     appTheme,
@@ -384,6 +386,8 @@ export default function App() {
     setCommunityChannelSlug,
     communityResourceModuleId,
     setCommunityResourceModuleId,
+    communityPodSlug,
+    setCommunityPodSlug,
     communitySettingsPane,
     setCommunitySettingsPane,
     applyCommunityShellState,
@@ -1877,8 +1881,11 @@ export default function App() {
         communityId: activeCommunity?.id ?? null,
         communityName: activeCommunity?.name ?? "this community",
         asMember: memberPreview.active,
-        onOpenPod: (pod) => {
-          const path = buildCommunityTabPath(selectedActiveCommunitySlug, "chat", null, null, pod.slug);
+        podSlug: communityTab === "pods" ? communityPodSlug : null,
+        onNavigate: (to) => {
+          const path = to.kind === "room"
+            ? buildCommunityTabPath(selectedActiveCommunitySlug, "chat", null, null, to.slug)
+            : buildCommunityTabPath(selectedActiveCommunitySlug, "pods", null, null, null, to.kind === "pod" ? to.slug : null);
           if (path) navigateTo(path);
         },
         createRoom: handleCreateCommunityChannel,

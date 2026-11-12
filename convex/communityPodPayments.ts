@@ -17,7 +17,8 @@ import { communityMembershipRowIsActive, getUniqueCommunityMembershipByPair, nor
 import { communitySubscriptionStatusGrantsAccess } from "./communitySubscriptionLifecycle";
 import { canReceiveCommunityRevenue, getStripeConnectDestinationAccountId, isStripeConnectCheckoutCapabilityError } from "./stripeConnectAccountCore";
 import { getStripeClient, requireStripeConnectWebhookConfiguration } from "./stripeCore";
-import { cancelAndRefundDuplicateSubscription, cancelStripeSubscriptionIfActive } from "./stripeSubscriptionCancellation";
+import { cancelAndRefundDuplicateSubscription, cancelStripeSubscriptionAtPeriodEnd, cancelStripeSubscriptionIfActive } from "./stripeSubscriptionCancellation";
+import { enqueueCommunityBillingIssueEmailInternal } from "./emailEvents";
 import { POLYNET_COMMUNITY_PLATFORM_FEE_BPS } from "../shared/founderPlan";
 import { communityIsActive } from "../shared/communityLifecycle";
 
@@ -126,6 +127,7 @@ export const podCheckoutConfigInternal = internalQuery({
       providerProductId: record.providerAccountId === providerAccountId ? record.providerProductId ?? null : null,
       providerPriceId: record.providerAccountId === providerAccountId ? record.providerPriceId ?? null : null,
       openCheckoutUrl: open?.checkoutUrl ?? null,
+      openPaymentId: open ? String(open._id) : null,
     };
   },
 });
@@ -177,7 +179,7 @@ export const startPodCheckout = action({
     successUrl: v.string(),
     cancelUrl: v.string(),
   },
-  handler: async (ctx, args): Promise<{ checkout_url: string }> => {
+  handler: async (ctx, args): Promise<{ checkout_url: string; payment_id: string }> => {
     const successUrl = requireCanonicalCheckoutReturnUrl(args.successUrl, "checkout_success_url_invalid");
     const cancelUrl = requireCanonicalCheckoutReturnUrl(args.cancelUrl, "checkout_cancel_url_invalid");
     if (!args.authSubject) throw new Error("auth_subject_required");
@@ -189,7 +191,7 @@ export const startPodCheckout = action({
     const config = await ctx.runQuery(internal.communityPodPayments.podCheckoutConfigInternal, {
       userId, communityId: args.communityId, channelId: args.channelId, nowMs,
     });
-    if (config.openCheckoutUrl) return { checkout_url: config.openCheckoutUrl };
+    if (config.openCheckoutUrl && config.openPaymentId) return { checkout_url: config.openCheckoutUrl, payment_id: config.openPaymentId };
     const stripe = getStripeClient();
     const stripeAccount = config.providerAccountId;
     const podKey = `${stripeAccount}:${String(args.channelId)}`;
@@ -233,7 +235,7 @@ export const startPodCheckout = action({
         await ctx.runMutation(internal.communityPodPayments.attachPodCheckoutInternal, {
           paymentId, providerCheckoutSessionId: session.id, checkoutUrl,
         });
-        return { checkout_url: checkoutUrl };
+        return { checkout_url: checkoutUrl, payment_id: String(paymentId) };
       } catch (error) {
         // Nothing was paid: an unopened checkout just lapses.
         await ctx.runMutation(internal.communityPodPayments.expirePodPaymentInternal, { paymentId });
@@ -286,6 +288,15 @@ export const syncPodPaymentInternal = internalMutation({
         .some((other: any) => String(other._id) !== String(row._id) && other.grantedAt);
       if (!others) await setChannelParticipantCore(ctx, { communityId: row.communityId, channelId: row.channelId, createdByUserId: row.userId, active: false, target: { kind: "member", userId: row.userId } });
       grantedAt = undefined;
+    }
+    // A payment that just failed: the same email communities send, naming the pod.
+    if (status === "past_due" && row.status !== "past_due") {
+      const room = await ctx.db.get(row.channelId) as any;
+      await enqueueCommunityBillingIssueEmailInternal({
+        ctx, userId: row.userId, communityId: row.communityId, nowMs,
+        issueMarker: `${String(row._id)}:${String(args.currentPeriodEndAt ?? row.currentPeriodEndAt ?? nowMs)}`,
+        podName: String(room?.name ?? "your pod"),
+      });
     }
     await ctx.db.patch(row._id, {
       status,
@@ -553,5 +564,83 @@ export const sweepUnreachablePodPaymentsInternal = internalAction({
       if (!result.more) break;
     }
     return { checked, stopped, expired };
+  },
+});
+
+
+// A member's own pod payment, as their pod shows it, or null when they were
+// added by a host (no payment).
+export function podPaymentStateOf(rows: any[]): { state: "paying" | "leaving" | "payment_problem"; until: string | null; amount_base_units: number; currency: string } | null {
+  const row = rows.filter((entry) => entry.grantedAt && GRANTING.includes(entry.status))
+    .sort((a, b) => Number(b.updatedAt) - Number(a.updatedAt))[0];
+  if (!row) return null;
+  return {
+    state: row.status === "cancel_at_period_end" ? "leaving" : row.status === "past_due" ? "payment_problem" : "paying",
+    until: typeof row.currentPeriodEndAt === "number" ? new Date(row.currentPeriodEndAt).toISOString() : null,
+    amount_base_units: row.amountBaseUnits,
+    currency: row.currency,
+  };
+}
+
+// What leaving needs to do: a paying member's subscriptions to stop renewing,
+// or (no payment) take them off now.
+export const podLeavePlanInternal = internalQuery({
+  args: { userId: v.id("users"), communityId: v.id("communities"), channelId: v.id("communityChannels") },
+  handler: async (ctx, args) => {
+    const room = await ctx.db.get(args.channelId) as any;
+    if (!room || String(room.communityId) !== String(args.communityId) || room.accessMode !== "restricted") throw new Error("community_pod_not_found");
+    const rows = await ctx.db.query("communityPodPayments")
+      .withIndex("by_channel_user", (q: any) => q.eq("channelId", args.channelId).eq("userId", args.userId)).collect();
+    const renewing = rows.filter((row: any) => row.grantedAt && (row.status === "active" || row.status === "past_due") && row.providerSubscriptionId)
+      .map((row: any) => ({ paymentId: row._id, providerAccountId: row.providerAccountId, providerSubscriptionId: row.providerSubscriptionId }));
+    const leaving = rows.some((row: any) => row.grantedAt && row.status === "cancel_at_period_end");
+    return { renewing, leaving };
+  },
+});
+
+// Stripe said it will stop at the period's end: shown at once, before its notice.
+export const markPodPaymentLeavingInternal = internalMutation({
+  args: { paymentId: v.id("communityPodPayments") },
+  handler: async (ctx, args) => {
+    const row = await ctx.db.get(args.paymentId);
+    if (row && (row.status === "active" || row.status === "past_due")) await ctx.db.patch(row._id, { status: "cancel_at_period_end", updatedAt: Date.now() });
+    return null;
+  },
+});
+
+// No payment (added by a host, or a free pod): off the pod now. A host who
+// leaves stops being its host.
+export const leavePodNowInternal = internalMutation({
+  args: { userId: v.id("users"), communityId: v.id("communities"), channelId: v.id("communityChannels") },
+  handler: async (ctx, args) => {
+    await setChannelParticipantCore(ctx, { communityId: args.communityId, channelId: args.channelId, createdByUserId: args.userId, active: false, target: { kind: "member", userId: args.userId } });
+    const record = await podRecord(ctx, args.communityId, args.channelId);
+    if (record?.hostUserIds?.some((id: any) => String(id) === String(args.userId))) {
+      await ctx.db.patch(record._id, { hostUserIds: record.hostUserIds.filter((id: any) => String(id) !== String(args.userId)), updatedAt: Date.now() });
+    }
+    return null;
+  },
+});
+
+// Leave a pod. Paying: Stripe stops renewing and access lasts to the end of
+// the period already paid (its notice then ends it). Not paying: out now.
+export const leavePod = action({
+  args: { authSubject: v.optional(v.string()), communityId: v.id("communities"), channelId: v.id("communityChannels") },
+  handler: async (ctx, args): Promise<{ left: "now" | "at_period_end" }> => {
+    const actor = await ctx.runQuery(internal.authActor.resolveAuthenticatedActorInternal as any, { authSubject: args.authSubject }) as { dbUserId?: any } | null;
+    const userId = actor?.dbUserId;
+    if (!userId) throw new Error("auth_subject_required");
+    const plan: { renewing: Array<{ paymentId: any; providerAccountId: string; providerSubscriptionId: string }>; leaving: boolean } =
+      await ctx.runQuery(internal.communityPodPayments.podLeavePlanInternal, { userId, communityId: args.communityId, channelId: args.channelId });
+    if (plan.renewing.length === 0 && plan.leaving) return { left: "at_period_end" };
+    if (plan.renewing.length === 0) {
+      await ctx.runMutation(internal.communityPodPayments.leavePodNowInternal, { userId, communityId: args.communityId, channelId: args.channelId });
+      return { left: "now" };
+    }
+    for (const payment of plan.renewing) {
+      await cancelStripeSubscriptionAtPeriodEnd({ providerAccountId: payment.providerAccountId, providerSubscriptionId: payment.providerSubscriptionId });
+      await ctx.runMutation(internal.communityPodPayments.markPodPaymentLeavingInternal, { paymentId: payment.paymentId });
+    }
+    return { left: "at_period_end" };
   },
 });

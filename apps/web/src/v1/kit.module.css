@@ -769,6 +769,13 @@
 .app .podform-seats{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--ink2)}
 .app .podform-seats input{width:96px}
 .app .podprice{font-size:13px;color:var(--ink);font-weight:500}
+.app .podpage{display:flex;flex-direction:column;gap:14px;max-width:620px;margin-top:20px}
+.app .podpage .podname{font-size:20px}
+.app .podget{margin:4px 0 0;padding-left:18px;display:flex;flex-direction:column;gap:6px;font-size:14px;color:var(--ink)}
+.app .podlink{background:none;border:0;padding:0;cursor:pointer;text-align:left;color:inherit;font:inherit}
+.app .podlink:hover{text-decoration:underline}
+.app .podtag{margin-left:8px;font-size:11px;color:var(--ink3);border:1px solid var(--line2);border-radius:999px;padding:1px 7px;white-space:nowrap}
+.app .podleave{display:flex;flex-direction:column;gap:8px;margin-top:8px}
 .app .podreq{display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:32px;font-size:13px;color:var(--ink)}
 .app .podreq em{font-style:normal;color:var(--ink3)}
 .app .podreq-acts{display:flex;gap:4px}

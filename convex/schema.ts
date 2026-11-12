@@ -891,6 +891,8 @@ export default defineSchema({
     seats: v.optional(v.number()),
     // Members the builder made hosts of this pod (builders and admins always are).
     hostUserIds: v.optional(v.array(v.id("users"))),
+    // "What you get": up to four short lines on the pod's outside page.
+    whatYouGet: v.optional(v.array(v.string())),
     // Paid pods (slice 2b): the monthly price charged on top of membership.
     // Missing means not paid. The Stripe product and price on the builder's
     // account are made on first checkout; a new amount clears the price, so
