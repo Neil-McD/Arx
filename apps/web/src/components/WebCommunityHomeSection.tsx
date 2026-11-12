@@ -293,7 +293,7 @@ export function WebCommunityHomeSection(props: WebCommunityHomeSectionProps) {
           ) : null}
           {!agentOn && isHost && snapshot ? (
             <Card label="Your community's agent" title="Here's what your guide would tell you today"
-              say={todayLines(snapshot, "host").map((line) => line.text).join(" ")}>
+              say={todayLines(snapshot, "host").map((line) => /[.!?”"]$/.test(line.text) ? line.text : `${line.text}.`).join(" ")}>
               {props.onTurnOnAgent ? <Btn go onClick={props.onTurnOnAgent}>Turn on your community's agent</Btn> : null}
             </Card>
           ) : null}
