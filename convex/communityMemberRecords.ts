@@ -313,7 +313,9 @@ export const getCommunityMemberRecord = query({
 
     const events: MemberRecordEvent[] = [];
     if (membership) {
-      events.push({ kind: "joined", text: plan.kind === "paid" ? `Joined on ${plan.label}` : plan.kind === "comped" ? "Joined, comped by a host" : "Joined", at: iso(membership.activatedAt ?? membership.createdAt) });
+      events.push({ kind: "joined", // The plan they are on now, not necessarily the one they joined on (a
+      // comp or a price change comes later, as its own line).
+      text: plan.kind === "paid" ? `Joined on ${plan.label}` : "Joined", at: iso(membership.activatedAt ?? membership.createdAt) });
       if (membership.role !== "member") events.push({ kind: "role", text: `Is ${roleWithArticle(membership.role)}`, at: iso(membership.updatedAt) });
       if (subscription?.cancelRequestedAt) events.push({ kind: "cancel_requested", text: "Asked to stop renewing", at: iso(subscription.cancelRequestedAt) });
       if (out) events.push({ kind: "left", text: OUT_REASON_TEXT[out], at: iso(membership.revokedAt ?? membership.updatedAt) });
