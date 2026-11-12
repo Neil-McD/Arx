@@ -506,3 +506,19 @@ label.trow{cursor:pointer}
 .r2 .kr .sec+.sec{margin-top:-8px}
 .v2 .chip.sel{background:var(--s2);color:var(--ink);border-color:var(--line2)}
 .kv-lib .lead{margin-top:30px}
+
+/* Classroom: big covers, a line about the course, progress as a percentage,
+   a dashed card to add one, and pages (never an endless shelf). */
+.kcourse{padding:0 0 14px;overflow:hidden}.kcourse>b,.kcourse>.s,.kcourse>.kpct{margin-left:14px;margin-right:14px}
+.kcourse>b{margin-top:12px;font-size:16px}.kcourse>.s{line-height:1.4;min-height:36px}
+.kcover{height:112px;border-radius:0;align-items:center;justify-content:center}.kcover .ic{width:26px;height:26px;opacity:.8}
+.kcover.c1{background:url(./polynet-earth.webp) 72% 38%/cover}
+.kpct{position:relative;display:block;height:20px;margin-top:10px;border-radius:10px;background:var(--s3);overflow:hidden}
+.kpct i{position:absolute;inset:0 auto 0 0;background:rgba(var(--w),.16);border-radius:10px}
+.kpct em{position:relative;display:block;padding:0 10px;font-style:normal;font-size:11px;font-weight:600;line-height:20px;color:var(--ink)}
+.knew{align-items:center;justify-content:center;flex-direction:row;gap:8px;min-height:200px;padding:0;border-style:dashed;background:none;color:var(--ink3);font-size:14px}
+.knew .ic{width:16px;height:16px}
+.ktitle{display:flex;align-items:flex-start;gap:16px;margin-top:6px}.ktitle h2{margin:0;flex:1}
+.kdone{flex:none;display:flex;align-items:center;justify-content:center;width:30px;height:30px;margin-top:4px;border-radius:50%;border:1.5px solid var(--line2);color:var(--ink3)}.kdone .ic{width:14px;height:14px}
+.kvideo em{margin-left:auto;font-style:normal;font-size:12px;padding:2px 6px;border-radius:5px;background:var(--bg);color:var(--ink)}
+.kchap{display:flex;flex-direction:column;gap:6px;margin-top:14px;font-size:14px;color:var(--ink2)}.kchap b{display:inline-block;width:44px;font-weight:500;color:var(--blue-ink)}
