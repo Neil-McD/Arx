@@ -1,3 +1,4 @@
+import { eventViewer, visibleEvents } from "./communityEventAudience";
 // Home's centre (docs/specs/community-agent-gateway-v0.md, slice 2): the last
 // visit, what happened since, and a member's next step. No model. Everything
 // read here is what this viewer may already see: shared channels, Knowledge's
@@ -113,9 +114,10 @@ export const getHomeMoments = query({
     const joinNames: string[] = [];
     if (audience === "host") for (const row of joinedRows.slice(0, 3)) joinNames.push(await displayName(ctx, row.userId, names));
 
-    const event = (await ctx.db.query("communityEvents")
+    // The next event this person may see (their own pod's call counts).
+    const event = (await visibleEvents(await ctx.db.query("communityEvents")
       .withIndex("by_community_status_startsAt", (q: any) => q.eq("communityId", args.communityId).eq("status", "live").gte("startsAt", nowMs).lt("startsAt", nowMs + 3 * DAY_MS))
-      .first()) as any;
+      .take(10), eventViewer(ctx, args.communityId, userId)))[0] as any;
     const nextEvent = event ? { title: String(event.title ?? "").slice(0, 120), startsAt: new Date(Number(event.startsAt)).toISOString() } : null;
 
     const input = { audience, since, posts, notes, joins: { count: joinedRows.length, names: joinNames }, nextEvent };

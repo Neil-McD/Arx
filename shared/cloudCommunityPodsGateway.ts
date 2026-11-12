@@ -29,6 +29,8 @@ export type CloudPodPage =
     seats_left: number | null;
     my_request: "pending" | "waitlist" | "declined" | null;
     checkout_open: boolean;
+    // When it meets: never the link or who is going.
+    rhythm: { recurrence_frequency: string; next_starts_at: string } | null;
     can_edit: boolean;
     can_enter: boolean;
   };
@@ -68,6 +70,8 @@ export type CloudPodDetail = {
   seats: number | null;
   price: CloudPodPrice;
   what_you_get: string[];
+  // The pod's next call, with its link.
+  next_call: { event_id: string; title: string; starts_at: string; url: string | null; recurrence_frequency: string } | null;
   slug: string;
   hosts: string[];
   // payment: how each member is in, for the people who manage the pod only.

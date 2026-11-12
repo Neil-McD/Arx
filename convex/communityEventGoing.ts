@@ -1,3 +1,4 @@
+import { eventViewer } from "./communityEventAudience";
 // "Going" (design v1 Events): a member says they'll be at one date of an
 // event; everyone in the community sees how many are going, a few faces, and
 // who is hosting. Members only (the same gate as reading events).
@@ -31,7 +32,8 @@ export const setCommunityEventGoing = mutation({
   handler: async (ctx, args) => {
     const userId = await reader(ctx, args);
     const event = await ctx.db.get(args.eventId);
-    if (!event || String(event.communityId) !== String(args.communityId)) throw new Error("community_event_not_found");
+    if (!event || String(event.communityId) !== String(args.communityId)
+      || !(await eventViewer(ctx, args.communityId, userId)(event))) throw new Error("community_event_not_found");
     if (event.status !== "live") throw new Error("community_event_cancelled");
     if (!Number.isFinite(args.occurrenceStartsAt) || args.occurrenceStartsAt < event.startsAt) throw new Error("community_event_occurrence_invalid");
     const existing = await ctx.db.query("communityEventGoing")
@@ -80,9 +82,10 @@ export const listCommunityEventGoing = query({
       return names.get(key)!;
     };
     const out: EventGoing[] = [];
+    const visible = eventViewer(ctx, args.communityId, userId);
     for (const item of args.items.slice(0, ITEMS_MAX)) {
       const event = await ctx.db.get(item.eventId);
-      if (!event || String(event.communityId) !== String(args.communityId)) continue;
+      if (!event || String(event.communityId) !== String(args.communityId) || !(await visible(event))) continue;
       const rows = await ctx.db.query("communityEventGoing")
         .withIndex("by_event_occurrence", (q) => q.eq("eventId", item.eventId).eq("occurrenceStartsAt", item.occurrenceStartsAt))
         .take(COUNT_CAP + 1);

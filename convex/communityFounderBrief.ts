@@ -1,3 +1,4 @@
+import { communityWideEvents } from "./communityEventAudience";
 // The founder's daily brief: each morning, in the founder's time zone, the
 // community agent reads the community's last day (public activity and counts
 // only, never members' private conversations with the agent), writes a short
@@ -211,7 +212,7 @@ export async function buildSnapshot(ctx: any, community: any, windowStartMs: num
     unanswered,
     quietNewcomers: { count: quiet.length, names: await nameList(quiet) },
     joinRequestsPending: joinRequests.length,
-    upcomingEvents: events.map((event: any) => ({ title: clip(event.title, 120), startsAt: new Date(Number(event.startsAt)).toISOString() })),
+    upcomingEvents: communityWideEvents(events).map((event: any) => ({ title: clip(event.title, 120), startsAt: new Date(Number(event.startsAt)).toISOString() })),
   };
 }
 

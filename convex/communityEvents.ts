@@ -1,4 +1,5 @@
 import { internalQuery, mutation, query } from "./_generated/server";
+import { eventViewer, requirePodEventManager, visibleEvents } from "./communityEventAudience";
 import { v } from "convex/values";
 import { DEFAULT_COMMUNITY_EVENT_DURATION_MS } from "../shared/communityEventLifecycle";
 import {
@@ -38,9 +39,20 @@ type CommunityEventLike = {
   recurrenceFrequency?: "none" | "daily" | "weekly" | "monthly";
   recurrenceInterval?: number;
   recurrenceUntil?: number;
+  podChannelId?: any;
   createdAt: number;
   updatedAt: number;
 };
+
+// Builders change any event; a pod's hosts change their pod's calls.
+async function requireEventManager(ctx: any, event: CommunityEventLike, userId: any) {
+  if (event.podChannelId) {
+    await requireCommunityChatAccess({ ctx, communityId: event.communityId, userId });
+    await requirePodEventManager(ctx, event.communityId, event.podChannelId, userId);
+    return;
+  }
+  await requireCommunityManager({ ctx, communityId: event.communityId, userId });
+}
 
 const COMMUNITY_EVENT_LIST_STATUSES = ["live", "cancelled"] as const;
 const COMMUNITY_EVENT_RECURRING_FREQUENCIES = ["daily", "weekly", "monthly"] as const;
@@ -111,6 +123,8 @@ function mapCommunityEventRow(row: CommunityEventLike, occurrenceStartsAt?: numb
     location_label: row.locationLabel ?? null,
     url: row.url ?? null,
     visibility: row.visibility,
+    // A pod's call (null for a community event).
+    pod_channel_id: row.podChannelId ? normalizeIdValue(row.podChannelId) : null,
     status: row.status,
     recurrence_frequency: recurrenceFrequency,
     recurrence_interval: normalizeCommunityEventRecurrenceInterval(row.recurrenceInterval),
@@ -253,13 +267,13 @@ export const listCommunityEventsForSemanticRepositoryInternal = internalQuery({
     if (!Number.isSafeInteger(cursorStartMs) || cursorStartMs < 0) {
       throw new Error("community_event_list_cursor_invalid");
     }
-    const rows = await listCommunityEventExpansionCandidates({
+    const rows = await visibleEvents(await listCommunityEventExpansionCandidates({
       ctx,
       communityId: args.communityId,
       startMs: cursorStartMs,
       endMs: Number.MAX_SAFE_INTEGER,
       includeCancelled: false,
-    });
+    }), eventViewer(ctx, args.communityId, args.userId));
     const expanded = expandCommunityEventRows({
       rows,
       startMs: cursorStartMs,
@@ -302,7 +316,8 @@ export const readCommunityEventForSemanticRepositoryInternal = internalQuery({
       : null;
     if (
       !row ||
-      normalizeIdValue(row.communityId) !== normalizeIdValue(args.communityId)
+      normalizeIdValue(row.communityId) !== normalizeIdValue(args.communityId) ||
+      !(await eventViewer(ctx, args.communityId, args.userId)(row))
     ) {
       throw new Error("community_event_not_found");
     }
@@ -360,16 +375,27 @@ export const listCommunityEvents = query({
       throw new Error("Event display range must be between one instant and 62 days.");
     }
 
-    const rows = await listCommunityEventExpansionCandidates({
+    const rows = await visibleEvents(await listCommunityEventExpansionCandidates({
       ctx,
       communityId: args.communityId,
       startMs,
       endMs,
       includeCancelled,
       overlap,
-    });
+    }), eventViewer(ctx, args.communityId, userId));
 
-    return expandCommunityEventRows({ rows, startMs, endMs, includeCancelled, limit, overlap });
+    // A pod's calls carry the pod's name, for the people who may see them.
+    const podNames = new Map<string, { name: string; slug: string }>();
+    for (const row of rows) {
+      if (!row.podChannelId || podNames.has(String(row.podChannelId))) continue;
+      const channel = await ctx.db.get(row.podChannelId) as any;
+      podNames.set(String(row.podChannelId), { name: String(channel?.name ?? ""), slug: String(channel?.slug ?? "") });
+    }
+    return expandCommunityEventRows({ rows, startMs, endMs, includeCancelled, limit, overlap }).map((event) => ({
+      ...event,
+      pod_name: event.pod_channel_id ? podNames.get(event.pod_channel_id)?.name ?? null : null,
+      pod_slug: event.pod_channel_id ? podNames.get(event.pod_channel_id)?.slug ?? null : null,
+    }));
   },
 });
 
@@ -396,11 +422,7 @@ export const saveCommunityEvent = mutation({
     if (eventId) {
       const existing = (await ctx.db.get(eventId as any)) as CommunityEventLike | null;
       if (!existing) throw new Error("community_event_not_found");
-      await requireCommunityManager({
-        ctx,
-        communityId: existing.communityId,
-        userId,
-      });
+      await requireEventManager(ctx, existing, userId);
       const title = normalizeName(
         Object.prototype.hasOwnProperty.call(payload, "title") ? payload.title : existing.title,
       );
@@ -451,7 +473,8 @@ export const saveCommunityEvent = mutation({
         url: normalizeOptionalUrl(
           Object.prototype.hasOwnProperty.call(payload, "url") ? payload.url : existing.url,
         ),
-        visibility: normalizeVisibility(
+        // A pod's call is never public.
+        visibility: existing.podChannelId ? "members" as const : normalizeVisibility(
           Object.prototype.hasOwnProperty.call(payload, "visibility") ? payload.visibility : existing.visibility,
         ),
         status: normalizeStatus(
@@ -476,11 +499,18 @@ export const saveCommunityEvent = mutation({
 
     const communityId = payload.community_id as any;
     if (!communityId) throw new Error("community_id_required");
-    const { community } = await requireCommunityManager({
-      ctx,
-      communityId,
-      userId,
-    });
+    // A pod's call (pod_channel_id): its hosts may schedule it; anything else
+    // is the builder's.
+    const podChannelId = payload.pod_channel_id ? ctx.db.normalizeId("communityChannels", String(payload.pod_channel_id)) : null;
+    if (payload.pod_channel_id && !podChannelId) throw new Error("community_pod_not_found");
+    let community: { _id: any };
+    if (podChannelId) {
+      await requireCommunityChatAccess({ ctx, communityId, userId });
+      await requirePodEventManager(ctx, communityId, podChannelId, userId);
+      community = { _id: communityId };
+    } else {
+      ({ community } = await requireCommunityManager({ ctx, communityId, userId }));
+    }
     const title = normalizeName(payload.title);
     const startsAt = requireIsoMs(payload.starts_at, "community_event_starts_at_invalid");
     const endsAt = parseOptionalIsoMs(payload.ends_at, "community_event_ends_at_invalid");
@@ -504,7 +534,8 @@ export const saveCommunityEvent = mutation({
       locationType: normalizeLocationType(payload.location_type),
       locationLabel: normalizeOptionalText(payload.location_label, 500),
       url: normalizeOptionalUrl(payload.url),
-      visibility: normalizeVisibility(payload.visibility),
+      visibility: podChannelId ? "members" : normalizeVisibility(payload.visibility),
+      ...(podChannelId ? { podChannelId } : {}),
       status: "live",
       recurrenceFrequency,
       recurrenceInterval: recurrenceFrequency === "none" ? 1 : normalizeCommunityEventRecurrenceInterval(payload.recurrence_interval),
@@ -532,11 +563,7 @@ export const cancelCommunityEvent = mutation({
     });
     const event = (await ctx.db.get(args.eventId as any)) as CommunityEventLike | null;
     if (!event) return { ok: true };
-    await requireCommunityManager({
-      ctx,
-      communityId: event.communityId,
-      userId,
-    });
+    await requireEventManager(ctx, event, userId);
     await ctx.db.patch(event._id as any, {
       status: "cancelled",
       updatedAt: Date.now(),
@@ -544,3 +571,12 @@ export const cancelCommunityEvent = mutation({
     return { ok: true };
   },
 });
+
+
+// A pod's next call (for the pod's own readers, who have already checked the
+// viewer may see the pod, or are showing only its rhythm).
+export async function nextPodCall(ctx: any, channelId: any, nowMs: number) {
+  const rows = (await ctx.db.query("communityEvents")
+    .withIndex("by_pod_status", (q: any) => q.eq("podChannelId", channelId).eq("status", "live")).take(50)) as CommunityEventLike[];
+  return expandCommunityEventRows({ rows, startMs: nowMs, endMs: Number.MAX_SAFE_INTEGER, includeCancelled: false, limit: 1 })[0] ?? null;
+}
