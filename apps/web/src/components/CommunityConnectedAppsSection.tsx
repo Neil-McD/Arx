@@ -2,7 +2,7 @@
 // community. The app asks Polynet what someone has here, server to server
 // with its secret, and hears when that changes. Secrets are shown once.
 import { useCallback, useEffect, useState } from "react";
-import { announceCommunityAppLinksChanged } from "../controllers/communityAppLinks";
+import { announceCommunityAppLinksChanged, COMMUNITY_PLANS_CHANGED_EVENT } from "../controllers/communityAppLinks";
 import connectYourAppGuide from "../../../../docs/product/guides/connect-your-app.md?raw";
 import { buildConnectedAppSetupPrompt } from "../../../../shared/connectedAppSetupPrompt";
 import { fetchCloudCommunityTiers, type CloudCommunityTier } from "../../../../shared/cloudCommunityTiersGateway";
@@ -45,6 +45,12 @@ export function CommunityConnectedAppsSection(props: { communityId: string; comm
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [props.communityId]);
   useEffect(() => { void load(); }, [load]);
+  // Plans edited alongside: the setup prompt carries them as they are now.
+  useEffect(() => {
+    const reload = () => { void load(); };
+    window.addEventListener(COMMUNITY_PLANS_CHANGED_EVENT, reload);
+    return () => window.removeEventListener(COMMUNITY_PLANS_CHANGED_EVENT, reload);
+  }, [load]);
 
   const run = async (work: () => Promise<void>) => {
     if (busy) return;
