@@ -280,6 +280,10 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
   own, then listed pods they could ask to join; a pod is an invite-only room plus
   its purpose, hosts, seats and listed/hidden, [spec](specs/pods-v0.md)).
   Tables: `communityPods`, `communityPodRequests` (asks to join and the waitlist).
+- **Pod knowledge:** `communityPodNotes` (notes that belong to one pod: the pod
+  reads, its hosts write, a builder may publish a copy to the community's notes;
+  their own table, and `scripts/community_pod_notes_wall.test.ts` lets only this
+  module touch it). Table: `communityPodNotes`.
 - **Pod calls:** `communityEventAudience` (the one rule: an event with a pod is
   visible only to people who can enter that pod; every reader of `communityEvents`
   goes through it, enforced by `scripts/community_event_audience.test.ts`).

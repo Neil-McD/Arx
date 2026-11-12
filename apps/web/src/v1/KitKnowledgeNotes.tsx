@@ -14,7 +14,8 @@ export function noteIsNew(note: Pick<CommunityNoteView, "created_at" | "updated_
 
 // Where a note came from, in the record's words; never names a member whose
 // conversation it was saved from.
-export function noteOrigin(note: Pick<CommunityNoteView, "kind" | "written_by">): string {
+export function noteOrigin(note: Pick<CommunityNoteView, "kind" | "written_by" | "from_pod">): string {
+  if (note.from_pod) return `Shared from the ${note.from_pod} pod`;
   if (note.kind === "founder") return note.written_by ? `Written by ${note.written_by}` : "Written by a host";
   if (note.kind === "ask") return "Saved from a conversation with the guide";
   if (note.kind === "tag") return "Saved from a conversation in a channel";

@@ -1501,6 +1501,8 @@ export default defineSchema({
     searchText: v.string(),
     // The old memory node a migrated note came from, so the copy runs once.
     migratedFromNodeId: v.optional(v.string()),
+    // A copy a builder published from a pod's knowledge: the pod's name.
+    fromPodName: v.optional(v.string()),
     // The last write's retry key, so a retried write is not applied twice.
     lastOperationKey: v.optional(v.string()),
     createdByUserId: v.optional(v.id("users")),
@@ -1512,6 +1514,25 @@ export default defineSchema({
     .index("by_community_updatedAt", ["communityId", "updatedAt"])
     .index("by_migrated_node", ["migratedFromNodeId"])
     .searchIndex("search_text", { searchField: "searchText", filterFields: ["communityId"] }),
+
+  // Pod knowledge (communityPodNotes.ts): notes that belong to one pod. Their
+  // own table, so no reader of community notes can show them.
+  communityPodNotes: defineTable({
+    communityId: v.id("communities"),
+    channelId: v.id("communityChannels"),
+    slug: v.string(),
+    title: v.string(),
+    bodyMd: v.string(),
+    createdByUserId: v.id("users"),
+    updatedByUserId: v.id("users"),
+    // The community note this was published as, when a builder published it.
+    publishedSlug: v.optional(v.string()),
+    publishedAt: v.optional(v.number()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_channel_slug", ["channelId", "slug"])
+    .index("by_channel_updatedAt", ["channelId", "updatedAt"]),
 
   // The founder-approved handbook (communityHandbook.ts): facts members ask
   // about. Only approvedMd reaches the agent; the draft waits for approval.

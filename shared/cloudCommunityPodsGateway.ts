@@ -163,3 +163,31 @@ export function formatPodDate(iso: string | null): string {
   const date = new Date(iso);
   return Number.isNaN(date.getTime()) ? "" : date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
+
+// Pod knowledge (convex/communityPodNotes.ts): notes that belong to one pod.
+export type CloudPodNote = { slug: string; title: string; body_md: string; written_by: string | null; created_at: string; updated_at: string; published: boolean };
+export type CloudPodNotes = { can_write: boolean; can_publish: boolean; notes: CloudPodNote[] };
+type PodNotesCall = { session: unknown; communityId: string; channelId: string };
+
+export async function fetchCloudPodNotes(params: PodNotesCall): Promise<CloudPodNotes> {
+  const { client: convex, authSubject } = await client(params.session);
+  return await convex.query("communityPodNotes:listPodNotes" as any, { authSubject, communityId: params.communityId, channelId: params.channelId });
+}
+
+export async function saveCloudPodNote(params: PodNotesCall & { slug?: string; title: string; text: string }): Promise<void> {
+  const { client: convex, authSubject } = await client(params.session);
+  await convex.mutation("communityPodNotes:savePodNote" as any, {
+    authSubject, communityId: params.communityId, channelId: params.channelId, title: params.title, text: params.text, ...(params.slug ? { slug: params.slug } : {}),
+  });
+}
+
+export async function deleteCloudPodNote(params: PodNotesCall & { slug: string }): Promise<void> {
+  const { client: convex, authSubject } = await client(params.session);
+  await convex.mutation("communityPodNotes:deletePodNote" as any, { authSubject, communityId: params.communityId, channelId: params.channelId, slug: params.slug });
+}
+
+// The only way out of a pod: a copy in the community's Knowledge.
+export async function publishCloudPodNote(params: PodNotesCall & { slug: string }): Promise<void> {
+  const { client: convex, authSubject } = await client(params.session);
+  await convex.mutation("communityPodNotes:publishPodNote" as any, { authSubject, communityId: params.communityId, channelId: params.channelId, slug: params.slug });
+}
