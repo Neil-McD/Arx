@@ -505,7 +505,7 @@
 .app .kcourse{padding:0 0 14px;overflow:hidden}.app .kcourse>b,.app .kcourse>.s,.app .kcourse>.kpct{margin-left:14px;margin-right:14px}
 .app .kcourse>b{margin-top:12px;font-size:16px}.app .kcourse>.s{line-height:1.4;min-height:36px}
 .app .kcover{height:112px;border-radius:0;align-items:center;justify-content:center}.app .kcover .ic{width:26px;height:26px;opacity:.8}
-.app .kcover.c1{background:url(./polynet-earth.webp) 72% 38%/cover}
+.app .kcover.c1{background:url(/design-lab/polynet-earth.webp) 72% 38%/cover}
 .app .kpct{position:relative;display:block;height:20px;margin-top:10px;border-radius:10px;background:var(--s3);overflow:hidden}
 .app .kpct i{position:absolute;inset:0 auto 0 0;background:rgba(var(--w),.16);border-radius:10px}
 .app .kpct em{position:relative;display:block;padding:0 10px;font-style:normal;font-size:11px;font-weight:600;line-height:20px;color:var(--ink)}
@@ -555,21 +555,19 @@
 .app .note-del{margin-left:8px;color:var(--ink3);font-size:12px;text-decoration:underline}
 .app .lab .priv{float:right;font-style:normal;font-weight:400}
 .app button.p{width:100%;text-align:left}
-/* Knowledge in the app: the mock's map in a scrolling page, a plain list of
-   notes under it, and the open note's text and forms in the right column. */
-.app .kn-title{margin:0;font-family:var(--serif);font-weight:var(--serif-w);font-size:34px;letter-spacing:-.02em;line-height:1.1}
-.app .kn-sub{margin:8px 0 0;font-size:13px;color:var(--ink2)}
-.app svg.kn-map{display:block;width:100%;height:auto;margin:6px 0 0}
-.app .kn-pt{cursor:pointer;outline:none}
-.app button.kn-row{width:100%;text-align:left;display:flex;align-items:center;gap:14px;cursor:pointer}
-.app .kn-row>div{flex:1;min-width:0}
-.app .kn-row .kn-dot{flex:none;margin:0 4px}
-.app .kn-row.sel{background:var(--s2)}
-.app .kn-dot{width:7px;height:7px;border-radius:50%;background:var(--ink3);justify-self:center}
-.app .kn-dot.kn-fresh{background:var(--aurora);box-shadow:0 0 10px var(--aurora)}
+/* Knowledge in the app (the classroom): the mock's cards and rows as real
+   buttons, the ask field as a button that opens the guide, the done circle's
+   on state, and the note forms in the right column. */
+.app button.kcourse,.app button.kcont,.app button.kl,.app button.src{width:100%;text-align:left}
+.app button.src{width:calc(100% + 20px)}
+.app button.kcont{display:block}
+.app .kask-btn{width:100%;cursor:pointer;color:var(--ink3);font-size:15px}
+.app .kask-btn span{flex:1;text-align:left}
+.app .kdone{cursor:pointer}.app .kdone.is{background:var(--blue);border-color:var(--blue);color:var(--bg)}
+.app .kl.d .ic{color:var(--ink2)}
+.app .kcover{background-color:var(--s2)}
 .app .kn-note-title{margin:2px 0 0;font-size:20px;font-weight:600;letter-spacing:-.015em}
 .app .kn-body p{margin:0 0 10px;font-size:15px;line-height:1.55;color:var(--ink2)}
-.app button.src{width:calc(100% + 20px);text-align:left}
 .app .kn-form{display:flex;flex-direction:column;gap:10px}
 .app .kn-form input,.app .kn-form textarea{width:100%;box-sizing:border-box;padding:8px 10px;border-radius:9px;border:1px solid var(--line);background:var(--field);color:var(--ink);font:inherit;font-size:14px;line-height:1.5;outline:0;resize:vertical}
 .app .kn-form input:focus,.app .kn-form textarea:focus{border-color:var(--line2)}

@@ -33,6 +33,8 @@ const ICON_PATHS: Record<string, string> = {
   smile: '<circle cx="12" cy="12" r="9"/><path d="M8.5 14.5s1.3 1.5 3.5 1.5 3.5-1.5 3.5-1.5M9 9.5h.01M15 9.5h.01"/>',
   sliders: '<path d="M4 6h8M16 6h4M4 12h2M10 12h10M4 18h10M18 18h2"/><circle cx="14" cy="6" r="2"/><circle cx="8" cy="12" r="2"/><circle cx="16" cy="18" r="2"/>',
   check: '<path d="M5 12.5 10 17.5 19 7"/>',
+  play: '<path d="M7 4.5v15l12-7.5z"/>',
+  book: '<path d="M4 5a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2z"/><path d="M4 21a2 2 0 0 1 2-2h13v2H6"/>',
   close: '<path d="M6 6l12 12M18 6 6 18"/>',
 };
 
