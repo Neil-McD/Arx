@@ -20,6 +20,7 @@ import { CommunityChannelSessionContext } from "./CommunityChannelSessionContext
 import { CommunityPresenceFacepile } from "./CommunityPresenceFacepile";
 import { WebCommunityNotes } from "./WebCommunityNotes";
 import { KitChannelRail } from "../v1/KitChannelRail";
+import { KitPodRail, useCloudPod } from "../v1/KitPodRail";
 import { KitMembersPage } from "../v1/KitMembersPage";
 import { KitMembersDirectory } from "../v1/KitMembersDirectory";
 import { CommunityMembersBulkBar, type SelectedMember } from "./CommunityMembersBulkBar";
@@ -125,6 +126,8 @@ function RosterSurface(props: RosterProps & {
   onCloseMembers?: () => void;
 }) {
   const scope = useContext(CommunityChannelSessionContext);
+  // A pod's room has the pod's own column (docs/specs/pods-v0.md).
+  const { pod, reload: reloadPod } = useCloudPod(isDesignV1Active() ? scope?.session ?? null : null, scope?.communityId ?? null, props.channelId);
   const dialogRef = useRef<HTMLElement | null>(null);
   const settingsRef = useRef<HTMLDivElement | null>(null);
   const searchRef = useRef<HTMLInputElement | null>(null);
@@ -372,6 +375,7 @@ function RosterSurface(props: RosterProps & {
     </div> : null}
     {kitRail ? (
       // Design v1 beside a channel on a wide window: the mock's column, from the kit.
+      pod && scope?.communityId ? <KitPodRail session={scope.session} communityId={scope.communityId} pod={pod} onChanged={() => void reloadPod()} /> :
       <KitChannelRail
         communityId={scope?.communityId ?? null}
         session={scope?.session ?? null}

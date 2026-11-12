@@ -1,9 +1,16 @@
-// Pods (docs/specs/pods-v0.md, slice 1): one page for every pod, never rows
-// in the left column. Builders see all pods and start new ones; a member sees
-// the pods they are in. Opening a pod opens its room.
+// Pods (docs/specs/pods-v0.md, slices 1 and 2a): one page for every pod,
+// never rows in the left column. Builders see all pods and start new ones; a
+// member sees the pods they are in, then listed pods they could join, from
+// the outside only. Opening a pod opens its room.
 import { useCallback, useEffect, useState } from "react";
 import { CommunityPageHeader, CommunityPageRail } from "./CommunityPageHeader";
-import { fetchCloudCommunityPods, saveCloudPodPurpose, type CloudCommunityPod } from "../../../../shared/cloudCommunityPodsGateway";
+import {
+  fetchCloudCommunityPods,
+  requestToJoinCloudPod,
+  saveCloudPodDetails,
+  type CloudCommunityPod,
+  type CloudOutsidePod,
+} from "../../../../shared/cloudCommunityPodsGateway";
 import { Btn, cx, Icon, KitApp, Sec } from "../v1/kit";
 
 export type WebCommunityPodsSectionProps = {
@@ -28,12 +35,17 @@ function activeLabel(iso: string | null, now: number): string {
   return days === 1 ? "Active yesterday" : `Active ${days} days ago`;
 }
 
+function seatsLabel(pod: CloudCommunityPod): string {
+  return pod.seats ? `${pod.members} of ${pod.seats} seats` : `${pod.members} ${pod.members === 1 ? "member" : "members"}`;
+}
+
 export function WebCommunityPodsSection(props: WebCommunityPodsSectionProps) {
-  const [state, setState] = useState<{ canManage: boolean; pods: CloudCommunityPod[] } | null>(null);
+  const [state, setState] = useState<{ canManage: boolean; pods: CloudCommunityPod[]; outside: CloudOutsidePod[] } | null>(null);
   const [failed, setFailed] = useState(false);
   const [creating, setCreating] = useState(false);
-  const [draft, setDraft] = useState({ name: "", purpose: "" });
+  const [draft, setDraft] = useState({ name: "", purpose: "", listed: true, seats: "" });
   const [saving, setSaving] = useState(false);
+  const [asking, setAsking] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const now = Date.now();
 
@@ -43,7 +55,7 @@ export function WebCommunityPodsSection(props: WebCommunityPodsSectionProps) {
       const session = await props.ensureSession(props.session);
       if (!session) return;
       const result = await fetchCloudCommunityPods({ session, communityId: props.communityId, asMember: props.asMember });
-      setState({ canManage: result.can_manage, pods: result.pods });
+      setState({ canManage: result.can_manage, pods: result.pods, outside: result.outside });
       setFailed(false);
     } catch { setFailed(true); }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -59,13 +71,17 @@ export function WebCommunityPodsSection(props: WebCommunityPodsSectionProps) {
       const created = await props.createRoom(name, "restricted");
       const room = created ? { id: String(created.id), slug: String(created.slug) } : null;
       if (!room) { setError("The pod couldn't be created. Try again."); return; }
-      const purpose = draft.purpose.trim();
-      if (purpose) {
-        const session = await props.ensureSession(props.session);
-        if (session) await saveCloudPodPurpose({ session, communityId: props.communityId, channelId: room.id, purpose }).catch(() => undefined);
+      const session = await props.ensureSession(props.session);
+      const seats = Number(draft.seats);
+      if (session) {
+        await saveCloudPodDetails({
+          session, communityId: props.communityId, channelId: room.id,
+          purpose: draft.purpose.trim(), visibility: draft.listed ? "listed" : "hidden",
+          ...(Number.isFinite(seats) && seats > 0 ? { seats } : {}),
+        }).catch(() => undefined);
       }
       setCreating(false);
-      setDraft({ name: "", purpose: "" });
+      setDraft({ name: "", purpose: "", listed: true, seats: "" });
       props.onOpenPod(room);
     } catch {
       setError("The pod couldn't be created. Try again.");
@@ -74,11 +90,22 @@ export function WebCommunityPodsSection(props: WebCommunityPodsSectionProps) {
     }
   };
 
+  const ask = async (pod: CloudOutsidePod) => {
+    if (asking || !props.communityId) return;
+    setAsking(pod.channel_id);
+    try {
+      const session = await props.ensureSession(props.session);
+      if (session) await requestToJoinCloudPod({ session, communityId: props.communityId, channelId: pod.channel_id });
+      await load();
+    } catch { /* the button stays; try again */ } finally { setAsking(null); }
+  };
+
   const canManage = Boolean(state?.canManage);
   const pods = state?.pods ?? [];
+  const outside = state?.outside ?? [];
   const lead = !state ? " " : canManage
     ? (pods.length ? `${pods.length} ${pods.length === 1 ? "pod" : "pods"} in ${props.communityName}.` : "Start your first pod.")
-    : (pods.length ? "Your pods." : "You're not in a pod yet.");
+    : (pods.length ? "Your pods." : outside.length ? "Pods you can join." : "No pods to join yet.");
 
   return (
     <div className="community-panel community-pods-panel">
@@ -87,29 +114,69 @@ export function WebCommunityPodsSection(props: WebCommunityPodsSectionProps) {
         <div className={cx("page")} style={{ padding: 0, overflow: "visible" }}>
           <p className={cx("lead")} style={{ marginTop: 0 }}>{lead}</p>
           {failed ? <p className={cx("sub")} role="alert">Pods couldn't load. <button type="button" className={cx("link")} onClick={() => void load()}>Try again</button></p> : null}
-          <div className={cx("podgrid")}>
-            {pods.map((pod) => (
-              <button key={pod.channel_id} type="button" className={cx("podcard")} onClick={() => props.onOpenPod(pod)}>
-                <span className={cx("podname")}><Icon name="users" />{pod.name}</span>
-                <span className={cx("podpurpose")}>{pod.purpose || (canManage ? "Add what this pod is for." : "")}</span>
-                <span className={cx("podmeta")}>{pod.members} {pod.members === 1 ? "member" : "members"} · {activeLabel(pod.last_active_at, now)}</span>
-              </button>
-            ))}
-            {canManage && !creating ? (
-              <button type="button" className={cx("podcard podnew")} onClick={() => setCreating(true)}><Icon name="plus" />New pod</button>
-            ) : null}
-          </div>
+          {pods.length || canManage ? (
+            <div className={cx("podgrid")}>
+              {pods.map((pod) => (
+                <button key={pod.channel_id} type="button" className={cx("podcard")} onClick={() => props.onOpenPod(pod)}>
+                  <span className={cx("podname")}><Icon name="users" />{pod.name}</span>
+                  <span className={cx("podpurpose")}>{pod.purpose || (pod.can_manage ? "Add what this pod is for." : "")}</span>
+                  {pod.can_manage && pod.waiting ? <span className={cx("podask")}>{pod.waiting} asking to join</span> : null}
+                  <span className={cx("podmeta")}>
+                    {[canManage ? (pod.visibility === "listed" ? "Listed" : "Hidden") : null, seatsLabel(pod), activeLabel(pod.last_active_at, now)].filter(Boolean).join(" · ")}
+                  </span>
+                </button>
+              ))}
+              {canManage && !creating ? (
+                <button type="button" className={cx("podcard podnew")} onClick={() => setCreating(true)}><Icon name="plus" />New pod</button>
+              ) : null}
+            </div>
+          ) : null}
           {canManage && creating ? (
             <div className={cx("card podform")}>
               <div className={cx("meta")}><span>New pod</span></div>
               <input value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} placeholder="Name, e.g. Founders pod" aria-label="Pod name" maxLength={60} autoFocus />
               <textarea value={draft.purpose} onChange={(event) => setDraft({ ...draft, purpose: event.target.value })} placeholder="What is this pod for? One sentence." aria-label="What the pod is for" rows={2} maxLength={280} />
+              <div className={cx("podform-row")}>
+                <label className={cx("podform-check")}>
+                  <input type="checkbox" checked={draft.listed} onChange={(event) => setDraft({ ...draft, listed: event.target.checked })} />
+                  Listed: members can see it and ask to join
+                </label>
+                <label className={cx("podform-seats")}>
+                  Seats
+                  <input value={draft.seats} onChange={(event) => setDraft({ ...draft, seats: event.target.value.replace(/[^0-9]/g, "") })} placeholder="No limit" aria-label="Seats" inputMode="numeric" />
+                </label>
+              </div>
               {error ? <p className={cx("bad")} role="alert">{error}</p> : null}
               <div className={cx("acts")}>
                 <Btn go small disabled={!draft.name.trim() || saving} onClick={() => void create()}>{saving ? "Creating…" : "Create pod"}</Btn>
                 <Btn txt small onClick={() => { setCreating(false); setError(null); }}>Cancel</Btn>
               </div>
             </div>
+          ) : null}
+          {outside.length ? (
+            <>
+              {pods.length ? <span className={cx("lab")} style={{ display: "block", marginTop: 32 }}>Pods you can join</span> : null}
+              <div className={cx("podgrid")}>
+                {outside.map((pod) => {
+                  const full = pod.seats_left === 0;
+                  const status = pod.my_request === "pending" ? "Asked · the host will reply"
+                    : pod.my_request === "waitlist" ? "On the waitlist" : null;
+                  return (
+                    <div key={pod.channel_id} className={cx("podcard podout")}>
+                      <span className={cx("podname")}><Icon name="lock" />{pod.name}</span>
+                      <span className={cx("podpurpose")}>{pod.purpose}</span>
+                      <span className={cx("podmeta")}>
+                        {[pod.hosts.length ? `Hosted by ${pod.hosts.join(" and ")}` : null,
+                          pod.seats_left === null ? null : full ? "Full" : `${pod.seats_left} ${pod.seats_left === 1 ? "seat" : "seats"} left`].filter(Boolean).join(" · ")}
+                      </span>
+                      {status ? <span className={cx("podask")}>{status}</span> : (
+                        <Btn small disabled={asking === pod.channel_id} onClick={() => void ask(pod)}>{full ? "Join the waitlist" : "Ask to join"}</Btn>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </>
           ) : null}
         </div>
       </KitApp>
@@ -118,8 +185,8 @@ export function WebCommunityPodsSection(props: WebCommunityPodsSectionProps) {
           <Sec label="What a pod is">
             <p className={cx("sub")}>
               {canManage
-                ? "A small group with a purpose and closer time with you. Only the people you add can see inside. Add people from the pod's settings."
-                : "A small group with a purpose and closer time with the hosts. Only the people in a pod can see inside it."}
+                ? "A small group with a purpose and closer time with you. Listed pods show members what they'd get and let them ask to join; hidden ones only their members know about."
+                : "A small group with a purpose and closer time with its hosts. Only the people in a pod can see inside it."}
             </p>
           </Sec>
         </KitApp>

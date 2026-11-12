@@ -277,8 +277,9 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
   is chosen in `shared/communityOwnerMoments.ts`). Table: `communityOwnerMoments`
   (what was shown and dismissed).
 - **Pods:** `communityPods` (the Pods page: builders see every pod, members their
-  own; a pod is an invite-only room plus its purpose, [spec](specs/pods-v0.md)).
-  Table: `communityPods`.
+  own, then listed pods they could ask to join; a pod is an invite-only room plus
+  its purpose, hosts, seats and listed/hidden, [spec](specs/pods-v0.md)).
+  Tables: `communityPods`, `communityPodRequests` (asks to join and the waitlist).
 - **Home moments:** `communityHomeMoments` ("since you were last here" from the
   visit before this one, and a member's next step; ranked in
   `shared/communityHomeMoments.ts`). Table: `communityMemberVisits`.

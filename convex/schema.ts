@@ -884,10 +884,30 @@ export default defineSchema({
     communityId: v.id("communities"),
     channelId: v.id("communityChannels"),
     purpose: v.string(),
+    // Listed: members see it from outside and can ask to join. Missing means
+    // hidden (every private room from before pods).
+    visibility: v.optional(v.union(v.literal("listed"), v.literal("hidden"))),
+    // No limit when missing.
+    seats: v.optional(v.number()),
+    // Members the builder made hosts of this pod (builders and admins always are).
+    hostUserIds: v.optional(v.array(v.id("users"))),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
     .index("by_community_channel", ["communityId", "channelId"]),
+  // Asking to join a listed pod: the pod's hosts approve or decline; a full
+  // pod puts the request on its waitlist.
+  communityPodRequests: defineTable({
+    communityId: v.id("communities"),
+    channelId: v.id("communityChannels"),
+    userId: v.id("users"),
+    status: v.union(v.literal("pending"), v.literal("waitlist"), v.literal("approved"), v.literal("declined")),
+    decidedByUserId: v.optional(v.id("users")),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_channel_user", ["channelId", "userId"])
+    .index("by_channel_status", ["channelId", "status"]),
 
   communityChannelParticipants: defineTable({
     communityId: v.id("communities"),
