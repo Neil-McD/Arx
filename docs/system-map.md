@@ -209,7 +209,7 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
 
 - **Does:** the one community agent: Agent-page conversations, @mention replies,
   site conversations; tools, streaming, model calls, receipts.
-- **Code:** `communityTurnContract` (shared: who speaks, who sees the answer, which layers that allows, and how many recent turns an Ask carries: 20, current turn included; older messages stay stored, unsummarized; and whether the agent may speak in channels: Ask and tag turns only draft posts, the member sends them), `communityNotes` (community notes under memory/: the agent writes them, everyone reads them), `runtimeAgentLoop`, `runtimeKernel` (the loop rules, `RuntimeKernelRun`), `piRuntimeKernel` (the loop engine, on Pi), `runtimeTurn*`, `runtimeContextIntegrity`,
+- **Code:** `communityTurnContract` (shared: who speaks, who sees the answer, which layers that allows, and how many recent turns an Ask carries: 20, current turn included; older messages stay stored, unsummarized; and whether the agent may speak in channels: Ask and tag turns only draft posts, the member sends them), `communityNotes` (community notes under memory/: hosts write them in Knowledge, everyone reads them), `runtimeAgentLoop`, `runtimeKernel` (the loop rules, `RuntimeKernelRun`), `piRuntimeKernel` (the loop engine, on Pi), `runtimeTurn*`, `runtimeContextIntegrity`,
   `runtimeHarnessShaping`, `runtimeHarnessComposition`, `polynetCanonicalExecutor`,
   `communityRepositorySearch`, `threads`, `communityAgent`, `communityAgentRuntime`,
   `communityAgentFilesystem`,

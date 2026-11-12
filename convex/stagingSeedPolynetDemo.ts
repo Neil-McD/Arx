@@ -471,3 +471,46 @@ export const seedPolynetDemoEventsInternal = internalMutation({
     return { build, teardown, workshop };
   },
 });
+
+// Knowledge as the mock has it: notes hosts wrote and notes saved earlier,
+// a few related by their words, some from this week. Run after
+// seedPolynetDemoInternal. Demo community only.
+const KNOWLEDGE_NOTES: Array<{ title: string; body: string; source: "founder" | "ask" | "tag" | "migrated"; daysAgo: number }> = [
+  { title: "The three-line door", body: "A join page that says what you get, who it's for, and the price converts better than a long one. See Invitations that work.", source: "founder", daysAgo: 2 },
+  { title: "Founding tier pricing", body: "Start the founding tier low and say plainly that it goes up. Founding members keep their price when it rises.", source: "founder", daysAgo: 3 },
+  { title: "Raising your price", body: "Tell founding members first, a month before. Their price stays; new members pay the new tier price.", source: "founder", daysAgo: 4 },
+  { title: "Friday call rhythm", body: "Same time every week. Open with one win, look at three real invitations, end with one thing to try before next Friday.", source: "founder", daysAgo: 9 },
+  { title: "Welcome sequence", body: "Welcome new members in #general the day they join, ask what they're building, and introduce one person working on the same thing.", source: "founder", daysAgo: 12 },
+  { title: "What to post first", body: "Your first post should be a win, not an introduction. Members reply to results.", source: "ask", daysAgo: 15 },
+  { title: "Pods of five", body: "Small pods of five members who check in weekly keep people coming back. Pick pods by what members are building.", source: "tag", daysAgo: 18 },
+  { title: "Paid or free to join", body: "Paid communities keep more members past the first month. A small price filters for people who will show up to the Friday call.", source: "migrated", daysAgo: 30 },
+  { title: "Following up after a call", body: "Post the recap within a day and tag the people whose invitations you looked at.", source: "founder", daysAgo: 6 },
+  { title: "Writing your offer", body: "Say the result first, then who it's for. The same three lines work for the join page and for invitations.", source: "ask", daysAgo: 21 },
+  { title: "Live call practice", body: "Run a practice call with three members before your first public one.", source: "tag", daysAgo: 25 },
+  { title: "When someone goes quiet", body: "Send one personal message after two quiet weeks, asking what they're working on. Never a template.", source: "founder", daysAgo: 1 },
+  { title: "Moving a group from Skool", body: "Move the most active ten first, then invite the rest with a date for the first call in the new home.", source: "migrated", daysAgo: 40 },
+  { title: "Pricing a workshop", body: "Workshops can be free for members and paid for guests. Founding members always get them free.", source: "founder", daysAgo: 8 },
+];
+
+export const seedPolynetDemoKnowledgeInternal = internalMutation({
+  args: {},
+  handler: async (ctx: any): Promise<Record<string, any>> => {
+    assertSeedAllowed();
+    const nowMs = Date.now();
+    const community = await ctx.db.query("communities").withIndex("by_slug", (q: any) => q.eq("slug", DEMO_SLUG)).unique();
+    if (!community) throw new Error("seed_demo_community_missing");
+    const communityId = community._id;
+    let written = 0;
+    for (const note of KNOWLEDGE_NOTES) {
+      const slug = communityNoteSlug(note.title);
+      const at = nowMs - note.daysAgo * DAY_MS;
+      const fields = { title: note.title, bodyMd: note.body, source: note.source, searchText: buildCommunityNoteSearchText({ title: note.title, bodyMd: note.body }),
+        updatedByUserId: community.ownerId, createdAt: at, updatedAt: at, createdByUserId: community.ownerId };
+      const existing = await ctx.db.query("communityNotes").withIndex("by_community_slug", (q: any) => q.eq("communityId", communityId).eq("slug", slug)).first();
+      if (existing) await ctx.db.patch(existing._id, fields);
+      else await ctx.db.insert("communityNotes", { communityId, slug, ...fields });
+      written += 1;
+    }
+    return { written };
+  },
+});

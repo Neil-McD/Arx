@@ -100,7 +100,7 @@ export function KitEventsList(props: {
   const mine = upcoming.filter((event) => going.get(goingKey(event))?.mine);
 
   const rail = (
-    <KitApp view="events" host={props.canManage} part="rail" className="events-kit-rail">
+    <KitApp view="events" host={props.canManage} part="rail" className="kit-page-rail">
       <Rail index={4} label="Your events">
         <Sec label="You're going to">
           {mine.length ? mine.slice(0, 6).map((event, index) => (
