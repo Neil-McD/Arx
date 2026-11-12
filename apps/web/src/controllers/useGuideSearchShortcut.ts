@@ -7,7 +7,11 @@ import { ASK_GUIDE_EVENT, OPEN_GUIDE_EVENT, isGuideSearchShortcut, openGuideFrom
 // guide" opens Home and sends the question.
 export function useGuideSearchShortcut(
   selectTab: (tab: "agent") => void,
-  dockRef: MutableRefObject<{ focusInput: () => void; ask?: (question: string, communityId: string) => "sent" | "not_ready" | "other_community" } | null>,
+  dockRef: MutableRefObject<{
+    focusInput: () => void;
+    ask?: (question: string, communityId: string) => "sent" | "not_ready" | "other_community";
+    draft?: (question: string, communityId: string) => boolean;
+  } | null>,
 ): void {
   useEffect(() => {
     if (!isDesignV1Active()) return;
@@ -16,12 +20,14 @@ export function useGuideSearchShortcut(
     // One pending attempt at a time; a new one, or leaving, cancels it.
     let pending: number | null = null;
     const cancel = () => { if (pending !== null) window.clearTimeout(pending); pending = null; };
-    const whenReady = (attempt: () => boolean) => {
+    const whenReady = (attempt: () => boolean, giveUp?: () => void) => {
       cancel();
       let tries = 0;
       const step = () => {
         pending = null;
-        if (!attempt() && tries++ < 36) pending = window.setTimeout(step, 80);
+        if (attempt()) return;
+        if (tries++ < 36) pending = window.setTimeout(step, 80);
+        else giveUp?.();
       };
       pending = window.setTimeout(step, 40);
     };
@@ -41,10 +47,12 @@ export function useGuideSearchShortcut(
       selectTab("agent");
       // Sent only to the guide of the community it was asked in; if the page
       // moves to another community first, the question is dropped.
+      // A guide still busy after three seconds keeps the question in Home's
+      // box, ready to send, rather than losing it.
       whenReady(() => {
         const result = dockRef.current?.ask?.(question, communityId) ?? "not_ready";
         return result !== "not_ready";
-      });
+      }, () => { dockRef.current?.draft?.(question, communityId); });
     };
     const onKeyDown = (event: KeyboardEvent) => {
       if (!isGuideSearchShortcut(event)) return;

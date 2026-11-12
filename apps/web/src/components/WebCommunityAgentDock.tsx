@@ -99,6 +99,8 @@ export type WebCommunityAgentDockHandle = {
   // asked in: "sent", "not_ready" (Home's box isn't on the page yet, or the
   // guide is busy) or "other_community" (stop: never send it elsewhere).
   ask: (question: string, communityId: string) => "sent" | "not_ready" | "other_community";
+  // When the guide stays busy, the question waits in Home's box instead.
+  draft: (question: string, communityId: string) => boolean;
   startResourceBuild: (request: {
     communityId: string;
     prompt: string;
@@ -309,6 +311,13 @@ function WebCommunityAgentDock(props, ref) {
       if (!askReadyRef.current || !composerFormRef.current) return "not_ready";
       sendSuggestionRef.current(question);
       return "sent";
+    },
+    draft: (question: string, askedInCommunityId: string) => {
+      if (!communityId || communityId !== askedInCommunityId || !composerFormRef.current) return false;
+      draftTextRef.current = question;
+      setInput(question);
+      kitInputRef.current?.focus();
+      return true;
     },
     startResourceBuild: async (request) => {
       const requestedCommunityId = String(request.communityId ?? "").trim();
