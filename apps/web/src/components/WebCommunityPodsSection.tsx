@@ -20,6 +20,7 @@ import {
 } from "../../../../shared/cloudCommunityPodsGateway";
 import { Btn, cx, Icon, KitApp, Sec } from "../v1/kit";
 import { forgetPod, recallPod, takePodPagePreview } from "../v1/podMemory";
+import { podRhythmText } from "../v1/KitPodCall";
 
 export type WebCommunityPodsSectionProps = {
   session: unknown;
@@ -171,6 +172,7 @@ function PodPage(props: WebCommunityPodsSectionProps & { podSlug: string }) {
               </Sec>
             ) : null}
             {page.hosts.length ? <p className={cx("sub")}>Hosted by {page.hosts.join(" and ")}</p> : null}
+            {page.rhythm ? <p className={cx("sub")}>{podRhythmText(page.rhythm)}</p> : null}
             <p className={cx("podmeta")}>
               {[page.price ? `+${formatPodPrice(page.price)} on top of your membership` : "Free for members",
                 page.seats_left === null ? null : full ? "Full" : `${page.seats_left} ${page.seats_left === 1 ? "seat" : "seats"} left`].filter(Boolean).join(" · ")}

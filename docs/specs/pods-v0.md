@@ -197,7 +197,15 @@ membership); one branch in the Stripe notice handler routes anything carrying
    view, ask to join, seats and waitlist, hosts. 2b (built): a pod price and
    Join through Stripe. 2c (built): refunds, disputes and the sweep that
    stops billing for pods someone can't reach.
-3. **Pod knowledge and pod calls.** Pod-scoped notes with the one-way wall and
+3. **Pod calls (3a, built) and pod knowledge (3b).** 3a: a pod call is an
+   event with a pod (`communityEvents.podChannelId`), reusing recurrence,
+   "I'm going" and reminders. One rule (`convex/communityEventAudience.ts`):
+   only people who can enter the pod see it, in every reader (Events, Home,
+   the guide and MCP, reminders; never the handbook, the founder's brief or
+   anything public). Hosts schedule and cancel their pod's calls from its
+   right column; the outside page shows the rhythm only, never the link. The
+   call is a link the host pastes. Original scope:
+   **Pod knowledge and pod calls.** Pod-scoped notes with the one-way wall and
    "publish to community"; pod-only events; with the Agent plan, the guide in
    a pod and its catch-up (uses the gateway's summaries).
 4. **Members' own agents.** Connect an agent to a pod, labelled, pod-scoped,

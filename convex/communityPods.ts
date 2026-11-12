@@ -12,6 +12,7 @@ import { setChannelParticipantCore } from "./communityChannelParticipants";
 import { normalizeIdValue, requireCommunityChatAccess, requireCommunityManager } from "./communityCore";
 import { displayName } from "./communityFounderBrief";
 import { podPaymentStateOf, podPriceOf } from "./communityPodPayments";
+import { nextPodCall } from "./communityEvents";
 
 const PODS_CAP = 50;
 const MEMBERS_CAP = 200;
@@ -190,6 +191,14 @@ export const getPod = query({
       seats: typeof record?.seats === "number" ? record.seats : null,
       price: podPriceOf(record),
       what_you_get: record?.whatYouGet ?? [],
+      // The pod's next call, with its link (this viewer can read the pod).
+      next_call: await (async () => {
+        const call = await nextPodCall(ctx, args.channelId, Date.now());
+        return call ? {
+          event_id: call.parent_event_id, title: call.title, starts_at: call.starts_at, url: call.url,
+          recurrence_frequency: call.recurrence_frequency,
+        } : null;
+      })(),
       slug: String(channel.slug ?? ""),
       hosts: await hostNames(ctx, record, names),
       members,
@@ -332,6 +341,11 @@ export const getPodPage = query({
       seats_left: typeof record?.seats === "number" ? Math.max(0, record.seats - grants.length) : null,
       my_request: request && request.status !== "approved" ? request.status : null,
       checkout_open: checkoutOpen,
+      // The pod's rhythm only: when it meets, never the link or who is going.
+      rhythm: await (async () => {
+        const call = await nextPodCall(ctx, channel._id, nowMs);
+        return call ? { recurrence_frequency: call.recurrence_frequency, next_starts_at: call.starts_at } : null;
+      })(),
       // The builder and hosts: what members see, plus Edit and a way in.
       can_edit: manages,
       can_enter: canEnter,

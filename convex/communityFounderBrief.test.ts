@@ -10,6 +10,7 @@ import {
   localDateAndHour,
   nextOccurrenceMs,
   parseBrief,
+  buildSnapshot,
   snapshotIsQuiet,
   type FounderBriefSnapshot,
 } from "./communityFounderBrief";
@@ -861,5 +862,111 @@ describe("pods", () => {
     expect(due.map((row: any) => row.providerSubscriptionId).sort()).toEqual(["sub_2", "sub_3"]);
     await t.mutation(internalRefs.communityPodPayments.clearPodRefundDueInternal, { paymentId: extra });
     expect((await t.query(internalRefs.communityPodPayments.listPodRefundsDueInternal, {})).map((row: any) => row.providerSubscriptionId)).toEqual(["sub_3"]);
+  });
+
+  it("pod calls: only the pod sees them, in every reader of events; hosts schedule; the outside shows the rhythm only", async () => {
+    const t = convexTest(schema, modules);
+    const nowMs = Date.now();
+    const f = await fixture(t, nowMs);
+    const ids = await t.run(async (ctx) => {
+      const find = async (subject: string) => (await ctx.db.query("users").withIndex("by_authSubject" as any, (q: any) => q.eq("authSubject", subject)).first())!;
+      const ana = await find("brief-Ana");
+      const ben = await find("brief-Ben");
+      for (const row of await ctx.db.query("communityMemberships").collect()) await ctx.db.patch(row._id, { activationSequence: 1, activatedAt: nowMs } as any);
+      const channelId = await ctx.db.insert("communityChannels", {
+        communityId: f.communityId, slug: "founders", name: "Founders", accessMode: "restricted",
+        postingPolicy: "members", status: "active", position: 1, createdByUserId: f.ownerId, createdAt: nowMs, updatedAt: nowMs,
+      } as any);
+      await ctx.db.insert("communityPods", { communityId: f.communityId, channelId, purpose: "Closer time", visibility: "listed", createdAt: nowMs, updatedAt: nowMs });
+      const anaMembership = (await ctx.db.query("communityMemberships").collect()).find((row: any) => String(row.userId) === String(ana._id))!;
+      await ctx.db.insert("communityChannelParticipants", {
+        communityId: f.communityId, channelId, principalKey: `user:${ana._id}`, membershipId: anaMembership._id, membershipActivationSequence: 1,
+        status: "active", createdByUserId: f.ownerId, createdAt: nowMs, updatedAt: nowMs,
+      } as any);
+      return { ana: ana._id, ben: ben._id, channelId };
+    });
+    const asOwner = t.withIdentity({ subject: "brief-Owner" });
+    const asAna = t.withIdentity({ subject: "brief-Ana" });
+    const asBen = t.withIdentity({ subject: "brief-Ben" });
+    // 25 hours out, so it is inside Home's window and the reminder's.
+    const startsAt = nowMs + 25 * HOUR_MS;
+    const callPayload = {
+      community_id: f.communityId, pod_channel_id: ids.channelId, title: "Founders call", starts_at: new Date(startsAt).toISOString(),
+      timezone: "UTC", recurrence_frequency: "weekly", url: "https://meet.example.com/founders", visibility: "public",
+    };
+    const schedule = (who: typeof asOwner) => who.mutation(api.communityEvents.saveCommunityEvent, { eventId: null, payload: callPayload });
+    // A member of the pod can't schedule; a host can.
+    await expect(schedule(asAna)).rejects.toThrow(/community_pod_manager_required/);
+    await expect(schedule(asBen)).rejects.toThrow();
+    await asOwner.mutation(api.communityPods.setPodHost, { communityId: f.communityId, channelId: ids.channelId, userId: ids.ana, host: true });
+    const call: any = await schedule(asAna);
+    // Never public, whatever was asked.
+    expect(call).toMatchObject({ title: "Founders call", visibility: "members", pod_channel_id: String(ids.channelId) });
+    const eventId = call.parent_event_id;
+    // A community event too, a little later, to prove readers still show it.
+    await asOwner.mutation(api.communityEvents.saveCommunityEvent, { eventId: null, payload: {
+      community_id: f.communityId, title: "Town hall", starts_at: new Date(startsAt + HOUR_MS).toISOString(), timezone: "UTC",
+    } });
+
+    // The Events list.
+    const titles = async (who: typeof asOwner) => (await who.query(api.communityEvents.listCommunityEvents, { communityId: f.communityId, startIso: new Date(nowMs).toISOString(), limit: 5 }))
+      .map((event: any) => [event.title, event.pod_name]);
+    expect(await titles(asAna)).toEqual([["Founders call", "Founders"], ["Town hall", null], ["Founders call", "Founders"], ["Founders call", "Founders"], ["Founders call", "Founders"]]);
+    expect(await titles(asBen)).toEqual([["Town hall", null]]);
+    expect((await titles(asOwner))[0]).toEqual(["Founders call", "Founders"]);
+    // The guide's and MCP's reader.
+    const semantic = async (userId: any) => (await t.query(internalRefs.communityEvents.listCommunityEventsForSemanticRepositoryInternal, { userId, communityId: f.communityId, limit: 3 }))
+      .events.map((event: any) => event.title);
+    expect(await semantic(ids.ana)).toContain("Founders call");
+    expect(await semantic(ids.ben)).toEqual(["Town hall"]);
+    await expect(t.query(internalRefs.communityEvents.readCommunityEventForSemanticRepositoryInternal, { userId: ids.ben, communityId: f.communityId, eventId, occurrenceStartsAt: startsAt }))
+      .rejects.toThrow(/community_event_not_found/);
+    // "I'm going".
+    await expect(asBen.mutation(api.communityEventGoing.setCommunityEventGoing, { communityId: f.communityId, eventId, occurrenceStartsAt: startsAt, going: true }))
+      .rejects.toThrow(/community_event_not_found/);
+    await asAna.mutation(api.communityEventGoing.setCommunityEventGoing, { communityId: f.communityId, eventId, occurrenceStartsAt: startsAt, going: true });
+    const goingItems = [{ eventId, occurrenceStartsAt: startsAt }];
+    expect(await asBen.query(api.communityEventGoing.listCommunityEventGoing, { communityId: f.communityId, items: goingItems })).toEqual([]);
+    expect(await asAna.query(api.communityEventGoing.listCommunityEventGoing, { communityId: f.communityId, items: goingItems })).toMatchObject([{ mine: true, count: 1 }]);
+    // Home's "coming up".
+    const comingUp = async (who: typeof asOwner) => JSON.stringify(await who.query(api.communityHomeMoments.getHomeMoments, { communityId: f.communityId }));
+    expect(await comingUp(asAna)).toContain("Founders call");
+    expect(await comingUp(asBen)).not.toContain("Founders call");
+    expect(await comingUp(asBen)).toContain("Town hall");
+    // The founder's brief is the whole community's: no pod calls.
+    const snapshot = await t.run(async (ctx) => buildSnapshot(ctx, await ctx.db.get(f.communityId), nowMs - DAY, nowMs));
+    expect(snapshot.upcomingEvents.map((event) => event.title)).toEqual(["Town hall"]);
+    // Reminders go to the pod only.
+    const batches: any[] = await t.query(internalRefs.eventReminders.buildEventReminderBatchesInternal, { nowMs: nowMs + 30 * 60 * 1000, lookaheadMs: 2 * HOUR_MS });
+    const podBatch = batches.filter((batch) => batch.eventTitle === "Founders call");
+    expect(podBatch.flatMap((batch) => batch.recipientUserIds)).toEqual([String(ids.ana)]);
+    expect(batches.find((batch) => batch.eventTitle === "Town hall").recipientUserIds).toContain(String(ids.ben));
+    // Ana leaves and rejoins the community: her old pod grant no longer
+    // counts (the room turns her away), so the pod's reminder skips her.
+    await t.run(async (ctx) => {
+      const membership = (await ctx.db.query("communityMemberships").collect()).find((row: any) => String(row.userId) === String(ids.ana))!;
+      await ctx.db.patch(membership._id, { activationSequence: 2 } as any);
+    });
+    const afterRejoin: any[] = await t.query(internalRefs.eventReminders.buildEventReminderBatchesInternal, { nowMs: nowMs + 30 * 60 * 1000, lookaheadMs: 2 * HOUR_MS });
+    expect(afterRejoin.filter((batch) => batch.eventTitle === "Founders call")).toEqual([]);
+    await t.run(async (ctx) => {
+      const membership = (await ctx.db.query("communityMemberships").collect()).find((row: any) => String(row.userId) === String(ids.ana))!;
+      await ctx.db.patch(membership._id, { activationSequence: 1 } as any);
+      // Sixty calls long past: the next one still shows.
+      for (let n = 1; n <= 60; n += 1) await ctx.db.insert("communityEvents", {
+        communityId: f.communityId, createdByUserId: ids.ana, title: `Old call ${n}`, startsAt: nowMs - n * DAY, timezone: "UTC",
+        locationType: "tbd", visibility: "members", podChannelId: ids.channelId, status: "live", recurrenceFrequency: "none", createdAt: nowMs - n * DAY, updatedAt: nowMs - n * DAY,
+      } as any);
+    });
+    // In the pod: the next call with its link. Outside: the rhythm, no link.
+    expect((await asAna.query(api.communityPods.getPod, { communityId: f.communityId, channelId: ids.channelId })).next_call)
+      .toMatchObject({ title: "Founders call", url: "https://meet.example.com/founders", recurrence_frequency: "weekly" });
+    const outside: any = await asBen.query(api.communityPods.getPodPage, { communityId: f.communityId, podSlug: "founders" });
+    expect(outside.rhythm).toEqual({ recurrence_frequency: "weekly", next_starts_at: new Date(startsAt).toISOString() });
+    expect(JSON.stringify(outside)).not.toContain("meet.example.com");
+    // Only the pod's managers cancel it; then it's gone for everyone.
+    await expect(asBen.mutation(api.communityEvents.cancelCommunityEvent, { eventId })).rejects.toThrow();
+    await asAna.mutation(api.communityEvents.cancelCommunityEvent, { eventId });
+    expect((await asAna.query(api.communityPods.getPod, { communityId: f.communityId, channelId: ids.channelId })).next_call).toBeNull();
   });
 });

@@ -34,10 +34,16 @@ export type CloudCommunityEvent = {
   is_recurring_instance: boolean;
   created_at: string;
   updated_at: string;
+  // A pod's call: only people who can enter that pod get it.
+  pod_channel_id?: string | null;
+  pod_name?: string | null;
+  pod_slug?: string | null;
 };
 
 export type CloudCommunityEventSavePayload = {
   community_id?: string;
+  // Schedules a pod's call (its hosts may).
+  pod_channel_id?: string;
   title: string;
   description_md?: string | null;
   starts_at: string;

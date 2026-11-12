@@ -1,3 +1,4 @@
+import { communityWideEvents } from "./communityEventAudience";
 import { v } from "convex/values";
 import { paginationOptsValidator } from "convex/server";
 import { resolveMentionRecipientSource } from "./communityNotificationAccess";
@@ -192,8 +193,9 @@ async function getLatestCommunityEventsUpdatedAt(
       q.eq("communityId", communityId).eq("status", "live"),
     )
     .order("desc")
-    .take(1)) as CommunityEventLike[];
-  const updatedAt = latest[0]?.updatedAt;
+    .take(20)) as CommunityEventLike[];
+  // A pod's call changing isn't news for the whole community.
+  const updatedAt = communityWideEvents(latest)[0]?.updatedAt;
   return typeof updatedAt === "number" && Number.isFinite(updatedAt) && updatedAt > 0
     ? Math.floor(updatedAt)
     : null;

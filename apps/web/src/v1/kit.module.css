@@ -776,6 +776,7 @@
 .app .podlink:hover{text-decoration:underline}
 .app .podtag{margin-left:8px;font-size:11px;color:var(--ink3);border:1px solid var(--line2);border-radius:999px;padding:1px 7px;white-space:nowrap}
 .app .podleave{display:flex;flex-direction:column;gap:8px;margin-top:8px}
+.app .podform select{padding:7px 10px;border-radius:8px;border:1px solid var(--line2);background:var(--field);color:var(--ink);font:inherit;font-size:13px}
 .app .podreq{display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:32px;font-size:13px;color:var(--ink)}
 .app .podreq em{font-style:normal;color:var(--ink3)}
 .app .podreq-acts{display:flex;gap:4px}
