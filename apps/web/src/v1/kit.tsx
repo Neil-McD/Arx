@@ -366,9 +366,9 @@ export function Sec(props: { label?: string; children: ReactNode }) {
   );
 }
 
-export function Btn(props: { children: ReactNode; go?: boolean; txt?: boolean; small?: boolean; style?: CSSProperties; onClick?: () => void }) {
+export function Btn(props: { children: ReactNode; go?: boolean; txt?: boolean; small?: boolean; disabled?: boolean; style?: CSSProperties; onClick?: () => void }) {
   return (
-    <button type="button" className={cx("btn", props.go && "go", props.txt && "txt", props.small && "sm")} style={props.style} onClick={props.onClick}>
+    <button type="button" className={cx("btn", props.go && "go", props.txt && "txt", props.small && "sm")} style={props.style} disabled={props.disabled} onClick={props.onClick}>
       {props.children}
     </button>
   );

@@ -192,6 +192,19 @@ css += """
 .app button.kmini-btn{width:100%;padding:0}.app button.kmini-btn:disabled{cursor:default}
 .app .kmini+.kline{margin-top:10px}
 
+/* Pods (docs/specs/pods-v0.md): one page of pod cards, and the new-pod form. */
+.app .podgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px;margin-top:20px}
+.app button.podcard{display:flex;flex-direction:column;align-items:flex-start;gap:6px;min-height:120px;padding:16px;border-radius:10px;border:1px solid var(--line2);background:var(--panel2,var(--s1));text-align:left;cursor:pointer;transition:border-color .15s var(--ease),background .15s var(--ease)}
+.app button.podcard:hover{border-color:rgba(var(--w),.18);background:var(--s2)}
+.app .podname{display:flex;align-items:center;gap:8px;font-size:15px;font-weight:600;color:var(--ink)}
+.app .podname .ic{width:15px;height:15px;color:var(--ink3)}
+.app .podpurpose{font-size:13px;line-height:1.5;color:var(--ink2)}
+.app .podmeta{margin-top:auto;font-size:12px;color:var(--ink3)}
+.app button.podnew{align-items:center;justify-content:center;flex-direction:row;gap:8px;border-style:dashed;color:var(--ink3);font-size:13px}
+.app .podform{display:flex;flex-direction:column;gap:10px;margin-top:16px;max-width:560px}
+.app .podform input,.app .podform textarea{width:100%;box-sizing:border-box;padding:8px 10px;border-radius:8px;border:1px solid var(--line2);background:var(--field);color:var(--ink);font:inherit;font-size:14px;outline:0;resize:vertical}
+.app .podform input:focus,.app .podform textarea:focus{border-color:rgba(var(--w),.2)}
+
 /* Links drawn as the mock's buttons (Join, Add to calendar). */
 .app a.btn{text-decoration:none}
 .app .btn.sm.on .ic{width:13px;height:13px}

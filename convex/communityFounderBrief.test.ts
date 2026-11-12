@@ -475,3 +475,40 @@ describe("Home moments", () => {
       .rejects.toThrow();
   });
 });
+
+describe("pods", () => {
+  it("builders see every pod; a member sees only pods they were added to; purpose is the builder's", async () => {
+    const t = convexTest(schema, modules);
+    const f = await fixture(t, Date.now());
+    const podId = await t.run(async (ctx) => {
+      const nowMs = Date.now();
+      const ana = (await ctx.db.query("users").withIndex("by_authSubject" as any, (q: any) => q.eq("authSubject", "brief-Ana")).first())!;
+      const anaMembership = (await ctx.db.query("communityMemberships").collect()).find((row: any) => String(row.userId) === String(ana._id))!;
+      await ctx.db.patch(anaMembership._id, { activationSequence: 1, activatedAt: nowMs } as any);
+      const channelId = await ctx.db.insert("communityChannels", {
+        communityId: f.communityId, slug: "founders-pod", name: "Founders pod", accessMode: "restricted",
+        postingPolicy: "members", status: "active", position: 1, createdByUserId: f.ownerId, createdAt: nowMs, updatedAt: nowMs,
+      } as any);
+      await ctx.db.insert("communityChannelParticipants", {
+        communityId: f.communityId, channelId, principalKey: `user:${ana._id}`, membershipId: anaMembership._id, membershipActivationSequence: 1,
+        status: "active", createdByUserId: f.ownerId, createdAt: nowMs, updatedAt: nowMs,
+      } as any);
+      return channelId;
+    });
+    const list = (subject: string, asMember?: boolean) => t.withIdentity({ subject })
+      .query(api.communityPods.listCommunityPods, { communityId: f.communityId, ...(asMember ? { asMember } : {}) });
+
+    const owner = await list("brief-Owner");
+    expect(owner.can_manage).toBe(true);
+    expect(owner.pods).toMatchObject([{ name: "Founders pod", members: 1, is_member: false }]);
+    expect((await list("brief-Ana")).pods.map((pod: any) => pod.name)).toEqual(["Founders pod"]);
+    expect(await list("brief-Ben")).toEqual({ can_manage: false, pods: [] });
+    // Viewing as a member, the builder sees only pods they are in.
+    expect((await list("brief-Owner", true)).pods).toEqual([]);
+
+    await t.withIdentity({ subject: "brief-Owner" }).mutation(api.communityPods.savePodPurpose, { communityId: f.communityId, channelId: podId, purpose: "  Weekly accountability for founders  " });
+    expect((await list("brief-Ana")).pods[0].purpose).toBe("Weekly accountability for founders");
+    await expect(t.withIdentity({ subject: "brief-Ana" }).mutation(api.communityPods.savePodPurpose, { communityId: f.communityId, channelId: podId, purpose: "mine" }))
+      .rejects.toThrow();
+  });
+});

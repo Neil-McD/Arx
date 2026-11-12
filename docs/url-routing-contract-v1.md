@@ -36,6 +36,7 @@ Current canonical/pathname routes include:
 - `/c/:slug/chat`
 - `/c/:slug/resources`
 - `/c/:slug/events`
+- `/c/:slug/pods` (the Pods page; a pod itself opens as its room at `/c/:slug/chat/:pod`)
 - `/c/:slug/settings`
 - `/c/:slug/agent`
 - `/c/:slug/workflows` (going with member workflows)

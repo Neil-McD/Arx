@@ -878,6 +878,17 @@ export default defineSchema({
 
   // Manager-owned grants, unique per channel/principal. Human grants bind to
   // the current community-membership activation; rejoining requires reinviting.
+  // Pods (docs/specs/pods-v0.md): a pod is an invite-only room plus this
+  // record of what it is for. A room with no record is a hidden pod.
+  communityPods: defineTable({
+    communityId: v.id("communities"),
+    channelId: v.id("communityChannels"),
+    purpose: v.string(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_community_channel", ["communityId", "channelId"]),
+
   communityChannelParticipants: defineTable({
     communityId: v.id("communities"),
     channelId: v.id("communityChannels"),

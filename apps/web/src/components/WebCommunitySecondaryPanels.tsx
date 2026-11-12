@@ -8,6 +8,7 @@ import { WebCommunityAiAgentSection } from "./WebCommunityAiAgentSection";
 import { WebCommunityAvatarEditorModal } from "./WebCommunityAvatarEditorModal";
 import { WebCommunityBannerEditorModal } from "./WebCommunityBannerEditorModal";
 import { WebCommunityEventsSection } from "./WebCommunityEventsSection";
+import { WebCommunityPodsSection, type WebCommunityPodsSectionProps } from "./WebCommunityPodsSection";
 import { WebDeleteResourceModuleModal } from "./WebDeleteResourceModuleModal";
 import { WebCommunityResourceModuleModal } from "./WebCommunityResourceModuleModal";
 import { CommunityResourcesPanel } from "./CommunityResourcesPanel";
@@ -50,6 +51,7 @@ export type WebCommunitySecondaryPanelsProps = {
   resources: ComponentProps<typeof CommunityResourcesPanel>;
   knowledge: ComponentProps<typeof WebCommunityKnowledgePanel>["context"];
   events: ComponentProps<typeof WebCommunityEventsSection>;
+  pods: WebCommunityPodsSectionProps;
   resourceModuleModal: ComponentProps<typeof WebCommunityResourceModuleModal>;
   resourceModuleDeleteModal: ComponentProps<typeof WebDeleteResourceModuleModal>;
 };
@@ -110,6 +112,9 @@ export function WebCommunitySecondaryPanels(props: WebCommunitySecondaryPanelsPr
 
       {props.communityTab === "events" &&
         renderCenteredPane(<WebCommunityEventsSection {...props.events} />)}
+
+      {props.communityTab === "pods" &&
+        renderCenteredPane(<WebCommunityPodsSection {...props.pods} />)}
 
     </>
   );

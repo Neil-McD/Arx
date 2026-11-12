@@ -276,6 +276,9 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
   cards for the owner, [gateway spec](specs/community-agent-gateway-v0.md); the card
   is chosen in `shared/communityOwnerMoments.ts`). Table: `communityOwnerMoments`
   (what was shown and dismissed).
+- **Pods:** `communityPods` (the Pods page: builders see every pod, members their
+  own; a pod is an invite-only room plus its purpose, [spec](specs/pods-v0.md)).
+  Table: `communityPods`.
 - **Home moments:** `communityHomeMoments` ("since you were last here" from the
   visit before this one, and a member's next step; ranked in
   `shared/communityHomeMoments.ts`). Table: `communityMemberVisits`.
