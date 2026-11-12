@@ -19,6 +19,13 @@ export function announceCommunityAppLinksChanged(): void {
   if (typeof window !== "undefined") window.dispatchEvent(new Event(CHANGED_EVENT));
 }
 
+// Manage → Plans announces a change, so Your app's setup prompt carries the
+// current plans.
+export const COMMUNITY_PLANS_CHANGED_EVENT = "polynet:community-plans-changed";
+export function announceCommunityPlansChanged(): void {
+  if (typeof window !== "undefined") window.dispatchEvent(new Event(COMMUNITY_PLANS_CHANGED_EVENT));
+}
+
 // Read once per community (and again after a change); none until known.
 export function useCommunityAppLinksState(args: {
   session: unknown;

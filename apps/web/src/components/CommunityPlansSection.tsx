@@ -1,6 +1,7 @@
 // Plans (one door, slice 1): the levels of membership a builder sells, one
 // at a time per member, each with the grants a connected app reads. The base
 // membership's price stays in Pricing above; here it gets a name and grants.
+import { announceCommunityPlansChanged } from "../controllers/communityAppLinks";
 import { useCallback, useEffect, useState } from "react";
 import {
   archiveCloudCommunityTier,
@@ -43,6 +44,7 @@ export function CommunityPlansSection(props: { communityId: string; session: unk
       });
       setDraft(null);
       await load();
+      announceCommunityPlansChanged();
     } catch (failure) {
       const code = String((failure as Error)?.message ?? "");
       setError(code.includes("grant_invalid") ? "Grants are short lowercase names like de:setter (not \"community\" or pod:…)."
@@ -58,6 +60,7 @@ export function CommunityPlansSection(props: { communityId: string; session: unk
       const session = await props.ensureSession(props.session);
       if (session) await archiveCloudCommunityTier({ session, communityId: props.communityId, key });
       await load();
+      announceCommunityPlansChanged();
     } catch { setError("Couldn't stop selling it. Try again."); } finally { setBusy(false); }
   };
 
