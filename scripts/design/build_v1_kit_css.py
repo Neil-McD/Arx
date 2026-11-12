@@ -192,6 +192,38 @@ css += """
 .app button.kmini-btn{width:100%;padding:0}.app button.kmini-btn:disabled{cursor:default}
 .app .kmini+.kline{margin-top:10px}
 
+/* Pods (docs/specs/pods-v0.md): one page of pod cards, and the new-pod form. */
+.app .podgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px;margin-top:20px}
+.app button.podcard{display:flex;flex-direction:column;align-items:flex-start;gap:6px;min-height:120px;padding:16px;border-radius:10px;border:1px solid var(--line2);background:var(--panel2,var(--s1));text-align:left;cursor:pointer;transition:border-color .15s var(--ease),background .15s var(--ease)}
+.app button.podcard:hover{border-color:rgba(var(--w),.18);background:var(--s2)}
+.app .podname{display:flex;align-items:center;gap:8px;font-size:15px;font-weight:600;color:var(--ink)}
+.app .podname .ic{width:15px;height:15px;color:var(--ink3)}
+.app .podpurpose{font-size:13px;line-height:1.5;color:var(--ink2)}
+.app .podmeta{margin-top:auto;font-size:12px;color:var(--ink3)}
+.app button.podnew{align-items:center;justify-content:center;flex-direction:row;gap:8px;border-style:dashed;color:var(--ink3);font-size:13px}
+.app .podform{display:flex;flex-direction:column;gap:10px;margin-top:16px;max-width:560px}
+.app .podform input,.app .podform textarea{width:100%;box-sizing:border-box;padding:8px 10px;border-radius:8px;border:1px solid var(--line2);background:var(--field);color:var(--ink);font:inherit;font-size:14px;outline:0;resize:vertical}
+.app .podform input:focus,.app .podform textarea:focus{border-color:rgba(var(--w),.2)}
+.app .podask{font-size:12px;color:var(--accent,var(--blue))}
+.app .podout{display:flex;flex-direction:column;align-items:flex-start;gap:6px;min-height:120px;padding:16px;border-radius:10px;border:1px solid var(--line2);background:var(--panel2,var(--s1))}
+.app .podout .btn{margin-top:auto}
+.app .podform-row{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap}
+.app .podform-check{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--ink2);cursor:pointer}
+.app .podform-check input{width:auto}
+.app .podform-seats{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--ink2)}
+.app .podform-seats input{width:96px}
+.app .podprice{font-size:13px;color:var(--ink);font-weight:500}
+.app .podpage{display:flex;flex-direction:column;gap:14px;max-width:620px;margin-top:20px}
+.app .podpage .podname{font-size:20px}
+.app .podget{margin:4px 0 0;padding-left:18px;display:flex;flex-direction:column;gap:6px;font-size:14px;color:var(--ink)}
+.app .podlink{background:none;border:0;padding:0;cursor:pointer;text-align:left;color:inherit;font:inherit}
+.app .podlink:hover{text-decoration:underline}
+.app .podtag{margin-left:8px;font-size:11px;color:var(--ink3);border:1px solid var(--line2);border-radius:999px;padding:1px 7px;white-space:nowrap}
+.app .podleave{display:flex;flex-direction:column;gap:8px;margin-top:8px}
+.app .podreq{display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:32px;font-size:13px;color:var(--ink)}
+.app .podreq em{font-style:normal;color:var(--ink3)}
+.app .podreq-acts{display:flex;gap:4px}
+
 /* Links drawn as the mock's buttons (Join, Add to calendar). */
 .app a.btn{text-decoration:none}
 .app .btn.sm.on .ic{width:13px;height:13px}

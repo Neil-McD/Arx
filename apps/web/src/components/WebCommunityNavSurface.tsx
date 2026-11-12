@@ -23,6 +23,13 @@ export function WebCommunityNavSurface({
     !isMobileHome &&
     webDestinationHasCommunityNavSelection(communityShell.destination);
 
+  // Design system v1: private rooms are pods, reached from the Pods page,
+  // never listed down the left column.
+  const listedChannels = useV1Layout
+    ? communityShell.communityChannels.filter((channel) => channel.access_mode !== "restricted")
+    : communityShell.communityChannels;
+  const inPod = useV1Layout && communityShell.destination.kind === "community_chat"
+    && communityShell.communityChannels.some((channel) => channel.access_mode === "restricted" && channel.slug === communityShell.selectedCommunityChannelSlug);
   return (
     <>
     {useV1Layout ? <WebCommunityCommandPalette communityShell={communityShell} /> : null}
@@ -32,7 +39,7 @@ export function WebCommunityNavSurface({
       communityTab={communityShell.communityTab}
       activeSelectionMode={hasDestinationSelection ? "route" : "none"}
       tabIndicators={communityShell.communityTabIndicators}
-      channels={communityShell.communityChannels}
+      channels={listedChannels}
       isLoadingChannels={communityShell.isLoadingCommunityChannels}
       selectedChannelSlug={isMobileHome ? null : communityShell.selectedCommunityChannelSlug}
       channelIndicators={communityShell.communityChannelIndicators}
@@ -98,6 +105,8 @@ export function WebCommunityNavSurface({
       isInboxOpen={communityShell.isDirectMessagesOpen}
       inboxUnreadCount={communityShell.directMessagesUnreadCount}
       onOpenMembers={useV1Layout ? communityShell.onOpenMembers : undefined}
+      onOpenPods={useV1Layout ? () => communityShell.onSelectCommunityTab("pods") : undefined}
+      podsActive={inPod}
       memberCount={communityShell.activeCommunityMemberCount}
       onOpenGuide={useV1Layout && communityShell.onOpenCommunitySettingsPane
         ? () => communityShell.onOpenCommunitySettingsPane?.("agent")

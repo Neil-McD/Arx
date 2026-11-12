@@ -78,6 +78,8 @@ export function useWebShellNavigationController(params: {
   setCommunityChannelSlug: Dispatch<SetStateAction<string | null>>;
   communityResourceModuleId: string | null;
   setCommunityResourceModuleId: Dispatch<SetStateAction<string | null>>;
+  communityPodSlug: string | null;
+  setCommunityPodSlug: Dispatch<SetStateAction<string | null>>;
   communitySettingsPane: CommunitySettingsPane;
   setCommunitySettingsPane: Dispatch<SetStateAction<CommunitySettingsPane>>;
   applyCommunityShellState: (options: {
@@ -127,6 +129,11 @@ export function useWebShellNavigationController(params: {
           ? nextAppRoute.communityResourceModuleId ?? null
           : null,
       );
+      current.setCommunityPodSlug(
+        nextAppRoute.communityTab === "pods"
+          ? nextAppRoute.communityPodSlug ?? null
+          : null,
+      );
       current.setCommunitySettingsPane(
         nextAppRoute.communityTab === "settings"
           ? nextAppRoute.communitySettingsPane ?? "community"
@@ -136,6 +143,7 @@ export function useWebShellNavigationController(params: {
     }
     current.setCommunityChannelSlug(null);
     current.setCommunityResourceModuleId(null);
+    current.setCommunityPodSlug(null);
     current.setCommunitySettingsPane("community");
   }, []);
 
@@ -202,6 +210,11 @@ export function useWebShellNavigationController(params: {
             current.activePage === "community" &&
             current.communityTab === "resources"
               ? current.communityResourceModuleId
+              : null,
+          communityPodSlug:
+            current.activePage === "community" &&
+            current.communityTab === "pods"
+              ? current.communityPodSlug
               : null,
           communitySettingsPane:
             current.activePage === "community" &&
@@ -342,6 +355,7 @@ export function useWebShellNavigationController(params: {
     communityTab: params.communityTab,
     communityChannelSlug: params.communityChannelSlug,
     communityResourceModuleId: params.communityResourceModuleId,
+    communityPodSlug: params.communityPodSlug,
     communitySettingsPane: params.communitySettingsPane,
     docsSlug:
       params.activePage === "docs" ? params.selectedProductDocSlug : null,

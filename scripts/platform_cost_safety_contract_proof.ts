@@ -111,7 +111,7 @@ const declaredCronNames = Array.from(
   crons.matchAll(/crons\.(?:interval|daily)\(\s*\n\s*"([^"]+)"/g),
   (match) => match[1]!,
 );
-assert.equal(declaredCronNames.length, 5, "every Convex cron must remain inventoried");
+assert.equal(declaredCronNames.length, 6, "every Convex cron must remain inventoried");
 for (const cronName of declaredCronNames) {
   assert.ok(
     contract.toLowerCase().includes(cronName.toLowerCase()),

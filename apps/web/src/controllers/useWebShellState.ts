@@ -102,6 +102,11 @@ export function useWebShellState() {
         ? initialAppRoute.communityResourceModuleId ?? null
         : null,
     );
+  const [communityPodSlug, setCommunityPodSlug] = useState<string | null>(
+    initialAppRoute?.page === "community" && initialAppRoute.communityTab === "pods"
+      ? initialAppRoute.communityPodSlug ?? null
+      : null,
+  );
   const [communitySettingsPane, setCommunitySettingsPane] =
     useState<CommunitySettingsPane>(
       initialAppRoute?.page === "community"
@@ -163,6 +168,8 @@ export function useWebShellState() {
     setCommunityChannelSlug,
     communityResourceModuleId,
     setCommunityResourceModuleId,
+    communityPodSlug,
+    setCommunityPodSlug,
     communitySettingsPane,
     setCommunitySettingsPane,
     appTheme,

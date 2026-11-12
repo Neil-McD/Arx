@@ -20,6 +20,7 @@ type WebDestinationShellState = {
   communityTab: CommunityTab;
   communityChannelSlug: string | null;
   communityResourceModuleId: string | null;
+  communityPodSlug: string | null;
   communitySettingsPane: CommunitySettingsPane;
   selectedProductDocSlug: string | null;
   activeOperatorTab: OperatorTab;
@@ -44,6 +45,7 @@ export function buildWebDestinationFromShellState(params: {
       communityTab: state.communityTab,
       communityChannelSlug: state.communityChannelSlug,
       communityResourceModuleId: state.communityResourceModuleId,
+      communityPodSlug: state.communityTab === "pods" ? state.communityPodSlug : null,
       communitySettingsPane: state.communitySettingsPane,
       docsSlug: state.selectedProductDocSlug,
       operatorTab: state.activeOperatorTab,

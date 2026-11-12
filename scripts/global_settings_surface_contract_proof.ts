@@ -30,6 +30,7 @@ assert.deepEqual(readAppRouteFromLocation(), {
   communityTab: "chat",
   communityChannelSlug: null,
   communityResourceModuleId: null,
+  communityPodSlug: null,
   communitySettingsPane: null,
   docsSlug: null,
 });

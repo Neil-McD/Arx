@@ -878,6 +878,89 @@ export default defineSchema({
 
   // Manager-owned grants, unique per channel/principal. Human grants bind to
   // the current community-membership activation; rejoining requires reinviting.
+  // Pods (docs/specs/pods-v0.md): a pod is an invite-only room plus this
+  // record of what it is for. A room with no record is a hidden pod.
+  communityPods: defineTable({
+    communityId: v.id("communities"),
+    channelId: v.id("communityChannels"),
+    purpose: v.string(),
+    // Listed: members see it from outside and can ask to join. Missing means
+    // hidden (every private room from before pods).
+    visibility: v.optional(v.union(v.literal("listed"), v.literal("hidden"))),
+    // No limit when missing.
+    seats: v.optional(v.number()),
+    // Members the builder made hosts of this pod (builders and admins always are).
+    hostUserIds: v.optional(v.array(v.id("users"))),
+    // "What you get": up to four short lines on the pod's outside page.
+    whatYouGet: v.optional(v.array(v.string())),
+    // Paid pods (slice 2b): the monthly price charged on top of membership.
+    // Missing means not paid. The Stripe product and price on the builder's
+    // account are made on first checkout; a new amount clears the price, so
+    // existing members keep theirs (their subscriptions carry it).
+    priceAmountBaseUnits: v.optional(v.number()),
+    priceCurrency: v.optional(v.string()),
+    providerAccountId: v.optional(v.string()),
+    providerProductId: v.optional(v.string()),
+    providerPriceId: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_community_channel", ["communityId", "channelId"]),
+  // A member's payment for a paid pod: one row per checkout, which becomes the
+  // subscription once Stripe confirms it. Kept apart from communitySubscriptions
+  // (one per membership). While it grants, the member is on the pod's list.
+  communityPodPayments: defineTable({
+    communityId: v.id("communities"),
+    channelId: v.id("communityChannels"),
+    userId: v.id("users"),
+    status: v.union(
+      v.literal("pending"),
+      v.literal("active"),
+      v.literal("past_due"),
+      v.literal("cancel_at_period_end"),
+      v.literal("ended"),
+      v.literal("expired"),
+    ),
+    amountBaseUnits: v.number(),
+    currency: v.string(),
+    providerAccountId: v.string(),
+    providerPriceId: v.string(),
+    providerCheckoutSessionId: v.optional(v.string()),
+    checkoutUrl: v.optional(v.string()),
+    checkoutExpiresAt: v.number(),
+    providerCustomerId: v.optional(v.string()),
+    providerSubscriptionId: v.optional(v.string()),
+    currentPeriodEndAt: v.optional(v.number()),
+    // When this payment put the member on the pod's list (so ending it takes
+    // them off, and a host's own grant is never touched).
+    grantedAt: v.optional(v.number()),
+    // Paid but never let in (or a second payment for the same pod): a full
+    // refund is owed. Kept until Stripe has refunded, whatever the status.
+    refundDue: v.optional(v.boolean()),
+    lastProviderEventAt: v.optional(v.number()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_channel_user", ["channelId", "userId"])
+    .index("by_user", ["userId"])
+    .index("by_provider_subscription", ["providerAccountId", "providerSubscriptionId"])
+    .index("by_status", ["status"])
+    .index("by_refundDue", ["refundDue"])
+    .index("by_community", ["communityId"]),
+  // Asking to join a listed pod: the pod's hosts approve or decline; a full
+  // pod puts the request on its waitlist.
+  communityPodRequests: defineTable({
+    communityId: v.id("communities"),
+    channelId: v.id("communityChannels"),
+    userId: v.id("users"),
+    status: v.union(v.literal("pending"), v.literal("waitlist"), v.literal("approved"), v.literal("declined")),
+    decidedByUserId: v.optional(v.id("users")),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_channel_user", ["channelId", "userId"])
+    .index("by_channel_status", ["channelId", "status"]),
+
   communityChannelParticipants: defineTable({
     communityId: v.id("communities"),
     channelId: v.id("communityChannels"),

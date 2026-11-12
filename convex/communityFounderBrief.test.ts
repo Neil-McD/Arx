@@ -475,3 +475,391 @@ describe("Home moments", () => {
       .rejects.toThrow();
   });
 });
+
+// A pod checkout reserved for a member (the payment's id).
+async function reservePod(t: ReturnType<typeof convexTest>, args: Record<string, unknown>) {
+  return (await t.mutation(internalRefs.communityPodPayments.createPendingPodPaymentInternal, args as any)).paymentId;
+}
+
+describe("pods", () => {
+  it("builders see every pod; a member sees only pods they were added to; purpose is the builder's", async () => {
+    const t = convexTest(schema, modules);
+    const f = await fixture(t, Date.now());
+    const podId = await t.run(async (ctx) => {
+      const nowMs = Date.now();
+      const ana = (await ctx.db.query("users").withIndex("by_authSubject" as any, (q: any) => q.eq("authSubject", "brief-Ana")).first())!;
+      const anaMembership = (await ctx.db.query("communityMemberships").collect()).find((row: any) => String(row.userId) === String(ana._id))!;
+      await ctx.db.patch(anaMembership._id, { activationSequence: 1, activatedAt: nowMs } as any);
+      const channelId = await ctx.db.insert("communityChannels", {
+        communityId: f.communityId, slug: "founders-pod", name: "Founders pod", accessMode: "restricted",
+        postingPolicy: "members", status: "active", position: 1, createdByUserId: f.ownerId, createdAt: nowMs, updatedAt: nowMs,
+      } as any);
+      await ctx.db.insert("communityChannelParticipants", {
+        communityId: f.communityId, channelId, principalKey: `user:${ana._id}`, membershipId: anaMembership._id, membershipActivationSequence: 1,
+        status: "active", createdByUserId: f.ownerId, createdAt: nowMs, updatedAt: nowMs,
+      } as any);
+      return channelId;
+    });
+    const list = (subject: string, asMember?: boolean) => t.withIdentity({ subject })
+      .query(api.communityPods.listCommunityPods, { communityId: f.communityId, ...(asMember ? { asMember } : {}) });
+
+    const owner = await list("brief-Owner");
+    expect(owner.can_manage).toBe(true);
+    expect(owner.pods).toMatchObject([{ name: "Founders pod", members: 1, is_member: false }]);
+    expect((await list("brief-Ana")).pods.map((pod: any) => pod.name)).toEqual(["Founders pod"]);
+    // Ben isn't in it, and a hidden pod (every room from before pods) isn't shown from outside either.
+    expect(await list("brief-Ben")).toEqual({ can_manage: false, pods: [], outside: [] });
+    // Viewing as a member, the builder sees only pods they are in.
+    expect((await list("brief-Owner", true)).pods).toEqual([]);
+
+    const asOwner = t.withIdentity({ subject: "brief-Owner" });
+    const asAna = t.withIdentity({ subject: "brief-Ana" });
+    const asBen = t.withIdentity({ subject: "brief-Ben" });
+    await asOwner.mutation(api.communityPods.savePodDetails, { communityId: f.communityId, channelId: podId, purpose: "  Weekly accountability for founders  " });
+    expect((await list("brief-Ana")).pods[0].purpose).toBe("Weekly accountability for founders");
+    await expect(asAna.mutation(api.communityPods.savePodDetails, { communityId: f.communityId, channelId: podId, purpose: "mine" })).rejects.toThrow();
+
+    // Listed with one seat (Ana has it): Ben sees the outside only, and asking puts him on the waitlist.
+    await asOwner.mutation(api.communityPods.savePodDetails, { communityId: f.communityId, channelId: podId, visibility: "listed", seats: 1 });
+    const outside = (await list("brief-Ben")).outside;
+    expect(outside).toEqual([{ channel_id: String(podId), slug: "founders-pod", name: "Founders pod", purpose: "Weekly accountability for founders", hosts: [], seats_left: 0, price: null, my_request: null }]);
+    expect(JSON.stringify(outside)).not.toContain("Ana");
+    await expect(asBen.query(api.communityPods.getPod, { communityId: f.communityId, channelId: podId })).rejects.toThrow();
+    expect(await asBen.mutation(api.communityPods.requestToJoinPod, { communityId: f.communityId, channelId: podId })).toEqual({ status: "waitlist" });
+    expect((await list("brief-Ben")).outside[0].my_request).toBe("waitlist");
+
+    // Only the pod's managers decide; the owner says yes and Ben is in.
+    const ben = await t.run(async (ctx) => (await ctx.db.query("users").withIndex("by_authSubject" as any, (q: any) => q.eq("authSubject", "brief-Ben")).first())!);
+    await t.run(async (ctx) => {
+      const membership = (await ctx.db.query("communityMemberships").collect()).find((row: any) => String(row.userId) === String(ben._id))!;
+      await ctx.db.patch(membership._id, { activationSequence: 1, activatedAt: Date.now() } as any);
+    });
+    await expect(asAna.mutation(api.communityPods.decidePodRequest, { communityId: f.communityId, channelId: podId, userId: ben._id, approve: true })).rejects.toThrow(/manager_required/);
+    expect((await asOwner.query(api.communityPods.getPod, { communityId: f.communityId, channelId: podId })).requests).toMatchObject([{ name: "Ben", status: "waitlist" }]);
+    await asOwner.mutation(api.communityPods.decidePodRequest, { communityId: f.communityId, channelId: podId, userId: ben._id, approve: true });
+    expect((await list("brief-Ben")).pods.map((pod: any) => pod.name)).toEqual(["Founders pod"]);
+    expect((await asBen.query(api.communityPods.getPod, { communityId: f.communityId, channelId: podId })).members.map((member: any) => member.name).sort()).toEqual(["Ana", "Ben"]);
+
+    // A host the builder names can decide for their pod.
+    await asOwner.mutation(api.communityPods.setPodHost, { communityId: f.communityId, channelId: podId, userId: ben._id, host: true });
+    expect((await asBen.query(api.communityPods.getPod, { communityId: f.communityId, channelId: podId })).can_manage).toBe(true);
+  });
+
+  it("paid pods: a price on top of membership; Stripe's notice puts the payer in and an ended subscription takes them out", async () => {
+    const t = convexTest(schema, modules);
+    const f = await fixture(t, Date.now());
+    const ids = await t.run(async (ctx) => {
+      const nowMs = Date.now();
+      const find = async (subject: string) => (await ctx.db.query("users").withIndex("by_authSubject" as any, (q: any) => q.eq("authSubject", subject)).first())!;
+      const ana = await find("brief-Ana");
+      const ben = await find("brief-Ben");
+      for (const row of await ctx.db.query("communityMemberships").collect()) await ctx.db.patch(row._id, { activationSequence: 1, activatedAt: nowMs } as any);
+      const channelId = await ctx.db.insert("communityChannels", {
+        communityId: f.communityId, slug: "inner-circle", name: "Inner circle", accessMode: "restricted",
+        postingPolicy: "members", status: "active", position: 1, createdByUserId: f.ownerId, createdAt: nowMs, updatedAt: nowMs,
+      } as any);
+      await ctx.db.insert("communityPods", { communityId: f.communityId, channelId, purpose: "Closer time", visibility: "listed", seats: 1, createdAt: nowMs, updatedAt: nowMs });
+      return { ana: ana._id, ben: ben._id, channelId };
+    });
+    const asOwner = t.withIdentity({ subject: "brief-Owner" });
+    const asAna = t.withIdentity({ subject: "brief-Ana" });
+    const setPrice = (amountBaseUnits: number, who = asOwner) => who.mutation(api.communityPodPayments.savePodPrice, { communityId: f.communityId, channelId: ids.channelId, amountBaseUnits });
+    // Charging needs the builder's Stripe; only builders set it; $1 to $10,000.
+    await expect(setPrice(10000)).rejects.toThrow(/community_checkout_unavailable/);
+    await t.run((ctx) => ctx.db.insert("userStripeConnectAccounts", {
+      userId: f.ownerId, stripeAccountId: "acct_builder", accountType: "express", status: "ready", detailsSubmitted: true,
+      chargesEnabled: true, payoutsEnabled: true, requirementsCurrentlyDue: [], requirementsEventuallyDue: [], createdAt: 0, updatedAt: 0,
+    }));
+    await expect(setPrice(10000, asAna)).rejects.toThrow();
+    await expect(setPrice(50)).rejects.toThrow(/community_pod_price_invalid/);
+    await setPrice(10000);
+    // From outside: the price, and asking is closed (payment is the gate).
+    const outside = (await asAna.query(api.communityPods.listCommunityPods, { communityId: f.communityId })).outside;
+    expect(outside).toMatchObject([{ name: "Inner circle", price: { amount_base_units: 10000, currency: "usd" }, seats_left: 1 }]);
+    await expect(asAna.mutation(api.communityPods.requestToJoinPod, { communityId: f.communityId, channelId: ids.channelId })).rejects.toThrow(/community_pod_paid/);
+    const config = (userId: any) => t.query(internalRefs.communityPodPayments.podCheckoutConfigInternal, { userId, communityId: f.communityId, channelId: ids.channelId, nowMs: Date.now() });
+    await expect(config(ids.ana)).resolves.toMatchObject({ amountBaseUnits: 10000, providerAccountId: "acct_builder", openCheckoutUrl: null });
+    // A checkout Ana opened is reused rather than started twice.
+    const paymentId = await reservePod(t, {
+      communityId: f.communityId, channelId: ids.channelId, userId: ids.ana, amountBaseUnits: 10000, currency: "usd",
+      providerAccountId: "acct_builder", providerPriceId: "price_pod", nowMs: Date.now(),
+    });
+    await t.mutation(internalRefs.communityPodPayments.attachPodCheckoutInternal, { paymentId, providerCheckoutSessionId: "cs_1", checkoutUrl: "https://checkout.stripe.com/c/1" });
+    expect((await config(ids.ana)).openCheckoutUrl).toBe("https://checkout.stripe.com/c/1");
+    const sync = (status: string, providerEventAt: number, extra: Record<string, unknown> = {}) => t.mutation(internalRefs.communityPodPayments.syncPodPaymentInternal, {
+      paymentId, providerAccountId: "acct_builder", providerSubscriptionId: "sub_1", subscriptionStatus: status, providerEventAt, ...extra,
+    });
+    // Another account's notice is refused; Stripe's confirmation puts Ana in.
+    await expect(t.mutation(internalRefs.communityPodPayments.syncPodPaymentInternal, {
+      paymentId, providerAccountId: "acct_other", providerSubscriptionId: "sub_1", subscriptionStatus: "active", providerEventAt: 1,
+    })).rejects.toThrow(/provider_account_mismatch/);
+    await expect(sync("active", 1000)).resolves.toMatchObject({ status: "active", granted: true });
+    expect((await asAna.query(api.communityPods.getPod, { communityId: f.communityId, channelId: ids.channelId })).members.map((m: any) => m.name)).toEqual(["Ana"]);
+    // Full now: Ben can't start a checkout, and Ana can't pay twice.
+    await expect(config(ids.ben)).rejects.toThrow(/community_pod_full/);
+    await expect(config(ids.ana)).rejects.toThrow(/already_in_pod/);
+    // Leaving keeps access to the period's end; an older notice changes nothing.
+    await expect(sync("active", 2000, { cancelAtPeriodEnd: true })).resolves.toMatchObject({ status: "cancel_at_period_end", granted: true });
+    await expect(sync("canceled", 500)).resolves.toMatchObject({ ignored: true, reason: "stale_event" });
+    // The subscription ends: Ana is out, and Ben can join.
+    await expect(sync("canceled", 3000)).resolves.toMatchObject({ status: "ended", granted: false });
+    await expect(asAna.query(api.communityPods.getPod, { communityId: f.communityId, channelId: ids.channelId })).rejects.toThrow(/community_pod_not_found/);
+    await expect(config(ids.ben)).resolves.toMatchObject({ amountBaseUnits: 10000 });
+    // A new price is for new joins; the builder can make the pod free again.
+    await setPrice(12700);
+    expect((await config(ids.ben)).providerPriceId).toBeNull();
+    await setPrice(0);
+    await expect(config(ids.ben)).rejects.toThrow(/community_pod_not_paid/);
+  });
+
+  it("paid pods end: a refund ends that pod only; leaving the community stops pod billing, refunding one that never let them in", async () => {
+    const t = convexTest(schema, modules);
+    const f = await fixture(t, Date.now());
+    const ids = await t.run(async (ctx) => {
+      const nowMs = Date.now();
+      const find = async (subject: string) => (await ctx.db.query("users").withIndex("by_authSubject" as any, (q: any) => q.eq("authSubject", subject)).first())!;
+      for (const row of await ctx.db.query("communityMemberships").collect()) await ctx.db.patch(row._id, { activationSequence: 1, activatedAt: nowMs } as any);
+      const room = (slug: string) => ctx.db.insert("communityChannels", {
+        communityId: f.communityId, slug, name: slug, accessMode: "restricted",
+        postingPolicy: "members", status: "active", position: 1, createdByUserId: f.ownerId, createdAt: nowMs, updatedAt: nowMs,
+      } as any);
+      return { ana: (await find("brief-Ana"))._id, ben: (await find("brief-Ben"))._id, podA: await room("pod-a"), podB: await room("pod-b") };
+    });
+    const pay = async (userId: any, channelId: any, sub: string) => {
+      const paymentId = await reservePod(t, {
+        communityId: f.communityId, channelId, userId, amountBaseUnits: 10000, currency: "usd", providerAccountId: "acct_builder", providerPriceId: "price_pod", nowMs: Date.now(),
+      });
+      const result = await t.mutation(internalRefs.communityPodPayments.syncPodPaymentInternal, {
+        paymentId, providerAccountId: "acct_builder", providerSubscriptionId: sub, subscriptionStatus: "active", providerEventAt: 1000,
+      });
+      return { paymentId, granted: result.granted };
+    };
+    const allUnreachable = async () => {
+      const found: any[] = [];
+      for (const status of ["active", "past_due", "cancel_at_period_end"]) {
+        let cursor: string | null = null;
+        for (;;) {
+          const page: any = await t.query(internalRefs.communityPodPayments.listUnreachablePodPaymentsPageInternal, { status, cursor });
+          found.push(...page.targets);
+          if (page.isDone) break;
+          cursor = page.continueCursor;
+        }
+      }
+      return found;
+    };
+    const inPod = (channelId: any, subject: string) => t.withIdentity({ subject }).query(api.communityPods.getPod, { communityId: f.communityId, channelId }).then(() => true, () => false);
+    expect((await pay(ids.ana, ids.podA, "sub_a")).granted).toBe(true);
+    expect((await pay(ids.ana, ids.podB, "sub_b")).granted).toBe(true);
+    // A refund on pod A: out of pod A only.
+    await expect(t.mutation(internalRefs.communityPodPayments.endPodPaymentForRiskInternal, { providerAccountId: "acct_builder", providerSubscriptionId: "sub_a" })).resolves.toEqual({ found: true });
+    expect(await inPod(ids.podA, "brief-Ana")).toBe(false);
+    expect(await inPod(ids.podB, "brief-Ana")).toBe(true);
+    // A community subscription isn't a pod payment.
+    await expect(t.mutation(internalRefs.communityPodPayments.endPodPaymentForRiskInternal, { providerAccountId: "acct_builder", providerSubscriptionId: "sub_community" })).resolves.toEqual({ found: false });
+    // Nothing to stop while everyone can reach their pod.
+    await expect(allUnreachable()).resolves.toEqual([]);
+    // Ben paid, but left the community before Stripe confirmed: never let in, refunded in full.
+    await t.run(async (ctx) => {
+      const membership = (await ctx.db.query("communityMemberships").collect()).find((row: any) => String(row.userId) === String(ids.ben))!;
+      await ctx.db.patch(membership._id, { state: "left" } as any);
+    });
+    const benPaid = await pay(ids.ben, ids.podB, "sub_ben");
+    expect(benPaid.granted).toBe(false);
+    await expect(t.run((ctx) => ctx.db.get(benPaid.paymentId))).resolves.toMatchObject({ status: "ended", refundDue: true });
+    // The refund stays owed (whatever Stripe says next) until it is made.
+    await expect(t.query(internalRefs.communityPodPayments.listPodRefundsDueInternal, {})).resolves.toMatchObject([{ providerSubscriptionId: "sub_ben" }]);
+    // Ana leaves the community: her pod B billing stops, keeping what she paid.
+    await t.run(async (ctx) => {
+      const membership = (await ctx.db.query("communityMemberships").collect()).find((row: any) => String(row.userId) === String(ids.ana))!;
+      await ctx.db.patch(membership._id, { state: "left" } as any);
+    });
+    const unreachable = await allUnreachable();
+    // The check scheduled when Ana left finds the same one, for her only.
+    expect((await t.query(internalRefs.communityPodPayments.listUnreachablePodPaymentsForScopeInternal, { communityId: f.communityId, userId: ids.ana }))
+      .map((row: any) => row.providerSubscriptionId)).toEqual(["sub_b"]);
+    expect(unreachable.map((row: any) => [row.providerSubscriptionId, row.refund])).toEqual([["sub_b", false]]);
+    for (const row of unreachable) await t.mutation(internalRefs.communityPodPayments.endUnreachablePodPaymentInternal, { paymentId: row.paymentId });
+    await expect(allUnreachable()).resolves.toEqual([]);
+  });
+
+  it("paid pods: a host taking someone off, or archiving, stops their billing; re-added meanwhile keeps it; fees reverse; abandoned checkouts expire", async () => {
+    const t = convexTest(schema, modules);
+    const f = await fixture(t, Date.now());
+    const ids = await t.run(async (ctx) => {
+      const nowMs = Date.now();
+      const ana = (await ctx.db.query("users").withIndex("by_authSubject" as any, (q: any) => q.eq("authSubject", "brief-Ana")).first())!;
+      for (const row of await ctx.db.query("communityMemberships").collect()) await ctx.db.patch(row._id, { activationSequence: 1, activatedAt: nowMs } as any);
+      const channelId = await ctx.db.insert("communityChannels", {
+        communityId: f.communityId, slug: "pod", name: "pod", accessMode: "restricted",
+        postingPolicy: "members", status: "active", position: 1, createdByUserId: f.ownerId, createdAt: nowMs, updatedAt: nowMs,
+      } as any);
+      return { ana: ana._id, channelId };
+    });
+    const paymentId = await reservePod(t, {
+      communityId: f.communityId, channelId: ids.channelId, userId: ids.ana, amountBaseUnits: 10000, currency: "usd", providerAccountId: "acct_builder", providerPriceId: "price_pod", nowMs: Date.now(),
+    });
+    await t.mutation(internalRefs.communityPodPayments.syncPodPaymentInternal, {
+      paymentId, providerAccountId: "acct_builder", providerSubscriptionId: "sub_x", subscriptionStatus: "active", providerEventAt: 1000,
+    });
+    // Polynet's fee reverses on a pod refund: the refund path recognises the payment.
+    await expect(t.query(internalRefs.communityPodPayments.getPodPaymentByProviderSubscriptionInternal, { providerAccountId: "acct_builder", providerSubscriptionId: "sub_x" }))
+      .resolves.toMatchObject({ status: "active" });
+    const scope = (args: Record<string, unknown>) => t.query(internalRefs.communityPodPayments.listUnreachablePodPaymentsForScopeInternal, args);
+    await expect(scope({ channelId: ids.channelId, userId: ids.ana })).resolves.toEqual([]);
+    // The builder takes Ana off the pod (the room's own control).
+    await t.withIdentity({ subject: "brief-Owner" }).mutation(api.communityChannelParticipants.setParticipant, {
+      communityId: f.communityId, channelId: ids.channelId, target: { kind: "member", userId: ids.ana }, active: false,
+    } as any);
+    await expect(scope({ channelId: ids.channelId, userId: ids.ana })).resolves.toMatchObject([{ providerSubscriptionId: "sub_x", refund: false }]);
+    // Put back before the check ran: billing goes on.
+    await t.withIdentity({ subject: "brief-Owner" }).mutation(api.communityChannelParticipants.setParticipant, {
+      communityId: f.communityId, channelId: ids.channelId, target: { kind: "member", userId: ids.ana }, active: true,
+    } as any);
+    await t.mutation(internalRefs.communityPodPayments.endUnreachablePodPaymentInternal, { paymentId });
+    await expect(t.run((ctx) => ctx.db.get(paymentId))).resolves.toMatchObject({ status: "active" });
+    // The community is archived: every pod payment in it is unreachable.
+    await t.run((ctx) => ctx.db.patch(f.communityId, { lifecycleStatus: "archived", lifecycleGeneration: 1 } as any));
+    await expect(scope({ communityId: f.communityId })).resolves.toMatchObject([{ providerSubscriptionId: "sub_x" }]);
+    // An unpaid checkout is marked expired a day after Stripe closed it.
+    const stale = await reservePod(t, {
+      communityId: f.communityId, channelId: ids.channelId, userId: ids.ana, amountBaseUnits: 10000, currency: "usd", providerAccountId: "acct_builder", providerPriceId: "price_pod", nowMs: Date.now() - 3 * DAY,
+    });
+    await expect(t.mutation(internalRefs.communityPodPayments.expireAbandonedPodCheckoutsInternal, { nowMs: Date.now() })).resolves.toMatchObject({ expired: 1 });
+    await expect(t.run((ctx) => ctx.db.get(stale))).resolves.toMatchObject({ status: "expired" });
+  });
+
+  it("a pod's own page: the room for those in it, the outside for others, nothing for a hidden pod; leaving and payment states", async () => {
+    const t = convexTest(schema, modules);
+    const f = await fixture(t, Date.now());
+    const ids = await t.run(async (ctx) => {
+      const nowMs = Date.now();
+      const find = async (subject: string) => (await ctx.db.query("users").withIndex("by_authSubject" as any, (q: any) => q.eq("authSubject", subject)).first())!;
+      const ana = await find("brief-Ana");
+      const ben = await find("brief-Ben");
+      for (const row of await ctx.db.query("communityMemberships").collect()) await ctx.db.patch(row._id, { activationSequence: 1, activatedAt: nowMs } as any);
+      const channelId = await ctx.db.insert("communityChannels", {
+        communityId: f.communityId, slug: "founders", name: "Founders", accessMode: "restricted",
+        postingPolicy: "members", status: "active", position: 1, createdByUserId: f.ownerId, createdAt: nowMs, updatedAt: nowMs,
+      } as any);
+      const anaMembership = (await ctx.db.query("communityMemberships").collect()).find((row: any) => String(row.userId) === String(ana._id))!;
+      await ctx.db.insert("communityChannelParticipants", {
+        communityId: f.communityId, channelId, principalKey: `user:${ana._id}`, membershipId: anaMembership._id, membershipActivationSequence: 1,
+        status: "active", createdByUserId: f.ownerId, createdAt: nowMs, updatedAt: nowMs,
+      } as any);
+      return { ana: ana._id, ben: ben._id, channelId };
+    });
+    const page = (subject: string, preview?: boolean) => t.withIdentity({ subject })
+      .query(api.communityPods.getPodPage, { communityId: f.communityId, podSlug: "Founders", ...(preview ? { preview } : {}) });
+    const asOwner = t.withIdentity({ subject: "brief-Owner" });
+    // Hidden: Ben (not in it) can't tell it exists; Ana goes into the room.
+    await expect(page("brief-Ben")).resolves.toEqual({ kind: "not_found" });
+    await expect(page("brief-Ana")).resolves.toEqual({ kind: "inside", slug: "founders" });
+    // The builder can enter every pod, so goes straight in; the outside page
+    // (even a hidden pod's) is theirs to preview on request. Not a member's.
+    await expect(page("brief-Owner")).resolves.toEqual({ kind: "inside", slug: "founders" });
+    await expect(page("brief-Owner", true)).resolves.toMatchObject({ kind: "outside", visibility: "hidden", can_edit: true, can_enter: true });
+    await expect(page("brief-Ana", true)).resolves.toEqual({ kind: "inside", slug: "founders" });
+    await expect(page("brief-Ben", true)).resolves.toEqual({ kind: "not_found" });
+    // "What you get": trimmed, at most four lines, blanks dropped.
+    await asOwner.mutation(api.communityPods.savePodDetails, {
+      communityId: f.communityId, channelId: ids.channelId, visibility: "listed", purpose: "Closer time",
+      whatYouGet: ["  Weekly call ", "", "Feedback", "Templates", "Office hours", "One too many"],
+    });
+    const outside: any = await page("brief-Ben");
+    expect(outside).toMatchObject({ kind: "outside", name: "Founders", purpose: "Closer time", what_you_get: ["Weekly call", "Feedback", "Templates", "Office hours"], can_edit: false, can_enter: false });
+    // Never who is in it.
+    expect(JSON.stringify(outside)).not.toContain("Ana");
+    await expect(page("brief-Nobody")).rejects.toThrow();
+    // Ana was added by a host: "You're in", and the builder sees "Added by a host".
+    const asAna = t.withIdentity({ subject: "brief-Ana" });
+    expect((await asAna.query(api.communityPods.getPod, { communityId: f.communityId, channelId: ids.channelId })).my_membership).toMatchObject({ state: "added" });
+    expect((await asAna.query(api.communityPods.getPod, { communityId: f.communityId, channelId: ids.channelId })).members[0].payment).toBeUndefined();
+    expect((await asOwner.query(api.communityPods.getPod, { communityId: f.communityId, channelId: ids.channelId })).members[0].payment).toEqual({ state: "added", until: null });
+    // Leaving with no payment: off the pod now.
+    await expect(t.query(internalRefs.communityPodPayments.podLeavePlanInternal, { userId: ids.ana, communityId: f.communityId, channelId: ids.channelId })).resolves.toEqual({ renewing: [], leaving: false });
+    await t.mutation(internalRefs.communityPodPayments.leavePodNowInternal, { userId: ids.ana, communityId: f.communityId, channelId: ids.channelId });
+    expect((await page("brief-Ana")).kind).toBe("outside");
+    // Ben pays: "Paying" with its renewal date; a failed payment emails him once.
+    const paymentId = await reservePod(t, {
+      communityId: f.communityId, channelId: ids.channelId, userId: ids.ben, amountBaseUnits: 10000, currency: "usd", providerAccountId: "acct_builder", providerPriceId: "price_pod", nowMs: Date.now(),
+    });
+    const renews = Date.now() + 20 * DAY;
+    const sync = (status: string, at: number) => t.mutation(internalRefs.communityPodPayments.syncPodPaymentInternal, {
+      paymentId, providerAccountId: "acct_builder", providerSubscriptionId: "sub_ben", subscriptionStatus: status, currentPeriodEndAt: renews, providerEventAt: at,
+    });
+    await sync("active", 1000);
+    const asBen = t.withIdentity({ subject: "brief-Ben" });
+    const mine = async () => (await asBen.query(api.communityPods.getPod, { communityId: f.communityId, channelId: ids.channelId })).my_membership;
+    expect(await mine()).toMatchObject({ state: "paying", until: new Date(renews).toISOString(), amount_base_units: 10000 });
+    await sync("past_due", 2000);
+    await sync("past_due", 2500);
+    expect(await mine()).toMatchObject({ state: "payment_problem" });
+    const emails = await t.run((ctx) => ctx.db.query("emailOutbox" as any).collect());
+    expect((emails as any[]).filter((row: any) => String(row.dedupeKey ?? "").startsWith("pod_billing_issue:")).length).toBe(1);
+    // Leaving a paid pod: Stripe stops renewing; shown as leaving, access kept.
+    await sync("active", 3000);
+    await expect(t.query(internalRefs.communityPodPayments.podLeavePlanInternal, { userId: ids.ben, communityId: f.communityId, channelId: ids.channelId }))
+      .resolves.toMatchObject({ renewing: [{ providerSubscriptionId: "sub_ben" }], leaving: false });
+    await t.mutation(internalRefs.communityPodPayments.markPodPaymentLeavingInternal, { paymentId });
+    expect(await mine()).toMatchObject({ state: "leaving" });
+    expect((await asOwner.query(api.communityPods.getPod, { communityId: f.communityId, channelId: ids.channelId })).members.find((m: any) => m.name === "Ben")?.payment)
+      .toMatchObject({ state: "leaving" });
+    await expect(page("brief-Ben")).resolves.toEqual({ kind: "inside", slug: "founders" });
+  });
+
+  it("paid pods: one checkout per member and pod; a second subscription or a payment after archiving is refunded, never granted", async () => {
+    const t = convexTest(schema, modules);
+    const f = await fixture(t, Date.now());
+    const ids = await t.run(async (ctx) => {
+      const nowMs = Date.now();
+      const ana = (await ctx.db.query("users").withIndex("by_authSubject" as any, (q: any) => q.eq("authSubject", "brief-Ana")).first())!;
+      const ben = (await ctx.db.query("users").withIndex("by_authSubject" as any, (q: any) => q.eq("authSubject", "brief-Ben")).first())!;
+      for (const row of await ctx.db.query("communityMemberships").collect()) await ctx.db.patch(row._id, { activationSequence: 1, activatedAt: nowMs } as any);
+      const channelId = await ctx.db.insert("communityChannels", {
+        communityId: f.communityId, slug: "pod", name: "pod", accessMode: "restricted",
+        postingPolicy: "members", status: "active", position: 1, createdByUserId: f.ownerId, createdAt: nowMs, updatedAt: nowMs,
+      } as any);
+      return { ana: ana._id, ben: ben._id, channelId };
+    });
+    const reserve = (userId: any, nowMs = Date.now()) => t.mutation(internalRefs.communityPodPayments.createPendingPodPaymentInternal, {
+      communityId: f.communityId, channelId: ids.channelId, userId, amountBaseUnits: 10000, currency: "usd", providerAccountId: "acct_builder", providerPriceId: "price_pod", nowMs,
+    });
+    // Two tabs: one reservation, with Stripe's 30 minutes and room to spare.
+    const first = await reserve(ids.ana);
+    const second = await reserve(ids.ana);
+    expect(second.paymentId).toBe(first.paymentId);
+    expect(first.checkoutExpiresAt - Date.now()).toBeGreaterThan(31 * 60 * 1000);
+    expect(first.checkoutUrl).toBeNull();
+    // Once Stripe has opened it, Join reopens that checkout.
+    await t.mutation(internalRefs.communityPodPayments.attachPodCheckoutInternal, { paymentId: first.paymentId, providerCheckoutSessionId: "cs_1", checkoutUrl: "https://checkout.stripe.com/c/1" });
+    expect(await reserve(ids.ana)).toMatchObject({ paymentId: first.paymentId, checkoutUrl: "https://checkout.stripe.com/c/1" });
+    // A failed second attempt never closes a checkout Stripe has open.
+    await t.mutation(internalRefs.communityPodPayments.expirePodPaymentInternal, { paymentId: first.paymentId });
+    await expect(t.run((ctx) => ctx.db.get(first.paymentId))).resolves.toMatchObject({ status: "pending" });
+    const sync = (paymentId: any, sub: string) => t.mutation(internalRefs.communityPodPayments.syncPodPaymentInternal, {
+      paymentId, providerAccountId: "acct_builder", providerSubscriptionId: sub, subscriptionStatus: "active", providerEventAt: 1000,
+    });
+    await expect(sync(first.paymentId, "sub_1")).resolves.toMatchObject({ granted: true });
+    // A second subscription for the same pod (somehow paid twice): not
+    // granted, ended, refund owed; the first is untouched.
+    const extra = await t.run((ctx) => ctx.db.insert("communityPodPayments", {
+      communityId: f.communityId, channelId: ids.channelId, userId: ids.ana, status: "pending", amountBaseUnits: 10000, currency: "usd",
+      providerAccountId: "acct_builder", providerPriceId: "price_pod", checkoutExpiresAt: Date.now() + DAY, createdAt: Date.now(), updatedAt: Date.now(),
+    }));
+    await expect(sync(extra, "sub_2")).resolves.toMatchObject({ status: "ended", granted: false });
+    await expect(t.run((ctx) => ctx.db.get(extra))).resolves.toMatchObject({ status: "ended", refundDue: true });
+    await expect(t.run((ctx) => ctx.db.get(first.paymentId))).resolves.toMatchObject({ status: "active" });
+    // Ben pays after the community was archived: never granted, refund owed.
+    const late = await reserve(ids.ben);
+    await t.run((ctx) => ctx.db.patch(f.communityId, { lifecycleStatus: "archived", lifecycleGeneration: 1 } as any));
+    await expect(sync(late.paymentId, "sub_3")).resolves.toMatchObject({ status: "ended", granted: false });
+    const lateRow: any = await t.run((ctx) => ctx.db.get(late.paymentId));
+    expect(lateRow).toMatchObject({ refundDue: true });
+    expect(lateRow.grantedAt).toBeUndefined();
+    // Both refunds wait in the durable list until made, then leave it.
+    const due = await t.query(internalRefs.communityPodPayments.listPodRefundsDueInternal, {});
+    expect(due.map((row: any) => row.providerSubscriptionId).sort()).toEqual(["sub_2", "sub_3"]);
+    await t.mutation(internalRefs.communityPodPayments.clearPodRefundDueInternal, { paymentId: extra });
+    expect((await t.query(internalRefs.communityPodPayments.listPodRefundsDueInternal, {})).map((row: any) => row.providerSubscriptionId)).toEqual(["sub_3"]);
+  });
+});

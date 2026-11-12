@@ -89,7 +89,7 @@ of the slices that follow.
 - DMs: each member's own, never another's.
 - MCP now: member reads and writes; moderator removal on a selection.
   Planned: channel setup; DMs (own only) by decision.
-- Pods (proposed): a tag plus a private channel.
+- Pods (proposed): see `specs/pods-v0.md` (a paid, higher-touch group that replaces private channels).
 
 ### 4. Learning
 - Member: R courses and lessons. A: mark a lesson done (private to them).

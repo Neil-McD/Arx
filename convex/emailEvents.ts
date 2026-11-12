@@ -82,6 +82,8 @@ export async function enqueueCommunityBillingIssueEmailInternal(params: {
   communityId: any;
   issueMarker: string;
   nowMs: number;
+  // A paid pod: its own name in the email, and its own dedupe key.
+  podName?: string;
 }) {
   try {
     const community = await params.ctx.db.get(params.communityId);
@@ -102,10 +104,10 @@ export async function enqueueCommunityBillingIssueEmailInternal(params: {
         recipientUserId: params.userId,
         templateKey: "billing_issue",
         payload: {
-          communityName,
-          actionUrl: buildAppUrl(actionPath),
+          communityName: params.podName ? `${params.podName} in ${communityName}` : communityName,
+          actionUrl: buildAppUrl(params.podName ? "/settings/billing" : actionPath),
         },
-        dedupeKey: `community_billing_issue:${String(params.communityId)}:${String(params.userId)}:${params.issueMarker}`,
+        dedupeKey: `${params.podName ? "pod" : "community"}_billing_issue:${String(params.communityId)}:${String(params.userId)}:${params.issueMarker}`,
         nowMs: params.nowMs,
       },
     );

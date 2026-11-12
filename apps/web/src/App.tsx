@@ -260,6 +260,8 @@ export default function App() {
     setCommunityChannelSlug,
     communityResourceModuleId,
     setCommunityResourceModuleId,
+    communityPodSlug,
+    setCommunityPodSlug,
     communitySettingsPane,
     setCommunitySettingsPane,
     appTheme,
@@ -384,6 +386,8 @@ export default function App() {
     setCommunityChannelSlug,
     communityResourceModuleId,
     setCommunityResourceModuleId,
+    communityPodSlug,
+    setCommunityPodSlug,
     communitySettingsPane,
     setCommunitySettingsPane,
     applyCommunityShellState,
@@ -1871,6 +1875,21 @@ export default function App() {
       canModerateContentActiveCommunity,
       resourceModuleModalProps,
       resourceModuleDeleteModalProps,
+      podsProps: {
+        session,
+        ensureSession: ensureUsableAuthSession,
+        communityId: activeCommunity?.id ?? null,
+        communityName: activeCommunity?.name ?? "this community",
+        asMember: memberPreview.active,
+        podSlug: communityTab === "pods" ? communityPodSlug : null,
+        onNavigate: (to) => {
+          const path = to.kind === "room"
+            ? buildCommunityTabPath(selectedActiveCommunitySlug, "chat", null, null, to.slug)
+            : buildCommunityTabPath(selectedActiveCommunitySlug, "pods", null, null, null, to.kind === "pod" ? to.slug : null);
+          if (path) navigateTo(path);
+        },
+        createRoom: handleCreateCommunityChannel,
+      },
       canPostMessagesActiveCommunity: canPostMessagesActiveChannel,
       isProfileSetupComplete: isProfileSetupCompleteForPublicActions,
       onCommunityTypingSignal: signalCommunityTyping,

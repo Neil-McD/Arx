@@ -80,6 +80,11 @@ describe("community channel routes", () => {
 
   it("keeps General on the backward-compatible chat route", () => {
     expect(buildCommunityTabPath("polynet", "chat")).toBe("/c/polynet/chat");
+    // A pod's own page, and the Pods page itself.
+    expect(buildCommunityTabPath("polynet", "pods", null, null, null, "founders")).toBe("/c/polynet/pods/founders");
+    expect(buildCommunityTabPath("polynet", "pods")).toBe("/c/polynet/pods");
+    // Only the Pods tab carries a pod.
+    expect(buildCommunityTabPath("polynet", "chat", null, null, null, "founders")).toBe("/c/polynet/chat");
     expect(
       buildCommunityTabPath("polynet", "chat", null, null, "general"),
     ).toBe("/c/polynet/chat");
@@ -206,6 +211,9 @@ describe("canonical web destinations", () => {
     ["/m/c/polynet/chat/wins", { kind: "community_chat", slug: "polynet", channelSlug: "wins" }],
     ["/m/c/polynet/resources/module-1", { kind: "community_resources", slug: "polynet", moduleId: "module-1" }],
     ["/m/c/polynet/events", { kind: "community_events", slug: "polynet" }],
+    ["/c/polynet/pods", { kind: "community_pods", slug: "polynet", podSlug: null }],
+    ["/c/polynet/pods/founders", { kind: "community_pods", slug: "polynet", podSlug: "founders" }],
+    ["/m/c/polynet/pods/Founders", { kind: "community_pods", slug: "polynet", podSlug: "founders" }],
     ["/m/c/polynet/settings/agent", { kind: "community_settings", slug: "polynet", pane: "agent" }],
     ["/m/c/polynet/funnel", { kind: "community_settings", slug: "polynet", pane: "community" }],
     ["/m/c/polynet/analytics", { kind: "community_analytics", slug: "polynet" }],

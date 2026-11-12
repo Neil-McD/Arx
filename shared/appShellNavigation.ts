@@ -48,6 +48,7 @@ export const COMMUNITY_TABS = [
   "agent",
   "resources",
   "events",
+  "pods",
   "settings",
   "analytics",
 ] as const;
@@ -81,6 +82,7 @@ export function isCommunityTabAllowedForAccess(
     case "agent":
     case "resources":
     case "events":
+    case "pods":
       return true;
   }
 }
@@ -110,6 +112,8 @@ export function parseCommunityTab(
       return "events";
     case "calendar":
       return "events";
+    case "pods":
+      return "pods";
     case "settings":
       return "settings";
     case "agent":

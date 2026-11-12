@@ -27,7 +27,8 @@ export function WebCommunityCommandPalette({ communityShell }: { communityShell:
       const unread = shell.directMessagesUnreadCount;
       list.push({ id: "inbox", label: "Inbox", icon: "inbox", hint: unread > 0 ? String(unread) : null, fresh: unread > 0 });
     }
-    for (const channel of shell.communityChannels) {
+    // Pods are found as one place, not as private rooms.
+    for (const channel of shell.communityChannels.filter((entry) => entry.access_mode !== "restricted")) {
       const indicator = shell.communityChannelIndicators[channel.slug] ?? shell.communityChannelIndicators[channel.id];
       const mentioned = Boolean(indicator?.mentions);
       const fresh = mentioned || Boolean(indicator?.chat);
@@ -40,7 +41,7 @@ export function WebCommunityCommandPalette({ communityShell }: { communityShell:
         quiet: true,
       });
     }
-    list.push({ id: "knowledge", label: "Knowledge", icon: "stars" }, { id: "events", label: "Events", icon: "cal" });
+    list.push({ id: "knowledge", label: "Knowledge", icon: "stars" }, { id: "events", label: "Events", icon: "cal" }, { id: "pods", label: "Pods", icon: "users" });
     if (shell.canViewMembersActiveCommunity) list.push({ id: "members", label: "Members", icon: "users" });
     if (isHost && shell.onOpenCommunitySettingsPane) list.push({ id: "guide", label: "Your guide", icon: "sliders" });
     return list;
@@ -62,7 +63,7 @@ export function WebCommunityCommandPalette({ communityShell }: { communityShell:
       }
       if (id === "members") { leaveInbox(); shell.onOpenMembers(); return; }
       if (id === "guide") { leaveInbox(); shell.onOpenCommunitySettingsPane?.("agent"); return; }
-      const tab = id === "home" ? "agent" : id === "knowledge" ? "resources" : id === "events" ? "events" : null;
+      const tab = id === "home" ? "agent" : id === "knowledge" ? "resources" : id === "events" ? "events" : id === "pods" ? "pods" : null;
       if (tab) { leaveInbox(); shell.onSelectCommunityTab(tab); }
     },
     openCommunity: (id: string) => {

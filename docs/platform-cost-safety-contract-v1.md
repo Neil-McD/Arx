@@ -145,7 +145,7 @@ terminal execution must leave no timer, subscription, or scheduled successor.
 
 #### Convex scheduled jobs
 
-`convex/crons.ts` currently declares 8 jobs:
+`convex/crons.ts` currently declares 9 jobs:
 
 | Job | Cadence | Current batch bound | Classification |
 | --- | --- | --- | --- |
@@ -156,6 +156,7 @@ terminal execution must leave no timer, subscription, or scheduled successor.
 | Process pending mention emails | 15 minutes | implementation-owned | notification job; declare an explicit batch bound in this registry |
 | Advance due workflow milestones | 1 minute | 25 due timers | member-workflow job; goes when member workflows are removed |
 | Send due founder briefs | 15 minutes | 25 due briefs (`MAX_BRIEFS_PER_RUN`) | AI-triggering job: one founder-funded model call per brief, deterministic brief when funding or the model is unavailable |
+| Stop billing for unreachable pods | 60 minutes | pages of 100 pod payments (`SWEEP_PAGE`) per granting status, to the end; 100 abandoned checkouts per round | billing safety net (the same check also runs at once, scoped, when access ends): indexed by status, one Stripe cancel per unreachable payment, idempotent; empty runs read only paying rows |
 
 The existence of a batch limit does not prove cost safety. Each job still needs
 an indexed due-work query, bounded downstream fanout, idempotency where it
