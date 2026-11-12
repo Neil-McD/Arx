@@ -4,7 +4,6 @@
 // stand. The owner sees the daily brief's facts read live; a member sees only
 // what any member can already see (convex/communityFounderBrief.ts).
 import { KitHomeRail } from "../v1/KitHomeRail";
-import { todayLines } from "../../../../shared/communityHomeToday";
 import type { CommunityPresenceSummary } from "../../../../shared/communityTypes";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
@@ -38,10 +37,8 @@ export type WebCommunityHomeSectionProps = {
   // still offers a way back into it.
   kit?: { talking: boolean; talk: ReactNode; onTalkItOver: () => void; hasConversation?: boolean } | null;
   // Whether the community's agent is on (docs/specs/community-agent-gateway-v0.md).
-  // Off: Home is plain (no guide, no next step); the owner sees what the
-  // guide would say, and the way to turn it on.
+  // Off: Home is plain (no guide, no next step, no upsell).
   agentOn?: boolean;
-  onTurnOnAgent?: () => void;
   // Who is here now (a member's "Right now" shows the faces).
   presence?: CommunityPresenceSummary | null;
 };
@@ -290,12 +287,6 @@ export function WebCommunityHomeSection(props: WebCommunityHomeSectionProps) {
                 <SinceItem key={index} kind={row.kind} title={row.title} detail={row.detail} onOpen={row.onOpen} still={!row.onOpen} />
               ))}
             </Since>
-          ) : null}
-          {!agentOn && isHost && snapshot ? (
-            <Card label="Your community's agent" title="Here's what your guide would tell you today"
-              say={todayLines(snapshot, "host").map((line) => /[.!?”"]$/.test(line.text) ? line.text : `${line.text}.`).join(" ")}>
-              {props.onTurnOnAgent ? <Btn go onClick={props.onTurnOnAgent}>Turn on your community's agent</Btn> : null}
-            </Card>
           ) : null}
           {agentOn && !kit.talking && kit.hasConversation && !card ? (
             <TextLink style={{ marginTop: 20 }} onClick={kit.onTalkItOver}>Continue your conversation</TextLink>
