@@ -2,6 +2,9 @@
 // community. The app asks Polynet what someone has here, server to server
 // with its secret, and hears when that changes. Secrets are shown once.
 import { useCallback, useEffect, useState } from "react";
+import connectYourAppGuide from "../../../../docs/product/guides/connect-your-app.md?raw";
+import { buildConnectedAppSetupPrompt } from "../../../../shared/connectedAppSetupPrompt";
+import { fetchCloudCommunityTiers, type CloudCommunityTier } from "../../../../shared/cloudCommunityTiersGateway";
 import {
   fetchCloudConnectedApps,
   registerCloudConnectedApp,
@@ -19,7 +22,7 @@ function apiOrigin(): string {
   return convex ? convex.replace(".convex.cloud", ".convex.site") : "";
 }
 
-export function CommunityConnectedAppsSection(props: { communityId: string; session: unknown; ensureSession: (session: any) => Promise<any | null> }) {
+export function CommunityConnectedAppsSection(props: { communityId: string; communityName?: string; session: unknown; ensureSession: (session: any) => Promise<any | null> }) {
   const [apps, setApps] = useState<CloudConnectedApp[] | null>(null);
   const [adding, setAdding] = useState<{ name: string; webhookUrl: string } | null>(null);
   const [editingHook, setEditingHook] = useState<{ appId: string; url: string } | null>(null);
@@ -27,6 +30,8 @@ export function CommunityConnectedAppsSection(props: { communityId: string; sess
   const [confirmRevoke, setConfirmRevoke] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [tiers, setTiers] = useState<CloudCommunityTier[]>([]);
+  const [copied, setCopied] = useState<string | null>(null);
 
   const withSession = async <T,>(work: (session: any) => Promise<T>): Promise<T | null> => {
     const session = await props.ensureSession(props.session);
@@ -34,6 +39,7 @@ export function CommunityConnectedAppsSection(props: { communityId: string; sess
   };
   const load = useCallback(async () => {
     try { setApps(await withSession((session) => fetchCloudConnectedApps({ session, communityId: props.communityId })) ?? []); } catch { setApps(null); }
+    try { setTiers((await withSession((session) => fetchCloudCommunityTiers({ session, communityId: props.communityId }))) ?? []); } catch { setTiers([]); }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [props.communityId]);
   useEffect(() => { void load(); }, [load]);
@@ -130,8 +136,24 @@ export function CommunityConnectedAppsSection(props: { communityId: string; sess
       ) : null}
       {error ? <div className="settings-section-desc" role="alert">{error}</div> : null}
       {apps.length && origin ? (
-        <div className="settings-section-desc community-app-howto">
-          From your server: <code>GET {origin}/apps/v1/access?email=…</code> with <code>Authorization: Bearer &lt;app secret&gt;</code> returns <code>{"{ allowed, tier, grants }"}</code>. Webhooks are signed (Standard Webhooks): on <code>access.changed</code>, ask again.
+        <div className="community-app-setup">
+          <strong>Set up with your AI</strong>
+          <div className="settings-section-desc">
+            Copy the setup prompt and paste it into Claude Code (or Cursor, or Codex) in your app's codebase. It has the whole guide and this community's values; it never contains your secret. Your API address: <code>{origin}</code>
+          </div>
+          <div className="community-plan-actions">
+            {apps.map((app) => (
+              <button key={app.app_id} type="button" onClick={() => {
+                const prompt = buildConnectedAppSetupPrompt({
+                  communityName: props.communityName ?? "your community", appName: app.name, appId: app.app_id, apiOrigin: origin,
+                  hasWebhook: Boolean(app.webhook_url), guide: connectYourAppGuide,
+                  tiers: tiers.filter((tier) => !tier.archived).map((tier) => ({ key: tier.key, name: tier.name, grants: tier.grants })),
+                });
+                void navigator.clipboard?.writeText(prompt).then(() => { setCopied(app.app_id); window.setTimeout(() => setCopied(null), 2000); }, () => setError("Couldn't copy. Open the guide instead."));
+              }}>{copied === app.app_id ? "Copied" : apps.length > 1 ? `Copy setup prompt for ${app.name}` : "Copy setup prompt"}</button>
+            ))}
+            <a className="secondary" href="/docs/guides/connect-your-app" target="_blank" rel="noreferrer">Read the guide</a>
+          </div>
         </div>
       ) : null}
     </div>

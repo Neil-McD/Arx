@@ -1,8 +1,8 @@
 {
   "version": 1,
   "source_manifest": "docs/product/manifest.json",
-  "manifest_hash": "f0cdc51d9f1156918ad7e006d2d7878963f1e36fde4806383408ff92f9e869a2",
-  "source_hash": "9b346ec4bb810d69e51d0830f6276dfa39fe3f1a946b4db0b4fff463a3610c27",
+  "manifest_hash": "1c9e5335d6f031b2c7ac16b7be09e6088c70358fd8f124c46512dee9a610c97c",
+  "source_hash": "37e306ed5a3689230290a0b10bfe341285f6745cdd0a4223b6306f48a4363653",
   "default_slug": "primitives/polynet",
   "docs": [
     {
@@ -2999,6 +2999,213 @@
       ],
       "word_count": 283,
       "search_text": "guides connect polynet mcp connect polynet mcp builder guides how to connect your own ai harness to the official polynet mcp alpha current builder llm alpha authority boundary builder canonical concepts connect current goal guide guides harness how llm mcp official own polynet product related rules setup the tools your connect polynet mcp goal setup canonical tools authority boundary rules related concepts connect polynet mcp goal connect your own ai harness to the official polynet mcp provider without copying credentials or weakening community access controls anyone can connect in each community you belong to your ai gets the lens of your role there a member reads what members see and writes their own posts reactions and lesson progress a moderator also reviews join requests and removes posts an owner or admin also gets the builder lens setup 1 sign in to polynet 2 open settings account or complete the onboarding mcp handoff 3 copy the polynet mcp setup packet 4 configure it in the external harness 5 complete polynet oauth in the browser 6 start a fresh harness session if the client does not reload mcp state 7 call polynet list at follow the returned communities path and explicitly open a community you belong to canonical tools the official provider exposes exactly text polynet list polynet read polynet search polynet write polynet call optional premium tools belong to the external harness or a separate polynet overlay they do not change the base polynet mcp contract authority boundary the setup packet identifies the polynet provider it does not grant community access the server derives the authenticated user and revalidates community membership entitlements role and capabilities for every tool call rules 1 never paste a bearer token into polynet or the setup packet 2 never treat workspace context id as authority 3 use only the official polynet endpoint 4 do not configure third party mcp servers inside polynet 5 treat a successful oauth handoff and an authorized tool call as separate proofs 6 discover paths and versioned capabilities before writing or calling related concepts polynet mcp community lens entitlement resource"
+    },
+    {
+      "id": "product.guide.connect_your_app",
+      "slug": "guides/connect-your-app",
+      "title": "Connect Your App",
+      "section": "Builder Guides",
+      "summary": "Connect your own product to your community: report your own sales (no fee), ask what someone has, and hear when it changes.",
+      "audience": [
+        "builder",
+        "llm"
+      ],
+      "status": "alpha-current",
+      "source": "docs/product/guides/connect-your-app.md",
+      "search": {
+        "aliases": [
+          "one door",
+          "connected app",
+          "app integration",
+          "sell your app",
+          "access check"
+        ],
+        "keywords": [
+          "connected app",
+          "grants",
+          "plans",
+          "tiers",
+          "access check",
+          "webhooks",
+          "sales",
+          "app secret",
+          "commission"
+        ],
+        "queries": [
+          "how do I connect my app to polynet",
+          "how does my app check access",
+          "how do I report sales to polynet",
+          "polynet webhook signature"
+        ],
+        "related_slugs": [
+          "guides/manage-access-billing-and-roles",
+          "primitives/entitlement"
+        ],
+        "boost": 1.2
+      },
+      "frontmatter": {
+        "id": "product.guide.connect_your_app",
+        "title": "Connect Your App",
+        "audience": [
+          "builder",
+          "llm"
+        ],
+        "status": "alpha-current",
+        "last_verified": "2026-11-12"
+      },
+      "content": "# Connect Your App\n\n## Goal\n\nYour product and your Polynet community, with one set of plans. Someone who buys\nfrom you gets your community too; someone who belongs to your community gets the\nplan they paid for in your app. Your app keeps its own sign-in and checkout.\n\n## The One Rule\n\nThe commission follows the checkout:\n\n- Sold through **your own checkout** (and reported to Polynet): no Polynet fee.\n- Sold through **Polynet's checkout**: Polynet's 2.9% platform fee.\n\nA person's access is the union of both: whichever side sold them a plan, they\nhave it. Nothing is copied back and forth.\n\n## What You Need\n\nFrom Polynet → your community → Manage → **Your app** (shown once when you\nconnect the app):\n\n- `POLYNET_APP_SECRET`: starts with `psk_`. Server only. Never in browser code,\n  never committed.\n- `POLYNET_WEBHOOK_SECRET`: starts with `whsec_`. For checking Polynet's\n  webhooks. Only needed if you set a webhook address.\n- `POLYNET_API_ORIGIN`: Polynet's API address, shown under Your app.\n\nYour **plans** are in Manage → **Plans**. Each has a key (the base membership\nis always `member`) and **grants**: the names your app checks, such as\n`yourapp:pro`. Every member also holds `community`, and `pod:<slug>` for each pod\nthey are in. Gate features on grants, never on prices.\n\n## 1. Report Your Own Sales\n\nWhenever a subscription in your billing system is created, renewed, changes plan,\nor ends, tell Polynet the person's **current** state. Send the whole state every\ntime; the latest report per email wins, so a missed one is corrected by the next.\n\n```http\nPOST {POLYNET_API_ORIGIN}/apps/v1/sales\nAuthorization: Bearer {POLYNET_APP_SECRET}\nContent-Type: application/json\n\n{ \"email\": \"buyer@example.com\", \"active\": true, \"tier\": \"pro\", \"external_ref\": \"sub_123\" }\n```\n\n- `active`: `true` while they should have access (Stripe `active`, `trialing`,\n  `past_due`), `false` once it ends (`canceled`, `unpaid`, `incomplete_expired`).\n- `tier`: the plan key in Polynet. Leave it out for the base membership.\n- `external_ref`: optional, your own subscription id, for tracing.\n\nThe response says what happened: `in`, `waiting_for_account` (no Polynet account\nwith that verified email yet; they're let in when they sign up with it),\n`kept_out` (they left, were removed or are blocked; a sale never puts them back),\n`ended`, or `kept_by_other_access` (something else still lets them in).\n\nDo this after your own billing has recorded the change, and never let it fail\nyour billing: log errors and move on.\n\n```ts\nexport async function reportSaleToPolynet(sale: { email: string; active: boolean; tier?: string; externalRef?: string }) {\n  const origin = process.env.POLYNET_API_ORIGIN;\n  const secret = process.env.POLYNET_APP_SECRET;\n  if (!origin || !secret) return; // not connected: do nothing\n  try {\n    const response = await fetch(`${origin.replace(/\\/+$/, \"\")}/apps/v1/sales`, {\n      method: \"POST\",\n      headers: { authorization: `Bearer ${secret}`, \"content-type\": \"application/json\" },\n      body: JSON.stringify({\n        email: sale.email.trim().toLowerCase(),\n        active: sale.active,\n        ...(sale.tier ? { tier: sale.tier } : {}),\n        ...(sale.externalRef ? { external_ref: sale.externalRef } : {}),\n      }),\n      signal: AbortSignal.timeout(5000),\n    });\n    if (!response.ok) console.error(\"polynet sale report refused\", response.status);\n  } catch (error) {\n    console.error(\"polynet sale report failed\", error);\n  }\n}\n```\n\n## 2. Ask What Someone Has\n\nFrom your server, with a **verified** email (one your sign-in has confirmed):\n\n```http\nGET {POLYNET_API_ORIGIN}/apps/v1/access?email=buyer%40example.com\nAuthorization: Bearer {POLYNET_APP_SECRET}\n```\n\n```json\n{ \"allowed\": true, \"tier\": { \"key\": \"pro\", \"name\": \"Pro\" }, \"grants\": [\"community\", \"yourapp:pro\"] }\n```\n\n- `allowed` is Polynet's own decision: a live Polynet subscription, a sale you\n  reported, or a free or comped membership. Blocked people and archived\n  communities are never allowed.\n- Someone unknown, unverified or not a member gets the same answer:\n  `{ \"allowed\": false, \"tier\": null, \"grants\": [] }`.\n- `tier` is the highest plan they hold; `grants` are all of them.\n\nCombine it with your own records: a person can use a feature if **your own\nbilling** gives it or **Polynet's grants** include it. If Polynet can't be\nreached, fall back to your own records only (fail closed for Polynet-sourced\naccess). A short cache (up to a minute) is fine; the webhook below tells you when\nto drop it.\n\n```ts\nexport async function polynetAccess(email: string): Promise<{ allowed: boolean; grants: string[] }> {\n  const origin = process.env.POLYNET_API_ORIGIN;\n  const secret = process.env.POLYNET_APP_SECRET;\n  if (!origin || !secret) return { allowed: false, grants: [] };\n  try {\n    const url = `${origin.replace(/\\/+$/, \"\")}/apps/v1/access?email=${encodeURIComponent(email.trim().toLowerCase())}`;\n    const response = await fetch(url, { headers: { authorization: `Bearer ${secret}` }, signal: AbortSignal.timeout(5000) });\n    if (!response.ok) return { allowed: false, grants: [] };\n    const body = await response.json();\n    return { allowed: body.allowed === true, grants: Array.isArray(body.grants) ? body.grants : [] };\n  } catch {\n    return { allowed: false, grants: [] };\n  }\n}\n```\n\n## 3. Hear When It Changes (Optional)\n\nIf you set a webhook address (public `https` only), Polynet sends\n`access.changed` whenever someone's access may have changed: they joined, paid,\nlapsed, left, were removed, changed pods, or a plan's grants changed. It carries\nonly the email. Ask the access check again; don't trust anything else in it.\n\nIt follows [Standard Webhooks](https://www.standardwebhooks.com): headers\n`webhook-id`, `webhook-timestamp`, `webhook-signature`. The signature is\n`v1,` + base64 HMAC-SHA256 of `{id}.{timestamp}.{raw body}`, keyed with the\nbase64 part of `POLYNET_WEBHOOK_SECRET` (after `whsec_`). Reject anything more\nthan five minutes old, and use `webhook-id` to ignore repeats (it stays the\nsame when Polynet retries). Answer `2xx` quickly; Polynet retries for a day.\n\n```ts\nimport { createHmac, timingSafeEqual } from \"node:crypto\";\n\nexport async function handlePolynetWebhook(request: Request): Promise<Response> {\n  const id = request.headers.get(\"webhook-id\") ?? \"\";\n  const timestamp = request.headers.get(\"webhook-timestamp\") ?? \"\";\n  const signatures = (request.headers.get(\"webhook-signature\") ?? \"\").split(\" \");\n  const body = await request.text();\n  const secret = process.env.POLYNET_WEBHOOK_SECRET ?? \"\";\n  if (!id || !timestamp || !secret) return new Response(null, { status: 400 });\n  if (Math.abs(Date.now() / 1000 - Number(timestamp)) > 300) return new Response(null, { status: 400 });\n  const key = Buffer.from(secret.replace(/^whsec_/, \"\"), \"base64\");\n  const expected = `v1,${createHmac(\"sha256\", key).update(`${id}.${timestamp}.${body}`).digest(\"base64\")}`;\n  const valid = signatures.some((candidate) =>\n    candidate.length === expected.length && timingSafeEqual(Buffer.from(candidate), Buffer.from(expected)));\n  if (!valid) return new Response(null, { status: 401 });\n  // if (await alreadyHandled(id)) return new Response(null, { status: 200 });\n  const event = JSON.parse(body) as { type: string; data: { email: string } };\n  if (event.type === \"access.changed\") {\n    // Drop any cached access for event.data.email; the next request asks again.\n  }\n  return new Response(null, { status: 200 });\n}\n```\n\n## Rules\n\n- The secrets live in server environment variables only.\n- Only send emails your sign-in has verified.\n- Never let a Polynet call fail or block your own billing or sign-in.\n- Gate on grants, not prices or plan names.\n- Polynet never needs your users' passwords, and you never need theirs.\n\n## Check It Works\n\n1. Connect the app in Polynet and set the environment variables.\n2. Make a test purchase in your app (test mode). Polynet's response should be\n   `in`, and the buyer appears in Members as \"Through your app\".\n3. Call the access check for that email: `allowed: true` with your plan's grants.\n4. Cancel the test subscription: the report returns `ended` and the access check\n   returns `allowed: false`.",
+      "headings": [
+        "Connect Your App",
+        "Goal",
+        "The One Rule",
+        "What You Need",
+        "1. Report Your Own Sales",
+        "2. Ask What Someone Has",
+        "3. Hear When It Changes (Optional)",
+        "Rules",
+        "Check It Works"
+      ],
+      "keywords": [
+        "access",
+        "alpha",
+        "and",
+        "app",
+        "ask",
+        "billing",
+        "builder",
+        "changes",
+        "check",
+        "commission",
+        "community",
+        "connect",
+        "connected",
+        "current",
+        "does",
+        "door",
+        "entitlement",
+        "fee",
+        "goal",
+        "grants",
+        "guide",
+        "guides",
+        "has",
+        "hear",
+        "how",
+        "integration",
+        "llm",
+        "manage",
+        "need",
+        "one",
+        "optional",
+        "own",
+        "plans",
+        "polynet",
+        "primitives",
+        "product",
+        "report",
+        "roles",
+        "rule",
+        "rules",
+        "sales",
+        "secret",
+        "sell",
+        "signature",
+        "someone",
+        "the",
+        "tiers",
+        "webhook",
+        "webhooks",
+        "what",
+        "when",
+        "works",
+        "you",
+        "your"
+      ],
+      "chunks": [
+        {
+          "id": "guides/connect-your-app#connect-your-app",
+          "slug": "guides/connect-your-app",
+          "heading": "Connect Your App",
+          "level": 1,
+          "text": "# Connect Your App",
+          "word_count": 3,
+          "search_text": "connect your app connect your app"
+        },
+        {
+          "id": "guides/connect-your-app#goal",
+          "slug": "guides/connect-your-app",
+          "heading": "Goal",
+          "level": 2,
+          "text": "## Goal\n\nYour product and your Polynet community, with one set of plans. Someone who buys\nfrom you gets your community too; someone who belongs to your community gets the\nplan they paid for in your app. Your app keeps its own sign-in and checkout.",
+          "word_count": 44,
+          "search_text": "goal goal your product and your polynet community with one set of plans someone who buys from you gets your community too someone who belongs to your community gets the plan they paid for in your app your app keeps its own sign in and checkout"
+        },
+        {
+          "id": "guides/connect-your-app#the-one-rule",
+          "slug": "guides/connect-your-app",
+          "heading": "The One Rule",
+          "level": 2,
+          "text": "## The One Rule\n\nThe commission follows the checkout:\n\n- Sold through **your own checkout** (and reported to Polynet): no Polynet fee.\n- Sold through **Polynet's checkout**: Polynet's 2.9% platform fee.\n\nA person's access is the union of both: whichever side sold them a plan, they\nhave it. Nothing is copied back and forth.",
+          "word_count": 52,
+          "search_text": "the one rule the one rule the commission follows the checkout sold through your own checkout and reported to polynet no polynet fee sold through polynet s checkout polynet s 2 9 platform fee a person s access is the union of both whichever side sold them a plan they have it nothing is copied back and forth"
+        },
+        {
+          "id": "guides/connect-your-app#what-you-need",
+          "slug": "guides/connect-your-app",
+          "heading": "What You Need",
+          "level": 2,
+          "text": "## What You Need\n\nFrom Polynet → your community → Manage → **Your app** (shown once when you\nconnect the app):\n\n- `POLYNET_APP_SECRET`: starts with `psk_`. Server only. Never in browser code,\n  never committed.\n- `POLYNET_WEBHOOK_SECRET`: starts with `whsec_`. For checking Polynet's\n  webhooks. Only needed if you set a webhook address.\n- `POLYNET_API_ORIGIN`: Polynet's API address, shown under Your app.\n\nYour **plans** are in Manage → **Plans**. Each has a key (the base membership\nis always `member`) and **grants**: the names your app checks, such as\n`yourapp:pro`. Every member also holds `community`, and `pod:<slug>` for each pod\nthey are in. Gate features on grants, never on prices.",
+          "word_count": 107,
+          "search_text": "what you need what you need from polynet your community manage your app shown once when you connect the app polynet app secret starts with psk server only never in browser code never committed polynet webhook secret starts with whsec for checking polynet s webhooks only needed if you set a webhook address polynet api origin polynet s api address shown under your app your plans are in manage plans each has a key the base membership is always member and grants the names your app checks such as yourapp pro every member also holds community and pod slug for each pod they are in gate features on grants never on prices"
+        },
+        {
+          "id": "guides/connect-your-app#1-report-your-own-sales",
+          "slug": "guides/connect-your-app",
+          "heading": "1. Report Your Own Sales",
+          "level": 2,
+          "text": "## 1. Report Your Own Sales\n\nWhenever a subscription in your billing system is created, renewed, changes plan,\nor ends, tell Polynet the person's **current** state. Send the whole state every\ntime; the latest report per email wins, so a missed one is corrected by the next.\n\n```http\nPOST {POLYNET_API_ORIGIN}/apps/v1/sales\nAuthorization: Bearer {POLYNET_APP_SECRET}\nContent-Type: application/json\n\n{ \"email\": \"buyer@example.com\", \"active\": true, \"tier\": \"pro\", \"external_ref\": \"sub_123\" }\n```\n\n- `active`: `true` while they should have access (Stripe `active`, `trialing`,\n  `past_due`), `false` once it ends (`canceled`, `unpaid`, `incomplete_expired`).\n- `tier`: the plan key in Polynet. Leave it out for the base membership.\n- `external_ref`: optional, your own subscription id, for tracing.\n\nThe response says what happened: `in`, `waiting_for_account` (no Polynet account\nwith that verified email yet; they're let in when they sign up with it),\n`kept_out` (they left, were removed or are blocked; a sale never puts them back),\n`ended`, or `kept_by_other_access` (something else still lets them in).\n\nDo this after your own billing has recorded the change, and never let it fail\nyour billing: log errors and move on.\n\n```ts\nexport async function reportSaleToPolynet(sale: { email: string; active: boolean; tier?: string; externalRef?: string }) {\n  const origin = process.env.POLYNET_API_ORIGIN;\n  const secret = process.env.POLYNET_APP_SECRET;\n  if (!origin || !secret) return; // not connected: do nothing\n  try {\n    const response = await fetch(`${origin.replace(/\\/+$/, \"\")}/apps/v1/sales`, {\n      method: \"POST\",\n      headers: { authorization: `Bearer ${secret}`, \"content-type\": \"application/json\" },\n      body: JSON.stringify({\n        email: sale.email.trim().toLowerCase(),\n        active: sale.active,\n        ...(sale.tier ? { tier: sale.tier } : {}),\n        ...(sale.externalRef ? { external_ref: sale.externalRef } : {}),\n      }),\n      signal: AbortSignal.timeout(5000),\n    });\n    if (!response.ok) console.error(\"polynet sale report refused\", response.status);\n  } catch (error) {\n    console.error(\"polynet sale report failed\", error);\n  }\n}\n```",
+          "word_count": 292,
+          "search_text": "1 report your own sales 1 report your own sales whenever a subscription in your billing system is created renewed changes plan or ends tell polynet the person s current state send the whole state every time the latest report per email wins so a missed one is corrected by the next http post polynet api origin apps v1 sales authorization bearer polynet app secret content type application json email buyer example com active true tier pro external ref sub 123 active true while they should have access stripe active trialing past due false once it ends canceled unpaid incomplete expired tier the plan key in polynet leave it out for the base membership external ref optional your own subscription id for tracing the response says what happened in waiting for account no polynet account with that verified email yet they re let in when they sign up with it kept out they left were removed or are blocked a sale never puts them back ended or kept by other access something else still lets them in do this after your own billing has recorded the change and never let it fail your billing log errors and move on ts export async function reportsaletopolynet sale email string active boolean tier string externalref string const origin process env polynet api origin const secret process env polynet app secret if origin secret return not connected do nothing try const response await fetch origin replace apps v1 sales method post headers authorization bearer secret content type application json body json stringify email sale email trim tolowercase active sale active sale tier tier sale tier sale externalref external ref sale externalref signal abortsignal timeout 5000 if response ok console error polynet sale report refused response status catch error console error polynet sale report failed error"
+        },
+        {
+          "id": "guides/connect-your-app#2-ask-what-someone-has",
+          "slug": "guides/connect-your-app",
+          "heading": "2. Ask What Someone Has",
+          "level": 2,
+          "text": "## 2. Ask What Someone Has\n\nFrom your server, with a **verified** email (one your sign-in has confirmed):\n\n```http\nGET {POLYNET_API_ORIGIN}/apps/v1/access?email=buyer%40example.com\nAuthorization: Bearer {POLYNET_APP_SECRET}\n```\n\n```json\n{ \"allowed\": true, \"tier\": { \"key\": \"pro\", \"name\": \"Pro\" }, \"grants\": [\"community\", \"yourapp:pro\"] }\n```\n\n- `allowed` is Polynet's own decision: a live Polynet subscription, a sale you\n  reported, or a free or comped membership. Blocked people and archived\n  communities are never allowed.\n- Someone unknown, unverified or not a member gets the same answer:\n  `{ \"allowed\": false, \"tier\": null, \"grants\": [] }`.\n- `tier` is the highest plan they hold; `grants` are all of them.\n\nCombine it with your own records: a person can use a feature if **your own\nbilling** gives it or **Polynet's grants** include it. If Polynet can't be\nreached, fall back to your own records only (fail closed for Polynet-sourced\naccess). A short cache (up to a minute) is fine; the webhook below tells you when\nto drop it.\n\n```ts\nexport async function polynetAccess(email: string): Promise<{ allowed: boolean; grants: string[] }> {\n  const origin = process.env.POLYNET_API_ORIGIN;\n  const secret = process.env.POLYNET_APP_SECRET;\n  if (!origin || !secret) return { allowed: false, grants: [] };\n  try {\n    const url = `${origin.replace(/\\/+$/, \"\")}/apps/v1/access?email=${encodeURIComponent(email.trim().toLowerCase())}`;\n    const response = await fetch(url, { headers: { authorization: `Bearer ${secret}` }, signal: AbortSignal.timeout(5000) });\n    if (!response.ok) return { allowed: false, grants: [] };\n    const body = await response.json();\n    return { allowed: body.allowed === true, grants: Array.isArray(body.grants) ? body.grants : [] };\n  } catch {\n    return { allowed: false, grants: [] };\n  }\n}\n```",
+          "word_count": 247,
+          "search_text": "2 ask what someone has 2 ask what someone has from your server with a verified email one your sign in has confirmed http get polynet api origin apps v1 access email buyer 40example com authorization bearer polynet app secret json allowed true tier key pro name pro grants community yourapp pro allowed is polynet s own decision a live polynet subscription a sale you reported or a free or comped membership blocked people and archived communities are never allowed someone unknown unverified or not a member gets the same answer allowed false tier null grants tier is the highest plan they hold grants are all of them combine it with your own records a person can use a feature if your own billing gives it or polynet s grants include it if polynet can t be reached fall back to your own records only fail closed for polynet sourced access a short cache up to a minute is fine the webhook below tells you when to drop it ts export async function polynetaccess email string promise allowed boolean grants string const origin process env polynet api origin const secret process env polynet app secret if origin secret return allowed false grants try const url origin replace apps v1 access email encodeuricomponent email trim tolowercase const response await fetch url headers authorization bearer secret signal abortsignal timeout 5000 if response ok return allowed false grants const body await response json return allowed body allowed true grants array isarray body grants body grants catch return allowed false grants"
+        },
+        {
+          "id": "guides/connect-your-app#3-hear-when-it-changes-optional",
+          "slug": "guides/connect-your-app",
+          "heading": "3. Hear When It Changes (Optional)",
+          "level": 2,
+          "text": "## 3. Hear When It Changes (Optional)\n\nIf you set a webhook address (public `https` only), Polynet sends\n`access.changed` whenever someone's access may have changed: they joined, paid,\nlapsed, left, were removed, changed pods, or a plan's grants changed. It carries\nonly the email. Ask the access check again; don't trust anything else in it.\n\nIt follows [Standard Webhooks](https://www.standardwebhooks.com): headers\n`webhook-id`, `webhook-timestamp`, `webhook-signature`. The signature is\n`v1,` + base64 HMAC-SHA256 of `{id}.{timestamp}.{raw body}`, keyed with the\nbase64 part of `POLYNET_WEBHOOK_SECRET` (after `whsec_`). Reject anything more\nthan five minutes old, and use `webhook-id` to ignore repeats (it stays the\nsame when Polynet retries). Answer `2xx` quickly; Polynet retries for a day.\n\n```ts\nimport { createHmac, timingSafeEqual } from \"node:crypto\";\n\nexport async function handlePolynetWebhook(request: Request): Promise<Response> {\n  const id = request.headers.get(\"webhook-id\") ?? \"\";\n  const timestamp = request.headers.get(\"webhook-timestamp\") ?? \"\";\n  const signatures = (request.headers.get(\"webhook-signature\") ?? \"\").split(\" \");\n  const body = await request.text();\n  const secret = process.env.POLYNET_WEBHOOK_SECRET ?? \"\";\n  if (!id || !timestamp || !secret) return new Response(null, { status: 400 });\n  if (Math.abs(Date.now() / 1000 - Number(timestamp)) > 300) return new Response(null, { status: 400 });\n  const key = Buffer.from(secret.replace(/^whsec_/, \"\"), \"base64\");\n  const expected = `v1,${createHmac(\"sha256\", key).update(`${id}.${timestamp}.${body}`).digest(\"base64\")}`;\n  const valid = signatures.some((candidate) =>\n    candidate.length === expected.length && timingSafeEqual(Buffer.from(candidate), Buffer.from(expected)));\n  if (!valid) return new Response(null, { status: 401 });\n  // if (await alreadyHandled(id)) return new Response(null, { status: 200 });\n  const event = JSON.parse(body) as { type: string; data: { email: string } };\n  if (event.type === \"access.changed\") {\n    // Drop any cached access for event.data.email; the next request asks again.\n  }\n  return new Response(null, { status: 200 });\n}\n```",
+          "word_count": 277,
+          "search_text": "3 hear when it changes optional 3 hear when it changes optional if you set a webhook address public https only polynet sends access changed whenever someone s access may have changed they joined paid lapsed left were removed changed pods or a plan s grants changed it carries only the email ask the access check again don t trust anything else in it it follows standard webhooks https www standardwebhooks com headers webhook id webhook timestamp webhook signature the signature is v1 base64 hmac sha256 of id timestamp raw body keyed with the base64 part of polynet webhook secret after whsec reject anything more than five minutes old and use webhook id to ignore repeats it stays the same when polynet retries answer 2xx quickly polynet retries for a day ts import createhmac timingsafeequal from node crypto export async function handlepolynetwebhook request request promise response const id request headers get webhook id const timestamp request headers get webhook timestamp const signatures request headers get webhook signature split const body await request text const secret process env polynet webhook secret if id timestamp secret return new response null status 400 if math abs date now 1000 number timestamp 300 return new response null status 400 const key buffer from secret replace whsec base64 const expected v1 createhmac sha256 key update id timestamp body digest base64 const valid signatures some candidate candidate length expected length timingsafeequal buffer from candidate buffer from expected if valid return new response null status 401 if await alreadyhandled id return new response null status 200 const event json parse body as type string data email string if event type access changed drop any cached access for event data email the next request asks again return new response null status 200"
+        },
+        {
+          "id": "guides/connect-your-app#rules",
+          "slug": "guides/connect-your-app",
+          "heading": "Rules",
+          "level": 2,
+          "text": "## Rules\n\n- The secrets live in server environment variables only.\n- Only send emails your sign-in has verified.\n- Never let a Polynet call fail or block your own billing or sign-in.\n- Gate on grants, not prices or plan names.\n- Polynet never needs your users' passwords, and you never need theirs.",
+          "word_count": 48,
+          "search_text": "rules rules the secrets live in server environment variables only only send emails your sign in has verified never let a polynet call fail or block your own billing or sign in gate on grants not prices or plan names polynet never needs your users passwords and you never need theirs"
+        },
+        {
+          "id": "guides/connect-your-app#check-it-works",
+          "slug": "guides/connect-your-app",
+          "heading": "Check It Works",
+          "level": 2,
+          "text": "## Check It Works\n\n1. Connect the app in Polynet and set the environment variables.\n2. Make a test purchase in your app (test mode). Polynet's response should be\n   `in`, and the buyer appears in Members as \"Through your app\".\n3. Call the access check for that email: `allowed: true` with your plan's grants.\n4. Cancel the test subscription: the report returns `ended` and the access check\n   returns `allowed: false`.",
+          "word_count": 69,
+          "search_text": "check it works check it works 1 connect the app in polynet and set the environment variables 2 make a test purchase in your app test mode polynet s response should be in and the buyer appears in members as through your app 3 call the access check for that email allowed true with your plan s grants 4 cancel the test subscription the report returns ended and the access check returns allowed false"
+        }
+      ],
+      "word_count": 1139,
+      "search_text": "guides connect your app connect your app builder guides connect your own product to your community report your own sales no fee ask what someone has and hear when it changes alpha current builder llm one door connected app app integration sell your app access check connected app grants plans tiers access check webhooks sales app secret commission how do i connect my app to polynet how does my app check access how do i report sales to polynet polynet webhook signature guides manage access billing and roles primitives entitlement access alpha and app ask billing builder changes check commission community connect connected current does door entitlement fee goal grants guide guides has hear how integration llm manage need one optional own plans polynet primitives product report roles rule rules sales secret sell signature someone the tiers webhook webhooks what when works you your connect your app goal the one rule what you need 1 report your own sales 2 ask what someone has 3 hear when it changes optional rules check it works connect your app goal your product and your polynet community with one set of plans someone who buys from you gets your community too someone who belongs to your community gets the plan they paid for in your app your app keeps its own sign in and checkout the one rule the commission follows the checkout sold through your own checkout and reported to polynet no polynet fee sold through polynet s checkout polynet s 2 9 platform fee a person s access is the union of both whichever side sold them a plan they have it nothing is copied back and forth what you need from polynet your community manage your app shown once when you connect the app polynet app secret starts with psk server only never in browser code never committed polynet webhook secret starts with whsec for checking polynet s webhooks only needed if you set a webhook address polynet api origin polynet s api address shown under your app your plans are in manage plans each has a key the base membership is always member and grants the names your app checks such as yourapp pro every member also holds community and pod slug for each pod they are in gate features on grants never on prices 1 report your own sales whenever a subscription in your billing system is created renewed changes plan or ends tell polynet the person s current state send the whole state every time the latest report per email wins so a missed one is corrected by the next http post polynet api origin apps v1 sales authorization bearer polynet app secret content type application json email buyer example com active true tier pro external ref sub 123 active true while they should have access stripe active trialing past due false once it ends canceled unpaid incomplete expired tier the plan key in polynet leave it out for the base membership external ref optional your own subscription id for tracing the response says what happened in waiting for account no polynet account with that verified email yet they re let in when they sign up with it kept out they left were removed or are blocked a sale never puts them back ended or kept by other access something else still lets them in do this after your own billing has recorded the change and never let it fail your billing log errors and move on ts export async function reportsaletopolynet sale email string active boolean tier string externalref string const origin process env polynet api origin const secret process env polynet app secret if origin secret return not connected do nothing try const response await fetch origin replace apps v1 sales method post headers authorization bearer secret content type application json body json stringify email sale email trim tolowercase active sale active sale tier tier sale tier sale externalref external ref sale externalref signal abortsignal timeout 5000 if response ok console error polynet sale report refused response status catch error console error polynet sale report failed error 2 ask what someone has from your server with a verified email one your sign in has confirmed http get polynet api origin apps v1 access email buyer 40example com authorization bearer polynet app secret json allowed true tier key pro name pro grants community yourapp pro allowed is polynet s own decision a live polynet subscription a sale you reported or a free or comped membership blocked people and archived communities are never allowed someone unknown unverified or not a member gets the same answer allowed false tier null grants tier is the highest plan they hold grants are all of them combine it with your own records a person can use a feature if your own billing gives it or polynet s grants include it if polynet can t be reached fall back to your own records only fail closed for polynet sourced access a short cache up to a minute is fine the webhook below tells you when to drop it ts export async function polynetaccess email string promise allowed boolean grants string const origin process env polynet api origin const secret process env polynet app secret if origin secret return allowed false grants try const url origin replace apps v1 access email encodeuricomponent email trim tolowercase const response await fetch url headers authorization bearer secret signal abortsignal timeout 5000 if response ok return allowed false grants const body await response json return allowed body allowed true grants array isarray body grants body grants catch return allowed false grants 3 hear when it changes optional if you set a webhook address public https only polynet sends access changed whenever someone s access may have changed they joined paid lapsed left were removed changed pods or a plan s grants changed it carries only the email ask the access check again don t trust anything else in it it follows standard webhooks https www standardwebhooks com headers webhook id webhook timestamp webhook signature the signature is v1 base64 hmac sha256 of id timestamp raw body keyed with the base64 part of polynet webhook secret after whsec reject anything more than five minutes old and use webhook id to ignore repeats it stays the same when polynet retries answer 2xx quickly polynet retries for a day ts import createhmac timingsafeequal from node crypto export async function handlepolynetwebhook request request promise response const id request headers get webhook id const timestamp request headers get webhook timestamp const signatures request headers get webhook signature split const body await request text const secret process env polynet webhook secret if id timestamp secret return new response null status 400 if math abs date now 1000 number timestamp 300 return new response null status 400 const key buffer from secret replace whsec base64 const expected v1 createhmac sha256 key update id timestamp body digest base64 const valid signatures some candidate candidate length expected length timingsafeequal buffer from candidate buffer from expected if valid return new response null status 401 if await alreadyhandled id return new response null status 200 const event json parse body as type string data email string if event type access changed drop any cached access for event data email the next request asks again return new response null status 200 rules the secrets live in server environment variables only only send emails your sign in has verified never let a polynet call fail or block your own billing or sign in gate on grants not prices or plan names polynet never needs your users passwords and you never need theirs check it works 1 connect the app in polynet and set the environment variables 2 make a test purchase in your app test mode polynet s response should be in and the buyer appears in members as through your app 3 call the access check for that email allowed true with your plan s grants 4 cancel the test subscription the report returns ended and the access check returns allowed false"
     },
     {
       "id": "product.guide.manage_access_billing_and_roles",
