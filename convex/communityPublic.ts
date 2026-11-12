@@ -5,6 +5,7 @@ import {
   type CommunityPricePointLike,
   type PublicPlanSummaryLike,
   communityMembershipRowIsActive,
+  communityMembershipState,
   getUniqueCommunityMembershipByPair,
   hasActiveAppGrant,
   mapActivePlanSummaries,
@@ -278,8 +279,13 @@ export const listSiteDiscoverCommunitiesInternal = internalQuery({
 // The join decision for Studio's funnel and for Join on a community site's
 // private twin (communityAppJoin.ts): one gate, whichever page asks.
 // One door: who may come back on an app purchase (see joinPublicCommunityInternal).
+// Only someone who left (or lapsed): a removal needs a manager, and a payment
+// hold (refund, dispute) is cleared only by a payment, never by joining.
 export function rejoinsOnAppPurchase(membership: Parameters<typeof communityMembershipRequiresManagerReapproval>[0], hasAppGrant: boolean): boolean {
-  return hasAppGrant && !communityMembershipRequiresManagerReapproval(membership);
+  if (!hasAppGrant) return false;
+  if (!membership) return true;
+  const state = communityMembershipState(membership);
+  return state === "left" || state === "lapsed";
 }
 
 export async function joinPublicCommunityInternal(args: {
