@@ -928,6 +928,8 @@ export function WebCommunitySettingsSection(props: WebCommunitySettingsSectionPr
                     {isOwnerSettingsLayer && isDesignV1Active() ? (
                       <CommunityConnectedAppsSection
                         communityId={resolvedActiveCommunity.id}
+                        communityName={resolvedActiveCommunity.name}
+                        communitySlug={resolvedActiveCommunity.slug}
                         session={props.session}
                         ensureSession={props.ensureSession}
                       />

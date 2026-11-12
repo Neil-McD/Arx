@@ -10,7 +10,7 @@ import { communitySiteRedirectTarget } from "../../../../shared/webAppRouteState
 
 type HandoffCommunity = { slug?: string | null; name?: string | null; site_url?: string | null; members_use?: "app" | "site" };
 
-export function WebCommunityHandoff(props: { communitySlug: string; membership: "loading" | "member" | "visitor" }) {
+export function WebCommunityHandoff(props: { communitySlug: string; membership: "loading" | "member" | "visitor"; signedIn?: boolean }) {
   const [state, setState] = useState<{ status: "loading" } | { status: "no_site"; name: string } | { status: "missing" } | { status: "unreachable" }>({ status: "loading" });
 
   useEffect(() => {
@@ -42,7 +42,9 @@ export function WebCommunityHandoff(props: { communitySlug: string; membership: 
   if (state.status === "loading") return <div className="landing-auth-hold" aria-hidden="true" />;
   const title = state.status === "no_site" ? state.name : state.status === "unreachable" ? "Couldn't reach Polynet" : "Community not found";
   const copy = state.status === "no_site"
-    ? "This community doesn't have its site yet, so it isn't taking new members here."
+    ? props.signedIn
+      ? "You're not a member yet, and this community doesn't have its site yet, so it isn't taking new members here."
+      : "This community doesn't have its site yet, so it isn't taking new members here. Already have access? Sign in."
     : state.status === "unreachable"
       ? "We couldn't look up this community just now. Check your connection and try again."
       : "This community doesn't exist or isn't public.";
@@ -55,6 +57,11 @@ export function WebCommunityHandoff(props: { communitySlug: string; membership: 
           <div className="public-funnel-state-actions">
             {state.status === "unreachable" ? (
               <button type="button" className="public-funnel-primary" onClick={() => window.location.reload()}>Try again</button>
+            ) : null}
+            {state.status === "no_site" && props.membership === "visitor" && !props.signedIn ? (
+              // Someone who already has access (bought in the community's own
+              // app, or was invited) signs in and lands inside.
+              <a className="public-funnel-primary" href={`/login?returnTo=${encodeURIComponent(`/c/${props.communitySlug}`)}`}>Sign in</a>
             ) : null}
             <a className="public-funnel-secondary" href="/">Go to Polynet</a>
           </div>

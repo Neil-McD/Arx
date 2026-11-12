@@ -43,6 +43,7 @@ export function buildWebAppMainSurfaceHostProps(params: {
     showOnboardingModal: params.showOnboardingModal,
     settingsSurfaceHostProps: params.settingsSurfaceHostProps,
     publicCommunitySlug: params.publicRoute.kind === "community_funnel" ? params.publicRoute.slug : null,
+    publicCommunitySignedIn: !params.isSignedOut,
     publicCommunityMembership: params.viewerCommunities.isLoading
       ? "loading"
       : params.publicRoute.kind === "community_funnel"

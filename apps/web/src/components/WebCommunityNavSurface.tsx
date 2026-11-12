@@ -7,6 +7,7 @@ import { WebCommunitySwitcher } from "./WebCommunitySwitcher";
 import type { WebCommunityShellProps } from "./webShellChromeShared";
 import { WebCommunityCommandPalette } from "./WebCommunityCommandPalette";
 import { SearchOrAskButton } from "./CommunityPageHeader";
+import { useCommunityAppLinks } from "../controllers/communityAppLinks";
 
 type WebCommunityNavSurfaceProps = {
   communityShell: WebCommunityShellProps;
@@ -19,6 +20,7 @@ export function WebCommunityNavSurface({
 }: WebCommunityNavSurfaceProps) {
   const isMobileHome = presentation === "mobile-home";
   const useV1Layout = !isMobileHome && isDesignV1Active();
+  const appLinks = useCommunityAppLinks();
   const hasDestinationSelection =
     !isMobileHome &&
     webDestinationHasCommunityNavSelection(communityShell.destination);
@@ -109,6 +111,8 @@ export function WebCommunityNavSurface({
       onOpenPods={useV1Layout ? () => communityShell.onSelectCommunityTab("pods")
         : isMobileHome && isDesignV1Active() ? () => communityShell.onSelectCommunityTabFromMobile("pods") : undefined}
       podsActive={inPod}
+      // One door: the community's own app, opened from here (design v1).
+      appLinks={isDesignV1Active() ? appLinks : undefined}
       memberCount={communityShell.activeCommunityMemberCount}
       onOpenGuide={useV1Layout && communityShell.onOpenCommunitySettingsPane
         ? () => communityShell.onOpenCommunitySettingsPane?.("agent")
