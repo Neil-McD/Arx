@@ -476,6 +476,11 @@ describe("Home moments", () => {
   });
 });
 
+// A pod checkout reserved for a member (the payment's id).
+async function reservePod(t: ReturnType<typeof convexTest>, args: Record<string, unknown>) {
+  return (await t.mutation(internalRefs.communityPodPayments.createPendingPodPaymentInternal, args as any)).paymentId;
+}
+
 describe("pods", () => {
   it("builders see every pod; a member sees only pods they were added to; purpose is the builder's", async () => {
     const t = convexTest(schema, modules);
@@ -575,7 +580,7 @@ describe("pods", () => {
     const config = (userId: any) => t.query(internalRefs.communityPodPayments.podCheckoutConfigInternal, { userId, communityId: f.communityId, channelId: ids.channelId, nowMs: Date.now() });
     await expect(config(ids.ana)).resolves.toMatchObject({ amountBaseUnits: 10000, providerAccountId: "acct_builder", openCheckoutUrl: null });
     // A checkout Ana opened is reused rather than started twice.
-    const paymentId = await t.mutation(internalRefs.communityPodPayments.createPendingPodPaymentInternal, {
+    const paymentId = await reservePod(t, {
       communityId: f.communityId, channelId: ids.channelId, userId: ids.ana, amountBaseUnits: 10000, currency: "usd",
       providerAccountId: "acct_builder", providerPriceId: "price_pod", nowMs: Date.now(),
     });
@@ -621,7 +626,7 @@ describe("pods", () => {
       return { ana: (await find("brief-Ana"))._id, ben: (await find("brief-Ben"))._id, podA: await room("pod-a"), podB: await room("pod-b") };
     });
     const pay = async (userId: any, channelId: any, sub: string) => {
-      const paymentId = await t.mutation(internalRefs.communityPodPayments.createPendingPodPaymentInternal, {
+      const paymentId = await reservePod(t, {
         communityId: f.communityId, channelId, userId, amountBaseUnits: 10000, currency: "usd", providerAccountId: "acct_builder", providerPriceId: "price_pod", nowMs: Date.now(),
       });
       const result = await t.mutation(internalRefs.communityPodPayments.syncPodPaymentInternal, {
@@ -658,7 +663,11 @@ describe("pods", () => {
       const membership = (await ctx.db.query("communityMemberships").collect()).find((row: any) => String(row.userId) === String(ids.ben))!;
       await ctx.db.patch(membership._id, { state: "left" } as any);
     });
-    expect((await pay(ids.ben, ids.podB, "sub_ben")).granted).toBe(false);
+    const benPaid = await pay(ids.ben, ids.podB, "sub_ben");
+    expect(benPaid.granted).toBe(false);
+    await expect(t.run((ctx) => ctx.db.get(benPaid.paymentId))).resolves.toMatchObject({ status: "ended", refundDue: true });
+    // The refund stays owed (whatever Stripe says next) until it is made.
+    await expect(t.query(internalRefs.communityPodPayments.listPodRefundsDueInternal, {})).resolves.toMatchObject([{ providerSubscriptionId: "sub_ben" }]);
     // Ana leaves the community: her pod B billing stops, keeping what she paid.
     await t.run(async (ctx) => {
       const membership = (await ctx.db.query("communityMemberships").collect()).find((row: any) => String(row.userId) === String(ids.ana))!;
@@ -668,7 +677,7 @@ describe("pods", () => {
     // The check scheduled when Ana left finds the same one, for her only.
     expect((await t.query(internalRefs.communityPodPayments.listUnreachablePodPaymentsForScopeInternal, { communityId: f.communityId, userId: ids.ana }))
       .map((row: any) => row.providerSubscriptionId)).toEqual(["sub_b"]);
-    expect(unreachable.map((row: any) => [row.providerSubscriptionId, row.refund]).sort()).toEqual([["sub_b", false], ["sub_ben", true]]);
+    expect(unreachable.map((row: any) => [row.providerSubscriptionId, row.refund])).toEqual([["sub_b", false]]);
     for (const row of unreachable) await t.mutation(internalRefs.communityPodPayments.endUnreachablePodPaymentInternal, { paymentId: row.paymentId });
     await expect(allUnreachable()).resolves.toEqual([]);
   });
@@ -686,7 +695,7 @@ describe("pods", () => {
       } as any);
       return { ana: ana._id, channelId };
     });
-    const paymentId = await t.mutation(internalRefs.communityPodPayments.createPendingPodPaymentInternal, {
+    const paymentId = await reservePod(t, {
       communityId: f.communityId, channelId: ids.channelId, userId: ids.ana, amountBaseUnits: 10000, currency: "usd", providerAccountId: "acct_builder", providerPriceId: "price_pod", nowMs: Date.now(),
     });
     await t.mutation(internalRefs.communityPodPayments.syncPodPaymentInternal, {
@@ -712,7 +721,7 @@ describe("pods", () => {
     await t.run((ctx) => ctx.db.patch(f.communityId, { lifecycleStatus: "archived", lifecycleGeneration: 1 } as any));
     await expect(scope({ communityId: f.communityId })).resolves.toMatchObject([{ providerSubscriptionId: "sub_x" }]);
     // An unpaid checkout is marked expired a day after Stripe closed it.
-    const stale = await t.mutation(internalRefs.communityPodPayments.createPendingPodPaymentInternal, {
+    const stale = await reservePod(t, {
       communityId: f.communityId, channelId: ids.channelId, userId: ids.ana, amountBaseUnits: 10000, currency: "usd", providerAccountId: "acct_builder", providerPriceId: "price_pod", nowMs: Date.now() - 3 * DAY,
     });
     await expect(t.mutation(internalRefs.communityPodPayments.expireAbandonedPodCheckoutsInternal, { nowMs: Date.now() })).resolves.toMatchObject({ expired: 1 });
@@ -771,7 +780,7 @@ describe("pods", () => {
     await t.mutation(internalRefs.communityPodPayments.leavePodNowInternal, { userId: ids.ana, communityId: f.communityId, channelId: ids.channelId });
     expect((await page("brief-Ana")).kind).toBe("outside");
     // Ben pays: "Paying" with its renewal date; a failed payment emails him once.
-    const paymentId = await t.mutation(internalRefs.communityPodPayments.createPendingPodPaymentInternal, {
+    const paymentId = await reservePod(t, {
       communityId: f.communityId, channelId: ids.channelId, userId: ids.ben, amountBaseUnits: 10000, currency: "usd", providerAccountId: "acct_builder", providerPriceId: "price_pod", nowMs: Date.now(),
     });
     const renews = Date.now() + 20 * DAY;
@@ -796,5 +805,61 @@ describe("pods", () => {
     expect((await asOwner.query(api.communityPods.getPod, { communityId: f.communityId, channelId: ids.channelId })).members.find((m: any) => m.name === "Ben")?.payment)
       .toMatchObject({ state: "leaving" });
     await expect(page("brief-Ben")).resolves.toEqual({ kind: "inside", slug: "founders" });
+  });
+
+  it("paid pods: one checkout per member and pod; a second subscription or a payment after archiving is refunded, never granted", async () => {
+    const t = convexTest(schema, modules);
+    const f = await fixture(t, Date.now());
+    const ids = await t.run(async (ctx) => {
+      const nowMs = Date.now();
+      const ana = (await ctx.db.query("users").withIndex("by_authSubject" as any, (q: any) => q.eq("authSubject", "brief-Ana")).first())!;
+      const ben = (await ctx.db.query("users").withIndex("by_authSubject" as any, (q: any) => q.eq("authSubject", "brief-Ben")).first())!;
+      for (const row of await ctx.db.query("communityMemberships").collect()) await ctx.db.patch(row._id, { activationSequence: 1, activatedAt: nowMs } as any);
+      const channelId = await ctx.db.insert("communityChannels", {
+        communityId: f.communityId, slug: "pod", name: "pod", accessMode: "restricted",
+        postingPolicy: "members", status: "active", position: 1, createdByUserId: f.ownerId, createdAt: nowMs, updatedAt: nowMs,
+      } as any);
+      return { ana: ana._id, ben: ben._id, channelId };
+    });
+    const reserve = (userId: any, nowMs = Date.now()) => t.mutation(internalRefs.communityPodPayments.createPendingPodPaymentInternal, {
+      communityId: f.communityId, channelId: ids.channelId, userId, amountBaseUnits: 10000, currency: "usd", providerAccountId: "acct_builder", providerPriceId: "price_pod", nowMs,
+    });
+    // Two tabs: one reservation, with Stripe's 30 minutes and room to spare.
+    const first = await reserve(ids.ana);
+    const second = await reserve(ids.ana);
+    expect(second.paymentId).toBe(first.paymentId);
+    expect(first.checkoutExpiresAt - Date.now()).toBeGreaterThan(31 * 60 * 1000);
+    expect(first.checkoutUrl).toBeNull();
+    // Once Stripe has opened it, Join reopens that checkout.
+    await t.mutation(internalRefs.communityPodPayments.attachPodCheckoutInternal, { paymentId: first.paymentId, providerCheckoutSessionId: "cs_1", checkoutUrl: "https://checkout.stripe.com/c/1" });
+    expect(await reserve(ids.ana)).toMatchObject({ paymentId: first.paymentId, checkoutUrl: "https://checkout.stripe.com/c/1" });
+    // A failed second attempt never closes a checkout Stripe has open.
+    await t.mutation(internalRefs.communityPodPayments.expirePodPaymentInternal, { paymentId: first.paymentId });
+    await expect(t.run((ctx) => ctx.db.get(first.paymentId))).resolves.toMatchObject({ status: "pending" });
+    const sync = (paymentId: any, sub: string) => t.mutation(internalRefs.communityPodPayments.syncPodPaymentInternal, {
+      paymentId, providerAccountId: "acct_builder", providerSubscriptionId: sub, subscriptionStatus: "active", providerEventAt: 1000,
+    });
+    await expect(sync(first.paymentId, "sub_1")).resolves.toMatchObject({ granted: true });
+    // A second subscription for the same pod (somehow paid twice): not
+    // granted, ended, refund owed; the first is untouched.
+    const extra = await t.run((ctx) => ctx.db.insert("communityPodPayments", {
+      communityId: f.communityId, channelId: ids.channelId, userId: ids.ana, status: "pending", amountBaseUnits: 10000, currency: "usd",
+      providerAccountId: "acct_builder", providerPriceId: "price_pod", checkoutExpiresAt: Date.now() + DAY, createdAt: Date.now(), updatedAt: Date.now(),
+    }));
+    await expect(sync(extra, "sub_2")).resolves.toMatchObject({ status: "ended", granted: false });
+    await expect(t.run((ctx) => ctx.db.get(extra))).resolves.toMatchObject({ status: "ended", refundDue: true });
+    await expect(t.run((ctx) => ctx.db.get(first.paymentId))).resolves.toMatchObject({ status: "active" });
+    // Ben pays after the community was archived: never granted, refund owed.
+    const late = await reserve(ids.ben);
+    await t.run((ctx) => ctx.db.patch(f.communityId, { lifecycleStatus: "archived", lifecycleGeneration: 1 } as any));
+    await expect(sync(late.paymentId, "sub_3")).resolves.toMatchObject({ status: "ended", granted: false });
+    const lateRow: any = await t.run((ctx) => ctx.db.get(late.paymentId));
+    expect(lateRow).toMatchObject({ refundDue: true });
+    expect(lateRow.grantedAt).toBeUndefined();
+    // Both refunds wait in the durable list until made, then leave it.
+    const due = await t.query(internalRefs.communityPodPayments.listPodRefundsDueInternal, {});
+    expect(due.map((row: any) => row.providerSubscriptionId).sort()).toEqual(["sub_2", "sub_3"]);
+    await t.mutation(internalRefs.communityPodPayments.clearPodRefundDueInternal, { paymentId: extra });
+    expect((await t.query(internalRefs.communityPodPayments.listPodRefundsDueInternal, {})).map((row: any) => row.providerSubscriptionId)).toEqual(["sub_3"]);
   });
 });
