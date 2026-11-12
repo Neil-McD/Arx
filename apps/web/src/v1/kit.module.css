@@ -578,6 +578,8 @@
 .app .lead{font-family:inherit;font-weight:600;font-size:20px;line-height:1.3;letter-spacing:-.01em}
 
 .app .kask{max-width:none}
+
+.app .kask-btn{min-height:0;height:46px;align-items:center;flex-wrap:nowrap;padding:0 14px}
 .app .kcrumb,.app .klesson{max-width:720px;margin-left:auto;margin-right:auto}
 .app .klesson{width:100%}
 .app .kback{display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 8px 0 6px;margin-left:-6px;border-radius:6px;color:var(--ink2);font-size:13px}
@@ -687,7 +689,7 @@
 .app button.kcourse,.app button.kcont,.app button.kl,.app button.src{width:100%;text-align:left}
 .app button.src{width:calc(100% + 20px)}
 .app button.kcont{display:block}
-.app .kask-btn{width:100%;cursor:pointer;color:var(--ink3);font-size:15px}
+.app .kask-btn{width:100%;cursor:pointer;color:var(--ink3);font-size:14px}
 .app .kask-btn span{flex:1;text-align:left}
 .app .kdone{cursor:pointer}.app .kdone.is{background:var(--blue);border-color:var(--blue);color:var(--bg)}
 .app .kl.d .ic{color:var(--ink2)}
