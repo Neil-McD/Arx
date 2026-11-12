@@ -1,4 +1,6 @@
-import { CommunityPageHeader } from "./CommunityPageHeader";
+import { CommunityPageHeader, CommunityPageRail } from "./CommunityPageHeader";
+import { isDesignV1Active } from "../../../../shared/designSystem";
+import { KitKnowledgePage } from "../v1/KitKnowledgePage";
 import { useEffect, useState, type ComponentProps } from "react";
 import { buildPlatformSwitcherStyle } from "../../../../shared/platformSwitcherUi";
 import { WebPlatformTabList, platformTabId, platformTabPanelId } from "./WebPlatformChoiceControls";
@@ -20,7 +22,32 @@ type Props = {
   };
 };
 
-export function WebCommunityKnowledgePanel({ resources, context }: Props) {
+export function WebCommunityKnowledgePanel(props: Props) {
+  // Design system v1: what the community has learned is the page; courses and
+  // documents are one click away (Resources), still in their own layout.
+  if (isDesignV1Active() && props.context.communityId && props.context.canViewGraph) return <KnowledgeV1 {...props} />;
+  return <KnowledgeClassic {...props} />;
+}
+
+function KnowledgeV1({ resources, context }: Props) {
+  const [view, setView] = useState<"notes" | "resources">("notes");
+  useEffect(() => { setView("notes"); }, [context.communityId]);
+  return (
+    <section className="community-knowledge-page" aria-label="Knowledge">
+      <CommunityPageHeader title={view === "resources" ? "Knowledge · Resources" : "Knowledge"}
+        actions={view === "resources" ? <button type="button" className="community-page-back" onClick={() => setView("notes")}>Back to notes</button> : null}>
+        <div className="community-knowledge-header"><h1>Knowledge</h1></div>
+      </CommunityPageHeader>
+      {view === "resources" ? <CommunityResourcesPanel {...resources} /> : (
+        <KitKnowledgePage communityId={context.communityId!} communityName={context.communityName ?? "This community"} session={context.session}
+          onOpenResources={() => setView("resources")}
+          renderRail={(rail) => <CommunityPageRail label="Open note">{rail}</CommunityPageRail>} />
+      )}
+    </section>
+  );
+}
+
+function KnowledgeClassic({ resources, context }: Props) {
   const [view, setView] = useState<"resources" | "notes">("resources");
   useEffect(() => { setView("resources"); }, [resources.state.selectedModuleId]);
   const notesOpen = view === "notes" && context.canViewGraph;

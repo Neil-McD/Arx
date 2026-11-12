@@ -51,3 +51,31 @@ test("members read the notes in Studio; only owners and admins edit or delete th
   expect((await asMember.query(api.communityNotes.listCommunityNotes, { communityId })).notes).toHaveLength(0);
   expect(memberId).toBeTruthy();
 });
+
+test("hosts write notes from Knowledge; members can't; only a host's own notes name the writer", async () => {
+  const t = convexTest(schema, modules);
+  const { ownerId, communityId } = await community(t);
+  await t.run(async (ctx: any) => {
+    const memberId = await ctx.db.insert("users", { authSubject: "member", displayName: "Jon", createdAt: NOW, updatedAt: NOW });
+    await ctx.db.insert("communityMemberships", { communityId, userId: memberId, role: "member", accessSource: "free_grant", state: "active", createdAt: NOW, updatedAt: NOW });
+    // A note saved from a member's conversation (an older source).
+    await ctx.db.insert("communityNotes", { communityId, slug: "pods", title: "Pods of five", bodyMd: "Five people per pod.", source: "ask",
+      searchText: "pods of five", createdByUserId: memberId, createdAt: NOW, updatedAt: NOW });
+    expect(ownerId).toBeTruthy();
+  });
+  const asOwner = t.withIdentity({ subject: "owner" });
+  const asMember = t.withIdentity({ subject: "member" });
+  await expect(asMember.mutation(api.communityNotes.createCommunityNote, { communityId, title: "Mine", text: "x" })).rejects.toThrow(/community_forbidden/);
+  const first = await asOwner.mutation(api.communityNotes.createCommunityNote, { communityId, title: "Invitations that work", text: "Lead with the result." });
+  const second = await asOwner.mutation(api.communityNotes.createCommunityNote, { communityId, title: "Invitations that work", text: "Say who it's for." });
+  expect(first.slug).toBe("invitations-that-work");
+  expect(second.slug).toBe("invitations-that-work-2");
+  await expect(asOwner.mutation(api.communityNotes.createCommunityNote, { communityId, title: "  ", text: "x" })).rejects.toThrow(/invalid_tool_args/);
+
+  const seen = await asMember.query(api.communityNotes.listCommunityNotes, { communityId });
+  const bySlug = Object.fromEntries(seen.notes.map((note: any) => [note.slug, note]));
+  expect(bySlug["invitations-that-work"]).toMatchObject({ kind: "founder", written_by: "Owner" });
+  expect(bySlug["invitations-that-work"].created_at).toBeTruthy();
+  // Saved from someone's conversation: never names them.
+  expect(bySlug.pods).toMatchObject({ kind: "ask", written_by: null });
+});
