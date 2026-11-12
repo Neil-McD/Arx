@@ -3,7 +3,7 @@
   <nav class="side" aria-label="Community">
     <label class="cover{bare}"><input type="radio" name="k" class="k-open">{markel}<span>{cname}</span><span class="sw">{i:updown}</span></label>
 
-    <div style="height:10px"></div>
+    <div class="lin-tools"><label class="lt"><input type="radio" name="k" class="k-open">{i:search}Search or ask<kbd>⌘K</kbd></label><span class="ib">{i:plus}</span></div>
     <label class="row n-home"><input type="radio" name="v" class="v-home">{i:home}Home<span class="count">1</span></label>
     <label class="row n-inbox"><input type="radio" name="v" class="v-inbox">{i:inbox}Inbox<span class="hint">4</span></label>
 
@@ -30,6 +30,7 @@
 
   <main class="main">
     <header class="top">
+      <h1 class="t0">Home</h1>
       <h1 class="t1">{i:hash}wins <small>Share what worked</small></h1>
       <h1 class="t2">Knowledge</h1>
       <h1 class="t3">Inbox <small>Across your communities</small></h1>
@@ -372,16 +373,23 @@
 
   <!-- RAIL: HOME -->
   <aside class="rail r0 m-only" aria-label="Right now">
-    <div class="sec">
-      <span class="livepill"><i></i>Live in 20 minutes</span>
+    <div class="ev"><span class="livepill"><i></i>Live in 20 minutes</span>
       <h3>Friday build call</h3>
       <p>Neil is hosting · 14 going</p>
-      <div style="display:flex;gap:8px;margin-top:6px"><span class="btn" style="height:32px;font-size:13px">Remind me</span><label class="btn txt" style="height:32px;font-size:13px"><input type="radio" name="v" class="v-events">All events</label></div>
+      <div style="display:flex;gap:6px;margin-top:4px"><span class="btn go">I'll be there</span><label class="btn txt"><input type="radio" name="v" class="v-events">All events</label></div></div>
+    <div class="sec">
+      <span class="lab">Today</span>
+      <ul class="tl">
+        <li><b>We passed 100 members last night.</b><span>#wins · 4 replies</span></li>
+        <li><b>Busiest in #wins</b><span>10 messages from 5 people</span></li>
+        <li><b>A pricing question in #biz is waiting for an answer</b><span>Asked 2 hours ago</span></li>
+      </ul>
+      <span class="counts">7 posts · 4 replies · 5 people</span>
     </div>
     <div class="sep"></div>
     <div class="sec">
-      <span class="lab">Here now</span>
-      <div style="display:flex;align-items:center;gap:12px"><span class="stack"><span class="av s a2">N</span><span class="av s a1">J</span><span class="av s a3">P</span><span class="av s a5">R</span><span class="av s a6">S</span></span><span class="sub" style="white-space:nowrap">Neil, Jon and 4 more</span></div>
+      <span class="lab">Online now</span>
+      <div style="display:flex;align-items:center;gap:10px"><span class="stack"><span class="av xs a2">N</span><span class="av xs a1">J</span><span class="av xs a3">P</span><span class="av xs a5">R</span><span class="av xs a6">S</span></span><span class="sub" style="white-space:nowrap">Neil, Jon and 4 more</span></div>
     </div>
     <div class="sep"></div>
     <div class="sec">
@@ -393,24 +401,30 @@
 
   <!-- RAIL: HOME, for the host -->
   <aside class="rail r0 h-only" aria-label="The community right now">
-    <!--HR--><div class="figs">
-      <div class="fig"><span>Members</span><b>214</b><em>3 joined this week</em></div>
-      <div class="fig"><span>Active this week</span><b>132</b><em>62 percent</em></div>
-      <div class="fig"><span>Revenue this month</span><b>$4,180</b><em>up $320</em></div>
-      <div class="fig"><span>Next payout</span><b>$1,240</b><em>Friday</em></div>
+    <div class="ev"><span class="livepill"><i></i>Live in 20 minutes</span>
+      <h3>Friday build call</h3>
+      <p>You're hosting · 14 going</p>
+      <div style="display:flex;gap:6px;margin-top:4px"><span class="btn go">Open the room</span><label class="btn txt"><input type="radio" name="v" class="v-events">All events</label></div></div>
+    <!--HR--><div class="sec">
+      <span class="lab">Today</span>
+      <ul class="tl">
+        <li><b>We passed 100 members last night.</b><span>#wins · 4 replies</span></li>
+        <li><b>Busiest in #wins</b><span>10 messages from 5 people</span></li>
+        <li><b>Rashid's pricing question has no answer yet</b><span>#biz · 2 days</span></li>
+        <li><b>Two people are waiting to join</b><span>Came through Jon's invitation</span></li>
+      </ul>
+      <span class="counts">7 posts · 4 replies · 5 people</span>
     </div><!--/HR-->
     <div class="sep"></div>
     <div class="sec">
-      <span class="livepill"><i></i>Live in 20 minutes</span>
-      <h3>Friday build call</h3>
-      <p>You're hosting · 14 going</p>
-      <div style="display:flex;gap:8px;margin-top:6px"><span class="btn" style="height:32px;font-size:13px">Open the room</span><label class="btn txt" style="height:32px;font-size:13px"><input type="radio" name="v" class="v-events">All events</label></div>
+      <span class="lab">Online now</span>
+      <div style="display:flex;align-items:center;gap:10px"><span class="stack"><span class="av xs a2">N</span><span class="av xs a1">J</span><span class="av xs a3">P</span><span class="av xs a5">R</span><span class="av xs a6">S</span></span><span class="sub" style="white-space:nowrap">Neil, Jon and 4 more</span></div>
     </div>
     <div class="sep"></div>
     <div class="sec">
-      <span class="lab">Your guide, this week</span>
-      <p>Answered 41 questions, welcomed 3 members, and saved 3 notes for your review.</p>
-      <label class="link" style="margin-top:2px"><input type="radio" name="v" class="v-guide">What it may do {i:arrow}</label>
+      <span class="lab">Community memory</span>
+      {mini}
+      <div style="display:flex;align-items:center;justify-content:space-between"><span class="sub">214 notes · 3 learned this week</span><label class="link"><input type="radio" name="v" class="v-know">Open {i:arrow}</label></div>
     </div>
   </aside>
 

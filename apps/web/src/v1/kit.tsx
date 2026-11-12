@@ -215,16 +215,13 @@ export function Main(props: { children: ReactNode }) {
   return <main className={cx("main")}>{props.children}</main>;
 }
 
-export function Top(props: { title?: ReactNode; titleView?: number; search?: boolean; onSearch?: () => void }) {
+// The page's header bar names it; Search or ask lives at the top of the left
+// column (Linear-style), not here.
+export function Top(props: { title?: ReactNode; titleView?: number }) {
   return (
     <>
       <header className={cx("top")}>
         {props.title ? <h1 className={cx(`t${props.titleView ?? 1}`)}>{props.title}</h1> : null}
-        {props.search === false ? null : (
-          <button type="button" className={cx("find")} onClick={props.onSearch}>
-            <Icon name="search" />Search or ask<kbd>⌘K</kbd>
-          </button>
-        )}
       </header>
       <div className={cx("hline")} />
     </>

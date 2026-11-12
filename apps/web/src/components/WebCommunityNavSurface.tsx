@@ -6,6 +6,7 @@ import { WebAccountMenu } from "./WebAccountMenu";
 import { WebCommunitySwitcher } from "./WebCommunitySwitcher";
 import type { WebCommunityShellProps } from "./webShellChromeShared";
 import { WebCommunityCommandPalette } from "./WebCommunityCommandPalette";
+import { SearchOrAskButton } from "./CommunityPageHeader";
 
 type WebCommunityNavSurfaceProps = {
   communityShell: WebCommunityShellProps;
@@ -57,6 +58,7 @@ export function WebCommunityNavSurface({
           ? communityShell.onSelectCommunityTabFromMobile
           : communityShell.onSelectCommunityTab
       }
+      toolsSlot={useV1Layout ? <SearchOrAskButton /> : null}
       layout={useV1Layout ? "v1" : "classic"}
       identityIsCover={useV1Layout}
       accountSlot={useV1Layout && communityShell.account

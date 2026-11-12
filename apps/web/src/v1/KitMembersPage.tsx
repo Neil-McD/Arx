@@ -21,7 +21,6 @@ import { fetchCloudCommunityMemberBillingHistory, type CloudCommunityMemberBilli
 import { formatPrice } from "../../../../shared/communityMemberRecords";
 import { CommunityChannelSessionContext } from "../components/CommunityChannelSessionContext";
 import type { CommunityAdmissionJoinRequest } from "../components/CommunityJoinRequestReview";
-import { openGuideFromSearch } from "../components/guideSearch";
 import { Btn, cx, Icon, KitApp, Rail, Sep, Sec, Top, View } from "./kit";
 
 type MembersView = "everyone" | `price:${string}` | "on_hold" | "cancelling" | "comped" | "know_little" | "past";
@@ -240,7 +239,7 @@ export function KitMembersPage(props: {
     <section className="members-page is-kit" aria-label="Community members">
       <KitApp view="members" host part="main">
         <View index={5}>
-          <Top title={<>Members <small>{summary ? `${summary.with_access} ${summary.with_access === 1 ? "member" : "members"}${summary.counts.on_hold ? ` · ${summary.counts.on_hold} on hold` : ""}` : ""}</small></>} titleView={5} onSearch={openGuideFromSearch} />
+          <Top title={<>Members <small>{summary ? `${summary.with_access} ${summary.with_access === 1 ? "member" : "members"}${summary.counts.on_hold ? ` · ${summary.counts.on_hold} on hold` : ""}` : ""}</small></>} titleView={5} />
           <div className={cx("page")} style={{ overflowY: "auto" }}>
             <p className={cx("lead")}><span className={cx("aura")}><Icon name="spark" /></span>{lead}</p>
             {waiting > 0 ? (
