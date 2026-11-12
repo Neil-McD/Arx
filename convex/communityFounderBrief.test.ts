@@ -1040,7 +1040,14 @@ describe("pods", () => {
     await asOwner.mutation(api.communityPodNotes.publishPodNote, { ...pod, slug: "launch-pricing" });
     const after = await asBen.query(api.communityNotes.listCommunityNotes, { communityId: f.communityId });
     expect(after.notes.map((note: any) => note.body_md)).toEqual(["Our launch price is $597."]);
+    // The builder deletes the copy and writes an unrelated note that takes its
+    // slug: republishing makes a new copy, never overwriting that note.
+    await asOwner.mutation(api.communityNotes.deleteCommunityNote, { communityId: f.communityId, slug: "launch-pricing" });
+    await asOwner.mutation(api.communityNotes.createCommunityNote, { communityId: f.communityId, title: "Launch pricing", text: "Unrelated community note." });
+    await asOwner.mutation(api.communityPodNotes.publishPodNote, { ...pod, slug: "launch-pricing" });
+    const bodies = (await asBen.query(api.communityNotes.listCommunityNotes, { communityId: f.communityId })).notes.map((note: any) => note.body_md).sort();
+    expect(bodies).toEqual(["Our launch price is $597.", "Unrelated community note."]);
     await asOwner.mutation(api.communityPodNotes.deletePodNote, { ...pod, slug: "launch-pricing" });
-    expect((await asBen.query(api.communityNotes.listCommunityNotes, { communityId: f.communityId })).notes).toHaveLength(1);
+    expect((await asBen.query(api.communityNotes.listCommunityNotes, { communityId: f.communityId })).notes).toHaveLength(2);
   });
 });

@@ -9,6 +9,7 @@
 // purpose, as a copy marked with the pod it came from.
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
+import type { Id } from "./_generated/dataModel";
 import { resolveUserIdForAuthenticatedRequest } from "./authActor";
 import { getCommunityChannelCapabilities, resolveCommunityChannelActor } from "./communityChannelAccess";
 import { requireCommunityChatAccess, requireCommunityManager } from "./communityCore";
@@ -72,7 +73,7 @@ export const listPodNotes = query({
         written_by: await writer(row.createdByUserId),
         created_at: new Date(row.createdAt).toISOString(),
         updated_at: new Date(row.updatedAt).toISOString(),
-        published: Boolean(row.publishedSlug),
+        published: Boolean(row.publishedNoteId && await ctx.db.get(row.publishedNoteId)),
       });
     }
     // Publishing writes the community's own notes, which are the builder's.
@@ -136,9 +137,11 @@ export const publishPodNote = mutation({
       title: row.title, bodyMd: row.bodyMd, searchText: buildCommunityNoteSearchText({ title: row.title, bodyMd: row.bodyMd }),
       fromPodName: String(channel.name ?? ""), updatedByUserId: userId, updatedAt: nowMs,
     };
-    const published = row.publishedSlug
-      ? await ctx.db.query("communityNotes").withIndex("by_community_slug", (q) => q.eq("communityId", args.communityId).eq("slug", row.publishedSlug!)).first()
-      : null;
+    // The copy this note was published as, by its own id: if a builder has
+    // since deleted it, publishing makes a new copy rather than overwriting
+    // whatever note now has its slug.
+    const publishedRow = row.publishedNoteId ? await ctx.db.get(row.publishedNoteId as Id<"communityNotes">) : null;
+    const published = publishedRow && String(publishedRow.communityId) === String(args.communityId) ? publishedRow : null;
     if (published) {
       await ctx.db.patch(published._id, fields);
       await ctx.db.patch(row._id, { publishedAt: nowMs });
@@ -151,8 +154,8 @@ export const publishPodNote = mutation({
     const taken = new Set(existing.map((note) => note.slug));
     let slug = base;
     for (let n = 2; taken.has(slug); n++) slug = `${base.slice(0, 60)}-${n}`;
-    await ctx.db.insert("communityNotes", { communityId: args.communityId, slug, source: "founder", createdByUserId: userId, createdAt: nowMs, ...fields });
-    await ctx.db.patch(row._id, { publishedSlug: slug, publishedAt: nowMs });
+    const publishedNoteId = await ctx.db.insert("communityNotes", { communityId: args.communityId, slug, source: "founder", createdByUserId: userId, createdAt: nowMs, ...fields });
+    await ctx.db.patch(row._id, { publishedSlug: slug, publishedNoteId, publishedAt: nowMs });
     return { slug };
   },
 });
