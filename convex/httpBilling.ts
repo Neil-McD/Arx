@@ -1,5 +1,5 @@
 import { internal } from "./_generated/api";
-import { POD_PAYMENT_METADATA_KEY, syncPodPaymentFromCheckoutSession, syncPodPaymentFromStripeSubscription } from "./communityPodPayments";
+import { endPodPaymentForRisk, POD_PAYMENT_METADATA_KEY, syncPodPaymentFromCheckoutSession, syncPodPaymentFromStripeSubscription } from "./communityPodPayments";
 import { v } from "convex/values";
 import { internalAction } from "./_generated/server";
 import {
@@ -714,6 +714,11 @@ async function syncCommunitySubscriptionRiskStatus(
   const providerAccountId = readStripeEventAccountId(event);
   if (!providerAccountId) {
     return { ok: true, ignored: true, reason: "community_subscription_provider_account_required" };
+  }
+  // A refund or dispute on a paid pod: that pod's access ends.
+  if (args.status === "ended" || args.status === "canceled") {
+    const podResult = await endPodPaymentForRisk(ctx, { providerAccountId, providerSubscriptionId, reason: args.revokedReason });
+    if (podResult) return podResult;
   }
   const existingCommunitySubscription = await ctx.runQuery(
     internal.communityCommerce

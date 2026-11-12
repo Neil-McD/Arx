@@ -8,7 +8,7 @@
 // checkout, Polynet asking Stripe directly. The return page grants nothing.
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
-import { action, internalMutation, internalQuery, mutation } from "./_generated/server";
+import { action, internalAction, internalMutation, internalQuery, mutation } from "./_generated/server";
 import { resolveUserIdForAuthenticatedRequest } from "./authActor";
 import { fillCheckoutSuccessUrl, normalizeStripeCommunitySubscriptionStatus, requireCanonicalCheckoutReturnUrl } from "./billingCore";
 import { setChannelParticipantCore } from "./communityChannelParticipants";
@@ -17,6 +17,7 @@ import { communityMembershipRowIsActive, getUniqueCommunityMembershipByPair, nor
 import { communitySubscriptionStatusGrantsAccess } from "./communitySubscriptionLifecycle";
 import { canReceiveCommunityRevenue, getStripeConnectDestinationAccountId, isStripeConnectCheckoutCapabilityError } from "./stripeConnectAccountCore";
 import { getStripeClient, requireStripeConnectWebhookConfiguration } from "./stripeCore";
+import { cancelAndRefundDuplicateSubscription, cancelStripeSubscriptionIfActive } from "./stripeSubscriptionCancellation";
 import { POLYNET_COMMUNITY_PLATFORM_FEE_BPS } from "../shared/founderPlan";
 import { communityIsActive } from "../shared/communityLifecycle";
 
@@ -364,4 +365,102 @@ export const confirmPodCheckout = action({
 export const normalizePodPaymentIdInternal = internalQuery({
   args: { paymentId: v.string() },
   handler: async (ctx, args) => ctx.db.normalizeId("communityPodPayments", args.paymentId),
+});
+
+
+// Slice 2c: the endings Stripe doesn't send as a subscription change.
+
+// Ends a payment for good and takes its grant away (unless another payment of
+// theirs still grants). Returns what to stop in Stripe, or null.
+async function endPodPayment(ctx: any, row: any, nowMs: number) {
+  if (row.grantedAt) {
+    const others = (await ctx.db.query("communityPodPayments")
+      .withIndex("by_channel_user", (q: any) => q.eq("channelId", row.channelId).eq("userId", row.userId)).collect())
+      .some((other: any) => String(other._id) !== String(row._id) && other.grantedAt);
+    if (!others) await setChannelParticipantCore(ctx, { communityId: row.communityId, channelId: row.channelId, createdByUserId: row.userId, active: false, target: { kind: "member", userId: row.userId } });
+  }
+  await ctx.db.patch(row._id, { status: "ended", grantedAt: undefined, updatedAt: nowMs });
+}
+
+// A full refund or an opened (or lost) dispute on a pod payment: that pod's
+// access ends and its subscription stops. A won dispute doesn't reopen it;
+// the member can join again.
+export const endPodPaymentForRiskInternal = internalMutation({
+  args: { providerAccountId: v.string(), providerSubscriptionId: v.string() },
+  handler: async (ctx, args) => {
+    const row = await ctx.db.query("communityPodPayments")
+      .withIndex("by_provider_subscription", (q: any) => q.eq("providerAccountId", args.providerAccountId).eq("providerSubscriptionId", args.providerSubscriptionId)).first();
+    if (!row) return { found: false as const };
+    if (row.status !== "ended") await endPodPayment(ctx, row, Date.now());
+    return { found: true as const };
+  },
+});
+
+export async function endPodPaymentForRisk(ctx: any, args: { providerAccountId: string; providerSubscriptionId: string; reason: string }) {
+  const result = await ctx.runMutation(internal.communityPodPayments.endPodPaymentForRiskInternal, {
+    providerAccountId: args.providerAccountId, providerSubscriptionId: args.providerSubscriptionId,
+  });
+  if (!result.found) return null;
+  await cancelStripeSubscriptionIfActive({ providerAccountId: args.providerAccountId, providerSubscriptionId: args.providerSubscriptionId });
+  return { ok: true, pod_payment: true, provider_subscription_id: args.providerSubscriptionId, revoked_reason: args.reason };
+}
+
+const SWEEP_BATCH = 200;
+const GRANTING: PodPaymentStatus[] = ["active", "past_due", "cancel_at_period_end"];
+
+// Paying for a pod you can't reach: you left or were removed from the
+// community, a host took you off the pod, or the pod's room closed. One rule
+// covers all of them. Never let in (paid as they left): cancel and refund in
+// full. Let in, then off: cancel, keeping what was already paid.
+export const listUnreachablePodPaymentsInternal = internalQuery({
+  args: {},
+  handler: async (ctx) => {
+    const found: Array<{ paymentId: any; providerAccountId: string; providerSubscriptionId: string; refund: boolean }> = [];
+    for (const status of GRANTING) {
+      const rows = await ctx.db.query("communityPodPayments").withIndex("by_status", (q: any) => q.eq("status", status)).take(SWEEP_BATCH);
+      for (const row of rows) {
+        if (!row.providerSubscriptionId) continue;
+        const room = await ctx.db.get(row.channelId) as any;
+        const membership = await getUniqueCommunityMembershipByPair({ ctx, communityId: row.communityId, userId: row.userId });
+        const grant = (await ctx.db.query("communityChannelParticipants")
+          .withIndex("by_channel_principal", (q: any) => q.eq("channelId", row.channelId).eq("principalKey", `user:${row.userId}`)).first()) as any;
+        const reachable = Boolean(room?.status === "active" && membership && communityMembershipRowIsActive(membership)
+          && grant?.status === "active" && normalizeIdValue(grant.membershipId) === normalizeIdValue(membership._id)
+          && Number(grant.membershipActivationSequence ?? 0) === Math.max(0, Math.floor(Number(membership.activationSequence ?? 0))));
+        if (!reachable) found.push({ paymentId: row._id, providerAccountId: row.providerAccountId, providerSubscriptionId: row.providerSubscriptionId, refund: !row.grantedAt });
+      }
+    }
+    return found;
+  },
+});
+
+export const endUnreachablePodPaymentInternal = internalMutation({
+  args: { paymentId: v.id("communityPodPayments") },
+  handler: async (ctx, args) => {
+    const row = await ctx.db.get(args.paymentId);
+    if (row && row.status !== "ended") await endPodPayment(ctx, row, Date.now());
+    return null;
+  },
+});
+
+export const sweepUnreachablePodPaymentsInternal = internalAction({
+  args: {},
+  handler: async (ctx): Promise<{ checked: number; stopped: number }> => {
+    const targets: Array<{ paymentId: any; providerAccountId: string; providerSubscriptionId: string; refund: boolean }> =
+      await ctx.runQuery(internal.communityPodPayments.listUnreachablePodPaymentsInternal, {});
+    let stopped = 0;
+    for (const target of targets) {
+      try {
+        const stripeTarget = { providerAccountId: target.providerAccountId, providerSubscriptionId: target.providerSubscriptionId };
+        if (target.refund) await cancelAndRefundDuplicateSubscription(stripeTarget);
+        else await cancelStripeSubscriptionIfActive(stripeTarget);
+        await ctx.runMutation(internal.communityPodPayments.endUnreachablePodPaymentInternal, { paymentId: target.paymentId });
+        stopped += 1;
+      } catch (error) {
+        // Left as it was; the next sweep tries again.
+        console.error("pod_payment_sweep_failed", { paymentId: String(target.paymentId), error: error instanceof Error ? error.message : String(error) });
+      }
+    }
+    return { checked: targets.length, stopped };
+  },
 });

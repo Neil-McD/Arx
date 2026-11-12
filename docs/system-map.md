@@ -282,8 +282,9 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
   Tables: `communityPods`, `communityPodRequests` (asks to join and the waitlist).
 - **Paid pods:** `communityPodPayments` (a pod's price on top of membership, its
   Stripe checkout and subscription, and the grant that follows payment; notices
-  routed from `httpBilling` by the `pod_payment_id` metadata). Table:
-  `communityPodPayments`.
+  routed from `httpBilling` by the `pod_payment_id` metadata; refunds and disputes
+  end a pod payment; an hourly cron stops billing for pods someone can't reach).
+  Table: `communityPodPayments`.
 - **Home moments:** `communityHomeMoments` ("since you were last here" from the
   visit before this one, and a member's next step; ranked in
   `shared/communityHomeMoments.ts`). Table: `communityMemberVisits`.
