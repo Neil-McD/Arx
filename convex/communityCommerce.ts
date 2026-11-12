@@ -502,6 +502,8 @@ export const resolvePublicCommunityCheckoutConfigInternal = internalQuery({
     communitySlug: v.string(),
     billingPeriod: v.string(),
     nowMs: v.optional(v.number()),
+    // A tier (one door); missing means the base membership.
+    tierKey: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const nowMs = args.nowMs ?? Date.now();
@@ -518,11 +520,16 @@ export const resolvePublicCommunityCheckoutConfigInternal = internalQuery({
     if (entryPolicy !== "paid_subscription") {
       throw new Error("paid_plan_required");
     }
+    const tier = args.tierKey
+      ? await ctx.db.query("communityTiers").withIndex("by_community_key", (q: any) => q.eq("communityId", community._id).eq("key", args.tierKey)).first()
+      : null;
+    if (args.tierKey && (!tier || tier.archivedAt)) throw new Error("community_tier_not_found");
     const pricePoint = await resolveCheckoutPricePoint({
       ctx,
       community,
       billingPeriod,
       nowMs,
+      tierKey: args.tierKey ?? null,
     });
     if (!pricePoint) throw new Error("paid_plan_required");
     const connectAccount = (await ctx.runQuery(
@@ -552,6 +559,7 @@ export const resolvePublicCommunityCheckoutConfigInternal = internalQuery({
       providerAccountId,
       platformFeeBps: POLYNET_COMMUNITY_PLATFORM_FEE_BPS,
       oneLiner: typeof community.oneLiner === "string" ? community.oneLiner : null,
+      tierName: tier ? String(tier.name) : null,
     };
   },
 });
@@ -1026,6 +1034,8 @@ export async function startCommunityJoinCheckoutCore(
     guest?: boolean;
     // Who's asking, as the edge saw them (a keyed hash of their address).
     visitorHash?: string;
+    // A tier of the membership (one door); missing means the base price.
+    tierKey?: string;
   },
 ): Promise<{ ok: true; session_id: string; checkout_url: string; buyer_secret?: string }> {
   const nowMs = Date.now();
@@ -1037,6 +1047,7 @@ export async function startCommunityJoinCheckoutCore(
       communitySlug: args.communitySlug,
       billingPeriod,
       nowMs,
+      ...(args.tierKey ? { tierKey: args.tierKey } : {}),
     },
   )) as {
     communityId: any;
@@ -1052,6 +1063,7 @@ export async function startCommunityJoinCheckoutCore(
     platformFeeBps: number;
     oneLiner: string | null;
     communityLifecycleGeneration: number;
+    tierName: string | null;
   };
   requireStripeConnectWebhookConfiguration();
   const sessionId = newOpaqueToken("chk");
@@ -1118,7 +1130,7 @@ export async function startCommunityJoinCheckoutCore(
     const productIdempotencyKey = `community-price-product:${checkoutConfig.providerAccountId}:${pricePointId}`;
     const priceIdempotencyKey = `community-price:${checkoutConfig.providerAccountId}:${pricePointId}`;
     const product = await stripe.products.create({
-      name: `${checkoutConfig.communityName} (${checkoutConfig.billingPeriod})`,
+      name: `${checkoutConfig.communityName}${checkoutConfig.tierName ? ` · ${checkoutConfig.tierName}` : ""} (${checkoutConfig.billingPeriod})`,
       description: checkoutConfig.oneLiner ?? undefined,
       metadata: {
         community_id: String(checkoutConfig.communityId),

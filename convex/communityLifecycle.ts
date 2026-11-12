@@ -185,7 +185,7 @@ async function getCurrentCommunityPriceAmounts(ctx: any, communityId: any): Prom
   const pickCurrentAmount = (billingPeriod: "monthly" | "annual"): number | null => {
     const current =
       currentPricePointRows
-        .filter((row) => row.billingPeriod === billingPeriod && row.isCurrent)
+        .filter((row) => row.billingPeriod === billingPeriod && row.isCurrent && !row.tierKey)
         .sort((a, b) => b.updatedAt - a.updatedAt)[0] ?? null;
     return current ? Math.max(1, Math.floor(Number(current.amountBaseUnits ?? 0))) : null;
   };
@@ -475,7 +475,8 @@ async function upsertCommunityPricePoint(args: {
     )
     .collect()) as CommunityPricePointLike[];
   rows.sort((a, b) => b.updatedAt - a.updatedAt);
-  const currentRows = rows.filter((row) => Boolean(row.isCurrent)).sort((a, b) => b.updatedAt - a.updatedAt);
+  // The base membership's prices only: a tier's are never touched here.
+  const currentRows = rows.filter((row) => Boolean(row.isCurrent) && !row.tierKey).sort((a, b) => b.updatedAt - a.updatedAt);
   const current = currentRows[0] ?? null;
 
   if (args.amountBaseUnits === null) {
@@ -983,7 +984,7 @@ export const updateCommunityProfileForTrustedUserInternal = internalMutation({
     const pricing = await getCurrentCommunityPriceAmounts(ctx, args.communityId);
     const currentPrice = ((await ctx.db.query("communityPricePoints" as any)
       .withIndex("by_community", (q: any) => q.eq("communityId", args.communityId))
-      .collect()) as Array<{ isCurrent: boolean; currency: string; currencyDecimals: number }>).find((row) => row.isCurrent);
+      .collect()) as Array<{ isCurrent: boolean; currency: string; currencyDecimals: number; tierKey?: string }>).find((row) => row.isCurrent && !row.tierKey);
     await saveCommunitySettingsCore(ctx, {
       userId: args.userId,
       communityId: args.communityId,

@@ -280,6 +280,10 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
   own, then listed pods they could ask to join; a pod is an invite-only room plus
   its purpose, hosts, seats and listed/hidden, [spec](specs/pods-v0.md)).
   Tables: `communityPods`, `communityPodRequests` (asks to join and the waitlist).
+- **Tiers and grants (one door):** `communityTiers` (a membership holds one tier;
+  each gives grants, the names a connected app reads; today's price is the base tier
+  "member", and every reader of the price reads only it). Table: `communityTiers`;
+  `communityPricePoints.tierKey` marks a tier's prices.
 - **Pod knowledge:** `communityPodNotes` (notes that belong to one pod: the pod
   reads, its hosts write, a builder may publish a copy to the community's notes;
   their own table, and `scripts/community_pod_notes_wall.test.ts` lets only this
