@@ -5,6 +5,7 @@
 // reader that doesn't): community-wide readers drop pod events; per-person
 // readers keep the ones that person may see.
 import { getCommunityChannelCapabilities, resolveCommunityChannelActor } from "./communityChannelAccess";
+import { communityMembershipRowIsActive } from "./communityCore";
 
 export function isPodEvent(row: any): boolean {
   return Boolean(row?.podChannelId);
@@ -61,14 +62,23 @@ export async function requirePodEventManager(ctx: any, communityId: any, channel
   return channel;
 }
 
-// Who a pod call's reminder goes to: the people on the pod's list (their grant
-// is bound to an active membership by the caller's own recipient list).
+// Who a pod call's reminder goes to: the people who can enter the pod now.
+// A grant counts only while it is bound to the member's current membership
+// (someone who left and rejoined isn't back in the pod until re-added), the
+// same check the room's own access makes.
 export async function podEventRecipientIds(ctx: any, row: any): Promise<Set<string>> {
   const channel = await openPodRoom(ctx, row.communityId, row.podChannelId);
   if (!channel) return new Set();
   const grants = await ctx.db.query("communityChannelParticipants")
     .withIndex("by_channel_principal", (q: any) => q.eq("channelId", row.podChannelId)).take(500);
-  return new Set(grants
-    .filter((grant: any) => grant.status === "active" && String(grant.principalKey).startsWith("user:"))
-    .map((grant: any) => String(grant.principalKey).slice("user:".length)));
+  const recipients = new Set<string>();
+  for (const grant of grants) {
+    if (grant.status !== "active" || !String(grant.principalKey).startsWith("user:") || !grant.membershipId) continue;
+    const membership = await ctx.db.get(grant.membershipId) as any;
+    if (!membership || !communityMembershipRowIsActive(membership)) continue;
+    if (Number(grant.membershipActivationSequence ?? 0) !== Math.max(0, Math.floor(Number(membership.activationSequence ?? 0)))) continue;
+    if (`user:${membership.userId}` !== String(grant.principalKey)) continue;
+    recipients.add(String(membership.userId));
+  }
+  return recipients;
 }

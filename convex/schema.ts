@@ -2401,7 +2401,7 @@ export default defineSchema({
     .index("by_community_status_updatedAt", ["communityId", "status", "updatedAt"])
     .index("by_status_startsAt", ["status", "startsAt"])
     .index("by_status_recurrenceFrequency_startsAt", ["status", "recurrenceFrequency", "startsAt"])
-    .index("by_pod_status", ["podChannelId", "status"])
+    .index("by_pod_status_startsAt", ["podChannelId", "status", "startsAt"])
     .index("by_createdBy", ["createdByUserId"]),
 
 

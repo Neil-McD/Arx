@@ -941,6 +941,23 @@ describe("pods", () => {
     const podBatch = batches.filter((batch) => batch.eventTitle === "Founders call");
     expect(podBatch.flatMap((batch) => batch.recipientUserIds)).toEqual([String(ids.ana)]);
     expect(batches.find((batch) => batch.eventTitle === "Town hall").recipientUserIds).toContain(String(ids.ben));
+    // Ana leaves and rejoins the community: her old pod grant no longer
+    // counts (the room turns her away), so the pod's reminder skips her.
+    await t.run(async (ctx) => {
+      const membership = (await ctx.db.query("communityMemberships").collect()).find((row: any) => String(row.userId) === String(ids.ana))!;
+      await ctx.db.patch(membership._id, { activationSequence: 2 } as any);
+    });
+    const afterRejoin: any[] = await t.query(internalRefs.eventReminders.buildEventReminderBatchesInternal, { nowMs: nowMs + 30 * 60 * 1000, lookaheadMs: 2 * HOUR_MS });
+    expect(afterRejoin.filter((batch) => batch.eventTitle === "Founders call")).toEqual([]);
+    await t.run(async (ctx) => {
+      const membership = (await ctx.db.query("communityMemberships").collect()).find((row: any) => String(row.userId) === String(ids.ana))!;
+      await ctx.db.patch(membership._id, { activationSequence: 1 } as any);
+      // Sixty calls long past: the next one still shows.
+      for (let n = 1; n <= 60; n += 1) await ctx.db.insert("communityEvents", {
+        communityId: f.communityId, createdByUserId: ids.ana, title: `Old call ${n}`, startsAt: nowMs - n * DAY, timezone: "UTC",
+        locationType: "tbd", visibility: "members", podChannelId: ids.channelId, status: "live", recurrenceFrequency: "none", createdAt: nowMs - n * DAY, updatedAt: nowMs - n * DAY,
+      } as any);
+    });
     // In the pod: the next call with its link. Outside: the rhythm, no link.
     expect((await asAna.query(api.communityPods.getPod, { communityId: f.communityId, channelId: ids.channelId })).next_call)
       .toMatchObject({ title: "Founders call", url: "https://meet.example.com/founders", recurrence_frequency: "weekly" });
