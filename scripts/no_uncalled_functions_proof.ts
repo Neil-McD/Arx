@@ -43,6 +43,7 @@ const ALLOWED = new Map<string, string>([
   ["stagingSeedSunrise:simulateSunriseLiveInternal", "operator tool: a simulated second member for live site checks"],
   ["stagingSeedPolynetDemo:seedPolynetDemoInternal", "operator tool: seeds the staging Polynet demo community with the mock's content"],
   ["stagingSeedPolynetDemo:seedPolynetDemoMessagesInternal", "operator tool: seeds direct messages to the demo community's owner"],
+  ["stagingSeedPolynetDemo:seedPolynetDemoEventsInternal", "operator tool: seeds the demo community's events and who is going"],
   ["stagingSeedPolynetDemo:seedPolynetDemoMembersInternal", "operator tool: seeds the demo community's prices, plans and member facts"],
 ]);
 

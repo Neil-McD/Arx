@@ -171,8 +171,9 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
 
 ### 6. Events — Keep
 
-- **Code:** `communityEvents`, `eventReminders` (cron: 24-hour reminder emails).
-- **Tables:** `communityEvents`.
+- **Code:** `communityEvents`, `eventReminders` (cron: 24-hour reminder emails),
+  `communityEventGoing` ("I'll be there" per date of an event: counts, faces, the host).
+- **Tables:** `communityEvents`, `communityEventGoing`.
 
 ### 7. Community notes — Keep (protected)
 

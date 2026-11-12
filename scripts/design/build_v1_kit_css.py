@@ -122,6 +122,9 @@ css += """
 .app .note-del{margin-left:8px;color:var(--ink3);font-size:12px;text-decoration:underline}
 .app .lab .priv{float:right;font-style:normal;font-weight:400}
 .app button.p{width:100%;text-align:left}
+/* Links drawn as the mock's buttons (Join, Add to calendar). */
+.app a.btn{text-decoration:none}
+.app .btn.sm.on .ic{width:13px;height:13px}
 
 /* Kit addition: states the mock doesn't draw, in its own terms. */
 .app .msg.cont{padding-top:3px;padding-bottom:3px}
