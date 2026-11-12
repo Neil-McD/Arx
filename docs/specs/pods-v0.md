@@ -53,6 +53,26 @@ does). Nothing private is ever listed in the left column.
   Never who is inside, what is said, or its knowledge.
 - **Hidden**: only its members, its hosts and the builder know it exists.
 
+### A pod's own page
+
+One address per pod, `/c/:slug/pods/:pod`, for hosts to share anywhere. Who
+opens it decides what it shows: someone in the pod goes into its room; a member
+who isn't sees its outside page (listed pods only); the builder and its hosts
+see that same outside page with Edit and a way in; anyone else gets "not
+found", so a hidden pod never shows. The outside page has fixed sections,
+filled from the pod and hidden when empty: name and purpose, **What you get**
+(up to four short lines), hosts, price and seats, and one button (Join, Ask to
+join, Join the waitlist, Full, or what the viewer already did). No page builder.
+
+### Your membership
+
+In the pod's right column: "You're in" (added by a host), "+$100/month · renews
+Dec 12", "Leaving · access until Dec 12", or "Your last payment didn't go
+through" (with the same email communities send). **Leave pod**: paying members
+stop renewing and keep access to the end of the period; anyone else is out at
+once. The builder and hosts see how each member is in: Paying, Leaving, Payment
+problem, or Added by a host.
+
 ### Inside a pod
 
 - **Middle**: the pod's conversation (the channel experience).

@@ -517,7 +517,7 @@ describe("pods", () => {
     // Listed with one seat (Ana has it): Ben sees the outside only, and asking puts him on the waitlist.
     await asOwner.mutation(api.communityPods.savePodDetails, { communityId: f.communityId, channelId: podId, visibility: "listed", seats: 1 });
     const outside = (await list("brief-Ben")).outside;
-    expect(outside).toEqual([{ channel_id: String(podId), name: "Founders pod", purpose: "Weekly accountability for founders", hosts: [], seats_left: 0, price: null, my_request: null }]);
+    expect(outside).toEqual([{ channel_id: String(podId), slug: "founders-pod", name: "Founders pod", purpose: "Weekly accountability for founders", hosts: [], seats_left: 0, price: null, my_request: null }]);
     expect(JSON.stringify(outside)).not.toContain("Ana");
     await expect(asBen.query(api.communityPods.getPod, { communityId: f.communityId, channelId: podId })).rejects.toThrow();
     expect(await asBen.mutation(api.communityPods.requestToJoinPod, { communityId: f.communityId, channelId: podId })).toEqual({ status: "waitlist" });
@@ -717,5 +717,80 @@ describe("pods", () => {
     });
     await expect(t.mutation(internalRefs.communityPodPayments.expireAbandonedPodCheckoutsInternal, { nowMs: Date.now() })).resolves.toMatchObject({ expired: 1 });
     await expect(t.run((ctx) => ctx.db.get(stale))).resolves.toMatchObject({ status: "expired" });
+  });
+
+  it("a pod's own page: the room for those in it, the outside for others, nothing for a hidden pod; leaving and payment states", async () => {
+    const t = convexTest(schema, modules);
+    const f = await fixture(t, Date.now());
+    const ids = await t.run(async (ctx) => {
+      const nowMs = Date.now();
+      const find = async (subject: string) => (await ctx.db.query("users").withIndex("by_authSubject" as any, (q: any) => q.eq("authSubject", subject)).first())!;
+      const ana = await find("brief-Ana");
+      const ben = await find("brief-Ben");
+      for (const row of await ctx.db.query("communityMemberships").collect()) await ctx.db.patch(row._id, { activationSequence: 1, activatedAt: nowMs } as any);
+      const channelId = await ctx.db.insert("communityChannels", {
+        communityId: f.communityId, slug: "founders", name: "Founders", accessMode: "restricted",
+        postingPolicy: "members", status: "active", position: 1, createdByUserId: f.ownerId, createdAt: nowMs, updatedAt: nowMs,
+      } as any);
+      const anaMembership = (await ctx.db.query("communityMemberships").collect()).find((row: any) => String(row.userId) === String(ana._id))!;
+      await ctx.db.insert("communityChannelParticipants", {
+        communityId: f.communityId, channelId, principalKey: `user:${ana._id}`, membershipId: anaMembership._id, membershipActivationSequence: 1,
+        status: "active", createdByUserId: f.ownerId, createdAt: nowMs, updatedAt: nowMs,
+      } as any);
+      return { ana: ana._id, ben: ben._id, channelId };
+    });
+    const page = (subject: string, asMember?: boolean) => t.withIdentity({ subject })
+      .query(api.communityPods.getPodPage, { communityId: f.communityId, podSlug: "Founders", ...(asMember ? { asMember } : {}) });
+    const asOwner = t.withIdentity({ subject: "brief-Owner" });
+    // Hidden: Ben (not in it) can't tell it exists; Ana goes into the room.
+    await expect(page("brief-Ben")).resolves.toEqual({ kind: "not_found" });
+    await expect(page("brief-Ana")).resolves.toEqual({ kind: "inside", slug: "founders" });
+    // The builder sees the outside, with Edit and a way in, even while hidden.
+    await expect(page("brief-Owner")).resolves.toMatchObject({ kind: "outside", visibility: "hidden", can_edit: true, can_enter: true });
+    // "What you get": trimmed, at most four lines, blanks dropped.
+    await asOwner.mutation(api.communityPods.savePodDetails, {
+      communityId: f.communityId, channelId: ids.channelId, visibility: "listed", purpose: "Closer time",
+      whatYouGet: ["  Weekly call ", "", "Feedback", "Templates", "Office hours", "One too many"],
+    });
+    const outside: any = await page("brief-Ben");
+    expect(outside).toMatchObject({ kind: "outside", name: "Founders", purpose: "Closer time", what_you_get: ["Weekly call", "Feedback", "Templates", "Office hours"], can_edit: false, can_enter: false });
+    // Never who is in it.
+    expect(JSON.stringify(outside)).not.toContain("Ana");
+    await expect(page("brief-Nobody")).rejects.toThrow();
+    // Ana was added by a host: "You're in", and the builder sees "Added by a host".
+    const asAna = t.withIdentity({ subject: "brief-Ana" });
+    expect((await asAna.query(api.communityPods.getPod, { communityId: f.communityId, channelId: ids.channelId })).my_membership).toMatchObject({ state: "added" });
+    expect((await asAna.query(api.communityPods.getPod, { communityId: f.communityId, channelId: ids.channelId })).members[0].payment).toBeUndefined();
+    expect((await asOwner.query(api.communityPods.getPod, { communityId: f.communityId, channelId: ids.channelId })).members[0].payment).toEqual({ state: "added", until: null });
+    // Leaving with no payment: off the pod now.
+    await expect(t.query(internalRefs.communityPodPayments.podLeavePlanInternal, { userId: ids.ana, communityId: f.communityId, channelId: ids.channelId })).resolves.toEqual({ renewing: [], leaving: false });
+    await t.mutation(internalRefs.communityPodPayments.leavePodNowInternal, { userId: ids.ana, communityId: f.communityId, channelId: ids.channelId });
+    expect((await page("brief-Ana")).kind).toBe("outside");
+    // Ben pays: "Paying" with its renewal date; a failed payment emails him once.
+    const paymentId = await t.mutation(internalRefs.communityPodPayments.createPendingPodPaymentInternal, {
+      communityId: f.communityId, channelId: ids.channelId, userId: ids.ben, amountBaseUnits: 10000, currency: "usd", providerAccountId: "acct_builder", providerPriceId: "price_pod", nowMs: Date.now(),
+    });
+    const renews = Date.now() + 20 * DAY;
+    const sync = (status: string, at: number) => t.mutation(internalRefs.communityPodPayments.syncPodPaymentInternal, {
+      paymentId, providerAccountId: "acct_builder", providerSubscriptionId: "sub_ben", subscriptionStatus: status, currentPeriodEndAt: renews, providerEventAt: at,
+    });
+    await sync("active", 1000);
+    const asBen = t.withIdentity({ subject: "brief-Ben" });
+    const mine = async () => (await asBen.query(api.communityPods.getPod, { communityId: f.communityId, channelId: ids.channelId })).my_membership;
+    expect(await mine()).toMatchObject({ state: "paying", until: new Date(renews).toISOString(), amount_base_units: 10000 });
+    await sync("past_due", 2000);
+    await sync("past_due", 2500);
+    expect(await mine()).toMatchObject({ state: "payment_problem" });
+    const emails = await t.run((ctx) => ctx.db.query("emailOutbox" as any).collect());
+    expect((emails as any[]).filter((row: any) => String(row.dedupeKey ?? "").startsWith("pod_billing_issue:")).length).toBe(1);
+    // Leaving a paid pod: Stripe stops renewing; shown as leaving, access kept.
+    await sync("active", 3000);
+    await expect(t.query(internalRefs.communityPodPayments.podLeavePlanInternal, { userId: ids.ben, communityId: f.communityId, channelId: ids.channelId }))
+      .resolves.toMatchObject({ renewing: [{ providerSubscriptionId: "sub_ben" }], leaving: false });
+    await t.mutation(internalRefs.communityPodPayments.markPodPaymentLeavingInternal, { paymentId });
+    expect(await mine()).toMatchObject({ state: "leaving" });
+    expect((await asOwner.query(api.communityPods.getPod, { communityId: f.communityId, channelId: ids.channelId })).members.find((m: any) => m.name === "Ben")?.payment)
+      .toMatchObject({ state: "leaving" });
+    await expect(page("brief-Ben")).resolves.toEqual({ kind: "inside", slug: "founders" });
   });
 });

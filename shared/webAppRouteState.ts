@@ -25,6 +25,8 @@ export type AppRouteState = {
   communityTab: CommunityTab;
   communityChannelSlug?: string | null;
   communityResourceModuleId?: string | null;
+  // Pods: /c/:slug/pods/:podSlug opens that pod's page (docs/specs/pods-v0.md).
+  communityPodSlug?: string | null;
   communitySettingsPane?: CommunitySettingsPane | null;
   docsSlug?: string | null;
   operatorTab?: OperatorTab | null;
@@ -39,6 +41,8 @@ export type AppRoutePathState = {
   communityTab: CommunityTab;
   communityChannelSlug?: string | null;
   communityResourceModuleId?: string | null;
+  // Pods: /c/:slug/pods/:podSlug opens that pod's page (docs/specs/pods-v0.md).
+  communityPodSlug?: string | null;
   communitySettingsPane?: CommunitySettingsPane | null;
   docsSlug?: string | null;
   operatorTab?: OperatorTab | null;
@@ -64,7 +68,7 @@ export type WebDestination =
   | { kind: "community_chat"; slug: string; channelSlug: string | null }
   | { kind: "community_resources"; slug: string; moduleId: string | null }
   | { kind: "community_events"; slug: string }
-  | { kind: "community_pods"; slug: string }
+  | { kind: "community_pods"; slug: string; podSlug: string | null }
   | { kind: "community_agent"; slug: string }
   | { kind: "community_settings"; slug: string; pane: CommunitySettingsPane }
   | { kind: "community_analytics"; slug: string };
@@ -206,9 +210,14 @@ export function buildCommunityTabPath(
   communityResourceModuleId?: string | null,
   communitySettingsPane?: CommunitySettingsPane | null,
   communityChannelSlug?: string | null,
+  communityPodSlug?: string | null,
 ): string | null {
   const slug = String(communitySlug ?? "").trim();
   if (!slug) return null;
+  const podSlug = String(communityPodSlug ?? "").trim().toLowerCase();
+  if (communityTab === "pods" && podSlug) {
+    return `/c/${encodeURIComponent(slug)}/pods/${encodeURIComponent(podSlug)}`;
+  }
   const tabSegment = communityTab;
   const moduleId = String(communityResourceModuleId ?? "").trim();
   const channelSlug = String(communityChannelSlug ?? "").trim().toLowerCase();
@@ -590,6 +599,8 @@ export function parseAppRouteFromPathname(pathname: string): AppRoutePathState |
       communityTab === "resources" ? String(segments[3] ?? "").trim() || null : null;
     const communityChannelSlug =
       communityTab === "chat" ? String(segments[3] ?? "").trim().toLowerCase() || null : null;
+    const communityPodSlug =
+      communityTab === "pods" ? String(segments[3] ?? "").trim().toLowerCase() || null : null;
     const communitySettingsPane =
       communityTab === "settings"
         ? parseCommunitySettingsPane(legacyAgentSettingsPane ?? segments[3] ?? null)
@@ -602,6 +613,7 @@ export function parseAppRouteFromPathname(pathname: string): AppRoutePathState |
       communityTab,
       communityChannelSlug,
       communityResourceModuleId,
+      communityPodSlug,
       communitySettingsPane,
     };
   }
@@ -651,7 +663,7 @@ export function deriveWebDestinationFromAppRoute(
         case "events":
           return { kind: "community_events", slug };
         case "pods":
-          return { kind: "community_pods", slug };
+          return { kind: "community_pods", slug, podSlug: route.communityPodSlug ?? null };
         case "agent":
           return { kind: "community_agent", slug };
         case "settings":
@@ -786,6 +798,7 @@ export function readAppRouteFromLocation(): AppRouteState {
       communityTab: fromPath.communityTab,
       communityChannelSlug: fromPath.communityChannelSlug ?? null,
       communityResourceModuleId: fromPath.communityResourceModuleId ?? null,
+      communityPodSlug: fromPath.communityPodSlug ?? null,
       communitySettingsPane: fromPath.communitySettingsPane ?? null,
       docsSlug: fromPath.docsSlug ?? null,
       ...(fromPath.operatorTab ? { operatorTab: fromPath.operatorTab } : {}),
@@ -823,6 +836,7 @@ export function buildAppRoutePath(state: AppRoutePathState): string | null {
       state.communityResourceModuleId,
       state.communitySettingsPane,
       state.communityChannelSlug,
+      state.communityPodSlug,
     );
   }
 
