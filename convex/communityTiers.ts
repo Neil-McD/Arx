@@ -12,7 +12,7 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { resolveUserIdForAuthenticatedRequest } from "./authActor";
-import { communityMembershipRowIsActive, getUniqueCommunityMembershipByPair, requireCommunityManager, resolveCommunityMembershipEntitlementState } from "./communityCore";
+import { communityMembershipRowIsActive, getUniqueCommunityMembershipByPair, requireCommunityManager, resolveCommunityLens } from "./communityCore";
 
 export const BASE_TIER_KEY = "member";
 const TIERS_MAX = 10;
@@ -183,11 +183,11 @@ export async function resolveMemberGrants(ctx: any, communityId: any, userId: an
 }> {
   const membership = await getUniqueCommunityMembershipByPair({ ctx, communityId, userId });
   if (!membership || !communityMembershipRowIsActive(membership)) return { allowed: false, tier: null, grants: [] };
-  // Allowed exactly when Polynet itself lets them in (the one entitlement
-  // decision: a live subscription, an active app sale, or a free or comped
-  // membership).
+  // Allowed exactly when Polynet itself lets them in: the one community lens
+  // (a live subscription, an active app sale, a free or comped membership;
+  // never when blocked or the community is archived).
   const community = await ctx.db.get(communityId);
-  if (!community || !(await resolveCommunityMembershipEntitlementState({ ctx, community, membership, userId })).isEntitled) {
+  if (!community || !(await resolveCommunityLens({ ctx, community, membership, userId })).entitled) {
     return { allowed: false, tier: null, grants: [] };
   }
   // Every tier this person holds: the one their Polynet price sells (if that
