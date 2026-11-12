@@ -141,10 +141,10 @@ export async function confirmCloudPodCheckout(params: { session: unknown; paymen
   return await convex.action("communityPodPayments:confirmPodCheckout" as any, { authSubject, paymentId: params.paymentId });
 }
 
-export async function fetchCloudPodPage(params: { session: unknown; communityId: string; podSlug: string; asMember?: boolean }): Promise<CloudPodPage> {
+export async function fetchCloudPodPage(params: { session: unknown; communityId: string; podSlug: string; asMember?: boolean; preview?: boolean }): Promise<CloudPodPage> {
   const { client: convex, authSubject } = await client(params.session);
   return await convex.query("communityPods:getPodPage" as any, {
-    authSubject, communityId: params.communityId, podSlug: params.podSlug, ...(params.asMember ? { asMember: true } : {}),
+    authSubject, communityId: params.communityId, podSlug: params.podSlug, ...(params.asMember ? { asMember: true } : {}), ...(params.preview ? { preview: true } : {}),
   });
 }
 

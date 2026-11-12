@@ -19,6 +19,7 @@ import {
   type CloudPodPrice,
 } from "../../../../shared/cloudCommunityPodsGateway";
 import { Btn, cx, Icon, KitApp, Sec } from "../v1/kit";
+import { forgetPod, recallPod, takePodPagePreview } from "../v1/podMemory";
 
 export type WebCommunityPodsSectionProps = {
   session: unknown;
@@ -110,12 +111,14 @@ function PodPage(props: WebCommunityPodsSectionProps & { podSlug: string }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  // The builder or a host asked to see the page as members do.
+  const [preview] = useState(() => takePodPagePreview(props.podSlug));
   const load = useCallback(async () => {
     if (!props.communityId) return;
     try {
       const session = await props.ensureSession(props.session);
       if (!session) return;
-      const next = await fetchCloudPodPage({ session, communityId: props.communityId, podSlug: props.podSlug, asMember: props.asMember });
+      const next = await fetchCloudPodPage({ session, communityId: props.communityId, podSlug: props.podSlug, asMember: props.asMember, preview });
       // In the pod: straight into its room.
       if (next.kind === "inside") { props.onNavigate({ kind: "room", slug: next.slug }); return; }
       setPage(next);
@@ -125,7 +128,7 @@ function PodPage(props: WebCommunityPodsSectionProps & { podSlug: string }) {
   useEffect(() => { void load(); }, [load]);
   usePodPaymentReturn(props, setNotice, load);
 
-  const back = <button type="button" className={cx("link")} onClick={() => props.onNavigate({ kind: "pods" })}>← Pods</button>;
+  const back = <button type="button" className={cx("link")} onClick={() => { forgetPod(); props.onNavigate({ kind: "pods" }); }}>← Pods</button>;
   if (!page) return <div className="community-panel community-pods-panel"><CommunityPageHeader title="Pods"><div className="resources-header">Pods</div></CommunityPageHeader></div>;
   if (page.kind !== "outside") {
     return (
@@ -188,7 +191,7 @@ function PodPage(props: WebCommunityPodsSectionProps & { podSlug: string }) {
               )}
             </div>
             {page.can_edit ? (
-              <p className={cx("sub2")}>This is what members see. Edit it from the pod's right column.{page.visibility === "hidden" ? " It's hidden, so only its members know it's here." : ""}</p>
+              <p className={cx("sub2")}>This is what members who aren't in it see. Edit it from the pod's right column.{page.visibility === "hidden" ? " It's hidden, so only its members know it's here." : ""}</p>
             ) : null}
           </div>
         </div>
@@ -234,6 +237,17 @@ function PodsList(props: WebCommunityPodsSectionProps) {
   useEffect(() => { void load(); }, [load]);
 
   usePodPaymentReturn(props, setNotice, load);
+
+  // "Pods" goes back to the pod they were last in, while they can still
+  // enter it. Its "← Pods" arrow forgets it, and this list shows instead.
+  const [recalled] = useState(() => recallPod());
+  useEffect(() => {
+    if (!recalled || !state || notice) return;
+    if (state.pods.some((pod) => pod.slug === recalled)) props.onNavigate({ kind: "room", slug: recalled });
+    else forgetPod();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [recalled, state]);
+  const returning = Boolean(recalled && !notice && (!state || state.pods.some((pod) => pod.slug === recalled)));
 
   const create = async () => {
     const name = draft.name.trim();
@@ -286,14 +300,14 @@ function PodsList(props: WebCommunityPodsSectionProps) {
     <div className="community-panel community-pods-panel">
       <CommunityPageHeader title="Pods"><div className="resources-header">Pods</div></CommunityPageHeader>
       <KitApp view="events" host={canManage} part="flow">
-        <div className={cx("page")} style={{ padding: 0, overflow: "visible" }}>
+        <div className={cx("page")} style={{ padding: 0, overflow: "visible", ...(returning ? { visibility: "hidden" as const } : {}) }}>
           <p className={cx("lead")} style={{ marginTop: 0 }}>{lead}</p>
           {notice ? <p className={cx("sub")} role="status">{notice}</p> : null}
           {failed ? <p className={cx("sub")} role="alert">Pods couldn't load. <button type="button" className={cx("link")} onClick={() => void load()}>Try again</button></p> : null}
           {pods.length || canManage ? (
             <div className={cx("podgrid")}>
               {pods.map((pod) => (
-                <button key={pod.channel_id} type="button" className={cx("podcard")} onClick={() => props.onNavigate(pod.is_member && !pod.can_manage ? { kind: "room", slug: pod.slug } : { kind: "pod", slug: pod.slug })}>
+                <button key={pod.channel_id} type="button" className={cx("podcard")} onClick={() => props.onNavigate({ kind: "room", slug: pod.slug })}>
                   <span className={cx("podname")}><Icon name="users" />{pod.name}</span>
                   <span className={cx("podpurpose")}>{pod.purpose || (pod.can_manage ? "Add what this pod is for." : "")}</span>
                   {pod.can_manage && pod.waiting ? <span className={cx("podask")}>{pod.waiting} asking to join</span> : null}

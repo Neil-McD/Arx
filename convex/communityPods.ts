@@ -291,12 +291,12 @@ export const decidePodRequest = mutation({
 });
 
 
-// One address per pod (/c/:slug/pods/:podSlug). Someone in the pod goes into
-// its room; a member who isn't sees its outside (a listed pod only); the
-// builder and its hosts see the outside too, with Edit and a way in. Anyone
-// else: not found, so a hidden pod's existence never shows.
+// One address per pod (/c/:slug/pods/:podSlug). Anyone who can enter (in it,
+// its hosts, the builder) goes into its room; a member who can't sees its
+// outside (a listed pod only). The builder and hosts can ask to preview that
+// outside page. Anyone else: not found, so a hidden pod's existence never shows.
 export const getPodPage = query({
-  args: { authSubject: v.optional(v.string()), communityId: v.id("communities"), podSlug: v.string(), asMember: v.optional(v.boolean()) },
+  args: { authSubject: v.optional(v.string()), communityId: v.id("communities"), podSlug: v.string(), asMember: v.optional(v.boolean()), preview: v.optional(v.boolean()) },
   handler: async (ctx, args) => {
     const { userId, actor } = await viewerOf(ctx, args.authSubject, args.communityId);
     const slug = args.podSlug.trim().toLowerCase();
@@ -309,8 +309,9 @@ export const getPodPage = query({
     const isIn = grants.some((row: any) => row.principalKey === actor.principalKey);
     const hosting = isHost(record, userId);
     const manages = actor.isManager && !args.asMember;
-    if (isIn && !manages && !hosting) return { kind: "inside" as const, slug: String(channel.slug) };
-    if (!manages && !hosting && record?.visibility !== "listed") return notFound;
+    const canEnter = isIn || manages || hosting;
+    if (canEnter && !(args.preview && (manages || hosting))) return { kind: "inside" as const, slug: String(channel.slug) };
+    if (!canEnter && record?.visibility !== "listed") return notFound;
     const names = new Map<string, string>();
     const price = podPriceOf(record);
     const request = await ctx.db.query("communityPodRequests")
@@ -333,7 +334,7 @@ export const getPodPage = query({
       checkout_open: checkoutOpen,
       // The builder and hosts: what members see, plus Edit and a way in.
       can_edit: manages,
-      can_enter: isIn || manages || hosting,
+      can_enter: canEnter,
     };
   },
 });

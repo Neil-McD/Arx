@@ -3032,3 +3032,17 @@
     border-radius: 0 9px 9px 0;
   }
 }
+
+/* Pods: the arrow from a pod's room back to every pod. */
+.community-channel-header-back {
+  background: none;
+  border: 0;
+  padding: 4px 8px 4px 0;
+  margin-right: 4px;
+  font: inherit;
+  font-size: 13px;
+  color: var(--text-muted);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.community-channel-header-back:hover { color: var(--text-default); }
