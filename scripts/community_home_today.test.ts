@@ -1,6 +1,6 @@
 import { expect, test } from "vitest";
 import { normalizeCommunityHomeSnapshot } from "../shared/cloudCommunityAdminGateway";
-import { eventsToday, todayCounts, todayLines } from "../shared/communityHomeToday";
+import { eventsToday, shortTitle, todayCounts, todayLines } from "../shared/communityHomeToday";
 
 const base = {
   memberCount: 12,
@@ -31,10 +31,10 @@ test("a quiet day says so, with no counts", () => {
 
 test("a busy day leads with the post people are replying to, then where it's busiest", () => {
   const lines = todayLines(busy, "member");
-  expect(lines.map((line) => line.text)).toEqual([
-    "“Jon passed 100 members” in #wins has 3 replies.",
-    "Busiest in #wins: 7 messages from 4 people.",
-    "A question in #biz is waiting for an answer.",
+  expect(lines.map((line) => [line.text, line.meta ?? null])).toEqual([
+    ["Jon passed 100 members", "#wins · 3 replies"],
+    ["Busiest in #wins", "7 messages from 4 people"],
+    ["A question in #biz is waiting for an answer.", null],
   ]);
   expect(lines[0].target).toEqual({ kind: "channel", slug: "wins", name: "wins" });
   expect(todayCounts(busy)).toBe("7 posts · 4 replies · 5 people");
@@ -53,4 +53,9 @@ test("the host also hears who is waiting and whose question is open; a member ne
 test("events today are the ones starting on the viewer's day", () => {
   expect(eventsToday(busy, new Date("2026-11-13T09:00:00.000Z")).map((event) => event.title)).toEqual(["Friday build call"]);
   expect(eventsToday(busy, new Date("2026-11-11T09:00:00.000Z"))).toEqual([]);
+});
+
+test("a long post is cut to its first sentence, then to fit", () => {
+  expect(shortTitle("We passed 100 members last night. The invitation that worked was three lines.")).toBe("We passed 100 members last night.");
+  expect(shortTitle("x".repeat(100))).toHaveLength(72);
 });

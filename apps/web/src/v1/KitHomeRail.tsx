@@ -68,7 +68,9 @@ export function KitHomeRail(props: {
             const onOpen = open(line);
             return (
               <li key={index}>
-                {onOpen ? <button type="button" className={cx("today-line")} onClick={onOpen}>{line.text}</button> : <span className={cx("today-line")}>{line.text}</span>}
+                {onOpen
+                  ? <button type="button" className={cx("today-line")} onClick={onOpen}><b>{line.text}</b>{line.meta ? <em>{line.meta}</em> : null}</button>
+                  : <span className={cx("today-line")}><b>{line.text}</b>{line.meta ? <em>{line.meta}</em> : null}</span>}
               </li>
             );
           })}

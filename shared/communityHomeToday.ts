@@ -7,11 +7,20 @@ import type { CloudCommunityHomeSnapshot } from "./cloudCommunityAdminGateway";
 
 export type TodayLine = {
   text: string;
+  // A quieter second line: where and how much ("#wins · 4 replies").
+  meta?: string | null;
   // Where the line goes when clicked: a channel by slug, or a page.
   target: { kind: "channel"; slug: string; name: string } | { kind: "members" } | null;
 };
 
 const plural = (count: number, one: string, many: string) => `${count} ${count === 1 ? one : many}`;
+
+// A post's first sentence, short enough for one or two lines of the column.
+export function shortTitle(text: string, max = 72): string {
+  const clean = text.replace(/\s+/g, " ").trim();
+  const sentence = clean.match(/^(.+?[.!?])(\s|$)/)?.[1] ?? clean;
+  return sentence.length > max ? `${sentence.slice(0, max - 1).trimEnd()}…` : sentence;
+}
 
 function sameDay(a: Date, b: Date): boolean {
   return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
@@ -22,14 +31,16 @@ export function todayLines(snapshot: CloudCommunityHomeSnapshot, audience: "host
   const { highlight, busiest } = snapshot;
   if (highlight) {
     lines.push({
-      text: `“${highlight.title}” in #${highlight.channel} has ${plural(highlight.replies, "reply", "replies")}.`,
+      text: shortTitle(highlight.title),
+      meta: `#${highlight.channel} · ${plural(highlight.replies, "reply", "replies")}`,
       target: { kind: "channel", slug: highlight.channelSlug, name: highlight.channel },
     });
   }
   if (busiest && busiest.posts + busiest.replies > 1) {
     const said = busiest.posts + busiest.replies;
     lines.push({
-      text: `Busiest in #${busiest.channel}: ${plural(said, "message", "messages")} from ${plural(busiest.people, "person", "people")}.`,
+      text: `Busiest in #${busiest.channel}`,
+      meta: `${plural(said, "message", "messages")} from ${plural(busiest.people, "person", "people")}`,
       target: { kind: "channel", slug: busiest.channelSlug, name: busiest.channel },
     });
   }
