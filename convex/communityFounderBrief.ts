@@ -81,7 +81,7 @@ function clip(raw: unknown, max: number): string {
   return text.length > max ? `${text.slice(0, max - 1)}…` : text;
 }
 
-async function displayName(ctx: any, userId: unknown, cache: Map<string, string>): Promise<string> {
+export async function displayName(ctx: any, userId: unknown, cache: Map<string, string>): Promise<string> {
   const key = String(userId ?? "");
   if (!key) return "A member";
   if (!cache.has(key)) {

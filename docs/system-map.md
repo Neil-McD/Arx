@@ -276,6 +276,9 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
   cards for the owner, [gateway spec](specs/community-agent-gateway-v0.md); the card
   is chosen in `shared/communityOwnerMoments.ts`). Table: `communityOwnerMoments`
   (what was shown and dismissed).
+- **Home moments:** `communityHomeMoments` ("since you were last here" from the
+  visit before this one, and a member's next step; ranked in
+  `shared/communityHomeMoments.ts`). Table: `communityMemberVisits`.
 - **Agent on/off:** `communityAgent.getCommunityAgentOn` (pages show the guide only
   when the Agent plan is paid and the agent is enabled).
 - **Handbook:** `communityHandbook` (the founder-approved handbook: owners and admins

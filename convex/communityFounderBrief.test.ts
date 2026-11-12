@@ -439,3 +439,39 @@ describe("owner moments", () => {
       .rejects.toThrow(/unknown/);
   });
 });
+
+describe("Home moments", () => {
+  it("a visit after half an hour away becomes 'since you were last here'; members never get names", async () => {
+    const t = convexTest(schema, modules);
+    const f = await fixture(t, Date.now());
+    const asAna = t.withIdentity({ subject: "brief-Ana" });
+    const asOwner = t.withIdentity({ subject: "brief-Owner" });
+
+    await asAna.mutation(api.communityHomeMoments.recordHomeVisit, { communityId: f.communityId });
+    const first = await asAna.query(api.communityHomeMoments.getHomeMoments, { communityId: f.communityId });
+    expect(first.firstVisit).toBe(true);
+    // Ana asked a question herself: she has posted, so no "say hello".
+    expect(first.nextStep?.kind ?? null).not.toBe("say_hello");
+
+    // Back after an hour: the earlier visit is now the one to count from.
+    const hourAgo = Date.now() - 60 * 60 * 1000;
+    await t.run(async (ctx) => {
+      const row = (await ctx.db.query("communityMemberVisits").collect())[0];
+      await ctx.db.patch(row._id, { currentVisitAt: hourAgo });
+    });
+    await asAna.mutation(api.communityHomeMoments.recordHomeVisit, { communityId: f.communityId });
+    const again = await asAna.query(api.communityHomeMoments.getHomeMoments, { communityId: f.communityId });
+    expect(again.firstVisit).toBe(false);
+    expect(Date.parse(again.since)).toBe(hourAgo);
+
+    // The owner sees who joined by name; viewing as a member, not.
+    const ownerView = await asOwner.query(api.communityHomeMoments.getHomeMoments, { communityId: f.communityId });
+    const memberView = await asOwner.query(api.communityHomeMoments.getHomeMoments, { communityId: f.communityId, asMember: true });
+    expect(ownerView.moments.find((moment: any) => moment.kind === "joined")?.title).toContain("Ana");
+    expect(JSON.stringify(memberView.moments)).not.toContain("Ben");
+
+    await t.run((ctx) => ctx.db.insert("users", { authSubject: "moments-stranger", createdAt: 0, updatedAt: 0 } as any));
+    await expect(t.withIdentity({ subject: "moments-stranger" }).query(api.communityHomeMoments.getHomeMoments, { communityId: f.communityId }))
+      .rejects.toThrow();
+  });
+});

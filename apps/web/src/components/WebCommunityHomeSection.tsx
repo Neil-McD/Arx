@@ -6,6 +6,8 @@
 import { KitHomeRail } from "../v1/KitHomeRail";
 import { dismissOwnerMoment, fetchOwnerMoment, markOwnerMomentShown } from "../../../../shared/cloudCommunityOwnerMomentsGateway";
 import type { OwnerMoment } from "../../../../shared/communityOwnerMoments";
+import { fetchCloudHomeMoments, recordCloudHomeVisit, type CloudHomeMoments } from "../../../../shared/cloudCommunityHomeMomentsGateway";
+import type { HomeMoment, MemberNextStep } from "../../../../shared/communityHomeMoments";
 import type { CommunityPresenceSummary } from "../../../../shared/communityTypes";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
@@ -225,6 +227,8 @@ export function WebCommunityHomeSection(props: WebCommunityHomeSectionProps) {
   // The owner's moment card (a milestone or a detected problem), when nothing
   // urgent holds the next-step spot.
   const [ownerMoment, setOwnerMoment] = useState<{ moment: OwnerMoment; isNew: boolean } | null>(null);
+  // What happened since this person's last visit, and a member's next step.
+  const [homeMoments, setHomeMoments] = useState<CloudHomeMoments | null>(null);
   const loadedCommunityIdRef = useRef<string | null>(null);
 
   useEffect(() => {
@@ -268,6 +272,33 @@ export function WebCommunityHomeSection(props: WebCommunityHomeSectionProps) {
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [props.communityId, props.refreshKey, props.audience]);
+
+  useEffect(() => {
+    if (!props.kit) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const session = await props.ensureSession(props.session);
+        if (!session) return;
+        // Read first (since the visit before this one), then record this visit.
+        const loaded = await fetchCloudHomeMoments({ session, communityId: props.communityId, asMember: props.audience === "member" });
+        if (!cancelled) setHomeMoments(loaded);
+        await recordCloudHomeVisit({ session, communityId: props.communityId }).catch(() => undefined);
+      } catch { if (!cancelled) setHomeMoments(null); }
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [props.communityId, props.refreshKey, props.audience]);
+
+  const openTarget = (target: HomeMoment["target"] | MemberNextStep["target"] | null) => {
+    if (!target) return undefined;
+    return () => {
+      if (target.kind === "channel") props.onOpenChannelByName(target.name);
+      else if (target.kind === "knowledge") props.onOpenKnowledge?.();
+      else if (target.kind === "events") props.onOpenEvents();
+      else if (target.kind === "members") props.onOpenJoinRequests();
+    };
+  };
 
   const dismissMoment = async () => {
     const current = ownerMoment;
@@ -323,13 +354,26 @@ export function WebCommunityHomeSection(props: WebCommunityHomeSectionProps) {
               <Btn txt onClick={kit.onTalkItOver}>Talk it over</Btn>
             </Card>
           ) : null}
-          {rows.length ? (
-            <Since label="Across the community" style={card ? undefined : { marginTop: 44 }}>
-              {rows.map((row, index) => (
-                <SinceItem key={index} kind={row.kind} title={row.title} detail={row.detail} onOpen={row.onOpen} still={!row.onOpen} />
-              ))}
-            </Since>
+          {!isHost && agentOn && homeMoments?.nextStep ? (
+            <Card label="Your next step" title={homeMoments.nextStep.title} say={homeMoments.nextStep.detail}>
+              <Btn go onClick={openTarget(homeMoments.nextStep.target)}>{homeMoments.nextStep.action}</Btn>
+              <Btn txt onClick={kit.onTalkItOver}>Talk it over</Btn>
+            </Card>
           ) : null}
+          {(() => {
+            // Paid: chosen for you since your last visit. Free: a plain list of what's new.
+            const list = homeMoments ? (agentOn ? homeMoments.moments : homeMoments.recent) : [];
+            if (!list.length) return null;
+            const label = agentOn ? (homeMoments?.firstVisit ? "This week" : "Since you were last here") : "Recent";
+            const hasCard = Boolean(card || ownerMoment || (!isHost && agentOn && homeMoments?.nextStep));
+            return (
+              <Since label={label} style={hasCard ? undefined : { marginTop: 44 }}>
+                {list.map((moment, index) => (
+                  <SinceItem key={index} kind={moment.label} learned={moment.kind === "learned"} title={moment.title} detail={moment.detail} onOpen={openTarget(moment.target)} still={!moment.target} />
+                ))}
+              </Since>
+            );
+          })()}
           {agentOn && !kit.talking && kit.hasConversation && !card ? (
             <TextLink style={{ marginTop: 20 }} onClick={kit.onTalkItOver}>Continue your conversation</TextLink>
           ) : null}
