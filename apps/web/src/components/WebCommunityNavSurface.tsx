@@ -105,7 +105,9 @@ export function WebCommunityNavSurface({
       isInboxOpen={communityShell.isDirectMessagesOpen}
       inboxUnreadCount={communityShell.directMessagesUnreadCount}
       onOpenMembers={useV1Layout ? communityShell.onOpenMembers : undefined}
-      onOpenPods={useV1Layout ? () => communityShell.onSelectCommunityTab("pods") : undefined}
+      // Pods on phones too (design v1 on): the phone menu has no other way in.
+      onOpenPods={useV1Layout ? () => communityShell.onSelectCommunityTab("pods")
+        : isMobileHome && isDesignV1Active() ? () => communityShell.onSelectCommunityTabFromMobile("pods") : undefined}
       podsActive={inPod}
       memberCount={communityShell.activeCommunityMemberCount}
       onOpenGuide={useV1Layout && communityShell.onOpenCommunitySettingsPane

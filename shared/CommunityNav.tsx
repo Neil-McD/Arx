@@ -678,7 +678,8 @@ export const CommunityNav = memo(function CommunityNav({
             <span className="nav-item-label">Events</span>
             {communityTab !== "events" && tabIndicators.events ? <span className="nav-item-dot" aria-hidden="true" /> : null}
           </button>
-          {isV1 && onOpenPods ? (
+          {/* Offered by the caller only when pods exist for this layout (design v1, desktop or phone). */}
+          {onOpenPods ? (
             <button
               className={showActiveSelection && (communityTab === "pods" || podsActive) ? "nav-item active" : "nav-item"}
               type="button"
