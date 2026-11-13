@@ -7,6 +7,7 @@
 // picked for anyone else who may see it.
 import { useCallback, useEffect, useState } from "react";
 import { CommunityPageHeader, CommunityPageRail } from "./CommunityPageHeader";
+import { isDesignV1Active } from "../../../../shared/designSystem";
 import {
   confirmCloudPodCheckout,
   fetchCloudCommunityPods,
@@ -262,7 +263,8 @@ function PodsList(props: WebCommunityPodsSectionProps) {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
-  const wide = useWideRail();
+  // The right column exists only in design v1, and only on a wide screen.
+  const wide = useWideRail() && isDesignV1Active();
   const selected = props.podSlug;
   const now = Date.now();
 
@@ -284,7 +286,9 @@ function PodsList(props: WebCommunityPodsSectionProps) {
 
   // "Pods" goes back to the pod they were last in, while they can still
   // enter it. Its "← Pods" arrow forgets it, and this list shows instead.
-  const [recalled] = useState(() => recallPod());
+  const [recalled, setRecalled] = useState(() => recallPod());
+  // Once a pod is picked, the remembered one no longer decides where Pods goes.
+  useEffect(() => { if (selected) setRecalled(null); }, [selected]);
   useEffect(() => {
     if (!recalled || !state || notice || selected) return;
     if (state.pods.some((pod) => pod.slug === recalled)) props.onNavigate({ kind: "room", slug: recalled });
