@@ -3,6 +3,7 @@ import type {
   SettingsPage,
 } from "../../../../shared/appShellNavigation";
 import { SettingsNavList } from "../../../../shared/SettingsNavList";
+import { isDesignV1Active } from "../../../../shared/designSystem";
 import { settingsGroupLabel } from "../../../../shared/appShellNavigation";
 import {
   WebSettingsPanels,
@@ -57,6 +58,12 @@ export function WebSettingsSurfaceHost(props: WebSettingsSurfaceHostProps) {
             </div>
           </div>
         )
+      ) : isDesignV1Active() ? (
+        // One Settings page: the same column, title and cards as the community's sections.
+        <div className="web-settings-centered-pane settings-page-v1 settings-page-v1-personal">
+          <h1 className="settings-page-title">{settingsGroupLabel(props.settingsGroup)}</h1>
+          <WebSettingsPanels {...props.settingsPanelsProps} />
+        </div>
       ) : (
         <div className="web-settings-centered-pane">
           <WebSettingsPanels {...props.settingsPanelsProps} />

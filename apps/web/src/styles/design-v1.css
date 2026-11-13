@@ -3115,3 +3115,21 @@
 :root[data-design="v1"] .settings-nav-v1 .settings-nav-back {
   color: var(--text-ink-secondary);
 }
+/* Every card fills the column; your own pages match the community's. */
+:root[data-design="v1"] .settings-page-v1 .community-general-settings-grid > *,
+:root[data-design="v1"] .settings-page-v1 .community-general-settings-secondary > * {
+  width: 100%;
+  max-width: none;
+  box-sizing: border-box;
+}
+:root[data-design="v1"] .settings-page-v1-personal {
+  padding: 28px 24px 56px;
+  box-sizing: border-box;
+}
+:root[data-design="v1"] .settings-page-v1-personal > .settings-section + .settings-section {
+  margin-top: 16px;
+}
+/* The page title names the section; the card's own repeat of it goes. */
+:root[data-design="v1"] .settings-page-v1-personal > .settings-section:first-of-type > .settings-section-title:first-child {
+  display: none;
+}
