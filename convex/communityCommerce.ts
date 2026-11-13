@@ -480,8 +480,10 @@ export const syncCommunitySubscriptionLifecycleInternal = internalMutation({
       before: membership,
       after: updatedMembership,
     });
-    // Recorded: their plan's pods follow, then connected apps hear of it.
-    if (accessChanged) await memberAccessChanged(ctx, args.communityId, args.userId);
+    // Recorded: their plan's pods follow, then connected apps hear of it. The
+    // subscription's own status counts too: someone kept in by an app sale who
+    // stops paying Polynet no longer holds the plan that payment bought.
+    if (accessChanged || status !== previousStatus) await memberAccessChanged(ctx, args.communityId, args.userId);
     if (status === "past_due" && previousStatus !== "past_due") {
       const issueMarker = [
         String(args.providerSubscriptionId ?? "").trim() || String(current?.providerSubscriptionId ?? "").trim() || String(membership._id),

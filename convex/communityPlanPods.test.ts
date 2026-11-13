@@ -101,8 +101,8 @@ test("a seat has reasons: the plan's going leaves a host's add or a pod payment 
   await expect(ids.asOwner.mutation(api.communityChannelParticipants.setParticipant, {
     communityId: ids.communityId, channelId: ids.podId, target: { kind: "member", userId }, active: false,
   } as any)).rejects.toThrow(/community_pod_seat_from_plan/);
-  await expect(t.query(internal.communityPodPayments.podLeavePlanInternal, { userId, communityId: ids.communityId, channelId: ids.podId }))
-    .rejects.toThrow(/community_pod_seat_from_plan/);
+  expect(await t.query(internal.communityPodPayments.podLeavePlanInternal, { userId, communityId: ids.communityId, channelId: ids.podId }))
+    .toEqual({ renewing: [], leaving: false, fromPlan: true });
   // They also pay for the pod on its own: moving down a plan keeps the paid seat.
   await t.run((ctx) => setChannelParticipantCore(ctx, { communityId: ids.communityId, channelId: ids.podId, createdByUserId: userId, active: true, target: { kind: "member", userId }, reason: "paid" }));
   await sell(t, ids.app.secret, { email: "cy@example.com", active: true, tier: "setter" });
@@ -129,6 +129,52 @@ test("a seat from before reasons is a host's, and keeps working", async () => {
   // The host takes them off: off.
   await ids.asOwner.mutation(api.communityChannelParticipants.setParticipant, {
     communityId: ids.communityId, channelId: ids.podId, target: { kind: "member", userId }, active: false,
+  } as any);
+  expect(await inPod(t, ids.podId, userId)).toBe(false);
+});
+
+test("a seat opened by a pod payment before reasons still closes when that payment ends", async () => {
+  const t = convexTest(schema, modules);
+  const ids = await setup(t);
+  const userId = await buyer(t, "eve");
+  await sell(t, ids.app.secret, { email: "eve@example.com", active: true, tier: "setter" });
+  const membership = await t.run(async (ctx) => (await ctx.db.query("communityMemberships").collect()).find((row: any) => String(row.userId) === String(userId)) as any);
+  await t.run(async (ctx: any) => {
+    await ctx.db.insert("communityChannelParticipants", {
+      communityId: ids.communityId, channelId: ids.podId, principalKey: `user:${userId}`, membershipId: membership._id,
+      membershipActivationSequence: membership.activationSequence ?? 0, status: "active", createdByUserId: userId, createdAt: NOW, updatedAt: NOW,
+    });
+    await ctx.db.insert("communityPodPayments", {
+      communityId: ids.communityId, channelId: ids.podId, userId, status: "active", grantedAt: NOW,
+      amountBaseUnits: 10000, currency: "usd", providerAccountId: "acct", providerPriceId: "price_pod", checkoutExpiresAt: NOW, createdAt: NOW, updatedAt: NOW,
+    });
+  });
+  // The payment ends: the seat it opened closes, as before reasons.
+  await t.run((ctx) => setChannelParticipantCore(ctx, { communityId: ids.communityId, channelId: ids.podId, createdByUserId: userId, active: false, target: { kind: "member", userId }, reason: "paid" }));
+  expect(await inPod(t, ids.podId, userId)).toBe(false);
+});
+
+test("stopping a Polynet payment takes away the pod that plan gave, even while an app sale keeps them in", async () => {
+  const t = convexTest(schema, modules);
+  const ids = await setup(t);
+  // Here the base plan includes the pod; the app sells Setter, which doesn't.
+  await includePod(ids, "member", "Connect", ["de:connect"], [ids.podId]);
+  const userId = await buyer(t, "fay");
+  await t.run(async (ctx: any) => {
+    const basePrice = (await ctx.db.query("communityPricePoints").collect()).find((row: any) => !row.tierKey)._id;
+    const membershipId = await ctx.db.insert("communityMemberships", {
+      communityId: ids.communityId, userId, role: "member", accessSource: "paid_subscription", pricePointId: basePrice,
+      state: "active", activationSequence: 1, activatedAt: NOW, createdAt: NOW, updatedAt: NOW,
+    });
+    await ctx.db.insert("communitySubscriptions", {
+      communityId: ids.communityId, userId, membershipId, pricePointId: basePrice, source: "stripe", status: "active",
+      providerSubscriptionId: "sub_fay", providerAccountId: "acct_de", currentPeriodEndAt: NOW + 86_400_000, cancelAtPeriodEnd: false, createdAt: NOW, updatedAt: NOW,
+    });
+  });
+  await sell(t, ids.app.secret, { email: "fay@example.com", active: true, tier: "setter" });
+  expect(await inPod(t, ids.podId, userId)).toBe(true);
+  await t.mutation(internal.communityCommerce.syncCommunitySubscriptionLifecycleInternal, {
+    communityId: ids.communityId, userId, source: "stripe", status: "canceled", providerAccountId: "acct_de", providerSubscriptionId: "sub_fay",
   } as any);
   expect(await inPod(t, ids.podId, userId)).toBe(false);
 });
