@@ -62,16 +62,9 @@ test("the owner's switch decides: Studio hands members to the site only when the
   // /c/<slug>: wait until membership is known; a member on Polynet's app opens the community there.
   expect(handoff).toMatch(/if \(props\.membership === "loading"\) return;/);
   expect(handoff).toMatch(/props\.membership === "member" && community\.members_use !== "site"[\s\S]*\/c\/\$\{encodeURIComponent\(community\.slug\)\}\/home/);
-  const settings = readFileSync(new URL("../apps/web/src/components/WebCommunitySettingsSection.tsx", import.meta.url), "utf8");
-  expect(settings).toMatch(/<CommunityMemberExperienceSection[\s\S]*canChange=\{isOwnerSettingsLayer\}/);
+  // The switch's editor was removed with custom sites (Nov 13); a community's stored choice still decides.
 });
 
-test("a saved switch updates Studio's copy of the community, so reopening Settings shows it", () => {
-  const section = readFileSync(new URL("../apps/web/src/components/CommunityMemberExperienceSection.tsx", import.meta.url), "utf8");
-  expect(section).toMatch(/setCurrent\(saved\);\s*props\.onSaved\(props\.community\.id, saved\);/);
-  const app = readFileSync(new URL("../apps/web/src/App.tsx", import.meta.url), "utf8");
-  expect(app).toMatch(/onMemberExperienceSaved:[\s\S]{0,200}setCommunities\(\(previous\) => previous\.map\([\s\S]{0,120}members_use: experience/);
-});
 
 test("right after a switch, a member is moved at most once: neither side sends a marked visit back", () => {
   expect(cameFromSite("?pn_from=site")).toBe(true);

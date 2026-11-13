@@ -95,11 +95,11 @@ export type WebCommunityShellProps = {
   /* Visitor lens: tabs render locked instead of hidden. */
   onSelectCommunityTab: (tab: CommunityTab) => void;
   // Opens one pane of the community's settings (design v1: "Your guide").
-  onOpenCommunitySettingsPane?: (pane: "community" | "public" | "plans" | "app" | "agent" | "danger") => void;
+  onOpenCommunitySettingsPane?: (pane: import("../../../../shared/appShellNavigation").CommunitySettingsPane) => void;
   // The community's owner (the Settings sidebar lists the owner's sections).
   isActiveCommunityOwner?: boolean;
   // Which community settings section is open.
-  communitySettingsPane?: "community" | "public" | "plans" | "app" | "agent" | "danger";
+  communitySettingsPane?: import("../../../../shared/appShellNavigation").CommunitySettingsPane;
   onSelectCommunityTabFromMobile: (tab: CommunityTab) => void;
   onCopyCommunityJoinLink: (joinUrl: string) => Promise<void> | void;
   canOpenDirectMessages: boolean;

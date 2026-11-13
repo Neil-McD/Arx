@@ -83,7 +83,7 @@ const hostProps = {
 test("design v1 adds Inbox under Home, and Members then Analytics under Events, with their counts", () => {
   const html = renderToStaticMarkup(React.createElement(CommunityNav, hostProps));
   expect(labelsInOrder(html)).toEqual([
-    "Home", "Inbox", "Channels", "general", "Community", "Knowledge", "Events", "Members", "Analytics", "Settings",
+    "Home", "Inbox", "Channels", "general", "Community", "Knowledge", "Events", "Members", "Analytics",
   ]);
   expect(html).toContain('<span class="nav-item-count" aria-label="4 unread">4</span>');
   expect(html).toContain('<span class="nav-item-hint">214</span>');
@@ -92,15 +92,15 @@ test("design v1 adds Inbox under Home, and Members then Analytics under Events, 
   expect(html).toMatch(/<button class="nav-item community-nav-inbox"[^>]*title="Inbox"/);
 });
 
-test("design v1 swaps the name and settings gear for the switcher; one Settings row opens settings", () => {
+test("design v1 swaps the name and settings gear for the switcher; settings open from the account menu, not the column", () => {
   const html = renderToStaticMarkup(React.createElement(CommunityNav, hostProps));
   expect(html).toContain('<span data-testid="switcher">switcher</span>');
   expect(html).not.toContain("community-nav-settings");
   expect(html).not.toContain("community-nav-identity-name");
-  expect(html.match(/title="Settings"/g)).toHaveLength(1);
+  expect(html).not.toContain('title="Settings"');
 });
 
-test("the foot is Invite people, then Settings; Your guide is in the account menu; Analytics is under Members", () => {
+test("the foot is Invite people only; Your guide is in the account menu; Analytics is under Members; no Visit site", () => {
   let items: Array<{ key: string; label: string }> = [];
   const html = renderToStaticMarkup(React.createElement(CommunityNav, {
     ...hostProps,
@@ -113,7 +113,9 @@ test("the foot is Invite people, then Settings; Your guide is in the account men
     },
   }));
   const labels = labelsInOrder(html);
-  expect(labels.slice(-2)).toEqual(["Invite people", "Settings"]);
+  expect(labels[labels.length - 1]).toBe("Invite people");
+  expect(labels).not.toContain("Settings");
+  expect(items.map((item) => item.key)).not.toContain("site");
   expect(labels).not.toContain("Your guide");
   expect(items.map((item) => item.key)).toContain("guide");
   expect(labels.indexOf("Analytics")).toBe(labels.indexOf("Members") + 1);
@@ -121,7 +123,7 @@ test("the foot is Invite people, then Settings; Your guide is in the account men
   expect(items.map((item) => item.key)).not.toContain("invite");
 });
 
-test("a member who may open their own settings gets the Settings row, and no host items", () => {
+test("a member gets no host rows or items", () => {
   let items: Array<{ key: string }> = [];
   const html = renderToStaticMarkup(React.createElement(CommunityNav, {
     ...hostProps,
@@ -131,7 +133,7 @@ test("a member who may open their own settings gets the Settings row, and no hos
     accountSlot: (communityItems: Array<{ key: string }>) => { items = communityItems; return React.createElement("span", null, "account"); },
   }));
   const labels = labelsInOrder(html);
-  expect(labels[labels.length - 1]).toBe("Settings");
+  expect(labels).not.toContain("Settings");
   expect(labels).not.toContain("Analytics");
   expect(items.map((item) => item.key)).not.toContain("guide");
 });

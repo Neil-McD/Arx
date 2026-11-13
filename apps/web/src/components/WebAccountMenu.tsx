@@ -125,7 +125,7 @@ export function WebAccountMenu(props: WebAccountMenuProps) {
             }}
           >
             <Settings size={16} aria-hidden="true" />
-            Profile and settings
+            Settings
           </button>
           <div className="account-menu-separator" role="separator" />
           <button
