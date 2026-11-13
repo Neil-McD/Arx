@@ -1563,6 +1563,8 @@
  */
 :root[data-design="v1"] {
   --left-column-width: clamp(224px, 18.4vw, 264px);
+  /* Inbox's conversation column; the list leaves exactly this much room. */
+  --inbox-thread-width: max(400px, var(--right-column-width));
 }
 
 /*
@@ -1584,7 +1586,7 @@
     gap: 0;
     /* Fixed gutters, like a channel; only Home is centred. */
     --inbox-gutter: 56px;
-    padding: 52px calc(var(--right-column-width) + var(--inbox-gutter)) 0 var(--inbox-gutter);
+    padding: 52px calc(var(--inbox-thread-width) + var(--inbox-gutter)) 0 var(--inbox-gutter);
     /* The left column's own line divides it, as on every page. */
     border: 0;
     border-radius: 0;
@@ -1596,7 +1598,7 @@
   :root[data-design="v1"] .web-direct-messages-host.is-page .community-dm-inbox-header {
     position: absolute;
     top: 0;
-    right: var(--right-column-width);
+    right: var(--inbox-thread-width);
     left: 0;
     flex: none;
     height: 52px;
@@ -1631,7 +1633,7 @@
   :root[data-design="v1"] .web-direct-messages-host.is-page .community-dm-inbox-search {
     position: absolute;
     top: 10px;
-    right: calc(var(--right-column-width) + var(--inbox-gutter));
+    right: calc(var(--inbox-thread-width) + var(--inbox-gutter));
     z-index: 3;
     width: 220px;
     height: 32px;
@@ -1748,7 +1750,7 @@
     right: 0;
     bottom: 0;
     /* The mock's Inbox conversation column is 400px, wider on big windows. */
-    width: max(400px, var(--right-column-width));
+    width: var(--inbox-thread-width);
     height: auto;
     max-height: none;
     gap: 0;
@@ -3474,4 +3476,53 @@
 
   /* Home: one column; the community-today panel opens from Home's header. */
   :root[data-design="v1"] .community-agent-dock-panel.has-home-rail { position: relative; }
+}
+
+/* ---------- The desktop shell, slice 2: layered pages (Nov 13) ----------
+   Inbox and Members show list and detail side by side from 1180px. Narrower,
+   Inbox becomes two layers: the list, then the conversation in its place with
+   a back arrow (no half drawer over the list). Members' record opens like any
+   right column: over the page's edge, from the header button or a member row. */
+:root[data-design="v1"] .community-dm-panel-back.is-layered-only { display: none; }
+@media (min-width: 721px) and (max-width: 1179px) {
+  /* The list takes the whole main area; no empty "choose someone" column. */
+  :root[data-design="v1"] .web-direct-messages-host.is-page .community-dm-inbox-panel {
+    padding-right: var(--inbox-gutter);
+  }
+  :root[data-design="v1"] .web-direct-messages-host.is-page .community-dm-inbox-header { right: 0; }
+  :root[data-design="v1"] .web-direct-messages-host.is-page .community-dm-inbox-search { right: var(--inbox-gutter); }
+  :root[data-design="v1"] .web-direct-messages-host.is-page .community-dm-empty-column { display: none; }
+  /* A conversation open: it is the page, with its back arrow; the list waits. */
+  :root[data-design="v1"] .web-direct-messages-host.is-page.has-open .community-dm-inbox-panel { display: none; }
+  :root[data-design="v1"] .web-direct-messages-host.is-page.has-open .community-dm-panel:not(.community-dm-inbox-panel) {
+    left: var(--left-column-width);
+    width: auto;
+    padding-left: var(--inbox-gutter);
+    padding-right: var(--inbox-gutter);
+    border-left: 0;
+  }
+  :root[data-design="v1"] .web-direct-messages-host.is-page .community-dm-panel-back.is-layered-only { display: inline-flex; }
+
+  /* Members: the table takes the page; the record opens as the panel. */
+  :root[data-design="v1"] .community-interaction-projection:has(> .members-page),
+  :root[data-design="v1"] .community-interaction-projection:has(> .members-page-record) {
+    position: relative;
+    grid-template-columns: minmax(0, 1fr);
+  }
+  :root[data-design="v1"] .community-interaction-projection > .members-page-record { display: none; }
+  :root[data-design="v1"][data-right-open] .community-interaction-projection > .members-page-record {
+    display: flex;
+    position: absolute;
+    top: 52px;
+    right: 0;
+    bottom: 0;
+    z-index: 30;
+    grid-column: auto;
+    grid-row: auto;
+    width: max(400px, var(--right-column-width));
+    max-width: calc(100% - 48px);
+    box-sizing: border-box;
+    overflow-y: auto;
+    box-shadow: -16px 0 40px rgba(0, 0, 0, 0.28);
+  }
 }
