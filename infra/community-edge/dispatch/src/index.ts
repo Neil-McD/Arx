@@ -513,7 +513,8 @@ async function handlePublicPage(request: Request, place: Place, env: Env): Promi
   }
   const view = answer?.ok === true ? joinView(answer, env, place) : null;
   if (!view) return json(502, { ok: false, code: "public_page_unavailable", message: "Couldn't load this community's page. Try again." });
-  const plans = (view.plans as Array<Record<string, unknown>>).map(({ billing_period, label, price }) => ({ billing_period, label, price }));
+  // Each plan on sale: its period, Studio's label and price, and (a named plan) its name and what it includes.
+  const plans = (view.plans as Array<Record<string, unknown>>).map(({ billing_period, label, price, title, includes }) => ({ billing_period, label, price, title, includes }));
   return json(200, {
     ok: true, community: view.community, gate: view.gate, available: view.available, action_label: view.action_label, plans,
     join_url: `${place.privateOrigin}/join`,
@@ -966,11 +967,14 @@ function joinView(answer: Record<string, unknown>, env: Env, place: Place): Reco
   if (!community || !gate) return null;
   const viewer = answer.viewer && typeof answer.viewer === "object" ? answer.viewer as Record<string, unknown> : null;
   const state = viewer && typeof viewer.state === "string" && JOIN_STATES.has(viewer.state) ? viewer.state : null;
-  const plans = (Array.isArray(answer.plans) ? answer.plans : []).slice(0, 2).flatMap((raw) => {
+  // The base membership (monthly, annual) and each other plan on sale (its key, monthly), with what it includes.
+  const plans = (Array.isArray(answer.plans) ? answer.plans : []).slice(0, 12).flatMap((raw) => {
     const plan = (raw ?? {}) as Record<string, unknown>;
     const period = plan.billing_period === "monthly" || plan.billing_period === "annual" ? plan.billing_period : null;
     const label = text(plan.label, 80);
-    return period && label ? [{ billing_period: period, name: text(plan.name, 120), label, price: text(plan.price, 40) }] : [];
+    const key = typeof plan.plan === "string" && /^[a-z0-9][a-z0-9-]{0,31}$/.test(plan.plan) ? plan.plan : null;
+    const includes = (Array.isArray(plan.includes) ? plan.includes : []).slice(0, 4).flatMap((name) => text(name, 60) ?? []);
+    return period && label ? [{ billing_period: period, name: text(plan.name, 120), label, price: text(plan.price, 40), plan: key, title: text(plan.title, 60), includes }] : [];
   });
   // Pictures only from Polynet's own storage, the one image host the twin's policy allows.
   const stored = (value: unknown) => typeof value === "string" && storage && value.startsWith(`${storage}/api/storage/`) ? value : null;

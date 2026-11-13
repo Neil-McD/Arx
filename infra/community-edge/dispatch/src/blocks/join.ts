@@ -26,6 +26,7 @@ export const JOIN_MESSAGES: Record<string, string> = {
   cancelling: "Cancelling…",
   paid_plan_required: "This community now requires a paid plan. Select a plan to continue.",
   community_checkout_unavailable: "Checkout is temporarily unavailable for this community.",
+  plan_unavailable: "That plan isn't on sale any more. Choose another.",
   community_temporarily_unavailable: "{name} isn't taking new members right now.",
   community_unavailable: "{name} isn't taking new members right now.",
   community_user_blocked: "You can't join {name}.",
@@ -158,6 +159,10 @@ function members(count) {
   return new Intl.NumberFormat().format(count) + (count === 1 ? " member" : " members");
 }
 
+// A plan's choice: its key, or (the base membership) its billing period.
+const PLAN_CHOICE = /^[a-z0-9][a-z0-9-]{0,31}$/;
+function planChoice(plan) { return plan.plan || plan.billing_period; }
+
 // Back to Join after signing in, with the plan picked or the checkout to finish.
 function signIn(plan, checkout) {
   const back = "/join" + (checkout ? "?checkout=" + encodeURIComponent(checkout) : plan ? "?plan=" + encodeURIComponent(plan) : "");
@@ -173,7 +178,8 @@ class Join {
     const checkout = params.get("checkout") || "";
     this.checkout = CHECKOUT_SESSION.test(checkout) ? checkout : null;
     this.canceled = checkout === "canceled";
-    this.plan = params.get("plan") === "annual" ? "annual" : params.get("plan") === "monthly" ? "monthly" : null;
+    const picked = params.get("plan") || "";
+    this.plan = PLAN_CHOICE.test(picked) ? picked : null;
     block.teardown = () => this.stop();
   }
 
@@ -360,26 +366,36 @@ class Join {
       h("button", { class: "quiet", part: "join-signin", type: "button", text: "Sign in", onclick: () => signIn(null) })]);
   }
 
-  // A paid plan: Studio's prices, one per billing period, then Stripe's own checkout.
+  // A paid plan: the base membership (one per billing period) and every other
+  // plan on sale, each with what it includes, then Stripe's own checkout.
   checkoutGate() {
     const plans = this.data.plans || [];
     if (!plans.length) return [h("p", { text: say("community_checkout_unavailable") })];
-    const chosen = plans.find((plan) => plan.billing_period === this.plan) || plans[0];
-    this.plan = chosen.billing_period;
+    const chosen = plans.find((plan) => planChoice(plan) === this.plan) || plans[0];
+    this.plan = planChoice(chosen);
+    this.chosen = chosen;
     const action = h("button", { class: "primary", part: "join-action", type: "button", text: chosen.label });
     const price = h("strong", { text: chosen.price || "" });
     const per = h("span", { class: "muted", text: chosen.billing_period === "annual" ? "/ year" : "/ month" });
     const out = chosen.price ? [h("p", { class: "price", part: "join-price" }, [price, per])] : [];
+    // Plans with names (Manage → Plans) show them; a base membership alone keeps Studio's "$29/month".
+    const named = plans.some((plan) => plan.plan);
+    const optionText = (plan) => {
+      const cost = (plan.price || "") + (plan.billing_period === "annual" ? "/year" : "/month");
+      const base = named && plan.title ? plan.title + " · " + cost : plan.label.replace(/^Join /, "");
+      return plan.includes && plan.includes.length ? base + " · includes " + plan.includes.join(", ") : base;
+    };
     if (plans.length > 1) {
       out.push(h("fieldset", { class: "plans", part: "plans" }, [h("legend", { text: "Choose a plan" })].concat(plans.map((plan) => {
-        const input = h("input", { type: "radio", name: "pn-join-plan", value: plan.billing_period, checked: plan === chosen });
+        const input = h("input", { type: "radio", name: "pn-join-plan", value: planChoice(plan), checked: plan === chosen });
         input.addEventListener("change", () => {
-          this.plan = plan.billing_period;
+          this.plan = planChoice(plan);
+          this.chosen = plan;
           action.textContent = plan.label;
           price.textContent = plan.price || "";
           per.textContent = plan.billing_period === "annual" ? "/ year" : "/ month";
         });
-        return h("label", { class: "plan", part: "plan" }, [input, h("span", { text: plan.label.replace(/^Join /, "") })]);
+        return h("label", { class: "plan", part: "plan" }, [input, h("span", { text: optionText(plan) })]);
       }))));
     }
     action.addEventListener("click", () => this.startCheckout(action));
@@ -429,7 +445,9 @@ class Join {
   async startCheckout(button) {
     button.disabled = true;
     const guest = !this.data.viewer;
-    const res = await call(guest ? "/__polynet/me/join/guest-checkout" : "/__polynet/me/join/checkout", { billing_period: this.plan });
+    const chosen = this.chosen || {};
+    const res = await call(guest ? "/__polynet/me/join/guest-checkout" : "/__polynet/me/join/checkout",
+      chosen.plan ? { billing_period: "monthly", plan: chosen.plan } : { billing_period: chosen.billing_period || "monthly" });
     if (!this.current()) return;
     if (res.status === 401) return signIn(this.plan);
     const url = res.status === 200 && res.body.ok === true && typeof res.body.checkout_url === "string" ? res.body.checkout_url : "";
@@ -442,7 +460,7 @@ class Join {
   refused(res) {
     const code = res.body && res.body.code;
     if (code === "account_setup_required" || code === "community_user_blocked") return this.block.load();
-    const known = code === "community_checkout_unavailable" || code === "community_temporarily_unavailable" || code === "community_unavailable" || code === "paid_plan_required";
+    const known = code === "community_checkout_unavailable" || code === "community_temporarily_unavailable" || code === "community_unavailable" || code === "paid_plan_required" || code === "plan_unavailable";
     this.render({ error: say(known ? code : "failed", this.name()) });
   }
 
