@@ -64,9 +64,11 @@ export function WebShellChromeHost(props: WebShellChromeHostProps) {
   );
 
   // Design v1, one Settings page: on the community's settings the left column
-  // is the Settings sidebar (the same one your own settings show).
+  // is the Settings sidebar (the same one your own settings show). It doesn't
+  // wait for your account to load (its footer does), or a refresh would show
+  // the community's own column first.
   const communitySettingsNav = props.communityShell.showDesktopCommunityNav && !props.showMobileAppShell && isDesignV1Active()
-    && props.communityShell.destination.kind === "community_settings" && props.communityShell.account;
+    && props.communityShell.destination.kind === "community_settings";
   const desktopCommunityNav = props.communityShell.showDesktopCommunityNav ? (
     communitySettingsNav ? (
       <WebSettingsNavV1
@@ -127,7 +129,10 @@ export function WebShellChromeHost(props: WebShellChromeHostProps) {
     isDesignV1Active() &&
     !desktopCommunityNav &&
     props.communityShell.showDesktopCommunityRail &&
-    props.communityShell.account
+    // Settings doesn't wait for your account (the sidebar's footer does), or a
+    // refresh would show the old rail first. Discover waits: signed out, it's
+    // a different page.
+    (props.communityShell.account || destinationKind === "global_settings")
       ? destinationKind === "discover"
         ? ("discover" as const)
         : destinationKind === "global_settings"
