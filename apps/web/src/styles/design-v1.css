@@ -3409,3 +3409,7 @@
 }
 :root[data-design="v1"] .settings-v1-checkbox.is-disabled { opacity: 0.5; cursor: default; }
 :root[data-design="v1"] .settings-v1-segmented { width: max-content; max-width: 100%; align-self: flex-start; }
+:root[data-design="v1"] .settings-v1-checklist { display: flex; flex-direction: column; gap: 8px; }
+/* Rows pages inside the community form: groups space themselves. */
+:root[data-design="v1"] .settings-page-v1 .community-general-settings-secondary:has(> .settings-v1-group) { gap: 0; }
+:root[data-design="v1"] .settings-page-v1 .community-general-settings-secondary > .settings-v1-note { margin-top: 10px; }

@@ -1,6 +1,6 @@
 // Plans (one door, slice 1): the levels of membership a builder sells, one
 // at a time per member, each with the grants a connected app reads. The base
-// membership's price stays in Pricing above; here it gets a name and grants.
+// membership's price stays in Pricing (below it); here it gets a name and grants.
 // A plan can include pods: whoever holds it has a seat in each.
 import { announceCommunityPlansChanged } from "../controllers/communityAppLinks";
 import { useCallback, useEffect, useState } from "react";
@@ -11,6 +11,7 @@ import {
   type CloudCommunityTier,
 } from "../../../../shared/cloudCommunityTiersGateway";
 import { fetchCloudCommunityPods, type CloudCommunityPod } from "../../../../shared/cloudCommunityPodsGateway";
+import { SettingsButton, SettingsCheckbox, SettingsGroup, SettingsNote, SettingsRow } from "./SettingsRows";
 
 type Draft = { key: string | null; base: boolean; name: string; price: string; grants: string; pods: string[] };
 
@@ -75,70 +76,69 @@ export function CommunityPlansSection(props: { communityId: string; session: unk
 
   if (!tiers) return null;
   const live = tiers.filter((tier) => !tier.archived);
+  const podNames = (ids: string[] | undefined) => (ids ?? []).map((id) => pods.find((pod) => pod.channel_id === id)?.name ?? "a pod");
+  const edit = (tier: CloudCommunityTier) => {
+    setError(null);
+    setDraft({ key: tier.key, base: tier.base, name: tier.name, price: tier.monthly_amount_base_units === null ? "" : String(tier.monthly_amount_base_units / 100), grants: tier.grants.join(", "), pods: tier.pod_channel_ids ?? [] });
+  };
+  // Design v1, rows: one row per plan; editing opens the plan's fields below.
   return (
-    <div className="settings-section community-plans-section">
-      <div className="settings-section-title">Plans</div>
-      <div className="settings-section-desc">
-        Levels of membership, one per member. Each plan gives grants: the names your own app reads to decide what someone can use. Members keep the price they joined at.
-      </div>
-      {live.map((tier) => (
-        <div key={tier.key} className="community-plan-row">
-          <div>
-            <strong>{tier.name}</strong>
-            <span className="settings-section-desc">{tier.base ? `${money(tier.monthly_amount_base_units)} (set in Pricing)` : money(tier.monthly_amount_base_units)} · {tier.members} {tier.members === 1 ? "member" : "members"}</span>
-            <div className="settings-section-desc">Grants: {["community", ...tier.grants].join(", ")}</div>
-            {tier.pod_channel_ids?.length ? (
-              <div className="settings-section-desc">Includes: {tier.pod_channel_ids.map((id) => pods.find((pod) => pod.channel_id === id)?.name ?? "a pod").join(", ")}</div>
-            ) : null}
-          </div>
-          <div className="community-plan-actions">
-            <button type="button" className="secondary" disabled={busy} onClick={() => { setError(null); setDraft({ key: tier.key, base: tier.base, name: tier.name, price: tier.monthly_amount_base_units === null ? "" : String(tier.monthly_amount_base_units / 100), grants: tier.grants.join(", "), pods: tier.pod_channel_ids ?? [] }); }}>Edit</button>
-            {tier.base ? null : <button type="button" className="secondary" disabled={busy} onClick={() => void archive(tier.key)}>Stop selling</button>}
-          </div>
-        </div>
-      ))}
+    <>
+      <SettingsGroup label="Plans">
+        {live.map((tier) => {
+          const includes = podNames(tier.pod_channel_ids);
+          return (
+            <SettingsRow key={tier.key} label={tier.name}
+              help={<>
+                {money(tier.monthly_amount_base_units)}{tier.base ? " (the base price, below)" : ""} · {tier.members} {tier.members === 1 ? "member" : "members"}
+                <br />Grants: {["community", ...tier.grants].join(", ")}{includes.length ? <><br />Includes: {includes.join(", ")}</> : null}
+              </>}>
+              <SettingsButton disabled={busy || Boolean(draft)} onClick={() => edit(tier)}>Edit</SettingsButton>
+              {tier.base ? null : <SettingsButton variant="quiet" disabled={busy || Boolean(draft)} onClick={() => void archive(tier.key)}>Stop selling</SettingsButton>}
+            </SettingsRow>
+          );
+        })}
+        {draft ? null : (
+          <SettingsRow label="Add a plan" help="Another level with its own price, grants and pods. Members keep the price they joined at.">
+            <SettingsButton onClick={() => { setError(null); setDraft({ key: null, base: false, name: "", price: "", grants: "", pods: [] }); }}>Add plan</SettingsButton>
+          </SettingsRow>
+        )}
+      </SettingsGroup>
+      {!draft && error ? <SettingsNote tone="error">{error}</SettingsNote> : null}
       {draft ? (
-        <div className="community-plan-form">
-          <label className="create-community-field">
-            <span>Name</span>
-            <input value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} maxLength={40} placeholder="e.g. Setter" autoFocus />
-          </label>
+        <SettingsGroup label={draft.key ? `Edit ${live.find((tier) => tier.key === draft.key)?.name ?? "plan"}` : "New plan"}>
+          <SettingsRow label="Name" htmlFor="plan-name">
+            <input id="plan-name" className="settings-v1-input" value={draft.name} maxLength={40} placeholder="e.g. Setter" autoFocus
+              onChange={(event) => setDraft({ ...draft, name: event.target.value })} />
+          </SettingsRow>
           {draft.base ? null : (
-            <label className="create-community-field">
-              <span>Monthly price (USD)</span>
-              <input value={draft.price} onChange={(event) => setDraft({ ...draft, price: event.target.value.replace(/[^0-9.]/g, "") })} inputMode="decimal" placeholder="197" />
-            </label>
+            <SettingsRow label="Monthly price" htmlFor="plan-price">
+              <span className="settings-v1-prefixed"><span aria-hidden="true">$</span>
+                <input id="plan-price" className="settings-v1-input" inputMode="decimal" placeholder="197" value={draft.price}
+                  onChange={(event) => setDraft({ ...draft, price: event.target.value.replace(/[^0-9.]/g, "") })} />
+              </span>
+            </SettingsRow>
           )}
-          <label className="create-community-field">
-            <span>Grants (comma separated)</span>
-            <input value={draft.grants} onChange={(event) => setDraft({ ...draft, grants: event.target.value })} placeholder="de:connect, de:setter" />
-          </label>
+          <SettingsRow label="Grants" htmlFor="plan-grants" help="Names your app reads, comma separated.">
+            <input id="plan-grants" className="settings-v1-input" placeholder="de:connect, de:setter" value={draft.grants}
+              onChange={(event) => setDraft({ ...draft, grants: event.target.value })} />
+          </SettingsRow>
           {pods.length ? (
-            <fieldset className="create-community-field community-plan-pods">
-              <span>Includes pods</span>
-              {pods.map((pod) => (
-                <label key={pod.channel_id} className="community-plan-pod">
-                  <input
-                    type="checkbox"
-                    checked={draft.pods.includes(pod.channel_id)}
-                    onChange={(event) => setDraft({ ...draft, pods: event.target.checked ? [...draft.pods, pod.channel_id] : draft.pods.filter((id) => id !== pod.channel_id) })}
-                  />
-                  {pod.name}
-                </label>
-              ))}
-              <span className="settings-section-desc">Everyone on this plan gets a seat in these, and loses it when they leave the plan.</span>
-            </fieldset>
+            <SettingsRow label="Includes pods" help="Everyone on this plan gets a seat in these, and loses it when they leave the plan." stacked>
+              <div className="settings-v1-checklist">
+                {pods.map((pod) => (
+                  <SettingsCheckbox key={pod.channel_id} label={pod.name} checked={draft.pods.includes(pod.channel_id)}
+                    onChange={(checked) => setDraft({ ...draft, pods: checked ? [...draft.pods, pod.channel_id] : draft.pods.filter((id) => id !== pod.channel_id) })} />
+                ))}
+              </div>
+            </SettingsRow>
           ) : null}
-          {error ? <div className="settings-section-desc" role="alert">{error}</div> : null}
-          <div className="community-plan-actions">
-            <button type="button" disabled={busy || !draft.name.trim()} onClick={() => void save()}>{busy ? "Saving…" : "Save plan"}</button>
-            <button type="button" className="secondary" onClick={() => { setDraft(null); setError(null); }}>Cancel</button>
-          </div>
-        </div>
-      ) : (
-        <button type="button" className="secondary" style={{ marginTop: 10 }} onClick={() => { setError(null); setDraft({ key: null, base: false, name: "", price: "", grants: "", pods: [] }); }}>Add a plan</button>
-      )}
-      {!draft && error ? <div className="settings-section-desc" role="alert">{error}</div> : null}
-    </div>
+          <SettingsRow label="" help={error ? <span className="settings-v1-error" role="alert">{error}</span> : undefined}>
+            <SettingsButton variant="quiet" onClick={() => { setDraft(null); setError(null); }}>Cancel</SettingsButton>
+            <SettingsButton variant="primary" disabled={busy || !draft.name.trim()} onClick={() => void save()}>{busy ? "Saving…" : "Save plan"}</SettingsButton>
+          </SettingsRow>
+        </SettingsGroup>
+      ) : null}
+    </>
   );
 }
