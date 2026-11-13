@@ -2471,6 +2471,7 @@ export default function App() {
     handleOpenGlobalSettings: shellVariant === "mobile"
       ? () => navigateTo(buildSettingsIndexPath())
       : () => openGlobalSettings("profile"),
+    openGlobalSettings,
     settingsGroup: settingsGroup as SettingsGroup,
     setSettingsPage,
     hasLeftPanel,
