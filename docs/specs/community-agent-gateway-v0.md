@@ -176,15 +176,14 @@ is the reason to upgrade.
   ("Turn on" goes straight to the Agent plan). Beyond that, the only prompts
   are owner moments (below). Members never see upsells.
 
-### Owner moments: milestones and detected problems
+### Owner moments: detected problems
 
 One card at a time, in the owner's next-step spot on Home, only when nothing
 urgent (a failed payment, people waiting to join) is there; at most one new
 card a week; dismissable for good. Every card uses the owner's own numbers.
 
-- **First member**: a congratulations only, no upsell.
-- **10 members** and **50 members**: where the upsell starts; the card names a
-  problem only if the data shows one at that moment.
+- **Member milestones** (first, 10 and 50 members) were removed on Nov 13 (Neil:
+  too much for now; keep it simple). Only detected problems make a card.
 - **Detected problems** (shown only while true):
   - **Questions waiting**: a member's question with no reply for 24 hours.
   - **Quiet newcomers**: 2 or more people joined 3 to 14 days ago and have

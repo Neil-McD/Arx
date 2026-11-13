@@ -43,7 +43,7 @@ export type WebCommunityHomeSectionProps = {
   // Whether the community's agent is on (docs/specs/community-agent-gateway-v0.md).
   // Off: Home is plain (no guide, no next step, no upsell).
   agentOn?: boolean;
-  // The owner's milestone and problem cards turn the agent on in Billing.
+  // The owner's problem cards turn the agent on in Billing.
   onTurnOnAgent?: () => void;
   // Who is here now (a member's "Right now" shows the faces).
   presence?: CommunityPresenceSummary | null;
@@ -224,7 +224,7 @@ export function homeEventTimeFor(startsAtIso: string, now: Date): string {
 export function WebCommunityHomeSection(props: WebCommunityHomeSectionProps) {
   const [snapshot, setSnapshot] = useState<CloudCommunityHomeSnapshot | null>(null);
   const [failed, setFailed] = useState(false);
-  // The owner's moment card (a milestone or a detected problem), when nothing
+  // The owner's moment card (a detected problem), when nothing
   // urgent holds the next-step spot.
   const [ownerMoment, setOwnerMoment] = useState<{ moment: OwnerMoment; isNew: boolean } | null>(null);
   // What happened since this person's last visit, and a member's next step.
@@ -358,7 +358,7 @@ export function WebCommunityHomeSection(props: WebCommunityHomeSectionProps) {
           <Eyebrow community={props.communityName} time={homeClockFor(now)} plain={!agentOn} />
           <Hello greeting={greeting} line={snapshot ? homeSentenceFor(snapshot, card, props.audience) : failed ? "" : " "} />
           {!card && ownerMoment ? (
-            <Card label={ownerMoment.moment.kind === "milestone" ? "Milestone" : "Worth a look"} title={ownerMoment.moment.title}
+            <Card label="Worth a look" title={ownerMoment.moment.title}
               say={[ownerMoment.moment.detail, ownerMoment.moment.guide ? (agentOn ? `Your guide ${ownerMoment.moment.guide}.` : `With your community's agent, your guide ${ownerMoment.moment.guide}.`) : ""].filter(Boolean).join(" ")}>
               {ownerMoment.moment.guide && !agentOn && props.onTurnOnAgent ? <Btn go onClick={props.onTurnOnAgent}>Turn on your community's agent</Btn> : null}
               {ownerMoment.moment.guide && agentOn ? <Btn go onClick={kit.onTalkItOver}>Talk it over</Btn> : null}

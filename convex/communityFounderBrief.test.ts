@@ -417,27 +417,21 @@ describe("staging seed for the brief", () => {
 });
 
 describe("owner moments", () => {
-  it("only the owner gets a card; shown, it stays for the week; dismissed, nothing new until next week", async () => {
+  it("only the owner gets a card; member count alone never makes one; only real card keys are recorded", async () => {
     const t = convexTest(schema, modules);
     const f = await fixture(t, Date.now());
     const asOwner = t.withIdentity({ subject: "brief-Owner" });
     const moment = () => asOwner.query(api.communityOwnerMoments.getOwnerMoment, { communityId: f.communityId });
-    // A quiet community with no milestone yet has no card.
+    // No milestones: ten members (or fifty) make no card on their own.
+    await t.run((ctx) => ctx.db.patch(f.communityId, { activeMemberCount: 51 } as any));
     expect(await moment()).toBeNull();
-    // Ten members besides the owner: the milestone, with no problem to name.
-    await t.run((ctx) => ctx.db.patch(f.communityId, { activeMemberCount: 11 } as any));
-    const first = await moment();
-    expect(first).toMatchObject({ isNew: true, moment: { key: "members_10", kind: "milestone" } });
     await expect(t.withIdentity({ subject: "brief-Ana" }).query(api.communityOwnerMoments.getOwnerMoment, { communityId: f.communityId }))
       .rejects.toThrow(/owner_required/);
-
-    await asOwner.mutation(api.communityOwnerMoments.markOwnerMomentShown, { communityId: f.communityId, key: first!.moment.key });
-    expect(await moment()).toMatchObject({ isNew: false, moment: { key: first!.moment.key } });
-
-    await asOwner.mutation(api.communityOwnerMoments.dismissOwnerMoment, { communityId: f.communityId, key: first!.moment.key });
-    expect(await moment()).toBeNull();
-    await expect(asOwner.mutation(api.communityOwnerMoments.dismissOwnerMoment, { communityId: f.communityId, key: "anything" }))
-      .rejects.toThrow(/unknown/);
+    await asOwner.mutation(api.communityOwnerMoments.markOwnerMomentShown, { communityId: f.communityId, key: "busy_week" });
+    await asOwner.mutation(api.communityOwnerMoments.dismissOwnerMoment, { communityId: f.communityId, key: "busy_week" });
+    for (const key of ["members_10", "anything"]) {
+      await expect(asOwner.mutation(api.communityOwnerMoments.dismissOwnerMoment, { communityId: f.communityId, key })).rejects.toThrow(/unknown/);
+    }
   });
 });
 
