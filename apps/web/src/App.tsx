@@ -2438,6 +2438,8 @@ export default function App() {
       isAuthRecoveringSignedInAppShell || isLoadingCommunityAccess,
     handleSelectCommunityTab,
     handleSelectCommunitySettingsPane,
+    isActiveCommunityOwner: communitySettingsLayer === "owner",
+    communitySettingsPane,
     handleSelectCommunityTabFromMobile,
     onCopyCommunityJoinLink: copyTextToClipboard,
     canOpenDirectMessages: Boolean(session),
@@ -2469,6 +2471,7 @@ export default function App() {
     handleOpenGlobalSettings: shellVariant === "mobile"
       ? () => navigateTo(buildSettingsIndexPath())
       : () => openGlobalSettings("profile"),
+    openGlobalSettings,
     settingsGroup: settingsGroup as SettingsGroup,
     setSettingsPage,
     hasLeftPanel,

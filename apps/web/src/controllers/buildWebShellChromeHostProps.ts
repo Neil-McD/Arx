@@ -73,7 +73,9 @@ export function buildWebShellChromeHostProps(params: {
   canViewActiveCommunityAnalytics: boolean;
   isLoadingCommunityAccess: boolean;
   handleSelectCommunityTab: (tab: WebShellChromeHostProps["communityShell"]["communityTab"]) => void;
-  handleSelectCommunitySettingsPane?: (pane: "community" | "agent" | "danger") => void;
+  handleSelectCommunitySettingsPane?: (pane: "community" | "public" | "plans" | "app" | "agent" | "danger") => void;
+  isActiveCommunityOwner?: boolean;
+  communitySettingsPane?: "community" | "public" | "plans" | "app" | "agent" | "danger";
   handleSelectCommunityTabFromMobile: (tab: WebShellChromeHostProps["communityShell"]["communityTab"]) => void;
   onCopyCommunityJoinLink: WebShellChromeHostProps["communityShell"]["onCopyCommunityJoinLink"];
   canOpenDirectMessages: boolean;
@@ -100,6 +102,8 @@ export function buildWebShellChromeHostProps(params: {
   handleOpenGlobalSettings: () => void;
   settingsGroup: SettingsGroup;
   setSettingsPage: (page: WebShellChromeHostProps["settingsSidebar"]["onSelectPage"] extends (page: infer T) => void ? T : never) => void;
+  // Opens one of your own settings pages from anywhere (a community's Settings page too).
+  openGlobalSettings?: (page: WebShellChromeHostProps["settingsSidebar"]["onSelectPage"] extends (page: infer T) => void ? T : never) => void;
   hasLeftPanel: boolean;
   isGlobalSettings: boolean;
 }): Omit<WebShellChromeHostProps, "mainSurface" | "globalOverlays"> {
@@ -239,6 +243,8 @@ export function buildWebShellChromeHostProps(params: {
       isLoadingCommunityAccess: params.isLoadingCommunityAccess,
       onSelectCommunityTab: params.handleSelectCommunityTab,
       onOpenCommunitySettingsPane: params.handleSelectCommunitySettingsPane,
+      isActiveCommunityOwner: params.isActiveCommunityOwner,
+      communitySettingsPane: params.communitySettingsPane,
       onSelectCommunityTabFromMobile: params.handleSelectCommunityTabFromMobile,
       onCopyCommunityJoinLink: params.onCopyCommunityJoinLink,
       canOpenDirectMessages: params.canOpenDirectMessages,
@@ -287,7 +293,8 @@ export function buildWebShellChromeHostProps(params: {
       showMobileSettingsShell: params.showMobileSettingsShell,
       isGlobalSettings: params.isGlobalSettings,
       settingsGroup: params.settingsGroup,
-      onSelectPage: params.setSettingsPage,
+      // On your own settings, switch page; from a community's Settings page, go to it.
+      onSelectPage: (page) => (params.isGlobalSettings || !params.openGlobalSettings ? params.setSettingsPage(page) : params.openGlobalSettings(page)),
     },
     hasLeftPanel: params.hasLeftPanel,
     isGlobalSettings: params.isGlobalSettings,

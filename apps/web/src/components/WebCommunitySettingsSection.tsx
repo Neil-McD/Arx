@@ -15,6 +15,7 @@ import { buildPlatformSwitcherStyle } from "../../../../shared/platformSwitcherU
 import {
   listCommunitySettingsPanesForAccess,
   normalizeCommunitySettingsPaneForAccess,
+  COMMUNITY_SETTINGS_PANE_LABELS,
   type CommunitySettingsPane,
 } from "../../../../shared/appShellNavigation";
 import { buildStripeConnectPresentation } from "../controllers/buildStripeConnectPresentation";
@@ -154,11 +155,27 @@ type WebCommunitySettingsSectionProps = {
 
 type SharedSettingsProps = Pick<WebCommunitySettingsSectionProps, "state" | "actions">;
 
-const COMMUNITY_SETTINGS_PANE_LABELS: Record<CommunitySettingsPane, string> = {
-  community: "General",
-  agent: "Agent",
-  danger: "Danger",
-};
+// The classic app keeps its three tabs, with everything on General.
+const CLASSIC_PANES: CommunitySettingsPane[] = ["community", "agent", "danger"];
+const CLASSIC_PANE_LABELS: Partial<Record<CommunitySettingsPane, string>> = { community: "General", agent: "Agent", danger: "Danger" };
+// Design v1 (one Settings page): the sections that share the community's saved form.
+const FORM_PANES: CommunitySettingsPane[] = ["community", "public", "plans", "app"];
+
+// Wide enough for the desktop frame, where the Settings sidebar lists the sections.
+function useWideSettingsSidebar(): boolean {
+  const query = "(min-width: 721px)";
+  const [wide, setWide] = useState(() => typeof window !== "undefined" && window.matchMedia?.(query).matches === true);
+  useEffect(() => {
+    const media = window.matchMedia?.(query);
+    if (!media) return;
+    const update = () => setWide(media.matches);
+    media.addEventListener?.("change", update);
+    return () => media.removeEventListener?.("change", update);
+  }, []);
+  // The phone app (/m/...) has no Settings sidebar at any width.
+  const phoneShell = typeof window !== "undefined" && /^\/m(\/|$)/.test(window.location.pathname);
+  return wide && !phoneShell;
+}
 
 function CommunitySettingsPaneSwitcher({
   activePane,
@@ -175,7 +192,7 @@ function CommunitySettingsPaneSwitcher({
   );
   const tabs = panes.map((pane) => ({
     id: pane,
-    label: COMMUNITY_SETTINGS_PANE_LABELS[pane],
+    label: isDesignV1Active() ? COMMUNITY_SETTINGS_PANE_LABELS[pane] : (CLASSIC_PANE_LABELS[pane] ?? COMMUNITY_SETTINGS_PANE_LABELS[pane]),
   }));
 
   return (
@@ -767,11 +784,17 @@ export function WebCommunitySettingsSection(props: WebCommunitySettingsSectionPr
     canManageMembers: canManageMembersActiveCommunity,
     isOwner: isOwnerSettingsLayer,
   };
-  const availableSettingsPanes = listCommunitySettingsPanesForAccess(settingsPaneAccess);
-  const selectedSettingsPane = normalizeCommunitySettingsPaneForAccess(
-    activePane,
-    settingsPaneAccess,
-  );
+  // Design v1 splits General into sections, picked from the Settings sidebar; the classic app keeps its tabs.
+  const split = isDesignV1Active();
+  // The Settings sidebar shows on wide screens only (WebShellChromeHost); a phone keeps the section switcher.
+  const hasSettingsSidebar = useWideSettingsSidebar();
+  const availableSettingsPanes = listCommunitySettingsPanesForAccess(settingsPaneAccess)
+    .filter((pane) => split || CLASSIC_PANES.includes(pane));
+  const normalizedPane = normalizeCommunitySettingsPaneForAccess(activePane, settingsPaneAccess);
+  const selectedSettingsPane = availableSettingsPanes.includes(normalizedPane) ? normalizedPane : (availableSettingsPanes[0] ?? "community");
+  const isFormPane = split ? FORM_PANES.includes(selectedSettingsPane) : selectedSettingsPane === "community";
+  // Where each block of the form lives: its own section in design v1, General in the classic app.
+  const shows = (pane: CommunitySettingsPane) => (split ? selectedSettingsPane === pane : selectedSettingsPane === "community");
   const availableSettingsPaneKey = availableSettingsPanes.join("|");
   const accessPresentationState = deriveCommunitySettingsAccessPresentation({
     hasActiveCommunity: Boolean(activeCommunity),
@@ -842,16 +865,16 @@ export function WebCommunitySettingsSection(props: WebCommunitySettingsSectionPr
         />
       ) : canManageCommunitySettings ? (
         <>
-          <div className="create-community-form community-settings-form">
+          <div className={`create-community-form community-settings-form${split ? " settings-page-v1" : ""}`}>
             <CommunityPageHeader
-              title="Manage"
-              actions={
+              title={split ? "Settings" : "Manage"}
+              actions={split && hasSettingsSidebar ? undefined : (
                 <CommunitySettingsPaneSwitcher
                   activePane={selectedSettingsPane}
                   panes={availableSettingsPanes}
                   onSelectPane={onSelectPane}
                 />
-              }
+              )}
             >
               <CommunitySettingsPaneSwitcher
                 activePane={selectedSettingsPane}
@@ -866,10 +889,11 @@ export function WebCommunitySettingsSection(props: WebCommunitySettingsSectionPr
               tabIndex={0}
               className="community-settings-pane-content"
             >
-              {selectedSettingsPane === "community" && state.isLoadingCommunitySettings ? (
+              {split ? <h1 className="settings-page-title">{COMMUNITY_SETTINGS_PANE_LABELS[selectedSettingsPane]}</h1> : null}
+              {isFormPane && state.isLoadingCommunitySettings ? (
               <div className="chat-empty">Loading community settings...</div>
               ) : null}
-              {selectedSettingsPane === "community" &&
+              {isFormPane &&
               !state.isLoadingCommunitySettings &&
               !state.isCommunitySettingsReady ? (
                 <div className="chat-empty">
@@ -884,14 +908,14 @@ export function WebCommunitySettingsSection(props: WebCommunitySettingsSectionPr
                   </button>
                 </div>
               ) : null}
-              {selectedSettingsPane === "community" &&
+              {isFormPane &&
               !state.isLoadingCommunitySettings &&
               state.isCommunitySettingsReady ? (
               <div className="community-general-settings">
                 <div
-                  className={`community-general-settings-grid${isOwnerSettingsLayer ? "" : " without-branding"}`}
+                  className={`community-general-settings-grid${isOwnerSettingsLayer && shows("community") ? "" : " without-branding"}`}
                 >
-                  {isOwnerSettingsLayer ? (
+                  {isOwnerSettingsLayer && shows("community") ? (
                     <CommunityBrandingSettingsSection
                       activeCommunity={resolvedActiveCommunity}
                       state={state}
@@ -899,8 +923,8 @@ export function WebCommunitySettingsSection(props: WebCommunitySettingsSectionPr
                     />
                   ) : null}
                   <div className="community-general-settings-secondary">
-                    <CommunityProfileSettingsSection state={state} actions={actions} />
-                    {isOwnerSettingsLayer ? (
+                    {shows("community") ? <CommunityProfileSettingsSection state={state} actions={actions} /> : null}
+                    {isOwnerSettingsLayer && shows("public") ? (
                       <CommunityPublicPageSection
                         communityId={resolvedActiveCommunity.id}
                         publicPageUrl={(() => {
@@ -911,7 +935,7 @@ export function WebCommunitySettingsSection(props: WebCommunitySettingsSectionPr
                         ensureSession={props.ensureSession}
                       />
                     ) : null}
-                    {canManageCommunitySettings ? (
+                    {canManageCommunitySettings && shows("public") ? (
                       <CommunityMemberExperienceSection
                         community={resolvedActiveCommunity}
                         canChange={isOwnerSettingsLayer}
@@ -920,7 +944,7 @@ export function WebCommunitySettingsSection(props: WebCommunitySettingsSectionPr
                         onSaved={props.onMemberExperienceSaved}
                       />
                     ) : null}
-                    {isOwnerSettingsLayer ? (
+                    {isOwnerSettingsLayer && !split ? (
                       <CommunityFounderBriefSection
                         communityId={resolvedActiveCommunity.id}
                         session={props.session}
@@ -928,14 +952,14 @@ export function WebCommunitySettingsSection(props: WebCommunitySettingsSectionPr
                       />
                     ) : null}
                     {/* One door: plans with grants. Design v1 only until it ships. */}
-                    {isOwnerSettingsLayer && isDesignV1Active() ? (
+                    {isOwnerSettingsLayer && split && shows("plans") ? (
                       <CommunityPlansSection
                         communityId={resolvedActiveCommunity.id}
                         session={props.session}
                         ensureSession={props.ensureSession}
                       />
                     ) : null}
-                    {isOwnerSettingsLayer && isDesignV1Active() ? (
+                    {isOwnerSettingsLayer && split && shows("app") ? (
                       <CommunityConnectedAppsSection
                         communityId={resolvedActiveCommunity.id}
                         communityName={resolvedActiveCommunity.name}
@@ -944,6 +968,7 @@ export function WebCommunitySettingsSection(props: WebCommunitySettingsSectionPr
                         ensureSession={props.ensureSession}
                       />
                     ) : null}
+                    {shows("plans") ? (
                     <CommunityMonetizationConfigSection
                       activeCommunity={resolvedActiveCommunity}
                       accountCommerceStatus={accountCommerceStatus}
@@ -956,6 +981,7 @@ export function WebCommunitySettingsSection(props: WebCommunitySettingsSectionPr
                       state={state}
                       actions={actions}
                     />
+                    ) : null}
                   </div>
                 </div>
                 {state.communitySettingsError ? (
@@ -1023,6 +1049,13 @@ export function WebCommunitySettingsSection(props: WebCommunitySettingsSectionPr
               ) : null}
               {selectedSettingsPane === "agent" ? (
               <WebCommunityAiAgentSection {...aiAgentProps} embedded />
+              ) : null}
+              {selectedSettingsPane === "agent" && split && isOwnerSettingsLayer ? (
+              <CommunityFounderBriefSection
+                communityId={resolvedActiveCommunity.id}
+                session={props.session}
+                ensureSession={props.ensureSession}
+              />
               ) : null}
               {selectedSettingsPane === "danger" && isOwnerSettingsLayer ? (
               <CommunityDangerSettingsSection
