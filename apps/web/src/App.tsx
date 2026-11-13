@@ -1827,6 +1827,7 @@ export default function App() {
         error: founderBilling.error,
         openPortal: founderBilling.openPortal,
         onOpenBuilderOffer: (community) => builderOffer.open({ community }),
+        refresh: founderBilling.refresh,
       },
       canViewActiveCommunityAnalytics,
       canViewPlatformAnalytics: hasOperatorAccess,

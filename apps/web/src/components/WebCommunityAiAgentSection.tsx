@@ -18,11 +18,24 @@ export type WebCommunityAgentPlanProps = {
   error: string | null;
   openPortal: (communityId: string) => Promise<void> | void;
   onOpenBuilderOffer: (community: CloudFounderBillingCommunity) => void;
+  refresh: () => Promise<unknown> | void;
 };
 
 function AgentPlanGroup({ plan }: { plan: WebCommunityAgentPlanProps }) {
   const community = plan.community;
-  if (!community) return plan.isLoading ? <SettingsGroup label="Plan"><SettingsRow label="Agent plan" help="Loading…" /></SettingsGroup> : null;
+  if (!community) {
+    // Couldn't load: say so and offer a retry, rather than dropping the group.
+    if (plan.error && !plan.isLoading) {
+      return (
+        <SettingsGroup label="Plan">
+          <SettingsRow label="Agent plan" help={<span className="settings-v1-error">{plan.error}</span>}>
+            <SettingsButton onClick={() => void plan.refresh()}>Retry</SettingsButton>
+          </SettingsRow>
+        </SettingsGroup>
+      );
+    }
+    return plan.isLoading ? <SettingsGroup label="Plan"><SettingsRow label="Agent plan" help="Loading…" /></SettingsGroup> : null;
+  }
   const action = resolveBuilderOfferPrimaryAction({ state: community.funding_state, allowedActions: community.allowed_actions });
   const comped = community.funding_mode === "operator_comp";
   const state = comped ? "Included by Polynet."
