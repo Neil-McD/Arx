@@ -3408,3 +3408,4 @@
   accent-color: var(--settings-accent);
 }
 :root[data-design="v1"] .settings-v1-checkbox.is-disabled { opacity: 0.5; cursor: default; }
+:root[data-design="v1"] .settings-v1-segmented { width: max-content; max-width: 100%; align-self: flex-start; }
