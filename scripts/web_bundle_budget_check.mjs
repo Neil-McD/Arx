@@ -7,7 +7,10 @@ const assetsDir = join(appDir, "dist", "assets");
 const limits = {
   maxSingleJsBytes: readLimit("WEB_BUNDLE_MAX_SINGLE_JS_BYTES", 1_600_000),
   maxIndexJsBytes: readLimit("WEB_BUNDLE_MAX_INDEX_JS_BYTES", 1_000_000),
-  maxTotalJsBytes: readLimit("WEB_BUNDLE_MAX_TOTAL_JS_BYTES", 3_400_000),
+  // Raised from 3_400_000 on Nov 13 2026: design v1 and the classic layout
+  // both ship until the classic layout is deleted (cleanup wave 2), which
+  // should take the total well under the old limit; lower it again then.
+  maxTotalJsBytes: readLimit("WEB_BUNDLE_MAX_TOTAL_JS_BYTES", 3_420_000),
   maxHostOnlyJsBytes: readLimit("WEB_BUNDLE_MAX_HOST_ONLY_JS_BYTES", 800_000),
 };
 
