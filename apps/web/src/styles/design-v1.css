@@ -3502,6 +3502,29 @@
     border-left: 0;
   }
   :root[data-design="v1"] .web-direct-messages-host.is-page .community-dm-panel-back.is-layered-only { display: inline-flex; }
+  /* Inbox on the kit (what design v1 draws): the same two layers. */
+  :root[data-design="v1"] .web-direct-messages-host.is-page .community-dm-inbox-panel.is-kit { padding-right: 0; }
+  :root[data-design="v1"] .web-direct-messages-host.is-page.has-open .community-dm-inbox-panel.is-kit { display: none; }
+  :root[data-design="v1"] .web-direct-messages-host.is-page.has-open .community-dm-panel.is-kit:not(.community-dm-inbox-panel) {
+    left: var(--left-column-width);
+    width: auto;
+    padding: 0;
+    border: 1px solid var(--surface-raised-edge);
+    border-radius: 10px;
+  }
+  :root[data-design="v1"] .web-direct-messages-host.is-page .community-dm-panel.is-kit .community-dm-panel-back.is-layered-only {
+    flex: none;
+    width: 30px;
+    height: 30px;
+    margin: 0 -4px 0 -6px;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-ink-secondary);
+    background: none;
+    border: 0;
+    border-radius: 7px;
+    cursor: pointer;
+  }
 
   /* Members: the table takes the page; the record opens as the panel. */
   :root[data-design="v1"] .community-interaction-projection:has(> .members-page),
