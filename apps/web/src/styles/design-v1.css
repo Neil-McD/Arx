@@ -3348,3 +3348,5 @@
 :root[data-design="v1"] .settings-v1-button.is-danger { border-color: var(--danger-border) !important; }
 :root[data-design="v1"] .settings-v1-button.is-quiet { border-color: transparent !important; }
 :root[data-design="v1"] .settings-page-v1-personal > .settings-page-head { margin-bottom: 16px; }
+
+:root[data-design="v1"] .settings-v1-status-row { display: inline-flex; align-items: center; gap: 10px; }

@@ -3423,38 +3423,16 @@ test("a person's own AI posts as them: their post, editable, replies on the post
   }
 });
 
-test("the owner's AI asks to change where members spend time; it can't approve its own request", async () => {
-  vi.stubEnv("ARX_PUBLIC_APP_URL", "https://polynet.test");
+test("asking to change where members spend time was retired with custom sites: it isn't offered", async () => {
   const t = convexTest(schema, modules);
   const f = await createFixture(t);
-  const admin = await createAdminFixture(t, f);
-  await t.run(ctx => ctx.db.insert("communitySiteDeploys", {
-    communityId: f.communityId, userId: f.ownerId, hostname: "canonical-community.polynet.page", fileCount: 1, totalBytes: 10, createdAt: Date.now(),
-  }));
-  const as = (subject: string, userId: any) => ({
-    read: (path: string) => executePolynetCanonicalTool({ ctx: executionContext(t.withIdentity({ subject })), authSubject: subject, userId,
-      principalKind: "external_mcp", evidenceSurface: "external_mcp", toolName: "polynet_read", input: { path: `/communities/canonical-community/${path}` } }),
-    call: (input: Record<string, unknown>, key: string) => executePolynetCanonicalTool({
-      ctx: executionContext(t.withIdentity({ subject })), authSubject: subject, userId, principalKind: "external_mcp", evidenceSurface: "external_mcp",
-      toolName: "polynet_call", input: { operation: "community.member_experience.request", version: 1,
-        target: "/communities/canonical-community/capabilities/community.member_experience.request.json", input, idempotency_key: key } }),
-  });
-  const owner = as(f.ownerSubject, f.ownerId);
-  const asked = await owner.call({ to: "site" }, "x1");
-  expect(asked, JSON.stringify(asked)).toMatchObject({ ok: true, value: { result: {
-    status: "awaiting_owner_approval", members_use: "app", approve_in: "https://polynet.test/c/canonical-community/settings/community" } } });
-  // The same call replays; nothing changed until the owner approves in Studio.
-  expect(await owner.call({ to: "site" }, "x1")).toMatchObject({ ok: true, value: { result: { status: "awaiting_owner_approval" } } });
-  const doc = JSON.parse(((await owner.read("builder/community.json")) as any).value.body);
-  expect(doc.member_experience).toMatchObject({ members_use: "app", has_custom_site: true, waiting_for_owner_approval: { from: "app", to: "site" } });
-  // An admin's AI may read it, not ask; a member's AI neither; bad input is refused.
-  expect(await as(admin.authSubject, admin.userId).call({ to: "site" }, "a1")).toMatchObject({ ok: false, code: "owner_only" });
-  expect(await as(f.memberSubject, f.memberId).call({ to: "site" }, "m1")).toMatchObject({ ok: false, code: "operation_not_found" });
-  expect(await owner.call({ to: "elsewhere" }, "x2")).toMatchObject({ ok: false, code: "invalid_tool_args" });
-  // There is no AI action that approves: approval is only Studio's, from the owner's session.
-  const capability = JSON.stringify(await owner.read("capabilities/community.member_experience.request.json"));
-  expect(capability).toContain("change_without_owner_approval");
-  for (const missing of ["community.member_experience.approve", "community.member_experience.set"]) {
-    expect(await owner.read(`capabilities/${missing}.json`), missing).toMatchObject({ ok: false });
-  }
+  const ctx = executionContext(t.withIdentity({ subject: f.ownerSubject }));
+  const call = await executePolynetCanonicalTool({ ctx, authSubject: f.ownerSubject, userId: f.ownerId, principalKind: "external_mcp",
+    evidenceSurface: "external_mcp", toolName: "polynet_call", input: { operation: "community.member_experience.request", version: 1,
+      target: "/communities/canonical-community/capabilities/community.member_experience.request.json", input: { to: "site" }, idempotency_key: "x1" } });
+  expect(call).toMatchObject({ ok: false, code: "operation_not_found" });
+  const read = await executePolynetCanonicalTool({ ctx, authSubject: f.ownerSubject, userId: f.ownerId, principalKind: "external_mcp",
+    evidenceSurface: "external_mcp", toolName: "polynet_read", input: { path: "/communities/canonical-community/capabilities/community.member_experience.request.json" } });
+  expect(read).toMatchObject({ ok: false });
 });
+
