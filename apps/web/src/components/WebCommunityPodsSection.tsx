@@ -160,7 +160,7 @@ function PodPitch(props: WebCommunityPodsSectionProps & { podSlug: string; inlin
   if (!page) return null;
   if (page.kind !== "outside") {
     return (
-      <div className={cx("podpage")}>
+      <div className={cx(props.inline ? "podpage" : "podpage podpitch")}>
         {back}
         <p className={cx("lead")}>This pod isn't here.</p>
         <p className={cx("sub")}>It may be private, or it may have closed.</p>
@@ -202,7 +202,7 @@ function PodPitch(props: WebCommunityPodsSectionProps & { podSlug: string; inlin
     page.seats_left === null || plans.length ? null : full ? "Full" : `${page.seats_left} ${page.seats_left === 1 ? "seat" : "seats"} left`,
   ].filter(Boolean).join(" · ");
   return (
-    <div className={cx("podpage")}>
+    <div className={cx(props.inline ? "podpage" : "podpage podpitch")}>
       {back}
       <span className={cx("podname")}><Icon name={page.can_enter ? "users" : "lock"} />{page.name}</span>
       {page.purpose ? <p className={cx("lead")}>{page.purpose}</p> : null}
