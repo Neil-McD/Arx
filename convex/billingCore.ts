@@ -11,6 +11,7 @@ import { enqueueCommunityAccessGrantedEmailInternal } from "./emailEvents";
 import { recordCriticalAuditEventBestEffort } from "./criticalAudit";
 import { readCanonicalPublicAppOrigin } from "./publicAppUrl";
 import { activateCommunityMembershipCore } from "./communityMembershipLifecycle";
+import { memberAccessChanged } from "./communityPlanPods";
 import {
   communityIsActive,
   communityLifecycleGenerationMatches,
@@ -402,6 +403,9 @@ export async function grantCommunityCheckout(args: {
     });
   }
   await args.ctx.db.patch(session._id, { membershipGrantedAt: args.nowMs, updatedAt: args.nowMs });
+  // Now the membership, its price (the plan bought) and its subscription are all recorded: the plan's pods follow,
+  // and connected apps hear of it. (Activation alone ran before the price and subscription existed.)
+  await memberAccessChanged(args.ctx, session.communityId, userId);
   if (accessGranted) {
     await enqueueCommunityAccessGrantedEmailInternal({
       ctx: args.ctx,

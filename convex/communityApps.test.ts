@@ -1368,6 +1368,57 @@ test("twin join: someone the community has blocked can't join, in Studio's words
   expect(await f.membership()).toBeNull();
 });
 
+test("twin join: the card offers every plan on sale; buying CRIS charges CRIS and seats them in the pod it includes", async () => {
+  stripe.checkouts.length = 0;
+  const f = await joinFixture();
+  const nowMs = Date.now();
+  await f.policy("paid_subscription");
+  const podId = await f.t.run(async (c) => {
+    await c.db.insert("communityPricePoints", {
+      communityId: f.ids.communityId, billingPeriod: "monthly", name: "Monthly", amountBaseUnits: 4700, currency: "usd", currencyDecimals: 2,
+      isCurrent: true, providerAccountId: "acct_test_owner", providerPriceId: "price_test_connect", createdAt: nowMs, updatedAt: nowMs,
+    });
+    await c.db.insert("communityPricePoints", {
+      communityId: f.ids.communityId, billingPeriod: "monthly", name: "CRIS", amountBaseUnits: 29700, currency: "usd", currencyDecimals: 2,
+      isCurrent: true, tierKey: "cris", providerAccountId: "acct_test_owner", providerPriceId: "price_test_cris", createdAt: nowMs, updatedAt: nowMs,
+    } as any);
+    await c.db.insert("userStripeConnectAccounts", {
+      userId: f.ids.ownerId, stripeAccountId: "acct_test_owner", accountType: "express", transfersEnabled: true, status: "ready",
+      detailsSubmitted: true, chargesEnabled: true, payoutsEnabled: true, requirementsCurrentlyDue: [], requirementsEventuallyDue: [], createdAt: nowMs, updatedAt: nowMs,
+    });
+    const channelId = await c.db.insert("communityChannels", {
+      communityId: f.ids.communityId, slug: "agency", name: "Drop-in agency", accessMode: "restricted", postingPolicy: "members", status: "active", position: 3,
+      createdByUserId: f.ids.ownerId, createdAt: nowMs, updatedAt: nowMs,
+    } as any);
+    await c.db.insert("communityPods", { communityId: f.ids.communityId, channelId, purpose: "", createdAt: nowMs, updatedAt: nowMs } as any);
+    await c.db.insert("communityTiers", { communityId: f.ids.communityId, key: "member", name: "Connect", rank: 0, grants: [], createdAt: nowMs, updatedAt: nowMs });
+    await c.db.insert("communityTiers", { communityId: f.ids.communityId, key: "cris", name: "CRIS", rank: 2, grants: [], podChannelIds: [channelId], createdAt: nowMs, updatedAt: nowMs });
+    // A stopped plan isn't offered.
+    await c.db.insert("communityTiers", { communityId: f.ids.communityId, key: "old", name: "Old", rank: 1, grants: [], archivedAt: nowMs, createdAt: nowMs, updatedAt: nowMs });
+    return channelId;
+  });
+  const token = await f.signInAt(f.twin, "apps-outsider");
+  const plans = (await f.read(token)).body.plans as Array<Record<string, unknown>>;
+  expect(plans.map((plan) => [plan.plan, plan.title, plan.includes])).toEqual([[null, "Connect", []], ["cris", "CRIS", ["Drop-in agency"]]]);
+  // Only a plan on sale, monthly.
+  expect(await f.me(COMMUNITY_APP_MY_JOIN_CHECKOUT_PATH, token, { billing_period: "monthly", plan: "old" })).toMatchObject({ status: 409, body: { code: "plan_unavailable" } });
+  expect((await f.me(COMMUNITY_APP_MY_JOIN_CHECKOUT_PATH, token, { billing_period: "annual", plan: "cris" })).status).toBe(400);
+  expect((await f.me(COMMUNITY_APP_MY_JOIN_CHECKOUT_PATH, token, { billing_period: "monthly", plan: "CRIS!" })).status).toBe(400);
+  const started = await f.me(COMMUNITY_APP_MY_JOIN_CHECKOUT_PATH, token, { billing_period: "monthly", plan: "cris" });
+  expect(started).toMatchObject({ status: 200, body: { ok: true } });
+  expect(stripe.checkouts[stripe.checkouts.length - 1].params).toMatchObject({ line_items: [{ price: "price_test_cris", quantity: 1 }] });
+  await f.t.mutation(internal.communityCommerce.syncPendingCommunityCheckoutSubscriptionInternal, {
+    sessionId: started.body.session_id as string, providerAccountId: "acct_test_owner", providerCheckoutSessionId: "cs_test_cris", providerCustomerId: "cus_test_cris",
+    providerSubscriptionId: "sub_test_cris", providerPriceId: "price_test_cris", subscriptionStatus: "active",
+    currentPeriodStartAt: nowMs, currentPeriodEndAt: nowMs + 30 * 86_400_000, markComplete: true,
+  });
+  // A member on CRIS, in the pod it includes.
+  expect(await f.membership()).toMatchObject({ state: "active" });
+  const seat = await f.t.run(async (c: any) => (await c.db.query("communityChannelParticipants")
+    .withIndex("by_channel_principal", (q: any) => q.eq("channelId", podId).eq("principalKey", `user:${f.ids.outsiderId}`)).first()) as any);
+  expect(seat).toMatchObject({ status: "active", reasons: ["plan"] });
+});
+
 test("twin join: a paid plan goes to Studio's checkout, back only to this twin's /join; the return grants nothing until Stripe's verified notice does", async () => {
   stripe.checkouts.length = 0;
   const f = await joinFixture();

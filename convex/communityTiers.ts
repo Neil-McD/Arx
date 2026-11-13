@@ -1,4 +1,5 @@
-import { notifyConnectedApps } from "./connectedAppNotify";
+import { heldTiers } from "./communityHeldTiers";
+import { tierHoldersChanged } from "./communityPlanPods";
 // Tiers and grants (one door, docs/specs/builder-modalities-v0.md, slice 1).
 // A membership holds one tier at a time; a tier gives grants, the names a
 // connected app reads (for Distribution Engineer: de:connect, de:setter,
@@ -13,11 +14,13 @@ import { notifyConnectedApps } from "./connectedAppNotify";
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { resolveUserIdForAuthenticatedRequest } from "./authActor";
-import { communityMembershipRowIsActive, getUniqueCommunityMembershipByPair, requireCommunityManager, resolveCommunityLens } from "./communityCore";
+import { communityMembershipRowIsActive, requireCommunityManager } from "./communityCore";
+import { BASE_TIER_KEY } from "./communityHeldTiers";
 
-export const BASE_TIER_KEY = "member";
+export { BASE_TIER_KEY };
 const TIERS_MAX = 10;
 const GRANTS_MAX = 10;
+const PODS_MAX = 10;
 const NAME_MAX = 40;
 const PRICE_MIN = 100;
 const PRICE_MAX = 1_000_000;
@@ -35,6 +38,23 @@ export function normalizeTierGrants(raw: string[]): string[] {
   }
   if (grants.length > GRANTS_MAX) throw new Error("community_tier_grant_invalid");
   return grants;
+}
+
+// A plan's pods: live pods of this community, each once.
+async function normalizePlanPods(ctx: any, communityId: any, raw: any[]): Promise<any[]> {
+  const ids: any[] = [];
+  for (const channelId of raw) {
+    if (ids.some((id) => String(id) === String(channelId))) continue;
+    const room = await ctx.db.get(channelId) as any;
+    const pod = room ? await ctx.db.query("communityPods")
+      .withIndex("by_community_channel", (q: any) => q.eq("communityId", communityId).eq("channelId", channelId)).first() : null;
+    if (!pod || String(room.communityId) !== String(communityId) || room.status !== "active" || room.accessMode !== "restricted") {
+      throw new Error("community_tier_pod_invalid");
+    }
+    ids.push(channelId);
+  }
+  if (ids.length > PODS_MAX) throw new Error("community_tier_pod_invalid");
+  return ids;
 }
 
 function tierKeyFor(name: string): string {
@@ -87,13 +107,14 @@ export const listCommunityTiers = query({
     }
     const tiers = [];
     const all = [
-      { key: BASE_TIER_KEY, name: base?.name ?? "Membership", rank: 0, grants: base?.grants ?? [], archivedAt: undefined },
+      { key: BASE_TIER_KEY, name: base?.name ?? "Membership", rank: 0, grants: base?.grants ?? [], podChannelIds: base?.podChannelIds ?? [], archivedAt: undefined },
       ...rows.filter((row: any) => row.key !== BASE_TIER_KEY).sort((a: any, b: any) => a.rank - b.rank),
     ];
     for (const tier of all) {
       const price = await currentTierPrice(ctx, args.communityId, tier.key);
       tiers.push({
         key: tier.key, name: tier.name, rank: tier.rank, grants: tier.grants,
+        pod_channel_ids: (tier.podChannelIds ?? []).map(String),
         base: tier.key === BASE_TIER_KEY, archived: Boolean(tier.archivedAt),
         monthly_amount_base_units: price ? price.amountBaseUnits : null,
         currency: price ? price.currency : "usd",
@@ -114,9 +135,12 @@ export const saveCommunityTier = mutation({
     name: v.string(),
     grants: v.array(v.string()),
     monthlyAmountBaseUnits: v.optional(v.number()),
+    // The pods this plan includes (missing: unchanged).
+    podChannelIds: v.optional(v.array(v.id("communityChannels"))),
   },
   handler: async (ctx, args) => {
     const { community } = await manager(ctx, args);
+    const podChannelIds = args.podChannelIds === undefined ? undefined : await normalizePlanPods(ctx, args.communityId, args.podChannelIds);
     const name = args.name.replace(/\s+/g, " ").trim().slice(0, NAME_MAX);
     if (!name) throw new Error("community_tier_name_required");
     const grants = normalizeTierGrants(args.grants);
@@ -133,10 +157,12 @@ export const saveCommunityTier = mutation({
       for (let n = 2; taken.has(key); n++) key = `${base.slice(0, 28)}-${n}`;
     }
     const grantsChanged = JSON.stringify(row?.grants ?? []) !== JSON.stringify(grants);
-    if (row) await ctx.db.patch(row._id, { name, grants, updatedAt: nowMs });
+    const podsChanged = podChannelIds !== undefined &&
+      JSON.stringify((row?.podChannelIds ?? []).map(String).sort()) !== JSON.stringify(podChannelIds.map(String).sort());
+    if (row) await ctx.db.patch(row._id, { name, grants, ...(podChannelIds !== undefined ? { podChannelIds } : {}), updatedAt: nowMs });
     else {
       const rank = key === BASE_TIER_KEY ? 0 : Math.max(0, ...rows.map((tier: any) => tier.rank)) + 1;
-      await ctx.db.insert("communityTiers", { communityId: args.communityId, key, name, rank, grants, createdAt: nowMs, updatedAt: nowMs });
+      await ctx.db.insert("communityTiers", { communityId: args.communityId, key, name, rank, grants, ...(podChannelIds?.length ? { podChannelIds } : {}), createdAt: nowMs, updatedAt: nowMs });
     }
     // A tier's monthly price. The base membership's is Settings' to change.
     if (key !== BASE_TIER_KEY) {
@@ -157,28 +183,9 @@ export const saveCommunityTier = mutation({
       }
     }
     void community;
-    // Grants changed: everyone holding this plan gets access.changed, so
-    // connected apps re-read what they have (bounded; most communities are small).
-    if (grantsChanged) {
-      const holders = new Set<string>();
-      const memberships = await ctx.db.query("communityMemberships")
-        .withIndex("by_community", (q: any) => q.eq("communityId", args.communityId)).take(2000);
-      const priceTier = new Map<string, string>();
-      for (const membership of memberships) {
-        if (!communityMembershipRowIsActive(membership) || membership.accessSource === "app_grant") continue;
-        let held = BASE_TIER_KEY;
-        if (membership.pricePointId) {
-          const id = String(membership.pricePointId);
-          if (!priceTier.has(id)) priceTier.set(id, ((await ctx.db.get(membership.pricePointId)) as any)?.tierKey ?? BASE_TIER_KEY);
-          held = priceTier.get(id)!;
-        }
-        if (held === key) holders.add(String(membership.userId));
-      }
-      const appSales = await ctx.db.query("communityAppGrants")
-        .withIndex("by_community_user", (q: any) => q.eq("communityId", args.communityId)).take(2000);
-      for (const sale of appSales) if (sale.active && sale.userId && sale.tierKey === key) holders.add(String(sale.userId));
-      for (const userId of [...holders].slice(0, 2000)) await notifyConnectedApps(ctx, args.communityId, userId as any);
-    }
+    // Grants or pods changed: everyone holding this plan gets its pods as they are now,
+    // and access.changed so connected apps re-read what they have.
+    if (grantsChanged || podsChanged) await tierHoldersChanged(ctx, args.communityId, key);
     return { key };
   },
 });
@@ -205,35 +212,10 @@ export const archiveCommunityTier = mutation({
 export async function resolveMemberGrants(ctx: any, communityId: any, userId: any): Promise<{
   allowed: boolean; tier: { key: string; name: string } | null; grants: string[];
 }> {
-  const membership = await getUniqueCommunityMembershipByPair({ ctx, communityId, userId });
-  if (!membership || !communityMembershipRowIsActive(membership)) return { allowed: false, tier: null, grants: [] };
-  // Allowed exactly when Polynet itself lets them in: the one community lens
-  // (a live subscription, an active app sale, a free or comped membership;
-  // never when blocked or the community is archived).
-  const community = await ctx.db.get(communityId);
-  if (!community || !(await resolveCommunityLens({ ctx, community, membership, userId })).entitled) {
-    return { allowed: false, tier: null, grants: [] };
-  }
-  // Every tier this person holds: the one their Polynet price sells (if that
-  // still lets them in) and each one the community's app reports selling them.
-  const tierKeys = new Set<string>();
-  const subscriptions = membership.accessSource === "paid_subscription"
-    ? await ctx.db.query("communitySubscriptions").withIndex("by_membership", (q: any) => q.eq("membershipId", membership._id)).collect()
-    : [];
-  const polynetPays = membership.accessSource !== "paid_subscription" || subscriptions.some((row: any) => ["active", "past_due", "cancel_at_period_end"].includes(row.status));
-  if (membership.accessSource !== "app_grant" && polynetPays) {
-    const price = membership.pricePointId ? await ctx.db.get(membership.pricePointId) as any : null;
-    tierKeys.add(price?.tierKey ?? BASE_TIER_KEY);
-  }
-  const appSales = (await ctx.db.query("communityAppGrants")
-    .withIndex("by_community_user", (q: any) => q.eq("communityId", communityId).eq("userId", userId)).take(20)).filter((row: any) => row.active);
-  for (const sale of appSales) tierKeys.add(sale.tierKey ?? BASE_TIER_KEY);
-  if (!tierKeys.size) tierKeys.add(BASE_TIER_KEY);
-  const held = [];
-  for (const key of tierKeys) {
-    const row = await ctx.db.query("communityTiers").withIndex("by_community_key", (q: any) => q.eq("communityId", communityId).eq("key", key)).first();
-    held.push({ key, name: row?.name ?? (key === BASE_TIER_KEY ? "Membership" : key), rank: key === BASE_TIER_KEY ? 0 : row?.rank ?? 0, grants: row?.grants ?? [] as string[] });
-  }
+  const current = await heldTiers(ctx, communityId, userId);
+  if (!current) return { allowed: false, tier: null, grants: [] };
+  const { membership } = current;
+  const held = [...current.tiers];
   // The tier shown is the highest held; the grants are all of them.
   held.sort((a, b) => b.rank - a.rank);
   const tier = held[0];

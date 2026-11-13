@@ -19,7 +19,7 @@ import {
   communitySubscriptionStatusGrantsAccess,
 } from "./communityCore";
 import { activateCommunityMembershipCore, endedCommunityMembershipFields } from "./communityMembershipLifecycle";
-import { notifyConnectedApps } from "./connectedAppNotify";
+import { memberAccessChanged } from "./communityPlanPods";
 import { schedulePodBillingCheck } from "./communityPodBillingCheck";
 import { adjustCommunityActiveMemberCountForMembershipTransition } from "./communityCore";
 
@@ -63,7 +63,7 @@ export async function applyAppGrants(ctx: any, communityId: any, userId: any, no
   if (active.length) {
     if (membership && communityMembershipRowIsActive(membership)) {
       // Already in: their tier may have changed.
-      await notifyConnectedApps(ctx, communityId, userId);
+      await memberAccessChanged(ctx, communityId, userId);
       return "in";
     }
     const state = membership ? communityMembershipState(membership) : null;
@@ -74,14 +74,14 @@ export async function applyAppGrants(ctx: any, communityId: any, userId: any, no
   }
   if (!membership || !communityMembershipRowIsActive(membership)) return "ended";
   if (await otherBasis(ctx, community, membership)) {
-    await notifyConnectedApps(ctx, communityId, userId);
+    await memberAccessChanged(ctx, communityId, userId);
     return "kept_by_other_access";
   }
   const ending = endedCommunityMembershipFields({ membership, to: "lapsed", reason: "connected_app_sale_ended", nowMs });
   await ctx.db.patch(membership._id, ending);
   await adjustCommunityActiveMemberCountForMembershipTransition({ ctx, communityId, before: membership, after: { ...membership, ...ending } });
   await schedulePodBillingCheck(ctx, { communityId, userId });
-  await notifyConnectedApps(ctx, communityId, userId);
+  await memberAccessChanged(ctx, communityId, userId);
   return "ended";
 }
 

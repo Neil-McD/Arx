@@ -1327,7 +1327,7 @@ const JOIN_ANSWER = {
       video: { provider: "youtube", id: "dQw4w9WgXcQ" }, guarantee: "Full refund in 30 days.", objections: [{ question: "Time?", answer: "2 hours." }],
       secret: "never" } },
   gate: "checkout", available: true, action_label: "Join $10/month",
-  plans: [{ billing_period: "monthly", name: "Monthly", label: "Join $10/month", price: "$10", price_id: "price_x" }, { billing_period: "weekly", label: "Join $1/week" }],
+  plans: [{ billing_period: "monthly", name: "Monthly", label: "Join $10/month", price: "$10", price_id: "price_x" }, { billing_period: "weekly", label: "Join $1/week" }, { billing_period: "monthly", name: "CRIS", label: "Join $297/month", price: "$297", plan: "cris", title: "CRIS", includes: ["Drop-in agency"], tier_secret: "x" }, { billing_period: "monthly", label: "Join $5/month", plan: "Bad Key!" }],
   viewer: { state: "visitor", can_request_again: false, reapply_at: null, setup_required: false, user_id: "u1" },
   terms_url: "https://polynet.example.com/terms",
   // Anything but Polynet's own legal pages never reaches the page.
@@ -1343,7 +1343,7 @@ const SHAPED_JOIN = {
       results: [{ quote: "Shipped twice as fast.", name: "Sam", role: "Founder" }], founder_bio: "I build things.",
       video: { provider: "youtube", id: "dQw4w9WgXcQ" }, guarantee: "Full refund in 30 days.", objections: [{ question: "Time?", answer: "2 hours." }],
     } },
-  gate: "checkout", available: true, action_label: "Join $10/month", plans: [{ billing_period: "monthly", name: "Monthly", label: "Join $10/month", price: "$10" }],
+  gate: "checkout", available: true, action_label: "Join $10/month", plans: [{ billing_period: "monthly", name: "Monthly", label: "Join $10/month", price: "$10", plan: null, title: null, includes: [] }, { billing_period: "monthly", name: "CRIS", label: "Join $297/month", price: "$297", plan: "cris", title: "CRIS", includes: ["Drop-in agency"] }, { billing_period: "monthly", name: null, label: "Join $5/month", price: null, plan: null, title: null, includes: [] }],
   terms_url: "https://polynet.example.com/terms", privacy_url: null,
   viewer: { state: "visitor", can_request_again: false, reapply_at: null, setup_required: false },
   // Setting up comes back: Studio's setup is told which community (by slug only).
@@ -1404,7 +1404,11 @@ test("public page: a founder's site reads its doorstep's data signed out, as the
   expect([res.status, res.headers.get("cache-control")]).toEqual([200, "public, max-age=60"]);
   expect(await res.json()).toEqual({
     ok: true, community: SHAPED_JOIN.community, gate: "checkout", available: true, action_label: "Join $10/month",
-    plans: [{ billing_period: "monthly", label: "Join $10/month", price: "$10" }], join_url: `${TWIN}/join`,
+    plans: [
+      { billing_period: "monthly", label: "Join $10/month", price: "$10", title: null, includes: [] },
+      { billing_period: "monthly", label: "Join $297/month", price: "$297", title: "CRIS", includes: ["Drop-in agency"] },
+      { billing_period: "monthly", label: "Join $5/month", price: null, title: null, includes: [] },
+    ], join_url: `${TWIN}/join`,
   });
   // Read as the doorstep reads it: from the twin's origin, no session.
   const [path, init] = backend.mock.calls[0];

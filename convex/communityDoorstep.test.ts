@@ -55,7 +55,7 @@ test("the doorstep's data: live courses with lesson counts, the host by name, th
       { title: "Lean Workflow", summary: "Cut the busy work.", lessons: 2 },
     ],
   });
-  expect(projection.plans).toEqual([{ billing_period: "monthly", name: "Monthly", label: "Join $29/month", price: "$29" }]);
+  expect(projection.plans).toEqual([{ billing_period: "monthly", name: "Monthly", label: "Join $29/month", price: "$29", plan: null, title: "Monthly", includes: [] }]);
 });
 
 test("a course's line is its first paragraph as plain words, cut at a word", () => {

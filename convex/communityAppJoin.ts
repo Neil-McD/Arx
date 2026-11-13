@@ -14,6 +14,7 @@ import {
   type CommunityMembershipLike,
   type PublicPlanSummaryLike,
   hasActiveAppGrant,
+  mapActivePlanSummaries,
   mapCommunityAccessRow,
   pickMostRelevantCommunityMembership,
   resolveCommunityBrandingFields,
@@ -98,6 +99,34 @@ export type CommunityAppJoinViewerState = "member" | "pending" | "denied" | "blo
 // Studio's funnel sells one plan per billing period: the newest current one,
 // which is the one checkout charges (resolveCheckoutPricePoint). Monthly first,
 // as Studio picks it.
+// Every other plan on sale (Manage → Plans), in order: its monthly price, its
+// name, and the pods it includes. Tiers are monthly only.
+const PLAN_KEY = /^[a-z0-9][a-z0-9-]{0,31}$/;
+async function tierPlans(ctx: any, communityId: any) {
+  const tiers = (await ctx.db.query("communityTiers").withIndex("by_community_key", (q: any) => q.eq("communityId", communityId)).collect())
+    .filter((tier: any) => !tier.archivedAt).sort((a: any, b: any) => a.rank - b.rank);
+  const prices = (await ctx.db.query("communityPricePoints")
+    .withIndex("by_community_current", (q: any) => q.eq("communityId", communityId).eq("isCurrent", true)).collect())
+    .filter((row: any) => !row.archivedAt && row.tierKey && row.billingPeriod === "monthly");
+  const out: Array<{ key: string | null; title: string; summary: PublicPlanSummaryLike; includes: string[] }> = [];
+  for (const tier of tiers) {
+    if (tier.key === "member") continue;
+    const price = prices.filter((row: any) => row.tierKey === tier.key).sort((a: any, b: any) => b.updatedAt - a.updatedAt)[0];
+    if (!price || !PLAN_KEY.test(tier.key)) continue;
+    out.push({ key: tier.key, title: tier.name, summary: mapActivePlanSummaries([price])[0]!, includes: await podNames(ctx, communityId, tier.podChannelIds) });
+  }
+  return out;
+}
+
+async function podNames(ctx: any, communityId: any, channelIds: any[] | undefined): Promise<string[]> {
+  const names: string[] = [];
+  for (const channelId of channelIds ?? []) {
+    const room = await ctx.db.get(channelId) as any;
+    if (room && String(room.communityId) === String(communityId) && room.status === "active" && room.accessMode === "restricted") names.push(String(room.name ?? "").slice(0, 60));
+  }
+  return names.filter(Boolean).slice(0, 4);
+}
+
 function plansByPeriod(plans: PublicPlanSummaryLike[]): PublicPlanSummaryLike[] {
   const latest = new Map<string, PublicPlanSummaryLike>();
   for (const plan of plans) latest.set(plan.billing_period, plan);
@@ -120,9 +149,13 @@ export async function communityAppJoinProjection(ctx: any, community: CommunityL
   const ownerConnectAccount = gate === "checkout"
     ? await ctx.db.query("userStripeConnectAccounts").withIndex("by_user", (q: any) => q.eq("userId", community.ownerId)).first()
     : null;
-  const plans = gate === "checkout" && canReceiveCommunityRevenue(ownerConnectAccount)
-    ? plansByPeriod(await listCurrentCommunitySellablePlans(ctx, community._id))
-    : [];
+  const selling = gate === "checkout" && canReceiveCommunityRevenue(ownerConnectAccount);
+  const plans = selling ? plansByPeriod(await listCurrentCommunitySellablePlans(ctx, community._id)) : [];
+  // The base membership's own name and pods (Manage → Plans), and every other plan on sale.
+  const baseTier = selling ? await ctx.db.query("communityTiers")
+    .withIndex("by_community_key", (q: any) => q.eq("communityId", community._id).eq("key", "member")).first() : null;
+  const baseIncludes = baseTier ? await podNames(ctx, community._id, baseTier.podChannelIds) : [];
+  const tiers = selling && plans.length ? await tierPlans(ctx, community._id) : [];
   let viewer: null | {
     state: CommunityAppJoinViewerState; can_request_again: boolean; reapply_at: string | null; setup_required: boolean;
   } = null;
@@ -186,11 +219,15 @@ export async function communityAppJoinProjection(ctx: any, community: CommunityL
     available: communityIsActive(community),
     action_label: action.label,
     // Only plans Studio would sell (a valid price); each with Studio's "Join $10/month".
-    plans: plans.flatMap((plan) => {
+    // Each with what the card needs: a title (the plan's name), the price on its own ("$29"), Studio's "Join $10/month",
+    // what it includes, and its key (null for the base membership). Tiers come after the base, monthly.
+    plans: [
+      ...plans.map((plan) => ({ plan, key: null as string | null, title: baseTier?.name ?? plan.name, includes: baseIncludes })),
+      ...tiers.map((tier) => ({ plan: tier.summary, key: tier.key, title: tier.title, includes: tier.includes })),
+    ].flatMap(({ plan, key, title, includes }) => {
       const view = buildCommunityFunnelPrimaryActionView({ mode: "checkout", plan });
-      // The price on its own ("$29"), for the doorstep's join card.
       const price = formatPlanPrice({ ...plan, billing_period: null });
-      return view.hasValidPaidPlan ? [{ billing_period: plan.billing_period, name: plan.name, label: view.label, price }] : [];
+      return view.hasValidPaidPlan ? [{ billing_period: plan.billing_period, name: plan.name, label: view.label, price, plan: key, title, includes }] : [];
     }),
     viewer,
     // Join's click accepts these (acceptCommunityJoin records it); the page links them.

@@ -1,4 +1,4 @@
-import { notifyConnectedApps } from "./connectedAppNotify";
+import { memberAccessChanged } from "./communityPlanPods";
 import {
   type CommunityMembershipLike,
   type CommunityMembershipState,
@@ -124,7 +124,7 @@ export async function activateCommunityMembershipCore(args: {
     userId: args.userId,
   });
   // One door: the community's connected apps re-read this person's access.
-  await notifyConnectedApps(args.ctx, args.communityId, args.userId);
+  await memberAccessChanged(args.ctx, args.communityId, args.userId);
   return {
     membership,
     accessGranted: true,

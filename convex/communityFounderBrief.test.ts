@@ -777,7 +777,7 @@ describe("pods", () => {
     expect((await asAna.query(api.communityPods.getPod, { communityId: f.communityId, channelId: ids.channelId })).members[0].payment).toBeUndefined();
     expect((await asOwner.query(api.communityPods.getPod, { communityId: f.communityId, channelId: ids.channelId })).members[0].payment).toEqual({ state: "added", until: null });
     // Leaving with no payment: off the pod now.
-    await expect(t.query(internalRefs.communityPodPayments.podLeavePlanInternal, { userId: ids.ana, communityId: f.communityId, channelId: ids.channelId })).resolves.toEqual({ renewing: [], leaving: false });
+    await expect(t.query(internalRefs.communityPodPayments.podLeavePlanInternal, { userId: ids.ana, communityId: f.communityId, channelId: ids.channelId })).resolves.toEqual({ renewing: [], leaving: false, fromPlan: false });
     await t.mutation(internalRefs.communityPodPayments.leavePodNowInternal, { userId: ids.ana, communityId: f.communityId, channelId: ids.channelId });
     expect((await page("brief-Ana")).kind).toBe("outside");
     // Ben pays: "Paying" with its renewal date; a failed payment emails him once.

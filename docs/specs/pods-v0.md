@@ -136,6 +136,20 @@ approves), or paid. A member can be in any number of paid pods. Seats are
 checked when checkout starts; a full paid pod shows "Full" and hosts add
 people by hand.
 
+**Plans include pods** (decided with Neil 2026-11-13): a plan (Manage →
+Plans) can include pods, so a plan is a price, grants and pods. For
+Distribution Engineer: Connect $47 and Setter $197 are the community without a
+pod; CRIS $297, the drop-in agency, includes its pod. Whoever holds the plan,
+sold through Polynet's checkout or the community's own app, has a seat in each
+pod it includes; moving to a plan without it, lapsing or leaving takes the seat
+away (`convex/communityPlanPods.ts`, called wherever access changes). A seat
+records why it is open (`communityChannelParticipants.reasons`: host, paid,
+plan) and stays open while any reason holds, so a plan never removes a host's
+add or a pod payment, and a pod payment ending never removes a plan's seat. A
+plan's seat ignores the pod's seat limit, and neither a host nor the member can
+take it away on its own: it follows the plan. A pod priced on its own (above)
+stays for communities that sell a pod by itself.
+
 Not built: plan switching, proration, combined prices, approve-then-pay, seat
 holds during checkout, a paid waitlist, a combined community-plus-pod
 checkout.

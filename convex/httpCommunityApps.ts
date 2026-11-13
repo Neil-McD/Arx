@@ -260,6 +260,8 @@ const JOIN_REFUSALS: Record<string, { status: number; code: string }> = {
   paid_plan_required: { status: 409, code: "paid_plan_required" },
   community_checkout_unavailable: { status: 409, code: "community_checkout_unavailable" },
   already_member: { status: 409, code: "already_member" },
+  // The plan picked was stopped, or never existed: pick another.
+  community_tier_not_found: { status: 409, code: "plan_unavailable" },
 };
 // Moderation and join review on the twin: Studio's cores and refusals; someone
 // who can't moderate here (or a post or request not of this community) gets a
@@ -1109,6 +1111,9 @@ function registerJoinRoutes(args: { http: HttpRouterLike; httpAction: HttpAction
       const body = await readJsonObject(req, 1024);
       const period = body?.billing_period;
       if (period !== "monthly" && period !== "annual") return reply(400, { ok: false, code: "invalid_request" });
+      // A plan from Manage → Plans (its key); missing is the base membership. Plans are monthly; checkout refuses a stopped or unknown one.
+      const plan = typeof body?.plan === "string" && body.plan ? body.plan : null;
+      if (plan !== null && (!/^[a-z0-9][a-z0-9-]{0,31}$/.test(plan) || period !== "monthly")) return reply(400, { ok: false, code: "invalid_request" });
       const origin = normalizeCommunityAppOrigin(req.headers.get("origin") ?? "") ?? "";
       const own = await ctx.runQuery(internal.communityAppJoin.isCommunityPrivateOriginInternal, {
         communityId: session.communityId as any, origin,
@@ -1120,6 +1125,7 @@ function registerJoinRoutes(args: { http: HttpRouterLike; httpAction: HttpAction
       if (join.viewer?.state === "member") return reply(409, { ok: false, code: "already_member" });
       const started = await runJoin(() => startCommunityJoinCheckoutCore(ctx, {
         communitySlug: join.community.slug, billingPeriod: period, successUrl: urls.successUrl, cancelUrl: urls.cancelUrl,
+        ...(plan ? { tierKey: plan } : {}),
         authSubject: session.authSubject, trustedUserId: session.userId,
       }));
       if (started instanceof Response) return started;
@@ -1139,6 +1145,9 @@ function registerJoinRoutes(args: { http: HttpRouterLike; httpAction: HttpAction
       const body = await readJsonObject(req, 1024);
       const period = body?.billing_period;
       if (period !== "monthly" && period !== "annual") return reply(400, { ok: false, code: "invalid_request" });
+      // A plan from Manage → Plans (its key); missing is the base membership. Plans are monthly; checkout refuses a stopped or unknown one.
+      const plan = typeof body?.plan === "string" && body.plan ? body.plan : null;
+      if (plan !== null && (!/^[a-z0-9][a-z0-9-]{0,31}$/.test(plan) || period !== "monthly")) return reply(400, { ok: false, code: "invalid_request" });
       const origin = normalizeCommunityAppOrigin(req.headers.get("origin") ?? "") ?? "";
       const found = origin
         ? (await ctx.runQuery(internal.communityAppJoin.privateOriginCommunityInternal, { origin })) as { communitySlug: string } | null
@@ -1147,6 +1156,7 @@ function registerJoinRoutes(args: { http: HttpRouterLike; httpAction: HttpAction
       if (!found || !urls) return reply(403, { ok: false, code: "private_origin_required" });
       const started = await runJoin(() => startCommunityJoinCheckoutCore(ctx, {
         communitySlug: found.communitySlug, billingPeriod: period, successUrl: urls.successUrl, cancelUrl: urls.cancelUrl, guest: true,
+        ...(plan ? { tierKey: plan } : {}),
         // Only the edge sets this (the request already proved the edge secret).
         visitorHash: /^[a-f0-9]{64}$/.test(req.headers.get("x-polynet-visitor") ?? "") ? req.headers.get("x-polynet-visitor")! : undefined,
       }));
