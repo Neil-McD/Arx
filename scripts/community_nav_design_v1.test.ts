@@ -80,10 +80,10 @@ const hostProps = {
   identitySlot: React.createElement("span", { "data-testid": "switcher" }, "switcher"),
 };
 
-test("design v1 adds Inbox under Home and Members under Events, with their counts", () => {
+test("design v1 adds Inbox under Home, and Members then Analytics under Events, with their counts", () => {
   const html = renderToStaticMarkup(React.createElement(CommunityNav, hostProps));
   expect(labelsInOrder(html)).toEqual([
-    "Home", "Inbox", "Channels", "general", "Community", "Knowledge", "Events", "Members", "Manage",
+    "Home", "Inbox", "Channels", "general", "Community", "Knowledge", "Events", "Members", "Analytics", "Manage",
   ]);
   expect(html).toContain('<span class="nav-item-count" aria-label="4 unread">4</span>');
   expect(html).toContain('<span class="nav-item-hint">214</span>');
@@ -100,10 +100,12 @@ test("design v1 swaps the name and settings gear for the switcher; Manage opens 
   expect(html).toMatch(/<button class="nav-item"[^>]*title="Manage"/);
 });
 
-test("the foot is the mock's Your guide and Manage; Analytics moves to the account menu", () => {
+test("the foot is Your guide, Invite people, then Manage; Analytics is under Members; neither is in the account menu", () => {
   let items: Array<{ key: string; label: string }> = [];
   const html = renderToStaticMarkup(React.createElement(CommunityNav, {
     ...hostProps,
+    activeCommunity: { name: "Test", site_url: "https://dawn-patrol.polynet.page" },
+    onCopyCommunityJoinLink: async () => true,
     onOpenGuide: () => {},
     accountSlot: (communityItems: Array<{ key: string; label: string }>) => {
       items = communityItems;
@@ -111,9 +113,10 @@ test("the foot is the mock's Your guide and Manage; Analytics moves to the accou
     },
   }));
   const labels = labelsInOrder(html);
-  expect(labels.slice(-2)).toEqual(["Your guide", "Manage"]);
-  expect(labels).not.toContain("Analytics");
-  expect(items.map((item) => item.key)).toContain("analytics");
+  expect(labels.slice(-3)).toEqual(["Your guide", "Invite people", "Manage"]);
+  expect(labels.indexOf("Analytics")).toBe(labels.indexOf("Members") + 1);
+  expect(items.map((item) => item.key)).not.toContain("analytics");
+  expect(items.map((item) => item.key)).not.toContain("invite");
 });
 
 test("the foot is the host's: a member who may open their own settings gets no Manage row", () => {
