@@ -49,6 +49,24 @@ the backend in production before any member sees new screens.
 - Leaving, removal, lapse, a host taking someone off a private room, and
   archiving each ask whether that person pays for a pod; with none, nothing
   is scheduled.
+- Added since this plan was first written (Nov 13, `release:verify` passed at
+  `9ab0910d4`, nothing deployed):
+  - Tables, all additive: `communityTiers`, `connectedApps`,
+    `connectedAppDeliveries`, `communityAppGrants`, `communityEventGoing`,
+    `communityMemberNotes` (12 new tables in all since `138ef7ce3`), and
+    `communityPricePoints.tierKey`, `communityMemberships.accessSource =
+    "app_grant"`, `connectedApps.appUrl`.
+  - Two public routes, `GET /apps/v1/access` and `POST /apps/v1/sales`, which
+    answer only with a connected app's secret. With no app connected (none is
+    in production), they refuse everything.
+  - Webhook deliveries to connected apps run on the scheduler (no new cron);
+    with no apps they schedule nothing.
+  - Access counts an active app sale, and someone who left can rejoin on one;
+    with no app sales, nothing changes.
+  - The only change outside the switch: a signed-out visitor to a community
+    with no site now sees "Sign in" on the `/c/<slug>` page, and a signed-in
+    non-member sees "You're not a member yet". Click through it on staging with
+    the switch off.
 - The classic app: whatever in the 45 commits is not behind the switch.
   **To do before releasing: list those changes** (`git diff 138ef7ce3 origin/main`
   filtered to code outside `isDesignV1Active()` and `v1/`), and click through
