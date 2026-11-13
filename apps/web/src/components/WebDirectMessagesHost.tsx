@@ -1679,7 +1679,7 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
   if (!isOpen) return null;
 
   return (
-    <div className={`web-direct-messages-host${props.mobileRoot ? " mobile-root" : ""}${inboxIsPage ? " is-page" : ""}${inboxIsPage ? " has-conversation" : ""}`}>
+    <div className={`web-direct-messages-host${props.mobileRoot ? " mobile-root" : ""}${inboxIsPage ? " is-page" : ""}${inboxIsPage ? " has-conversation" : ""}${directMessagePanel ? " has-open" : ""}`}>
       {/* Design system v1: Inbox is a page. The list fills the main area and
           stays there; the open conversation sits beside it in the right column. */}
       {directMessagePanel ? (

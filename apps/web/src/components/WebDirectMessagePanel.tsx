@@ -836,9 +836,9 @@ export function WebDirectMessagePanel(props: WebDirectMessagePanelProps) {
         </div>
       ) : null}
       <div className="community-dm-panel-header">
-        {props.onBackToInbox && !props.besideInbox ? (
+        {props.onBackToInbox ? (
           <button
-            className="community-dm-panel-back"
+            className={`community-dm-panel-back${props.besideInbox ? " is-layered-only" : ""}`}
             type="button"
             onClick={props.onBackToInbox}
             aria-label="Back to direct messages"
