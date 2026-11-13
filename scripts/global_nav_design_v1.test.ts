@@ -59,7 +59,7 @@ test("Settings' left column: Back, your own sections with the open one marked, t
     communityShell: { ...inCommunity, canManageMembersActiveCommunity: true, isActiveCommunityOwner: true },
   }));
   // Archive sits at the bottom of General; the public page was removed.
-  expect(rows(owner)).toEqual(["Back", "Profile", "Account", "Billing", "Appearance", "General", "Plans and pricing", "Your app", "Guide"]);
+  expect(rows(owner)).toEqual(["Back to Kiln", "Profile", "Account", "Billing", "Appearance", "General", "Plans and pricing", "Your app", "Guide"]);
   expect(owner).toContain('<div class="community-nav-section-label">Kiln</div>');
   const admin = renderToStaticMarkup(React.createElement(WebGlobalNavV1, {
     mode: "settings", settingsSidebar, onBackFromSettings: () => {},
