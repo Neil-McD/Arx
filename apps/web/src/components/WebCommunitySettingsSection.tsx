@@ -161,6 +161,22 @@ const CLASSIC_PANE_LABELS: Partial<Record<CommunitySettingsPane, string>> = { co
 // Design v1 (one Settings page): the sections that share the community's saved form.
 const FORM_PANES: CommunitySettingsPane[] = ["community", "public", "plans", "app"];
 
+// Wide enough for the desktop frame, where the Settings sidebar lists the sections.
+function useWideSettingsSidebar(): boolean {
+  const query = "(min-width: 721px)";
+  const [wide, setWide] = useState(() => typeof window !== "undefined" && window.matchMedia?.(query).matches === true);
+  useEffect(() => {
+    const media = window.matchMedia?.(query);
+    if (!media) return;
+    const update = () => setWide(media.matches);
+    media.addEventListener?.("change", update);
+    return () => media.removeEventListener?.("change", update);
+  }, []);
+  // The phone app (/m/...) has no Settings sidebar at any width.
+  const phoneShell = typeof window !== "undefined" && /^\/m(\/|$)/.test(window.location.pathname);
+  return wide && !phoneShell;
+}
+
 function CommunitySettingsPaneSwitcher({
   activePane,
   panes,
@@ -176,7 +192,7 @@ function CommunitySettingsPaneSwitcher({
   );
   const tabs = panes.map((pane) => ({
     id: pane,
-    label: CLASSIC_PANE_LABELS[pane] ?? COMMUNITY_SETTINGS_PANE_LABELS[pane],
+    label: isDesignV1Active() ? COMMUNITY_SETTINGS_PANE_LABELS[pane] : (CLASSIC_PANE_LABELS[pane] ?? COMMUNITY_SETTINGS_PANE_LABELS[pane]),
   }));
 
   return (
@@ -770,6 +786,8 @@ export function WebCommunitySettingsSection(props: WebCommunitySettingsSectionPr
   };
   // Design v1 splits General into sections, picked from the Settings sidebar; the classic app keeps its tabs.
   const split = isDesignV1Active();
+  // The Settings sidebar shows on wide screens only (WebShellChromeHost); a phone keeps the section switcher.
+  const hasSettingsSidebar = useWideSettingsSidebar();
   const availableSettingsPanes = listCommunitySettingsPanesForAccess(settingsPaneAccess)
     .filter((pane) => split || CLASSIC_PANES.includes(pane));
   const normalizedPane = normalizeCommunitySettingsPaneForAccess(activePane, settingsPaneAccess);
@@ -850,7 +868,7 @@ export function WebCommunitySettingsSection(props: WebCommunitySettingsSectionPr
           <div className={`create-community-form community-settings-form${split ? " settings-page-v1" : ""}`}>
             <CommunityPageHeader
               title={split ? "Settings" : "Manage"}
-              actions={split ? undefined : (
+              actions={split && hasSettingsSidebar ? undefined : (
                 <CommunitySettingsPaneSwitcher
                   activePane={selectedSettingsPane}
                   panes={availableSettingsPanes}

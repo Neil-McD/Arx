@@ -102,6 +102,8 @@ export function buildWebShellChromeHostProps(params: {
   handleOpenGlobalSettings: () => void;
   settingsGroup: SettingsGroup;
   setSettingsPage: (page: WebShellChromeHostProps["settingsSidebar"]["onSelectPage"] extends (page: infer T) => void ? T : never) => void;
+  // Opens one of your own settings pages from anywhere (a community's Settings page too).
+  openGlobalSettings?: (page: WebShellChromeHostProps["settingsSidebar"]["onSelectPage"] extends (page: infer T) => void ? T : never) => void;
   hasLeftPanel: boolean;
   isGlobalSettings: boolean;
 }): Omit<WebShellChromeHostProps, "mainSurface" | "globalOverlays"> {
@@ -291,7 +293,8 @@ export function buildWebShellChromeHostProps(params: {
       showMobileSettingsShell: params.showMobileSettingsShell,
       isGlobalSettings: params.isGlobalSettings,
       settingsGroup: params.settingsGroup,
-      onSelectPage: params.setSettingsPage,
+      // On your own settings, switch page; from a community's Settings page, go to it.
+      onSelectPage: (page) => (params.isGlobalSettings || !params.openGlobalSettings ? params.setSettingsPage(page) : params.openGlobalSettings(page)),
     },
     hasLeftPanel: params.hasLeftPanel,
     isGlobalSettings: params.isGlobalSettings,
