@@ -3,12 +3,12 @@ import { beforeEach, expect, test, vi } from "vitest";
 import { api, internal } from "./_generated/api";
 import schema from "./schema";
 
-const stripe = vi.hoisted(() => ({ updates: [] as Array<{ id: string; params: any; options: any }>, price: "price_setter", pending: false }));
+const stripe = vi.hoisted(() => ({ updates: [] as Array<{ id: string; params: any; options: any }>, price: "price_setter", amount: 19700, pending: false }));
 vi.mock("./stripeCore", async (importOriginal) => ({
   ...(await importOriginal<typeof import("./stripeCore")>()),
   getStripeClient: () => ({
     subscriptions: {
-      retrieve: async () => ({ id: "sub_1", items: { data: [{ id: "si_1", price: { id: stripe.price } }] } }),
+      retrieve: async () => ({ id: "sub_1", items: { data: [{ id: "si_1", price: { id: stripe.price, unit_amount: stripe.amount } }] } }),
       update: async (id: string, params: any, options: any) => {
         stripe.updates.push({ id, params, options });
         return { id, ...(stripe.pending ? { pending_update: { subscription_items: params.items } } : {}) };
@@ -19,7 +19,7 @@ vi.mock("./stripeCore", async (importOriginal) => ({
 
 const modules = import.meta.glob(["./**/*.ts", "!./**/*.test.ts"]);
 const NOW = Date.now();
-beforeEach(() => { stripe.updates.length = 0; stripe.price = "price_setter"; stripe.pending = false; });
+beforeEach(() => { stripe.updates.length = 0; stripe.price = "price_setter"; stripe.amount = 19700; stripe.pending = false; });
 
 // Distribution Engineer's community: Connect $47, Setter $197, CRIS $297 (with the agency pod); Ana pays Polynet for Setter.
 async function setup(t: ReturnType<typeof convexTest>) {
@@ -97,7 +97,7 @@ test("moving up charges the difference now and only moves once paid; Stripe's no
   expect(await heldTier(t, ids)).toBe("cris");
   expect(await inPod(t, ids)).toBe(true);
   // And down again: moved now, the unused part credited; out of the pod once Stripe says so.
-  stripe.price = "price_cris";
+  stripe.price = "price_cris"; stripe.amount = 29700;
   await asAna(t).action(api.communityPlanChange.changeMyCommunityPlan, { communityId: ids.communityId, plan: "setter" });
   expect(stripe.updates[1].params).toMatchObject({ items: [{ id: "si_1", price: "price_setter" }], proration_behavior: "create_prorations" });
   await notice(t, ids, "price_setter");
@@ -132,4 +132,16 @@ test("only a member paying Polynet monthly, for a plan on sale they don't alread
   });
   await expect(change("cris")).rejects.toThrow(/plan_change_unavailable/);
   expect(stripe.updates).toHaveLength(0);
+});
+
+test("up or down is judged by what Stripe bills now, and an archived community takes no changes", async () => {
+  const t = convexTest(schema, modules);
+  const ids = await setup(t);
+  // Stripe already bills Connect (a switch not recorded here yet): Setter from there is up.
+  stripe.price = "price_connect"; stripe.amount = 4700;
+  await asAna(t).action(api.communityPlanChange.changeMyCommunityPlan, { communityId: ids.communityId, plan: "cris" });
+  expect(stripe.updates[0].params.proration_behavior).toBe("always_invoice");
+  await t.run((ctx: any) => ctx.db.patch(ids.communityId, { lifecycleStatus: "archived" }));
+  await expect(asAna(t).action(api.communityPlanChange.changeMyCommunityPlan, { communityId: ids.communityId, plan: null })).rejects.toThrow();
+  expect(stripe.updates).toHaveLength(1);
 });

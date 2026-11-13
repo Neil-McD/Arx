@@ -12,6 +12,7 @@ import { action, internalQuery, query } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { resolveUserIdForAuthenticatedRequest } from "./authActor";
 import { communityMembershipRowIsActive, getUniqueCommunityMembershipByPair } from "./communityCore";
+import { communityIsActive } from "../shared/communityLifecycle";
 import { getStripeClient } from "./stripeCore";
 import { ensureCommunityProviderPrice } from "./communityCommerce";
 
@@ -101,10 +102,13 @@ export const planChangeTargetInternal = internalQuery({
     const account = String(now.subscription.providerAccountId);
     if (target.price.providerAccountId && String(target.price.providerAccountId) !== account) throw new Error("plan_change_unavailable");
     const community = await ctx.db.get(args.communityId) as any;
+    // An archived community (its billing being wound down) takes no plan changes.
+    if (!community || !communityIsActive(community)) throw new Error("community_unavailable");
     return {
       providerAccountId: account,
       providerSubscriptionId: String(now.subscription.providerSubscriptionId),
-      up: target.price.amountBaseUnits > now.price.amountBaseUnits,
+      targetAmount: target.price.amountBaseUnits,
+      recordedAmount: now.price.amountBaseUnits,
       price: {
         pricePointId: target.price._id, providerAccountId: account, providerPriceId: target.price.providerPriceId ?? null,
         communityId: args.communityId, communitySlug: String(community?.slug ?? ""), communityName: String(community?.name ?? ""),
@@ -130,11 +134,15 @@ export const changeMyCommunityPlan = action({
     const item = subscription.items?.data?.[0];
     if (!item?.id) throw new Error("plan_change_unavailable");
     if (item.price?.id === priceId) return { status: "changing" };
+    // Up or down from what Stripe bills now (a previous switch may not be recorded here yet).
+    const billedNow = typeof item.price?.unit_amount === "number" ? item.price.unit_amount : target.recordedAmount;
+    const up = target.targetAmount > billedNow;
+    // Stripe's client makes its own key for retries of this one request.
     const updated = await stripe.subscriptions.update(target.providerSubscriptionId, {
       items: [{ id: item.id, price: priceId }],
-      proration_behavior: target.up ? "always_invoice" : "create_prorations",
+      proration_behavior: up ? "always_invoice" : "create_prorations",
       payment_behavior: "pending_if_incomplete",
-    }, { ...options, idempotencyKey: `community-plan-change:${target.providerSubscriptionId}:${priceId}:${Math.floor(Date.now() / 60_000)}` });
+    }, options);
     // An upgrade whose payment didn't go through stays pending: still on the old plan.
     return { status: (updated as any).pending_update ? "payment_problem" : "changing" };
   },
