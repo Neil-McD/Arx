@@ -6,6 +6,8 @@ export type CloudCommunityTier = {
   name: string;
   rank: number;
   grants: string[];
+  /** The pods this plan includes: its holders have a seat in each. */
+  pod_channel_ids?: string[];
   base: boolean;
   archived: boolean;
   monthly_amount_base_units: number | null;
@@ -21,12 +23,13 @@ export async function fetchCloudCommunityTiers(params: TiersCall): Promise<Cloud
   return Array.isArray(result?.tiers) ? result.tiers : [];
 }
 
-export async function saveCloudCommunityTier(params: TiersCall & { key?: string; name: string; grants: string[]; monthlyAmountBaseUnits?: number }): Promise<{ key: string }> {
+export async function saveCloudCommunityTier(params: TiersCall & { key?: string; name: string; grants: string[]; monthlyAmountBaseUnits?: number; podChannelIds?: string[] }): Promise<{ key: string }> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session as any);
   return await client.mutation("communityTiers:saveCommunityTier" as any, {
     authSubject, communityId: params.communityId, name: params.name, grants: params.grants,
     ...(params.key ? { key: params.key } : {}),
     ...(typeof params.monthlyAmountBaseUnits === "number" ? { monthlyAmountBaseUnits: params.monthlyAmountBaseUnits } : {}),
+    ...(params.podChannelIds ? { podChannelIds: params.podChannelIds } : {}),
   });
 }
 

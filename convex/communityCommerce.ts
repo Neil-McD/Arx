@@ -1,5 +1,5 @@
 import { hasActiveAppGrant } from "./communityCore";
-import { notifyConnectedApps } from "./connectedAppNotify";
+import { memberAccessChanged } from "./communityPlanPods";
 import { internal } from "./_generated/api";
 import { internalAction, internalMutation, internalQuery } from "./_generated/server";
 import { v } from "convex/values";
@@ -466,9 +466,7 @@ export const syncCommunitySubscriptionLifecycleInternal = internalMutation({
     if (before === "active" && next !== "active") {
       await schedulePodBillingCheck(ctx, { communityId: args.communityId, userId: args.userId });
     }
-    if (before !== next || String(pricePointId ?? "") !== String(membership.pricePointId ?? "")) {
-      await notifyConnectedApps(ctx, args.communityId, args.userId);
-    }
+    const accessChanged = before !== next || String(pricePointId ?? "") !== String(membership.pricePointId ?? "");
     await ctx.db.patch(membership._id, {
       pricePointId,
       ...stateFields,
@@ -482,6 +480,8 @@ export const syncCommunitySubscriptionLifecycleInternal = internalMutation({
       before: membership,
       after: updatedMembership,
     });
+    // Recorded: their plan's pods follow, then connected apps hear of it.
+    if (accessChanged) await memberAccessChanged(ctx, args.communityId, args.userId);
     if (status === "past_due" && previousStatus !== "past_due") {
       const issueMarker = [
         String(args.providerSubscriptionId ?? "").trim() || String(current?.providerSubscriptionId ?? "").trim() || String(membership._id),

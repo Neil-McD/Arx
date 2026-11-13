@@ -179,7 +179,9 @@ export async function handlePolynetWebhook(request: Request): Promise<Response> 
 Buyers should never hunt for the other half of what they bought.
 
 **Polynet → your app.** Set your app's address under Your app. Every member then
-sees a link to it in your community's left column. Nothing to build.
+sees a link to it in your community's left column. Nothing to build. If your app
+tracks its own links, the address can be one of your tracked links, so your
+reports show the community as a source.
 
 **Your app → Polynet.** Add a link to your community. Its address is shown
 under Your app (`https://…/c/<your-community>`). It is also the invite:
@@ -209,6 +211,9 @@ design system; the word "Community" (or your community's name) is enough.
 - Never let a Polynet call fail or block your own billing or sign-in.
 - Gate on grants, not prices or plan names.
 - Polynet never needs your users' passwords, and you never need theirs.
+- Test against Polynet's staging with test purchases only. Never send real
+  customers to a test Polynet: give your app a switch for who it reports
+  (your test buyers while testing, real buyers once live on production).
 
 ## Check It Works
 

@@ -197,6 +197,10 @@ The builder's app keeps its own login and billing and does most of the selling.
   manager. Signed-in non-members no longer see a Sign in that loops. The site's
   join card says "Already have access? Sign in" (ships with the next edge
   worker deploy). The left-column link appears as soon as the builder saves.
+- **Plans include pods (built, Nov 13):** a plan is a price, grants and pods.
+  Distribution Engineering on staging: Connect $47 (`de:connect`), Setter $197
+  (`de:setter`), CRIS $297 (`de:cris`, and the agency pod once it exists). See
+  pods-v0.md "Plans include pods".
 - **Next:** slice 3 (buy and change tiers through Polynet
   from the app), slice 4 (Distribution Engineer live, both ways). Sign in with
   Polynet waits for a builder with no login of its own.
