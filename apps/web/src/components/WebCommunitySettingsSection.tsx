@@ -4,7 +4,8 @@ import { CommunityPlansSection } from "./CommunityPlansSection";
 import { isDesignV1Active } from "../../../../shared/designSystem";
 import { CommunityPageHeader } from "./CommunityPageHeader";
 import { useCallback, useEffect, useRef, useState, type ComponentProps } from "react";
-import { SettingsGroup, SettingsRow, SettingsSaveStatus, SettingsSegmented, SettingsSwitch } from "./SettingsRows";
+import { SettingsButton, SettingsGroup, SettingsNote, SettingsRow, SettingsSaveStatus, SettingsSegmented, SettingsSelect, SettingsSwitch } from "./SettingsRows";
+import { STRIPE_CONNECT_COUNTRIES } from "../../../../shared/stripeConnectCountries";
 import type { DragEvent } from "react";
 import type { CommunitySettingsLayer } from "../../../../shared/communityAccessViewModel";
 import { deriveCommunitySettingsAccessPresentation } from "../../../../shared/communityAccessResolution";
@@ -704,6 +705,80 @@ function CommunityMonetizationConfigSection({
   const stripeConnectCountryLabel = formatStripeConnectCountry(selectedStripeConnectCountry);
   const needsStripeConnectCountry = !canReceiveCommunityRevenue && !selectedStripeConnectCountry;
 
+  // Design v1, rows: the base price, then how payments reach you.
+  if (isDesignV1Active()) {
+    const priceRow = (mode: "monthly" | "annual") => {
+      const monthly = mode === "monthly";
+      return (
+        <SettingsRow label={monthly ? "Monthly price" : "Annual price"} htmlFor={`pricing-${mode}`} help={monthly ? "Billed monthly." : "Billed once a year."}>
+          <span className="settings-v1-prefixed"><span aria-hidden="true">$</span>
+            <input id={`pricing-${mode}`} className="settings-v1-input" type="text" inputMode="decimal" placeholder={monthly ? "29" : "290"}
+              value={monthly ? state.communitySettingsPriceUsdMonthly : state.communitySettingsPriceUsdAnnual} disabled={needsStripeConnect}
+              onChange={(event) => {
+                if (monthly) actions.setCommunitySettingsPriceUsdMonthly(event.target.value);
+                else actions.setCommunitySettingsPriceUsdAnnual(event.target.value);
+                actions.markCommunitySettingsDirty();
+              }} />
+          </span>
+        </SettingsRow>
+      );
+    };
+    const feeLine = `Paid memberships: ${platformFeePercent.toFixed(1)}% Polynet fee, plus Stripe's.`;
+    return (
+      <>
+        <SettingsGroup label="Base price">
+          <SettingsRow label="Price" help={needsStripeConnect ? "Connect Stripe below to charge." : "What the base membership costs."}>
+            <SettingsSegmented
+              label="Pricing options"
+              value={state.communitySettingsPricingMode}
+              options={pricingOptions.map((opt) => ({ id: opt.key, label: opt.label, disabled: opt.key !== "free" && needsStripeConnect }))}
+              onChange={(value) => { actions.setCommunitySettingsPricingMode(value); actions.markCommunitySettingsDirty(); }}
+            />
+          </SettingsRow>
+          {state.communitySettingsPricingMode === "monthly" ? priceRow("monthly") : null}
+          {state.communitySettingsPricingMode === "annual" ? priceRow("annual") : null}
+        </SettingsGroup>
+        <SettingsGroup label="Payments">
+          {!canMonetizeCommunities ? (
+            <SettingsRow label="Stripe" help="Paid memberships aren't available for this account yet." />
+          ) : canReceiveCommunityRevenue ? (
+            <SettingsRow label="Stripe" help={`Connected${stripeConnectCountryLabel ? ` · ${stripeConnectCountryLabel}` : ""}. ${feeLine}`}>
+              {canManagePayoutAccount ? (
+                <SettingsButton disabled={isStartingStripeConnectOnboarding} onClick={() => void startStripeConnectOnboarding({ context: "community", communitySlug: activeCommunity.slug, country: selectedStripeConnectCountry || null })}>
+                  {isStartingStripeConnectOnboarding ? "Opening…" : "Open Stripe"}
+                </SettingsButton>
+              ) : null}
+            </SettingsRow>
+          ) : (
+            <>
+              <SettingsRow label="Stripe" help={<>
+                {stripeConnectPresentation.statusMessage}
+                {stripeConnectPresentation.requirementsPreview.length > 0 ? <><br />Stripe still needs: {stripeConnectPresentation.requirementsPreview.join(", ")}.</> : null}
+                {canManagePayoutAccount ? null : <><br />The owner must finish Stripe setup first.</>}
+              </>}>
+                {canManagePayoutAccount ? (
+                  <SettingsButton variant="primary" disabled={isStartingStripeConnectOnboarding || needsStripeConnectCountry} onClick={() => void startStripeConnectOnboarding({ context: "community", communitySlug: activeCommunity.slug, country: selectedStripeConnectCountry || null })}>
+                    {isStartingStripeConnectOnboarding ? "Opening…" : stripeConnectPresentation.connectCtaLabel}
+                  </SettingsButton>
+                ) : null}
+              </SettingsRow>
+              {canManagePayoutAccount ? (
+                <SettingsRow label="Payout country" htmlFor="stripe-country" help="Where your business is legally based.">
+                  <SettingsSelect id="stripe-country" value={selectedStripeConnectCountry} disabled={isStartingStripeConnectOnboarding}
+                    onChange={(event) => setStripeConnectCountry(event.target.value)}>
+                    <option value="">Select country</option>
+                    {STRIPE_CONNECT_COUNTRIES.map((country) => <option key={country.code} value={country.code}>{country.name}</option>)}
+                  </SettingsSelect>
+                </SettingsRow>
+              ) : null}
+            </>
+          )}
+        </SettingsGroup>
+        {accountCommerceError ? <SettingsNote tone="error">{accountCommerceError}</SettingsNote> : null}
+      </>
+    );
+  }
+
   return (
     <div className="settings-section community-settings-access-section">
       <div className="settings-section-title">Access & Pricing</div>
@@ -731,17 +806,6 @@ function CommunityMonetizationConfigSection({
         ) : null}
         <div className="create-community-field">
           <span>Pricing</span>
-          {isDesignV1Active() ? (
-            <SettingsSegmented
-              label="Pricing options"
-              value={state.communitySettingsPricingMode}
-              options={pricingOptions.map((opt) => ({ id: opt.key, label: opt.label, disabled: opt.key !== "free" && needsStripeConnect }))}
-              onChange={(value) => {
-                actions.setCommunitySettingsPricingMode(value);
-                actions.markCommunitySettingsDirty();
-              }}
-            />
-          ) : (
           <WebPlatformRadioGroup
             options={pricingOptions.map((opt) => ({
               id: opt.key,
@@ -757,7 +821,6 @@ function CommunityMonetizationConfigSection({
             className="platform-switcher platform-switcher-compact"
             style={pricingSwitcherStyle}
           />
-          )}
           <span className="create-community-hint">Shown on your funnel and checkout.</span>
         </div>
       </div>
