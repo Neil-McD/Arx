@@ -2347,13 +2347,15 @@ export default function App() {
           avatarUrl: savedProfilesByUserId[canonicalSessionUserId]?.avatar_url ?? null,
           // "Host" is the owner. Being able to see settings is not enough: a
           // Polynet operator can, in communities where they are only a member.
+          // Blank until this community's access has loaded, so a host never
+          // sees "Member" flash first.
           roleLabel: memberPreview.active
             ? "Viewing as a member"
-            : activeCommunity &&
-              activeCommunityAccess?.community_id === activeCommunity.id &&
-              activeCommunityAccess.is_owner === true
-              ? "Host"
-              : "Member",
+            : activeCommunity && activeCommunityAccess?.community_id !== activeCommunity.id
+              ? ""
+              : activeCommunity && activeCommunityAccess?.is_owner === true
+                ? "Host"
+                : "Member",
           memberView: memberPreview.available
             ? { active: memberPreview.active, onToggle: () => handleToggleMemberPreview(!memberPreview.active) }
             : undefined,
