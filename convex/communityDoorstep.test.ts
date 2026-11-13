@@ -129,7 +129,8 @@ test("the public page's sections: owner-only, checked, never overwritten from a 
   const read = await t.withIdentity({ subject: "owner-subject" }).query(api.communityPublicPage.getMyCommunityPublicPage, { communityId });
   expect(read).toMatchObject({ revision: 1, page: { guarantee: "Refund in 30 days." } });
   const projection = await t.run(async (ctx) => communityAppJoinProjection(ctx, (await ctx.db.get(communityId)) as any, null));
-  expect(projection.community.page).toMatchObject({ for_you: ["You run a business."], guarantee: "Refund in 30 days.", video: { provider: "youtube", id: "dQw4w9WgXcQ" } });
+  // The sales sections were removed from the join page (Nov 13, with custom sites); the stored copy is kept.
+  expect(projection.community.page).toBeNull();
 });
 
 test("a video link is read only from YouTube, Vimeo or Loom, by its id", async () => {
