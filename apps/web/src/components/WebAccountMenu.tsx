@@ -156,7 +156,7 @@ export function WebAccountMenu(props: WebAccountMenuProps) {
         </span>
         <span className="account-menu-identity">
           <span className="account-menu-name">{props.name}</span>
-          <span className="account-menu-role">{props.roleLabel}</span>
+          {props.roleLabel ? <span className="account-menu-role">{props.roleLabel}</span> : null}
         </span>
         <ChevronsUpDown size={15} aria-hidden="true" />
       </button>
