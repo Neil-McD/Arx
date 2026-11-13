@@ -9,16 +9,14 @@ import {
   communityResourceIsLiveModulePage,
   communityResourceModuleIsLive,
   normalizeIdValue,
-  readCommunityActiveMemberCount,
 } from "./communityCore";
 import { buildSnapshot } from "./communityFounderBrief";
 import { communityIsActive } from "../shared/communityLifecycle";
 import {
   COURSE_STALL_MIN,
-  milestoneKeysCoveredBy,
+  OWNER_MOMENT_KEYS,
   pickOwnerMoment,
   type OwnerMomentFacts,
-  type OwnerMomentKey,
 } from "../shared/communityOwnerMoments";
 
 const DAY_MS = 86_400_000;
@@ -26,7 +24,7 @@ const STALL_MS = 7 * DAY_MS;
 const COURSES_CAP = 20;
 const LESSONS_CAP = 50;
 const ROWS_PER_LESSON_CAP = 500;
-const MOMENT_KEYS = new Set<string>(["members_1", "members_10", "members_50", "questions_waiting", "quiet_newcomers", "course_stall", "busy_week"]);
+const MOMENT_KEYS = new Set<string>(OWNER_MOMENT_KEYS);
 
 async function requireOwner(ctx: any, authSubject: string | undefined, communityId: any) {
   const userId = await resolveUserIdForAuthenticatedRequest({ ctx, authSubject: authSubject ?? null });
@@ -83,7 +81,6 @@ export const getOwnerMoment = query({
     const nowMs = Date.now();
     const snapshot = await buildSnapshot(ctx, community, nowMs - DAY_MS, nowMs);
     const facts: OwnerMomentFacts = {
-      memberCount: Math.max(0, (readCommunityActiveMemberCount(community) ?? 0) - 1),
       questionsWaiting: snapshot.unanswered.map((row) => ({ author: row.author, channel: row.channel, hoursAgo: row.hoursAgo })),
       quietNewcomers: snapshot.quietNewcomers,
       courseStall: await courseStall(ctx, args.communityId, nowMs),
@@ -97,8 +94,7 @@ export const getOwnerMoment = query({
 });
 
 // The card was shown: it starts its week (shown again while this week's card
-// is open, nothing changes). A milestone also marks the smaller ones as seen,
-// so they never come late.
+// is open, nothing changes).
 export const markOwnerMomentShown = mutation({
   args: { authSubject: v.optional(v.string()), communityId: v.id("communities"), key: v.string() },
   handler: async (ctx, args) => {
@@ -111,10 +107,6 @@ export const markOwnerMomentShown = mutation({
     if (existing && existing.dismissedAt === undefined && nowMs - existing.shownAt < 7 * DAY_MS) return null;
     if (existing) await ctx.db.patch(existing._id, { shownAt: nowMs, dismissedAt: undefined, updatedAt: nowMs });
     else await ctx.db.insert("communityOwnerMoments", { communityId: args.communityId, key: args.key, shownAt: nowMs, createdAt: nowMs, updatedAt: nowMs });
-    for (const smaller of milestoneKeysCoveredBy(args.key as OwnerMomentKey)) {
-      if (smaller === args.key || await find(smaller)) continue;
-      await ctx.db.insert("communityOwnerMoments", { communityId: args.communityId, key: smaller, shownAt: nowMs, dismissedAt: nowMs, createdAt: nowMs, updatedAt: nowMs });
-    }
     return null;
   },
 });
