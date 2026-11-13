@@ -214,6 +214,7 @@ css += """
 .app .podpitch{max-width:100%;min-width:0;margin-top:0;overflow-wrap:anywhere}
 .app .podpitch .lead{font-size:17px;max-width:100%;margin-top:0}
 .app .podpitch .podname{font-size:17px}
+.app .podpitch .sub2,.app .podpitch .sub,.app .podpitch .podmeta{white-space:normal;max-width:100%}
 .app .podform-row{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap}
 .app .podform-check{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--ink2);cursor:pointer}
 .app .podform-check input{width:auto}
