@@ -3,6 +3,7 @@
 // docs/design/members-invariants.md: every way someone is in and at which
 // price, who needs the host, who is out and why, and one member's record.
 import { useCallback, useContext, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { RightColumnToggle, setRightColumnOpen } from "../components/RightColumnToggle";
 import { createPortal } from "react-dom";
 import { UserAvatar } from "../../../../shared/UserAvatar";
 import {
@@ -239,7 +240,7 @@ export function KitMembersPage(props: {
     <section className="members-page is-kit" aria-label="Community members">
       <KitApp view="members" host part="main">
         <View index={5}>
-          <Top title={<>Members <small>{summary ? `${summary.with_access} ${summary.with_access === 1 ? "member" : "members"}${summary.counts.on_hold ? ` · ${summary.counts.on_hold} on hold` : ""}` : ""}</small></>} titleView={5} />
+          <Top title={<>Members <small>{summary ? `${summary.with_access} ${summary.with_access === 1 ? "member" : "members"}${summary.counts.on_hold ? ` · ${summary.counts.on_hold} on hold` : ""}` : ""}</small></>} titleView={5} actions={<RightColumnToggle />} />
           <div className={cx("page")} style={{ overflowY: "auto" }}>
             <p className={cx("lead")}><span className={cx("aura")}><Icon name="spark" /></span>{lead}</p>
             {waiting > 0 ? (
@@ -303,7 +304,8 @@ export function KitMembersPage(props: {
                 <div className={cx("trow th")} role="row"><span /><span>Member</span><span>What happened</span><span>Was on</span><span>When</span></div>
                 {pastRows.map((row) => (
                   <button key={`${row.user_id}:${row.reason}`} type="button" role="row" className={cx("trow", row.membership_id && openKey === row.membership_id && "sel")}
-                    onClick={() => row.membership_id && setOpenKey(row.membership_id)} disabled={!row.membership_id}>
+                    data-opens-right-column
+                    onClick={() => { if (!row.membership_id) return; setOpenKey(row.membership_id); setRightColumnOpen(true); }} disabled={!row.membership_id}>
                     <Face size="s" name={row.name} url={row.avatar_url} seed={row.user_id} getAvatarColor={props.getAvatarColor} getInitials={props.getInitials} />
                     <span><b>{row.name}</b>{row.reason === "blocked" ? <span className={cx("tag hold")}>blocked</span> : null}{row.rejoined ? <span className={cx("tag")}>rejoined before</span> : null}</span>
                     <span>{row.reason_text}</span>
