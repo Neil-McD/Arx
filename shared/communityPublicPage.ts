@@ -59,13 +59,6 @@ export function communityPublicPageVideoFromUrl(raw: unknown): CommunityPublicPa
   return null;
 }
 
-// The link a founder would recognise, for Settings.
-export function communityPublicPageVideoWatchUrl(video: CommunityPublicPageVideo): string {
-  if (video.provider === "youtube") return `https://www.youtube.com/watch?v=${video.id}`;
-  if (video.provider === "vimeo") return `https://vimeo.com/${video.id}`;
-  return `https://www.loom.com/share/${video.id}`;
-}
-
 // One line of plain text: control characters out, runs of whitespace one space.
 function line(value: unknown): string {
   return String(value ?? "").replace(/[\u0000-\u001f\u007f]+/g, " ").replace(/\s+/g, " ").trim();
