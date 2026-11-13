@@ -42,8 +42,8 @@ const buyer = (t: ReturnType<typeof convexTest>, handle: string) => t.run((ctx) 
 const sell = (t: ReturnType<typeof convexTest>, secret: string, body: Record<string, unknown>) => t.fetch("/apps/v1/sales", {
   method: "POST", headers: { authorization: `Bearer ${secret}`, "content-type": "application/json" }, body: JSON.stringify(body),
 });
-const seat = (t: ReturnType<typeof convexTest>, podId: any, userId: any) => t.run(async (ctx) => (await ctx.db.query("communityChannelParticipants")
-  .withIndex("by_channel_principal", (q) => q.eq("channelId", podId).eq("principalKey", `user:${userId}`)).first()) as any);
+const seat = (t: ReturnType<typeof convexTest>, podId: any, userId: any) => t.run(async (ctx: any) => (await ctx.db.query("communityChannelParticipants")
+  .withIndex("by_channel_principal", (q: any) => q.eq("channelId", podId).eq("principalKey", `user:${userId}`)).first()) as any);
 const inPod = async (t: ReturnType<typeof convexTest>, podId: any, userId: any) => (await seat(t, podId, userId))?.status === "active";
 const grants = async (t: ReturnType<typeof convexTest>, secret: string, handle: string) =>
   (await (await t.fetch(`/apps/v1/access?email=${handle}%40example.com`, { headers: { authorization: `Bearer ${secret}` } })).json()).grants as string[];
