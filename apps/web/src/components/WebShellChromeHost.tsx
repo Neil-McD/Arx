@@ -129,7 +129,10 @@ export function WebShellChromeHost(props: WebShellChromeHostProps) {
     isDesignV1Active() &&
     !desktopCommunityNav &&
     props.communityShell.showDesktopCommunityRail &&
-    props.communityShell.account
+    // Settings doesn't wait for your account (the sidebar's footer does), or a
+    // refresh would show the old rail first. Discover waits: signed out, it's
+    // a different page.
+    (props.communityShell.account || destinationKind === "global_settings")
       ? destinationKind === "discover"
         ? ("discover" as const)
         : destinationKind === "global_settings"
