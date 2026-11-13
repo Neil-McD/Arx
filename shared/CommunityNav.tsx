@@ -711,6 +711,17 @@ export const CommunityNav = memo(function CommunityNav({
               {memberCount ? <span className="nav-item-hint">{memberCount}</span> : null}
             </button>
           ) : null}
+          {isV1 && canViewActiveCommunityAnalytics ? (
+            <button
+              className={showActiveSelection && communityTab === "analytics" ? "nav-item active" : "nav-item"}
+              type="button"
+              onClick={() => onSelectTab("analytics")}
+              title="Analytics"
+            >
+              <span className="nav-icon" aria-hidden="true"><ChartNoAxesColumn size={17} strokeWidth={1.7} /></span>
+              <span className="nav-item-label">Analytics</span>
+            </button>
+          ) : null}
         </>
       ) : null}
       {isLoadingAccess ? (
@@ -751,18 +762,32 @@ export const CommunityNav = memo(function CommunityNav({
           <div className="community-nav-invite-loading web-skeleton-block" />
         </div>
       ) : isV1 ? (
-        // Design system v1: the mock's foot, Your guide and Manage. Invite
-        // people, Analytics and Visit site are in the account menu below.
-        // Both are the host's (the mock's h-only): a member's own settings are
-        // in the account menu.
-        showSettingsButton && canManageMembersActiveCommunity ? (
+        // Design system v1: the foot. Your guide and Manage are the host's;
+        // Invite people sits just above Manage for anyone who may invite.
+        // Analytics is under Members above; Visit site is in the account menu.
+        (showSettingsButton && canManageMembersActiveCommunity) || canCopyJoinLink ? (
           <div className="community-nav-footer">
-            {onOpenGuide ? (
+            {showSettingsButton && canManageMembersActiveCommunity && onOpenGuide ? (
               <button className="nav-item" type="button" onClick={onOpenGuide} title="Your guide">
                 <span className="nav-icon" aria-hidden="true"><Sparkles size={16} strokeWidth={1.9} /></span>
                 <span className="nav-item-label">Your guide</span>
               </button>
             ) : null}
+            {canCopyJoinLink ? (
+              <button
+                className={`nav-item community-nav-invite${didCopyJoinLink ? " is-copied" : ""}`}
+                type="button"
+                onClick={() => void handleCopyJoinLink()}
+                title={inviteTitle}
+                aria-label={inviteTitle}
+              >
+                <span className="nav-icon" aria-hidden="true">
+                  {didCopyJoinLink ? <Check size={16} strokeWidth={1.9} /> : <UserPlus size={16} strokeWidth={1.9} />}
+                </span>
+                <span className="nav-item-label">{didCopyJoinLink ? "Copied the invite link" : "Invite people"}</span>
+              </button>
+            ) : null}
+            {showSettingsButton && canManageMembersActiveCommunity ? (
             <button
               className={showActiveSelection && communityTab === "settings" ? "nav-item active" : "nav-item"}
               type="button"
@@ -772,6 +797,7 @@ export const CommunityNav = memo(function CommunityNav({
               <span className="nav-icon" aria-hidden="true"><SlidersHorizontal size={16} strokeWidth={1.9} /></span>
               <span className="nav-item-label">Manage</span>
             </button>
+            ) : null}
           </div>
         ) : null
       ) : canCopyJoinLink || siteUrl ? (
@@ -836,8 +862,6 @@ export const CommunityNav = memo(function CommunityNav({
         <div className="community-nav-account">
           {typeof accountSlot === "function"
             ? accountSlot([
-                ...(canCopyJoinLink ? [{ key: "invite", label: didCopyJoinLink ? "Copied the invite link" : "Invite people", icon: <UserPlus size={16} aria-hidden="true" />, onSelect: () => void handleCopyJoinLink() }] : []),
-                ...(canViewActiveCommunityAnalytics ? [{ key: "analytics", label: "Analytics", icon: <ChartNoAxesColumn size={16} aria-hidden="true" />, onSelect: () => onSelectTab("analytics") }] : []),
                 ...(siteUrl ? [{ key: "site", label: "Visit site", icon: <ExternalLink size={16} aria-hidden="true" />, onSelect: () => { window.open(siteUrl, "_blank", "noopener,noreferrer"); } }] : []),
               ])
             : accountSlot}
