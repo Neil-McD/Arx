@@ -28,8 +28,6 @@ export const applyCommunityOperationInternal = internalMutation({
         ...("name" in input ? { name: input.name } : {}), ...("slug" in input ? { slug: input.slug } : {}),
         ...("one_liner" in input ? { oneLiner: input.one_liner } : {}), ...("about" in input ? { about: input.about } : {}),
         ...("visibility" in input ? { visibility: input.visibility } : {}) })
-      : args.operation === "community.member_experience.request"
-        ? await ctx.runMutation(refs.communityOwnerApprovals.requestMemberExperienceForTrustedUserInternal, { ...scope, to: input.to })
       : args.operation === "community.join_mode.set"
         ? await ctx.runMutation(refs.communityAdmin.setCommunityFreeAccessModeForTrustedUserInternal, { ...scope, mode: input.mode })
       : args.operation === "community.agent.instructions.set"

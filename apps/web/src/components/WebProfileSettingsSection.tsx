@@ -72,7 +72,8 @@ function ProfileSettingsV1(props: WebProfileSettingsSectionProps) {
     void now.saveProfileToCloud();
   };
   // A new or adjusted photo saves at once.
-  const photo = [props.profileAvatarUrl, props.profileAvatarFocusX, props.profileAvatarFocusY, props.profileAvatarZoom, props.isProfileAvatarFocusModalOpen].join("|");
+  // ...and a save that finishes while edits are still unsaved goes again.
+  const photo = [props.profileAvatarUrl, props.profileAvatarFocusX, props.profileAvatarFocusY, props.profileAvatarZoom, props.isProfileAvatarFocusModalOpen, isSavingProfile].join("|");
   useEffect(() => { if (!props.isProfileAvatarFocusModalOpen) window.setTimeout(trySave, 0); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [photo]);
   const name = (props.profileName || session?.user.email || "AR").replace(/^@/, "");
   return (

@@ -3213,7 +3213,7 @@
 }
 :root[data-design="v1"] textarea.settings-v1-input { height: auto; padding: 8px 10px; resize: vertical; line-height: 1.45; }
 :root[data-design="v1"] .settings-v1-input:hover { border-color: var(--border-strong); }
-:root[data-design="v1"] .settings-v1-input:focus { outline: none; border-color: var(--accent-cyan); }
+:root[data-design="v1"] .settings-v1-input:focus { outline: none; border-color: var(--settings-accent); }
 :root[data-design="v1"] .settings-v1-input:disabled { opacity: 0.6; }
 :root[data-design="v1"] .settings-v1-prefixed { display: flex; align-items: center; gap: 6px; width: 100%; color: var(--text-ink-secondary); }
 :root[data-design="v1"] .settings-v1-button {
@@ -3276,18 +3276,13 @@
   background: var(--text-ink-primary);
   transition: left 0.15s;
 }
-:root[data-design="v1"] .settings-v1-switch.is-on { background: var(--accent-cyan); }
+:root[data-design="v1"] .settings-v1-switch.is-on { background: var(--settings-accent); }
 :root[data-design="v1"] .settings-v1-switch.is-on span { left: 17px; background: #fff; }
 :root[data-design="v1"] .settings-page-v1 { max-width: 640px; }
 @media (max-width: 720px) {
   :root[data-design="v1"] .settings-v1-row { flex-direction: column; align-items: stretch; gap: 8px; }
   :root[data-design="v1"] .settings-v1-row-control { justify-content: flex-start; flex: 1 1 auto; }
 }
-/* The settings panel's general button look must not reach the rows' own controls. */
-:root[data-design="v1"] .settings-v1-switch { background: var(--border-strong) !important; border: 0 !important; }
-:root[data-design="v1"] .settings-v1-switch.is-on { background: var(--accent-cyan) !important; }
-:root[data-design="v1"] .settings-v1-button { background: transparent !important; }
-:root[data-design="v1"] .settings-v1-button.is-quiet { border-color: transparent !important; }
 /* No header row on the Settings page: the title starts at the top. */
 :root[data-design="v1"] .community-page-body:has(.settings-page-v1) { grid-template-rows: 0 minmax(0, 1fr); }
 
@@ -3316,35 +3311,100 @@
 }
 :root[data-design="v1"] .settings-v1-rows > .settings-v1-note { margin: 0; padding: 10px 16px; border-top: 1px solid var(--surface-raised-edge); }
 :root[data-design="v1"] .settings-v1-note.is-error { color: var(--danger-text); }
+/* The personal column spaces its groups the same way General does. */
+:root[data-design="v1"] .settings-page-v1-personal { gap: 0; }
+:root[data-design="v1"] .settings-page-v1-personal > .settings-v1-note { margin-top: 10px; }
+:root[data-design="v1"] .settings-page-v1-personal > .settings-page-head { margin-bottom: 16px; }
+
+:root[data-design="v1"] .settings-v1-status-row { display: inline-flex; align-items: center; gap: 10px; }
+
+/* ---------- Settings controls: one set (Nov 13) ----------
+   Switch: on/off that applies now. Segmented: one of 2–4 short options.
+   Select: one of many. Checkbox: several from a list. Buttons: one primary
+   at most, secondary otherwise, quiet for small things, danger only in the
+   Danger zone. One accent (the app's indigo) means on, selected, primary and
+   focus; red means destructive. Every control is 30px tall. */
+:root[data-design="v1"] {
+  --settings-accent: var(--bg-button);
+  --settings-accent-hover: var(--bg-button-hover);
+  --settings-control-height: 30px;
+}
+:root[data-design="v1"] .settings-v1-button {
+  justify-content: center;
+  gap: 6px;
+  height: var(--settings-control-height);
+  line-height: 1;
+  font-family: inherit;
+}
+:root[data-design="v1"] .settings-v1-button:focus-visible,
+:root[data-design="v1"] .settings-v1-segment:focus-visible,
+:root[data-design="v1"] .settings-v1-switch:focus-visible {
+  outline: 2px solid var(--settings-accent);
+  outline-offset: 2px;
+}
+:root[data-design="v1"] .settings-v1-button.is-primary {
+  color: #fff;
+  background: var(--settings-accent);
+  border-color: var(--settings-accent);
+}
+:root[data-design="v1"] .settings-v1-button.is-primary:hover:not(:disabled) {
+  background: var(--settings-accent-hover);
+  border-color: var(--settings-accent-hover);
+}
+:root[data-design="v1"] .settings-v1-button.is-danger:hover:not(:disabled) { background: var(--danger-surface); }
+:root[data-design="v1"] .settings-v1-button.is-quiet:hover:not(:disabled) { color: var(--text-ink-primary); }
 :root[data-design="v1"] .settings-v1-segmented {
   display: inline-flex;
+  align-items: stretch;
+  height: var(--settings-control-height);
+  box-sizing: border-box;
   padding: 2px;
   gap: 2px;
   border: 1px solid var(--surface-raised-edge);
-  border-radius: 8px;
+  border-radius: 7px;
 }
 :root[data-design="v1"] .settings-v1-segment {
-  height: 26px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 56px;
+  margin: 0;
   padding: 0 12px;
   font: inherit;
   font-size: 13px;
   font-weight: 500;
+  line-height: 1;
   color: var(--text-ink-secondary);
-  background: transparent !important;
-  border: 0 !important;
-  border-radius: 6px;
+  background: transparent;
+  border: 0;
+  border-radius: 5px;
   cursor: pointer;
 }
-:root[data-design="v1"] .settings-v1-segment.is-on {
-  color: var(--text-ink-primary);
-  background: var(--surface-raised-edge) !important;
+:root[data-design="v1"] .settings-v1-segment:hover:not(:disabled):not(.is-on) { color: var(--text-ink-primary); }
+:root[data-design="v1"] .settings-v1-segment.is-on { color: #fff; background: var(--settings-accent); }
+:root[data-design="v1"] .settings-v1-segment:disabled { opacity: 0.45; cursor: default; }
+:root[data-design="v1"] .settings-v1-select {
+  height: var(--settings-control-height);
+  padding-right: 28px;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23888' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 9px center;
+  cursor: pointer;
 }
-/* The personal column spaces its groups the same way General does. */
-:root[data-design="v1"] .settings-page-v1-personal { gap: 0; }
-:root[data-design="v1"] .settings-page-v1-personal > .settings-v1-note { margin-top: 10px; }
-/* The panel's own button border colour must not reach the rows' buttons. */
-:root[data-design="v1"] .settings-v1-button { border-color: var(--surface-raised-edge) !important; }
-:root[data-design="v1"] .settings-v1-button:hover { border-color: var(--border-strong) !important; }
-:root[data-design="v1"] .settings-v1-button.is-danger { border-color: var(--danger-border) !important; }
-:root[data-design="v1"] .settings-v1-button.is-quiet { border-color: transparent !important; }
-:root[data-design="v1"] .settings-page-v1-personal > .settings-page-head { margin-bottom: 16px; }
+:root[data-design="v1"] .settings-v1-input:not(textarea) { height: var(--settings-control-height); }
+:root[data-design="v1"] .settings-v1-checkbox {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13.5px;
+  color: var(--text-ink-primary);
+  cursor: pointer;
+}
+:root[data-design="v1"] .settings-v1-checkbox input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: var(--settings-accent);
+}
+:root[data-design="v1"] .settings-v1-checkbox.is-disabled { opacity: 0.5; cursor: default; }

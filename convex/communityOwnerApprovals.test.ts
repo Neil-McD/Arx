@@ -37,19 +37,25 @@ async function fixture(opts: { deployed?: boolean } = {}) {
     }
     return { ownerId, adminId, communityId };
   });
-  const ask = (userId: any, to: "app" | "site") =>
-    t.mutation(internal.communityOwnerApprovals.requestMemberExperienceForTrustedUserInternal, { userId, communityId: ids.communityId, to });
+  // The AI's request operation was retired; a request left waiting is a row, as it was stored.
+  const ask = async (userId: any, to: "app" | "site") => {
+    const id = await t.run(async (ctx) => {
+      const waiting = await ctx.db.query("communityOwnerApprovals").collect();
+      for (const row of waiting) if (row.status === "pending") await ctx.db.patch(row._id, { status: "replaced", decidedAt: Date.now() });
+      return ctx.db.insert("communityOwnerApprovals", { communityId: ids.communityId, kind: "member_experience", requestedByUserId: userId,
+        fromValue: "app", toValue: to, status: "pending", expiresAt: Date.now() + OWNER_APPROVAL_TTL_MS, createdAt: Date.now() } as any);
+    });
+    return { request: { request_id: String(id) } };
+  };
   const decide = (subject: string, requestId: any, decision: "approve" | "decline") =>
     t.withIdentity({ subject }).mutation(api.communityOwnerApprovals.decideMemberExperienceRequest, { communityId: ids.communityId, requestId, decision });
   const membersUse = () => t.query(internal.communityOwnerApprovals.readMemberExperienceForTrustedManagerInternal, { userId: ids.ownerId, communityId: ids.communityId });
   return { t, ...ids, ask, decide, membersUse };
 }
 
-test("the owner's AI asks; nothing changes until the owner approves in Studio", async () => {
+test("a request left waiting changes nothing until the owner approves it", async () => {
   const f = await fixture();
   const asked = await f.ask(f.ownerId, "site");
-  expect(asked).toMatchObject({ status: "awaiting_owner_approval", members_use: "app",
-    approve_in: "https://polynet-staging.example.com/c/dawn-club/settings/community", request: { from: "app", to: "site" } });
   expect(await f.membersUse()).toMatchObject({ members_use: "app", waiting_for_owner_approval: { to: "site" } });
   // Only the owner sees and decides it.
   await expect(f.t.withIdentity({ subject: "admin-subject" }).query(api.communityOwnerApprovals.getMyPendingMemberExperienceRequest, { communityId: f.communityId }))
@@ -65,14 +71,6 @@ test("the owner's AI asks; nothing changes until the owner approves in Studio", 
   await expect(f.decide("owner-subject", asked.request!.request_id, "approve")).rejects.toThrow(/community_approval_not_found/);
 });
 
-test("only the owner's AI may ask, and only for a site that's deployed", async () => {
-  const f = await fixture();
-  await expect(f.ask(f.adminId, "site")).rejects.toThrow(/community_member_experience_owner_only/);
-  const bare = await fixture({ deployed: false });
-  await expect(bare.ask(bare.ownerId, "site")).rejects.toThrow(/community_custom_site_required/);
-  // Already that way: nothing to approve.
-  expect(await f.ask(f.ownerId, "app")).toMatchObject({ status: "already_set", members_use: "app", request: null });
-});
 
 test("declined, replaced, expired and out-of-date requests change nothing", async () => {
   const f = await fixture();
@@ -98,7 +96,6 @@ test("an archived community can't be changed through a request, even one made be
   const asked = await f.ask(f.ownerId, "site");
   await f.t.run((ctx) => ctx.db.patch(f.communityId, { lifecycleStatus: "archived", lifecycleGeneration: 1 } as any));
   await expect(f.decide("owner-subject", asked.request!.request_id, "approve")).rejects.toThrow();
-  await expect(f.ask(f.ownerId, "site")).rejects.toThrow();
   const stored = await f.t.run(async (ctx) => (await ctx.db.get(f.communityId) as any)?.memberExperience ?? null);
   expect(stored).toBeNull();
 });

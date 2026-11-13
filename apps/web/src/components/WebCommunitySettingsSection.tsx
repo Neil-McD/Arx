@@ -4,7 +4,7 @@ import { CommunityPlansSection } from "./CommunityPlansSection";
 import { isDesignV1Active } from "../../../../shared/designSystem";
 import { CommunityPageHeader } from "./CommunityPageHeader";
 import { useCallback, useEffect, useRef, useState, type ComponentProps } from "react";
-import { SettingsGroup, SettingsRow, SettingsSaveStatus, SettingsSwitch } from "./SettingsRows";
+import { SettingsGroup, SettingsRow, SettingsSaveStatus, SettingsSegmented, SettingsSwitch } from "./SettingsRows";
 import type { DragEvent } from "react";
 import type { CommunitySettingsLayer } from "../../../../shared/communityAccessViewModel";
 import { deriveCommunitySettingsAccessPresentation } from "../../../../shared/communityAccessResolution";
@@ -639,7 +639,9 @@ function useAutosave(enabled: boolean, rootRef: { current: HTMLElement | null },
   // Pictures and switches change without a committed field.
   const media = [state.communitySettingsAvatarUrl, state.communitySettingsAvatarFocusX, state.communitySettingsAvatarFocusY, state.communitySettingsAvatarZoom,
     state.communitySettingsBannerUrl, state.communitySettingsBannerFocusX, state.communitySettingsBannerFocusY, state.communitySettingsBannerZoom,
-    state.communitySettingsVisibility, state.communitySettingsPricingMode, state.isProcessingCommunitySettingsBanner].join("|");
+    state.communitySettingsVisibility, state.communitySettingsPricingMode, state.isProcessingCommunitySettingsBanner,
+    // A save that finishes while edits are still unsaved goes again.
+    state.isSavingCommunitySettings].join("|");
   useEffect(() => { if (enabled) window.setTimeout(trySave, 0); }, [enabled, media, trySave]);
   return { onChange: onCommit, onBlur: onCommit, onClick: onCommit };
 }
@@ -729,6 +731,17 @@ function CommunityMonetizationConfigSection({
         ) : null}
         <div className="create-community-field">
           <span>Pricing</span>
+          {isDesignV1Active() ? (
+            <SettingsSegmented
+              label="Pricing options"
+              value={state.communitySettingsPricingMode}
+              options={pricingOptions.map((opt) => ({ id: opt.key, label: opt.label, disabled: opt.key !== "free" && needsStripeConnect }))}
+              onChange={(value) => {
+                actions.setCommunitySettingsPricingMode(value);
+                actions.markCommunitySettingsDirty();
+              }}
+            />
+          ) : (
           <WebPlatformRadioGroup
             options={pricingOptions.map((opt) => ({
               id: opt.key,
@@ -744,6 +757,7 @@ function CommunityMonetizationConfigSection({
             className="platform-switcher platform-switcher-compact"
             style={pricingSwitcherStyle}
           />
+          )}
           <span className="create-community-hint">Shown on your funnel and checkout.</span>
         </div>
       </div>
@@ -1065,7 +1079,13 @@ export function WebCommunitySettingsSection(props: WebCommunitySettingsSectionPr
                 <div className="settings-page-head">
                   <h1 className="settings-page-title">{COMMUNITY_SETTINGS_PANE_LABELS[selectedSettingsPane]}</h1>
                   {isFormPane && state.isCommunitySettingsReady ? (
-                    <SettingsSaveStatus saving={state.isSavingCommunitySettings} dirty={state.isCommunitySettingsDirty} error={state.communitySettingsError} />
+                    <span className="settings-v1-status-row">
+                      <SettingsSaveStatus saving={state.isSavingCommunitySettings} dirty={state.isCommunitySettingsDirty} error={state.communitySettingsError} />
+                      {state.communitySettingsConflict ? (
+                        <button className="settings-v1-button" type="button" disabled={state.isLoadingCommunitySettings}
+                          onClick={() => void actions.handleReloadLatestCommunitySettings()}>Reload latest</button>
+                      ) : null}
+                    </span>
                   ) : null}
                 </div>
               ) : null}

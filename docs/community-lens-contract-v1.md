@@ -58,10 +58,9 @@ of the slices that follow.
   visibility; admins too: one-liner, about; naming the revision they read),
   `community.join_mode.set`, `community.agent.instructions.set`,
   `community.handbook.save_draft` and `community.handbook.approve`, through
-  Studio's own domain functions. The owner's AI may ask to change where
-  members spend time (`community.member_experience.request`, `to`: app or
-  site); nothing changes until the owner approves it in Studio → Settings
-  within 24 hours (`communityOwnerApprovals`). No AI action approves.
+  Studio's own domain functions. Asking to change where members spend time
+  (`community.member_experience.request`) was retired with custom sites
+  (Nov 13 2026); a community's stored choice still decides.
   Planned: pictures; archive (confirmed).
 
 ### 2. People

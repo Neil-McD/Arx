@@ -77,10 +77,10 @@ const JOIN_MODE_OPERATION = "community.join_mode.set";
 const AGENT_INSTRUCTIONS_OPERATION = "community.agent.instructions.set";
 const HANDBOOK_DRAFT_OPERATION = "community.handbook.save_draft";
 const HANDBOOK_APPROVE_OPERATION = "community.handbook.approve";
-// Where members spend time: the owner's AI asks; the owner approves in Studio.
-const MEMBER_EXPERIENCE_REQUEST_OPERATION = "community.member_experience.request";
+// "Where members spend time" requests were retired with custom sites (Nov 13):
+// Settings no longer has the screen the owner approved them on.
 const COMMUNITY_OPERATIONS = [SETTINGS_UPDATE_OPERATION, JOIN_MODE_OPERATION, AGENT_INSTRUCTIONS_OPERATION,
-  HANDBOOK_DRAFT_OPERATION, HANDBOOK_APPROVE_OPERATION, MEMBER_EXPERIENCE_REQUEST_OPERATION];
+  HANDBOOK_DRAFT_OPERATION, HANDBOOK_APPROVE_OPERATION];
 const BUILDER_COMMUNITY_PATH = POLYNET_BUILDER_COMMUNITY_PATH;
 // People: actions on a selection of members (owners and admins).
 const MEMBERS_ROLE_OPERATION = "community.members.set_role";
@@ -865,11 +865,6 @@ function capabilityDocument(args: {
       slug: "the community's address; its site moves with it. If the answer is lost, retry the same call at the new address: it replays", visibility: "published or unlisted (publishing needs a name, one-liner and picture)",
       result: "result: the community as builder/community.json shows it", effects: ["change_community_profile"],
       forbidden_effects: ["pricing", "pictures", "archive"] }
-    : args.operation === MEMBER_EXPERIENCE_REQUEST_OPERATION ? {
-      required: ["to"], to: "app (Polynet's app) or site (the community's own deployed site): where members spend time",
-      who: "the owner's own AI only. Nothing changes until the owner approves it in Studio (Settings) within 24 hours; you can't approve it",
-      result: "result: { status: awaiting_owner_approval | already_set, members_use, approve_in, request }. Read builder/community.json for what happened",
-      effects: ["request_member_experience_change"], forbidden_effects: ["change_without_owner_approval"] }
     : args.operation === JOIN_MODE_OPERATION ? {
       required: ["mode"], mode: "open or approval (a paid community stays paid)",
       result: "result: { entry_policy, approved_pending_request_count }", effects: ["set_join_mode", "opening_approves_waiting_requests"] }
@@ -2561,7 +2556,6 @@ async function executeCommunityOperation(args: {
         (!("about" in rawInput) || rawInput.about === null || text("about", 8_000)) &&
         (!("visibility" in rawInput) || rawInput.visibility === "published" || rawInput.visibility === "unlisted")
     : operation === JOIN_MODE_OPERATION ? only(["mode"]) && (rawInput.mode === "open" || rawInput.mode === "approval")
-    : operation === MEMBER_EXPERIENCE_REQUEST_OPERATION ? only(["to"]) && (rawInput.to === "app" || rawInput.to === "site")
     : operation === AGENT_INSTRUCTIONS_OPERATION ? only(["text"]) && text("text", 40_000)
     // The handbook is published exactly as given, so a longer one is refused, never cut.
     : only(["text"]) && text("text", COMMUNITY_HANDBOOK_MAX_CHARS));
@@ -2569,7 +2563,6 @@ async function executeCommunityOperation(args: {
     return canonicalError("invalid_tool_args", operation === SETTINGS_UPDATE_OPERATION
       ? "Give expected_revision and at least one of name, slug, one_liner, about or visibility (published or unlisted)."
       : operation === JOIN_MODE_OPERATION ? "mode is open or approval."
-      : operation === MEMBER_EXPERIENCE_REQUEST_OPERATION ? "to is app or site."
       : operation === AGENT_INSTRUCTIONS_OPERATION ? "Give text (up to 40,000 characters)."
       : `Give text (the handbook is at most ${COMMUNITY_HANDBOOK_MAX_CHARS.toLocaleString("en-US")} characters).`);
   }

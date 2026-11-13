@@ -3,7 +3,7 @@
 // signed-in session, makes the change. One kind so far: where members spend
 // time (Polynet's app or the community's own site).
 import { v } from "convex/values";
-import { internalMutation, internalQuery, mutation, query } from "./_generated/server";
+import { internalQuery, mutation, query } from "./_generated/server";
 import { resolveUserIdForAuthenticatedRequest } from "./authActor";
 import { requireCommunityOwner } from "./communityCore";
 import { applyCommunityMemberExperience } from "./communityLifecycle";
@@ -21,49 +21,13 @@ async function pendingRequest(ctx: any, communityId: any) {
     .first();
 }
 
-function settingsUrl(slug: string): string | null {
-  try {
-    return `${readCanonicalPublicAppOrigin().replace(/\/+$/, "")}/c/${encodeURIComponent(slug)}/settings/community`;
-  } catch {
-    return null;
-  }
-}
-
 function publicRequest(row: any) {
   return row ? { request_id: String(row._id), from: row.fromValue, to: row.toValue, expires_at: new Date(row.expiresAt).toISOString() } : null;
 }
 
-// The owner's AI asks (community.member_experience.request): only the owner's
-// own AI; "site" only once a site is deployed. A newer request replaces one
-// still waiting. Nothing changes until the owner approves in Studio.
-export const requestMemberExperienceForTrustedUserInternal = internalMutation({
-  args: { userId: v.id("users"), communityId: v.id("communities"), to: v.union(v.literal("app"), v.literal("site")) },
-  handler: async (ctx, args) => {
-    // Studio's own owner guard (an active community, its builder access, its owner).
-    const { community } = await requireCommunityOwner({ ctx, communityId: args.communityId, userId: args.userId }).catch((error: unknown) => {
-      throw error instanceof Error && error.message.includes("community_owner_required") ? new Error("community_member_experience_owner_only") : error;
-    });
-    if (args.to === "site" && !(await communityHasCustomSite(ctx, community._id))) throw new Error("community_custom_site_required");
-    const current = await communityMemberExperience(ctx, community as any);
-    const waiting = await pendingRequest(ctx, community._id);
-    if (current === args.to) {
-      if (waiting) await ctx.db.patch(waiting._id, { status: "replaced", decidedAt: Date.now() });
-      return { status: "already_set", members_use: current, approve_in: null, request: null };
-    }
-    const nowMs = Date.now();
-    if (waiting) await ctx.db.patch(waiting._id, { status: "replaced", decidedAt: nowMs });
-    const id = await ctx.db.insert("communityOwnerApprovals", {
-      communityId: community._id, kind: KIND, requestedByUserId: args.userId,
-      fromValue: current, toValue: args.to, status: "pending", expiresAt: nowMs + OWNER_APPROVAL_TTL_MS, createdAt: nowMs,
-    });
-    return {
-      status: "awaiting_owner_approval",
-      members_use: current,
-      approve_in: settingsUrl(String(community.slug ?? "")),
-      request: publicRequest(await ctx.db.get(id)),
-    };
-  },
-});
+// Requests were made by the owner's AI (community.member_experience.request),
+// retired with custom sites (Nov 13 2026). The cached production app still
+// reads and decides any request left waiting, so those stay until it updates.
 
 // What the owner's (or an admin's) AI reads in builder/community.json.
 export const readMemberExperienceForTrustedManagerInternal = internalQuery({
