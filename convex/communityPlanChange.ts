@@ -69,6 +69,22 @@ const view = (plan: Plan) => ({
   amount_base_units: plan.price.amountBaseUnits, currency: plan.price.currency, currency_decimals: plan.price.currencyDecimals ?? 2,
 });
 
+/** The plans on sale that include a pod (monthly price each): how to get into it by plan. */
+export async function plansIncludingPod(ctx: any, communityId: any, channelId: any) {
+  const tiers = (await ctx.db.query("communityTiers").withIndex("by_community_key", (q: any) => q.eq("communityId", communityId)).collect())
+    .filter((tier: any) => !tier.archivedAt && (tier.podChannelIds ?? []).some((id: any) => String(id) === String(channelId)));
+  if (!tiers.length) return [];
+  const plans = await plansOnSale(ctx, communityId);
+  return plans
+    .filter((plan) => tiers.some((tier: any) => (tier.key === BASE ? plan.key === null : tier.key === plan.key)))
+    .map((plan) => ({ key: plan.key, name: plan.name, amount_base_units: plan.price.amountBaseUnits, currency: plan.price.currency, currency_decimals: plan.price.currencyDecimals ?? 2 }));
+}
+
+/** Whether this member can change their plan here (they pay Polynet monthly for it). */
+export async function canChangePlanHere(ctx: any, communityId: any, userId: any): Promise<boolean> {
+  return (await payingNow(ctx, communityId, userId)).reason === null;
+}
+
 /** A member's own plan in this community, and the others they could move to. */
 export const getMyCommunityPlan = query({
   args: { authSubject: v.optional(v.string()), communityId: v.id("communities") },

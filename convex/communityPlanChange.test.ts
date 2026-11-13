@@ -145,3 +145,22 @@ test("up or down is judged by what Stripe bills now, and an archived community t
   await expect(asAna(t).action(api.communityPlanChange.changeMyCommunityPlan, { communityId: ids.communityId, plan: null })).rejects.toThrow();
   expect(stripe.updates).toHaveLength(1);
 });
+
+test("a pod that comes with a plan says so, and offers the switch to a member who can make it here", async () => {
+  const t = convexTest(schema, modules);
+  const ids = await setup(t);
+  await t.run(async (ctx: any) => {
+    const record = await ctx.db.query("communityPods").withIndex("by_community_channel", (q: any) => q.eq("communityId", ids.communityId).eq("channelId", ids.podId)).first();
+    await ctx.db.patch(record._id, { visibility: "listed" });
+  });
+  const page = await asAna(t).query(api.communityPods.getPodPage, { communityId: ids.communityId, podSlug: "agency" }) as any;
+  expect(page).toMatchObject({ kind: "outside", can_switch_plan: true, included_with: [{ key: "cris", name: "CRIS", amount_base_units: 29700 }] });
+  const list = await asAna(t).query(api.communityPods.listCommunityPods, { communityId: ids.communityId }) as any;
+  expect(list.outside).toMatchObject([{ slug: "agency", included_with: ["CRIS"] }]);
+  // Bought in the app: it says which plan, but the switch is made there.
+  await t.run(async (ctx: any) => {
+    const membership = (await ctx.db.query("communityMemberships").collect()).find((row: any) => String(row.userId) === String(ids.ana));
+    await ctx.db.patch(membership._id, { accessSource: "app_grant" });
+  });
+  expect((await asAna(t).query(api.communityPods.getPodPage, { communityId: ids.communityId, podSlug: "agency" }) as any).can_switch_plan).toBe(false);
+});
