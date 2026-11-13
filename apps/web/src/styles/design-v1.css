@@ -3146,11 +3146,6 @@
   gap: 12px;
 }
 :root[data-design="v1"] .settings-page-head .settings-page-title { margin-bottom: 20px; }
-:root[data-design="v1"] .settings-page-head.is-inline {
-  margin: -48px 0 28px;
-  justify-content: flex-end;
-  min-height: 20px;
-}
 :root[data-design="v1"] .settings-v1-status {
   font-size: 12px;
   color: var(--text-ink-secondary);
@@ -3295,3 +3290,52 @@
 :root[data-design="v1"] .settings-v1-button.is-quiet { border-color: transparent !important; }
 /* No header row on the Settings page: the title starts at the top. */
 :root[data-design="v1"] .community-page-body:has(.settings-page-v1) { grid-template-rows: 0 minmax(0, 1fr); }
+
+/* Your own pages sit exactly where the community's do: same top, same left. */
+:root[data-design="v1"] .settings-panel:has(> .settings-page-v1-personal) { padding-top: 0; }
+:root[data-design="v1"] .settings-page-v1-personal { padding: 28px 0 56px; }
+/* Back sits where a community's name sits (no banner): 12px down, a 48px row. */
+:root[data-design="v1"] .settings-nav-v1 .settings-nav-back {
+  height: 48px;
+  margin: 12px 0 10px;
+  font-size: 14px;
+  font-weight: 500;
+}
+:root[data-design="v1"] .settings-v1-value {
+  font-size: 13.5px;
+  color: var(--text-ink-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+:root[data-design="v1"] .settings-v1-note {
+  margin: 10px 2px 0;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--text-ink-secondary);
+}
+:root[data-design="v1"] .settings-v1-rows > .settings-v1-note { margin: 0; padding: 10px 16px; border-top: 1px solid var(--surface-raised-edge); }
+:root[data-design="v1"] .settings-v1-note.is-error { color: var(--danger-text); }
+:root[data-design="v1"] .settings-v1-segmented {
+  display: inline-flex;
+  padding: 2px;
+  gap: 2px;
+  border: 1px solid var(--surface-raised-edge);
+  border-radius: 8px;
+}
+:root[data-design="v1"] .settings-v1-segment {
+  height: 26px;
+  padding: 0 12px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-ink-secondary);
+  background: transparent !important;
+  border: 0 !important;
+  border-radius: 6px;
+  cursor: pointer;
+}
+:root[data-design="v1"] .settings-v1-segment.is-on {
+  color: var(--text-ink-primary);
+  background: var(--surface-raised-edge) !important;
+}
