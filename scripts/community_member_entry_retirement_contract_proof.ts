@@ -57,7 +57,8 @@ for (const [source, label] of [
 assert.doesNotMatch(settingsStyles, /community-onboarding/);
 assert.doesNotMatch(dockStyles, /is-onboarding|dock-onboarding/);
 // One Settings page (design v1): the community's sections; no onboarding or workflows pane.
-assert.deepEqual(COMMUNITY_SETTINGS_PANES, ["community", "public", "plans", "app", "agent", "danger"]);
+assert.deepEqual(COMMUNITY_SETTINGS_PANES, ["community", "plans", "app", "agent", "danger"]);
+assert.equal(parseCommunitySettingsPane("public"), "community");
 assert.equal(parseCommunitySettingsPane("workflows"), "community");
 assert.deepEqual(
   deriveWebDestinationFromPath("/m/c/polynet/onboarding/preview"),

@@ -633,24 +633,15 @@ function useAutosave(enabled: boolean, rootRef: { current: HTMLElement | null },
     if (active && rootRef.current?.contains(active) && (active.tagName === "INPUT" || active.tagName === "TEXTAREA") && (active as HTMLInputElement).type !== "file") return;
     void run();
   }, [rootRef]);
-  useEffect(() => {
-    const root = rootRef.current;
-    if (!enabled || !root) return;
-    const onCommit = () => window.setTimeout(trySave, 0);
-    root.addEventListener("change", onCommit);
-    root.addEventListener("focusout", onCommit);
-    root.addEventListener("click", onCommit);
-    return () => {
-      root.removeEventListener("change", onCommit);
-      root.removeEventListener("focusout", onCommit);
-      root.removeEventListener("click", onCommit);
-    };
-  }, [enabled, rootRef, trySave]);
+  // Handlers go on the page's root as React props, so they follow the root
+  // when it mounts late (it renders only once access has loaded).
+  const onCommit = useCallback(() => { if (enabled) window.setTimeout(trySave, 0); }, [enabled, trySave]);
   // Pictures and switches change without a committed field.
   const media = [state.communitySettingsAvatarUrl, state.communitySettingsAvatarFocusX, state.communitySettingsAvatarFocusY, state.communitySettingsAvatarZoom,
     state.communitySettingsBannerUrl, state.communitySettingsBannerFocusX, state.communitySettingsBannerFocusY, state.communitySettingsBannerZoom,
     state.communitySettingsVisibility, state.communitySettingsPricingMode, state.isProcessingCommunitySettingsBanner].join("|");
   useEffect(() => { if (enabled) window.setTimeout(trySave, 0); }, [enabled, media, trySave]);
+  return { onChange: onCommit, onBlur: onCommit, onClick: onCommit };
 }
 
 function CommunityMonetizationConfigSection({
@@ -971,7 +962,7 @@ export function WebCommunitySettingsSection(props: WebCommunitySettingsSectionPr
   const selectedSettingsPane = availableSettingsPanes.includes(normalizedPane) ? normalizedPane : (availableSettingsPanes[0] ?? "community");
   const isFormPane = split ? FORM_PANES.includes(selectedSettingsPane) : selectedSettingsPane === "community";
   const pageRef = useRef<HTMLDivElement | null>(null);
-  useAutosave(split && isFormPane, pageRef, state, actions.handleSaveCommunitySettings);
+  const autosave = useAutosave(split && isFormPane, pageRef, state, actions.handleSaveCommunitySettings);
   // Where each block of the form lives: its own section in design v1, General in the classic app.
   const shows = (pane: CommunitySettingsPane) => (split ? selectedSettingsPane === pane : selectedSettingsPane === "community");
   const availableSettingsPaneKey = availableSettingsPanes.join("|");
@@ -1044,7 +1035,7 @@ export function WebCommunitySettingsSection(props: WebCommunitySettingsSectionPr
         />
       ) : canManageCommunitySettings ? (
         <>
-          <div ref={pageRef} className={`create-community-form community-settings-form${split ? " settings-page-v1" : ""}`}>
+          <div ref={pageRef} {...autosave} className={`create-community-form community-settings-form${split ? " settings-page-v1" : ""}`}>
             {split && hasSettingsSidebar ? null : (
             <CommunityPageHeader
               title={split ? "Settings" : "Manage"}
