@@ -4,7 +4,7 @@ import { CommunityPlansSection } from "./CommunityPlansSection";
 import { isDesignV1Active } from "../../../../shared/designSystem";
 import { CommunityPageHeader } from "./CommunityPageHeader";
 import { useCallback, useEffect, useRef, useState, type ComponentProps } from "react";
-import { SettingsGroup, SettingsRow, SettingsSaveStatus, SettingsSegmented, SettingsSwitch } from "./SettingsRows";
+import { SettingsGroup, SettingsRow, SettingsSaveStatus, SettingsSwitch } from "./SettingsRows";
 import type { DragEvent } from "react";
 import type { CommunitySettingsLayer } from "../../../../shared/communityAccessViewModel";
 import { deriveCommunitySettingsAccessPresentation } from "../../../../shared/communityAccessResolution";
@@ -731,17 +731,6 @@ function CommunityMonetizationConfigSection({
         ) : null}
         <div className="create-community-field">
           <span>Pricing</span>
-          {isDesignV1Active() ? (
-            <SettingsSegmented
-              label="Pricing options"
-              value={state.communitySettingsPricingMode}
-              options={pricingOptions.map((opt) => ({ id: opt.key, label: opt.label, disabled: opt.key !== "free" && needsStripeConnect }))}
-              onChange={(value) => {
-                actions.setCommunitySettingsPricingMode(value);
-                actions.markCommunitySettingsDirty();
-              }}
-            />
-          ) : (
           <WebPlatformRadioGroup
             options={pricingOptions.map((opt) => ({
               id: opt.key,
@@ -757,7 +746,6 @@ function CommunityMonetizationConfigSection({
             className="platform-switcher platform-switcher-compact"
             style={pricingSwitcherStyle}
           />
-          )}
           <span className="create-community-hint">Shown on your funnel and checkout.</span>
         </div>
       </div>
