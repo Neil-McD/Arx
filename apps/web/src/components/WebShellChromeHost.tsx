@@ -1,3 +1,4 @@
+import { WebSettingsNavV1 } from "./WebSettingsNavV1";
 import type {
   ComponentProps,
   ReactNode,
@@ -62,11 +63,28 @@ export function WebShellChromeHost(props: WebShellChromeHostProps) {
     <WebDesktopShellHeader {...props.desktopHeader} />
   );
 
+  // Design v1, one Settings page: on the community's settings the left column
+  // is the Settings sidebar (the same one your own settings show).
+  const communitySettingsNav = props.communityShell.showDesktopCommunityNav && !props.showMobileAppShell && isDesignV1Active()
+    && props.communityShell.destination.kind === "community_settings" && props.communityShell.account;
   const desktopCommunityNav = props.communityShell.showDesktopCommunityNav ? (
+    communitySettingsNav ? (
+      <WebSettingsNavV1
+        communityShell={props.communityShell}
+        settingsSidebar={props.settingsSidebar}
+        current={{ kind: "community", pane: props.communityShell.communitySettingsPane ?? "community" }}
+        onBack={() => {
+          const slug = String(props.communityShell.activeCommunity?.slug ?? "").trim();
+          if (slug) props.communityShell.onOpenCommunityHome(slug);
+          else props.desktopHeader.onBackToCommunity();
+        }}
+      />
+    ) : (
     <WebCommunityNavSurface
       communityShell={props.communityShell}
       presentation="desktop"
     />
+    )
   ) : null;
   const mobileGlobalShellContent = isMobileCommunityHome ? (
     <WebCommunityNavSurface
