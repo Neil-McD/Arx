@@ -847,9 +847,9 @@ export function WebCommunitySettingsSection(props: WebCommunitySettingsSectionPr
         />
       ) : canManageCommunitySettings ? (
         <>
-          <div className="create-community-form community-settings-form">
+          <div className={`create-community-form community-settings-form${split ? " settings-page-v1" : ""}`}>
             <CommunityPageHeader
-              title={split ? COMMUNITY_SETTINGS_PANE_LABELS[selectedSettingsPane] : "Manage"}
+              title={split ? "Settings" : "Manage"}
               actions={split ? undefined : (
                 <CommunitySettingsPaneSwitcher
                   activePane={selectedSettingsPane}
@@ -871,6 +871,7 @@ export function WebCommunitySettingsSection(props: WebCommunitySettingsSectionPr
               tabIndex={0}
               className="community-settings-pane-content"
             >
+              {split ? <h1 className="settings-page-title">{COMMUNITY_SETTINGS_PANE_LABELS[selectedSettingsPane]}</h1> : null}
               {isFormPane && state.isLoadingCommunitySettings ? (
               <div className="chat-empty">Loading community settings...</div>
               ) : null}

@@ -126,11 +126,9 @@ assert.match(
   /bannerBottom <= navTop \+ COMMUNITY_IDENTITY_HEIGHT_PX/,
   "the identity surface should condense only after the banner leaves its sticky row",
 );
-assert.doesNotMatch(
-  communityNav,
-  /title="Settings"/,
-  "community settings should not remain duplicated in the lower management list",
-);
+// One way into settings per layout (the classic gear by the name; design v1's
+// Settings row in the foot) is proven by behaviour in
+// scripts/community_nav_design_v1.test.ts.
 assert.match(
   shellCss,
   /\.community-nav-identity\s*\{[^}]*position:\s*sticky;[^}]*min-height:\s*44px;[^}]*background:\s*var\(--surface-nav, var\(--surface-panel\)\);/,

@@ -3071,3 +3071,47 @@
 /* Plans include pods: the plan form's pod choices. */
 :root[data-design="v1"] .community-plan-pods { border: 0; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 6px; }
 :root[data-design="v1"] .community-plan-pod { display: flex; align-items: center; gap: 8px; font-size: 14px; }
+
+/* One Settings page (design v1): a narrow centred column, a large page title,
+   and each group of settings in its own card (after Linear's settings). */
+:root[data-design="v1"] .settings-page-v1 {
+  max-width: 680px;
+  margin: 0 auto;
+  width: 100%;
+}
+:root[data-design="v1"] .settings-page-title {
+  margin: 8px 0 20px;
+  font-size: 24px;
+  font-weight: 600;
+  letter-spacing: -0.015em;
+  color: var(--text-ink-primary);
+}
+:root[data-design="v1"] .settings-page-v1 .community-general-settings-grid,
+:root[data-design="v1"] .settings-page-v1 .community-general-settings-secondary {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+:root[data-design="v1"] .settings-page-v1 .settings-section {
+  margin: 0;
+  padding: 20px;
+  border: 1px solid var(--surface-raised-edge);
+  border-radius: 10px;
+  background: var(--surface-raised, transparent);
+}
+:root[data-design="v1"] .settings-page-v1 .community-settings-pane-content > .settings-section,
+:root[data-design="v1"] .settings-page-v1 .community-settings-pane-content > * + * {
+  margin-top: 16px;
+}
+:root[data-design="v1"] .settings-page-v1 .settings-section-title {
+  font-size: 15px;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+:root[data-design="v1"] .settings-page-v1 .community-general-settings-save {
+  margin-top: 16px;
+}
+/* The Settings sidebar: the way back sits apart from the sections. */
+:root[data-design="v1"] .settings-nav-v1 .settings-nav-back {
+  color: var(--text-ink-secondary);
+}
