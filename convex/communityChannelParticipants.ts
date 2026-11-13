@@ -100,6 +100,12 @@ export const setParticipant = mutation({
   args: { ...scope, target, active: v.boolean() },
   handler: async (ctx, args) => {
     const manager = await requireManager(ctx, args);
+    // A seat their plan gives can't be taken away here: it follows the plan.
+    if (!args.active && args.target.kind === "member") {
+      const seat = (await ctx.db.query("communityChannelParticipants")
+        .withIndex("by_channel_principal", q => q.eq("channelId", args.channelId).eq("principalKey", `user:${(args.target as any).userId}`)).take(1))[0];
+      if (seatReasons(seat as any).includes("plan")) throw new Error("community_pod_seat_from_plan");
+    }
     const result = await setChannelParticipantCore(ctx, { ...args, createdByUserId: manager.userId });
     // Off a paid pod: stop their billing for it now.
     if (!args.active && args.target.kind === "member" && result.changed) {
@@ -109,10 +115,22 @@ export const setParticipant = mutation({
   },
 });
 
-/** Caller must establish manager authority; grants retain activation lineage. */
+export type PodSeatReason = "host" | "paid" | "plan";
+
+/** Why a seat is open; none when it is closed. An open seat from before reasons is the host's. */
+export function seatReasons(row: { status?: string; reasons?: PodSeatReason[] } | null | undefined): PodSeatReason[] {
+  if (!row || row.status !== "active") return [];
+  return row.reasons?.length ? [...row.reasons] : ["host"];
+}
+
+/** Caller must establish manager authority; grants retain activation lineage.
+ * A member's seat is open while any reason holds. Opening adds `reason` (the
+ * host's unless said); closing removes `reason`, or without one the host's and
+ * the paid one: the seat a plan gives stays until the plan's sync removes it. */
 export async function setChannelParticipantCore(ctx: any, args: {
   communityId: any; channelId: any; createdByUserId: any; active: boolean;
   target: { kind: "member"; userId: any } | { kind: "community_agent" };
+  reason?: PodSeatReason;
 }) {
     const principalKey = args.target.kind === "member" ? `user:${args.target.userId}` : "community_agent";
     const existing = await ctx.db.query("communityChannelParticipants")
@@ -126,17 +144,35 @@ export async function setChannelParticipantCore(ctx: any, args: {
     }
     const binding = membership ? { membershipId: membership._id as any,
       membershipActivationSequence: Math.max(0, Math.floor(Number(membership.activationSequence ?? 0))) } : {};
-    const status = args.active ? "active" as const : "revoked" as const;
     const previous = existing[0];
-    if (!args.active && !previous) return { changed: false };
-    if (previous?.status === status && (!args.active || (
-      normalizeIdValue(previous.membershipId) === normalizeIdValue(binding.membershipId) &&
-      previous.membershipActivationSequence === binding.membershipActivationSequence
-    ))) return { changed: false };
+    const sameBinding = Boolean(previous) &&
+      normalizeIdValue(previous.membershipId) === normalizeIdValue((binding as any).membershipId) &&
+      previous.membershipActivationSequence === (binding as any).membershipActivationSequence;
+    if (args.target.kind === "community_agent") {
+      const status = args.active ? "active" as const : "revoked" as const;
+      if (!args.active && !previous) return { changed: false };
+      if (previous?.status === status && (!args.active || sameBinding)) return { changed: false };
+      const now = Date.now();
+      if (previous) await ctx.db.patch(previous._id, { status, ...binding, updatedAt: now });
+      else await ctx.db.insert("communityChannelParticipants", { communityId: args.communityId, channelId: args.channelId,
+        principalKey, status, ...binding, createdByUserId: args.createdByUserId, createdAt: now, updatedAt: now });
+      return { changed: true };
+    }
+    // A seat from an earlier membership (they left and came back) carries no reasons into this one.
+    const before = args.active && previous && !sameBinding ? [] : seatReasons(previous);
+    const reasons: PodSeatReason[] = args.active
+      ? [...new Set([...before, args.reason ?? "host"])] as PodSeatReason[]
+      : before.filter((reason) => (args.reason ? reason !== args.reason : reason === "plan"));
+    const status = reasons.length ? "active" as const : "revoked" as const;
+    if (!previous && status === "revoked") return { changed: false };
+    const sameReasons = before.length === reasons.length && before.every((reason) => reasons.includes(reason));
+    if (previous && previous.status === status && sameReasons && (status === "revoked" || !args.active || sameBinding)
+      && (status === "revoked" || previous.reasons?.length)) return { changed: false };
     const now = Date.now();
-    if (previous) await ctx.db.patch(previous._id, { status, ...binding, updatedAt: now });
+    const fields = { status, reasons: status === "active" ? reasons : [], ...(args.active ? binding : {}), updatedAt: now };
+    if (previous) await ctx.db.patch(previous._id, fields);
     else await ctx.db.insert("communityChannelParticipants", { communityId: args.communityId, channelId: args.channelId,
-      principalKey, status, ...binding, createdByUserId: args.createdByUserId, createdAt: now, updatedAt: now });
+      principalKey, ...fields, ...binding, createdByUserId: args.createdByUserId, createdAt: now });
     // A pod grant is part of a member's access (pod:<slug>) for connected apps.
     if (args.target.kind === "member") await notifyConnectedApps(ctx, args.communityId, args.target.userId);
     return { changed: true };

@@ -11,7 +11,7 @@ import { internal } from "./_generated/api";
 import { action, internalAction, internalMutation, internalQuery, mutation } from "./_generated/server";
 import { resolveUserIdForAuthenticatedRequest } from "./authActor";
 import { fillCheckoutSuccessUrl, normalizeStripeCommunitySubscriptionStatus, requireCanonicalCheckoutReturnUrl } from "./billingCore";
-import { setChannelParticipantCore } from "./communityChannelParticipants";
+import { seatReasons, setChannelParticipantCore } from "./communityChannelParticipants";
 import { ensureCommunityStripeCustomerForUser } from "./communityCommerce";
 import { communityMembershipRowIsActive, getUniqueCommunityMembershipByPair, normalizeIdValue, requireCommunityChatAccess, requireCommunityManager } from "./communityCore";
 import { communitySubscriptionStatusGrantsAccess } from "./communitySubscriptionLifecycle";
@@ -326,13 +326,13 @@ export const syncPodPaymentInternal = internalMutation({
         await ctx.scheduler.runAfter(0, internal.communityPodPayments.processPodRefundsInternal, {});
         return { ok: true, status: "ended" as PodPaymentStatus, granted: false };
       }
-      await setChannelParticipantCore(ctx, { communityId: row.communityId, channelId: row.channelId, createdByUserId: row.userId, active: true, target: { kind: "member", userId: row.userId } });
+      await setChannelParticipantCore(ctx, { communityId: row.communityId, channelId: row.channelId, createdByUserId: row.userId, active: true, target: { kind: "member", userId: row.userId }, reason: "paid" });
       grantedAt = nowMs;
     } else if (!grants && grantedAt) {
       const others = (await ctx.db.query("communityPodPayments")
         .withIndex("by_channel_user", (q: any) => q.eq("channelId", row.channelId).eq("userId", row.userId)).collect())
         .some((other: any) => String(other._id) !== String(row._id) && other.grantedAt);
-      if (!others) await setChannelParticipantCore(ctx, { communityId: row.communityId, channelId: row.channelId, createdByUserId: row.userId, active: false, target: { kind: "member", userId: row.userId } });
+      if (!others) await setChannelParticipantCore(ctx, { communityId: row.communityId, channelId: row.channelId, createdByUserId: row.userId, active: false, target: { kind: "member", userId: row.userId }, reason: "paid" });
       grantedAt = undefined;
     }
     // A payment that just failed: the same email communities send, naming the pod.
@@ -434,7 +434,7 @@ async function endPodPayment(ctx: any, row: any, nowMs: number) {
     const others = (await ctx.db.query("communityPodPayments")
       .withIndex("by_channel_user", (q: any) => q.eq("channelId", row.channelId).eq("userId", row.userId)).collect())
       .some((other: any) => String(other._id) !== String(row._id) && other.grantedAt);
-    if (!others) await setChannelParticipantCore(ctx, { communityId: row.communityId, channelId: row.channelId, createdByUserId: row.userId, active: false, target: { kind: "member", userId: row.userId } });
+    if (!others) await setChannelParticipantCore(ctx, { communityId: row.communityId, channelId: row.channelId, createdByUserId: row.userId, active: false, target: { kind: "member", userId: row.userId }, reason: "paid" });
   }
   await ctx.db.patch(row._id, { status: "ended", grantedAt: undefined, updatedAt: nowMs });
 }
@@ -680,6 +680,10 @@ export const podLeavePlanInternal = internalQuery({
   handler: async (ctx, args) => {
     const room = await ctx.db.get(args.channelId) as any;
     if (!room || String(room.communityId) !== String(args.communityId) || room.accessMode !== "restricted") throw new Error("community_pod_not_found");
+    // Their plan includes this pod: it goes with the plan, not on its own.
+    const seat = (await ctx.db.query("communityChannelParticipants")
+      .withIndex("by_channel_principal", (q: any) => q.eq("channelId", args.channelId).eq("principalKey", `user:${args.userId}`)).take(1))[0];
+    if (seatReasons(seat).includes("plan")) throw new Error("community_pod_seat_from_plan");
     const rows = await ctx.db.query("communityPodPayments")
       .withIndex("by_channel_user", (q: any) => q.eq("channelId", args.channelId).eq("userId", args.userId)).collect();
     const renewing = rows.filter((row: any) => row.grantedAt && (row.status === "active" || row.status === "past_due") && row.providerSubscriptionId)

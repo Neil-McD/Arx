@@ -3068,3 +3068,6 @@
   text-decoration: none;
   box-sizing: border-box;
 }
+/* Plans include pods: the plan form's pod choices. */
+:root[data-design="v1"] .community-plan-pods { border: 0; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 6px; }
+:root[data-design="v1"] .community-plan-pod { display: flex; align-items: center; gap: 8px; font-size: 14px; }

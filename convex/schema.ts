@@ -968,6 +968,11 @@ export default defineSchema({
     membershipId: v.optional(v.id("communityMemberships")),
     membershipActivationSequence: v.optional(v.number()),
     status: v.union(v.literal("active"), v.literal("revoked")),
+    // Why a member's seat is open: a host added them, they pay for the pod, or
+    // their plan includes it. Open while any reason holds; each part of the
+    // system adds or removes only its own. Missing on an open seat from before
+    // reasons: the host's.
+    reasons: v.optional(v.array(v.union(v.literal("host"), v.literal("paid"), v.literal("plan")))),
     createdByUserId: v.id("users"),
     createdAt: v.number(),
     updatedAt: v.number(),
@@ -1211,6 +1216,9 @@ export default defineSchema({
     name: v.string(),
     rank: v.number(),
     grants: v.array(v.string()),
+    // The pods this plan includes: whoever holds the plan has a seat in each
+    // (communityPlanPods.ts). Missing means none.
+    podChannelIds: v.optional(v.array(v.id("communityChannels"))),
     // No new joins; members on it keep it, and its grants.
     archivedAt: v.optional(v.number()),
     createdAt: v.number(),
