@@ -73,7 +73,6 @@ type BuildWebCommunitySurfaceProjectionParams = {
   communityAgentConfigError: WebCommunitySecondaryPanelsProps["aiAgent"]["communityAgentConfigError"];
   aiAgentInstructionsEditorProps: WebCommunitySecondaryPanelsProps["aiAgent"]["instructionsEditorProps"];
   aiAgentHandbookEditorProps: WebCommunitySecondaryPanelsProps["aiAgent"]["handbookEditorProps"];
-  aiAgentPlanProps?: WebCommunitySecondaryPanelsProps["aiAgent"]["agentPlan"];
   canViewActiveCommunityAnalytics: WebCommunitySecondaryPanelsProps["analytics"]["canViewActiveCommunityAnalytics"];
   canViewPlatformAnalytics: WebCommunitySecondaryPanelsProps["analytics"]["canViewPlatformAnalytics"];
   analyticsState: WebCommunitySecondaryPanelsProps["analytics"]["state"];
@@ -207,7 +206,6 @@ export function buildWebCommunitySurfaceProjection(
       onRequireSignIn: params.requireSignIn,
       instructionsEditorProps: params.aiAgentInstructionsEditorProps,
       handbookEditorProps: params.aiAgentHandbookEditorProps,
-      agentPlan: params.aiAgentPlanProps,
     },
     analytics: {
       hasActiveCommunity: Boolean(params.activeCommunity),

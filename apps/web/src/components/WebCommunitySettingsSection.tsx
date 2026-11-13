@@ -1141,7 +1141,7 @@ export function WebCommunitySettingsSection(props: WebCommunitySettingsSectionPr
               {split ? (
                 <div className="settings-page-head">
                   <h1 className="settings-page-title">{COMMUNITY_SETTINGS_PANE_LABELS[selectedSettingsPane]}</h1>
-                  {isFormPane && selectedSettingsPane !== "app" && state.isCommunitySettingsReady ? (
+                  {isFormPane && state.isCommunitySettingsReady ? (
                     <span className="settings-v1-status-row">
                       <SettingsSaveStatus saving={state.isSavingCommunitySettings} dirty={state.isCommunitySettingsDirty} error={state.communitySettingsError} />
                       {state.communitySettingsConflict ? (

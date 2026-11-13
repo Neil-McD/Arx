@@ -48,7 +48,7 @@ test("Settings' left column: Back, your own sections with the open one marked, t
     mode: "settings", communityShell, settingsSidebar, onBackFromSettings: () => {},
   }));
   // No community open: only your own sections.
-  expect(rows(html)).toEqual(["Back", "Profile", "Account", "Appearance"]);
+  expect(rows(html)).toEqual(["Back", "Profile", "Account", "Billing", "Appearance"]);
   expect(html).toContain('<div class="community-nav-section-label">You</div>');
   expect(html).toMatch(/<button class="nav-item active"[^>]*title="Account"[^>]*aria-current="page"/);
   expect(html).not.toContain("Your communities");
@@ -59,20 +59,19 @@ test("Settings' left column: Back, your own sections with the open one marked, t
     communityShell: { ...inCommunity, canManageMembersActiveCommunity: true, isActiveCommunityOwner: true },
   }));
   // Archive sits at the bottom of General; the public page was removed.
-  // No Billing page: each community's Agent plan is on its Guide.
-  expect(rows(owner)).toEqual(["Back to Kiln", "Profile", "Account", "Appearance", "General", "Plans and pricing", "Your app", "Guide"]);
+  expect(rows(owner)).toEqual(["Back to Kiln", "Profile", "Account", "Billing", "Appearance", "General", "Plans and pricing", "Your app", "Guide"]);
   expect(owner).toContain('<div class="community-nav-section-label">Kiln</div>');
   const admin = renderToStaticMarkup(React.createElement(WebGlobalNavV1, {
     mode: "settings", settingsSidebar, onBackFromSettings: () => {},
     communityShell: { ...inCommunity, canManageMembersActiveCommunity: true, isActiveCommunityOwner: false },
   }));
-  expect(rows(admin).slice(4)).toEqual(["General", "Guide"]);
+  expect(rows(admin).slice(5)).toEqual(["General", "Guide"]);
   // A member: their own membership here, none of the community's sections.
   const member = renderToStaticMarkup(React.createElement(WebGlobalNavV1, {
     mode: "settings", settingsSidebar, onBackFromSettings: () => {},
     communityShell: { ...inCommunity, canManageMembersActiveCommunity: false },
   }));
-  expect(rows(member).slice(4)).toEqual(["Membership"]);
+  expect(rows(member).slice(5)).toEqual(["Membership"]);
   expect(member).toContain('<div class="community-nav-section-label">You in Kiln</div>');
 });
 

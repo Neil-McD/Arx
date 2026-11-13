@@ -14,7 +14,6 @@ import {
   updateCloudConnectedApp,
   type CloudConnectedApp,
 } from "../../../../shared/cloudConnectedAppsGateway";
-import { SettingsButton, SettingsGroup, SettingsNote, SettingsRow, settingsButtonClass } from "./SettingsRows";
 
 type Shown = { appId: string; secret: string; signingSecret?: string };
 
@@ -69,128 +68,124 @@ export function CommunityConnectedAppsSection(props: { communityId: string; comm
 
   if (!apps) return null;
   const origin = apiOrigin();
-  const communityUrl = props.communitySlug ? `${window.location.origin}/c/${encodeURIComponent(props.communitySlug)}` : null;
-  const copyPrompt = (app: CloudConnectedApp) => {
-    const prompt = buildConnectedAppSetupPrompt({
-      communityName: props.communityName ?? "your community", appName: app.name, appId: app.app_id, apiOrigin: origin,
-      hasWebhook: Boolean(app.webhook_url), guide: connectYourAppGuide, communityUrl, hasAppLink: Boolean(app.app_url),
-      tiers: tiers.filter((tier) => !tier.archived).map((tier) => ({ key: tier.key, name: tier.name, grants: tier.grants })),
-    });
-    void navigator.clipboard?.writeText(prompt).then(() => { setCopied(app.app_id); window.setTimeout(() => setCopied(null), 2000); }, () => setError("Couldn't copy. Open the guide instead."));
-  };
-  const addressRow = (app: CloudConnectedApp, field: "appUrl" | "webhookUrl") => {
-    const isApp = field === "appUrl";
-    const value = isApp ? app.app_url : app.webhook_url;
-    const open = editing?.appId === app.app_id && editing.field === field;
-    return (
-      <SettingsRow label={isApp ? "App address" : "Webhook"}
-        help={open ? undefined : value ?? (isApp ? "Not set: no link in your community yet." : "Not set.")}
-        stacked={open}>
-        {open ? (
-          <span className="settings-v1-inline-edit">
-            <input className="settings-v1-input" value={editing!.url} autoFocus inputMode="url"
-              aria-label={isApp ? "App address" : "Webhook address"}
-              placeholder={isApp ? "https://your-app.com" : "https://your-app.com/polynet/webhook"}
-              onChange={(event) => setEditing({ ...editing!, url: event.target.value })} />
-            <SettingsButton variant="quiet" onClick={() => setEditing(null)}>Cancel</SettingsButton>
-            <SettingsButton variant="primary" disabled={busy} onClick={() => void run(async () => {
-              await withSession((session) => updateCloudConnectedApp({ session, communityId: props.communityId, appId: app.app_id, [field]: editing!.url.trim() }));
-              setEditing(null);
-            })}>Save</SettingsButton>
-          </span>
-        ) : (
-          <SettingsButton disabled={busy} onClick={() => setEditing({ appId: app.app_id, field, url: value ?? "" })}>{value ? "Change" : "Add"}</SettingsButton>
-        )}
-      </SettingsRow>
-    );
-  };
-  // Design v1, rows: each connected app is a group; connecting one opens its
-  // fields below; the setup prompt for your AI comes last.
   return (
-    <>
+    <div className="settings-section community-apps-section">
+      <div className="settings-section-title">Your app</div>
+      <div className="settings-section-desc">
+        Connect your own product. Your app asks Polynet what someone has in this community (their plan and grants), and hears when that changes. Sales through Polynet pay Polynet's fee; sales your app makes itself don't.
+      </div>
       {shown ? (
-        <SettingsGroup label="Copy these now. They won't be shown again.">
-          <SettingsRow label="App secret" help="Keep it on your server." stacked><code className="settings-v1-code">{shown.secret}</code></SettingsRow>
-          {shown.signingSecret ? <SettingsRow label="Webhook signing secret" stacked><code className="settings-v1-code">{shown.signingSecret}</code></SettingsRow> : null}
-          <SettingsRow label="">
-            <SettingsButton variant="primary" onClick={() => setShown(null)}>I've saved them</SettingsButton>
-          </SettingsRow>
-        </SettingsGroup>
+        <div className="community-app-secret" role="status">
+          <strong>Copy these now. They won't be shown again.</strong>
+          <div className="settings-section-desc">App secret (keep it on your server)</div>
+          <code>{shown.secret}</code>
+          {shown.signingSecret ? (
+            <>
+              <div className="settings-section-desc">Webhook signing secret</div>
+              <code>{shown.signingSecret}</code>
+            </>
+          ) : null}
+          <button type="button" className="secondary" onClick={() => setShown(null)}>I've saved them</button>
+        </div>
       ) : null}
       {apps.map((app) => (
-        <SettingsGroup key={app.app_id} label={app.name}>
-          <SettingsRow label="App ID" help={`Secret ends ${app.secret_hint}`}>
-            <span className="settings-v1-value is-mono">{app.app_id}</span>
-          </SettingsRow>
-          {addressRow(app, "appUrl")}
-          {addressRow(app, "webhookUrl")}
-          <SettingsRow label="Secret" help="Makes a new one. The old one stops working.">
-            <SettingsButton disabled={busy} onClick={() => void run(async () => {
-              const result = await withSession((session) => rotateCloudConnectedAppSecret({ session, communityId: props.communityId, appId: app.app_id }));
-              if (result) setShown({ appId: app.app_id, secret: result.secret });
-            })}>New secret</SettingsButton>
-          </SettingsRow>
-          <SettingsRow label="Disconnect" help="Members lose the link, and your app loses access.">
+        <div key={app.app_id} className="community-plan-row">
+          <div>
+            <strong>{app.name}</strong>
+            <span className="settings-section-desc">{app.app_id} · secret ends {app.secret_hint}</span>
+            {editing?.appId === app.app_id ? (
+              <span className="community-plan-actions">
+                <input value={editing.url} onChange={(event) => setEditing({ ...editing, url: event.target.value })}
+                  placeholder={editing.field === "appUrl" ? "https://your-app.com" : "https://your-app.com/polynet/webhook"}
+                  aria-label={editing.field === "appUrl" ? "App address" : "Webhook address"} inputMode="url" />
+                <button type="button" disabled={busy} onClick={() => void run(async () => {
+                  await withSession((session) => updateCloudConnectedApp({ session, communityId: props.communityId, appId: app.app_id, [editing.field]: editing.url.trim() }));
+                  setEditing(null);
+                })}>Save</button>
+                <button type="button" className="secondary" onClick={() => setEditing(null)}>Cancel</button>
+              </span>
+            ) : (
+              <>
+                <span className="settings-section-desc">Members open it at: {app.app_url ?? "not set (no link in your community yet)"}</span>
+                <span className="settings-section-desc">Webhooks: {app.webhook_url ?? "not set"}</span>
+              </>
+            )}
+          </div>
+          <div className="community-plan-actions">
             {confirmRevoke === app.app_id ? (
               <>
-                <SettingsButton variant="quiet" onClick={() => setConfirmRevoke(null)}>Keep</SettingsButton>
-                <SettingsButton variant="danger" disabled={busy} onClick={() => void run(async () => {
-                  await withSession((session) => revokeCloudConnectedApp({ session, communityId: props.communityId, appId: app.app_id }));
-                  setConfirmRevoke(null);
-                })}>Confirm disconnect</SettingsButton>
+                <button type="button" disabled={busy} onClick={() => void run(async () => { await withSession((session) => revokeCloudConnectedApp({ session, communityId: props.communityId, appId: app.app_id })); setConfirmRevoke(null); })}>Disconnect</button>
+                <button type="button" className="secondary" onClick={() => setConfirmRevoke(null)}>Keep</button>
               </>
             ) : (
-              <SettingsButton variant="danger" disabled={busy} onClick={() => setConfirmRevoke(app.app_id)}>Disconnect</SettingsButton>
+              <>
+                <button type="button" className="secondary" disabled={busy} onClick={() => setEditing({ appId: app.app_id, field: "appUrl", url: app.app_url ?? "" })}>App address</button>
+                <button type="button" className="secondary" disabled={busy} onClick={() => setEditing({ appId: app.app_id, field: "webhookUrl", url: app.webhook_url ?? "" })}>Webhook</button>
+                <button type="button" className="secondary" disabled={busy} onClick={() => void run(async () => {
+                  const result = await withSession((session) => rotateCloudConnectedAppSecret({ session, communityId: props.communityId, appId: app.app_id }));
+                  if (result) setShown({ appId: app.app_id, secret: result.secret });
+                })}>New secret</button>
+                <button type="button" className="secondary" disabled={busy} onClick={() => setConfirmRevoke(app.app_id)}>Disconnect</button>
+              </>
             )}
-          </SettingsRow>
-        </SettingsGroup>
+          </div>
+        </div>
       ))}
       {adding ? (
-        <SettingsGroup label="Connect an app">
-          <SettingsRow label="Name" htmlFor="app-name">
-            <input id="app-name" className="settings-v1-input" value={adding.name} maxLength={60} placeholder="e.g. Distribution Engineer" autoFocus
-              onChange={(event) => setAdding({ ...adding, name: event.target.value })} />
-          </SettingsRow>
-          <SettingsRow label="App address" htmlFor="app-url" help="Members get a link to it in your left column.">
-            <input id="app-url" className="settings-v1-input" value={adding.appUrl} placeholder="https://your-app.com" inputMode="url"
-              onChange={(event) => setAdding({ ...adding, appUrl: event.target.value })} />
-          </SettingsRow>
-          <SettingsRow label="Webhook" htmlFor="app-webhook" help="Optional. Where Polynet tells your app about changes.">
-            <input id="app-webhook" className="settings-v1-input" value={adding.webhookUrl} placeholder="https://your-app.com/polynet/webhook" inputMode="url"
-              onChange={(event) => setAdding({ ...adding, webhookUrl: event.target.value })} />
-          </SettingsRow>
-          <SettingsRow label="" help={error ? <span className="settings-v1-error" role="alert">{error}</span> : undefined}>
-            <SettingsButton variant="quiet" onClick={() => { setAdding(null); setError(null); }}>Cancel</SettingsButton>
-            <SettingsButton variant="primary" disabled={busy || !adding.name.trim()} onClick={() => void run(async () => {
+        <div className="community-plan-form">
+          <label className="create-community-field">
+            <span>App name</span>
+            <input value={adding.name} onChange={(event) => setAdding({ ...adding, name: event.target.value })} maxLength={60} placeholder="e.g. Distribution Engineer" autoFocus />
+          </label>
+          <label className="create-community-field">
+            <span>App address</span>
+            <input value={adding.appUrl} onChange={(event) => setAdding({ ...adding, appUrl: event.target.value })} placeholder="https://your-app.com" inputMode="url" />
+            <span className="settings-section-desc">Members get a link to it in your community's left column.</span>
+          </label>
+          <label className="create-community-field">
+            <span>Webhook address (optional)</span>
+            <input value={adding.webhookUrl} onChange={(event) => setAdding({ ...adding, webhookUrl: event.target.value })} placeholder="https://your-app.com/polynet/webhook" inputMode="url" />
+          </label>
+          <div className="community-plan-actions">
+            <button type="button" disabled={busy || !adding.name.trim()} onClick={() => void run(async () => {
               const result = await withSession((session) => registerCloudConnectedApp({ session, communityId: props.communityId, name: adding.name, appUrl: adding.appUrl.trim() || undefined, webhookUrl: adding.webhookUrl.trim() || undefined }));
               if (result) { setShown({ appId: result.app_id, secret: result.secret, signingSecret: result.webhook_signing_secret }); setAdding(null); }
-            })}>{busy ? "Connecting…" : "Connect app"}</SettingsButton>
-          </SettingsRow>
-        </SettingsGroup>
+            })}>{busy ? "Connecting…" : "Connect app"}</button>
+            <button type="button" className="secondary" onClick={() => { setAdding(null); setError(null); }}>Cancel</button>
+          </div>
+        </div>
       ) : apps.length < 3 ? (
-        <SettingsGroup>
-          <SettingsRow label={apps.length ? "Connect another app" : "Connect your app"}
-            help="Your app asks Polynet what someone has here (their plan and grants) and hears when that changes. Sales your app makes itself pay no Polynet fee.">
-            <SettingsButton variant={apps.length ? "secondary" : "primary"} onClick={() => { setError(null); setAdding({ name: "", appUrl: "", webhookUrl: "" }); }}>Connect an app</SettingsButton>
-          </SettingsRow>
-        </SettingsGroup>
+        <button type="button" className="secondary" style={{ marginTop: 10 }} onClick={() => { setError(null); setAdding({ name: "", appUrl: "", webhookUrl: "" }); }}>Connect an app</button>
       ) : null}
-      {!adding && error ? <SettingsNote tone="error">{error}</SettingsNote> : null}
+      {error ? <div className="settings-section-desc" role="alert">{error}</div> : null}
       {apps.length && origin ? (
-        <SettingsGroup label="Set up with your AI">
-          {apps.map((app) => (
-            <SettingsRow key={app.app_id} label={apps.length > 1 ? `Setup prompt for ${app.name}` : "Setup prompt"}
-              help="Paste it into Claude Code, Cursor or Codex in your app's code. It has the guide and this community's values, never your secret.">
-              <SettingsButton onClick={() => copyPrompt(app)}>{copied === app.app_id ? "Copied" : "Copy prompt"}</SettingsButton>
-            </SettingsRow>
-          ))}
-          <SettingsRow label="API address"><span className="settings-v1-value is-mono">{origin}</span></SettingsRow>
-          {communityUrl ? <SettingsRow label="Link to your community" help="Put it in your app; the prompt suggests where."><span className="settings-v1-value is-mono">{communityUrl}</span></SettingsRow> : null}
-          <SettingsRow label="The guide" help="How connected apps work, step by step.">
-            <a className={settingsButtonClass()} href="/docs/guides/connect-your-app" target="_blank" rel="noreferrer">Read the guide</a>
-          </SettingsRow>
-        </SettingsGroup>
+        <div className="community-app-setup">
+          <strong>Set up with your AI</strong>
+          <div className="settings-section-desc">
+            Copy the setup prompt and paste it into Claude Code (or Cursor, or Codex) in your app's codebase. It has the whole guide and this community's values; it never contains your secret. Your API address: <code>{origin}</code>
+          </div>
+          {props.communitySlug ? (
+            <div className="settings-section-desc">
+              Link to your community from your app (the prompt suggests where): <code>{`${window.location.origin}/c/${encodeURIComponent(props.communitySlug)}`}</code>
+            </div>
+          ) : null}
+          <div className="community-plan-actions">
+            {apps.map((app) => (
+              <button key={app.app_id} type="button" onClick={() => {
+                const prompt = buildConnectedAppSetupPrompt({
+                  communityName: props.communityName ?? "your community", appName: app.name, appId: app.app_id, apiOrigin: origin,
+                  hasWebhook: Boolean(app.webhook_url), guide: connectYourAppGuide,
+                  communityUrl: props.communitySlug ? `${window.location.origin}/c/${encodeURIComponent(props.communitySlug)}` : null,
+                  hasAppLink: Boolean(app.app_url),
+                  tiers: tiers.filter((tier) => !tier.archived).map((tier) => ({ key: tier.key, name: tier.name, grants: tier.grants })),
+                });
+                void navigator.clipboard?.writeText(prompt).then(() => { setCopied(app.app_id); window.setTimeout(() => setCopied(null), 2000); }, () => setError("Couldn't copy. Open the guide instead."));
+              }}>{copied === app.app_id ? "Copied" : apps.length > 1 ? `Copy setup prompt for ${app.name}` : "Copy setup prompt"}</button>
+            ))}
+            <a className="secondary" href="/docs/guides/connect-your-app" target="_blank" rel="noreferrer">Read the guide</a>
+          </div>
+        </div>
       ) : null}
-    </>
+    </div>
   );
 }

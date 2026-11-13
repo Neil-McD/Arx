@@ -96,16 +96,6 @@ export function WebSettingsPanels(props: WebSettingsPanelsProps) {
   };
 
   if (isDesignV1Active()) {
-    // Design v1 has no Billing page: each community's Agent plan is on its
-    // Guide. An old /settings/billing link opens Account.
-    if (props.settingsGroup === "billing") {
-      return (
-        <>
-          <SettingsPageHead title={settingsGroupLabel("account")} />
-          <WebSettingsPanelBody {...props} settingsGroup="account" profileSectionProps={profileSectionProps} />
-        </>
-      );
-    }
     const p = profileSectionProps;
     const status = props.settingsGroup === "profile" && p.session ? (
       <SettingsSaveStatus saving={p.isSavingProfile} dirty={p.profileNeedsSave}
