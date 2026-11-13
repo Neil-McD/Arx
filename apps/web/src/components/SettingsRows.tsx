@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import type { ButtonHTMLAttributes, KeyboardEvent, ReactNode, SelectHTMLAttributes } from "react";
 
 // One Settings page (design v1), after Linear's settings: plain groups with a
 // small label, and rows with the name (and at most one short line) on the left
@@ -62,4 +62,64 @@ export function SettingsPageHead(props: { title: string; status?: ReactNode }) {
 // A short line under a group (a fee note, an empty state).
 export function SettingsNote(props: { children: ReactNode; tone?: "error" }) {
   return <p className={`settings-v1-note${props.tone === "error" ? " is-error" : ""}`} role={props.tone === "error" ? "alert" : undefined}>{props.children}</p>;
+}
+
+// Buttons: at most one primary on a page; secondary for everything else;
+// quiet for small things (Remove); danger only in the Danger zone.
+export type SettingsButtonVariant = "primary" | "secondary" | "quiet" | "danger";
+export function settingsButtonClass(variant: SettingsButtonVariant = "secondary") {
+  return `settings-v1-button${variant === "secondary" ? "" : ` is-${variant}`}`;
+}
+export function SettingsButton({ variant, className, type, ...rest }: ButtonHTMLAttributes<HTMLButtonElement> & { variant?: SettingsButtonVariant }) {
+  return <button {...rest} type={type ?? "button"} className={`${settingsButtonClass(variant)}${className ? ` ${className}` : ""}`} />;
+}
+
+// One of 2–4 short options, all worth seeing at once (Theme; Free / Monthly / Annual).
+export function SettingsSegmented<T extends string>(props: {
+  label: string;
+  value: T;
+  options: readonly { id: T; label: string; disabled?: boolean }[];
+  onChange: (value: T) => void;
+}) {
+  // A radio group's keyboard: one tab stop (the selected option), arrows and
+  // Home/End move and select, skipping disabled options.
+  const enabled = props.options.filter((option) => !option.disabled);
+  const tabStop = enabled.some((option) => option.id === props.value) ? props.value : enabled[0]?.id;
+  const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    const at = enabled.findIndex((option) => option.id === props.value);
+    const next = event.key === "ArrowRight" || event.key === "ArrowDown" ? enabled[(at + 1) % enabled.length]
+      : event.key === "ArrowLeft" || event.key === "ArrowUp" ? enabled[(at - 1 + enabled.length) % enabled.length]
+      : event.key === "Home" ? enabled[0] : event.key === "End" ? enabled[enabled.length - 1] : null;
+    if (!next) return;
+    event.preventDefault();
+    if (next.id !== props.value) props.onChange(next.id);
+    event.currentTarget.querySelector<HTMLButtonElement>(`[data-segment="${next.id}"]`)?.focus();
+  };
+  return (
+    <div className="settings-v1-segmented" role="radiogroup" aria-label={props.label} onKeyDown={onKeyDown}>
+      {props.options.map((option) => (
+        <button key={option.id} type="button" role="radio" data-segment={option.id} aria-checked={props.value === option.id} disabled={option.disabled}
+          tabIndex={option.id === tabStop ? 0 : -1}
+          className={`settings-v1-segment${props.value === option.id ? " is-on" : ""}`}
+          onClick={() => { if (props.value !== option.id) props.onChange(option.id); }}>
+          {option.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+// One of many (5+), or long labels: a native select, drawn like the inputs.
+export function SettingsSelect({ className, ...rest }: SelectHTMLAttributes<HTMLSelectElement>) {
+  return <select {...rest} className={`settings-v1-input settings-v1-select${className ? ` ${className}` : ""}`} />;
+}
+
+// Several from a list (a plan's pods).
+export function SettingsCheckbox(props: { checked: boolean; label: ReactNode; disabled?: boolean; onChange: (checked: boolean) => void }) {
+  return (
+    <label className={`settings-v1-checkbox${props.disabled ? " is-disabled" : ""}`}>
+      <input type="checkbox" checked={props.checked} disabled={props.disabled} onChange={(event) => props.onChange(event.target.checked)} />
+      <span>{props.label}</span>
+    </label>
+  );
 }
