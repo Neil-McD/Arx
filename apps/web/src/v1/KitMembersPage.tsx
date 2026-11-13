@@ -284,7 +284,8 @@ export function KitMembersPage(props: {
                   <span />{header("name", "Member")}<span>Working on</span>{header("plan", "Plan")}{header("active", "Last active")}
                 </div>
                 {rows.map((row) => (
-                  <button key={keyOf(row)} type="button" role="row" className={cx("trow", openKey === keyOf(row) && "sel")} onClick={() => setOpenKey(keyOf(row))}>
+                  <button key={keyOf(row)} type="button" role="row" className={cx("trow", openKey === keyOf(row) && "sel")} data-opens-right-column
+                    onClick={() => { setOpenKey(keyOf(row)); setRightColumnOpen(true); }}>
                     <Face size="s" name={row.name} url={row.avatar_url} seed={row.user_id} getAvatarColor={props.getAvatarColor} getInitials={props.getInitials} />
                     <span>
                       <b>{row.name}</b>
