@@ -680,16 +680,16 @@ export const podLeavePlanInternal = internalQuery({
   handler: async (ctx, args) => {
     const room = await ctx.db.get(args.channelId) as any;
     if (!room || String(room.communityId) !== String(args.communityId) || room.accessMode !== "restricted") throw new Error("community_pod_not_found");
-    // Their plan includes this pod: it goes with the plan, not on its own.
+    // Their plan includes this pod: the seat goes with the plan, though a separate payment for it can still be stopped.
     const seat = (await ctx.db.query("communityChannelParticipants")
       .withIndex("by_channel_principal", (q: any) => q.eq("channelId", args.channelId).eq("principalKey", `user:${args.userId}`)).take(1))[0];
-    if (seatReasons(seat).includes("plan")) throw new Error("community_pod_seat_from_plan");
+    const fromPlan = seatReasons(seat).includes("plan");
     const rows = await ctx.db.query("communityPodPayments")
       .withIndex("by_channel_user", (q: any) => q.eq("channelId", args.channelId).eq("userId", args.userId)).collect();
     const renewing = rows.filter((row: any) => row.grantedAt && (row.status === "active" || row.status === "past_due") && row.providerSubscriptionId)
       .map((row: any) => ({ paymentId: row._id, providerAccountId: row.providerAccountId, providerSubscriptionId: row.providerSubscriptionId }));
     const leaving = rows.some((row: any) => row.grantedAt && row.status === "cancel_at_period_end");
-    return { renewing, leaving };
+    return { renewing, leaving, fromPlan };
   },
 });
 
@@ -725,8 +725,10 @@ export const leavePod = action({
     const actor = await ctx.runQuery(internal.authActor.resolveAuthenticatedActorInternal as any, { authSubject: args.authSubject }) as { dbUserId?: any } | null;
     const userId = actor?.dbUserId;
     if (!userId) throw new Error("auth_subject_required");
-    const plan: { renewing: Array<{ paymentId: any; providerAccountId: string; providerSubscriptionId: string }>; leaving: boolean } =
+    const plan: { renewing: Array<{ paymentId: any; providerAccountId: string; providerSubscriptionId: string }>; leaving: boolean; fromPlan: boolean } =
       await ctx.runQuery(internal.communityPodPayments.podLeavePlanInternal, { userId, communityId: args.communityId, channelId: args.channelId });
+    // Nothing of their own to stop, and the seat comes with their plan: it ends when the plan does.
+    if (plan.fromPlan && plan.renewing.length === 0) throw new Error("community_pod_seat_from_plan");
     if (plan.renewing.length === 0 && plan.leaving) return { left: "at_period_end" };
     if (plan.renewing.length === 0) {
       await ctx.runMutation(internal.communityPodPayments.leavePodNowInternal, { userId, communityId: args.communityId, channelId: args.channelId });

@@ -123,6 +123,17 @@ export function seatReasons(row: { status?: string; reasons?: PodSeatReason[] } 
   return row.reasons?.length ? [...row.reasons] : ["host"];
 }
 
+/** A seat's reasons as written; an open seat from before reasons was opened by a pod payment if one still grants it,
+ * else by a host. */
+async function currentSeatReasons(ctx: any, row: any, userId: any): Promise<PodSeatReason[]> {
+  if (!row || row.status !== "active") return [];
+  if (row.reasons?.length) return [...row.reasons];
+  const paying = (await ctx.db.query("communityPodPayments")
+    .withIndex("by_channel_user", (q: any) => q.eq("channelId", row.channelId).eq("userId", userId)).take(20))
+    .some((payment: any) => payment.grantedAt);
+  return [paying ? "paid" : "host"];
+}
+
 /** Caller must establish manager authority; grants retain activation lineage.
  * A member's seat is open while any reason holds. Opening adds `reason` (the
  * host's unless said); closing removes `reason`, or without one the host's and
@@ -159,7 +170,7 @@ export async function setChannelParticipantCore(ctx: any, args: {
       return { changed: true };
     }
     // A seat from an earlier membership (they left and came back) carries no reasons into this one.
-    const before = args.active && previous && !sameBinding ? [] : seatReasons(previous);
+    const before = args.active && previous && !sameBinding ? [] : await currentSeatReasons(ctx, previous, args.target.userId);
     const reasons: PodSeatReason[] = args.active
       ? [...new Set([...before, args.reason ?? "host"])] as PodSeatReason[]
       : before.filter((reason) => (args.reason ? reason !== args.reason : reason === "plan"));
