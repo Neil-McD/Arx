@@ -1487,7 +1487,7 @@
 /* One column for every such page: same left edge, same width, same top. */
 :root[data-design="v1"] .community-page-body > .community-tab-scroll > .web-community-centered-pane {
   box-sizing: border-box;
-  width: min(100%, 920px);
+  width: min(100%, var(--content-wide));
   margin-inline: auto;
   padding: 28px 32px 56px;
 }
@@ -1507,13 +1507,19 @@
  * one width, one edge, inside the raised panel.
  */
 :root[data-design="v1"] {
+  /* Three content widths, by what a page is for: forms (Settings), reading
+     (Home, a channel's messages, lessons), and wide pages (Knowledge, Events,
+     Analytics, Members). */
+  --content-form: 640px;
+  --content-reading: 736px;
+  --content-wide: 920px;
   /* The mock is drawn at 1440px wide (328px there). Wider screens get a wider
      column, up to 440px. */
   --right-column-width: clamp(328px, 23vw, 440px);
   /* Home's column: the mock's 848px main area less its 56px gutters, centred
      in the space it has, with the composer on the same two edges. Every other
      page uses the mock's fixed 56px gutters across the whole width. */
-  --main-measure: 736px;
+  --main-measure: var(--content-reading);
   --main-gutter: max(56px, calc((100% - var(--main-measure)) / 2));
 }
 
@@ -1934,8 +1940,9 @@
 }
 
 :root[data-design="v1"] .community-channel-header h1 {
-  font-size: 14px;
-  font-weight: 600;
+  /* Every page's header title, as the mock's finish draws it (16/500). */
+  font-size: 16px;
+  font-weight: 500;
   letter-spacing: -0.005em;
 }
 
@@ -1962,9 +1969,9 @@
   height: 36px;
 }
 
-/* Text keeps a readable measure on wide windows; the row itself is full width. */
+/* Text keeps the reading width on wide windows; the row itself is full width. */
 :root[data-design="v1"] .community-chat .community-interaction-group-body {
-  max-width: 760px;
+  max-width: var(--content-reading);
 }
 
 :root[data-design="v1"] .community-chat .community-interaction-meta-row {
@@ -2306,7 +2313,7 @@
   :root[data-design="v1"] .community-page-body > .community-page-header {
     grid-column: 1;
     grid-row: 1;
-    padding: 0 max(32px, calc((100% - 920px) / 2 + 32px));
+    padding: 0 max(32px, calc((100% - var(--content-wide)) / 2 + 32px));
   }
 
   :root[data-design="v1"] .community-page-body > .community-tab-scroll {
@@ -3007,7 +3014,7 @@
 /* One Settings page (design v1): a narrow centred column, a large page title,
    and each group of settings in its own card (after Linear's settings). */
 :root[data-design="v1"] .settings-page-v1 {
-  max-width: 680px;
+  max-width: var(--content-form);
   margin: 0 auto;
   width: 100%;
 }
@@ -3210,7 +3217,6 @@
 }
 :root[data-design="v1"] .settings-v1-switch.is-on { background: var(--settings-accent); }
 :root[data-design="v1"] .settings-v1-switch.is-on span { left: 17px; background: #fff; }
-:root[data-design="v1"] .settings-page-v1 { max-width: 640px; }
 @media (max-width: 720px) {
   :root[data-design="v1"] .settings-v1-row { flex-direction: column; align-items: stretch; gap: 8px; }
   :root[data-design="v1"] .settings-v1-row-control { justify-content: flex-start; flex: 1 1 auto; }
