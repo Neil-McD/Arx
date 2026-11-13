@@ -1,4 +1,4 @@
-import { ArrowLeft, Bell, Building2, Lock, Plug, Sparkles, Sun, Tag, TriangleAlert, User, CreditCard } from "lucide-react";
+import { ArrowLeft, Bell, Building2, Lock, Plug, Sparkles, Sun, Tag, TriangleAlert, User } from "lucide-react";
 import type { ReactNode } from "react";
 import {
   COMMUNITY_SETTINGS_PANE_LABELS,
@@ -17,7 +17,6 @@ import type { WebCommunityShellProps, WebSettingsSidebarProps } from "./webShell
 const PERSONAL: Array<{ page: SettingsPage; icon: ReactNode }> = [
   { page: "profile", icon: <User size={16} strokeWidth={1.7} /> },
   { page: "account", icon: <Lock size={16} strokeWidth={1.7} /> },
-  { page: "billing", icon: <CreditCard size={16} strokeWidth={1.7} /> },
   { page: "appearance", icon: <Sun size={16} strokeWidth={1.7} /> },
 ];
 
@@ -65,7 +64,7 @@ export function WebSettingsNavV1(props: {
       <div className="community-nav-section-label">You</div>
       {PERSONAL.map((entry) => item(
         entry.page, settingsGroupLabel(entry.page), entry.icon,
-        props.current.kind === "personal" && props.current.page === entry.page,
+        props.current.kind === "personal" && (props.current.page === "billing" ? "account" : props.current.page) === entry.page,
         () => props.settingsSidebar.onSelectPage(entry.page),
       ))}
       {community && openPane && panes.length ? (

@@ -1819,6 +1819,15 @@ export default function App() {
         markCommunityAgentConfigDirty,
       },
       aiAgentHandbookEditorProps: { communityId: activeCommunityId, session, ensureSession: ensureUsableAuthSession },
+      // This community's Agent plan, shown on Guide (owners only: it's their billing).
+      aiAgentPlanProps: {
+        community: founderBilling.overview.communities.find((community) => community.community_id === activeCommunityId && community.lifecycle_status === "active") ?? null,
+        isLoading: founderBilling.isLoading,
+        isActing: founderBilling.actionCommunityId === activeCommunityId,
+        error: founderBilling.error,
+        openPortal: founderBilling.openPortal,
+        onOpenBuilderOffer: (community) => builderOffer.open({ community }),
+      },
       canViewActiveCommunityAnalytics,
       canViewPlatformAnalytics: hasOperatorAccess,
       analyticsState: {
