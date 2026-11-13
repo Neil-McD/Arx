@@ -1087,18 +1087,20 @@ test("Messages: unblocked or muted elsewhere, the open thread follows on refresh
     // The tab comes back into view (forced visible: a headless tab under CI load
     // can report hidden), again until the refresh lands, since one lost request
     // would otherwise leave nothing else to refresh it (live updates are faked).
+    // Each wait allows 30 seconds: under a full suite's load a single 15-second
+    // wait ran out (twice in a day) though the thread did follow.
     const refresh = () => page.evaluate(() => {
       Object.defineProperty(document, "visibilityState", { configurable: true, get: () => "visible" });
       document.dispatchEvent(new Event("visibilitychange"));
     });
-    await expect.poll(async () => { await refresh(); return personal.locator("[part=input]").count(); }, { timeout: 15_000, intervals: [1_000] }).toBe(1);
+    await expect.poll(async () => { await refresh(); return personal.locator("[part=input]").count(); }, { timeout: 30_000, intervals: [1_000] }).toBe(1);
     expect(await personal.locator("[part=block]").textContent()).toBe("Block");
     expect(await personal.locator("[part=mute]").getAttribute("aria-pressed")).toBe("true");
     dm.slowConversationMs = 0;
     // A draft survives the next change.
     await personal.locator("[part=input]").fill("Sorry about that");
     dm.conversations[0].muted = false;
-    await expect.poll(async () => { await refresh(); return personal.locator("[part=mute]").getAttribute("aria-pressed"); }, { timeout: 15_000, intervals: [1_000] }).toBe("false");
+    await expect.poll(async () => { await refresh(); return personal.locator("[part=mute]").getAttribute("aria-pressed"); }, { timeout: 30_000, intervals: [1_000] }).toBe("false");
     expect(await personal.locator("[part=input]").inputValue()).toBe("Sorry about that");
   } finally {
     await browser.close();
