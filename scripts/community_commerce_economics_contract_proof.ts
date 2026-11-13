@@ -70,12 +70,12 @@ assert.match(
 );
 assert.match(
   communityCommerce,
-  /products\.create\([\s\S]*stripeAccount: checkoutConfig\.providerAccountId/,
+  /products\.create\([\s\S]*stripeAccount: config\.providerAccountId/,
   "Community products must be created on the founder account.",
 );
 assert.match(
   communityCommerce,
-  /prices\.create\([\s\S]*stripeAccount: checkoutConfig\.providerAccountId/,
+  /prices\.create\([\s\S]*stripeAccount: config\.providerAccountId/,
   "Community prices must be created on the founder account.",
 );
 assert.match(

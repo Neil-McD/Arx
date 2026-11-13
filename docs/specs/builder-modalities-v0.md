@@ -206,6 +206,10 @@ The builder's app keeps its own login and billing and does most of the selling.
   includes, and checks out the one chosen (`plan` key on both checkout routes;
   a stopped plan is refused). The card lives in the community-site worker, so
   it goes live with the next worker deploy.
+- **Changing plan (built, Nov 13):** members who pay Polynet monthly switch
+  plans from "Your plan" in their community settings; Stripe's notice moves the
+  plan, and its pods and grants follow. Members who bought in the app change it
+  there.
 - **Next:** slice 3 (buy and change tiers through Polynet
   from the app), slice 4 (Distribution Engineer live, both ways). Sign in with
   Polynet waits for a builder with no login of its own.
