@@ -352,6 +352,17 @@ export const syncCommunitySubscriptionLifecycleInternal = internalMutation({
 
     let pricePointId = args.pricePointId ?? current?.pricePointId ?? membership.pricePointId ?? undefined;
     const providerPriceId = String(args.providerPriceId ?? "").trim();
+    // Stripe bills what the subscription is on now: when it moved to another of
+    // this community's prices (a member changing plan), that price is theirs.
+    if (pricePointId && providerPriceId && source === "stripe") {
+      const recorded = await ctx.db.get(pricePointId) as CommunityPricePointLike | null;
+      if (recorded && String(recorded.providerPriceId ?? "").trim() !== providerPriceId) {
+        const moved = ((await ctx.db.query("communityPricePoints" as any)
+          .withIndex("by_community", (q: any) => q.eq("communityId", args.communityId)).collect()) as CommunityPricePointLike[])
+          .find((row) => String(row.providerPriceId ?? "").trim() === providerPriceId && String(row.providerAccountId ?? "").trim() === providerAccountId);
+        if (moved) pricePointId = moved._id;
+      }
+    }
     if (!pricePointId && providerPriceId) {
       const pricePoints = (await ctx.db
         .query("communityPricePoints" as any)
@@ -1125,68 +1136,7 @@ export async function startCommunityJoinCheckoutCore(
       nowMs,
     });
   }
-  let providerPriceId = String(checkoutConfig.providerPriceId ?? "").trim() || null;
-  if (!providerPriceId) {
-    const existingProviderPrice = (await ctx.runQuery(
-      internal.communityCommerce.getCommunityPricePointProviderPriceInternal as any,
-      {
-        pricePointId: checkoutConfig.pricePointId,
-        providerAccountId: checkoutConfig.providerAccountId,
-      },
-    )) as { providerPriceId?: string | null; providerAccountId?: string | null } | null;
-    providerPriceId = String(existingProviderPrice?.providerPriceId ?? "").trim() || null;
-  }
-  if (!providerPriceId) try {
-    const stripe = getStripeClient();
-    const pricePointId = String(checkoutConfig.pricePointId);
-    const productIdempotencyKey = `community-price-product:${checkoutConfig.providerAccountId}:${pricePointId}`;
-    const priceIdempotencyKey = `community-price:${checkoutConfig.providerAccountId}:${pricePointId}`;
-    const product = await stripe.products.create({
-      name: `${checkoutConfig.communityName}${checkoutConfig.tierName ? ` · ${checkoutConfig.tierName}` : ""} (${checkoutConfig.billingPeriod})`,
-      description: checkoutConfig.oneLiner ?? undefined,
-      metadata: {
-        community_id: String(checkoutConfig.communityId),
-        community_slug: checkoutConfig.communitySlug,
-        community_price_point_id: String(checkoutConfig.pricePointId),
-        billing_period: checkoutConfig.billingPeriod,
-      },
-    }, {
-      stripeAccount: checkoutConfig.providerAccountId,
-      idempotencyKey: productIdempotencyKey,
-    });
-    const price = await stripe.prices.create({
-      currency: checkoutConfig.currency,
-      unit_amount: checkoutConfig.amountBaseUnits,
-      recurring: {
-        interval: checkoutConfig.billingPeriod === "annual" ? "year" : "month",
-      },
-      product: product.id,
-      metadata: {
-        community_id: String(checkoutConfig.communityId),
-        community_slug: checkoutConfig.communitySlug,
-        community_price_point_id: String(checkoutConfig.pricePointId),
-        billing_period: checkoutConfig.billingPeriod,
-      },
-    }, {
-      stripeAccount: checkoutConfig.providerAccountId,
-      idempotencyKey: priceIdempotencyKey,
-    });
-    const attachResult = (await ctx.runMutation(
-      internal.communityCommerce.attachCommunityPricePointProviderPriceInternal as any,
-      {
-        pricePointId: checkoutConfig.pricePointId,
-        providerAccountId: checkoutConfig.providerAccountId,
-        providerPriceId: price.id,
-        nowMs,
-      },
-    )) as { providerPriceId?: string | null; providerAccountId?: string | null } | null;
-    providerPriceId = String(attachResult?.providerPriceId ?? price.id).trim();
-    if (!providerPriceId) throw new Error("provider_price_id_required");
-  } catch (error) {
-    // The founder's account can't sell this price (say, a currency it doesn't support).
-    if (isStripeConnectCheckoutCapabilityError(error)) throw new Error("community_checkout_unavailable");
-    throw error;
-  }
+  const providerPriceId = await ensureCommunityProviderPrice(ctx, checkoutConfig, nowMs);
   await ctx.runMutation(
     internal.communityCommerce.createPendingPublicCommunityCheckoutSessionInternal as any,
     {
@@ -1465,3 +1415,78 @@ async function checkoutBuyerIsIn(ctx: any, session: any): Promise<boolean> {
   return await requireCommunityChatAccess({ ctx, communityId: session.communityId, userId: session.ownerUserId }).then(() => true, () => false);
 }
 
+// The Stripe price for a community price point on the founder's account: the one
+// recorded, else made once (product and price, idempotent) and recorded. Checkout
+// and a member's plan change both use it.
+export type CommunityProviderPriceConfig = {
+  pricePointId: any; providerAccountId: string; providerPriceId?: string | null;
+  communityId: any; communitySlug: string; communityName: string; tierName?: string | null; oneLiner?: string | null;
+  billingPeriod: string; currency: string; amountBaseUnits: number;
+};
+
+export async function ensureCommunityProviderPrice(ctx: any, config: CommunityProviderPriceConfig, nowMs: number): Promise<string> {
+  let providerPriceId = String(config.providerPriceId ?? "").trim() || null;
+  if (!providerPriceId) {
+    const existingProviderPrice = (await ctx.runQuery(
+      internal.communityCommerce.getCommunityPricePointProviderPriceInternal as any,
+      {
+        pricePointId: config.pricePointId,
+        providerAccountId: config.providerAccountId,
+      },
+    )) as { providerPriceId?: string | null; providerAccountId?: string | null } | null;
+    providerPriceId = String(existingProviderPrice?.providerPriceId ?? "").trim() || null;
+  }
+  if (!providerPriceId) try {
+    const stripe = getStripeClient();
+    const pricePointId = String(config.pricePointId);
+    const productIdempotencyKey = `community-price-product:${config.providerAccountId}:${pricePointId}`;
+    const priceIdempotencyKey = `community-price:${config.providerAccountId}:${pricePointId}`;
+    const product = await stripe.products.create({
+      name: `${config.communityName}${config.tierName ? ` · ${config.tierName}` : ""} (${config.billingPeriod})`,
+      description: config.oneLiner ?? undefined,
+      metadata: {
+        community_id: String(config.communityId),
+        community_slug: config.communitySlug,
+        community_price_point_id: String(config.pricePointId),
+        billing_period: config.billingPeriod,
+      },
+    }, {
+      stripeAccount: config.providerAccountId,
+      idempotencyKey: productIdempotencyKey,
+    });
+    const price = await stripe.prices.create({
+      currency: config.currency,
+      unit_amount: config.amountBaseUnits,
+      recurring: {
+        interval: config.billingPeriod === "annual" ? "year" : "month",
+      },
+      product: product.id,
+      metadata: {
+        community_id: String(config.communityId),
+        community_slug: config.communitySlug,
+        community_price_point_id: String(config.pricePointId),
+        billing_period: config.billingPeriod,
+      },
+    }, {
+      stripeAccount: config.providerAccountId,
+      idempotencyKey: priceIdempotencyKey,
+    });
+    const attachResult = (await ctx.runMutation(
+      internal.communityCommerce.attachCommunityPricePointProviderPriceInternal as any,
+      {
+        pricePointId: config.pricePointId,
+        providerAccountId: config.providerAccountId,
+        providerPriceId: price.id,
+        nowMs,
+      },
+    )) as { providerPriceId?: string | null; providerAccountId?: string | null } | null;
+    providerPriceId = String(attachResult?.providerPriceId ?? price.id).trim();
+    if (!providerPriceId) throw new Error("provider_price_id_required");
+  } catch (error) {
+    // The founder's account can't sell this price (say, a currency it doesn't support).
+    if (isStripeConnectCheckoutCapabilityError(error)) throw new Error("community_checkout_unavailable");
+    throw error;
+  }
+  if (!providerPriceId) throw new Error("provider_price_id_required");
+  return providerPriceId;
+}

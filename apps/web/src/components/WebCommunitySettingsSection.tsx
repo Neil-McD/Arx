@@ -1,3 +1,4 @@
+import { CommunityMyPlanSection } from "./CommunityMyPlanSection";
 import { CommunityConnectedAppsSection } from "./CommunityConnectedAppsSection";
 import { CommunityPlansSection } from "./CommunityPlansSection";
 import { isDesignV1Active } from "../../../../shared/designSystem";
@@ -678,8 +679,12 @@ function CommunityMemberSettingsSection({
   activeCommunity,
   state,
   actions,
+  session,
+  ensureSession,
 }: SharedSettingsProps & {
   activeCommunity: ActiveCommunity;
+  session: unknown;
+  ensureSession: (session: any) => Promise<any | null>;
 }) {
   return (
     <div className="create-community-form community-settings-form">
@@ -711,6 +716,9 @@ function CommunityMemberSettingsSection({
           </div>
         ) : null}
       </div>
+      {isDesignV1Active() ? (
+        <CommunityMyPlanSection communityId={activeCommunity.id} session={session} ensureSession={ensureSession} />
+      ) : null}
       <div className="settings-section" style={{ marginTop: 18 }}>
         <div className="settings-section-title">Leave community</div>
         <div className="settings-section-desc">
@@ -829,6 +837,8 @@ export function WebCommunitySettingsSection(props: WebCommunitySettingsSectionPr
           activeCommunity={resolvedActiveCommunity}
           state={state}
           actions={actions}
+          session={props.session}
+          ensureSession={props.ensureSession}
         />
       ) : canManageCommunitySettings ? (
         <>

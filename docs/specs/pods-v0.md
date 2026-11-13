@@ -150,6 +150,14 @@ plan's seat ignores the pod's seat limit, and neither a host nor the member can
 take it away on its own: it follows the plan. A pod priced on its own (above)
 stays for communities that sell a pod by itself.
 
+**Changing plan** (Nov 13, `convex/communityPlanChange.ts`): a member who pays
+Polynet monthly moves to another plan on sale from their community settings
+("Your plan"). Their Stripe subscription moves to the new plan's price: up is
+charged the difference now and only moves once paid; down moves now with the
+rest of the month credited. Stripe's notice records it (the price Stripe bills
+is the member's), and the plan's pods and grants follow. A plan bought in the
+community's own app is changed there.
+
 Not built: plan switching, proration, combined prices, approve-then-pay, seat
 holds during checkout, a paid waitlist, a combined community-plus-pod
 checkout.
