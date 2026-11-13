@@ -150,6 +150,15 @@ plan's seat ignores the pod's seat limit, and neither a host nor the member can
 take it away on its own: it follows the plan. A pod priced on its own (above)
 stays for communities that sell a pod by itself.
 
+**A pod's pitch is in the right column** (Nov 13): the Pods page lists pods;
+picking one you're not in shows its pitch in the right column (on a narrow
+screen, the page itself): what it is, what you get, its hosts, and how you get
+in. A pod a plan includes says "Included with CRIS" and offers "Switch to CRIS"
+to a member who pays Polynet monthly (the plan change below); otherwise its own
+price, or asking. Its address (/c/:slug/pods/:pod) opens the Pods page with it
+picked; there is no separate pod page. Builders and hosts see it as members do
+from the pod's own right column.
+
 **Changing plan** (Nov 13, `convex/communityPlanChange.ts`): a member who pays
 Polynet monthly moves to another plan on sale from their community settings
 ("Your plan"). Their Stripe subscription moves to the new plan's price: up is
