@@ -3339,3 +3339,11 @@
   color: var(--text-ink-primary);
   background: var(--surface-raised-edge) !important;
 }
+/* The personal column spaces its groups the same way General does. */
+:root[data-design="v1"] .settings-page-v1-personal { gap: 0; }
+:root[data-design="v1"] .settings-page-v1-personal > .settings-v1-note { margin-top: 10px; }
+/* The panel's own button border colour must not reach the rows' buttons. */
+:root[data-design="v1"] .settings-v1-button { border-color: var(--surface-raised-edge) !important; }
+:root[data-design="v1"] .settings-v1-button:hover { border-color: var(--border-strong) !important; }
+:root[data-design="v1"] .settings-v1-button.is-danger { border-color: var(--danger-border) !important; }
+:root[data-design="v1"] .settings-v1-button.is-quiet { border-color: transparent !important; }
