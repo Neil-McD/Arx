@@ -32,7 +32,9 @@ function AgentPlanGroup({ plan }: { plan: WebCommunityAgentPlanProps }) {
   return (
     <SettingsGroup label="Plan">
       <SettingsRow label="Agent plan"
-        help={plan.error ? <span className="settings-v1-error">{plan.error}</span> : `${state} ${formatBuilderOfferPrice(community.monthly_price_base_units)}; the community itself is free.`}>
+        help={plan.error ? <span className="settings-v1-error">{plan.error}</span>
+          : comped ? "Included by Polynet. The community itself is free."
+          : `${state} ${formatBuilderOfferPrice(community.monthly_price_base_units)}; the community itself is free.`}>
         {comped || !action ? null : (
           <SettingsButton variant={action === "buy_builder" ? "primary" : "secondary"} disabled={plan.isActing}
             onClick={() => (action === "manage_builder" ? void plan.openPortal(community.community_id) : plan.onOpenBuilderOffer(community))}>
