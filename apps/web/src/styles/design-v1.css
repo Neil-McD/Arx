@@ -3431,10 +3431,14 @@
   :root[data-design="v1"][data-right-open] .community-agent-dock-panel.has-home-rail > .community-home-rail {
     display: block;
     position: absolute;
-    top: 0;
+    /* Below the header line, so its panel button stays there to close it. */
+    top: 52px;
     right: 0;
     bottom: 0;
     z-index: 30;
+    /* Out of the grid: in one column, a placed item would get an empty track. */
+    grid-column: auto;
+    grid-row: auto;
     width: var(--right-column-width);
     max-width: calc(100% - 48px);
     box-sizing: border-box;
