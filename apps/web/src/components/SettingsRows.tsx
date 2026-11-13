@@ -1,4 +1,4 @@
-import type { ButtonHTMLAttributes, ReactNode, SelectHTMLAttributes } from "react";
+import type { ButtonHTMLAttributes, KeyboardEvent, ReactNode, SelectHTMLAttributes } from "react";
 
 // One Settings page (design v1), after Linear's settings: plain groups with a
 // small label, and rows with the name (and at most one short line) on the left
@@ -81,10 +81,25 @@ export function SettingsSegmented<T extends string>(props: {
   options: readonly { id: T; label: string; disabled?: boolean }[];
   onChange: (value: T) => void;
 }) {
+  // A radio group's keyboard: one tab stop (the selected option), arrows and
+  // Home/End move and select, skipping disabled options.
+  const enabled = props.options.filter((option) => !option.disabled);
+  const tabStop = enabled.some((option) => option.id === props.value) ? props.value : enabled[0]?.id;
+  const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    const at = enabled.findIndex((option) => option.id === props.value);
+    const next = event.key === "ArrowRight" || event.key === "ArrowDown" ? enabled[(at + 1) % enabled.length]
+      : event.key === "ArrowLeft" || event.key === "ArrowUp" ? enabled[(at - 1 + enabled.length) % enabled.length]
+      : event.key === "Home" ? enabled[0] : event.key === "End" ? enabled[enabled.length - 1] : null;
+    if (!next) return;
+    event.preventDefault();
+    if (next.id !== props.value) props.onChange(next.id);
+    event.currentTarget.querySelector<HTMLButtonElement>(`[data-segment="${next.id}"]`)?.focus();
+  };
   return (
-    <div className="settings-v1-segmented" role="radiogroup" aria-label={props.label}>
+    <div className="settings-v1-segmented" role="radiogroup" aria-label={props.label} onKeyDown={onKeyDown}>
       {props.options.map((option) => (
-        <button key={option.id} type="button" role="radio" aria-checked={props.value === option.id} disabled={option.disabled}
+        <button key={option.id} type="button" role="radio" data-segment={option.id} aria-checked={props.value === option.id} disabled={option.disabled}
+          tabIndex={option.id === tabStop ? 0 : -1}
           className={`settings-v1-segment${props.value === option.id ? " is-on" : ""}`}
           onClick={() => { if (props.value !== option.id) props.onChange(option.id); }}>
           {option.label}
