@@ -4,6 +4,8 @@ import { Copy } from "lucide-react";
 import { tryCopyTextToClipboard } from "../../../../shared/chatUi";
 import { buildPolynetMcpSetupForOrigin } from "../../../../shared/polynetMcpSetup";
 import { DiscoverCatalogLogo } from "./DiscoverCatalogLogo";
+import { isDesignV1Active } from "../../../../shared/designSystem";
+import { SettingsGroup, SettingsRow } from "./SettingsRows";
 
 export type WebPolynetMcpAccountSectionProps = {
   session: {
@@ -36,6 +38,22 @@ export function WebPolynetMcpAccountSection(
       setCopyState("error");
     }
   };
+
+  if (isDesignV1Active()) {
+    return (
+      <SettingsGroup label="Your AI">
+        <SettingsRow label="Connect your AI" help={props.session
+          ? "Paste the setup into Claude Code, Codex or another tool, then sign in once. It sees only communities you're in."
+          : "Sign in to connect your AI."}>
+          {props.session ? (
+            <button className="settings-v1-button" type="button" onClick={() => void handleCopySetup()}>
+              {copyState === "copied" ? "Copied" : copyState === "error" ? "Copy failed" : "Copy setup"}
+            </button>
+          ) : null}
+        </SettingsRow>
+      </SettingsGroup>
+    );
+  }
 
   return (
     <div className="settings-section">

@@ -1,4 +1,4 @@
-import { ArrowLeft, Bell, Building2, Globe, Lock, Plug, Sparkles, Sun, Tag, TriangleAlert, User, CreditCard } from "lucide-react";
+import { ArrowLeft, Bell, Building2, Lock, Plug, Sparkles, Sun, Tag, TriangleAlert, User, CreditCard } from "lucide-react";
 import type { ReactNode } from "react";
 import {
   COMMUNITY_SETTINGS_PANE_LABELS,
@@ -23,7 +23,6 @@ const PERSONAL: Array<{ page: SettingsPage; icon: ReactNode }> = [
 
 const PANE_ICONS: Record<CommunitySettingsPane, ReactNode> = {
   community: <Building2 size={16} strokeWidth={1.7} />,
-  public: <Globe size={16} strokeWidth={1.7} />,
   plans: <Tag size={16} strokeWidth={1.7} />,
   app: <Plug size={16} strokeWidth={1.7} />,
   agent: <Sparkles size={16} strokeWidth={1.7} />,
@@ -47,7 +46,7 @@ export function WebSettingsNavV1(props: {
       canManageSettings: canManage,
       canManageMembers: canManage,
       isOwner: Boolean(communityShell.isActiveCommunityOwner),
-    })
+    }).filter((pane) => pane !== "danger") // Archive is at the bottom of General
     : [];
   const item = (key: string, label: string, icon: ReactNode, active: boolean, onClick: () => void) => (
     <button key={key} className={active ? "nav-item active" : "nav-item"} type="button" onClick={onClick} title={label} aria-current={active ? "page" : undefined}>
@@ -58,9 +57,9 @@ export function WebSettingsNavV1(props: {
   return (
     <aside className="community-nav global-nav-v1 settings-nav-v1" aria-label="Settings">
       <div className="community-nav-v1-primary">
-        <button className="nav-item settings-nav-back" type="button" onClick={props.onBack} title="Back">
+        <button className="nav-item settings-nav-back" type="button" onClick={props.onBack} title={community ? `Back to ${community.name}` : "Back"}>
           <span className="nav-icon" aria-hidden="true"><ArrowLeft size={17} strokeWidth={1.7} /></span>
-          <span className="nav-item-label">{community ? `Back to ${community.name}` : "Back"}</span>
+          <span className="nav-item-label">Back</span>
         </button>
       </div>
       <div className="community-nav-section-label">You</div>

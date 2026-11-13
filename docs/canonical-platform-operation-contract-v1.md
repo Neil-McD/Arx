@@ -380,15 +380,10 @@ admin changing an owner field is `owner_only`. `community.join_mode.set`
 (`open` approves waiting requests), `community.agent.instructions.set`,
 `community.handbook.save_draft` and `community.handbook.approve` (exactly this
 text; empty withdraws) call Studio's own functions. Each call has a receipt.
-`community.member_experience.request` (`to`: `app` or `site`, owner only; `site`
-needs a deployed site, else `community_custom_site_required`) only asks: it
-saves a request (`communityOwnerApprovals`, 24 hours, one at a time, a newer one
-replaces it) and answers `awaiting_owner_approval` with Studio's Settings link,
-or `already_set`. The owner approves or declines it in Studio, from their own
-session; an approval applies only if members still use what it was asked from
-(else `stale`), and is recorded as `via: owner_ai_approved`.
-`builder/community.json` shows `member_experience` (`members_use`,
-`has_custom_site`, `waiting_for_owner_approval`).
+`community.member_experience.request` was retired with custom sites (Nov 13
+2026): Settings no longer has the screen an owner approved it on, so it is
+`operation_not_found`. `builder/community.json` still shows `member_experience`
+(`members_use`, `has_custom_site`).
 
 People (builder lens): `community.members.set_role` (`members`,
 `role`), `.remove`, `.ban` (`reason` optional) and `.unban` take a selection of

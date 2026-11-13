@@ -3133,3 +3133,220 @@
 :root[data-design="v1"] .settings-page-v1-personal > .settings-section:first-of-type > .settings-section-title:first-child {
   display: none;
 }
+
+/* One Settings page, rows (after Linear's settings): groups with a small label,
+   rows with the name on the left and the control on the right. */
+:root[data-design="v1"] .community-page-body:has(.settings-page-v1) > .community-page-header:empty {
+  display: none;
+}
+:root[data-design="v1"] .settings-page-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+:root[data-design="v1"] .settings-page-head .settings-page-title { margin-bottom: 20px; }
+:root[data-design="v1"] .settings-v1-status {
+  font-size: 12px;
+  color: var(--text-ink-secondary);
+}
+:root[data-design="v1"] .settings-v1-status.is-error,
+:root[data-design="v1"] .settings-v1-error {
+  color: var(--danger-text);
+}
+:root[data-design="v1"] .settings-v1-group + .settings-v1-group { margin-top: 28px; }
+:root[data-design="v1"] .settings-v1-group-label {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-ink-secondary);
+  margin: 0 0 8px;
+}
+:root[data-design="v1"] .settings-v1-rows {
+  border: 1px solid var(--surface-raised-edge);
+  border-radius: 10px;
+}
+:root[data-design="v1"] .settings-v1-group.is-danger .settings-v1-rows { border-color: var(--danger-border); }
+:root[data-design="v1"] .settings-v1-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  min-height: 56px;
+  padding: 12px 16px;
+}
+:root[data-design="v1"] .settings-v1-row + .settings-v1-row { border-top: 1px solid var(--surface-raised-edge); }
+:root[data-design="v1"] .settings-v1-row.is-stacked { flex-direction: column; align-items: stretch; gap: 8px; }
+:root[data-design="v1"] .settings-v1-row-text { min-width: 0; flex: 0 1 auto; }
+:root[data-design="v1"] .settings-v1-row-label {
+  display: block;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-ink-primary);
+}
+:root[data-design="v1"] .settings-v1-row-help {
+  margin-top: 2px;
+  font-size: 12.5px;
+  line-height: 1.4;
+  color: var(--text-ink-secondary);
+}
+:root[data-design="v1"] .settings-v1-row-control {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex: 0 1 300px;
+  min-width: 0;
+}
+:root[data-design="v1"] .settings-v1-row.is-stacked .settings-v1-row-control { flex: 1 1 auto; justify-content: stretch; }
+:root[data-design="v1"] .settings-v1-input {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  height: 32px;
+  padding: 0 10px;
+  font: inherit;
+  font-size: 13.5px;
+  color: var(--text-ink-primary);
+  background: transparent;
+  border: 1px solid var(--surface-raised-edge);
+  border-radius: 7px;
+}
+:root[data-design="v1"] textarea.settings-v1-input { height: auto; padding: 8px 10px; resize: vertical; line-height: 1.45; }
+:root[data-design="v1"] .settings-v1-input:hover { border-color: var(--border-strong); }
+:root[data-design="v1"] .settings-v1-input:focus { outline: none; border-color: var(--accent-cyan); }
+:root[data-design="v1"] .settings-v1-input:disabled { opacity: 0.6; }
+:root[data-design="v1"] .settings-v1-prefixed { display: flex; align-items: center; gap: 6px; width: 100%; color: var(--text-ink-secondary); }
+:root[data-design="v1"] .settings-v1-button {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  height: 30px;
+  padding: 0 12px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-ink-primary);
+  background: transparent;
+  border: 1px solid var(--surface-raised-edge);
+  border-radius: 7px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+:root[data-design="v1"] .settings-v1-button:hover { border-color: var(--border-strong); }
+:root[data-design="v1"] .settings-v1-button input[type="file"] { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+:root[data-design="v1"] .settings-v1-button.is-quiet { border-color: transparent; color: var(--text-ink-secondary); }
+:root[data-design="v1"] .settings-v1-button.is-danger { color: var(--danger-text); border-color: var(--danger-border); }
+:root[data-design="v1"] .settings-v1-button.is-disabled,
+:root[data-design="v1"] .settings-v1-button:disabled { opacity: 0.5; cursor: default; }
+:root[data-design="v1"] .settings-v1-logo {
+  width: 32px !important;
+  height: 32px !important;
+  flex: none;
+  border-radius: 8px;
+  overflow: hidden;
+  font-size: 12px;
+}
+:root[data-design="v1"] .settings-v1-logo.is-round { border-radius: 50%; }
+:root[data-design="v1"] .settings-v1-banner {
+  width: 96px;
+  height: 32px;
+  flex: none;
+  border-radius: 6px;
+  overflow: hidden;
+  border: 1px solid var(--surface-raised-edge);
+}
+:root[data-design="v1"] .settings-v1-banner-empty { width: 100%; height: 100%; }
+:root[data-design="v1"] .settings-v1-switch {
+  position: relative;
+  width: 34px;
+  height: 20px;
+  flex: none;
+  padding: 0;
+  border: 0;
+  border-radius: 10px;
+  background: var(--border-strong);
+  cursor: pointer;
+}
+:root[data-design="v1"] .settings-v1-switch span {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--text-ink-primary);
+  transition: left 0.15s;
+}
+:root[data-design="v1"] .settings-v1-switch.is-on { background: var(--accent-cyan); }
+:root[data-design="v1"] .settings-v1-switch.is-on span { left: 17px; background: #fff; }
+:root[data-design="v1"] .settings-page-v1 { max-width: 640px; }
+@media (max-width: 720px) {
+  :root[data-design="v1"] .settings-v1-row { flex-direction: column; align-items: stretch; gap: 8px; }
+  :root[data-design="v1"] .settings-v1-row-control { justify-content: flex-start; flex: 1 1 auto; }
+}
+/* The settings panel's general button look must not reach the rows' own controls. */
+:root[data-design="v1"] .settings-v1-switch { background: var(--border-strong) !important; border: 0 !important; }
+:root[data-design="v1"] .settings-v1-switch.is-on { background: var(--accent-cyan) !important; }
+:root[data-design="v1"] .settings-v1-button { background: transparent !important; }
+:root[data-design="v1"] .settings-v1-button.is-quiet { border-color: transparent !important; }
+/* No header row on the Settings page: the title starts at the top. */
+:root[data-design="v1"] .community-page-body:has(.settings-page-v1) { grid-template-rows: 0 minmax(0, 1fr); }
+
+/* Your own pages sit exactly where the community's do: same top, same left. */
+:root[data-design="v1"] .settings-panel:has(> .settings-page-v1-personal) { padding-top: 0; }
+:root[data-design="v1"] .settings-page-v1-personal { padding: 28px 0 56px; }
+/* Back sits where a community's name sits (no banner): 12px down, a 48px row. */
+:root[data-design="v1"] .settings-nav-v1 .settings-nav-back {
+  height: 48px;
+  margin: 12px 0 10px;
+  font-size: 14px;
+  font-weight: 500;
+}
+:root[data-design="v1"] .settings-v1-value {
+  font-size: 13.5px;
+  color: var(--text-ink-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+:root[data-design="v1"] .settings-v1-note {
+  margin: 10px 2px 0;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--text-ink-secondary);
+}
+:root[data-design="v1"] .settings-v1-rows > .settings-v1-note { margin: 0; padding: 10px 16px; border-top: 1px solid var(--surface-raised-edge); }
+:root[data-design="v1"] .settings-v1-note.is-error { color: var(--danger-text); }
+:root[data-design="v1"] .settings-v1-segmented {
+  display: inline-flex;
+  padding: 2px;
+  gap: 2px;
+  border: 1px solid var(--surface-raised-edge);
+  border-radius: 8px;
+}
+:root[data-design="v1"] .settings-v1-segment {
+  height: 26px;
+  padding: 0 12px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-ink-secondary);
+  background: transparent !important;
+  border: 0 !important;
+  border-radius: 6px;
+  cursor: pointer;
+}
+:root[data-design="v1"] .settings-v1-segment.is-on {
+  color: var(--text-ink-primary);
+  background: var(--surface-raised-edge) !important;
+}
+/* The personal column spaces its groups the same way General does. */
+:root[data-design="v1"] .settings-page-v1-personal { gap: 0; }
+:root[data-design="v1"] .settings-page-v1-personal > .settings-v1-note { margin-top: 10px; }
+/* The panel's own button border colour must not reach the rows' buttons. */
+:root[data-design="v1"] .settings-v1-button { border-color: var(--surface-raised-edge) !important; }
+:root[data-design="v1"] .settings-v1-button:hover { border-color: var(--border-strong) !important; }
+:root[data-design="v1"] .settings-v1-button.is-danger { border-color: var(--danger-border) !important; }
+:root[data-design="v1"] .settings-v1-button.is-quiet { border-color: transparent !important; }
+:root[data-design="v1"] .settings-page-v1-personal > .settings-page-head { margin-bottom: 16px; }
+
+:root[data-design="v1"] .settings-v1-status-row { display: inline-flex; align-items: center; gap: 10px; }

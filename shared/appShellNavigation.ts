@@ -59,7 +59,6 @@ export type CommunityTab = (typeof COMMUNITY_TABS)[number];
 // the order its sidebar lists them.
 export const COMMUNITY_SETTINGS_PANES = [
   "community",
-  "public",
   "plans",
   "app",
   "agent",
@@ -68,7 +67,6 @@ export const COMMUNITY_SETTINGS_PANES = [
 
 export const COMMUNITY_SETTINGS_PANE_LABELS: Record<(typeof COMMUNITY_SETTINGS_PANES)[number], string> = {
   community: "General",
-  public: "Public page",
   plans: "Plans and pricing",
   app: "Your app",
   agent: "Guide",
@@ -152,8 +150,9 @@ export function parseCommunitySettingsPane(
       return "agent";
     case "danger":
       return "danger";
+    // The public page was removed (Nov 13); its old address opens General.
     case "public":
-      return "public";
+      return "community";
     case "plans":
       return "plans";
     case "app":
@@ -180,7 +179,6 @@ export function isCommunitySettingsPaneAllowedForAccess(
       return access.canViewSettings;
     case "agent":
       return access.canManageMembers;
-    case "public":
     case "plans":
     case "app":
     case "danger":

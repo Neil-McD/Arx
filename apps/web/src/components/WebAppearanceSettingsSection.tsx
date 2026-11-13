@@ -1,4 +1,6 @@
 import { APP_THEME_OPTIONS, type AppTheme } from "../../../../shared/theme";
+import { isDesignV1Active } from "../../../../shared/designSystem";
+import { SettingsGroup, SettingsRow } from "./SettingsRows";
 
 type WebAppearanceSettingsSectionProps = {
   appTheme: AppTheme;
@@ -7,6 +9,22 @@ type WebAppearanceSettingsSectionProps = {
 
 export function WebAppearanceSettingsSection(props: WebAppearanceSettingsSectionProps) {
   const { appTheme, setAppTheme } = props;
+  if (isDesignV1Active()) {
+    return (
+      <SettingsGroup>
+        <SettingsRow label="Theme" help="How Polynet looks on this device.">
+          <div className="settings-v1-segmented" role="radiogroup" aria-label="Theme">
+            {APP_THEME_OPTIONS.filter((theme) => !theme.disabled).map((theme) => (
+              <button key={theme.id} type="button" role="radio" aria-checked={appTheme === theme.id}
+                className={`settings-v1-segment${appTheme === theme.id ? " is-on" : ""}`} onClick={() => setAppTheme(theme.id)}>
+                {theme.label}
+              </button>
+            ))}
+          </div>
+        </SettingsRow>
+      </SettingsGroup>
+    );
+  }
 
   return (
     <>

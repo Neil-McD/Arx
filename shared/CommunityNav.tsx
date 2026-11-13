@@ -762,11 +762,9 @@ export const CommunityNav = memo(function CommunityNav({
           <div className="community-nav-invite-loading web-skeleton-block" />
         </div>
       ) : isV1 ? (
-        // Design system v1: the foot. Invite people (anyone who may invite),
-        // then Settings: the one Settings page, for everyone who has settings
-        // here (a host's community sections, a member's own). Your guide and
-        // Visit site are in the account menu; Analytics is under Members.
-        showSettingsButton || canCopyJoinLink ? (
+        // Design system v1: the foot is Invite people (anyone who may invite).
+        // Settings and Your guide are in the account menu; Analytics is under Members.
+        canCopyJoinLink ? (
           <div className="community-nav-footer">
             {canCopyJoinLink ? (
               <button
@@ -781,17 +779,6 @@ export const CommunityNav = memo(function CommunityNav({
                 </span>
                 <span className="nav-item-label">{didCopyJoinLink ? "Copied the invite link" : "Invite people"}</span>
               </button>
-            ) : null}
-            {showSettingsButton ? (
-            <button
-              className={showActiveSelection && communityTab === "settings" ? "nav-item active" : "nav-item"}
-              type="button"
-              onClick={() => onSelectTab("settings")}
-              title="Settings"
-            >
-              <span className="nav-icon" aria-hidden="true"><Settings size={16} strokeWidth={1.9} /></span>
-              <span className="nav-item-label">Settings</span>
-            </button>
             ) : null}
           </div>
         ) : null
@@ -858,7 +845,6 @@ export const CommunityNav = memo(function CommunityNav({
           {typeof accountSlot === "function"
             ? accountSlot([
                 ...(showSettingsButton && canManageMembersActiveCommunity && onOpenGuide ? [{ key: "guide", label: "Your guide", icon: <Sparkles size={16} aria-hidden="true" />, onSelect: onOpenGuide }] : []),
-                ...(siteUrl ? [{ key: "site", label: "Visit site", icon: <ExternalLink size={16} aria-hidden="true" />, onSelect: () => { window.open(siteUrl, "_blank", "noopener,noreferrer"); } }] : []),
               ])
             : accountSlot}
         </div>

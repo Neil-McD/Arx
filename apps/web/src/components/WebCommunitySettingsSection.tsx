@@ -3,7 +3,8 @@ import { CommunityConnectedAppsSection } from "./CommunityConnectedAppsSection";
 import { CommunityPlansSection } from "./CommunityPlansSection";
 import { isDesignV1Active } from "../../../../shared/designSystem";
 import { CommunityPageHeader } from "./CommunityPageHeader";
-import { useEffect, useState, type ComponentProps } from "react";
+import { useCallback, useEffect, useRef, useState, type ComponentProps } from "react";
+import { SettingsGroup, SettingsRow, SettingsSaveStatus, SettingsSwitch } from "./SettingsRows";
 import type { DragEvent } from "react";
 import type { CommunitySettingsLayer } from "../../../../shared/communityAccessViewModel";
 import { deriveCommunitySettingsAccessPresentation } from "../../../../shared/communityAccessResolution";
@@ -28,8 +29,6 @@ import {
   WebPlatformRadioGroup,
   WebPlatformTabList,
 } from "./WebPlatformChoiceControls";
-import { CommunityMemberExperienceSection } from "./CommunityMemberExperienceSection";
-import { CommunityPublicPageSection } from "./CommunityPublicPageSection";
 import { CommunityFounderBriefSection } from "./CommunityFounderBriefSection";
 import { communitySiteAddress } from "../../../../shared/communitySlug";
 
@@ -159,7 +158,7 @@ type SharedSettingsProps = Pick<WebCommunitySettingsSectionProps, "state" | "act
 const CLASSIC_PANES: CommunitySettingsPane[] = ["community", "agent", "danger"];
 const CLASSIC_PANE_LABELS: Partial<Record<CommunitySettingsPane, string>> = { community: "General", agent: "Agent", danger: "Danger" };
 // Design v1 (one Settings page): the sections that share the community's saved form.
-const FORM_PANES: CommunitySettingsPane[] = ["community", "public", "plans", "app"];
+const FORM_PANES: CommunitySettingsPane[] = ["community", "plans", "app"];
 
 // Wide enough for the desktop frame, where the Settings sidebar lists the sections.
 function useWideSettingsSidebar(): boolean {
@@ -479,6 +478,174 @@ function CommunityProfileSettingsSection({ state, actions }: SharedSettingsProps
   );
 }
 
+// Design v1, one Settings page: General as rows (after Linear's settings).
+// Everything saves as you change it (see useAutosave below); Archive sits at
+// the bottom, as Linear puts Delete.
+function CommunityGeneralSettingsV1({
+  activeCommunity,
+  isOwner,
+  state,
+  actions,
+}: SharedSettingsProps & { activeCommunity: ActiveCommunity; isOwner: boolean }) {
+  const [confirmArchive, setConfirmArchive] = useState(false);
+  useEffect(() => { setConfirmArchive(false); }, [activeCommunity.id]);
+  const name = state.communitySettingsName || activeCommunity?.name || "Community";
+  const fileButton = (label: string, onFile: (file: File | null) => void, disabled?: boolean) => (
+    <label className={`settings-v1-button${disabled ? " is-disabled" : ""}`}>
+      {label}
+      <input type="file" accept="image/*" disabled={disabled} onChange={(event) => {
+        const file = event.target.files?.[0] ?? null;
+        event.target.value = "";
+        onFile(file);
+      }} />
+    </label>
+  );
+  return (
+    <>
+      <SettingsGroup>
+        {isOwner ? (
+          <SettingsRow label="Logo" help="Square, shown beside the name everywhere.">
+            <CommunityAvatar
+              className="settings-v1-logo"
+              imageUrl={state.communitySettingsAvatarUrl}
+              focusX={state.communitySettingsAvatarFocusX}
+              focusY={state.communitySettingsAvatarFocusY}
+              zoom={state.communitySettingsAvatarZoom}
+              name={name}
+              alt="Community logo"
+              fallback={actions.communityInitials(name)}
+            />
+            {fileButton(state.communitySettingsAvatarUrl ? "Change" : "Upload", (file) => void actions.handleCommunityAvatarUpload(file))}
+            {state.communitySettingsAvatarUrl ? (
+              <>
+                <button className="settings-v1-button" type="button" onClick={actions.openCommunityAvatarFocusModal}>Adjust</button>
+                <button className="settings-v1-button is-quiet" type="button" onClick={() => {
+                  actions.setCommunitySettingsAvatarUrl(null);
+                  actions.setCommunitySettingsAvatarFocusX(0.5);
+                  actions.setCommunitySettingsAvatarFocusY(0.5);
+                  actions.setCommunitySettingsAvatarZoom(1);
+                  actions.closeCommunityAvatarFocusModal();
+                  actions.markCommunitySettingsDirty();
+                }}>Remove</button>
+              </>
+            ) : null}
+          </SettingsRow>
+        ) : null}
+        {isOwner ? (
+          <SettingsRow
+            label="Banner"
+            help={state.communitySettingsBannerUploadError
+              ? <span className="settings-v1-error">{state.communitySettingsBannerUploadError}</span>
+              : state.isProcessingCommunitySettingsBanner ? "Processing…" : "Wide image at the top of the left column."}
+          >
+            <StableFramedMedia
+              className="settings-v1-banner"
+              imageUrl={state.communitySettingsBannerUrl}
+              frame={{ focusX: state.communitySettingsBannerFocusX, focusY: state.communitySettingsBannerFocusY, zoom: state.communitySettingsBannerZoom }}
+              alt="Community banner"
+              loading="eager"
+              fallback={<div className="settings-v1-banner-empty" />}
+            />
+            {fileButton(state.communitySettingsBannerUrl ? "Change" : "Upload", (file) => void actions.handleCommunityBannerUpload(file), state.isProcessingCommunitySettingsBanner)}
+            {state.communitySettingsBannerUrl ? (
+              <>
+                <button className="settings-v1-button" type="button" disabled={state.isProcessingCommunitySettingsBanner} onClick={actions.openCommunityBannerFocusModal}>Adjust</button>
+                <button className="settings-v1-button is-quiet" type="button" disabled={state.isProcessingCommunitySettingsBanner} onClick={() => {
+                  actions.setCommunitySettingsBannerUrl(null);
+                  actions.setCommunitySettingsBannerFocusX(0.5);
+                  actions.setCommunitySettingsBannerFocusY(0.5);
+                  actions.setCommunitySettingsBannerZoom(1);
+                  actions.setCommunitySettingsBannerUploadError(null);
+                  actions.closeCommunityBannerFocusModal();
+                  actions.markCommunitySettingsDirty();
+                }}>Remove</button>
+              </>
+            ) : null}
+          </SettingsRow>
+        ) : null}
+        <SettingsRow label="Name" htmlFor="settings-community-name">
+          <input id="settings-community-name" className="settings-v1-input" type="text" value={state.communitySettingsName} disabled={!isOwner}
+            onChange={(event) => { actions.setCommunitySettingsName(event.target.value); actions.markCommunitySettingsDirty(); }} />
+        </SettingsRow>
+        {isOwner ? (
+          <SettingsRow label="Address" htmlFor="settings-community-slug" help={`Its link: /c/${state.communitySettingsSlug || "your-community"}`}>
+            <input id="settings-community-slug" className="settings-v1-input" type="text" maxLength={32} value={state.communitySettingsSlug}
+              onChange={(event) => { actions.setCommunitySettingsSlug(actions.slugifyCommunityName(event.target.value)); actions.markCommunitySettingsDirty(); }} />
+          </SettingsRow>
+        ) : null}
+        <SettingsRow label="One-liner" htmlFor="settings-community-one-liner" help="Shown on Discover and when people join.">
+          <input id="settings-community-one-liner" className="settings-v1-input" type="text" value={state.communitySettingsOneLiner}
+            placeholder="Who it's for, in one line"
+            onChange={(event) => { actions.setCommunitySettingsOneLiner(event.target.value); actions.markCommunitySettingsDirty(); }} />
+        </SettingsRow>
+        <SettingsRow label="About" htmlFor="settings-community-about" stacked>
+          <textarea id="settings-community-about" className="settings-v1-input" rows={4} value={state.communitySettingsAbout}
+            placeholder="What members get, and who it's for."
+            onChange={(event) => { actions.setCommunitySettingsAbout(event.target.value); actions.markCommunitySettingsDirty(); }} />
+        </SettingsRow>
+      </SettingsGroup>
+      {isOwner ? (
+        <SettingsGroup label="Visibility">
+          <SettingsRow label="Listed in Discover" help="Anyone can find it. Joining still goes through your plans or approval.">
+            <SettingsSwitch
+              label="Listed in Discover"
+              checked={state.communitySettingsVisibility === "published"}
+              onChange={(checked) => { actions.setCommunitySettingsVisibility(checked ? "published" : "unlisted"); actions.markCommunitySettingsDirty(); }}
+            />
+          </SettingsRow>
+        </SettingsGroup>
+      ) : null}
+      {isOwner ? (
+        <SettingsGroup label="Danger zone" tone="danger">
+          <SettingsRow
+            label="Archive community"
+            help={state.communityArchiveError
+              ? <span className="settings-v1-error">{state.communityArchiveError}</span>
+              : "Freezes it and stops subscriptions. Content is kept and it can be restored."}
+          >
+            {confirmArchive ? (
+              <>
+                <button className="settings-v1-button" type="button" disabled={state.isArchivingCommunity} onClick={() => setConfirmArchive(false)}>Cancel</button>
+                <button className="settings-v1-button is-danger" type="button" disabled={state.isArchivingCommunity} onClick={() => void actions.handleArchiveCommunity()}>
+                  {state.isArchivingCommunity ? "Archiving…" : "Confirm archive"}
+                </button>
+              </>
+            ) : (
+              <button className="settings-v1-button is-danger" type="button" disabled={state.isArchivingCommunity} onClick={() => setConfirmArchive(true)}>Archive</button>
+            )}
+          </SettingsRow>
+        </SettingsGroup>
+      ) : null}
+    </>
+  );
+}
+
+// Design v1 saves as you go: when a field is committed (a text field loses
+// focus, a select or switch changes) or a picture changes, the form saves.
+function useAutosave(enabled: boolean, rootRef: { current: HTMLElement | null }, state: SharedSettingsProps["state"], save: () => Promise<void> | void) {
+  const latest = useRef({ state, save });
+  latest.current = { state, save };
+  const trySave = useCallback(() => {
+    const { state: now, save: run } = latest.current;
+    if (!now.isCommunitySettingsDirty || now.isSavingCommunitySettings || now.isProcessingCommunitySettingsBanner || now.communitySettingsConflict) return;
+    const active = document.activeElement;
+    // Still typing in a field of this page: wait for it to be committed.
+    if (active && rootRef.current?.contains(active) && (active.tagName === "INPUT" || active.tagName === "TEXTAREA") && (active as HTMLInputElement).type !== "file") return;
+    void run();
+  }, [rootRef]);
+  // Handlers go on the page's root as React props, so they follow the root
+  // when it mounts late (it renders only once access has loaded).
+  const onCommit = useCallback(() => { if (enabled) window.setTimeout(trySave, 0); }, [enabled, trySave]);
+  // Pictures and switches change without a committed field.
+  const media = [state.communitySettingsAvatarUrl, state.communitySettingsAvatarFocusX, state.communitySettingsAvatarFocusY, state.communitySettingsAvatarZoom,
+    state.communitySettingsBannerUrl, state.communitySettingsBannerFocusX, state.communitySettingsBannerFocusY, state.communitySettingsBannerZoom,
+    state.communitySettingsVisibility, state.communitySettingsPricingMode, state.isProcessingCommunitySettingsBanner,
+    // A save that finishes while edits are still unsaved goes again.
+    state.isSavingCommunitySettings].join("|");
+  useEffect(() => { if (enabled) window.setTimeout(trySave, 0); }, [enabled, media, trySave]);
+  return { onChange: onCommit, onBlur: onCommit, onClick: onCommit };
+}
+
 function CommunityMonetizationConfigSection({
   activeCommunity,
   accountCommerceStatus,
@@ -504,6 +671,8 @@ function CommunityMonetizationConfigSection({
   canManagePublishing: boolean;
   canManagePayoutAccount: boolean;
 }) {
+  // Design v1: visibility is in General.
+  const showVisibility = !isDesignV1Active();
   const pricingOptions = [
     { key: "free", label: "Free" },
     { key: "monthly", label: "Monthly" },
@@ -539,7 +708,7 @@ function CommunityMonetizationConfigSection({
     <div className="settings-section community-settings-access-section">
       <div className="settings-section-title">Access & Pricing</div>
       <div className="community-settings-access-controls">
-        {canManagePublishing ? (
+        {canManagePublishing && showVisibility ? (
           <label className="create-community-field">
             <span>Visibility</span>
             <select
@@ -788,11 +957,14 @@ export function WebCommunitySettingsSection(props: WebCommunitySettingsSectionPr
   const split = isDesignV1Active();
   // The Settings sidebar shows on wide screens only (WebShellChromeHost); a phone keeps the section switcher.
   const hasSettingsSidebar = useWideSettingsSidebar();
+  // Design v1 folds Danger into General (Archive at its bottom).
   const availableSettingsPanes = listCommunitySettingsPanesForAccess(settingsPaneAccess)
-    .filter((pane) => split || CLASSIC_PANES.includes(pane));
+    .filter((pane) => (split ? pane !== "danger" : CLASSIC_PANES.includes(pane)));
   const normalizedPane = normalizeCommunitySettingsPaneForAccess(activePane, settingsPaneAccess);
   const selectedSettingsPane = availableSettingsPanes.includes(normalizedPane) ? normalizedPane : (availableSettingsPanes[0] ?? "community");
   const isFormPane = split ? FORM_PANES.includes(selectedSettingsPane) : selectedSettingsPane === "community";
+  const pageRef = useRef<HTMLDivElement | null>(null);
+  const autosave = useAutosave(split && isFormPane, pageRef, state, actions.handleSaveCommunitySettings);
   // Where each block of the form lives: its own section in design v1, General in the classic app.
   const shows = (pane: CommunitySettingsPane) => (split ? selectedSettingsPane === pane : selectedSettingsPane === "community");
   const availableSettingsPaneKey = availableSettingsPanes.join("|");
@@ -865,7 +1037,8 @@ export function WebCommunitySettingsSection(props: WebCommunitySettingsSectionPr
         />
       ) : canManageCommunitySettings ? (
         <>
-          <div className={`create-community-form community-settings-form${split ? " settings-page-v1" : ""}`}>
+          <div ref={pageRef} {...autosave} className={`create-community-form community-settings-form${split ? " settings-page-v1" : ""}`}>
+            {split && hasSettingsSidebar ? null : (
             <CommunityPageHeader
               title={split ? "Settings" : "Manage"}
               actions={split && hasSettingsSidebar ? undefined : (
@@ -882,6 +1055,7 @@ export function WebCommunitySettingsSection(props: WebCommunitySettingsSectionPr
                 onSelectPane={onSelectPane}
               />
             </CommunityPageHeader>
+            )}
             <div
               id={platformTabPanelId("community-settings", selectedSettingsPane)}
               role="tabpanel"
@@ -889,7 +1063,20 @@ export function WebCommunitySettingsSection(props: WebCommunitySettingsSectionPr
               tabIndex={0}
               className="community-settings-pane-content"
             >
-              {split ? <h1 className="settings-page-title">{COMMUNITY_SETTINGS_PANE_LABELS[selectedSettingsPane]}</h1> : null}
+              {split ? (
+                <div className="settings-page-head">
+                  <h1 className="settings-page-title">{COMMUNITY_SETTINGS_PANE_LABELS[selectedSettingsPane]}</h1>
+                  {isFormPane && state.isCommunitySettingsReady ? (
+                    <span className="settings-v1-status-row">
+                      <SettingsSaveStatus saving={state.isSavingCommunitySettings} dirty={state.isCommunitySettingsDirty} error={state.communitySettingsError} />
+                      {state.communitySettingsConflict ? (
+                        <button className="settings-v1-button" type="button" disabled={state.isLoadingCommunitySettings}
+                          onClick={() => void actions.handleReloadLatestCommunitySettings()}>Reload latest</button>
+                      ) : null}
+                    </span>
+                  ) : null}
+                </div>
+              ) : null}
               {isFormPane && state.isLoadingCommunitySettings ? (
               <div className="chat-empty">Loading community settings...</div>
               ) : null}
@@ -908,7 +1095,10 @@ export function WebCommunitySettingsSection(props: WebCommunitySettingsSectionPr
                   </button>
                 </div>
               ) : null}
-              {isFormPane &&
+              {split && selectedSettingsPane === "community" && !state.isLoadingCommunitySettings && state.isCommunitySettingsReady ? (
+                <CommunityGeneralSettingsV1 activeCommunity={resolvedActiveCommunity} isOwner={isOwnerSettingsLayer} state={state} actions={actions} />
+              ) : null}
+              {isFormPane && !(split && selectedSettingsPane === "community") &&
               !state.isLoadingCommunitySettings &&
               state.isCommunitySettingsReady ? (
               <div className="community-general-settings">
@@ -924,26 +1114,6 @@ export function WebCommunitySettingsSection(props: WebCommunitySettingsSectionPr
                   ) : null}
                   <div className="community-general-settings-secondary">
                     {shows("community") ? <CommunityProfileSettingsSection state={state} actions={actions} /> : null}
-                    {isOwnerSettingsLayer && shows("public") ? (
-                      <CommunityPublicPageSection
-                        communityId={resolvedActiveCommunity.id}
-                        publicPageUrl={(() => {
-                          // Join, the doorstep this panel edits (a custom site's own home is the founder's).
-                          try { return resolvedActiveCommunity.site_url ? `${new URL(resolvedActiveCommunity.site_url).origin}/join` : null; } catch { return null; }
-                        })()}
-                        session={props.session}
-                        ensureSession={props.ensureSession}
-                      />
-                    ) : null}
-                    {canManageCommunitySettings && shows("public") ? (
-                      <CommunityMemberExperienceSection
-                        community={resolvedActiveCommunity}
-                        canChange={isOwnerSettingsLayer}
-                        session={props.session}
-                        ensureSession={props.ensureSession}
-                        onSaved={props.onMemberExperienceSaved}
-                      />
-                    ) : null}
                     {isOwnerSettingsLayer && !split ? (
                       <CommunityFounderBriefSection
                         communityId={resolvedActiveCommunity.id}
@@ -984,7 +1154,7 @@ export function WebCommunitySettingsSection(props: WebCommunitySettingsSectionPr
                     ) : null}
                   </div>
                 </div>
-                {state.communitySettingsError ? (
+                {state.communitySettingsError && !split ? (
                   <div className="auth-error">
                     {state.communitySettingsError}
                     {state.communitySettingsConflict ? (
@@ -1000,6 +1170,7 @@ export function WebCommunitySettingsSection(props: WebCommunitySettingsSectionPr
                     ) : null}
                   </div>
                 ) : null}
+                {split ? null : (
                 <div className="create-community-actions community-general-settings-save">
                   <span className="community-general-settings-status" aria-live="polite">
                     {state.isSavingCommunitySettings
@@ -1045,6 +1216,7 @@ export function WebCommunitySettingsSection(props: WebCommunitySettingsSectionPr
                     </div>
                   ) : null}
                 </div>
+                )}
               </div>
               ) : null}
               {selectedSettingsPane === "agent" ? (

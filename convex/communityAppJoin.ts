@@ -29,7 +29,6 @@ import { PRIVACY_AI_DATA_POLICY_DOCUMENT, TERMS_OF_SERVICE_DOCUMENT, legalDocume
 import { attachCommunityCheckoutToUser, sha256Hex } from "./communityCheckoutBuyer";
 import { resolveCheckoutSessionFinalization } from "./communityCommerce";
 import { recordCommunityJoinStarted } from "./communityFunnelEvents";
-import { loadCommunityPublicPage } from "./communityPublicPage";
 import { communityResourceIsMemberVisiblePage, communityResourceModuleIsMemberLive } from "../shared/communityResourceVisibility";
 import { formatPlanPrice } from "../shared/accountCommerce";
 
@@ -193,12 +192,14 @@ export async function communityAppJoinProjection(ctx: any, community: CommunityL
     mode, plan: plans[0] ?? null, approvalPending: admission.approvalPending,
     approvalDenied: admission.approvalDenied, canRequestAgain: admission.canRequestAgain,
   });
-  const [branding, courses, host, page] = await Promise.all([
+  const [branding, courses, host] = await Promise.all([
     resolveCommunityBrandingFields(ctx, community),
     doorstepCourses(ctx, community._id),
     doorstepHost(ctx, (community as any).ownerId),
-    loadCommunityPublicPage(ctx, community._id),
   ]);
+  // The owner's sales sections were removed (Nov 13, with custom sites): the
+  // join page shows the community, its plans and Join. Stored copy is kept.
+  const page = null;
   const legalOrigin = (() => { try { return readCanonicalPublicAppOrigin(); } catch { return null; } })();
   const text = (value: unknown, max: number) => (typeof value === "string" && value.trim() ? value.trim().slice(0, max) : null);
   return {
