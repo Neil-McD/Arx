@@ -1943,6 +1943,7 @@
   /* Every page's header title, as the mock's finish draws it (16/500). */
   font-size: 16px;
   font-weight: 500;
+  line-height: 1.45;
   letter-spacing: -0.005em;
 }
 
