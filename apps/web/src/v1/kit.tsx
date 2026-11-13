@@ -218,11 +218,12 @@ export function Main(props: { children: ReactNode }) {
 
 // The page's header bar names it; Search or ask lives at the top of the left
 // column (Linear-style), not here.
-export function Top(props: { title?: ReactNode; titleView?: number }) {
+export function Top(props: { title?: ReactNode; titleView?: number; actions?: ReactNode }) {
   return (
     <>
       <header className={cx("top")}>
         {props.title ? <h1 className={cx(`t${props.titleView ?? 1}`)}>{props.title}</h1> : null}
+        {props.actions ? <div className="kit-top-actions">{props.actions}</div> : null}
       </header>
       <div className={cx("hline")} />
     </>
