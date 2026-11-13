@@ -659,7 +659,7 @@ async function discover() {
 // first_steps: [{ title, text }], results: [{ quote, name, role }],
 // founder_bio, video: { provider, id } | null, guarantee, objections:
 // [{ question, answer }] } }, gate ("join" | "request_access" | "checkout"),
-// available, action_label, plans: [{ billing_period, label, price }], join_url }.
+// available, action_label, plans: [{ billing_period, label, price, title, includes }], join_url }.
 // The owner fills the page's sections in Studio's Settings; leave out any that
 // are empty. Joining is always Polynet's: link the button to join_url.
 async function publicPage() {
