@@ -8477,13 +8477,6 @@
   color: color-mix(in srgb, var(--member-avatar-color, var(--text-secondary)) 45%, var(--text-primary));
 }
 
-/* The owner's switch: where members spend time (Polynet's app or their site). */
-.community-member-experience-options {
-  display: grid;
-  gap: 8px;
-  margin-top: 10px;
-}
-
 .community-member-experience-option {
   display: flex;
   gap: 10px;
@@ -8506,67 +8499,4 @@
 .community-member-experience-option > span {
   display: grid;
   gap: 2px;
-}
-
-/* A change the owner's AI asked for, waiting for the owner. */
-.community-member-experience-request {
-  display: grid;
-  gap: 10px;
-  margin-top: 10px;
-  padding: 12px;
-  border: 1px solid var(--text-primary);
-  border-radius: 12px;
-}
-
-.community-member-experience-request-actions {
-  display: flex;
-  gap: 8px;
-}
-
-/* The owner's public page sections (Settings): fixed slots, blank ones don't show. */
-.community-public-page-section {
-  display: grid;
-  gap: 14px;
-}
-
-.community-public-page-ai {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px 12px;
-}
-
-.community-public-page-group {
-  display: grid;
-  gap: 6px;
-}
-
-.community-public-page-label {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text-secondary);
-}
-
-.community-public-page-pair {
-  display: grid;
-  grid-template-columns: minmax(0, 2fr) minmax(0, 3fr);
-  gap: 6px;
-}
-
-.community-public-page-result {
-  display: grid;
-  gap: 6px;
-  padding-bottom: 6px;
-}
-
-.community-public-page-section input,
-.community-public-page-section textarea {
-  width: 100%;
-  box-sizing: border-box;
-}
-
-@media (max-width: 560px) {
-  .community-public-page-pair {
-    grid-template-columns: minmax(0, 1fr);
-  }
 }

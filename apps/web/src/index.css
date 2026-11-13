@@ -28,7 +28,6 @@
   --web-rail-control-size: 44px;
   --web-rail-anchor-inset: calc((var(--web-rail-width) - var(--web-rail-control-size)) / 2);
   --web-rail-balance-shift: calc((var(--web-rail-control-size) - var(--web-rail-width)) / 4);
-  --web-sessions-drawer-width: 240px;
   --community-shell-inset: 8px;
   --community-shell-radius: 16px;
   --community-shell-stroke: var(--stroke-panel-edge);
@@ -289,7 +288,7 @@
   padding-top: var(--web-topbar-height);
 }
 
-.sessions:not(.web-sessions-drawer) {
+.sessions {
   padding-top: var(--web-topbar-height);
 }
 
@@ -331,9 +330,9 @@
 
 /* Web retained surfaces: center against the rail control edge (not the rail column edge). */
 @media (min-width: 921px) {
-  .app-root:not(.sessions-drawer-open) .app-shell.with-community-rail.no-left.no-right:not(.community-layout) .discover-hero,
-  .app-root:not(.sessions-drawer-open) .app-shell.with-community-rail.no-left.no-right:not(.community-layout) .discover-grid,
-  .app-root:not(.sessions-drawer-open) .app-shell.with-community-rail.no-left.no-right:not(.community-layout) .public-funnel-shell {
+  .app-root .app-shell.with-community-rail.no-left.no-right:not(.community-layout) .discover-hero,
+  .app-root .app-shell.with-community-rail.no-left.no-right:not(.community-layout) .discover-grid,
+  .app-root .app-shell.with-community-rail.no-left.no-right:not(.community-layout) .public-funnel-shell {
     position: relative;
     left: var(--web-rail-balance-shift);
   }
