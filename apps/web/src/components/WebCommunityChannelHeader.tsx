@@ -1,4 +1,5 @@
 import { forgetPod, goToPodsPath } from "../v1/podMemory";
+import { RightColumnToggle } from "./RightColumnToggle";
 import {
   useEffect,
   useId,
@@ -299,6 +300,7 @@ export function WebCommunityChannelHeader({
           <div className="community-channel-header-identity" title={channel.name}>{identity}</div>
         )}
         {trailingAction}
+        {isDesignV1Active() ? <RightColumnToggle /> : null}
         {canOpenChannelMenu && !v1Title ? (
           <div className="community-channel-header-actions" ref={menuRef}>
             <button

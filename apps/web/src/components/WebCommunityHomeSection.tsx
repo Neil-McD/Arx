@@ -32,7 +32,7 @@ export type WebCommunityHomeSectionProps = {
   // Changes each time Home is opened, so the facts are read again.
   refreshKey?: number;
   // Where the right-hand column goes on wide windows (the page's own rail).
-  // The same panel also renders inline, for windows too narrow for a rail.
+  // Narrower windows open the same rail as a panel from Home's header (RightColumnToggle).
   asideContainer?: HTMLElement | null;
   now?: Date;
   // Design system v1, the host's Home on the kit (docs/design/hifi-mock):
@@ -395,8 +395,6 @@ export function WebCommunityHomeSection(props: WebCommunityHomeSectionProps) {
             <TextLink style={{ marginTop: 20 }} onClick={kit.onTalkItOver}>Continue your conversation</TextLink>
           ) : null}
           {kit.talk}
-          {/* Windows too narrow for the right column get its panel here. */}
-          {panel && !kit.talking ? <div className="community-home-kit-inline" aria-label="The community right now">{panel}</div> : null}
         </HomeBody>
         {props.asideContainer && rail ? createPortal(rail, props.asideContainer) : null}
       </>
