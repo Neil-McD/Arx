@@ -19,6 +19,7 @@ const ALLOWED = new Map([
   ["anonymousUserCleanup", "operator tool: data deletion, run by hand"],
   ["communityMaintenance", "operator tool: purges orphaned user artifacts, run by hand"],
   ["communityWeeklyDigestWorker", "dormant by design until the weekly digest gets a cron"],
+  ["communityPublicPage", "the cached production app's public-page editor still calls it; delete after production runs design v1 (cleanup wave 3)"],
 ]);
 
 const tracked = execFileSync("git", ["ls-files"], { cwd: root, encoding: "utf8" })
