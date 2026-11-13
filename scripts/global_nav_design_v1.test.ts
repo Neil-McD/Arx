@@ -43,12 +43,34 @@ test("Discover's left column: Discover, Inbox, your communities, start one, your
   expect(html).toContain("Maya Chen");
 });
 
-test("Settings' left column: Back, Inbox, then the settings sections with the open one marked", () => {
+test("Settings' left column: Back, your own sections with the open one marked, then the community's by role", () => {
   const html = renderToStaticMarkup(React.createElement(WebGlobalNavV1, {
     mode: "settings", communityShell, settingsSidebar, onBackFromSettings: () => {},
   }));
-  expect(rows(html).slice(0, 2)).toEqual(["Back", "Inbox"]);
-  expect(html).toContain('<div class="community-nav-section-label">Settings</div>');
-  expect(html).toMatch(/<button class="nav-item active"[^>]*aria-current="page"[^>]*aria-label="Account"/);
+  // No community open: only your own sections.
+  expect(rows(html)).toEqual(["Back", "Profile", "Account", "Billing", "Appearance"]);
+  expect(html).toContain('<div class="community-nav-section-label">You</div>');
+  expect(html).toMatch(/<button class="nav-item active"[^>]*title="Account"[^>]*aria-current="page"/);
   expect(html).not.toContain("Your communities");
+  // A host: the community's sections under its name; the owner's are the owner's.
+  const inCommunity = { ...communityShell, activeCommunity: { id: "a", slug: "kiln", name: "Kiln" }, canViewActiveCommunitySettings: true, onOpenCommunitySettingsPane: () => {} };
+  const owner = renderToStaticMarkup(React.createElement(WebGlobalNavV1, {
+    mode: "settings", settingsSidebar, onBackFromSettings: () => {},
+    communityShell: { ...inCommunity, canManageMembersActiveCommunity: true, isActiveCommunityOwner: true },
+  }));
+  expect(rows(owner)).toEqual(["Back", "Profile", "Account", "Billing", "Appearance", "General", "Public page", "Plans and pricing", "Your app", "Guide", "Danger"]);
+  expect(owner).toContain('<div class="community-nav-section-label">Kiln</div>');
+  const admin = renderToStaticMarkup(React.createElement(WebGlobalNavV1, {
+    mode: "settings", settingsSidebar, onBackFromSettings: () => {},
+    communityShell: { ...inCommunity, canManageMembersActiveCommunity: true, isActiveCommunityOwner: false },
+  }));
+  expect(rows(admin).slice(5)).toEqual(["General", "Guide"]);
+  // A member: their own membership here, none of the community's sections.
+  const member = renderToStaticMarkup(React.createElement(WebGlobalNavV1, {
+    mode: "settings", settingsSidebar, onBackFromSettings: () => {},
+    communityShell: { ...inCommunity, canManageMembersActiveCommunity: false },
+  }));
+  expect(rows(member).slice(5)).toEqual(["Membership"]);
+  expect(member).toContain('<div class="community-nav-section-label">You in Kiln</div>');
 });
+

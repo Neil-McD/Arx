@@ -83,7 +83,7 @@ const hostProps = {
 test("design v1 adds Inbox under Home, and Members then Analytics under Events, with their counts", () => {
   const html = renderToStaticMarkup(React.createElement(CommunityNav, hostProps));
   expect(labelsInOrder(html)).toEqual([
-    "Home", "Inbox", "Channels", "general", "Community", "Knowledge", "Events", "Members", "Analytics", "Manage",
+    "Home", "Inbox", "Channels", "general", "Community", "Knowledge", "Events", "Members", "Analytics", "Settings",
   ]);
   expect(html).toContain('<span class="nav-item-count" aria-label="4 unread">4</span>');
   expect(html).toContain('<span class="nav-item-hint">214</span>');
@@ -92,15 +92,15 @@ test("design v1 adds Inbox under Home, and Members then Analytics under Events, 
   expect(html).toMatch(/<button class="nav-item community-nav-inbox"[^>]*title="Inbox"/);
 });
 
-test("design v1 swaps the name and settings gear for the switcher; Manage opens settings", () => {
+test("design v1 swaps the name and settings gear for the switcher; one Settings row opens settings", () => {
   const html = renderToStaticMarkup(React.createElement(CommunityNav, hostProps));
   expect(html).toContain('<span data-testid="switcher">switcher</span>');
   expect(html).not.toContain("community-nav-settings");
   expect(html).not.toContain("community-nav-identity-name");
-  expect(html).toMatch(/<button class="nav-item"[^>]*title="Manage"/);
+  expect(html.match(/title="Settings"/g)).toHaveLength(1);
 });
 
-test("the foot is Your guide, Invite people, then Manage; Analytics is under Members; neither is in the account menu", () => {
+test("the foot is Invite people, then Settings; Your guide is in the account menu; Analytics is under Members", () => {
   let items: Array<{ key: string; label: string }> = [];
   const html = renderToStaticMarkup(React.createElement(CommunityNav, {
     ...hostProps,
@@ -113,22 +113,27 @@ test("the foot is Your guide, Invite people, then Manage; Analytics is under Mem
     },
   }));
   const labels = labelsInOrder(html);
-  expect(labels.slice(-3)).toEqual(["Your guide", "Invite people", "Manage"]);
+  expect(labels.slice(-2)).toEqual(["Invite people", "Settings"]);
+  expect(labels).not.toContain("Your guide");
+  expect(items.map((item) => item.key)).toContain("guide");
   expect(labels.indexOf("Analytics")).toBe(labels.indexOf("Members") + 1);
   expect(items.map((item) => item.key)).not.toContain("analytics");
   expect(items.map((item) => item.key)).not.toContain("invite");
 });
 
-test("the foot is the host's: a member who may open their own settings gets no Manage row", () => {
+test("a member who may open their own settings gets the Settings row, and no host items", () => {
+  let items: Array<{ key: string }> = [];
   const html = renderToStaticMarkup(React.createElement(CommunityNav, {
     ...hostProps,
     canManageMembersActiveCommunity: false,
     canViewActiveCommunityAnalytics: false,
     onOpenGuide: () => {},
+    accountSlot: (communityItems: Array<{ key: string }>) => { items = communityItems; return React.createElement("span", null, "account"); },
   }));
   const labels = labelsInOrder(html);
-  expect(labels).not.toContain("Manage");
-  expect(labels).not.toContain("Your guide");
+  expect(labels[labels.length - 1]).toBe("Settings");
+  expect(labels).not.toContain("Analytics");
+  expect(items.map((item) => item.key)).not.toContain("guide");
 });
 
 test("a member sees no host rows, and Members only when they may see members", () => {
@@ -147,10 +152,12 @@ test("the classic column keeps its gear and gains none of the v1 rows", () => {
   expect(html).toContain("community-nav-settings");
   expect(html).not.toContain(">Inbox<");
   expect(html).not.toContain(">Manage<");
+  // The classic gear is its one way into settings: no Settings row as well.
+  expect(html).not.toContain('title="Settings"');
   expect(html).not.toContain('data-testid="switcher"');
 });
 
-test("the switcher names the community, closed, and flags news elsewhere", () => {
+test("the switcher names the community, closed, with no stray dot", () => {
   const communities = [
     { id: "a", slug: "kiln", name: "Kiln", avatar_url: null },
     { id: "b", slug: "de", name: "Distribution Engineer", avatar_url: null },
@@ -169,10 +176,8 @@ test("the switcher names the community, closed, and flags news elsewhere", () =>
   expect(html).toContain('aria-haspopup="menu"');
   expect(html).toContain('aria-expanded="false"');
   expect(html).not.toContain('role="menu"');
-  expect(html).toContain("community-switcher-news");
-  // News in the community you are already in is not "elsewhere".
-  const quiet = renderToStaticMarkup(React.createElement(WebCommunitySwitcher, { ...props, attentionById: { a: true } }));
-  expect(quiet).not.toContain("community-switcher-news");
+  // No dot on the closed banner (Neil, Nov 13: it read as a glitch); news shows beside each community in the open list.
+  expect(html).not.toContain("community-switcher-news");
 });
 
 test("design v1 words the add row 'Add a channel'; classic keeps 'Add Channel'", () => {
