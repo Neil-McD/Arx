@@ -49,6 +49,48 @@ the backend in production before any member sees new screens.
 - Leaving, removal, lapse, a host taking someone off a private room, and
   archiving each ask whether that person pays for a pod; with none, nothing
   is scheduled.
+- Added since this plan was first written (Nov 13, `release:verify` passed at
+  `9ab0910d4`, nothing deployed):
+  - Tables, all additive: `communityTiers`, `connectedApps`,
+    `connectedAppDeliveries`, `communityAppGrants`, `communityEventGoing`,
+    `communityMemberNotes` (12 new tables in all since `138ef7ce3`), and
+    `communityPricePoints.tierKey`, `communityMemberships.accessSource =
+    "app_grant"`, `connectedApps.appUrl`.
+  - Two public routes, `GET /apps/v1/access` and `POST /apps/v1/sales`, which
+    answer only with a connected app's secret. With no app connected (none is
+    in production), they refuse everything.
+  - Webhook deliveries to connected apps run on the scheduler (no new cron);
+    with no apps they schedule nothing.
+  - Access counts an active app sale, and someone who left can rejoin on one;
+    with no app sales, nothing changes.
+  - The only change outside the switch: a signed-out visitor to a community
+    with no site now sees "Sign in" on the `/c/<slug>` page, and a signed-in
+    non-member sees "You're not a member yet". Click through it on staging with
+    the switch off.
+  - Plans include pods (#476): `communityTiers.podChannelIds` and
+    `communityChannelParticipants.reasons` (host, paid, plan), both optional.
+    Existing open seats have no reasons and read as they always did (a pod
+    payment's if one still grants it, else the host's), so nothing changes for
+    existing pod members. Seats follow plans only once a builder makes a plan
+    include a pod (Manage → Plans, design v1).
+  - Selling any plan at the door (#477): the join list also carries named
+    plans and both checkout routes accept a plan key. With no named plans (true
+    of every production community), the list and checkout are as today. The
+    join card's new list is in the community-site worker and ships with its own
+    deploy, separately from this release.
+  - A completed Polynet checkout now re-syncs the member's plan pods and tells
+    connected apps once its price and subscription are recorded; with no plan
+    pods or apps, that does nothing.
+  - Checked Nov 13: `release:verify` passed at `d2ab33b0b` (nothing deployed;
+    settings parity lists only unused production settings). The classic app
+    (switch off) clicked through on staging as an owner: General, a private
+    room, Knowledge, Events, Agent and Manage load with no errors; Manage shows
+    no Plans or Your app; Pricing works as before.
+**Not in this release, and shelved (Nov 13):** founders' own vibe-coded
+sites (CLI, SDK, the design switch). Polynet's default community site stays,
+frozen: it is where people join and pay. Moving the join page into Polynet's
+app is decided after the Distribution Engineer pilot.
+
 - The classic app: whatever in the 45 commits is not behind the switch.
   **To do before releasing: list those changes** (`git diff 138ef7ce3 origin/main`
   filtered to code outside `isDesignV1Active()` and `v1/`), and click through
