@@ -11,9 +11,8 @@ import type {
   CloudFounderBillingOverview,
 } from "../../../../shared/cloudFounderBillingGateway";
 
-import { isDesignV1Active } from "../../../../shared/designSystem";
-import { SettingsGroup, SettingsNote, SettingsRow } from "./SettingsRows";
-
+// The classic Billing page. Design v1 has none: each community's Agent plan
+// is on its Guide (WebCommunityAiAgentSection).
 type SessionLike = {
   user: {
     id: string;
@@ -66,46 +65,6 @@ export function WebBillingSettingsSection(props: WebBillingSettingsSectionProps)
   const activeCommunities = props.founderBillingOverview.communities.filter(
     (community) => community.lifecycle_status === "active",
   );
-
-  if (isDesignV1Active()) {
-    return (
-      <>
-        <SettingsGroup label={`Agent plan · ${formatBuilderOfferPrice()} ${POLYNET_BUILDER_OFFER.scopeLabel}`}>
-          {props.isLoadingFounderBilling && activeCommunities.length === 0 ? (
-            <SettingsRow label="Loading…" />
-          ) : activeCommunities.length === 0 ? (
-            <SettingsRow label="No communities yet" help="Each community you run can have its own agent.">
-              <button className="settings-v1-button" type="button" onClick={props.onOpenCreateCommunity}>Create community</button>
-            </SettingsRow>
-          ) : activeCommunities.map((community) => {
-            const primaryAction = resolveBuilderOfferPrimaryAction({ state: community.funding_state, allowedActions: community.allowed_actions });
-            const isActing = props.founderBillingActionCommunityId === community.community_id;
-            return (
-              <SettingsRow key={community.community_id} label={community.community_name} help={communityFundingStateLabel(community)}>
-                {community.funding_mode === "operator_comp" || !primaryAction ? null : (
-                  <button className="settings-v1-button" type="button" disabled={isActing}
-                    onClick={() => runFundingAction({ action: primaryAction, community, onOpenBuilderOffer: props.onOpenBuilderOffer, openFounderBillingPortal: props.openFounderBillingPortal })}>
-                    {isActing ? "Opening…" : builderFundingActionLabel({ action: primaryAction, state: community.funding_state, includePrice: false })}
-                  </button>
-                )}
-              </SettingsRow>
-            );
-          })}
-        </SettingsGroup>
-        {props.founderBillingError ? (
-          <SettingsNote tone="error">
-            {props.founderBillingError}{" "}
-            <button type="button" className="settings-v1-button is-quiet" disabled={props.isLoadingFounderBilling} onClick={() => void props.refreshFounderBilling()}>
-              {props.isLoadingFounderBilling ? "Retrying…" : "Retry"}
-            </button>
-          </SettingsNote>
-        ) : null}
-        <SettingsNote>
-          Communities are free. Paid memberships carry a {POLYNET_BUILDER_OFFER.platformFeeBps / 100}% Polynet fee; Stripe's fees are separate.
-        </SettingsNote>
-      </>
-    );
-  }
 
   return (
     <>
