@@ -1,7 +1,7 @@
-import { ArrowLeft, Compass, Inbox, Plus } from "lucide-react";
+import { Compass, Inbox, Plus } from "lucide-react";
 import { CommunityAvatar } from "../../../../shared/CommunityAvatar";
-import { SettingsNavList } from "../../../../shared/SettingsNavList";
 import { WebAccountMenu } from "./WebAccountMenu";
+import { WebSettingsNavV1 } from "./WebSettingsNavV1";
 import { WebCommunitySwitcher } from "./WebCommunitySwitcher";
 import type { CommunityLike, WebCommunityShellProps, WebSettingsSidebarProps } from "./webShellChromeShared";
 
@@ -38,11 +38,23 @@ export function WebGlobalNavV1(props: {
     </button>
   ) : null;
 
+  // Your own settings: the one Settings sidebar (the community's settings show the same one).
+  if (props.mode === "settings") {
+    return (
+      <WebSettingsNavV1
+        communityShell={communityShell}
+        settingsSidebar={props.settingsSidebar}
+        current={{ kind: "personal", page: props.settingsSidebar.settingsGroup }}
+        onBack={props.onBackFromSettings}
+      />
+    );
+  }
+
   return (
-    <aside className="community-nav global-nav-v1" aria-label={props.mode === "discover" ? "Discover" : "Settings"}>
+    <aside className="community-nav global-nav-v1" aria-label="Discover">
       <div className="community-nav-identity is-condensed">
         <WebCommunitySwitcher
-          activeCommunityName={props.mode === "discover" ? "Discover" : "Settings"}
+          activeCommunityName="Discover"
           communities={communityShell.railCommunities}
           selectedCommunitySlug={null}
           attentionById={communityShell.communityRailAttentionById}
@@ -51,23 +63,7 @@ export function WebGlobalNavV1(props: {
           onCreateCommunity={communityShell.onOpenCommunityCreateCta}
         />
       </div>
-      {props.mode === "settings" ? (
-        <>
-          <div className="community-nav-v1-primary">
-            <button className="nav-item" type="button" onClick={props.onBackFromSettings} title="Back">
-              <span className="nav-icon" aria-hidden="true"><ArrowLeft size={17} strokeWidth={1.7} /></span>
-              <span className="nav-item-label">Back</span>
-            </button>
-            {inbox}
-          </div>
-          <div className="community-nav-section-label">Settings</div>
-          <SettingsNavList
-            settingsGroup={props.settingsSidebar.settingsGroup}
-            onSelectPage={props.settingsSidebar.onSelectPage}
-          />
-        </>
-      ) : (
-        <>
+      <>
           <div className="community-nav-v1-primary">
             <button className="nav-item active" type="button" onClick={communityShell.onOpenDiscover} title="Discover" aria-current="page">
               <span className="nav-icon" aria-hidden="true"><Compass size={17} strokeWidth={1.7} /></span>
@@ -96,8 +92,7 @@ export function WebGlobalNavV1(props: {
             <span className="nav-icon" aria-hidden="true"><Plus size={17} strokeWidth={1.8} /></span>
             <span className="nav-item-label">Start a community</span>
           </button>
-        </>
-      )}
+      </>
       {communityShell.account ? (
         <div className="community-nav-account"><WebAccountMenu {...communityShell.account} /></div>
       ) : null}

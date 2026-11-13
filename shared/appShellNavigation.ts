@@ -55,11 +55,25 @@ export const COMMUNITY_TABS = [
 
 export type CommunityTab = (typeof COMMUNITY_TABS)[number];
 
+// One Settings page (docs/specs/settings-v1.md): the community's sections, in
+// the order its sidebar lists them.
 export const COMMUNITY_SETTINGS_PANES = [
   "community",
+  "public",
+  "plans",
+  "app",
   "agent",
   "danger",
 ] as const;
+
+export const COMMUNITY_SETTINGS_PANE_LABELS: Record<(typeof COMMUNITY_SETTINGS_PANES)[number], string> = {
+  community: "General",
+  public: "Public page",
+  plans: "Plans and pricing",
+  app: "Your app",
+  agent: "Guide",
+  danger: "Danger",
+};
 
 export type CommunitySettingsPane = (typeof COMMUNITY_SETTINGS_PANES)[number];
 
@@ -138,6 +152,12 @@ export function parseCommunitySettingsPane(
       return "agent";
     case "danger":
       return "danger";
+    case "public":
+      return "public";
+    case "plans":
+      return "plans";
+    case "app":
+      return "app";
     case "community":
     default:
       return "community";
@@ -160,6 +180,9 @@ export function isCommunitySettingsPaneAllowedForAccess(
       return access.canViewSettings;
     case "agent":
       return access.canManageMembers;
+    case "public":
+    case "plans":
+    case "app":
     case "danger":
       return access.isOwner;
   }

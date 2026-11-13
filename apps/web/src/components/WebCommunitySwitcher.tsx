@@ -28,11 +28,6 @@ export function WebCommunitySwitcher(props: WebCommunitySwitcherProps) {
   const rootRef = useRef<HTMLDivElement | null>(null);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
   const menuId = useId();
-  const othersHaveNews = props.communities.some(
-    (community) =>
-      props.attentionById[community.id] &&
-      String(community.slug ?? "") !== props.selectedCommunitySlug,
-  );
 
   useEffect(() => {
     if (!isOpen) return;
@@ -72,7 +67,6 @@ export function WebCommunitySwitcher(props: WebCommunitySwitcherProps) {
     >
       {props.mark ? <span className={cx("mark")} aria-hidden="true">{props.mark}</span> : null}
       <span className="community-switcher-name">{props.activeCommunityName}</span>
-      {othersHaveNews ? <span className="community-switcher-news" aria-label="New in another community" /> : null}
       <span className={cx("sw")}><Icon name="updown" /></span>
     </button>
   ) : null;
@@ -151,9 +145,6 @@ export function WebCommunitySwitcher(props: WebCommunitySwitcherProps) {
       >
         {props.mark ? <span className="community-switcher-mark" aria-hidden="true">{props.mark}</span> : null}
         <span className="community-switcher-name">{props.activeCommunityName}</span>
-        {othersHaveNews ? (
-          <span className="community-switcher-news" aria-label="New in another community" />
-        ) : null}
         <ChevronsUpDown size={15} aria-hidden="true" />
       </button>
       {menu}

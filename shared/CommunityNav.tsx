@@ -762,17 +762,12 @@ export const CommunityNav = memo(function CommunityNav({
           <div className="community-nav-invite-loading web-skeleton-block" />
         </div>
       ) : isV1 ? (
-        // Design system v1: the foot. Your guide and Manage are the host's;
-        // Invite people sits just above Manage for anyone who may invite.
-        // Analytics is under Members above; Visit site is in the account menu.
-        (showSettingsButton && canManageMembersActiveCommunity) || canCopyJoinLink ? (
+        // Design system v1: the foot. Invite people (anyone who may invite),
+        // then Settings: the one Settings page, for everyone who has settings
+        // here (a host's community sections, a member's own). Your guide and
+        // Visit site are in the account menu; Analytics is under Members.
+        showSettingsButton || canCopyJoinLink ? (
           <div className="community-nav-footer">
-            {showSettingsButton && canManageMembersActiveCommunity && onOpenGuide ? (
-              <button className="nav-item" type="button" onClick={onOpenGuide} title="Your guide">
-                <span className="nav-icon" aria-hidden="true"><Sparkles size={16} strokeWidth={1.9} /></span>
-                <span className="nav-item-label">Your guide</span>
-              </button>
-            ) : null}
             {canCopyJoinLink ? (
               <button
                 className={`nav-item community-nav-invite${didCopyJoinLink ? " is-copied" : ""}`}
@@ -787,15 +782,15 @@ export const CommunityNav = memo(function CommunityNav({
                 <span className="nav-item-label">{didCopyJoinLink ? "Copied the invite link" : "Invite people"}</span>
               </button>
             ) : null}
-            {showSettingsButton && canManageMembersActiveCommunity ? (
+            {showSettingsButton ? (
             <button
               className={showActiveSelection && communityTab === "settings" ? "nav-item active" : "nav-item"}
               type="button"
               onClick={() => onSelectTab("settings")}
-              title="Manage"
+              title="Settings"
             >
-              <span className="nav-icon" aria-hidden="true"><SlidersHorizontal size={16} strokeWidth={1.9} /></span>
-              <span className="nav-item-label">Manage</span>
+              <span className="nav-icon" aria-hidden="true"><Settings size={16} strokeWidth={1.9} /></span>
+              <span className="nav-item-label">Settings</span>
             </button>
             ) : null}
           </div>
@@ -862,6 +857,7 @@ export const CommunityNav = memo(function CommunityNav({
         <div className="community-nav-account">
           {typeof accountSlot === "function"
             ? accountSlot([
+                ...(showSettingsButton && canManageMembersActiveCommunity && onOpenGuide ? [{ key: "guide", label: "Your guide", icon: <Sparkles size={16} aria-hidden="true" />, onSelect: onOpenGuide }] : []),
                 ...(siteUrl ? [{ key: "site", label: "Visit site", icon: <ExternalLink size={16} aria-hidden="true" />, onSelect: () => { window.open(siteUrl, "_blank", "noopener,noreferrer"); } }] : []),
               ])
             : accountSlot}
