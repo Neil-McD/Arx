@@ -8,6 +8,8 @@ import {
   setCloudFounderBriefSettings,
   type CloudFounderBriefSettings,
 } from "../../../../shared/cloudCommunityAdminGateway";
+import { isDesignV1Active } from "../../../../shared/designSystem";
+import { SettingsGroup, SettingsRow, SettingsSelect, SettingsSwitch } from "./SettingsRows";
 
 const HOURS = Array.from({ length: 24 }, (_, hour) => hour);
 
@@ -76,6 +78,26 @@ export function CommunityFounderBriefSection(props: {
 
   const enabled = Boolean(settings?.enabled);
   const localHour = settings?.local_hour ?? 8;
+  if (isDesignV1Active()) {
+    return (
+      <SettingsGroup label="Daily brief">
+        <SettingsRow label="Send me a daily brief"
+          help={error ? <span className="settings-v1-error" role="alert">{error}</span>
+            : "Each morning: who joined, posts nobody answered, newcomers gone quiet, what's coming up. In your guide conversation and by email; it never messages members."}>
+          <SettingsSwitch label="Send me a daily brief" checked={enabled} disabled={!settings || saving}
+            onChange={(checked) => void save({ enabled: checked, localHour })} />
+        </SettingsRow>
+        {enabled ? (
+          <SettingsRow label="Time" htmlFor="brief-hour" help={settings?.time_zone ? `${settings.time_zone} time.` : "Your time."}>
+            <SettingsSelect id="brief-hour" value={localHour} disabled={saving}
+              onChange={(event) => void save({ enabled: true, localHour: Number(event.target.value) })}>
+              {HOURS.map((hour) => <option key={hour} value={hour}>{hourLabel(hour)}</option>)}
+            </SettingsSelect>
+          </SettingsRow>
+        ) : null}
+      </SettingsGroup>
+    );
+  }
   return (
     <div className="settings-section community-founder-brief-section">
       <div className="settings-section-title">Daily brief</div>

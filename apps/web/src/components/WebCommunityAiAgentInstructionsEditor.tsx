@@ -1,4 +1,6 @@
 import type { Dispatch, MutableRefObject, SetStateAction } from "react";
+import { isDesignV1Active } from "../../../../shared/designSystem";
+import { SettingsGroup, SettingsRow } from "./SettingsRows";
 
 export type WebCommunityAiAgentInstructionsEditorProps = {
   communityAgentConfigDirtyRef: MutableRefObject<boolean>;
@@ -15,6 +17,23 @@ export function WebCommunityAiAgentInstructionsEditor(
   props: WebCommunityAiAgentInstructionsEditorProps,
 ) {
   const isDirty = props.communityAgentConfigDirtyRef.current;
+  // Design v1: one stacked row; it saves when you leave the box.
+  if (isDesignV1Active()) {
+    const status = props.communityAgentConfigSaveError
+      ? <span className="settings-v1-error">{props.communityAgentConfigSaveError}</span>
+      : props.isSavingCommunityAgentConfig ? "Saving…" : isDirty ? "Unsaved" : "Adds to Polynet's fixed rules for identity, safety and authority. Saves as you go.";
+    return (
+      <SettingsGroup label="Instructions">
+        <SettingsRow label="How should the guide help here?" htmlFor="guide-instructions" help={status} stacked>
+          <textarea id="guide-instructions" className="settings-v1-input" rows={6}
+            placeholder="Optional instructions for this community."
+            value={props.communityAgentConfigCommunitySystemPrompt}
+            onChange={(event) => { props.setCommunityAgentConfigCommunitySystemPrompt(event.target.value); props.markCommunityAgentConfigDirty(); }}
+            onBlur={() => { if (props.communityAgentConfigDirtyRef.current && !props.isSavingCommunityAgentConfig) void props.handleSaveCommunityAgentConfig(); }} />
+        </SettingsRow>
+      </SettingsGroup>
+    );
+  }
 
   return (
     <div className="settings-section">
