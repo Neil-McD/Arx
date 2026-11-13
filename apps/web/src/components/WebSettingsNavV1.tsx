@@ -57,9 +57,9 @@ export function WebSettingsNavV1(props: {
   return (
     <aside className="community-nav global-nav-v1 settings-nav-v1" aria-label="Settings">
       <div className="community-nav-v1-primary">
-        <button className="nav-item settings-nav-back" type="button" onClick={props.onBack} title="Back">
+        <button className="nav-item settings-nav-back" type="button" onClick={props.onBack} title={community ? `Back to ${community.name}` : "Back"}>
           <span className="nav-icon" aria-hidden="true"><ArrowLeft size={17} strokeWidth={1.7} /></span>
-          <span className="nav-item-label">{community ? `Back to ${community.name}` : "Back"}</span>
+          <span className="nav-item-label">Back</span>
         </button>
       </div>
       <div className="community-nav-section-label">You</div>

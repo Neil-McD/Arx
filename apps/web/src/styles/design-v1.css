@@ -3288,3 +3288,10 @@
   :root[data-design="v1"] .settings-v1-row { flex-direction: column; align-items: stretch; gap: 8px; }
   :root[data-design="v1"] .settings-v1-row-control { justify-content: flex-start; flex: 1 1 auto; }
 }
+/* The settings panel's general button look must not reach the rows' own controls. */
+:root[data-design="v1"] .settings-v1-switch { background: var(--border-strong) !important; border: 0 !important; }
+:root[data-design="v1"] .settings-v1-switch.is-on { background: var(--accent-cyan) !important; }
+:root[data-design="v1"] .settings-v1-button { background: transparent !important; }
+:root[data-design="v1"] .settings-v1-button.is-quiet { border-color: transparent !important; }
+/* No header row on the Settings page: the title starts at the top. */
+:root[data-design="v1"] .community-page-body:has(.settings-page-v1) { grid-template-rows: 0 minmax(0, 1fr); }
