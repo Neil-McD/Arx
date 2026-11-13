@@ -1223,20 +1223,6 @@
   display: none;
 }
 
-/* Home on the kit: the right column's panel, inline under the rows, for
-   windows too narrow for the right column. */
-:root[data-design="v1"] .community-home-kit-inline {
-  display: flex;
-  flex-direction: column;
-  gap: 26px;
-  margin-top: 40px;
-}
-
-@media (min-width: 1180px) {
-  :root[data-design="v1"] .community-home-kit-inline {
-    display: none;
-  }
-}
 
 :root[data-design="v1"] .community-home-aside.is-rail {
   border-top: 0;
@@ -1577,6 +1563,8 @@
  */
 :root[data-design="v1"] {
   --left-column-width: clamp(224px, 18.4vw, 264px);
+  /* Inbox's conversation column; the list leaves exactly this much room. */
+  --inbox-thread-width: max(400px, var(--right-column-width));
 }
 
 /*
@@ -1598,7 +1586,7 @@
     gap: 0;
     /* Fixed gutters, like a channel; only Home is centred. */
     --inbox-gutter: 56px;
-    padding: 52px calc(var(--right-column-width) + var(--inbox-gutter)) 0 var(--inbox-gutter);
+    padding: 52px calc(var(--inbox-thread-width) + var(--inbox-gutter)) 0 var(--inbox-gutter);
     /* The left column's own line divides it, as on every page. */
     border: 0;
     border-radius: 0;
@@ -1610,7 +1598,7 @@
   :root[data-design="v1"] .web-direct-messages-host.is-page .community-dm-inbox-header {
     position: absolute;
     top: 0;
-    right: var(--right-column-width);
+    right: var(--inbox-thread-width);
     left: 0;
     flex: none;
     height: 52px;
@@ -1645,7 +1633,7 @@
   :root[data-design="v1"] .web-direct-messages-host.is-page .community-dm-inbox-search {
     position: absolute;
     top: 10px;
-    right: calc(var(--right-column-width) + var(--inbox-gutter));
+    right: calc(var(--inbox-thread-width) + var(--inbox-gutter));
     z-index: 3;
     width: 220px;
     height: 32px;
@@ -1762,7 +1750,7 @@
     right: 0;
     bottom: 0;
     /* The mock's Inbox conversation column is 400px, wider on big windows. */
-    width: max(400px, var(--right-column-width));
+    width: var(--inbox-thread-width);
     height: auto;
     max-height: none;
     gap: 0;
@@ -3406,3 +3394,158 @@
 }
 :root[data-design="v1"] .settings-v1-inline-edit { display: flex; align-items: center; gap: 8px; width: 100%; }
 :root[data-design="v1"] .settings-v1-inline-edit .settings-v1-input { flex: 1 1 auto; }
+
+/* ---------- The desktop shell: one rule for the right column (Nov 13) ----------
+   Left column | middle | right column. The right column shows beside the
+   middle only from 1180px, where the middle keeps ~600px. Narrower (down to
+   the phone layout at 720px), every right column hides and the header's
+   panel button (RightColumnToggle) opens it over the page's edge. It never
+   drops under the middle. */
+:root[data-design="v1"] .right-column-toggle { display: none; }
+:root[data-design="v1"] .community-page-rail-toggle { display: none; }
+@media (min-width: 721px) and (max-width: 1179px) {
+  :root[data-design="v1"] .right-column-toggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: none;
+    width: 30px;
+    height: 30px;
+    margin-left: auto;
+    padding: 0;
+    color: var(--text-ink-secondary);
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 7px;
+    cursor: pointer;
+  }
+  :root[data-design="v1"] .right-column-toggle:hover,
+  :root[data-design="v1"] .right-column-toggle.is-open {
+    color: var(--text-ink-primary);
+    border-color: var(--surface-raised-edge);
+  }
+  :root[data-design="v1"] .right-column-toggle:focus-visible { outline: 2px solid var(--settings-accent); outline-offset: 2px; }
+  :root[data-design="v1"] .kit-top-actions { margin-left: auto; display: flex; align-items: center; }
+
+  /* The panel itself: over the page's right edge, the column's own width. */
+  :root[data-design="v1"][data-right-open] .community-page-body > .community-page-rail,
+  :root[data-design="v1"][data-right-open] .community-interaction-projection.has-channel-context > .channel-roster-panel,
+  :root[data-design="v1"][data-right-open] .community-agent-dock-panel.has-home-rail > .community-home-rail {
+    display: block;
+    position: absolute;
+    /* Below the header line, so its panel button stays there to close it. */
+    top: 52px;
+    right: 0;
+    bottom: 0;
+    z-index: 30;
+    /* Out of the grid: in one column, a placed item would get an empty track. */
+    grid-column: auto;
+    grid-row: auto;
+    width: var(--right-column-width);
+    max-width: calc(100% - 48px);
+    box-sizing: border-box;
+    overflow-y: auto;
+    background: var(--surface-raised);
+    border-left: 1px solid var(--surface-raised-edge);
+    box-shadow: -16px 0 40px rgba(0, 0, 0, 0.28);
+  }
+
+  /* Pages in the frame (Knowledge, Events, Pods...): one column; the button
+     sits at the right of the header line, only when the page has a rail. */
+  :root[data-design="v1"] .community-page-body:has(.community-page-rail-content) {
+    position: relative;
+    grid-template-columns: minmax(0, 1fr);
+  }
+  :root[data-design="v1"] .community-page-body > .community-page-rail { display: none; }
+  :root[data-design="v1"] .community-page-body:has(.community-page-rail-content) > .community-page-rail-toggle {
+    display: flex;
+    position: absolute;
+    top: 11px;
+    right: 16px;
+    z-index: 31;
+  }
+  :root[data-design="v1"] .community-page-body:has(.community-page-rail-content) > .community-page-header { padding-right: 64px; }
+
+  /* A channel: one column; its people-and-memory panel opens from the header. */
+  :root[data-design="v1"] .community-interaction-projection.has-channel-context {
+    position: relative;
+    grid-template-columns: minmax(0, 1fr);
+  }
+  :root[data-design="v1"] .community-interaction-projection.has-channel-context > .channel-roster-panel { display: none; }
+  :root[data-design="v1"] .community-interaction-projection:not(.has-channel-context) .community-channel-header .right-column-toggle { display: none; }
+
+  /* Home: one column; the community-today panel opens from Home's header. */
+  :root[data-design="v1"] .community-agent-dock-panel.has-home-rail { position: relative; }
+}
+
+/* ---------- The desktop shell, slice 2: layered pages (Nov 13) ----------
+   Inbox and Members show list and detail side by side from 1180px. Narrower,
+   Inbox becomes two layers: the list, then the conversation in its place with
+   a back arrow (no half drawer over the list). Members' record opens like any
+   right column: over the page's edge, from the header button or a member row. */
+:root[data-design="v1"] .community-dm-panel-back.is-layered-only { display: none; }
+@media (min-width: 721px) and (max-width: 1179px) {
+  /* The list takes the whole main area; no empty "choose someone" column. */
+  :root[data-design="v1"] .web-direct-messages-host.is-page .community-dm-inbox-panel {
+    padding-right: var(--inbox-gutter);
+  }
+  :root[data-design="v1"] .web-direct-messages-host.is-page .community-dm-inbox-header { right: 0; }
+  :root[data-design="v1"] .web-direct-messages-host.is-page .community-dm-inbox-search { right: var(--inbox-gutter); }
+  :root[data-design="v1"] .web-direct-messages-host.is-page .community-dm-empty-column { display: none; }
+  /* A conversation open: it is the page, with its back arrow; the list waits. */
+  :root[data-design="v1"] .web-direct-messages-host.is-page.has-open .community-dm-inbox-panel { display: none; }
+  :root[data-design="v1"] .web-direct-messages-host.is-page.has-open .community-dm-panel:not(.community-dm-inbox-panel) {
+    left: var(--left-column-width);
+    width: auto;
+    padding-left: var(--inbox-gutter);
+    padding-right: var(--inbox-gutter);
+    border-left: 0;
+  }
+  :root[data-design="v1"] .web-direct-messages-host.is-page .community-dm-panel-back.is-layered-only { display: inline-flex; }
+  /* Inbox on the kit (what design v1 draws): the same two layers. */
+  :root[data-design="v1"] .web-direct-messages-host.is-page .community-dm-inbox-panel.is-kit { padding-right: 0; }
+  :root[data-design="v1"] .web-direct-messages-host.is-page.has-open .community-dm-inbox-panel.is-kit { display: none; }
+  :root[data-design="v1"] .web-direct-messages-host.is-page.has-open .community-dm-panel.is-kit:not(.community-dm-inbox-panel) {
+    left: var(--left-column-width);
+    width: auto;
+    padding: 0;
+    border: 1px solid var(--surface-raised-edge);
+    border-radius: 10px;
+  }
+  :root[data-design="v1"] .web-direct-messages-host.is-page .community-dm-panel.is-kit .community-dm-panel-back.is-layered-only {
+    flex: none;
+    width: 30px;
+    height: 30px;
+    margin: 0 -4px 0 -6px;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-ink-secondary);
+    background: none;
+    border: 0;
+    border-radius: 7px;
+    cursor: pointer;
+  }
+
+  /* Members: the table takes the page; the record opens as the panel. */
+  :root[data-design="v1"] .community-interaction-projection:has(> .members-page),
+  :root[data-design="v1"] .community-interaction-projection:has(> .members-page-record) {
+    position: relative;
+    grid-template-columns: minmax(0, 1fr);
+  }
+  :root[data-design="v1"] .community-interaction-projection > .members-page-record { display: none; }
+  :root[data-design="v1"][data-right-open] .community-interaction-projection > .members-page-record {
+    display: flex;
+    position: absolute;
+    top: 52px;
+    right: 0;
+    bottom: 0;
+    z-index: 30;
+    grid-column: auto;
+    grid-row: auto;
+    width: max(400px, var(--right-column-width));
+    max-width: calc(100% - 48px);
+    box-sizing: border-box;
+    overflow-y: auto;
+    box-shadow: -16px 0 40px rgba(0, 0, 0, 0.28);
+  }
+}

@@ -689,6 +689,13 @@ export function WebDirectMessagePanel(props: WebDirectMessagePanelProps) {
         <KitApp view="inbox" part="rail">
           <Rail index={3} label={`Conversation with ${peerLabel}`}>
             <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+              {/* Narrower windows show Inbox as layers: back to the list. */}
+              {props.onBackToInbox ? (
+                <button className="community-dm-panel-back is-layered-only" type="button" onClick={props.onBackToInbox}
+                  aria-label="Back to Inbox" title="Inbox">
+                  <ArrowLeft aria-hidden="true" />
+                </button>
+              ) : null}
               <span className={cx("av")}>
                 <UserAvatar
                   className="community-dm-kit-avatar"
@@ -836,9 +843,9 @@ export function WebDirectMessagePanel(props: WebDirectMessagePanelProps) {
         </div>
       ) : null}
       <div className="community-dm-panel-header">
-        {props.onBackToInbox && !props.besideInbox ? (
+        {props.onBackToInbox ? (
           <button
-            className="community-dm-panel-back"
+            className={`community-dm-panel-back${props.besideInbox ? " is-layered-only" : ""}`}
             type="button"
             onClick={props.onBackToInbox}
             aria-label="Back to direct messages"

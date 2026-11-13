@@ -801,6 +801,8 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
     const needsReply = withMessages.find((conversation) =>
       !conversation.viewer_muted && Boolean(conversation.has_unread || Number(conversation.unread_count ?? 0) > 0));
     const first = needsReply ?? withMessages[0];
+    // Narrower windows show Inbox as layers: start on the list, not inside a conversation.
+    if (typeof window !== "undefined" && window.matchMedia("(max-width: 1179px)").matches) return;
     if (first) openConversationRef.current?.(first, { deferRead: true });
   }, [activeConversationId, conversations, inboxIsPage, isLoadingInbox, isOpen, openConversationRequest, openRequest]);
   useEffect(() => {
@@ -1679,7 +1681,7 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
   if (!isOpen) return null;
 
   return (
-    <div className={`web-direct-messages-host${props.mobileRoot ? " mobile-root" : ""}${inboxIsPage ? " is-page" : ""}${inboxIsPage ? " has-conversation" : ""}`}>
+    <div className={`web-direct-messages-host${props.mobileRoot ? " mobile-root" : ""}${inboxIsPage ? " is-page" : ""}${inboxIsPage ? " has-conversation" : ""}${directMessagePanel ? " has-open" : ""}`}>
       {/* Design system v1: Inbox is a page. The list fills the main area and
           stays there; the open conversation sits beside it in the right column. */}
       {directMessagePanel ? (
