@@ -1,6 +1,6 @@
 import { useEffect, useRef, type DragEvent } from "react";
 import { isDesignV1Active } from "../../../../shared/designSystem";
-import { SettingsGroup, SettingsRow, SettingsSaveStatus } from "./SettingsRows";
+import { SettingsGroup, SettingsRow } from "./SettingsRows";
 import type { SocialProfileKind, SocialProfileLinks } from "../../../../shared/socialProfileLinks";
 import { UserAvatar } from "../../../../shared/UserAvatar";
 import { WebSocialProfileLinksFields } from "./WebSocialProfileLinksFields";
@@ -77,9 +77,6 @@ function ProfileSettingsV1(props: WebProfileSettingsSectionProps) {
   const name = (props.profileName || session?.user.email || "AR").replace(/^@/, "");
   return (
     <div ref={rootRef} className="settings-v1-page-body" onBlur={() => window.setTimeout(trySave, 0)}>
-      <div className="settings-page-head is-inline">
-        <SettingsSaveStatus saving={isSavingProfile} dirty={profileNeedsSave} error={props.profileSaveError ?? (props.profileLoadStatus === "error" ? "Couldn't load your profile" : null)} />
-      </div>
       <SettingsGroup>
         <SettingsRow label="Photo">
           <div

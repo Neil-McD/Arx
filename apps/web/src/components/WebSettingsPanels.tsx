@@ -20,6 +20,10 @@ import {
 } from "./WebBillingSettingsSection";
 import { WebPolynetMcpAccountSection } from "./WebPolynetMcpAccountSection";
 import { WebProfileSettingsSection } from "./WebProfileSettingsSection";
+import { WebArchivedCommunityList } from "./WebArchivedCommunityList";
+import { SettingsPageHead, SettingsSaveStatus } from "./SettingsRows";
+import { isDesignV1Active } from "../../../../shared/designSystem";
+import { settingsGroupLabel } from "../../../../shared/appShellNavigation";
 
 type SessionLike = AuthSession | null;
 
@@ -91,6 +95,24 @@ export function WebSettingsPanels(props: WebSettingsPanelsProps) {
     saveProfileToCloud: props.profile.saveProfileToCloud,
   };
 
+  if (isDesignV1Active()) {
+    const p = profileSectionProps;
+    const status = props.settingsGroup === "profile" && p.session ? (
+      <SettingsSaveStatus saving={p.isSavingProfile} dirty={p.profileNeedsSave}
+        error={p.profileSaveError ?? (p.profileLoadStatus === "error" ? "Couldn't load your profile" : null)} />
+    ) : null;
+    return (
+      <>
+        <SettingsPageHead title={settingsGroupLabel(props.settingsGroup)} status={status} />
+        <WebSettingsPanelBody {...props} profileSectionProps={profileSectionProps} />
+      </>
+    );
+  }
+  return <WebSettingsPanelBody {...props} profileSectionProps={profileSectionProps} />;
+}
+
+function WebSettingsPanelBody(props: WebSettingsPanelsProps & { profileSectionProps: Parameters<typeof WebProfileSettingsSection>[0] }) {
+  const profileSectionProps = props.profileSectionProps;
   switch (props.settingsGroup) {
     case "profile":
       return <WebProfileSettingsSection {...profileSectionProps} />;
@@ -100,6 +122,15 @@ export function WebSettingsPanels(props: WebSettingsPanelsProps) {
           <WebAccountSettingsSection {...props.account} />
           <WebEmailPreferencesSection {...props.emailPreferences} />
           <WebPolynetMcpAccountSection session={props.account.session} />
+          {isDesignV1Active() && props.account.session ? (
+            <WebArchivedCommunityList
+              communities={props.account.founderBillingOverview.communities.filter((community) => community.lifecycle_status === "archived")}
+              actionCommunityId={props.account.founderBillingActionCommunityId}
+              error={props.account.founderBillingError}
+              retryCommunityArchive={props.account.retryCommunityArchive}
+              restoreCommunityWithoutPayment={props.account.restoreCommunityWithoutPayment}
+            />
+          ) : null}
         </>
       );
     case "billing":
