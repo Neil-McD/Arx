@@ -159,9 +159,10 @@ function members(count) {
   return new Intl.NumberFormat().format(count) + (count === 1 ? " member" : " members");
 }
 
-// A plan's choice: its key, or (the base membership) its billing period.
-const PLAN_CHOICE = /^[a-z0-9][a-z0-9-]{0,31}$/;
-function planChoice(plan) { return plan.plan || plan.billing_period; }
+// A plan's choice: "tier:<key>" for a named plan, or (the base membership) its
+// billing period. Never the same: a plan keyed "monthly" is still that plan.
+const PLAN_CHOICE = /^(monthly|annual|tier:[a-z0-9][a-z0-9-]{0,31})$/;
+function planChoice(plan) { return plan.plan ? "tier:" + plan.plan : plan.billing_period; }
 
 // Back to Join after signing in, with the plan picked or the checkout to finish.
 function signIn(plan, checkout) {
