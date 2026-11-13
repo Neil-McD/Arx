@@ -523,7 +523,7 @@ describe("pods", () => {
     // Listed with one seat (Ana has it): Ben sees the outside only, and asking puts him on the waitlist.
     await asOwner.mutation(api.communityPods.savePodDetails, { communityId: f.communityId, channelId: podId, visibility: "listed", seats: 1 });
     const outside = (await list("brief-Ben")).outside;
-    expect(outside).toEqual([{ channel_id: String(podId), slug: "founders-pod", name: "Founders pod", purpose: "Weekly accountability for founders", hosts: [], seats_left: 0, price: null, my_request: null }]);
+    expect(outside).toEqual([{ channel_id: String(podId), slug: "founders-pod", name: "Founders pod", purpose: "Weekly accountability for founders", hosts: [], seats_left: 0, price: null, my_request: null, included_with: [] }]);
     expect(JSON.stringify(outside)).not.toContain("Ana");
     await expect(asBen.query(api.communityPods.getPod, { communityId: f.communityId, channelId: podId })).rejects.toThrow();
     expect(await asBen.mutation(api.communityPods.requestToJoinPod, { communityId: f.communityId, channelId: podId })).toEqual({ status: "waitlist" });

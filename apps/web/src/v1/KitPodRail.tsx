@@ -143,7 +143,7 @@ export function KitPodRail(props: { session: unknown; communityId: string; pod: 
                       void navigator.clipboard?.writeText(podLink(pod.slug)).then(() => { setCopied(true); window.setTimeout(() => setCopied(false), 1500); }, () => undefined);
                     }}>{copied ? "Copied" : "Copy link"}</Btn>
                   ) : null}
-                  {pod.slug ? <Btn small txt onClick={() => { askForPodPagePreview(pod.slug); goToPodsPath(pod.slug); }}>See its page</Btn> : null}
+                  {pod.slug ? <Btn small txt onClick={() => { askForPodPagePreview(pod.slug); goToPodsPath(pod.slug); }}>See it as members do</Btn> : null}
                 </div>
               ) : null}
             </>

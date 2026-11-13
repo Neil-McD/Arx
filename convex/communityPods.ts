@@ -13,6 +13,7 @@ import { normalizeIdValue, requireCommunityChatAccess, requireCommunityManager }
 import { displayName } from "./communityFounderBrief";
 import { podPaymentStateOf, podPriceOf } from "./communityPodPayments";
 import { nextPodCall } from "./communityEvents";
+import { canChangePlanHere, plansIncludingPod } from "./communityPlanChange";
 
 const PODS_CAP = 50;
 const MEMBERS_CAP = 200;
@@ -146,6 +147,8 @@ export const listCommunityPods = query({
           seats_left: typeof record.seats === "number" ? Math.max(0, record.seats - taken) : null,
           price: podPriceOf(record),
           my_request: request && request.status !== "approved" ? request.status : null,
+          // The plans that include it: the way in for a pod that comes with a plan.
+          included_with: (await plansIncludingPod(ctx, args.communityId, record.channelId)).map((plan) => plan.name),
         });
       }
     }
@@ -346,6 +349,10 @@ export const getPodPage = query({
         const call = await nextPodCall(ctx, channel._id, nowMs);
         return call ? { recurrence_frequency: call.recurrence_frequency, next_starts_at: call.starts_at } : null;
       })(),
+      // The plans that include it (each with its monthly price), and whether
+      // this member can move to one here (they pay Polynet monthly).
+      included_with: await plansIncludingPod(ctx, args.communityId, channel._id),
+      can_switch_plan: !manages && await canChangePlanHere(ctx, args.communityId, userId),
       // The builder and hosts: what members see, plus Edit and a way in.
       can_edit: manages,
       can_enter: canEnter,

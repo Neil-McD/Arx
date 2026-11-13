@@ -31,6 +31,9 @@ export type CloudPodPage =
     checkout_open: boolean;
     // When it meets: never the link or who is going.
     rhythm: { recurrence_frequency: string; next_starts_at: string } | null;
+    // The plans that include this pod, and whether this member can move to one here.
+    included_with: CloudPlanOffer[];
+    can_switch_plan: boolean;
     can_edit: boolean;
     can_enter: boolean;
   };
@@ -60,7 +63,11 @@ export type CloudOutsidePod = {
   seats_left: number | null;
   price: CloudPodPrice;
   my_request: "pending" | "waitlist" | "declined" | null;
+  // Names of the plans that include it.
+  included_with: string[];
 };
+
+export type CloudPlanOffer = { key: string | null; name: string; amount_base_units: number; currency: string; currency_decimals: number };
 
 export type CloudPodDetail = {
   channel_id: string;
