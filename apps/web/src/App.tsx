@@ -2351,7 +2351,7 @@ export default function App() {
           // sees "Member" flash first.
           roleLabel: memberPreview.active
             ? "Viewing as a member"
-            : activeCommunity && activeCommunityAccess?.community_id !== activeCommunity.id
+            : !activeCommunity || activeCommunityAccess?.community_id !== activeCommunity.id
               ? ""
               : activeCommunity && activeCommunityAccess?.is_owner === true
                 ? "Host"
