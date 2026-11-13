@@ -82,7 +82,11 @@ export function KitPodRail(props: { session: unknown; communityId: string; pod: 
       // Out now: the room closes, so back to Pods.
       if (result.left === "now") { forgetPod(); goToPodsPath(); }
       else props.onChanged();
-    } catch { setLeaveError("Couldn't leave. Try again."); } finally { setBusy(null); }
+    } catch (failure) {
+      // A pod their plan includes goes with the plan.
+      setLeaveError(String((failure as Error)?.message ?? "").includes("community_pod_seat_from_plan")
+        ? "This pod comes with your plan. It ends when the plan does." : "Couldn't leave. Try again.");
+    } finally { setBusy(null); }
   };
 
   const mine = pod.my_membership;

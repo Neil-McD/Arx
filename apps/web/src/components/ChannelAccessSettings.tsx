@@ -52,7 +52,9 @@ export function ChannelAccessSettings({ channelId }: { channelId: string }) {
       await load(null, epoch);
       if (generation.current === epoch) setPendingMode(null);
     } catch (error) {
-      if (generation.current === epoch) setError(communityChannelCapacityError(error) ?? "Could not save. Access may have changed; reload settings and try again.");
+      if (generation.current === epoch) setError(String((error as Error)?.message ?? "").includes("community_pod_seat_from_plan")
+        ? "Their plan includes this pod, so they stay while they're on it. Change their plan to take them out."
+        : communityChannelCapacityError(error) ?? "Could not save. Access may have changed; reload settings and try again.");
     } finally { if (generation.current === epoch) setBusy(false); }
   };
 
