@@ -3347,3 +3347,4 @@
 :root[data-design="v1"] .settings-v1-button:hover { border-color: var(--border-strong) !important; }
 :root[data-design="v1"] .settings-v1-button.is-danger { border-color: var(--danger-border) !important; }
 :root[data-design="v1"] .settings-v1-button.is-quiet { border-color: transparent !important; }
+:root[data-design="v1"] .settings-page-v1-personal > .settings-page-head { margin-bottom: 16px; }
