@@ -94,6 +94,15 @@ export function WebMobileBottomRail({
 // step aside for the composer (design-v1.css).
 function PhoneTabs({ communityShell }: WebMobileBottomRailProps) {
   const activeRoot = communityShell.mobileRootPage;
+  // In a channel (and its threads) or a pod's room, the composer has the
+  // bottom of the screen; the arrow at the top goes back. A conversation in
+  // Inbox does the same in CSS (design-v1.css).
+  const destination = communityShell.destination;
+  const inConversation = activeRoot === "community" && (
+    destination.kind === "community_chat" ||
+    (destination.kind === "community_pods" && Boolean(destination.podSlug))
+  );
+  if (inConversation) return null;
   const community = communityShell.activeCommunity;
   const communityName = String(community?.name ?? "").trim() || "Community";
   const logo = String(community?.avatar_url ?? "").trim();

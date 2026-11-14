@@ -3893,11 +3893,12 @@
 
 /* In a channel, a thread or a conversation: no tabs, the composer at the
    bottom; back is the arrow at the top. */
-:root[data-design="v1"] .app-root.mobile-shell:has(.mobile-bottom-rail.is-phone-tabs):has(.community-chat, .web-direct-messages-host.mobile-root.has-open) {
+:root[data-design="v1"] .app-root.mobile-shell:not(:has(.mobile-bottom-rail)),
+:root[data-design="v1"] .app-root.mobile-shell:has(.web-direct-messages-host.mobile-root.has-open) {
   --mobile-bottom-rail-height: 0px;
 }
 
-:root[data-design="v1"] .app-root.mobile-shell:has(.community-chat, .web-direct-messages-host.mobile-root.has-open) .mobile-bottom-rail.is-phone-tabs {
+:root[data-design="v1"] .app-root.mobile-shell:has(.web-direct-messages-host.mobile-root.has-open) .mobile-bottom-rail.is-phone-tabs {
   display: none;
 }
 
@@ -3909,4 +3910,11 @@
 /* Home and Inbox are tabs on a phone, so the community's menu leaves them out. */
 :root[data-design="v1"] .app-root.mobile-shell:has(.mobile-bottom-rail.is-phone-tabs) .community-nav-v1-primary {
   display: none;
+}
+
+/* On a phone the page runs edge to edge, as in the mock: no inset frame. */
+:root[data-design="v1"] .app-root.mobile-shell .mobile-global-shell-surface {
+  margin: env(safe-area-inset-top, 0px) 0 calc(env(safe-area-inset-bottom, 0px) + var(--mobile-bottom-rail-height)) 0;
+  border: 0;
+  border-radius: 0;
 }
