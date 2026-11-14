@@ -20,6 +20,12 @@ const ALLOWED = new Map([
   ["communityMaintenance", "operator tool: purges orphaned user artifacts, run by hand"],
   ["communityWeeklyDigestWorker", "dormant by design until the weekly digest gets a cron"],
   ["communityPublicPage", "the cached production app's public-page editor still calls it; delete after production runs design v1 (cleanup wave 3)"],
+  // The /operator console was deleted (Nov 13); the cached production app's console still calls these.
+  ["operatorDashboard", "the cached production app's /operator console still calls it; delete after production updates (cleanup wave 3)"],
+  ["operatorSentryDiagnostics", "the cached production app's /operator console still calls it; delete after production updates (cleanup wave 3)"],
+  ["operatorIntelligence", "only operatorDashboard reads it; goes with it (cleanup wave 3)"],
+  ["emailDiagnostics", "only operatorDashboard reads it; goes with it (cleanup wave 3)"],
+  ["communityAccessAudit", "only operatorDashboard reads it; goes with it (cleanup wave 3)"],
 ]);
 
 const tracked = execFileSync("git", ["ls-files"], { cwd: root, encoding: "utf8" })
