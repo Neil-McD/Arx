@@ -3,7 +3,7 @@ import type { AppPage } from "../../../../shared/appShellNavigation";
 import { WebCommunityHost } from "./WebCommunityHost";
 import { WebDiscoverPanel } from "./WebDiscoverPanel";
 import { WebProductDocsPanel } from "./WebProductDocsPanel";
-import { WebCommunityHandoff } from "./WebCommunityHandoff";
+import { WebCommunityLandingPage } from "./WebCommunityLandingPage";
 import { WebSettingsSurfaceHost } from "./WebSettingsSurfaceHost";
 import { WebLandingPage } from "./WebLandingPage";
 import { PublicFindPage } from "./polynetLanding/PublicFindPage";
@@ -24,11 +24,10 @@ export type WebAppMainSurfaceHostProps = {
   platformBridgePageProps: ComponentProps<typeof WebPlatformBridgePage>;
   showOnboardingModal: boolean;
   settingsSurfaceHostProps: ComponentProps<typeof WebSettingsSurfaceHost>;
-  // /c/<slug>: the community whose site to hand over to.
+  // /c/<slug>: the community whose landing page this is, and the viewer's
+  // session (null signed out) for where they stand and to join.
   publicCommunitySlug: string | null;
-  // Whether the viewer belongs to that community ("loading" until known).
-  publicCommunityMembership: "loading" | "member" | "visitor";
-  publicCommunitySignedIn: boolean;
+  publicCommunitySession: unknown | null;
   communityHostProps: ComponentProps<typeof WebCommunityHost>;
   discoverPanelProps: ComponentProps<typeof WebDiscoverPanel>;
   productDocsPanelProps: ComponentProps<typeof WebProductDocsPanel>;
@@ -48,7 +47,7 @@ export function WebAppMainSurfaceHost(props: WebAppMainSurfaceHostProps) {
         <div className="landing-auth-hold" aria-hidden="true" />
       ) : props.showPublicCommunityFunnel ? (
         <div className="community-body">
-          {props.publicCommunitySlug ? <WebCommunityHandoff communitySlug={props.publicCommunitySlug} membership={props.publicCommunityMembership} signedIn={props.publicCommunitySignedIn} /> : null}
+          {props.publicCommunitySlug ? <WebCommunityLandingPage communitySlug={props.publicCommunitySlug} session={props.publicCommunitySession} /> : null}
         </div>
       ) : props.showPublicFind ? (
         <PublicFindPage {...props.publicFindProps} />

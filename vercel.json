@@ -24,6 +24,7 @@
     { "src": "/runtime/mcp", "dest": "/api/mcp/runtime" },
     { "src": "/\\.well-known/oauth-protected-resource", "dest": "/api/mcp/oauth-protected-resource" },
     { "src": "/\\.well-known/oauth-authorization-server", "dest": "/api/mcp/oauth-authorization-server" },
+    { "src": "/c/([A-Za-z0-9-]+)/?", "dest": "/api/community-page?slug=$1" },
     { "handle": "filesystem" },
     { "src": "/(.*\\..*)", "status": 404 },
     { "src": "/(.*)", "dest": "/index.html" }

@@ -69,6 +69,7 @@ import type * as communityInteractionEvidence from "../communityInteractionEvide
 import type * as communityInteractionEvidenceCore from "../communityInteractionEvidenceCore.js";
 import type * as communityInteractions from "../communityInteractions.js";
 import type * as communityJoinRequestCore from "../communityJoinRequestCore.js";
+import type * as communityLanding from "../communityLanding.js";
 import type * as communityLessonProgress from "../communityLessonProgress.js";
 import type * as communityLifecycle from "../communityLifecycle.js";
 import type * as communityLive from "../communityLive.js";
@@ -160,6 +161,7 @@ import type * as httpBilling from "../httpBilling.js";
 import type * as httpCommunityAgentAttachments from "../httpCommunityAgentAttachments.js";
 import type * as httpCommunityApps from "../httpCommunityApps.js";
 import type * as httpCommunityAttachments from "../httpCommunityAttachments.js";
+import type * as httpCommunityLanding from "../httpCommunityLanding.js";
 import type * as httpCommunitySites from "../httpCommunitySites.js";
 import type * as httpConnectedApps from "../httpConnectedApps.js";
 import type * as httpEmail from "../httpEmail.js";
@@ -290,6 +292,7 @@ declare const fullApi: ApiFromModules<{
   communityInteractionEvidenceCore: typeof communityInteractionEvidenceCore;
   communityInteractions: typeof communityInteractions;
   communityJoinRequestCore: typeof communityJoinRequestCore;
+  communityLanding: typeof communityLanding;
   communityLessonProgress: typeof communityLessonProgress;
   communityLifecycle: typeof communityLifecycle;
   communityLive: typeof communityLive;
@@ -381,6 +384,7 @@ declare const fullApi: ApiFromModules<{
   httpCommunityAgentAttachments: typeof httpCommunityAgentAttachments;
   httpCommunityApps: typeof httpCommunityApps;
   httpCommunityAttachments: typeof httpCommunityAttachments;
+  httpCommunityLanding: typeof httpCommunityLanding;
   httpCommunitySites: typeof httpCommunitySites;
   httpConnectedApps: typeof httpConnectedApps;
   httpEmail: typeof httpEmail;
