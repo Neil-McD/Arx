@@ -24,10 +24,13 @@ function labels(html: string): string[] {
   return [...html.matchAll(/<span class="_lab_[^"]*">([^<]+)<\/span>/g)].map((match) => match[1]);
 }
 
-test("design v1: the channel panel is the mock's: pinned, memory, then who is here", () => {
+// No notes here: they are the guide's memory, kept by builders in Knowledge
+// (Neil, Nov 14), not something a channel lists.
+test("design v1: the channel panel is pinned, then who is here; no notes", () => {
   design.v1 = true;
   const html = renderToStaticMarkup(React.createElement(ChannelRosterPanel, props));
-  expect(labels(html)).toEqual(["Pinned", "Memory from this channel", "In this channel"]);
+  expect(labels(html)).toEqual(["Pinned", "In this channel"]);
+  expect(html).not.toContain("Memory");
   expect(html).toContain("How to post a win");
   expect(html).toContain("4 here now");
   expect(html).toContain("Everyone");
@@ -39,7 +42,7 @@ test("design v1: the channel panel is the mock's: pinned, memory, then who is he
 test("design v1: nothing pinned, no Pinned section", () => {
   design.v1 = true;
   const html = renderToStaticMarkup(React.createElement(ChannelRosterPanel, { ...props, pinned: null }));
-  expect(labels(html)).toEqual(["Memory from this channel", "In this channel"]);
+  expect(labels(html)).toEqual(["In this channel"]);
 });
 
 test("design v1: an open thread takes the panel's place", () => {

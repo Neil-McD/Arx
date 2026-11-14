@@ -1,7 +1,8 @@
 // Design system v1: Home's right column. Three things, in this order:
 // Today (an event that is on today, a few lines on what is going on, and the
-// day's counts), who is online now, and the community's memory. The same for
-// a host and a member; a host's Today also says what is waiting for them.
+// day's counts) and who is online now, the same for a host and a member; a
+// host's Today also says what is waiting for them. Builders get one more
+// line: how much their guide knows (its notes are theirs, not the members').
 import { useEffect, useState } from "react";
 import type { CloudCommunityHomeSnapshot } from "../../../../shared/cloudCommunityAdminGateway";
 import type { CommunityPresenceSummary } from "../../../../shared/communityTypes";
@@ -9,7 +10,6 @@ import { todayCounts, todayLines, type TodayLine } from "../../../../shared/comm
 import { fetchCommunityNotes } from "../../../../shared/cloudCommunityNotesGateway";
 import { UserAvatar } from "../../../../shared/UserAvatar";
 import { cx, Sec, Sep, TextLink } from "./kit";
-import { KitMemoryMap } from "./KitMemoryMap";
 import { KitNextEvent } from "./KitNextEvent";
 import { noteIsNew } from "./KitKnowledgeNotes";
 
@@ -39,13 +39,13 @@ export function KitHomeRail(props: {
   onOpenMembers: () => void;
   onOpenKnowledge?: () => void;
 }) {
-  const [memory, setMemory] = useState<{ total: number; more: boolean; fresh: number } | null>(null);
+  const [memory, setMemory] = useState<{ total: number; more: boolean; fresh: number; canManage: boolean } | null>(null);
   useEffect(() => {
     let cancelled = false;
     fetchCommunityNotes({ session: props.session, communityId: props.communityId, limit: 50 })
       .then((view) => {
         if (cancelled) return;
-        setMemory({ total: view.notes.length, more: view.has_more, fresh: view.notes.filter((note) => noteIsNew(note, props.now)).length });
+        setMemory({ total: view.notes.length, more: view.has_more, fresh: view.notes.filter((note) => noteIsNew(note, props.now)).length, canManage: view.can_manage });
       })
       .catch(() => { if (!cancelled) setMemory(null); });
     return () => { cancelled = true; };
@@ -96,16 +96,19 @@ export function KitHomeRail(props: {
           <span className={cx("sub2")}>{hereLine(props.presence)}</span>
         </div>
       </Sec>
-      <Sep />
-      <Sec label="Community memory">
-        <button type="button" className={cx("kmini", "kmini-btn")} onClick={props.onOpenKnowledge} aria-label="Open Knowledge" disabled={!props.onOpenKnowledge}>
-          <KitMemoryMap />
-        </button>
-        <div className={cx("kline")}>
-          <span>{memory ? `${memory.total}${memory.more ? "+" : ""} ${memory.total === 1 && !memory.more ? "note" : "notes"}${memory.fresh ? ` · ${memory.fresh} learned this week` : ""}` : " "}</span>
-          {props.onOpenKnowledge ? <TextLink onClick={props.onOpenKnowledge}>Open</TextLink> : null}
-        </div>
-      </Sec>
+      {/* What the guide knows is the builders' to see; the server sends a
+          member nothing here, so the section is simply absent for them. */}
+      {memory && memory.canManage ? (
+        <>
+          <Sep />
+          <Sec label="What your guide knows">
+            <div className={cx("kline")}>
+              <span>{memory.total === 0 ? "Nothing yet. Teach it in Knowledge." : `${memory.total}${memory.more ? "+" : ""} ${memory.total === 1 && !memory.more ? "thing" : "things"}${memory.fresh ? ` · ${memory.fresh} new this week` : ""}`}</span>
+              {props.onOpenKnowledge ? <TextLink onClick={props.onOpenKnowledge}>Open</TextLink> : null}
+            </div>
+          </Sec>
+        </>
+      ) : null}
     </>
   );
 }

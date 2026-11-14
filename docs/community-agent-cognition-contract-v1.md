@@ -2570,8 +2570,12 @@ that everyone reads. This replaces the steward's scheduled memory pipeline
   characters), source (`ask`, `tag`, `founder`, `migrated`), and who and when.
   At most 500 notes per community. A note's path is `memory/<slug>.md`, where
   the slug is its title in lowercase words.
-- `memory/` lists, reads and searches notes for every authorized reader
-  (members, a member's site, MCP harnesses and the agent). Only the community
+- `memory/` lists, reads and searches notes for the community agent (answering
+  a member or acting for the community) and for builders (owners and admins,
+  including through their own MCP harness). Since Nov 14 a member's own
+  harness or the community's app acting for a member gets
+  `semantic_not_found` there, and community-wide search leaves notes out for
+  them: notes are the guide's memory, reached through its answers. Only the community
   agent writes them, from an Ask (`community_agent_for_member`) or a tag
   (`community_agent`): `create` on `memory/` with a title and text, `append`
   or `update` on a note's path. Retries are idempotent like channel writes.

@@ -104,7 +104,8 @@ export const getHomeMoments = query({
       });
     }
 
-    const notes = (await ctx.db.query("communityNotes")
+    // What the guide learned is the host's to see; a member never gets a note's title.
+    const notes = audience !== "host" ? [] : (await ctx.db.query("communityNotes")
       .withIndex("by_community_updatedAt", (q: any) => q.eq("communityId", args.communityId).gte("updatedAt", since)).take(20))
       .map((note: any) => ({ slug: String(note.slug), title: String(note.title), createdAt: Number(note.createdAt) }));
 
