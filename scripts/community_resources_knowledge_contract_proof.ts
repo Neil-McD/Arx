@@ -284,8 +284,8 @@ assert.match(
 );
 assert.match(
   resourceController,
-  /handleCreateBlankPageDraft[\s\S]*resource_role: "page"[\s\S]*title: "Untitled lesson"[\s\S]*module_id: moduleId[\s\S]*saveCloudCommunityResource<SessionT, ResourceT>/,
-  "web resource controller must create course-owned blank lesson drafts",
+  /handleCreateBlankPageDraft[\s\S]*resource_role: "page"[\s\S]*title: title\?\.trim\(\) \|\| "Untitled lesson"[\s\S]*module_id: moduleId[\s\S]*saveCloudCommunityResource<SessionT, ResourceT>/,
+  "web resource controller must create course-owned blank lesson drafts (named when a title is given, as an outline does)",
 );
 assert.match(
   resourceController,

@@ -1,7 +1,7 @@
 import { CommunityPageHeader, CommunityPageRail } from "./CommunityPageHeader";
 import { isDesignV1Active } from "../../../../shared/designSystem";
 import { KitClassroom } from "../v1/KitClassroom";
-import { saveCloudCommunityResource } from "../../../../shared/cloudCommunityAdminGateway";
+import { saveCloudCommunityResource, saveCloudCommunityResourceModule } from "../../../../shared/cloudCommunityAdminGateway";
 import { useEffect, useState, type ComponentProps } from "react";
 import { buildPlatformSwitcherStyle } from "../../../../shared/platformSwitcherUi";
 import { WebPlatformTabList, platformTabId, platformTabPanelId } from "./WebPlatformChoiceControls";
@@ -63,7 +63,31 @@ function KnowledgeV1({ resources, context }: Props) {
           // still decides who may write.
           canManage={canManage}
           openCourseId={moduleId} onOpenCourse={resources.actions.handleSelectModule}
-          onNewCourse={resources.actions.openNewModuleModal}
+          onCreateCourse={canManage ? async (name, lessons) => {
+            // The course first (a draft only hosts see), then its lessons in
+            // order. If a lesson fails, what was made stays and the page says so.
+            let courseId: string | null = null;
+            try {
+              const saved = await saveCloudCommunityResourceModule({ session: context.session, moduleId: null, isPatch: false,
+                payload: { community_id: context.communityId, name } });
+              courseId = saved?.id ?? null;
+            } catch (error) {
+              return { ok: false, message: error instanceof Error && error.message && !error.message.includes("_") ? error.message : "The course couldn't be made. Try again." };
+            }
+            await resources.actions.retryRead("modules");
+            if (!courseId) return { ok: false, message: "The course was made, but it didn't open. Find it on the shelf." };
+            let made = 0;
+            for (const title of lessons) {
+              const lesson = await resources.actions.handleCreateBlankPageDraft(courseId, title);
+              if (!lesson) break;
+              made += 1;
+            }
+            if (made < lessons.length) {
+              return { ok: false, message: `"${name}" was made with ${made} of ${lessons.length} lessons. Open it from the shelf to add the rest.` };
+            }
+            resources.actions.handleSelectModule(courseId);
+            return { ok: true };
+          } : undefined}
           onEditCourse={(id) => { resources.actions.handleSelectModule(id); setEditing(true); }}
           onSetCourseStatus={canManage ? async (id, status) => {
             const course = resources.state.modules.find((module) => module.id === id);

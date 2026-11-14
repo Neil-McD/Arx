@@ -648,7 +648,7 @@ export function useCommunityResourceController<
     return true;
   }, [loadCommunityResources, resetResourceEditor]);
 
-  const handleCreateBlankPageDraft = useCallback(async (moduleId: string): Promise<ResourceT | null> => {
+  const handleCreateBlankPageDraft = useCallback(async (moduleId: string, title?: string): Promise<ResourceT | null> => {
     const current = argsRef.current;
     const session = await resolveUsableSession(current.session, current.ensureSession);
     if (!session || !current.activeCommunityId) return null;
@@ -660,7 +660,7 @@ export function useCommunityResourceController<
         community_id: current.activeCommunityId,
         type: "post",
         resource_role: "page",
-        title: "Untitled lesson",
+        title: title?.trim() || "Untitled lesson",
         body_md: null,
         url: null,
         pinned: false,
