@@ -115,8 +115,11 @@ export function resolveInitialAppShellVariant(params: {
   search?: string | null;
   oauthShellVariant?: AppShellVariant | null;
   standalone?: boolean;
+  // A phone always gets the phone layout, whatever link it opened.
+  phone?: boolean;
 }): AppShellVariant {
   if (params.oauthShellVariant) return params.oauthShellVariant;
+  if (params.phone === true) return "mobile";
   const isStandaloneLaunch =
     params.standalone === true
     && new URLSearchParams(String(params.search ?? "")).get(

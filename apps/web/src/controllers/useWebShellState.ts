@@ -32,7 +32,7 @@ import {
 import {
   readOAuthCallbackShellVariantFromLocation,
 } from "../../../../shared/cloudPkce";
-import { isStandaloneWebApp } from "../../../../shared/browserRuntimeMode";
+import { isPhoneViewport, isStandaloneWebApp } from "../../../../shared/browserRuntimeMode";
 import type {
   MobileOverlay,
   MobileRootPage,
@@ -48,6 +48,7 @@ export function useWebShellState() {
           search: window.location.search,
           oauthShellVariant: readOAuthCallbackShellVariantFromLocation(),
           standalone: isStandaloneWebApp(),
+          phone: isPhoneViewport(),
         });
   const initialPublicRoute: PublicRoute = readPublicRouteFromLocation();
   const initialAppRoute: AppRouteState | null =
