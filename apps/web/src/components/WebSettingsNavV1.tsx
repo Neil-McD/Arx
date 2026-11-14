@@ -32,7 +32,8 @@ export function WebSettingsNavV1(props: {
   communityShell: WebCommunityShellProps;
   settingsSidebar: WebSettingsSidebarProps;
   // What is open: one of your own pages, or a section of the community's.
-  current: { kind: "personal"; page: SettingsPage } | { kind: "community"; pane: CommunitySettingsPane };
+  // `index`: a phone's Settings list, nothing open yet.
+  current: { kind: "personal"; page: SettingsPage } | { kind: "community"; pane: CommunitySettingsPane } | { kind: "index" };
   onBack: () => void;
 }) {
   const { communityShell } = props;

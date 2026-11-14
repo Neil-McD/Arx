@@ -136,6 +136,7 @@ export function buildWebShellChromeHostProps(params: {
   return {
     showMobileAppShell: params.showMobileAppShell,
     showMobileSettingsShell: params.showMobileSettingsShell,
+    showMobileSettingsIndex: params.showMobileSettingsIndex,
     showMobilePublicFunnel: params.showMobilePublicFunnel,
     mobileOverlay: params.mobileOverlay,
     mobileChromeAutoHideEnabled: params.mobileChromeAutoHideEnabled,
