@@ -12,6 +12,7 @@ import { WebMobileGlobalShell } from "./WebMobileGlobalShell";
 import { WebCommunityNavSurface } from "./WebCommunityNavSurface";
 import { WebSettingsSidebar } from "./WebSettingsSidebar";
 import { isDesignV1Active } from "../../../../shared/designSystem";
+import { KitConfirm } from "../v1/KitConfirm";
 import { WebGlobalNavV1 } from "./WebGlobalNavV1";
 import type {
   MobileOverlay,
@@ -191,6 +192,8 @@ export function WebShellChromeHost(props: WebShellChromeHostProps) {
 
   return (
     <div className={rootClassName}>
+      {/* The app's own "are you sure?", on every screen of the shell. */}
+      {isDesignV1Active() ? <KitConfirm /> : null}
       {shellHeader}
       <WebMobileCommunityShell communityShell={props.communityShell} />
 

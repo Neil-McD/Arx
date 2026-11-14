@@ -1,3 +1,4 @@
+import { askInApp } from "../../../../shared/inAppConfirm";
 import { Fragment, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { enterSendsMessage, isImeComposing } from "../controllers/communityComposerTextEditing";
 import { CommunityChannelSessionContext } from "./CommunityChannelSessionContext";
@@ -1112,9 +1113,8 @@ export function CommunityInteractionFeedList(props: CommunityInteractionFeedList
                                 onDelete={
                                   (isOwnRoot || props.canModerateContent) && props.onDeleteMessage
                                     ? () => {
-                                        if (window.confirm(isOwnRoot ? "Delete this message?" : "Remove this message for everyone?")) {
-                                          props.onDeleteMessage?.("root", root.id);
-                                        }
+                                        void askInApp({ message: isOwnRoot ? "Delete this message?" : "Remove this message for everyone?", yes: isOwnRoot ? "Delete" : "Remove", no: "Keep", danger: true })
+                                          .then((yes) => { if (yes) props.onDeleteMessage?.("root", root.id); });
                                       }
                                     : undefined
                                 }

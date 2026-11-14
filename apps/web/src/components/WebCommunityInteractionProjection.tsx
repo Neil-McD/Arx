@@ -1,3 +1,4 @@
+import { askInApp } from "../../../../shared/inAppConfirm";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   Users,
@@ -859,9 +860,8 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
                           onDelete={
                             (isOwnReply || props.canModerateContent) && props.onDeleteMessage
                               ? () => {
-                                  if (window.confirm(isOwnReply ? "Delete this reply?" : "Remove this reply for everyone?")) {
-                                    props.onDeleteMessage?.("reply", reply.id);
-                                  }
+                                  void askInApp({ message: isOwnReply ? "Delete this reply?" : "Remove this reply for everyone?", yes: isOwnReply ? "Delete" : "Remove", no: "Keep", danger: true })
+                                    .then((yes) => { if (yes) props.onDeleteMessage?.("reply", reply.id); });
                                 }
                               : undefined
                           }

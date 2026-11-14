@@ -301,6 +301,15 @@ css += """
 .app .evsw.on{background:var(--go)}.app .evsw.on i{left:17px;background:#fff}
 @media (max-width:720px){.app .evparts{grid-template-columns:minmax(0,1fr)}.app .evaddrow span{display:none}.app .erow{row-gap:8px}}
 
+/* Kit addition: the app's own "are you sure?" (KitConfirm), in the palette's
+   layer: a light veil and one small card. */
+.app.palette-part .veil.askveil{-webkit-backdrop-filter:none;backdrop-filter:none;background:rgba(0,0,0,.32)}
+.app .askcard{position:fixed;left:50%;top:min(180px,22vh);width:min(380px,calc(100vw - 32px));transform:translateX(-50%);padding:18px 18px 14px;border-radius:12px;border:1px solid var(--line2);background:var(--pop);box-shadow:var(--pop-shadow);animation:pop .2s var(--ease) both}
+.app .askcard p{margin:0;font-size:14.5px;line-height:1.5;color:var(--ink)}
+.app .askacts{display:flex;justify-content:flex-end;gap:8px;margin-top:16px}
+.app .askacts .btn.no{color:var(--bad);border-color:var(--bad-line)}
+.app .askacts .btn:focus-visible{outline:0;border-color:rgba(var(--w),.34);background:var(--s2)}
+
 /* Kit addition: states the mock doesn't draw, in its own terms. */
 .app .msg.cont{padding-top:3px;padding-bottom:3px}
 .app .msg.cont>.gap{width:36px;flex:none}

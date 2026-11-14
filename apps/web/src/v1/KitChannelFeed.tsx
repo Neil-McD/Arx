@@ -3,6 +3,7 @@
 // first of a run, reactions and the thread link under the text, and the
 // tools on hover. Every behaviour is the app's own (communityInteractionFeed):
 // profiles, mentions, attachments, edit, delete, pin, retry, threads, typing.
+import { askInApp } from "../../../../shared/inAppConfirm";
 import { Fragment } from "react";
 import { MessageSquare } from "lucide-react";
 import {
@@ -306,9 +307,8 @@ export function KitChannelFeed(props: CommunityInteractionFeedListProps) {
                       onDelete={
                         (isOwnRoot || props.canModerateContent) && props.onDeleteMessage
                           ? () => {
-                              if (window.confirm(isOwnRoot ? "Delete this message?" : "Remove this message for everyone?")) {
-                                props.onDeleteMessage?.("root", root.id);
-                              }
+                              void askInApp({ message: isOwnRoot ? "Delete this message?" : "Remove this message for everyone?", yes: isOwnRoot ? "Delete" : "Remove", no: "Keep", danger: true })
+                                .then((yes) => { if (yes) props.onDeleteMessage?.("root", root.id); });
                             }
                           : undefined
                       }

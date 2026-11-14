@@ -4067,6 +4067,15 @@
     padding-right: 16px;
   }
 
+  /* The page's header is in the flow here, so the room the classic layout
+     left for a floating bar is just a blank band above the page. */
+  :root[data-design="v1"] .app-root.mobile-shell .community-page-body > .community-tab-scroll {
+    padding-top: 0;
+  }
+  :root[data-design="v1"] .app-root.mobile-shell .community-page-body > .community-tab-scroll > .web-community-centered-pane {
+    padding-top: 12px;
+  }
+
   :root[data-design="v1"] .app-root.mobile-shell .community-settings-pane-content,
   :root[data-design="v1"] .app-root.mobile-shell .settings-v1-group {
     min-width: 0;
