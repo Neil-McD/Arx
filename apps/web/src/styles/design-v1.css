@@ -3531,3 +3531,38 @@
   }
   :root[data-design="v1"] .members-record-back:hover { color: var(--text-ink-primary); }
 }
+
+/* ---------- Analytics (Nov 13, Neil) ----------
+   Four figures, one chart, how people join; who is on which plan in the
+   right column (or under the page once the column is hidden). */
+:root[data-design="v1"] .analytics-v1-figs > * { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+@media (max-width: 1100px) {
+  :root[data-design="v1"] .analytics-v1-figs > * { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+:root[data-design="v1"] .analytics-v1-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 34px;
+}
+:root[data-design="v1"] .analytics-v1-chart { margin-top: 10px; }
+:root[data-design="v1"] .analytics-v1-funnel { display: grid; gap: 14px; margin-top: 12px; }
+:root[data-design="v1"] .analytics-v1-step > div:first-child {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 6px;
+  font-size: 13px;
+}
+:root[data-design="v1"] .analytics-v1-step em,
+:root[data-design="v1"] .analytics-v1-plan em { font-style: normal; color: var(--ink3); font-size: 12px; }
+:root[data-design="v1"] .analytics-v1-bar { height: 6px; border-radius: 3px; }
+:root[data-design="v1"] .analytics-v1-bar i { background: var(--bg-button); border-radius: 3px; }
+:root[data-design="v1"] .analytics-v1-plans { display: grid; gap: 12px; }
+:root[data-design="v1"] .analytics-v1-plan > div { display: flex; justify-content: space-between; gap: 12px; font-size: 13px; }
+:root[data-design="v1"] .analytics-v1-plan b { font-weight: 500; }
+:root[data-design="v1"] .analytics-v1-plan em { display: block; margin-top: 2px; }
+@media (min-width: 900px) {
+  :root[data-design="v1"] .analytics-v1-plans-inline { display: none; }
+}
