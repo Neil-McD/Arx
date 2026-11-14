@@ -3784,3 +3784,124 @@
     opacity: 1;
   }
 }
+
+/* ---------- The phone's tabs (Neil, Nov 14 mock) ----------
+   Home, the community (its logo) and Inbox, with the desktop's marks; the
+   names under them. Inside a channel, a thread or a conversation the tabs
+   step aside and the composer takes the bottom of the screen. */
+:root[data-design="v1"] .mobile-bottom-rail.is-phone-tabs {
+  --mobile-bottom-rail-surface: var(--surface-rail);
+  left: 0;
+  height: calc(64px + env(safe-area-inset-bottom, 0px));
+  padding: 0 8px env(safe-area-inset-bottom, 0px);
+  align-items: stretch;
+  border-top: 1px solid var(--divider-accent);
+}
+
+:root[data-design="v1"] .mobile-phone-tabs {
+  flex: 1;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+:root[data-design="v1"] .mobile-phone-tab {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 6px 4px 4px;
+  border: 0;
+  background: transparent;
+  color: var(--text-faint);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+:root[data-design="v1"] .mobile-phone-tab.active {
+  color: var(--text-primary);
+}
+
+:root[data-design="v1"] .mobile-phone-tab:disabled {
+  opacity: 0.4;
+}
+
+:root[data-design="v1"] .mobile-phone-tab-icon {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 24px;
+}
+
+:root[data-design="v1"] .mobile-phone-tab-label {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+:root[data-design="v1"] .mobile-phone-tab-logo {
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  object-fit: cover;
+  opacity: 0.72;
+}
+
+:root[data-design="v1"] .mobile-phone-tab-logo.is-letter {
+  display: grid;
+  place-items: center;
+  background: var(--surface-selected);
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+:root[data-design="v1"] .mobile-phone-tab.active .mobile-phone-tab-logo {
+  opacity: 1;
+}
+
+:root[data-design="v1"] .mobile-phone-tab-count {
+  position: absolute;
+  top: -4px;
+  right: -10px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 8px;
+  background: var(--accent-act, var(--accent));
+  color: var(--text-on-accent, var(--text-primary));
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 16px;
+  text-align: center;
+}
+
+:root[data-design="v1"] .mobile-phone-tab-dot {
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent-act, var(--accent));
+}
+
+/* In a channel, a thread or a conversation: no tabs, the composer at the
+   bottom; back is the arrow at the top. */
+:root[data-design="v1"] .app-root.mobile-shell:has(.mobile-bottom-rail.is-phone-tabs):has(.community-chat, .web-direct-messages-host.mobile-root.has-open) {
+  --mobile-bottom-rail-height: 0px;
+}
+
+:root[data-design="v1"] .app-root.mobile-shell:has(.community-chat, .web-direct-messages-host.mobile-root.has-open) .mobile-bottom-rail.is-phone-tabs {
+  display: none;
+}
+
+/* With the tabs: everything above them clears their height. */
+:root[data-design="v1"] .app-root.mobile-shell:has(.mobile-bottom-rail.is-phone-tabs) {
+  --mobile-bottom-rail-height: 64px;
+}

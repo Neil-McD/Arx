@@ -1296,9 +1296,10 @@ function WebCommunityAgentDock(props, ref) {
   // by itself, so nothing that needs you is hidden behind Home at rest.
   const conversationNeedsYou =
     turnIsActive || isPreparing || Boolean(dockError) || Boolean(memberLimitNotice) || persistentResourceChangesetCards.length > 0;
-  // Home on the kit: Home in design v1 on a wide window, the host's and a member's.
+  // Home on the kit: Home in design v1, the host's and a member's, on desktop
+  // and as the phone's Home tab.
   const agentOn = useCommunityAgentOn();
-  const kitHome = homeActive && guideWording && !props.mobileRoot && Boolean(props.home);
+  const kitHome = homeActive && guideWording && Boolean(props.home);
   // The palette's question waits for Home's own box and an idle guide.
   askReadyRef.current = Boolean(kitHome) && !(composerIsBusy || isPreparing || isStartingNewChat);
   const kitHomeIsHost = props.home?.audience === "host";
