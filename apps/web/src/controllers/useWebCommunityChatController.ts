@@ -342,8 +342,13 @@ export function useWebCommunityChatController(
     ingestAttachmentsFromFileList: ingestAttachments,
   });
 
-  const handleSendCommunityMessage = useCallback(async (
-    draft?: WebCommunityMessageSendDraft,
+  // One send at a time per composer, until its draft is cleared: a second
+  // Enter (or Enter and a click) during the session check used to read the
+  // same text and post it twice (Nov 13).
+  const sendClaimsRef = useRef(new Map<string, symbol>());
+  const sendCommunityMessageNow = useCallback(async (
+    draft: WebCommunityMessageSendDraft | undefined,
+    releaseClaim: () => void,
   ) => {
     const current = paramsRef.current;
     const activeCommunityId = current.activeCommunityId;
@@ -464,6 +469,8 @@ export function useWebCommunityChatController(
     }
     const composerInputRef = draft?.inputRef ?? inputRef;
     if (composerInputRef?.current) composerInputRef.current.style.height = "auto";
+    // The draft is cleared: the next message can start now.
+    releaseClaim();
 
     const idempotencyKey = createCommunityComposerIdempotencyKey(
       activeCommunityId,
@@ -532,6 +539,25 @@ export function useWebCommunityChatController(
     }
   }, [messageInput, messageMentions, replyingToMessage]);
 
+  const handleSendCommunityMessage = useCallback(async (
+    draft?: WebCommunityMessageSendDraft,
+  ) => {
+    const claim = draft ? "thread" : "main";
+    if (sendClaimsRef.current.has(claim)) return;
+    // Each send releases only its own claim, so a slow earlier send finishing
+    // can't free a later send's claim.
+    const token = Symbol(claim);
+    sendClaimsRef.current.set(claim, token);
+    const release = () => {
+      if (sendClaimsRef.current.get(claim) === token) sendClaimsRef.current.delete(claim);
+    };
+    try {
+      await sendCommunityMessageNow(draft, release);
+    } finally {
+      release();
+    }
+  }, [sendCommunityMessageNow]);
+
   const resetChatState = useCallback(() => {
     setError(null);
     setMessageInput("");
@@ -546,15 +572,39 @@ export function useWebCommunityChatController(
     resetChatState();
   }, [params.activeCommunityId, resetChatState]);
 
+  // Each channel keeps what you were typing in it (Nov 13): switching away
+  // saves the draft, coming back restores it. Files are not kept.
+  const latestDraftRef = useRef({ text: messageInput, mentions: messageMentions });
+  latestDraftRef.current = { text: messageInput, mentions: messageMentions };
+  const draftsByChannelRef = useRef(new Map<string, { text: string; mentions: CommittedMention[] }>());
+  const draftKeyRef = useRef<string | null>(null);
   useEffect(() => {
+    const nextKey = `${params.activeCommunityId ?? ""}:${params.activeChannelId ?? ""}`;
+    const previousKey = draftKeyRef.current;
+    if (previousKey && previousKey !== nextKey) {
+      const leaving = latestDraftRef.current;
+      if (leaving.text.trim()) draftsByChannelRef.current.set(previousKey, leaving);
+      else draftsByChannelRef.current.delete(previousKey);
+    }
+    draftKeyRef.current = nextKey;
+    const saved = draftsByChannelRef.current.get(nextKey) ?? null;
     setError(null);
-    setMessageInput("");
-    setMessageMentions([]);
+    setMessageInput(saved?.text ?? "");
+    setMessageMentions(saved?.mentions ?? []);
     setAttachments([]);
     setIsSendingMessage(false);
     setReplyingToMessage(null);
-    if (inputRef.current) inputRef.current.style.height = "auto";
-  }, [params.activeChannelId]);
+    const textarea = inputRef.current;
+    if (!textarea) return;
+    textarea.style.height = "auto";
+    if (!saved) return;
+    // Size the box to the restored draft once it has rendered.
+    const frame = window.requestAnimationFrame(() => {
+      textarea.style.height = "auto";
+      textarea.style.height = `${Math.min(textarea.scrollHeight, 120)}px`;
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [params.activeCommunityId, params.activeChannelId]);
 
   useEffect(() => {
     const setupGateMessage =

@@ -1,4 +1,5 @@
 import { useCommunityAgentOn } from "../controllers/communityAgentOn";
+import { isImeComposing } from "../controllers/communityComposerTextEditing";
 import {
   useCallback,
   useEffect,
@@ -1374,7 +1375,7 @@ function WebCommunityAgentDock(props, ref) {
                 onPaste={handleAttachmentPaste}
                 placeholder={presentation.composerLabel}
                 aria-label={presentation.composerLabel}
-                disabled={composerIsBusy || isPreparing || isStartingNewChat}
+                disabled={isPreparing || isStartingNewChat}
               />
               <button
                 type="button"
@@ -1554,6 +1555,7 @@ function WebCommunityAgentDock(props, ref) {
               }}
               onPaste={handleAttachmentPaste}
               onKeyDown={(event) => {
+                if (isImeComposing(event)) return;
                 if (event.key === "Enter" && !event.shiftKey) {
                   event.preventDefault();
                   event.currentTarget.form?.requestSubmit();
@@ -1562,7 +1564,7 @@ function WebCommunityAgentDock(props, ref) {
               placeholder={presentation.composerLabel}
               aria-label={presentation.composerLabel}
               rows={1}
-              disabled={composerIsBusy || isPreparing || isStartingNewChat}
+              disabled={isPreparing || isStartingNewChat}
             />
             </div>
             </div>
