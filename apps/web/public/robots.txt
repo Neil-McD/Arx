@@ -3,7 +3,6 @@ Allow: /$
 Allow: /discover
 Allow: /c/
 Disallow: /settings
-Disallow: /operator
 Disallow: /onboarding
 Disallow: /checkout
 Disallow: /m/

@@ -47,7 +47,6 @@ export function useWebRouteAccessBoundaryController<
   session: SessionT | null;
   isAuthBootstrapComplete: boolean;
   communities: TCommunity[];
-  operatorAccessState: WebRouteScopedAccessState;
   accountSetupAccessState: WebRouteScopedAccessState;
   ensureSession: (session?: SessionT | null) => Promise<SessionT | null>;
   loadCommunities: (session: SessionT) => Promise<void>;
@@ -198,7 +197,6 @@ export function useWebRouteAccessBoundaryController<
     authState: params.authState,
     communitySlug: slug,
     communityAccessState,
-    operatorAccessState: params.operatorAccessState,
     accountSetupAccessState: params.accountSetupAccessState,
   });
 

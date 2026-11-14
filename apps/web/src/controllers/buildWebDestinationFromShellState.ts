@@ -3,7 +3,6 @@ import type {
   AppView,
   CommunitySettingsPane,
   CommunityTab,
-  OperatorTab,
   SettingsPage,
 } from "../../../../shared/appShellNavigation";
 import {
@@ -23,7 +22,6 @@ type WebDestinationShellState = {
   communityPodSlug: string | null;
   communitySettingsPane: CommunitySettingsPane;
   selectedProductDocSlug: string | null;
-  activeOperatorTab: OperatorTab;
 };
 
 export function buildWebDestinationFromShellState(params: {
@@ -48,7 +46,6 @@ export function buildWebDestinationFromShellState(params: {
       communityPodSlug: state.communityTab === "pods" ? state.communityPodSlug : null,
       communitySettingsPane: state.communitySettingsPane,
       docsSlug: state.selectedProductDocSlug,
-      operatorTab: state.activeOperatorTab,
     },
   });
 }

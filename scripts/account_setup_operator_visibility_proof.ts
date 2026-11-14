@@ -9,14 +9,6 @@ function read(relativePath: string): string {
 const accountSetupCore = read("convex/accountSetupCore.ts");
 const operatorDashboard = read("convex/operatorDashboard.ts");
 const operatorIntelligence = read("convex/operatorIntelligence.ts");
-const operatorGateway = read("shared/cloudOperatorDashboardGateway.ts");
-const operatorTypes = read("shared/operatorTypes.ts");
-const operatorPanel = [
-  read("apps/web/src/components/WebOperatorDashboardHost.tsx"),
-  read("apps/web/src/components/useOperatorDashboardData.ts"),
-  read("apps/web/src/components/OperatorBusinessPanelView.tsx"),
-  read("apps/web/src/components/workspaceRightPanelOperatorShared.ts"),
-].join("\n");
 const schema = read("convex/schema.ts");
 
 assert.match(
@@ -59,51 +51,17 @@ assert.match(
   /export const getOperatorAccountSetupSnapshotInternal = internalQuery/,
   "operator account setup should expose a single read-only internal snapshot query",
 );
-assert.doesNotMatch(
-  operatorPanel,
-  /loadOperatorAccountSetupOverviewCanonical|loadOperatorAccountSetupUsersCanonical/,
-  "operator panel must not double-load account setup overview and users",
-);
 
 assert.match(operatorDashboard, /requireOperatorAccess/, "setup visibility must be operator-only");
-assert.match(operatorTypes, /OperatorAccountSetupOverviewSnapshot/, "operator setup overview type is missing");
-assert.match(operatorTypes, /OperatorAccountSetupUserRecord/, "operator setup user type is missing");
-assert.match(operatorTypes, /OperatorAccountSetupSnapshot/, "operator setup snapshot type is missing");
-assert.match(operatorTypes, /totalMatching: number/, "setup user list must expose total matching count");
-assert.match(operatorTypes, /isTruncated: boolean/, "setup user list must expose truncation state");
 assert.doesNotMatch(
   schema,
   /accountSetupEvents: defineTable/,
   "account setup should not create a separate behavioral analytics table",
 );
 assert.doesNotMatch(operatorIntelligence, /accountSetupEvents/, "operator setup visibility should use canonical setup state only");
-assert.doesNotMatch(operatorTypes, /OperatorAccountSetupEventSummary/, "operator setup types should not expose event analytics");
-assert.doesNotMatch(operatorPanel, /Setup activity|Setup funnel|Recent setup events/, "operator setup UI should stay focused on current setup state");
-assert.match(operatorGateway, /loadOperatorAccountSetupSnapshotCanonical/, "web gateway must load setup snapshot");
-assert.doesNotMatch(operatorPanel, /"accounts"/, "operator panel must merge account setup into Business, not expose a separate Accounts tab");
-assert.match(operatorPanel, /accountSetup=\{operator\.state\.accountSetup\}/, "business tab must receive account setup state");
-assert.doesNotMatch(operatorPanel, /<h2>Account setup<\/h2>/, "operator panel should present this as user readiness, not account setup");
-assert.doesNotMatch(operatorPanel, /Current user setup state from canonical account records/, "operator panel must not render the old empty account setup intro card");
-assert.match(operatorPanel, /<h2>User readiness<\/h2>/, "business tab must include a user readiness section boundary");
-assert.match(operatorPanel, /<OperatorAccountSetupInsights snapshot=\{props\.accountSetup\} \/>/, "business tab must render account setup insights");
-assert.equal(
-  operatorPanel.match(/<h2>User readiness<\/h2>/g)?.length ?? 0,
-  1,
-  "business tab must render exactly one user readiness section boundary",
-);
-assert.equal(
-  operatorPanel.match(/<OperatorAccountSetupInsights snapshot=\{props\.accountSetup\} \/>/g)?.length ?? 0,
-  1,
-  "business tab must render account setup insights exactly once",
-);
-assert.match(operatorPanel, /Showing \$\{users\.length\} of \$\{userList\.totalMatching\}/, "operator setup UI must disclose list truncation context");
-assert.match(operatorPanel, /"handle"/, "operator setup missing-field ordering must include handle");
-assert.match(operatorPanel, /case "handle":[\s\S]*?return "Handle";/, "operator setup UI must label missing handles");
-assert.match(operatorPanel, /case "platform_legal":[\s\S]*?return "Platform legal";/, "operator setup UI must label missing platform legal acceptance");
 assert.match(operatorIntelligence, /"legalAcceptances"/, "operator setup visibility must source platform legal acceptance");
 assert.doesNotMatch(operatorDashboard, /v\.literal\("direction"\)/, "operator setup filters must not include the deleted direction step");
 assert.doesNotMatch(operatorIntelligence, /v\.literal\("direction"\)/, "operator setup snapshots must not include the deleted direction step");
-assert.doesNotMatch(operatorPanel, /case "direction":|return "Direction";/, "operator setup UI must not label the deleted direction step");
 
 const existingWithoutProfileDetail = buildAccountSetupStatus({
   displayName: "Existing Member",

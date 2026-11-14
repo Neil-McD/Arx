@@ -1,4 +1,4 @@
-import { lazy, Suspense, type ComponentProps } from "react";
+import type { ComponentProps } from "react";
 import type { AppPage } from "../../../../shared/appShellNavigation";
 import { WebCommunityHost } from "./WebCommunityHost";
 import { WebDiscoverPanel } from "./WebDiscoverPanel";
@@ -9,13 +9,6 @@ import { WebLandingPage } from "./WebLandingPage";
 import { PublicFindPage } from "./polynetLanding/PublicFindPage";
 import { WebOnboardingPage } from "./WebOnboardingPage";
 import { WebPlatformBridgePage } from "./WebPlatformBridgePage";
-import type { WebOperatorDashboardHostProps } from "./WebOperatorDashboardHost";
-
-const WebOperatorDashboardHost = lazy(() =>
-  import("./WebOperatorDashboardHost").then((module) => ({
-    default: module.WebOperatorDashboardHost,
-  })),
-);
 
 export type WebAppMainSurfaceHostProps = {
   activePage: AppPage;
@@ -23,7 +16,6 @@ export type WebAppMainSurfaceHostProps = {
   showCommunitySurface: boolean;
   showDiscoverPanel: boolean;
   showProductDocsPanel: boolean;
-  showOperatorDashboard: boolean;
   holdLandingForAuth: boolean;
   landingPageProps: ComponentProps<typeof WebLandingPage>;
   showPublicFind: boolean;
@@ -40,7 +32,6 @@ export type WebAppMainSurfaceHostProps = {
   communityHostProps: ComponentProps<typeof WebCommunityHost>;
   discoverPanelProps: ComponentProps<typeof WebDiscoverPanel>;
   productDocsPanelProps: ComponentProps<typeof WebProductDocsPanel>;
-  operatorDashboardProps: WebOperatorDashboardHostProps | null;
 };
 
 export function WebAppMainSurfaceHost(props: WebAppMainSurfaceHostProps) {
@@ -72,14 +63,6 @@ export function WebAppMainSurfaceHost(props: WebAppMainSurfaceHostProps) {
         </>
       ) : props.activePage === "settings" ? (
         <WebSettingsSurfaceHost {...props.settingsSurfaceHostProps} />
-      ) : props.activePage === "operator" ? (
-        props.showOperatorDashboard && props.operatorDashboardProps ? (
-          <Suspense fallback={<div className="landing-auth-hold" aria-hidden="true" />}>
-            <WebOperatorDashboardHost {...props.operatorDashboardProps} />
-          </Suspense>
-        ) : (
-          <div className="landing-auth-hold" aria-hidden="true" />
-        )
       ) : props.showCommunitySurface ? (
         <WebCommunityHost {...props.communityHostProps} />
       ) : (

@@ -5,7 +5,6 @@ import type {
   AppView,
   CommunitySettingsPane,
   CommunityTab,
-  OperatorTab,
   SettingsPage,
 } from "../../../../shared/appShellNavigation";
 import {
@@ -84,9 +83,6 @@ export function useWebShellState() {
   );
   const [selectedProductDocSlug, setSelectedProductDocSlug] =
     useState<string | null>(initialAppRoute?.docsSlug ?? null);
-  const [activeOperatorTab, setActiveOperatorTab] = useState<OperatorTab>(
-    initialAppRoute?.operatorTab ?? "platform",
-  );
   const [communityTab, setCommunityTab] = useState<CommunityTab>(
     initialAppRoute?.communityTab ?? "chat",
   );
@@ -160,8 +156,6 @@ export function useWebShellState() {
     settingsGroup: settingsGroupForPage(settingsPage),
     selectedProductDocSlug,
     setSelectedProductDocSlug,
-    activeOperatorTab,
-    setActiveOperatorTab,
     communityTab,
     setCommunityTab,
     communityChannelSlug,

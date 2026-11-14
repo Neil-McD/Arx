@@ -23,7 +23,6 @@ export type WebRouteAccessRequirement =
   | "account_setup"
   | "authenticated"
   | "community"
-  | "operator"
   | "legacy_entry";
 
 export type WebRouteAccessProjection =
@@ -62,7 +61,6 @@ export function classifyWebRouteAccessRequirement(params: {
   if (params.activePage === "landing") return "member_entry";
   if (params.activePage === "onboarding") return "account_setup";
   if (params.activePage === "community") return "community";
-  if (params.activePage === "operator") return "operator";
   return "authenticated";
 }
 
@@ -75,8 +73,7 @@ export function shouldHydrateWebRouteAccountSetup(params: {
   return (
     requirement === "account_setup" ||
     requirement === "authenticated" ||
-    requirement === "community" ||
-    requirement === "operator"
+    requirement === "community"
   );
 }
 
@@ -87,7 +84,6 @@ export function resolveWebRouteAccessProjection(params: {
   authState: WebRouteAuthState;
   communitySlug?: string | null;
   communityAccessState?: WebRouteScopedAccessState;
-  operatorAccessState?: WebRouteScopedAccessState;
   accountSetupAccessState?: WebRouteScopedAccessState;
 }): WebRouteAccessProjection {
   const requirement = classifyWebRouteAccessRequirement(params);
@@ -162,17 +158,6 @@ export function resolveWebRouteAccessProjection(params: {
         requirement,
         communitySlug,
       };
-    }
-    return { kind: "hold", requirement };
-  }
-
-  if (requirement === "operator") {
-    const accessState = params.operatorAccessState ?? "resolving";
-    if (accessState === "allowed") {
-      return { kind: "render_authenticated", requirement };
-    }
-    if (accessState === "denied") {
-      return { kind: "redirect_member_entry", requirement };
     }
     return { kind: "hold", requirement };
   }
