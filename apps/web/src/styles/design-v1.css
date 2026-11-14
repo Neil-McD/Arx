@@ -3928,3 +3928,172 @@
   background: transparent;
   box-shadow: none;
 }
+
+/* ---------- The phone's top bar (Neil, Nov 14 mock) ----------
+   The back arrow sits beside the page's name, which reads from the left as on
+   desktop. The header holds only the name: switching community is the
+   community tab's banner. */
+:root[data-design="v1"] .app-root.mobile-shell .mobile-topbar {
+  height: calc(54px + env(safe-area-inset-top, 0px));
+  padding: env(safe-area-inset-top, 0px) 6px 0;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 2px;
+}
+
+:root[data-design="v1"] .app-root.mobile-shell .mobile-topbar-left {
+  padding: 0;
+  background: transparent;
+  box-shadow: none;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+
+:root[data-design="v1"] .app-root.mobile-shell .mobile-topbar-left .mobile-topbar-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
+  color: var(--nav-ink);
+}
+
+:root[data-design="v1"] .app-root.mobile-shell .mobile-topbar-center {
+  flex: 1;
+  min-width: 0;
+  justify-content: flex-start;
+}
+
+:root[data-design="v1"] .app-root.mobile-shell .mobile-topbar-center .mobile-topbar-community-selector {
+  display: none;
+}
+
+:root[data-design="v1"] .app-root.mobile-shell .mobile-topbar-context-label {
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 16px;
+  font-weight: 500;
+  letter-spacing: -0.005em;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+:root[data-design="v1"] .app-root.mobile-shell .mobile-topbar-context-label svg {
+  width: 16px;
+  height: 16px;
+  color: var(--icon-default);
+}
+
+/* A page's own header leaves room for the arrow beside its name. */
+:root[data-design="v1"] .app-root.mobile-shell:has(.mobile-topbar-back) .community-channel-header-identity {
+  padding-left: 40px;
+}
+
+/* The title sits beside the arrow, not centred over the page. */
+:root[data-design="v1"] .app-root.mobile-shell .mobile-topbar-center {
+  position: static;
+  left: auto;
+  transform: none;
+}
+
+/* A kit page's own header leaves room for the arrow (its gutter reads this). */
+:root[data-design="v1"] .app-root.mobile-shell:has(.mobile-topbar-back) {
+  --kit-top-inset: 52px;
+}
+
+/* Members on a phone: the page, full screen over the channel it opened from,
+   with the arrow back; the channel's name steps aside. */
+@media (max-width: 720px) {
+  :root[data-design="v1"] .app-root.mobile-shell .members-page {
+    position: fixed;
+    inset: env(safe-area-inset-top, 0px) 0 0 0;
+    z-index: 25;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    min-height: 0;
+    background: var(--surface-workspace, var(--surface-app));
+  }
+
+  :root[data-design="v1"] .app-root.mobile-shell:has(.members-page) .mobile-topbar-center {
+    display: none;
+  }
+}
+
+/* With no title of its own (the page draws its name), the middle of the bar
+   is gone rather than a frosted strip over the page's title. */
+:root[data-design="v1"] .app-root.mobile-shell .mobile-topbar-center:not(:has(.mobile-topbar-context-label)) {
+  display: none;
+}
+
+:root[data-design="v1"] .app-root.mobile-shell .mobile-topbar-center {
+  background: transparent;
+  box-shadow: none;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+
+/* Settings on a phone: 16px gutters, and a row's buttons wrap rather than
+   run past the edge. */
+@media (max-width: 720px) {
+  :root[data-design="v1"] .app-root.mobile-shell .web-community-centered-pane {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+
+  :root[data-design="v1"] .app-root.mobile-shell .community-settings-pane-content,
+  :root[data-design="v1"] .app-root.mobile-shell .settings-v1-group {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  :root[data-design="v1"] .settings-v1-row-control {
+    flex-wrap: wrap;
+  }
+}
+
+/* Members on a phone, two layers as on a narrow window: picking someone
+   replaces the list with their record, full screen; "Members" goes back. */
+@media (max-width: 720px) {
+  :root[data-design="v1"] .app-root.mobile-shell .members-page.has-picked {
+    display: none;
+  }
+
+  :root[data-design="v1"] .app-root.mobile-shell:has(.members-page.has-picked) .members-page-record {
+    position: fixed;
+    inset: env(safe-area-inset-top, 0px) 0 0 0;
+    z-index: 25;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    overflow-y: auto;
+    background: var(--surface-workspace, var(--surface-app));
+  }
+
+  :root[data-design="v1"] .app-root.mobile-shell:has(.members-page.has-picked) .mobile-topbar {
+    display: none;
+  }
+
+  :root[data-design="v1"] .app-root.mobile-shell .members-page-record > * {
+    flex-direction: column;
+  }
+
+  :root[data-design="v1"] .app-root.mobile-shell .members-record-back {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-height: 44px;
+    margin: 4px 10px 0;
+    padding: 0 10px 0 6px;
+    color: var(--text-ink-secondary);
+    font: inherit;
+    font-size: 14px;
+    background: none;
+    border: 0;
+    border-radius: 8px;
+    cursor: pointer;
+    align-self: flex-start;
+  }
+}
