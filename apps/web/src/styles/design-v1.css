@@ -3595,6 +3595,7 @@
 :root[data-design="v1"] .mobile-global-shell:not(.has-community-rail) .settings-nav-v1 { padding-top: 56px; }
 
 /* ---------- Phones, step 4 ----------
-   No strip of communities on a phone, so the Inbox and a conversation sit on
-   the screen's own edge, not the strip's. */
-:root[data-design="v1"] .web-direct-messages-host.mobile-root .community-dm-panel { left: var(--community-shell-inset); }
+   No strip of communities on a phone in v1, so it takes no room: everything
+   that sat beside it (Inbox, the guide, the top bar, the bottom tabs) sits on
+   the screen's own edge inset instead. */
+:root[data-design="v1"] { --mobile-community-rail-width: var(--community-shell-inset); }
