@@ -41,6 +41,12 @@ describe("installed app shell selection", () => {
     })).toBe("standard");
   });
 
+  it("opens every link on a phone in the phone layout", () => {
+    expect(resolveInitialAppShellVariant({ pathname: "/c/polynet/chat", phone: true })).toBe("mobile");
+    expect(resolveInitialAppShellVariant({ pathname: "/c/polynet", phone: true })).toBe("mobile");
+    expect(resolveInitialAppShellVariant({ pathname: "/c/polynet/chat", phone: false })).toBe("standard");
+  });
+
   it("preserves the OAuth callback shell authority", () => {
     expect(resolveInitialAppShellVariant({
       pathname: "/m",
