@@ -2469,8 +2469,8 @@ export default function App() {
       globalOverlayHostProps={globalOverlayHostProps}
       communityAgentDockRef={communityAgentComposerApiRef}
       communityAgentDockProps={{
+        // Home is the guide's page on desktop and the phone's Home tab alike.
         home:
-          !showMobileShell &&
           isDesignV1Active() &&
           activeCommunity &&
           canonicalSessionUserId &&
@@ -2496,8 +2496,11 @@ export default function App() {
                 presence: activeCommunityPresenceSummary,
               }
             : null,
-        pageMode: !showMobileShell,
-        pageActive: activePage === "community" && communityTab === "agent",
+        // Design v1: the phone's Home tab is the same page as desktop Home.
+        pageMode: !showMobileShell || (isDesignV1Active() && mobileRootPage === "agent"),
+        pageActive: showMobileShell
+          ? mobileRootPage === "agent"
+          : activePage === "community" && communityTab === "agent",
         isVisible: isCommunityAgentDockVisible,
         isSuppressed: false,
         canManageResources: canManageResourcesActiveCommunity,
