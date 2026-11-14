@@ -1,4 +1,5 @@
 import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { Check, ChevronsUpDown, Compass, Plus, Search } from "lucide-react";
 import { CommunityAvatar } from "../../../../shared/CommunityAvatar";
 import type { CommunityLike } from "./webShellChromeShared";
@@ -26,6 +27,9 @@ export type WebCommunitySwitcherProps = {
 export function WebCommunitySwitcher(props: WebCommunitySwitcherProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [query, setQuery] = useState("");
+  // The menu floats above the page, pinned under the switcher, so a menu
+  // wider than the left column never makes the column scroll (Nov 13).
+  const [anchor, setAnchor] = useState<{ top: number; left: number; width: number } | null>(null);
   const rootRef = useRef<HTMLDivElement | null>(null);
   const popoverRef = useRef<HTMLDivElement | null>(null);
   const searchRef = useRef<HTMLInputElement | null>(null);
@@ -34,6 +38,21 @@ export function WebCommunitySwitcher(props: WebCommunitySwitcherProps) {
 
   // A long list gets a search box; it takes focus when the menu opens.
   const searchable = props.communities.length > 6;
+  useEffect(() => {
+    if (!isOpen) { setAnchor(null); return; }
+    const place = () => {
+      const box = rootRef.current?.getBoundingClientRect();
+      if (!box) return;
+      // A collapsed left column is only an icon wide: open beside it instead.
+      setAnchor(box.width < 120
+        ? { top: box.top, left: box.right + 8, width: 264 }
+        : { top: box.bottom + 2, left: box.left + 6, width: box.width - 12 });
+    };
+    place();
+    window.addEventListener("resize", place);
+    return () => window.removeEventListener("resize", place);
+  }, [isOpen]);
+
   useEffect(() => {
     if (!isOpen) { setQuery(""); return; }
     const frame = requestAnimationFrame(() => {
@@ -79,7 +98,8 @@ export function WebCommunitySwitcher(props: WebCommunitySwitcherProps) {
   useEffect(() => {
     if (!isOpen) return;
     const onPointerDown = (event: PointerEvent) => {
-      if (!rootRef.current?.contains(event.target as Node)) setIsOpen(false);
+      const target = event.target as Node;
+      if (!rootRef.current?.contains(target) && !popoverRef.current?.contains(target)) setIsOpen(false);
     };
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
@@ -118,8 +138,9 @@ export function WebCommunitySwitcher(props: WebCommunitySwitcherProps) {
     </button>
   ) : null;
 
-  const menu = isOpen ? (
-        <div className="community-switcher-popover" id={menuId} ref={popoverRef} onKeyDown={onMenuKeyDown}>
+  const menu = isOpen && anchor ? createPortal(
+        <div className="community-switcher-popover is-floating" id={menuId} ref={popoverRef} onKeyDown={onMenuKeyDown}
+          style={{ top: anchor.top, left: anchor.left, width: Math.max(264, anchor.width) }}>
           {searchable ? (
             <label className="community-switcher-search">
               <Search size={14} aria-hidden="true" />
@@ -171,7 +192,8 @@ export function WebCommunitySwitcher(props: WebCommunitySwitcherProps) {
               <span className="community-switcher-item-name">Start a community</span>
             </button>
           </div>
-        </div>
+        </div>,
+        document.body,
   ) : null;
 
   if (cover) {
