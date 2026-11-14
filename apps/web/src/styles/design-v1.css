@@ -3531,3 +3531,23 @@
   }
   :root[data-design="v1"] .members-record-back:hover { color: var(--text-ink-primary); }
 }
+
+/* ---------- One header on every page (Nov 13, Neil) ----------
+   Home and Inbox are the reference: the title in the bright ink, and under
+   the header line a hairline that fades out at both ends (the kit's .hline).
+   Every other page's header (pages in the frame, a channel, a pod) matches. */
+:root[data-design="v1"] { --header-hairline: rgba(255, 255, 255, 0.12); }
+:root[data-design="v1"][data-theme="light"] { --header-hairline: rgba(13, 17, 23, 0.14); }
+:root[data-design="v1"] .community-channel-header h1,
+:root[data-design="v1"] .community-channel-header .community-channel-header-identity h1 { color: var(--text-ink-primary); }
+:root[data-design="v1"] .community-channel-header { position: relative; }
+:root[data-design="v1"] .community-channel-header::after {
+  content: "";
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, transparent 8%, var(--header-hairline) 50%, transparent 92%, transparent);
+  pointer-events: none;
+}
