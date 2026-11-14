@@ -39,7 +39,6 @@ export function buildWebShellProjection(params: {
     isAppRoute && params.destination.kind === "community_settings";
   const isLandingPage =
     isAppRoute && params.destination.kind === "platform_entry";
-  const isOperatorPage = isAppRoute && params.destination.kind === "operator";
   const isPublicAppPage = isLandingPage || Boolean(params.isPublicFind && isAppRoute);
   const isCommunityAppDestination = isWebCommunityAppDestination(
     params.destination,
@@ -53,7 +52,6 @@ export function buildWebShellProjection(params: {
       isCommunityAppDestination ||
       params.destination.kind === "onboarding" ||
       params.destination.kind === "discover" ||
-      params.destination.kind === "operator" ||
       params.destination.kind === "docs");
   const showMobileSettingsShell = showMobileAppShell && isGlobalSettings;
   const showMobileShell = showMobileAppShell;
@@ -78,7 +76,6 @@ export function buildWebShellProjection(params: {
     !showMobilePublicFunnel;
   const showDesktopCommunityRail =
     isAppRoute &&
-    !isOperatorPage &&
     !showMobileAppShell &&
     !showMobilePublicFunnel;
   const shouldShowDesktopCommunityRail =
@@ -89,7 +86,6 @@ export function buildWebShellProjection(params: {
     isGlobalSettings || isCommunitySettings
       ? "settings"
       : params.destination.kind === "discover" ||
-          params.destination.kind === "operator" ||
           params.destination.kind === "docs"
         ? "discover"
         : "community";

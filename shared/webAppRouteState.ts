@@ -1,12 +1,10 @@
 import {
   parseCommunitySettingsPane,
   parseCommunityTab,
-  parseOperatorTab,
   type AppPage,
   type AppView,
   type CommunitySettingsPane,
   type CommunityTab,
-  type OperatorTab,
   type SettingsPage,
 } from "./appShellNavigation";
 
@@ -29,7 +27,6 @@ export type AppRouteState = {
   communityPodSlug?: string | null;
   communitySettingsPane?: CommunitySettingsPane | null;
   docsSlug?: string | null;
-  operatorTab?: OperatorTab | null;
 };
 
 export type AppRoutePathState = {
@@ -45,7 +42,6 @@ export type AppRoutePathState = {
   communityPodSlug?: string | null;
   communitySettingsPane?: CommunitySettingsPane | null;
   docsSlug?: string | null;
-  operatorTab?: OperatorTab | null;
 };
 
 /**
@@ -61,7 +57,6 @@ export type WebDestination =
   | { kind: "onboarding" }
   | { kind: "discover" }
   | { kind: "docs"; slug: string | null }
-  | { kind: "operator"; tab: OperatorTab }
   | { kind: "global_settings"; page: SettingsPage; index: boolean }
   | { kind: "community_funnel"; slug: string }
   | { kind: "community_home"; slug: string }
@@ -471,17 +466,6 @@ export function parseAppRouteFromPathname(pathname: string): AppRoutePathState |
     };
   }
 
-  if (segments[0] === "operator" && segments.length <= 2) {
-    return {
-      page: "operator",
-      view: "home",
-      settingsPage: "profile",
-      communitySlug: null,
-      communityTab: "chat",
-      operatorTab: parseOperatorTab(segments[1] ?? null),
-    };
-  }
-
   if (segments[0] === "workspace") {
     if (segments[1] === "community" && segments.length === 5 && segments[3] === "setup") {
       const slug = String(segments[2] ?? "").trim();
@@ -633,8 +617,6 @@ export function deriveWebDestinationFromAppRoute(
       return { kind: "discover" };
     case "docs":
       return { kind: "docs", slug: route.docsSlug ?? null };
-    case "operator":
-      return { kind: "operator", tab: route.operatorTab ?? "platform" };
     case "settings":
       return {
         kind: "global_settings",
@@ -801,7 +783,6 @@ export function readAppRouteFromLocation(): AppRouteState {
       communityPodSlug: fromPath.communityPodSlug ?? null,
       communitySettingsPane: fromPath.communitySettingsPane ?? null,
       docsSlug: fromPath.docsSlug ?? null,
-      ...(fromPath.operatorTab ? { operatorTab: fromPath.operatorTab } : {}),
     };
   }
 
@@ -842,10 +823,6 @@ export function buildAppRoutePath(state: AppRoutePathState): string | null {
 
   if (state.page === "docs") {
     return buildDocsPath(state.docsSlug);
-  }
-
-  if (state.page === "operator") {
-    return `/operator/${state.operatorTab ?? "platform"}`;
   }
 
   if (state.page === "landing") {

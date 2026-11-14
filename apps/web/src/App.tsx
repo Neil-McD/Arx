@@ -217,14 +217,7 @@ export default function App() {
     onAfterSignOut: accountGraphLifecycle.onAfterSignOut,
   });
   const authenticatedIdentity = useWebAuthenticatedIdentityController(session);
-  const {
-    canonicalUserId: canonicalSessionUserId,
-    isOperatorAccessResolved,
-    operatorAccess,
-    operatorAccessError,
-    retryOperatorAccess,
-    hasOperatorAccess,
-  } = authenticatedIdentity;
+  const { canonicalUserId: canonicalSessionUserId } = authenticatedIdentity;
   const profileStorageUserId = canonicalSessionUserId;
   const { upsertCommunityVisualIdentities } =
     useWebCommunityVisualIdentityRegistryLifecycle(canonicalSessionUserId);
@@ -254,8 +247,6 @@ export default function App() {
     settingsGroup,
     selectedProductDocSlug,
     setSelectedProductDocSlug,
-    activeOperatorTab,
-    setActiveOperatorTab,
     communityTab,
     setCommunityTab,
     communityChannelSlug,
@@ -365,7 +356,6 @@ export default function App() {
   const shellNavigation = useWebShellNavigationController({
     session,
     isAuthBootstrapComplete,
-    hasOperatorAccess,
     publicRoute,
     setPublicRoute,
     shellVariant,
@@ -380,8 +370,6 @@ export default function App() {
     setMobileSettingsView,
     selectedProductDocSlug,
     setSelectedProductDocSlug,
-    activeOperatorTab,
-    setActiveOperatorTab,
     selectedActiveCommunitySlug,
     communityTab,
     communityChannelSlug,
@@ -400,7 +388,6 @@ export default function App() {
     applyAppRouteState,
     pushNavSnapshot,
     openGlobalSettings,
-    openOperatorConsole,
     goBack,
     backTargetSnapshot,
     backTargetLabel: effectiveBackTargetLabel,
@@ -1336,16 +1323,6 @@ export default function App() {
 
   // /c/<slug> only hands over to the community's site (WebCommunityHandoff).
   const isPublicCommunityFunnel = shellPublicRoute.kind === "community_funnel";
-  const operatorRouteAccessState =
-    activePage !== "operator"
-      ? "not_applicable" as const
-      : operatorAccessError
-        ? "failed" as const
-      : !isOperatorAccessResolved
-        ? "resolving" as const
-        : operatorAccess
-          ? "allowed" as const
-          : "denied" as const;
   const accountSetupRouteAccessState =
     !session
       ? "not_applicable" as const
@@ -1372,7 +1349,6 @@ export default function App() {
       communities,
       session,
       isAuthBootstrapComplete,
-      operatorAccessState: operatorRouteAccessState,
       accountSetupAccessState: accountSetupRouteAccessState,
       ensureSession: ensureUsableAuthSession,
       loadCommunities,
@@ -2193,10 +2169,6 @@ export default function App() {
     appToast,
   });
 
-  const selectedCommunityAnalyticsPath = buildCommunityTabPath(
-    selectedActiveCommunitySlug ?? activeCommunity?.slug,
-    "analytics",
-  );
   const mainSurfaceHostProps = buildWebAppMainSurfaceHostProps({
     activePage,
     isPublicCommunityFunnel,
@@ -2296,17 +2268,6 @@ export default function App() {
       },
       renderMarkdown,
     },
-    operatorDashboardProps:
-      session && operatorAccess
-        ? {
-            session,
-            activeTab: activeOperatorTab,
-            onSelectTab: openOperatorConsole,
-            onOpenCommunityAnalytics: selectedCommunityAnalyticsPath
-              ? () => navigateTo(selectedCommunityAnalyticsPath)
-              : null,
-          }
-        : null,
   });
   const {
     community: communityAgentDockCommunity,
@@ -2496,14 +2457,10 @@ export default function App() {
   });
 
   if (shouldHoldRouteForAccess) {
-    const operatorAdmissionError = activePage === "operator"
-      ? operatorAccessError
-      : null;
     const routeAdmissionError =
       authError ??
       onboardingError ??
-      communityResolutionError ??
-      operatorAdmissionError;
+      communityResolutionError;
     const retryRouteAdmission = () => {
       if (authError) {
         retryAuthBootstrap();
@@ -2511,10 +2468,6 @@ export default function App() {
       }
       if (communityResolutionError) {
         retryCommunityResolution();
-        return;
-      }
-      if (operatorAdmissionError) {
-        retryOperatorAccess();
         return;
       }
       setOnboardingError(null);

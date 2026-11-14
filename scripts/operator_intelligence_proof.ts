@@ -15,7 +15,6 @@ function extractBetween(source: string, startMarker: string, endMarker: string, 
 
 const schema = read("convex/schema.ts");
 const operatorIntelligence = read("convex/operatorIntelligence.ts");
-const operatorTypes = read("shared/operatorTypes.ts");
 const businessAnalytics = read("convex/businessAnalytics.ts");
 const businessAnalyticsCore = read("convex/businessAnalyticsCore.ts");
 const communityPublic = read("convex/communityPublic.ts");
@@ -69,12 +68,6 @@ for (const [table, indexes] of [
   assert.match(schema, new RegExp(`${table}: defineTable[\\s\\S]*${indexes[0]}`), `${table} missing ${indexes[0]}`);
   assert.match(schema, new RegExp(`${table}: defineTable[\\s\\S]*${indexes[1]}`), `${table} missing ${indexes[1]}`);
 }
-
-assert.match(
-  operatorTypes,
-  /export type OperatorCommunityRecord = /,
-  "operator community record contract is missing",
-);
 assert.match(communityListQuery, /records\.sort\(/, "operator communities should sort before applying the limit");
 assert.match(
   communityListQuery,
@@ -85,21 +78,6 @@ assert.ok(
   communityListQuery.indexOf("records.sort(") < communityListQuery.indexOf("return records.slice(0, limit)"),
   "operator communities must sort all matching records before slicing to the panel limit",
 );
-assert.match(operatorTypes, /export type OperatorOverviewSnapshot = /, "operator overview contract is missing");
-assert.match(operatorTypes, /export type OperatorMonetizationSnapshot = /, "operator monetization contract is missing");
-assert.doesNotMatch(
-  operatorTypes,
-  /creditTopup|usageBuyers/,
-  "retired credit top-ups are gone from operator monetization (rows deleted Nov 7; Stripe keeps the history)",
-);
-assert.doesNotMatch(
-  operatorTypes,
-  new RegExp("buil" + "derPlanCheckoutStarts: number"),
-  "operator monetization must not foreground deprecated paid-plan checkout starts",
-);
-assert.match(operatorTypes, /export type OperatorRiskItem = /, "operator risk contract is missing");
-assert.match(operatorTypes, /export type OperatorEventRecord = /, "operator event contract is missing");
-assert.doesNotMatch(operatorTypes, /OperatorToolDefinition|OperatorDashboardSection/, "unused operator tool scaffold must stay deleted");
 
 for (const queryName of [
   "getOperatorOverviewInternal",
@@ -150,51 +128,6 @@ assert.match(
   operatorIntelligence,
   /CHECKOUT_STATUSES = \["pending", "complete", "expired"\]/,
   "operator checkout starts must include expired checkout sessions",
-);
-assert.match(
-  operatorTypes,
-  /businessKpis\?:/,
-  "operator monetization should expose the canonical business KPI contract",
-);
-assert.match(
-  operatorTypes,
-  /activePayingCustomers: number/,
-  "operator business KPIs should expose active paying users",
-);
-assert.match(
-  operatorTypes,
-  /communityPlatformRevShareInRange: OperatorMoneyMetric \| null/,
-  "operator business KPIs should expose community rev-share separately from gross community revenue",
-);
-assert.doesNotMatch(
-  operatorTypes,
-  /accountSetupCompleted: number|accountSetupCompletionRate: number \| null/,
-  "operator monetization KPIs must not duplicate account setup snapshot fields",
-);
-assert.match(
-  operatorTypes,
-  /activatedCommunityCreators: number/,
-  "operator business KPIs should expose activated community creators",
-);
-assert.match(
-  operatorTypes,
-  /communityCreatorActivationRate: number \| null/,
-  "operator business KPIs should expose community creator activation rate",
-);
-assert.match(
-  operatorTypes,
-  /communitiesWithFirstMember: number/,
-  "operator business KPIs should expose community first-member activation",
-);
-assert.match(
-  operatorTypes,
-  /paidCommunitiesWithMembers: number/,
-  "operator business KPIs should expose paid communities with members",
-);
-assert.match(
-  operatorTypes,
-  /averageRecordedLifetimeValue: OperatorMoneyMetric \| null/,
-  "operator business KPIs should label first-party checkout LTV explicitly",
 );
 assert.match(
   schema,
@@ -307,11 +240,6 @@ assert.doesNotMatch(
   "community funnel analytics should not write raw visitor keys",
 );
 assert.match(
-  operatorTypes,
-  /source: "first_party" \| "posthog" \| "vercel_analytics" \| "unavailable"/,
-  "operator visitor source contract should include first-party analytics",
-);
-assert.match(
   monetizationQuery,
   /ctx\.db\s*\.query\("platformBusinessVisits" as any\)/,
   "operator business KPIs should read first-party business visits",
@@ -325,11 +253,6 @@ assert.match(
   monetizationQuery,
   /const identifiedVisitorHashes = new Set\([\s\S]*businessVisitRows[\s\S]*row\.userId[\s\S]*visitorKeyHash/,
   "operator business KPIs should count identified visitor hashes",
-);
-assert.match(
-  operatorTypes,
-  /identified: number/,
-  "operator visitor KPI contract should expose identified visitor count",
 );
 assert.match(
   monetizationQuery,
@@ -390,38 +313,6 @@ assert.doesNotMatch(
   operatorIntelligence,
   new RegExp("buil" + "derPlanCheckoutStarts|buil" + "derPlanCheckoutCompletions"),
   "operator monetization must not expose deprecated paid-plan checkout metrics",
-);
-
-assert.match(
-  operatorTypes,
-  /activeMemberships: number/,
-  "operator member contract must name membership counts honestly",
-);
-assert.match(
-  operatorTypes,
-  /averageMembersPerCommunity: number \| null/,
-  "operator community overview should expose average members per community",
-);
-assert.match(
-  operatorTypes,
-  /paidCommunityConversionRate: number \| null/,
-  "operator community overview should expose paid community conversion",
-);
-assert.match(
-  operatorTypes,
-  /setupRiskCommunities: number/,
-  "operator community overview should expose setup-risk community count",
-);
-assert.match(
-  operatorTypes,
-  /averageMrrPerCommunity: OperatorMoneyMetric \| null/,
-  "operator community overview should expose average community MRR",
-);
-
-assert.doesNotMatch(
-  operatorTypes,
-  /activeMembers: number/,
-  "operator member contract must not expose activeMembers until it is usage-window based",
 );
 
 assert.match(

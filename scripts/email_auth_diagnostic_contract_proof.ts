@@ -7,13 +7,6 @@ const read = (path: string) => readFileSync(join(root, path), "utf8");
 
 const diagnostic = read("convex/emailDiagnostics.ts");
 const workosEmailVerification = read("convex/workosEmailVerification.ts");
-const gateway = read("shared/cloudOperatorDashboardGateway.ts");
-const operatorTypes = read("shared/operatorTypes.ts");
-const operatorDataHook = read("apps/web/src/components/useOperatorDashboardData.ts");
-const businessPanel = read("apps/web/src/components/OperatorBusinessPanelView.tsx");
-const emailPanel = read("apps/web/src/components/OperatorEmailPanelView.tsx");
-const operatorHost = read("apps/web/src/components/WebOperatorDashboardHost.tsx");
-const appShellNavigation = read("shared/appShellNavigation.ts");
 const pkg = read("package.json");
 
 assert.match(
@@ -88,59 +81,6 @@ assert.match(
   "email auth diagnostic must explicitly report that it is redacted and read-only",
 );
 
-assert.match(
-  operatorTypes,
-  /export type OperatorEmailAuthDiagnosticSnapshot = \{[\s\S]*configuration:[\s\S]*resendApiKeyConfigured: boolean[\s\S]*emailVerifiedClaimValue: boolean \| null[\s\S]*workosUser:[\s\S]*emailVerified\?: boolean \| null[\s\S]*aggregate:[\s\S]*currentUser:[\s\S]*emailVerifiedAtPresent: boolean[\s\S]*outbox:[\s\S]*failures: Record<string, number>[\s\S]*pendingDueNow: number[\s\S]*recentRows: Array[\s\S]*deliveries:[\s\S]*lastEventType: string \| null/,
-  "operator types must expose the redacted email auth and ops diagnostic snapshot",
-);
-
-assert.match(
-  operatorTypes,
-  /outbox:[\s\S]*totals:[\s\S]*rows: number[\s\S]*byStatus: Record<string, number>[\s\S]*failures: Record<string, number>[\s\S]*outboxTotalMode: "exact_collect" \| string[\s\S]*outboxTotalRows: number/,
-  "operator types must expose exact outbox totals and their evidence metadata",
-);
-
-assert.match(
-  gateway,
-  /loadOperatorEmailAuthDiagnosticCanonical[\s\S]*client\.action\("emailDiagnostics:getOperatorEmailAuthDiagnostic"[\s\S]*includeWorkosUserLookup: params\.includeWorkosUserLookup \?\? true/,
-  "operator gateway must load the email auth diagnostic through the gated action",
-);
-
-assert.match(
-  operatorDataHook,
-  /loadOperatorEmailAuthDiagnosticCanonical[\s\S]*emailAuth: OperatorEmailAuthDiagnosticSnapshot \| null[\s\S]*emailAuth: null[\s\S]*loadOperatorEmailAuthDiagnosticCanonical\(\{ session, includeWorkosUserLookup: true \}\)[\s\S]*emailAuth: fulfilledValue\(emailAuth\)/,
-  "operator dashboard data hook must load and retain the email auth diagnostic",
-);
-
-assert.match(
-  operatorHost,
-  /import \{ OperatorEmailPanelView \}[\s\S]*props\.activeTab === "email"[\s\S]*<OperatorEmailPanelView[\s\S]*monetization=\{operator\.state\.monetization\}[\s\S]*emailAuth=\{operator\.state\.emailAuth\}/,
-  "the live operator console must route email diagnostics to the dedicated Email tab",
-);
-
-assert.match(
-  appShellNavigation,
-  /OPERATOR_TABS = \[\s*"platform",\s*"business",\s*"email",\s*"communities",?\s*\] as const[\s\S]*export type OperatorTab = \(typeof OPERATOR_TABS\)\[number\]/,
-  "canonical operator navigation must expose Email as one of four bounded operator tabs",
-);
-
-assert.match(
-  emailPanel,
-  /Provider health[\s\S]*Resend API key[\s\S]*Email engagement[\s\S]*Email auth[\s\S]*Queue health[\s\S]*Recent outbox/,
-  "operator Email panel must project provider, engagement, auth, and queue diagnostics",
-);
-
-assert.match(
-  emailPanel,
-  /outboxTotals = outbox\?\.totals[\s\S]*suppressedEmails = outboxTotals\?\.byStatus\.suppressed[\s\S]*failureEntries = topEntries\(outboxTotals\?\.failures[\s\S]*Suppressed outbox total[\s\S]*outboxTotals\?\.byStatus\[status\]/,
-  "operator Email panel must prefer exact outbox totals over capped sample counts",
-);
-
-assert.doesNotMatch(
-  businessPanel,
-  /Email engagement|Email auth|emailAuth/,
-  "operator Business panel must not retain the dedicated email diagnostic sections",
-);
 
 assert.doesNotMatch(
   diagnostic,

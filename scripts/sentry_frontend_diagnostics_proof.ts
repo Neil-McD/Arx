@@ -6,34 +6,8 @@ function read(relativePath: string): string {
 }
 
 const operatorSentryDiagnostics = read("convex/operatorSentryDiagnostics.ts");
-const operatorGateway = read("shared/cloudOperatorDashboardGateway.ts");
-const operatorTypes = read("shared/operatorTypes.ts");
-const operatorPanel = [
-  read("apps/web/src/components/WebOperatorDashboardHost.tsx"),
-  read("apps/web/src/components/useOperatorDashboardData.ts"),
-  read("apps/web/src/components/OperatorPlatformPanelView.tsx"),
-].join("\n");
 const viteConfig = read("apps/web/vite.config.ts");
 const packageJson = read("package.json");
-
-assert.match(
-  operatorTypes,
-  /export type OperatorFrontendErrorDiagnosticsSnapshot = /,
-  "frontend error diagnostics snapshot contract is missing",
-);
-for (const field of ["issues", "events", "affectedUsers", "unresolvedIssues"]) {
-  assert.match(operatorTypes, new RegExp(`${field}: number`), `frontend error totals missing ${field}`);
-}
-assert.match(
-  operatorTypes,
-  /topIssues: OperatorFrontendErrorIssue\[\]/,
-  "frontend error diagnostics must expose sanitized top issues only",
-);
-assert.match(
-  operatorTypes,
-  /issueLimit: number[\s\S]*configured: boolean[\s\S]*unavailableReason: string \| null[\s\S]*sampled: boolean[\s\S]*isTruncated: boolean/,
-  "frontend error evidence must expose limit, configuration, sampling, and truncation state",
-);
 
 assert.match(
   viteConfig,
@@ -93,58 +67,6 @@ assert.doesNotMatch(
   operatorSentryDiagnostics,
   /ctx\.db\.insert|ctx\.db\.patch|ctx\.db\.delete|mutation\(/,
   "Sentry diagnostics must stay read-only",
-);
-
-assert.match(
-  operatorGateway,
-  /loadOperatorFrontendErrorDiagnosticsCanonical/,
-  "operator gateway must expose canonical frontend error diagnostics",
-);
-assert.match(
-  operatorGateway,
-  /operatorSentryDiagnostics:getOperatorFrontendErrorDiagnostics/,
-  "operator gateway must call the gated Sentry diagnostics action",
-);
-assert.match(
-  operatorGateway,
-  /readCurrentBuildFromVersionJson\(\)[\s\S]*sentryRelease: string \| null[\s\S]*currentBuildId: build\.buildId[\s\S]*frontendSentryRelease: build\.sentryRelease/,
-  "operator gateway must pass current build and frontend Sentry release evidence to Sentry diagnostics",
-);
-assert.doesNotMatch(
-  operatorGateway,
-  /SENTRY_AUTH_TOKEN|Authorization|Bearer/,
-  "browser gateway must not expose Sentry tokens or auth headers",
-);
-
-assert.match(
-  operatorPanel,
-  /loadOperatorFrontendErrorDiagnosticsCanonical/,
-  "operator panel must load frontend error diagnostics",
-);
-assert.match(
-  operatorPanel,
-  /Frontend errors/,
-  "operator panel must render frontend error diagnostics",
-);
-assert.match(
-  operatorPanel,
-  /Sentry frontend diagnostics unavailable/,
-  "operator panel must show Sentry unavailable evidence",
-);
-assert.match(
-  operatorPanel,
-  /Open issues shown[\s\S]*Top issue events[\s\S]*Affected users shown[\s\S]*formatBoundedCount/,
-  "operator panel must label bounded sampled Sentry metrics explicitly",
-);
-assert.match(
-  operatorPanel,
-  /Frontend error diagnostics show the top \{props\.frontendErrors\.evidence\.issueLimit\} Sentry issues/,
-  "operator panel must render the backend issue limit",
-);
-assert.match(
-  operatorPanel,
-  /Promise\.allSettled[\s\S]*frontendErrors[\s\S]*fulfilledValue\(frontendErrors\)/,
-  "Sentry diagnostics failure must not blank the whole operator panel",
 );
 assert.match(
   packageJson,

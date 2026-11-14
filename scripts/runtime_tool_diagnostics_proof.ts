@@ -7,13 +7,6 @@ function read(relativePath: string): string {
 
 const schema = read("convex/schema.ts");
 const operatorIntelligence = read("convex/operatorIntelligence.ts");
-const operatorPlatformHealth = read("shared/operatorPlatformHealth.ts");
-const operatorPanel = [
-  read("apps/web/src/components/WebOperatorDashboardHost.tsx"),
-  read("apps/web/src/components/useOperatorDashboardData.ts"),
-  read("apps/web/src/components/OperatorPlatformPanelView.tsx"),
-  read("apps/web/src/components/OperatorBusinessPanelView.tsx"),
-].join("\n");
 const voiceCostAccounting = read("convex/voiceProviderCostAccounting.ts");
 const runtimeAgentLoop = read("convex/runtimeAgentLoop.ts");
 const runtimeTurnHandlers = read("convex/runtimeTurnHandlers.ts");
@@ -30,25 +23,6 @@ assert.match(
   /getOperatorRuntimeToolDiagnosticsInternal = internalQuery[\s\S]*executionAvailability/,
   "operator diagnostics must retain current runtime availability",
 );
-assert.match(
-  operatorPlatformHealth,
-  /runtime\.executionAvailability[\s\S]*Turns, tools, providers, and sandbox execution clean/,
-  "platform health must score execution rather than retired billing",
-);
-assert.match(operatorPanel, /<h2>Runtime execution<\/h2>/);
-assert.match(operatorPanel, /Runtime diagnostics are sampled for this window/);
-assert.doesNotMatch(
-  operatorPanel,
-  /<h2>Tool balance revenue<\/h2>|<span>Credit top-up conversion<\/span>/,
-  "retired tool credits must not be presented as a current product or revenue rail",
-);
-
-assert.doesNotMatch(
-  operatorPanel,
-  /tool-credit|top-up/i,
-  "retired tool credits are gone from the operator panel (their checkouts were deleted Nov 7)",
-);
-
 assert.match(voiceCostAccounting, /billingDisposition: "platform_absorbed"/);
 assert.match(voiceCostAccounting, /recordVoiceProviderCostInternal/);
 for (const runtimeSource of [runtimeAgentLoop, runtimeTurnHandlers, httpVoice]) {
