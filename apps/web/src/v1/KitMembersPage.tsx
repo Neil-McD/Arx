@@ -243,7 +243,8 @@ export function KitMembersPage(props: {
     <section className={`members-page is-kit${picked ? " has-picked" : ""}`} aria-label="Community members">
       <KitApp view="members" host part="main">
         <View index={5}>
-          <Top title={<>Members <small>{summary ? `${summary.with_access} ${summary.with_access === 1 ? "member" : "members"}${summary.counts.on_hold ? ` · ${summary.counts.on_hold} on hold` : ""}` : ""}</small></>} titleView={5} />
+          {/* One header style everywhere: the title alone (the count is in the left column; On hold is a filter below). */}
+          <Top title="Members" titleView={5} />
           <div className={cx("page")} style={{ overflowY: "auto" }}>
             <p className={cx("lead")}><span className={cx("aura")}><Icon name="spark" /></span>{lead}</p>
             {waiting > 0 ? (

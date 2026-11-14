@@ -3532,6 +3532,29 @@
   :root[data-design="v1"] .members-record-back:hover { color: var(--text-ink-primary); }
 }
 
+/* ---------- One header on every page (Nov 13, Neil) ----------
+   Home and Inbox are the reference: the title in the bright ink, and under
+   the header line a hairline that fades out at both ends (the kit's .hline).
+   Every other page's header (pages in the frame, a channel, a pod) matches. */
+:root[data-design="v1"] { --header-title: #e6e7e9; --header-hairline: rgba(255, 255, 255, 0.09); }
+:root[data-design="v1"][data-theme="light"] { --header-title: #0d1117; --header-hairline: rgba(13, 17, 23, 0.14); }
+:root[data-design="v1"] .community-channel-header h1,
+:root[data-design="v1"] .community-channel-header .community-channel-header-identity h1 {
+  color: var(--header-title);
+  font-family: "Geist Variable", "Geist", "Inter", system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+:root[data-design="v1"] .community-channel-header { position: relative; }
+:root[data-design="v1"] .community-channel-header::after {
+  content: "";
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, transparent 8%, var(--header-hairline) 50%, transparent 92%, transparent);
+  pointer-events: none;
 /* ---------- Analytics (Nov 13, Neil) ----------
    Four figures, one chart, how people join; who is on which plan in the
    right column (or under the page once the column is hidden). */

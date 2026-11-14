@@ -407,7 +407,7 @@ function KitInboxPage(props: WebDirectMessageInboxPanelProps & { kitPage: { acti
     <aside className="community-dm-panel community-dm-inbox-panel is-kit" role="dialog" aria-label="Inbox">
       <KitApp view="inbox" part="main">
         <View index={3}>
-          <Top title={<>Inbox <small>Across your communities</small></>} titleView={3} />
+          <Top title="Inbox" titleView={3} />
           <div className={cx("page")} style={{ overflowY: "auto" }}>
             <p className={cx("lead")}>
               <span className={cx("aura")}><Icon name="spark" /></span>
