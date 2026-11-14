@@ -1790,7 +1790,8 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
           activeConversationId={activeConversationId}
           onSelectConversation={openConversation}
           onSelectPerson={openPersonConversation}
-          kitPage={inboxIsPage ? { activeCommunityId: props.activeCommunityId ?? null } : null}
+          // Design v1: the same Inbox page on a phone's Inbox tab as on desktop.
+          kitPage={inboxIsPage || (props.mobileRoot && isDesignV1Active()) ? { activeCommunityId: props.activeCommunityId ?? null } : null}
         />
       ) : null}
     </div>

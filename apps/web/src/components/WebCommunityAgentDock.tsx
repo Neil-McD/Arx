@@ -80,6 +80,7 @@ import {
 import type { WebCommunityRecord } from "../webAppContracts";
 import "./WebCommunityAgentDock.css";
 import { fitComposerHeight } from "../../../../shared/composerHeight";
+import { communityAgentSessionKey } from "../../../../shared/communityAgentPageState";
 
 type CommunityAgentMessage = Omit<CloudMessageTransportRow, "role"> & {
   role: "user" | "assistant" | "system";
@@ -205,9 +206,15 @@ function formatInferenceIssue(issue: InferenceIssueModalState | null): string | 
   return issue.message?.trim() || "The community agent could not complete this turn. Try again.";
 }
 
+// The unsent text to the guide, per person and community. It outlives the
+// page itself: a phone's tabs rebuild the page when you look at Inbox and come
+// back, and the words you were writing should still be there.
+const unsentGuideText = new Map<string, string>();
+
 export const WebCommunityAgentDock = forwardRef<WebCommunityAgentDockHandle, WebCommunityAgentDockProps>(
 function WebCommunityAgentDock(props, ref) {
   const communityId = props.community?.id ?? null;
+  const unsentTextKey = communityAgentSessionKey(props.session?.user.id, communityId);
   const communityName = String(props.community?.name ?? "").trim();
   const isOpenSurface = props.pageMode
     ? Boolean(props.pageActive)
@@ -216,7 +223,11 @@ function WebCommunityAgentDock(props, ref) {
   const [episodeId, setEpisodeId] = useState<string | null>(null);
   const [, setThreadContext] = useState<ActiveThreadContext | null>(null);
   const [messages, setMessages] = useState<CommunityAgentMessage[]>([]);
-  const [input, setInput] = useState("");
+  const [input, setInput] = useState(() => unsentGuideText.get(unsentTextKey) ?? "");
+  useEffect(() => {
+    if (input) unsentGuideText.set(unsentTextKey, input);
+    else unsentGuideText.delete(unsentTextKey);
+  }, [input, unsentTextKey]);
   const [attachments, setAttachments] = useState<CommunityAgentImageDraft[]>([]);
   const [isUploadingAttachments, setIsUploadingAttachments] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -248,7 +259,7 @@ function WebCommunityAgentDock(props, ref) {
   const composerFormRef = useRef<HTMLFormElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const attachmentsRef = useRef<CommunityAgentImageDraft[]>([]);
-  const draftTextRef = useRef("");
+  const draftTextRef = useRef(input);
   const submitInFlightRef = useRef(false);
   const sendSuggestionRef = useRef<(text: string) => void>(() => undefined);
   const askReadyRef = useRef(false);
@@ -529,7 +540,12 @@ function WebCommunityAgentDock(props, ref) {
     setRuntimeEventsByRunId: setScopedRuntimeEventsByRunId,
   });
 
+  // A new person or community starts clean. The first run is the page opening:
+  // it keeps the unsent text it was given (unsentGuideText).
+  const scopeResetRanRef = useRef(false);
   useEffect(() => {
+    const opening = !scopeResetRanRef.current;
+    scopeResetRanRef.current = true;
     const previousThreadKey = activeThreadKeyRef.current;
     if (previousThreadKey) stopStreamingTurn(previousThreadKey);
     activeThreadKeyRef.current = null;
@@ -544,8 +560,10 @@ function WebCommunityAgentDock(props, ref) {
     setIsStartingNewChat(false);
     submitInFlightRef.current = false;
     setIsSubmitting(false);
-    draftTextRef.current = "";
-    setInput("");
+    if (!opening) {
+      draftTextRef.current = "";
+      setInput("");
+    }
     clearAttachmentDrafts();
     setIsUploadingAttachments(false);
     setLocalError(null);
@@ -1296,9 +1314,10 @@ function WebCommunityAgentDock(props, ref) {
   // by itself, so nothing that needs you is hidden behind Home at rest.
   const conversationNeedsYou =
     turnIsActive || isPreparing || Boolean(dockError) || Boolean(memberLimitNotice) || persistentResourceChangesetCards.length > 0;
-  // Home on the kit: Home in design v1 on a wide window, the host's and a member's.
+  // Home on the kit: Home in design v1, the host's and a member's, on desktop
+  // and as the phone's Home tab.
   const agentOn = useCommunityAgentOn();
-  const kitHome = homeActive && guideWording && !props.mobileRoot && Boolean(props.home);
+  const kitHome = homeActive && guideWording && Boolean(props.home);
   // The palette's question waits for Home's own box and an idle guide.
   askReadyRef.current = Boolean(kitHome) && !(composerIsBusy || isPreparing || isStartingNewChat);
   const kitHomeIsHost = props.home?.audience === "host";

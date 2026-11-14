@@ -93,6 +93,9 @@ export function WebShellChromeHost(props: WebShellChromeHostProps) {
   // desktop, full width (you, then the community's sections); a section
   // opens its page of rows.
   const isPhoneV1 = isDesignV1Active() && props.showMobileAppShell;
+  // Design v1: the phone's Home tab is the desktop Home page, drawn in the main
+  // area (the guide's page lives there in page mode).
+  const isPhoneHome = isPhoneV1 && props.communityShell.mobileRootPage === "agent";
   const phoneSettingsIndex = isPhoneV1 && props.showMobileSettingsIndex ? (
     <WebSettingsNavV1
       communityShell={props.communityShell}
@@ -110,7 +113,7 @@ export function WebShellChromeHost(props: WebShellChromeHostProps) {
       communityShell={props.communityShell}
       presentation="mobile-home"
     />
-  ) : isMobileDedicatedRoot ? null : props.mainSurface);
+  ) : isMobileDedicatedRoot && !isPhoneHome ? null : props.mainSurface);
   const mobileGlobalShellLabel = isMobileCommunityHome
     ? "Community home"
     : props.communityShell.mobileRootPage === "agent"

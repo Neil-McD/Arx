@@ -2248,12 +2248,19 @@ export default function App() {
       renderMarkdown,
     },
   });
+  // The guide's page: desktop Home, and design v1's phone Home tab. On a v1
+  // phone it stays one page across the tabs (hidden off Home), so a draft to
+  // the guide survives a look at Inbox.
+  const communityAgentPageMode = !showMobileShell || isDesignV1Active();
+  const leavePhoneHome = () => {
+    if (showMobileShell && mobileRootPage === "agent") setMobileRootPage("community");
+  };
   const {
     community: communityAgentDockCommunity,
     surfaceContext: communityAgentSurfaceContext,
     isVisible: isCommunityAgentDockVisible,
   } = useWebCommunityAgentSurfaceController({
-    pageMode: !showMobileShell,
+    pageMode: communityAgentPageMode,
     activePage,
     communityTab,
     activeCommunity,
@@ -2469,8 +2476,8 @@ export default function App() {
       globalOverlayHostProps={globalOverlayHostProps}
       communityAgentDockRef={communityAgentComposerApiRef}
       communityAgentDockProps={{
+        // Home is the guide's page on desktop and the phone's Home tab alike.
         home:
-          !showMobileShell &&
           isDesignV1Active() &&
           activeCommunity &&
           canonicalSessionUserId &&
@@ -2484,20 +2491,34 @@ export default function App() {
                 communityId: activeCommunity.id,
                 communityName: activeCommunity.name,
                 firstName: displayName(canonicalSessionUserId).trim().split(/\s+/)[0] || "there",
-                onOpenJoinRequests: shellChromeHostProps.communityShell.onOpenMembers,
+                // On a phone, what Home opens is in the community tab.
+                onOpenJoinRequests: () => {
+                  leavePhoneHome();
+                  shellChromeHostProps.communityShell.onOpenMembers();
+                },
                 onOpenChannelByName: (channelName: string) => {
                   const channel = activeCommunityChannels.find((candidate) => candidate.name === channelName);
-                  if (channel) shellChromeHostProps.communityShell.onSelectCommunityChannel(channel);
+                  if (!channel) return;
+                  leavePhoneHome();
+                  shellChromeHostProps.communityShell.onSelectCommunityChannel(channel);
                 },
-                onOpenEvents: () => handleSelectCommunityTab("events"),
-                onOpenKnowledge: () => handleSelectCommunityTab("resources"),
+                onOpenEvents: () => {
+                  leavePhoneHome();
+                  handleSelectCommunityTab("events");
+                },
+                onOpenKnowledge: () => {
+                  leavePhoneHome();
+                  handleSelectCommunityTab("resources");
+                },
                 // The Agent plan is bought in Billing (no trial).
                 onTurnOnAgent: () => openGlobalSettings("billing"),
                 presence: activeCommunityPresenceSummary,
               }
             : null,
-        pageMode: !showMobileShell,
-        pageActive: activePage === "community" && communityTab === "agent",
+        pageMode: communityAgentPageMode,
+        pageActive: showMobileShell
+          ? mobileRootPage === "agent"
+          : activePage === "community" && communityTab === "agent",
         isVisible: isCommunityAgentDockVisible,
         isSuppressed: false,
         canManageResources: canManageResourcesActiveCommunity,
