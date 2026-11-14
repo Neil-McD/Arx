@@ -4099,8 +4099,8 @@
 }
 
 /* ---------- One level in: the way back is in the header (Neil, Nov 14) ----------
-   A course inside Knowledge: an arrow left of the page's name, and the
-   course's name after it in quieter ink. No second line repeats "Knowledge". */
+   A course inside Knowledge, a pod's room: an arrow, then the name of what
+   you're in. No word beside the arrow and no second line. */
 :root[data-design="v1"] .community-page-header-back {
   display: inline-grid;
   place-items: center;
@@ -4120,26 +4120,19 @@
   color: var(--text-primary);
 }
 
-:root[data-design="v1"] .community-page-header-detail {
-  min-width: 0;
-  margin-left: 10px;
-  padding-left: 10px;
-  border-left: 1px solid var(--border-strong);
-  font-size: 14px;
-  color: var(--text-ink-secondary);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
 :root[data-design="v1"] .app-root:not(.mobile-shell) .knowledge-course-crumb {
   display: none;
 }
 
 /* A phone's top bar has its own arrow; the header's steps aside there. */
-:root[data-design="v1"] .app-root.mobile-shell .community-page-header-back,
-:root[data-design="v1"] .app-root.mobile-shell .community-page-header-detail {
+:root[data-design="v1"] .app-root.mobile-shell .community-page-header-back:not(.community-channel-header-back) {
   display: none;
+}
+
+/* A pod's room uses the same arrow, with no word beside it. */
+:root[data-design="v1"] .community-channel-header-back.community-page-header-back {
+  margin: 0 6px 0 -6px;
+  padding: 0;
 }
 
 /* A host's course tools live in the right column; where that column is hidden

@@ -74,15 +74,14 @@ export function CommunityPageRail(props: { label: string; children: ReactNode })
 
 // `children` is the page's classic title row, shown when v1 is off (and where
 // a page is used outside the frame, as on mobile).
-// One level in (a course inside Knowledge): the way back is an arrow in the
-// header, left of the page's name, and what you're in follows the name (Neil,
-// Nov 14). No second line under the header repeats the page's name.
+// One level in (a course inside Knowledge, a pod's room): the header is an
+// arrow back and the name of what you're in, nothing else (Neil, Nov 14). No
+// word beside the arrow, and no second line under the header.
 export function CommunityPageHeader(props: {
   title: string;
   actions?: ReactNode;
   children: ReactNode;
   back?: { label: string; onBack: () => void } | null;
-  detail?: string | null;
 }) {
   const slot = useContext(HeaderSlotContext);
   const toolbar = useContext(ToolbarSlotContext);
@@ -98,7 +97,6 @@ export function CommunityPageHeader(props: {
             </button>
           ) : null}
           <h1>{props.title}</h1>
-          {props.detail ? <span className="community-page-header-detail">{props.detail}</span> : null}
         </div>,
         slot,
       )}

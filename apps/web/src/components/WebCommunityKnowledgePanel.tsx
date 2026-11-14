@@ -50,9 +50,8 @@ function KnowledgeV1({ resources, context }: Props) {
   const openCourse = moduleId ? resources.state.modules.find((module) => module.id === moduleId && !module.is_virtual) ?? null : null;
   return (
     <section className="community-knowledge-page" aria-label="Knowledge">
-      <CommunityPageHeader title={editing ? "Knowledge · Editing" : "Knowledge"}
+      <CommunityPageHeader title={editing ? "Knowledge · Editing" : openCourse ? openCourse.name : "Knowledge"}
         back={openCourse && !editing ? { label: "Back to Knowledge", onBack: () => resources.actions.handleSelectModule(null) } : null}
-        detail={openCourse && !editing ? openCourse.name : null}
         actions={editing ? <button type="button" className="community-page-back" onClick={() => setEditing(false)}>Done editing</button> : null}>
         <div className="community-knowledge-header"><h1>Knowledge</h1></div>
       </CommunityPageHeader>
