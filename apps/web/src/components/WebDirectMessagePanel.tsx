@@ -24,6 +24,7 @@ import { VoiceInputButton } from "../../../../shared/VoiceInputButton";
 import { isDesignV1Active } from "../../../../shared/designSystem";
 import { Icon, KitApp, Rail, cx } from "../v1/kit";
 import { inboxTimeFor } from "./WebDirectMessageInboxPanel";
+import { fitComposerHeight } from "../../../../shared/composerHeight";
 
 type DirectMessageComposerAttachment = DirectMessageAttachment & {
   data_url?: string | null;
@@ -77,7 +78,6 @@ type WebDirectMessagePanelProps = {
 };
 
 const DM_AUTO_SCROLL_THRESHOLD_PX = 96;
-const DM_COMPOSER_MAX_HEIGHT_PX = 148;
 const DM_CLUSTER_GAP_MS = 5 * 60 * 1000;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -516,8 +516,7 @@ export function WebDirectMessagePanel(props: WebDirectMessagePanelProps) {
   useEffect(() => {
     const textarea = composerTextareaRef.current;
     if (!textarea) return;
-    textarea.style.height = "auto";
-    textarea.style.height = `${Math.min(textarea.scrollHeight, DM_COMPOSER_MAX_HEIGHT_PX)}px`;
+    fitComposerHeight(textarea);
     if (shouldFollowMessagesRef.current) {
       scrollMessagesToBottom();
     }

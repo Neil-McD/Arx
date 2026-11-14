@@ -47,7 +47,6 @@ const HOST_HOME_SUGGESTIONS = ["How was this week?", "Who is at risk of leaving?
 // A member's, as the mock has them.
 const MEMBER_HOME_SUGGESTIONS = ["What did I miss?", "Who should I meet?", "Draft my intro"];
 // The kit composer grows to this height, then scrolls.
-const KIT_ASK_MAX_HEIGHT_PX = 160;
 import {
   ensureCloudCommunityAgentConversation,
   startNewCloudCommunityAgentConversation,
@@ -80,6 +79,7 @@ import {
 } from "./RuntimeResourceChangesetApprovalCards";
 import type { WebCommunityRecord } from "../webAppContracts";
 import "./WebCommunityAgentDock.css";
+import { fitComposerHeight } from "../../../../shared/composerHeight";
 
 type CommunityAgentMessage = Omit<CloudMessageTransportRow, "role"> & {
   role: "user" | "assistant" | "system";
@@ -243,8 +243,7 @@ function WebCommunityAgentDock(props, ref) {
   useEffect(() => {
     const box = kitInputRef.current;
     if (!box) return;
-    box.style.height = "auto";
-    box.style.height = `${Math.min(box.scrollHeight, KIT_ASK_MAX_HEIGHT_PX)}px`;
+    fitComposerHeight(box);
   }, [input]);
   const composerFormRef = useRef<HTMLFormElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -314,8 +313,7 @@ function WebCommunityAgentDock(props, ref) {
       }
       const inputElement = textareaRef.current;
       if (!inputElement) return;
-      inputElement.style.height = "auto";
-      inputElement.style.height = `${Math.min(inputElement.scrollHeight, 112)}px`;
+      fitComposerHeight(inputElement);
       inputElement.focus();
     },
     ask: (question: string, askedInCommunityId: string) => {
@@ -1568,8 +1566,7 @@ function WebCommunityAgentDock(props, ref) {
               onChange={(event) => {
                 draftTextRef.current = event.target.value;
                 setInput(event.target.value);
-                event.currentTarget.style.height = "auto";
-                event.currentTarget.style.height = `${Math.min(event.currentTarget.scrollHeight, 112)}px`;
+                fitComposerHeight(event.currentTarget);
               }}
               onPaste={handleAttachmentPaste}
               onKeyDown={(event) => {

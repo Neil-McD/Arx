@@ -11,6 +11,7 @@ import {
   getVoiceLanguageHint,
   mergeVoiceTranscript,
 } from "./voiceCapture";
+import { fitComposerHeight } from "./composerHeight";
 
 export type VoiceSurface = "community" | "direct_message" | "member_agent";
 export type VoiceUiState = "idle" | "recording" | "transcribing";
@@ -265,8 +266,7 @@ export function useWebVoiceInputController<SessionT>(args: UseWebVoiceInputContr
     window.setTimeout(() => {
       const input = args.chatInputRef?.current;
       if (!input) return;
-      input.style.height = "auto";
-      input.style.height = Math.min(input.scrollHeight, 120) + "px";
+      fitComposerHeight(input);
       input.focus();
     }, 0);
   }
