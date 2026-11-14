@@ -1,7 +1,7 @@
 import { CommunityPageHeader, CommunityPageRail } from "./CommunityPageHeader";
 import { isDesignV1Active } from "../../../../shared/designSystem";
 import { KitClassroom } from "../v1/KitClassroom";
-import { saveCloudCommunityResource, saveCloudCommunityResourceModule } from "../../../../shared/cloudCommunityAdminGateway";
+import { deleteCloudCommunityResourceModule, prepareCloudCommunityBrandingField, saveCloudCommunityResource, saveCloudCommunityResourceModule } from "../../../../shared/cloudCommunityAdminGateway";
 import { useEffect, useState, type ComponentProps } from "react";
 import { buildPlatformSwitcherStyle } from "../../../../shared/platformSwitcherUi";
 import { WebPlatformTabList, platformTabId, platformTabPanelId } from "./WebPlatformChoiceControls";
@@ -110,10 +110,33 @@ function KnowledgeV1({ resources, context }: Props) {
             }
             return { ok: true };
           } : undefined}
-          onEditCourseDetails={(id) => {
+          onSaveCourse={canManage ? async (id, patch) => {
+            try {
+              // The cover is sent only when it changed; a new one is centred.
+              const cover = patch.cover.kind === "keep" ? {}
+                : patch.cover.kind === "remove" ? { banner_storage_id: null, banner_url: null }
+                  : { banner_storage_id: (await prepareCloudCommunityBrandingField({ session: context.session, kind: "banner", nextValue: patch.cover.dataUrl })).storageId ?? null,
+                    banner_url: null, banner_focus_x: 0.5, banner_focus_y: 0.5, banner_zoom: 1 };
+              await saveCloudCommunityResourceModule({ session: context.session, moduleId: id, isPatch: true,
+                payload: { name: patch.name, description_md: patch.description || null, ...cover } });
+              await resources.actions.retryRead("modules");
+              return { ok: true };
+            } catch (error) {
+              return { ok: false, message: error instanceof Error && error.message && !error.message.includes("_") ? error.message : "That couldn't be saved. Try again." };
+            }
+          } : undefined}
+          onDeleteCourse={canManage ? async (id) => {
+            // Only a draft: the new page's rule until the old design leaves prod.
             const course = resources.state.modules.find((module) => module.id === id);
-            if (course) resources.actions.handleEditModule(course);
-          }}
+            if (!course || course.module_status !== "draft") return { ok: false, message: "Unpublish this course before deleting it." };
+            try {
+              await deleteCloudCommunityResourceModule({ session: context.session, moduleId: id });
+              await Promise.all([resources.actions.retryRead("modules"), resources.actions.retryRead("resources")]);
+              return { ok: true };
+            } catch {
+              return { ok: false, message: "The course couldn't be deleted. Try again." };
+            }
+          } : undefined}
           lessonEditing={canManage ? {
             save: async (resourceId, patch) => {
               await saveCloudCommunityResource({ session: context.session, resourceId, isPatch: true, payload: patch });
