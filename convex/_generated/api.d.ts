@@ -55,7 +55,6 @@ import type * as communityComposerReplay from "../communityComposerReplay.js";
 import type * as communityCore from "../communityCore.js";
 import type * as communityDirectory from "../communityDirectory.js";
 import type * as communityEventAudience from "../communityEventAudience.js";
-import type * as communityEventGoing from "../communityEventGoing.js";
 import type * as communityEvents from "../communityEvents.js";
 import type * as communityEvidenceAudit from "../communityEvidenceAudit.js";
 import type * as communityFounderBrief from "../communityFounderBrief.js";
@@ -273,7 +272,6 @@ declare const fullApi: ApiFromModules<{
   communityCore: typeof communityCore;
   communityDirectory: typeof communityDirectory;
   communityEventAudience: typeof communityEventAudience;
-  communityEventGoing: typeof communityEventGoing;
   communityEvents: typeof communityEvents;
   communityEvidenceAudit: typeof communityEvidenceAudit;
   communityFounderBrief: typeof communityFounderBrief;
