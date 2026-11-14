@@ -547,7 +547,14 @@ export function WebCommunityEventsSection(props: WebCommunityEventsSectionProps)
   // Design system v1: the soonest event as a card, then Coming up and Past.
   const listParts = splitCommunityEvents(state.events, listNow);
   const renderEventsList = () => {
-    if (showInitialEventsLoading) return <div className="community-events-state" role="status">Loading events…</div>;
+    // The right column stays mounted while events load: dropping it for a
+    // frame changes the page's layout and the title jumps (Nov 13).
+    if (showInitialEventsLoading) return (
+      <>
+        <div className="community-events-state" role="status">Loading events…</div>
+        <CommunityPageRail label="Your events"><div /></CommunityPageRail>
+      </>
+    );
     return (
       <KitEventsList featured={listParts.featured} comingUp={listParts.comingUp} past={listParts.past} now={listNow}
         canManage={capabilities.hasActiveCommunity && capabilities.canManageEvents} going={props.going ?? null}
