@@ -2248,12 +2248,14 @@ export default function App() {
       renderMarkdown,
     },
   });
+  // The guide's page: desktop Home, and design v1's phone Home tab.
+  const communityAgentPageMode = !showMobileShell || (isDesignV1Active() && mobileRootPage === "agent");
   const {
     community: communityAgentDockCommunity,
     surfaceContext: communityAgentSurfaceContext,
     isVisible: isCommunityAgentDockVisible,
   } = useWebCommunityAgentSurfaceController({
-    pageMode: !showMobileShell,
+    pageMode: communityAgentPageMode,
     activePage,
     communityTab,
     activeCommunity,
@@ -2496,8 +2498,7 @@ export default function App() {
                 presence: activeCommunityPresenceSummary,
               }
             : null,
-        // Design v1: the phone's Home tab is the same page as desktop Home.
-        pageMode: !showMobileShell || (isDesignV1Active() && mobileRootPage === "agent"),
+        pageMode: communityAgentPageMode,
         pageActive: showMobileShell
           ? mobileRootPage === "agent"
           : activePage === "community" && communityTab === "agent",

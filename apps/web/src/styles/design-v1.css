@@ -3905,3 +3905,8 @@
 :root[data-design="v1"] .app-root.mobile-shell:has(.mobile-bottom-rail.is-phone-tabs) {
   --mobile-bottom-rail-height: 64px;
 }
+
+/* Home and Inbox are tabs on a phone, so the community's menu leaves them out. */
+:root[data-design="v1"] .app-root.mobile-shell:has(.mobile-bottom-rail.is-phone-tabs) .community-nav-v1-primary {
+  display: none;
+}
