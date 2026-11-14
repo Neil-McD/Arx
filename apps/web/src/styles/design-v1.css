@@ -3568,3 +3568,8 @@
 }
 :root[data-design="v1"] .community-dm-kit-thread { overflow-x: hidden; }
 :root[data-design="v1"] .community-dm-kit-thread :is(img, video, iframe, .message-link-media, .message-pdf-card) { max-width: 100%; }
+
+/* ---------- Phones, step 2: the community home is the left column ----------
+   Without the old strip of communities, the column takes the whole width. */
+:root[data-design="v1"] .mobile-global-shell:not(.has-community-rail) { grid-template-columns: minmax(0, 1fr); }
+:root[data-design="v1"] .mobile-community-home:not(.has-community-rail) .community-nav { padding: 0 12px 12px; }
