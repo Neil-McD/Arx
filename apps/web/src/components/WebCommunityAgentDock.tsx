@@ -46,6 +46,8 @@ import { VoiceInputButton } from "../../../../shared/VoiceInputButton";
 const HOST_HOME_SUGGESTIONS = ["How was this week?", "Who is at risk of leaving?", "Who should I welcome?"];
 // A member's, as the mock has them.
 const MEMBER_HOME_SUGGESTIONS = ["What did I miss?", "Who should I meet?", "Draft my intro"];
+// The kit composer grows to this height, then scrolls.
+const KIT_ASK_MAX_HEIGHT_PX = 160;
 import {
   ensureCloudCommunityAgentConversation,
   startNewCloudCommunityAgentConversation,
@@ -235,7 +237,15 @@ function WebCommunityAgentDock(props, ref) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   // Home on the kit uses the mock's one-line field instead of the textarea.
-  const kitInputRef = useRef<HTMLInputElement | null>(null);
+  const kitInputRef = useRef<HTMLTextAreaElement | null>(null);
+  // Home's box grows with what you type (Shift+Enter adds a line), up to a
+  // limit, and shrinks back when the message goes (Nov 13).
+  useEffect(() => {
+    const box = kitInputRef.current;
+    if (!box) return;
+    box.style.height = "auto";
+    box.style.height = `${Math.min(box.scrollHeight, KIT_ASK_MAX_HEIGHT_PX)}px`;
+  }, [input]);
   const composerFormRef = useRef<HTMLFormElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const attachmentsRef = useRef<CommunityAgentImageDraft[]>([]);
@@ -1364,13 +1374,21 @@ function WebCommunityAgentDock(props, ref) {
               onDrop={handleAttachmentDrop}
             >
               <Icon name="spark" extra="sp" />
-              <input
+              <textarea
                 ref={kitInputRef}
-                type="text"
+                className="kit-ask-text has-mark"
+                rows={1}
                 value={input}
                 onChange={(event) => {
                   draftTextRef.current = event.target.value;
                   setInput(event.target.value);
+                }}
+                onKeyDown={(event) => {
+                  if (isImeComposing(event)) return;
+                  if (event.key === "Enter" && !event.shiftKey) {
+                    event.preventDefault();
+                    event.currentTarget.form?.requestSubmit();
+                  }
                 }}
                 onPaste={handleAttachmentPaste}
                 placeholder={presentation.composerLabel}
