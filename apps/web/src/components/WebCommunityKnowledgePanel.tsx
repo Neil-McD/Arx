@@ -70,7 +70,12 @@ function KnowledgeV1({ resources, context }: Props) {
           onAddSources={canManage ? async ({ links, files }) => {
             const result = await resources.actions.handleAddCommunitySources({ links, files });
             if (!result) return { ok: false, message: "That couldn't be added. Try again." };
-            if (result.saved === 0) return { ok: false, message: sourceProblem(result.errors[0] ?? result.ingestion?.failures[0]?.message) };
+            // Anything refused or unreadable is said, even when the rest went in.
+            const problem = result.errors[0] ?? result.ingestion?.failures[0]?.message;
+            if (result.saved === 0 || result.rejected > 0 || problem) {
+              const added = result.saved > 0 ? `${result.saved} added. ` : "";
+              return { ok: false, message: `${added}${sourceProblem(problem)}` };
+            }
             return { ok: true };
           } : undefined}
           onEditCourseDetails={(id) => {
