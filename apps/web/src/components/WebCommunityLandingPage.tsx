@@ -25,6 +25,10 @@ type Phase =
   | { kind: "paid_signed_out" }
   | { kind: "finishing" }
   | { kind: "joined" }
+  // Stripe hasn't confirmed yet after a minute: the payment may still go
+  // through, so nothing is promised; they can check again.
+  | { kind: "still_confirming" }
+  // Stripe says this checkout didn't complete (expired or not paid).
   | { kind: "checkout_expired" };
 
 const CHECKOUT_SECRET_KEY = (sessionId: string) => `polynet.checkout.${sessionId}`;
@@ -88,6 +92,8 @@ export function WebCommunityLandingPage(props: Props) {
   const [error, setError] = useState<string | null>(null);
   const [planIndex, setPlanIndex] = useState(0);
   const [aboutOpen, setAboutOpen] = useState(false);
+  // Bumped by "Check again" to re-run the finish after a slow confirmation.
+  const [finishAttempt, setFinishAttempt] = useState(0);
   const autoActed = useRef(false);
 
   const params = useMemo(() => new URLSearchParams(window.location.search), []);
@@ -144,15 +150,21 @@ export function WebCommunityLandingPage(props: Props) {
           window.setTimeout(openCommunity, 900);
           return;
         }
-        if (result.status === "pending" && attempt < 30) { window.setTimeout(() => void tryFinish(attempt + 1), 2000); return; }
+        if (result.status === "pending") {
+          if (attempt < 30) { window.setTimeout(() => void tryFinish(attempt + 1), 2000); return; }
+          setPhase({ kind: "still_confirming" });
+          return;
+        }
         setPhase({ kind: "checkout_expired" });
       } catch {
-        if (!cancelled && attempt < 30) window.setTimeout(() => void tryFinish(attempt + 1), 2000);
+        if (cancelled) return;
+        if (attempt < 30) window.setTimeout(() => void tryFinish(attempt + 1), 2000);
+        else setPhase({ kind: "still_confirming" });
       }
     };
     void tryFinish(0);
     return () => { cancelled = true; };
-  }, [returnSessionId, Boolean(data), props.session, slug, openCommunity]);
+  }, [returnSessionId, Boolean(data), props.session, slug, openCommunity, finishAttempt]);
 
   const join = useCallback(async () => {
     if (!data) return;
@@ -242,9 +254,16 @@ export function WebCommunityLandingPage(props: Props) {
         </Card>
       );
     }
+    if (phase.kind === "still_confirming") {
+      return (
+        <Card title="Still confirming your payment" note="Stripe hasn't confirmed it yet. Your membership starts as soon as it does; your email receipt is the record.">
+          <button type="button" className="cl-primary" onClick={() => setFinishAttempt((n) => n + 1)}>Check again</button>
+        </Card>
+      );
+    }
     if (phase.kind === "checkout_expired") {
       return (
-        <Card title="We couldn't confirm that payment" note="If you were charged, it's refunded automatically. You can try again.">
+        <Card title="That checkout didn't complete" note="Stripe didn't finish this payment. You can start again.">
           <button type="button" className="cl-primary" onClick={() => { setPhase({ kind: "idle" }); window.history.replaceState({}, "", `/c/${slug}`); }}>Try again</button>
         </Card>
       );

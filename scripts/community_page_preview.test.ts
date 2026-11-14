@@ -40,3 +40,14 @@ test("no https image keeps Polynet's card; a listed community stays indexable; o
   expect(isPolynetHost("evil.example.com")).toBe(false);
   expect(isPolynetHost("polynet.ai.evil.com")).toBe(false);
 });
+
+test("a signed-out checkout's visitor is a keyed hash of their address, never the address", async () => {
+  // @ts-expect-error: a plain JavaScript Vercel function
+  const { visitorAddress, visitorHash } = await import("../api/community-checkout.js");
+  expect(visitorAddress({ "x-real-ip": "203.0.113.7", "x-forwarded-for": "198.51.100.1" })).toBe("203.0.113.7");
+  expect(visitorAddress({ "x-forwarded-for": "198.51.100.1, 10.0.0.1" })).toBe("198.51.100.1");
+  const hash = visitorHash("203.0.113.7", "secret-a");
+  expect(hash).toMatch(/^[a-f0-9]{64}$/);
+  expect(hash).not.toContain("203");
+  expect(visitorHash("203.0.113.7", "secret-b")).not.toBe(hash);
+});

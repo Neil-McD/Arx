@@ -79,6 +79,21 @@ export async function startCommunityLandingCheckout(
   session: unknown | null,
   params: { communitySlug: string; billingPeriod: "monthly" | "annual"; plan: string | null },
 ): Promise<{ checkout_url: string; session_id: string; buyer_secret: string | null }> {
+  // Signed out (cash first): through the app's own server function, which
+  // limits each visitor's checkouts (api/community-checkout.js).
+  if (!session) {
+    const response = await fetch("/api/community-checkout", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ communitySlug: params.communitySlug, billingPeriod: params.billingPeriod, plan: params.plan }),
+    });
+    const payload = (await response.json().catch(() => null)) as
+      | { ok: true; checkout_url: string; session_id: string; buyer_secret: string }
+      | { ok: false; code?: string }
+      | null;
+    if (!payload || !payload.ok) throw new Error((payload && "code" in payload && payload.code) || "join_unavailable");
+    return { checkout_url: payload.checkout_url, session_id: payload.session_id, buyer_secret: payload.buyer_secret };
+  }
   const { client, authSubject } = await clientFor(session);
   return (await client.action("communityLanding:startCommunityLandingCheckout" as any, {
     communitySlug: params.communitySlug,
