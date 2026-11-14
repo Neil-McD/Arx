@@ -41,6 +41,8 @@ export function KitAnalyticsPage(props: { state: CommunityAnalyticsState; action
   const revenueChange = revenue.length > 1 && summary.mrr_base_units != null
     ? summary.mrr_base_units - (revenue[0]?.value ?? 0)
     : null;
+  // Nothing has ever been paid: no currency to show money in.
+  const unpaid = !summary.mrr_base_units && !summary.currency;
   const active = summary.active_members_window;
   const visits = summary.page_visits_window ?? 0;
   const started = summary.join_starts_window ?? 0;
@@ -48,11 +50,13 @@ export function KitAnalyticsPage(props: { state: CommunityAnalyticsState; action
 
   const figures = [
     { label: "Members", value: formatCount(total), note: newMembers ? `+${formatCount(newMembers)} new` : "No one new" },
-    {
-      label: "Monthly revenue",
-      value: money(summary.mrr_base_units),
-      note: revenueChange == null || summary.mrr_base_units == null ? "" : revenueChange === 0 ? "No change" : signedMoney(revenueChange),
-    },
+    unpaid
+      ? { label: "Monthly revenue", value: "None", note: "No paid plans yet" }
+      : {
+        label: "Monthly revenue",
+        value: money(summary.mrr_base_units),
+        note: revenueChange == null || summary.mrr_base_units == null ? "" : revenueChange === 0 ? "No change" : signedMoney(revenueChange),
+      },
     { label: "Active", value: active != null && total ? percent(active, total) : "—", note: active != null && total ? `${formatCount(active)} of ${formatCount(total)}` : "" },
     { label: "Join rate", value: visits > 0 ? percent(joined, visits) : "—", note: visits > 0 ? "of visitors" : "No visits yet" },
   ];
