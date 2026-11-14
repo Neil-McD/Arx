@@ -1,8 +1,8 @@
 import { useCommunityAppLinksState } from "./controllers/communityAppLinks";
 import { useGuideSearchShortcut } from "./controllers/useGuideSearchShortcut";
+import { useCloseInboxOnSettings } from "./controllers/useCloseInboxOnSettings";
 import { useCommunityAgentOnState } from "./controllers/communityAgentOn";
 import {
-  useEffect,
   useMemo,
   useRef,
 } from "react";
@@ -2344,12 +2344,11 @@ export default function App() {
     }
   }
   // A member has no restricted channel, so a preview leaves one for General.
-  // Inbox is a page drawn over the main area; arriving on Settings (yours or
-  // the community's) closes it, or it would stay on top of Settings.
-  const isOnSettingsPage = activePage === "settings" || (activePage === "community" && communityTab === "settings");
-  useEffect(() => {
-    if (isOnSettingsPage && isDirectMessagesOpen) handleCloseDirectMessages();
-  }, [isOnSettingsPage, isDirectMessagesOpen, handleCloseDirectMessages]);
+  useCloseInboxOnSettings({
+    isOnSettingsPage: activePage === "settings" || (activePage === "community" && communityTab === "settings"),
+    isInboxOpen: isDirectMessagesOpen,
+    closeInbox: handleCloseDirectMessages,
+  });
 
   const handleToggleMemberPreview = (on: boolean) => {
     memberPreview.set(on);
