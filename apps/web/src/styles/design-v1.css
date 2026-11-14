@@ -4021,3 +4021,35 @@
     display: none;
   }
 }
+
+/* With no title of its own (the page draws its name), the middle of the bar
+   is gone rather than a frosted strip over the page's title. */
+:root[data-design="v1"] .app-root.mobile-shell .mobile-topbar-center:not(:has(.mobile-topbar-context-label)) {
+  display: none;
+}
+
+:root[data-design="v1"] .app-root.mobile-shell .mobile-topbar-center {
+  background: transparent;
+  box-shadow: none;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+
+/* Settings on a phone: 16px gutters, and a row's buttons wrap rather than
+   run past the edge. */
+@media (max-width: 720px) {
+  :root[data-design="v1"] .app-root.mobile-shell .web-community-centered-pane {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+
+  :root[data-design="v1"] .app-root.mobile-shell .community-settings-pane-content,
+  :root[data-design="v1"] .app-root.mobile-shell .settings-v1-group {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  :root[data-design="v1"] .settings-v1-row-control {
+    flex-wrap: wrap;
+  }
+}
