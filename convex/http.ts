@@ -5,7 +5,6 @@ import { registerRuntimeAuthRoutes } from "./httpAuth";
 import { registerRuntimeAuthBridgeRoutes } from "./httpAuthBridge";
 import { registerRuntimeBillingRoutes } from "./httpBilling";
 import { registerRuntimeMcpRoutes } from "./httpMcp";
-import { registerCommunitySiteRoutes } from "./httpCommunitySites";
 import { registerEmailRoutes } from "./httpEmail";
 import { readAuthenticatedIdentityProfile } from "./authIdentity";
 import { parseOptionalString } from "./httpInferenceConfig";
@@ -13,7 +12,6 @@ import { registerRuntimeTurnRoutes } from "./httpRuntimeRoutes";
 import { registerRuntimeVoiceRoutes } from "./httpVoice";
 import { registerCommunityAgentAttachmentRoutes } from "./httpCommunityAgentAttachments";
 import { registerCommunityAttachmentRoutes } from "./httpCommunityAttachments";
-import { registerCommunityAppRoutes } from "./httpCommunityApps";
 import { registerCommunityLandingRoutes } from "./httpCommunityLanding";
 import { registerConnectedAppRoutes } from "./httpConnectedApps";
 import { sseResponseWithHeaders, type SseSource } from "./httpStreaming";
@@ -269,11 +267,9 @@ registerCommunityAgentAttachmentRoutes({
 
 registerCommunityAttachmentRoutes({ http, httpAction, jsonResponse, optionsResponse, requireAuthenticatedActor });
 
-registerCommunityAppRoutes({ http, httpAction });
 registerCommunityLandingRoutes({ http, httpAction });
 registerConnectedAppRoutes({ http, httpAction });
 
-registerCommunitySiteRoutes({ http, httpAction, requireAuthenticatedActor });
 
 registerRuntimeMcpRoutes({
   http,

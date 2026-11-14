@@ -181,7 +181,9 @@ test("someone who left comes back on their app purchase by joining, without payi
     // The app still reports the purchase; the sale alone doesn't put them back.
     expect(await (await report(t, ids.app.secret, { email: `${handle}@example.com`, active: true, tier: "setter" })).json()).toEqual({ outcome: "kept_out" });
     const projection = await t.run(async (ctx) => communityAppJoinProjection(ctx, (await ctx.db.get(ids.communityId)) as any, userId));
-    const joined = await t.mutation(internal.communityAppJoin.joinCommunityAppVisitorInternal, { userId, communityId: ids.communityId });
+    const joined = await t.withIdentity({ subject: `${handle}-subject` }).mutation(api.communityLanding.joinCommunityFromLanding, {
+      communitySlug: "de-pilot", authSubject: `${handle}-subject`,
+    });
     if (state === "left") {
       // Their own choice: Join, not a price, and they're in on the app's plan.
       expect(projection.gate).toBe("join");

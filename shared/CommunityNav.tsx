@@ -28,7 +28,6 @@ type CommunityNavCommunityLike = {
   slug?: string | null;
   name?: string | null;
   // The community's own site, where members live (null where it has none).
-  site_url?: string | null;
   banner_url?: string | null;
   banner_focus_x?: number | null;
   banner_focus_y?: number | null;
@@ -170,7 +169,7 @@ function resolveCommunityJoinUrl(slugRaw: string | null | undefined): string | n
   const slug = String(slugRaw ?? "").trim();
   if (!slug) return null;
   const joinPath = `/c/${encodeURIComponent(slug)}`;
-  if (typeof window === "undefined") return joinPath;
+  if (typeof window === "undefined" || !window.location?.origin) return joinPath;
   return new URL(joinPath, window.location.origin).toString();
 }
 

@@ -1694,64 +1694,6 @@ async function siteTargetByHandle(ctx: any, viewerUserId: any, handle: string): 
   return target;
 }
 
-export const listSiteDirectConversationsForTrustedUserInternal = internalQuery({
-  args: { userId: v.id("users") },
-  handler: async (ctx, args) => {
-    const viewer = await resolvePublicUserId(ctx, args.userId);
-    const rows = await listMyDirectConversationsForUser(ctx, args.userId, 50);
-    return rows.map((row) => siteDirectConversation(row, viewer));
-  },
-});
-
-// One conversation and its newest page of messages (or the page before beforeSeq).
-export const readSiteDirectConversationForTrustedUserInternal = internalQuery({
-  args: { userId: v.id("users"), conversationId: v.string(), beforeSeq: v.optional(v.number()) },
-  handler: async (ctx, args) => {
-    const conversationId = siteConversationId(ctx, args.conversationId);
-    const { conversation } = await requireActiveUserParticipant({ ctx, conversationId, userId: args.userId });
-    const rows = await listDirectMessagesForUser(ctx, args.userId, {
-      conversationId, beforeSeq: args.beforeSeq ?? null, limit: SITE_DM_PAGE_SIZE + 1,
-    });
-    const viewer = await resolvePublicUserId(ctx, args.userId);
-    return {
-      conversation: siteDirectConversation(await mapDirectConversation(ctx, conversation, { viewerUserId: args.userId }), viewer),
-      messages: rows.slice(-SITE_DM_PAGE_SIZE).map((row) => siteDirectMessage(row, viewer)),
-      has_more: rows.length > SITE_DM_PAGE_SIZE,
-    };
-  },
-});
-
-// "Message @handle": their conversation with the member if there is one;
-// otherwise who they are, once Studio's rules say the member may message them
-// (a shared community, no block either way; a block refuses exactly as a
-// missing shared community does). Nothing is created until the first send.
-export const startSiteDirectConversationForTrustedUserInternal = internalQuery({
-  args: { userId: v.id("users"), communityId: v.id("communities"), handle: v.string() },
-  handler: async (ctx, args) => {
-    const target = await siteTargetByHandle(ctx, args.userId, args.handle);
-    const existing = await findDirectConversationByUsers(ctx, args.userId, target._id);
-    if (existing) {
-      const mine = (await ctx.db
-        .query("dmParticipants" as any)
-        .withIndex("by_conversation_user", (q: any) => q.eq("conversationId", existing._id).eq("userId", args.userId))
-        .first()) as DirectMessageParticipantLike | null;
-      if (mine?.status === "active") return { conversation_id: String(existing._id), peer: null };
-    }
-    await requireDirectMessageRelationshipAccess({
-      ctx, viewerUserId: args.userId, targetUserId: target._id, preferredCommunityId: args.communityId, requiredCommunityId: null,
-    });
-    const profile = await resolveUserProfileDisplayProjectionForUser(ctx, target);
-    return {
-      conversation_id: null,
-      peer: {
-        name: profile.display_name ?? target.displayName ?? null,
-        handle: String(target.normalizedHandle ?? target.handle ?? "").replace(/^@+/, "") || null,
-        avatar_url: profile.avatar_url ?? null,
-      },
-    };
-  },
-});
-
 // A message into a conversation, or (by handle) the first one to a person,
 // which Studio's send creates the conversation for, from this community.
 export const sendSiteDirectMessageForTrustedUserInternal = internalMutation({
@@ -1774,54 +1716,6 @@ export const sendSiteDirectMessageForTrustedUserInternal = internalMutation({
     const target = await siteTargetByHandle(ctx, args.userId, String(args.handle ?? ""));
     const sent = await sendDirectMessageToTargetForUser(ctx, args.userId, target, { communityId: args.communityId, ...send });
     return { conversation_id: sent.conversation.id, message: siteDirectMessage(sent.message, viewer) };
-  },
-});
-
-export const markSiteDirectConversationReadForTrustedUserInternal = internalMutation({
-  args: { userId: v.id("users"), conversationId: v.string(), throughSeq: v.number() },
-  handler: async (ctx, args) => {
-    const viewer = await resolvePublicUserId(ctx, args.userId);
-    const row = await markDirectConversationReadForUser(ctx, args.userId, {
-      conversationId: siteConversationId(ctx, args.conversationId), throughSeq: args.throughSeq,
-    });
-    return siteDirectConversation(row, viewer);
-  },
-});
-
-export const setSiteDirectConversationMutedForTrustedUserInternal = internalMutation({
-  args: { userId: v.id("users"), conversationId: v.string(), muted: v.boolean() },
-  handler: async (ctx, args) => {
-    const viewer = await resolvePublicUserId(ctx, args.userId);
-    const row = await setDirectConversationMutedForUser(ctx, args.userId, siteConversationId(ctx, args.conversationId), args.muted);
-    return siteDirectConversation(row, viewer);
-  },
-});
-
-export const setSiteDirectTypingForTrustedUserInternal = internalMutation({
-  args: { userId: v.id("users"), conversationId: v.string(), typing: v.boolean() },
-  handler: async (ctx, args) => {
-    const conversationId = siteConversationId(ctx, args.conversationId);
-    if (args.typing) await setDirectTypingForUser(ctx, args.userId, conversationId);
-    else await clearDirectTypingForUser(ctx, args.userId, conversationId);
-    return { typing: args.typing };
-  },
-});
-
-// Block or unblock the other person in one of the member's conversations
-// (Studio blocks by person; the twin names the conversation, never an id).
-export const setSiteDirectMessageBlockForTrustedUserInternal = internalMutation({
-  args: { userId: v.id("users"), conversationId: v.string(), blocked: v.boolean() },
-  handler: async (ctx, args) => {
-    const conversationId = siteConversationId(ctx, args.conversationId);
-    const { conversation } = await requireActiveUserParticipant({ ctx, conversationId, userId: args.userId });
-    const viewerKey = normalizeIdValue(args.userId);
-    const peer = (await listConversationParticipants(ctx, conversationId)).find((row) =>
-      row.participantType === "user" && normalizeIdValue(row.userId) && normalizeIdValue(row.userId) !== viewerKey);
-    const target = peer?.userId ? ((await ctx.db.get(peer.userId)) as UserRow | null) : null;
-    if (!target) throw new Error("dm_target_not_found");
-    await setDirectMessageBlockForUser(ctx, args.userId, target, args.blocked);
-    const viewer = await resolvePublicUserId(ctx, args.userId);
-    return siteDirectConversation(await mapDirectConversation(ctx, conversation, { viewerUserId: args.userId }), viewer);
   },
 });
 

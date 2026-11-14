@@ -9,7 +9,6 @@ import {
   normalizeCommunityEventRecurrenceInterval,
 } from "../shared/communityEventTime";
 import { listActiveCommunityRecipientUserIds } from "./communityRecipientCore";
-import { communitySitePageUrl } from "./communitySites";
 import { readCanonicalPublicAppOrigin } from "./publicAppUrl";
 import { logStructuredError } from "./errorLogging";
 
@@ -30,7 +29,6 @@ type EventReminderBatch = {
   occurrenceStartsAt: number;
   recipientUserIds: any[];
   // This occurrence's page on the community's own site, where it has one.
-  siteEventUrl?: string | null;
 };
 
 type CommunityRow = {
@@ -187,7 +185,6 @@ export const buildEventReminderBatchesInternal = internalQuery({
           eventTimezone: String(event.timezone ?? "").trim() || "UTC",
           occurrenceStartsAt,
           recipientUserIds: recipientUserIds.slice(first, first + RECIPIENTS_PER_BATCH),
-          siteEventUrl: podRecipients ? null : await communitySitePageUrl(ctx, community, `/events/${encodeURIComponent(String(event._id))}~${occurrenceStartsAt}`),
         });
       }
     }
@@ -226,7 +223,7 @@ export const enqueueEventReminderEmailsInternal = internalAction({
         title: `${batch.eventTitle} is tomorrow`,
         subtitle: batch.communityName,
         intro: `Starts ${startLabel}.`,
-        actionUrl: batch.siteEventUrl ?? buildEventsActionUrl(batch.communitySlug),
+        actionUrl: buildEventsActionUrl(batch.communitySlug),
         footerNote: "You can change event reminder emails from account settings.",
       };
       for (const userId of batch.recipientUserIds) {

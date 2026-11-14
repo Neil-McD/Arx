@@ -306,21 +306,6 @@ async function readHandleAvailability(ctx: any, rawHandle: string, currentUserId
   };
 }
 
-export const checkHandleAvailabilityForTrustedUserInternal = internalQuery({
-  args: { userId: v.id("users"), handle: v.string() },
-  handler: async (ctx, args) => await readHandleAvailability(ctx, args.handle, args.userId),
-});
-
-// The member's own profile as Studio's settings read it, for the private twin.
-export const readOwnProfileDetailForTrustedUserInternal = internalQuery({
-  args: { userId: v.id("users") },
-  handler: async (ctx, args) => {
-    const user = (await ctx.db.get(args.userId)) as UserRow | null;
-    if (!user) return null;
-    return await mapProfileDetail(ctx, user, await findProfileDetailByUserId(ctx, args.userId));
-  },
-});
-
 export const listProfilesByUserIds = query({
   args: {
     userIds: v.array(v.string()),
@@ -471,17 +456,6 @@ export const generateProfileAvatarUploadUrl = mutation({
     return {
       uploadUrl: await ctx.storage.generateUploadUrl(),
     };
-  },
-});
-
-// The private twin's photo upload, step 1 of Studio's flow: an upload URL for
-// a member whose twin session the caller already checked. The browser sends
-// the file straight to storage; step 2 is the profile write with its id.
-export const generateProfileAvatarUploadUrlForTrustedUserInternal = internalMutation({
-  args: { userId: v.id("users") },
-  handler: async (ctx, args) => {
-    if (!(await ctx.db.get(args.userId))) throwProfileMutationError("user_not_found");
-    return { uploadUrl: await ctx.storage.generateUploadUrl() };
   },
 });
 
@@ -755,47 +729,6 @@ async function writeProfileDetailForUser(
 }
 
 const PROFILE_AVATAR_CLAIM_WINDOW_MS = 60 * 60 * 1000;
-
-// A member's own profile from a community site's private twin: the session
-// already says who they are. Only what the twin's settings page edits, through
-// Studio's own write.
-export const updateProfileDetailForTrustedUserInternal = internalMutation({
-  args: {
-    userId: v.id("users"),
-    displayName: v.optional(v.union(v.string(), v.null())),
-    handle: v.optional(v.union(v.string(), v.null())),
-    // Any text: a storage id is checked below, so a bad one is the profile's own refusal.
-    avatarStorageId: v.optional(v.union(v.string(), v.null())),
-    bio: v.optional(v.union(v.string(), v.null())),
-    socialLinks: v.optional(
-      v.object({
-        youtube: v.optional(v.union(v.string(), v.null())),
-        x: v.optional(v.union(v.string(), v.null())),
-        instagram: v.optional(v.union(v.string(), v.null())),
-      }),
-    ),
-  },
-  handler: async (ctx, args) => {
-    const nowMs = Date.now();
-    const { userId, avatarStorageId: rawAvatar, ...fields } = args;
-    const text = validateProfileDetailText(fields);
-    if (!(await ctx.db.get(userId))) throwProfileMutationError("user_not_found");
-    let avatar: { avatarStorageId?: any; avatarFocusX?: number; avatarFocusY?: number; avatarZoom?: number } = {};
-    if (rawAvatar === null) avatar = { avatarStorageId: null };
-    if (typeof rawAvatar === "string") {
-      // Only a photo just uploaded (upload URLs last an hour), never another
-      // member's existing file: replacing a photo deletes the old one.
-      const storageId = ctx.db.system.normalizeId("_storage", rawAvatar);
-      const file = storageId ? await ctx.db.system.get(storageId) : null;
-      if (!file || !String(file.contentType ?? "").startsWith("image/") || file._creationTime < nowMs - PROFILE_AVATAR_CLAIM_WINDOW_MS) {
-        throwProfileMutationError("profile_avatar_invalid");
-      }
-      // A new photo starts centered, as it does in Studio.
-      avatar = { avatarStorageId: storageId, avatarFocusX: 0.5, avatarFocusY: 0.5, avatarZoom: 1 };
-    }
-    return await writeProfileDetailForUser(ctx, userId, { ...fields, ...avatar }, nowMs, text);
-  },
-});
 
 export const backfillCompletedProfileBridgeSocialLinkFacts = mutation({
   args: {

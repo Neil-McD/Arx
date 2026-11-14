@@ -44,8 +44,6 @@ preview: today they run against Polynet's staging environment.
 |---|---|
 | `convex/`, `shared/` | The backend, on [Convex](https://convex.dev) |
 | `apps/web/` | Polynet Studio (React, Vite) |
-| `infra/community-edge/` | The edge that serves community sites (Cloudflare Workers for Platforms), with the SDK and account shell |
-| `packages/polynet-cli/` | `@polynet/cli`: create, check and deploy community sites, plus the agent skills |
 | `docs/` | Contracts and specs |
 | `scripts/` | Contract proofs and the release gate |
 

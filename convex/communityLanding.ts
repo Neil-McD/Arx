@@ -11,6 +11,7 @@ import { internal } from "./_generated/api";
 import { resolveAuthenticatedActor } from "./authActor";
 import { communityAppJoinProjection } from "./communityAppJoin";
 import { communityAgentIsOn } from "./communityApps";
+import { communityWideEvents } from "./communityEventAudience";
 import { sha256Hex } from "./communityCheckoutBuyer";
 import { startCommunityJoinCheckoutCore } from "./communityCommerce";
 import { communityIsActive } from "../shared/communityLifecycle";
@@ -29,6 +30,17 @@ const VISIT_DEDUPE_WINDOW_MS = 30 * 60 * 1000;
 function cleanSlug(raw: string): string {
   const slug = String(raw ?? "").trim().toLowerCase();
   return SLUG_PATTERN.test(slug) ? slug : "";
+}
+
+// For an action: a missing community is unavailable, an archived one says so.
+async function actionableCommunityBySlug(ctx: any, raw: string): Promise<CommunityLike> {
+  const slug = cleanSlug(raw);
+  const community = slug
+    ? (await ctx.db.query("communities").withIndex("by_slug", (q: any) => q.eq("slug", slug)).first()) as CommunityLike | null
+    : null;
+  if (!community) throw new Error("community_unavailable");
+  if (!communityIsActive(community)) throw new Error("community_archived");
+  return community;
 }
 
 async function activeCommunityBySlug(ctx: any, raw: string): Promise<CommunityLike | null> {
@@ -94,9 +106,9 @@ export const getCommunityLandingPage = query({
       is_owner: Boolean(userId && ownerId && String(userId) === String(ownerId)),
       signed_in: Boolean(userId),
       host,
-      events: (events as any[])
-        // Public, and not a pod's call (only that pod's people may see those).
-        .filter((row) => row.visibility === "public" && !row.podChannelId)
+      // Public, and never a pod's call (only that pod's people may see those).
+      events: communityWideEvents(events as any[])
+        .filter((row) => row.visibility === "public")
         .slice(0, UPCOMING_EVENTS)
         .map((row) => ({
           title: String(row.title ?? "").slice(0, 120),
@@ -115,8 +127,7 @@ export const joinCommunityFromLanding = mutation({
   args: { communitySlug: v.string(), authSubject: v.optional(v.string()) },
   handler: async (ctx, args) => {
     const userId = await requiredUserId(ctx, args.authSubject);
-    const community = await activeCommunityBySlug(ctx, args.communitySlug);
-    if (!community) throw new Error("community_unavailable");
+    const community = await actionableCommunityBySlug(ctx, args.communitySlug);
     const nowMs = Date.now();
     const result = await joinPublicCommunityInternal({ ctx, community, userId, nowMs });
     await recordCommunityJoinStarted(ctx, { communityId: community._id, userId, nowMs });
@@ -128,8 +139,7 @@ export const cancelCommunityJoinRequestFromLanding = mutation({
   args: { communitySlug: v.string(), authSubject: v.optional(v.string()) },
   handler: async (ctx, args) => {
     const userId = await requiredUserId(ctx, args.authSubject);
-    const community = await activeCommunityBySlug(ctx, args.communitySlug);
-    if (!community) throw new Error("community_unavailable");
+    const community = await actionableCommunityBySlug(ctx, args.communitySlug);
     return await cancelPendingCommunityJoinRequest({ ctx, communityId: community._id, userId });
   },
 });

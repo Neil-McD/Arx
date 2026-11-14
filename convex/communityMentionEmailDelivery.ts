@@ -3,7 +3,6 @@ import { communityLifecycleGenerationMatches } from "../shared/communityLifecycl
 import { resolveMentionRecipientSource } from "./communityNotificationAccess";
 import { readCommunityChannelReadState } from "./communityReadCursorCore";
 import { mentionBroadcastAllowsEmail } from "./communityMentionBroadcasts";
-import { communitySitePageUrl } from "./communitySites";
 import { readCanonicalPublicAppOrigin } from "./publicAppUrl";
 import { buildCommunityTabPath } from "../shared/webAppRouteState";
 
@@ -84,11 +83,7 @@ export async function resolveMentionEmailDelivery(args: {
     const author = source.row.actorUserId
       ? await args.ctx.db.get(source.row.actorUserId)
       : null;
-    // On the community's own site when it has one: members live there.
-    let actionUrl = (await communitySitePageUrl(
-      args.ctx, community,
-      channel.slug && channel.slug !== "general" ? `/chat?channel=${encodeURIComponent(channel.slug)}` : "/chat",
-    )) ?? "";
+    let actionUrl = "";
     if (!actionUrl) try {
       const path = buildCommunityTabPath(
         community.slug,

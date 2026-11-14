@@ -5,7 +5,6 @@ import { communityIsActive } from "../shared/communityLifecycle";
 import { communityResourceIsMemberVisiblePage, communityResourceModuleIsMemberLive } from "../shared/communityResourceVisibility";
 import { COMMUNITY_CARD_LIMITS, type CommunityCardPerson } from "../shared/communityOntology.ts";
 import { resolveCommunityEntryPolicy } from "./communityCore";
-import { communitySiteUrl } from "./communitySites";
 import { readCanonicalPublicAppOrigin } from "./publicAppUrl";
 
 // The parts of the community card (shared/communityOntology.ts) that don't
@@ -67,8 +66,7 @@ export const loadCommunityCardSourceInternal = internalQuery({
     }
 
     const handbook = await ctx.db.query("communityHandbooks").withIndex("by_community", (q) => q.eq("communityId", args.communityId)).first();
-    const site = await communitySiteUrl(ctx, community);
-    let canonicalUrl = site;
+    let canonicalUrl: string | null = null;
     const notesCount = (await ctx.db.query("communityNotes")
       .withIndex("by_community_updatedAt", (q: any) => q.eq("communityId", community._id))
       .take(COMMUNITY_NOTES_MAX_PER_COMMUNITY)).length;

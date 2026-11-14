@@ -83,15 +83,3 @@ async function updateEmailPreferencesForUser(
   return toPublicPreferences({ ...existing, ...patch });
 }
 
-// For a member whose private-twin session the caller already checked: what
-// Studio's settings show (the weekly digest), nothing more.
-export const getEmailPreferencesForTrustedUserInternal = internalQuery({
-  args: { userId: v.id("users") },
-  handler: async (ctx, args) => toPublicPreferences(await getEmailPreferencesRowByUserId(ctx, args.userId)),
-});
-
-export const updateWeeklyDigestForTrustedUserInternal = internalMutation({
-  args: { userId: v.id("users"), weeklyDigestEnabled: v.boolean() },
-  handler: async (ctx, args) => await updateEmailPreferencesForUser(ctx, args.userId, { weeklyDigestEnabled: args.weeklyDigestEnabled }),
-});
-

@@ -14,20 +14,10 @@ In plain words: you can read, run, change and share it. If you run a modified
 version as a service for other people, you must offer them your source code
 under the same license.
 
-## What builders use: MIT
+## What builders use
 
-These parts are licensed under the [MIT License](packages/polynet-cli/LICENSE),
-so a community's site, its AI agent and its tools never carry AGPL obligations:
-
-- `packages/` — the Polynet CLI (`@polynet/cli`), its site checks, and the
-  agent guide and skills it installs into a site folder.
-- `infra/community-edge/dispatch/src/sdk.ts`, `ui.ts` and `llms.ts` — the SDK
-  (`/__polynet/sdk.js`), the account shell (`/__polynet/ui.js`) and the builder
-  guide (`/llms.txt`) that every community site loads. See
-  [`LICENSE-MIT`](infra/community-edge/dispatch/src/LICENSE-MIT).
-
-A community's own site, built on these, belongs to its founder under whatever
-license they choose.
+Community sites, the CLI and the site SDK were removed on Nov 13, 2026; there
+are no separately licensed builder packages in this repository today.
 
 ## Not covered
 
