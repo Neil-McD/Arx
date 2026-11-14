@@ -3644,3 +3644,49 @@
   margin-left: 0;
   justify-content: flex-start;
 }
+
+/* ---------- The kit composer's text (Nov 13, Neil) ----------
+   Home's guide and a DM share one composer: the text runs across the top
+   and grows line by line (Shift+Enter), the tools sit on the row below. */
+:root[data-design="v1"] .kit-ask-text {
+  flex: 1 1 100%;
+  min-width: 0;
+  min-height: 20px;
+  max-height: 160px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  outline: none;
+  resize: none;
+  overflow-y: auto;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: 14px;
+  line-height: 20px;
+}
+:root[data-design="v1"] .kit-ask-text::placeholder { color: var(--ink3); }
+/* With Home's spark before it, the text shares the first row with the mark. */
+:root[data-design="v1"] .kit-ask-text.has-mark { flex-basis: calc(100% - 40px); }
+:root[data-design="v1"] .kit-ask-text:disabled { cursor: default; opacity: 0.6; }
+
+/* ---------- A channel's composer as it grows (Nov 13, Neil) ----------
+   Shift+Enter adds lines; the plus, emoji, voice and send stay level with
+   the last line instead of floating in the middle. A line is 22px with 9px
+   below it, so its middle is 20px up; a 32px button 4px up and the 34px
+   send 3px up share that middle. One line looks exactly as before. */
+@media (min-width: 721px) {
+  :root[data-design="v1"] .community-chat .community-interaction-main-composer .community-composer-authoring-row,
+  :root[data-design="v1"] .community-chat .community-interaction-drawer-composer .community-composer-authoring-row {
+    align-items: flex-end;
+  }
+  :root[data-design="v1"] .community-chat .community-interaction-main-composer .community-composer-authoring-row .ask-icon-btn,
+  :root[data-design="v1"] .community-chat .community-interaction-drawer-composer .community-composer-authoring-row .ask-icon-btn {
+    margin-bottom: 4px;
+  }
+  :root[data-design="v1"] .community-chat .community-interaction-main-composer .community-composer-authoring-row .chat-send.ask-send-btn,
+  :root[data-design="v1"] .community-chat .community-interaction-drawer-composer .community-composer-authoring-row .chat-send.ask-send-btn {
+    margin-bottom: 3px;
+  }
+  :root[data-design="v1"] .chat-input-bar .mention-composer-field { align-items: flex-end; }
+}
