@@ -12,6 +12,7 @@ export function KitConfirm() {
   const askingRef = useRef(asking);
   askingRef.current = asking;
   const noRef = useRef<HTMLButtonElement | null>(null);
+  const yesRef = useRef<HTMLButtonElement | null>(null);
   const returnFocusRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => registerInAppConfirmHost((question, answer) => {
@@ -22,7 +23,18 @@ export function KitConfirm() {
   }), []);
   // Leaving the page with a question open is a "no".
   useEffect(() => () => askingRef.current?.answer(false), []);
-  useEffect(() => { if (asking) noRef.current?.focus(); }, [asking]);
+  useEffect(() => {
+    if (!asking) return;
+    noRef.current?.focus();
+    // If the focus is taken elsewhere (a click on the page behind is caught by
+    // the veil, but scripts can move it), bring it back to the card.
+    const back = (event: FocusEvent) => {
+      const card = noRef.current?.closest("[role='alertdialog']");
+      if (card && event.target instanceof Node && !card.contains(event.target)) noRef.current?.focus();
+    };
+    document.addEventListener("focusin", back);
+    return () => document.removeEventListener("focusin", back);
+  }, [asking]);
 
   if (!asking) return null;
   const answer = (yes: boolean) => {
@@ -34,11 +46,18 @@ export function KitConfirm() {
     <KitApp view="home" part="palette">
       <div className={cx("veil", "askveil")} onMouseDown={(event) => { if (event.target === event.currentTarget) answer(false); }}>
         <div className={cx("askcard")} role="alertdialog" aria-modal="true" aria-label={asking.question.message}
-          onKeyDown={(event) => { if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); answer(false); } }}>
+          onKeyDown={(event) => {
+            if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); answer(false); }
+            // Tab stays on the card's two buttons until the question is answered.
+            if (event.key === "Tab") {
+              event.preventDefault();
+              (document.activeElement === noRef.current ? yesRef.current : noRef.current)?.focus();
+            }
+          }}>
           <p>{asking.question.message}</p>
           <div className={cx("askacts")}>
             <button ref={noRef} type="button" className={cx("btn sm")} onClick={() => answer(false)}>{asking.question.no ?? "Cancel"}</button>
-            <button type="button" className={cx("btn sm", asking.question.danger ? "no" : "go")} onClick={() => answer(true)}>{asking.question.yes}</button>
+            <button ref={yesRef} type="button" className={cx("btn sm", asking.question.danger ? "no" : "go")} onClick={() => answer(true)}>{asking.question.yes}</button>
           </div>
         </div>
       </div>
