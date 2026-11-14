@@ -540,7 +540,12 @@ function WebCommunityAgentDock(props, ref) {
     setRuntimeEventsByRunId: setScopedRuntimeEventsByRunId,
   });
 
+  // A new person or community starts clean. The first run is the page opening:
+  // it keeps the unsent text it was given (unsentGuideText).
+  const scopeResetRanRef = useRef(false);
   useEffect(() => {
+    const opening = !scopeResetRanRef.current;
+    scopeResetRanRef.current = true;
     const previousThreadKey = activeThreadKeyRef.current;
     if (previousThreadKey) stopStreamingTurn(previousThreadKey);
     activeThreadKeyRef.current = null;
@@ -555,8 +560,10 @@ function WebCommunityAgentDock(props, ref) {
     setIsStartingNewChat(false);
     submitInFlightRef.current = false;
     setIsSubmitting(false);
-    draftTextRef.current = "";
-    setInput("");
+    if (!opening) {
+      draftTextRef.current = "";
+      setInput("");
+    }
     clearAttachmentDrafts();
     setIsUploadingAttachments(false);
     setLocalError(null);
