@@ -237,7 +237,7 @@ export function WebCommunityLandingPage(props: Props) {
     if (phase.kind === "finishing") return <Card title={<><span className="cl-spin" aria-hidden="true" />Finishing your membership…</>} note="This takes a few seconds. You'll go straight in." />;
     if (phase.kind === "paid_signed_out") {
       return (
-        <Card title={<><span className="cl-dot is-ok" aria-hidden="true" />Payment received</>} note="One last step: sign in with the email you paid with, and you're in.">
+        <Card title="Almost there" note="Sign in with the email you paid with to finish joining. Your membership starts as soon as Stripe confirms the payment.">
           <a className="cl-primary" href={loginHref(hereNow)}>Sign in to finish</a>
         </Card>
       );
