@@ -161,6 +161,7 @@ import type * as httpBilling from "../httpBilling.js";
 import type * as httpCommunityAgentAttachments from "../httpCommunityAgentAttachments.js";
 import type * as httpCommunityApps from "../httpCommunityApps.js";
 import type * as httpCommunityAttachments from "../httpCommunityAttachments.js";
+import type * as httpCommunityLanding from "../httpCommunityLanding.js";
 import type * as httpCommunitySites from "../httpCommunitySites.js";
 import type * as httpConnectedApps from "../httpConnectedApps.js";
 import type * as httpEmail from "../httpEmail.js";
@@ -383,6 +384,7 @@ declare const fullApi: ApiFromModules<{
   httpCommunityAgentAttachments: typeof httpCommunityAgentAttachments;
   httpCommunityApps: typeof httpCommunityApps;
   httpCommunityAttachments: typeof httpCommunityAttachments;
+  httpCommunityLanding: typeof httpCommunityLanding;
   httpCommunitySites: typeof httpCommunitySites;
   httpConnectedApps: typeof httpConnectedApps;
   httpEmail: typeof httpEmail;
