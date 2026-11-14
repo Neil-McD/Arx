@@ -11,6 +11,7 @@ import { internal } from "./_generated/api";
 import { resolveAuthenticatedActor } from "./authActor";
 import { communityAppJoinProjection } from "./communityAppJoin";
 import { communityAgentIsOn } from "./communityApps";
+import { communityWideEvents } from "./communityEventAudience";
 import { sha256Hex } from "./communityCheckoutBuyer";
 import { startCommunityJoinCheckoutCore } from "./communityCommerce";
 import { communityIsActive } from "../shared/communityLifecycle";
@@ -94,9 +95,9 @@ export const getCommunityLandingPage = query({
       is_owner: Boolean(userId && ownerId && String(userId) === String(ownerId)),
       signed_in: Boolean(userId),
       host,
-      events: (events as any[])
-        // Public, and not a pod's call (only that pod's people may see those).
-        .filter((row) => row.visibility === "public" && !row.podChannelId)
+      // Public, and never a pod's call (only that pod's people may see those).
+      events: communityWideEvents(events as any[])
+        .filter((row) => row.visibility === "public")
         .slice(0, UPCOMING_EVENTS)
         .map((row) => ({
           title: String(row.title ?? "").slice(0, 120),
