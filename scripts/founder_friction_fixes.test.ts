@@ -19,7 +19,9 @@ test("a community's address is its own site, on this environment's suffix once i
   expect(communitySiteAddress("same", { slug: "same", site_url: "https://same.polynet.page/" })).toBe("same.polynet.page");
 });
 
-test("a visitor reaching a community through Studio (its link, Discover, a member page on the site) lands on its doorstep", () => {
+test("a visitor reaching a community through Studio (its link, Discover) lands on its doorstep; a member lands in the app", () => {
   const handoff = readFileSync(new URL("../apps/web/src/components/WebCommunityHandoff.tsx", import.meta.url), "utf8");
-  expect(handoff).toMatch(/props\.membership === "visitor" \? `\$\{new URL\(target\)\.origin\}\/join` : target/);
+  // Members always use the app (Nov 13); only visitors are sent to the site's doorstep.
+  expect(handoff).toMatch(/props\.membership === "member"\) \{\s*return window\.location\.replace\(`\/c\/\$\{encodeURIComponent\(community\.slug\)\}\/home`\)/);
+  expect(handoff).toMatch(/window\.location\.replace\(`\$\{new URL\(target\)\.origin\}\/join`\)/);
 });
