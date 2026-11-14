@@ -6,6 +6,7 @@ import { WebAccountMenu } from "./WebAccountMenu";
 import { WebCommunitySwitcher } from "./WebCommunitySwitcher";
 import type { WebCommunityShellProps } from "./webShellChromeShared";
 import { WebCommunityCommandPalette } from "./WebCommunityCommandPalette";
+import { KitConfirm } from "../v1/KitConfirm";
 import { SearchOrAskButton } from "./CommunityPageHeader";
 import { useCommunityAppLinks } from "../controllers/communityAppLinks";
 
@@ -37,6 +38,7 @@ export function WebCommunityNavSurface({
   return (
     <>
     {useV1Layout && !isMobileHome ? <WebCommunityCommandPalette communityShell={communityShell} /> : null}
+    {useV1Layout ? <KitConfirm /> : null}
     <CommunityNav
       activeCommunity={communityShell.activeCommunity}
       hideIdentitySettings={isMobileHome && !useV1Layout}

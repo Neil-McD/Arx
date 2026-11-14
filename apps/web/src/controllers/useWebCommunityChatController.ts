@@ -1,3 +1,4 @@
+import { askInApp } from "../../../../shared/inAppConfirm";
 import {
   useCallback,
   useEffect,
@@ -447,7 +448,7 @@ export function useWebCommunityChatController(
           : emailMode === "in_app_and_email"
             ? "This @everybody mention will notify members in app. Unread members may also get an email after 15 minutes. Email blasts are limited to once every 72 hours."
             : "This @everybody mention will notify members in app. If the email blast is available, unread members may also get an email after 15 minutes.";
-      if (typeof window !== "undefined" && !window.confirm(confirmation)) return;
+      if (typeof window !== "undefined" && !(await askInApp({ message: confirmation, yes: "Send to everybody", no: "Not yet" }))) return;
     }
 
     const restoreDraft = () => {

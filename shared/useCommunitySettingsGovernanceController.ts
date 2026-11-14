@@ -33,7 +33,8 @@ type UseCommunitySettingsGovernanceControllerArgs<SessionT extends SessionLike> 
   activeCommunityId: string | null;
   session: SessionT | null;
   ensureSession?: EnsureSessionFn<SessionT>;
-  confirmAction: (message: string) => boolean;
+  // Asks before something that can't be undone; `yes` is the word on the button.
+  confirmAction: (message: string, yes: string) => boolean | Promise<boolean>;
   loadCommunities: (session: SessionT) => Promise<void>;
   onLeaveCommunityLocalState: (leavingCommunityId: string) => void;
 
@@ -163,7 +164,7 @@ export function useCommunitySettingsGovernanceController<SessionT extends Sessio
     const communityId = current.activeCommunityId;
     if (!session || !communityId) return;
 
-    const confirmed = current.confirmAction("Leave this community? You will lose access immediately.");
+    const confirmed = await current.confirmAction("Leave this community? You will lose access immediately.", "Leave");
     if (!confirmed) return;
     current.setCommunityMemberSettingsError(null);
     current.setIsLeavingCommunity(true);
