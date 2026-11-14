@@ -81,16 +81,18 @@ judgement of the page against the mock, not a measurement.
 | Logo, favicon, app icons | 95% | #437 #439 #440 | Sign-in page logo is set in WorkOS | |
 | Home (host and member) | 65% | #432 #433 #435 #436 #449 | Money figures, the guide's week, suggestion chips, richer card kinds | Payments slice; guide work |
 | Channel and thread | 70% | #438 #441 #446 #447 | Catch up; channel description; more than one face on the replies line | Catch up spec; a description field |
-| Inbox | 65% | #445 #448 #490 #510 | Mentions and replies across communities, guide line, approvals, "Draft a reply"; an address | Inbox part two (backend); routing |
-| Events | 55% | #450 #500 | A full test pass (Nov 14 plan, A); RSVP; the event form is still the old pop-up | Test pass; pop-up redesign; RSVP slice |
+| Inbox | 70% | #445 #448 #490 #510 #518 #520 | Mentions and replies across communities, guide line, approvals, "Draft a reply"; an address | Inbox part two (backend); routing |
+| Events | 85% | #450 #500 #519 | Recaps after a call; Home shows an event only on its day; reminders unchanged. No RSVP (Neil, Nov 14: not needed yet) | A short spec for recaps |
 | Members | 70% | #451 #452 #490 #512 | Guide suggestions; an address; a member's record on a phone (hosts have it) | Routing |
-| Knowledge | 60% | #442 #492 | A full test pass (Nov 14 plan, A); the course editor is still the old pop-up | Test pass; pop-up redesign |
+| Knowledge | 80% | #442 #492 #516 #517 #523 #524 | Course tools in the page (edit, delete a draft, arrange, move a lesson), which retires the old editor; lesson resources; retry or remove a file or link; answers naming their sources | Section 5, track 1 |
 | Manage, Your guide | 15% / 5% | header only (#442) | Both pages | |
 | Discover, your settings | 60% | #444 | Their own header line and content column | |
 | Command palette | 0% | | | |
-| Mobile | 85% | #493 #494 #504 #509 #510 #512 | Switcher as a sheet; Pods and a pod's room; a check on a real phone | Neil's phone pass |
+| Mobile | 85% | #493 #494 #504 #509 #510 #512 #522 | Switcher as a sheet; Pods and a pod's room; a check on a real phone | Neil's phone pass |
 
-Shipped behind the switch: #427 to #512 (status as of 2026-11-14). Production: none of it.
+Shipped behind the switch: #427 to #524 (status as of the end of 2026-11-14). Production: none of it.
+
+Pop-ups: the browser's own confirm boxes are gone from the new design (#522: one card of the app's own); the event form and the new-course form are in the page (#519, #523). About a dozen pop-ups remain (section 5, track 2).
 
 ### How each slice is made now
 
@@ -125,72 +127,95 @@ Shipped behind the switch: #427 to #512 (status as of 2026-11-14). Production: n
 | 2026-11-10 | Logo: the flat two-tone network mark with a slight lift; the favicon fills its tile |
 | 2026-11-14 | Pods icon: lucide `Boxes` (three boxes), replacing the three circles |
 | 2026-11-14 | One way to see what members see: View as a member in the account menu. Knowledge's own preview switch goes with the old editor ("More tools") |
+| 2026-11-14 | Left menu order: Pods, Knowledge, Events, app links, Members; Analytics at the foot above Invite people. Knowledge icon: the shelf (`Library`) |
+| 2026-11-14 | One level in (a course, a pod's room, What your guide knows): the header is an arrow and the name, no word beside the arrow |
+| 2026-11-14 | Events: no "I'll be there" anywhere (page, Home, pod calls); a host adds an event by typing one line; add, edit and cancel happen in the page |
+| 2026-11-14 | Composers take the cursor on the pages that are about them (Home, a channel, a pod's room); focus outlines are grey, never blue |
+| 2026-11-14 | Knowledge has one bar for builders: it asks, teaches the guide, or starts a course from an outline (first line the course, each line a lesson). Members get the bar that asks |
+| 2026-11-14 | Notes are the guide's memory: builders keep them ("What your guide knows"), members never browse them and the server never hands them to a member or a member's own AI. What members must read belongs in a lesson. Files and links members can open are resources attached to a lesson |
+| 2026-11-14 | Only a draft course can be deleted (a rule of the new page until the old design leaves prod); no typing the name. The cover crop goes: a new cover is centred |
+| 2026-11-14 | Agents: two agents (the community's guide; a personal agent someone brings) and two lenses (builder, member). Anything a person can do in the app their agent can do through the one door with the same permission; money stays human. The guide may reply untagged when it can help (`docs/specs/agents-and-the-one-door-v1.md`) |
 
-## 5. What is next, in order (Neil, 2026-11-14)
+## 5. What is next, in order (Neil, end of 2026-11-14)
 
-Four workstreams. A and B start together; C waits on Neil's reaction to the
-mock; D needs his OK on a one-page spec first.
+One plan, four tracks. Mocks for tracks 1 and 2 are on the Knowledge canvas
+(`https://claude.ai/artifact/RUsBpG7rfA6gbCN62nzJHP`); track 3 has a spec.
+Each slice goes to staging on its own, is checked there, then merges.
 
-### A. Test Knowledge and Events end to end (no code until the bug list)
+### Track 1. Finish Knowledge (about 80% → 95%)
 
-On staging, in a test community nobody else is in (no one is notified), on
-desktop and on a phone, as host and as member. Every step gets a pass or a bug.
+| # | Slice | Done when |
+|---|---|---|
+| 1.1 | A course's own tools: Edit opens the box in the page (name, what members will learn, cover); Delete is offered on drafts only and asks with the confirm card | No pop-up is reachable from a course |
+| 1.2 | Arrange courses on the shelf; "Move to another course" inside lesson editing; remove "More tools" | The old editor cannot be opened from the new design |
+| 1.3 | Files and links the guide read: Try again and Remove on each | A failed read can be retried or cleared |
+| 1.4 | Resources for a lesson: a builder attaches a link or file to a lesson; members open it under the lesson; the guide reads it too. Needs one optional field on a resource (which lesson it belongs to) | A member opens a lesson's source |
 
-- **Knowledge:** create, edit, reorder and delete a course and a lesson; mark a
-  lesson done; write, edit and delete a note; "Ask anything Polynet knows";
-  the guide answers from what it learned; what a member sees; empty states.
-- **Events:** create, edit and cancel; a repeating event; timezones (event's
-  zone vs the viewer's); online vs a place; "You're going to"; the event on
-  Home and on the community's page (`/c/<slug>`); reminders; what a member sees.
-- Out: a bug list, ordered, each fixed in the slice that touches its screen.
+Kept as they are: the shelf, the lesson reader, Mark done, Questions nobody
+answered. Deleted when the old design leaves prod: `CommunityResourcesPanel`
+and the three course pop-ups (section 9).
 
-### B. Pods icon
+### Track 2. The remaining pop-ups
 
-Three or four candidates from the same icon set as the rest of the left column
-(lucide at 17px, 1.7 stroke), drawn in the phone mock and the left column. Neil
-picks; one small change in `shared/CommunityNav.tsx`.
+Done: the browser's confirm boxes, the event form, the new-course form. Left,
+in this order: one way to confirm a delete (lessons and notes still use an
+inline "Delete for good"); channel settings and new channel; member settings;
+sign out; the avatar, logo and banner editors and the photo viewer (these stay
+overlays, restyled to the kit, full screen on a phone); the terms reader. Rule:
+make and change in the page where the thing lives; ask with the confirm card;
+only looking-at-something is an overlay.
 
-### C. Pop-ups, redesigned everywhere
+### Track 3. Agents and the one door
 
-Every pop-up is the old design (a centred box over a dimmed page). Three
-replacements, mocked first on the phone-screens canvas:
+Spec: `docs/specs/agents-and-the-one-door-v1.md` (Neil's review is the gate).
+The engine underneath is `community-agent-gateway-v0.md`.
 
-| Pattern | Desktop | Phone | Replaces |
-|---|---|---|---|
-| **Panel** (create and edit) | Slides in from the right, the right column's width, over the page; compact fields; Save and Cancel fixed at the bottom | Full screen, back arrow, Save at the bottom | New/edit event (`WebCommunityEventsSection`), course editor (`WebCommunityResourceModuleModal`), member settings (`CommunityMemberSettingsDialog`), create community (`WebCreateCommunityModal`), builder offer (`WebBuilderOfferModal`), profile setup (`WebBlockingSetupModal`), the old Members pop-up (narrow windows, `ChannelRosterPanel`) |
-| **Confirm** (are you sure) | A small card, the action in red when it destroys something | The same, near the bottom | Delete lesson (`WebDeleteResourceModal`), delete course (`WebDeleteResourceModuleModal`), sign out (`WebSignOutConfirmModal`), and the six browser `confirm()` boxes (delete a message or reply, cancel an event, chat and navigation guards) |
-| **Viewer** (looking, not editing) | Centred, restyled to the kit | Full screen | Photo lightbox, logo / banner / avatar croppers, the terms and privacy reader |
+| # | Slice | Done when |
+|---|---|---|
+| 3.1 | Parity for builders: create, change and cancel an event; make a course from an outline; teach the guide, through the existing door | Claude, connected to staging, sets up a course and a weekly call |
+| 3.2 | The activity page: what agents did, for whom, and an off switch per connection | A builder can see and stop any agent |
+| 3.3 | Two steps for anything that destroys or broadcasts (delete, ban, remove, cancel a series, message everybody), including the verbs that exist today | No single call can do it |
+| 3.4 | Answers say where they came from: a lesson or a lesson's resource is a link; what the host taught is named, not linked | A member can open the source of an answer |
+| 3.5 | The guide wakes on a beat and answers questions nobody answered: waits first, replies in the thread once, only with a sourced answer, never in a pod unless its host turned it on; a builder's dial (Off, Quiet, Active) and a daily cap | A question asked at night has a sourced answer by morning, and a quiet community costs nothing |
+| 3.6 | The guide proposes: buttons on answers for members, drafts for builders to approve | A builder approves a drafted note in one tap |
+| 3.7 | Packaging: a ready-made plugin for Claude and ChatGPT | A builder connects without reading docs |
 
-Where something can be made in place, it is (as New pod already is: a card in
-the list). Slices: 1) the Panel and Confirm components plus events and the
-course editor; 2) every Confirm; 3) the remaining Panels; 4) the Viewers.
-Prod's old design keeps its pop-ups until the switch goes on everywhere.
+Also in this track, unchanged: progress from a founder's app into the guide;
+Distribution Engineering's PRs #1365 and #1374 (Neil's repo; known bug: a
+buyer from DE's own checkout could get a second, free workspace).
 
-### D. One door: what an app or an agent can build
+### Track 4. Ship it
 
-Merged on main, not live: Sign in with Polynet, the access check, sales
-reports, webhooks, plans that unlock app features, Settings › Your app.
+Staging is far ahead of production; the gap is now the main risk.
 
-Missing:
-- **An agent or a founder's app cannot create events or Knowledge.** The
-  MCP's actions are react, moderate, settings, join mode, handbook and lesson
-  done. Proposed: `community.event.create|update|cancel`,
-  `community.note.create`, `community.course.upsert`, `community.lesson.upsert`
-  through the existing canonical executor (authorised, audited, host-scoped).
-  A separate app API only when an app asks for one.
-- **Progress from the app into the guide** (the pilot's last step).
-- **Distribution Engineering:** PRs #1365 and #1374 open; known bug: a buyer
-  from DE's own checkout could get a second, free workspace.
-- **Leftovers:** `community.member_experience.request` (sites slice 3) and
-  `community.funnel.update_draft` (its screen is deleted).
+1. Neil walks staging on his laptop and his own phone; what he finds is fixed
+   in the slice that touches that screen.
+2. Phone leftovers: the switcher as a sheet; Pods and a pod's room.
+3. The prod release plan (`production-release-plan-2026-11.md`): what ships,
+   what to check after, how to roll back, the Convex step. To settle there:
+   after the release the old design shows members an empty notes page (correct,
+   but bare) until the new design is switched on.
+4. Acceptance (section 8); switch on everywhere; delete the old paths
+   (section 9).
 
-Spec first (`docs/specs/`), Neil's OK, then build.
+### The order
 
-### Then
+1.1 and 1.2 first (they finish what was started and retire the old editor).
+Then Neil's walk and the release plan, with 3.1 alongside. Then 3.2 and 3.3
+before the guide gets more power (3.5, 3.6). Track 2 fills the gaps between.
+1.3, 1.4 and 3.4 go together: they are all about sources.
 
-Neil's pass on his own phone; the prod release plan (what ships, what to check
-after, how to roll back, the Convex step); acceptance (section 8); switch on
-everywhere and delete the old paths (section 9).
+### Waiting on Neil
+
+- The walk-through on staging (laptop and phone).
+- Review of the agents spec, and its three calls: may a builder's AI publish a
+  course without a tap in the app (proposed: yes); may a member's AI read their
+  own direct messages (proposed: not yet); ban and remove through an agent move
+  to two steps (proposed: yes).
+- Two defaults for 3.5: how long the guide waits before answering (proposed:
+  one hour) and where the dial starts (proposed: Quiet).
+- Whether Knowledge's box opens on Ask or on Teach (it opens on Ask today).
+- A Stripe test-card run of a paid join; the two DE pull requests.
 
 ## 6. Deliberately not in this plan
 
