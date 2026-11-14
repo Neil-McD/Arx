@@ -1985,7 +1985,8 @@
     padding: 0 56px 26px;
   }
 
-  :root[data-design="v1"] .community-chat .community-interaction-main-composer > .chat-input-bar {
+  :root[data-design="v1"] .community-chat .community-interaction-main-composer > .chat-input-bar,
+  :root[data-design="v1"] .community-chat .community-interaction-drawer-composer > .chat-input-bar {
     width: 100%;
     margin: 0;
   }
@@ -2072,7 +2073,8 @@
 /* The composer: one 52px row. Tools at the left, the text, then mic and send. */
 @media (min-width: 721px) {
   /* The mock's .ask: its edge, field and inner light; blue when you type. */
-  :root[data-design="v1"] .community-chat .community-interaction-main-composer > .chat-input-bar {
+  :root[data-design="v1"] .community-chat .community-interaction-main-composer > .chat-input-bar,
+  :root[data-design="v1"] .community-chat .community-interaction-drawer-composer > .chat-input-bar {
     min-height: 52px;
     padding: 0 8px 0 8px;
     border-radius: 14px;
@@ -2085,36 +2087,43 @@
     transition: border-color 0.2s ease, box-shadow 0.2s ease;
   }
 
-  :root[data-design="v1"] .community-chat .community-interaction-main-composer > .chat-input-bar:focus-within {
+  :root[data-design="v1"] .community-chat .community-interaction-main-composer > .chat-input-bar:focus-within,
+  :root[data-design="v1"] .community-chat .community-interaction-drawer-composer > .chat-input-bar:focus-within {
     border-color: var(--accent-act-edge);
     box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 0 0 4px var(--accent-act-halo);
   }
 
-  :root[data-design="v1"] .community-chat .community-interaction-main-composer .community-composer-authoring-row {
+  :root[data-design="v1"] .community-chat .community-interaction-main-composer .community-composer-authoring-row,
+  :root[data-design="v1"] .community-chat .community-interaction-drawer-composer .community-composer-authoring-row {
     grid-template-columns: auto minmax(0, 1fr) auto;
     grid-template-rows: auto;
     align-items: center;
     column-gap: 6px;
   }
 
-  :root[data-design="v1"] .community-chat .community-interaction-main-composer .community-composer-toolbar {
+  :root[data-design="v1"] .community-chat .community-interaction-main-composer .community-composer-toolbar,
+  :root[data-design="v1"] .community-chat .community-interaction-drawer-composer .community-composer-toolbar {
     display: contents;
   }
 
-  :root[data-design="v1"] .community-chat .community-interaction-main-composer .community-composer-tools {
+  :root[data-design="v1"] .community-chat .community-interaction-main-composer .community-composer-tools,
+  :root[data-design="v1"] .community-chat .community-interaction-drawer-composer .community-composer-tools {
     order: 1;
   }
 
-  :root[data-design="v1"] .community-chat .community-interaction-main-composer .community-composer-editor-row {
+  :root[data-design="v1"] .community-chat .community-interaction-main-composer .community-composer-editor-row,
+  :root[data-design="v1"] .community-chat .community-interaction-drawer-composer .community-composer-editor-row {
     order: 2;
     padding: 6px 4px;
   }
 
-  :root[data-design="v1"] .community-chat .community-interaction-main-composer .community-composer-submit-tools {
+  :root[data-design="v1"] .community-chat .community-interaction-main-composer .community-composer-submit-tools,
+  :root[data-design="v1"] .community-chat .community-interaction-drawer-composer .community-composer-submit-tools {
     order: 3;
   }
 
-  :root[data-design="v1"] .community-chat .community-interaction-main-composer .mention-composer-field {
+  :root[data-design="v1"] .community-chat .community-interaction-main-composer .mention-composer-field,
+  :root[data-design="v1"] .community-chat .community-interaction-drawer-composer .mention-composer-field {
     min-height: 38px;
     font-size: 15px;
   }
@@ -2500,32 +2509,38 @@
 /* A channel's composer: the plus at the left; mentions, emoji, voice and send
    at the right, as in the mock. */
 @media (min-width: 721px) {
-  :root[data-design="v1"] .community-chat .community-interaction-main-composer .community-composer-authoring-row {
+  :root[data-design="v1"] .community-chat .community-interaction-main-composer .community-composer-authoring-row,
+  :root[data-design="v1"] .community-chat .community-interaction-drawer-composer .community-composer-authoring-row {
     display: flex;
     align-items: center;
     gap: 4px;
   }
 
-  :root[data-design="v1"] .community-chat .community-interaction-main-composer .community-composer-tools {
+  :root[data-design="v1"] .community-chat .community-interaction-main-composer .community-composer-tools,
+  :root[data-design="v1"] .community-chat .community-interaction-drawer-composer .community-composer-tools {
     display: contents;
   }
 
-  :root[data-design="v1"] .community-chat .community-interaction-main-composer .community-composer-add {
+  :root[data-design="v1"] .community-chat .community-interaction-main-composer .community-composer-add,
+  :root[data-design="v1"] .community-chat .community-interaction-drawer-composer .community-composer-add {
     order: 1;
   }
 
-  :root[data-design="v1"] .community-chat .community-interaction-main-composer .community-composer-editor-row {
+  :root[data-design="v1"] .community-chat .community-interaction-main-composer .community-composer-editor-row,
+  :root[data-design="v1"] .community-chat .community-interaction-drawer-composer .community-composer-editor-row {
     order: 2;
     flex: 1 1 auto;
     min-width: 0;
     padding: 0 6px;
   }
 
-  :root[data-design="v1"] .community-chat .community-interaction-main-composer .community-composer-tools > :not(.community-composer-add) {
+  :root[data-design="v1"] .community-chat .community-interaction-main-composer .community-composer-tools > :not(.community-composer-add),
+  :root[data-design="v1"] .community-chat .community-interaction-drawer-composer .community-composer-tools > :not(.community-composer-add) {
     order: 3;
   }
 
-  :root[data-design="v1"] .community-chat .community-interaction-main-composer .community-composer-submit-tools {
+  :root[data-design="v1"] .community-chat .community-interaction-main-composer .community-composer-submit-tools,
+  :root[data-design="v1"] .community-chat .community-interaction-drawer-composer .community-composer-submit-tools {
     order: 4;
   }
 
@@ -2535,7 +2550,8 @@
   }
 
   /* The mock's icon buttons (.ib): 32px, rounded squares, quiet until hovered. */
-  :root[data-design="v1"] .community-chat .community-interaction-main-composer .ask-icon-btn {
+  :root[data-design="v1"] .community-chat .community-interaction-main-composer .ask-icon-btn,
+  :root[data-design="v1"] .community-chat .community-interaction-drawer-composer .ask-icon-btn {
     width: 32px;
     height: 32px;
     min-height: 32px;
@@ -2544,14 +2560,16 @@
     color: var(--text-faint);
   }
 
-  :root[data-design="v1"] .community-chat .community-interaction-main-composer .ask-icon-btn:hover:not(:disabled) {
+  :root[data-design="v1"] .community-chat .community-interaction-main-composer .ask-icon-btn:hover:not(:disabled),
+  :root[data-design="v1"] .community-chat .community-interaction-drawer-composer .ask-icon-btn:hover:not(:disabled) {
     background: var(--hover-overlay);
     color: var(--text-ink-primary);
   }
 
   /* The mock's send: quiet, blue while you type. Its colours come through
      the conversation tokens, which the older rule sets with !important. */
-  :root[data-design="v1"] .community-chat .community-interaction-main-composer .chat-send.ask-send-btn {
+  :root[data-design="v1"] .community-chat .community-interaction-main-composer .chat-send.ask-send-btn,
+  :root[data-design="v1"] .community-chat .community-interaction-drawer-composer .chat-send.ask-send-btn {
     --conversation-primary-action-surface: var(--hover-overlay);
     --conversation-primary-action-hover-surface: var(--hover-overlay);
     --conversation-primary-action-foreground: var(--text-faint);
@@ -2564,7 +2582,8 @@
     box-shadow: none;
   }
 
-  :root[data-design="v1"] .community-chat .community-interaction-main-composer > .chat-input-bar:focus-within .chat-send.ask-send-btn:not(:disabled) {
+  :root[data-design="v1"] .community-chat .community-interaction-main-composer > .chat-input-bar:focus-within .chat-send.ask-send-btn:not(:disabled),
+  :root[data-design="v1"] .community-chat .community-interaction-drawer-composer > .chat-input-bar:focus-within .chat-send.ask-send-btn:not(:disabled) {
     --conversation-primary-action-surface: linear-gradient(180deg, #1077d2, #0b69c4);
     --conversation-primary-action-hover-surface: linear-gradient(180deg, #0e74ce, #0a66c2);
     --conversation-primary-action-foreground: #ffffff;
@@ -2948,7 +2967,8 @@
 }
 
 @media (min-width: 721px) {
-  :root[data-design="v1"] .community-chat .community-interaction-main-composer > .chat-input-bar:focus-within .chat-send.ask-send-btn:not(:disabled) {
+  :root[data-design="v1"] .community-chat .community-interaction-main-composer > .chat-input-bar:focus-within .chat-send.ask-send-btn:not(:disabled),
+  :root[data-design="v1"] .community-chat .community-interaction-drawer-composer > .chat-input-bar:focus-within .chat-send.ask-send-btn:not(:disabled) {
     --conversation-primary-action-surface: var(--bg-button);
     --conversation-primary-action-hover-surface: var(--bg-button-hover);
     box-shadow: none;
