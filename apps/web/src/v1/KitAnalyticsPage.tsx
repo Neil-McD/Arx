@@ -1,6 +1,6 @@
 // Design system v1: Analytics for the people who run a community (Neil, Nov
 // 13). One header like every page (the range on its right), four figures,
-// one chart, how people join, and who is on which plan in the right column.
+// one chart, and who is on which plan in the right column.
 import { useState, type ReactNode } from "react";
 import { AnalyticsLineChart } from "../../../../shared/AnalyticsLineChart";
 import { formatCount, formatMoneyBaseUnits } from "../../../../shared/contentFormatting";
@@ -45,7 +45,6 @@ export function KitAnalyticsPage(props: { state: CommunityAnalyticsState; action
   const unpaid = !summary.mrr_base_units && !summary.currency;
   const active = summary.active_members_window;
   const visits = summary.page_visits_window ?? 0;
-  const started = summary.join_starts_window ?? 0;
   const joined = newMembers ?? 0;
 
   const figures = [
@@ -59,12 +58,6 @@ export function KitAnalyticsPage(props: { state: CommunityAnalyticsState; action
       },
     { label: "Active", value: active != null && total ? percent(active, total) : "—", note: active != null && total ? `${formatCount(active)} of ${formatCount(total)}` : "" },
     { label: "Join rate", value: visits > 0 ? percent(joined, visits) : "—", note: visits > 0 ? "of visitors" : "No visits yet" },
-  ];
-
-  const steps = [
-    { label: "Visited the join page", value: visits },
-    { label: "Started joining", value: started },
-    { label: "Joined", value: joined },
   ];
 
   const plans = summary.plans ?? [];
@@ -100,22 +93,6 @@ export function KitAnalyticsPage(props: { state: CommunityAnalyticsState; action
           </div>
           <div className="analytics-v1-chart">
             <AnalyticsLineChart points={points} height={170} valueFormatter={metric === "revenue" ? (value) => money(value) : undefined} />
-          </div>
-
-          <span className={cx("lab")} style={{ display: "block", marginTop: 34 }}>How people join</span>
-          <div className="analytics-v1-funnel">
-            {steps.map((step, index) => {
-              const before = index > 0 ? steps[index - 1].value : 0;
-              return (
-                <div key={step.label} className="analytics-v1-step">
-                  <div>
-                    <span>{step.label}</span>
-                    <em>{formatCount(step.value)}{index > 0 && before > 0 ? ` · ${percent(step.value, before)} of the step before` : ""}</em>
-                  </div>
-                  <div className={`${cx("bar")} analytics-v1-bar`}><i style={{ width: visits > 0 ? `${Math.min(100, (step.value / visits) * 100)}%` : "0%" }} /></div>
-                </div>
-              );
-            })}
           </div>
 
           {/* Below 900px the right column is hidden, so the plans sit here. */}
