@@ -174,7 +174,7 @@ export function KitClassroom(props: {
   // ---------- the right column
   const noteRail = note ? (
     <>
-      <TextLink onClick={() => setNote(null)}>Back</TextLink>
+      <button type="button" className={cx("kback")} onClick={() => setNote(null)}><Icon name="back" />Back</button>
       {note.mode === "new" && canWriteNotes ? (
         <NoteForm title="" text="" submitLabel="Save note" onCancel={() => setNote(null)}
           onSubmit={async (title, text) => {
@@ -206,14 +206,14 @@ export function KitClassroom(props: {
     <>
       {courses.length ? (
         <>
-          {props.canManage ? (
+          {props.canManage ? (courses.some((entry) => entry.course.module_status === "live") ? (
             <Sec label="Learning">
               {courses.filter((entry) => entry.course.module_status === "live").slice(0, 5).map(({ course }) => {
                 const row = summaryBy.get(course.id);
                 return <div key={course.id} className={cx("kline")}><span>{course.name}</span><em>{row ? `${row.started} started · ${row.finished} finished` : "—"}</em></div>;
               })}
             </Sec>
-          ) : (
+          ) : <Sec label="Learning"><p>Publish a course and you'll see who started and finished it here.</p></Sec>) : (
             <Sec label="Your progress">
               {courses.filter(({ lessons }) => courseProgress(lessons, done).done > 0).length === 0 ? <p>Start a course and it shows here.</p> : null}
               {courses.map(({ course, lessons }) => {
