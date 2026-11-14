@@ -35,7 +35,7 @@ test("DM overlays preserve the desktop Agent page while retaining mobile and voi
   expect(controller).toContain('(params.pageMode || !params.isDirectMessagesOpen)');
   expect(controller).toContain('(!isVisible || params.isDirectMessagesOpen || scopeChanged)');
   // Page mode: desktop, and design v1's phone Home tab (the same Home page).
-  expect(app).toMatch(/const communityAgentPageMode = !showMobileShell \|\| \(isDesignV1Active\(\) && mobileRootPage === "agent"\);/);
+  expect(app).toMatch(/const communityAgentPageMode = !showMobileShell \|\| isDesignV1Active\(\);/);
   expect(app).toMatch(/useWebCommunityAgentSurfaceController\(\{\s*pageMode: communityAgentPageMode/);
   expect(controller).toContain('!params.isOnboardingModalOpen');
 });
