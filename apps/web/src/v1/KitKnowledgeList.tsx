@@ -74,15 +74,18 @@ export function KitKnowledgeList(props: {
     setBusy(true);
     setError(null);
     try {
+      // Files (or links) and words together: both are kept. The files go
+      // first; once they are in, they leave the box so a retry never adds
+      // them twice.
       let result: KnowledgeAddResult = { ok: true };
       if (files.length > 0 || draft?.kind === "links") {
         if (!props.onAddSources) return;
         result = await props.onAddSources({ links: draft?.kind === "links" ? draft.links : [], files });
-      } else if (draft?.kind === "note") {
+        if (result.ok) setFiles([]);
+      }
+      if (result.ok && draft?.kind === "note") {
         if (!props.onAddNote) return;
         result = await props.onAddNote(draft.title, draft.text);
-      } else {
-        return;
       }
       if (result.ok) close(); else setError(result.message);
     } finally {
@@ -97,7 +100,7 @@ export function KitKnowledgeList(props: {
   if (!canAdd && rows.length === 0) return null;
 
   const hint = files.length > 0
-    ? `${files.length === 1 ? files[0].name : `${files.length} files`}. Polynet reads ${files.length === 1 ? "it" : "them"}.`
+    ? `${files.length === 1 ? files[0].name : `${files.length} files`}. Polynet reads ${files.length === 1 ? "it" : "them"}.${draft?.kind === "note" ? ` Your words are saved as a note, "${draft.title}".` : ""}`
     : draft?.kind === "links" ? (draft.links.length === 1 ? "A link. Polynet reads the page." : `${draft.links.length} links. Polynet reads each page.`)
       : draft?.kind === "note" ? `A note, "${draft.title}". Every member and the guide can read it.`
         : "Write a note, paste a link, or choose a file.";
