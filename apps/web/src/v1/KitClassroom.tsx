@@ -29,6 +29,15 @@ import { useCommunityAgentOn } from "../controllers/communityAgentOn";
 
 const SHELF = 6;
 
+// A course without a cover gets one of three soft tints, the same one every
+// time (from its id), so a shelf never reads as a row of empty boxes.
+const COVER_TINTS = ["c2", "c3", "c4"] as const;
+function coverTint(id: string): (typeof COVER_TINTS)[number] {
+  let hash = 0;
+  for (let index = 0; index < id.length; index += 1) hash = (hash * 31 + id.charCodeAt(index)) >>> 0;
+  return COVER_TINTS[hash % COVER_TINTS.length];
+}
+
 function firstLine(markdown: string | null): string {
   const line = String(markdown ?? "").split("\n").map((part) => part.replace(/^#+\s*/, "").trim()).find(Boolean) ?? "";
   return line.length > 110 ? `${line.slice(0, 107)}…` : line;
@@ -337,7 +346,8 @@ export function KitClassroom(props: {
       </div>
     );
   } else {
-    const shelf = pageOf(courses, shelfPage, props.canManage ? SHELF - 1 : SHELF);
+    // Adding a course is a button beside "Courses", so hosts' pages hold six too.
+    const shelf = pageOf(courses, shelfPage, SHELF);
     const learning = summary.reduce((total, row) => total + row.started, 0);
     page = (
       <div className={cx("page")} style={{ padding: 0, overflow: "visible" }}>
@@ -361,14 +371,19 @@ export function KitClassroom(props: {
           </button>
         ) : null}
 
-        <div className={cx("khead")}><span className={cx("lab")}>Courses</span></div>
+        <div className={cx("khead")}>
+          <span className={cx("lab")}>Courses</span>
+          {props.canManage && courses.length > 0 ? (
+            <button type="button" className={cx("btn sm knewbtn")} onClick={props.onNewCourse}><Icon name="plus" />New course</button>
+          ) : null}
+        </div>
         <div className={cx("kgrid")}>
           {shelf.items.map(({ course, lessons }) => {
             const progress = courseProgress(lessons, done);
             const row = summaryBy.get(course.id);
             return (
               <button key={course.id} type="button" className={cx("kcourse")} onClick={() => props.onOpenCourse(course.id)}>
-                <span className={cx("kcover", course.banner_url ? "" : "c2")} style={course.banner_url ? { backgroundImage: `url(${JSON.stringify(course.banner_url)})`, backgroundSize: "cover", backgroundPosition: `${(course.banner_focus_x ?? 0.5) * 100}% ${(course.banner_focus_y ?? 0.5) * 100}%` } : undefined}>
+                <span className={cx("kcover", course.banner_url ? "" : coverTint(course.id))} style={course.banner_url ? { backgroundImage: `url(${JSON.stringify(course.banner_url)})`, backgroundSize: "cover", backgroundPosition: `${(course.banner_focus_x ?? 0.5) * 100}% ${(course.banner_focus_y ?? 0.5) * 100}%` } : undefined}>
                   {course.banner_url ? null : <Icon name="book" />}
                 </span>
                 <b>{course.name}{course.module_status === "draft" ? <span className={cx("tag")} style={{ marginLeft: 8 }}>draft</span> : null}</b>
@@ -381,7 +396,8 @@ export function KitClassroom(props: {
               </button>
             );
           })}
-          {props.canManage ? <button type="button" className={cx("kcourse knew")} onClick={props.onNewCourse}><Icon name="plus" />New course</button> : null}
+          {/* The dashed card is the empty shelf's way in; with courses, the button beside "Courses" adds one. */}
+          {props.canManage && courses.length === 0 ? <button type="button" className={cx("kcourse knew")} onClick={props.onNewCourse}><Icon name="plus" />New course</button> : null}
         </div>
         {shelf.pages > 1 ? (
           <div className={cx("kpager")}>
