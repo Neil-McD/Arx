@@ -22,9 +22,10 @@ export function fitComposerHeight(textarea: HTMLTextAreaElement | null | undefin
   const previousScrollTop = textarea.scrollTop;
   textarea.style.height = "auto";
   const contentHeight = textarea.scrollHeight;
+  // Scrolling is never switched off: a window made narrower can wrap a
+  // draft past the limit before the next keystroke resizes it.
   const nextHeight = Math.min(contentHeight, limit);
   textarea.style.height = `${nextHeight}px`;
-  textarea.style.overflowY = contentHeight > limit ? "auto" : "hidden";
   textarea.scrollTop = caretAtEnd ? textarea.scrollHeight : previousScrollTop;
   // A mention layer drawn over the text follows its scroll.
   textarea.parentElement?.style.setProperty("--mention-composer-scroll-top", `${textarea.scrollTop}px`);
@@ -34,7 +35,6 @@ export function fitComposerHeight(textarea: HTMLTextAreaElement | null | undefin
 export function resetComposerHeight(textarea: HTMLTextAreaElement | null | undefined): void {
   if (!textarea) return;
   textarea.style.height = "auto";
-  textarea.style.overflowY = "hidden";
   textarea.scrollTop = 0;
   textarea.parentElement?.style.setProperty("--mention-composer-scroll-top", "0px");
 }

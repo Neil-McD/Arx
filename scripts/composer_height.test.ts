@@ -28,7 +28,6 @@ describe("composer height", () => {
     const { box } = fakeTextarea(4);
     fitComposerHeight(box);
     expect(box.style.height).toBe(`${4 * 22 + 18}px`);
-    expect(box.style.overflowY).toBe("hidden");
     expect(box.scrollTop).toBe(0);
   });
 
@@ -37,7 +36,6 @@ describe("composer height", () => {
     const { box, parentVars } = fakeTextarea(14);
     fitComposerHeight(box);
     expect(box.style.height).toBe("240px");
-    expect(box.style.overflowY).toBe("auto");
     expect(box.scrollTop).toBe(box.scrollHeight - 240);
     expect(parentVars.get("--mention-composer-scroll-top")).toBe(`${box.scrollHeight - 240}px`);
   });
@@ -61,7 +59,6 @@ describe("composer height", () => {
     fitComposerHeight(box);
     resetComposerHeight(box);
     expect(box.style.height).toBe("auto");
-    expect(box.style.overflowY).toBe("hidden");
     expect(parentVars.get("--mention-composer-scroll-top")).toBe("0px");
   });
 });
