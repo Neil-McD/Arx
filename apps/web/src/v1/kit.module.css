@@ -872,6 +872,7 @@
 .app .askcard p{margin:0;font-size:14.5px;line-height:1.5;color:var(--ink)}
 .app .askacts{display:flex;justify-content:flex-end;gap:8px;margin-top:16px}
 .app .askacts .btn.no{color:var(--bad);border-color:var(--bad-line)}
+.app .askacts .btn:focus-visible{outline:0;border-color:rgba(var(--w),.34);background:var(--s2)}
 
 /* Kit addition: states the mock doesn't draw, in its own terms. */
 .app .msg.cont{padding-top:3px;padding-bottom:3px}
