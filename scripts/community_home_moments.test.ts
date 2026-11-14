@@ -48,8 +48,7 @@ describe("a member's next step", () => {
     expect(memberNextStep({ ...none, hasPosted: false, joinedRecently: true })?.kind).toBe("say_hello");
     expect(memberNextStep({ ...none, courseInProgress: { course: "Launch your community", lessonNumber: 3, total: 9, lessonTitle: "Choose your first ten" } }))
       .toMatchObject({ kind: "continue_lesson", detail: "Lesson 3 of 9: Choose your first ten." });
-    expect(memberNextStep({ ...none, nextEvent: { title: "Friday build call", startsAt: "2026-11-13T18:00:00.000Z", going: false } })?.kind).toBe("rsvp");
-    expect(memberNextStep({ ...none, nextEvent: { title: "Friday build call", startsAt: "2026-11-13T18:00:00.000Z", going: true } })).toBeNull();
+    expect(memberNextStep({ ...none, nextEvent: { title: "Friday build call", startsAt: "2026-11-13T18:00:00.000Z" } })?.kind).toBe("next_event");
     expect(memberNextStep(none)).toBeNull();
   });
 });

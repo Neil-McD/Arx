@@ -68,3 +68,11 @@ export function eventDateBlock(startsAtIso: string, isPast: boolean): { number: 
     word: date.toLocaleDateString(undefined, isPast ? { month: "short" } : { weekday: "short" }),
   };
 }
+
+// "every Thursday", "every day", "every month": how a repeating event says so.
+export function eventRepeatWord(event: { starts_at: string; recurrence_frequency: string }): string | null {
+  if (event.recurrence_frequency === "weekly") return `every ${new Date(event.starts_at).toLocaleDateString(undefined, { weekday: "long" })}`;
+  if (event.recurrence_frequency === "daily") return "every day";
+  if (event.recurrence_frequency === "monthly") return "every month";
+  return null;
+}

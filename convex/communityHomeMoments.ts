@@ -130,16 +130,12 @@ export const getHomeMoments = query({
       const general = await ctx.db.query("communityChannels")
         .withIndex("by_community_systemRole", (q: any) => q.eq("communityId", args.communityId).eq("systemRole", "general")).first();
       const mine = (row: any) => String(row.actorUserId ?? "") === String(userId);
-      const going = event
-        ? Boolean(await ctx.db.query("communityEventGoing")
-          .withIndex("by_event_occurrence_user", (q: any) => q.eq("eventId", event._id).eq("occurrenceStartsAt", Number(event.startsAt)).eq("userId", userId)).first())
-        : false;
       nextStep = memberNextStep({
         courseInProgress: await courseInProgress(ctx, args.communityId, userId),
         hasPosted: roots.some(mine) || replies.some(mine),
         joinedRecently: Boolean(membership && nowMs - Number(membership.createdAt) < 14 * DAY_MS),
         generalChannel: general?.name ? String(general.name) : null,
-        nextEvent: nextEvent ? { ...nextEvent, going } : null,
+        nextEvent,
       });
     }
 
