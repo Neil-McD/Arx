@@ -232,6 +232,22 @@ pages, mounted without the app.
 6. Standard and `/m` shell variants must share the same access decision.
 7. Automatic redirects replace browser history rather than adding entries.
 
+## Phone Shell Variant (`/m`)
+
+`/m/<path>` is the phone layout of the same route: the same page identity
+and the same access decision (rule 6), drawn for a phone.
+
+- Who gets it: the installed home-screen app (its launch URL), and any phone,
+  meaning a narrow screen worked by touch, `(max-width: 720px) and (pointer: coarse)`
+  (`isPhoneViewport()` in `shared/browserRuntimeMode.ts`).
+- A phone that opens an ordinary link starts in the phone layout and its
+  address becomes `/m/<path>` by a history replace (rule 7), so back, forward
+  and reload stay in it (`resolveInitialAppShellVariant` and the navigation
+  controller's location handling in `apps/web/src/controllers`).
+- A narrow desktop window keeps the standard layout.
+- Links Polynet hands out (invites, the community page `/c/<slug>`) stay
+  without `/m`; the phone adds it on arrival.
+
 ## Transitional Note
 
 Old hash-based deep links are no longer part of the supported route contract.

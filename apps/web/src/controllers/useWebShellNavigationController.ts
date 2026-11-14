@@ -22,7 +22,7 @@ import {
   pushUniqueNavSnapshot,
 } from "../../../../shared/navSnapshot";
 import { resolveAuthSubject } from "../../../../shared/authSession";
-import { isStandaloneWebApp } from "../../../../shared/browserRuntimeMode";
+import { isPhoneViewport, isStandaloneWebApp } from "../../../../shared/browserRuntimeMode";
 import { hasOAuthCallbackParamsInLocation } from "../../../../shared/cloudPkce";
 import {
   STANDALONE_APP_LAUNCH_SEARCH_PARAM,
@@ -143,7 +143,9 @@ export function useWebShellNavigationController(params: {
   const applyLocationToState = useCallback(() => {
     const current = paramsRef.current;
     current.setShellVariant(
-      readShellVariantFromPathname(window.location.pathname || "/"),
+      isPhoneViewport()
+        ? "mobile"
+        : readShellVariantFromPathname(window.location.pathname || "/"),
     );
     const nextPublicRoute = readPublicRouteFromLocation();
     current.setPublicRoute(nextPublicRoute);
@@ -302,6 +304,16 @@ export function useWebShellNavigationController(params: {
     params.publicRoute.kind,
     params.session,
   ]);
+
+  // A phone that opened an ordinary link: its address says /m/..., like every
+  // page it goes to next, so back, forward and reload stay in the phone layout.
+  useEffect(() => {
+    if (!isPhoneViewport()) return;
+    const current = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+    const next = applyShellVariantToKnownPath(current, "mobile");
+    if (next === current) return;
+    window.history.replaceState(window.history.state ?? {}, document.title, next);
+  }, []);
 
   useEffect(() => {
     if (!isStandaloneWebApp()) return;
