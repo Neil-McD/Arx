@@ -546,10 +546,10 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
 
 - **Does:** the back office (founders' admin: settings, members, billing,
   analytics) and Polynet's app, the member experience a community uses by
-  default. The owner's switch (Nov 6, `setCommunityMemberExperience`,
-  `CommunityMemberExperienceSection`) moves members to the community's own
-  deployed site instead; then Studio hands them there
-  (`useWebMemberSiteHandoff`). See the routing contract.
+  default. Since Nov 13 members always use the app (custom sites are being
+  removed): the owner's switch (`setCommunityMemberExperience`) is stored but
+  no longer moves anyone, and Studio's member-to-site hand-off is gone. See
+  the routing contract.
 - **Code:** `apps/web` (React, Vite: `App.tsx`, `components/`, `controllers/`),
   `shared/` (gateways and shared UI), `api/` (Vercel functions); backend helper
   `publicAppUrl`.

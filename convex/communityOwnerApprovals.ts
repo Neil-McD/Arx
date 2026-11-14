@@ -7,7 +7,7 @@ import { internalQuery, mutation, query } from "./_generated/server";
 import { resolveUserIdForAuthenticatedRequest } from "./authActor";
 import { requireCommunityOwner } from "./communityCore";
 import { applyCommunityMemberExperience } from "./communityLifecycle";
-import { communityHasCustomSite, communityMemberExperience } from "./communitySites";
+import { communityHasCustomSite, storedCommunityMemberExperience } from "./communitySites";
 import { readCanonicalPublicAppOrigin } from "./publicAppUrl";
 
 export const OWNER_APPROVAL_TTL_MS = 24 * 60 * 60 * 1000;
@@ -37,7 +37,7 @@ export const readMemberExperienceForTrustedManagerInternal = internalQuery({
     if (!community) throw new Error("community_not_found");
     const waiting = await pendingRequest(ctx, community._id);
     return {
-      members_use: await communityMemberExperience(ctx, community as any),
+      members_use: await storedCommunityMemberExperience(ctx, community as any),
       has_custom_site: await communityHasCustomSite(ctx, community._id),
       waiting_for_owner_approval: waiting && waiting.expiresAt > Date.now() ? publicRequest(waiting) : null,
     };
@@ -82,13 +82,13 @@ export const decideMemberExperienceRequest = mutation({
       ctx.db.patch(row._id, { status, decidedByUserId: userId, decidedAt: nowMs });
     if (row.expiresAt <= nowMs) {
       await close("expired");
-      return { status: "expired", members_use: await communityMemberExperience(ctx, community as any) };
+      return { status: "expired", members_use: await storedCommunityMemberExperience(ctx, community as any) };
     }
     if (args.decision === "decline") {
       await close("declined");
-      return { status: "declined", members_use: await communityMemberExperience(ctx, community as any) };
+      return { status: "declined", members_use: await storedCommunityMemberExperience(ctx, community as any) };
     }
-    const current = await communityMemberExperience(ctx, community as any);
+    const current = await storedCommunityMemberExperience(ctx, community as any);
     if (current !== row.fromValue) {
       await close("stale");
       return { status: "stale", members_use: current };

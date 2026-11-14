@@ -196,7 +196,17 @@ export async function communityHasCustomSite(ctx: any, communityId: any): Promis
   return Boolean(await ctx.db.query("communitySiteDeploys").withIndex("by_community_createdAt", (q: any) => q.eq("communityId", communityId)).first());
 }
 
-export async function communityMemberExperience(ctx: any, community: ExperienceCommunity): Promise<MemberExperience> {
+// Members always use Polynet's app (Neil, Nov 13: custom sites are being
+// removed). The owner's stored choice is kept, unread, until sites go; every
+// link, email and hand-off that asks this now sends members to the app.
+export async function communityMemberExperience(_ctx: any, _community: ExperienceCommunity): Promise<MemberExperience> {
+  return "app";
+}
+
+// The owner's switch as stored (still set by the cached production app and an
+// owner's approved AI request): "site" only while a site is deployed. Only the
+// switch's own bookkeeping reads it; members are never sent by it.
+export async function storedCommunityMemberExperience(ctx: any, community: ExperienceCommunity): Promise<MemberExperience> {
   if (community.memberExperience !== "site") return "app";
   return (await communityHasCustomSite(ctx, community._id)) && (await communitySiteUrl(ctx, community)) ? "site" : "app";
 }

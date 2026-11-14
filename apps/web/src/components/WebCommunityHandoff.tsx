@@ -1,14 +1,14 @@
 // Studio's /c/<slug>: the community's one link. Visitors go to its doorstep
 // (Join on its site: the page that sells it, where joining and paying happen;
-// Discover's cards come through here too). Members go where the owner's
-// switch says they spend time: the community in Polynet's app, or its site.
+// Discover's cards come through here too). Members always go to the community
+// in Polynet's app (Nov 13: custom sites are being removed).
 // A community with no site yet gets a short note instead of a dead end, and a
 // failed lookup says so (with a retry) rather than claiming it doesn't exist.
 import { useEffect, useState } from "react";
 import { resolveCloudPublicFunnel } from "../../../../shared/cloudPublicFunnelGateway";
 import { communitySiteRedirectTarget } from "../../../../shared/webAppRouteState";
 
-type HandoffCommunity = { slug?: string | null; name?: string | null; site_url?: string | null; members_use?: "app" | "site" };
+type HandoffCommunity = { slug?: string | null; name?: string | null; site_url?: string | null };
 
 export function WebCommunityHandoff(props: { communitySlug: string; membership: "loading" | "member" | "visitor"; signedIn?: boolean }) {
   const [state, setState] = useState<{ status: "loading" } | { status: "no_site"; name: string } | { status: "missing" } | { status: "unreachable" }>({ status: "loading" });
@@ -22,13 +22,12 @@ export function WebCommunityHandoff(props: { communitySlug: string; membership: 
         if (cancelled) return;
         const community = payload?.ok ? payload.community : null;
         if (!community?.slug) return setState({ status: "missing" });
-        if (props.membership === "member" && community.members_use !== "site") {
+        if (props.membership === "member") {
           return window.location.replace(`/c/${encodeURIComponent(community.slug)}/home`);
         }
         const target = communitySiteRedirectTarget(`/c/${community.slug}`, community.slug, community.site_url);
-        // A visitor: the doorstep. A member of a community on its own site:
-        // the place on the site they asked for.
-        if (target) return window.location.replace(props.membership === "visitor" ? `${new URL(target).origin}/join` : target);
+        // A visitor: the doorstep on the community's site.
+        if (target) return window.location.replace(`${new URL(target).origin}/join`);
         setState({ status: "no_site", name: String(community.name ?? community.slug) });
       } catch {
         if (!cancelled) setState({ status: "unreachable" });

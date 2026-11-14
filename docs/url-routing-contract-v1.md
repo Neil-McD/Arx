@@ -108,14 +108,16 @@ Use explicit namespaces.
 
 The community's one link (`WebCommunityHandoff`). Visitors go to its site's
 public page, where joining and paying (cash first) happen; Studio has no join
-page or checkout of its own. Members go where the owner's switch says they
-spend time (`members_use`, `communityMemberExperience`): Polynet's app
-(`/c/:slug/home`, the default) or the community's own deployed site. It waits
-until membership is known. A community with no site yet shows a short note.
+page or checkout of its own. Members always go to Polynet's app
+(`/c/:slug/home`): since Nov 13 custom sites are being removed, and
+`communityMemberExperience` answers "app" for every community. It waits until
+membership is known. A community with no site yet shows a short note.
 
-The switch (Nov 6, owner only, Studio → Settings): "Polynet's app" or "Your
-custom site" (needs a deployed site; without one it reads as the app). Every
-link follows it: emails and DM links (`communitySitePageUrl` and
+The switch (Nov 6, owner only) is no longer shown in Studio. The cached
+production app and an owner's approved AI request can still set it; the stored
+choice (`storedCommunityMemberExperience`) is kept only for the switch's own
+bookkeeping until sites are deleted, and sends no one anywhere. Before Nov 13
+every link followed it: emails and DM links (`communitySitePageUrl` and
 `communityPrivatePageUrl` give a site link only in site mode), and the site's
 edge, which in app mode sends member pages (`/chat`, `/events`, `/learn`,
 `/knowledge`, `/ask`, `/people`, and the twin's `/messages`, `/settings`,
@@ -125,12 +127,9 @@ it sends (`pn_from=site` from the edge, `pn_from=app` from Studio) and never
 sends a marked visit back, so in the minute after a switch, while one side may
 still have the old choice cached, a member is moved at most once: no loops.
 
-In site mode, Studio's member screens, `/c/:slug/home`, `/c/:slug/chat`,
-`/c/:slug/events`, `/c/:slug/resources` and `/c/:slug/agent`, hand someone who
-only belongs to the site's matching page (`/`, `/chat`, `/events`, `/learn`,
-`/ask`) once their access has loaded (`useWebMemberSiteHandoff`). The owner, admins,
-moderators and anyone with a members, join-request, moderation or resources
-right (`communityAccessRunsCommunity`) stay in Studio, the back office; so does everyone in a community with no site yet.
+Studio no longer hands members to a site (Nov 13): the member-to-site
+hand-off was removed with the switch's effect, so every member screen opens in
+the app.
 
 The retired draft-preview URL `/c/:slug/preview` resolves to `/c/:slug`. The
 retired editor URLs `/c/:slug/funnel` and `/c/:slug/settings/funnel` redirect to
