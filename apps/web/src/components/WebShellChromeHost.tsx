@@ -93,7 +93,6 @@ export function WebShellChromeHost(props: WebShellChromeHostProps) {
   // desktop, full width (you, then the community's sections); a section
   // opens its page of rows.
   const isPhoneV1 = isDesignV1Active() && props.showMobileAppShell;
-  const isPhoneSettings = isPhoneV1 && (props.isGlobalSettings || props.communityShell.destination.kind === "community_settings");
   const phoneSettingsIndex = isPhoneV1 && props.showMobileSettingsIndex ? (
     <WebSettingsNavV1
       communityShell={props.communityShell}
@@ -129,7 +128,9 @@ export function WebShellChromeHost(props: WebShellChromeHostProps) {
     <WebMobileGlobalShell
       communityShell={props.communityShell}
       isCommunityHome={isMobileCommunityHome}
-      hideRail={isPhoneV1 && (isMobileCommunityHome || isPhoneSettings)}
+      // Design v1 on a phone: no strip of communities on any screen; the
+      // community home's banner switches community, as on desktop.
+      hideRail={isPhoneV1}
       label={mobileGlobalShellLabel}
     >
       {mobileGlobalShellContent}

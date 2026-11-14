@@ -354,7 +354,8 @@ assert.match(
 );
 assert.match(
   communityNavSurface,
-  /const hasDestinationSelection =[\s\S]*!isMobileHome &&[\s\S]*webDestinationHasCommunityNavSelection\(communityShell\.destination\)[\s\S]*hideIdentitySettings=\{isMobileHome\}[\s\S]*activeSelectionMode=\{hasDestinationSelection \? "route" : "none"\}[\s\S]*onReorderChannels=\{[\s\S]*isMobileHome \? undefined : communityShell\.onReorderCommunityChannels[\s\S]*\}/,
+  /const hasDestinationSelection =[\s\S]*!isMobileHome &&[\s\S]*webDestinationHasCommunityNavSelection\(communityShell\.destination\)[\s\S]*hideIdentitySettings=\{isMobileHome && !useV1Layout\}[\s\S]*activeSelectionMode=\{hasDestinationSelection \? "route" : "none"\}[\s\S]*onReorderChannels=\{[\s\S]*isMobileHome \? undefined : communityShell\.onReorderCommunityChannels[\s\S]*\}/,
+  // Design v1 keeps the account menu's host items (Your guide) on the phone home; the classic phone home hides them.
   "mobile home should keep community identity without claiming an active destination or exposing reorder controls",
 );
 assert.match(
