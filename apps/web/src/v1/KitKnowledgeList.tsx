@@ -2,7 +2,7 @@
 // One list of everything the community knows beyond its courses, and for
 // hosts one row that adds to it in place: write and it's a note, paste a link
 // or choose a file and Polynet reads it. No menu, no pop-up.
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { FileText, Link2, StickyNote } from "lucide-react";
 import type { CommunityNoteView } from "../../../../shared/cloudCommunityNotesGateway";
 import type { CommunityResource } from "../components/communityResourcesContracts";
@@ -47,6 +47,8 @@ export function KitKnowledgeList(props: {
   // Hosts only: add a note, or hand links and files to be read.
   onAddNote?: (title: string, text: string) => Promise<KnowledgeAddResult>;
   onAddSources?: (input: { links: string[]; files: File[] }) => Promise<KnowledgeAddResult>;
+  // Open the add box already holding this (an unanswered question to answer).
+  seed?: { text: string; nonce: number } | null;
 }) {
   const [adding, setAdding] = useState(false);
   const [text, setText] = useState("");
@@ -55,6 +57,15 @@ export function KitKnowledgeList(props: {
   const [error, setError] = useState<string | null>(null);
   const fileInput = useRef<HTMLInputElement | null>(null);
   const canAdd = Boolean(props.onAddNote || props.onAddSources);
+  const seedNonce = props.seed?.nonce;
+  useEffect(() => {
+    if (!props.seed || !canAdd) return;
+    setText(props.seed.text);
+    setFiles([]);
+    setError(null);
+    setAdding(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [seedNonce]);
   const draft = readKnowledgeDraft(text);
   const close = () => { setAdding(false); setText(""); setFiles([]); setError(null); };
 
@@ -96,7 +107,8 @@ export function KitKnowledgeList(props: {
       <div className={cx("khead")}><span className={cx("lab")}>Notes, files and links</span></div>
       {adding ? (
         <div className={cx("kadd")}>
-          <textarea autoFocus rows={2} value={text} disabled={busy} aria-label="Add a note, a link or a file"
+          <textarea autoFocus rows={2} value={text}
+            onFocus={(event) => { const end = event.currentTarget.value.length; event.currentTarget.setSelectionRange(end, end); }} disabled={busy} aria-label="Add a note, a link or a file"
             placeholder="Write what Polynet should know, or paste a link" onChange={(event) => setText(event.target.value)}
             onKeyDown={(event) => { if (event.key === "Escape") close(); }} />
           <div className={cx("khint")}>{hint}</div>
