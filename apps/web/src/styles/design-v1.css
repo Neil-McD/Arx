@@ -3556,3 +3556,27 @@
   background: linear-gradient(90deg, transparent, transparent 8%, var(--header-hairline) 50%, transparent 92%, transparent);
   pointer-events: none;
 }
+
+/* ---------- Analytics (Nov 13, Neil) ----------
+   Four figures, one chart; who is on which plan in the
+   right column (or under the page once the column is hidden). */
+:root[data-design="v1"] .analytics-v1-figs > * { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+@media (max-width: 1100px) {
+  :root[data-design="v1"] .analytics-v1-figs > * { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+:root[data-design="v1"] .analytics-v1-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 34px;
+}
+:root[data-design="v1"] .analytics-v1-chart { margin-top: 10px; }
+:root[data-design="v1"] .analytics-v1-plan em { font-style: normal; color: var(--ink3); font-size: 12px; }
+:root[data-design="v1"] .analytics-v1-plans { display: grid; gap: 12px; }
+:root[data-design="v1"] .analytics-v1-plan > div { display: flex; justify-content: space-between; gap: 12px; font-size: 13px; }
+:root[data-design="v1"] .analytics-v1-plan b { font-weight: 500; }
+:root[data-design="v1"] .analytics-v1-plan em { display: block; margin-top: 2px; }
+@media (min-width: 900px) {
+  :root[data-design="v1"] .analytics-v1-plans-inline { display: none; }
+}
