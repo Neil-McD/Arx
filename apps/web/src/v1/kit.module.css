@@ -890,6 +890,16 @@
 .app .kseg button{height:24px;padding:0 10px;border-radius:6px;font-size:12.5px;font-weight:500;color:var(--ink2)}
 .app .kseg button[aria-pressed="true"]{background:var(--s2);color:var(--ink)}
 
+/* Kit addition: arranging the shelf (two arrows on each book) and moving a
+   lesson to another course from its editor. */
+.app .kcourse.karr{position:relative;cursor:default}
+.app .kcourse.karr:hover{border-color:var(--line);background:var(--s1)}
+.app .kmove{position:absolute;top:8px;right:8px;display:flex;gap:4px}
+.app .kmove button{width:28px;height:28px;border-radius:7px;display:grid;place-items:center;border:1px solid var(--line2);background:var(--pop);color:var(--ink)}
+.app .kmove button:disabled{opacity:.35}
+.app .kmove button .ic{width:14px;height:14px}
+.app .kmoveto{height:28px;max-width:220px;padding:0 8px;border-radius:6px;border:1px solid var(--line2);background:transparent;color:var(--ink2);font:inherit;font-size:12.5px}
+
 /* Kit addition: changing a course in the page (KitCourseEdit): the cover on
    the left, the words on the right. */
 .app .kcedit{margin-top:0;margin-bottom:22px}

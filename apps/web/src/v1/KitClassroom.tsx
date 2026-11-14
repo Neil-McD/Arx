@@ -33,6 +33,15 @@ import { useCommunityAgentOn } from "../controllers/communityAgentOn";
 
 const SHELF = 6;
 
+// The shelf's order after one book moves one place; null when it can't.
+export function courseOrderAfterMove(ids: string[], index: number, by: -1 | 1): string[] | null {
+  const to = index + by;
+  if (index < 0 || index >= ids.length || to < 0 || to >= ids.length) return null;
+  const next = ids.slice();
+  [next[index], next[to]] = [next[to], next[index]];
+  return next;
+}
+
 // A course without a cover gets one of three soft tints, the same one every
 // time (from its id), so a shelf never reads as a row of empty boxes.
 const COVER_TINTS = ["c2", "c3", "c4"] as const;
@@ -76,8 +85,8 @@ export function KitClassroom(props: {
   onOpenGuideMemory?: (open: boolean) => void;
   // Makes a draft course with these lessons and opens it (hosts).
   onCreateCourse?: (name: string, lessons: string[]) => Promise<KnowledgeAddResult>;
-  onEditCourse: (moduleId: string) => void;
-  // A course's name, line and cover (the course form).
+  // The shelf's order, as members see it (hosts).
+  onReorderCourses?: (moduleIds: string[]) => Promise<boolean> | boolean;
   // A course's own tools (hosts): change its name, description and cover in
   // the page, and delete it while it is still a draft.
   onSaveCourse?: (moduleId: string, patch: CourseEditPatch) => Promise<KnowledgeAddResult>;
@@ -92,6 +101,8 @@ export function KitClassroom(props: {
     addLesson: (moduleId: string) => Promise<string | null>;
     reorder: (moduleId: string, resourceIds: string[]) => Promise<void>;
     remove: (resourceId: string) => Promise<void>;
+    // Puts a lesson at the end of another course.
+    move?: (resourceId: string, moduleId: string) => Promise<void>;
   } | null;
   renderRail: (rail: ReactNode) => ReactNode;
 }) {
@@ -106,6 +117,10 @@ export function KitClassroom(props: {
   const [saving, setSaving] = useState(false);
   const [editingLessonId, setEditingLessonId] = useState<string | null>(null);
   const [editingCourse, setEditingCourse] = useState(false);
+  // Arrange: the shelf shows every course with two arrows, until Done.
+  const [arranging, setArranging] = useState(false);
+  const [movingCourse, setMovingCourse] = useState(false);
+  useEffect(() => { if (!props.canManage) setArranging(false); }, [props.canManage]);
   const [deletingCourse, setDeletingCourse] = useState(false);
   const [courseError, setCourseError] = useState<string | null>(null);
   useEffect(() => { setEditingCourse(false); setCourseError(null); }, [props.openCourseId]);
@@ -304,6 +319,13 @@ export function KitClassroom(props: {
     </>
   );
 
+  const moveCourse = async (index: number, by: -1 | 1) => {
+    const ids = courseOrderAfterMove(courses.map((entry) => entry.course.id), index, by);
+    if (!ids || !props.onReorderCourses || movingCourse) return;
+    setMovingCourse(true);
+    try { await props.onReorderCourses(ids); } finally { setMovingCourse(false); }
+  };
+
   const deleteCourse = async () => {
     if (!open || !props.onDeleteCourse || deletingCourse) return;
     const count = open.lessons.length;
@@ -336,7 +358,6 @@ export function KitClassroom(props: {
                 onClick={() => void setCourseStatus(open.course.id, "draft")}>Unpublish</button>
             )) : null}
             {props.onSaveCourse ? <button type="button" className={cx("btn sm")} aria-pressed={editingCourse} onClick={() => setEditingCourse(true)}>Edit course</button> : null}
-            <button type="button" className={cx("btn sm txt")} onClick={() => props.onEditCourse(open.course.id)}>More tools</button>
             {/* Only a draft can be deleted: taking a live course away from
                 members is Unpublish, on purpose, first. */}
             {props.onDeleteCourse ? (open.course.module_status === "draft" ? (
@@ -434,6 +455,12 @@ export function KitClassroom(props: {
           <KitLessonEditor key={lesson.id} resource={lesson} index={index} total={open.lessons.length} courseLive={open.course.module_status !== "draft"}
             onCancel={() => setEditingLessonId(null)}
             onSave={async (patch) => { await editingTools.save(lesson.id, patch); setEditingLessonId(null); }}
+            moveTargets={editingTools.move ? courses.filter((entry) => entry.course.id !== open.course.id).map((entry) => ({ id: entry.course.id, name: entry.course.name })) : []}
+            onMove={editingTools.move ? async (courseId) => {
+              await editingTools.move!(lesson.id, courseId);
+              setEditingLessonId(null);
+              setLessonId(open.lessons[index + 1]?.id ?? open.lessons[index - 1]?.id ?? null);
+            } : undefined}
             onDelete={async () => {
               await editingTools.remove(lesson.id);
               setEditingLessonId(null);
@@ -509,14 +536,35 @@ export function KitClassroom(props: {
 
         <div className={cx("khead")}>
           <span className={cx("lab")}>Courses</span>
-          {props.onCreateCourse && courses.length > 0 ? (
-            <button type="button" className={cx("btn sm knewbtn")} onClick={newCourse}><Icon name="plus" />New course</button>
-          ) : null}
+          {arranging ? <span className={cx("sub")} style={{ marginLeft: 10 }}>Members see them in this order.</span> : null}
+          <span style={{ marginLeft: "auto", display: "flex", gap: 6 }}>
+            {props.onReorderCourses && props.canManage && courses.length > 1 ? (
+              <button type="button" className={cx("btn sm", !arranging && "txt")} aria-pressed={arranging} onClick={() => setArranging(!arranging)}>{arranging ? "Done" : "Arrange"}</button>
+            ) : null}
+            {props.onCreateCourse && courses.length > 0 && !arranging ? (
+              <button type="button" className={cx("btn sm")} onClick={newCourse}><Icon name="plus" />New course</button>
+            ) : null}
+          </span>
         </div>
         <div className={cx("kgrid")}>
-          {shelf.items.map(({ course, lessons }) => {
+          {(arranging ? courses : shelf.items).map(({ course, lessons }, position) => {
             const progress = courseProgress(lessons, done);
             const row = summaryBy.get(course.id);
+            // Arranging: the book stays put and two arrows move it; it does
+            // not open, so a slip of the hand never leaves the shelf.
+            if (arranging) return (
+              <div key={course.id} className={cx("kcourse", "karr")}>
+                <span className={cx("kcover", course.banner_url ? "" : coverTint(course.id))} style={course.banner_url ? { backgroundImage: `url(${JSON.stringify(course.banner_url)})`, backgroundSize: "cover", backgroundPosition: `${(course.banner_focus_x ?? 0.5) * 100}% ${(course.banner_focus_y ?? 0.5) * 100}%` } : undefined}>
+                  {course.banner_url ? null : <Icon name="book" />}
+                </span>
+                <span className={cx("kmove")}>
+                  <button type="button" aria-label={`Move ${course.name} earlier`} disabled={movingCourse || position === 0} onClick={() => void moveCourse(position, -1)}><Icon name="back" /></button>
+                  <button type="button" aria-label={`Move ${course.name} later`} disabled={movingCourse || position === courses.length - 1} onClick={() => void moveCourse(position, 1)}><Icon name="arrow" /></button>
+                </span>
+                <b>{course.name}{course.module_status === "draft" ? <span className={cx("tag")} style={{ marginLeft: 8 }}>draft</span> : null}</b>
+                <span className={cx("s")}>{position + 1} of {courses.length}</span>
+              </div>
+            );
             return (
               <button key={course.id} type="button" className={cx("kcourse")} onClick={() => props.onOpenCourse(course.id)}>
                 <span className={cx("kcover", course.banner_url ? "" : coverTint(course.id))} style={course.banner_url ? { backgroundImage: `url(${JSON.stringify(course.banner_url)})`, backgroundSize: "cover", backgroundPosition: `${(course.banner_focus_x ?? 0.5) * 100}% ${(course.banner_focus_y ?? 0.5) * 100}%` } : undefined}>
@@ -535,7 +583,7 @@ export function KitClassroom(props: {
           {/* The dashed card is the empty shelf's way in; with courses, the button beside "Courses" adds one. */}
           {props.onCreateCourse && courses.length === 0 ? <button type="button" className={cx("kcourse knew")} onClick={newCourse}><Icon name="plus" />New course</button> : null}
         </div>
-        {shelf.pages > 1 ? (
+        {shelf.pages > 1 && !arranging ? (
           <div className={cx("kpager")}>
             <span>{shelf.from}–{shelf.to} of {courses.length} courses</span>
             <button type="button" className={cx("btn sm")} disabled={shelf.page === 0} onClick={() => setShelfPage(shelf.page - 1)}>Previous</button>

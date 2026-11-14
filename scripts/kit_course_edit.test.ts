@@ -29,3 +29,24 @@ describe("changing a course in the page", () => {
     expect(panel).toMatch(/course\.module_status !== "draft"\) return \{ ok: false/);
   });
 });
+
+const { courseOrderAfterMove } = await import("../apps/web/src/v1/KitClassroom");
+
+describe("arranging the shelf, and the old editor's retirement", () => {
+  it("moves one book one place, and refuses to move off the end", () => {
+    expect(courseOrderAfterMove(["a", "b", "c"], 0, 1)).toEqual(["b", "a", "c"]);
+    expect(courseOrderAfterMove(["a", "b", "c"], 2, -1)).toEqual(["a", "c", "b"]);
+    expect(courseOrderAfterMove(["a", "b", "c"], 0, -1)).toBeNull();
+    expect(courseOrderAfterMove(["a", "b", "c"], 2, 1)).toBeNull();
+  });
+  // Neil, Nov 14: one way to edit. The new design has no way into the earlier
+  // editor ("More tools") or its preview switch.
+  it("the new Knowledge page cannot open the earlier editor", () => {
+    const page = readFileSync(new URL("../apps/web/src/v1/KitClassroom.tsx", import.meta.url), "utf8");
+    expect(page).not.toMatch(/More tools|onEditCourse\b/);
+    const panel = readFileSync(new URL("../apps/web/src/components/WebCommunityKnowledgePanel.tsx", import.meta.url), "utf8");
+    const v1 = panel.slice(panel.indexOf("function KnowledgeV1"), panel.indexOf("function KnowledgeClassic"));
+    expect(v1.length).toBeGreaterThan(200);
+    expect(v1).not.toMatch(/CommunityResourcesPanel|Done editing/);
+  });
+});

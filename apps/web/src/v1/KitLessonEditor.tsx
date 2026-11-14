@@ -44,6 +44,9 @@ export function KitLessonEditor(props: {
   onSave: (patch: LessonPatch) => Promise<void>;
   onCancel: () => void;
   onDelete: () => Promise<void>;
+  // The other courses this lesson could move to, and the move itself.
+  moveTargets?: Array<{ id: string; name: string }>;
+  onMove?: (courseId: string) => Promise<void>;
 }) {
   const { resource } = props;
   const [title, setTitle] = useState(resource.title);
@@ -53,6 +56,7 @@ export function KitLessonEditor(props: {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [moving, setMoving] = useState(false);
   const provider = videoLabel(video);
   const thumb = useMemo(() => {
     const embed = video.trim() ? parseEmbedUrl(video.trim()) : null;
@@ -112,6 +116,21 @@ export function KitLessonEditor(props: {
             <Btn small txt onClick={() => setConfirmDelete(false)}>Keep it</Btn>
           </>
         ) : <Btn small txt onClick={() => setConfirmDelete(true)}>Delete</Btn>}
+        {props.onMove && props.moveTargets?.length && !confirmDelete ? (
+          // A lesson moves as it was last saved, so unsaved words are saved or
+          // dropped first.
+          <select className={cx("kmoveto")} aria-label="Move this lesson to another course" value="" disabled={moving || Boolean(patch)}
+            title={patch ? "Save or cancel your changes first" : undefined}
+            onChange={(event) => {
+              const courseId = event.target.value;
+              if (!courseId) return;
+              setMoving(true);
+              void props.onMove!(courseId).catch(() => setError("The lesson couldn't be moved. Try again.")).finally(() => setMoving(false));
+            }}>
+            <option value="">{moving ? "Moving…" : "Move to another course"}</option>
+            {props.moveTargets.map((course) => <option key={course.id} value={course.id}>{course.name}</option>)}
+          </select>
+        ) : null}
         <span style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
           <Btn small txt onClick={props.onCancel}>Cancel</Btn>
           <button type="button" className={cx("btn sm go")} disabled={saving || !patch} onClick={() => void save()}>{saving ? "Saving…" : "Save"}</button>
