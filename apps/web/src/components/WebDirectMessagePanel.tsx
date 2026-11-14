@@ -779,14 +779,14 @@ export function WebDirectMessagePanel(props: WebDirectMessagePanelProps) {
                   <DirectMessageAttachmentViews attachments={props.attachments} isComposer={true} onRetryAttachment={props.onRetryAttachment} onRemoveAttachment={props.onRemoveAttachment} />
                 </div>
               ) : null}
-              <form className={cx("ask")} style={{ height: "auto", minHeight: 46 }} onSubmit={onSubmit}>
+              {/* The kit's composer, like Home's: the text across the top, then
+                  attach and voice on the left and send on the right (Nov 13). */}
+              <form className={cx("ask")} onSubmit={onSubmit}>
                 <input ref={fileInputRef} className="community-dm-panel-file-input" type="file" multiple
                   accept="image/jpeg,image/png,image/webp,image/gif,application/pdf,text/plain,text/markdown,text/csv,application/json,.csv,.doc,.docx,.json,.md,.pdf,.ppt,.pptx,.rtf,.txt,.xls,.xlsx"
                   onChange={onFileInputChange} />
-                <button type="button" className={cx("ib")} style={{ marginLeft: -8 }} onClick={() => fileInputRef.current?.click()} disabled={props.isSending || isPeerBlocked} aria-label="Attach files" title="Attach files">
-                  <Icon name="plus" />
-                </button>
                 <textarea
+                  className="kit-ask-text"
                   ref={(node) => {
                     composerTextareaRef.current = node;
                     if (props.inputRef) props.inputRef.current = node;
@@ -807,6 +807,9 @@ export function WebDirectMessagePanel(props: WebDirectMessagePanelProps) {
                   rows={1}
                   disabled={props.isSending || isPeerBlocked}
                 />
+                <button type="button" className={cx("ib")} onClick={() => fileInputRef.current?.click()} disabled={props.isSending || isPeerBlocked} aria-label="Attach files" title="Attach files">
+                  <Icon name="plus" />
+                </button>
                 {props.voiceButtonProps ? (
                   <button type="button" className={cx("ib")} onClick={props.voiceButtonProps.onClick} disabled={props.voiceButtonProps.disabled}
                     aria-label={props.voiceButtonProps.title} title={props.voiceButtonProps.title} aria-pressed={props.voiceButtonProps.state === "recording"}
@@ -814,7 +817,7 @@ export function WebDirectMessagePanel(props: WebDirectMessagePanelProps) {
                     <Icon name="mic" />
                   </button>
                 ) : null}
-                <button type="submit" className={cx("send")} style={{ width: 30, height: 30 }} disabled={!canSendDirectMessage} aria-label="Send direct message" title="Send">
+                <button type="submit" className={cx("send")} disabled={!canSendDirectMessage} aria-label="Send direct message" title="Send">
                   <Icon name="up" />
                 </button>
               </form>
