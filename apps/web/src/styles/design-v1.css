@@ -3579,3 +3579,18 @@
 @media (min-width: 900px) {
   :root[data-design="v1"] .analytics-v1-plans-inline { display: none; }
 }
+
+/* ---------- The header holds the page's name only (Nov 13, Neil) ----------
+   A page's own controls sit in a row at the top of the page, under the
+   header line, on the page's left edge. An empty row takes no room. */
+:root[data-design="v1"] .community-page-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 24px;
+}
+:root[data-design="v1"] .community-page-toolbar:empty { display: none; }
+:root[data-design="v1"] .community-page-toolbar > .community-page-header-actions {
+  margin-left: 0;
+  justify-content: flex-start;
+}

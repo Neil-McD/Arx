@@ -28,26 +28,38 @@ const HeaderSlotContext = createContext<HTMLElement | null | undefined>(undefine
 
 const RailSlotContext = createContext<HTMLElement | null | undefined>(undefined);
 
+// A page's own controls (a time range, a section switcher, "Done editing")
+// sit in a row just under the header, aligned with the page (Neil, Nov 13):
+// the header line holds the page's name and nothing else.
+const ToolbarSlotContext = createContext<HTMLElement | null | undefined>(undefined);
+
 export function CommunityPageFrame(props: { children: ReactNode }) {
   const [slot, setSlot] = useState<HTMLElement | null>(null);
   const [rail, setRail] = useState<HTMLElement | null>(null);
+  const [toolbar, setToolbar] = useState<HTMLElement | null>(null);
+  const v1 = isDesignV1Active();
   const body = (
     <div className="community-tab-scroll">
-      <div className="web-community-centered-pane">{props.children}</div>
+      <div className="web-community-centered-pane">
+        {v1 ? <div className="community-page-toolbar" ref={setToolbar} /> : null}
+        {props.children}
+      </div>
     </div>
   );
-  if (!isDesignV1Active()) return body;
+  if (!v1) return body;
   // The right column is a slot too: a page that has one fills it with
   // <CommunityPageRail>; an empty slot takes no room.
   return (
     <>
       <HeaderSlotContext.Provider value={slot}>
         <RailSlotContext.Provider value={rail}>
+          <ToolbarSlotContext.Provider value={toolbar}>
           <div className="community-page-body">
             <header className="community-channel-header community-page-header" ref={setSlot} />
             {body}
             <aside className="community-page-rail" ref={setRail} />
           </div>
+          </ToolbarSlotContext.Provider>
         </RailSlotContext.Provider>
       </HeaderSlotContext.Provider>
     </>
@@ -64,15 +76,18 @@ export function CommunityPageRail(props: { label: string; children: ReactNode })
 // a page is used outside the frame, as on mobile).
 export function CommunityPageHeader(props: { title: string; actions?: ReactNode; children: ReactNode }) {
   const slot = useContext(HeaderSlotContext);
+  const toolbar = useContext(ToolbarSlotContext);
   if (!isDesignV1Active() || slot === undefined) return <>{props.children}</>;
   if (!slot) return null;
-  return createPortal(
+  return (
     <>
-      <div className="community-channel-header-identity">
-        <h1>{props.title}</h1>
-      </div>
-      {props.actions ? <div className="community-page-header-actions">{props.actions}</div> : null}
-    </>,
-    slot,
+      {createPortal(
+        <div className="community-channel-header-identity">
+          <h1>{props.title}</h1>
+        </div>,
+        slot,
+      )}
+      {props.actions && toolbar ? createPortal(<div className="community-page-header-actions">{props.actions}</div>, toolbar) : null}
+    </>
   );
 }
