@@ -12,7 +12,12 @@
   --cl-accent-hover: #5e6ad2;
   --cl-link: #aab1f0;
   --cl-guide: #c4b5fd;
-  min-height: 100vh;
+  /* The app's frame doesn't scroll the window: the page is its own scroller. */
+  height: 100vh;
+  height: 100dvh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  box-sizing: border-box;
   background: var(--cl-bg);
   color: var(--cl-ink);
   font-family: "Geist Variable", "Geist", "Inter", system-ui, sans-serif;
