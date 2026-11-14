@@ -4,6 +4,7 @@ import { Check, ChevronsUpDown, Compass, Plus, Search } from "lucide-react";
 import { CommunityAvatar } from "../../../../shared/CommunityAvatar";
 import type { CommunityLike } from "./webShellChromeShared";
 import { Icon, KitApp, cx } from "../v1/kit";
+import { isImeComposing } from "../controllers/communityComposerTextEditing";
 
 export type WebCommunitySwitcherProps = {
   activeCommunityName: string;
@@ -74,6 +75,7 @@ export function WebCommunitySwitcher(props: WebCommunitySwitcherProps) {
 
   // Arrow keys move through the search box and every item; Enter picks.
   const onMenuKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    if (isImeComposing(event)) return;
     if (event.key !== "ArrowDown" && event.key !== "ArrowUp" && event.key !== "Home" && event.key !== "End") {
       if (event.key === "Enter" && event.target === searchRef.current && listed[0]) {
         event.preventDefault();
