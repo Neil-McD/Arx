@@ -39,7 +39,7 @@ export function WebCommunityNavSurface({
     {useV1Layout && !isMobileHome ? <WebCommunityCommandPalette communityShell={communityShell} /> : null}
     <CommunityNav
       activeCommunity={communityShell.activeCommunity}
-      hideIdentitySettings={isMobileHome}
+      hideIdentitySettings={isMobileHome && !useV1Layout}
       communityTab={communityShell.communityTab}
       activeSelectionMode={hasDestinationSelection ? "route" : "none"}
       tabIndicators={communityShell.communityTabIndicators}
