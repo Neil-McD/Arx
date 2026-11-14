@@ -23,7 +23,8 @@ const node = (communityId: any, title: string, extra: Record<string, unknown> = 
   createdAt: NOW, updatedAt: NOW, ...extra,
 });
 
-test("members read the notes in Studio; only owners and admins edit or delete them", async () => {
+// Notes are the guide's memory (Neil, Nov 14): a member is never handed them.
+test("only owners and admins read, edit or delete the notes; a member gets none of them", async () => {
   const t = convexTest(schema, modules);
   const { ownerId, communityId } = await community(t);
   const memberId = await t.run(async (ctx: any) => {
@@ -40,15 +41,17 @@ test("members read the notes in Studio; only owners and admins edit or delete th
   const asOwner = t.withIdentity({ subject: "owner" });
 
   const seen = await asMember.query(api.communityNotes.listCommunityNotes, { communityId });
-  expect(seen).toMatchObject({ can_manage: false, notes: [expect.objectContaining({ title: "Saturday carpool", body_md: "Leaves at 4:50." })] });
+  expect(seen).toEqual({ can_manage: false, has_more: false, notes: [] });
+  expect((await asOwner.query(api.communityNotes.listCommunityNotes, { communityId })).notes).toMatchObject([{ title: "Saturday carpool", body_md: "Leaves at 4:50." }]);
   await expect(asMember.mutation(api.communityNotes.deleteCommunityNote, { communityId, slug: "saturday-carpool" })).rejects.toThrow(/community_forbidden/);
   await expect(asMember.mutation(api.communityNotes.updateCommunityNote, { communityId, slug: "saturday-carpool", title: "x", text: "y" })).rejects.toThrow(/community_forbidden/);
 
   expect((await asOwner.query(api.communityNotes.listCommunityNotes, { communityId })).can_manage).toBe(true);
   await asOwner.mutation(api.communityNotes.updateCommunityNote, { communityId, slug: "saturday-carpool", title: "Saturday carpool", text: "Leaves at 4:45 now." });
-  expect((await asMember.query(api.communityNotes.listCommunityNotes, { communityId })).notes[0].body_md).toBe("Leaves at 4:45 now.");
-  await asOwner.mutation(api.communityNotes.deleteCommunityNote, { communityId, slug: "saturday-carpool" });
+  expect((await asOwner.query(api.communityNotes.listCommunityNotes, { communityId })).notes[0].body_md).toBe("Leaves at 4:45 now.");
   expect((await asMember.query(api.communityNotes.listCommunityNotes, { communityId })).notes).toHaveLength(0);
+  await asOwner.mutation(api.communityNotes.deleteCommunityNote, { communityId, slug: "saturday-carpool" });
+  expect((await asOwner.query(api.communityNotes.listCommunityNotes, { communityId })).notes).toHaveLength(0);
   expect(memberId).toBeTruthy();
 });
 
@@ -72,7 +75,8 @@ test("hosts write notes from Knowledge; members can't; only a host's own notes n
   expect(second.slug).toBe("invitations-that-work-2");
   await expect(asOwner.mutation(api.communityNotes.createCommunityNote, { communityId, title: "  ", text: "x" })).rejects.toThrow(/invalid_tool_args/);
 
-  const seen = await asMember.query(api.communityNotes.listCommunityNotes, { communityId });
+  expect((await asMember.query(api.communityNotes.listCommunityNotes, { communityId })).notes).toEqual([]);
+  const seen = await asOwner.query(api.communityNotes.listCommunityNotes, { communityId });
   const bySlug = Object.fromEntries(seen.notes.map((note: any) => [note.slug, note]));
   expect(bySlug["invitations-that-work"]).toMatchObject({ kind: "founder", written_by: "Owner" });
   expect(bySlug["invitations-that-work"].created_at).toBeTruthy();

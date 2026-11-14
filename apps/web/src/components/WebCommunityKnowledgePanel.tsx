@@ -48,10 +48,15 @@ function KnowledgeV1({ resources, context }: Props) {
   useEffect(() => { if (!canManage) setEditing(false); }, [canManage]);
   const moduleId = resources.state.selectedModuleId;
   const openCourse = moduleId ? resources.state.modules.find((module) => module.id === moduleId && !module.is_virtual) ?? null : null;
+  // "What your guide knows": the builders' list, one level in from Knowledge.
+  const [guideMemoryOpen, setGuideMemoryOpen] = useState(false);
+  useEffect(() => { setGuideMemoryOpen(false); }, [context.communityId, canManage]);
+  const inGuideMemory = guideMemoryOpen && canManage && !openCourse && !editing;
   return (
     <section className="community-knowledge-page" aria-label="Knowledge">
-      <CommunityPageHeader title={editing ? "Knowledge · Editing" : openCourse ? openCourse.name : "Knowledge"}
-        back={openCourse && !editing ? { label: "Back to Knowledge", onBack: () => resources.actions.handleSelectModule(null) } : null}
+      <CommunityPageHeader title={editing ? "Knowledge · Editing" : openCourse ? openCourse.name : inGuideMemory ? "What your guide knows" : "Knowledge"}
+        back={openCourse && !editing ? { label: "Back to Knowledge", onBack: () => resources.actions.handleSelectModule(null) }
+          : inGuideMemory ? { label: "Back to Knowledge", onBack: () => setGuideMemoryOpen(false) } : null}
         actions={editing ? <button type="button" className="community-page-back" onClick={() => setEditing(false)}>Done editing</button> : null}>
         <div className="community-knowledge-header"><h1>Knowledge</h1></div>
       </CommunityPageHeader>
@@ -63,6 +68,7 @@ function KnowledgeV1({ resources, context }: Props) {
           // still decides who may write.
           canManage={canManage}
           openCourseId={moduleId} onOpenCourse={resources.actions.handleSelectModule}
+          guideMemoryOpen={inGuideMemory} onOpenGuideMemory={canManage ? setGuideMemoryOpen : undefined}
           onCreateCourse={canManage ? async (name, lessons) => {
             // The course first (a draft only hosts see), then its lessons in
             // order. If a lesson fails, what was made stays and the page says so.

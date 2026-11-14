@@ -1017,7 +1017,9 @@ describe("pods", () => {
     expect(await everywhere(asAna)).not.toContain("497");
     // The builder publishes one note: a copy in Knowledge, marked with its pod.
     await asOwner.mutation(api.communityPodNotes.publishPodNote, { ...pod, slug: "launch-pricing" });
-    const community = await asBen.query(api.communityNotes.listCommunityNotes, { communityId: f.communityId });
+    // (Builders read the community's notes; a member is never handed them.)
+    expect((await asBen.query(api.communityNotes.listCommunityNotes, { communityId: f.communityId })).notes).toEqual([]);
+    const community = await asOwner.query(api.communityNotes.listCommunityNotes, { communityId: f.communityId });
     expect(community.notes).toMatchObject([{ title: "Launch pricing", body_md: secret, from_pod: "Founders" }]);
     // The pod's other note stayed in.
     expect(JSON.stringify(community)).not.toContain("everyone shipped");
@@ -1025,16 +1027,16 @@ describe("pods", () => {
     // Publishing again updates the same copy; deleting the pod note leaves it.
     await asOwner.mutation(api.communityPodNotes.savePodNote, { ...pod, slug: "launch-pricing", title: "Launch pricing", text: "Our launch price is $597." });
     await asOwner.mutation(api.communityPodNotes.publishPodNote, { ...pod, slug: "launch-pricing" });
-    const after = await asBen.query(api.communityNotes.listCommunityNotes, { communityId: f.communityId });
+    const after = await asOwner.query(api.communityNotes.listCommunityNotes, { communityId: f.communityId });
     expect(after.notes.map((note: any) => note.body_md)).toEqual(["Our launch price is $597."]);
     // The builder deletes the copy and writes an unrelated note that takes its
     // slug: republishing makes a new copy, never overwriting that note.
     await asOwner.mutation(api.communityNotes.deleteCommunityNote, { communityId: f.communityId, slug: "launch-pricing" });
     await asOwner.mutation(api.communityNotes.createCommunityNote, { communityId: f.communityId, title: "Launch pricing", text: "Unrelated community note." });
     await asOwner.mutation(api.communityPodNotes.publishPodNote, { ...pod, slug: "launch-pricing" });
-    const bodies = (await asBen.query(api.communityNotes.listCommunityNotes, { communityId: f.communityId })).notes.map((note: any) => note.body_md).sort();
+    const bodies = (await asOwner.query(api.communityNotes.listCommunityNotes, { communityId: f.communityId })).notes.map((note: any) => note.body_md).sort();
     expect(bodies).toEqual(["Our launch price is $597.", "Unrelated community note."]);
     await asOwner.mutation(api.communityPodNotes.deletePodNote, { ...pod, slug: "launch-pricing" });
-    expect((await asBen.query(api.communityNotes.listCommunityNotes, { communityId: f.communityId })).notes).toHaveLength(2);
+    expect((await asOwner.query(api.communityNotes.listCommunityNotes, { communityId: f.communityId })).notes).toHaveLength(2);
   });
 });

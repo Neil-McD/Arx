@@ -76,7 +76,7 @@ An authorized community is mounted at:
 ├── channels/
 │   ├── general/
 │   └── <custom-channel-slug>/
-├── memory/
+├── memory/           # the guide's notes: the agent and owner/admin only
 ├── capabilities/
 └── builder/          # owner/admin only
     └── resources/

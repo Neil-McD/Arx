@@ -425,7 +425,7 @@ export function WebCommunityLandingPage(props: Props) {
                 {data!.guide ? (
                   <div className="cl-tile is-guide">
                     <div className="cl-tile-label">The guide</div>
-                    <p>Members can ask the community's guide anything it knows{data!.guide.notes > 0 ? `, from its courses, conversations and ${data!.guide.notes.toLocaleString()} saved ${data!.guide.notes === 1 ? "note" : "notes"}` : ""}.</p>
+                    <p>Members can ask the community's guide anything it knows, from its courses and what the host has taught it.</p>
                   </div>
                 ) : null}
                 {data!.app ? (

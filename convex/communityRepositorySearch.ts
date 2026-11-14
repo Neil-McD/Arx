@@ -105,6 +105,9 @@ export const searchCommunityRepositoryInternal = internalAction({
     types: v.optional(v.array(v.string())),
     limit: v.optional(v.number()),
     surface: communityEvidenceSurfaceValidator,
+    // Notes are the guide's memory: only the guide and builders search them.
+    // Left out, they are not searched.
+    includeNotes: v.optional(v.boolean()),
   },
   handler: async (ctx, args): Promise<Record<string, unknown>> => {
     const userId = await resolveTrustedCommunityEvidenceUserId({
@@ -126,10 +129,10 @@ export const searchCommunityRepositoryInternal = internalAction({
           .searchRecentCommunityResourceEvidenceInternal,
         { userId, communityId: args.communityId, query, limit },
       ),
-      ctx.runQuery(
+      args.includeNotes === true ? ctx.runQuery(
         (internal as any).communityNotes.searchCommunityNotesInternal,
         { communityId: args.communityId, query, limit },
-      ),
+      ) : { notes: [] },
     ]) as [
       Record<string, unknown>,
       Record<string, unknown>,
