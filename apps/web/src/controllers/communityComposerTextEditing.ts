@@ -1,5 +1,14 @@
 // While an input method (Japanese, Chinese, Korean...) is composing, Enter
 // and the arrow keys belong to it: they pick a candidate, not send or move.
+// On a touch screen the keyboard's Return can't be held with Shift, so it
+// adds a line and the send button sends (as in Messages and Slack). With a
+// mouse and keyboard, Enter sends and Shift+Enter adds a line (Nov 13).
+export function enterSendsMessage(event: { key: string; shiftKey: boolean }): boolean {
+  if (event.key !== "Enter" || event.shiftKey) return false;
+  if (typeof window === "undefined" || typeof window.matchMedia !== "function") return true;
+  return !window.matchMedia("(hover: none) and (pointer: coarse)").matches;
+}
+
 export function isImeComposing(event: { nativeEvent?: { isComposing?: boolean; keyCode?: number }; isComposing?: boolean; keyCode?: number }): boolean {
   const native = event.nativeEvent ?? event;
   return Boolean(native.isComposing) || native.keyCode === 229;

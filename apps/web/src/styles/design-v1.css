@@ -3738,3 +3738,24 @@
     --conversation-primary-action-foreground: #ffffff;
   }
 }
+
+/* ---------- Composers on a phone (Nov 13, Neil) ----------
+   As the text grows, the buttons stay level with its last line (a line and
+   a button are both 42px, so the bottoms line up). Send is quiet while
+   there is nothing to send and blue once there is, so a blue arrow always
+   means it will go. */
+@media (max-width: 720px) {
+  :root[data-design="v1"] .app-root.mobile-shell .chat-input-bar .community-composer-authoring-row {
+    align-items: end;
+  }
+  :root[data-design="v1"] .app-root.mobile-shell .chat-input-bar .mention-composer-field {
+    align-items: flex-end;
+  }
+  :root[data-design="v1"] .app-root.mobile-shell .chat-send.ask-send-btn:disabled {
+    --conversation-primary-action-surface: var(--hover-overlay);
+    --conversation-primary-action-hover-surface: var(--hover-overlay);
+    --conversation-primary-action-foreground: var(--text-faint);
+    box-shadow: none;
+    opacity: 1;
+  }
+}

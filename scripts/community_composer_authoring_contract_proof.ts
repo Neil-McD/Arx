@@ -13,7 +13,7 @@ const contract = read("docs/community-interaction-substrate-contract-v1.md");
 
 assert.match(
   panel,
-  /mainMention\.handleKeyDown\(event\)[\s\S]*handleMentionTokenBackspace[\s\S]*handleCommunityComposerAuthoringKeyDown\(event, handleMainCommunityComposerUserInput\)[\s\S]*event\.key === "Enter" && !event\.shiftKey/,
+  /mainMention\.handleKeyDown\(event\)[\s\S]*handleMentionTokenBackspace[\s\S]*handleCommunityComposerAuthoringKeyDown\(event, handleMainCommunityComposerUserInput\)[\s\S]*enterSendsMessage\(event\)/,
   "mention selection must retain keyboard priority before formatting and send",
 );
 assert.match(
