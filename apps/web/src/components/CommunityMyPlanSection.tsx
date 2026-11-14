@@ -3,6 +3,7 @@
 // the old plan shows, with a note that it's on its way.
 import { useCallback, useEffect, useState } from "react";
 import { changeCloudMyCommunityPlan, fetchCloudMyCommunityPlan, type CloudMyPlan, type CloudMyPlanOption } from "../../../../shared/cloudCommunityPlanChangeGateway";
+import { SettingsButton, SettingsGroup, SettingsNote, SettingsRow } from "./SettingsRows";
 
 const money = (plan: CloudMyPlanOption) => {
   const value = plan.amount_base_units / Math.pow(10, plan.currency_decimals);
@@ -45,31 +46,26 @@ export function CommunityMyPlanSection(props: { communityId: string; session: un
   };
 
   if (!mine?.member || !mine.plans.length) return null;
+  // Design v1 (the only place this shows): your plan as rows.
   return (
-    <div className="settings-section community-my-plan">
-      <div className="settings-section-title">Your plan</div>
-      <div className="settings-section-desc">
-        {mine.current ? `You're on ${mine.current.name}.` : "Your plan."}
-        {mine.can_change ? " Moving up charges the difference now; moving down credits the rest of this month." : ""}
-        {!mine.can_change && mine.reason === "not_paying_polynet" ? " You bought it outside Polynet, so it's changed where you bought it." : ""}
-      </div>
-      {mine.plans.map((plan) => (
-        <div key={plan.key ?? "base"} className="community-plan-row">
-          <div>
-            <strong>{plan.name}</strong>
-            <span className="settings-section-desc">{money(plan)}{plan.includes.length ? ` · includes ${plan.includes.join(", ")}` : ""}</span>
-          </div>
-          <div className="community-plan-actions">
-            {plan.current ? <span className="settings-section-desc">Current plan</span>
+    <>
+      <SettingsGroup label="Your plan">
+        {mine.plans.map((plan) => (
+          <SettingsRow key={plan.key ?? "base"} label={plan.name}
+            help={`${money(plan)}${plan.includes.length ? ` · includes ${plan.includes.join(", ")}` : ""}`}>
+            {plan.current ? <span className="settings-v1-value">Your plan</span>
               : mine.can_change ? (
-                <button type="button" className="secondary" disabled={Boolean(busy)} onClick={() => void change(plan)}>
-                  {busy === (plan.key ?? "base") ? "Changing…" : `Switch to ${plan.name}`}
-                </button>
+                <SettingsButton disabled={Boolean(busy)} onClick={() => void change(plan)}>
+                  {busy === (plan.key ?? "base") ? "Changing…" : "Switch"}
+                </SettingsButton>
               ) : null}
-          </div>
-        </div>
-      ))}
-      {note ? <div className="settings-section-desc" role="status">{note}</div> : null}
-    </div>
+          </SettingsRow>
+        ))}
+      </SettingsGroup>
+      <SettingsNote>
+        {note ?? (mine.can_change ? "Moving up charges the difference now; moving down credits the rest of this month."
+          : mine.reason === "not_paying_polynet" ? "You bought it outside Polynet, so it's changed where you bought it." : "")}
+      </SettingsNote>
+    </>
   );
 }
