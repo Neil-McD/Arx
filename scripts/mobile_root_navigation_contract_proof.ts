@@ -278,7 +278,7 @@ assert.doesNotMatch(
 
 assert.match(
   bottomRail,
-  /import \{ House, MessageCircle, Sparkles \} from "lucide-react";/,
+  /import \{ House, Inbox, MessageCircle, Sparkles \} from "lucide-react";/,
   "the rail should use the shared icon library",
 );
 assert.match(
