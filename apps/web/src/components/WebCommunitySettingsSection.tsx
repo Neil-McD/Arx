@@ -37,9 +37,6 @@ type CommunityPricingMode = "free" | "monthly" | "annual";
 
 type ActiveCommunity = {
   id: string;
-  site_url?: string | null;
-  members_use?: "app" | "site";
-  has_custom_site?: boolean;
   name: string;
   slug: string;
   visibility: string;

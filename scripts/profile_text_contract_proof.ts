@@ -47,12 +47,8 @@ const textValidator = profiles.match(
 assert.ok(textValidator, "profile text validator must remain discoverable");
 assert.match(textValidator, /validateProfileDisplayName[\s\S]*profile_display_name_too_long/);
 assert.match(textValidator, /validateProfileBio[\s\S]*profile_bio_too_long/);
-const twinHandler = profiles.match(
-  /export const updateProfileDetailForTrustedUserInternal = internalMutation\([\s\S]*?\n\}\);/,
-)?.[0] ?? "";
 for (const [name, handler, write] of [
   ["upsertProfileDetail", mutationHandler, "ensureAuthenticatedActor"],
-  ["updateProfileDetailForTrustedUserInternal", twinHandler, "writeProfileDetailForUser"],
 ] as const) {
   assert.ok(handler, `${name} must remain discoverable`);
   const validated = handler.indexOf("validateProfileDetailText(");

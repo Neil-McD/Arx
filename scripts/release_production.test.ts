@@ -107,7 +107,6 @@ function commandOrder(calls: Call[]): string[] {
       const text = `${call.command} ${call.args.join(" ")}`;
       if (text.includes("release:gate")) return "gate";
       if (text.includes("convex deploy")) return "convex_deploy";
-      if (text.includes("wrangler deploy")) return "edge_deploy";
       if (text.includes(" deploy --prod")) return "vercel_deploy";
       if (text.includes(" promote ")) return "vercel_promote";
       if (text.includes(" rollback ")) return "vercel_rollback";
@@ -177,21 +176,15 @@ describe("production release flow", () => {
     expect(result.rollbackDeployment.id).toBe("dpl_previous");
   });
 
-  test("an edge failure after the web is live says what's released and how to finish", async () => {
-    const { deps } = fakeDeps({ failOn: "wrangler deploy" });
-    await expect(runProductionRelease(deps, {})).rejects.toThrow(/production_release_edge_failed[\s\S]*npx wrangler deploy --env production/);
-  });
-
   test("release deploys Convex before the web app, with pinned authority, then proves the live result", async () => {
     const { deps, calls } = fakeDeps();
     const result = await runProductionRelease(deps, {});
     expect(result.status).toBe("released");
     expect(commandOrder(calls)).toEqual([
       "gate", "vercel_project", "vercel_env", "convex_env", "convex_env", "vercel_inspect",
-      "convex_deploy", "vercel_deploy", "edge_deploy",
+      "convex_deploy", "vercel_deploy",
     ]);
-    const edge = calls.find((call) => call.args.includes("wrangler"))!;
-    expect([edge.args.join(" "), (edge as any).cwd]).toEqual(["wrangler deploy --env production", "infra/community-edge/dispatch"]);
+    expect(calls.some((call) => call.args.includes("wrangler"))).toBe(false);
     const convex = calls.find((call) => call.args.includes("convex") && call.args.includes("deploy"))!;
     expect(convex.env?.CONVEX_DEPLOYMENT).toBe(PRODUCTION_AUTHORITY.convexDeployment);
     const web = calls.find((call) => call.args.includes("--prod"))!;
@@ -200,7 +193,7 @@ describe("production release flow", () => {
     expect(web.args).toContain(`VITE_POLYNET_BUILD_ID=${HEAD}`);
     expect(result.deploymentUrl).toBe("https://polynet-new-neil-mcds-projects.vercel.app");
     expect(result.stages.map((stage: { id: string }) => stage.id)).toEqual([
-      "guards", "no_regress", "release_gate", "settings_parity", "preflight", "convex_deployed", "web_deployed", "live_verified", "edge_deployed",
+      "guards", "no_regress", "release_gate", "settings_parity", "preflight", "convex_deployed", "web_deployed", "live_verified",
     ]);
   });
 

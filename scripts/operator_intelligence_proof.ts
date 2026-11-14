@@ -48,12 +48,12 @@ const recordBusinessVisitMutation = extractBetween(
   "export const identifyBusinessVisitor = mutation",
   "business visit record mutation",
 );
-const publicFunnelVisitMutation = extractBetween(
-  read("convex/communityAppJoin.ts"),
-  "export const recordCommunitySiteVisitInternal = internalMutation",
-  "export const privateOriginCommunityInternal = internalQuery",
-  "community site visit mutation",
+// A visit to a community's landing page (/c/<slug>, convex/communityLanding.ts).
+const landingSource = read("convex/communityLanding.ts");
+const publicFunnelVisitMutation = landingSource.slice(
+  landingSource.indexOf("export const recordCommunityLandingVisit = mutation"),
 );
+assert.ok(publicFunnelVisitMutation.length > 0, "community landing visit mutation is missing");
 const publicFunnelAnalyticsInsert = extractBetween(
   publicFunnelVisitMutation,
   'await ctx.db.insert("communityAnalyticsEvents"',
@@ -226,13 +226,13 @@ assert.match(
 );
 assert.match(
   publicFunnelVisitMutation,
-  /\^\[0-9a-f\]\{64\}\$/,
-  "community site visits should accept only the edge's keyed visitor hash",
+  /\^\[A-Za-z0-9_-\]\{16,64\}\$[\s\S]*sha256Hex\(/,
+  "community landing visits should accept only a browser's random key, and hash it",
 );
 assert.match(
   publicFunnelAnalyticsInsert,
-  /visitorKeyHash: args\.visitorHash,/,
-  "community site visits should write only the hashed visitor key",
+  /visitorKeyHash: visitorHash,/,
+  "community landing visits should write only the hashed visitor key",
 );
 assert.doesNotMatch(
   publicFunnelAnalyticsInsert,

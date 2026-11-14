@@ -63,7 +63,7 @@ function main() {
   const listDiscover = extractSection(
     communityPublic,
     "export const listPublicDiscoverCommunities = query({",
-    "export const listSiteDiscoverCommunitiesInternal = internalQuery({",
+    "export function rejoinsOnAppPurchase(",
     "public Discover community listing",
   );
   assert.match(

@@ -5,7 +5,6 @@ import { afterEach, expect, test, vi } from "vitest";
 
 import { api } from "./_generated/api";
 import schema from "./schema";
-import { registerCommunitySiteAddresses } from "./communitySites";
 
 const modules = import.meta.glob(["./*.ts", "!./*.test.ts", "./_generated/**/*.*s"]);
 const NOW = Date.now();
@@ -32,7 +31,6 @@ async function fixture() {
         communityId, userId, role, accessSource: "free_grant", state: "active", activationSequence: 1, activatedAt: NOW, createdAt: NOW, updatedAt: NOW,
       } as any);
     }
-    await registerCommunitySiteAddresses(ctx, { _id: communityId, slug: "dawn-club" });
     return { ownerId, adminId, communityId };
   });
   const set = (subject: string, experience: "app" | "site") =>

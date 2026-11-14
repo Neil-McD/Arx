@@ -19,8 +19,7 @@ those proofs' exceptions.
 
 ```text
 Members and founders
-  ├─ a community's own site  <slug>.polynet.page   → Cloudflare edge (infra/community-edge) ─┐
-  ├─ Polynet Studio          polynet.ai (apps/web)  → Vercel functions (api/) ─────────────────┤
+  ├─ Polynet Studio          polynet.ai (apps/web)  → Vercel functions (api/) ─────────────────┐
   └─ their own AI agent      Claude, Codex, …       → official Polynet MCP (/runtime/mcp) ─────┤
                                                                                               ▼
                                       Convex backend (convex/): data, rules, agent runtime, crons
@@ -66,7 +65,11 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
 - **Code:** `communityLanding` (the landing page: its read, join, cancel,
   checkout, finish and visit count, over `communityAppJoin`'s projection),
   `httpCommunityLanding` (a signed-out buyer's checkout, from the app's server
-  function only), `communityCore`, `communityLifecycle`, `communityMembershipLifecycle`,
+  function only), `communityApps` (whether the community's agent answers),
+  `communityFunnelEvents` (join-started counts for Analytics),
+  `communityPublicPage` (the retired public-page editor the cached production
+  app still calls; its stored copy is the `communityPublicPages` table),
+  `communityCore`, `communityLifecycle`, `communityMembershipLifecycle`,
   `communityJoinRequestCore`, `communityAdmin`, `communityPublic`, `communityDirectory`,
   `communityColdArchive`, `communityCapabilityContext`, `communityPresenceCore`,
   `communityAccessAudit`, `communityAccessQueries`, `communityMembershipContextCore`,
@@ -219,7 +222,7 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
   `communityRepositorySearch`, `threads`, `communityAgent`, `communityAgentRuntime`,
   `communityAgentFilesystem`,
   `communityAgentContext`, `communityAgentChannelAccess`, `communityAgentConcierge*`,
-  `communityAgentServeWorker`, `communityAppAgentTurn`, `httpRuntimeRoutes`,
+  `communityAgentServeWorker`, `httpRuntimeRoutes`,
   `httpStreaming`, `fundedInferenceGateway`, `founderInference*`,
   `openAiNativeToolCompletion`, `httpInferenceConfig`, `httpCommunityAgentAttachments`, `httpRuntimeSupport`,
   `httpRuntimeTurnState`, `runtimeCancellation`, `runtimeHarnessTelemetry`,
@@ -343,96 +346,21 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
   `polynetCanonicalReceipts`; Vercel `api/mcp/*` (OAuth metadata, proxy).
 - **Reached by:** `/runtime/mcp`, `/.well-known/oauth-*`.
 - **Tables:** `polynetCanonicalOperationReceipts`, `memberWriteRateCounters`
-  (`memberWriteRateLimit`: a person's writes per minute through their own AI
-  or site).
+  (`memberWriteRateLimit`: a person's writes per minute through their own AI).
 - **Contracts:** [polynet-workspace-mcp-contract-v0.md](polynet-workspace-mcp-contract-v0.md),
   [canonical-platform-operation-contract-v1.md](canonical-platform-operation-contract-v1.md).
 
-### 11. Community sites — Keep (staging only)
+### 11. Community sites — Removed (Nov 13, 2026)
 
-- **Does:** each community's own vibe-coded site on `<slug>.polynet.page`:
-  sign-in with Polynet, the member experience through the SDK (chat with
-  unread, mentions, typing and who's online; member profiles; events, courses,
-  memory, the agent), the shared `<polynet-account>` shell, deploys. Every
-  site is its own world (Oct 28): it ships a frame (`/frame.html`, its header,
-  nav and footer around one `<polynet-page>`), and the edge serves that frame
-  at Polynet's standard pages (`/chat`, `/people[/<handle>]`,
-  `/events[/<event>]`, `/learn[/<course>[/<lesson>]]`, `/knowledge`, `/ask`,
-  `/discover`) unless the site has its own file there; `<polynet-page>` fills
-  it with Polynet's blocks (`<polynet-channels>`, `<polynet-chat>`,
-  `<polynet-members>`, `<polynet-events>`, `<polynet-learn>`,
-  `<polynet-knowledge>`, `<polynet-ask>`, `<polynet-discover>`, served from
-  `blocks/`) over the SDK's events, resources, memory and private agent
-  conversation. `/discover` is public: the edge's `/__polynet/discover`
-  (cached a minute) reads `communityPublic.listSiteDiscoverCommunitiesInternal`
-  (published, active, operational; the list Studio's Discover uses) through
-  `/runtime/community_edge/discover`, and links each card to that
-  community's own site, else its Studio page. Blocks style themselves with
-  adopted stylesheets, so a site's `style-src 'self'` CSP doesn't break them. The route table is `STANDARD_PAGES` in
-  `packages/polynet-cli/checks.mjs`, whose site checks fail `polynet check`,
-  CLI and MCP deploys without the frame, or when a site's own standard page
-  lacks its blocks. Sites style them only through tokens, `::part()`, slots
-  and the page's `.pn-page-*` classes. A member's own pages (`/communities`,
-  `/settings`, `/messages` and `/join`) live on the
-  site's **private twin**, `<slug>--me<suffix>.polynet.page`: the edge draws
-  the site's frame there with every script, handler and dangerous URL
-  stripped (`twin.ts`, HTMLRewriter), adds only Polynet's scripts under a
-  `script-src 'self'` policy, and `<polynet-personal>` (`blocks/personal.ts`)
-  renders inside `<polynet-page>`. The twin's origin is registered beside the
-  site's at deploy (`communityDomains.kind = "private"`); a session minted
-  there is `kind: "private"` (`communityAppSessions.kind`), and personal
-  endpoints (`/runtime/app/me/*`, the edge's `/__polynet/me/*`) refuse every
-  other session and 404 on the site. Messages runs the helpers Studio's DM
-  functions run (`directMessages`, `...ForTrustedUserInternal`) and goes live
-  through `communityLive.watchMessages`, which answers only a private
-  session's watch token, with versions only. Join (`communityAppJoin`) works
-  signed out and is the one page for someone not yet a member (the twin's
-  sign-in mints them a private session for it): Studio's funnel projection,
-  join core and checkout, back to the twin's `/join`, with membership only from
-  the webhook's record. The site <-> twin host mapping is
-  `privateTwinHost` / `siteHostOfTwin` in `checks.mjs` (edge, backend, CLI).
-  Page views on a public site are the founder's analytics visits: the edge
-  reports each one after the page (`/runtime/app/visit`, a keyed hash of the
-  address, no bots or fetches; of the twin only Join, the doorstep, reported as
-  the site's) to `recordCommunitySiteVisitInternal`, one per visitor per half
-  hour, into `communityAnalyticsEvents` (`funnel_visit`). The funnel's middle
-  step, "Started joining", is `funnel_join_started` there
-  (`communityFunnelEvents.recordCommunityJoinStarted`): written when a
-  `community_join` checkout is created (signed in or guest) and when someone
-  joins or asks to join on the twin (`joinCommunityAppVisitorInternal`), one per
-  person per community per half hour, keyed by account (`visitorKey`
-  `user:<id>`) or, for a signed-out buyer, the keyed visitor hash; analytics
-  only, never access. Studio's Analytics shows Page visits → Started joining →
-  New members (`join_starts_window`). Join is the community's doorstep (its
-  address's front door): the one-liner as the promise, the live courses, the
-  About, and the owner's sales sections from `communityPublicPages`
-  (`communityPublicPage`, limits in `shared/communityPublicPage.ts`: who it's
-  for and not for, first steps, results, founder bio, a YouTube/Vimeo/Loom
-  intro video by id, a guarantee, objections; owner-only saves, revision
-  checked), each shown only when filled in. Only Join's policy frames anything
-  (those three players). Spec:
-  [specs/community-site-rails-v0.md](specs/community-site-rails-v0.md).
-- **Code:** `httpCommunityApps`, `communityApps`, `communityAppJoin`, `communityFunnelEvents`, `communityPublicPage`, `communityPublic` (Discover's list), `httpCommunitySites`,
-  `communitySites`, `communitySiteDeploy`, `communityLive`;
-  `infra/community-edge/dispatch/src/` (edge Worker `index.ts`, the private twin
-  `twin.ts`, SDK `sdk.ts`, shell `ui.ts`, blocks `blocks/` including `page.ts`
-  `personal.ts`, `settings.ts`, `messages.ts` and `join.ts`, guide `llms.ts`); `packages/polynet-cli` (`@polynet/cli`: create, check,
-  skills, deploy).
-- **Reached by:** the edge only (`/runtime/app*`, `/runtime/community_edge/*`,
-  edge secret); `/runtime/sites/deploy/*` from the CLI and MCP.
-- **Tables:** `communityDomains`, `communitySiteDeploys`, `communityAppSessions`,
-  `communityAppHandoffs`, `communityOwnerApprovals` (a change the owner's AI
-  asked for, waiting for the owner's approval in Studio: where members spend
-  time; `communityOwnerApprovals.ts`).
-- **Contracts:** [infra/community-edge/README.md](../infra/community-edge/README.md),
-  [research/community-frontend-hosting-20261016.md](research/community-frontend-hosting-20261016.md).
-- **Addresses (Oct 28, POL-34):** production `<slug>.polynet.page`, staging
-  `<slug>-staging.polynet.page` on the same domain (`POLYNET_SITES_HOST_SUFFIX`);
-  production refuses names ending in `-staging`, and no site name ends in
-  `--me` (each site's private twin is `<slug>--me<suffix>.polynet.page`). The
-  CLI targets production by default (`--staging` for staging).
-- **Gap:** the production edge, namespace and settings are set up after POL-34's
-  code ships.
+- Each community's own site on `<slug>.polynet.page`, its Cloudflare edge,
+  the CLI, the site SDK and the MCP's `community.site.deploy` are deleted. A
+  community's public page is `/c/<slug>` in the app (area 2,
+  `communityLanding`); members always use the app.
+- **Kept until production runs this (slice 3):** the tables
+  (`communityDomains`, `communitySiteDeploys`, `communityAppSessions`,
+  `communityAppHandoffs`) and the owner's old member-experience switch
+  (`communitySites`, `communityOwnerApprovals`), which the cached production
+  app still calls. The production edge on Cloudflare is turned off then.
 - **Staging seed:** `stagingSeedSunrise` (hand-run, refuses unless
   `POLYNET_ALLOW_SEED=1`). `seedSunriseInternal({ communityId, ownerUserId? })`
   fills one community (Sunrise Climbing Club on staging) with four simulated

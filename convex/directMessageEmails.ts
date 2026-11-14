@@ -4,7 +4,6 @@ import { v } from "convex/values";
 import { resolveUserProfileDisplayProjectionForUser } from "./userProfileProjection";
 import { stripChatInlineMarkdown } from "../shared/chatInlineMarkdown";
 import { requireCommunityChatAccess } from "./communityCore";
-import { communityPrivatePageUrl } from "./communitySites";
 import { readCanonicalPublicAppOrigin } from "./publicAppUrl";
 
 const DM_EMAIL_SNIPPET_MAX_CHARS = 120;
@@ -35,8 +34,6 @@ export async function directMessageLink(ctx: any, community: Record<string, any>
   const stillIn = community
     ? await requireCommunityChatAccess({ ctx, communityId: community._id, userId: recipientUserId as any }).then(() => true, () => false)
     : false;
-  const onSite = stillIn ? await communityPrivatePageUrl(ctx, community as any, `/messages/${encodeURIComponent(conversationId)}`) : null;
-  if (onSite) return onSite;
   let origin = "https://www.polynet.ai";
   try { origin = readCanonicalPublicAppOrigin(); } catch { /* the production app, as before */ }
   return `${origin.replace(/\/+$/, "")}/?dm=${encodeURIComponent(conversationId)}`;

@@ -28,7 +28,6 @@ type CommunityNavCommunityLike = {
   slug?: string | null;
   name?: string | null;
   // The community's own site, where members live (null where it has none).
-  site_url?: string | null;
   banner_url?: string | null;
   banner_focus_x?: number | null;
   banner_focus_y?: number | null;

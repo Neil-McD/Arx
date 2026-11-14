@@ -31,9 +31,6 @@ export type WebCommunityRecord = {
   visual_identity?: CommunityVisualIdentity | null;
   // Its own site; where its members spend time (the owner's switch); whether
   // it has deployed a site of its own (the switch's "site" choice needs one).
-  site_url?: string | null;
-  members_use?: "app" | "site";
-  has_custom_site?: boolean;
 };
 
 export type WebCommunityVoiceTranscriptTarget = {

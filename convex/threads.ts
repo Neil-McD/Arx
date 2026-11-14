@@ -1386,12 +1386,6 @@ export const listNewestCloudThreadMessages = query({
     })),
 });
 
-// For a community front end showing its member's agent conversation.
-export const listNewestCloudThreadMessagesForTrustedOwnerInternal = internalQuery({
-  args: { ...listNewestCloudThreadMessagesArgs, trustedOwnerId: v.id("users") },
-  handler: async (ctx, { trustedOwnerId, ...args }) => await listNewestCloudThreadMessagesHandler(ctx, args, trustedOwnerId),
-});
-
 export const listCommunityAgentRuntimeMessagesInternal = internalQuery({
   args: {
     ownerId: v.id("users"),

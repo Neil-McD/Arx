@@ -5,7 +5,6 @@ import { afterEach, expect, test, vi } from "vitest";
 
 import { api, internal } from "./_generated/api";
 import schema from "./schema";
-import { registerCommunitySiteAddresses } from "./communitySites";
 import { OWNER_APPROVAL_TTL_MS } from "./communityOwnerApprovals";
 
 const modules = import.meta.glob(["./*.ts", "!./*.test.ts", "./_generated/**/*.*s"]);
@@ -31,7 +30,6 @@ async function fixture(opts: { deployed?: boolean } = {}) {
     await ctx.db.insert("communityMemberships", {
       communityId, userId: adminId, role: "admin", accessSource: "free_grant", state: "active", activationSequence: 1, activatedAt: NOW, createdAt: NOW, updatedAt: NOW,
     } as any);
-    await registerCommunitySiteAddresses(ctx, { _id: communityId, slug: "dawn-club" });
     if (opts.deployed !== false) {
       await ctx.db.insert("communitySiteDeploys", { communityId, userId: ownerId, hostname: "dawn-club-staging.polynet.page", fileCount: 1, totalBytes: 10, createdAt: NOW });
     }

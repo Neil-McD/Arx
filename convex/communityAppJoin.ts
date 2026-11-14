@@ -1,8 +1,7 @@
 import { canReceiveCommunityRevenue } from "./stripeConnectAccountCore";
 import { v } from "convex/values";
-import { internalMutation, internalQuery } from "./_generated/server";
+import { internalMutation } from "./_generated/server";
 import { communityIsActive } from "../shared/communityLifecycle";
-import { normalizeCommunityAppOrigin } from "../shared/communityAppSession";
 import {
   deriveCommunityFunnelAction,
   derivePublicCommunityAdmissionProjection,
@@ -21,25 +20,21 @@ import {
   resolveCommunityEntryPolicy,
 } from "./communityCore";
 import { joinPublicCommunityInternal, listCurrentCommunitySellablePlans, rejoinsOnAppPurchase } from "./communityPublic";
-import { cancelPendingCommunityJoinRequest } from "./communityJoinRequestCore";
 import { loadAccountSetupStatusForUserId } from "./accountSetupCore";
 import { accountSetupBlocksJoining } from "../shared/accountSetup";
 import { readCanonicalPublicAppOrigin } from "./publicAppUrl";
 import { PRIVACY_AI_DATA_POLICY_DOCUMENT, TERMS_OF_SERVICE_DOCUMENT, legalDocumentPublicUrl } from "../shared/legalDocuments";
 import { attachCommunityCheckoutToUser, sha256Hex } from "./communityCheckoutBuyer";
 import { resolveCheckoutSessionFinalization } from "./communityCommerce";
-import { recordCommunityJoinStarted } from "./communityFunnelEvents";
 import { communityResourceIsMemberVisiblePage, communityResourceModuleIsMemberLive } from "../shared/communityResourceVisibility";
 import { formatPlanPrice } from "../shared/accountCommerce";
 
-// Join on a community site's private twin (<slug>--me<suffix>.<sites domain>/join).
-// The page shows what Studio's public funnel (/c/<slug>) shows and decides, from
-// the same projections (shared/communityJoinPolicy.ts, shared/communityFunnelUi.ts)
-// and through the same cores: Studio's join decision (joinPublicCommunityInternal),
-// its cancel, and its paid checkout, finalization and claim. Signed out it is a
-// read-only public projection; every action needs a session minted on the twin
-// (httpCommunityApps enforces that). Access to a paid community comes only from
-// the provider's verified webhook, never from Stripe's redirect back.
+// Joining, as the community's landing page shows and runs it (/c/<slug>,
+// convex/communityLanding.ts): the same projections as Studio
+// (shared/communityJoinPolicy.ts, shared/communityFunnelUi.ts) and the same
+// cores: Studio's join decision (joinPublicCommunityInternal), its cancel, and
+// its paid checkout, finalization and claim. Access to a paid community comes
+// only from the provider's verified webhook, never from Stripe's redirect back.
 
 // The doorstep's "What you get": the courses members see (live ones, in the
 // founder's order), each with its lesson count, bounded so a signed-out read
@@ -237,92 +232,6 @@ export async function communityAppJoinProjection(ctx: any, community: CommunityL
   };
 }
 
-async function communityAtOrigin(ctx: any, originRaw: string): Promise<{ community: CommunityLike; domain: any } | null> {
-  const origin = normalizeCommunityAppOrigin(originRaw);
-  if (!origin) return null;
-  const domain = await ctx.db.query("communityDomains").withIndex("by_origin", (q: any) => q.eq("origin", origin)).first();
-  const community = domain ? ((await ctx.db.get(domain.communityId)) as CommunityLike | null) : null;
-  return community && communityIsActive(community) ? { community, domain } : null;
-}
-
-// The join page's read: anyone (userId absent) gets the public projection; a
-// twin session's user also gets where they stand. Only a private twin's origin.
-export const getCommunityAppJoinInternal = internalQuery({
-  args: { origin: v.string(), userId: v.optional(v.id("users")), communityId: v.optional(v.id("communities")) },
-  handler: async (ctx, args) => {
-    const found = await communityAtOrigin(ctx, args.origin);
-    if (!found || found.domain.kind !== "private") return null;
-    if (args.communityId && String(found.community._id) !== String(args.communityId)) return null;
-    return await communityAppJoinProjection(ctx, found.community, args.userId ?? null);
-  },
-});
-
-// Join (open) or ask to (approval): Studio's own decision, whichever it is.
-// Either way someone acted on the doorstep, which the founder's analytics count.
-export const joinCommunityAppVisitorInternal = internalMutation({
-  args: { userId: v.id("users"), communityId: v.id("communities") },
-  handler: async (ctx, args) => {
-    const community = (await ctx.db.get(args.communityId)) as CommunityLike | null;
-    if (!community) throw new Error("community_not_found");
-    const nowMs = Date.now();
-    const result = await joinPublicCommunityInternal({ ctx, community, userId: args.userId, nowMs });
-    await recordCommunityJoinStarted(ctx, { communityId: community._id, userId: args.userId, nowMs });
-    return result;
-  },
-});
-
-// Withdraw a pending request, as Studio's funnel does.
-export const cancelCommunityAppJoinRequestInternal = internalMutation({
-  args: { userId: v.id("users"), communityId: v.id("communities") },
-  handler: async (ctx, args) => {
-    const community = (await ctx.db.get(args.communityId)) as CommunityLike | null;
-    if (!community) throw new Error("community_not_found");
-    if (!communityIsActive(community)) throw new Error("community_archived");
-    return await cancelPendingCommunityJoinRequest({ ctx, communityId: community._id, userId: args.userId });
-  },
-});
-
-// A page view on a community's public site, for its founder's analytics: the
-// edge sends the site's origin and a keyed hash of the visitor's address (never
-// the address). One visit per visitor per community per half hour, as Studio's
-// funnel counted them; nothing for a private twin or an archived community.
-const SITE_VISIT_DEDUPE_WINDOW_MS = 30 * 60 * 1000;
-export const recordCommunitySiteVisitInternal = internalMutation({
-  args: { origin: v.string(), visitorHash: v.string() },
-  handler: async (ctx, args) => {
-    if (!/^[0-9a-f]{64}$/.test(args.visitorHash)) return { ok: false };
-    const found = await communityAtOrigin(ctx, args.origin);
-    if (!found || found.domain.kind === "private") return { ok: false };
-    const nowMs = Date.now();
-    const latest = await ctx.db
-      .query("communityAnalyticsEvents")
-      .withIndex("by_community_visitor_hash_event", (q) =>
-        q.eq("communityId", found.community._id).eq("visitorKeyHash", args.visitorHash).eq("eventType", "funnel_visit"),
-      )
-      .order("desc")
-      .first();
-    if (latest && latest.createdAt >= nowMs - SITE_VISIT_DEDUPE_WINDOW_MS) return { ok: true, deduped: true };
-    await ctx.db.insert("communityAnalyticsEvents", {
-      communityId: found.community._id,
-      eventType: "funnel_visit",
-      visitorKeyHash: args.visitorHash,
-      createdAt: nowMs,
-    });
-    return { ok: true };
-  },
-});
-
-// The community a site's private twin belongs to: where a signed-out buyer's
-// checkout may start. Nothing for a site's public origin or an archived community.
-export const privateOriginCommunityInternal = internalQuery({
-  args: { origin: v.string() },
-  handler: async (ctx, args) => {
-    const found = await communityAtOrigin(ctx, args.origin);
-    if (!found || found.domain.kind !== "private") return null;
-    return { communityId: found.community._id, communitySlug: String(found.community.slug ?? "") };
-  },
-});
-
 // Back from Stripe on the twin: Studio's finalization, a read of what Stripe's
 // verified notice recorded (never the redirect); the notice itself granted the
 // membership. Only the buyer's own checkout for this community; anything else
@@ -349,22 +258,5 @@ export const finishCommunityAppCheckoutInternal = internalMutation({
     if (finalization.status === "pending") return { status: "pending" };
     if (finalization.status !== "succeeded") return { status: "expired" };
     return { status: "joined" };
-  },
-});
-
-// Stripe's return addresses for a checkout started on a site's private twin:
-// its own /join, nothing else. The caller has already checked that the origin
-// is this community's private twin (isCommunityPrivateOriginInternal).
-export function twinCheckoutReturnUrls(origin: string): { successUrl: string; cancelUrl: string } | null {
-  const normalized = normalizeCommunityAppOrigin(origin);
-  if (!normalized || normalized !== origin) return null;
-  return { successUrl: `${normalized}/join?checkout={CHECKOUT_SESSION_ID}`, cancelUrl: `${normalized}/join?checkout=canceled` };
-}
-
-export const isCommunityPrivateOriginInternal = internalQuery({
-  args: { communityId: v.id("communities"), origin: v.string() },
-  handler: async (ctx, args) => {
-    const found = await communityAtOrigin(ctx, args.origin);
-    return Boolean(found && found.domain.kind === "private" && String(found.community._id) === String(args.communityId));
   },
 });
