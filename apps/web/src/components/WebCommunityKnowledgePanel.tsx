@@ -40,27 +40,23 @@ function sourceProblem(raw: string | undefined): string {
 }
 
 function KnowledgeV1({ resources, context }: Props) {
-  // The classroom is the page. A host's editing tools (lessons, sources,
-  // reordering) are still the earlier editor, one click away and one click back.
-  const [editing, setEditing] = useState(false);
+  // The classroom is the page, for reading and for a host's tools. The earlier
+  // editor and its pop-ups are not reachable from here (Nov 14); they stay in
+  // the code for the old design until it leaves production.
   const canManage = resources.capabilities.canOperateResources;
-  useEffect(() => { setEditing(false); }, [context.communityId]);
-  useEffect(() => { if (!canManage) setEditing(false); }, [canManage]);
   const moduleId = resources.state.selectedModuleId;
   const openCourse = moduleId ? resources.state.modules.find((module) => module.id === moduleId && !module.is_virtual) ?? null : null;
   // "What your guide knows": the builders' list, one level in from Knowledge.
   const [guideMemoryOpen, setGuideMemoryOpen] = useState(false);
   useEffect(() => { setGuideMemoryOpen(false); }, [context.communityId, canManage]);
-  const inGuideMemory = guideMemoryOpen && canManage && !openCourse && !editing;
+  const inGuideMemory = guideMemoryOpen && canManage && !openCourse;
   return (
     <section className="community-knowledge-page" aria-label="Knowledge">
-      <CommunityPageHeader title={editing ? "Knowledge · Editing" : openCourse ? openCourse.name : inGuideMemory ? "What your guide knows" : "Knowledge"}
-        back={openCourse && !editing ? { label: "Back to Knowledge", onBack: () => resources.actions.handleSelectModule(null) }
-          : inGuideMemory ? { label: "Back to Knowledge", onBack: () => setGuideMemoryOpen(false) } : null}
-        actions={editing ? <button type="button" className="community-page-back" onClick={() => setEditing(false)}>Done editing</button> : null}>
+      <CommunityPageHeader title={openCourse ? openCourse.name : inGuideMemory ? "What your guide knows" : "Knowledge"}
+        back={openCourse ? { label: "Back to Knowledge", onBack: () => resources.actions.handleSelectModule(null) }
+          : inGuideMemory ? { label: "Back to Knowledge", onBack: () => setGuideMemoryOpen(false) } : null}>
         <div className="community-knowledge-header"><h1>Knowledge</h1></div>
       </CommunityPageHeader>
-      {editing && canManage ? <CommunityResourcesPanel {...resources} /> : (
         <KitClassroom communityId={context.communityId!} communityName={context.communityName ?? "This community"} session={context.session}
           modules={resources.state.modules} resources={resources.state.resources}
           loaded={resources.state.moduleRead.hasData && resources.state.resourceRead.hasData}
@@ -94,7 +90,7 @@ function KnowledgeV1({ resources, context }: Props) {
             resources.actions.handleSelectModule(courseId);
             return { ok: true };
           } : undefined}
-          onEditCourse={(id) => { resources.actions.handleSelectModule(id); setEditing(true); }}
+          onReorderCourses={canManage ? resources.actions.handleReorderModules : undefined}
           onSetCourseStatus={canManage ? async (id, status) => {
             const course = resources.state.modules.find((module) => module.id === id);
             if (course) await resources.actions.handleSetModuleStatus(course, status);
@@ -148,9 +144,11 @@ function KnowledgeV1({ resources, context }: Props) {
             },
             reorder: async (id, ids) => { await resources.actions.handleReorderResources(id, ids); },
             remove: async (resourceId) => { await resources.actions.handleDeleteResource(resourceId); },
+            move: async (resourceId, courseId) => {
+              if (!(await resources.actions.handleMoveResourceToModule(resourceId, courseId, null))) throw new Error("move_failed");
+            },
           } : null}
           renderRail={(rail) => <CommunityPageRail label="Knowledge">{rail}</CommunityPageRail>} />
-      )}
     </section>
   );
 }
