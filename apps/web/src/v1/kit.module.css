@@ -890,6 +890,14 @@
 .app .kseg button{height:24px;padding:0 10px;border-radius:6px;font-size:12.5px;font-weight:500;color:var(--ink2)}
 .app .kseg button[aria-pressed="true"]{background:var(--s2);color:var(--ink)}
 
+/* Kit addition: changing a course in the page (KitCourseEdit): the cover on
+   the left, the words on the right. */
+.app .kcedit{margin-top:0;margin-bottom:22px}
+.app .kcgrid{display:grid;grid-template-columns:200px minmax(0,1fr);gap:14px;margin-top:12px}
+.app .kcthumb{height:112px;border-radius:8px;border:1px solid var(--line2);background:var(--s2) center/cover no-repeat;display:grid;place-items:center;color:var(--ink3)}
+.app .kcbtns{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+@media (max-width:720px){.app .kcgrid{grid-template-columns:minmax(0,1fr)}}
+
 /* Kit addition: the app's own "are you sure?" (KitConfirm), in the palette's
    layer: a light veil and one small card. */
 .app.palette-part .veil.askveil{-webkit-backdrop-filter:none;backdrop-filter:none;background:rgba(0,0,0,.32)}
