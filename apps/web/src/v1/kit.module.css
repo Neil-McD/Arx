@@ -836,7 +836,7 @@
 @media (max-width:720px){
 .app .view,.app .scroll,.app .page,.app .home{min-width:0}
 .app.part{--measure-gutter:20px}
-.app .top,.app.part.on-v-home .top{padding-left:16px;padding-right:16px}
+.app .top,.app.part.on-v-home .top{padding-left:var(--kit-top-inset,16px);padding-right:16px}
 .app .page{padding-left:16px;padding-right:16px}
 .app .home,.app.part .home{padding-left:20px;padding-right:20px}
 .app .dock,.app.part .dock{padding-left:12px;padding-right:12px;padding-bottom:12px}
@@ -848,4 +848,6 @@
 .app .filters>*{flex:none}
 .app .mrow .h{flex-wrap:wrap;row-gap:0}
 .app .mrow .h b{flex:none;white-space:nowrap}
+.app .trow{grid-template-columns:28px minmax(0,1fr) auto auto;gap:0 12px}
+.app .trow>:nth-child(3){display:none}
 }
