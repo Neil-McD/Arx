@@ -865,6 +865,27 @@
 .app .evsw.on{background:var(--go)}.app .evsw.on i{left:17px;background:#fff}
 @media (max-width:720px){.app .evparts{grid-template-columns:minmax(0,1fr)}.app .evaddrow span{display:none}.app .erow{row-gap:8px}}
 
+/* Kit addition: Knowledge's one box at the top (KitKnowledgeAdd): the row it
+   is while closed, how it says back what it read, and the Note / Course
+   switch in its foot. */
+.app .kaddrow{display:flex;align-items:center;gap:12px;width:100%;height:46px;margin-top:20px;padding:0 14px;border-radius:10px;border:1px solid var(--line2);background:var(--panel2);color:var(--ink2);font-size:14px;text-align:left}
+.app .kaddrow:hover{color:var(--ink);border-color:rgba(var(--w),.18)}
+.app .kaddrow .ic{width:16px;height:16px;color:var(--ink3)}
+.app .kaddrow span{margin-left:auto;font-size:12.5px;color:var(--ink3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.app .kaddbox{margin-top:20px;padding:14px 12px 12px 16px;border-color:rgba(var(--au),.45);box-shadow:0 0 0 4px rgba(var(--au),.08)}
+.app .kaddbox textarea{font-size:15px;line-height:1.6;min-height:48px;max-height:260px;overflow-y:auto}
+.app .kreadlab{margin-top:10px;font-size:12px;color:var(--ink3)}
+.app .kread{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+.app .kread span{display:inline-flex;align-items:center;gap:7px;min-height:28px;max-width:100%;padding:3px 10px;border-radius:7px;border:1px solid var(--line);background:var(--s1);color:var(--ink);font-size:13px}
+.app .kread span svg{width:14px;height:14px;flex:none;color:var(--ink3)}
+.app .kread span em{font-style:normal;color:var(--ink3)}
+.app .kread span.dim{color:var(--ink3)}
+.app .kaddfoot{display:flex;align-items:center;flex-wrap:wrap;gap:8px 10px;margin-top:14px}
+.app .kseg{display:inline-flex;padding:2px;border-radius:8px;border:1px solid var(--line2);background:var(--field)}
+.app .kseg button{height:24px;padding:0 10px;border-radius:6px;font-size:12.5px;font-weight:500;color:var(--ink2)}
+.app .kseg button[aria-pressed="true"]{background:var(--s2);color:var(--ink)}
+@media (max-width:720px){.app .kaddrow span{display:none}}
+
 /* Kit addition: the app's own "are you sure?" (KitConfirm), in the palette's
    layer: a light veil and one small card. */
 .app.palette-part .veil.askveil{-webkit-backdrop-filter:none;backdrop-filter:none;background:rgba(0,0,0,.32)}
