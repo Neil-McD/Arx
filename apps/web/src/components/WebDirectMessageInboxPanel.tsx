@@ -419,17 +419,29 @@ function KitInboxPage(props: WebDirectMessageInboxPanelProps & { kitPage: { acti
                   })())}
             </p>
             <div className={cx("filters")} style={{ marginTop: 20 }} role="group" aria-label="Show">
-              <button type="button" className={cx("chip", activeFilter === "reply" && "sel")} aria-pressed={activeFilter === "reply"} onClick={() => setFilter("reply")}>
-                Needs a reply{needsReply ? ` · ${needsReply}` : ""}
-              </button>
-              <button type="button" className={cx("chip", activeFilter === "all" && "sel")} aria-pressed={activeFilter === "all"} onClick={() => setFilter("all")}>
-                Everything
-              </button>
-              {hereName && fromElsewhere ? (
-                <button type="button" className={cx("chip", activeFilter === "here" && "sel")} aria-pressed={activeFilter === "here"} onClick={() => setFilter("here")}>
-                  Only {hereName}
-                </button>
-              ) : null}
+              {findingSomeone ? (
+                // Finding someone takes the filters' place on this line: the
+                // filters sort conversations, which are hidden while you look.
+                <label className="community-dm-recipient-search community-dm-inbox-search">
+                  <Search aria-hidden="true" />
+                  <input autoFocus value={props.searchValue} onChange={(event) => props.onSearchValueChange(event.target.value)}
+                    onKeyDown={(event) => { if (event.key === "Escape") setFindingSomeone(false); }} aria-label="Find someone" placeholder="Find someone" />
+                </label>
+              ) : (
+                <>
+                  <button type="button" className={cx("chip", activeFilter === "reply" && "sel")} aria-pressed={activeFilter === "reply"} onClick={() => setFilter("reply")}>
+                    Needs a reply{needsReply ? ` · ${needsReply}` : ""}
+                  </button>
+                  <button type="button" className={cx("chip", activeFilter === "all" && "sel")} aria-pressed={activeFilter === "all"} onClick={() => setFilter("all")}>
+                    Everything
+                  </button>
+                  {hereName && fromElsewhere ? (
+                    <button type="button" className={cx("chip", activeFilter === "here" && "sel")} aria-pressed={activeFilter === "here"} onClick={() => setFilter("here")}>
+                      Only {hereName}
+                    </button>
+                  ) : null}
+                </>
+              )}
               {props.canBrowsePeople ? (
                 <button type="button" className={cx("chip")} style={{ marginLeft: "auto" }} aria-pressed={findingSomeone} onClick={() => setFindingSomeone((open) => !open)}>
                   {findingSomeone ? "Done" : "New message"}
@@ -440,10 +452,6 @@ function KitInboxPage(props: WebDirectMessageInboxPanelProps & { kitPage: { acti
 
             {findingSomeone ? (
               <>
-                <label className="community-dm-recipient-search community-dm-inbox-search" style={{ marginTop: 18 }}>
-                  <Search aria-hidden="true" />
-                  <input autoFocus value={props.searchValue} onChange={(event) => props.onSearchValueChange(event.target.value)} aria-label="Find someone" placeholder="Find someone" />
-                </label>
                 {props.peopleError ? <div className="community-dm-panel-error">{props.peopleError}</div> : null}
                 <div className={cx("list")} style={{ marginTop: 14 }}>
                   {people.map((person) => {
