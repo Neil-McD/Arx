@@ -102,5 +102,5 @@ export type CommunityResourcesActions = {
     onChangePinned: (value: boolean) => void;
   };
   handleDeleteResource: (resourceId: string) => Promise<boolean> | boolean;
-  handleCreateBlankPageDraft: (moduleId: string) => Promise<CommunityResource | null>;
+  handleCreateBlankPageDraft: (moduleId: string, title?: string) => Promise<CommunityResource | null>;
 };

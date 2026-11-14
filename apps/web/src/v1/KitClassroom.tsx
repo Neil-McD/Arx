@@ -21,12 +21,12 @@ import {
 import { getCloudCommunityHomeSnapshot } from "../../../../shared/cloudCommunityAdminGateway";
 import { continueLesson, courseLessons, courseProgress, pageOf } from "../../../../shared/communityClassroom";
 import type { CommunityResource, CommunityResourceModule } from "../components/communityResourcesContracts";
-import { openGuideFromSearch } from "../components/guideSearch";
+import { askGuide, openGuideFromSearch } from "../components/guideSearch";
 import { WebCommunityResourceViewerContent } from "../components/WebCommunityResourceViewerContent";
 import { NoteForm, OpenNote, noteIsNew } from "./KitKnowledgeNotes";
 import { KitLessonEditor, type LessonPatch } from "./KitLessonEditor";
 import { Btn, cx, Icon, KitApp, Rail, Sec, Sep, TextLink } from "./kit";
-import { KitKnowledgeList, type KnowledgeAddResult } from "./KitKnowledgeList";
+import { KitKnowledgeAdd, KitKnowledgeList, type KnowledgeAddMode, type KnowledgeAddResult } from "./KitKnowledgeList";
 import { useCommunityAgentOn } from "../controllers/communityAgentOn";
 
 const SHELF = 6;
@@ -68,7 +68,8 @@ export function KitClassroom(props: {
   // A course asked for by its address, or null.
   openCourseId: string | null;
   onOpenCourse: (moduleId: string | null) => void;
-  onNewCourse: () => void;
+  // Makes a draft course with these lessons and opens it (hosts).
+  onCreateCourse?: (name: string, lessons: string[]) => Promise<KnowledgeAddResult>;
   onEditCourse: (moduleId: string) => void;
   // A course's name, line and cover (the course form).
   onEditCourseDetails: (moduleId: string) => void;
@@ -99,7 +100,9 @@ export function KitClassroom(props: {
   // Questions members asked in channels that nobody answered (the owner's
   // brief already finds them): where Knowledge is thin.
   const [waiting, setWaiting] = useState<Array<{ author: string; channel: string; text: string; hoursAgo: number }>>([]);
-  const [seed, setSeed] = useState<{ text: string; nonce: number } | null>(null);
+  const [seed, setSeed] = useState<{ text: string; mode?: KnowledgeAddMode; nonce: number } | null>(null);
+  // "New course" opens the box at the top of the page, switched to Course.
+  const newCourse = () => setSeed({ text: "", mode: "course", nonce: Date.now() });
   useEffect(() => {
     if (!props.canManage) { setWaiting([]); return; }
     let cancelled = false;
@@ -400,11 +403,27 @@ export function KitClassroom(props: {
             ? hostLead(courses.map((entry) => entry.course), learning)
             : resume ? "Pick up where you left off." : courses.length ? "Pick a course to start." : "Nothing to learn here yet."}
         </p>
-        {agentOn ? (
+        {/* One bar: people who can add get the box that asks and adds;
+            everyone else gets the bar that asks. */}
+        {agentOn && !(canWriteNotes || props.canManage) ? (
           <button type="button" className={cx("ask kask kask-btn")} onClick={() => openGuideFromSearch()}>
             <Icon name="spark" extra="sp" /><span>Ask anything {props.communityName} knows</span>
           </button>
         ) : null}
+
+        <KitKnowledgeAdd seed={seed} communityName={props.communityName}
+          onAsk={agentOn ? (question) => askGuide(question, props.communityId) : undefined}
+          onAddNote={canWriteNotes ? async (title, text) => {
+            try {
+              await createCommunityNote({ session: props.session, communityId: props.communityId, title, text });
+              await loadNotes();
+              return { ok: true };
+            } catch (error) {
+              return { ok: false, message: error instanceof Error && error.message ? error.message : "That note couldn't be saved. Try again." };
+            }
+          } : undefined}
+          onAddSources={props.canManage ? props.onAddSources : undefined}
+          onCreateCourse={props.canManage ? props.onCreateCourse : undefined} />
 
         {resume ? (
           <button type="button" className={cx("card kcont")} onClick={() => { props.onOpenCourse(resume.course.id); setLessonId(resume.lesson.id); }}>
@@ -417,8 +436,8 @@ export function KitClassroom(props: {
 
         <div className={cx("khead")}>
           <span className={cx("lab")}>Courses</span>
-          {props.canManage && courses.length > 0 ? (
-            <button type="button" className={cx("btn sm knewbtn")} onClick={props.onNewCourse}><Icon name="plus" />New course</button>
+          {props.onCreateCourse && courses.length > 0 ? (
+            <button type="button" className={cx("btn sm knewbtn")} onClick={newCourse}><Icon name="plus" />New course</button>
           ) : null}
         </div>
         <div className={cx("kgrid")}>
@@ -441,7 +460,7 @@ export function KitClassroom(props: {
             );
           })}
           {/* The dashed card is the empty shelf's way in; with courses, the button beside "Courses" adds one. */}
-          {props.canManage && courses.length === 0 ? <button type="button" className={cx("kcourse knew")} onClick={props.onNewCourse}><Icon name="plus" />New course</button> : null}
+          {props.onCreateCourse && courses.length === 0 ? <button type="button" className={cx("kcourse knew")} onClick={newCourse}><Icon name="plus" />New course</button> : null}
         </div>
         {shelf.pages > 1 ? (
           <div className={cx("kpager")}>
@@ -450,19 +469,9 @@ export function KitClassroom(props: {
             <button type="button" className={cx("btn sm")} disabled={shelf.page >= shelf.pages - 1} onClick={() => setShelfPage(shelf.page + 1)}>Next</button>
           </div>
         ) : null}
-        <KitKnowledgeList notes={notes} now={now} seed={seed}
+        <KitKnowledgeList notes={notes} now={now}
           sources={props.canManage ? props.resources.filter((resource) => resource.resource_role === "source") : []}
-          onOpenNote={(slug) => setNote({ slug, mode: "read" })}
-          onAddNote={canWriteNotes ? async (title, text) => {
-            try {
-              await createCommunityNote({ session: props.session, communityId: props.communityId, title, text });
-              await loadNotes();
-              return { ok: true };
-            } catch (error) {
-              return { ok: false, message: error instanceof Error && error.message ? error.message : "That note couldn't be saved. Try again." };
-            }
-          } : undefined}
-          onAddSources={props.canManage ? props.onAddSources : undefined} />
+          onOpenNote={(slug) => setNote({ slug, mode: "read" })} />
       </div>
     );
   }
