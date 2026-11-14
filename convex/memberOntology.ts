@@ -91,13 +91,6 @@ export const confirmMemberInterviewFacts = mutation({
   handler: async (ctx, args) => await confirmMemberInterviewFactsHandler(ctx, args, await resolveUserIdForAuthenticatedRequest({ ctx, authSubject: args.authSubject ?? null })),
 });
 
-// For a turn from a community front end: the member was authenticated by the
-// front end's session, which has no Convex identity.
-export const confirmMemberInterviewFactsForTrustedUserInternal = internalMutation({
-  args: { ...confirmMemberInterviewFactsArgs, trustedUserId: v.id("users") },
-  handler: async (ctx, { trustedUserId, ...args }) => await confirmMemberInterviewFactsHandler(ctx, args, trustedUserId),
-});
-
 /* "Who is @handle?" — the narrowest lens. Both viewer and subject must hold
    ACTIVE memberships in the shared community: when a membership ends, this
    read returns nothing for that community (retention-on-leave invariant —
