@@ -13,7 +13,7 @@ const contract = read("docs/community-interaction-substrate-contract-v1.md");
 
 assert.match(
   panel,
-  /mainMention\.handleKeyDown\(event\)[\s\S]*handleMentionTokenBackspace[\s\S]*handleCommunityComposerAuthoringKeyDown\(event, handleMainCommunityComposerUserInput\)[\s\S]*event\.key === "Enter" && !event\.shiftKey/,
+  /mainMention\.handleKeyDown\(event\)[\s\S]*handleMentionTokenBackspace[\s\S]*handleCommunityComposerAuthoringKeyDown\(event, handleMainCommunityComposerUserInput\)[\s\S]*enterSendsMessage\(event\)/,
   "mention selection must retain keyboard priority before formatting and send",
 );
 assert.match(
@@ -69,7 +69,7 @@ assert.match(
 );
 assert.match(
   contract,
-  /Enter sends, Shift\+Enter inserts a newline and continues an active list marker, and Tab or Shift\+Tab changes indentation only while the selection contains a list item/,
+  /with a mouse and keyboard, Enter sends and Shift\+Enter inserts a newline and continues an active list marker; on a touch screen[\s\S]*Return inserts a newline and the send button sends[\s\S]*Tab or Shift\+Tab changes indentation only while the selection contains a list item/,
   "the product contract should record authoring keyboard semantics",
 );
 assert.equal(

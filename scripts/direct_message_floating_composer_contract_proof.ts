@@ -30,7 +30,7 @@ assert.match(
 );
 assert.match(
   dmPanel,
-  /event\.key === "Enter" && !event\.shiftKey[\s\S]*void props\.onSend\(\);[\s\S]*<VoiceInputButton \{\.\.\.props\.voiceButtonProps\}/,
+  /enterSendsMessage\(event\)[\s\S]*void props\.onSend\(\);[\s\S]*<VoiceInputButton \{\.\.\.props\.voiceButtonProps\}/,
   "the visual slice must preserve DM send and voice behavior",
 );
 

@@ -1,5 +1,5 @@
 import { useCommunityAgentOn } from "../controllers/communityAgentOn";
-import { isImeComposing } from "../controllers/communityComposerTextEditing";
+import { enterSendsMessage, isImeComposing } from "../controllers/communityComposerTextEditing";
 import type {
   ChangeEventHandler,
   ClipboardEventHandler,
@@ -1243,7 +1243,7 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
                 if (
                   handleCommunityComposerAuthoringKeyDown(event, handleMainCommunityComposerUserInput)
                 ) return;
-                if (event.key === "Enter" && !event.shiftKey) {
+                if (enterSendsMessage(event)) {
                   event.preventDefault();
                   if (isAuthRecoveringSignedIn) return;
                   void handleMainCommunityComposerSubmit();
@@ -1387,7 +1387,7 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
                   })
                 ) return;
                 if (handleCommunityComposerAuthoringKeyDown(event, handleDrawerReplyInputChange)) return;
-                if (event.key === "Enter" && !event.shiftKey) {
+                if (enterSendsMessage(event)) {
                   event.preventDefault();
                   if (isAuthRecoveringSignedIn) return;
                   void handleSendDrawerReply();

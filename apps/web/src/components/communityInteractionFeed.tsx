@@ -1,5 +1,5 @@
 import { Fragment, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
-import { isImeComposing } from "../controllers/communityComposerTextEditing";
+import { enterSendsMessage, isImeComposing } from "../controllers/communityComposerTextEditing";
 import { CommunityChannelSessionContext } from "./CommunityChannelSessionContext";
 import { downloadCloudCommunityChatAttachment } from "../../../../shared/cloudCommunityChatGateway";
 import {
@@ -254,7 +254,7 @@ export function EditForm(props: {
         onChange={(event) => props.onChange(event.target.value)}
         onKeyDown={(event) => {
           if (isImeComposing(event)) return;
-          if (event.key === "Enter" && !event.shiftKey) {
+          if (enterSendsMessage(event)) {
             event.preventDefault();
             props.onSave();
           } else if (event.key === "Escape") {
