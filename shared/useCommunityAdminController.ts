@@ -42,7 +42,7 @@ type UseCommunityAdminControllerArgs<
   activeCommunityId: string | null;
   session: SessionT | null;
   ensureSession?: EnsureSessionFn<SessionT>;
-  confirmAction?: (message: string) => boolean;
+  confirmAction?: (message: string, yes: string) => boolean | Promise<boolean>;
   reloadCommunities: (session: SessionT) => Promise<void>;
   reloadCommunityAccess: (communityId: string, session: SessionT) => Promise<void>;
 
@@ -351,7 +351,7 @@ export function useCommunityAdminController<
     const session = await resolveUsableSession(current.session, current.ensureSession);
     if (!session || !communityId) return;
     const confirmed = current.confirmAction
-      ? current.confirmAction("Remove this member?")
+      ? await current.confirmAction("Remove this member?", "Remove")
       : window.confirm("Remove this member?");
     if (!confirmed) return;
     try {
@@ -372,7 +372,7 @@ export function useCommunityAdminController<
     const session = await resolveUsableSession(current.session, current.ensureSession);
     if (!session || !communityId) return;
     const confirmed = current.confirmAction
-      ? current.confirmAction("Ban this member? They will not be able to rejoin unless unbanned.")
+      ? await current.confirmAction("Ban this member? They will not be able to rejoin unless unbanned.", "Ban")
       : window.confirm("Ban this member? They will not be able to rejoin unless unbanned.");
     if (!confirmed) return;
     try {

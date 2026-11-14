@@ -1,3 +1,4 @@
+import { askInApp } from "../../../../shared/inAppConfirm";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { AuthSession } from "../auth";
 import { isValidCommunitySlug } from "../../../../shared/communitySlug";
@@ -181,7 +182,7 @@ export function useWebCommunitySettingsController(params: {
     activeCommunityId: params.activeCommunityId,
     session: params.session,
     ensureSession: params.ensureSession,
-    confirmAction: (message) => confirm(message),
+    confirmAction: (message, yes) => askInApp({ message, yes, danger: true }),
     loadCommunities: params.loadCommunities,
     onLeaveCommunityLocalState: params.onLeaveCommunity,
     setCommunityMemberSettingsError:

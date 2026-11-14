@@ -369,8 +369,8 @@ assert.deepEqual(splitBodyIntoMentionSegments("text", [mention({ label: "  " })]
   );
   assert.match(
     senderSource,
-    /Unread members may also get an email after 15 minutes[\s\S]*once every 72 hours[\s\S]*window\.confirm\(confirmation\)/,
-    "@everybody sends must show the mass-email warning before the message is committed",
+    /Unread members may also get an email after 15 minutes[\s\S]*once every 72 hours[\s\S]*!\(await askInApp\(\{ message: confirmation,[^)]*\)\)\) return;/,
+    "@everybody sends must show the mass-email warning (the app's own question, not the browser's box) and wait for the answer before the message is committed",
   );
   assert.match(
     feedSource,

@@ -1,3 +1,4 @@
+import { askInApp } from "../../../shared/inAppConfirm";
 import { useCommunityAppLinksState } from "./controllers/communityAppLinks";
 import { useGuideSearchShortcut } from "./controllers/useGuideSearchShortcut";
 import { useCloseInboxOnSettings } from "./controllers/useCloseInboxOnSettings";
@@ -854,7 +855,7 @@ export default function App() {
   >({
     activeCommunityId,
     ...authenticatedSessionArg,
-    confirmAction: (message) => confirm(message),
+    confirmAction: (message, yes) => askInApp({ message, yes, danger: true }),
     reloadCommunities: loadCommunities,
     reloadCommunityAccess: reloadActiveCommunityAccess,
     getProfileSaveSession: () => sessionRef.current ?? session,
