@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { Search } from "lucide-react";
+import { ArrowLeft, Search } from "lucide-react";
 import { isDesignV1Active } from "../../../../shared/designSystem";
 import { openGuideFromSearch } from "./guideSearch";
 import { useCommunityAgentOn } from "../controllers/communityAgentOn";
@@ -74,7 +74,15 @@ export function CommunityPageRail(props: { label: string; children: ReactNode })
 
 // `children` is the page's classic title row, shown when v1 is off (and where
 // a page is used outside the frame, as on mobile).
-export function CommunityPageHeader(props: { title: string; actions?: ReactNode; children: ReactNode }) {
+// One level in (a course inside Knowledge, a pod's room): the header is an
+// arrow back and the name of what you're in, nothing else (Neil, Nov 14). No
+// word beside the arrow, and no second line under the header.
+export function CommunityPageHeader(props: {
+  title: string;
+  actions?: ReactNode;
+  children: ReactNode;
+  back?: { label: string; onBack: () => void } | null;
+}) {
   const slot = useContext(HeaderSlotContext);
   const toolbar = useContext(ToolbarSlotContext);
   if (!isDesignV1Active() || slot === undefined) return <>{props.children}</>;
@@ -83,6 +91,11 @@ export function CommunityPageHeader(props: { title: string; actions?: ReactNode;
     <>
       {createPortal(
         <div className="community-channel-header-identity">
+          {props.back ? (
+            <button type="button" className="community-page-header-back" onClick={props.back.onBack} aria-label={props.back.label} title={props.back.label}>
+              <ArrowLeft size={16} strokeWidth={1.8} aria-hidden="true" />
+            </button>
+          ) : null}
           <h1>{props.title}</h1>
         </div>,
         slot,
