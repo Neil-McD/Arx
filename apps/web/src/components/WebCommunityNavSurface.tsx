@@ -19,7 +19,9 @@ export function WebCommunityNavSurface({
   presentation,
 }: WebCommunityNavSurfaceProps) {
   const isMobileHome = presentation === "mobile-home";
-  const useV1Layout = !isMobileHome && isDesignV1Active();
+  // Design v1: a phone's community home is the same left column, full width.
+  const useV1Layout = isDesignV1Active();
+  const selectTab = isMobileHome ? communityShell.onSelectCommunityTabFromMobile : communityShell.onSelectCommunityTab;
   const appLinks = useCommunityAppLinks();
   const hasDestinationSelection =
     !isMobileHome &&
@@ -34,10 +36,10 @@ export function WebCommunityNavSurface({
     && communityShell.communityChannels.some((channel) => channel.access_mode === "restricted" && channel.slug === communityShell.selectedCommunityChannelSlug);
   return (
     <>
-    {useV1Layout ? <WebCommunityCommandPalette communityShell={communityShell} /> : null}
+    {useV1Layout && !isMobileHome ? <WebCommunityCommandPalette communityShell={communityShell} /> : null}
     <CommunityNav
       activeCommunity={communityShell.activeCommunity}
-      hideIdentitySettings={isMobileHome}
+      hideIdentitySettings={isMobileHome && !useV1Layout}
       communityTab={communityShell.communityTab}
       activeSelectionMode={hasDestinationSelection ? "route" : "none"}
       tabIndicators={communityShell.communityTabIndicators}
@@ -62,11 +64,7 @@ export function WebCommunityNavSurface({
       canViewActiveCommunityAnalytics={communityShell.canViewActiveCommunityAnalytics}
       isLoadingAccess={communityShell.isLoadingCommunityAccess}
       onCopyCommunityJoinLink={communityShell.onCopyCommunityJoinLink}
-      onSelectTab={
-        isMobileHome
-          ? communityShell.onSelectCommunityTabFromMobile
-          : communityShell.onSelectCommunityTab
-      }
+      onSelectTab={selectTab}
       toolsSlot={useV1Layout ? <SearchOrAskButton /> : null}
       layout={useV1Layout ? "v1" : "classic"}
       identityIsCover={useV1Layout}
@@ -108,8 +106,7 @@ export function WebCommunityNavSurface({
       inboxUnreadCount={communityShell.directMessagesUnreadCount}
       onOpenMembers={useV1Layout ? communityShell.onOpenMembers : undefined}
       // Pods on phones too (design v1 on): the phone menu has no other way in.
-      onOpenPods={useV1Layout ? () => communityShell.onSelectCommunityTab("pods")
-        : isMobileHome && isDesignV1Active() ? () => communityShell.onSelectCommunityTabFromMobile("pods") : undefined}
+      onOpenPods={useV1Layout ? () => selectTab("pods") : undefined}
       podsActive={inPod}
       // One door: the community's own app, opened from here (design v1).
       appLinks={isDesignV1Active() ? appLinks : undefined}

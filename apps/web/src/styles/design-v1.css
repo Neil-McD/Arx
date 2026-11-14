@@ -3568,3 +3568,28 @@
 }
 :root[data-design="v1"] .community-dm-kit-thread { overflow-x: hidden; }
 :root[data-design="v1"] .community-dm-kit-thread :is(img, video, iframe, .message-link-media, .message-pdf-card) { max-width: 100%; }
+
+/* ---------- Phones, step 2: the community home is the left column ----------
+   Without the old strip of communities, the column takes the whole width. */
+:root[data-design="v1"] .mobile-global-shell:not(.has-community-rail) { grid-template-columns: minmax(0, 1fr); }
+:root[data-design="v1"] .mobile-community-home:not(.has-community-rail) .community-nav { padding: 0 12px 12px; }
+/* Settings open from your account at the bottom, as on desktop; no gear. */
+:root[data-design="v1"] .mobile-topbar.is-community-home .mobile-topbar-settings { display: none; }
+
+/* ---------- Phones, step 3: Settings ----------
+   The index is the Settings sidebar, full width; a section's page has its own
+   title (the rows' head), so the phone's second title goes. */
+:root[data-design="v1"] .mobile-global-shell:not(.has-community-rail) .settings-nav-v1 {
+  width: 100%;
+  height: 100%;
+  box-sizing: border-box;
+  padding: 0 12px 12px;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  overflow-y: auto;
+}
+:root[data-design="v1"] .mobile-settings-detail-title { display: none; }
+/* The phone's top bar has the way back; the list starts below it. */
+:root[data-design="v1"] .mobile-global-shell:not(.has-community-rail) .settings-nav-v1 .settings-nav-back { display: none; }
+:root[data-design="v1"] .mobile-global-shell:not(.has-community-rail) .settings-nav-v1 { padding-top: 56px; }
