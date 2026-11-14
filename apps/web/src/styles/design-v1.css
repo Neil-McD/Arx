@@ -2514,6 +2514,14 @@
   display: none;
 }
 
+/* Long text scrolls under a soft edge in the box's top and bottom padding,
+   not a hard cut at its border. The padding is empty while it fits. */
+:root[data-design="v1"] .chat-input-bar textarea.chat-input,
+:root[data-design="v1"] .chat-input-bar .mention-composer-highlight {
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, black 9px, black calc(100% - 9px), transparent 100%);
+  mask-image: linear-gradient(to bottom, transparent 0, black 9px, black calc(100% - 9px), transparent 100%);
+}
+
 /* A channel's composer: the plus at the left; mentions, emoji, voice and send
    at the right, as in the mock. */
 @media (min-width: 721px) {
