@@ -262,14 +262,20 @@ function WebCommunityAgentDock(props, ref) {
   useEffect(() => {
     if (!props.pageMode || !props.pageActive || props.isSuppressed) return;
     if (typeof window === "undefined" || window.matchMedia?.("(pointer: coarse)").matches) return;
-    const frame = window.requestAnimationFrame(() => {
+    // On a first load the box arrives a moment after the page: look for it
+    // for a couple of seconds, focus it once, then stop.
+    let tries = 0;
+    const timer = window.setInterval(() => {
       const box = kitInputRef.current ?? textareaRef.current;
+      tries += 1;
+      if (!box || box.disabled || box.offsetParent === null) { if (tries >= 20) window.clearInterval(timer); return; }
+      window.clearInterval(timer);
       const active = document.activeElement;
-      if (!box || box.disabled || active === box) return;
+      if (active === box) return;
       if (active instanceof HTMLElement && (active.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(active.tagName) || active.closest("[role='dialog'], .modal"))) return;
       box.focus({ preventScroll: true });
-    });
-    return () => window.cancelAnimationFrame(frame);
+    }, 100);
+    return () => window.clearInterval(timer);
   }, [props.pageMode, props.pageActive, props.isSuppressed, props.community?.id]);
   const composerFormRef = useRef<HTMLFormElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
