@@ -270,10 +270,11 @@ assert.match(
   /Platform analytics[\s\S]*operator-console-title">Analytics[\s\S]*activeScope="platform"[\s\S]*onOpenCommunityScope/,
   "the operator route must present the Platform scope of Analytics and preserve a community return path",
 );
-assert.match(
+// Neil, Nov 13: no operator view in a community's Analytics; it has its time ranges only.
+assert.doesNotMatch(
   communityAnalytics,
-  /activeScope="community"[\s\S]*showPlatformScope=\{capabilities\.canViewPlatformAnalytics\}[\s\S]*actions\.openPlatformAnalytics/,
-  "community analytics must expose Platform only through the resolved operator capability",
+  /WebAnalyticsScopeSwitcher|canViewPlatformAnalytics|openPlatformAnalytics/,
+  "community analytics must not offer a Platform (operator) view",
 );
 assert.match(
   operatorHost,

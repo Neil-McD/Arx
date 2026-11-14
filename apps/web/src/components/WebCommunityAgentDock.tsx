@@ -24,7 +24,6 @@ import {
 } from "lucide-react";
 import { isDesignV1Active } from "../../../../shared/designSystem";
 import { Chips, Dock, Icon, KitApp, Mine, Scroll, Talk, Theirs, Top, View, cx } from "../v1/kit";
-import { RightColumnToggle } from "./RightColumnToggle";
 import { getAuthUrl, type AuthSession } from "../auth";
 import { CommunityComposerControls } from "./CommunityComposerControls";
 import { renderMarkdown } from "../../../../shared/markdownUi";
@@ -1316,7 +1315,7 @@ function WebCommunityAgentDock(props, ref) {
         <View index={0}>
           {/* The top row scrolls with Home, so the eyebrow's glow is never cut. */}
           <Scroll ref={scrollRef}>
-            <Top title="Home" titleView={0} actions={<RightColumnToggle />} />
+            <Top title="Home" titleView={0} />
             <WebCommunityHomeSection
               {...props.home}
               session={props.session}

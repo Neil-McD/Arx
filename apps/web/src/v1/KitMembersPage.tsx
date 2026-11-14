@@ -3,7 +3,7 @@
 // docs/design/members-invariants.md: every way someone is in and at which
 // price, who needs the host, who is out and why, and one member's record.
 import { useCallback, useContext, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
-import { RightColumnToggle, setRightColumnOpen } from "../components/RightColumnToggle";
+import { ArrowLeft } from "lucide-react";
 import { createPortal } from "react-dom";
 import { UserAvatar } from "../../../../shared/UserAvatar";
 import {
@@ -84,6 +84,9 @@ export function KitMembersPage(props: {
   const [sort, setSort] = useState<{ key: SortKey; desc: boolean } | null>(null);
   const [search, setSearch] = useState("");
   const [openKey, setOpenKey] = useState<string | null>(null);
+  // Narrow windows (below 900px) show Members as layers: picking someone
+  // replaces the table with their record, with a way back.
+  const [picked, setPicked] = useState(false);
   const [record, setRecord] = useState<CloudMemberRecord | null>(null);
   const [recordVersion, setRecordVersion] = useState(0);
   const [tableVersion, setTableVersion] = useState(0);
@@ -237,10 +240,10 @@ export function KitMembersPage(props: {
     }
   };
   const page = (
-    <section className="members-page is-kit" aria-label="Community members">
+    <section className={`members-page is-kit${picked ? " has-picked" : ""}`} aria-label="Community members">
       <KitApp view="members" host part="main">
         <View index={5}>
-          <Top title={<>Members <small>{summary ? `${summary.with_access} ${summary.with_access === 1 ? "member" : "members"}${summary.counts.on_hold ? ` · ${summary.counts.on_hold} on hold` : ""}` : ""}</small></>} titleView={5} actions={<RightColumnToggle />} />
+          <Top title={<>Members <small>{summary ? `${summary.with_access} ${summary.with_access === 1 ? "member" : "members"}${summary.counts.on_hold ? ` · ${summary.counts.on_hold} on hold` : ""}` : ""}</small></>} titleView={5} />
           <div className={cx("page")} style={{ overflowY: "auto" }}>
             <p className={cx("lead")}><span className={cx("aura")}><Icon name="spark" /></span>{lead}</p>
             {waiting > 0 ? (
@@ -284,8 +287,7 @@ export function KitMembersPage(props: {
                   <span />{header("name", "Member")}<span>Working on</span>{header("plan", "Plan")}{header("active", "Last active")}
                 </div>
                 {rows.map((row) => (
-                  <button key={keyOf(row)} type="button" role="row" className={cx("trow", openKey === keyOf(row) && "sel")} data-opens-right-column
-                    onClick={() => { setOpenKey(keyOf(row)); setRightColumnOpen(true); }}>
+                  <button key={keyOf(row)} type="button" role="row" className={cx("trow", openKey === keyOf(row) && "sel")} onClick={() => { setOpenKey(keyOf(row)); setPicked(true); }}>
                     <Face size="s" name={row.name} url={row.avatar_url} seed={row.user_id} getAvatarColor={props.getAvatarColor} getInitials={props.getInitials} />
                     <span>
                       <b>{row.name}</b>
@@ -305,8 +307,7 @@ export function KitMembersPage(props: {
                 <div className={cx("trow th")} role="row"><span /><span>Member</span><span>What happened</span><span>Was on</span><span>When</span></div>
                 {pastRows.map((row) => (
                   <button key={`${row.user_id}:${row.reason}`} type="button" role="row" className={cx("trow", row.membership_id && openKey === row.membership_id && "sel")}
-                    data-opens-right-column
-                    onClick={() => { if (!row.membership_id) return; setOpenKey(row.membership_id); setRightColumnOpen(true); }} disabled={!row.membership_id}>
+                    onClick={() => { if (!row.membership_id) return; setOpenKey(row.membership_id); setPicked(true); }} disabled={!row.membership_id}>
                     <Face size="s" name={row.name} url={row.avatar_url} seed={row.user_id} getAvatarColor={props.getAvatarColor} getInitials={props.getInitials} />
                     <span><b>{row.name}</b>{row.reason === "blocked" ? <span className={cx("tag hold")}>blocked</span> : null}{row.rejoined ? <span className={cx("tag")}>rejoined before</span> : null}</span>
                     <span>{row.reason_text}</span>
@@ -327,6 +328,9 @@ export function KitMembersPage(props: {
 
   const recordRail: ReactNode = (
     <KitApp view="members" host part="rail">
+      <button type="button" className="members-record-back" onClick={() => setPicked(false)} aria-label="Back to Members">
+        <ArrowLeft size={14} strokeWidth={1.8} aria-hidden="true" />Members
+      </button>
       <Rail index={5} label={record ? record.name : "Member"}>
         {record ? <MemberRecordView record={record} now={now} self={record.user_id === props.currentUserId}
           onMessage={props.onMessage} onManage={props.onManage} getAvatarColor={props.getAvatarColor} getInitials={props.getInitials}
