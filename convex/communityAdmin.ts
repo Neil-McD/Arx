@@ -1,3 +1,4 @@
+import { BASE_TIER_KEY } from "./communityHeldTiers";
 import { memberAccessChanged } from "./communityPlanPods";
 import { action, internalAction, internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import { schedulePodBillingCheck } from "./communityPodBillingCheck";
@@ -2450,7 +2451,7 @@ export const getCommunityAnalyticsSnapshot = query({
     let currency: string | null = null;
     let currencyDecimals: number | null = null;
     let mixedCurrency = false;
-    // Who is on which plan now: '' is the base membership, else a tier's key.
+    // Who is on which plan now, by tier key (BASE_TIER_KEY: the base membership).
     const planTotals = new Map<string, { mrr: number; users: Set<string> }>();
 
     for (const subscription of subscriptions) {
@@ -2485,7 +2486,7 @@ export const getCommunityAnalyticsSnapshot = query({
           : Math.max(0, Math.floor(pricePoint.amountBaseUnits));
       if (isCurrentRecurring) {
         mrrBaseUnits += monthlyBaseUnits;
-        const planKey = String(pricePoint.tierKey ?? "");
+        const planKey = String(pricePoint.tierKey ?? BASE_TIER_KEY);
         const plan = planTotals.get(planKey) ?? { mrr: 0, users: new Set<string>() };
         plan.mrr += monthlyBaseUnits;
         plan.users.add(String(subscription.userId ?? subscription._id));
@@ -2505,23 +2506,44 @@ export const getCommunityAnalyticsSnapshot = query({
       .withIndex("by_community_lastSeenAt", (q: any) =>
         q.eq("communityId", args.communityId).gte("lastSeenAt", sinceMs),
       )
-      .take(MAX_ANALYTICS_SNAPSHOT_EVENT_ROWS)) as Array<{ userId: string }>;
+      .take(MAX_ANALYTICS_SNAPSHOT_EVENT_ROWS)) as Array<{
+        userId: string;
+        lastSeenAt: number;
+        createdAt: number;
+        activeUntil?: number;
+      }>;
+    // Joining writes a baseline row (lastSeenAt = createdAt, no lease); only a
+    // heartbeat after that is a visit.
     const activeMembers = new Set(
-      presenceRows.map((row) => String(row.userId)).filter((id) => memberIds.has(id)),
+      presenceRows
+        .filter((row) => row.activeUntil != null || row.lastSeenAt > row.createdAt)
+        .map((row) => String(row.userId))
+        .filter((id) => memberIds.has(id)),
     ).size;
+    // A plan bought through a connected app is held as an app grant, not a
+    // subscription (communityHeldTiers): count those members on their plan.
+    const appGrants = (await ctx.db
+      .query("communityAppGrants" as any)
+      .withIndex("by_community_user", (q: any) => q.eq("communityId", args.communityId))
+      .take(MAX_ANALYTICS_SNAPSHOT_EVENT_ROWS)) as Array<{ userId?: string; tierKey?: string; active: boolean }>;
+    for (const grant of appGrants) {
+      if (!grant.active || !grant.userId || !memberIds.has(String(grant.userId))) continue;
+      const planKey = String(grant.tierKey ?? BASE_TIER_KEY);
+      const plan = planTotals.get(planKey) ?? { mrr: 0, users: new Set<string>() };
+      plan.users.add(String(grant.userId));
+      planTotals.set(planKey, plan);
+    }
 
     const paidUsers = new Set<string>();
     const plans: Array<{ key: string; name: string; members: number; mrr_base_units: number | null }> = [];
     for (const [key, plan] of planTotals) {
       plan.users.forEach((id) => paidUsers.add(id));
-      const tier = key
-        ? ((await ctx.db
-            .query("communityTiers" as any)
-            .withIndex("by_community_key", (q: any) => q.eq("communityId", args.communityId).eq("key", key))
-            .first()) as { name?: string } | null)
-        : null;
+      const tier = (await ctx.db
+        .query("communityTiers" as any)
+        .withIndex("by_community_key", (q: any) => q.eq("communityId", args.communityId).eq("key", key))
+        .first()) as { name?: string } | null;
       plans.push({
-        key: key || "base",
+        key,
         name: String(tier?.name ?? "").trim() || "Membership",
         members: plan.users.size,
         mrr_base_units: mixedCurrency ? null : plan.mrr,
