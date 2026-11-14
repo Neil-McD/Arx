@@ -106,9 +106,16 @@ Use explicit namespaces.
 
 - `/c/:slug`
 
-The community's one link (`WebCommunityHandoff`). Visitors go to its site's
-public page, where joining and paying (cash first) happen; Studio has no join
-page or checkout of its own. Members always go to Polynet's app
+The community's one link: its landing page in the app (`WebCommunityLandingPage`,
+Nov 13; backend `convex/communityLanding.ts`). Anyone, signed in or out, sees
+the community (banner, logo, name, one-liner, host, members, the guide, about,
+courses, public upcoming events, its connected app, plans) and one join card:
+Join (open), Ask to join (approval), or a plan, paid cash first (Stripe, then
+sign in; a signed-out buyer's browser keeps the checkout's secret so signing in
+claims it, and a verified email match claims it too). Joining runs Studio's own
+join decision and checkout cores. A member sees "You're a member" and Open
+community. Shared links get the community's own preview (`api/community-page.js`).
+Members always go to Polynet's app
 (`/c/:slug/home`): since Nov 13 custom sites are being removed, and
 `communityMemberExperience` answers "app" for every community. It waits until
 membership is known. A community with no site yet shows a short note.
