@@ -307,7 +307,12 @@ css += """
 .app .kaddrow{display:flex;align-items:center;gap:12px;width:100%;height:46px;margin-top:20px;padding:0 14px;border-radius:10px;border:1px solid var(--line2);background:var(--panel2);color:var(--ink2);font-size:14px;text-align:left}
 .app .kaddrow:hover{color:var(--ink);border-color:rgba(var(--w),.18)}
 .app .kaddrow .ic{width:16px;height:16px;color:var(--ink3)}
-.app .kaddrow span{margin-left:auto;font-size:12.5px;color:var(--ink3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.app .kaddrow .ic.sp{color:var(--aurora-ink)}
+.app .krot{position:relative;flex:1;min-width:0;height:20px;overflow:hidden}
+.app .krot b{position:absolute;inset:0;font-weight:400;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;animation:krot 9s var(--ease) infinite both}
+.app .krot b+b{animation-delay:-4.5s}
+@keyframes krot{0%,42%{opacity:1;transform:none}50%,92%{opacity:0;transform:translateY(-6px)}93%{opacity:0;transform:translateY(6px)}100%{opacity:1;transform:none}}
+@media (prefers-reduced-motion:reduce){.app .krot b{animation:none}.app .krot b+b{display:none}}
 .app .kaddbox{margin-top:20px;padding:14px 12px 12px 16px;border-color:rgba(var(--au),.45);box-shadow:0 0 0 4px rgba(var(--au),.08)}
 .app .kaddbox textarea{font-size:15px;line-height:1.6;min-height:48px;max-height:260px;overflow-y:auto}
 .app .kreadlab{margin-top:10px;font-size:12px;color:var(--ink3)}
@@ -320,7 +325,6 @@ css += """
 .app .kseg{display:inline-flex;padding:2px;border-radius:8px;border:1px solid var(--line2);background:var(--field)}
 .app .kseg button{height:24px;padding:0 10px;border-radius:6px;font-size:12.5px;font-weight:500;color:var(--ink2)}
 .app .kseg button[aria-pressed="true"]{background:var(--s2);color:var(--ink)}
-@media (max-width:720px){.app .kaddrow span{display:none}}
 
 /* Kit addition: the app's own "are you sure?" (KitConfirm), in the palette's
    layer: a light veil and one small card. */

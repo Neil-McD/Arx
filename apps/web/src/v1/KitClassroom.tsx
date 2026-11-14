@@ -21,7 +21,7 @@ import {
 import { getCloudCommunityHomeSnapshot } from "../../../../shared/cloudCommunityAdminGateway";
 import { continueLesson, courseLessons, courseProgress, pageOf } from "../../../../shared/communityClassroom";
 import type { CommunityResource, CommunityResourceModule } from "../components/communityResourcesContracts";
-import { openGuideFromSearch } from "../components/guideSearch";
+import { askGuide, openGuideFromSearch } from "../components/guideSearch";
 import { WebCommunityResourceViewerContent } from "../components/WebCommunityResourceViewerContent";
 import { NoteForm, OpenNote, noteIsNew } from "./KitKnowledgeNotes";
 import { KitLessonEditor, type LessonPatch } from "./KitLessonEditor";
@@ -403,13 +403,16 @@ export function KitClassroom(props: {
             ? hostLead(courses.map((entry) => entry.course), learning)
             : resume ? "Pick up where you left off." : courses.length ? "Pick a course to start." : "Nothing to learn here yet."}
         </p>
-        {agentOn ? (
+        {/* One bar: people who can add get the box that asks and adds;
+            everyone else gets the bar that asks. */}
+        {agentOn && !(canWriteNotes || props.canManage) ? (
           <button type="button" className={cx("ask kask kask-btn")} onClick={() => openGuideFromSearch()}>
             <Icon name="spark" extra="sp" /><span>Ask anything {props.communityName} knows</span>
           </button>
         ) : null}
 
-        <KitKnowledgeAdd seed={seed}
+        <KitKnowledgeAdd seed={seed} communityName={props.communityName}
+          onAsk={agentOn ? (question) => askGuide(question, props.communityId) : undefined}
           onAddNote={canWriteNotes ? async (title, text) => {
             try {
               await createCommunityNote({ session: props.session, communityId: props.communityId, title, text });
