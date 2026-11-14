@@ -53,14 +53,15 @@ export function WebCommunitySwitcher(props: WebCommunitySwitcherProps) {
     return () => window.removeEventListener("resize", place);
   }, [isOpen]);
 
+  // Focus moves into the menu once it has rendered (it renders after its
+  // position is known).
+  const isShown = isOpen && anchor !== null;
   useEffect(() => {
     if (!isOpen) { setQuery(""); return; }
-    const frame = requestAnimationFrame(() => {
-      if (searchRef.current) searchRef.current.focus();
-      else popoverRef.current?.querySelector<HTMLButtonElement>(".community-switcher-item")?.focus();
-    });
-    return () => cancelAnimationFrame(frame);
-  }, [isOpen]);
+    if (!isShown) return;
+    if (searchRef.current) searchRef.current.focus();
+    else popoverRef.current?.querySelector<HTMLButtonElement>(".community-switcher-item")?.focus();
+  }, [isOpen, isShown]);
 
   // The community you're in comes first; the rest keep their order.
   const listed = useMemo(() => {
