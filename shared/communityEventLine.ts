@@ -107,13 +107,13 @@ export function readEventLine(text: string, today: EventLineToday): EventLineRea
     }
   }
 
-  // Where: what follows a last "at" or "in".
+  // Where: "on Zoom", or what follows a last "at" or "in".
   let place: string | null = null;
-  const where = take(/\s(?:at|in|@)\s+([^,]+?)\s*$/i);
+  const where = take(/\s(?:on|via|over)\s+(zoom|discord|google meet|meet|teams|slack|youtube|twitch)\s*$/i) ?? take(/\s(?:at|in|@)\s+([^,]+?)\s*$/i);
   if (where) place = where[1].trim() || null;
 
   const title = rest.replace(/\s+/g, " ").replace(/^[\s,;:-]+|[\s,;:-]+$/g, "").replace(/\s+(?:on|at|from|in)$/i, "").trim();
-  return { title, date, time, endTime, repeats, place };
+  return { title: title.charAt(0).toUpperCase() + title.slice(1), date, time, endTime, repeats, place };
 }
 
 const pad = (value: number) => String(value).padStart(2, "0");

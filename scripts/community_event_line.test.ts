@@ -42,7 +42,7 @@ describe("reading one line into an event", () => {
   });
   it("reads monthly, daily and 24-hour times", () => {
     expect(readEventLine("AMA monthly 18:30", today)).toMatchObject({ title: "AMA", repeats: "monthly", time: { hour: 18, minute: 30 } });
-    expect(readEventLine("Daily standup at 9:15am on Zoom", today)).toMatchObject({ repeats: "daily", time: { hour: 9, minute: 15 } });
+    expect(readEventLine("Daily standup at 9:15am on Zoom", today)).toMatchObject({ title: "Standup", repeats: "daily", time: { hour: 9, minute: 15 }, place: "Zoom" });
   });
   it("knows a call from an address", () => {
     expect(eventLinePlaceIsOnline("Zoom")).toBe(true);

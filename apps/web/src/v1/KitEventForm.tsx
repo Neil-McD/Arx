@@ -79,10 +79,10 @@ export function KitEventForm(props: {
   return (
     <form ref={box} className={cx("kadd", "evadd")} aria-label={props.isNew ? "Add an event" : props.isSeries ? "Change this series" : "Change this event"} aria-busy={props.isSaving}
       onSubmit={submit} onKeyDown={(event) => { if (event.key === "Escape" && !props.isSaving) { event.stopPropagation(); props.onClose(); } }}>
-      {props.isNew ? (
+      {props.isNew && !parts ? (
         <input className={cx("evline")} autoFocus value={line} onChange={(event) => typeLine(event.target.value)} aria-label="Add an event" placeholder="Office hours every Tuesday 3pm" />
       ) : (
-        <div className={cx("evhead")}>{props.isSeries ? "Change every date of this series" : "Change this event"}</div>
+        <div className={cx("evhead")}>{props.isNew ? "New event" : props.isSeries ? "Change every date of this series" : "Change this event"}</div>
       )}
       {showRead ? (
         <>
@@ -98,7 +98,7 @@ export function KitEventForm(props: {
       ) : null}
       {parts ? (
         <div className={cx("evparts")}>
-          <label className={cx("wide")}><span>Name</span><input value={draft.title} onChange={(event) => set("title", event.target.value)} placeholder="Weekly call" autoFocus={!props.isNew} /></label>
+          <label className={cx("wide")}><span>Name</span><input value={draft.title} onChange={(event) => set("title", event.target.value)} placeholder="Weekly call" autoFocus /></label>
           <label><span>Starts</span><input type="datetime-local" value={draft.starts_at} onChange={(event) => set("starts_at", event.target.value)} /></label>
           <label><span>Ends</span><input type="datetime-local" value={draft.ends_at} onChange={(event) => set("ends_at", event.target.value)} /></label>
           <label><span>Time zone</span>
