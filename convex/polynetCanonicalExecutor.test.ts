@@ -2941,7 +2941,7 @@ test("community.md is the community card: the reader's restricted channels (from
   expect(body).not.toContain("founders-only");
 });
 
-test("community notes are read-only to every agent and connected AI; nothing marks private rooms any more", async () => {
+test("community notes: the guide and builders read them, a member's own AI does not, and nobody writes them; nothing marks private rooms any more", async () => {
   const t = convexTest(schema, modules);
   const f = await createFixture(t);
   await t.run(ctx => ctx.db.insert("communityNotes", {
@@ -2949,17 +2949,34 @@ test("community notes are read-only to every agent and connected AI; nothing mar
     source: "founder", searchText: "liquid chalk helps cold hands", createdAt: Date.now(), updatedAt: Date.now(),
   }));
   const memberCtx = executionContext(t.withIdentity({ subject: f.memberSubject }));
-  const run = (principalKind: "community_agent_for_member" | "community_agent" | "external_mcp", toolName: any, input: Record<string, unknown>) =>
+  const run = (principalKind: "community_agent_for_member" | "community_agent" | "external_mcp" | "community_app", toolName: any, input: Record<string, unknown>) =>
     executePolynetCanonicalTool({ ctx: memberCtx, authSubject: f.memberSubject, userId: f.memberId, principalKind,
       evidenceSurface: principalKind === "external_mcp" ? "external_mcp" : "member_agent_dock", toolName, input });
+  const ownerCtx = executionContext(t.withIdentity({ subject: f.ownerSubject }));
+  const asBuilder = (toolName: any, input: Record<string, unknown>) =>
+    executePolynetCanonicalTool({ ctx: ownerCtx, authSubject: f.ownerSubject, userId: f.ownerId, principalKind: "external_mcp",
+      evidenceSurface: "external_mcp", toolName, input });
   const notes = "/communities/canonical-community/memory/";
 
-  // Everyone reads, lists and searches them.
-  expect(await run("external_mcp", "polynet_read", { path: `${notes}liquid-chalk-helps.md` })).toMatchObject({ ok: true });
+  // The guide reads, lists and searches them to answer a member (Neil, Nov 14:
+  // notes are the guide's memory).
+  expect(await run("community_agent_for_member", "polynet_read", { path: `${notes}liquid-chalk-helps.md` })).toMatchObject({ ok: true });
   expect(await run("community_agent_for_member", "polynet_list", { path: notes })).toMatchObject({ ok: true, value: { writable: false,
     entries: [expect.objectContaining({ title: "Liquid chalk helps" })] } });
-  expect(await run("external_mcp", "polynet_search", { path: notes, query: "chalk" })).toMatchObject({ ok: true,
+  expect(await run("community_agent_for_member", "polynet_search", { path: notes, query: "chalk" })).toMatchObject({ ok: true,
     value: { results: [expect.objectContaining({ title: "Liquid chalk helps" })] } });
+  // A builder's own AI reads them too.
+  expect(await asBuilder("polynet_read", { path: `${notes}liquid-chalk-helps.md` })).toMatchObject({ ok: true });
+  expect(await asBuilder("polynet_search", { path: notes, query: "chalk" })).toMatchObject({ ok: true,
+    value: { results: [expect.objectContaining({ title: "Liquid chalk helps" })] } });
+  // A member's own AI, or the community's app acting for them, gets none of it:
+  // not the list, not a note, not a search hit, in the folder or across the community.
+  for (const principal of ["external_mcp", "community_app"] as const) {
+    expect(await run(principal, "polynet_read", { path: `${notes}liquid-chalk-helps.md` })).toMatchObject({ ok: false });
+    expect(await run(principal, "polynet_list", { path: notes })).toMatchObject({ ok: false });
+    expect(await run(principal, "polynet_search", { path: notes, query: "chalk" })).toMatchObject({ ok: false });
+    expect(JSON.stringify(await run(principal, "polynet_search", { path: "/communities/canonical-community/", query: "liquid chalk" }))).not.toContain("Liquid chalk helps");
+  }
 
   // Nobody writes them: not an Ask, not a tag, not a connected AI; no create, append or rewrite.
   for (const principal of ["community_agent_for_member", "community_agent", "external_mcp"] as const) {

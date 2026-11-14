@@ -68,6 +68,10 @@ export function KitClassroom(props: {
   // A course asked for by its address, or null.
   openCourseId: string | null;
   onOpenCourse: (moduleId: string | null) => void;
+  // "What your guide knows": the builders' list of what the guide answers
+  // from. The page's header belongs to the caller, so it holds this.
+  guideMemoryOpen?: boolean;
+  onOpenGuideMemory?: (open: boolean) => void;
   // Makes a draft course with these lessons and opens it (hosts).
   onCreateCourse?: (name: string, lessons: string[]) => Promise<KnowledgeAddResult>;
   onEditCourse: (moduleId: string) => void;
@@ -187,6 +191,19 @@ export function KitClassroom(props: {
   };
 
   const openNote = note?.slug ? notes.find((entry) => entry.slug === note.slug) ?? null : null;
+  // Files and links the guide was given to read (builders only).
+  const guideSources = props.canManage ? props.resources.filter((resource) => resource.resource_role === "source") : [];
+  const sourceFailed = (source: CommunityResource) => (source as { source_ingestion_status?: string }).source_ingestion_status === "failed";
+  const inGuideMemory = Boolean(props.guideMemoryOpen && canWriteNotes && !open);
+  const teach = canWriteNotes ? async (title: string, text: string): Promise<KnowledgeAddResult> => {
+    try {
+      await createCommunityNote({ session: props.session, communityId: props.communityId, title, text });
+      await loadNotes();
+      return { ok: true };
+    } catch (error) {
+      return { ok: false, message: error instanceof Error && error.message ? error.message : "That couldn't be saved. Try again." };
+    }
+  } : undefined;
 
   // ---------- the right column
   const noteRail = note ? (
@@ -229,10 +246,23 @@ export function KitClassroom(props: {
               <div key={`${question.author}:${index}`} className={cx("kwait")}>
                 <p>“{question.text}”</p>
                 <span className={cx("sub")}>{question.author} in #{question.channel} · {question.hoursAgo < 48 ? `${question.hoursAgo}h ago` : `${Math.round(question.hoursAgo / 24)}d ago`}</span>
-                <button type="button" className={cx("btn sm")} onClick={() => { setNote(null); setSeed({ text: `${question.text}\n`, nonce: Date.now() }); }}>Add the answer</button>
+                <button type="button" className={cx("btn sm")} onClick={() => { setNote(null); props.onOpenGuideMemory?.(false); setSeed({ text: `${question.text}\n`, nonce: Date.now() }); }}>Teach the answer</button>
               </div>
             ))}
           </div>
+          <Sep />
+        </>
+      ) : null}
+      {canWriteNotes && props.onOpenGuideMemory ? (
+        <>
+          <Sec label="What your guide knows">
+            <div className={cx("kline")}><span>You taught it</span><em>{notes.filter((entry) => entry.kind === "founder").length}</em></div>
+            <div className={cx("kline")}><span>It picked up from conversations</span><em>{notes.filter((entry) => entry.kind !== "founder").length}</em></div>
+            <div className={cx("kline")}><span>Files and links it read</span><em>{guideSources.filter((source) => !sourceFailed(source)).length}</em></div>
+            {guideSources.some(sourceFailed) ? <div className={cx("kline")} style={{ color: "var(--bad)" }}><span>Couldn't be read</span><em style={{ color: "inherit" }}>{guideSources.filter(sourceFailed).length}</em></div> : null}
+            <div><button type="button" className={cx("btn sm")} onClick={() => props.onOpenGuideMemory?.(true)}>Open</button></div>
+            <p className={cx("sub")}>Only builders see this. Members get it through the guide's answers.</p>
+          </Sec>
           <Sep />
         </>
       ) : null}
@@ -331,13 +361,27 @@ export function KitClassroom(props: {
 
   const rail = (
     <KitApp view="know" host={props.canManage} part="rail" className="kit-page-rail">
-      <Rail index={2} label="Knowledge">{noteRail ?? courseRail ?? libraryRail}</Rail>
+      <Rail index={2} label="Knowledge">{noteRail ?? courseRail ?? (inGuideMemory ? (
+        <Sec label="How it fills up"><p>You teach it here. It also saves what gets answered in channels, on its own. Edit or remove anything it got wrong.</p></Sec>
+      ) : libraryRail)}</Rail>
     </KitApp>
   );
 
   // ---------- the page
   let page: ReactNode;
-  if (open) {
+  if (inGuideMemory) {
+    // Builders only: everything the guide answers from. Members never get
+    // this list (the server doesn't send it to them either).
+    page = (
+      <div className={cx("page")} style={{ padding: 0, overflow: "visible" }}>
+        <p className={cx("sub")} style={{ margin: 0 }}>Your guide answers from this. Members never see the list.</p>
+        <KitKnowledgeAdd seed={null} communityName={props.communityName} closedLabel="Teach your guide"
+          onAddNote={teach} onAddSources={props.canManage ? props.onAddSources : undefined} />
+        <KitKnowledgeList notes={notes} now={now} sources={guideSources} onOpenNote={(slug) => setNote({ slug, mode: "read" })} />
+        {notes.length === 0 && guideSources.length === 0 ? <p className={cx("sub")} style={{ marginTop: 20 }}>Nothing yet. Teach it something above, and what gets answered in channels is saved here on its own.</p> : null}
+      </div>
+    );
+  } else if (open) {
     const index = open.lessons.findIndex((entry) => entry.id === lessonId);
     const lesson = index >= 0 ? open.lessons[index] : null;
     const next = index >= 0 ? open.lessons[index + 1] ?? null : null;
@@ -413,15 +457,7 @@ export function KitClassroom(props: {
 
         <KitKnowledgeAdd seed={seed} communityName={props.communityName}
           onAsk={agentOn ? (question) => askGuide(question, props.communityId) : undefined}
-          onAddNote={canWriteNotes ? async (title, text) => {
-            try {
-              await createCommunityNote({ session: props.session, communityId: props.communityId, title, text });
-              await loadNotes();
-              return { ok: true };
-            } catch (error) {
-              return { ok: false, message: error instanceof Error && error.message ? error.message : "That note couldn't be saved. Try again." };
-            }
-          } : undefined}
+          onAddNote={teach}
           onAddSources={props.canManage ? props.onAddSources : undefined}
           onCreateCourse={props.canManage ? props.onCreateCourse : undefined} />
 
@@ -469,9 +505,13 @@ export function KitClassroom(props: {
             <button type="button" className={cx("btn sm")} disabled={shelf.page >= shelf.pages - 1} onClick={() => setShelfPage(shelf.page + 1)}>Next</button>
           </div>
         ) : null}
-        <KitKnowledgeList notes={notes} now={now}
-          sources={props.canManage ? props.resources.filter((resource) => resource.resource_role === "source") : []}
-          onOpenNote={(slug) => setNote({ slug, mode: "read" })} />
+        {/* Where the right column is hidden (narrow windows), builders still
+            need the way into what the guide knows. */}
+        {canWriteNotes && props.onOpenGuideMemory ? (
+          <div className="knowledge-course-tools-inline" style={{ marginTop: 24 }}>
+            <button type="button" className={cx("btn sm")} onClick={() => props.onOpenGuideMemory?.(true)}>What your guide knows · {notes.length + guideSources.length}</button>
+          </div>
+        ) : null}
       </div>
     );
   }

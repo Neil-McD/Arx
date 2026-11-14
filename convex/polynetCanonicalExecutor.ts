@@ -789,6 +789,15 @@ function canonicalJsonDocument(args: {
   };
 }
 
+// Notes are the guide's memory (Neil, Nov 14): the guide reads them to answer,
+// and builders read them to fix what it knows. A member's own agent, or the
+// community's own app acting for a member, does not get the list or a note.
+function notesReadable(args: { principalKind: PolynetPrincipalKind; evidenceSurface: CommunityEvidenceSurface }, target: ResolvedCommunityTarget): boolean {
+  if (args.evidenceSurface === "community_funnel_builder") return false;
+  if (args.principalKind === "community_agent" || args.principalKind === "community_agent_for_member") return true;
+  return target.authority.canUseBuilderProjection === true;
+}
+
 function capabilityDocument(args: {
   target: ResolvedCommunityTarget;
   operation: string;
@@ -1191,7 +1200,7 @@ async function executeCanonicalList(args: {
   }
   // memory/ holds the community notes: everything the agent saved for everyone.
   if (target.localPath === POLYNET_MEMORY_DIRECTORY_PATH) {
-    if (args.evidenceSurface === "community_funnel_builder") {
+    if (!notesReadable(args, target)) {
       return canonicalError("semantic_not_found", "Repository path not found or not accessible.");
     }
     const listed = (await args.ctx.runQuery((internal as any).communityNotes.listCommunityNotesInternal, {
@@ -1670,7 +1679,7 @@ async function executeCanonicalRead(args: {
 
   const memoryMatch = /^\/memory\/([A-Za-z0-9_-]+)\.md$/.exec(target.localPath);
   if (memoryMatch) {
-    const note = args.evidenceSurface === "community_funnel_builder" ? null : (await args.ctx.runQuery(
+    const note = !notesReadable(args, target) ? null : (await args.ctx.runQuery(
       (internal as any).communityNotes.readCommunityNoteInternal,
       { communityId: target.communityId, slug: memoryMatch[1] },
     )) as (CommunityNote | null);
@@ -1874,7 +1883,7 @@ async function executeCanonicalSearch(args: {
       };
     }
     if (target.localPath.startsWith(POLYNET_MEMORY_DIRECTORY_PATH)) {
-      if (args.evidenceSurface === "community_funnel_builder") {
+      if (!notesReadable(args, target)) {
         return canonicalError("semantic_not_found", "Search path not found or not searchable.");
       }
       const found = (await args.ctx.runQuery((internal as any).communityNotes.searchCommunityNotesInternal, {
@@ -1913,6 +1922,7 @@ async function executeCanonicalSearch(args: {
         query,
         limit,
         surface: args.evidenceSurface,
+        includeNotes: notesReadable(args, target),
         ...(Array.isArray(args.input.types) ? { types: args.input.types } : {}),
       },
     )) as Record<string, unknown>;

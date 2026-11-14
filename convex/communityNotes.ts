@@ -67,7 +67,8 @@ export const searchCommunityNotesInternal = internalQuery({
   },
 });
 
-// Studio: every member reads the notes; owners and admins edit or delete them.
+// Notes are the guide's memory (Neil, Nov 14): owners and admins read, edit and
+// delete them. A member asks the guide; they are never handed the list.
 const viewerArgs = { userId: v.optional(v.id("users")), authSubject: v.optional(v.string()), communityId: v.id("communities") };
 
 async function viewer(ctx: any, args: { userId?: any; authSubject?: string; communityId: any }) {
@@ -81,6 +82,7 @@ export const listCommunityNotes = query({
   args: { ...viewerArgs, limit: v.optional(v.number()) },
   handler: async (ctx, args) => {
     const { canManage } = await viewer(ctx, args);
+    if (!canManage) return { can_manage: false, has_more: false, notes: [] };
     const limit = Math.max(1, Math.min(COMMUNITY_NOTES_MAX_PER_COMMUNITY, Math.floor(args.limit ?? 100)));
     const rows = await ctx.db.query("communityNotes")
       .withIndex("by_community_updatedAt", (q) => q.eq("communityId", args.communityId)).order("desc").take(limit + 1);

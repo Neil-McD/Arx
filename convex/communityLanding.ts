@@ -24,7 +24,6 @@ import { readCanonicalPublicAppOrigin } from "./publicAppUrl";
 
 const SLUG_PATTERN = /^[a-z0-9][a-z0-9-]{0,62}$/;
 const UPCOMING_EVENTS = 3;
-const NOTE_COUNT_CAP = 1000;
 const VISIT_DEDUPE_WINDOW_MS = 30 * 60 * 1000;
 
 function cleanSlug(raw: string): string {
@@ -77,13 +76,12 @@ export const getCommunityLandingPage = query({
     const nowMs = Date.now();
     const ownerId = (community as any).ownerId;
 
-    const [hostFace, hostDetail, events, noteRows, apps, agentOn] = await Promise.all([
+    const [hostFace, hostDetail, events, apps, agentOn] = await Promise.all([
       ownerId ? resolveUserProfileDisplayProjection(ctx, ownerId) : null,
       ownerId ? ctx.db.query("userProfileDetails").withIndex("by_user", (q: any) => q.eq("userId", ownerId)).first() : null,
       ctx.db.query("communityEvents")
         .withIndex("by_community_status_startsAt", (q: any) => q.eq("communityId", community._id).eq("status", "live").gte("startsAt", nowMs))
         .take(20),
-      ctx.db.query("communityNotes").withIndex("by_community_slug", (q: any) => q.eq("communityId", community._id)).take(NOTE_COUNT_CAP),
       ctx.db.query("connectedApps").withIndex("by_community", (q: any) => q.eq("communityId", community._id)).collect(),
       communityAgentIsOn(ctx, community._id),
     ]);
@@ -116,7 +114,9 @@ export const getCommunityLandingPage = query({
           place: row.locationType === "online" ? "Online" : typeof row.locationLabel === "string" ? row.locationLabel.slice(0, 80) : null,
           repeats: row.recurrenceFrequency && row.recurrenceFrequency !== "none" ? row.recurrenceFrequency : null,
         })),
-      guide: agentOn ? { notes: (noteRows as any[]).length } : null,
+      // That there is a guide, and nothing about what it knows: notes are its
+      // memory, not something the page counts for visitors.
+      guide: agentOn ? {} : null,
       app: app && appHost ? { name: String(app.name ?? "").slice(0, 80), url: app.appUrl, host: appHost } : null,
     };
   },

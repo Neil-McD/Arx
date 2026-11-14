@@ -64,6 +64,8 @@ export function KitKnowledgeAdd(props: {
   // Sends a question to the guide (when the community has one).
   onAsk?: (question: string) => void;
   communityName: string;
+  // What the closed bar says when it only teaches (the builders' list).
+  closedLabel?: string;
   // Open the box already holding this (an unanswered question to answer),
   // or already switched to Course (the shelf's "New course").
   seed?: { text: string; mode?: KnowledgeAddMode; nonce: number } | null;
@@ -144,13 +146,13 @@ export function KitKnowledgeAdd(props: {
   };
 
   if (!adding) return (
-    <button type="button" className={cx("kaddrow")} onClick={() => setAdding(true)} aria-label={props.onAsk ? `Ask anything ${props.communityName} knows, or add to Knowledge` : "Add to Knowledge"}>
+    <button type="button" className={cx("kaddrow")} onClick={() => setAdding(true)} aria-label={props.onAsk ? `Ask anything ${props.communityName} knows, or teach your guide` : (props.closedLabel ?? "Teach your guide")}>
       {props.onAsk ? <Icon name="spark" extra="sp" /> : <Icon name="plus" />}
       {props.onAsk ? (
         // The two things this bar does, taking turns (CSS only; still when
         // the reader asks for less motion).
-        <span className={cx("krot")} aria-hidden="true"><b>Ask anything {props.communityName} knows</b><b>Add to Knowledge</b></span>
-      ) : "Add to Knowledge"}
+        <span className={cx("krot")} aria-hidden="true"><b>Ask anything {props.communityName} knows</b><b>{props.onCreateCourse ? "Teach your guide, or start a course" : "Teach your guide"}</b></span>
+      ) : (props.closedLabel ?? "Teach your guide")}
     </button>
   );
 
@@ -158,19 +160,19 @@ export function KitKnowledgeAdd(props: {
     : isCourse
     ? (outline ? "First line is the course. Each line after is a lesson. It starts as a draft only hosts see." : "Name the course on the first line, then one lesson per line.")
     : files.length > 0
-      ? `${files.length === 1 ? files[0].name : `${files.length} files`}. Polynet reads ${files.length === 1 ? "it" : "them"}.${draft?.kind === "note" ? ` Your words are saved as a note, "${draft.title}".` : ""}`
+      ? `${files.length === 1 ? files[0].name : `${files.length} files`}. Polynet reads ${files.length === 1 ? "it" : "them"}.${draft?.kind === "note" ? ` Your words are taught to the guide as "${draft.title}".` : ""}`
       : draft?.kind === "links" ? (draft.links.length === 1 ? "A link. Polynet reads the page." : `${draft.links.length} links. Polynet reads each page.`)
-        : draft?.kind === "note" ? "Every member and the guide can read it."
-          : props.onAddSources ? "Write a note, paste a link, or choose a file." : "Write what people here should know.";
+        : draft?.kind === "note" ? "Your guide will know this. Members get it through its answers."
+          : props.onAddSources ? "Write it, paste a link, or choose a file." : "Write what your guide should know.";
   const ready = isAsk ? Boolean(text.trim()) : isCourse ? Boolean(outline) : Boolean(draft) || files.length > 0;
-  const goLabel = isAsk ? "Ask" : isCourse ? "Create course" : draft?.kind === "note" && files.length === 0 ? "Add note" : "Add";
+  const goLabel = isAsk ? "Ask" : isCourse ? "Create course" : draft?.kind === "note" && files.length === 0 ? "Teach" : "Add";
 
   return (
     <div className={cx("kadd", "kaddbox")}>
       <textarea ref={box} autoFocus rows={isCourse ? 3 : 2} value={text} disabled={busy}
         onFocus={(event) => { const end = event.currentTarget.value.length; event.currentTarget.setSelectionRange(end, end); }}
-        aria-label={isAsk ? `Ask anything ${props.communityName} knows` : isCourse ? "The course, then one lesson per line" : "Add a note, a link or a file"}
-        placeholder={isAsk ? `Ask anything ${props.communityName} knows` : isCourse ? "Client onboarding\nKickoff call\nAccess checklist" : "Write what Polynet should know, or paste a link"}
+        aria-label={isAsk ? `Ask anything ${props.communityName} knows` : isCourse ? "The course, then one lesson per line" : "Teach your guide: write it, paste a link or choose a file"}
+        placeholder={isAsk ? `Ask anything ${props.communityName} knows` : isCourse ? "Client onboarding\nKickoff call\nAccess checklist" : "Write what your guide should know, or paste a link"}
         onChange={(event) => setText(event.target.value)}
         onKeyDown={(event) => {
           if (event.key === "Escape") { event.stopPropagation(); close(); }
@@ -187,7 +189,7 @@ export function KitKnowledgeAdd(props: {
                 {outline.lessons.map((lesson, index) => <span key={`${index}:${lesson}`}><em>{index + 1}.</em>{lesson}</span>)}
                 {outline.lessons.length === 0 ? <span className={cx("dim")}>No lessons yet</span> : null}
               </>
-            ) : draft?.kind === "note" ? <span><StickyNote aria-hidden="true" />A note: {draft.title}</span> : null}
+            ) : draft?.kind === "note" ? <span><StickyNote aria-hidden="true" />Your guide learns: {draft.title}</span> : null}
           </div>
         </>
       ) : null}
@@ -196,7 +198,7 @@ export function KitKnowledgeAdd(props: {
         {props.onCreateCourse || props.onAsk ? (
           <span className={cx("kseg")} role="group" aria-label="What this is">
             {props.onAsk ? <button type="button" aria-pressed={isAsk} disabled={busy} onClick={() => { setMode("ask"); setFiles([]); box.current?.focus(); }}>Ask</button> : null}
-            <button type="button" aria-pressed={!isCourse && !isAsk} disabled={busy} onClick={() => { setMode("note"); box.current?.focus(); }}>Note</button>
+            <button type="button" aria-pressed={!isCourse && !isAsk} disabled={busy} onClick={() => { setMode("note"); box.current?.focus(); }}>Teach</button>
             {props.onCreateCourse ? <button type="button" aria-pressed={isCourse} disabled={busy} onClick={() => { setMode("course"); setFiles([]); box.current?.focus(); }}>Course</button> : null}
           </span>
         ) : null}
@@ -229,7 +231,6 @@ export function KitKnowledgeList(props: {
 
   return (
     <>
-      <div className={cx("khead")}><span className={cx("lab")}>Notes, files and links</span></div>
       <div className={cx("krows")}>
         {rows.map((row) => row.note ? (
           <button key={row.key} type="button" className={cx("krow")} onClick={() => props.onOpenNote(row.note!.slug)}>
