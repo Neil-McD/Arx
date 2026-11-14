@@ -349,6 +349,9 @@ export type CommunityAnalyticsSummary = {
   retention_window: number | null;
   total_resources: number | null;
   resources_added_window: number | null;
+  // Members on each plan now, most revenue first; "Free" last. Missing from
+  // an older backend.
+  plans?: CommunityAnalyticsPlan[];
 };
 
 export type AnalyticsPoint = {
@@ -371,6 +374,13 @@ export type CommunityAnalyticsSnapshot = {
   generated_at: string;
   summary: CommunityAnalyticsSummary;
   series: CommunityAnalyticsSeries;
+};
+
+export type CommunityAnalyticsPlan = {
+  key: string;
+  name: string;
+  members: number;
+  mrr_base_units: number | null;
 };
 
 export type CommunityPricingMode = "free" | "monthly" | "annual";

@@ -3,6 +3,8 @@ import { useMemo, useState } from "react";
 import { AnalyticsLineChart } from "../../../../shared/AnalyticsLineChart";
 import { formatCount, formatMoneyBaseUnits, formatPercent } from "../../../../shared/contentFormatting";
 import { buildPlatformSwitcherStyle } from "../../../../shared/platformSwitcherUi";
+import { isDesignV1Active } from "../../../../shared/designSystem";
+import { KitAnalyticsPage } from "../v1/KitAnalyticsPage";
 import type {
   CommunityAnalyticsActions,
   CommunityAnalyticsCapabilities,
@@ -58,6 +60,8 @@ export function CommunityAnalyticsPanel(props: CommunityAnalyticsPanelProps) {
   if (!capabilities.canViewActiveCommunityAnalytics) {
     return <div className="chat-empty">Only owners and admins can view community analytics.</div>;
   }
+
+  if (isDesignV1Active()) return <KitAnalyticsPage state={state} actions={actions} />;
 
   const rangeSwitcher = (
     <div
