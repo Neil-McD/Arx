@@ -3573,3 +3573,5 @@
    Without the old strip of communities, the column takes the whole width. */
 :root[data-design="v1"] .mobile-global-shell:not(.has-community-rail) { grid-template-columns: minmax(0, 1fr); }
 :root[data-design="v1"] .mobile-community-home:not(.has-community-rail) .community-nav { padding: 0 12px 12px; }
+/* Settings open from your account at the bottom, as on desktop; no gear. */
+:root[data-design="v1"] .mobile-topbar.is-community-home .mobile-topbar-settings { display: none; }
