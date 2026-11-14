@@ -468,8 +468,9 @@ label.trow{cursor:pointer}
 .kprog{display:flex;align-items:center;gap:10px;margin-top:12px;font-size:12px;color:var(--ink3)}
 .kprog .bar{flex:none;width:120px}.kprog .ic{width:12px;height:12px;vertical-align:-2px;margin-right:4px}
 .khead{display:flex;align-items:center;margin-top:30px}
-/* Cards keep a readable width (280px or more); how many fit a row follows. */
-.kgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px;margin-top:10px}
+/* Cards keep a readable width (260px or more); how many fit a row follows,
+   at most three. */
+.kgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(max(260px,calc((100% - 24px) / 3)),1fr));gap:12px;margin-top:10px}
 .kcourse{display:flex;flex-direction:column;gap:4px;padding:10px 10px 14px;border-radius:12px;border:1px solid var(--line);background:var(--s1);transition:border-color .16s var(--ease),background .16s var(--ease);cursor:pointer}
 .kcourse:hover{border-color:var(--line2);background:var(--s2)}
 .kcourse b{font-size:15px;font-weight:550;letter-spacing:-.005em;margin-top:8px}.kcourse .s{font-size:13px;color:var(--ink3)}
