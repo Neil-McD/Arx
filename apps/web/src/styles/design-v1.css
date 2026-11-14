@@ -4076,6 +4076,10 @@
     display: none;
   }
 
+  :root[data-design="v1"] .app-root.mobile-shell .members-page-record > * {
+    flex-direction: column;
+  }
+
   :root[data-design="v1"] .app-root.mobile-shell .members-record-back {
     display: inline-flex;
     align-items: center;
@@ -4090,5 +4094,6 @@
     border: 0;
     border-radius: 8px;
     cursor: pointer;
+    align-self: flex-start;
   }
 }
