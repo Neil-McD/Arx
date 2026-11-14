@@ -51,12 +51,12 @@ assert.match(
 );
 assert.match(
   chatPanel,
-  /if \(lastCommunityComposerFocusTargetRef\.current === communityComposerFocusTargetKey\) return;[\s\S]*const isThreadTarget = communityComposerFocusTargetKey\.startsWith\("thread:"\);[\s\S]*drawerReplyInputRef[\s\S]*chatInputRef[\s\S]*focusCommunityComposerSafely\(inputRef, \{[\s\S]*maxHeightPx: 120,[\s\S]*transferFromRefs: isThreadTarget \? \[chatInputRef\] : \[drawerReplyInputRef\]/,
+  /if \(lastCommunityComposerFocusTargetRef\.current === communityComposerFocusTargetKey\) return;[\s\S]*const isThreadTarget = communityComposerFocusTargetKey\.startsWith\("thread:"\);[\s\S]*drawerReplyInputRef[\s\S]*chatInputRef[\s\S]*focusCommunityComposerSafely\(inputRef, \{[\s\S]*fitHeight: true,[\s\S]*transferFromRefs: isThreadTarget \? \[chatInputRef\] : \[drawerReplyInputRef\]/,
   "community focus must move only on main/thread target transitions",
 );
 assert.match(
   chatPanel,
-  /onStartRootReply=\{\(message\) => \{[\s\S]*setDrawerReplyTarget\(message\);[\s\S]*focusCommunityComposerSafely\(drawerReplyInputRef, \{[\s\S]*maxHeightPx: 120,[\s\S]*transferFromRefs: \[chatInputRef\]/,
+  /onStartRootReply=\{\(message\) => \{[\s\S]*setDrawerReplyTarget\(message\);[\s\S]*focusCommunityComposerSafely\(drawerReplyInputRef, \{[\s\S]*fitHeight: true,[\s\S]*transferFromRefs: \[chatInputRef\]/,
   "replying to a drawer reply must use the same safe drawer focus path",
 );
 

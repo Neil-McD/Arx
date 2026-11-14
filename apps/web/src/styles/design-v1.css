@@ -2497,6 +2497,31 @@
   line-height: 22px;
 }
 
+/* Every composer grows with its text to about ten lines (40% of the window at
+   most; shared/composerHeight.ts sets the height), then scrolls inside itself
+   without a bar: a bar would narrow the text under its mention layer and the
+   two would wrap differently (Nov 14). */
+:root[data-design="v1"] textarea.chat-input,
+:root[data-design="v1"] .community-dm-panel-input,
+:root[data-design="v1"] .kit-ask-text {
+  max-height: min(40vh, 240px);
+  scrollbar-width: none;
+}
+
+:root[data-design="v1"] textarea.chat-input::-webkit-scrollbar,
+:root[data-design="v1"] .community-dm-panel-input::-webkit-scrollbar,
+:root[data-design="v1"] .kit-ask-text::-webkit-scrollbar {
+  display: none;
+}
+
+/* Long text scrolls under a soft edge in the box's top and bottom padding,
+   not a hard cut at its border. The padding is empty while it fits. */
+:root[data-design="v1"] .chat-input-bar textarea.chat-input,
+:root[data-design="v1"] .chat-input-bar .mention-composer-highlight {
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, black 9px, black calc(100% - 9px), transparent 100%);
+  mask-image: linear-gradient(to bottom, transparent 0, black 9px, black calc(100% - 9px), transparent 100%);
+}
+
 /* A channel's composer: the plus at the left; mentions, emoji, voice and send
    at the right, as in the mock. */
 @media (min-width: 721px) {
@@ -3652,7 +3677,7 @@
   flex: 1 1 100%;
   min-width: 0;
   min-height: 20px;
-  max-height: 160px;
+  max-height: min(40vh, 240px);
   margin: 0;
   padding: 0;
   border: 0;
