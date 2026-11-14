@@ -3501,3 +3501,10 @@
 /* Kit rails fill whatever width the column has. */
 :root[data-design="v1"] .community-page-rail .kit-page-rail,
 :root[data-design="v1"] .community-home-rail > * { max-width: 100%; }
+/* Below 1180px the page's side margins narrow (56 -> 32px), so the middle
+   keeps its room while the right column stays open. */
+@media (min-width: 721px) and (max-width: 1179px) {
+  :root[data-design="v1"] .community-page-body:has(.community-page-rail-content) > .community-page-header { padding: 0 32px; }
+  :root[data-design="v1"] .community-page-body:has(.community-page-rail-content) > .community-tab-scroll > .web-community-centered-pane { padding: 28px 32px 56px; }
+  :root[data-design="v1"] .web-direct-messages-host.is-page .community-dm-inbox-panel { --inbox-gutter: 32px; }
+}
