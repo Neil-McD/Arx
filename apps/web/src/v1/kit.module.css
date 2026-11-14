@@ -843,4 +843,9 @@
 .app .chips{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none}
 .app .chips::-webkit-scrollbar{display:none}
 .app .chips>*{flex:none}
+.app .filters{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none}
+.app .filters::-webkit-scrollbar{display:none}
+.app .filters>*{flex:none}
+.app .mrow .h{flex-wrap:wrap;row-gap:0}
+.app .mrow .h b{flex:none;white-space:nowrap}
 }

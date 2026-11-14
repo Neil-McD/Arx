@@ -3918,3 +3918,13 @@
   border: 0;
   border-radius: 0;
 }
+
+/* The phone's Inbox tab: the Inbox page edge to edge, no panel frame. */
+:root[data-design="v1"] .web-direct-messages-host.mobile-root .community-dm-inbox-panel.is-kit {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
