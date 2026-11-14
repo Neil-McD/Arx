@@ -3536,10 +3536,10 @@
    Home and Inbox are the reference: the title in the bright ink, and under
    the header line a hairline that fades out at both ends (the kit's .hline).
    Every other page's header (pages in the frame, a channel, a pod) matches. */
-:root[data-design="v1"] { --header-hairline: rgba(255, 255, 255, 0.12); }
-:root[data-design="v1"][data-theme="light"] { --header-hairline: rgba(13, 17, 23, 0.14); }
+:root[data-design="v1"] { --header-title: #e6e7e9; --header-hairline: rgba(255, 255, 255, 0.09); }
+:root[data-design="v1"][data-theme="light"] { --header-title: #0d1117; --header-hairline: rgba(13, 17, 23, 0.14); }
 :root[data-design="v1"] .community-channel-header h1,
-:root[data-design="v1"] .community-channel-header .community-channel-header-identity h1 { color: var(--text-ink-primary); }
+:root[data-design="v1"] .community-channel-header .community-channel-header-identity h1 { color: var(--header-title); }
 :root[data-design="v1"] .community-channel-header { position: relative; }
 :root[data-design="v1"] .community-channel-header::after {
   content: "";
