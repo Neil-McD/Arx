@@ -1720,6 +1720,29 @@
     }
   }
 
+  /* The kit Inbox: the field sits on the filters' line, left of Done. */
+  :root[data-design="v1"] .web-direct-messages-host.is-page .community-dm-inbox-panel.is-kit .community-dm-inbox-search {
+    position: relative;
+    top: auto;
+    right: auto;
+    flex: 0 1 320px;
+    min-width: 0;
+    width: auto;
+    height: 28px;
+  }
+  :root[data-design="v1"] .web-direct-messages-host.is-page .community-dm-inbox-panel.is-kit .community-dm-inbox-search:focus-within {
+    border-color: var(--stroke-focus);
+  }
+  :root[data-design="v1"] .web-direct-messages-host.is-page .community-dm-inbox-panel.is-kit .community-dm-inbox-search input,
+  :root[data-design="v1"] .web-direct-messages-host.is-page .community-dm-inbox-panel.is-kit .community-dm-inbox-search input:focus {
+    height: 100%;
+    padding: 0 0 0 24px;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+  }
+
   :root[data-design="v1"] .web-direct-messages-host.is-page .community-dm-inbox-list {
     gap: 0;
     margin: 0 -12px;
@@ -3543,28 +3566,6 @@
   :root[data-design="v1"] .web-direct-messages-host.is-page .community-dm-inbox-panel.is-kit { padding-right: 0; }
   :root[data-design="v1"] .web-direct-messages-host.is-page .community-dm-inbox-header { right: 0; }
   :root[data-design="v1"] .web-direct-messages-host.is-page .community-dm-inbox-search { right: var(--inbox-gutter); }
-  /* The kit Inbox: the field sits on the filters' line, left of Done. */
-  :root[data-design="v1"] .web-direct-messages-host.is-page .community-dm-inbox-panel.is-kit .community-dm-inbox-search {
-    position: relative;
-    top: auto;
-    right: auto;
-    flex: 0 1 320px;
-    min-width: 0;
-    width: auto;
-    height: 28px;
-  }
-  :root[data-design="v1"] .web-direct-messages-host.is-page .community-dm-inbox-panel.is-kit .community-dm-inbox-search:focus-within {
-    border-color: var(--stroke-focus);
-  }
-  :root[data-design="v1"] .web-direct-messages-host.is-page .community-dm-inbox-panel.is-kit .community-dm-inbox-search input,
-  :root[data-design="v1"] .web-direct-messages-host.is-page .community-dm-inbox-panel.is-kit .community-dm-inbox-search input:focus {
-    height: 100%;
-    padding: 0 0 0 24px;
-    border: 0;
-    border-radius: 0;
-    background: transparent;
-    box-shadow: none;
-  }
   :root[data-design="v1"] .web-direct-messages-host.is-page .community-dm-empty-column { display: none; }
   :root[data-design="v1"] .web-direct-messages-host.is-page.has-open .community-dm-inbox-panel { display: none; }
   :root[data-design="v1"] .web-direct-messages-host.is-page.has-open .community-dm-panel:not(.community-dm-inbox-panel) {
