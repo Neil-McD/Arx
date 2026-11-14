@@ -4097,3 +4097,47 @@
     align-self: flex-start;
   }
 }
+
+/* ---------- One level in: the way back is in the header (Neil, Nov 14) ----------
+   A course inside Knowledge: an arrow left of the page's name, and the
+   course's name after it in quieter ink. No second line repeats "Knowledge". */
+:root[data-design="v1"] .community-page-header-back {
+  display: inline-grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  margin: 0 4px 0 -8px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--nav-ink);
+  cursor: pointer;
+}
+
+:root[data-design="v1"] .community-page-header-back:hover {
+  background: var(--hover-overlay);
+  color: var(--text-primary);
+}
+
+:root[data-design="v1"] .community-page-header-detail {
+  min-width: 0;
+  margin-left: 10px;
+  padding-left: 10px;
+  border-left: 1px solid var(--border-strong);
+  font-size: 14px;
+  color: var(--text-ink-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+:root[data-design="v1"] .app-root:not(.mobile-shell) .knowledge-course-crumb {
+  display: none;
+}
+
+/* A phone's top bar has its own arrow; the header's steps aside there. */
+:root[data-design="v1"] .app-root.mobile-shell .community-page-header-back,
+:root[data-design="v1"] .app-root.mobile-shell .community-page-header-detail {
+  display: none;
+}

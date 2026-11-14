@@ -267,6 +267,21 @@ export function KitClassroom(props: {
     <>
       <Sec label={open.course.name}>
         {props.canManage ? (
+          <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8 }}>
+            {open.course.module_status === "draft" ? <span className={cx("tag")}>Draft · only hosts see it</span> : null}
+            {props.onSetCourseStatus ? (open.course.module_status === "draft" ? (
+              <button type="button" className={cx("btn sm go")} disabled={publishing || open.lessons.length === 0}
+                title={open.lessons.length === 0 ? "Write a lesson first" : "Members will see this course"}
+                onClick={() => void setCourseStatus(open.course.id, "live")}>Publish course</button>
+            ) : (
+              <button type="button" className={cx("btn sm txt")} disabled={publishing} title="Back to a draft only hosts see"
+                onClick={() => void setCourseStatus(open.course.id, "draft")}>Unpublish</button>
+            )) : null}
+            <button type="button" className={cx("btn sm")} onClick={() => props.onEditCourseDetails(open.course.id)}>Course details</button>
+            <button type="button" className={cx("btn sm txt")} onClick={() => props.onEditCourse(open.course.id)}>More tools</button>
+          </div>
+        ) : null}
+        {props.canManage ? (
           <div className={cx("kline")}><span>{summaryBy.get(open.course.id)?.started ?? 0} started</span><em>{summaryBy.get(open.course.id)?.finished ?? 0} finished</em></div>
         ) : (
           <>
@@ -322,23 +337,10 @@ export function KitClassroom(props: {
     const next = index >= 0 ? open.lessons[index + 1] ?? null : null;
     page = (
       <div className={cx("page")} style={{ padding: 0, overflow: "visible" }}>
-        <div className={cx("kcrumb")} style={{ marginTop: 0 }}>
+        {/* On a phone the top bar's arrow leaves the community page, so the course keeps its own way back here; on desktop it is the header's arrow. */}
+        <div className={`knowledge-course-crumb ${cx("kcrumb")}`} style={{ marginTop: 0 }}>
           <button type="button" className={cx("kback")} onClick={() => props.onOpenCourse(null)} aria-label="Back to Knowledge"><Icon name="back" />Knowledge</button>
           <span>›</span><span>{open.course.name}</span>
-          {props.canManage ? (
-            <span style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
-              {props.onSetCourseStatus ? (open.course.module_status === "draft" ? (
-                <button type="button" className={cx("btn sm go")} disabled={publishing || open.lessons.length === 0}
-                  title={open.lessons.length === 0 ? "Write a lesson first" : "Members will see this course"}
-                  onClick={() => void setCourseStatus(open.course.id, "live")}>Publish course</button>
-              ) : (
-                <button type="button" className={cx("btn sm txt")} disabled={publishing} title="Back to a draft only hosts see"
-                  onClick={() => void setCourseStatus(open.course.id, "draft")}>Unpublish</button>
-              )) : null}
-              <button type="button" className={cx("btn sm")} onClick={() => props.onEditCourseDetails(open.course.id)}>Course details</button>
-              <button type="button" className={cx("btn sm txt")} onClick={() => props.onEditCourse(open.course.id)}>More tools</button>
-            </span>
-          ) : null}
         </div>
         {lesson && editingTools && editingLessonId === lesson.id ? (
           <KitLessonEditor key={lesson.id} resource={lesson} index={index} total={open.lessons.length} courseLive={open.course.module_status !== "draft"}
