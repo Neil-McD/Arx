@@ -26,6 +26,8 @@ import { WebCommunityResourceViewerContent } from "../components/WebCommunityRes
 import { NoteForm, OpenNote, noteIsNew } from "./KitKnowledgeNotes";
 import { KitLessonEditor, type LessonPatch } from "./KitLessonEditor";
 import { Btn, cx, Icon, KitApp, Rail, Sec, Sep, TextLink } from "./kit";
+import { KitCourseEdit, type CourseEditPatch } from "./KitCourseEdit";
+import { askInApp } from "../../../../shared/inAppConfirm";
 import { KitKnowledgeAdd, KitKnowledgeList, type KnowledgeAddMode, type KnowledgeAddResult } from "./KitKnowledgeList";
 import { useCommunityAgentOn } from "../controllers/communityAgentOn";
 
@@ -76,7 +78,10 @@ export function KitClassroom(props: {
   onCreateCourse?: (name: string, lessons: string[]) => Promise<KnowledgeAddResult>;
   onEditCourse: (moduleId: string) => void;
   // A course's name, line and cover (the course form).
-  onEditCourseDetails: (moduleId: string) => void;
+  // A course's own tools (hosts): change its name, description and cover in
+  // the page, and delete it while it is still a draft.
+  onSaveCourse?: (moduleId: string, patch: CourseEditPatch) => Promise<KnowledgeAddResult>;
+  onDeleteCourse?: (moduleId: string) => Promise<KnowledgeAddResult>;
   // Publish a course to members, or take it back to a draft (hosts).
   onSetCourseStatus?: (moduleId: string, status: "draft" | "live") => Promise<unknown>;
   // Hosts hand Polynet links and files to read.
@@ -100,6 +105,10 @@ export function KitClassroom(props: {
   const [note, setNote] = useState<{ slug: string | null; mode: "read" | "edit" | "new" } | null>(null);
   const [saving, setSaving] = useState(false);
   const [editingLessonId, setEditingLessonId] = useState<string | null>(null);
+  const [editingCourse, setEditingCourse] = useState(false);
+  const [deletingCourse, setDeletingCourse] = useState(false);
+  const [courseError, setCourseError] = useState<string | null>(null);
+  useEffect(() => { setEditingCourse(false); setCourseError(null); }, [props.openCourseId]);
   const editingTools = props.canManage ? props.lessonEditing : null;
   // Questions members asked in channels that nobody answered (the owner's
   // brief already finds them): where Knowledge is thin.
@@ -295,6 +304,24 @@ export function KitClassroom(props: {
     </>
   );
 
+  const deleteCourse = async () => {
+    if (!open || !props.onDeleteCourse || deletingCourse) return;
+    const count = open.lessons.length;
+    const yes = await askInApp({
+      message: `Delete "${open.course.name}"${count ? ` and its ${count} ${count === 1 ? "lesson" : "lessons"}` : ""}? This can't be undone.`,
+      yes: "Delete course", no: "Keep", danger: true,
+    });
+    if (!yes) return;
+    setDeletingCourse(true);
+    setCourseError(null);
+    try {
+      const result = await props.onDeleteCourse(open.course.id);
+      if (result.ok) props.onOpenCourse(null); else setCourseError(result.message);
+    } finally {
+      setDeletingCourse(false);
+    }
+  };
+
   // A host's tools for the open course: in the right column, and in the page
   // on the widths where that column is hidden.
   const courseTools = open && props.canManage ? (
@@ -308,8 +335,14 @@ export function KitClassroom(props: {
               <button type="button" className={cx("btn sm txt")} disabled={publishing} title="Back to a draft only hosts see"
                 onClick={() => void setCourseStatus(open.course.id, "draft")}>Unpublish</button>
             )) : null}
-            <button type="button" className={cx("btn sm")} onClick={() => props.onEditCourseDetails(open.course.id)}>Course details</button>
+            {props.onSaveCourse ? <button type="button" className={cx("btn sm")} aria-pressed={editingCourse} onClick={() => setEditingCourse(true)}>Edit course</button> : null}
             <button type="button" className={cx("btn sm txt")} onClick={() => props.onEditCourse(open.course.id)}>More tools</button>
+            {/* Only a draft can be deleted: taking a live course away from
+                members is Unpublish, on purpose, first. */}
+            {props.onDeleteCourse ? (open.course.module_status === "draft" ? (
+              <button type="button" className={cx("btn sm txt no")} disabled={deletingCourse} onClick={() => void deleteCourse()}>{deletingCourse ? "Deleting" : "Delete course"}</button>
+            ) : <span className={cx("sub")} style={{ flexBasis: "100%" }}>To delete this course, unpublish it first.</span>) : null}
+            {courseError ? <span className={cx("sub")} role="alert" style={{ flexBasis: "100%", color: "var(--bad)" }}>{courseError}</span> : null}
     </>
   ) : null;
   const openProgress = open ? courseProgress(open.lessons, done) : null;
@@ -393,6 +426,10 @@ export function KitClassroom(props: {
           <span>›</span><span>{open.course.name}</span>
         </div>
         {courseTools ? <div className="knowledge-course-tools-inline">{courseTools}</div> : null}
+        {editingCourse && props.onSaveCourse && props.canManage ? (
+          <KitCourseEdit key={open.course.id} course={open.course} onClose={() => setEditingCourse(false)}
+            onSave={(patch) => props.onSaveCourse!(open.course.id, patch)} />
+        ) : null}
         {lesson && editingTools && editingLessonId === lesson.id ? (
           <KitLessonEditor key={lesson.id} resource={lesson} index={index} total={open.lessons.length} courseLive={open.course.module_status !== "draft"}
             onCancel={() => setEditingLessonId(null)}
