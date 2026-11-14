@@ -6,18 +6,12 @@ export function slugifyCommunityName(input: string): string {
     .replace(/(^-|-$)+/g, "");
 }
 
-// A community's own site address for a handle: the site it has (with this
-// environment's suffix, as its site_url shows), or <handle>.polynet.page.
-export function communitySiteAddress(nextSlug: string, current?: { slug?: string | null; site_url?: string | null }): string {
+// A community's landing page address for a handle: /c/<handle> on this app
+// (Nov 13: custom sites are being removed, so the page lives in the app).
+export function communityPageAddress(nextSlug: string, host?: string): string {
   const slug = nextSlug.trim() || "your-community";
-  try {
-    const host = current?.site_url ? new URL(current.site_url).host : "";
-    const currentSlug = String(current?.slug ?? "");
-    if (host && currentSlug && host.startsWith(currentSlug)) return `${slug}${host.slice(currentSlug.length)}`;
-  } catch {
-    // Not a URL: the plain address below.
-  }
-  return `${slug}.polynet.page`;
+  const here = host ?? (typeof window !== "undefined" && window.location?.host ? window.location.host : "www.polynet.ai");
+  return `${here}/c/${slug}`;
 }
 
 export function isValidCommunitySlug(value: string): boolean {
