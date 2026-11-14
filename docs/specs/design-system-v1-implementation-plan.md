@@ -123,6 +123,7 @@ Shipped behind the switch: #427 to #512 (status as of 2026-11-14). Production: n
 | 2026-11-10 | Inbox and Members are pages, with the selected item in the right column (Members recorded as an exception in `docs/core-contract.md`) |
 | 2026-11-10 | Events is a list; the month calendar goes |
 | 2026-11-10 | Logo: the flat two-tone network mark with a slight lift; the favicon fills its tile |
+| 2026-11-14 | Pods icon: lucide `Boxes` (three boxes), replacing the three circles |
 | 2026-11-14 | One way to see what members see: View as a member in the account menu. Knowledge's own preview switch goes with the old editor ("More tools") |
 
 ## 5. What is next, in order (Neil, 2026-11-14)
