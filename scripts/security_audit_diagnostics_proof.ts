@@ -16,30 +16,12 @@ function sliceBetween(source: string, startNeedle: string, endNeedle: string): s
 const criticalAudit = read("convex/criticalAudit.ts");
 const operatorIntelligence = read("convex/operatorIntelligence.ts");
 const operatorDashboard = read("convex/operatorDashboard.ts");
-const operatorGateway = read("shared/cloudOperatorDashboardGateway.ts");
-const operatorPlatformHealth = read("shared/operatorPlatformHealth.ts");
-const operatorTypes = read("shared/operatorTypes.ts");
-const operatorPanel = [
-  read("apps/web/src/components/WebOperatorDashboardHost.tsx"),
-  read("apps/web/src/components/useOperatorDashboardData.ts"),
-  read("apps/web/src/components/OperatorPlatformPanelView.tsx"),
-].join("\n");
 const packageJson = read("package.json");
 
 const securityDiagnosticsBlock = sliceBetween(
   operatorIntelligence,
   "getOperatorSecurityAuditDiagnosticsInternal = internalQuery",
   "export const getOperatorRuntimeToolDiagnosticsInternal",
-);
-const securityCardBlock = sliceBetween(
-  operatorPlatformHealth,
-  "function buildSecurityCard",
-  "export function buildOperatorPlatformHealthCards",
-);
-const trustBoundaryPanelBlock = sliceBetween(
-  operatorPanel,
-  "<h2>Trust boundary</h2>",
-  "<h2>Runtime execution</h2>",
 );
 
 assert.match(
@@ -78,33 +60,6 @@ assert.doesNotMatch(
   criticalAudit,
   /metadata:\s*input\.metadata/,
   "critical audit must not store caller metadata directly",
-);
-
-assert.match(
-  operatorTypes,
-  /export type OperatorSecurityAuditDiagnosticsSnapshot = /,
-  "operator security audit snapshot contract is missing",
-);
-for (const field of [
-  "webhookFailures",
-  "blockedActions",
-  "destructiveActions",
-  "operatorRoleChanges",
-  "operatorAccessBlocks",
-  "billingTrustEvents",
-  "unknownSecurityEvents",
-]) {
-  assert.match(operatorTypes, new RegExp(`${field}: number`), `security audit totals missing ${field}`);
-}
-assert.match(
-  operatorTypes,
-  /trustBoundary\?:[\s\S]*score: number \| null[\s\S]*findings: number[\s\S]*blockedBoundaryActions: number[\s\S]*attentionItems: OperatorSecurityAuditAttentionItem\[\]/,
-  "security audit diagnostics must expose trust-boundary health separately",
-);
-assert.match(
-  operatorTypes,
-  /auditActivity\?:[\s\S]*events: number[\s\S]*warnings: number[\s\S]*destructiveActions: number[\s\S]*billingTrustEvents: number/,
-  "security audit diagnostics must expose normal audit activity separately",
 );
 
 assert.match(
@@ -162,51 +117,6 @@ assert.match(
   operatorDashboard,
   /getOperatorSecurityAuditDiagnostics = query[\s\S]*requireOperatorAccess[\s\S]*getOperatorSecurityAuditDiagnosticsInternal/,
   "public security audit diagnostics query must be operator-gated",
-);
-assert.match(
-  operatorGateway,
-  /operatorDashboard:getOperatorSecurityAuditDiagnostics/,
-  "web gateway must call the gated security audit diagnostics query",
-);
-assert.doesNotMatch(
-  operatorGateway,
-  /operatorIntelligence:getOperatorSecurityAuditDiagnosticsInternal/,
-  "web gateway must not call internal security audit diagnostics directly",
-);
-assert.match(
-  operatorPanel,
-  /loadOperatorSecurityAuditDiagnosticsCanonical/,
-  "operator panel must load the security audit diagnostics snapshot",
-);
-assert.match(
-  operatorPanel,
-  /Trust boundary/,
-  "operator panel must render the security audit diagnostics surface",
-);
-assert.doesNotMatch(
-  operatorPanel,
-  /Security &amp; audit/,
-  "operator panel should use the trust-boundary label",
-);
-assert.match(
-  securityCardBlock,
-  /security\.trustBoundary[\s\S]*Trust-boundary failures clear/,
-  "platform security card must score trust-boundary health",
-);
-assert.doesNotMatch(
-  securityCardBlock,
-  /audit warnings|blocked actions/,
-  "platform security card must not score normal audit warning volume or generic blocked activity",
-);
-assert.match(
-  trustBoundaryPanelBlock,
-  /Trust health[\s\S]*Trust findings[\s\S]*Webhook failures[\s\S]*Operator access blocks[\s\S]*Blocked boundary actions[\s\S]*Audit events/,
-  "operator security panel must separate trust health from audit activity",
-);
-assert.match(
-  operatorPanel,
-  /Trust-boundary diagnostics are sampled for this window/,
-  "operator panel must label sampled security audit diagnostics",
 );
 assert.match(
   packageJson,

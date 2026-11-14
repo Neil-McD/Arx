@@ -10,37 +10,18 @@ export type AppPage =
   | "landing"
   | "onboarding"
   | "settings"
-  | "operator"
   | "community"
   | "discover"
   | "docs";
 
 export type AppView = "home" | "community_home";
 
-export type DesktopShellContextualBackPage = "settings" | "operator";
+export type DesktopShellContextualBackPage = "settings";
 
 export function isDesktopShellContextualBackPage(
   page: AppPage,
 ): page is DesktopShellContextualBackPage {
-  return page === "settings" || page === "operator";
-}
-
-export const OPERATOR_TABS = [
-  "platform",
-  "business",
-  "email",
-  "communities",
-] as const;
-
-export type OperatorTab = (typeof OPERATOR_TABS)[number];
-
-export function parseOperatorTab(
-  value: string | null | undefined,
-): OperatorTab {
-  const normalized = String(value ?? "").trim();
-  return OPERATOR_TABS.includes(normalized as OperatorTab)
-    ? (normalized as OperatorTab)
-    : "platform";
+  return page === "settings";
 }
 
 export const COMMUNITY_TABS = [

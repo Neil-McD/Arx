@@ -14,7 +14,6 @@ import type {
   AppView,
   CommunitySettingsPane,
   CommunityTab,
-  OperatorTab,
   SettingsPage,
 } from "../../../../shared/appShellNavigation";
 import {
@@ -55,7 +54,6 @@ type MemberEntryActions = {
 export function useWebShellNavigationController(params: {
   session: AuthSession | null;
   isAuthBootstrapComplete: boolean;
-  hasOperatorAccess: boolean;
   publicRoute: PublicRoute;
   setPublicRoute: Dispatch<SetStateAction<PublicRoute>>;
   shellVariant: AppShellVariant;
@@ -70,8 +68,6 @@ export function useWebShellNavigationController(params: {
   setMobileSettingsView: Dispatch<SetStateAction<"index" | "detail">>;
   selectedProductDocSlug: string | null;
   setSelectedProductDocSlug: Dispatch<SetStateAction<string | null>>;
-  activeOperatorTab: OperatorTab;
-  setActiveOperatorTab: Dispatch<SetStateAction<OperatorTab>>;
   selectedActiveCommunitySlug: string | null;
   communityTab: CommunityTab;
   communityChannelSlug: string | null;
@@ -111,9 +107,6 @@ export function useWebShellNavigationController(params: {
     );
     if (nextAppRoute.page === "docs") {
       current.setSelectedProductDocSlug(nextAppRoute.docsSlug ?? null);
-    }
-    if (nextAppRoute.page === "operator") {
-      current.setActiveOperatorTab(nextAppRoute.operatorTab ?? "platform");
     }
     if (nextAppRoute.page === "community") {
       current.applyCommunityShellState({
@@ -225,10 +218,6 @@ export function useWebShellNavigationController(params: {
             current.activePage === "docs"
               ? current.selectedProductDocSlug
               : null,
-          operatorTab:
-            current.activePage === "operator"
-              ? current.activeOperatorTab
-              : null,
         }) ?? "",
         current.shellVariant,
       ) || null
@@ -254,15 +243,6 @@ export function useWebShellNavigationController(params: {
       }
       if (current.activePage !== "settings") pushNavSnapshot();
       navigateTo(buildSettingsPath(page));
-    },
-    [navigateTo, pushNavSnapshot],
-  );
-  const openOperatorConsole = useCallback(
-    (tab: OperatorTab = "platform"): void => {
-      const current = paramsRef.current;
-      if (!current.hasOperatorAccess) return;
-      if (current.activePage !== "operator") pushNavSnapshot();
-      navigateTo(`/operator/${tab}`);
     },
     [navigateTo, pushNavSnapshot],
   );
@@ -359,8 +339,6 @@ export function useWebShellNavigationController(params: {
     communitySettingsPane: params.communitySettingsPane,
     docsSlug:
       params.activePage === "docs" ? params.selectedProductDocSlug : null,
-    operatorTab:
-      params.activePage === "operator" ? params.activeOperatorTab : null,
     applyLocationToState,
     setStripeConnectReturn: params.setStripeConnectReturn,
     buildAppRoutePath: (state) =>
@@ -409,7 +387,6 @@ export function useWebShellNavigationController(params: {
     buildCurrentAppRoutePath,
     pushNavSnapshot,
     openGlobalSettings,
-    openOperatorConsole,
     goBack,
     backTargetSnapshot,
     backTargetLabel: backTargetSnapshot

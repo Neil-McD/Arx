@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { buildAppRoutePath, readAppRouteFromLocation } from "../shared/webAppRouteState.ts";
-import { buildWebShellProjection } from "../apps/web/src/controllers/buildWebShellProjection.ts";
+import { readAppRouteFromLocation } from "../shared/webAppRouteState.ts";
 
 function read(relativePath: string): string {
   return readFileSync(new URL(`../${relativePath}`, import.meta.url), "utf8");
@@ -17,22 +16,13 @@ function readExportBlock(source: string, exportName: string): string {
 
 const operatorDashboard = read("convex/operatorDashboard.ts");
 const operatorAccess = read("convex/operatorAccess.ts");
-const operatorGateway = read("shared/cloudOperatorDashboardGateway.ts");
 const schema = read("convex/schema.ts");
-const webRouteState = read("shared/webAppRouteState.ts");
 const app = read("apps/web/src/App.tsx");
-const authenticatedIdentityController = read(
-  "apps/web/src/controllers/useWebAuthenticatedIdentityController.ts",
-);
 const routeAccessBoundary = read(
   "apps/web/src/controllers/useWebRouteAccessBoundaryController.ts",
 );
-const appMainSurfaceHost = read("apps/web/src/components/WebAppMainSurfaceHost.tsx");
-const operatorHost = read("apps/web/src/components/WebOperatorDashboardHost.tsx");
-const analyticsScopeSwitcher = read("apps/web/src/components/WebAnalyticsScopeSwitcher.tsx");
 const communityAnalytics = read("apps/web/src/components/CommunityAnalyticsPanel.tsx");
 const settingsNav = read("shared/SettingsNavList.tsx");
-const shellProjection = read("apps/web/src/controllers/buildWebShellProjection.ts");
 const webDesktopShellHeader = read("apps/web/src/components/WebDesktopShellHeader.tsx");
 const baseCss = [read("apps/web/src/base.css"), read("apps/web/src/styles/shell-and-onboarding.css"), read("apps/web/src/styles/community-and-content.css"), read("apps/web/src/styles/settings-runtime-and-theme-overrides.css")].join("\n");
 const packageJson = read("package.json");
@@ -43,35 +33,13 @@ Object.defineProperty(globalThis, "window", {
   configurable: true,
   value: { location: { pathname: "/operator/email", search: "" } },
 });
-assert.equal(readAppRouteFromLocation().page, "operator");
-assert.equal(readAppRouteFromLocation().operatorTab, "email");
-assert.equal(
-  buildAppRoutePath({
-    page: "operator",
-    view: "home",
-    settingsPage: "profile",
-    communitySlug: null,
-    communityTab: "chat",
-    operatorTab: "communities",
-  }),
-  "/operator/communities",
-);
+// The operator console was removed (Neil, Nov 13): /operator opens nothing.
+assert.equal(readAppRouteFromLocation().page, "landing");
 if (originalWindow === undefined) {
   Reflect.deleteProperty(globalThis, "window");
 } else {
   Object.defineProperty(globalThis, "window", { configurable: true, value: originalWindow });
 }
-
-const operatorProjection = buildWebShellProjection({
-  publicRouteKind: "app",
-  shellVariant: "standard",
-  destination: { kind: "operator", tab: "platform" },
-  mobileSettingsView: "detail",
-  isPublicCommunityFunnel: false,
-});
-assert.equal(operatorProjection.showDesktopCommunityRail, false);
-assert.equal(operatorProjection.showDesktopCommunityNav, false);
-assert.equal(operatorProjection.hasLeftPanel, false);
 
 assert.match(
   schema,
@@ -185,90 +153,9 @@ for (const mutationName of operatorMaintenanceMutationNames) {
 }
 
 assert.match(
-  operatorGateway,
-  /bootstrapConvexAuthenticatedClient/,
-  "operator gateway must use the authenticated Convex client",
-);
-assert.match(
-  operatorGateway,
-  /operatorDashboard:getOperatorOverview/,
-  "operator gateway must call the gated operator dashboard surface",
-);
-assert.match(
-  operatorGateway,
-  /operatorAccess:recordOperatorDashboardAccess/,
-  "operator gateway must record dashboard access before loading operator data",
-);
-assert.match(
-  operatorGateway,
-  /operatorAccess:getMyOperatorAccessOptional/,
-  "operator gateway must use the non-throwing operator access probe for UI gating",
-);
-assert.doesNotMatch(
-  operatorGateway,
-  /operatorDashboard:getOperatorAccess|loadOperatorAccessCanonical/,
-  "browser gateway must not call the noisy legacy operator dashboard access probe",
-);
-assert.match(
-  operatorGateway,
-  /bootstrap\?\.dbUserId[\s\S]*operator_access_identity_mismatch/,
-  "operator access must validate the returned operator role against the authenticated Convex user id",
-);
-assert.doesNotMatch(
-  operatorGateway,
-  /operatorIntelligence:/,
-  "web gateway must not call internal operator intelligence directly",
-);
-
-assert.match(
-  webRouteState,
-  /segments\[0\] === "operator"[\s\S]*page: "operator"[\s\S]*operatorTab: parseOperatorTab/,
-  "operator routes must parse into one canonical operator page with a bounded tab",
-);
-assert.match(
-  webRouteState,
-  /state\.page === "operator"[\s\S]*`\/operator\/\$\{state\.operatorTab \?\? "platform"\}`/,
-  "operator routes must serialize to a canonical tab path",
-);
-assert.match(
-  authenticatedIdentityController,
-  /isOperatorAccessResolved =[\s\S]*operatorAccessState\?\.subject === canonicalUserId[\s\S]*operatorAccess =[\s\S]*isOperatorAccessResolved/,
-  "operator rendering must distinguish unresolved access from a resolved denial for the current auth subject",
-);
-assert.match(
-  authenticatedIdentityController,
-  /setOperatorAccessState\(\{ subject, access: access \?\? null \}\)/,
-  "the optional access probe must record a resolved denial instead of leaving the route pending",
-);
-assert.match(
   routeAccessBoundary,
   /projection\.kind === "redirect_member_entry"[\s\S]*resolveAndEnterMemberDestination/,
   "unauthorized operator routes must wait for access resolution and then fail closed to a member destination",
-);
-assert.match(
-  appMainSurfaceHost,
-  /activePage === "operator"[\s\S]*showOperatorDashboard && props\.operatorDashboardProps[\s\S]*landing-auth-hold/,
-  "the operator surface must render only with authorized props and otherwise show a neutral hold",
-);
-assert.match(
-  operatorHost,
-  /useOperatorDashboardData\(\{[\s\S]*enabled: true[\s\S]*surface: "operator_console"/,
-  "operator data must load only after the authorized operator host mounts and must record the canonical surface",
-);
-assert.match(
-  analyticsScopeSwitcher,
-  /if \(!props\.showPlatformScope\) return null/,
-  "platform scope must stay hidden until operator access resolves",
-);
-assert.match(
-  analyticsScopeSwitcher,
-  /Analytics scope[\s\S]*Community[\s\S]*Platform/,
-  "analytics must expose one shared Community and Platform scope control",
-);
-assert.match(
-  operatorHost,
-  /Platform analytics[\s\S]*operator-console-title">Analytics[\s\S]*activeScope="platform"[\s\S]*onOpenCommunityScope/,
-  "the operator route must present the Platform scope of Analytics and preserve a community return path",
 );
 // Neil, Nov 13: no operator view in a community's Analytics; it has its time ranges only.
 assert.doesNotMatch(
@@ -276,25 +163,10 @@ assert.doesNotMatch(
   /WebAnalyticsScopeSwitcher|canViewPlatformAnalytics|openPlatformAnalytics/,
   "community analytics must not offer a Platform (operator) view",
 );
-assert.match(
-  operatorHost,
-  /OPERATOR_TABS\.map[\s\S]*OperatorPlatformPanelView[\s\S]*OperatorBusinessPanelView[\s\S]*OperatorEmailPanelView[\s\S]*OperatorCommunitiesPanelView/,
-  "the operator console must expose the four bounded diagnostic views",
-);
-assert.doesNotMatch(
-  operatorHost,
-  /WebWorkspaceRightPanel|workspace-right-panel/,
-  "the operator console must not depend on retired Workspace panel presentation",
-);
 assert.doesNotMatch(
   settingsNav,
   /showOperatorConsole|onOpenOperatorConsole|Platform Analytics/,
   "operator navigation must not be coupled to global settings",
-);
-assert.match(
-  shellProjection,
-  /isOperatorPage[\s\S]*const showDesktopCommunityRail =[\s\S]*isAppRoute &&[\s\S]*!isOperatorPage &&[\s\S]*!showMobileAppShell/,
-  "the desktop operator console must remain full width without the community rail",
 );
 assert.doesNotMatch(
   app,

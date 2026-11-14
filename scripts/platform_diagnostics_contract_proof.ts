@@ -19,13 +19,6 @@ const authSessions = read("convex/authSessions.ts");
 const operatorAccess = read("convex/operatorAccess.ts");
 const operatorDashboard = read("convex/operatorDashboard.ts");
 const operatorIntelligence = read("convex/operatorIntelligence.ts");
-const operatorGateway = read("shared/cloudOperatorDashboardGateway.ts");
-const operatorTypes = read("shared/operatorTypes.ts");
-const operatorPanel = [
-  read("apps/web/src/components/WebOperatorDashboardHost.tsx"),
-  read("apps/web/src/components/useOperatorDashboardData.ts"),
-  read("apps/web/src/components/OperatorPlatformPanelView.tsx"),
-].join("\n");
 const packageJson = read("package.json");
 const authAccessDiagnosticsBlock = sliceBetween(
   operatorIntelligence,
@@ -137,22 +130,6 @@ assert.match(
   /recordPlatformDiagnosticEventBestEffort/,
   "operator access diagnostics must be best-effort",
 );
-
-assert.match(
-  operatorTypes,
-  /export type OperatorAuthAccessDiagnosticsSnapshot = /,
-  "operator diagnostics snapshot type is missing",
-);
-assert.match(
-  operatorTypes,
-  /authAvailability\?: \{[\s\S]*successRate: number \| null;[\s\S]*affectedUsers: number;[\s\S]*unattributedFailures: number;/,
-  "operator auth diagnostics must expose rate and impact based auth availability",
-);
-assert.match(
-  operatorTypes,
-  /accessIntegrity\?: \{[\s\S]*operatorAccessDenied: number;[\s\S]*communityAccessDenied: number;[\s\S]*entitlementErrorFindings: number;/,
-  "operator auth diagnostics must separate access integrity from auth availability",
-);
 assert.match(
   operatorIntelligence,
   /getOperatorAuthAccessDiagnosticsInternal = internalQuery/,
@@ -203,57 +180,6 @@ assert.match(
   operatorDashboard,
   /getOperatorAuthAccessDiagnostics = query[\s\S]*requireOperatorAccess/,
   "public operator diagnostics query must be operator-gated",
-);
-assert.match(
-  operatorGateway,
-  /operatorDashboard:getOperatorAuthAccessDiagnostics/,
-  "web gateway must call the gated operator diagnostics surface",
-);
-assert.doesNotMatch(
-  operatorGateway,
-  /operatorIntelligence:/,
-  "web gateway must not call internal operator intelligence directly",
-);
-assert.match(
-  operatorPanel,
-  /Auth &amp; access/,
-  "operator panel must project auth and access diagnostics",
-);
-assert.match(
-  operatorPanel,
-  /24h auth success/,
-  "operator panel must label auth availability as a recent success-rate signal",
-);
-assert.match(
-  operatorPanel,
-  /Access integrity/,
-  "operator panel must separate access integrity from auth availability",
-);
-assert.doesNotMatch(
-  operatorPanel,
-  /30d session-start events/,
-  "operator panel must not surface raw session-start event totals as an auth-health row",
-);
-assert.match(
-  operatorPanel,
-  /loadOperatorAuthAccessDiagnosticsCanonical/,
-  "operator panel must load the canonical auth and access diagnostics snapshot",
-);
-const platformHealth = read("shared/operatorPlatformHealth.ts");
-assert.match(
-  platformHealth,
-  /id: "web" \| "runtime" \| "auth" \| "access" \| "security"/,
-  "operator platform health cards must expose a separate access card",
-);
-assert.match(
-  platformHealth,
-  /formatPrecisePercent\(availability\.successRate\).*auth success/s,
-  "operator auth card must foreground auth success rate",
-);
-assert.doesNotMatch(
-  platformHealth,
-  /primaryMetric: `\$\{auth\.totals\.sessionEstablished\} sessions`/,
-  "operator auth card must not present raw session-start events as live auth health",
 );
 assert.match(
   packageJson,
