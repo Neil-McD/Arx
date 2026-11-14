@@ -3555,6 +3555,8 @@
   height: 1px;
   background: linear-gradient(90deg, transparent, transparent 8%, var(--header-hairline) 50%, transparent 92%, transparent);
   pointer-events: none;
+}
+
 /* ---------- Analytics (Nov 13, Neil) ----------
    Four figures, one chart, how people join; who is on which plan in the
    right column (or under the page once the column is hidden). */
