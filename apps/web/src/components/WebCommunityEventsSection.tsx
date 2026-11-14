@@ -1,5 +1,6 @@
 import { CommunityPageHeader, CommunityPageRail } from "./CommunityPageHeader";
 import { KitEventsList } from "../v1/KitEventsList";
+import { KitEventForm } from "../v1/KitEventForm";
 import { isDesignV1Active } from "../../../../shared/designSystem";
 import { splitCommunityEvents } from "./communityEventsList";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
@@ -22,12 +23,9 @@ type WebCommunityEventsSectionProps = {
   capabilities: CommunityEventsCapabilities;
   state: CommunityEventsState;
   actions: CommunityEventsActions;
-  // Design system v1: who is asking, for "I'll be there".
-  going?: { session: unknown; communityId: string } | null;
-  getAvatarColor?: (id: string) => string;
 };
 
-type EventDraft = {
+export type EventDraft = {
   title: string;
   description_md: string;
   starts_at: string;
@@ -38,6 +36,8 @@ type EventDraft = {
   url: string;
   recurrence_frequency: "none" | "daily" | "weekly" | "monthly";
   recurrence_until: string;
+  // Members only, or also on the community's public page.
+  visibility: "members" | "public";
 };
 
 type EventDayGroup = {
@@ -178,6 +178,7 @@ function makeDraft(dayKey: string | null): EventDraft {
     url: "",
     recurrence_frequency: "none",
     recurrence_until: "",
+    visibility: "members",
   };
 }
 
@@ -196,6 +197,7 @@ function makeDraftFromEvent(event: CommunityEvent): EventDraft {
     recurrence_until: event.recurrence_until
       ? toCommunityEventDateTimeInputValue(new Date(event.recurrence_until), timezone)
       : "",
+    visibility: event.visibility === "public" ? "public" : "members",
   };
 }
 
@@ -485,12 +487,12 @@ export function WebCommunityEventsSection(props: WebCommunityEventsSectionProps)
     actions.setVisibleMonthIso(toMonthIso(nextMonth));
   };
 
-  const submitDraft = async () => {
-    if (!draft) return;
+  // Saves one draft; what is wrong with it shows in the open form.
+  const saveEventDraft = async (draft: EventDraft, eventId: string | null): Promise<boolean> => {
     const title = draft.title.trim();
     if (!title) {
       setLocalError("Title is required.");
-      return;
+      return false;
     }
     const timezone = normalizeCommunityEventTimeZone(draft.timezone);
     const startsAt = communityEventDateTimeInputToIso(draft.starts_at, timezone);
@@ -500,12 +502,12 @@ export function WebCommunityEventsSection(props: WebCommunityEventsSectionProps)
           ? "Start time is invalid in the selected timezone."
           : "Start time is required.",
       );
-      return;
+      return false;
     }
     const endsAt = draft.ends_at ? communityEventDateTimeInputToIso(draft.ends_at, timezone) : null;
     if (draft.ends_at && !endsAt) {
       setLocalError("End time is invalid.");
-      return;
+      return false;
     }
     const recurrenceUntil =
       draft.recurrence_frequency === "none"
@@ -515,11 +517,11 @@ export function WebCommunityEventsSection(props: WebCommunityEventsSectionProps)
           : null;
     if (draft.recurrence_frequency !== "none" && draft.recurrence_until && !recurrenceUntil) {
       setLocalError("Repeat end date is invalid.");
-      return;
+      return false;
     }
     setIsSaving(true);
     const didSave = await actions.saveEvent(
-      editingEventId,
+      eventId,
       {
         title,
         description_md: draft.description_md.trim() || null,
@@ -529,7 +531,7 @@ export function WebCommunityEventsSection(props: WebCommunityEventsSectionProps)
         location_type: draft.location_type,
         location_label: draft.location_label.trim() || null,
         url: draft.url.trim() || null,
-        visibility: "members",
+        visibility: draft.visibility,
         recurrence_frequency: draft.recurrence_frequency,
         recurrence_interval: 1,
         recurrence_until: recurrenceUntil,
@@ -537,7 +539,19 @@ export function WebCommunityEventsSection(props: WebCommunityEventsSectionProps)
       currentRange,
     );
     setIsSaving(false);
-    if (didSave) {
+    return didSave;
+  };
+
+  const closeDraft = () => {
+    if (isSaving) return;
+    setDraft(null);
+    setEditingEventId(null);
+    setLocalError(null);
+  };
+
+  const submitDraft = async () => {
+    if (!draft) return;
+    if (await saveEventDraft(draft, editingEventId)) {
       setDraft(null);
       setEditingEventId(null);
       setLocalError(null);
@@ -546,22 +560,31 @@ export function WebCommunityEventsSection(props: WebCommunityEventsSectionProps)
 
   // Design system v1: the soonest event as a card, then Coming up and Past.
   const listParts = splitCommunityEvents(state.events, listNow);
+  const eventForm = draft ? (
+    <KitEventForm draft={draft} isNew={!editingEventId} isSeries={isRecurringCommunityEvent(editingSourceEvent)}
+      canBePublic={!editingSourceEvent?.pod_channel_id} communityName={capabilities.activeCommunityName}
+      isSaving={isSaving} error={localError ?? (isSaving ? null : state.eventsError)}
+      timeZones={getUniqueTimeZoneOptions(draft.timezone).map((zone) => ({ value: zone, label: formatTimeZoneLabel(zone) }))}
+      onChange={setDraft} onClose={closeDraft} onSubmit={() => void submitDraft()} />
+  ) : null;
   const renderEventsList = () => {
     // The right column stays mounted while events load: dropping it for a
     // frame changes the page's layout and the title jumps (Nov 13).
     if (showInitialEventsLoading) return (
       <>
         <div className="community-events-state" role="status">Loading events…</div>
-        <CommunityPageRail label="Your events"><div /></CommunityPageRail>
+        <CommunityPageRail label="This event"><div /></CommunityPageRail>
       </>
     );
     return (
       <KitEventsList featured={listParts.featured} comingUp={listParts.comingUp} past={listParts.past} now={listNow}
-        canManage={capabilities.hasActiveCommunity && capabilities.canManageEvents} going={props.going ?? null}
-        timeLabel={(event) => formatEventTime(event).primary} calendarUrl={buildGoogleCalendarUrl}
-        onNew={() => openNewEvent(getDefaultEventDayForMonth(monthDate))} onEdit={openEditEvent} onCancel={confirmCancelEvent}
-        getAvatarColor={props.getAvatarColor}
-        renderRail={(rail) => <CommunityPageRail label="Your events">{rail}</CommunityPageRail>} />
+        canManage={capabilities.hasActiveCommunity && capabilities.canManageEvents} communityName={capabilities.activeCommunityName}
+        timeLabel={formatEventTime} calendarUrl={buildGoogleCalendarUrl}
+        form={eventForm} editingId={editingEventId}
+        onNew={() => openNewEvent(null)} onEdit={openEditEvent}
+        onCancel={(event) => actions.cancelEvent(event.parent_event_id, currentRange)}
+        onSetPublic={(event, isPublic) => saveEventDraft({ ...makeDraftFromEvent(event), visibility: isPublic ? "public" : "members" }, event.parent_event_id)}
+        renderRail={(rail) => <CommunityPageRail label="This event">{rail}</CommunityPageRail>} />
     );
   };
 
@@ -747,19 +770,14 @@ export function WebCommunityEventsSection(props: WebCommunityEventsSectionProps)
         </>
       )}
 
-      {draft ? (
+      {draft && !isDesignV1Active() ? (
         <EventModal
           draft={draft}
           isSaving={isSaving}
           error={localError}
           title={eventModalTitle}
           onChange={setDraft}
-          onClose={() => {
-            if (isSaving) return;
-            setDraft(null);
-            setEditingEventId(null);
-            setLocalError(null);
-          }}
+          onClose={closeDraft}
           onSubmit={submitDraft}
         />
       ) : null}

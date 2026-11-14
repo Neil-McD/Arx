@@ -105,7 +105,7 @@ export function formatMomentWhen(startsAtIso: string): string {
 
 // A member's one next step, only when there is a real one.
 export type MemberNextStep = {
-  kind: "continue_lesson" | "say_hello" | "rsvp";
+  kind: "continue_lesson" | "say_hello" | "next_event";
   title: string;
   detail: string;
   action: string;
@@ -118,7 +118,7 @@ export function memberNextStep(args: {
   hasPosted: boolean;
   joinedRecently: boolean;
   generalChannel: string | null;
-  nextEvent: { title: string; startsAt: string; going: boolean } | null;
+  nextEvent: { title: string; startsAt: string } | null;
 }): MemberNextStep | null {
   if (args.joinedRecently && !args.hasPosted && args.generalChannel) {
     return {
@@ -135,10 +135,10 @@ export function memberNextStep(args: {
       action: "Continue", target: { kind: "knowledge" },
     };
   }
-  if (args.nextEvent && !args.nextEvent.going) {
+  if (args.nextEvent) {
     return {
-      kind: "rsvp", title: `${args.nextEvent.title} is coming up`,
-      detail: "Let the host know you'll be there.", when: args.nextEvent.startsAt,
+      kind: "next_event", title: `${args.nextEvent.title} is coming up`,
+      detail: "Put it in your calendar so it doesn't slip by.", when: args.nextEvent.startsAt,
       action: "See the event", target: { kind: "events" },
     };
   }

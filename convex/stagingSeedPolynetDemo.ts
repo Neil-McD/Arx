@@ -447,7 +447,6 @@ export const seedPolynetDemoEventsInternal = internalMutation({
       return user._id;
     };
     for (const event of await ctx.db.query("communityEvents").withIndex("by_community", (q: any) => q.eq("communityId", communityId)).collect()) {
-      for (const row of await ctx.db.query("communityEventGoing").withIndex("by_event_occurrence", (q: any) => q.eq("eventId", event._id)).collect()) await ctx.db.delete(row._id);
       await ctx.db.delete(event._id);
     }
     const friday = nextLocalWeekdayAt(nowMs, 5, 10, 0, TIME_ZONE);
@@ -456,17 +455,11 @@ export const seedPolynetDemoEventsInternal = internalMutation({
       locationType: "online", locationLabel: "Video call", url: "https://meet.jit.si/polynet-demo-build-call", visibility: "members", status: "live",
       recurrenceFrequency: weekly ? "weekly" : "none", ...(weekly ? { recurrenceInterval: 1 } : {}), createdAt: nowMs, updatedAt: nowMs,
     });
-    const going = async (eventId: any, occurrenceStartsAt: number, keys: string[]) => {
-      for (const key of keys) await ctx.db.insert("communityEventGoing", { communityId, eventId, occurrenceStartsAt, userId: await userFor(key), createdAt: nowMs });
-    };
     const build = await make(community.ownerId, "Friday build call", "Jon is bringing the invitation that took him past 100 members. Bring yours and we'll look at three together.", friday, 60, true);
-    await going(build, friday, ["jon", "priya", "rashid", "sara", "maya", "ana", "tom", "lena"]);
     const teardownAt = nextLocalWeekdayAt(nowMs + 3 * DAY_MS, 2, 18, 0, TIME_ZONE);
     const teardown = await make(await userFor("priya"), "Door teardown: three members' join pages", "Priya walks through three join pages and what she'd change.", teardownAt, 60);
-    await going(teardown, teardownAt, ["jon", "maya", "mira", "ines", "omar"]);
     const workshopAt = nextLocalWeekdayAt(nowMs + 8 * DAY_MS, 4, 13, 0, TIME_ZONE);
     const workshop = await make(community.ownerId, "Workshop: pricing your founding tier", "How to pick a founding price you can raise later.", workshopAt, 90);
-    await going(workshop, workshopAt, ["priya", "rashid", "sara", "ana", "tom", "lena", "dev"]);
     await make(await userFor("jon"), "Invitation clinic", "Jon reviewed ten invitations live.", nowMs - 5 * DAY_MS, 50);
     await make(await userFor("sara"), "Live call practice", "Sara's first open practice call.", nowMs - 12 * DAY_MS, 45);
     return { build, teardown, workshop };
