@@ -197,8 +197,6 @@ describe("canonical web destinations", () => {
     ["/m/discover", { kind: "discover" }],
     ["/docs", { kind: "docs", slug: null }],
     ["/m/docs/getting-started/intro", { kind: "docs", slug: "getting-started/intro" }],
-    ["/operator", { kind: "operator", tab: "platform" }],
-    ["/m/operator/business", { kind: "operator", tab: "business" }],
     ["/settings", { kind: "global_settings", index: true }],
     ["/m/settings/profile", { kind: "global_settings", page: "profile", index: false }],
     ["/c/polynet", { kind: "community_funnel", slug: "polynet" }],
@@ -226,7 +224,6 @@ describe("canonical web destinations", () => {
     ["/onboarding", "/m/onboarding"],
     ["/discover", "/m/discover"],
     ["/docs/getting-started", "/m/docs/getting-started"],
-    ["/operator/communities", "/m/operator/communities"],
     ["/settings/appearance", "/m/settings/appearance"],
     ["/c/polynet", "/m/c/polynet"],
     ["/c/polynet/preview", "/m/c/polynet/preview"],
@@ -246,7 +243,8 @@ describe("canonical web destinations", () => {
     );
   });
 
-  it.each(["/unknown", "/m/unknown", "/operator/platform/extra", "/c"])(
+  // The operator console was removed (Nov 13): /operator is unknown.
+  it.each(["/unknown", "/m/unknown", "/operator", "/operator/platform", "/c"])(
     "rejects unknown route %s",
     (path) => {
       expect(deriveWebDestinationFromPath(path)).toBeNull();

@@ -22,7 +22,6 @@ function project(params: {
   communitySlug?: string | null;
   communityAccessState?: WebRouteScopedAccessState;
   communityPreviewAccessState?: WebRouteScopedAccessState;
-  operatorAccessState?: WebRouteScopedAccessState;
   accountSetupAccessState?: WebRouteScopedAccessState;
 }) {
   return resolveWebRouteAccessProjection({
@@ -33,7 +32,6 @@ function project(params: {
     communitySlug: params.communitySlug ?? null,
     communityAccessState: params.communityAccessState,
     communityPreviewAccessState: params.communityPreviewAccessState,
-    operatorAccessState: params.operatorAccessState,
     accountSetupAccessState: params.accountSetupAccessState,
   });
 }
@@ -104,7 +102,6 @@ for (const [publicRoute, activePage, pathname] of [
 for (const [publicRoute, activePage, pathname] of [
   [{ kind: "app" }, "onboarding", "/onboarding"],
   [{ kind: "app" }, "community", "/c/polynet/chat"],
-  [{ kind: "app" }, "operator", "/operator/platform"],
 ] satisfies Array<[PublicRoute, AppPage, string]>) {
   assert.equal(
     shouldHydrateWebRouteAccountSetup({ publicRoute, activePage, pathname }),
@@ -232,43 +229,6 @@ for (const publicRoute of [
   );
 }
 
-assert.deepEqual(
-  project({
-    activePage: "operator",
-    pathname: "/operator/platform",
-    authState: "signed_in",
-    operatorAccessState: "resolving",
-  }),
-  { kind: "hold", requirement: "operator" },
-);
-assert.deepEqual(
-  project({
-    activePage: "operator",
-    pathname: "/operator/platform",
-    authState: "signed_in",
-    operatorAccessState: "failed",
-  }),
-  { kind: "hold", requirement: "operator" },
-);
-assert.deepEqual(
-  project({
-    activePage: "operator",
-    pathname: "/operator/platform",
-    authState: "signed_in",
-    operatorAccessState: "allowed",
-  }),
-  { kind: "render_authenticated", requirement: "operator" },
-);
-assert.deepEqual(
-  project({
-    activePage: "operator",
-    pathname: "/operator/platform",
-    authState: "signed_in",
-    operatorAccessState: "denied",
-  }),
-  { kind: "redirect_member_entry", requirement: "operator" },
-);
-
 assert.deepEqual(project({ pathname: "/workspace", authState: "signed_in" }), {
   kind: "hold",
   requirement: "legacy_entry",
@@ -276,10 +236,6 @@ assert.deepEqual(project({ pathname: "/workspace", authState: "signed_in" }), {
 
 const boundary = read(
   "apps/web/src/controllers/useWebRouteAccessBoundaryController.ts",
-);
-const operatorGateway = read("shared/cloudOperatorDashboardGateway.ts");
-const operatorIdentity = read(
-  "apps/web/src/controllers/useWebAuthenticatedIdentityController.ts",
 );
 const memberEntryGateway = read(
   "shared/cloudMemberEntryDestinationGateway.ts",
@@ -385,7 +341,6 @@ assert.match(
   "route admission must share one finite deadline",
 );
 for (const [name, source, code] of [
-  ["operator access", operatorGateway, "operator_access_resolution_timeout"],
   ["member entry", memberEntryGateway, "member_entry_destination_timeout"],
 ] as const) {
   assert.match(
@@ -399,16 +354,6 @@ for (const [name, source, code] of [
     `${name} authority must use the canonical admission deadline`,
   );
 }
-assert.match(
-  operatorIdentity,
-  /operatorAccessError[\s\S]*retryOperatorAccess/,
-  "transient operator authority failure must remain held and retryable",
-);
-assert.match(
-  app,
-  /operatorAccessError[\s\S]*retryOperatorAccess\(\)/,
-  "operator route recovery must stay in-app",
-);
 assert.doesNotMatch(
   onboarding,
   /activePage !== "onboarding"[\s\S]{0,240}requireSignIn/,
@@ -436,5 +381,5 @@ assert.match(
 );
 
 console.log(
-  "web_route_access_boundary_contract_proof: canonical public, authenticated, community, operator, and mobile route matrix ok",
+  "web_route_access_boundary_contract_proof: canonical public, authenticated, community, and mobile route matrix ok",
 );
