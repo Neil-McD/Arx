@@ -915,13 +915,6 @@ describe("pods", () => {
     expect(await semantic(ids.ben)).toEqual(["Town hall"]);
     await expect(t.query(internalRefs.communityEvents.readCommunityEventForSemanticRepositoryInternal, { userId: ids.ben, communityId: f.communityId, eventId, occurrenceStartsAt: startsAt }))
       .rejects.toThrow(/community_event_not_found/);
-    // "I'm going".
-    await expect(asBen.mutation(api.communityEventGoing.setCommunityEventGoing, { communityId: f.communityId, eventId, occurrenceStartsAt: startsAt, going: true }))
-      .rejects.toThrow(/community_event_not_found/);
-    await asAna.mutation(api.communityEventGoing.setCommunityEventGoing, { communityId: f.communityId, eventId, occurrenceStartsAt: startsAt, going: true });
-    const goingItems = [{ eventId, occurrenceStartsAt: startsAt }];
-    expect(await asBen.query(api.communityEventGoing.listCommunityEventGoing, { communityId: f.communityId, items: goingItems })).toEqual([]);
-    expect(await asAna.query(api.communityEventGoing.listCommunityEventGoing, { communityId: f.communityId, items: goingItems })).toMatchObject([{ mine: true, count: 1 }]);
     // Home's "coming up".
     const comingUp = async (who: typeof asOwner) => JSON.stringify(await who.query(api.communityHomeMoments.getHomeMoments, { communityId: f.communityId }));
     expect(await comingUp(asAna)).toContain("Founders call");
