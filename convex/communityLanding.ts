@@ -134,14 +134,15 @@ export const cancelCommunityJoinRequestFromLanding = mutation({
   },
 });
 
-// A paid plan: Stripe's checkout, coming back only to this page. Signed out,
-// cash first: the browser keeps the returned secret until it signs in.
+// A paid plan, signed in: Stripe's checkout, coming back only to this page.
+// Signed out (cash first) goes through the app's server function instead
+// (httpCommunityLanding.ts), so each visitor's checkouts are limited.
 export const startCommunityLandingCheckout = action({
   args: {
     communitySlug: v.string(),
     billingPeriod: v.union(v.literal("monthly"), v.literal("annual")),
     plan: v.optional(v.string()),
-    authSubject: v.optional(v.string()),
+    authSubject: v.string(),
   },
   handler: async (ctx, args): Promise<{ checkout_url: string; session_id: string; buyer_secret: string | null }> => {
     const slug = cleanSlug(args.communitySlug);
@@ -156,7 +157,7 @@ export const startCommunityLandingCheckout = action({
       successUrl: `${page}?checkout={CHECKOUT_SESSION_ID}`,
       cancelUrl: `${page}?checkout=canceled`,
       ...(plan ? { tierKey: plan } : {}),
-      ...(args.authSubject ? { authSubject: args.authSubject } : { guest: true }),
+      authSubject: args.authSubject,
     });
     return { checkout_url: started.checkout_url, session_id: started.session_id, buyer_secret: started.buyer_secret ?? null };
   },
