@@ -3593,3 +3593,8 @@
 /* The phone's top bar has the way back; the list starts below it. */
 :root[data-design="v1"] .mobile-global-shell:not(.has-community-rail) .settings-nav-v1 .settings-nav-back { display: none; }
 :root[data-design="v1"] .mobile-global-shell:not(.has-community-rail) .settings-nav-v1 { padding-top: 56px; }
+
+/* ---------- Phones, step 4 ----------
+   No strip of communities on a phone, so the Inbox and a conversation sit on
+   the screen's own edge, not the strip's. */
+:root[data-design="v1"] .web-direct-messages-host.mobile-root .community-dm-panel { left: var(--community-shell-inset); }
