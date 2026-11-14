@@ -57,11 +57,16 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
 
 ### 2. Communities, membership and joining — Keep
 
-- **Does:** create, configure, archive and restore communities; join (open,
-  approval, paid) on a community site's own `/join` (on its private twin,
-  `communityAppJoin`; paid joins are cash first); roles; blocks; Discover.
-  Studio's `/c/<slug>` only hands over to the site (Nov 6).
-- **Code:** `communityCore`, `communityLifecycle`, `communityMembershipLifecycle`,
+- **Does:** create, configure, archive and restore communities; the
+  community's landing page at `/c/<slug>` in the app (Nov 13), where people
+  join (open, approval, paid; paid joins are cash first: a signed-out buyer's
+  checkout goes through the app's `api/community-checkout.js`, which limits
+  each visitor; shared links get the community's preview from
+  `api/community-page.js`); roles; blocks; Discover.
+- **Code:** `communityLanding` (the landing page: its read, join, cancel,
+  checkout, finish and visit count, over `communityAppJoin`'s projection),
+  `httpCommunityLanding` (a signed-out buyer's checkout, from the app's server
+  function only), `communityCore`, `communityLifecycle`, `communityMembershipLifecycle`,
   `communityJoinRequestCore`, `communityAdmin`, `communityPublic`, `communityDirectory`,
   `communityColdArchive`, `communityCapabilityContext`, `communityPresenceCore`,
   `communityAccessAudit`, `communityAccessQueries`, `communityMembershipContextCore`,

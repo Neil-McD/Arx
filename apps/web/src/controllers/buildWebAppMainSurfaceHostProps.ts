@@ -5,8 +5,8 @@ export function buildWebAppMainSurfaceHostProps(params: {
   activePage: WebAppMainSurfaceHostProps["activePage"];
   isPublicCommunityFunnel: boolean;
   publicRoute: PublicRoute;
-  // The viewer's communities, to tell whether they belong to /c/<slug>'s community.
-  viewerCommunities: { isLoading: boolean; slugs: string[] };
+  // The viewer's session (null signed out), for /c/<slug>'s landing page.
+  session: unknown | null;
   landingPageProps: WebAppMainSurfaceHostProps["landingPageProps"];
   isSignedOut: boolean;
   onboardingPageProps: WebAppMainSurfaceHostProps["onboardingPageProps"];
@@ -38,13 +38,7 @@ export function buildWebAppMainSurfaceHostProps(params: {
     showOnboardingModal: params.showOnboardingModal,
     settingsSurfaceHostProps: params.settingsSurfaceHostProps,
     publicCommunitySlug: params.publicRoute.kind === "community_funnel" ? params.publicRoute.slug : null,
-    publicCommunitySignedIn: !params.isSignedOut,
-    publicCommunityMembership: params.viewerCommunities.isLoading
-      ? "loading"
-      : params.publicRoute.kind === "community_funnel"
-        && params.viewerCommunities.slugs.includes(params.publicRoute.slug.toLowerCase())
-        ? "member"
-        : "visitor",
+    publicCommunitySession: params.session,
     communityHostProps: params.communityHostProps,
     discoverPanelProps: params.discoverPanelProps,
     productDocsPanelProps: params.productDocsPanelProps,

@@ -1307,7 +1307,7 @@ export default function App() {
     },
   };
 
-  // /c/<slug> only hands over to the community's site (WebCommunityHandoff).
+  // /c/<slug> is the community's landing page (WebCommunityLandingPage).
   const isPublicCommunityFunnel = shellPublicRoute.kind === "community_funnel";
   const accountSetupRouteAccessState =
     !session
@@ -2155,10 +2155,7 @@ export default function App() {
     activePage,
     isPublicCommunityFunnel,
     publicRoute: shellPublicRoute,
-    viewerCommunities: {
-      isLoading: !isAuthBootstrapComplete || Boolean(session && !hasResolvedCommunities),
-      slugs: session ? communities.map((community) => community.slug) : [],
-    },
+    session,
     holdLandingForAuth: shouldHoldLandingForAuth,
     isSignedOut: !session,
     landingPageProps: {

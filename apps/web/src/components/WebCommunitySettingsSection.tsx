@@ -31,7 +31,7 @@ import {
   WebPlatformTabList,
 } from "./WebPlatformChoiceControls";
 import { CommunityFounderBriefSection } from "./CommunityFounderBriefSection";
-import { communitySiteAddress } from "../../../../shared/communitySlug";
+import { communityPageAddress } from "../../../../shared/communitySlug";
 
 type CommunityPricingMode = "free" | "monthly" | "annual";
 
@@ -440,7 +440,7 @@ function CommunityBrandingSettingsSection({
               }}
             />
             <span className="create-community-hint">
-              {`Your public page: ${communitySiteAddress(state.communitySettingsSlug, activeCommunity)}`}
+              {`Your page: ${communityPageAddress(state.communitySettingsSlug)}`}
             </span>
           </label>
         </div>

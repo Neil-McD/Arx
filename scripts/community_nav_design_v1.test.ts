@@ -104,7 +104,7 @@ test("the foot is Invite people only; Your guide is in the account menu; Analyti
   let items: Array<{ key: string; label: string }> = [];
   const html = renderToStaticMarkup(React.createElement(CommunityNav, {
     ...hostProps,
-    activeCommunity: { name: "Test", site_url: "https://dawn-patrol.polynet.page" },
+    activeCommunity: { name: "Test", slug: "dawn-patrol", site_url: "https://dawn-patrol.polynet.page" },
     onCopyCommunityJoinLink: async () => true,
     onOpenGuide: () => {},
     accountSlot: (communityItems: Array<{ key: string; label: string }>) => {

@@ -252,40 +252,6 @@ export function readSetupReturnCommunity(search: string | null | undefined): str
   return SETUP_RETURN_SLUG.test(slug) ? slug : null;
 }
 
-// Where they go back to: the site's join page (it hands over to the private
-// join page), marked so it can say they're set up. Only to an https site.
-export function communitySiteJoinUrl(siteUrl: unknown): string | null {
-  if (typeof siteUrl !== "string") return null;
-  try {
-    const site = new URL(siteUrl);
-    return site.protocol === "https:" ? `${site.origin}/join?setup=done` : null;
-  } catch {
-    return null;
-  }
-}
-
-// The bare /c/<slug> page was the community's funnel; a community with its own
-// site sends visitors there instead, since the site is its front door. Only that
-// exact page (Studio's own /c/<slug>/... pages stay), and only to an https site.
-export function communitySiteRedirectTarget(
-  pathname: string | null | undefined,
-  communitySlug: string | null | undefined,
-  siteUrl: unknown,
-): string | null {
-  const slug = String(communitySlug ?? "").trim().toLowerCase();
-  // The mobile shell's /m prefix too (/m/c/<slug>).
-  const path = String(pathname ?? "").replace(/\/+$/, "").replace(/^\/m(?=\/)/, "");
-  let here = "";
-  try { here = decodeURIComponent(path).toLowerCase(); } catch { return null; }
-  if (!slug || here !== `/c/${slug}` || typeof siteUrl !== "string") return null;
-  try {
-    const site = new URL(siteUrl);
-    return site.protocol === "https:" ? `${site.origin}/` : null;
-  } catch {
-    return null;
-  }
-}
-
 export function buildCommunityFunnelPath(communitySlug: string | null | undefined): string | null {
   const slug = String(communitySlug ?? "").trim();
   if (!slug) return null;

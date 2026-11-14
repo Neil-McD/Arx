@@ -21,11 +21,9 @@ import type { AppPage } from "../../../../shared/appShellNavigation";
 import {
   SETUP_RETURN_STORAGE_KEY,
   buildCommunityFunnelPath,
-  communitySiteJoinUrl,
   isRootAppRoutePath,
   readSetupReturnCommunity,
 } from "../../../../shared/webAppRouteState";
-import { resolveCloudPublicFunnel } from "../../../../shared/cloudPublicFunnelGateway";
 import { useWebProfileSettingsUiController } from "./useWebProfileSettingsUiController";
 import { readProfileDraftForUser } from "../../../../shared/profileDraftStorage";
 import { readAuthResumeState } from "../../../../shared/authResumeState";
@@ -355,21 +353,14 @@ export function useWebOnboardingProfileController(params: {
           setOnboardingError("We could not continue where you left off. Try again.");
           return false;
         }
-        // Came from a community's site to join it: back to its join page.
+        // Came from a community's landing page to join it: back there, and
+        // the page joins (or asks to) for them (intent=join).
         const returnCommunity = readStoredSetupReturnCommunity();
         if (returnCommunity) {
           clearStoredSetupReturnCommunity();
-          const funnel = await resolveCloudPublicFunnel<AuthSession, { site_url?: string | null }, unknown>({
-            communitySlug: returnCommunity,
-          }).catch(() => null);
-          const joinUrl = funnel?.ok ? communitySiteJoinUrl(funnel.community?.site_url) : null;
-          if (joinUrl) {
-            window.location.assign(joinUrl);
-            return true;
-          }
-          const funnelPath = funnel?.ok ? buildCommunityFunnelPath(returnCommunity) : null;
+          const funnelPath = buildCommunityFunnelPath(returnCommunity);
           if (funnelPath) {
-            actionsRef.current.navigateTo(funnelPath, { replace: true });
+            window.location.assign(`${funnelPath}?intent=join`);
             return true;
           }
         }
