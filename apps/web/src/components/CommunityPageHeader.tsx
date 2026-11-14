@@ -3,7 +3,6 @@ import { createPortal } from "react-dom";
 import { Search } from "lucide-react";
 import { isDesignV1Active } from "../../../../shared/designSystem";
 import { openGuideFromSearch } from "./guideSearch";
-import { RightColumnToggle } from "./RightColumnToggle";
 import { useCommunityAgentOn } from "../controllers/communityAgentOn";
 
 // The mock's "Search or ask", the same on every page's top bar. Until search
@@ -46,7 +45,6 @@ export function CommunityPageFrame(props: { children: ReactNode }) {
         <RailSlotContext.Provider value={rail}>
           <div className="community-page-body">
             <header className="community-channel-header community-page-header" ref={setSlot} />
-            <div className="community-page-rail-toggle"><RightColumnToggle /></div>
             {body}
             <aside className="community-page-rail" ref={setRail} />
           </div>

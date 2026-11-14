@@ -8,7 +8,6 @@ import type {
   CommunityAnalyticsCapabilities,
   CommunityAnalyticsState,
 } from "./communityAnalyticsContracts";
-import { WebAnalyticsScopeSwitcher } from "./WebAnalyticsScopeSwitcher";
 
 type CommunityAnalyticsPanelProps = {
   capabilities: CommunityAnalyticsCapabilities;
@@ -60,14 +59,6 @@ export function CommunityAnalyticsPanel(props: CommunityAnalyticsPanelProps) {
     return <div className="chat-empty">Only owners and admins can view community analytics.</div>;
   }
 
-  const scopeSwitcher = (
-    <WebAnalyticsScopeSwitcher
-            activeScope="community"
-            showPlatformScope={capabilities.canViewPlatformAnalytics}
-            onOpenCommunityScope={() => undefined}
-            onOpenPlatformScope={actions.openPlatformAnalytics}
-          />
-  );
   const rangeSwitcher = (
     <div
           className="platform-switcher platform-switcher-compact"
@@ -95,11 +86,10 @@ export function CommunityAnalyticsPanel(props: CommunityAnalyticsPanelProps) {
 
   return (
     <>
-      <CommunityPageHeader title="Analytics" actions={<>{scopeSwitcher}{rangeSwitcher}</>}>
+      <CommunityPageHeader title="Analytics" actions={rangeSwitcher}>
         <div className="analytics-header-row">
           <div className="analytics-title-stack">
             <div className="panel-title">Analytics</div>
-            {scopeSwitcher}
           </div>
           {rangeSwitcher}
         </div>

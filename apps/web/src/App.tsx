@@ -1831,7 +1831,6 @@ export default function App() {
         refresh: founderBilling.refresh,
       },
       canViewActiveCommunityAnalytics,
-      canViewPlatformAnalytics: hasOperatorAccess,
       analyticsState: {
         communityAnalyticsRange,
         isLoadingCommunityAnalytics,
@@ -1841,7 +1840,6 @@ export default function App() {
       },
       analyticsActions: {
         setCommunityAnalyticsRange,
-        openPlatformAnalytics: () => openOperatorConsole("platform"),
       },
       resourcesState: {
         resourceRead: communityContent.resourceRead,

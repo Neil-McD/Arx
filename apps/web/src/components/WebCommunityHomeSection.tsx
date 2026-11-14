@@ -32,7 +32,7 @@ export type WebCommunityHomeSectionProps = {
   // Changes each time Home is opened, so the facts are read again.
   refreshKey?: number;
   // Where the right-hand column goes on wide windows (the page's own rail).
-  // Narrower windows open the same rail as a panel from Home's header (RightColumnToggle).
+  // The rail stays open, narrowing with the window, and hides only below 900px.
   asideContainer?: HTMLElement | null;
   now?: Date;
   // Design system v1, the host's Home on the kit (docs/design/hifi-mock):

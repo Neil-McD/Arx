@@ -8,7 +8,6 @@ export type CommunityAnalyticsCapabilities = {
   hasActiveCommunity: boolean;
   hasSession: boolean;
   canViewActiveCommunityAnalytics: boolean;
-  canViewPlatformAnalytics: boolean;
 };
 
 export type CommunityAnalyticsState = {
@@ -21,5 +20,4 @@ export type CommunityAnalyticsState = {
 
 export type CommunityAnalyticsActions = {
   setCommunityAnalyticsRange: (value: AnalyticsRange) => void;
-  openPlatformAnalytics: () => void;
 };
