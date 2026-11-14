@@ -1142,13 +1142,6 @@ export const getCloudThreadByThreadKey = query({
     })),
 });
 
-// For a turn from a community front end: the owner was authenticated by the
-// front end's session, which has no Convex identity.
-export const getCloudThreadByThreadKeyForTrustedOwnerInternal = internalQuery({
-  args: { ...getCloudThreadByThreadKeyArgs, trustedOwnerId: v.id("users") },
-  handler: async (ctx, { trustedOwnerId, ...args }) => await getCloudThreadByThreadKeyHandler(ctx, args, trustedOwnerId),
-});
-
 export const ensureCloudThread = mutation({
   args: {
     ownerId: v.optional(v.id("users")),
@@ -1384,12 +1377,6 @@ export const listNewestCloudThreadMessages = query({
       ownerId: args.ownerId,
       authSubject: args.authSubject ?? null,
     })),
-});
-
-// For a community front end showing its member's agent conversation.
-export const listNewestCloudThreadMessagesForTrustedOwnerInternal = internalQuery({
-  args: { ...listNewestCloudThreadMessagesArgs, trustedOwnerId: v.id("users") },
-  handler: async (ctx, { trustedOwnerId, ...args }) => await listNewestCloudThreadMessagesHandler(ctx, args, trustedOwnerId),
 });
 
 export const listCommunityAgentRuntimeMessagesInternal = internalQuery({
@@ -1900,13 +1887,6 @@ export const getCloudThreadMessageByOwnerMessageKey = query({
     })),
 });
 
-// For a turn from a community front end: the owner was authenticated by the
-// front end's session, which has no Convex identity.
-export const getCloudThreadMessageByOwnerMessageKeyForTrustedOwnerInternal = internalQuery({
-  args: { ...getCloudThreadMessageByOwnerMessageKeyArgs, trustedOwnerId: v.id("users") },
-  handler: async (ctx, { trustedOwnerId, ...args }) => await getCloudThreadMessageByOwnerMessageKeyHandler(ctx, args, trustedOwnerId),
-});
-
 const addCloudThreadMessageArgs = {
     ownerId: v.optional(v.id("users")),
     authSubject: v.optional(v.string()),
@@ -2164,13 +2144,6 @@ export const upsertCloudThreadMessageByMessageKey = mutation({
       ownerId: args.ownerId,
       authSubject: args.authSubject ?? null,
     })),
-});
-
-// For a turn from a community front end: the owner was authenticated by the
-// front end's session, which has no Convex identity.
-export const upsertCloudThreadMessageByMessageKeyForTrustedOwnerInternal = internalMutation({
-  args: { ...upsertCloudThreadMessageByMessageKeyArgs, trustedOwnerId: v.id("users") },
-  handler: async (ctx, { trustedOwnerId, ...args }) => await upsertCloudThreadMessageByMessageKeyHandler(ctx, args, trustedOwnerId),
 });
 
 export const deleteCloudThreadMessage = mutation({
@@ -2550,13 +2523,6 @@ export const ensureCloudRuntimeRunStarted = mutation({
     })),
 });
 
-// For a turn from a community front end: the owner was authenticated by the
-// front end's session, which has no Convex identity.
-export const ensureCloudRuntimeRunStartedForTrustedOwnerInternal = internalMutation({
-  args: { ...ensureCloudRuntimeRunStartedArgs, trustedOwnerId: v.id("users") },
-  handler: async (ctx, { trustedOwnerId, ...args }) => await ensureCloudRuntimeRunStartedHandler(ctx, args, trustedOwnerId),
-});
-
 const appendCloudRuntimeRunEventArgs = {
     ownerId: v.optional(v.id("users")),
     authSubject: v.optional(v.string()),
@@ -2638,13 +2604,6 @@ export const appendCloudRuntimeRunEvent = mutation({
       ownerId: args.ownerId,
       authSubject: args.authSubject ?? null,
     })),
-});
-
-// For a turn from a community front end: the owner was authenticated by the
-// front end's session, which has no Convex identity.
-export const appendCloudRuntimeRunEventForTrustedOwnerInternal = internalMutation({
-  args: { ...appendCloudRuntimeRunEventArgs, trustedOwnerId: v.id("users") },
-  handler: async (ctx, { trustedOwnerId, ...args }) => await appendCloudRuntimeRunEventHandler(ctx, args, trustedOwnerId),
 });
 
 export const recordRuntimeProviderContextAttestationInternal = internalMutation({
@@ -2818,13 +2777,6 @@ export const finishCloudRuntimeRun = mutation({
       ownerId: args.ownerId,
       authSubject: args.authSubject ?? null,
     })),
-});
-
-// For a turn from a community front end: the owner was authenticated by the
-// front end's session, which has no Convex identity.
-export const finishCloudRuntimeRunForTrustedOwnerInternal = internalMutation({
-  args: { ...finishCloudRuntimeRunArgs, trustedOwnerId: v.id("users") },
-  handler: async (ctx, { trustedOwnerId, ...args }) => await finishCloudRuntimeRunHandler(ctx, args, trustedOwnerId),
 });
 
 export const setCloudRuntimeRunContextSnapshotInternal = internalMutation({

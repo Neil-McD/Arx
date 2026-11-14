@@ -32,6 +32,17 @@ function cleanSlug(raw: string): string {
   return SLUG_PATTERN.test(slug) ? slug : "";
 }
 
+// For an action: a missing community is unavailable, an archived one says so.
+async function actionableCommunityBySlug(ctx: any, raw: string): Promise<CommunityLike> {
+  const slug = cleanSlug(raw);
+  const community = slug
+    ? (await ctx.db.query("communities").withIndex("by_slug", (q: any) => q.eq("slug", slug)).first()) as CommunityLike | null
+    : null;
+  if (!community) throw new Error("community_unavailable");
+  if (!communityIsActive(community)) throw new Error("community_archived");
+  return community;
+}
+
 async function activeCommunityBySlug(ctx: any, raw: string): Promise<CommunityLike | null> {
   const slug = cleanSlug(raw);
   if (!slug) return null;
@@ -116,8 +127,7 @@ export const joinCommunityFromLanding = mutation({
   args: { communitySlug: v.string(), authSubject: v.optional(v.string()) },
   handler: async (ctx, args) => {
     const userId = await requiredUserId(ctx, args.authSubject);
-    const community = await activeCommunityBySlug(ctx, args.communitySlug);
-    if (!community) throw new Error("community_unavailable");
+    const community = await actionableCommunityBySlug(ctx, args.communitySlug);
     const nowMs = Date.now();
     const result = await joinPublicCommunityInternal({ ctx, community, userId, nowMs });
     await recordCommunityJoinStarted(ctx, { communityId: community._id, userId, nowMs });
@@ -129,8 +139,7 @@ export const cancelCommunityJoinRequestFromLanding = mutation({
   args: { communitySlug: v.string(), authSubject: v.optional(v.string()) },
   handler: async (ctx, args) => {
     const userId = await requiredUserId(ctx, args.authSubject);
-    const community = await activeCommunityBySlug(ctx, args.communitySlug);
-    if (!community) throw new Error("community_unavailable");
+    const community = await actionableCommunityBySlug(ctx, args.communitySlug);
     return await cancelPendingCommunityJoinRequest({ ctx, communityId: community._id, userId });
   },
 });

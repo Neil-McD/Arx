@@ -38,7 +38,6 @@ import {
   resolveMemberCommunityPresenceSummary,
 } from "./communityPresenceCore";
 import { communityIsActive } from "../shared/communityLifecycle";
-import { communityMemberExperience, communitySiteUrl, registeredSiteOrigin } from "./communitySites";
 import type { CommunityPublicFace } from "../shared/communityTypes";
 import { requireAccountSetupCompleteForUser } from "./accountSetupCore";
 import { acceptCommunityJoin } from "./starterProfile";
@@ -107,8 +106,6 @@ export const resolvePublicFunnelBySlug = query({
         funnel: COMMUNITY_FUNNEL_PUBLIC_CONFIG,
         // Its own site: the community's front door, so this page sends visitors there,
         // and where its members spend time (Polynet's app unless the owner chose the site).
-        site_url: await communitySiteUrl(ctx, community),
-        members_use: await communityMemberExperience(ctx, community),
       },
       active_plan: activePlan,
     };
@@ -251,30 +248,6 @@ async function listDiscoverableCommunities(ctx: QueryCtx, limit: number): Promis
   return listed.filter((community): community is CommunityLike => community !== null).slice(0, limit);
 }
 
-// Discover on a community site (the edge's /__polynet/discover, signed in or
-// not): the same list, with only what a public card shows. site_url is the
-// community's own site on this environment's sites domain, when it has one
-// (its origin is registered to it); otherwise the card links to Studio.
-export const listSiteDiscoverCommunitiesInternal = internalQuery({
-  args: { sitesDomain: v.optional(v.string()), hostSuffix: v.optional(v.string()) },
-  handler: async (ctx, args) => {
-    const domain = String(args.sitesDomain ?? "").trim().toLowerCase();
-    const suffix = String(args.hostSuffix ?? "").trim().toLowerCase();
-    const text = (value: unknown, max: number) => (typeof value === "string" && value.trim() ? value.trim().slice(0, max) : null);
-    return await Promise.all((await listDiscoverableCommunities(ctx, 100)).map(async (community) => {
-      const slug = String(community.slug ?? "");
-      const branding = await resolveCommunityBrandingFields(ctx, community);
-      return {
-        slug,
-        name: text(community.name, 120) ?? slug,
-        one_liner: text(community.oneLiner, 300),
-        avatar_url: branding.avatar_url,
-        member_count: Math.max(0, Math.floor(Number((community as any).activeMemberCount) || 0)),
-        site_url: await registeredSiteOrigin(ctx, community, domain, suffix),
-      };
-    }));
-  },
-});
 
 // The join decision for Studio's funnel and for Join on a community site's
 // private twin (communityAppJoin.ts): one gate, whichever page asks.

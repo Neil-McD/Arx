@@ -2,7 +2,7 @@ import { BASE_TIER_KEY } from "./communityHeldTiers";
 import { memberAccessChanged } from "./communityPlanPods";
 import { action, internalAction, internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import { schedulePodBillingCheck } from "./communityPodBillingCheck";
-import { communityHasCustomSite, communityMemberExperience, communitySiteUrl } from "./communitySites";
+import { communityHasCustomSite, communityMemberExperience } from "./communitySites";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
@@ -842,9 +842,6 @@ export const listCommunityMemberships = query({
         // Its own site (null where it has none); where its members spend time,
         // the owner's switch; and whether a site of its own is deployed (the
         // switch's "site" choice needs one).
-        site_url: await communitySiteUrl(ctx, community),
-        members_use: await communityMemberExperience(ctx, community),
-        has_custom_site: await communityHasCustomSite(ctx, community._id),
       };
       return selectMode === "minimal"
         ? base
@@ -1441,52 +1438,6 @@ function requireJoinRequestId(ctx: any, raw: string) {
   return id;
 }
 
-// Join review on a site's private twin (httpCommunityApps, private sessions
-// only): the pending requests of the session's own community, with the names
-// a reviewer needs, and Studio's approve and deny for exactly that community.
-export const listPendingJoinRequestsForTrustedReviewerInternal = internalQuery({
-  args: { userId: v.id("users"), communityId: v.id("communities") },
-  handler: async (ctx, args) => {
-    const { community } = await requireCommunityModerator({ ctx, communityId: args.communityId, userId: args.userId });
-    const rows = (await ctx.db
-      .query("communityJoinRequests")
-      .withIndex("by_community_status_createdAt", (q: any) => q.eq("communityId", args.communityId).eq("status", "pending"))
-      .order("desc")
-      .take(100)) as CommunityJoinRequestLike[];
-    const requests = [];
-    for (const row of rows) {
-      if (assertCanonicalCommunityJoinRequest(row) !== "pending") continue;
-      const user = (await ctx.db.get(row.userId)) as { handle?: string } | null;
-      const display = await resolveUserProfileDisplayProjection(ctx, row.userId);
-      requests.push({
-        id: String(row._id),
-        name: display.display_name ?? user?.handle ?? "Someone",
-        handle: typeof user?.handle === "string" ? user.handle : null,
-        avatar_url: display.avatar_url ?? null,
-        asked_at: toIsoString(row.createdAt),
-      });
-    }
-    // A paid community admits through checkout only; there's nothing to approve.
-    return { paid: resolveCommunityEntryPolicy(community) === "paid_subscription", requests };
-  },
-});
-
-export const approveJoinRequestForTrustedReviewerInternal = internalMutation({
-  args: { userId: v.id("users"), communityId: v.id("communities"), requestId: v.string() },
-  handler: async (ctx, args) => await approveCommunityJoinRequestCore(ctx, {
-    requestId: requireJoinRequestId(ctx, args.requestId), userId: args.userId, communityId: args.communityId,
-    logContext: { actorUserId: args.userId, requestId: args.requestId, surface: "community_site_twin" },
-  }),
-});
-
-export const denyJoinRequestForTrustedReviewerInternal = internalMutation({
-  args: { userId: v.id("users"), communityId: v.id("communities"), requestId: v.string() },
-  handler: async (ctx, args) => await denyCommunityJoinRequestForReviewerCore(ctx, {
-    requestId: requireJoinRequestId(ctx, args.requestId), userId: args.userId, communityId: args.communityId,
-    logContext: { actorUserId: args.userId, requestId: args.requestId, surface: "community_site_twin" },
-  }),
-});
-
 export const setCommunityMemberRole = mutation({
   args: {
     userId: v.optional(v.id("users")),
@@ -2081,18 +2032,6 @@ async function saveCommunityMemberSettingsForUser(
   });
 }
 
-// The same three member actions for a member whose private-twin session the
-// caller (httpCommunityApps) already checked, in that session's community.
-export const getCommunityMemberSettingsForTrustedUserInternal = internalQuery({
-  args: { userId: v.id("users"), communityId: v.id("communities") },
-  handler: async (ctx, args) => await readCommunityMemberSettingsForUser(ctx, args),
-});
-
-export const saveCommunityMemberSettingsForTrustedUserInternal = internalMutation({
-  args: { userId: v.id("users"), communityId: v.id("communities"), muted: v.boolean() },
-  handler: async (ctx, args) => await saveCommunityMemberSettingsForUser(ctx, { ...args, mutedUntilIso: null }),
-});
-
 // After a paid member leaves: tell Stripe not to renew. Stripe's own notice
 // ends the subscription (and with it the member's access) when the period ends.
 // A failed call is retried with growing gaps (about a day in all); the
@@ -2126,11 +2065,6 @@ export const cancelCommunitySubscriptionsAtPeriodEndInternal = internalAction({
     await ctx.scheduler.runAfter(delay, internal.communityAdmin.cancelCommunitySubscriptionsAtPeriodEndInternal, { targets: failed, attempt: attempt + 1 });
     return { ok: false, retrying: true };
   },
-});
-
-export const leaveCommunityForTrustedUserInternal = internalMutation({
-  args: { userId: v.id("users"), communityId: v.id("communities") },
-  handler: async (ctx, args) => await leaveCommunityForUser(ctx, args),
 });
 
 export const approvePendingJoinRequestsForOpenAccessInternal = internalMutation({

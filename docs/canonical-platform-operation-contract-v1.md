@@ -170,167 +170,13 @@ function-spec digest
    validating an explicitly requested community. A repeated cursor fails
    closed instead of silently substituting a first-page community.
 
-## Community front ends
+## Community front ends (removed)
 
-Polynet splits into two surfaces:
-
-- **The community's front end** is the member experience: chat, posts,
-  content, events, memory and the agent. Founders vibe-code it, and it acts
-  only through the five verbs.
-- **Polynet Studio** (today's web app) keeps founder administration,
-  settings, analytics, billing, direct messages and account. These never move
-  into front ends.
-
-A front end lives at the community's own domain, behind the Polynet community
-edge (`infra/community-edge`). A domain is registered to exactly one community
-(`communityDomains`, `convex/communityApps.ts`): an exact HTTPS origin, or
-`localhost` / `*.localhost` for development.
-
-Sign-in is invisible when the member is already signed in to Polynet:
-
-1. The edge sends the member to Polynet's login bridge
-   (`/api/auth/community-handoff`) with the community, its callback and a state.
-2. With a live Polynet session, Convex checks membership and that the callback
-   belongs to a registered domain of that community, then issues a one-time
-   code (60 seconds, bound to state and domain, deleted when presented; only
-   hashes stored). A Polynet user who isn't a member yet is sent back to the
-   site's `/join`, which the edge serves on the site's private twin: the
-   community's own join page (`join_url` from the edge's session endpoint),
-   deciding exactly as Studio's funnel does (open, approval or paid, through
-   Studio's cores and checkout). A private twin's own sign-in also signs in
-   someone who isn't a member yet, for Join only: every personal page still
-   requires membership, and the site API re-checks it on every call.
-3. The edge swaps the code server to server (edge secret) for a 30-day session
-   kept in an HttpOnly, host-only cookie on the community's domain. Page code
-   and the community's own Worker never see it. When it expires, the same hop
-   signs the member in again. The session and sign-in-state cookies use the
-   `__Host-` prefix (Secure, `Path=/`, no `Domain`), because every community
-   shares the sites domain and that domain is not a public suffix: a sibling
-   site can set `Domain=polynet.page` cookies, but never a `__Host-` one, so it
-   cannot shadow a member's session or fixate them into its own. For the same
-   reason (sibling sites count as the same site, so the browser sends this
-   site's `SameSite=Lax` cookies with their requests) the edge answers the
-   member endpoints (`/__polynet/api`, `/agent`, `/agent/messages`, `/upload`,
-   `/files/*`, `/account`, `/auth/session`, `/auth/logout`) only for the site's
-   own pages: `Sec-Fetch-Site: same-origin`, or, from a browser without Fetch
-   Metadata, a matching `Origin` on writes. Anything else gets 403
-   `cross_site_request`; opening a file link (a navigation) still works. A
-   site's own responses can't set Polynet's cookies: the edge drops any
-   `Set-Cookie` naming one.
-
-The edge forwards `/__polynet/api` to `POST /runtime/app` with the edge secret
-and the session; the backend answers nothing else, so a token is useless
-outside the edge. Each request runs the canonical executor as principal
-`community_app`:
-
-- authority = the member's current access ∩ the mounted community, re-derived
-  on every request; revoking membership, the session or the domain takes
-  effect immediately;
-- member lane only, even when the member owns the community: no `builder/`
-  paths and no admission or milestone capabilities;
-- community paths only: no platform root, other communities, user profiles or
-  direct messages;
-- channel writes are the member's own posts (actor `human`) through the trusted
-  composer, with `community_app` canonical receipts; file attachments are refused.
-
-Chat through the door, the same for every actor:
-
-- `polynet_list` on `channels/<slug>/` returns recent posts and replies with
-  `object_type`, a reply's `root_ref`, the author's `display_name`, `handle` and
-  `avatar_url`, `reactions`, the caller's own `reacted_by_me`, `by_me`,
-  `can_edit`, `reply_count`, `edited_at` and `snippet_truncated`; when the
-  500-character snippet was cut, `text` carries the whole post. `by_me` covers
-  posts the community agent made for the caller (they may delete those);
-  `can_edit` is their own words only. Posts by the retired personal agent list
-  as `community_agent`.
-- `polynet_list` on `channels/<slug>/interaction:root:<id>/` returns that post
-  and its replies, oldest first.
-- `polynet_write` with `update` or `delete` on a post's `.md` path edits or
-  deletes the caller's own post only, even for owners; moderating others'
-  posts stays in Studio.
-- Listing the community folder (`/communities/<slug>/`) returns
-  `community: { slug, name }` and, for a member, `viewer: { display_name,
-  handle, avatar_url, role }`. A post whose text contains `@<name>` and whose
-  `content.mentions` include `{ agentKey: "community_agent" }` asks the
-  community agent, which replies in the channel (community-funded).
-- `polynet_call` `community.interaction.react` sets the caller's reaction
-  (`ref`, `emoji`, `on`), so retries are safe.
-- `polynet_call` `community.lesson.set_done` marks a lesson (`ref`
-  `resource:<id>`) done or not done for the caller (`done`), so retries are
-  safe. Lessons listed or read for that member carry `done: true`; nobody
-  else sees it.
-- A post's `content.mentions` may also name members as `{ userId }` (the id in
-  a member's `ref`, `user:<id>`); the text must contain each one's `@handle`.
-
-Studio's member rails, through the door (a member's own read state and
-presence; never the community agent, never direct messages):
-
-- Each `channels/` entry carries the caller's `unread`, `mentioned`,
-  `latest_activity_at` and `seen_through_at` (milliseconds or null), from
-  Studio's attention projection; listing never moves them.
-- `polynet_call` `community.channel.mark_read` (`channel`, optional
-  `through_at` in milliseconds) advances the caller's read position through
-  Studio's clamped acknowledgement: never past what is readable, never back.
-- `polynet_call` `community.presence.heartbeat` (`{}`) renews the caller's
-  presence lease, and `community.typing.set` (`channel`, `on`, optional
-  `thread_ref`) sets or clears their typing lease. Both set rather than toggle,
-  and both are `community_app` only: an agent or harness never makes a member
-  look present.
-- `polynet_read` `presence.json` returns `{ online_count, online_count_capped,
-  members: [{ ref, name, handle, avatar_url }] }`; `members/<handle>.json` (or
-  `members/by-user/<id>.json`) returns `{ ref, name, handle, avatar_url, role,
-  online, bio, links }`, exactly what Studio shows a fellow member, when both
-  reader and subject are active here (otherwise `semantic_not_found`). Member
-  entries in `members/` carry `handle`, `avatar_url` and `online`. The
-  community agent reads neither JSON document.
-
-Community pages through the door: `events/` lists upcoming events with
-times, location and link; `resources/` lists module folders and resource
-documents to read; `memory/` lists the top accepted memories the member can
-read (up to 12, recorded as a retrieval like a search), and `polynet_search`
-on `memory/` finds more. Front ends reach memory as their trusted member,
-since they have no Convex identity. Creating events and resources stays in
-Studio.
-
-Files: the page posts a file to the edge's `/__polynet/upload` (headers
-`x-polynet-channel`, `x-polynet-idempotency-key`, optional `x-polynet-root-id`
-for a reply) before writing the post with the same idempotency key and
-`content.attachments: [{ attachmentId }]`; the post claims it. Limits and
-content checks are Studio's. Listings show files as
-`attachments: [{ ref: "attachment:<id>", name, kind, mime, size }]`, and the
-page loads them from `/__polynet/files/<id>`: images inline, everything else
-as a download, only within the session's community.
-
-The community agent (Agent page): the edge forwards `POST /__polynet/agent` (`{ text,
-message_key }`) to `/runtime/app/agent` and `GET /__polynet/agent/messages`
-to `/runtime/app/agent_messages`, with the edge secret and session. A turn
-runs Studio's runtime harness on the member's own conversation for this
-community (the one Studio's Agent page shows), streamed as server-sent events.
-The page sends only text: the thread, community, model and funding are fixed
-server-side, and the community's AI allowance pays as in Studio. Because the
-front end has no Convex identity, the turn runs on a context
-(`convex/communityAppAgentTurn.ts`) that sends exactly the identity-bound calls
-to internal twins carrying the authenticated member; any other identity-bound
-call fails closed. The agent stays in the member lane, even for owners. What it writes for the
-member is the community agent's post, attributed to that member
-(`on_behalf_of_user_id` in Studio's read model).
-
-Live updates: the edge's `/__polynet/auth/session` gives a signed-in page the
-Convex URL and a **watch-only token** (`pnw_`), derived from the session token
-(only its hash is stored). The page subscribes to the public query
-`communityLive:watch` with that token and a channel path; it returns only a
-version that changes when anything in the channel changes (posts, replies,
-edits, deletions, reactions, the channel itself), and the page re-reads the
-channel through the door. A channel watch also returns who else is typing there
-(`typing: [{ ref, name, avatar_url, thread_ref, expires_in_ms }]`). Watching
-`presence.json` returns a version that changes when the set of members online
-changes; the page re-reads `presence.json`. `watch` re-checks the session, membership and channel
-access on every run, so losing any of them turns the subscription off live. The
-watch token cannot call the API and carries no content.
-
-API rate limits belong at the edge. Retrieval logs record these reads on the
-`external_mcp` surface; a dedicated surface is a follow-up.
-
+Community sites and their edge were removed on Nov 13, 2026. A community's
+public page is `/c/<slug>` in the app (`convex/communityLanding.ts`), where
+people join; members use the app. A builder's own app connects through
+connected apps (`convex/connectedApps.ts`), which ask Polynet, server to
+server, what a person may do.
 
 ## The Polynet MCP: every role, in its own lens
 
@@ -344,7 +190,7 @@ door gives the caller the lens of their role there
 - **moderator** (owners, admins, moderators): also `builder/join-requests/`,
   `community.admission.approve` / `.deny`, and `community.interaction.remove`;
 - **builder** (owners and admins who manage resources): also the rest of
-  `builder/`, workflow decisions and `community.site.deploy`.
+  `builder/` and workflow decisions.
 
 A post or reply written through someone's own AI (`external_mcp`), like one
 from their site (`community_app`), is that person's own post: stored as a
@@ -399,50 +245,7 @@ Every `polynet_call` answers in the published output shape:
 fails if any input they accept is missing from the published call schema, or
 an answer lacks a required output field.
 
-Writes a person makes through their own AI (`external_mcp`) or their site
-(`community_app`) share one budget of 60 a minute
+Writes a person makes through their own AI (`external_mcp`) share one budget of 60 a minute
 (`convex/memberWriteRateLimit.ts`). Over it, the call is `rate_limited`
 with `retry_after_ms`. Reads, presence, typing and read positions don't
 count; the community agent is bounded by AI quota instead.
-
-Builders publish their community's site with `polynet_call`
-`community.site.deploy` (`input.files`: `"/path" -> { content, encoding }`,
-`utf8` or `base64`, with `/index.html`; up to 200 files and 5 MB). It is the
-same deploy path as `npx @polynet/cli deploy` (`convex/communitySiteDeploy.ts`):
-Cloudflare receives only the files it lacks, the site goes live at
-`https://<slug>.<sites domain>`, and the receipt records the manifest (paths,
-hashes, sizes), not the contents.
-
-Both paths first run the site checks in `packages/polynet-cli/checks.mjs`
-(the same module `polynet check` uses). Errors stop the deploy
-(`site_checks_failed` on the MCP): a site without a root `index.html`; a
-site where no page (or script, for framework builds; JavaScript comments
-don't count) places `<polynet-channels>`, `<polynet-chat>` and
-`<polynet-members>`, Polynet's required blocks; a page without
-`<html lang>`, a `<title>` or a zoomable viewport, an `<img>` without `alt`, a
-button or link without a name. Warnings come back with the result. The checks
-are a guardrail for agents, not a security boundary: the CLI runs them
-locally. The Polynet shell isn't checked because the edge guarantees it: it
-adds `/__polynet/ui.js` to every HTML page that doesn't load it, and `ui.js`
-mounts a fixed top-right `<polynet-account>` on a page that has none shortly
-after load. The shell's account data (`/__polynet/account`) is readable by any
-script on the site, so it covers the current community only (member name,
-handle, avatar, role here) and never lists the member's other communities.
-Those are on the site's private twin (`<slug>--me<suffix>.<sites domain>`,
-`/communities`), where the edge strips every script from the site's frame and
-only Polynet's code runs; the deploy registers the twin's origin beside the
-site's (`communityDomains.kind = "private"`), and its read
-(`/runtime/app/me/communities`) answers only a session minted there
-(`communityAppSessions.kind = "private"`). So do the member's settings there
-(`/runtime/app/me/settings`, `handle`, `profile`, `avatar_upload`, `avatar`,
-`notifications`, `leave`), which also require current membership and call the
-same cores as Studio's settings (profile write, handle check, avatar upload
-URL, email preferences, community member settings, leave), and the member's
-direct messages there (`/runtime/app/me/messages`, `messages/conversation`,
-`start`, `send`, `upload`, `read`, `mute`, `typing`, `block`), which run the
-helpers Studio's DM functions run; their live signal
-(`communityLive:watchMessages`) answers only a private session's watch token,
-with versions only. Signing out on
-either origin returns a short-lived ticket (`session_revoke` →
-`signout_ticket`) that ends the other origin's session for the same member in
-the same browser only.

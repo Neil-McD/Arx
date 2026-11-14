@@ -2289,26 +2289,6 @@ async function loadModerationTarget(ctx: any, args: { communityId: any; ref: str
   return { targetType, target };
 }
 
-export const readInteractionForTrustedModeratorInternal = internalQuery({
-  args: { userId: v.id("users"), communityId: v.id("communities"), ref: v.string() },
-  handler: async (ctx, args) => {
-    await requireCommunityModerator({ ctx, communityId: args.communityId, userId: args.userId });
-    const found = await loadModerationTarget(ctx, args);
-    if (!found || found.target.status !== "live") return null;
-    await requireTargetChannelAccess({ ctx, target: found.target, userId: args.userId });
-    const author = found.target.actorType === "human" && found.target.actorUserId
-      ? await resolveUserProfileDisplayProjection(ctx, found.target.actorUserId)
-      : null;
-    return {
-      ref: args.ref,
-      author: author?.display_name ?? (found.target.actorType === "human" ? "A member" : "The community agent"),
-      text: String(found.target.contentSummary ?? "").slice(0, 600),
-      mine: normalizeIdValue(found.target.actorUserId) === normalizeIdValue(args.userId),
-      created_at: new Date(found.target.createdAt).toISOString(),
-    };
-  },
-});
-
 export const removeInteractionForTrustedModeratorInternal = internalMutation({
   args: { userId: v.id("users"), communityId: v.id("communities"), ref: v.string() },
   handler: async (ctx, args) => {

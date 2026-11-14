@@ -84,10 +84,13 @@ test("acting on the doorstep counts as started joining, once per person a while"
     } as any);
     return { communityId, visitorId };
   });
-  const { internal } = await import("./_generated/api");
-  await t.mutation(internal.communityAppJoin.joinCommunityAppVisitorInternal, { userId: visitorId, communityId });
-  await t.mutation(internal.communityAppJoin.cancelCommunityAppJoinRequestInternal, { userId: visitorId, communityId });
-  await t.mutation(internal.communityAppJoin.joinCommunityAppVisitorInternal, { userId: visitorId, communityId });
+  const { api } = await import("./_generated/api");
+  const visitor = t.withIdentity({ subject: "visitor-subject" });
+  const asVisitor = { communitySlug: "club", authSubject: "visitor-subject" };
+  await visitor.mutation(api.communityLanding.joinCommunityFromLanding, asVisitor);
+  await visitor.mutation(api.communityLanding.cancelCommunityJoinRequestFromLanding, asVisitor);
+  await visitor.mutation(api.communityLanding.joinCommunityFromLanding, asVisitor);
+  void communityId;
   const started = await t.run(async (ctx) => (await ctx.db.query("communityAnalyticsEvents").collect())
     .filter((row) => row.eventType === "funnel_join_started").map((row) => [row.visitorKey, row.userId]));
   expect(started).toEqual([[`user:${visitorId}`, visitorId]]);

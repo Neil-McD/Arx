@@ -1,6 +1,6 @@
 import { internal } from "./_generated/api";
 import { internalMutation, internalQuery, mutation, query } from "./_generated/server";
-import { communityHasCustomSite, storedCommunityMemberExperience, moveCommunitySiteAddresses, registerCommunitySiteAddresses, requireSiteReadySlug } from "./communitySites";
+import { communityHasCustomSite, requireCommunitySlugShape, storedCommunityMemberExperience } from "./communitySites";
 import { ConvexError, v } from "convex/values";
 import { recordCriticalAuditEvent } from "./criticalAudit";
 import { requireOwnerBelowFreeCommunityLimit } from "./communityCore";
@@ -677,7 +677,7 @@ export const createCommunity = mutation({
     // a community created with its own verified Agent plan is never capped.
     if (!operatorComped && !founderSubscription) await requireOwnerBelowFreeCommunityLimit(ctx, ownerId);
     const slug = normalizeSlug(args.slug);
-    requireSiteReadySlug(slug);
+    requireCommunitySlugShape(slug);
     const existing = await ctx.db
       .query("communities")
       .withIndex("by_slug", (q) => q.eq("slug", slug))
@@ -765,8 +765,6 @@ export const createCommunity = mutation({
       baselineAt: nowMs,
     });
     await ensureGeneralChannel({ ctx, communityId, nowMs });
-    // On its own site from the start (Polynet's default until the founder deploys one).
-    await registerCommunitySiteAddresses(ctx, { _id: communityId, slug });
     await ctx.scheduler.runAfter(
       0,
       internal.communityInteractions.createCommunityAgentCanonicalInteractionInternal,
@@ -859,9 +857,7 @@ async function saveCommunitySettingsCore(ctx: any, args: any) {
 
   const previousAvatarStorageId = community.avatarStorageId;
   const previousBannerStorageId = community.bannerStorageId;
-  // Its site addresses move with the slug (or the rename is refused, before anything changes).
-  if (settingsState.normalizedSlug !== String(community.slug ?? "")) requireSiteReadySlug(settingsState.normalizedSlug);
-  await moveCommunitySiteAddresses(ctx, community, settingsState.normalizedSlug);
+  if (settingsState.normalizedSlug !== String(community.slug ?? "")) requireCommunitySlugShape(settingsState.normalizedSlug);
 
   await ctx.db.patch(community._id as any, {
     name: settingsState.nextName,

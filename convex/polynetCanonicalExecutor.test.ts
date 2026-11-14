@@ -212,6 +212,7 @@ test("self-context query rechecks access after path resolution and refuses direc
 const modules = import.meta.glob([
   "./communityOwnerApprovals.ts",
   "./communityAppJoin.ts",
+  "./communityLanding.ts",
   "./communityCompilerDigest.ts",
   "./communityPublic.ts",
   "./communityOntologyCards.ts",
@@ -244,18 +245,16 @@ const modules = import.meta.glob([
   "./_generated/**/*.*s",
 ]);
 
-// Join, or withdraw a request, the way a community's site does (its private
-// twin's join runs these), as the signed-in user with this subject.
+// Join, or withdraw a request, the way a community's landing page does
+// (/c/<slug>), as the signed-in user with this subject.
 async function siteJoin(t: any, subject: string, target: { communitySlug?: string; communityId?: any }, cancel = false) {
-  const ids = await t.run(async (ctx: any) => ({
-    userId: (await ctx.db.query("users").withIndex("by_authSubject", (q: any) => q.eq("authSubject", subject)).first())?._id,
-    communityId: target.communityId
-      ?? (await ctx.db.query("communities").withIndex("by_slug", (q: any) => q.eq("slug", target.communitySlug)).first())?._id,
-  }));
-  if (!ids.communityId) throw new Error("community_not_found");
-  return await t.mutation(
-    cancel ? internal.communityAppJoin.cancelCommunityAppJoinRequestInternal : internal.communityAppJoin.joinCommunityAppVisitorInternal,
-    ids,
+  const communitySlug = target.communitySlug
+    ?? (await t.run(async (ctx: any) => (await ctx.db.get(target.communityId))?.slug));
+  if (!communitySlug) throw new Error("community_not_found");
+  const signedIn = t.withIdentity({ subject });
+  return await signedIn.mutation(
+    cancel ? api.communityLanding.cancelCommunityJoinRequestFromLanding : api.communityLanding.joinCommunityFromLanding,
+    { communitySlug, authSubject: subject },
   );
 }
 
@@ -3157,7 +3156,7 @@ test("the published polynet_call schema covers every input any role's actions ac
   Object.assign(everyRole, await accepted(memberMcp));
   expect(Object.keys(everyRole)).toEqual(expect.arrayContaining(["community.interaction.react", "community.lesson.set_done",
     "community.channel.mark_read", "community.presence.heartbeat", "community.typing.set", "community.interaction.remove",
-    "community.admission.approve", "community.site.deploy"]));
+    "community.admission.approve"]));
   for (const [operation, keys] of Object.entries(everyRole)) {
     for (const key of keys) expect(published, `${operation} accepts ${key}`).toContain(key);
   }
