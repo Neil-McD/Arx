@@ -984,6 +984,11 @@
   padding-top: 6px;
   border-top: 1px solid var(--border-default);
 }
+:root[data-design="v1"] .community-switcher-popover.is-floating {
+  position: fixed;
+  right: auto;
+  z-index: 1000;
+}
 :root[data-design="v1"] .community-switcher-item { min-width: 0; }
 :root[data-design="v1"] .community-switcher-item > svg { flex: 0 0 auto; }
 :root[data-design="v1"] .community-switcher-search {
@@ -1081,13 +1086,6 @@
     padding: 0;
   }
 
-  :root[data-design="v1"] .app-shell.community-layout.sessions-compact.no-right .community-switcher-popover {
-    position: fixed;
-    top: 12px;
-    right: auto;
-    left: 64px;
-    width: 240px;
-  }
 
   :root[data-design="v1"] .app-shell.community-layout.sessions-compact.no-right .community-nav .nav-item {
     justify-content: center;
