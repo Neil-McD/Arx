@@ -294,7 +294,7 @@ assert.match(
 );
 assert.match(
   resourceContracts,
-  /handleCreateBlankPageDraft: \(moduleId: string\) => Promise<CommunityResource \| null>/,
+  /handleCreateBlankPageDraft: \(moduleId: string, title\?: string\) => Promise<CommunityResource \| null>/,
   "resources panel contract must require a course for blank lesson creation",
 );
 assert.match(
