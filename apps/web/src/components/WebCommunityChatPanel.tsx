@@ -1,4 +1,5 @@
 import { useCommunityAgentOn } from "../controllers/communityAgentOn";
+import { isImeComposing } from "../controllers/communityComposerTextEditing";
 import type {
   ChangeEventHandler,
   ClipboardEventHandler,
@@ -1229,6 +1230,7 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
               onScroll={(event) => syncMentionComposerHighlightScroll(event.currentTarget)}
               onPaste={onCommunityAttachmentPaste}
               onKeyDown={(event) => {
+                if (isImeComposing(event)) return;
                 if (mainMention.handleKeyDown(event)) return;
                 if (
                   handleMentionTokenBackspace({
@@ -1374,6 +1376,7 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
               onScroll={(event) => syncMentionComposerHighlightScroll(event.currentTarget)}
               onPaste={handleDrawerReplyAttachmentPaste}
               onKeyDown={(event) => {
+                if (isImeComposing(event)) return;
                 if (drawerMention.handleKeyDown(event)) return;
                 if (
                   handleMentionTokenBackspace({

@@ -1,4 +1,5 @@
 import { ArrowLeft, Ban, Bell, BellOff, MessageCircle, MoreHorizontal, Paperclip, RotateCcw } from "lucide-react";
+import { isImeComposing } from "../controllers/communityComposerTextEditing";
 import type { ChangeEvent, ComponentProps, DragEvent, FormEvent, MutableRefObject, ReactNode } from "react";
 import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type {
@@ -794,6 +795,7 @@ export function WebDirectMessagePanel(props: WebDirectMessagePanelProps) {
                   onChange={(event) => props.onInputChange(event.target.value)}
                   onBlur={() => { void props.onComposerBlur?.(); }}
                   onKeyDown={(event) => {
+                    if (isImeComposing(event)) return;
                     if (event.key === "Enter" && !event.shiftKey) {
                       event.preventDefault();
                       if (!canSendDirectMessage) return;
@@ -1057,6 +1059,7 @@ export function WebDirectMessagePanel(props: WebDirectMessagePanelProps) {
               void props.onComposerBlur?.();
             }}
             onKeyDown={(event) => {
+              if (isImeComposing(event)) return;
               if (event.key === "Enter" && !event.shiftKey) {
                 event.preventDefault();
                 if (!canSendDirectMessage) return;
