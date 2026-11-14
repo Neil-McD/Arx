@@ -51,11 +51,14 @@ assert.doesNotMatch(
   /isVisitorCommunitySurface|canViewMembers:[\s\S]{0,260}shellPublicRoute\.kind === "community_funnel"/,
   "the public funnel must not inherit visitor shell presence or member-directory controls",
 );
-// Studio's /c/<slug> only hands over to the community's own site.
+// /c/<slug> is the community's landing page in the app (Nov 13): it never
+// sends visitors to a site, and it joins through the server's own join rules.
+const landingPage = read("apps/web/src/components/WebCommunityLandingPage.tsx");
+assert.doesNotMatch(landingPage, /site_url|polynet\.page/, "the landing page must not hand visitors to a community site");
 assert.match(
-  read("apps/web/src/components/WebCommunityHandoff.tsx"),
-  /communitySiteRedirectTarget[\s\S]*window\.location\.replace\([^)]*\btarget\b/,
-  "Studio's /c/<slug> must hand visitors over to the community's site",
+  read("convex/communityLanding.ts"),
+  /joinPublicCommunityInternal\(\{ ctx, community, userId, nowMs \}\)/,
+  "joining from the landing page must run Studio's own join decision",
 );
 
 

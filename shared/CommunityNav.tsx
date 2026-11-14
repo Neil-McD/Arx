@@ -5,7 +5,6 @@ import {
   Check,
   ChevronDown,
   ChevronUp,
-  ExternalLink,
   GripVertical,
   Hash,
   House,
@@ -167,15 +166,6 @@ function trapModalFocus(event: KeyboardEvent, container: HTMLElement | null) {
 }
 
 // The community's own site when it has one: its front door, and what an invite shares.
-function resolveCommunitySiteUrl(siteUrlRaw: string | null | undefined): string | null {
-  try {
-    const site = new URL(String(siteUrlRaw ?? ""));
-    return site.protocol === "https:" ? `${site.origin}/` : null;
-  } catch {
-    return null;
-  }
-}
-
 function resolveCommunityJoinUrl(slugRaw: string | null | undefined): string | null {
   const slug = String(slugRaw ?? "").trim();
   if (!slug) return null;
@@ -253,8 +243,8 @@ export const CommunityNav = memo(function CommunityNav({
     canViewActiveCommunityAnalytics;
   const activeCommunityName = activeCommunity?.name?.trim() || null;
   const activeCommunityBannerUrl = activeCommunity?.banner_url?.trim() || null;
-  const siteUrl = resolveCommunitySiteUrl(activeCommunity?.site_url);
-  const joinUrl = siteUrl ?? resolveCommunityJoinUrl(activeCommunity?.slug);
+  // The invite link is the community's landing page in the app (Nov 13).
+  const joinUrl = resolveCommunityJoinUrl(activeCommunity?.slug);
   const canCopyJoinLink = Boolean(canViewMembersActiveCommunity && joinUrl && onCopyCommunityJoinLink);
   const inviteTitle = didCopyJoinLink ? "Copied invite link" : "Copy invite link";
   const showChannelLoadingSkeleton =
@@ -782,22 +772,8 @@ export const CommunityNav = memo(function CommunityNav({
             ) : null}
           </div>
         ) : null
-      ) : canCopyJoinLink || siteUrl ? (
+      ) : canCopyJoinLink ? (
         <div className="community-nav-footer">
-          {siteUrl ? (
-            <a
-              className="nav-item community-nav-site"
-              href={siteUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              title="Visit the community's site"
-            >
-              <span className="nav-icon">
-                <ExternalLink size={16} strokeWidth={1.9} aria-hidden="true" />
-              </span>
-              <span className="nav-item-label">Visit site</span>
-            </a>
-          ) : null}
           {canCopyJoinLink ? (
           <button
             className={`nav-item community-nav-invite${didCopyJoinLink ? " is-copied" : ""}`}
