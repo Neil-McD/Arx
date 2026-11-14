@@ -75,7 +75,6 @@ type BuildWebCommunitySurfaceProjectionParams = {
   aiAgentHandbookEditorProps: WebCommunitySecondaryPanelsProps["aiAgent"]["handbookEditorProps"];
   aiAgentPlanProps?: WebCommunitySecondaryPanelsProps["aiAgent"]["agentPlan"];
   canViewActiveCommunityAnalytics: WebCommunitySecondaryPanelsProps["analytics"]["canViewActiveCommunityAnalytics"];
-  canViewPlatformAnalytics: WebCommunitySecondaryPanelsProps["analytics"]["canViewPlatformAnalytics"];
   analyticsState: WebCommunitySecondaryPanelsProps["analytics"]["state"];
   analyticsActions: WebCommunitySecondaryPanelsProps["analytics"]["actions"];
   resourcesState: WebCommunitySecondaryPanelsProps["resources"]["state"];
@@ -213,7 +212,6 @@ export function buildWebCommunitySurfaceProjection(
       hasActiveCommunity: Boolean(params.activeCommunity),
       hasSession: params.hasAuthenticatedPresentation,
       canViewActiveCommunityAnalytics: params.canViewActiveCommunityAnalytics,
-      canViewPlatformAnalytics: params.canViewPlatformAnalytics,
       onRequireSignIn: params.requireSignIn,
       state: params.analyticsState,
       actions: params.analyticsActions,

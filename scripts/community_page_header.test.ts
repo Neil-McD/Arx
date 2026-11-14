@@ -27,8 +27,7 @@ test("design v1: the frame owns one header line above the content, and the old t
   const html = renderToStaticMarkup(React.createElement(CommunityPageFrame, null, page));
   // The line is the channel header's element, so every page's header matches a channel's.
   // The header line is the first row of the content column, so it lines up with the content.
-  // Then the right column's panel button (shown only on narrower windows, by CSS).
-  expect(html).toMatch(/^<div class="community-page-body"><header class="community-channel-header community-page-header"><\/header><div class="community-page-rail-toggle"><button type="button" class="right-column-toggle"[\s\S]*?<\/button><\/div><div class="community-tab-scroll">/);
+  expect(html).toMatch(/^<div class="community-page-body"><header class="community-channel-header community-page-header"><\/header><div class="community-tab-scroll">/);
   // The right column's slot follows the content; a page that has nothing for it leaves it empty.
   expect(html).toContain('<aside class="community-page-rail"></aside>');
   expect(html).not.toContain("classic-row");

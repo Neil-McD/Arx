@@ -802,7 +802,7 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
       !conversation.viewer_muted && Boolean(conversation.has_unread || Number(conversation.unread_count ?? 0) > 0));
     const first = needsReply ?? withMessages[0];
     // Narrower windows show Inbox as layers: start on the list, not inside a conversation.
-    if (typeof window !== "undefined" && window.matchMedia("(max-width: 1179px)").matches) return;
+    if (typeof window !== "undefined" && window.matchMedia("(max-width: 899px)").matches) return;
     if (first) openConversationRef.current?.(first, { deferRead: true });
   }, [activeConversationId, conversations, inboxIsPage, isLoadingInbox, isOpen, openConversationRequest, openRequest]);
   useEffect(() => {
