@@ -38,6 +38,7 @@ export type AnalyticsSummaryLike = {
   retention_window: number | null;
   total_resources: number | null;
   resources_added_window: number | null;
+  plans?: Array<{ key: string; name: string; members: number; mrr_base_units: number | null }>;
 };
 
 export type AnalyticsPointLike = {

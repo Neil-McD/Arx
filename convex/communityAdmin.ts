@@ -2450,6 +2450,8 @@ export const getCommunityAnalyticsSnapshot = query({
     let currency: string | null = null;
     let currencyDecimals: number | null = null;
     let mixedCurrency = false;
+    // Who is on which plan now: '' is the base membership, else a tier's key.
+    const planTotals = new Map<string, { mrr: number; users: Set<string> }>();
 
     for (const subscription of subscriptions) {
       const status = String(subscription.status ?? "");
@@ -2483,6 +2485,11 @@ export const getCommunityAnalyticsSnapshot = query({
           : Math.max(0, Math.floor(pricePoint.amountBaseUnits));
       if (isCurrentRecurring) {
         mrrBaseUnits += monthlyBaseUnits;
+        const planKey = String(pricePoint.tierKey ?? "");
+        const plan = planTotals.get(planKey) ?? { mrr: 0, users: new Set<string>() };
+        plan.mrr += monthlyBaseUnits;
+        plan.users.add(String(subscription.userId ?? subscription._id));
+        planTotals.set(planKey, plan);
       }
       monthlyRows.push({
         createdAt: subscription.createdAt,
@@ -2491,11 +2498,45 @@ export const getCommunityAnalyticsSnapshot = query({
       });
     }
 
+    // Active: a member (or the owner) who had the community open in the window.
+    const memberIds = new Set<string>([String(community.ownerId), ...rows.map((row) => String(row.userId))]);
+    const presenceRows = (await ctx.db
+      .query("communityPresence" as any)
+      .withIndex("by_community_lastSeenAt", (q: any) =>
+        q.eq("communityId", args.communityId).gte("lastSeenAt", sinceMs),
+      )
+      .take(MAX_ANALYTICS_SNAPSHOT_EVENT_ROWS)) as Array<{ userId: string }>;
+    const activeMembers = new Set(
+      presenceRows.map((row) => String(row.userId)).filter((id) => memberIds.has(id)),
+    ).size;
+
+    const paidUsers = new Set<string>();
+    const plans: Array<{ key: string; name: string; members: number; mrr_base_units: number | null }> = [];
+    for (const [key, plan] of planTotals) {
+      plan.users.forEach((id) => paidUsers.add(id));
+      const tier = key
+        ? ((await ctx.db
+            .query("communityTiers" as any)
+            .withIndex("by_community_key", (q: any) => q.eq("communityId", args.communityId).eq("key", key))
+            .first()) as { name?: string } | null)
+        : null;
+      plans.push({
+        key: key || "base",
+        name: String(tier?.name ?? "").trim() || "Membership",
+        members: plan.users.size,
+        mrr_base_units: mixedCurrency ? null : plan.mrr,
+      });
+    }
+    plans.sort((a, b) => (b.mrr_base_units ?? 0) - (a.mrr_base_units ?? 0) || b.members - a.members);
+    const freeMembers = Math.max(0, rows.length - paidUsers.size);
+    if (freeMembers > 0) plans.push({ key: "free", name: "Free", members: freeMembers, mrr_base_units: 0 });
+
     return {
       range,
       bucket,
       generated_at: toIsoString(nowMs),
       summary: {
+        plans,
         page_visits_window: visitRows.length,
         join_starts_window: startedRows.length,
         total_members: 1 + rows.length,
@@ -2505,7 +2546,7 @@ export const getCommunityAnalyticsSnapshot = query({
         mrr_base_units: mixedCurrency ? null : mrrBaseUnits,
         currency: mixedCurrency ? null : currency,
         currency_decimals: mixedCurrency ? null : currencyDecimals,
-        active_members_window: null,
+        active_members_window: activeMembers,
         retention_window: null,
         total_resources: null,
         resources_added_window: null,
