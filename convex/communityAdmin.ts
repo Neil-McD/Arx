@@ -2528,7 +2528,8 @@ export const getCommunityAnalyticsSnapshot = query({
       });
     }
     plans.sort((a, b) => (b.mrr_base_units ?? 0) - (a.mrr_base_units ?? 0) || b.members - a.members);
-    const freeMembers = Math.max(0, rows.length - paidUsers.size);
+    // Everyone else, the owner included, is on no paid plan.
+    const freeMembers = Math.max(0, 1 + rows.length - paidUsers.size);
     if (freeMembers > 0) plans.push({ key: "free", name: "Free", members: freeMembers, mrr_base_units: 0 });
 
     return {
