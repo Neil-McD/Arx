@@ -3590,3 +3590,6 @@
   overflow-y: auto;
 }
 :root[data-design="v1"] .mobile-settings-detail-title { display: none; }
+/* The phone's top bar has the way back; the list starts below it. */
+:root[data-design="v1"] .mobile-global-shell:not(.has-community-rail) .settings-nav-v1 .settings-nav-back { display: none; }
+:root[data-design="v1"] .mobile-global-shell:not(.has-community-rail) .settings-nav-v1 { padding-top: 56px; }
