@@ -1,8 +1,9 @@
 // Design system v1: Knowledge as a classroom, in the mock's markup
 // (docs/design/hifi-mock, Knowledge). The library: ask, continue where you
 // left off, and the courses as cards with progress, in pages. An open course:
-// its lesson, Mark done and Next, with the outline in the right column. Notes
-// only ever appear in the right column ("Learned this week").
+// its lesson, Mark done and Next, with the outline in the right column. Under
+// the shelf, one list of notes, files and links (KitKnowledgeList); a note
+// opens in the right column.
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   fetchCourseProgressSummary,
@@ -24,7 +25,7 @@ import { WebCommunityResourceViewerContent } from "../components/WebCommunityRes
 import { NoteForm, OpenNote, noteIsNew } from "./KitKnowledgeNotes";
 import { KitLessonEditor, type LessonPatch } from "./KitLessonEditor";
 import { Btn, cx, Icon, KitApp, Rail, Sec, Sep, TextLink } from "./kit";
-import { KitMemoryMap } from "./KitMemoryMap";
+import { KitKnowledgeList, type KnowledgeAddResult } from "./KitKnowledgeList";
 import { useCommunityAgentOn } from "../controllers/communityAgentOn";
 
 const SHELF = 6;
@@ -72,6 +73,8 @@ export function KitClassroom(props: {
   onEditCourseDetails: (moduleId: string) => void;
   // Publish a course to members, or take it back to a draft (hosts).
   onSetCourseStatus?: (moduleId: string, status: "draft" | "live") => Promise<unknown>;
+  // Hosts hand Polynet links and files to read.
+  onAddSources?: (input: { links: string[]; files: File[] }) => Promise<KnowledgeAddResult>;
   // Hosts write lessons in place.
   lessonEditing: {
     save: (resourceId: string, patch: LessonPatch) => Promise<void>;
@@ -166,8 +169,6 @@ export function KitClassroom(props: {
     }
   };
 
-  const fresh = notes.filter((entry) => noteIsNew(entry, now)).slice(0, 4);
-  const shownNotes = fresh.length ? fresh : notes.slice(0, 3);
   const openNote = note?.slug ? notes.find((entry) => entry.slug === note.slug) ?? null : null;
 
   // ---------- the right column
@@ -203,27 +204,8 @@ export function KitClassroom(props: {
 
   const libraryRail = (
     <>
-      <Sec label={`What ${props.communityName} knows`}>
-        <div className={cx("kmini")}><KitMemoryMap /></div>
-        <span className={cx("sub")}>{notes.length} {notes.length === 1 ? "note" : "notes"} · {courses.length} {courses.length === 1 ? "course" : "courses"}</span>
-      </Sec>
-      {shownNotes.length || canWriteNotes ? (
-        <>
-          <Sep />
-          <div className={cx("sec")}>
-            <span className={cx("lab")} style={{ display: "flex", alignItems: "center", gap: 6, color: "var(--aurora-ink)" }}><Icon name="spark" extra="xs" />{fresh.length ? "Learned this week" : "What it has learned"}</span>
-            {shownNotes.map((entry, index) => (
-              <button key={entry.slug} type="button" className={cx("src")} style={index ? { marginTop: -8 } : undefined} onClick={() => setNote({ slug: entry.slug, mode: "read" })}>
-                <span className={cx("sdot", noteIsNew(entry, now) && "fresh")} />{entry.title}{noteIsNew(entry, now) ? <em>new</em> : null}
-              </button>
-            ))}
-            {canWriteNotes ? <TextLink onClick={() => setNote({ slug: null, mode: "new" })}>Write a note</TextLink> : null}
-          </div>
-        </>
-      ) : null}
       {courses.length ? (
         <>
-          <Sep />
           {props.canManage ? (
             <Sec label="Learning">
               {courses.filter((entry) => entry.course.module_status === "live").slice(0, 5).map(({ course }) => {
@@ -433,6 +415,19 @@ export function KitClassroom(props: {
             <button type="button" className={cx("btn sm")} disabled={shelf.page >= shelf.pages - 1} onClick={() => setShelfPage(shelf.page + 1)}>Next</button>
           </div>
         ) : null}
+        <KitKnowledgeList notes={notes} now={now}
+          sources={props.canManage ? props.resources.filter((resource) => resource.resource_role === "source") : []}
+          onOpenNote={(slug) => setNote({ slug, mode: "read" })}
+          onAddNote={canWriteNotes ? async (title, text) => {
+            try {
+              await createCommunityNote({ session: props.session, communityId: props.communityId, title, text });
+              await loadNotes();
+              return { ok: true };
+            } catch (error) {
+              return { ok: false, message: error instanceof Error && error.message ? error.message : "That note couldn't be saved. Try again." };
+            }
+          } : undefined}
+          onAddSources={props.canManage ? props.onAddSources : undefined} />
       </div>
     );
   }
