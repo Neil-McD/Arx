@@ -345,7 +345,7 @@ export function useWebCommunityChatController(
   // One send at a time per composer, until its draft is cleared: a second
   // Enter (or Enter and a click) during the session check used to read the
   // same text and post it twice (Nov 13).
-  const sendClaimsRef = useRef(new Set<string>());
+  const sendClaimsRef = useRef(new Map<string, symbol>());
   const sendCommunityMessageNow = useCallback(async (
     draft: WebCommunityMessageSendDraft | undefined,
     releaseClaim: () => void,
@@ -544,8 +544,13 @@ export function useWebCommunityChatController(
   ) => {
     const claim = draft ? "thread" : "main";
     if (sendClaimsRef.current.has(claim)) return;
-    sendClaimsRef.current.add(claim);
-    const release = () => { sendClaimsRef.current.delete(claim); };
+    // Each send releases only its own claim, so a slow earlier send finishing
+    // can't free a later send's claim.
+    const token = Symbol(claim);
+    sendClaimsRef.current.set(claim, token);
+    const release = () => {
+      if (sendClaimsRef.current.get(claim) === token) sendClaimsRef.current.delete(claim);
+    };
     try {
       await sendCommunityMessageNow(draft, release);
     } finally {
