@@ -46,8 +46,8 @@ assert.match(
 );
 assert.match(
   chatPanel,
-  /const communityComposerFocusTargetKey = \(\(\) => \{[\s\S]*profilePanelUserId[\s\S]*return null;[\s\S]*showInteractionProjection && selectedInteractionRootId && drawerReplyTarget[\s\S]*return `thread:\$\{selectedInteractionRootId\}`;[\s\S]*return `main:\$\{activeCommunity\.id\}`;/,
-  "community focus priority must be thread drawer when mounted, otherwise base chat, while profile drawer suppresses focus",
+  /const communityComposerFocusTargetKey = \(\(\) => \{[\s\S]*profilePanelUserId[\s\S]*return null;[\s\S]*showInteractionProjection && selectedInteractionRootId && drawerReplyTarget[\s\S]*return `thread:\$\{selectedInteractionRootId\}`;[\s\S]*return `main:\$\{activeCommunity\.id\}:\$\{interactionProjection\?\.activeChannel\?\.id \?\? ""\}`;/,
+  "community focus priority must be thread drawer when mounted, otherwise the open channel's own box (each channel and pod room takes focus when opened), while profile drawer suppresses focus",
 );
 assert.match(
   chatPanel,

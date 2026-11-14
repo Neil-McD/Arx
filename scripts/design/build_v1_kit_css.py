@@ -243,6 +243,98 @@ css += """
 .app a.btn{text-decoration:none}
 .app .btn.sm.on .ic{width:13px;height:13px}
 
+/* Kit addition: Knowledge's one list of notes, files and links, and the
+   row that adds to it in place (Nov 14 mock). */
+.app .krows{margin-top:8px}
+.app .krow{display:grid;grid-template-columns:18px minmax(0,1fr) auto;gap:0 12px;align-items:center;min-height:48px;width:100%;text-align:left;border-top:1px solid var(--line);color:inherit}
+.app .krows>.krow:first-child{border-top:0}
+.app button.krow:hover .t b{text-decoration:underline;text-decoration-color:var(--line2)}
+.app .krow .ic{width:16px;height:16px;color:var(--ink3)}
+.app .krow .t{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--ink3);font-size:13px}
+.app .krow .t b{font-size:13.5px;font-weight:550;color:var(--ink);margin-right:8px}
+.app .krow .from{display:inline-flex;align-items:center;gap:8px;font-size:12px;color:var(--ink3);white-space:nowrap}
+.app .krow.add .t{color:var(--ink2)}
+.app .kadd{margin-top:10px;border:1px solid var(--line2);background:var(--panel2);border-radius:10px;padding:12px 10px 10px 14px}
+.app .kadd textarea{display:block;width:100%;min-height:44px;padding:0;border:0;outline:0;resize:none;background:transparent;color:var(--ink);font:inherit;font-size:14.5px;line-height:1.5}
+.app .kadd textarea::placeholder{color:var(--ink3)}
+.app .khint{margin-top:8px;font-size:12.5px;color:var(--ink2)}
+.app .kwait{display:flex;flex-direction:column;align-items:flex-start;gap:6px;padding:12px;border-radius:8px;border:1px solid rgba(var(--au),.22);background:rgba(var(--au),.05)}
+.app .kwait p{margin:0;font-size:13.5px;font-weight:500;line-height:1.4;color:var(--ink)}
+
+/* Kit addition: Events (Nov 14 mock). The row that adds an event, the box it
+   opens into, the question Cancel asks in the row, and the public switch. */
+.app .evaddrow{display:flex;align-items:center;gap:12px;width:100%;height:44px;padding:0 14px;border-radius:10px;border:1px solid var(--line2);background:var(--panel2);color:var(--ink2);font-size:14px;text-align:left}
+.app .evaddrow:hover{color:var(--ink);border-color:rgba(var(--w),.18)}
+.app .evaddrow .ic{width:16px;height:16px;color:var(--ink3)}
+.app .evaddrow span{margin-left:auto;font-size:12.5px;color:var(--ink3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.app .evadd{margin-top:0;padding:14px 12px 12px 16px;border-color:rgba(var(--au),.45);box-shadow:0 0 0 4px rgba(var(--au),.08)}
+.app .evline{display:block;width:100%;height:30px;padding:0;border:0;outline:0;background:transparent;color:var(--ink);font:inherit;font-size:17px;font-weight:500}
+.app .evline::placeholder{color:var(--ink3);font-weight:400}
+.app .evhead{font-size:15px;font-weight:550}
+.app .evnote{margin-top:10px;font-size:12px;color:var(--ink3)}
+.app .evread{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+.app .evread button{display:inline-flex;align-items:center;gap:7px;height:28px;padding:0 10px;border-radius:7px;border:1px solid var(--line);background:var(--s1);color:var(--ink);font-size:13px}
+.app .evread button:hover{border-color:var(--line2)}
+.app .evread .ic{width:14px;height:14px;color:var(--ink3)}
+.app .evparts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px 12px;margin-top:12px;padding-right:4px}
+.app .evparts label{display:flex;flex-direction:column;gap:4px;min-width:0}
+.app .evparts label.wide{grid-column:1/-1}
+.app .evparts label>span{font-size:12px;color:var(--ink3)}
+.app .evparts input:not([type=checkbox]),.app .evparts select,.app .evparts textarea{width:100%;box-sizing:border-box;min-height:34px;padding:6px 10px;border-radius:8px;border:1px solid var(--line);background:var(--field);color:var(--ink);font:inherit;font-size:13.5px;line-height:1.5;outline:0;resize:vertical}
+.app .evparts input:focus,.app .evparts select:focus,.app .evparts textarea:focus{border-color:var(--line2)}
+.app .evparts input::placeholder{color:var(--ink3)}
+.app .evparts label.evpublic{flex-direction:row;align-items:flex-start;gap:10px}
+.app .evparts label.evpublic input{margin-top:3px}
+.app .evparts label.evpublic>span{font-size:13.5px;color:var(--ink)}
+.app .evparts label.evpublic small,.app .evswitch small{display:block;margin-top:2px;font-size:12px;color:var(--ink3)}
+.app .everr{margin-top:10px;font-size:13px;color:var(--bad)}
+.app .evfoot{display:flex;align-items:center;gap:8px;margin-top:14px}
+.app .evfoot>span{flex:1;min-width:0;font-size:12.5px;color:var(--ink3)}
+.app .evdim{opacity:.5}
+.app .evname{display:inline;padding:0;border:0;background:none;color:inherit;font:inherit;text-align:left;cursor:pointer}
+.app .evname:hover{text-decoration:underline;text-decoration-color:var(--line2)}
+.app .evask{display:inline-flex;align-items:center;gap:6px;font-size:13px;color:var(--ink2);white-space:nowrap}
+.app .evswitch{display:flex;align-items:flex-start;gap:12px;font-size:13.5px}
+.app .evswitch>span{flex:1;min-width:0}
+.app .evsw{flex:none;position:relative;width:34px;height:20px;margin-top:1px;border-radius:10px;border:0;background:var(--s2);transition:background .16s var(--ease)}
+.app .evsw i{position:absolute;top:3px;left:3px;width:14px;height:14px;border-radius:50%;background:var(--ink2);transition:left .16s var(--ease),background .16s var(--ease)}
+.app .evsw.on{background:var(--go)}.app .evsw.on i{left:17px;background:#fff}
+@media (max-width:720px){.app .evparts{grid-template-columns:minmax(0,1fr)}.app .evaddrow span{display:none}.app .erow{row-gap:8px}}
+
+/* Kit addition: Knowledge's one box at the top (KitKnowledgeAdd): the row it
+   is while closed, how it says back what it read, and the Note / Course
+   switch in its foot. */
+.app .kaddrow{display:flex;align-items:center;gap:12px;width:100%;height:46px;margin-top:20px;padding:0 14px;border-radius:10px;border:1px solid var(--line2);background:var(--panel2);color:var(--ink2);font-size:14px;text-align:left}
+.app .kaddrow:hover{color:var(--ink);border-color:rgba(var(--w),.18)}
+.app .kaddrow .ic{width:16px;height:16px;color:var(--ink3)}
+.app .kaddrow .ic.sp{color:var(--aurora-ink)}
+.app .krot{position:relative;flex:1;min-width:0;height:20px;overflow:hidden}
+.app .krot b{position:absolute;inset:0;font-weight:400;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;animation:krot 9s var(--ease) infinite both}
+.app .krot b+b{animation-delay:-4.5s}
+@keyframes krot{0%,42%{opacity:1;transform:none}50%,92%{opacity:0;transform:translateY(-6px)}93%{opacity:0;transform:translateY(6px)}100%{opacity:1;transform:none}}
+@media (prefers-reduced-motion:reduce){.app .krot b{animation:none}.app .krot b+b{display:none}}
+.app .kaddbox{margin-top:20px;padding:14px 12px 12px 16px;border-color:rgba(var(--au),.45);box-shadow:0 0 0 4px rgba(var(--au),.08)}
+.app .kaddbox textarea{font-size:15px;line-height:1.6;min-height:48px;max-height:260px;overflow-y:auto}
+.app .kreadlab{margin-top:10px;font-size:12px;color:var(--ink3)}
+.app .kread{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+.app .kread span{display:inline-flex;align-items:center;gap:7px;min-height:28px;max-width:100%;padding:3px 10px;border-radius:7px;border:1px solid var(--line);background:var(--s1);color:var(--ink);font-size:13px}
+.app .kread span svg{width:14px;height:14px;flex:none;color:var(--ink3)}
+.app .kread span em{font-style:normal;color:var(--ink3)}
+.app .kread span.dim{color:var(--ink3)}
+.app .kaddfoot{display:flex;align-items:center;flex-wrap:wrap;gap:8px 10px;margin-top:14px}
+.app .kseg{display:inline-flex;padding:2px;border-radius:8px;border:1px solid var(--line2);background:var(--field)}
+.app .kseg button{height:24px;padding:0 10px;border-radius:6px;font-size:12.5px;font-weight:500;color:var(--ink2)}
+.app .kseg button[aria-pressed="true"]{background:var(--s2);color:var(--ink)}
+
+/* Kit addition: the app's own "are you sure?" (KitConfirm), in the palette's
+   layer: a light veil and one small card. */
+.app.palette-part .veil.askveil{-webkit-backdrop-filter:none;backdrop-filter:none;background:rgba(0,0,0,.32)}
+.app .askcard{position:fixed;left:50%;top:min(180px,22vh);width:min(380px,calc(100vw - 32px));transform:translateX(-50%);padding:18px 18px 14px;border-radius:12px;border:1px solid var(--line2);background:var(--pop);box-shadow:var(--pop-shadow);animation:pop .2s var(--ease) both}
+.app .askcard p{margin:0;font-size:14.5px;line-height:1.5;color:var(--ink)}
+.app .askacts{display:flex;justify-content:flex-end;gap:8px;margin-top:16px}
+.app .askacts .btn.no{color:var(--bad);border-color:var(--bad-line)}
+.app .askacts .btn:focus-visible{outline:0;border-color:rgba(var(--w),.34);background:var(--s2)}
+
 /* Kit addition: states the mock doesn't draw, in its own terms. */
 .app .msg.cont{padding-top:3px;padding-bottom:3px}
 .app .msg.cont>.gap{width:36px;flex:none}

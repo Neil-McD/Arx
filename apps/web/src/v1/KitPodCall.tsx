@@ -1,13 +1,9 @@
 // Pod calls (docs/specs/pods-v0.md, slice 3a): the pod's next call in its
-// right column, with its link and "I'm going"; hosts schedule or cancel it.
+// right column, with its link; hosts schedule or cancel it. (No "I'm going":
+// Neil, Nov 14, not needed yet.)
 // A pod call is an event only the pod can see.
-import { useCallback, useEffect, useState } from "react";
-import {
-  cancelCloudCommunityEvent,
-  listCloudCommunityEventGoing,
-  saveCloudCommunityEvent,
-  setCloudCommunityEventGoing,
-} from "../../../../shared/cloudCommunityEventsGateway";
+import { useState } from "react";
+import { cancelCloudCommunityEvent, saveCloudCommunityEvent } from "../../../../shared/cloudCommunityEventsGateway";
 import type { CloudPodDetail } from "../../../../shared/cloudCommunityPodsGateway";
 import { formatMomentWhen } from "../../../../shared/communityHomeMoments";
 import { Btn, Sec, cx } from "./kit";
@@ -25,31 +21,10 @@ export function podRhythmText(rhythm: { recurrence_frequency: string; next_start
 export function KitPodCall(props: { session: unknown; communityId: string; pod: CloudPodDetail; onChanged: () => void }) {
   const { pod } = props;
   const call = pod.next_call;
-  const [going, setGoing] = useState<{ mine: boolean; count: number } | null>(null);
   const [busy, setBusy] = useState(false);
   const [scheduling, setScheduling] = useState(false);
   const [draft, setDraft] = useState<{ title: string; when: string; repeat: Repeat; url: string }>({ title: "", when: "", repeat: "weekly", url: "" });
   const [error, setError] = useState<string | null>(null);
-  const occurrence = call ? Date.parse(call.starts_at) : 0;
-
-  const loadGoing = useCallback(async () => {
-    if (!call) { setGoing(null); return; }
-    try {
-      const rows = await listCloudCommunityEventGoing({ session: props.session, communityId: props.communityId, items: [{ eventId: call.event_id, occurrenceStartsAt: occurrence }] });
-      setGoing({ mine: Boolean(rows[0]?.mine), count: rows[0]?.count ?? 0 });
-    } catch { setGoing(null); }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [call?.event_id, occurrence, props.communityId]);
-  useEffect(() => { void loadGoing(); }, [loadGoing]);
-
-  const toggleGoing = async () => {
-    if (!call || busy) return;
-    setBusy(true);
-    try {
-      await setCloudCommunityEventGoing({ session: props.session, communityId: props.communityId, eventId: call.event_id, occurrenceStartsAt: occurrence, going: !going?.mine });
-      await loadGoing();
-    } catch { /* stays as it was */ } finally { setBusy(false); }
-  };
 
   const schedule = async () => {
     const startsAt = new Date(draft.when);
@@ -94,9 +69,6 @@ export function KitPodCall(props: { session: unknown; communityId: string; pod: 
           <span className={cx("sub2")}>{[formatMomentWhen(call.starts_at), REPEAT_WORD[call.recurrence_frequency]].filter(Boolean).join(" · ")}</span>
           <div className={cx("acts")} style={{ marginTop: 8 }}>
             {call.url ? <a className={cx("link")} href={call.url} target="_blank" rel="noreferrer noopener">Join the call</a> : null}
-            <Btn small txt disabled={busy} onClick={() => void toggleGoing()}>
-              {going?.mine ? `Going ✓${going.count > 1 ? ` · ${going.count} going` : ""}` : going?.count ? `I'm going · ${going.count} going` : "I'm going"}
-            </Btn>
             {pod.can_manage ? <Btn small txt disabled={busy} onClick={() => void cancel()}>Cancel call</Btn> : null}
           </div>
         </>

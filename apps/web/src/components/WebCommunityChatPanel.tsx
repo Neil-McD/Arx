@@ -153,6 +153,9 @@ function shouldPreserveCommunityComposerFocus(activeElement: Element | null, inp
   if (!activeElement) return false;
   if (activeElement === input) return true;
   if (activeElement === document.body || activeElement === document.documentElement) return false;
+  // A box on a page that has just been hidden (Home's, when you open a
+  // channel) is not somewhere the person is typing.
+  if (activeElement instanceof HTMLElement && activeElement.offsetParent === null) return false;
   if (isCommunityComposerEditableElement(activeElement)) return true;
   return Boolean(
     activeElement.closest(
@@ -757,7 +760,9 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
     if (showInteractionProjection && selectedInteractionRootId && drawerReplyTarget) {
       return `thread:${selectedInteractionRootId}`;
     }
-    return `main:${activeCommunity.id}`;
+    // Each channel and each pod's room is its own place: opening one puts
+    // the cursor in its message box (Neil, Nov 14).
+    return `main:${activeCommunity.id}:${interactionProjection?.activeChannel?.id ?? ""}`;
   })();
 
   useEffect(() => {

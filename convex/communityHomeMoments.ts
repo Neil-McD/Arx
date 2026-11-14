@@ -104,7 +104,8 @@ export const getHomeMoments = query({
       });
     }
 
-    const notes = (await ctx.db.query("communityNotes")
+    // What the guide learned is the host's to see; a member never gets a note's title.
+    const notes = audience !== "host" ? [] : (await ctx.db.query("communityNotes")
       .withIndex("by_community_updatedAt", (q: any) => q.eq("communityId", args.communityId).gte("updatedAt", since)).take(20))
       .map((note: any) => ({ slug: String(note.slug), title: String(note.title), createdAt: Number(note.createdAt) }));
 
@@ -130,16 +131,12 @@ export const getHomeMoments = query({
       const general = await ctx.db.query("communityChannels")
         .withIndex("by_community_systemRole", (q: any) => q.eq("communityId", args.communityId).eq("systemRole", "general")).first();
       const mine = (row: any) => String(row.actorUserId ?? "") === String(userId);
-      const going = event
-        ? Boolean(await ctx.db.query("communityEventGoing")
-          .withIndex("by_event_occurrence_user", (q: any) => q.eq("eventId", event._id).eq("occurrenceStartsAt", Number(event.startsAt)).eq("userId", userId)).first())
-        : false;
       nextStep = memberNextStep({
         courseInProgress: await courseInProgress(ctx, args.communityId, userId),
         hasPosted: roots.some(mine) || replies.some(mine),
         joinedRecently: Boolean(membership && nowMs - Number(membership.createdAt) < 14 * DAY_MS),
         generalChannel: general?.name ? String(general.name) : null,
-        nextEvent: nextEvent ? { ...nextEvent, going } : null,
+        nextEvent,
       });
     }
 

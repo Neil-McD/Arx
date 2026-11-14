@@ -108,7 +108,7 @@ export type UseWebCommunityResourceUiControllerResult<
     onChangePinned: (value: boolean) => void;
   };
   handleDeleteResource: (resourceId: string) => Promise<boolean>;
-  handleCreateBlankPageDraft: (moduleId: string) => Promise<ResourceT | null>;
+  handleCreateBlankPageDraft: (moduleId: string, title?: string) => Promise<ResourceT | null>;
   resourceModuleModalProps: ComponentProps<typeof WebCommunityResourceModuleModal>;
   resourceModuleDeleteModalProps: ComponentProps<typeof WebDeleteResourceModuleModal>;
   loadCommunityResourceModules: (communityId: string, session: SessionT) => Promise<void>;

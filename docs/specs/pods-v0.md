@@ -230,7 +230,8 @@ membership); one branch in the Stripe notice handler routes anything carrying
    stops billing for pods someone can't reach.
 3. **Pod calls (3a, built) and pod knowledge (3b).** 3a: a pod call is an
    event with a pod (`communityEvents.podChannelId`), reusing recurrence,
-   "I'm going" and reminders. One rule (`convex/communityEventAudience.ts`):
+   and reminders ("I'm going" came off the page on Nov 14: not needed yet).
+   One rule (`convex/communityEventAudience.ts`):
    only people who can enter the pod see it, in every reader (Events, Home,
    the guide and MCP, reminders; never the handbook, the founder's brief or
    anything public). Hosts schedule and cancel their pod's calls from its

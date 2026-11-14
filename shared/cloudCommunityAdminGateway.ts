@@ -974,14 +974,16 @@ export async function saveCloudCommunityResourceModule<SessionT>(
     isPatch: boolean;
     payload: Record<string, unknown>;
   },
-): Promise<void> {
+): Promise<{ id: string } | null> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
-  await client.mutation("communityResources:saveCommunityResourceModule" as any, {
+  // The saved course, so a caller that just made one can add its lessons.
+  const saved = await client.mutation("communityResources:saveCommunityResourceModule" as any, {
     authSubject,
     moduleId: params.moduleId,
     isPatch: params.isPatch,
     payload: params.payload,
-  });
+  }) as { id?: unknown } | null;
+  return saved && typeof saved.id === "string" ? { id: saved.id } : null;
 }
 
 export async function reorderCloudCommunityResourceModules<SessionT>(

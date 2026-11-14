@@ -256,6 +256,31 @@ function WebCommunityAgentDock(props, ref) {
     if (!box) return;
     fitComposerHeight(box);
   }, [input]);
+  // Home is a page whose main thing is its box, so opening it puts the cursor
+  // there (Neil, Nov 14). Not on touch screens, where that raises the
+  // keyboard, and never over something the person is already typing in.
+  useEffect(() => {
+    if (!props.pageMode || !props.pageActive || props.isSuppressed) return;
+    if (typeof window === "undefined" || window.matchMedia?.("(pointer: coarse)").matches) return;
+    // On a first load the box arrives a moment after the page: look for it
+    // for a couple of seconds' worth of frames, focus it once, then stop.
+    let frames = 0;
+    let frame = 0;
+    const look = () => {
+      const box = kitInputRef.current ?? textareaRef.current;
+      frames += 1;
+      if (!box || box.disabled || box.offsetParent === null) {
+        if (frames < 150) frame = window.requestAnimationFrame(look);
+        return;
+      }
+      const active = document.activeElement;
+      if (active === box) return;
+      if (active instanceof HTMLElement && (active.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(active.tagName) || active.closest("[role='dialog'], .modal"))) return;
+      box.focus({ preventScroll: true });
+    };
+    frame = window.requestAnimationFrame(look);
+    return () => window.cancelAnimationFrame(frame);
+  }, [props.pageMode, props.pageActive, props.isSuppressed, props.community?.id]);
   const composerFormRef = useRef<HTMLFormElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const attachmentsRef = useRef<CommunityAgentImageDraft[]>([]);

@@ -1720,6 +1720,30 @@
     }
   }
 
+  /* The kit Inbox: the field sits on the filters' line, left of Done. */
+  :root[data-design="v1"] .web-direct-messages-host.is-page .community-dm-inbox-panel.is-kit .community-dm-inbox-search {
+    position: relative;
+    top: auto;
+    right: auto;
+    flex: 0 1 320px;
+    min-width: 0;
+    width: auto;
+    height: 28px;
+  }
+  :root[data-design="v1"] .web-direct-messages-host.is-page .community-dm-inbox-panel.is-kit .community-dm-inbox-search:focus-within {
+    /* The same quiet grey a channel's message box takes, never blue. */
+    border-color: color-mix(in srgb, var(--text-primary) 24%, transparent);
+  }
+  :root[data-design="v1"] .web-direct-messages-host.is-page .community-dm-inbox-panel.is-kit .community-dm-inbox-search input,
+  :root[data-design="v1"] .web-direct-messages-host.is-page .community-dm-inbox-panel.is-kit .community-dm-inbox-search input:focus {
+    height: 100%;
+    padding: 0 0 0 24px;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+  }
+
   :root[data-design="v1"] .web-direct-messages-host.is-page .community-dm-inbox-list {
     gap: 0;
     margin: 0 -12px;
@@ -4043,6 +4067,15 @@
     padding-right: 16px;
   }
 
+  /* The page's header is in the flow here, so the room the classic layout
+     left for a floating bar is just a blank band above the page. */
+  :root[data-design="v1"] .app-root.mobile-shell .community-page-body > .community-tab-scroll {
+    padding-top: 0;
+  }
+  :root[data-design="v1"] .app-root.mobile-shell .community-page-body > .community-tab-scroll > .web-community-centered-pane {
+    padding-top: 12px;
+  }
+
   :root[data-design="v1"] .app-root.mobile-shell .community-settings-pane-content,
   :root[data-design="v1"] .app-root.mobile-shell .settings-v1-group {
     min-width: 0;
@@ -4095,5 +4128,58 @@
     border-radius: 8px;
     cursor: pointer;
     align-self: flex-start;
+  }
+}
+
+/* ---------- One level in: the way back is in the header (Neil, Nov 14) ----------
+   A course inside Knowledge, a pod's room: an arrow, then the name of what
+   you're in. No word beside the arrow and no second line. */
+:root[data-design="v1"] .community-page-header-back {
+  display: inline-grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  margin: 0 4px 0 -8px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--nav-ink);
+  cursor: pointer;
+}
+
+:root[data-design="v1"] .community-page-header-back:hover {
+  background: var(--hover-overlay);
+  color: var(--text-primary);
+}
+
+:root[data-design="v1"] .app-root:not(.mobile-shell) .knowledge-course-crumb {
+  display: none;
+}
+
+/* A phone's top bar has its own arrow; the header's steps aside there. */
+:root[data-design="v1"] .app-root.mobile-shell .community-page-header-back:not(.community-channel-header-back) {
+  display: none;
+}
+
+/* A pod's room uses the same arrow, with no word beside it. */
+:root[data-design="v1"] .community-channel-header-back.community-page-header-back {
+  margin: 0 6px 0 -6px;
+  padding: 0;
+}
+
+/* A host's course tools live in the right column; where that column is hidden
+   (721 to 899px wide) they sit above the lesson instead. */
+:root[data-design="v1"] .knowledge-course-tools-inline {
+  display: none;
+}
+
+@media (min-width: 721px) and (max-width: 899px) {
+  :root[data-design="v1"] .knowledge-course-tools-inline {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 14px;
   }
 }
