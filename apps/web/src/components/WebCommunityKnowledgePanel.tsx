@@ -54,6 +54,10 @@ function KnowledgeV1({ resources, context }: Props) {
           openCourseId={moduleId} onOpenCourse={resources.actions.handleSelectModule}
           onNewCourse={resources.actions.openNewModuleModal}
           onEditCourse={(id) => { resources.actions.handleSelectModule(id); setEditing(true); }}
+          onSetCourseStatus={canManage ? async (id, status) => {
+            const course = resources.state.modules.find((module) => module.id === id);
+            if (course) await resources.actions.handleSetModuleStatus(course, status);
+          } : undefined}
           onEditCourseDetails={(id) => {
             const course = resources.state.modules.find((module) => module.id === id);
             if (course) resources.actions.handleEditModule(course);

@@ -43,6 +43,17 @@ function firstLine(markdown: string | null): string {
   return line.length > 110 ? `${line.slice(0, 107)}…` : line;
 }
 
+// What a host most needs to hear: drafts members can't see come first.
+function hostLead(courses: CommunityResourceModule[], learning: number): string {
+  if (courses.length === 0) return "Start with one course.";
+  const drafts = courses.filter((course) => course.module_status === "draft");
+  if (drafts.length === courses.length) return courses.length === 1 ? `${courses[0].name} is a draft. Members can't see it yet.` : "None of your courses is published yet.";
+  if (drafts.length === 1) return `${drafts[0].name} is a draft. Members can't see it yet.`;
+  if (drafts.length > 1) return `${drafts.length} courses are drafts. Members can't see them yet.`;
+  if (learning > 0) return `Members have started ${learning} ${learning === 1 ? "course" : "courses"} between them.`;
+  return "Your courses are ready for members.";
+}
+
 export function KitClassroom(props: {
   communityId: string;
   communityName: string;
@@ -59,6 +70,8 @@ export function KitClassroom(props: {
   onEditCourse: (moduleId: string) => void;
   // A course's name, line and cover (the course form).
   onEditCourseDetails: (moduleId: string) => void;
+  // Publish a course to members, or take it back to a draft (hosts).
+  onSetCourseStatus?: (moduleId: string, status: "draft" | "live") => Promise<unknown>;
   // Hosts write lessons in place.
   lessonEditing: {
     save: (resourceId: string, patch: LessonPatch) => Promise<void>;
@@ -79,6 +92,12 @@ export function KitClassroom(props: {
   const [saving, setSaving] = useState(false);
   const [editingLessonId, setEditingLessonId] = useState<string | null>(null);
   const editingTools = props.canManage ? props.lessonEditing : null;
+  const [publishing, setPublishing] = useState(false);
+  const setCourseStatus = async (moduleId: string, status: "draft" | "live") => {
+    if (!props.onSetCourseStatus || publishing) return;
+    setPublishing(true);
+    try { await props.onSetCourseStatus(moduleId, status); } finally { setPublishing(false); }
+  };
   // Asking Knowledge is the guide's; a community without it doesn't offer it.
   const agentOn = useCommunityAgentOn();
   const [now] = useState(Date.now);
@@ -297,6 +316,14 @@ export function KitClassroom(props: {
           <span>›</span><span>{open.course.name}</span>
           {props.canManage ? (
             <span style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
+              {props.onSetCourseStatus ? (open.course.module_status === "draft" ? (
+                <button type="button" className={cx("btn sm go")} disabled={publishing || open.lessons.length === 0}
+                  title={open.lessons.length === 0 ? "Write a lesson first" : "Members will see this course"}
+                  onClick={() => void setCourseStatus(open.course.id, "live")}>Publish course</button>
+              ) : (
+                <button type="button" className={cx("btn sm txt")} disabled={publishing} title="Back to a draft only hosts see"
+                  onClick={() => void setCourseStatus(open.course.id, "draft")}>Unpublish</button>
+              )) : null}
               <button type="button" className={cx("btn sm")} onClick={() => props.onEditCourseDetails(open.course.id)}>Course details</button>
               <button type="button" className={cx("btn sm txt")} onClick={() => props.onEditCourse(open.course.id)}>More tools</button>
             </span>
@@ -353,7 +380,7 @@ export function KitClassroom(props: {
       <div className={cx("page")} style={{ padding: 0, overflow: "visible" }}>
         <p className={cx("lead")} style={{ marginTop: 0 }}>{agentOn ? <span className={cx("aura")}><Icon name="spark" /></span> : null}
           {!props.loaded ? " " : props.canManage
-            ? (courses.length === 0 ? "Start with one course." : learning > 0 ? `Members have started ${learning} ${learning === 1 ? "course" : "courses"} between them.` : "Your courses are ready for members.")
+            ? hostLead(courses.map((entry) => entry.course), learning)
             : resume ? "Pick up where you left off." : courses.length ? "Pick a course to start." : "Nothing to learn here yet."}
         </p>
         {agentOn ? (
