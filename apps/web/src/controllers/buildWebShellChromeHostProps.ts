@@ -236,7 +236,10 @@ export function buildWebShellChromeHostProps(params: {
       activeCommunityMemberCount: params.activeCommunityMemberCount,
       onOpenMembers: params.isPublicCommunityFunnel
         ? () => params.setMobileOverlay("members")
-        : params.onOpenCommunityMembers,
+        // A phone's community home: Members opens from the channel view, so go there first.
+        : isMobileCommunityHome
+          ? () => { params.handleSelectCommunityTabFromMobile("chat"); params.onOpenCommunityMembers(); }
+          : params.onOpenCommunityMembers,
       canViewActiveCommunitySettings: params.canViewActiveCommunitySettings,
       canManageMembersActiveCommunity: params.canManageMembersActiveCommunity,
       canViewActiveCommunityAnalytics: params.canViewActiveCommunityAnalytics,
