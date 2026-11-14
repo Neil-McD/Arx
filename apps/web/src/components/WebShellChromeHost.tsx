@@ -23,6 +23,7 @@ import type {
 export type WebShellChromeHostProps = {
   showMobileAppShell: boolean;
   showMobileSettingsShell: boolean;
+  showMobileSettingsIndex?: boolean;
   showMobilePublicFunnel: boolean;
   mobileOverlay: MobileOverlay;
   mobileChromeAutoHideEnabled: boolean;
@@ -88,12 +89,29 @@ export function WebShellChromeHost(props: WebShellChromeHostProps) {
     />
     )
   ) : null;
-  const mobileGlobalShellContent = isMobileCommunityHome ? (
+  // Design v1 on a phone: Settings' index is the same Settings sidebar as
+  // desktop, full width (you, then the community's sections); a section
+  // opens its page of rows.
+  const isPhoneV1 = isDesignV1Active() && props.showMobileAppShell;
+  const isPhoneSettings = isPhoneV1 && (props.isGlobalSettings || props.communityShell.destination.kind === "community_settings");
+  const phoneSettingsIndex = isPhoneV1 && props.showMobileSettingsIndex ? (
+    <WebSettingsNavV1
+      communityShell={props.communityShell}
+      settingsSidebar={props.settingsSidebar}
+      current={{ kind: "index" }}
+      onBack={() => {
+        const slug = String(props.communityShell.activeCommunity?.slug ?? "").trim();
+        if (slug) props.communityShell.onOpenCommunityHome(slug);
+        else props.desktopHeader.onBackToCommunity();
+      }}
+    />
+  ) : null;
+  const mobileGlobalShellContent = phoneSettingsIndex ?? (isMobileCommunityHome ? (
     <WebCommunityNavSurface
       communityShell={props.communityShell}
       presentation="mobile-home"
     />
-  ) : isMobileDedicatedRoot ? null : props.mainSurface;
+  ) : isMobileDedicatedRoot ? null : props.mainSurface);
   const mobileGlobalShellLabel = isMobileCommunityHome
     ? "Community home"
     : props.communityShell.mobileRootPage === "agent"
@@ -111,6 +129,7 @@ export function WebShellChromeHost(props: WebShellChromeHostProps) {
     <WebMobileGlobalShell
       communityShell={props.communityShell}
       isCommunityHome={isMobileCommunityHome}
+      hideRail={isPhoneV1 && (isMobileCommunityHome || isPhoneSettings)}
       label={mobileGlobalShellLabel}
     >
       {mobileGlobalShellContent}

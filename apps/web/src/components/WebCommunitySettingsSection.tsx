@@ -162,6 +162,11 @@ const CLASSIC_PANE_LABELS: Partial<Record<CommunitySettingsPane, string>> = { co
 const FORM_PANES: CommunitySettingsPane[] = ["community", "plans", "app"];
 
 // Wide enough for the desktop frame, where the Settings sidebar lists the sections.
+// The phone app (/m/...): Settings' sections are listed on its Settings index.
+function isPhoneShellPath(): boolean {
+  return typeof window !== "undefined" && /^\/m(\/|$)/.test(window.location.pathname);
+}
+
 function useWideSettingsSidebar(): boolean {
   const query = "(min-width: 721px)";
   const [wide, setWide] = useState(() => typeof window !== "undefined" && window.matchMedia?.(query).matches === true);
@@ -1113,7 +1118,7 @@ export function WebCommunitySettingsSection(props: WebCommunitySettingsSectionPr
       ) : canManageCommunitySettings ? (
         <>
           <div ref={pageRef} {...autosave} className={`create-community-form community-settings-form${split ? " settings-page-v1" : ""}`}>
-            {split && hasSettingsSidebar ? null : (
+            {split && (hasSettingsSidebar || isPhoneShellPath()) ? null : (
             <CommunityPageHeader
               title={split ? "Settings" : "Manage"}
               actions={split && hasSettingsSidebar ? undefined : (
