@@ -47,7 +47,6 @@ import { useWebAuthErrorToastLifecycle } from "./controllers/useWebAuthErrorToas
 import { useWebCommunityAgentSurfaceController } from "./controllers/useWebCommunityAgentSurfaceController";
 import { useWebDirectMessagesChromeController } from "./controllers/useWebDirectMessagesChromeController";
 import { useWebCommunityTabAccessGuard } from "./controllers/useWebCommunityTabAccessGuard";
-import { useWebMemberSiteHandoff } from "./controllers/useWebMemberSiteHandoff";
 import { communityAccessRunsCommunity } from "../../../shared/communityAccessViewModel";
 import { useWebMobileChromeReadingModeLifecycle } from "./controllers/useWebMobileChromeReadingModeLifecycle";
 import { useWebShellActionController } from "./controllers/useWebShellActionController";
@@ -691,19 +690,6 @@ export default function App() {
     applyCommunityShellState,
   });
 
-  useWebMemberSiteHandoff({
-    activePage,
-    activeView,
-    communityTab,
-    communityChannelSlug,
-    activeCommunityId,
-    activeCommunityAccessId: activeCommunityAccess?.community_id ?? null,
-    // Only while its members use the site (the owner's switch); else they stay in the app.
-    activeCommunitySiteUrl: activeCommunity?.members_use === "site" ? activeCommunity.site_url : null,
-    isLoadingCommunityAccess,
-    communityAccessLoadError,
-    runsCommunity: communityAccessRunsCommunity(activeCommunityAccess),
-  });
 
   const {
     summary: communityAnalyticsSummary,
@@ -1684,10 +1670,6 @@ export default function App() {
       isResolvingCommunityAccess: isLoadingCommunityAccess,
       communityAccessLoadError,
       onRetryCommunityAccess: retryActiveCommunityAccess,
-      // The owner's switch saved: keep Studio's copy of the community in step.
-      onMemberExperienceSaved: (communityId: string, experience: "app" | "site") =>
-        setCommunities((previous) => previous.map((community) =>
-          community.id === communityId ? { ...community, members_use: experience } : community)),
       canViewActiveCommunitySettings,
       communitySettingsLayer,
       communitySettingsPane,

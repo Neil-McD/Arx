@@ -642,14 +642,15 @@ Rules:
 - custom-channel URLs carry an authorized slug while server reads and writes carry the resolved channel id
 - an unresolved or failed custom-channel slug never falls through to General; channel reads, writes, typing, and read acknowledgements remain disabled until resolution succeeds
 - roots, pagination, subscriptions, optimistic sends, retries, selected drawer state, typing, unread dividers, and read acknowledgements share one community-and-channel boundary
-- channel switching clears transient composer/reply state and cannot expose roots or pending sends from another channel
+- channel switching keeps each channel's typed text and mentions as that channel's own draft (restored on return, never shown in another channel); attachments, reply context and pending sends are cleared, and no channel can expose roots or pending sends from another
 - only community managers see Add Channel; the dialog accepts one display name and the server remains authoritative for normalization, authorization, and the ten-channel limit
 - every resolved member channel renders one canonical conversation header so the active scope remains explicit independently of sidebar or mobile-drawer state
 - main-channel and drawer-reply composers share one canonical writing surface: desktop retains the raised editor and full utility row, while mobile collapses attachment, editor, dictation, and send into one compact row; mobile mention entry remains available through typed `@` autocomplete and emoji entry through the native keyboard rather than duplicate visible controls
 - the visible mention control inserts at the current caret and opens the same authorized autocomplete used by typed `@`; reply candidates continue to exclude role broadcasts such as `@everybody`
 - `+` opens the existing bounded attachment input directly; it is not a generalized add menu
 - emoji insertion returns focus to the native textarea; supported formatting remains authored as canonical plain text through typed syntax and bounded keyboard behavior rather than a visible formatting toolbar
-- Enter sends, Shift+Enter inserts a newline and continues an active list marker, and Tab or Shift+Tab changes indentation only while the selection contains a list item; mention autocomplete retains priority for Enter and Tab
+- with a mouse and keyboard, Enter sends and Shift+Enter inserts a newline and continues an active list marker; on a touch screen (`(hover: none) and (pointer: coarse)`) Return inserts a newline and the send button sends, because a phone keyboard cannot hold Shift; while an input method is composing (Japanese, Chinese, Korean), Enter and the arrow keys belong to it and never send; Tab or Shift+Tab changes indentation only while the selection contains a list item; mention autocomplete retains priority for Enter and Tab
+- one send at a time per composer until its draft is cleared, so a repeated Enter or an Enter plus a click cannot post the same text twice
 - reply context, queued attachments, and emoji-picker visibility remain transient composer state; emoji state resets when the community, channel, or selected thread context changes
 - message overflow menus open below triggers in the top half of the viewport and above triggers in the bottom half so edit, pin, and delete actions remain clear of the floating composer
 - only community managers see the active-channel options trigger; custom-channel rename preserves the canonical slug and delete archives without deleting interaction history
