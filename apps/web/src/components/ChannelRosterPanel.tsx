@@ -26,6 +26,7 @@ import { KitMembersDirectory } from "../v1/KitMembersDirectory";
 import { CommunityMembersBulkBar, type SelectedMember } from "./CommunityMembersBulkBar";
 import type { CommunityPresenceSummary } from "../../../../shared/communityTypes";
 import { resolveAuthSubject, type AuthSessionLike } from "../../../../shared/authSession";
+import { readShellVariantFromPathname } from "../../../../shared/webAppRouteState";
 
 type Page = FunctionReturnType<typeof api.communityChannelParticipants.listChannelRoster>;
 
@@ -81,10 +82,12 @@ function ChannelRosterWorkspace(props: RosterProps) {
     setAskedNarrow(Boolean(props.narrowOpen));
     if (props.narrowOpen) setMembersOpen(true);
   }
-  // The page is a desktop layout. A narrow window keeps the list it had, with
-  // its own way back.
+  // The page is a desktop layout, and the phone layout's too (/m/, Nov 14
+  // mock: Members is a page there, not a pop-up). A narrow desktop window
+  // keeps the list it had, with its own way back.
   const wideEnoughForPage = typeof window === "undefined" || typeof window.matchMedia !== "function"
-    || window.matchMedia("(min-width: 721px)").matches;
+    || window.matchMedia("(min-width: 721px)").matches
+    || readShellVariantFromPathname(window.location.pathname || "/") === "mobile";
   if (isDesignV1Active() && membersOpen && wideEnoughForPage) {
     const close = () => { setMembersOpen(false); props.onCloseNarrow?.(); };
     return <><MembersPageLeaver onLeave={close} /><RosterSurface {...props} channelId={undefined} narrowOpen={false}
