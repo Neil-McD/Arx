@@ -807,6 +807,22 @@
 .app a.btn{text-decoration:none}
 .app .btn.sm.on .ic{width:13px;height:13px}
 
+/* Kit addition: Knowledge's one list of notes, files and links, and the
+   row that adds to it in place (Nov 14 mock). */
+.app .krows{margin-top:8px}
+.app .krow{display:grid;grid-template-columns:18px minmax(0,1fr) auto;gap:0 12px;align-items:center;min-height:48px;width:100%;text-align:left;border-top:1px solid var(--line);color:inherit}
+.app .krows>.krow:first-child{border-top:0}
+.app button.krow:hover .t b{text-decoration:underline;text-decoration-color:var(--line2)}
+.app .krow .ic{width:16px;height:16px;color:var(--ink3)}
+.app .krow .t{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--ink3);font-size:13px}
+.app .krow .t b{font-size:13.5px;font-weight:550;color:var(--ink);margin-right:8px}
+.app .krow .from{display:inline-flex;align-items:center;gap:8px;font-size:12px;color:var(--ink3);white-space:nowrap}
+.app .krow.add .t{color:var(--ink2)}
+.app .kadd{margin-top:10px;border:1px solid var(--line2);background:var(--panel2);border-radius:10px;padding:12px 10px 10px 14px}
+.app .kadd textarea{display:block;width:100%;min-height:44px;padding:0;border:0;outline:0;resize:none;background:transparent;color:var(--ink);font:inherit;font-size:14.5px;line-height:1.5}
+.app .kadd textarea::placeholder{color:var(--ink3)}
+.app .khint{margin-top:8px;font-size:12.5px;color:var(--ink2)}
+
 /* Kit addition: states the mock doesn't draw, in its own terms. */
 .app .msg.cont{padding-top:3px;padding-bottom:3px}
 .app .msg.cont>.gap{width:36px;flex:none}

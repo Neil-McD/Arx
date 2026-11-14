@@ -30,6 +30,15 @@ export function WebCommunityKnowledgePanel(props: Props) {
   return <KnowledgeClassic {...props} />;
 }
 
+// A source Polynet couldn't take, in plain words.
+function sourceProblem(raw: string | undefined): string {
+  const message = String(raw ?? "");
+  if (message.includes("pdf_ingestion_not_supported")) return "Polynet can't read PDFs yet.";
+  if (message.includes("content_type_not_supported")) return "Polynet can't read that kind of file yet.";
+  if (message.includes("no_readable_content")) return "Polynet found nothing to read there.";
+  return "Polynet couldn't read that. Check it and try again.";
+}
+
 function KnowledgeV1({ resources, context }: Props) {
   // The classroom is the page. A host's editing tools (lessons, sources,
   // reordering) are still the earlier editor, one click away and one click back.
@@ -57,6 +66,12 @@ function KnowledgeV1({ resources, context }: Props) {
           onSetCourseStatus={canManage ? async (id, status) => {
             const course = resources.state.modules.find((module) => module.id === id);
             if (course) await resources.actions.handleSetModuleStatus(course, status);
+          } : undefined}
+          onAddSources={canManage ? async ({ links, files }) => {
+            const result = await resources.actions.handleAddCommunitySources({ links, files });
+            if (!result) return { ok: false, message: "That couldn't be added. Try again." };
+            if (result.saved === 0) return { ok: false, message: sourceProblem(result.errors[0] ?? result.ingestion?.failures[0]?.message) };
+            return { ok: true };
           } : undefined}
           onEditCourseDetails={(id) => {
             const course = resources.state.modules.find((module) => module.id === id);
