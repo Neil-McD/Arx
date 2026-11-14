@@ -180,48 +180,92 @@ All in dark and in light.
 
 ## 9. When the switch goes on everywhere: what to delete
 
-The switch keeps the old app alive beside the new one. On the day v1 is switched
-on for production, these go in one pull request, after the switch-on has run on
-production for a few days. Text-matching checks that pin the old markup are
-turned into behaviour tests first, never deleted in bulk.
+Updated 2026-11-13 (after Settings as rows #483–#487, the desktop shell
+#490–#491 and phones #493–#494).
+
+The switch keeps the old app alive beside the new one. The order:
+
+1. **Switch production to v1** (Neil's call). Flip the switch's meaning so v1
+   is on unless `VITE_DESIGN_V1=0`; that keeps a no-code way back for the
+   first days. Production then takes everything since its last release, so the
+   release gets its own checklist.
+2. **Delete the old layout** after a few days on production, in four pull
+   requests (each checked on staging):
+   1. The switch and the classic branches (below).
+   2. Text-matching checks that pin old markup become behaviour tests first,
+      never deleted in bulk.
+   3. Styles (below).
+   4. Lower the web bundle's total budget again (raised to 3.42 MB on Nov 13
+      while both layouts ship).
+3. **Then the backend kept only for the cached production app** (cleanup wave
+   3): `communityPublicPage` (named in `scripts/no_orphan_modules_proof.ts`),
+   `communityOwnerApprovals` get/decide, then their stored data with Neil's OK.
 
 Code
-- `apps/web/src/components/WebCommunityRail.tsx` (the rail of community icons),
-  its props in `webShellChromeShared.ts`, and the rail branch in
-  `WebShellChromeHost.tsx`.
-- `apps/web/src/components/WebSettingsSidebar.tsx`, replaced by `WebGlobalNavV1`.
-- The classic branch of `shared/CommunityNav.tsx` (the "Agent" row, the
-  settings gear on the name, the management divider); the `layout` prop.
-- The month calendar in `WebCommunityEventsSection.tsx` and
-  `getWebCommunityEventsMonthRange`.
-- The floating direct-messages panel layout (desktop), the "Messages" wording,
-  and the back button beside the list, in `WebDirectMessagesHost.tsx`,
-  `WebDirectMessageInboxPanel.tsx` and `WebDirectMessagePanel.tsx`. Mobile keeps
-  its own until mobile is redesigned.
-- The desktop members pop-up in `ChannelRosterPanel.tsx` (narrow screens still
-  use the right-rail list until mobile is redesigned).
-- "Agent" as the agent's tag in `communityInteractionFeed.tsx`; the agent page's
-  "Agent" title in `WebCommunityAgentDock.tsx`.
-- `favicon*.png`, `favicon.svg`, `favicon.ico`, `apple-touch-icon.png`,
-  `icon-*.png` and `manifest.webmanifest` at the public root, replaced by
-  `brand/v1/` (move those up and drop `applyDesignIcons`).
-- The switch itself: `apps/web/designSystemFlag.ts`, `shared/designSystem.ts`,
-  every `isDesignV1Active()` branch (15 files today), `VITE_DESIGN_V1` on
+- The switch: `apps/web/designSystemFlag.ts`, `shared/designSystem.ts`,
+  69 `isDesignV1Active()` call sites in 36 files (Nov 13): `App.tsx`;
+  components `ChannelRosterPanel`, `CommunityFounderBriefSection`,
+  `CommunityPageHeader`, `WebAccountSettingsSection`,
+  `WebAppearanceSettingsSection`, `WebArchivedCommunityList`,
+  `WebCommunityAgentDock`, `WebCommunityAiAgentInstructionsEditor`,
+  `WebCommunityAiAgentSection`, `WebCommunityChannelHeader`,
+  `WebCommunityEventsSection`, `WebCommunityHandbookEditor`,
+  `WebCommunityInteractionProjection`, `WebCommunityKnowledgePanel`,
+  `WebCommunityNavSurface`, `WebCommunityPodsSection`,
+  `WebCommunitySettingsSection`, `WebDirectMessageInboxPanel`,
+  `WebDirectMessagePanel`, `WebDirectMessagesHost`,
+  `WebEmailPreferencesSection`, `WebMobileGlobalShell`, `WebOnboardingPage`,
+  `WebPlatformBridgePage`, `WebPolynetMcpAccountSection`,
+  `WebProfileSettingsSection`, `WebSettingsPanels`, `WebSettingsSurfaceHost`,
+  `WebShellChromeHost`, `communityInteractionFeed`; controllers
+  `useGuideSearchShortcut`, `useWebCommunityContentController`,
+  `useWebCommunityTabAccessGuard`; `shared/chatUi.ts`. `VITE_DESIGN_V1` on
   `polynet-staging`, and `FORBIDDEN_PRODUCTION_ENV` in
   `scripts/lib/releaseProduction.mjs`.
+- Components only the classic layout uses: `WebCommunityRail.tsx` (nothing in
+  v1 renders it since #494) and its props in `webShellChromeShared.ts`;
+  `WebSettingsSidebar.tsx`; `shared/SettingsNavList.tsx` (the phone's old
+  Settings list); `WebBillingSettingsSection.tsx` (v1 has no Billing page);
+  `WebDesktopShellHeader.tsx`; the classic uses of `WebPlatformRadioGroup`
+  (`WebPlatformChoiceControls.tsx`); the classic halves of the Settings
+  sections (Profile, Account, Email, MCP, Archived, Appearance's preview
+  cards, the Access & Pricing card, the founder brief and handbook cards).
+- The classic branch of `shared/CommunityNav.tsx` (the "Agent" row, the gear,
+  "Visit site", the management divider) and its `layout` prop.
+- The month calendar in `WebCommunityEventsSection.tsx` and
+  `getWebCommunityEventsMonthRange`.
+- The floating direct-messages panel (desktop) and its back button beside the
+  list.
+- The desktop members pop-up in `ChannelRosterPanel.tsx`. The phone's Members
+  box is still that dialog; restyle it before deleting.
+- "Agent" as the agent's tag in `communityInteractionFeed.tsx`.
+- The classic favicons at the public root, replaced by `brand/v1/` (move those
+  up and drop `applyDesignIcons`).
 
-Styles
-- The `:root[data-design="v1"]` prefix in `design-v1.css` (it becomes the base),
-  and the token blocks it replaced in `base.css`.
-- Rules for the deleted components above in `community-and-content.css`,
-  `shell-and-onboarding.css`, `settings-runtime-and-theme-overrides.css` and
-  `index.css`, found by those components' class names.
+Styles (measured Nov 13 over 23 desktop and phone views of v1)
+- 513 v1 rules (87 KB); 507 old rules (71 KB) that v1 pages still rely on;
+  2,340 old rules (313 KB) not seen on those views. "Not seen" is not dead:
+  the biggest groups are KaTeX, message markdown, the public landing page, and
+  dialogs. So styles are deleted component by component, checking each
+  component's screens and dialogs, never in bulk.
+- Move the 507 relied-on rules into `design-v1.css`, then drop its
+  `:root[data-design="v1"]` prefix (593 rules) so it becomes the base, and
+  delete the token blocks it replaced in `base.css`.
+- Rules for the deleted components in `community-and-content.css` (8,502
+  lines), `settings-runtime-and-theme-overrides.css` (5,475),
+  `shell-and-onboarding.css` (1,479) and `index.css` (1,961), found by those
+  components' class names; the `.settings-panel button:not(...)` rule.
+  KaTeX, markdown and landing-page styles stay, in their own files.
 
 Docs and checks
 - The design-v1 exception in `docs/core-contract.md` becomes the rule.
 - `scripts/app_theme_contract_proof.ts` scoping checks for `design-v1.css`.
 - Classic expectations in `scripts/community_nav_design_v1.test.ts`,
-  `scripts/community_page_header.test.ts` and `scripts/channel_tags_design_v1.test.ts`.
+  `scripts/community_page_header.test.ts`,
+  `scripts/channel_tags_design_v1.test.ts`,
+  `scripts/channel_rail_design_v1.test.ts`,
+  `scripts/mobile_root_navigation_contract_proof.ts` and
+  `scripts/release_production.test.ts`.
 
 ## 10. Decisions taken before slice 0
 

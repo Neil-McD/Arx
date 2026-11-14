@@ -73,5 +73,5 @@ test("a run by one author shows the name once, and the guide wears its spark", (
 
 test("the host's own post carries the host tag, and an empty channel keeps its empty state", () => {
   expect(render([bundle("n", "neil", 5, "This is the play.")])).toContain(">host<");
-  expect(render([])).toContain("No threads yet");
+  expect(render([])).toContain("No messages yet");
 });

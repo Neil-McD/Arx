@@ -927,14 +927,14 @@ export function CommunityInteractionFeedList(props: CommunityInteractionFeedList
             </div>
           ) : props.isLoadingRoots && props.roots.length === 0 && props.activityEvents.length === 0 ? (
             <div className="community-interaction-state" aria-live="polite">
-              <div>Loading threads...</div>
+              <div>Loading messages…</div>
               <div className="community-interaction-loading web-skeleton-pill" aria-hidden="true" />
             </div>
           ) : props.roots.length === 0 && props.activityEvents.length === 0 ? (
             <div className="community-interaction-empty">
               <MessageSquare size={22} aria-hidden="true" />
-              <div>No threads yet</div>
-              <span>New community messages will appear here as canonical threads.</span>
+              <div>No messages yet</div>
+              <span>Say hello. The first message starts the conversation.</span>
             </div>
           ) : (
             <div className="community-interaction-feed">

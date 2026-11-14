@@ -4,7 +4,7 @@ import { CommunityPlansSection } from "./CommunityPlansSection";
 import { isDesignV1Active } from "../../../../shared/designSystem";
 import { CommunityPageHeader } from "./CommunityPageHeader";
 import { useCallback, useEffect, useRef, useState, type ComponentProps } from "react";
-import { SettingsButton, SettingsGroup, SettingsNote, SettingsRow, SettingsSaveStatus, SettingsSegmented, SettingsSelect, SettingsSwitch } from "./SettingsRows";
+import { SettingsButton, SettingsGroup, SettingsNote, SettingsPageHead, SettingsRow, SettingsSaveStatus, SettingsSegmented, SettingsSelect, SettingsSwitch } from "./SettingsRows";
 import { STRIPE_CONNECT_COUNTRIES } from "../../../../shared/stripeConnectCountries";
 import type { DragEvent } from "react";
 import type { CommunitySettingsLayer } from "../../../../shared/communityAccessViewModel";
@@ -952,6 +952,38 @@ function CommunityMemberSettingsSection({
   session: unknown;
   ensureSession: (session: any) => Promise<any | null>;
 }) {
+  const [confirmLeave, setConfirmLeave] = useState(false);
+  // Design v1: Membership as rows, like the rest of Settings.
+  if (isDesignV1Active()) {
+    return (
+      <div className="create-community-form community-settings-form settings-page-v1">
+        <SettingsPageHead title="Membership" />
+        <SettingsGroup label="Notifications">
+          <SettingsRow label="Mute this community"
+            help={state.communityMemberSettingsError ? <span className="settings-v1-error">{state.communityMemberSettingsError}</span>
+              : "Fewer notifications and no attention dots from it."}>
+            <SettingsSwitch label="Mute this community" checked={state.communityMemberMuted} disabled={state.isLoadingCommunityMemberSettings}
+              onChange={(checked) => void actions.handleToggleCommunityMute(checked)} />
+          </SettingsRow>
+        </SettingsGroup>
+        <CommunityMyPlanSection communityId={activeCommunity.id} session={session} ensureSession={ensureSession} />
+        <SettingsGroup label="Danger zone" tone="danger">
+          <SettingsRow label={`Leave ${activeCommunity.name}`} help="You lose access to it. You can join again later.">
+            {confirmLeave ? (
+              <>
+                <SettingsButton variant="quiet" disabled={state.isLeavingCommunity} onClick={() => setConfirmLeave(false)}>Cancel</SettingsButton>
+                <SettingsButton variant="danger" disabled={state.isLeavingCommunity} onClick={() => void actions.handleLeaveCommunity()}>
+                  {state.isLeavingCommunity ? "Leaving…" : "Confirm leave"}
+                </SettingsButton>
+              </>
+            ) : (
+              <SettingsButton variant="danger" onClick={() => setConfirmLeave(true)}>Leave</SettingsButton>
+            )}
+          </SettingsRow>
+        </SettingsGroup>
+      </div>
+    );
+  }
   return (
     <div className="create-community-form community-settings-form">
       <div className="settings-section">
@@ -982,9 +1014,6 @@ function CommunityMemberSettingsSection({
           </div>
         ) : null}
       </div>
-      {isDesignV1Active() ? (
-        <CommunityMyPlanSection communityId={activeCommunity.id} session={session} ensureSession={ensureSession} />
-      ) : null}
       <div className="settings-section" style={{ marginTop: 18 }}>
         <div className="settings-section-title">Leave community</div>
         <div className="settings-section-desc">
