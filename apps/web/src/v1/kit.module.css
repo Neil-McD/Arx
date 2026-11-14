@@ -463,7 +463,7 @@
 .app .kprog .bar{flex:none;width:120px}.app .kprog .ic{width:12px;height:12px;vertical-align:-2px;margin-right:4px}
 .app .khead{display:flex;align-items:center;margin-top:30px}
 
-.app .kgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px;margin-top:10px}
+.app .kgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(max(260px,calc((100% - 24px) / 3)),1fr));gap:12px;margin-top:10px}
 .app .kcourse{display:flex;flex-direction:column;gap:4px;padding:10px 10px 14px;border-radius:12px;border:1px solid var(--line);background:var(--s1);transition:border-color .16s var(--ease),background .16s var(--ease);cursor:pointer}
 .app .kcourse:hover{border-color:var(--line2);background:var(--s2)}
 .app .kcourse b{font-size:15px;font-weight:550;letter-spacing:-.005em;margin-top:8px}.app .kcourse .s{font-size:13px;color:var(--ink3)}
