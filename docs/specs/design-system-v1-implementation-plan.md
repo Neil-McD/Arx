@@ -81,16 +81,16 @@ judgement of the page against the mock, not a measurement.
 | Logo, favicon, app icons | 95% | #437 #439 #440 | Sign-in page logo is set in WorkOS | |
 | Home (host and member) | 65% | #432 #433 #435 #436 #449 | Money figures, the guide's week, suggestion chips, richer card kinds | Payments slice; guide work |
 | Channel and thread | 70% | #438 #441 #446 #447 | Catch up; channel description; more than one face on the replies line | Catch up spec; a description field |
-| Inbox | 50% | #445 #448 | Mentions and replies across communities, guide line, filters, approvals, "Draft a reply"; an address | Inbox part two (backend); routing |
-| Events | 50% | #450 | Going, counts and faces; who is hosting; recaps | RSVP slice |
-| Members | 45% | #451 #452 | Guide suggestions; bios; host Plan column and Invite; flat list; an address | Routing; member data |
-| Knowledge | 10% | header only (#442) | The whole page | Neil (Nov 11): build for what exists first (host notes, documents), so guide-drafted notes behind approval can be added later |
+| Inbox | 65% | #445 #448 #490 #510 | Mentions and replies across communities, guide line, approvals, "Draft a reply"; an address | Inbox part two (backend); routing |
+| Events | 55% | #450 #500 | A full test pass (Nov 14 plan, A); RSVP; the event form is still the old pop-up | Test pass; pop-up redesign; RSVP slice |
+| Members | 70% | #451 #452 #490 #512 | Guide suggestions; an address; a member's record on a phone (hosts have it) | Routing |
+| Knowledge | 60% | #442 #492 | A full test pass (Nov 14 plan, A); the course editor is still the old pop-up | Test pass; pop-up redesign |
 | Manage, Your guide | 15% / 5% | header only (#442) | Both pages | |
 | Discover, your settings | 60% | #444 | Their own header line and content column | |
 | Command palette | 0% | | | |
-| Mobile | 0% | | Its own design pass | Neil signing in to staging in the built-in browser |
+| Mobile | 85% | #493 #494 #504 #509 #510 #512 | Switcher as a sheet; Pods and a pod's room; a check on a real phone | Neil's phone pass |
 
-Shipped behind the switch: #427 to #452. Production: none of it.
+Shipped behind the switch: #427 to #512 (status as of 2026-11-14). Production: none of it.
 
 ### How each slice is made now
 
@@ -124,17 +124,71 @@ Shipped behind the switch: #427 to #452. Production: none of it.
 | 2026-11-10 | Events is a list; the month calendar goes |
 | 2026-11-10 | Logo: the flat two-tone network mark with a slight lift; the favicon fills its tile |
 
-## 5. What is next, in order
+## 5. What is next, in order (Neil, 2026-11-14)
 
-1. Addresses for Inbox and Members, in one routing change.
-2. Knowledge: what exists first (decided Nov 11).
-3. Going (RSVP) for Events: one table, one member action, with a security review.
-4. Manage and Your guide.
-5. The right column of each page (Catch up, Home's money and week).
-6. Command palette.
-7. Mobile.
-8. Acceptance on staging (section 8), then switch on everywhere and delete the
-   old paths (section 9).
+Four workstreams. A and B start together; C waits on Neil's reaction to the
+mock; D needs his OK on a one-page spec first.
+
+### A. Test Knowledge and Events end to end (no code until the bug list)
+
+On staging, in a test community nobody else is in (no one is notified), on
+desktop and on a phone, as host and as member. Every step gets a pass or a bug.
+
+- **Knowledge:** create, edit, reorder and delete a course and a lesson; mark a
+  lesson done; write, edit and delete a note; "Ask anything Polynet knows";
+  the guide answers from what it learned; what a member sees; empty states.
+- **Events:** create, edit and cancel; a repeating event; timezones (event's
+  zone vs the viewer's); online vs a place; "You're going to"; the event on
+  Home and on the community's page (`/c/<slug>`); reminders; what a member sees.
+- Out: a bug list, ordered, each fixed in the slice that touches its screen.
+
+### B. Pods icon
+
+Three or four candidates from the same icon set as the rest of the left column
+(lucide at 17px, 1.7 stroke), drawn in the phone mock and the left column. Neil
+picks; one small change in `shared/CommunityNav.tsx`.
+
+### C. Pop-ups, redesigned everywhere
+
+Every pop-up is the old design (a centred box over a dimmed page). Three
+replacements, mocked first on the phone-screens canvas:
+
+| Pattern | Desktop | Phone | Replaces |
+|---|---|---|---|
+| **Panel** (create and edit) | Slides in from the right, the right column's width, over the page; compact fields; Save and Cancel fixed at the bottom | Full screen, back arrow, Save at the bottom | New/edit event (`WebCommunityEventsSection`), course editor (`WebCommunityResourceModuleModal`), member settings (`CommunityMemberSettingsDialog`), create community (`WebCreateCommunityModal`), builder offer (`WebBuilderOfferModal`), profile setup (`WebBlockingSetupModal`), the old Members pop-up (narrow windows, `ChannelRosterPanel`) |
+| **Confirm** (are you sure) | A small card, the action in red when it destroys something | The same, near the bottom | Delete lesson (`WebDeleteResourceModal`), delete course (`WebDeleteResourceModuleModal`), sign out (`WebSignOutConfirmModal`), and the six browser `confirm()` boxes (delete a message or reply, cancel an event, chat and navigation guards) |
+| **Viewer** (looking, not editing) | Centred, restyled to the kit | Full screen | Photo lightbox, logo / banner / avatar croppers, the terms and privacy reader |
+
+Where something can be made in place, it is (as New pod already is: a card in
+the list). Slices: 1) the Panel and Confirm components plus events and the
+course editor; 2) every Confirm; 3) the remaining Panels; 4) the Viewers.
+Prod's old design keeps its pop-ups until the switch goes on everywhere.
+
+### D. One door: what an app or an agent can build
+
+Merged on main, not live: Sign in with Polynet, the access check, sales
+reports, webhooks, plans that unlock app features, Settings › Your app.
+
+Missing:
+- **An agent or a founder's app cannot create events or Knowledge.** The
+  MCP's actions are react, moderate, settings, join mode, handbook and lesson
+  done. Proposed: `community.event.create|update|cancel`,
+  `community.note.create`, `community.course.upsert`, `community.lesson.upsert`
+  through the existing canonical executor (authorised, audited, host-scoped).
+  A separate app API only when an app asks for one.
+- **Progress from the app into the guide** (the pilot's last step).
+- **Distribution Engineering:** PRs #1365 and #1374 open; known bug: a buyer
+  from DE's own checkout could get a second, free workspace.
+- **Leftovers:** `community.member_experience.request` (sites slice 3) and
+  `community.funnel.update_draft` (its screen is deleted).
+
+Spec first (`docs/specs/`), Neil's OK, then build.
+
+### Then
+
+Neil's pass on his own phone; the prod release plan (what ships, what to check
+after, how to roll back, the Convex step); acceptance (section 8); switch on
+everywhere and delete the old paths (section 9).
 
 ## 6. Deliberately not in this plan
 
@@ -149,9 +203,7 @@ before anyone builds it.
 | Per-action permissions for the agent ("on its own, asks first, never") | Changes what the agent is allowed to do; touches agent authority |
 | Recaps of calls saved to Knowledge | Confirm what exists first |
 | View as a member | New; small, but touches access checks |
-| Pods | Not designed |
-| Mobile | Not designed |
-| The door and community sites | Separate surfaces; this plan is the app only |
+| Community sites | Removed (#505–#507); a community's page is `/c/<slug>` in the app |
 
 ## 7. Risks
 
