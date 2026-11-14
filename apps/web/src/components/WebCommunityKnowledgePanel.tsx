@@ -30,6 +30,15 @@ export function WebCommunityKnowledgePanel(props: Props) {
   return <KnowledgeClassic {...props} />;
 }
 
+// A source Polynet couldn't take, in plain words.
+function sourceProblem(raw: string | undefined): string {
+  const message = String(raw ?? "");
+  if (message.includes("pdf_ingestion_not_supported")) return "Polynet can't read PDFs yet.";
+  if (message.includes("content_type_not_supported")) return "Polynet can't read that kind of file yet.";
+  if (message.includes("no_readable_content")) return "Polynet found nothing to read there.";
+  return "Polynet couldn't read that. Check it and try again.";
+}
+
 function KnowledgeV1({ resources, context }: Props) {
   // The classroom is the page. A host's editing tools (lessons, sources,
   // reordering) are still the earlier editor, one click away and one click back.
@@ -54,6 +63,21 @@ function KnowledgeV1({ resources, context }: Props) {
           openCourseId={moduleId} onOpenCourse={resources.actions.handleSelectModule}
           onNewCourse={resources.actions.openNewModuleModal}
           onEditCourse={(id) => { resources.actions.handleSelectModule(id); setEditing(true); }}
+          onSetCourseStatus={canManage ? async (id, status) => {
+            const course = resources.state.modules.find((module) => module.id === id);
+            if (course) await resources.actions.handleSetModuleStatus(course, status);
+          } : undefined}
+          onAddSources={canManage ? async ({ links, files }) => {
+            const result = await resources.actions.handleAddCommunitySources({ links, files });
+            if (!result) return { ok: false, message: "That couldn't be added. Try again." };
+            // Anything refused or unreadable is said, even when the rest went in.
+            const problem = result.errors[0] ?? result.ingestion?.failures[0]?.message;
+            if (result.saved === 0 || result.rejected > 0 || problem) {
+              const added = result.saved > 0 ? `${result.saved} added. ` : "";
+              return { ok: false, message: `${added}${sourceProblem(problem)}` };
+            }
+            return { ok: true };
+          } : undefined}
           onEditCourseDetails={(id) => {
             const course = resources.state.modules.find((module) => module.id === id);
             if (course) resources.actions.handleEditModule(course);

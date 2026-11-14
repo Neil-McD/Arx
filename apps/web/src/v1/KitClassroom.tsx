@@ -1,8 +1,9 @@
 // Design system v1: Knowledge as a classroom, in the mock's markup
 // (docs/design/hifi-mock, Knowledge). The library: ask, continue where you
 // left off, and the courses as cards with progress, in pages. An open course:
-// its lesson, Mark done and Next, with the outline in the right column. Notes
-// only ever appear in the right column ("Learned this week").
+// its lesson, Mark done and Next, with the outline in the right column. Under
+// the shelf, one list of notes, files and links (KitKnowledgeList); a note
+// opens in the right column.
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   fetchCourseProgressSummary,
@@ -17,6 +18,7 @@ import {
   updateCommunityNote,
   type CommunityNoteView,
 } from "../../../../shared/cloudCommunityNotesGateway";
+import { getCloudCommunityHomeSnapshot } from "../../../../shared/cloudCommunityAdminGateway";
 import { continueLesson, courseLessons, courseProgress, pageOf } from "../../../../shared/communityClassroom";
 import type { CommunityResource, CommunityResourceModule } from "../components/communityResourcesContracts";
 import { openGuideFromSearch } from "../components/guideSearch";
@@ -24,7 +26,7 @@ import { WebCommunityResourceViewerContent } from "../components/WebCommunityRes
 import { NoteForm, OpenNote, noteIsNew } from "./KitKnowledgeNotes";
 import { KitLessonEditor, type LessonPatch } from "./KitLessonEditor";
 import { Btn, cx, Icon, KitApp, Rail, Sec, Sep, TextLink } from "./kit";
-import { KitMemoryMap } from "./KitMemoryMap";
+import { KitKnowledgeList, type KnowledgeAddResult } from "./KitKnowledgeList";
 import { useCommunityAgentOn } from "../controllers/communityAgentOn";
 
 const SHELF = 6;
@@ -43,6 +45,17 @@ function firstLine(markdown: string | null): string {
   return line.length > 110 ? `${line.slice(0, 107)}…` : line;
 }
 
+// What a host most needs to hear: drafts members can't see come first.
+function hostLead(courses: CommunityResourceModule[], learning: number): string {
+  if (courses.length === 0) return "Start with one course.";
+  const drafts = courses.filter((course) => course.module_status === "draft");
+  if (drafts.length === courses.length) return courses.length === 1 ? `${courses[0].name} is a draft. Members can't see it yet.` : "None of your courses is published yet.";
+  if (drafts.length === 1) return `${drafts[0].name} is a draft. Members can't see it yet.`;
+  if (drafts.length > 1) return `${drafts.length} courses are drafts. Members can't see them yet.`;
+  if (learning > 0) return `Members have started ${learning} ${learning === 1 ? "course" : "courses"} between them.`;
+  return "Your courses are ready for members.";
+}
+
 export function KitClassroom(props: {
   communityId: string;
   communityName: string;
@@ -59,6 +72,10 @@ export function KitClassroom(props: {
   onEditCourse: (moduleId: string) => void;
   // A course's name, line and cover (the course form).
   onEditCourseDetails: (moduleId: string) => void;
+  // Publish a course to members, or take it back to a draft (hosts).
+  onSetCourseStatus?: (moduleId: string, status: "draft" | "live") => Promise<unknown>;
+  // Hosts hand Polynet links and files to read.
+  onAddSources?: (input: { links: string[]; files: File[] }) => Promise<KnowledgeAddResult>;
   // Hosts write lessons in place.
   lessonEditing: {
     save: (resourceId: string, patch: LessonPatch) => Promise<void>;
@@ -79,6 +96,25 @@ export function KitClassroom(props: {
   const [saving, setSaving] = useState(false);
   const [editingLessonId, setEditingLessonId] = useState<string | null>(null);
   const editingTools = props.canManage ? props.lessonEditing : null;
+  // Questions members asked in channels that nobody answered (the owner's
+  // brief already finds them): where Knowledge is thin.
+  const [waiting, setWaiting] = useState<Array<{ author: string; channel: string; text: string; hoursAgo: number }>>([]);
+  const [seed, setSeed] = useState<{ text: string; nonce: number } | null>(null);
+  useEffect(() => {
+    if (!props.canManage) { setWaiting([]); return; }
+    let cancelled = false;
+    getCloudCommunityHomeSnapshot({ session: props.session, communityId: props.communityId })
+      .then((snapshot) => { if (!cancelled) setWaiting(snapshot?.unanswered ?? []); })
+      // Only the owner may read the brief's facts; others go without this part.
+      .catch(() => { if (!cancelled) setWaiting([]); });
+    return () => { cancelled = true; };
+  }, [props.session, props.communityId, props.canManage]);
+  const [publishing, setPublishing] = useState(false);
+  const setCourseStatus = async (moduleId: string, status: "draft" | "live") => {
+    if (!props.onSetCourseStatus || publishing) return;
+    setPublishing(true);
+    try { await props.onSetCourseStatus(moduleId, status); } finally { setPublishing(false); }
+  };
   // Asking Knowledge is the guide's; a community without it doesn't offer it.
   const agentOn = useCommunityAgentOn();
   const [now] = useState(Date.now);
@@ -147,14 +183,12 @@ export function KitClassroom(props: {
     }
   };
 
-  const fresh = notes.filter((entry) => noteIsNew(entry, now)).slice(0, 4);
-  const shownNotes = fresh.length ? fresh : notes.slice(0, 3);
   const openNote = note?.slug ? notes.find((entry) => entry.slug === note.slug) ?? null : null;
 
   // ---------- the right column
   const noteRail = note ? (
     <>
-      <TextLink onClick={() => setNote(null)}>Back</TextLink>
+      <button type="button" className={cx("kback")} onClick={() => setNote(null)}><Icon name="back" />Back</button>
       {note.mode === "new" && canWriteNotes ? (
         <NoteForm title="" text="" submitLabel="Save note" onCancel={() => setNote(null)}
           onSubmit={async (title, text) => {
@@ -184,35 +218,31 @@ export function KitClassroom(props: {
 
   const libraryRail = (
     <>
-      <Sec label={`What ${props.communityName} knows`}>
-        <div className={cx("kmini")}><KitMemoryMap /></div>
-        <span className={cx("sub")}>{notes.length} {notes.length === 1 ? "note" : "notes"} · {courses.length} {courses.length === 1 ? "course" : "courses"}</span>
-      </Sec>
-      {shownNotes.length || canWriteNotes ? (
+      {canWriteNotes && waiting.length ? (
         <>
-          <Sep />
           <div className={cx("sec")}>
-            <span className={cx("lab")} style={{ display: "flex", alignItems: "center", gap: 6, color: "var(--aurora-ink)" }}><Icon name="spark" extra="xs" />{fresh.length ? "Learned this week" : "What it has learned"}</span>
-            {shownNotes.map((entry, index) => (
-              <button key={entry.slug} type="button" className={cx("src")} style={index ? { marginTop: -8 } : undefined} onClick={() => setNote({ slug: entry.slug, mode: "read" })}>
-                <span className={cx("sdot", noteIsNew(entry, now) && "fresh")} />{entry.title}{noteIsNew(entry, now) ? <em>new</em> : null}
-              </button>
+            <span className={cx("lab")} style={{ display: "flex", alignItems: "center", gap: 6, color: "var(--aurora-ink)" }}><Icon name="spark" extra="xs" />Questions nobody answered</span>
+            {waiting.slice(0, 3).map((question, index) => (
+              <div key={`${question.author}:${index}`} className={cx("kwait")}>
+                <p>“{question.text}”</p>
+                <span className={cx("sub")}>{question.author} in #{question.channel} · {question.hoursAgo < 48 ? `${question.hoursAgo}h ago` : `${Math.round(question.hoursAgo / 24)}d ago`}</span>
+                <button type="button" className={cx("btn sm")} onClick={() => { setNote(null); setSeed({ text: `${question.text}\n`, nonce: Date.now() }); }}>Add the answer</button>
+              </div>
             ))}
-            {canWriteNotes ? <TextLink onClick={() => setNote({ slug: null, mode: "new" })}>Write a note</TextLink> : null}
           </div>
+          <Sep />
         </>
       ) : null}
       {courses.length ? (
         <>
-          <Sep />
-          {props.canManage ? (
+          {props.canManage ? (courses.some((entry) => entry.course.module_status === "live") ? (
             <Sec label="Learning">
               {courses.filter((entry) => entry.course.module_status === "live").slice(0, 5).map(({ course }) => {
                 const row = summaryBy.get(course.id);
                 return <div key={course.id} className={cx("kline")}><span>{course.name}</span><em>{row ? `${row.started} started · ${row.finished} finished` : "—"}</em></div>;
               })}
             </Sec>
-          ) : (
+          ) : <Sec label="Learning"><p>Publish a course and you'll see who started and finished it here.</p></Sec>) : (
             <Sec label="Your progress">
               {courses.filter(({ lessons }) => courseProgress(lessons, done).done > 0).length === 0 ? <p>Start a course and it shows here.</p> : null}
               {courses.map(({ course, lessons }) => {
@@ -297,6 +327,14 @@ export function KitClassroom(props: {
           <span>›</span><span>{open.course.name}</span>
           {props.canManage ? (
             <span style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
+              {props.onSetCourseStatus ? (open.course.module_status === "draft" ? (
+                <button type="button" className={cx("btn sm go")} disabled={publishing || open.lessons.length === 0}
+                  title={open.lessons.length === 0 ? "Write a lesson first" : "Members will see this course"}
+                  onClick={() => void setCourseStatus(open.course.id, "live")}>Publish course</button>
+              ) : (
+                <button type="button" className={cx("btn sm txt")} disabled={publishing} title="Back to a draft only hosts see"
+                  onClick={() => void setCourseStatus(open.course.id, "draft")}>Unpublish</button>
+              )) : null}
               <button type="button" className={cx("btn sm")} onClick={() => props.onEditCourseDetails(open.course.id)}>Course details</button>
               <button type="button" className={cx("btn sm txt")} onClick={() => props.onEditCourse(open.course.id)}>More tools</button>
             </span>
@@ -353,7 +391,7 @@ export function KitClassroom(props: {
       <div className={cx("page")} style={{ padding: 0, overflow: "visible" }}>
         <p className={cx("lead")} style={{ marginTop: 0 }}>{agentOn ? <span className={cx("aura")}><Icon name="spark" /></span> : null}
           {!props.loaded ? " " : props.canManage
-            ? (courses.length === 0 ? "Start with one course." : learning > 0 ? `Members have started ${learning} ${learning === 1 ? "course" : "courses"} between them.` : "Your courses are ready for members.")
+            ? hostLead(courses.map((entry) => entry.course), learning)
             : resume ? "Pick up where you left off." : courses.length ? "Pick a course to start." : "Nothing to learn here yet."}
         </p>
         {agentOn ? (
@@ -406,6 +444,19 @@ export function KitClassroom(props: {
             <button type="button" className={cx("btn sm")} disabled={shelf.page >= shelf.pages - 1} onClick={() => setShelfPage(shelf.page + 1)}>Next</button>
           </div>
         ) : null}
+        <KitKnowledgeList notes={notes} now={now} seed={seed}
+          sources={props.canManage ? props.resources.filter((resource) => resource.resource_role === "source") : []}
+          onOpenNote={(slug) => setNote({ slug, mode: "read" })}
+          onAddNote={canWriteNotes ? async (title, text) => {
+            try {
+              await createCommunityNote({ session: props.session, communityId: props.communityId, title, text });
+              await loadNotes();
+              return { ok: true };
+            } catch (error) {
+              return { ok: false, message: error instanceof Error && error.message ? error.message : "That note couldn't be saved. Try again." };
+            }
+          } : undefined}
+          onAddSources={props.canManage ? props.onAddSources : undefined} />
       </div>
     );
   }
