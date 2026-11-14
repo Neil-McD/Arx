@@ -4,6 +4,7 @@ import {
   indentCommunityComposerList,
   insertCommunityComposerText,
   toggleCommunityComposerInlineFormat,
+  isImeComposing,
 } from "../apps/web/src/controllers/communityComposerTextEditing";
 
 describe("community composer text editing", () => {
@@ -50,5 +51,18 @@ describe("community composer text editing", () => {
     expect(continueCommunityComposerList({ value: "before\n  - ", selectionStart: 11, selectionEnd: 11 }))
       .toEqual({ value: "before\n\n", selectionStart: 8, selectionEnd: 8, changed: true });
     expect(continueCommunityComposerList({ value: "plain", selectionStart: 5, selectionEnd: 5 })).toBeNull();
+  });
+});
+
+
+describe("isImeComposing", () => {
+  it("is true while an input method composes, so Enter picks a candidate instead of sending", () => {
+    expect(isImeComposing({ nativeEvent: { isComposing: true } })).toBe(true);
+    expect(isImeComposing({ nativeEvent: { isComposing: false, keyCode: 229 } })).toBe(true);
+    expect(isImeComposing({ isComposing: true })).toBe(true);
+  });
+  it("is false for ordinary keys", () => {
+    expect(isImeComposing({ nativeEvent: { isComposing: false, keyCode: 13 } })).toBe(false);
+    expect(isImeComposing({})).toBe(false);
   });
 });

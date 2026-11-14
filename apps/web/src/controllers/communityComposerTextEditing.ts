@@ -1,3 +1,10 @@
+// While an input method (Japanese, Chinese, Korean...) is composing, Enter
+// and the arrow keys belong to it: they pick a candidate, not send or move.
+export function isImeComposing(event: { nativeEvent?: { isComposing?: boolean; keyCode?: number }; isComposing?: boolean; keyCode?: number }): boolean {
+  const native = event.nativeEvent ?? event;
+  return Boolean(native.isComposing) || native.keyCode === 229;
+}
+
 export type CommunityComposerSelection = {
   value: string;
   selectionStart: number;
