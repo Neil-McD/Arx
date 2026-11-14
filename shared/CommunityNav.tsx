@@ -1,5 +1,6 @@
 import { memo, useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import {
+  Boxes,
   Brain,
   ChartNoAxesColumn,
   Check,
@@ -9,6 +10,7 @@ import {
   Hash,
   House,
   Inbox,
+  Library,
   LockKeyhole,
   Plus,
   Settings,
@@ -639,6 +641,20 @@ export const CommunityNav = memo(function CommunityNav({
               <span className="nav-item-label">Agent</span>
             </button>
           )}
+          {/* Pods, then Knowledge, Events, Members (Neil, Nov 14). Offered by the caller only when pods exist for this layout (design v1, desktop or phone). */}
+          {onOpenPods ? (
+            <button
+              className={showActiveSelection && (communityTab === "pods" || podsActive) ? "nav-item active" : "nav-item"}
+              type="button"
+              onClick={onOpenPods}
+              title="Pods"
+            >
+              <span className="nav-icon" aria-hidden="true">
+                <Boxes size={17} strokeWidth={1.7} />
+              </span>
+              <span className="nav-item-label">Pods</span>
+            </button>
+          ) : null}
           <button
             className={showActiveSelection && communityTab === "resources" ? "nav-item active" : "nav-item"}
             type="button"
@@ -646,7 +662,7 @@ export const CommunityNav = memo(function CommunityNav({
             title="Knowledge"
           >
             <span className="nav-icon">
-              <Brain size={18} strokeWidth={1.7} aria-hidden="true" />
+              {isV1 ? <Library size={17} strokeWidth={1.7} aria-hidden="true" /> : <Brain size={18} strokeWidth={1.7} aria-hidden="true" />}
             </span>
             <span className="nav-item-label">Knowledge</span>
             {communityTab !== "resources" && tabIndicators.resources ? <span className="nav-item-dot" aria-hidden="true" /> : null}
@@ -671,22 +687,6 @@ export const CommunityNav = memo(function CommunityNav({
             <span className="nav-item-label">Events</span>
             {communityTab !== "events" && tabIndicators.events ? <span className="nav-item-dot" aria-hidden="true" /> : null}
           </button>
-          {/* Offered by the caller only when pods exist for this layout (design v1, desktop or phone). */}
-          {onOpenPods ? (
-            <button
-              className={showActiveSelection && (communityTab === "pods" || podsActive) ? "nav-item active" : "nav-item"}
-              type="button"
-              onClick={onOpenPods}
-              title="Pods"
-            >
-              <span className="nav-icon" aria-hidden="true">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
-                  <circle cx="8" cy="9" r="3" /><circle cx="16" cy="9" r="3" /><circle cx="12" cy="16" r="3" />
-                </svg>
-              </span>
-              <span className="nav-item-label">Pods</span>
-            </button>
-          ) : null}
           {(appLinks ?? []).map((app) => (
             <a className="nav-item nav-item-app" key={app.url} href={app.url} target="_blank" rel="noreferrer" title={`Open ${app.name}`}>
               <span className="nav-icon" aria-hidden="true"><SquareArrowOutUpRight size={16} strokeWidth={1.7} /></span>
@@ -698,17 +698,6 @@ export const CommunityNav = memo(function CommunityNav({
               <span className="nav-icon" aria-hidden="true"><Users size={17} strokeWidth={1.7} /></span>
               <span className="nav-item-label">Members</span>
               {memberCount ? <span className="nav-item-hint">{memberCount}</span> : null}
-            </button>
-          ) : null}
-          {isV1 && canViewActiveCommunityAnalytics ? (
-            <button
-              className={showActiveSelection && communityTab === "analytics" ? "nav-item active" : "nav-item"}
-              type="button"
-              onClick={() => onSelectTab("analytics")}
-              title="Analytics"
-            >
-              <span className="nav-icon" aria-hidden="true"><ChartNoAxesColumn size={17} strokeWidth={1.7} /></span>
-              <span className="nav-item-label">Analytics</span>
             </button>
           ) : null}
         </>
@@ -751,10 +740,21 @@ export const CommunityNav = memo(function CommunityNav({
           <div className="community-nav-invite-loading web-skeleton-block" />
         </div>
       ) : isV1 ? (
-        // Design system v1: the foot is Invite people (anyone who may invite).
-        // Settings and Your guide are in the account menu; Analytics is under Members.
-        canCopyJoinLink ? (
+        // Design system v1: the foot is Analytics (hosts), then Invite people
+        // (anyone who may invite). Settings and Your guide are in the account menu.
+        canCopyJoinLink || canViewActiveCommunityAnalytics ? (
           <div className="community-nav-footer">
+            {canViewActiveCommunityAnalytics ? (
+              <button
+                className={showActiveSelection && communityTab === "analytics" ? "nav-item active" : "nav-item"}
+                type="button"
+                onClick={() => onSelectTab("analytics")}
+                title="Analytics"
+              >
+                <span className="nav-icon" aria-hidden="true"><ChartNoAxesColumn size={17} strokeWidth={1.7} /></span>
+                <span className="nav-item-label">Analytics</span>
+              </button>
+            ) : null}
             {canCopyJoinLink ? (
               <button
                 className={`nav-item community-nav-invite${didCopyJoinLink ? " is-copied" : ""}`}
