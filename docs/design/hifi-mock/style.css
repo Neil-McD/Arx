@@ -517,7 +517,7 @@ label.trow{cursor:pointer}
 .kcourse>b,.kcourse>.s{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden}
 .kcourse>.s{margin-bottom:10px}.kcourse>.kpct{margin-top:auto}
 /* A course without a cover: one of three soft tints, never an empty box. */
-.kcover.c4{background:linear-gradient(135deg,rgba(var(--au),.16),rgba(var(--w),.05))}
+.kcover.c4{background:linear-gradient(135deg,rgba(29,155,240,.14),rgba(var(--au),.16))}
 .kcover{height:112px;border-radius:0;align-items:center;justify-content:center}.kcover .ic{width:26px;height:26px;opacity:.8}
 .kcover.c1{background:url(./polynet-earth.webp) 72% 38%/cover}
 .kpct{position:relative;display:block;height:20px;margin-top:10px;border-radius:10px;background:var(--s3);overflow:hidden}
