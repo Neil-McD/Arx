@@ -267,7 +267,7 @@ export function WebCommunityChannelHeader({
   const identity = (
     <>
       {channel.access_mode === "restricted" ? <LockKeyhole size={17} strokeWidth={1.9} aria-hidden="true" /> : <Hash size={17} strokeWidth={1.9} aria-hidden="true" />}
-      <h1>{channel.name}{isDesignV1Active() && description ? <small className="community-channel-header-description">{description}</small> : null}</h1>
+      <h1>{channel.name}</h1>
     </>
   );
 

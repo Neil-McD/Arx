@@ -87,7 +87,7 @@ export function KitMembersDirectory(props: {
     <section className="members-page is-kit" aria-label="Community members">
       <KitApp view="members" part="main">
         <View index={5}>
-          <Top title={<>Members <small>{rows ? `${rows.length} ${rows.length === 1 ? "person" : "people"}` : ""}</small></>} titleView={5} />
+          <Top title="Members" titleView={5} />
           <div className={cx("page")} style={{ overflowY: "auto" }}>
             <p className={cx("lead")}><span className={cx("aura")}><Icon name="spark" /></span>
               {failed ? "Members couldn't load." : !rows ? " " : hereCount > 1 ? `${hereCount} people are here now.` : "Who's here, and what they're working on."}</p>
