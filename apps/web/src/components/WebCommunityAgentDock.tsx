@@ -260,7 +260,7 @@ function WebCommunityAgentDock(props, ref) {
   // there (Neil, Nov 14). Not on touch screens, where that raises the
   // keyboard, and never over something the person is already typing in.
   useEffect(() => {
-    if (!props.pageMode || props.isSuppressed) return;
+    if (!props.pageMode || !props.pageActive || props.isSuppressed) return;
     if (typeof window === "undefined" || window.matchMedia?.("(pointer: coarse)").matches) return;
     const frame = window.requestAnimationFrame(() => {
       const box = kitInputRef.current ?? textareaRef.current;
@@ -270,7 +270,7 @@ function WebCommunityAgentDock(props, ref) {
       box.focus({ preventScroll: true });
     });
     return () => window.cancelAnimationFrame(frame);
-  }, [props.pageMode, props.isSuppressed, props.community?.id]);
+  }, [props.pageMode, props.pageActive, props.isSuppressed, props.community?.id]);
   const composerFormRef = useRef<HTMLFormElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const attachmentsRef = useRef<CommunityAgentImageDraft[]>([]);
