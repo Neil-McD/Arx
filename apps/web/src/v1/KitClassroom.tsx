@@ -505,6 +505,13 @@ export function KitClassroom(props: {
             <button type="button" className={cx("btn sm")} disabled={shelf.page >= shelf.pages - 1} onClick={() => setShelfPage(shelf.page + 1)}>Next</button>
           </div>
         ) : null}
+        {/* Where the right column is hidden (narrow windows), builders still
+            need the way into what the guide knows. */}
+        {canWriteNotes && props.onOpenGuideMemory ? (
+          <div className="knowledge-course-tools-inline" style={{ marginTop: 24 }}>
+            <button type="button" className={cx("btn sm")} onClick={() => props.onOpenGuideMemory?.(true)}>What your guide knows · {notes.length + guideSources.length}</button>
+          </div>
+        ) : null}
       </div>
     );
   }
