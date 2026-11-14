@@ -250,7 +250,11 @@ export function WebCommunityLandingPage(props: Props) {
       );
     }
     if (viewer?.state === "member") {
-      return <Card title="You're a member" note={null}><button type="button" className="cl-primary" onClick={openCommunity}>Open community</button></Card>;
+      return (
+        <Card title={d.is_owner ? "Your community" : "You're a member"} note={d.is_owner ? "This is the page people see when you share your link." : null}>
+          <button type="button" className="cl-primary" onClick={openCommunity}>Open community</button>
+        </Card>
+      );
     }
     if (viewer?.state === "blocked") return <Card title={`You can't join ${name}`} note={null} />;
     if (!d.available) return <Card title={`Join ${name}`} note={`${name} isn't taking new members right now.`} />;
