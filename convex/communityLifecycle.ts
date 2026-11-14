@@ -1,6 +1,6 @@
 import { internal } from "./_generated/api";
 import { internalMutation, internalQuery, mutation, query } from "./_generated/server";
-import { communityHasCustomSite, communityMemberExperience, moveCommunitySiteAddresses, registerCommunitySiteAddresses, requireSiteReadySlug } from "./communitySites";
+import { communityHasCustomSite, storedCommunityMemberExperience, moveCommunitySiteAddresses, registerCommunitySiteAddresses, requireSiteReadySlug } from "./communitySites";
 import { ConvexError, v } from "convex/values";
 import { recordCriticalAuditEvent } from "./criticalAudit";
 import { requireOwnerBelowFreeCommunityLimit } from "./communityCore";
@@ -579,7 +579,7 @@ export async function applyCommunityMemberExperience(ctx: any, args: {
   if (args.experience === "site" && !(await communityHasCustomSite(ctx, args.community._id))) {
     throw new Error("community_custom_site_required");
   }
-  const before = await communityMemberExperience(ctx, args.community as any);
+  const before = await storedCommunityMemberExperience(ctx, args.community as any);
   const nowMs = Date.now();
   await ctx.db.patch(args.community._id as any, { memberExperience: args.experience, updatedAt: nowMs });
   if (before !== args.experience) {

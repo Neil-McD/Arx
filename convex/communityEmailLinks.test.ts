@@ -7,9 +7,9 @@ import { communityPrivatePageUrl, communitySitePageUrl, registerCommunitySiteAdd
 import { directMessageLink } from "./directMessageEmails";
 import { enqueueCommunityAccessGrantedEmailInternal } from "./emailEvents";
 
-// Members live on the community's own site, so the emails that bring them back
-// open it there; without a site (production until its sites run) they keep
-// their Studio links.
+// Members always use Polynet's app (Nov 13: custom sites are being removed),
+// so every email that brings them back opens the app, even for a community
+// whose stored switch says "site" and which has deployed one.
 const modules = import.meta.glob(["./*.ts", "!./*.test.ts", "./_generated/**/*.*s"]);
 const NOW = Date.now();
 
@@ -46,7 +46,7 @@ async function fixture(withSite: boolean, opts: { appWithSite?: boolean } = {}) 
   return { t, ...ids };
 }
 
-test("with a site, a community's links are its site's pages and its private pages", async () => {
+test("even with a deployed site and the switch on site, every link stays in the app", async () => {
   const f = await fixture(true);
   const links = await f.t.run(async (ctx) => {
     const community = (await ctx.db.get(f.communityId))!;
@@ -57,12 +57,7 @@ test("with a site, a community's links are its site's pages and its private page
       bySlug: await ctx.runQuery(internal.communitySites.communitySitePageUrlBySlugInternal, { slug: "night-swimmers", path: "/" }),
     };
   });
-  expect(links).toEqual({
-    chat: "https://night-swimmers-staging.polynet.page/chat?channel=crew",
-    event: "https://night-swimmers-staging.polynet.page/events/abc~1793570400000",
-    messages: "https://night-swimmers--me-staging.polynet.page/messages/k97abc",
-    bySlug: "https://night-swimmers-staging.polynet.page/",
-  });
+  expect(links).toEqual({ chat: null, event: null, messages: null, bySlug: null });
 });
 
 test("members on Polynet's app (the default, even with a site address): every link stays in the app", async () => {
@@ -93,26 +88,19 @@ test("without a site there's no site link, so each email keeps its Studio link",
   expect(links).toEqual([null, null]);
 });
 
-test("a direct message opens on the community's private pages, or this environment's Studio inbox, never a hard-coded production address", async () => {
+test("a direct message opens this environment's Studio inbox, never a site or a hard-coded production address", async () => {
   const withSite = await fixture(true);
   const link = (f: Awaited<ReturnType<typeof fixture>>, userId: any) =>
     f.t.run(async (ctx) => directMessageLink(ctx, await ctx.db.get(f.communityId), "k97abc", userId));
-  // A member still in the community: that conversation on its private pages.
-  expect(await link(withSite, withSite.memberId)).toBe("https://night-swimmers--me-staging.polynet.page/messages/k97abc");
-  // Someone who has since left: Messages there would refuse them, so Studio's inbox.
-  await withSite.t.run(async (ctx) => {
-    const row = (await ctx.db.query("communityMemberships").collect()).find((m) => m.userId === withSite.memberId)!;
-    await ctx.db.patch(row._id, { state: "lapsed", revokedAt: NOW });
-  });
   expect(await link(withSite, withSite.memberId)).toBe("https://polynet-staging.example.com/?dm=k97abc");
-  // Begun outside any community: Studio's inbox, on this environment's own app.
+  // Begun outside any community: the same inbox, on this environment's own app.
   expect(await withSite.t.run((ctx) => directMessageLink(ctx, null, "k97abc", withSite.memberId))).toBe("https://polynet-staging.example.com/?dm=k97abc");
   vi.unstubAllEnvs();
   const noSite = await fixture(false);
   expect(await link(noSite, noSite.memberId)).toBe("https://polynet-staging.example.com/?dm=k97abc");
 });
 
-test("'you're in' opens the community's chat on its site; without a site, Studio's", async () => {
+test("'you're in' opens the community's chat in the app, with or without a site", async () => {
   for (const withSite of [true, false]) {
     vi.unstubAllEnvs();
     const f = await fixture(withSite);
@@ -121,8 +109,6 @@ test("'you're in' opens the community's chat on its site; without a site, Studio
       const row = await ctx.db.query("emailOutbox").first();
       return row?.payload?.actionUrl ?? null;
     });
-    expect(url, String(withSite)).toBe(withSite
-      ? "https://night-swimmers-staging.polynet.page/chat"
-      : "https://polynet-staging.example.com/c/night-swimmers/chat");
+    expect(url, String(withSite)).toBe("https://polynet-staging.example.com/c/night-swimmers/chat");
   }
 });
