@@ -1,5 +1,5 @@
 import { useCommunityAgentOn } from "../controllers/communityAgentOn";
-import { isImeComposing } from "../controllers/communityComposerTextEditing";
+import { enterSendsMessage, isImeComposing } from "../controllers/communityComposerTextEditing";
 import {
   useCallback,
   useEffect,
@@ -1385,7 +1385,7 @@ function WebCommunityAgentDock(props, ref) {
                 }}
                 onKeyDown={(event) => {
                   if (isImeComposing(event)) return;
-                  if (event.key === "Enter" && !event.shiftKey) {
+                  if (enterSendsMessage(event)) {
                     event.preventDefault();
                     event.currentTarget.form?.requestSubmit();
                   }
@@ -1574,7 +1574,7 @@ function WebCommunityAgentDock(props, ref) {
               onPaste={handleAttachmentPaste}
               onKeyDown={(event) => {
                 if (isImeComposing(event)) return;
-                if (event.key === "Enter" && !event.shiftKey) {
+                if (enterSendsMessage(event)) {
                   event.preventDefault();
                   event.currentTarget.form?.requestSubmit();
                 }

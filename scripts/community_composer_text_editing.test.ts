@@ -4,6 +4,7 @@ import {
   indentCommunityComposerList,
   insertCommunityComposerText,
   toggleCommunityComposerInlineFormat,
+  enterSendsMessage,
   isImeComposing,
 } from "../apps/web/src/controllers/communityComposerTextEditing";
 
@@ -64,5 +65,13 @@ describe("isImeComposing", () => {
   it("is false for ordinary keys", () => {
     expect(isImeComposing({ nativeEvent: { isComposing: false, keyCode: 13 } })).toBe(false);
     expect(isImeComposing({})).toBe(false);
+  });
+});
+
+describe("enterSendsMessage", () => {
+  it("sends on Enter, adds a line on Shift+Enter, ignores other keys", () => {
+    expect(enterSendsMessage({ key: "Enter", shiftKey: false })).toBe(true);
+    expect(enterSendsMessage({ key: "Enter", shiftKey: true })).toBe(false);
+    expect(enterSendsMessage({ key: "a", shiftKey: false })).toBe(false);
   });
 });

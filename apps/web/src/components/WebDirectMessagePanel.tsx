@@ -1,5 +1,5 @@
-import { ArrowLeft, Ban, Bell, BellOff, MessageCircle, MoreHorizontal, Paperclip, RotateCcw } from "lucide-react";
-import { isImeComposing } from "../controllers/communityComposerTextEditing";
+import { ArrowLeft, Ban, Bell, BellOff, MessageCircle, MoreHorizontal, Paperclip, Plus, RotateCcw } from "lucide-react";
+import { enterSendsMessage, isImeComposing } from "../controllers/communityComposerTextEditing";
 import type { ChangeEvent, ComponentProps, DragEvent, FormEvent, MutableRefObject, ReactNode } from "react";
 import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type {
@@ -796,7 +796,7 @@ export function WebDirectMessagePanel(props: WebDirectMessagePanelProps) {
                   onBlur={() => { void props.onComposerBlur?.(); }}
                   onKeyDown={(event) => {
                     if (isImeComposing(event)) return;
-                    if (event.key === "Enter" && !event.shiftKey) {
+                    if (enterSendsMessage(event)) {
                       event.preventDefault();
                       if (!canSendDirectMessage) return;
                       void props.onSend();
@@ -1048,7 +1048,7 @@ export function WebDirectMessagePanel(props: WebDirectMessagePanelProps) {
             aria-label="Attach files"
             title="Attach files"
           >
-            <Paperclip aria-hidden="true" />
+            <Plus aria-hidden="true" />
           </button>
           <textarea
             ref={(node) => {
@@ -1063,7 +1063,7 @@ export function WebDirectMessagePanel(props: WebDirectMessagePanelProps) {
             }}
             onKeyDown={(event) => {
               if (isImeComposing(event)) return;
-              if (event.key === "Enter" && !event.shiftKey) {
+              if (enterSendsMessage(event)) {
                 event.preventDefault();
                 if (!canSendDirectMessage) return;
                 void props.onSend();
