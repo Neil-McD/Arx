@@ -38,6 +38,9 @@ export type EventDraft = {
   recurrence_until: string;
   // Members only, or also on the community's public page.
   visibility: "members" | "public";
+  // Every week, or every second week: kept as the event has it (the form
+  // has no field for it, and saving must not change the dates).
+  recurrence_interval: number;
 };
 
 type EventDayGroup = {
@@ -179,6 +182,7 @@ function makeDraft(dayKey: string | null): EventDraft {
     recurrence_frequency: "none",
     recurrence_until: "",
     visibility: "members",
+    recurrence_interval: 1,
   };
 }
 
@@ -198,6 +202,7 @@ function makeDraftFromEvent(event: CommunityEvent): EventDraft {
       ? toCommunityEventDateTimeInputValue(new Date(event.recurrence_until), timezone)
       : "",
     visibility: event.visibility === "public" ? "public" : "members",
+    recurrence_interval: event.recurrence_interval || 1,
   };
 }
 
@@ -533,7 +538,7 @@ export function WebCommunityEventsSection(props: WebCommunityEventsSectionProps)
         url: draft.url.trim() || null,
         visibility: draft.visibility,
         recurrence_frequency: draft.recurrence_frequency,
-        recurrence_interval: 1,
+        recurrence_interval: draft.recurrence_interval,
         recurrence_until: recurrenceUntil,
       },
       currentRange,
@@ -561,7 +566,7 @@ export function WebCommunityEventsSection(props: WebCommunityEventsSectionProps)
   // Design system v1: the soonest event as a card, then Coming up and Past.
   const listParts = splitCommunityEvents(state.events, listNow);
   const eventForm = draft ? (
-    <KitEventForm draft={draft} isNew={!editingEventId} isSeries={isRecurringCommunityEvent(editingSourceEvent)}
+    <KitEventForm key={editingEventId ?? "new"} draft={draft} isNew={!editingEventId} isSeries={isRecurringCommunityEvent(editingSourceEvent)}
       canBePublic={!editingSourceEvent?.pod_channel_id} communityName={capabilities.activeCommunityName}
       isSaving={isSaving} error={localError ?? (isSaving ? null : state.eventsError)}
       timeZones={getUniqueTimeZoneOptions(draft.timezone).map((zone) => ({ value: zone, label: formatTimeZoneLabel(zone) }))}

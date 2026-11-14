@@ -1731,7 +1731,8 @@
     height: 28px;
   }
   :root[data-design="v1"] .web-direct-messages-host.is-page .community-dm-inbox-panel.is-kit .community-dm-inbox-search:focus-within {
-    border-color: var(--stroke-focus);
+    /* The same quiet grey a channel's message box takes, never blue. */
+    border-color: color-mix(in srgb, var(--text-primary) 24%, transparent);
   }
   :root[data-design="v1"] .web-direct-messages-host.is-page .community-dm-inbox-panel.is-kit .community-dm-inbox-search input,
   :root[data-design="v1"] .web-direct-messages-host.is-page .community-dm-inbox-panel.is-kit .community-dm-inbox-search input:focus {
