@@ -757,7 +757,9 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
     if (showInteractionProjection && selectedInteractionRootId && drawerReplyTarget) {
       return `thread:${selectedInteractionRootId}`;
     }
-    return `main:${activeCommunity.id}`;
+    // Each channel and each pod's room is its own place: opening one puts
+    // the cursor in its message box (Neil, Nov 14).
+    return `main:${activeCommunity.id}:${interactionProjection?.activeChannel?.id ?? ""}`;
   })();
 
   useEffect(() => {
