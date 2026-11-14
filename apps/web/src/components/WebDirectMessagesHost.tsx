@@ -27,6 +27,7 @@ import { mergeVoiceTranscript } from "../../../../shared/voiceCapture";
 import { WebDirectMessageInboxPanel } from "./WebDirectMessageInboxPanel";
 import { isDesignV1Active } from "../../../../shared/designSystem";
 import { WebDirectMessagePanel } from "./WebDirectMessagePanel";
+import { fitComposerHeight } from "../../../../shared/composerHeight";
 
 type DirectMessageAttachmentDraft = DirectMessageAttachment & {
   data_url?: string | null;
@@ -464,8 +465,7 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
           return;
         }
       }
-      input.style.height = "auto";
-      input.style.height = `${Math.min(input.scrollHeight, 148)}px`;
+      fitComposerHeight(input);
       input.focus({ preventScroll: true });
       const end = input.value.length;
       try {

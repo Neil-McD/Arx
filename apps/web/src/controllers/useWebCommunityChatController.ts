@@ -39,6 +39,7 @@ import {
   COMMUNITY_ATTACHMENT_MEDIA_BYTES as MAX_WEB_MEDIA_UPLOAD_BYTES,
   COMMUNITY_ATTACHMENT_FILE_BYTES as MAX_WEB_FILE_UPLOAD_BYTES,
 } from "../../../../shared/communityAttachmentPolicy";
+import { fitComposerHeight, resetComposerHeight } from "../../../../shared/composerHeight";
 const MAX_WEB_TEXT_ATTACHMENT_BYTES = 200 * 1024;
 const MAX_WEB_IMAGE_DATA_URL_CHARS = 600_000;
 export type WebCommunityMessageAttachment = CommunityMessageAttachment & {
@@ -468,7 +469,7 @@ export function useWebCommunityChatController(
       setReplyingToMessage(null);
     }
     const composerInputRef = draft?.inputRef ?? inputRef;
-    if (composerInputRef?.current) composerInputRef.current.style.height = "auto";
+    resetComposerHeight(composerInputRef?.current);
     // The draft is cleared: the next message can start now.
     releaseClaim();
 
@@ -565,7 +566,7 @@ export function useWebCommunityChatController(
     setAttachments([]);
     setIsSendingMessage(false);
     setReplyingToMessage(null);
-    if (inputRef.current) inputRef.current.style.height = "auto";
+    resetComposerHeight(inputRef.current);
   }, []);
 
   useEffect(() => {
@@ -596,12 +597,11 @@ export function useWebCommunityChatController(
     setReplyingToMessage(null);
     const textarea = inputRef.current;
     if (!textarea) return;
-    textarea.style.height = "auto";
+    resetComposerHeight(textarea);
     if (!saved) return;
     // Size the box to the restored draft once it has rendered.
     const frame = window.requestAnimationFrame(() => {
-      textarea.style.height = "auto";
-      textarea.style.height = `${Math.min(textarea.scrollHeight, 120)}px`;
+      fitComposerHeight(textarea);
     });
     return () => window.cancelAnimationFrame(frame);
   }, [params.activeCommunityId, params.activeChannelId]);
@@ -628,8 +628,7 @@ export function useWebCommunityChatController(
   ) => {
     setMessageInput(value);
     if (!textarea) return;
-    textarea.style.height = "auto";
-    textarea.style.height = `${Math.min(textarea.scrollHeight, 120)}px`;
+    fitComposerHeight(textarea);
   }, []);
 
   return {

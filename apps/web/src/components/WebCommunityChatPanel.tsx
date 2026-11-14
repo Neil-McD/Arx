@@ -65,6 +65,7 @@ import {
   coerceCommunityVisualIdentity,
   type CommunityVisualIdentity,
 } from "../../../../shared/communityVisualIdentity";
+import { fitComposerHeight, resetComposerHeight } from "../../../../shared/composerHeight";
 
 type UserProfile = SharedUserProfile;
 type ProfileCommunityContext = SharedProfileCommunityContext;
@@ -445,7 +446,7 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
     inputRef: MutableRefObject<HTMLTextAreaElement | null>,
     options?: {
       force?: boolean;
-      maxHeightPx?: number;
+      fitHeight?: boolean;
       transferFromRefs?: Array<MutableRefObject<HTMLTextAreaElement | null>>;
     },
   ) => {
@@ -479,10 +480,8 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
           return;
         }
       }
-      input.style.height = "auto";
-      if (options?.maxHeightPx) {
-        input.style.height = `${Math.min(input.scrollHeight, options.maxHeightPx)}px`;
-      }
+      if (options?.fitHeight) fitComposerHeight(input);
+      else resetComposerHeight(input);
       input.focus({ preventScroll: true });
       const end = input.value.length;
       try {
@@ -778,7 +777,7 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
       ? drawerReplyInputRef
       : chatInputRef;
     focusCommunityComposerSafely(inputRef, {
-      maxHeightPx: 120,
+      fitHeight: true,
       transferFromRefs: isThreadTarget ? [chatInputRef] : [drawerReplyInputRef],
     });
   }, [chatInputRef, communityComposerFocusTargetKey, focusCommunityComposerSafely]);
@@ -790,7 +789,7 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
     drawerReplyAutoSeedTokenRef.current = null;
     setDrawerReplyAttachmentsAndRef([]);
     if (drawerReplyInputRef.current) {
-      drawerReplyInputRef.current.style.height = "auto";
+      resetComposerHeight(drawerReplyInputRef.current);
     }
   }, [activeCommunity?.id, rootReplyTarget, setDrawerReplyAttachmentsAndRef]);
 
@@ -893,8 +892,7 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
     if (autoSeedToken && value.trim() !== autoSeedToken) {
       drawerReplyAutoSeedTokenRef.current = null;
     }
-    textarea.style.height = "auto";
-    textarea.style.height = `${Math.min(textarea.scrollHeight, 120)}px`;
+    fitComposerHeight(textarea);
     if (!selectedInteractionRootId) return;
     if (value.trim()) {
       onCommunityTypingSignal?.(selectedInteractionRootId);
@@ -971,8 +969,7 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
   const focusDrawerReplyInput = useCallback(() => {
     const input = drawerReplyInputRef.current;
     if (!input) return;
-    input.style.height = "auto";
-    input.style.height = `${Math.min(input.scrollHeight, 120)}px`;
+    fitComposerHeight(input);
     input.focus({ preventScroll: true });
     const end = input.value.length;
     try {
@@ -1518,7 +1515,7 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
                   }
                   setTimeout(() => {
                     focusCommunityComposerSafely(drawerReplyInputRef, {
-                      maxHeightPx: 120,
+                      fitHeight: true,
                       transferFromRefs: [chatInputRef],
                     });
                   }, 0);
