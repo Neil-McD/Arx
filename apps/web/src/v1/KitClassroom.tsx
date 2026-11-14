@@ -262,12 +262,10 @@ export function KitClassroom(props: {
     </>
   );
 
-  const openProgress = open ? courseProgress(open.lessons, done) : null;
-  const courseRail = open && openProgress ? (
+  // A host's tools for the open course: in the right column, and in the page
+  // on the widths where that column is hidden.
+  const courseTools = open && props.canManage ? (
     <>
-      <Sec label={open.course.name}>
-        {props.canManage ? (
-          <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8 }}>
             {open.course.module_status === "draft" ? <span className={cx("tag")}>Draft · only hosts see it</span> : null}
             {props.onSetCourseStatus ? (open.course.module_status === "draft" ? (
               <button type="button" className={cx("btn sm go")} disabled={publishing || open.lessons.length === 0}
@@ -279,8 +277,13 @@ export function KitClassroom(props: {
             )) : null}
             <button type="button" className={cx("btn sm")} onClick={() => props.onEditCourseDetails(open.course.id)}>Course details</button>
             <button type="button" className={cx("btn sm txt")} onClick={() => props.onEditCourse(open.course.id)}>More tools</button>
-          </div>
-        ) : null}
+    </>
+  ) : null;
+  const openProgress = open ? courseProgress(open.lessons, done) : null;
+  const courseRail = open && openProgress ? (
+    <>
+      <Sec label={open.course.name}>
+        {courseTools ? <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8 }}>{courseTools}</div> : null}
         {props.canManage ? (
           <div className={cx("kline")}><span>{summaryBy.get(open.course.id)?.started ?? 0} started</span><em>{summaryBy.get(open.course.id)?.finished ?? 0} finished</em></div>
         ) : (
@@ -342,6 +345,7 @@ export function KitClassroom(props: {
           <button type="button" className={cx("kback")} onClick={() => props.onOpenCourse(null)} aria-label="Back to Knowledge"><Icon name="back" />Knowledge</button>
           <span>›</span><span>{open.course.name}</span>
         </div>
+        {courseTools ? <div className="knowledge-course-tools-inline">{courseTools}</div> : null}
         {lesson && editingTools && editingLessonId === lesson.id ? (
           <KitLessonEditor key={lesson.id} resource={lesson} index={index} total={open.lessons.length} courseLive={open.course.module_status !== "draft"}
             onCancel={() => setEditingLessonId(null)}
