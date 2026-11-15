@@ -220,7 +220,7 @@ assert.match(
 );
 assert.match(
   run,
-  /runPiRuntimeKernel<RetrievalToolName>\(\{[\s\S]*inputBudget:[\s\S]*runCompletion: async[\s\S]*claimCommunityInferenceFundingSession\([\s\S]*surface: args\.surface[\s\S]*markCommunityInferenceFundingSessionProviderStarted\([\s\S]*runOpenAiNativeToolCompletion\(\{[\s\S]*modelId: fundingSession\.modelId/,
+  /runPiRuntimeKernel<RetrievalToolName>\(\{[\s\S]*inputBudget:[\s\S]*runCompletion: async[\s\S]*claimCommunityInferenceFundingSession\([\s\S]*surface: args\.surface[\s\S]*markCommunityInferenceFundingSessionProviderStarted\([\s\S]*const modelId = fundingSession\.modelId;[\s\S]*runOpenAiNativeToolCompletion\(\{[\s\S]*modelId,/,
   "the run entry should admit model input before claiming canonical hosted funding and starting the provider",
 );
 for (const source of [actionBlock, run]) assert.doesNotMatch(
@@ -251,7 +251,7 @@ assert.match(
 );
 assert.match(
   run,
-  /unsupported_concierge_tool[\s\S]*function coerceToLensTools[\s\S]*lensHasTool\(lens, completion\.toolName\)[\s\S]*buildResponsesApiFunctionTools\(LENS_TOOLS\[args\.lens\]\)/,
+  /unsupported_concierge_tool[\s\S]*function coerceToLensTools[\s\S]*lensHasTool\(lens, completion\.toolName\)[\s\S]*buildResponsesApiFunctionTools\(lensTools\)/,
   "the run should offer only its lens tools and reject any other tool the model asks for before execution",
 );
 assert.match(

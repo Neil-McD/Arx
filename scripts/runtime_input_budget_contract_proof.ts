@@ -100,7 +100,7 @@ assert.match(
 const conciergeRuntime = read("convex/communityAgentRun.ts");
 assert.match(
   conciergeRuntime,
-  /const tools = buildResponsesApiFunctionTools\(LENS_TOOLS\[args\.lens\]\)[\s\S]*toolSchemas: tools[\s\S]*\btools,/,
+  /const lensTools = LENS_TOOLS\[args\.lens\];[\s\S]*const tools = buildResponsesApiFunctionTools\(lensTools\)[\s\S]*toolSchemas: tools[\s\S]*\btools,/,
   "The guide's run must budget and send one resolved provider tool surface",
 );
 assert.match(read("convex/communityAgentServeWorker.ts"), /runFundedCommunityAgent\(\{/, "the tagged guide runs on the shared run entry");
