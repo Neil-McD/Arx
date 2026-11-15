@@ -2716,7 +2716,9 @@
 @media (min-width: 721px) {
   :root[data-design="v1"] .web-direct-messages-host.is-page .community-dm-inbox-panel.is-kit {
     display: block;
-    padding: 0 max(400px, var(--right-column-width)) 0 0;
+    /* Exactly the conversation column: the list then sits in the middle
+       with the page's own gutter on both sides. */
+    padding: 0 var(--inbox-thread-width) 0 0;
     overflow: hidden;
   }
 }

@@ -43,6 +43,15 @@ export function memberTimeFor(iso: string | null, now: number): string {
   return date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
 
+// "Jun 27", with the year only when it isn't this one.
+export function shortDay(iso: string | null, now: number): string | null {
+  if (!iso) return null;
+  const date = new Date(iso);
+  if (!Number.isFinite(date.getTime())) return null;
+  const sameYear = date.getFullYear() === new Date(now).getFullYear();
+  return date.toLocaleDateString("en-US", sameYear ? { month: "short", day: "numeric" } : { month: "short", day: "numeric", year: "numeric" });
+}
+
 function csvFor(rows: CloudMemberRecordRow[]): string {
   const cell = (value: string | null) => `"${String(value ?? "").replace(/"/g, '""')}"`;
   const head = ["Name", "Handle", "Role", "Plan", "Standing", "Joined", "Last active", "Working on"];
@@ -82,7 +91,6 @@ export function KitMembersPage(props: {
   const [loaded, setLoaded] = useState<{ view: string; rows: CloudMemberRecordRow[]; past: CloudPastMemberRow[]; cursor: string | null; done: boolean } | null>(null);
   const [loading, setLoading] = useState(false);
   const [sort, setSort] = useState<{ key: SortKey; desc: boolean } | null>(null);
-  const [search, setSearch] = useState("");
   const [openKey, setOpenKey] = useState<string | null>(null);
   // Narrow windows (below 900px) show Members as layers: picking someone
   // replaces the table with their record, with a way back.
@@ -142,16 +150,15 @@ export function KitMembersPage(props: {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [scope?.session, scope?.communityId, view, props.joinRequests.length, props.refreshKey, tableVersion]);
 
-  // More as you reach the end of the table; everything while you search.
+  // More as you reach the end of the table.
   useEffect(() => {
     if (!loaded || loaded.done || loading) return;
-    if (search.trim()) { void loadMore(false); return; }
     const target = sentinelRef.current;
     if (!target) return;
     const observer = new IntersectionObserver((entries) => { if (entries.some((entry) => entry.isIntersecting)) void loadMore(false); }, { rootMargin: "400px" });
     observer.observe(target);
     return () => observer.disconnect();
-  }, [loaded, loading, search, loadMore]);
+  }, [loaded, loading, loadMore]);
 
   // The person who needs the host most opens first: on hold, then cancelling.
   useEffect(() => {
@@ -183,8 +190,7 @@ export function KitMembersPage(props: {
 
   const rows = useMemo(() => {
     if (!loaded || loaded.view !== view) return [];
-    const q = search.trim().toLowerCase();
-    const list = loaded.rows.filter((row) => !q || [row.name, row.handle, row.working_on, row.plan.label].some((v) => String(v ?? "").toLowerCase().includes(q)));
+    const list = loaded.rows;
     if (!sort) return list;
     const dir = sort.desc ? -1 : 1;
     return [...list].sort((a, b) => {
@@ -192,7 +198,7 @@ export function KitMembersPage(props: {
       if (sort.key === "plan") return dir * a.plan.label.localeCompare(b.plan.label);
       return dir * String(a.last_active_at ?? "").localeCompare(String(b.last_active_at ?? ""));
     });
-  }, [loaded, view, sort, search]);
+  }, [loaded, view, sort]);
   const pastRows = loaded && loaded.view === "past" ? loaded.past : [];
   const counts = summary?.counts ?? null;
   const data = summary;
@@ -264,24 +270,22 @@ export function KitMembersPage(props: {
                 ))}
               </div>
             ) : null}
-            <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 30 }}>
-              <label className={cx("find")} style={{ margin: 0, width: 240 }}>
-                <Icon name="search" />
-                <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Find a member" aria-label="Find a member" />
-              </label>
-              <button type="button" className={cx("btn sm")} style={{ marginLeft: "auto" }} onClick={() => void exportCsv()} disabled={!summary || exporting}>{exporting ? "Exporting…" : "Export"}</button>
+            {/* One line: who to show, and Export at its end. */}
+            <div className={cx("views")} role="group" aria-label="Show" style={{ marginTop: 22 }}>
+              {counts && data ? (
+                <>
+                  {chip("everyone", "Everyone", counts.everyone)}
+                  {data.prices.map((price) => chip(`price:${price.price_point_id}`, price.label.replace(" · ", " "), price.count))}
+                  {counts.on_hold ? chip("on_hold", "On hold", counts.on_hold) : null}
+                  {counts.cancelling ? chip("cancelling", "Cancelling", counts.cancelling) : null}
+                  {counts.comped ? chip("comped", "Comped", counts.comped) : null}
+                  {/* A filter that would show everyone filters nothing, so it isn't drawn. */}
+                  {counts.know_little && (counts.know_little < counts.everyone || view === "know_little") ? chip("know_little", "Know little", counts.know_little) : null}
+                  {counts.past ? chip("past", "Past", counts.past) : null}
+                </>
+              ) : null}
+              <button type="button" className={cx("chip")} style={{ marginLeft: "auto" }} onClick={() => void exportCsv()} disabled={!summary || exporting}>{exporting ? "Exporting…" : "Export"}</button>
             </div>
-            {counts && data ? (
-              <div className={cx("views")} role="group" aria-label="Show">
-                {chip("everyone", "Everyone", counts.everyone)}
-                {data.prices.map((price) => chip(`price:${price.price_point_id}`, price.label.replace(" · ", " "), price.count))}
-                {counts.on_hold ? chip("on_hold", "On hold", counts.on_hold) : null}
-                {counts.cancelling ? chip("cancelling", "Cancelling", counts.cancelling) : null}
-                {counts.comped ? chip("comped", "Comped", counts.comped) : null}
-                {counts.know_little ? chip("know_little", "Know little", counts.know_little) : null}
-                {counts.past ? chip("past", "Past", counts.past) : null}
-              </div>
-            ) : null}
             {loaded && view !== "past" ? (
               <div className={cx("tbl")} role="table" aria-label="Members">
                 <div className={cx("trow th")} role="row">
@@ -295,7 +299,7 @@ export function KitMembersPage(props: {
                       {roleTag(row.role) ? <span className={cx("tag")}>{roleTag(row.role)}</span> : null}
                       {row.money ? <span className={cx("tag", row.money.kind === "on_hold" && "hold")}>{row.money.label}</span> : null}
                     </span>
-                    <span className={cx(!row.working_on && "none")}>{row.working_on ?? "Hasn't said yet"}</span>
+                    <span>{row.working_on ?? ""}</span>
                     <span>{row.plan.label}</span>
                     <span>{memberTimeFor(row.last_active_at, now)}</span>
                   </button>
@@ -395,42 +399,78 @@ function MemberRecordView(props: {
     }
   };
   const first = record.name.split(/\s+/)[0] || record.name;
-  const joined = record.joined_at ? new Date(record.joined_at).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }) : null;
+  const joined = shortDay(record.joined_at, props.now);
   const role = record.role === "owner" ? "Host" : record.role === "admin" ? "Admin" : record.role === "moderator" ? "Moderator" : "Member";
   const day = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString("en-US", { month: "long", day: "numeric" }) : null);
+  // Who they are in one line: "Member · Free · joined Jun 27".
+  const who = [record.out ? record.out.text : role, record.plan.kind === "owner" ? null : record.plan.label, joined ? `joined ${joined}` : null].filter(Boolean).join(" · ");
+  // When they joined is already in that line; the rest of the trail is drawn.
+  const trail = record.events.filter((event) => event.kind !== "joined");
+  const canManage = Boolean(props.onManage && record.membership_id && !record.out);
   return (
     <>
-      <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-        <Face name={record.name} url={record.avatar_url} seed={record.user_id} getAvatarColor={props.getAvatarColor} getInitials={props.getInitials}
-          style={{ width: 56, height: 56, fontSize: 18 }} />
-        <div>
-          <div style={{ fontSize: 20, fontWeight: 600, letterSpacing: "-.015em" }}>{record.name}</div>
-          <div className={cx("sub")} style={{ marginTop: 2 }}>{record.out ? record.out.text : role}{joined ? ` · joined ${joined}` : ""}</div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <Face name={record.name} url={record.avatar_url} seed={record.user_id} getAvatarColor={props.getAvatarColor} getInitials={props.getInitials}
+            style={{ width: 44, height: 44, fontSize: 15, flex: "none" }} />
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontSize: 16, fontWeight: 600, letterSpacing: "-.01em", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{record.name}</div>
+            <div className={cx("sub")} style={{ fontSize: 12.5 }}>{who}</div>
+          </div>
         </div>
-        <div className={cx("plan")}>
-          <b>{record.plan.label}</b>
-          {record.money?.kind === "on_hold" ? <span className={cx("bad")}>Payment on hold{day(record.money.since_at) ? ` since ${day(record.money.since_at)}` : ""}.{record.money.ends_at ? ` Access ends ${day(record.money.ends_at)}.` : ""}</span> : null}
-          {record.money?.kind === "cancelling" ? <span>Leaving{record.money.ends_at ? ` on ${day(record.money.ends_at)}` : " at the end of the period"}.</span> : null}
-          {record.plan.kind === "comped" ? <span>A host gave {first} access.</span> : null}
-        </div>
-        {!props.self ? (
-          <div style={{ display: "flex", gap: 8 }}>
-            {props.onMessage && !record.out ? <Btn small onClick={() => props.onMessage?.(record.user_id)}>Message</Btn> : null}
-            {props.onManage && record.membership_id && !record.out ? <Btn small onClick={manage}>Change role</Btn> : null}
+        {/* Only when something about their access needs the host. */}
+        {record.money || record.plan.kind === "comped" ? (
+          <div className={cx("plan")}>
+            {record.money?.kind === "on_hold" ? <b className={cx("bad")}>Payment on hold{day(record.money.since_at) ? ` since ${day(record.money.since_at)}` : ""}.{record.money.ends_at ? ` Access ends ${day(record.money.ends_at)}.` : ""}</b> : null}
+            {record.money?.kind === "cancelling" ? <b>Leaving{record.money.ends_at ? ` on ${day(record.money.ends_at)}` : " at the end of the period"}.</b> : null}
+            {record.plan.kind === "comped" ? <span>A host gave {first} access.</span> : null}
+          </div>
+        ) : null}
+        {!props.self && ((props.onMessage && !record.out) || canManage || props.onComp) ? (
+          <div style={{ display: "flex", gap: 6 }}>
+            {props.onMessage && !record.out ? <Btn small go onClick={() => props.onMessage?.(record.user_id)}>Message</Btn> : null}
+            {canManage ? <Btn small onClick={manage}>Change role</Btn> : null}
             {props.onComp ? <Btn small onClick={async () => { setComping(true); try { await props.onComp?.(); } finally { setComping(false); } }}>{comping ? "Comping…" : "Comp"}</Btn> : null}
+            {canManage ? (
+              <button type="button" className={cx("btn sm")} style={{ marginLeft: "auto", padding: "0 7px" }} aria-label={`Remove or block ${first}`} title="Remove or block" onClick={manage}>
+                <Icon name="more" />
+              </button>
+            ) : null}
           </div>
         ) : null}
       </div>
-      <Sep />
+      {/* What they said. With nothing said, nothing is drawn. */}
       {record.facts.length ? (
-        <div className={cx("kv")}>
-          {record.facts.map((fact, index) => (
-            <FactRow key={index} label={fact.label} body={fact.body} note={[fact.source, day(fact.at)].filter(Boolean).join(" · ")} />
-          ))}
-        </div>
-      ) : (
-        <Sec label="What we know"><p>{props.self ? "You haven't told us about yourself yet." : `${first} hasn't told us anything about themselves yet.`}</p></Sec>
-      )}
+        <>
+          <Sep />
+          <div className={cx("kv")}>
+            {record.facts.map((fact, index) => (
+              <FactRow key={index} label={fact.label} body={fact.body} note={[fact.source, day(fact.at)].filter(Boolean).join(" · ")} />
+            ))}
+          </div>
+        </>
+      ) : null}
+      <Sep />
+      <Sec label="Here">
+        <div className={cx("src")}><Icon name="spark" />Last active<em>{memberTimeFor(record.last_active_at, props.now)}</em></div>
+        {trail.map((event, index) => (
+          <div key={index} className={cx("src")} style={{ marginTop: -8 }}>
+            <Icon name="check" />{event.text}<em>{memberTimeFor(event.at, props.now)}</em>
+          </div>
+        ))}
+      </Sec>
+      {props.payments && props.payments.events.length ? (
+        <>
+          <Sep />
+          <Sec label="Payments">
+            {props.payments.events.slice(0, 8).map((event, index) => (
+              <div key={event.id} className={cx("src")} style={index ? { marginTop: -8 } : undefined}>
+                <Icon name="check" />{paymentText(event)}<em>{memberTimeFor(event.occurred_at, props.now)}</em>
+              </div>
+            ))}
+          </Sec>
+        </>
+      ) : null}
       <Sep />
       <div className={cx("sec")}>
         <span className={cx("lab")}>Notes<em className={cx("priv")}>Only hosts see these</em></span>
@@ -448,32 +488,6 @@ function MemberRecordView(props: {
         </form>
         {noteError ? <p className={cx("bad")} role="alert">{noteError}</p> : null}
       </div>
-      <Sep />
-      {props.payments && props.payments.events.length ? (
-        <>
-          <Sec label="Payments">
-            {props.payments.events.slice(0, 8).map((event, index) => (
-              <div key={event.id} className={cx("src")} style={index ? { marginTop: -8 } : undefined}>
-                <Icon name="check" />{paymentText(event)}<em>{memberTimeFor(event.occurred_at, props.now)}</em>
-              </div>
-            ))}
-          </Sec>
-          <Sep />
-        </>
-      ) : null}
-      <Sec label="So far">
-        {record.events.map((event, index) => (
-          <div key={index} className={cx("src")} style={index ? { marginTop: -8 } : undefined}>
-            <Icon name={event.kind === "joined" ? "users" : "check"} />{event.text}<em>{memberTimeFor(event.at, props.now)}</em>
-          </div>
-        ))}
-        <div className={cx("src")} style={{ marginTop: -8 }}><Icon name="spark" />Last active<em>{memberTimeFor(record.last_active_at, props.now)}</em></div>
-      </Sec>
-      {props.onManage && record.membership_id && !record.out && !props.self ? (
-        <div style={{ marginTop: "auto" }}>
-          <button type="button" className={cx("link")} style={{ color: "var(--ink3)" }} onClick={manage}>Remove or block</button>
-        </div>
-      ) : null}
     </>
   );
 }

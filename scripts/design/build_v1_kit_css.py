@@ -381,6 +381,15 @@ css += """
 .app .askacts .btn.no{color:var(--bad);border-color:var(--bad-line)}
 .app .askacts .btn:focus-visible{outline:0;border-color:rgba(var(--w),.34);background:var(--s2)}
 
+/* Kit addition: an Inbox row is two lines (Nov 14 walk): who and where, then
+   what was said. Each is cut at the end of its line, never wrapped. */
+.app .mrow.one>div{min-width:0}
+.app .mrow.one .h{flex-wrap:nowrap}
+.app .mrow.one .h b{flex:0 1 auto;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.app .mrow.one .h span{flex:0 9999 auto;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.app .mrow.one .h time{flex:none;white-space:nowrap}
+.app .mrow.one p{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
 /* Kit addition: states the mock doesn't draw, in its own terms. */
 .app .msg.cont{padding-top:3px;padding-bottom:3px}
 .app .msg.cont>.gap{width:36px;flex:none}
