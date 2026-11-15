@@ -164,18 +164,9 @@ function isPhoneShellPath(): boolean {
 }
 
 function useWideSettingsSidebar(): boolean {
-  const query = "(min-width: 721px)";
-  const [wide, setWide] = useState(() => typeof window !== "undefined" && window.matchMedia?.(query).matches === true);
-  useEffect(() => {
-    const media = window.matchMedia?.(query);
-    if (!media) return;
-    const update = () => setWide(media.matches);
-    media.addEventListener?.("change", update);
-    return () => media.removeEventListener?.("change", update);
-  }, []);
-  // The phone app (/m/...) has no Settings sidebar at any width.
-  const phoneShell = typeof window !== "undefined" && /^\/m(\/|$)/.test(window.location.pathname);
-  return wide && !phoneShell;
+  // The desktop layout has the Settings sidebar at every window width; the
+  // phone app (/m/...) has none at any.
+  return !(typeof window !== "undefined" && /^\/m(\/|$)/.test(window.location.pathname));
 }
 
 function CommunitySettingsPaneSwitcher({

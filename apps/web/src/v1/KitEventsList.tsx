@@ -9,7 +9,7 @@
 import { useState, type ReactNode } from "react";
 import type { CloudCommunityEvent } from "../../../../shared/cloudCommunityEventsGateway";
 import { eventDateBlock, eventDayWord, eventRepeatWord, featuredEventLabel } from "../components/communityEventsList";
-import { Btn, cx, Icon, KitApp, Rail, Sec, Sep } from "./kit";
+import { Btn, cx, Icon, KitApp, Rail, Sec, Sep, useMinWidth } from "./kit";
 
 // "1:00 pm", as the mock has it (the reader's own time).
 export function eventClock(startsAtIso: string): string {
@@ -89,42 +89,53 @@ export function KitEventsList(props: {
   const pickedTime = picked ? props.timeLabel(picked) : null;
   const pickedPlace = picked ? eventPlaceWord(picked) : "";
   const pickedRepeat = picked ? eventRepeatWord(picked) : null;
-  const rail = (
+  // The event you picked: when, where, what to know, who can see it.
+  const detail = picked && pickedTime ? (
+    <>
+      <Sec label={isPast(picked) ? "Past" : picked.id === featured?.id ? "Next" : "Later"}>
+        <h3>{picked.title}</h3>
+        <p>{eventDayWord(picked.starts_at, props.now)} · {pickedTime.primary}</p>
+        {pickedTime.secondary ? <p className={cx("sub")}>{pickedTime.secondary}</p> : null}
+        {pickedRepeat ? <p className={cx("sub")}>Repeats {pickedRepeat}</p> : null}
+        {pickedPlace ? <p className={cx("sub")}>{pickedPlace}</p> : null}
+        {picked.pod_name ? <p className={cx("sub")}>Only people in {picked.pod_name} see it.</p> : null}
+      </Sec>
+      {picked.description_md ? (
+        <>
+          <Sep />
+          <Sec label="What to know"><p style={{ whiteSpace: "pre-wrap" }}>{picked.description_md}</p></Sec>
+        </>
+      ) : null}
+      {props.canManage && !picked.pod_channel_id && !isPast(picked) ? (
+        <>
+          <Sep />
+          <div className={cx("evswitch")}>
+            <span>On {props.communityName ?? "the community"}'s public page<small>Visitors see the name, day and place. The link to join stays with members.</small></span>
+            <button type="button" role="switch" aria-checked={picked.visibility === "public"} aria-label="Show on the public page" disabled={busy === picked.id}
+              className={cx("evsw", picked.visibility === "public" && "on")} onClick={() => void setPublic(picked, picked.visibility !== "public")}><i /></button>
+          </div>
+        </>
+      ) : null}
+    </>
+  ) : null;
+  // 1024px and wider it is the right column. Narrower there is no column, so
+  // an event you pick takes the list's place, with a way back.
+  const wide = useMinWidth(1024);
+  const rail = detail ? (
     <KitApp view="events" host={props.canManage} part="rail" className="kit-page-rail">
-      <Rail index={4} label="This event">
-        {picked && pickedTime ? (
-          <>
-            <Sec label={isPast(picked) ? "Past" : picked.id === featured?.id ? "Next" : "Later"}>
-              <h3>{picked.title}</h3>
-              <p>{eventDayWord(picked.starts_at, props.now)} · {pickedTime.primary}</p>
-              {pickedTime.secondary ? <p className={cx("sub")}>{pickedTime.secondary}</p> : null}
-              {pickedRepeat ? <p className={cx("sub")}>Repeats {pickedRepeat}</p> : null}
-              {pickedPlace ? <p className={cx("sub")}>{pickedPlace}</p> : null}
-              {picked.pod_name ? <p className={cx("sub")}>Only people in {picked.pod_name} see it.</p> : null}
-            </Sec>
-            {picked.description_md ? (
-              <>
-                <Sep />
-                <Sec label="What to know"><p style={{ whiteSpace: "pre-wrap" }}>{picked.description_md}</p></Sec>
-              </>
-            ) : null}
-            {props.canManage && !picked.pod_channel_id && !isPast(picked) ? (
-              <>
-                <Sep />
-                <div className={cx("evswitch")}>
-                  <span>On {props.communityName ?? "the community"}'s public page<small>Visitors see the name, day and place. The link to join stays with members.</small></span>
-                  <button type="button" role="switch" aria-checked={picked.visibility === "public"} aria-label="Show on the public page" disabled={busy === picked.id}
-                    className={cx("evsw", picked.visibility === "public" && "on")} onClick={() => void setPublic(picked, picked.visibility !== "public")}><i /></button>
-                </div>
-              </>
-            ) : null}
-          </>
-        ) : (
-          <Sec><p>{props.canManage ? "Add an event and it shows here: when it is, where, and who can see it." : "Nothing is planned yet."}</p></Sec>
-        )}
-      </Rail>
+      <Rail index={4} label="This event">{detail}</Rail>
     </KitApp>
-  );
+  ) : null;
+  if (!wide && detail && all.some((event) => event.id === pickedId)) {
+    return (
+      <KitApp view="events" host={props.canManage} part="flow">
+        <div className={cx("page")} style={{ padding: 0, overflow: "visible" }}>
+          <button type="button" className={cx("btn sm txt")} style={{ marginLeft: -10 }} onClick={() => setPickedId(null)}><Icon name="back" />Events</button>
+          <div className={cx("evlayer")}>{detail}</div>
+        </div>
+      </KitApp>
+    );
+  }
 
   return (
     <>
@@ -194,7 +205,7 @@ export function KitEventsList(props: {
           ) : null}
         </div>
       </KitApp>
-      {props.renderRail(rail)}
+      {wide && rail ? props.renderRail(rail) : null}
     </>
   );
 }

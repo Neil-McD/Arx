@@ -110,9 +110,10 @@ function joinErrorText(failure: unknown, paid: boolean): string | null {
   return paid ? "Checkout couldn't start. Try again." : "Couldn't send that. Try again.";
 }
 
-// Wide enough for the right column (design-v1.css shows it from 721px).
+// Wide enough for the right column (design-v1.css shows it from 1024px).
+// Narrower, a picked pod takes the page's place, with a way back.
 function useWideRail(): boolean {
-  const query = "(min-width: 721px)";
+  const query = "(min-width: 1024px)";
   const [wide, setWide] = useState(() => typeof window !== "undefined" && window.matchMedia?.(query).matches === true);
   useEffect(() => {
     const media = window.matchMedia?.(query);

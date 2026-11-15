@@ -38,8 +38,9 @@ test("nothing in the kit's stylesheet can style the rest of the app", () => {
   expect(selectors.length).toBeGreaterThan(300);
   for (const head of selectors) {
     for (const selector of head.split(/,(?![^(]*\))/)) {
-      // Every selector is anchored on the kit's root, a module class.
-      expect(selector.trim(), head).toMatch(/^(:where\()?\.app\b/);
+      // Every selector is anchored on the kit's root, a module class. A phone
+      // rule first asks the page's root which layout this is (zero weight).
+      expect(selector.trim(), head).toMatch(/^(:where\(:root\[data-layout="phone"\]\) )?(:where\()?\.app\b/);
     }
   }
 });

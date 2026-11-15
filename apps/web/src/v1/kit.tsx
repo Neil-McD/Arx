@@ -89,7 +89,21 @@ export function useAppLightTheme(): boolean {
   return useSyncExternalStore(subscribeToTheme, readLightTheme, () => false);
 }
 
-// True while the window is at least `px` wide (the app's desktop is 721).
+// True in the phone layout (the root's data-layout, set from the shell the app
+// chose). A desktop window is never the phone layout, however narrow.
+export function usePhoneLayout(): boolean {
+  return useSyncExternalStore(
+    (onChange) => {
+      const observer = new MutationObserver(onChange);
+      observer.observe(document.documentElement, { attributes: true, attributeFilter: ["data-layout"] });
+      return () => observer.disconnect();
+    },
+    () => document.documentElement.dataset.layout === "phone",
+    () => false,
+  );
+}
+
+// True while the window is at least `px` wide (the right column needs 1024).
 export function useMinWidth(px: number): boolean {
   return useSyncExternalStore(
     (onChange) => {

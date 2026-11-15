@@ -2,6 +2,7 @@
 // hifi-mock, Members, member view). Who is here and what each person chose to
 // share; never plan, payment, notes or where a fact came from (the server
 // sends none of it: convex/communityMemberProfiles.ts).
+import { ArrowLeft } from "lucide-react";
 import { Fragment, useContext, useEffect, useMemo, useState, type CSSProperties } from "react";
 import { createPortal } from "react-dom";
 import { UserAvatar } from "../../../../shared/UserAvatar";
@@ -47,6 +48,9 @@ export function KitMembersDirectory(props: {
   const [filter, setFilter] = useState<Filter>("everyone");
   const [search, setSearch] = useState("");
   const [openKey, setOpenKey] = useState<string | null>(null);
+  // Below 1024px there is no right column: picking someone shows them in the
+  // list's place, with a way back (the same layers the host's Members has).
+  const [picked, setPicked] = useState(false);
   const [profile, setProfile] = useState<CloudMemberProfile | null>(null);
 
   useEffect(() => {
@@ -84,7 +88,7 @@ export function KitMembersDirectory(props: {
   );
 
   const page = (
-    <section className="members-page is-kit" aria-label="Community members">
+    <section className={`members-page is-kit${picked ? " has-picked" : ""}`} aria-label="Community members">
       <KitApp view="members" part="main">
         <View index={5}>
           <Top title="Members" titleView={5} />
@@ -100,7 +104,7 @@ export function KitMembersDirectory(props: {
             </div>
             <div className={cx("ppl")}>
               {shown.map((row) => (
-                <button key={keyOf(row)} type="button" className={cx("p", openKey === keyOf(row) && "sel", row.you && "you")} onClick={() => setOpenKey(keyOf(row))}>
+                <button key={keyOf(row)} type="button" className={cx("p", openKey === keyOf(row) && "sel", row.you && "you")} onClick={() => { setOpenKey(keyOf(row)); setPicked(true); }}>
                   <Face name={row.name} url={row.avatar_url} seed={row.user_id} getAvatarColor={props.getAvatarColor} getInitials={props.getInitials} />
                   <b>{row.name}{row.you ? <span className={cx("tag")}>you</span> : roleTag(row.role) ? <span className={cx("tag")}>{roleTag(row.role)}</span> : null}</b>
                   <span>{row.you ? "What others see" : row.working_on ?? (row.here_now ? "Here now" : "")}</span>
@@ -116,6 +120,9 @@ export function KitMembersDirectory(props: {
 
   const rail = (
     <KitApp view="members" part="rail">
+      <button type="button" className="members-record-back" onClick={() => setPicked(false)} aria-label="Back to Members">
+        <ArrowLeft size={14} strokeWidth={1.8} aria-hidden="true" />Members
+      </button>
       <Rail index={5} label={profile ? profile.name : "Member"}>
         {profile ? <MemberProfileView profile={profile} onMessage={props.onMessage} getAvatarColor={props.getAvatarColor} getInitials={props.getInitials} /> : null}
       </Rail>
