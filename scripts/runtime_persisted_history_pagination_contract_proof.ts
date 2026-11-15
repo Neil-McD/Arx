@@ -35,7 +35,7 @@ assert.equal(
 );
 assert.match(
   runtimeLoop,
-  /while \(hasMore && !selection\.blockedByBudget && !selection\.atTurnLimit\)[\s\S]*selectCommunityAgentHistoryForBudget[\s\S]*runtime_persisted_history_selected[\s\S]*resolvedProviderToolSchemas/,
+  /toolSchemas: resolvedProviderToolSchemas[\s\S]*while \(hasMore && !selection\.blockedByBudget && !selection\.atTurnLimit\)[\s\S]*selectCommunityAgentHistoryForBudget[\s\S]*runtime_persisted_history_selected/,
   "the runtime must page until model budget or history exhaustion and persist selection lineage",
 );
 assert.doesNotMatch(

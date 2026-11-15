@@ -1,5 +1,4 @@
 import { internal } from "./_generated/api";
-import { runOpenAiCompletion } from "./httpRuntimeSupport";
 import {
   buildRuntimeRunPersistenceHelpers,
   type SseResponseEvent,
@@ -8,12 +7,11 @@ import {
   type SseResponseSource,
   type SseResponseStreamWriter,
 } from "./httpRuntimeTurnState";
-import { executeChatToolsAgentLoop } from "./runtimeAgentLoop";
+import { executeChatToolsAgentLoop, type PrivateTalkRunResult } from "./runtimeAgentLoop";
 import { appendRuntimeContextIntegrityCheckBestEffort } from "./runtimeContextIntegrity";
 import {
   USER_CANCELLED_RUNTIME_CODE,
   isRuntimeRunCancelledError,
-  runAbortableWithRuntimeCancellation,
   throwIfRuntimeRunCancelled,
 } from "./runtimeCancellation";
 import {
@@ -21,16 +19,13 @@ import {
   PLATFORM_HOME_COMMUNITY_AGENT_LIMIT_REACHED,
   formatPlatformHomeMemberLimitMessage,
   type CommunityInferenceSurface,
-  type FounderProviderRequestUsage,
 } from "../shared/founderInference";
-import { createFounderInferenceUsageTotals, founderProviderRequests, observeFounderProviderResult } from "./founderInferenceUsage";
-import { assertPaidLuna6ProviderHeadroom, founderInferenceBudgetFailureCode } from "./founderInferenceBudget";
+import { founderProviderRequests } from "./founderInferenceUsage";
 import {
   isRecoverableRuntimeKernelStopReason,
 } from "../shared/runtimeKernelTypes";
 import {
   buildRuntimeTurnContextSnapshot,
-  renderRuntimeTurnContextForFailureFinalizer,
   type RuntimeTurnContextSnapshotV1,
   type RuntimeTurnContextPacket,
 } from "../shared/runtimeTurnContextPacket";
@@ -59,12 +54,7 @@ import {
 import { resolvePolynetRuntimeEngine } from "../shared/runtimeEngine";
 import { logStructuredError } from "./errorLogging";
 import {
-  claimCommunityInferenceFundingSession,
-  failCommunityInferenceFundingSession,
-  markCommunityInferenceFundingSessionProviderStarted,
-  providerFailureIsKnownPreSpend,
   settleCommunityInferenceFundingSession,
-  type CommunityInferenceFundingSession,
 } from "./founderInferenceRuntime";
 import type { RuntimeProviderContextAttestationV1 } from "../shared/runtimeProviderContextAttestation";
 
@@ -152,19 +142,6 @@ type RuntimeCompletionFailure = {
   message: string;
 };
 
-function openAiModelIdFromRef(modelRef: string): string | null {
-  const trimmed = String(modelRef ?? "").trim();
-  if (!trimmed.toLowerCase().startsWith("openai/")) return null;
-  const modelId = trimmed.slice("openai/".length).trim();
-  return modelId || null;
-}
-
-function isRuntimeCompletionFailure(
-  completion: RuntimeCompletionSuccess | RuntimeCompletionFailure,
-): completion is RuntimeCompletionFailure {
-  return "ok" in completion && completion.ok === false;
-}
-
 function emitBufferedAssistantText(params: {
   content: string;
   emitDelta: (delta: string) => void;
@@ -176,40 +153,6 @@ function emitBufferedAssistantText(params: {
   for (let index = 0; index < content.length; index += chunkSize) {
     params.emitDelta(content.slice(index, index + chunkSize));
   }
-}
-
-function buildAdaptiveFailureFinalizationMessages(params: {
-  runtimeTurnContext: RuntimeTurnContextPacket;
-}): Array<{ role: "system" | "user"; content: string }> {
-  const userContent = [
-    "Current runtime turn context:",
-    renderRuntimeTurnContextForFailureFinalizer(params.runtimeTurnContext),
-  ].join("\n");
-  return [
-    {
-      role: "system",
-      content: [
-        "You are writing the final user-facing response after an agent runtime stopped before a normal final answer.",
-        "Do not output a fixed ledger template. Answer the user's latest message directly and naturally.",
-        "Use the evidence provided, but separate verified facts from unknowns.",
-        "Keep it concise. Usually 2-5 short paragraphs or a few bullets.",
-        "Do not mention hidden implementation names unless they help the user debug.",
-      ].join("\n"),
-    },
-    {
-      role: "user",
-      content: userContent,
-    },
-  ];
-}
-
-function normalizeAdaptiveFailureAnswer(value: unknown): string | null {
-  const normalized = String(value ?? "").trim();
-  if (!normalized) return null;
-  if (/^run stopped before completing\.?/i.test(normalized)) return null;
-  return normalized.length > 2400
-    ? `${normalized.slice(0, 2399).trimEnd()}…`
-    : normalized;
 }
 
 export type JsonResponseFn = (
@@ -736,7 +679,6 @@ export async function handleRuntimeTurnRequest(args: {
       if (!persistVisibleAssistantMessage) return null;
       const hasPartialContent = String(params.content ?? "").trim().length > 0;
       let failureContextPacket: RuntimeTurnContextPacket | null = null;
-      let adaptiveFinalizerContent: string | null = null;
       if (!hasPartialContent) {
         const loadedFailureContext = await loadRuntimeTurnContextPacketForRun({
           ctx,
@@ -755,50 +697,9 @@ export async function handleRuntimeTurnRequest(args: {
           },
         });
         failureContextPacket = loadedFailureContext.packet;
-        // A paid community run cannot issue an unmetered follow-up provider call.
-        if (params.status === "error" && !(communityInferenceAdmission?.ok && requestedModelId === "gpt-6-luna")) {
-          try {
-            const finalizationMessages = buildAdaptiveFailureFinalizationMessages({
-              runtimeTurnContext: failureContextPacket,
-            });
-            const finalizationMaxTokens = 700;
-            const openAiFinalizerModelId = openAiModelIdFromRef(modelRef);
-            const completion = await runAbortableWithRuntimeCancellation({
-              ctx,
-              ownerId: actor.dbUserId,
-              runId,
-              touchHeartbeat: touchRunHeartbeatBestEffort,
-              operation: async (signal) => {
-                // The founder-funded OpenAI model writes the fallback answer.
-                if (!openAiFinalizerModelId) {
-                  return {
-                    ok: false as const,
-                    status: 503,
-                    code: "finalizer_model_unavailable",
-                    message: "The community model is not an OpenAI model.",
-                  };
-                }
-                return await runOpenAiCompletion({
-                  req,
-                  modelId: openAiFinalizerModelId,
-                  messages: finalizationMessages,
-                  maxTokens: finalizationMaxTokens,
-                  signal,
-                });
-              },
-            });
-            if (!isRuntimeCompletionFailure(completion)) {
-              adaptiveFinalizerContent = normalizeAdaptiveFailureAnswer(
-                completion.content,
-              );
-            }
-          } catch {
-            adaptiveFinalizerContent = null;
-          }
-        }
       }
       const finalAnswer = buildRuntimeFailureFinalAnswer({
-        partialContent: adaptiveFinalizerContent ?? params.content,
+        partialContent: params.content,
         runtimeTurnContext: failureContextPacket,
         status: params.status,
         reason: params.reason ?? null,
@@ -839,119 +740,19 @@ export async function handleRuntimeTurnRequest(args: {
     };
     const communityInferenceSurface: CommunityInferenceSurface | null =
       invocationSurface === "member_agent_dock" ? invocationSurface : null;
-    let communityFundingProviderStarted = false;
-    const communityFundingUsage = createFounderInferenceUsageTotals(requestedModelId);
-    const claimCommunityFundingSession = async (): Promise<CommunityInferenceFundingSession | null> => {
-      if (!communityInferenceSurface) return null;
-      if (!runtimeCommunityId || !communityInferenceAdmission?.ok) {
-        throw new Error("community_inference_funding_authority_missing");
-      }
-      return await claimCommunityInferenceFundingSession({
-        ctx,
-        communityId: runtimeCommunityId,
-        actorUserId: actor.dbUserId,
-        surface: communityInferenceSurface,
-        receiptKey: `${communityInferenceSurface}:${runId}`,
-        sourceRunId: `runtime:${runId}`,
-        admission: communityInferenceAdmission,
-      });
-    };
-    const markCommunityFundingProviderStarted = async (
-      session: CommunityInferenceFundingSession | null,
-    ): Promise<void> => {
-      if (!session || communityFundingProviderStarted) return;
-      if (session.modelId !== requestedModelId) {
-        throw new Error("founder_inference_model_changed_before_start");
-      }
-      await markCommunityInferenceFundingSessionProviderStarted({ ctx, session });
-      communityFundingProviderStarted = true;
-    };
-    const observeCommunityFundingProviderResult = (result: {
-      ok: boolean;
-      code: string | null;
-      promptTokens: number | null;
-      completionTokens: number | null;
-      providerRequestUsage?: FounderProviderRequestUsage;
-    }): void => {
-      if (!communityInferenceSurface) return;
-      if (!communityFundingProviderStarted) {
-        communityFundingUsage.complete = false;
-        return;
-      }
-      observeFounderProviderResult(communityFundingUsage, result,
-        !result.ok && providerFailureIsKnownPreSpend(result.code ?? "provider_error"));
-    };
-    const failUnhandledCommunityFundingSession = async (
-      session: CommunityInferenceFundingSession | null,
-      failureCode: string,
-    ): Promise<void> => {
-      if (!session) return;
-      await failCommunityInferenceFundingSession({
+    // The run entry claims, starts and (on failure) releases the owner's
+    // funding; a finished run's funding is settled here, with its answer.
+    const settlePrivateTalkFunding = async (result: PrivateTalkRunResult): Promise<void> => {
+      if (!result.ok || !result.funding) return;
+      const { session, usage } = result.funding;
+      await settleCommunityInferenceFundingSession({
         ctx,
         session,
-        promptTokens: communityFundingUsage.promptTokens,
-        completionTokens: communityFundingUsage.completionTokens,
-        providerRequests: founderProviderRequests(communityFundingUsage),
-        usageComplete: communityFundingProviderStarted
-          ? communityFundingUsage.complete
-          : true,
-        failureCode,
-        disposition: communityFundingProviderStarted ? "indeterminate" : "failed",
-      });
-    };
-    const finalizeCommunityFundingForLoopResult = async (params: {
-      session: CommunityInferenceFundingSession | null;
-      result: {
-        ok: boolean;
-        code?: string;
-      };
-      outcomeCode?: string;
-    }): Promise<void> => {
-      if (!params.session) return;
-      if (!communityInferenceSurface) {
-        throw new Error("community_inference_surface_missing");
-      }
-      if (params.result.ok) {
-        if (!communityFundingProviderStarted) {
-          await failCommunityInferenceFundingSession({
-            ctx,
-            session: params.session,
-            promptTokens: 0,
-            completionTokens: 0,
-            usageComplete: true,
-            failureCode: `${communityInferenceSurface}_provider_not_started`,
-            disposition: "failed",
-          });
-          throw new Error(`${communityInferenceSurface}_provider_not_started`);
-        }
-        await settleCommunityInferenceFundingSession({
-          ctx,
-          session: params.session,
-          promptTokens: communityFundingUsage.promptTokens,
-          completionTokens: communityFundingUsage.completionTokens,
-          providerRequests: founderProviderRequests(communityFundingUsage),
-          usageComplete: communityFundingUsage.complete,
-          outcomeCode:
-            params.outcomeCode ?? `${communityInferenceSurface}_completed`,
-        });
-        return;
-      }
-      const failureCode = String(
-        params.result.code ?? `${communityInferenceSurface}_inference_failed`,
-      ).trim();
-      await failCommunityInferenceFundingSession({
-        ctx,
-        session: params.session,
-        promptTokens: communityFundingUsage.promptTokens,
-        completionTokens: communityFundingUsage.completionTokens,
-        providerRequests: founderProviderRequests(communityFundingUsage),
-        usageComplete: communityFundingProviderStarted
-          ? communityFundingUsage.complete
-          : true,
-        failureCode,
-        disposition: !communityFundingProviderStarted || providerFailureIsKnownPreSpend(failureCode)
-          ? "failed"
-          : "indeterminate",
+        promptTokens: usage.promptTokens,
+        completionTokens: usage.completionTokens,
+        providerRequests: founderProviderRequests(usage),
+        usageComplete: usage.complete,
+        outcomeCode: `${communityInferenceSurface ?? "member_agent_dock"}_completed`,
       });
     };
     const polynetAllowedToolNamesForRun = allowedToolNames;
@@ -1060,7 +861,6 @@ export async function handleRuntimeTurnRequest(args: {
         });
         runtimeTurnStage = "agent_loop";
         let loopResult;
-        let communityFundingSession: CommunityInferenceFundingSession | null = null;
         try {
           loopResult = await executeChatToolsAgentLoop({
             ctx,
@@ -1099,31 +899,12 @@ export async function handleRuntimeTurnRequest(args: {
             },
             touchRunHeartbeat: touchRunHeartbeatBestEffort,
             recordInitialProviderContextAttestation,
-            beforeProviderRequest: async (): Promise<void> => {
-              if (!communityFundingSession) {
-                communityFundingSession = await claimCommunityFundingSession();
-              }
-              if (communityFundingSession) assertPaidLuna6ProviderHeadroom({
-                session: communityFundingSession, usage: communityFundingUsage, maxOutputTokens: maxTokens,
-              });
-              await markCommunityFundingProviderStarted(communityFundingSession);
-            },
-            observeProviderResult: observeCommunityFundingProviderResult,
+            communityInferenceAdmission,
             onAssistantTextDelta: emitLiveAssistantDelta,
           });
           await appendContextIntegrityCheckBestEffortForRun();
         } catch (error) {
-          if (communityFundingSession) {
-            try {
-              await failUnhandledCommunityFundingSession(
-                communityFundingSession,
-                founderInferenceBudgetFailureCode(error) ?? "community_inference_loop_unhandled",
-              );
-            } catch {
-              // Preserve the original runtime failure; the receipt remains fail-closed.
-            }
-          }
-          if (!communityFundingSession && communityInferenceSurface) {
+          if (communityInferenceSurface && !isRuntimeRunCancelledError(error)) {
             const failure = resolveCommunityFundingClaimFailure(error);
             await finishRunBestEffortForRun({
               status: "error",
@@ -1181,10 +962,7 @@ export async function handleRuntimeTurnRequest(args: {
           return;
         }
         try {
-          await finalizeCommunityFundingForLoopResult({
-            session: communityFundingSession,
-            result: loopResult,
-          });
+          await settlePrivateTalkFunding(loopResult);
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error);
           await finishRunBestEffortForRun({
@@ -1428,7 +1206,6 @@ export async function handleRuntimeTurnRequest(args: {
     }
     runtimeTurnStage = "agent_loop";
     let loopResult;
-    let communityFundingSession: CommunityInferenceFundingSession | null = null;
     try {
       loopResult = await executeChatToolsAgentLoop({
         ctx,
@@ -1470,30 +1247,11 @@ export async function handleRuntimeTurnRequest(args: {
         },
         touchRunHeartbeat: touchRunHeartbeatBestEffort,
         recordInitialProviderContextAttestation,
-        beforeProviderRequest: async (): Promise<void> => {
-          if (!communityFundingSession) {
-            communityFundingSession = await claimCommunityFundingSession();
-          }
-          if (communityFundingSession) assertPaidLuna6ProviderHeadroom({
-            session: communityFundingSession, usage: communityFundingUsage, maxOutputTokens: maxTokens,
-          });
-          await markCommunityFundingProviderStarted(communityFundingSession);
-        },
-        observeProviderResult: observeCommunityFundingProviderResult,
+        communityInferenceAdmission,
       });
       await appendContextIntegrityCheckBestEffortForRun();
     } catch (error) {
-      if (communityFundingSession) {
-        try {
-          await failUnhandledCommunityFundingSession(
-            communityFundingSession,
-            founderInferenceBudgetFailureCode(error) ?? "community_inference_loop_unhandled",
-          );
-        } catch {
-          // Preserve the original runtime failure; the receipt remains fail-closed.
-        }
-      }
-      if (!communityFundingSession && communityInferenceSurface) {
+      if (communityInferenceSurface && !isRuntimeRunCancelledError(error)) {
         const failure = resolveCommunityFundingClaimFailure(error);
         await finishRunBestEffortForRun({
           status: "error",
@@ -1549,10 +1307,7 @@ export async function handleRuntimeTurnRequest(args: {
       });
     }
     try {
-      await finalizeCommunityFundingForLoopResult({
-        session: communityFundingSession,
-        result: loopResult,
-      });
+      await settlePrivateTalkFunding(loopResult);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       await finishRunBestEffortForRun({

@@ -350,7 +350,7 @@ assert.match(
 );
 assert.match(
   run,
-  /catch \(error\)[\s\S]*const failureCode = founderInferenceBudgetFailureCode\(error\) \?\? \(providerStarted[\s\S]*return \{ ok: false, failureCode, providerStarted \}/,
+  /catch \(error\)[\s\S]*const failureCode = founderInferenceBudgetFailureCode\(error\) \?\? args\.mapStopError\?\.\(error\)\?\.code \?\? \(providerStarted[\s\S]*return \{ ok: false, failureCode, providerStarted \}/,
   "the run entry should turn provider exceptions into a failure code",
 );
 assert.match(
