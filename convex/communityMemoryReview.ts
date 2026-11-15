@@ -14,8 +14,9 @@ import { internal } from "./_generated/api";
 import { internalAction, internalMutation, internalQuery } from "./_generated/server";
 import { communityIsActive } from "../shared/communityLifecycle";
 import { MEMORY_APPLY_OPERATION, MEMORY_REFUSAL_WORDS, MEMORY_REVIEW_INSTRUCTIONS, nextMemoryReviewAtMs, parseMemoryApplyCall, podReviewInstructions } from "../shared/communityMemory";
-import { communityTimeZone, scheduleMemoryReview } from "./communityMemory";
+import { communityTimeZone, scheduleAgentWork } from "./communityMemory";
 import { runFundedCommunityAgent, type CommunityAgentRunEvent } from "./communityAgentRun";
+import { BRIEF_DELAY_MS } from "../shared/communityBriefs";
 import { founderProviderRequests } from "./founderInferenceUsage";
 import { settleCommunityInferenceFundingSession } from "./founderInferenceRuntime";
 import { communityAgentIsOn } from "./communityApps";
@@ -95,10 +96,13 @@ export const completeMemoryReviewInternal = internalMutation({
       // Posts written while the review ran, or left over from a busy window,
       // wait for the next one: a backlog soon, new posts at the quiet hour.
       const pending = args.backlog ? Math.max(1, work.pending) : Math.max(0, work.pending - args.claimedPending);
+      // A brief written while more happened is due again an hour later.
       const dueAt = args.backlog ? args.nowMs + BACKLOG_NEXT_MS
-        : pending > 0 ? nextMemoryReviewAtMs(args.nowMs, await communityTimeZone(ctx, work.communityId)) : undefined;
+        : pending <= 0 ? undefined
+          : work.kind === "brief" ? args.nowMs + BRIEF_DELAY_MS
+            : nextMemoryReviewAtMs(args.nowMs, await communityTimeZone(ctx, work.communityId));
       await ctx.db.patch(work._id, { reviewedThrough: args.windowEnd, pending, dueAt, leaseUntil: undefined, failures: 0, lastErrorCode: undefined, updatedAt: args.nowMs });
-      if (dueAt) await scheduleMemoryReview(ctx, work._id, dueAt);
+      if (dueAt) await scheduleAgentWork(ctx, work._id, dueAt);
       return { dueAt: dueAt ?? null };
     }
     if (args.outcome === "skipped") {
@@ -109,7 +113,7 @@ export const completeMemoryReviewInternal = internalMutation({
     const failures = work.failures + 1;
     const dueAt = failures < MAX_FAILURES ? args.nowMs + RETRY_MS : undefined;
     await ctx.db.patch(work._id, { failures, dueAt, leaseUntil: undefined, lastErrorCode: args.errorCode?.slice(0, 120), updatedAt: args.nowMs });
-    if (dueAt) await scheduleMemoryReview(ctx, work._id, dueAt);
+    if (dueAt) await scheduleAgentWork(ctx, work._id, dueAt);
     return { dueAt: dueAt ?? null };
   },
 });
@@ -267,7 +271,7 @@ export const repairMemoryReviewScheduleInternal = internalMutation({
     for (const work of lost) {
       if (work.leaseUntil && work.leaseUntil > nowMs) continue;
       await ctx.db.patch(work._id, { dueAt: nowMs + 60_000, updatedAt: nowMs });
-      await scheduleMemoryReview(ctx, work._id, nowMs + 60_000);
+      await scheduleAgentWork(ctx, work._id, nowMs + 60_000);
       rescheduled += 1;
     }
     return { rescheduled };
@@ -292,7 +296,7 @@ export const requestMemoryReviewNowInternal = internalMutation({
         reviewedThrough, dueAt: nowMs, failures: 0, createdAt: nowMs, updatedAt: nowMs,
       });
     }
-    await scheduleMemoryReview(ctx, workId, nowMs);
+    await scheduleAgentWork(ctx, workId, nowMs);
     return { workId };
   },
 });
