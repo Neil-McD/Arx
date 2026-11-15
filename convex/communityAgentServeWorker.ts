@@ -1815,8 +1815,6 @@ export const processQueuedCommunityAgentServeRequestsInternal = internalAction({
       });
       const run = await runFundedCommunityAgent({
         lens: "guide_public",
-        // Reads in one answer run side by side; writes still run alone.
-        parallelReads: true,
         ctx,
         communityId: context.request.communityId,
         actorUserId: context.request.requesterUserId,

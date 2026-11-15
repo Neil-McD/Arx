@@ -5,11 +5,6 @@ import { v, type ObjectType } from "convex/values";
 import { buildCommunityConversationThreadKey, parseCommunityConversationIdentity, COMMUNITY_CONVERSATION_PREFIX } from "../shared/communityConversationIdentity";
 import { resolveAuthenticatedSubject } from "./authIdentity";
 import {
-  applyRuntimeHarnessTelemetryEvent,
-  createEmptyRuntimeHarnessTelemetrySummary,
-  type RuntimeHarnessTelemetrySummary,
-} from "../shared/runtimeHarnessScorecard";
-import {
   mergeRuntimeWorkingStateTaskLedger,
   summarizeRuntimeWorkingStateFromEvents,
 } from "../shared/runtimeWorkingStateLedger";
@@ -155,7 +150,6 @@ type RuntimeRunLike = {
   harnessProfile?: string;
   harnessProfileSource?: string;
   capabilityFamilies?: string[];
-  runtimeHarnessTelemetrySummary?: RuntimeHarnessTelemetrySummary;
   startedContextSnapshot?: unknown;
   activeContextSnapshot?: unknown;
   activeContextSnapshotUpdatedAt?: number;
@@ -2256,7 +2250,6 @@ async function ensureCloudRuntimeRunStartedHandler(ctx: MutationCtx, args: Objec
       harnessProfile,
       harnessProfileSource,
       capabilityFamilies,
-      runtimeHarnessTelemetrySummary: createEmptyRuntimeHarnessTelemetrySummary(),
       status: "running",
       lastEventSeq: 1,
       startedAt,
@@ -2362,11 +2355,6 @@ async function appendCloudRuntimeRunEventHandler(ctx: MutationCtx, args: ObjectT
       payload: args.payload,
       communityScopeId: run.communityId,
     });
-    const runtimeHarnessTelemetrySummary = applyRuntimeHarnessTelemetryEvent({
-      summary: run.runtimeHarnessTelemetrySummary,
-      eventType,
-      payload: persistedPayload,
-    });
     const id = await ctx.db.insert("runtimeRunEvents", {
       ownerId,
       threadId: thread._id,
@@ -2379,7 +2367,6 @@ async function appendCloudRuntimeRunEventHandler(ctx: MutationCtx, args: ObjectT
     });
     await ctx.db.patch(run._id, {
       lastEventSeq: seq,
-      runtimeHarnessTelemetrySummary,
       updatedAt: nowMs,
     });
     const created = (await ctx.db.get(id)) as RuntimeRunEventLike | null;

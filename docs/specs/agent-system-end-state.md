@@ -150,12 +150,7 @@ A person's conversation with the guide is one ongoing session. Older turns
 become a written summary plus the recent messages; everything older is
 searched when needed.
 
-Tool calls in one model answer run one at a time, except calls that change
-nothing (today `polynet_list`; reads and searches record a receipt, so they
-count as writes): a run may let those run side by side (`parallelReads` on
-the run entry). The guide tagged in a channel and a private talk do; the
-nightly review has one write and no reads. Anything that writes always runs
-alone, in order.
+Tool calls in one model answer run one at a time, in order.
 
 Wide work fans out: helpers on a small model read and draft; the run applies
 their drafts in one checked operation. Helpers never write.
@@ -222,7 +217,7 @@ Two rules across lenses:
 | Piece | Today | Gap to the end state |
 |---|---|---|
 | Pi kernel | `shared/piRuntimeKernel.ts` on `pi-agent-core` 1.4.0 | Kept |
-| Run entry | `convex/communityAgentRun.ts` (`runFundedCommunityAgent`): funding, budget, events, Pi, tools from the run's lens, streamed text, a stop, the context receipt and side-by-side reads. A person's private talk, the guide tagged in a channel and the nightly review all run on it | Kept |
+| Run entry | `convex/communityAgentRun.ts` (`runFundedCommunityAgent`): funding, budget, events, Pi, tools from the run's lens, streamed text, a stop and the context receipt. A person's private talk, the guide tagged in a channel and the nightly review all run on it | Kept |
 | Run ledgers | `runtimeRuns` + `runtimeRunEvents` (private talks); `communityAgentRunEvents` (tags); `agentWorkRuns` (nights) | One ledger |
 | Lenses | `shared/lens.ts`: reads, calls, tools, person views, the private talk's lens | Kept; operations not yet declared with effect and approval (slice 6) |
 | Tools | Five Polynet tools; `web_research` in private talks only (OpenAI web search today; the Exa version waits for its key). One router, `convex/agentTools.ts`. `web_crawl` deleted Nov 15 | Exa only |
