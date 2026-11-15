@@ -93,7 +93,8 @@ export type LensView =
   | "memory_notes"        // memory.md and memory/: what the guide knows
   | "builder_directory"   // builder/ (join requests for moderators)
   | "builder_records"     // builder/community.json, builder/resources/
-  | "pods";               // pods/ and pods/<slug>/pod.md (inside or outside, by access)
+  | "pods"                // pods/ and pods/<slug>/pod.md (inside or outside, by access)
+  | "brief";              // brief.md: what's happening in the community
 
 const MEMBERS_AND_BUILDERS: LensName[] = ["member_private", "member_own_ai", "member_site", "builder_private", "builder_own_ai"];
 const PEOPLE: LensName[] = [...MEMBERS_AND_BUILDERS, "guide_public"];
@@ -114,6 +115,9 @@ export const LENS_READS: Record<LensView, LensName[]> = {
   builder_records: BUILDERS,
   // Each lens sees the pods its access allows (convex/communityPodFacts.ts).
   pods: PEOPLE,
+  // The community's brief is written for everyone in it; a pod's is read
+  // through pods, inside only.
+  brief: PEOPLE,
 };
 
 // What a lens may do: polynet_call operations.
