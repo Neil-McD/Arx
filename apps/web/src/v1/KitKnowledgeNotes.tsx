@@ -44,6 +44,7 @@ export function OpenNote(props: {
   onUndo?: () => Promise<void>;
 }) {
   const [confirming, setConfirming] = useState(false);
+  const [undoing, setUndoing] = useState(false);
   const learned = props.note.author_kind === "guide";
   const [sources, setSources] = useState<NoteSourceView[] | null>(null);
   const [sourcesFailed, setSourcesFailed] = useState(false);
@@ -56,7 +57,8 @@ export function OpenNote(props: {
     let live = true;
     loadSources().then((rows) => { if (live) setSources(rows); }, () => { if (live) setSourcesFailed(true); });
     return () => { live = false; };
-  }, [props.note.slug, learned, loadSources]);
+    // A note put back by Undo has its earlier sources: load them again.
+  }, [props.note.slug, props.note.updated_at, learned, loadSources]);
   const paragraphs = props.note.body_md.split(/\n{2,}/).map((part) => part.trim()).filter(Boolean);
   return (
     <>
@@ -107,7 +109,12 @@ export function OpenNote(props: {
               <Btn small onClick={props.onEdit}>Edit</Btn>
               {confirming ? (
                 <>
-                  <button type="button" className={cx("btn sm no")} onClick={() => void props.onUndo!()}>Undo what it learned</button>
+                  <button type="button" className={cx("btn sm no")} disabled={undoing} onClick={() => {
+                    // One confirmed Undo puts back one change, however often it's clicked.
+                    if (undoing) return;
+                    setUndoing(true);
+                    void props.onUndo!().finally(() => { setUndoing(false); setConfirming(false); });
+                  }}>{undoing ? "Undoing…" : "Undo what it learned"}</button>
                   <Btn small txt onClick={() => setConfirming(false)}>Keep it</Btn>
                 </>
               ) : <Btn small txt onClick={() => setConfirming(true)}>Undo</Btn>}
