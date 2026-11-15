@@ -863,7 +863,7 @@
 .app .evsw{flex:none;position:relative;width:34px;height:20px;margin-top:1px;border-radius:10px;border:0;background:var(--s2);transition:background .16s var(--ease)}
 .app .evsw i{position:absolute;top:3px;left:3px;width:14px;height:14px;border-radius:50%;background:var(--ink2);transition:left .16s var(--ease),background .16s var(--ease)}
 .app .evsw.on{background:var(--go)}.app .evsw.on i{left:17px;background:#fff}
-@media (max-width:720px){.app .evparts{grid-template-columns:minmax(0,1fr)}.app .evaddrow span{display:none}.app .erow{row-gap:8px}}
+:where(:root[data-layout="phone"]) .app .evparts{grid-template-columns:minmax(0,1fr)}:where(:root[data-layout="phone"]) .app .evaddrow span{display:none}:where(:root[data-layout="phone"]) .app .erow{row-gap:8px}
 
 /* Kit addition: Knowledge's one box at the top (KitKnowledgeAdd): the row it
    is while closed, how it says back what it read, and the Note / Course
@@ -916,7 +916,7 @@
 .app .krow .from .btn.sm{height:24px;padding:0 8px;font-size:12px}
 .app .kedit-bar{flex-wrap:wrap;row-gap:8px}
 .app .kedit-pub{white-space:nowrap}
-@media (max-width:720px){.app .kresadd{grid-template-columns:minmax(0,1fr)}}
+:where(:root[data-layout="phone"]) .app .kresadd{grid-template-columns:minmax(0,1fr)}
 
 /* Kit addition: arranging the shelf (two arrows on each book) and moving a
    lesson to another course from its editor. */
@@ -934,7 +934,7 @@
 .app .kcgrid{display:grid;grid-template-columns:200px minmax(0,1fr);gap:14px;margin-top:12px}
 .app .kcthumb{height:112px;border-radius:8px;border:1px solid var(--line2);background:var(--s2) center/cover no-repeat;display:grid;place-items:center;color:var(--ink3)}
 .app .kcbtns{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
-@media (max-width:720px){.app .kcgrid{grid-template-columns:minmax(0,1fr)}}
+:where(:root[data-layout="phone"]) .app .kcgrid{grid-template-columns:minmax(0,1fr)}
 
 /* Kit addition: the app's own "are you sure?" (KitConfirm), in the palette's
    layer: a light veil and one small card. */
@@ -989,21 +989,19 @@
 /* On a phone (Neil, Nov 14 mock): the same pages on 16-20px gutters instead
    of the mock's 56px, every view shrinking to the screen, and rows of chips
    scrolling sideways rather than widening the page. */
-@media (max-width:720px){
-.app .view,.app .scroll,.app .page,.app .home{min-width:0}
-.app.part{--measure-gutter:20px}
-.app .top,.app.part.on-v-home .top{padding-left:var(--kit-top-inset,16px);padding-right:16px}
-.app .page{padding-left:16px;padding-right:16px}
-.app .home,.app.part .home{padding-left:20px;padding-right:20px}
-.app .dock,.app.part .dock{padding-left:12px;padding-right:12px;padding-bottom:12px}
-.app .chips{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none}
-.app .chips::-webkit-scrollbar{display:none}
-.app .chips>*{flex:none}
-.app .filters{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none}
-.app .filters::-webkit-scrollbar{display:none}
-.app .filters>*{flex:none}
-.app .mrow .h{flex-wrap:wrap;row-gap:0}
-.app .mrow .h b{flex:none;white-space:nowrap}
-.app .trow{grid-template-columns:28px minmax(0,1fr) auto auto;gap:0 12px}
-.app .trow>:nth-child(3){display:none}
-}
+:where(:root[data-layout="phone"]) .app .view,:where(:root[data-layout="phone"]) .app .scroll,:where(:root[data-layout="phone"]) .app .page,:where(:root[data-layout="phone"]) .app .home{min-width:0}
+:where(:root[data-layout="phone"]) .app.part{--measure-gutter:20px}
+:where(:root[data-layout="phone"]) .app .top,:where(:root[data-layout="phone"]) .app.part.on-v-home .top{padding-left:var(--kit-top-inset,16px);padding-right:16px}
+:where(:root[data-layout="phone"]) .app .page{padding-left:16px;padding-right:16px}
+:where(:root[data-layout="phone"]) .app .home,:where(:root[data-layout="phone"]) .app.part .home{padding-left:20px;padding-right:20px}
+:where(:root[data-layout="phone"]) .app .dock,:where(:root[data-layout="phone"]) .app.part .dock{padding-left:12px;padding-right:12px;padding-bottom:12px}
+:where(:root[data-layout="phone"]) .app .chips{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none}
+:where(:root[data-layout="phone"]) .app .chips::-webkit-scrollbar{display:none}
+:where(:root[data-layout="phone"]) .app .chips>*{flex:none}
+:where(:root[data-layout="phone"]) .app .filters{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none}
+:where(:root[data-layout="phone"]) .app .filters::-webkit-scrollbar{display:none}
+:where(:root[data-layout="phone"]) .app .filters>*{flex:none}
+:where(:root[data-layout="phone"]) .app .mrow .h{flex-wrap:wrap;row-gap:0}
+:where(:root[data-layout="phone"]) .app .mrow .h b{flex:none;white-space:nowrap}
+:where(:root[data-layout="phone"]) .app .trow{grid-template-columns:28px minmax(0,1fr) auto auto;gap:0 12px}
+:where(:root[data-layout="phone"]) .app .trow>:nth-child(3){display:none}

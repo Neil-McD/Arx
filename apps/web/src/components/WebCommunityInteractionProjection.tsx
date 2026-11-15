@@ -5,7 +5,7 @@ import {
 } from "lucide-react";
 import { CommunityThreadHeader } from "./CommunityThreadHeader";
 import { isDesignV1Active } from "../../../../shared/designSystem";
-import { KitApp, useMinWidth } from "../v1/kit";
+import { KitApp, usePhoneLayout } from "../v1/kit";
 import { KitChannelFeed } from "../v1/KitChannelFeed";
 import {
   EmojiPickerButton,
@@ -180,7 +180,8 @@ export function communityInteractionRootHasRichContent(
 
 export function WebCommunityInteractionProjection(props: WebCommunityInteractionProjectionProps) {
   const hasChannelContext = Boolean(props.communityId && props.activeChannel);
-  const isDesktopWidth = useMinWidth(721);
+  // The desktop layout at any window width; the phone layout draws its own feed.
+  const isDesktopWidth = !usePhoneLayout();
   const peopleOpen = Boolean(props.peopleOpen && hasChannelContext);
   const closePeople = useCallback(() => {
     props.onPeopleOpenChange?.(false);
