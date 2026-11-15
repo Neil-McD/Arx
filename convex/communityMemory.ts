@@ -336,7 +336,10 @@ export const listMemoryRuns = query({
 
 // ---------- what the nightly review reads, in one prompt
 
-const NOTES_WITH_FIRST_LINE = 40;
+// The newest notes are shown whole (so the guide changes one instead of
+// repeating it); older ones by title.
+const NOTES_SHOWN_WHOLE = 40;
+const NOTE_SHOWN_CHARS = 600;
 const NOTES_LISTED_MAX = 200;
 
 async function authorWord(ctx: any, row: any, names: Map<string, string>): Promise<string> {
@@ -397,8 +400,8 @@ export const readMemoryReviewInputInternal = internalQuery({
     if (notes.length === 0) lines.push("_None yet._");
     notes.forEach((note, i) => {
       const who = noteAuthorKind(note) === "builder" ? "a builder" : "you";
-      const first = i < NOTES_WITH_FIRST_LINE ? `: ${note.bodyMd.replace(/\s+/g, " ").trim().slice(0, 120)}` : "";
-      lines.push(`- memory/${note.slug}.md · ${note.title} · by ${who}${first}`);
+      lines.push(`- memory/${note.slug}.md · ${note.title} · by ${who}`);
+      if (i < NOTES_SHOWN_WHOLE) lines.push(`  > ${note.bodyMd.replace(/\s+/g, " ").trim().slice(0, NOTE_SHOWN_CHARS)}`);
     });
     lines.push("", `# What people said, ${new Date(args.sinceMs).toISOString()} to ${new Date(readUntil).toISOString()}`);
     const names = new Map<string, string>();
