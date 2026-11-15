@@ -89,13 +89,16 @@ describe("Sunrise staging seed", () => {
     const first = await seed();
     expect(first).toMatchObject({ timeZone: "America/Los_Angeles", posts: 9, replies: 10, removedPosts: 0, ownerMention: { handle: "neil-sunrise" } });
     expect(first.channels.map((channel: any) => channel.slug)).toEqual(["general", "beta", "setters"]);
-    // Setters is private to Maya and Priya.
+    // Setters is a pod for Maya and Priya, hosted by Maya, with the guide in it.
     const setters: any = await t.run(async (ctx) => {
       const channel = await ctx.db.query("communityChannels").withIndex("by_community_slug", (q: any) => q.eq("communityId", f.communityId).eq("slug", "setters")).first();
       const participants = await ctx.db.query("communityChannelParticipants").withIndex("by_channel_principal", (q: any) => q.eq("channelId", channel!._id)).collect();
-      return { accessMode: channel?.accessMode, participants: participants.filter((row: any) => row.status === "active").length };
+      const pod = await ctx.db.query("communityPods").withIndex("by_community_channel", (q: any) => q.eq("communityId", f.communityId).eq("channelId", channel!._id)).first();
+      const active = participants.filter((row: any) => row.status === "active");
+      return { accessMode: channel?.accessMode, members: active.filter((row: any) => row.principalKey.startsWith("user:")).length,
+        guide: active.some((row: any) => row.principalKey === "community_agent"), listed: pod?.visibility };
     });
-    expect(setters).toEqual({ accessMode: "restricted", participants: 2 });
+    expect(setters).toEqual({ accessMode: "restricted", members: 2, guide: true, listed: "listed" });
     const state = await seededState(t, f.communityId);
     expect(state.seedUserIds).toHaveLength(4);
     expect(state.memberships.filter((row) => row.active)).toHaveLength(4);

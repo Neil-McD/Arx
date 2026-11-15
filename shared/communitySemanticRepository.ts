@@ -21,11 +21,20 @@ export const COMMUNITY_HANDBOOK_PATH = "/handbook.md";
 export const COMMUNITY_MEMORY_INDEX_PATH = "/memory.md";
 // Pods (convex/communityPodFacts.ts): pods/, pods/<slug>/ and pods/<slug>/pod.md.
 export const POLYNET_PODS_DIRECTORY_PATH = "/pods/";
-export function parseCommunityPodPath(localPath: string): { kind: "pods" } | { kind: "pod" | "pod_facts"; slug: string } | null {
+export type CommunityPodPath =
+  | { kind: "pods" }
+  | { kind: "pod" | "pod_facts" | "pod_memory_index" | "pod_memory"; slug: string }
+  | { kind: "pod_memory_note"; slug: string; note: string };
+export function parseCommunityPodPath(localPath: string): CommunityPodPath | null {
   if (localPath === POLYNET_PODS_DIRECTORY_PATH) return { kind: "pods" };
-  const match = /^\/pods\/([a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?)\/(pod\.md)?$/.exec(localPath);
+  const match = /^\/pods\/([a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?)\/(pod\.md|memory\.md|memory\/|memory\/([A-Za-z0-9_-]{1,64})\.md)?$/.exec(localPath);
   if (!match) return null;
-  return match[2] ? { kind: "pod_facts", slug: match[1] } : { kind: "pod", slug: match[1] };
+  const slug = match[1];
+  if (!match[2]) return { kind: "pod", slug };
+  if (match[2] === "pod.md") return { kind: "pod_facts", slug };
+  if (match[2] === "memory.md") return { kind: "pod_memory_index", slug };
+  if (match[2] === "memory/") return { kind: "pod_memory", slug };
+  return { kind: "pod_memory_note", slug, note: match[3] };
 }
 export const MEMBER_TIMELINE_PATH = /^\/members\/([A-Za-z0-9_.-]{1,64})\/timeline\.md$/;
 // Who is online now, as JSON (a member read; never the community agent).
@@ -621,7 +630,7 @@ export function validatePolynetSemanticRepositoryOperationInput(args: {
     const podPath = parseCommunityPodPath(repositoryPath.localPath);
     if (repositoryPath.localPath === COMMUNITY_MEMBER_SELF_DIRECTORY || repositoryPath.localPath === COMMUNITY_MEMBER_SELF_CONTEXT_PATH ||
       repositoryPath.localPath === PERSONAL_MEMORY_PATH || podPath) {
-      const directory = repositoryPath.localPath === COMMUNITY_MEMBER_SELF_DIRECTORY || podPath?.kind === "pods" || podPath?.kind === "pod";
+      const directory = repositoryPath.localPath === COMMUNITY_MEMBER_SELF_DIRECTORY || podPath?.kind === "pods" || podPath?.kind === "pod" || podPath?.kind === "pod_memory";
       const validated = validateCommunitySemanticOperationInput({
         ...args,
         path: directory ? "/" : "/community.md",

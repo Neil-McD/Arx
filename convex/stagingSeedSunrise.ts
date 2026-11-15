@@ -228,8 +228,37 @@ async function ensureSettersChannel(ctx: any, communityId: any, createdByUserId:
     await setChannelParticipantCore(ctx, { communityId, channelId: channel._id, createdByUserId,
       active: true, target: { kind: "member", userId: ids[key] } });
   }
+  await ensureSettersPod(ctx, communityId, channel, createdByUserId, ids, nowMs);
   return channel;
 }
+
+// The Setters room is a pod (listed, hosted by Maya) with the guide in it, so
+// it keeps its own memory (pods slice C).
+async function ensureSettersPod(ctx: any, communityId: any, channel: any, createdByUserId: any, ids: Record<MemberKey, any>, nowMs: number) {
+  const record = await ctx.db.query("communityPods")
+    .withIndex("by_community_channel", (q: any) => q.eq("communityId", communityId).eq("channelId", channel._id)).first();
+  const fields = { purpose: "The route setters plan resets and the comp.", visibility: "listed" as const, hostUserIds: [ids.maya], updatedAt: nowMs };
+  if (record) await ctx.db.patch(record._id, fields);
+  else await ctx.db.insert("communityPods", { communityId, channelId: channel._id, ...fields, createdAt: nowMs });
+  await setChannelParticipantCore(ctx, { communityId, channelId: channel._id, createdByUserId, active: true, target: { kind: "community_agent" } });
+}
+
+// Staging: make the Setters room a pod with the guide in it, without
+// re-seeding (which would clear the posts memory notes cite).
+export const seedSunriseSettersPodInternal = internalMutation({
+  args: { communityId: v.id("communities") },
+  handler: async (ctx: any, args) => {
+    assertSeedAllowed();
+    const community = await ctx.db.get(args.communityId);
+    if (!community) throw new Error("community_not_found");
+    const channel = await ctx.db.query("communityChannels")
+      .withIndex("by_community_status_normalizedName", (q: any) =>
+        q.eq("communityId", args.communityId).eq("status", "active").eq("normalizedName", "setters")).first();
+    if (!channel || channel.accessMode !== "restricted") throw new Error("seed_setters_channel_missing");
+    await ensureSettersPod(ctx, args.communityId, channel, community.ownerId, await seedUserIds(ctx), Date.now());
+    return { roomId: String(channel._id) };
+  },
+});
 
 // ---------- clearing the previous seed's activity ----------
 

@@ -380,7 +380,7 @@ test.each([false, true])("private-room agent execution is scoped and revocation 
   const claim = await t.mutation(internalRefs.communityAgentServeWorker.claimNextCommunityAgentServeRequestInternal,
     { requestId, nowMs: 10_000 });
   const args = { requestId, expectedAttempt: claim.attempt };
-  expect(await t.query(internalRefs.communityAgentChannelAccess.authorizeServeToolsInternal, args)).toEqual({ restricted: true, podRoomId: String(f.channelId) });
+  expect(await t.query(internalRefs.communityAgentChannelAccess.authorizeServeToolsInternal, args)).toEqual({ restricted: true, podRoomId: String(f.channelId), podSlug: "private-client" });
   expect(await t.query(internalRefs.communityAgentServeWorker.readCommunityAgentServeRequestContextInternal, args)).toMatchObject({ ok: true });
   if (revoked) {
     await t.run(ctx => ctx.db.patch(grantId, { status: "revoked" }));

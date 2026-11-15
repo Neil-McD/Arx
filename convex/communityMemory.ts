@@ -6,8 +6,8 @@
 import { v } from "convex/values";
 import {
   communityScopeKey, insertMemoryIndex, insertNote, insertRemoval, insertRevision, insertRun, insertWork,
-  memoryIndexFor, noteBySlug, notesByUpdated, removalsFor, revisionsForRun, revisionsForSlug, runsOfCommunity, workFor,
-  type ScopeKey,
+  memoryIndexFor, noteBySlug, notesByUpdated, parseScopeKey, podScopeKey, removalsFor, revisionsForRun, revisionsForSlug,
+  runsOfCommunity, workFor, type ScopeKey,
 } from "./communityNotesStore";
 import { internal } from "./_generated/api";
 import { internalMutation, internalQuery, mutation, query } from "./_generated/server";
@@ -35,12 +35,35 @@ import {
 } from "../shared/communityMemory";
 
 const REMOVALS_SCAN = 500;
+
+// A pod's room in this community (its memory's scope), or null.
+async function podRoom(ctx: any, communityId: any, roomId: unknown) {
+  const id = roomId ? ctx.db.normalizeId("communityChannels", String(roomId)) : null;
+  const channel = id ? await ctx.db.get(id) : null;
+  return channel && String(channel.communityId) === String(communityId) && channel.accessMode === "restricted" && channel.status === "active"
+    ? channel : null;
+}
+
+// The guide works in a pod only where a builder seated it.
+export async function guideSeatedInPod(ctx: any, roomId: any): Promise<boolean> {
+  const seat = await ctx.db.query("communityChannelParticipants")
+    .withIndex("by_channel_principal", (q: any) => q.eq("channelId", roomId).eq("principalKey", "community_agent")).first();
+  return seat?.status === "active";
+}
+
+// The scope a call names: the community's, or one of its pods'.
+async function scopeFor(ctx: any, communityId: any, podRoomId?: unknown): Promise<ScopeKey | null> {
+  if (!podRoomId) return communityScopeKey(communityId);
+  return (await podRoom(ctx, communityId, podRoomId)) ? podScopeKey(podRoomId) : null;
+}
 const RUNS_LIST_MAX = 30;
 
 type Refused = { ok: false; code: string };
 type Written = { ok: true; slug: string; title: string; change: "added" | "changed" };
 
-async function evidenceFacts(ctx: any, communityId: any, ref: MemoryEvidenceRef): Promise<MemoryEvidenceFacts> {
+// "openChannel" means readable in this memory's place: a channel open to every
+// member, or, for a pod's memory, that pod's own room. Never another pod.
+async function evidenceFacts(ctx: any, communityId: any, ref: MemoryEvidenceRef, scope: ScopeKey): Promise<MemoryEvidenceFacts> {
   const none = { exists: false, communityMatches: false, live: false, byPerson: false, openChannel: false, sharedVisibility: false };
   const table = ref.kind === "post" ? "communityInteractionRoots" : "communityInteractionReplies";
   const id = ctx.db.normalizeId(table, ref.id);
@@ -57,8 +80,9 @@ async function evidenceFacts(ctx: any, communityId: any, ref: MemoryEvidenceRef)
     communityMatches: String(row.communityId) === String(communityId),
     live,
     byPerson: row.actorType === "human",
-    openChannel: Boolean(channel && channel.accessMode === "all_members" && channel.status === "active"
-      && String(channel.communityId) === String(communityId)),
+    openChannel: Boolean(channel && channel.status === "active" && String(channel.communityId) === String(communityId) && (
+      channel.accessMode === "all_members" ||
+      (parseScopeKey(scope)?.kind === "pod" && channel.accessMode === "restricted" && podScopeKey(channel._id) === scope))),
     sharedVisibility: row.visibilityScope === "community" || row.visibilityScope === "public",
   };
 }
@@ -81,9 +105,12 @@ async function refuse(ctx: any, run: any, title: string, code: string): Promise<
 
 // Starts a review: the community's work row (made once) and the run's record.
 export const openMemoryReviewRunInternal = internalMutation({
-  args: { communityId: v.id("communities"), windowStart: v.number(), windowEnd: v.number(), nowMs: v.number() },
+  args: { communityId: v.id("communities"), windowStart: v.number(), windowEnd: v.number(), nowMs: v.number(),
+    // A pod's review: its room. Missing: the community's.
+    podRoomId: v.optional(v.string()) },
   handler: async (ctx, args) => {
-    const scope = communityScopeKey(args.communityId);
+    const scope = await scopeFor(ctx, args.communityId, args.podRoomId);
+    if (!scope) throw new Error("community_pod_not_found");
     let work = await workFor(ctx, scope, "memory_review");
     if (!work) {
       const workId = await insertWork(ctx, scope, {
@@ -122,12 +149,12 @@ export const observeCommunityMemoryInternal = internalMutation({
 
     const parsed = parseMemoryEvidenceRefs(args.evidenceRefs);
     if ("error" in parsed) return refuse(ctx, run, title, parsed.error);
+    const scope = scopeOfRun(run);
     for (const ref of parsed.refs) {
-      const refusal = memoryEvidenceRefusal(await evidenceFacts(ctx, args.communityId, ref));
+      const refusal = memoryEvidenceRefusal(await evidenceFacts(ctx, args.communityId, ref, scope));
       if (refusal) return refuse(ctx, run, title, refusal);
     }
     const refs = parsed.refs.map((ref) => ref.raw);
-    const scope = scopeOfRun(run);
     const removals = await removalsFor(ctx, scope).order("desc").take(REMOVALS_SCAN);
     if (memoryEvidenceWasRemoved(refs, removals)) return refuse(ctx, run, title, "evidence_removed");
 
@@ -218,9 +245,11 @@ export const finishMemoryReviewRunInternal = internalMutation({
 });
 
 export const readCommunityMemoryIndexInternal = internalQuery({
-  args: { communityId: v.id("communities") },
+  args: { communityId: v.id("communities"), podRoomId: v.optional(v.string()) },
   handler: async (ctx, args) => {
-    const row = await memoryIndexFor(ctx, communityScopeKey(args.communityId));
+    const scope = await scopeFor(ctx, args.communityId, args.podRoomId);
+    if (!scope) return null;
+    const row = await memoryIndexFor(ctx, scope);
     return row ? { bodyMd: row.bodyMd, updatedAt: row.updatedAt } : null;
   },
 });
@@ -236,6 +265,22 @@ async function manager(ctx: any, args: { userId?: any; authSubject?: string; com
   return userId;
 }
 
+// Who may correct a scope's memory: builders for every scope; a pod's hosts
+// for their own pod.
+async function memoryEditor(ctx: any, args: { userId?: any; authSubject?: string; communityId: any }, scope: ScopeKey) {
+  const userId = await resolveUserIdForAuthenticatedRequest({ ctx, userId: args.userId, authSubject: args.authSubject ?? null });
+  await requireCommunityChatAccess({ ctx, communityId: args.communityId, userId });
+  const isBuilder = await requireCommunityManager({ ctx, communityId: args.communityId, userId }).then(() => true, () => false);
+  if (isBuilder) return userId;
+  const pod = parseScopeKey(scope);
+  if (pod?.kind === "pod") {
+    const record = await ctx.db.query("communityPods")
+      .withIndex("by_community_channel", (q: any) => q.eq("communityId", args.communityId).eq("channelId", pod.id)).first();
+    if (record?.hostUserIds?.some((id: any) => String(id) === String(userId))) return userId;
+  }
+  throw new Error("community_forbidden");
+}
+
 // Removes a guide note and remembers what it was learned from.
 export async function removeGuideNote(ctx: any, note: any, removedByUserId: any, nowMs: number) {
   await insertRemoval(ctx, (note.scopeKey as ScopeKey | undefined) ?? communityScopeKey(note.communityId), {
@@ -248,10 +293,11 @@ export async function removeGuideNote(ctx: any, note: any, removedByUserId: any,
 // Undo one guide note: its last change is put back; a note the guide added is
 // removed, and its posts won't bring it back.
 export const undoLearnedNote = mutation({
-  args: { ...viewerArgs, slug: v.string() },
+  args: { ...viewerArgs, slug: v.string(), podRoomId: v.optional(v.string()) },
   handler: async (ctx, args) => {
-    const userId = await manager(ctx, args);
-    const scope = communityScopeKey(args.communityId);
+    const scope = await scopeFor(ctx, args.communityId, args.podRoomId);
+    if (!scope) throw new Error("semantic_not_found");
+    const userId = await memoryEditor(ctx, args, scope);
     const note = await noteBySlug(ctx, scope, args.slug);
     if (!note || noteAuthorKind(note) !== "guide") throw new Error("semantic_not_found");
     const nowMs = Date.now();
@@ -277,9 +323,9 @@ export const undoLearnedNote = mutation({
 export const undoMemoryRun = mutation({
   args: { ...viewerArgs, runId: v.id("agentWorkRuns") },
   handler: async (ctx, args) => {
-    const userId = await manager(ctx, args);
     const run = await ctx.db.get(args.runId);
     if (!run || String(run.communityId) !== String(args.communityId)) throw new Error("semantic_not_found");
+    const userId = await memoryEditor(ctx, args, scopeOfRun(run));
     if (run.status === "undone") return { undone: 0 };
     const nowMs = Date.now();
     // Newest first, in the order they were written (a review can change the
@@ -330,10 +376,23 @@ export const listMemoryRuns = query({
     await manager(ctx, args);
     const limit = Math.max(1, Math.min(RUNS_LIST_MAX, Math.floor(args.limit ?? 10)));
     const runs = await runsOfCommunity(ctx, args.communityId).order("desc").take(limit * 3);
-    return runs.filter((run: any) => run.status === "done" || run.status === "undone").slice(0, limit).map((run: any) => ({
-      id: String(run._id), status: run.status, added: run.added, changed: run.changed, refused: run.refused.length,
-      summary: run.summary ?? null, created_at: new Date(run.createdAt).toISOString(),
-    }));
+    const places = new Map<string, string | null>();
+    const out = [];
+    for (const run of runs.filter((run: any) => run.status === "done" || run.status === "undone").slice(0, limit)) {
+      // Which memory a night wrote: the community's, or a pod's (by name).
+      const scope = parseScopeKey(scopeOfRun(run));
+      if (scope?.kind === "pod" && !places.has(scope.id)) {
+        const room = await podRoom(ctx, args.communityId, scope.id);
+        places.set(scope.id, room ? String(room.name ?? "") : null);
+      }
+      out.push({
+        id: String(run._id), status: run.status, added: run.added, changed: run.changed, refused: run.refused.length,
+        summary: run.summary ?? null, created_at: new Date(run.createdAt).toISOString(),
+        pod: scope?.kind === "pod" ? { room_id: scope.id, name: places.get(scope.id) ?? null } : null,
+      });
+    }
+    return out;
+
   },
 });
 
@@ -365,9 +424,12 @@ async function authorWord(ctx: any, row: any, names: Map<string, string>): Promi
 // last one shown (readUntil) and the next review reads the rest. A reply in
 // a thread that was deleted isn't readable, so it isn't shown or counted.
 export const readMemoryReviewInputInternal = internalQuery({
-  args: { communityId: v.id("communities"), sinceMs: v.number(), untilMs: v.number() },
+  // A pod's review reads its own room only; the community's, its open channels.
+  args: { communityId: v.id("communities"), sinceMs: v.number(), untilMs: v.number(), podRoomId: v.optional(v.string()) },
   handler: async (ctx, args) => {
-    const channels = await ctx.db.query("communityChannels")
+    const room = args.podRoomId ? await podRoom(ctx, args.communityId, args.podRoomId) : null;
+    if (args.podRoomId && !room) return { posts: 0, readUntil: args.untilMs, text: "", rewritable: [] as string[] };
+    const channels = room ? [room] : await ctx.db.query("communityChannels")
       .withIndex("by_community_access_status_position", (q) => q.eq("communityId", args.communityId).eq("accessMode", "all_members").eq("status", "active"))
       .take(100);
     const liveRoots = new Map<string, boolean>();
@@ -399,10 +461,16 @@ export const readMemoryReviewInputInternal = internalQuery({
       .sort((a, b) => a.order - b.order || a.row.createdAt - b.row.createdAt);
     if (read.length === 0) return { posts: 0, readUntil, text: "", rewritable: [] as string[] };
 
-    const scope = communityScopeKey(args.communityId);
+    const scope = room ? podScopeKey(room._id) : communityScopeKey(args.communityId);
     const index = await memoryIndexFor(ctx, scope);
     const notes = await notesByUpdated(ctx, scope).order("desc").take(NOTES_LISTED_MAX);
-    const lines = ["# memory.md", "", index?.bodyMd?.trim() || "_Nothing yet._", "", `# The notes (${notes.length}${notes.length === NOTES_LISTED_MAX ? ", newest first" : ""})`, ""];
+    const lines: string[] = [];
+    if (room) {
+      // The community's memory, for context: the pod already knows it.
+      const community = await memoryIndexFor(ctx, communityScopeKey(args.communityId));
+      lines.push("# The community's memory.md (context only: never copy it into this pod's notes)", "", community?.bodyMd?.trim() || "_Nothing yet._", "");
+    }
+    lines.push(room ? `# The ${String(room.name ?? "")} pod's memory.md` : "# memory.md", "", index?.bodyMd?.trim() || "_Nothing yet._", "", `# The notes (${notes.length}${notes.length === NOTES_LISTED_MAX ? ", newest first" : ""})`, "");
     if (notes.length === 0) lines.push("_None yet._");
     const rewritable: string[] = [];
     let wholeChars = 0;
@@ -458,8 +526,13 @@ export async function scheduleMemoryReview(ctx: any, workId: any, atMs: number) 
 export async function markCommunityMemoryReviewDue(ctx: any, args: { communityId: any; channelId: any; actorType: string; nowMs: number }) {
   if (args.actorType !== "human" || !args.channelId) return;
   const channel = await ctx.db.get(args.channelId);
-  if (!channel || channel.accessMode !== "all_members" || channel.status !== "active") return;
-  const scope = communityScopeKey(args.communityId);
+  if (!channel || channel.status !== "active" || String(channel.communityId) !== String(args.communityId)) return;
+  // An open channel feeds the community's memory; a pod's room feeds that
+  // pod's, and only where the guide works (a builder seated it there).
+  let scope: ScopeKey;
+  if (channel.accessMode === "all_members") scope = communityScopeKey(args.communityId);
+  else if (channel.accessMode === "restricted" && await guideSeatedInPod(ctx, channel._id)) scope = podScopeKey(channel._id);
+  else return;
   const work = await workFor(ctx, scope, "memory_review");
   if (work?.dueAt) {
     await ctx.db.patch(work._id, { pending: work.pending + 1, updatedAt: args.nowMs });

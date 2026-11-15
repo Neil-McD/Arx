@@ -2,7 +2,7 @@
 // read under memory/. Only the founder (owners and admins, in Studio) edits or
 // deletes them; no agent, member or connected AI writes them (Nov 5: closed
 // both a private-room leak path and a shared-memory injection path).
-import { communityScopeKey, insertNote, noteBySlug, notesByUpdated, searchNotes } from "./communityNotesStore";
+import { communityScopeKey, insertNote, noteBySlug, notesByUpdated, podScopeKey, searchNotes } from "./communityNotesStore";
 import { v } from "convex/values";
 import { internalQuery, mutation, query } from "./_generated/server";
 import { resolveUserIdForAuthenticatedRequest } from "./authActor";
@@ -37,19 +37,33 @@ export function noteSnippet(bodyMd: string, query: string): string {
   return `${at > 0 ? "…" : ""}${slice}${at + SNIPPET_CHARS < text.length ? "…" : ""}`;
 }
 
+// The scope a reader names: the community's notes, or one of its pods' (its
+// room, checked to be this community's; the caller checked the reader may
+// see inside it).
+async function noteScope(ctx: any, communityId: any, podRoomId?: string) {
+  if (!podRoomId) return communityScopeKey(communityId);
+  const id = ctx.db.normalizeId("communityChannels", podRoomId);
+  const room = id ? await ctx.db.get(id) : null;
+  return room && String(room.communityId) === String(communityId) && room.accessMode === "restricted" ? podScopeKey(room._id) : null;
+}
+
 export const listCommunityNotesInternal = internalQuery({
-  args: { communityId: v.id("communities"), limit: v.optional(v.number()) },
+  args: { communityId: v.id("communities"), limit: v.optional(v.number()), podRoomId: v.optional(v.string()) },
   handler: async (ctx, args) => {
     const limit = Math.max(1, Math.min(LIST_LIMIT_MAX, Math.floor(args.limit ?? 20)));
-    const rows = await notesByUpdated(ctx, communityScopeKey(args.communityId)).order("desc").take(limit + 1);
+    const scope = await noteScope(ctx, args.communityId, args.podRoomId);
+    if (!scope) return { notes: [], hasMore: false };
+    const rows = await notesByUpdated(ctx, scope).order("desc").take(limit + 1);
     return { notes: rows.slice(0, limit).map(noteSummary), hasMore: rows.length > limit };
   },
 });
 
 export const readCommunityNoteInternal = internalQuery({
-  args: { communityId: v.id("communities"), slug: v.string() },
+  args: { communityId: v.id("communities"), slug: v.string(), podRoomId: v.optional(v.string()) },
   handler: async (ctx, args) => {
-    const row = await noteBySlug(ctx, communityScopeKey(args.communityId), args.slug);
+    const scope = await noteScope(ctx, args.communityId, args.podRoomId);
+    if (!scope) return null;
+    const row = await noteBySlug(ctx, scope, args.slug);
     return row ? { ...noteSummary(row), bodyMd: row.bodyMd } : null;
   },
 });
