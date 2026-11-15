@@ -17,6 +17,7 @@ import { formatCommunityEventZonedDateTime } from "../shared/communityEventTime"
 import { PLATFORM_LEGAL_DOCUMENTS } from "../shared/legalDocuments";
 import { buildCommunityFunnelContentTestFixture } from "../scripts/community_funnel_test_fixture";
 import { renderCommunityMemberSelfContext } from "../shared/communityMemberSelfContext";
+import { lensCalls, lensReads, resolveLens, type LensAction, type LensView } from "../shared/lens";
 
 const selfContextPath = "/communities/canonical-community/members/me/context.md";
 test("retired integration paths are not found", async () => {
@@ -3528,4 +3529,57 @@ test("personal memory is the member's own: written in their private talk, read b
   expect(((await memberTalk("polynet_read", { path: memoryPath })) as any).value.body).not.toContain("Tuesdays");
   await memberTalk("polynet_call", remember([{ action: "clear" }], "pm-6"));
   expect(((await memberTalk("polynet_read", { path: memoryPath })) as any).value.body).toContain("_Nothing yet._");
+});
+
+// The lens table (shared/lens.ts) is the one place that says who sees and does
+// what. This grid holds it to what the executor actually does: every lens, every
+// view it governs, every action.
+test("lens grid: what each lens reads and may do is exactly what the lens table says", async () => {
+  vi.stubEnv("ARX_PUBLIC_APP_URL", "https://polynet-staging.vercel.app");
+  const t = convexTest(schema, modules);
+  const f = await createFixture(t);
+  const base = "/communities/canonical-community";
+  const callers = {
+    member_private: { subject: f.memberSubject, userId: f.memberId, principalKind: "community_agent_for_member", evidenceSurface: "member_agent_dock" },
+    builder_private: { subject: f.ownerSubject, userId: f.ownerId, principalKind: "community_agent_for_member", evidenceSurface: "member_agent_dock" },
+    member_own_ai: { subject: f.memberSubject, userId: f.memberId, principalKind: "external_mcp", evidenceSurface: "external_mcp" },
+    builder_own_ai: { subject: f.ownerSubject, userId: f.ownerId, principalKind: "external_mcp", evidenceSurface: "external_mcp" },
+    member_site: { subject: f.memberSubject, userId: f.memberId, principalKind: "community_app", evidenceSurface: "external_mcp" },
+    guide_public: { subject: f.ownerSubject, userId: f.ownerId, principalKind: "community_agent", evidenceSurface: "community_concierge" },
+  } as const;
+  const views: Record<string, ["polynet_list" | "polynet_read", string]> = {
+    members_self: ["polynet_list", `${base}/members/me/`],
+    member_profile: ["polynet_read", `${base}/members/canonical-member.json`],
+    member_timeline: ["polynet_read", `${base}/members/canonical-member/timeline.md`],
+    presence: ["polynet_read", `${base}/presence.json`],
+    memory_notes: ["polynet_list", `${base}/memory/`],
+    builder_directory: ["polynet_list", `${base}/builder/`],
+    builder_records: ["polynet_read", `${base}/builder/community.json`],
+  };
+  const actions: Record<string, string> = {
+    react: "community.interaction.react", lesson_done: "community.lesson.set_done", mark_read: "community.channel.mark_read",
+    presence: "community.presence.heartbeat", personal_memory: "member.memory.remember", review_joins: "community.admission.approve",
+    remove_posts: "community.interaction.remove", builder_change: "community.members.set_role",
+  };
+  const mismatches: string[] = [];
+  for (const [expectedLens, caller] of Object.entries(callers)) {
+    const run = (toolName: "polynet_list" | "polynet_read", path: string) => executePolynetCanonicalTool({
+      ctx: executionContext(t.withIdentity({ subject: caller.subject })), authSubject: caller.subject, userId: caller.userId,
+      principalKind: caller.principalKind, evidenceSurface: caller.evidenceSurface as any, mountedCommunityId: f.communityId, toolName, input: { path } });
+    const lens = resolveLens({ principalKind: caller.principalKind, evidenceSurface: caller.evidenceSurface,
+      authority: { canUseBuilderProjection: expectedLens.startsWith("builder"), canReviewJoinRequests: expectedLens === "builder_own_ai", canModerateContent: expectedLens === "builder_own_ai" } });
+    expect(lens.name).toBe(expectedLens);
+    for (const [view, [toolName, path]] of Object.entries(views)) {
+      const result = await run(toolName, path);
+      const allowed = lensReads(lens, view as LensView);
+      if (result.ok !== allowed) mismatches.push(`${expectedLens} ${view}: table ${allowed}, executor ${result.ok} ${result.ok ? "" : (result as any).code}`);
+    }
+    const capabilities = await run("polynet_list", `${base}/capabilities/`);
+    const listed = JSON.stringify(capabilities);
+    for (const [action, operation] of Object.entries(actions)) {
+      const allowed = lensCalls(lens, action as LensAction);
+      if (listed.includes(`/capabilities/${operation}.json`) !== allowed) mismatches.push(`${expectedLens} ${action}: table ${allowed}, listed ${!allowed}`);
+    }
+  }
+  expect(mismatches).toEqual([]);
 });
