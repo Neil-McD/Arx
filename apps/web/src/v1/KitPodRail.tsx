@@ -129,17 +129,19 @@ export function KitPodRail(props: { session: unknown; communityId: string; pod: 
     ["knowledge", <KitPodKnowledge session={props.session} communityId={props.communityId} channelId={pod.channel_id} />],
     ["people", (
       <Sec label={`In this pod · ${pod.members.length}`}>
-        {pod.can_edit ? pod.members.map((member) => (
+        {pod.can_manage ? pod.members.map((member) => (
           <div key={member.user_id} className={cx("podreq")}>
             <span>
               {member.name}{member.is_host ? <em> · host</em> : null}
               {member.payment ? <span className={cx("podtag")}>{memberTag(member.payment)}</span> : null}
             </span>
-            <span className={cx("podreq-acts")}>
-              <Btn small txt disabled={Boolean(busy)} onClick={() => void act(`host:${member.user_id}`, () => setCloudPodHost({ session: props.session, communityId: props.communityId, channelId: pod.channel_id, userId: member.user_id, host: !member.is_host }))}>
-                {member.is_host ? "Not host" : "Make host"}
-              </Btn>
-            </span>
+            {pod.can_edit ? (
+              <span className={cx("podreq-acts")}>
+                <Btn small txt disabled={Boolean(busy)} onClick={() => void act(`host:${member.user_id}`, () => setCloudPodHost({ session: props.session, communityId: props.communityId, channelId: pod.channel_id, userId: member.user_id, host: !member.is_host }))}>
+                  {member.is_host ? "Not host" : "Make host"}
+                </Btn>
+              </span>
+            ) : null}
           </div>
         )) : pod.members.length ? <PanelPeople names={pod.members.map((member) => member.name)} max={5} /> : <p className={cx("sub")}>No one yet.</p>}
       </Sec>
