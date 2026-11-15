@@ -1,7 +1,7 @@
 // Design system v1: the guide's brief, the first part of every right panel
 // (Home's, a pod's): what's happening in the place, written by the guide
-// (shared/communityBriefs.ts). A headline and a few points, each from posts
-// in a channel it can open, with when it was written. Builders (a pod's hosts
+// (shared/communityBriefs.ts). A summary of one to three sentences, the
+// channels it came from, and when it was written. Builders (a pod's hosts
 // for its own) can take it down until the next one. With no brief it draws
 // nothing, so each panel shows its own fallback.
 import { useCallback, useEffect, useState } from "react";
@@ -33,7 +33,7 @@ export function usePlaceBrief(session: unknown, communityId: string | null, podC
 export function BriefPart(props: {
   brief: BriefView;
   now: number;
-  // Opens the channel a point came from. Missing: points are plain text
+  // Opens a channel the brief came from. Missing: no channels shown
   // (inside a pod, the reader is already in its room).
   onOpenChannel?: (channel: { slug: string; name: string }) => void;
   onHide?: () => Promise<void>;
@@ -44,22 +44,14 @@ export function BriefPart(props: {
   return (
     <div className={cx("brief")}>
       <span className={cx("gl")}><Icon name="spark" />Your guide{age ? <em>{age}</em> : null}</span>
-      {props.brief.headline ? <p><b>{props.brief.headline}</b></p> : null}
-      <ul className={cx("brief-points")}>
-        {props.brief.points.map((point, index) => {
-          const channel = point.channels[0];
-          const where = point.channels.map((entry) => `#${entry.name}`).join(", ");
-          return (
-            <li key={index}>
-              {props.onOpenChannel && channel ? (
-                <button type="button" className={cx("brief-point")} title={`Open ${where}`} onClick={() => props.onOpenChannel!(channel)}>
-                  <span>{point.text}</span><em>{where}</em>
-                </button>
-              ) : <span className={cx("brief-point")}><span>{point.text}</span></span>}
-            </li>
-          );
-        })}
-      </ul>
+      <p>{props.brief.summary}</p>
+      {props.onOpenChannel && props.brief.channels.length ? (
+        <span className={cx("brief-from")}>
+          {props.brief.channels.map((channel) => (
+            <button key={channel.slug} type="button" title={`Open #${channel.name}`} onClick={() => props.onOpenChannel!(channel)}>#{channel.name}</button>
+          ))}
+        </span>
+      ) : null}
       {props.onHide ? (
         <div className={cx("brief-acts")}>
           {confirming ? (

@@ -1676,14 +1676,14 @@ export default defineSchema({
 
   // A place's brief (shared/communityBriefs.ts): what's happening there,
   // rewritten by the guide after new activity. One per scope, read by
-  // everyone who can enter the place. Each point cites the posts it came
-  // from; a point whose post is gone stops showing.
+  // everyone who can enter the place: a short summary and the posts it drew
+  // on; once one of those is gone it stops showing.
   communityBriefs: defineTable({
     communityId: v.id("communities"),
     // "community:<communityId>" or "pod:<roomId>" (convex/communityNotesStore.ts).
     scopeKey: v.string(),
-    headline: v.string(),
-    points: v.array(v.object({ text: v.string(), refs: v.array(v.string()) })),
+    summary: v.string(),
+    refs: v.array(v.string()),
     runId: v.optional(v.id("agentWorkRuns")),
     // Written from the place's threads up to here.
     windowEnd: v.number(),

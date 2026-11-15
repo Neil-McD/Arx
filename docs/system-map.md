@@ -209,7 +209,8 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
   `communityBriefs`: written by the guide after new posts in a place, the
   community's open channels or a pod's own room where the guide works, at
   most every three hours, on the same run entry in one request, with one
-  `brief.write` whose points cite the posts they came from; read back as
+  `brief.write`: a summary of one to three sentences and the posts it drew
+  on, or nothing when the posts are only noise; read back as
   `brief.md` and `pods/<pod>/brief.md` through one reader, `readPlaceBrief`;
   the same reader feeds the first part of Home's and a pod's right panel,
   `getPlaceBrief`, and builders or a pod's hosts can take a brief down until
