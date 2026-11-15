@@ -443,21 +443,14 @@ function PodsList(props: WebCommunityPodsSectionProps) {
           ) : null}
         </div>
       </KitApp>
-      <CommunityPageRail label="Pods">
-        <KitApp view="events" host={canManage} part="rail">
-          {selected ? (
+      {/* The right column is the pod you picked; with none picked there is no column. */}
+      {selected ? (
+        <CommunityPageRail label="Pods">
+          <KitApp view="events" host={canManage} part="rail">
             <PodPitch {...props} podSlug={selected} inline={false} reloadKey={reloadKey} />
-          ) : (
-          <Sec label="What a pod is">
-            <p className={cx("sub")}>
-              {canManage
-                ? "A small group with a purpose and closer time with you. Listed pods show members what they'd get and let them ask to join; hidden ones only their members know about."
-                : "A small group with a purpose and closer time with its hosts. Only the people in a pod can see inside it."}
-            </p>
-          </Sec>
-          )}
-        </KitApp>
-      </CommunityPageRail>
+          </KitApp>
+        </CommunityPageRail>
+      ) : null}
     </div>
   );
 }
