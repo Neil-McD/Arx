@@ -166,9 +166,18 @@ for that row only; a daily sweep re-schedules any row whose job was lost.
 
 | Kind | Made due by | When it runs | What it does |
 |---|---|---|---|
-| **Brief** | A post, reply, join or lesson finished in a place | An hour after the first unreviewed event, so a burst is read once | Rewrites that place's brief |
+| **Brief** | A person's post or reply in a place | An hour after the first new one, and at most once every three hours | Writes that place's brief fresh from its recent threads |
 | **Memory review** | Any evidence in a scope that day | Nightly, at the community's quiet hour | Reads the day; writes, corrects and merges memories with `observe`; rebuilds `memory.md` |
 | **Unanswered question** (later) | A question with no reply | After the wait the builder set | Answers in the thread with a cited answer, or hands it to the builder |
+
+A brief is a view, never a source (`shared/communityBriefs.ts`): each point
+cites the posts it came from, and only posts the guide was shown, so a reader
+can go there and a point whose post is removed stops showing; it is written
+fresh from the place's recent threads, never from the brief before it; it
+holds nothing that goes stale by itself (dates, counts, what's coming up are
+drawn live beside it) and no links; it stops showing a week after its last
+rewrite. A worker's write that goes through ends its run: a brief, or a
+review with nothing refused, is one model request.
 
 A quiet scope costs nothing. AI off means no work rows run.
 
@@ -227,7 +236,7 @@ Two rules across lenses:
 | Memories | `communityNotes` with a scope key (`community:<id>`, `pod:<roomId>`), revisions, removals and `memory.md` (`communityMemoryIndex`), all through one door (`communityNotesStore`, held by a test). Old `communityPodNotes` rows are moved by a backfill | Drop the old tables (cleanup slice C) |
 | Memory review | Nightly per scope (community and each pod), made due by posts (`agentWork`), one pass: the guide is handed the day and its notes and writes once with `memory.apply`. Undo a note or a night exists in the backend | Sources and undo on a note: built. The nights list and "Learned lately": deferred |
 | Personal memory | `shared/personalMemory.ts`, `convex/memberMemory.ts`: capped at 1,375 characters, written in a private talk with `member.memory.remember`, loaded into every talk with that member, never shown elsewhere | The You page |
-| Briefs | The founder brief: a fixed snapshot and one call, on a 15-minute cron | Brief work per place (slice 3) |
+| Briefs | `communityBriefs`: the community's brief, written by the guide in one model request from its recent threads (picked by what matters), its card, handbook and `memory.md`; every point cites posts it was shown; no links; nothing that goes stale. The founder brief (a fixed snapshot and one call, on a 15-minute cron) still runs beside it | Pod briefs, `brief.md` in the folder, the panels; the morning email reads the stored brief and the founder brief's model call goes |
 
 ## 7. What the leading agents do, and what we take
 
@@ -278,7 +287,7 @@ something onto the new system deletes the old path in the same slice.
    the You page shows each line with its source. Visible only to the member
    until they share it. When a member asks the guide to remember something
    for everyone, it becomes a suggestion a builder approves or rejects.
-3. **Briefs.** *Not started.* Brief work per place; Home's and channels' right panels read
+3. **Briefs.** *Under way: the community's brief is written; pods, the panels and the email are next.* Brief work per place; Home's and channels' right panels read
    them. The founder brief moves onto the run entry and its old pipeline is
    deleted.
 4. **Pods.** *Built: `pods/` in the folder, pod facts, pod memory and its nightly review, the guide working inside one pod. Not yet pod briefs.* `pods/<pod>/` in the folder; pod lens; pod memory review and
