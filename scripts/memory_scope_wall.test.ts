@@ -11,7 +11,7 @@ import { expect, test } from "vitest";
 // accident. (This replaces the pod notes wall: pod notes are pod-scoped notes.)
 const CONVEX = join(__dirname, "..", "convex");
 const STORE = "communityNotesStore.ts";
-const TABLES = ["communityNotes", "communityMemoryIndex", "communityNoteRevisions", "communityNoteRemovals", "agentWork", "agentWorkRuns", "communityPodNotes"];
+const TABLES = ["communityNotes", "communityMemoryIndex", "communityNoteRevisions", "communityNoteRemovals", "communityBriefs", "agentWork", "agentWorkRuns", "communityPodNotes"];
 const reach = new RegExp(`(?:query|insert)\\("(${TABLES.join("|")})"\\)?`);
 
 test("only the memory store queries or inserts memory records", () => {
@@ -23,7 +23,7 @@ test("only the memory store queries or inserts memory records", () => {
 
 test("every memory index starts with the scope key", () => {
   const schema = readFileSync(join(CONVEX, "schema.ts"), "utf8");
-  for (const table of ["communityNotes", "communityMemoryIndex", "communityNoteRemovals", "agentWork"]) {
+  for (const table of ["communityNotes", "communityMemoryIndex", "communityNoteRemovals", "communityBriefs", "agentWork"]) {
     const start = schema.indexOf(`  ${table}: defineTable(`);
     const end = schema.indexOf(": defineTable(", start + table.length + 20);
     const definition = schema.slice(start, end);

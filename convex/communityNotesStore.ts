@@ -6,7 +6,7 @@
 // place that queries or inserts these tables (scripts/memory_scope_wall.test.ts).
 //
 // Tables: communityNotes, communityMemoryIndex (memory.md), communityNoteRevisions,
-// communityNoteRemovals, agentWork, agentWorkRuns.
+// communityNoteRemovals, communityBriefs, agentWork, agentWorkRuns.
 
 import { v } from "convex/values";
 import { internalMutation } from "./_generated/server";
@@ -80,9 +80,27 @@ export async function insertRemoval(ctx: any, scopeKey: ScopeKey, doc: Record<st
   return await ctx.db.insert("communityNoteRemovals", { ...doc, scopeKey });
 }
 
+// ---------- a place's brief
+
+export async function briefFor(ctx: any, scopeKey: ScopeKey) {
+  return await ctx.db.query("communityBriefs").withIndex("by_scope", (q: any) => q.eq("scopeKey", scopeKey)).first();
+}
+
+// A place has one brief; a new one replaces it.
+export async function writeBrief(ctx: any, scopeKey: ScopeKey, doc: Record<string, unknown> & { updatedAt: number }) {
+  const existing = await briefFor(ctx, scopeKey);
+  if (existing) {
+    await ctx.db.replace(existing._id, { ...doc, scopeKey, createdAt: existing.createdAt });
+    return existing._id;
+  }
+  return await ctx.db.insert("communityBriefs", { ...doc, scopeKey, createdAt: doc.updatedAt });
+}
+
 // ---------- work the guide does with nobody present
 
-export async function workFor(ctx: any, scopeKey: ScopeKey, kind: "memory_review") {
+export type AgentWorkKind = "memory_review" | "brief";
+
+export async function workFor(ctx: any, scopeKey: ScopeKey, kind: AgentWorkKind) {
   return await ctx.db.query("agentWork").withIndex("by_scope_kind", (q: any) => q.eq("scopeKey", scopeKey).eq("kind", kind)).first();
 }
 

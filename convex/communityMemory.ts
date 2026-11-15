@@ -118,20 +118,23 @@ async function refuse(ctx: any, run: any, title: string, code: string): Promise<
 export const openMemoryReviewRunInternal = internalMutation({
   args: { communityId: v.id("communities"), windowStart: v.number(), windowEnd: v.number(), nowMs: v.number(),
     // A pod's review: its room. Missing: the community's.
-    podRoomId: v.optional(v.string()) },
+    podRoomId: v.optional(v.string()),
+    // The review (by default), or a place's brief.
+    kind: v.optional(v.union(v.literal("memory_review"), v.literal("brief"))) },
   handler: async (ctx, args) => {
     const scope = await scopeFor(ctx, args.communityId, args.podRoomId);
     if (!scope) throw new Error("community_pod_not_found");
-    let work = await workFor(ctx, scope, "memory_review");
+    const kind = args.kind ?? "memory_review";
+    let work = await workFor(ctx, scope, kind);
     if (!work) {
       const workId = await insertWork(ctx, scope, {
-        communityId: args.communityId, kind: "memory_review", pending: 0, reviewedThrough: args.windowStart,
+        communityId: args.communityId, kind, pending: 0, reviewedThrough: args.windowStart,
         failures: 0, createdAt: args.nowMs, updatedAt: args.nowMs,
       });
       work = await ctx.db.get(workId);
     }
     const runId = await insertRun(ctx, scope, {
-      communityId: args.communityId, workId: work!._id, kind: "memory_review", status: "running",
+      communityId: args.communityId, workId: work!._id, kind, status: "running",
       windowStart: args.windowStart, windowEnd: args.windowEnd, added: [], changed: [], refused: [], createdAt: args.nowMs,
     });
     return { runId, workId: work!._id };
@@ -572,8 +575,13 @@ export async function communityTimeZone(ctx: any, communityId: any): Promise<str
   return settings?.timeZone ?? null;
 }
 
-export async function scheduleMemoryReview(ctx: any, workId: any, atMs: number) {
-  await ctx.scheduler.runAt(atMs, (internal as any).communityMemoryReview.runMemoryReviewInternal, { workId });
+// Schedules a work row's job: the nightly review, or a place's brief.
+export async function scheduleAgentWork(ctx: any, workId: any, atMs: number) {
+  const work = await ctx.db.get(workId);
+  const job = work?.kind === "brief"
+    ? (internal as any).communityBriefs.runCommunityBriefInternal
+    : (internal as any).communityMemoryReview.runMemoryReviewInternal;
+  await ctx.scheduler.runAt(atMs, job, { workId });
 }
 
 // Called where people's posts and replies are written: counts what the next
@@ -596,14 +604,14 @@ export async function markCommunityMemoryReviewDue(ctx: any, args: { communityId
   const dueAt = nextMemoryReviewAtMs(args.nowMs, await communityTimeZone(ctx, args.communityId));
   if (work) {
     await ctx.db.patch(work._id, { pending: work.pending + 1, firstPendingAt: work.firstPendingAt ?? args.nowMs, dueAt, failures: 0, updatedAt: args.nowMs });
-    await scheduleMemoryReview(ctx, work._id, dueAt);
+    await scheduleAgentWork(ctx, work._id, dueAt);
   } else {
     // The first review reads the last day, not the community's whole past.
     const workId = await insertWork(ctx, scope, {
       communityId: args.communityId, kind: "memory_review", pending: 1, firstPendingAt: args.nowMs,
       reviewedThrough: args.nowMs - 24 * 60 * 60_000, dueAt, failures: 0, createdAt: args.nowMs, updatedAt: args.nowMs,
     });
-    await scheduleMemoryReview(ctx, workId, dueAt);
+    await scheduleAgentWork(ctx, workId, dueAt);
   }
 }
 
