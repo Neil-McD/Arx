@@ -951,6 +951,12 @@ describe("pods", () => {
     const outside: any = await asBen.query(api.communityPods.getPodPage, { communityId: f.communityId, podSlug: "founders" });
     expect(outside.rhythm).toEqual({ recurrence_frequency: "weekly", next_starts_at: new Date(startsAt).toISOString() });
     expect(JSON.stringify(outside)).not.toContain("meet.example.com");
+    // Outside, what the pod knows is a number only: never a note's name or text.
+    await t.run((ctx: any) => ctx.db.insert("communityNotes", { communityId: f.communityId, scopeKey: `pod:${String(ids.channelId)}`,
+      slug: "launch-price", title: "POD NOTE TITLE", bodyMd: "POD NOTE TEXT", source: "founder", searchText: "x", createdAt: nowMs, updatedAt: nowMs }));
+    const counted: any = await asBen.query(api.communityPods.getPodPage, { communityId: f.communityId, podSlug: "founders" });
+    expect(counted.knows).toBe(1);
+    expect(JSON.stringify(counted)).not.toMatch(/POD NOTE/);
     // Only the pod's managers cancel it; then it's gone for everyone.
     await expect(asBen.mutation(api.communityEvents.cancelCommunityEvent, { eventId })).rejects.toThrow();
     await asAna.mutation(api.communityEvents.cancelCommunityEvent, { eventId });

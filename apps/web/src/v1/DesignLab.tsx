@@ -29,8 +29,9 @@ import {
   View,
   Ask,
 } from "./kit";
+import { LearnedRows } from "./KitBrain";
 import { BriefPart } from "./KitBrief";
-import { PanelLearned, PanelLine, PanelNext, PanelPart, PanelPeople } from "./KitPanel";
+import { PanelAction, PanelLearned, PanelLine, PanelNext, PanelPart, PanelPeople } from "./KitPanel";
 import { KitChannelFeed } from "./KitChannelFeed";
 import { CommunityPageFrame, CommunityPageRail } from "../components/CommunityPageHeader";
 import { KitHomeRail } from "./KitHomeRail";
@@ -343,6 +344,47 @@ function PodsShell() {
   );
 }
 
+// The Knowledge shelf's panel in the page's real shell: member (Continue) or
+// builder (a question to teach, and who is learning).
+function KnowShell(props: { builder: boolean }) {
+  const now = Date.now();
+  const learned = { total: 11, more: false, this_week: 4, can_manage: props.builder,
+    latest: [{ title: "Who runs dawn sessions", at: new Date(now - 3_600_000).toISOString() }, { title: "Yellow V5: toe-hook", at: new Date(now - 2 * 86_400_000).toISOString() }, { title: "Purple V4: drop-knee", at: new Date(now - 3 * 86_400_000).toISOString() }] };
+  return (
+    <div style={{ height: "100vh", display: "grid" }}>
+      <CommunityPageFrame>
+        <div style={{ padding: 40 }}>Knowledge</div>
+        <CommunityPageRail label="Knowledge">
+          <KitApp view="know" host={props.builder} part="rail" className="kit-page-rail">
+            <Rail index={2} label="Knowledge">
+              <BriefPart now={now} brief={{ summary: "The focus is practical board beta: climbers have settled on a toe-hook for the yellow V5 and a drop-knee to unlock the purple V4.", channels: [], updated_at: new Date(now - 3_600_000).toISOString() }} />
+              {props.builder ? (
+                <PanelPart label="Waiting on an answer" fact="2">
+                  <PanelLine action={<PanelAction onClick={() => undefined}>Teach</PanelAction>}>“Anyone have a spare harness for Saturday's meet at the north wall?”</PanelLine>
+                  <PanelLine action={<PanelAction onClick={() => undefined}>Teach</PanelAction>}>“What grade is the pink one?”</PanelLine>
+                </PanelPart>
+              ) : (
+                <PanelPart label="Continue" fact="lesson 2 of 3">
+                  <PanelNext title="Reading a board problem" sub="Board basics" action={<Btn go>Resume</Btn>} />
+                </PanelPart>
+              )}
+              <PanelPart label="The community brain" action={props.builder ? <PanelAction onClick={() => undefined}>Open</PanelAction> : null}>
+                <PanelLine fact="1">Courses</PanelLine>
+                <PanelLine fact="3">Lessons</PanelLine>
+                <PanelLine fact="11">Learned from the community</PanelLine>
+              </PanelPart>
+              <PanelPart label="Learned lately" fact="4 this week"><LearnedRows view={learned} now={now} /></PanelPart>
+              {props.builder ? (
+                <PanelPart label="Learning"><PanelLine fact="4 started · 1 finished">Board basics</PanelLine></PanelPart>
+              ) : null}
+            </Rail>
+          </KitApp>
+        </CommunityPageRail>
+      </CommunityPageFrame>
+    </div>
+  );
+}
+
 // ?scale=1.25 draws the lab larger, to try a size for big monitors.
 function labScale(): number {
   if (typeof window === "undefined") return 1;
@@ -352,5 +394,5 @@ function labScale(): number {
 
 export function DesignLab() {
   const page = typeof window === "undefined" ? "" : new URLSearchParams(window.location.search).get("page");
-  return page === "channel" ? <HostChannel /> : page === "brief" ? <BriefPanels /> : page === "pods-shell" ? <PodsShell /> : page === "pods" ? <PodsPage join={false} /> : page === "home-panel" ? <RealPanels pod={false} /> : page === "pod-panel" ? <RealPanels pod /> : page === "pods-join" ? <PodsPage join /> : <HostHomeQuiet />;
+  return page === "channel" ? <HostChannel /> : page === "brief" ? <BriefPanels /> : page === "pods-shell" ? <PodsShell /> : page === "know-panel" ? <KnowShell builder={false} /> : page === "know-panel-builder" ? <KnowShell builder /> : page === "pods" ? <PodsPage join={false} /> : page === "home-panel" ? <RealPanels pod={false} /> : page === "pod-panel" ? <RealPanels pod /> : page === "pods-join" ? <PodsPage join /> : <HostHomeQuiet />;
 }
