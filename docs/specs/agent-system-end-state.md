@@ -214,7 +214,32 @@ Two rules across lenses:
 | Background work | The founder brief: a fixed snapshot and one call, on a 15-minute cron; event reminders and mention emails | `agentWork` rows made due by events; the brief becomes a review lens |
 | Member sessions | `memberAgentChannels`, `memberAgentEpisodes` | Kept; compaction as above |
 
-## 7. The plan
+## 7. What the leading agents do, and what we take
+
+Researched Nov 14, 2026: Grok Bot and Team Bots (xAI), dots (OpenAI), Muse
+(Meta), Instinct, OpenClaw and Hermes (Nous Research).
+
+| What they do | Who | What it means here |
+|---|---|---|
+| A persistent agent with a name, its own memory and routines | All of them | The guide, one per community |
+| What it learns about a person stays between them and the agent; a shared agent "doesn't save anything about you personally for the team" | Grok Team Bots, OpenClaw (`MEMORY.md` never loaded in group chats) | The person scope, and the rule that private talks never feed shared memory |
+| Two small files loaded at the start of a session (about 2,200 and 1,375 characters), everything else searched | Hermes (`MEMORY.md`, `USER.md`), OpenClaw (`MEMORY.md`, `USER.md`) | `memory.md` and `/me/memory.md`, capped at those sizes |
+| Daily notes, then a background "dreaming" pass that distils them into long-term memory; a diary of each pass for review | OpenClaw (`DREAMS.md`), Instinct (memory updates about a day later) | The nightly review, and a readable record of each night for builders |
+| A teammate teaching a shared agent something for everyone becomes a suggestion; the owner or a manager approves it. The owner's own changes apply at once | Grok Team Bots | A member asking the guide, or a personal agent proposing, to remember something for everyone waits for a builder's OK. Learning from shared places goes live with undo |
+| Memory from an untrusted source is excluded from automatic context until a trusted reviewer confirms it | OpenClaw (memory provenance) | Evidence references checked by code; content is data |
+| Background work uses read-only tools; acting needs a rule | dots ("proactive research" cannot send or change anything) | The worker's lens: read, `observe`, write briefs; nothing else |
+| Per-action rules: act, act if asked, ask first, hand off | dots (Custom Rules), Muse (Sentinel approves actions) | Operations declared with an approval rule |
+| "Nothing needs attention" is a normal result and is not shown | OpenClaw (`HEARTBEAT_OK`) | A run that finds nothing writes nothing and says nothing |
+| "What do you remember about me?", "Forget that" in chat | Grok Bot, OpenClaw | The guide answers these in a member's chat, as well as the You page |
+| After it answers in a thread, it follows that thread without being tagged again | Grok Team Bots in Slack | Part of slice "The guide wakes" |
+| Memory is not a source of truth; changing facts stay in their system | Grok Bot docs | The facts layers own facts; memories cite them |
+
+Where we deliberately differ: dots' memory cannot be seen or fixed one entry
+at a time; ours always can. Grok lets a personal Bot carry private-chat
+details into a group unless told not to; ours never does. Grok bills the
+person answered; here the owner pays (decided Nov 12).
+
+## 8. The plan
 
 Each slice ships to staging, then Neil's acceptance. Each one that moves
 something onto the new system deletes the old path in the same slice.
@@ -245,7 +270,7 @@ something onto the new system deletes the old path in the same slice.
 10. **The map**, drawn from memories and their evidence, on Knowledge, Home
     and pods.
 
-## 8. Tests the system must always pass
+## 9. Tests the system must always pass
 
 - Evidence outside a run's scope is never mounted and never accepted by
   `observe`.
@@ -258,16 +283,16 @@ something onto the new system deletes the old path in the same slice.
   memory says about it.
 - A personal agent can do exactly what its person can, and nothing more.
 
-## 9. Decisions for Neil
+## 10. Decided (Neil, Nov 14)
 
-1. Memories go live straight away with undo (recommended), or wait for a
-   builder's OK.
-2. Members see the titles of community memories (recommended), with a click
-   asking the guide.
-3. The member's guide keeps a memory of that member from their private talk,
-   visible only to them until they share it (recommended, slice 5).
+1. **Memories go live straight away, with undo.** For memories the guide
+   draws from what was said in a shared place.
+2. **Members see only what was just learned:** the titles in "Learned
+   lately" under the map in a place's right panel. Nothing more.
+3. **The guide keeps a memory of each member** from their private talk,
+   visible only to them until they share it, as personal agents do.
 
-## 10. Not in this end state
+## 11. Not in this end state
 
 Other channels into the guide (text, email, voice); anything across
 communities; the guide posting new top-level messages; any agent touching
