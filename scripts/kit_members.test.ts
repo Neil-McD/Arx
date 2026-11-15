@@ -4,7 +4,7 @@ import * as React from "react";
 const web = createRequire(new URL("../apps/web/package.json", import.meta.url));
 const root = createRequire(import.meta.url);
 if (web.resolve("react") !== root.resolve("react")) vi.doMock(web.resolve("react"), () => React);
-const { memberTimeFor, paymentText } = await import("../apps/web/src/v1/KitMembersPage");
+const { memberTimeFor, paymentText, shortDay } = await import("../apps/web/src/v1/KitMembersPage");
 const { memberDirectoryRowsFor } = await import("../apps/web/src/v1/KitMembersDirectory");
 const { planFor, moneyFor, formatPrice, outReasonFor, memberInView } = await import("../shared/communityMemberRecords");
 
@@ -76,4 +76,12 @@ test("a member's directory puts you first, then whoever is here, and filters by 
   expect(memberDirectoryRowsFor(rows, "here", "").map((r: any) => r.name)).toEqual(["Neil"]);
   expect(memberDirectoryRowsFor(rows, "hosts", "").map((r: any) => r.name)).toEqual(["Neil"]);
   expect(memberDirectoryRowsFor(rows, "everyone", "pric").map((r: any) => r.name)).toEqual(["Ana"]);
+});
+
+test("when someone joined reads short, with the year only when it isn't this one", () => {
+  const now = new Date(2026, 10, 14).getTime();
+  expect(shortDay(new Date(2026, 5, 27).toISOString(), now)).toBe("Jun 27");
+  expect(shortDay(new Date(2025, 2, 12).toISOString(), now)).toBe("Mar 12, 2025");
+  expect(shortDay(null, now)).toBeNull();
+  expect(shortDay("not a date", now)).toBeNull();
 });

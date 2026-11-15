@@ -126,7 +126,6 @@ export function KitMembersDirectory(props: {
 
 function MemberProfileView(props: { profile: CloudMemberProfile; onMessage?: (userId: string) => void; getAvatarColor: (id: string) => string; getInitials: (name: string) => string }) {
   const { profile } = props;
-  const first = profile.name.split(/\s+/)[0] || profile.name;
   const role = profile.role === "owner" ? "host" : profile.role === "member" ? null : profile.role;
   return (
     <>
@@ -138,14 +137,15 @@ function MemberProfileView(props: { profile: CloudMemberProfile; onMessage?: (us
         </div>
         {!profile.you && props.onMessage ? <div style={{ display: "flex", gap: 8 }}><Btn small go onClick={() => props.onMessage?.(profile.user_id)}>Message</Btn></div> : null}
       </div>
-      <Sep />
+      {profile.facts.length || profile.you ? <Sep /> : null}
       {profile.facts.length ? (
         <div className={cx("kv")}>
           {profile.facts.map((fact, index) => <Fragment key={index}><span>{fact.label}</span><p>{fact.body}</p></Fragment>)}
         </div>
-      ) : (
-        <Sec label="Working on"><p>{profile.you ? "You haven't shared anything yet. Tell your guide what you're working on and it can show here, once you approve it." : `${first} hasn't shared anything yet.`}</p></Sec>
-      )}
+      ) : profile.you ? (
+        // Only your own empty record says anything: it tells you how to fill it.
+        <Sec label="Working on"><p>Tell your guide what you're working on and it can show here, once you approve it.</p></Sec>
+      ) : null}
       {profile.in_common.length ? (
         <>
           <Sep />

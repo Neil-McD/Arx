@@ -60,7 +60,19 @@ test("the Inbox page is the mock's: the line, the chips, and rows with a badge f
   expect(html).toContain("<b>Jon</b>");
   expect(html).not.toContain("<b>Ray</b>");
   expect(html).toContain("Only Polynet");
-  expect(has(html, "mrow")).toBe(true);
+  // A row is two lines, each cut at the end of its line.
+  expect(has(html, "mrow", "one")).toBe(true);
   expect(has(html, "dot")).toBe(true);
   expect(html).not.toContain("community-dm-inbox-row");
+});
+
+test("a row says where a conversation began only when that is somewhere else", () => {
+  const html = render([
+    conversation("a", "Jon", false, { id: "polynet", name: "Polynet" }),
+    conversation("b", "Ray", false, { id: "de", name: "Distribution Engineer" }),
+  ]);
+  // Everything in the Inbox is a direct message, so no row says so.
+  expect(html).not.toContain("Direct message");
+  expect(html).toContain("<b>Jon</b><time>");
+  expect(html).toContain("<b>Ray</b><span>Distribution Engineer</span>");
 });

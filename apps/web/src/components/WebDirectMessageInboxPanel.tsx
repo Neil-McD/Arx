@@ -481,7 +481,7 @@ function KitInboxPage(props: WebDirectMessageInboxPanelProps & { kitPage: { acti
                     <button
                       key={conversation.id}
                       type="button"
-                      className={cx("mrow", props.activeConversationId === conversation.id && "sel", !unread && "read")}
+                      className={cx("mrow", "one", props.activeConversationId === conversation.id && "sel", !unread && "read")}
                       aria-current={props.activeConversationId === conversation.id ? "true" : undefined}
                       aria-label={`${name}, ${unread ? "unread, " : ""}${preview}`}
                       onClick={() => props.onSelectConversation(conversation)}
@@ -490,7 +490,8 @@ function KitInboxPage(props: WebDirectMessageInboxPanelProps & { kitPage: { acti
                       <div>
                         <div className={cx("h")}>
                           <b>{name}</b>
-                          <span>{elsewhere ? `Direct message · ${elsewhere.name}` : "Direct message"}</span>
+                          {/* Everything here is a direct message; only where it began is worth saying. */}
+                          {elsewhere ? <span>{elsewhere.name}</span> : null}
                           <time>{inboxTimeFor(conversation.last_message_at ?? conversation.updated_at)}</time>
                         </div>
                         <p>{preview}</p>
