@@ -225,7 +225,7 @@ Two rules across lenses:
 | Community facts | The records, read through the executor; `communityPodFacts` for pods (a lens sees only pods its access allows; the guide in a pod sees that pod) | Kept |
 | People facts | `communityPersonFacts`: one view of a person, cut by the lens (member, self, builder); one rule for which facts show (`isPeopleFact`) | Kept |
 | Memories | `communityNotes` with a scope key (`community:<id>`, `pod:<roomId>`), revisions, removals and `memory.md` (`communityMemoryIndex`), all through one door (`communityNotesStore`, held by a test). Old `communityPodNotes` rows are moved by a backfill | Drop the old tables (cleanup slice C) |
-| Memory review | Nightly per scope (community and each pod), made due by posts (`agentWork`), one pass: the guide is handed the day and its notes and writes once with `memory.apply`. Undo a note or a night exists in the backend | The builder's page for nights and undo; "Learned lately"; the learning switch |
+| Memory review | Nightly per scope (community and each pod), made due by posts (`agentWork`), one pass: the guide is handed the day and its notes and writes once with `memory.apply`. Undo a note or a night exists in the backend | Sources and undo on a note: built. The nights list and "Learned lately": deferred |
 | Personal memory | `shared/personalMemory.ts`, `convex/memberMemory.ts`: capped at 1,375 characters, written in a private talk with `member.memory.remember`, loaded into every talk with that member, never shown elsewhere | The You page |
 | Briefs | The founder brief: a fixed snapshot and one call, on a 15-minute cron | Brief work per place (slice 3) |
 
@@ -259,7 +259,7 @@ person answered; here the owner pays (decided Nov 12).
 Each slice ships to staging, then Neil's acceptance. Each one that moves
 something onto the new system deletes the old path in the same slice.
 
-1. **The run entry and community memory.** *Built, apart from the builder's page (nights and undo), "Learned lately", the switch and the twenty-question check.* One run entry on Pi with lens,
+1. **The run entry and community memory.** *Built, with sources and undo on each learned note. Deferred: the nights list, "Learned lately", the twenty-question check.* One run entry on Pi with lens,
    mount, funding and one ledger. `agentWork` rows, made due by events. The
    memory shape, `observe`, and the nightly memory review for the community
    scope (open channels only). `memory.md` (capped at about 2,200

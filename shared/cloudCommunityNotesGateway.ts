@@ -38,3 +38,23 @@ export async function createCommunityNote(params: NotesCall & { title: string; t
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
   return await client.mutation("communityNotes:createCommunityNote" as any, { authSubject, communityId: params.communityId, title: params.title, text: params.text });
 }
+
+// What a guide note was learned from (convex/communityMemory.ts listNoteSources).
+export type NoteSourceView =
+  | { ref: string; kind: "post" | "reply"; available: false }
+  | { ref: string; kind: "post" | "reply"; available: true; channel_slug: string | null; channel_name: string | null;
+      author: string | null; excerpt: string; created_at: string };
+
+export async function fetchNoteSources(params: NotesCall & { slug: string }): Promise<NoteSourceView[]> {
+  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
+  const result = await client.query("communityMemory:listNoteSources" as any, { authSubject, communityId: params.communityId, slug: params.slug });
+  return (result?.sources ?? []) as NoteSourceView[];
+}
+
+// Undo what the guide learned in a note: a change is put back; a note it
+// added is removed, and the same posts won't teach it again.
+export async function undoLearnedNote(params: NotesCall & { slug: string }): Promise<"changed" | "removed"> {
+  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
+  const result = await client.mutation("communityMemory:undoLearnedNote" as any, { authSubject, communityId: params.communityId, slug: params.slug });
+  return result?.undone;
+}

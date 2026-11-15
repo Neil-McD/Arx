@@ -20,9 +20,14 @@ The plan below is kept as written; "As built" says where the build differs.
 
 ## Not built yet
 
-The builder's page for nights and undo (the backend exists:
-`listMemoryRuns`, `undoMemoryRun`, `undoLearnedNote`), "Learned lately" on
-Home, the "Learn from open channels" switch, and the twenty-question check.
+Built Nov 15: a guide note in Knowledge says it was learned by the guide,
+lists the posts it came from (`listNoteSources`), and has Undo
+(`undoLearnedNote`).
+
+Deferred by Neil (Nov 15): the list of nights with undo for a whole night
+(`listMemoryRuns`, `undoMemoryRun` exist), "Learned lately" on Home, and the
+twenty-question check. Cut: the "Learn from open channels" switch (AI off
+already stops learning).
 
 ## What it delivers
 

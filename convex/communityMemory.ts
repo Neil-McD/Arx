@@ -31,6 +31,7 @@ import {
   memoryEvidenceWasRemoved,
   memoryIndexRefusal,
   noteAuthorKind,
+  parseMemoryEvidenceRef,
   parseMemoryEvidenceRefs,
   type MemoryEvidenceFacts,
   type MemoryEvidenceRef,
@@ -299,6 +300,50 @@ export async function removeGuideNote(ctx: any, note: any, removedByUserId: any,
   });
   await ctx.db.delete(note._id);
 }
+
+// What a guide note was learned from, for whoever may correct it: each post
+// or reply it cites, with its place, who wrote it, a short excerpt and when.
+// A source deleted or moved out of the note's place since shows as gone.
+const SOURCE_EXCERPT_CHARS = 240;
+export const listNoteSources = query({
+  args: { ...viewerArgs, slug: v.string(), podRoomId: v.optional(v.string()) },
+  handler: async (ctx, args) => {
+    const scope = await scopeFor(ctx, args.communityId, args.podRoomId);
+    if (!scope) throw new Error("semantic_not_found");
+    await memoryEditor(ctx, args, scope);
+    const note = await noteBySlug(ctx, scope, args.slug);
+    if (!note) throw new Error("semantic_not_found");
+    const names = new Map<string, string | null>();
+    const sources = [];
+    for (const raw of (note.evidenceRefs ?? []) as string[]) {
+      const ref = parseMemoryEvidenceRef(raw);
+      if (!ref) continue;
+      const facts = await evidenceFacts(ctx, args.communityId, ref, scope);
+      if (!facts.exists || !facts.communityMatches || !facts.live || !facts.inScope) {
+        sources.push({ ref: raw, kind: ref.kind, available: false as const });
+        continue;
+      }
+      const row: any = await ctx.db.get(ctx.db.normalizeId(ref.kind === "post" ? "communityInteractionRoots" : "communityInteractionReplies", ref.id)!);
+      const channel: any = row.channelId ? await ctx.db.get(row.channelId) : null;
+      let author: string | null = null;
+      if (row.actorUserId) {
+        const key = String(row.actorUserId);
+        if (!names.has(key)) {
+          const user: any = await ctx.db.get(row.actorUserId);
+          names.set(key, user?.displayName ?? (user?.handle ? `@${user.handle}` : null));
+        }
+        author = names.get(key) ?? null;
+      }
+      sources.push({
+        ref: raw, kind: ref.kind, available: true as const,
+        channel_slug: channel?.slug ?? null, channel_name: channel?.name ?? null,
+        author, excerpt: String(row.contentSummary ?? "").trim().slice(0, SOURCE_EXCERPT_CHARS),
+        created_at: new Date(row.createdAt).toISOString(),
+      });
+    }
+    return { slug: note.slug, sources };
+  },
+});
 
 // Undo one guide note: its last change is put back; a note the guide added is
 // removed, and its posts won't bring it back.
