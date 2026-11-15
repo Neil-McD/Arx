@@ -3698,8 +3698,10 @@
 @media (max-width: 1023px) {
   :root[data-design="v1"]:where(:not([data-layout="phone"])) .community-interaction-projection:has(> .members-page.has-picked) > .members-page { display: none; }
   :root[data-design="v1"]:where(:not([data-layout="phone"])) .community-interaction-projection:has(> .members-page.has-picked) > .members-page-record { display: flex; grid-column: 1; }
+  :root[data-design="v1"]:where(:not([data-layout="phone"])) .community-interaction-projection:has(> .members-page.has-picked) > .members-page-record > * { flex-direction: column; }
   :root[data-design="v1"]:where(:not([data-layout="phone"])) .members-record-back {
     display: inline-flex;
+    align-self: flex-start;
     align-items: center;
     gap: 6px;
     height: 30px;
