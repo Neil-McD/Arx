@@ -7,6 +7,7 @@ import { afterEach, expect, test, vi } from "vitest";
 import { internal } from "./_generated/api";
 import schema from "./schema";
 import { markCommunityBriefDue } from "./communityBriefs";
+import { briefAge } from "../shared/communityBriefs";
 
 const modules = import.meta.glob(["./*.ts", "!./*.test.ts", "./_generated/**/*.*s"]);
 const NOW = Date.UTC(2026, 10, 15, 15, 0, 0);
@@ -288,4 +289,14 @@ test("the guide taken out of a pod while its brief is being written: the brief i
   vi.setSystemTime(row.dueAt);
   expect(await t.action(internal.communityBriefs.runCommunityBriefInternal, { workId: row._id })).toMatchObject({ status: "failed" });
   expect(await t.run((ctx: any) => ctx.db.query("communityBriefs").collect())).toHaveLength(0);
+});
+
+test("a brief's age reads in a few words", () => {
+  const at = new Date(NOW).toISOString();
+  expect(briefAge(at, NOW + 60_000)).toBe("just now");
+  expect(briefAge(at, NOW + 20 * 60_000)).toBe("20m ago");
+  expect(briefAge(at, NOW + 3 * HOUR)).toBe("3h ago");
+  expect(briefAge(at, NOW + 30 * HOUR)).toBe("yesterday");
+  expect(briefAge(at, NOW + 50 * HOUR)).toBe("2 days ago");
+  expect(briefAge("", NOW)).toBe("");
 });

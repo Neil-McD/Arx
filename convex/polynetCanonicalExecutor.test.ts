@@ -12,6 +12,7 @@ import { api, internal } from "./_generated/api";
 import { fitJsonDocument, executePolynetCanonicalTool } from "./polynetCanonicalExecutor";
 import { POLYNET_CANONICAL_TOOL_DEFINITIONS } from "../shared/polynetCanonicalToolContract";
 import { runAgentTool } from "./agentTools";
+import { writeBrief } from "./communityNotesStore";
 import schema from "./schema";
 import { formatCommunityEventZonedDateTime } from "../shared/communityEventTime";
 import { PLATFORM_LEGAL_DOCUMENTS } from "../shared/legalDocuments";
@@ -3723,7 +3724,7 @@ test("brief.md: the community's for everyone in it; a pod's inside only; gone po
     await ctx.db.insert("communityBriefs", { communityId: f.communityId, scopeKey: `pod:${String(climbersId)}`,
       headline: "Week 3 is fingerboards", points: [{ text: "The week 3 plan is fingerboard work.", refs: [`post:${plan}`] }],
       windowEnd: nowMs, createdAt: nowMs, updatedAt: nowMs });
-    return { operator, openName: String(open.name), climbersId, chalk, briefId };
+    return { operator, openName: String(open.name), climbersId, scoutsId, chalk, briefId };
   });
   const base = "/communities/canonical-community";
   const as = (subject: string, userId: any, principalKind: any, evidenceSurface: any, podRoomId?: string) =>
@@ -3767,6 +3768,37 @@ test("brief.md: the community's for everyone in it; a pod's inside only; gone po
   expect(body(await member("polynet_read", `${base}/brief.md`))).toContain("No brief yet.");
   await t.run((ctx: any) => ctx.db.patch(made.briefId, { updatedAt: nowMs }));
   expect(body(await member("polynet_read", `${base}/brief.md`))).toContain("The Saturday meet");
+
+  // The panels read the same brief (getPlaceBrief): a member sees the
+  // community's and can't take it down; a builder can; a pod's is for the
+  // people inside, and its hosts may take it down.
+  const asMember = t.withIdentity({ subject: f.memberSubject });
+  const asOwner = t.withIdentity({ subject: f.ownerSubject });
+  const place = { communityId: f.communityId };
+  const pod = { communityId: f.communityId, podChannelId: made.climbersId };
+  expect(await asMember.query(api.communityBriefs.getPlaceBrief, place)).toMatchObject({ can_hide: false, brief: { points: [{ text: "The Saturday meet is at the north wall." }] } });
+  expect(await asOwner.query(api.communityBriefs.getPlaceBrief, place)).toMatchObject({ can_hide: true });
+  expect(await asMember.query(api.communityBriefs.getPlaceBrief, pod)).toMatchObject({ can_hide: false, brief: { headline: "Week 3 is fingerboards" } });
+  await expect(asMember.mutation(api.communityBriefs.hidePlaceBrief, pod)).rejects.toThrow("community_forbidden");
+  await t.run(async (ctx: any) => {
+    const record = await ctx.db.query("communityPods").withIndex("by_community_channel", (q: any) => q.eq("communityId", f.communityId).eq("channelId", made.climbersId)).first();
+    await ctx.db.patch(record._id, { hostUserIds: [f.memberId] });
+  });
+  expect(await asMember.query(api.communityBriefs.getPlaceBrief, pod)).toMatchObject({ can_hide: true });
+  await expect(asMember.query(api.communityBriefs.getPlaceBrief, { communityId: f.communityId, podChannelId: made.scoutsId })).rejects.toThrow("community_pod_not_found");
+  await expect(asMember.mutation(api.communityBriefs.hidePlaceBrief, place)).rejects.toThrow("community_forbidden");
+  // Taken down: gone from the panel and from brief.md, until the next one is written.
+  expect(await asOwner.mutation(api.communityBriefs.hidePlaceBrief, place)).toEqual({ hidden: true });
+  expect(await asMember.query(api.communityBriefs.getPlaceBrief, place)).toEqual({ brief: null, can_hide: false });
+  expect(body(await member("polynet_read", `${base}/brief.md`))).toContain("No brief yet.");
+  expect(await asMember.mutation(api.communityBriefs.hidePlaceBrief, pod)).toEqual({ hidden: true });
+  expect(await asMember.query(api.communityBriefs.getPlaceBrief, pod)).toEqual({ brief: null, can_hide: false });
+  await t.run(async (ctx: any) => {
+    const stored = await ctx.db.get(made.briefId);
+    const { _id, _creationTime, ...doc } = stored;
+    await writeBrief(ctx, stored.scopeKey, { ...doc, hiddenAt: undefined, hiddenByUserId: undefined, updatedAt: nowMs });
+  });
+  expect(await asMember.query(api.communityBriefs.getPlaceBrief, place)).toMatchObject({ brief: { points: [{ text: "The Saturday meet is at the north wall." }] } });
 
   // The guide off (nobody pays for it): no brief.
   await t.run((ctx: any) => ctx.db.delete(made.operator));

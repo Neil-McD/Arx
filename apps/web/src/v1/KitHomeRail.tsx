@@ -1,8 +1,9 @@
-// Design system v1: Home's right column. Three things, in this order:
-// Today (an event that is on today, a few lines on what is going on, and the
-// day's counts) and who is online now, the same for a host and a member; a
-// host's Today also says what is waiting for them. Builders get one more
-// line: how much their guide knows (its notes are theirs, not the members').
+// Design system v1: Home's right column, in this order: the guide's brief
+// (what's happening, from recent posts); an event that is on today; Today
+// (the day's counts and, for a host, who is waiting to join); who is online
+// now. Until the guide has written a brief, Today carries a few code-built
+// lines on what is going on instead. Builders get one more line: how much
+// their guide knows (its notes are theirs, not the members').
 import { useEffect, useState } from "react";
 import type { CloudCommunityHomeSnapshot } from "../../../../shared/cloudCommunityAdminGateway";
 import type { CommunityPresenceSummary } from "../../../../shared/communityTypes";
@@ -10,6 +11,7 @@ import { todayCounts, todayLines, type TodayLine } from "../../../../shared/comm
 import { fetchCommunityNotes } from "../../../../shared/cloudCommunityNotesGateway";
 import { UserAvatar } from "../../../../shared/UserAvatar";
 import { cx, Sec, Sep, TextLink } from "./kit";
+import { BriefPart, usePlaceBrief } from "./KitBrief";
 import { KitNextEvent } from "./KitNextEvent";
 import { noteIsNew } from "./KitKnowledgeNotes";
 
@@ -52,7 +54,11 @@ export function KitHomeRail(props: {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [props.session, props.communityId]);
 
-  const lines = props.agentOn === false ? [] : todayLines(props.snapshot, props.audience);
+  const { brief, canHide, hide } = usePlaceBrief(props.session, props.communityId, null, props.agentOn !== false);
+  // The brief says what's going on; beside it Today keeps only what is the
+  // host's to act on (who is waiting to join).
+  const lines = props.agentOn === false ? [] : todayLines(props.snapshot, props.audience)
+    .filter((line) => !brief || line.target?.kind === "members");
   const counts = todayCounts(props.snapshot);
   const open = (line: TodayLine) => {
     if (!line.target) return undefined;
@@ -63,6 +69,12 @@ export function KitHomeRail(props: {
 
   return (
     <>
+      {brief ? (
+        <>
+          <BriefPart brief={brief} now={props.now} onOpenChannel={(channel) => props.onOpenChannelByName(channel.name)} onHide={canHide ? hide : undefined} />
+          <Sep />
+        </>
+      ) : null}
       <KitNextEvent session={props.session} communityId={props.communityId} now={props.now} onOpenEvents={props.onOpenEvents} quietWhenNone />
       <Sec label="Today">
         {lines.length ? <ul className={cx("today")}>
