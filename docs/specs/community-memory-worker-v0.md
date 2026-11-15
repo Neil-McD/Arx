@@ -32,21 +32,26 @@ the two drafts before it.
    event marks a review as due; the review runs once its inputs settle.
 8. **Sub-agents read and draft; the lead applies in one checked step.**
 
-## The layers (Neil, Nov 14: the same idea as DE's ledger, offer, market and profile)
+## Three layers (Neil, Nov 14)
 
-Each layer is a set of living Markdown files drawn from records. Each layer
-cites the one below it. Nothing in a higher layer is believed without its
-evidence.
+Polynet is simpler than Distribution Engineer: three layers, each a set of
+living Markdown files drawn from records.
 
-| Layer | Distribution Engineer | Polynet | Who writes it |
-|---|---|---|---|
-| 0. What happened | Content, placements, attribution, conversations | Posts and replies by place, calls, events held and who came, joins and leaves, lessons finished, payments, questions left unanswered | Nobody: it is recorded |
-| 1. What is offered | Products and offers | Courses and lessons, events, pods (what you get, price), channels and what they are for, plans | The builder |
-| 2. Who the people are | Market research | What members said about themselves: what they are working on, where they are, their goals | Members, in their own words |
-| 3. What it means | Business profile, positioning, strategy | What the community has settled and how it does things, gaps, the builder's rules (handbook), each member's picture, and the briefs | The guide (cited), and the builder (outranks the guide) |
+| Layer | What it holds | Who writes it |
+|---|---|---|
+| **Community facts** | What exists and what happened: channels, pods, courses and lessons, events and who came, posts and replies, calls, joins and leaves | Recorded as it happens; builders create what exists |
+| **People facts** | Who each person is here: their role (owner, host, member), name, bio, linked accounts, plan, when they joined, what they said about themselves | Recorded, or stated by the person or a builder |
+| **Memories** | What the facts mean: what the community has settled, gaps, what each pod knows, the guide's picture of a person, and the briefs | The guide, citing facts; a builder's words outrank the guide's |
 
-Layer 0 is the universe the model updates its picture from. Briefs and
-notes are layer 3: one step of interpretation above it.
+The line between facts and memories: a fact was recorded or stated by a
+person; a memory is the guide's reading of facts and always cites them. A
+guess about a person ("good at onboarding calls") is a memory, born "Only
+you", never a fact.
+
+**Pods are a community inside the community, with their own gate.** A pod
+has its own facts (its room, its calls, its members) and its own memories,
+and sees the outer community's facts and memories too. Nothing flows out of a
+pod except what a builder publishes on purpose.
 
 ## Every agent works this way
 
@@ -61,7 +66,7 @@ what is mounted and which writes are allowed; nothing else differs.
 | A member's own AI over MCP | Five tools, member paths | Unchanged; `observe` only proposes |
 | The founder's brief | Not an agent: a fixed JSON snapshot and one call | A review lens of the same guide, writing `places/community/brief.md` |
 | The memory review | Does not exist | A review lens; `observe` is its only write |
-| Pods | Pod notes exist in the database but are not in the folder | `pods/<pod>/` in the folder, mounted only for that pod's members and the guide working there |
+| Pods | Pod notes exist in the database but are not in the folder | `pods/<pod>/` in the folder: mounted for that pod's members and the guide working there, on top of the community's own folder |
 
 ## What this changes in Polynet
 
