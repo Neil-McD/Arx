@@ -30,6 +30,7 @@ function noteFrom(note: CommunityNoteView): string {
   if (note.kind === "founder") return note.written_by ? `By ${note.written_by}` : "By a host";
   if (note.kind === "ask") return "From a question";
   if (note.kind === "tag") return "From a channel";
+  if (note.kind === "learned") return note.evidence_count ? `Learned from ${note.evidence_count} ${note.evidence_count === 1 ? "post" : "posts"}` : "Learned by your guide";
   return "";
 }
 

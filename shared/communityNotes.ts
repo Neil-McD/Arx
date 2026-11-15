@@ -9,7 +9,7 @@ export const COMMUNITY_NOTE_BODY_MAX_CHARS = 4_000;
 export const COMMUNITY_NOTES_MAX_PER_COMMUNITY = 500;
 export const COMMUNITY_NOTE_SLUG_MAX_CHARS = 64;
 
-export type CommunityNoteSource = "ask" | "tag" | "founder" | "migrated";
+export type CommunityNoteSource = "ask" | "tag" | "founder" | "migrated" | "learned";
 
 export type CommunityNote = {
   slug: string;
@@ -25,6 +25,7 @@ const SOURCE_WORDS: Record<CommunityNoteSource, string> = {
   tag: "from a conversation in a channel",
   founder: "written by the founder",
   migrated: "from earlier community memory",
+  learned: "learned by the guide from what was said in the community's open channels",
 };
 
 // What the agent is told about community notes: read them, never write them.

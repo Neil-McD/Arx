@@ -17,6 +17,7 @@ const NOT_POST_WRITES: Record<string, string> = {
   "communityAttachmentUploads.ts": "patches attachment upload rows' status, not posts",
   "communityMemberWorkflows.ts": "patches workflow runs' status, not posts",
   "communityPods.ts": "patches pod join requests' status, not posts; reads posts only for last activity",
+  "communityMemory.ts": "patches the guide's review runs' status, not posts; reads posts only to check a note's evidence",
 };
 
 function sources(): string[] {

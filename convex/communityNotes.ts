@@ -16,6 +16,8 @@ import {
   normalizeCommunityNoteTitle,
 } from "../shared/communityNotes";
 import { buildCommunitySearchQuery } from "../shared/communitySearchText";
+import { noteAuthorKind } from "../shared/communityMemory";
+import { removeGuideNote } from "./communityMemory";
 
 const LIST_LIMIT_MAX = 50;
 const SEARCH_LIMIT_MAX = 20;
@@ -104,6 +106,7 @@ export const listCommunityNotes = query({
       notes.push({
         slug: row.slug, title: row.title, body_md: row.bodyMd, source: communityNoteSourceWords(row.source),
         kind: row.source, written_by: await writer(row), from_pod: row.fromPodName ?? null,
+        author_kind: noteAuthorKind(row), evidence_count: row.evidenceRefs?.length ?? 0,
         created_at: new Date(row.createdAt).toISOString(),
         updated_at: new Date(row.updatedAt).toISOString(),
       });
@@ -123,8 +126,10 @@ export const updateCommunityNote = mutation({
       .withIndex("by_community_slug", (q) => q.eq("communityId", args.communityId).eq("slug", args.slug)).first();
     if (!row) throw new Error("semantic_not_found");
     const title = normalizeCommunityNoteTitle(args.title) ?? row.title;
+    // A builder's correction makes the note theirs: the guide won't change it again.
     await ctx.db.patch(row._id, {
       title, bodyMd: text, searchText: buildCommunityNoteSearchText({ title, bodyMd: text }), updatedByUserId: userId, updatedAt: Date.now(),
+      authorKind: "builder",
     });
     return { slug: row.slug, title };
   },
@@ -159,11 +164,13 @@ export const createCommunityNote = mutation({
 export const deleteCommunityNote = mutation({
   args: { ...viewerArgs, slug: v.string() },
   handler: async (ctx, args) => {
-    const { canManage } = await viewer(ctx, args);
+    const { userId, canManage } = await viewer(ctx, args);
     if (!canManage) throw new Error("community_forbidden");
     const row = await ctx.db.query("communityNotes")
       .withIndex("by_community_slug", (q) => q.eq("communityId", args.communityId).eq("slug", args.slug)).first();
-    if (row) await ctx.db.delete(row._id);
+    // A guide note's posts are remembered, so they don't bring it back.
+    if (row && noteAuthorKind(row) === "guide") await removeGuideNote(ctx, row, userId, Date.now());
+    else if (row) await ctx.db.delete(row._id);
     return { deleted: Boolean(row) };
   },
 });
