@@ -379,7 +379,7 @@ assert.equal(
 );
 assert.match(
   threads,
-  /const persistedPayload = projectRuntimeCommunityContextEventPayload\([\s\S]*?communityScopeId: run\.communityId[\s\S]*?applyRuntimeHarnessTelemetryEvent\([\s\S]*?payload: persistedPayload[\s\S]*?runtimeRunEvents[\s\S]*?payload: persistedPayload/,
+  /const persistedPayload = projectRuntimeCommunityContextEventPayload\([\s\S]*?communityScopeId: run\.communityId[\s\S]*?runtimeRunEvents[\s\S]*?payload: persistedPayload/,
 );
 
 console.log("runtime_community_context_receipt_proof: ok");

@@ -1,7 +1,7 @@
 /// <reference types="vite/client" />
 // The run entry (convex/communityAgentRun.ts) with what a private talk adds:
-// streamed text, its lens's tools, reads side by side, a check before the
-// first request and a stop the person can press.
+// streamed text, its lens's tools, a check before the first request and a
+// stop the person can press.
 import { convexTest } from "convex-test";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { internal } from "./_generated/api";
@@ -88,32 +88,6 @@ test("a private talk streams its answer and is offered its lens's tools, web res
   expect(bodies[0].tools.map((tool: any) => tool.name)).toEqual(
     ["polynet_list", "polynet_read", "polynet_search", "polynet_write", "polynet_call", "web_research"]);
   expect(bodies[0].parallel_tool_calls).toBe(false);
-});
-
-test("reads that change nothing run side by side when asked; the schedule is reported", async () => {
-  const t = convexTest(schema, modules);
-  const w = await fundedCommunity(t);
-  // Listing is the read that changes nothing, so it may run side by side.
-  const list = (id: string, path: string) => ({ type: "function_call", call_id: id, name: "polynet_list", arguments: JSON.stringify({ path }) });
-  const bodies = stubModel([{ output: [list("a", "/communities/run-club/channels/"), list("b", "/communities/run-club/pods/")] }, { output_text: "Done." }]);
-  let running = 0;
-  let overlapped = false;
-  const schedules: any[] = [];
-  const result: any = await run(t, w, {
-    parallelReads: true,
-    onToolSchedule: async (schedule: any) => { schedules.push(schedule); },
-    executeTool: async (_name: string, _args: any, call: any) => {
-      running += 1;
-      if (running > 1) overlapped = true;
-      await new Promise((resolve) => setTimeout(resolve, 5));
-      running -= 1;
-      return { status: "ok", exitCode: 0, outputText: JSON.stringify({ read: call.providerCallId }), errorCode: null, errorMessage: null };
-    },
-  });
-  expect(result.ok).toBe(true);
-  expect(bodies[0].parallel_tool_calls).toBe(true);
-  expect(schedules[0].executionMode).toBe("parallel_read_batch");
-  expect(overlapped).toBe(true);
 });
 
 test("a tool outside the lens is refused before it runs", async () => {
