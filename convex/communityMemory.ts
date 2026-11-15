@@ -40,7 +40,7 @@ import {
 const REMOVALS_SCAN = 500;
 
 // A pod's room in this community (its memory's scope), or null.
-async function podRoom(ctx: any, communityId: any, roomId: unknown) {
+export async function podRoom(ctx: any, communityId: any, roomId: unknown) {
   const id = roomId ? ctx.db.normalizeId("communityChannels", String(roomId)) : null;
   const channel = id ? await ctx.db.get(id) : null;
   return channel && String(channel.communityId) === String(communityId) && channel.accessMode === "restricted" && channel.status === "active"
@@ -93,7 +93,7 @@ async function evidenceFacts(ctx: any, communityId: any, ref: MemoryEvidenceRef,
 // A run that may still write: open, this community's, and for a pod's memory,
 // only while the pod's room is open and the guide still works there (a
 // builder taking the guide out stops a review already under way).
-async function openRun(ctx: any, communityId: any, runId: any) {
+export async function openRun(ctx: any, communityId: any, runId: any) {
   const run = await ctx.db.get(runId);
   if (!run || String(run.communityId) !== String(communityId) || run.status !== "running") return null;
   const scope = parseScopeKey((run.scopeKey as string | undefined) ?? "");

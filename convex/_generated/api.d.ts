@@ -11,6 +11,7 @@
 import type * as account from "../account.js";
 import type * as accountSetupCore from "../accountSetupCore.js";
 import type * as agentTools from "../agentTools.js";
+import type * as agentWork from "../agentWork.js";
 import type * as anonymousUserCleanup from "../anonymousUserCleanup.js";
 import type * as auth from "../auth.js";
 import type * as authActor from "../authActor.js";
@@ -235,6 +236,7 @@ declare const fullApi: ApiFromModules<{
   account: typeof account;
   accountSetupCore: typeof accountSetupCore;
   agentTools: typeof agentTools;
+  agentWork: typeof agentWork;
   anonymousUserCleanup: typeof anonymousUserCleanup;
   auth: typeof auth;
   authActor: typeof authActor;

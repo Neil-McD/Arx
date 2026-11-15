@@ -49,15 +49,15 @@ test("a review is claimed once, carries over posts written while it ran, and ret
   await t.run((ctx: any) => ctx.db.insert("operatorRoles", { userId: w.ownerId, role: "owner", active: true, createdAt: NOW, updatedAt: NOW }));
   await t.run((ctx: any) => markCommunityMemoryReviewDue(ctx, { communityId: w.communityId, channelId: w.general, actorType: "human", nowMs: NOW }));
   const row: any = await work(t, w.communityId);
-  expect(await t.mutation(internal.communityMemoryReview.claimMemoryReviewInternal, { workId: row._id, nowMs: NOW })).toBeNull();
+  expect(await t.mutation(internal.agentWork.claimAgentWorkInternal, { workId: row._id, nowMs: NOW })).toBeNull();
   const at = row.dueAt;
-  const claim: any = await t.mutation(internal.communityMemoryReview.claimMemoryReviewInternal, { workId: row._id, nowMs: at });
+  const claim: any = await t.mutation(internal.agentWork.claimAgentWorkInternal, { workId: row._id, nowMs: at });
   expect(claim).toMatchObject({ communitySlug: "review-club", windowStart: NOW - 86_400_000, windowEnd: at, claimedPending: 1 });
-  expect(await t.mutation(internal.communityMemoryReview.claimMemoryReviewInternal, { workId: row._id, nowMs: at + 1 })).toBeNull();
+  expect(await t.mutation(internal.agentWork.claimAgentWorkInternal, { workId: row._id, nowMs: at + 1 })).toBeNull();
 
   // A post arrives while the review runs.
   await t.run((ctx: any) => markCommunityMemoryReviewDue(ctx, { communityId: w.communityId, channelId: w.general, actorType: "human", nowMs: at + 5 }));
-  const done: any = await t.mutation(internal.communityMemoryReview.completeMemoryReviewInternal, {
+  const done: any = await t.mutation(internal.agentWork.completeAgentWorkInternal, {
     workId: row._id, outcome: "reviewed", windowEnd: at, claimedPending: 1, nowMs: at + 10 });
   expect(done.dueAt).toBe(Date.UTC(2026, 10, 16, 3, 0, 0));
   expect(await work(t, w.communityId)).toMatchObject({ pending: 1, reviewedThrough: at, failures: 0 });
@@ -66,8 +66,8 @@ test("a review is claimed once, carries over posts written while it ran, and ret
   for (let i = 1; i <= 3; i++) {
     const claimAt = next.dueAt + i * 3_600_000;
     await t.run((ctx: any) => ctx.db.patch(next._id, { dueAt: claimAt, leaseUntil: undefined }));
-    await t.mutation(internal.communityMemoryReview.claimMemoryReviewInternal, { workId: next._id, nowMs: claimAt });
-    const failed: any = await t.mutation(internal.communityMemoryReview.completeMemoryReviewInternal, {
+    await t.mutation(internal.agentWork.claimAgentWorkInternal, { workId: next._id, nowMs: claimAt });
+    const failed: any = await t.mutation(internal.agentWork.completeAgentWorkInternal, {
       workId: next._id, outcome: "failed", windowEnd: claimAt, claimedPending: 1, errorCode: "provider_exception", nowMs: claimAt });
     expect(failed.dueAt === null).toBe(i === 3);
   }
@@ -123,13 +123,13 @@ test("a funded community whose owner switched the guide off is skipped; switched
   });
   await t.run((ctx: any) => markCommunityMemoryReviewDue(ctx, { communityId: w.communityId, channelId: w.general, actorType: "human", nowMs: NOW }));
   const row: any = await work(t, w.communityId);
-  expect(await t.mutation(internal.communityMemoryReview.claimMemoryReviewInternal, { workId: row._id, nowMs: row.dueAt })).toEqual({ skipped: true });
+  expect(await t.mutation(internal.agentWork.claimAgentWorkInternal, { workId: row._id, nowMs: row.dueAt })).toEqual({ skipped: true });
 
   await t.run(async (ctx: any) => {
     await ctx.db.insert("communityAgentConfigs", { communityId: w.communityId, systemPrompt: "", agentEnabled: true, createdAt: NOW, updatedAt: NOW + 1 });
     await ctx.db.patch(row._id, { dueAt: row.dueAt });
   });
-  expect(await t.mutation(internal.communityMemoryReview.claimMemoryReviewInternal, { workId: row._id, nowMs: row.dueAt }))
+  expect(await t.mutation(internal.agentWork.claimAgentWorkInternal, { workId: row._id, nowMs: row.dueAt }))
     .toMatchObject({ communitySlug: "review-club", claimedPending: 1 });
 });
 
@@ -149,8 +149,8 @@ test("a busy window is read through its 100th post; the rest is reviewed 15 minu
 
   await t.run((ctx: any) => markCommunityMemoryReviewDue(ctx, { communityId: w.communityId, channelId: w.general, actorType: "human", nowMs: NOW }));
   const row: any = await work(t, w.communityId);
-  await t.mutation(internal.communityMemoryReview.claimMemoryReviewInternal, { workId: row._id, nowMs: row.dueAt });
-  const done: any = await t.mutation(internal.communityMemoryReview.completeMemoryReviewInternal, {
+  await t.mutation(internal.agentWork.claimAgentWorkInternal, { workId: row._id, nowMs: row.dueAt });
+  const done: any = await t.mutation(internal.agentWork.completeAgentWorkInternal, {
     workId: row._id, outcome: "reviewed", windowEnd: offered.readUntil, claimedPending: 1, backlog: true, nowMs: NOW + 2_000 });
   expect(done.dueAt).toBe(NOW + 2_000 + 15 * 60_000);
   expect(await work(t, w.communityId)).toMatchObject({ reviewedThrough: NOW + 100, pending: 1 });
