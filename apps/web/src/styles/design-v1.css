@@ -3087,6 +3087,13 @@
   background: var(--linear-window);
 }
 
+/* The desktop layout is the same at every window width. The older styles
+   tightened the left menu below 720px (they took that for a phone); here it
+   keeps the padding it has everywhere else. */
+:root[data-design="v1"]:where(:not([data-layout="phone"])) .product-shell-surface--community > .community-nav {
+  padding: 0 12px 12px;
+}
+
 :root[data-design="v1"]:where(:not([data-layout="phone"])) .product-shell-surface--community > main,
 :root[data-design="v1"]:where(:not([data-layout="phone"])) .product-shell-surface--community > .web-main-surface-slot > * {
   margin: 8px 8px 8px 0;
