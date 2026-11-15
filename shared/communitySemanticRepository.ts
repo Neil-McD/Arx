@@ -19,19 +19,22 @@ export const POLYNET_COMMUNITY_PROFILE_PATH = "/community.md";
 export const POLYNET_MEMBERS_DIRECTORY_PATH = "/members/";
 export const COMMUNITY_HANDBOOK_PATH = "/handbook.md";
 export const COMMUNITY_MEMORY_INDEX_PATH = "/memory.md";
+// A place's brief: what's happening there (shared/communityBriefs.ts).
+export const COMMUNITY_BRIEF_PATH = "/brief.md";
 // Pods (convex/communityPodFacts.ts): pods/, pods/<slug>/ and pods/<slug>/pod.md.
 export const POLYNET_PODS_DIRECTORY_PATH = "/pods/";
 export type CommunityPodPath =
   | { kind: "pods" }
-  | { kind: "pod" | "pod_facts" | "pod_memory_index" | "pod_memory"; slug: string }
+  | { kind: "pod" | "pod_facts" | "pod_brief" | "pod_memory_index" | "pod_memory"; slug: string }
   | { kind: "pod_memory_note"; slug: string; note: string };
 export function parseCommunityPodPath(localPath: string): CommunityPodPath | null {
   if (localPath === POLYNET_PODS_DIRECTORY_PATH) return { kind: "pods" };
-  const match = /^\/pods\/([a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?)\/(pod\.md|memory\.md|memory\/|memory\/([A-Za-z0-9_-]{1,64})\.md)?$/.exec(localPath);
+  const match = /^\/pods\/([a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?)\/(pod\.md|brief\.md|memory\.md|memory\/|memory\/([A-Za-z0-9_-]{1,64})\.md)?$/.exec(localPath);
   if (!match) return null;
   const slug = match[1];
   if (!match[2]) return { kind: "pod", slug };
   if (match[2] === "pod.md") return { kind: "pod_facts", slug };
+  if (match[2] === "brief.md") return { kind: "pod_brief", slug };
   if (match[2] === "memory.md") return { kind: "pod_memory_index", slug };
   if (match[2] === "memory/") return { kind: "pod_memory", slug };
   return { kind: "pod_memory_note", slug, note: match[3] };
@@ -612,8 +615,8 @@ export function validatePolynetSemanticRepositoryOperationInput(args: {
       /^\/members\/(?:by-user\/[A-Za-z0-9_-]+|[^/]+)\.json$/.test(repositoryPath.localPath) ||
       // A member's activity (members/<handle>/timeline.md) and the approved handbook too.
       MEMBER_TIMELINE_PATH.test(repositoryPath.localPath) || repositoryPath.localPath === COMMUNITY_HANDBOOK_PATH ||
-      // The community's short memory (docs/specs/agent-system-slice-1.md).
-      repositoryPath.localPath === COMMUNITY_MEMORY_INDEX_PATH) {
+      // The community's short memory (docs/specs/agent-system-slice-1.md) and its brief.
+      repositoryPath.localPath === COMMUNITY_MEMORY_INDEX_PATH || repositoryPath.localPath === COMMUNITY_BRIEF_PATH) {
       const validated = validateCommunitySemanticOperationInput({ ...args,
         path: "/community.md" });
       if (!validated.ok) return validated;
