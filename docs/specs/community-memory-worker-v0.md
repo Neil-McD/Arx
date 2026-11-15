@@ -1,116 +1,145 @@
-# Community memory worker (v0 spec)
+# Community memory (v0 spec)
 
-Status: draft for Neil's review, 2026-11-14. Nothing is built. Rewritten after
-Neil asked to design from first principles instead of from the codebase.
+Status: draft for Neil's review, 2026-11-14. Nothing is built. Third version:
+rewritten to follow Distribution Engineer's context and ontology model
+(`docs/architecture/ledger-contract.md`, `context-directories.md`,
+`agent-context-policy.md`, `end-state.md` in that repo), which is better than
+the two drafts before it.
 
-## The design
+## The model, taken from Distribution Engineer
 
-Taken from the best known shape for agent memory (Anthropic, "The components
-of agent memory", Nov 2026), then checked against our code.
+1. **The database owns facts; files are views.** The agent sees memory as
+   Markdown files, but each file is drawn from records on every read. There is
+   no second store of pages. Indexes, briefs and the map are rebuildable
+   projections, never the truth.
+2. **Evidence and observations are different things.** Evidence is what was
+   said, kept as it was said (posts, a private talk, a call transcript, a
+   lesson). An observation is the guide's reading of evidence, and it cites
+   the evidence it came from. Code checks every citation.
+3. **One fact, one home.** Each kind of knowledge has exactly one record type.
+4. **The agent's notes sit beside people's, never over them.** A builder's
+   words outrank the guide's. The guide can add its own note next to a
+   builder's, never replace it.
+5. **Retrieval first.** A turn starts small: who the guide is, its lens, the
+   community's short memory file and a few tools. Everything else is read on
+   demand through the five tools (list, read, search, write, call). No
+   automatic stuffing of notes into the prompt.
+6. **One agent, many lenses.** The guide answering a member, the guide
+   briefing a builder and the guide reviewing a day are the same agent with a
+   different model, tool ceiling and budget. Lenses never fork memory.
+7. **Triggers, not a heartbeat.** Polynet owns every event that matters (a
+   post, a reply, a lesson finished, a person joining), so nothing polls. An
+   event marks a review as due; the review runs once its inputs settle.
+8. **Sub-agents read and draft; the lead applies in one checked step.**
 
-1. **Memory is a folder of linked pages.** One folder per scope: the
-   community, each pod, each person. Each folder has a short `index.md` (what
-   it knows and where) and topic pages that link to each other and cite the
-   posts they came from. The node map is that link graph.
-2. **One agent per community.** Its own schedule, budget and folders.
-3. **It dreams at night.** Once a night, at the community's quiet hour, if
-   anything was said that day: it re-reads the day and edits its pages (adds,
-   corrects, merges, links, keeps the index small).
-4. **Scope is what is mounted.** A run can only see the record and the folder
-   of its scope. Nothing else is there to leak.
-5. **A gate on the way out.** The agent edits a staged copy. A checker
-   reviews each changed page; it is committed or thrown away. Each night is
-   one commit a builder can see and undo.
-6. **At answer time** the guide loads the index and searches the pages.
+## What this changes in Polynet
 
-## The codebase, challenged
-
-| Today | Verdict |
+| Today in Polynet | Change |
 |---|---|
-| The five tools (list, read, search, write, call) already show a community as a folder: notes are `memory/*.md` | **Keep.** It is the agent's interface to memory. The worker uses the same five tools as every other agent. |
-| `communityNotes` (slug, title, markdown, search index) | **Keep as page storage.** What is wrong is around it: no writer, no history, no index, no citations. |
-| No agent writer since Nov 5 | **Replace with the gate,** which is what the Nov 5 closure was missing. |
-| The founder brief's fixed one-call pipeline | **Not the model.** Thinking runs in an agent loop (Pi, `shared/piRuntimeKernel.ts`); the database holds the record and the commit. |
-| A typed table of links | **Drop.** Links live in the pages as markdown; the map is read from them. |
-| The guide's recall: three notes per answer | **Change:** index first, then search. |
-| One shared clock polling for due communities | **Drop.** Each community schedules its own next run (Convex `runAt`); one daily sweep only repairs a broken chain. |
+| `communityNotes`: title and body, no citations, no author kind, one revision | Becomes an observation record: `scope`, `authorKind` (`builder`, `guide`), `evidenceRefs`, `revision`, `status` (`current`, `superseded`, `removed`) |
+| `communityPodNotes`, `memberFacts` | The same observation shape, scoped to a pod and to a person. `memberFacts` already has provenance and consent; it gains `evidenceRefs` checked by code |
+| The guide gets three notes stuffed into each turn | Replaced by a small `memory.md` view plus reads on demand. DE forbids automatic memory injection, for good reason |
+| `memory/*.md` already exists as a virtual folder behind the five tools | Keep. It is DE's read router. Extend it with the views below |
+| Nothing writes observations except builders | The guide writes through one checked operation |
+| The founder brief's 15-minute polling clock | Not used. Each community has a review row whose `dueAt` is set by events |
 
-Runs on OpenAI (gpt-6-luna), paid by the owner, only when the owner's AI is
-on. Anthropic's hosted agents would add a second AI company, against the
-Oct 27 decision.
+## The ontology
+
+```
+community
+  place: open channel | pod | a person's private talk with the guide
+    evidence: post, reply, private message to the guide, call transcript
+  course > lesson (builder's words: evidence, most trusted)
+  person (member)
+  observation (guide or builder), scoped to one place or person,
+    citing evidence from that same scope
+  projection: brief, memory.md, index, map, learned lately (rebuilt, never stored as truth)
+```
+
+**Scope rule, enforced in the write operation:** an observation's scope is
+the scope of its evidence. Evidence from a pod can only support a pod
+observation; a private talk only a fact about that person (born "Only you");
+direct messages between members are never evidence.
+
+## The files the guide sees (all drawn from records)
+
+- `memory.md`: the community's short memory, a capped list of what matters
+  most, with links. Loaded at the start of every turn. Rebuilt from
+  observations, not hand-kept.
+- `memory/<topic>.md`: one observation each, with its sources.
+- `pods/<pod>/memory.md`, `people/me/memory.md`: the same, per scope, mounted
+  only for those allowed.
+- `places/<place>/brief.md`: the latest brief for a place.
+
+## How the guide writes
+
+One operation, `observe`, the same for the guide, a builder's own AI over the
+MCP, and (later) a member's agent proposing a candidate:
+
+- input: scope, title, body, `evidenceRefs`, optionally `supersedes`;
+- code checks: every ref exists, is live, and is in the scope; a guide
+  observation never supersedes a builder's; a removed observation is not
+  recreated from the same evidence; a cap per review; size limits;
+- writes a new revision, a receipt, and marks the scope's views stale.
+
+## How reviews run
+
+`communityMemoryReviews`, one row per scope (the community, each pod, each
+person), modelled on DE's `crisMemoryReviews`:
+
+- `pending` (evidence since the last review), `reviewedThrough`, `dueAt`,
+  `leaseUntil`, `failures`.
+- A new post in an open channel bumps the community row's `pending` and sets
+  `dueAt` if unset. When a review is due depends on its kind:
+  - **Brief:** due an hour after the first unreviewed post, so a burst is
+    read once. A quiet place keeps its last brief.
+  - **Consolidation:** due nightly at the community's quiet hour, if the day
+    had evidence. It reads the day, writes and supersedes observations,
+    merges duplicates, and rebuilds `memory.md`.
+- A Convex job is scheduled at `dueAt` for that row only. A daily sweep
+  re-schedules any row whose job was lost.
+
+Inside a review the guide uses the five tools on its mounted scope, with a
+review lens: read and search freely, `observe` as its only write. For a busy
+day it may fan out to sub-agents that read slices and draft; the review
+applies their drafts in one step.
 
 ## Slice 1: the community remembers
 
-Open channels only, one scope (the community folder), nightly.
+Open channels only. Community scope only.
 
-**Data**
+1. `communityNotes` gains the observation fields; existing notes become
+   `authorKind: builder`.
+2. The `observe` operation with its checks and receipt.
+3. `communityMemoryReviews` for the community scope, set due by new posts in
+   open channels; the nightly consolidation review.
+4. `memory.md` as a rebuilt view; the guide loads it instead of the three
+   stuffed notes.
+5. *What your guide knows*: each observation shows its sources and author;
+   builders can remove or correct. *Home*: "Learned lately".
+6. One setting and its line for members: "Your guide learns from open
+   channels. Private talks with it stay private."
 
-- `communityNotes` gains `kind` (`index` or `page`), `writer` (`worker` or
-  `builder`), `lastCommitId`.
-- New `communityMemoryCommits`: one row a night: status (`committed`,
-  `partly`, `dropped`), pages changed, each refused page and why, tokens,
-  timestamps.
-- New `communityMemoryPageVersions`: a page's body before each commit, so a
-  commit or one page can be undone.
-- New `communityMemorySchedule`: one row per community: `nextRunAt`,
-  `quietHour`, `enabled`, last error.
-
-**The run** (a Convex action, under ten minutes)
-
-1. Mount, in code: the day's live posts in channels open to all members, as a
-   read-only record; the community folder as a staged copy.
-2. Agent loop on Pi with list, read, search on both, and write on the staged
-   copy only. A step and token budget per run. The prompt says what memory is
-   for, not how to keep it.
-3. Gate, in code, per changed page: every citation is a post from the mount;
-   nothing that names or describes a member beyond what they posted publicly;
-   size limits; pages a builder wrote are not overwritten (the change becomes
-   a suggestion in the builder's view); a page a builder removed is not
-   recreated from the same posts.
-4. Commit: save passed pages, their old versions, the commit row, and
-   schedule tomorrow.
-
-**The guide** loads `index.md` (bounded) into every answer, then searches
-pages as today.
-
-**Front end**
-
-- *What your guide knows* (builders): pages with "learned last night from 4
-  posts in #general", the posts behind each, undo a page, undo a night.
-  Suggestions on builder-written pages.
-- *Home* right panel: "Learned lately", the titles committed in the last
-  week.
-- One setting, with the line members also see: "Your guide learns from open
-  channels. Private talks with it stay private."
-
-**Tests before it ships**
-
-- A pod, a private talk or a direct message is never in the mount.
-- A page citing a post outside the mount is refused.
-- A removed page is not recreated from the same posts.
-- A run retried for the same night commits once.
-- With AI off, nothing runs.
-- A post that reads like an instruction changes nothing but what the page
-  says about it.
+**Tests:** evidence from a pod, a private talk or a DM is refused; a guide
+observation cannot supersede a builder's; a removed observation is not
+recreated from the same evidence; a retried review writes once; with AI off
+nothing runs; text in a post that reads like an instruction changes nothing.
 
 **Acceptance:** a week on the seeded staging community; Neil keeps most of
-what was learned; a fixed set of twenty questions is answered better from
-memory than before.
+what was learned; twenty fixed questions are answered better than before.
 
 ## Later slices
 
-2. **Briefs:** written when someone opens a place and its brief is stale;
-   panels show brief and next thing.
-3. **Pods:** the same run per pod, into the pod's folder.
-4. **People:** from a member's private talk, into their own folder, born
-   "Only you"; the You page.
-5. **The map:** drawn from the links in the pages, on Knowledge, Home and pods.
-6. **Candidates from personal agents** (a propose verb on the MCP) and
-   **calls** (transcripts, with consent).
+2. Briefs per place (`brief.md`), on the hourly trigger; the right panels.
+3. Pods: the same review and views per pod.
+4. People: facts from a member's private talk, born "Only you"; the You page.
+5. The map, drawn from observations and their evidence.
+6. Candidates from personal agents through `observe`; call transcripts as
+   evidence, with consent.
 
 ## Decisions for Neil
 
-1. **Commit straight in, with undo** (recommended), or hold each night for the
+1. Observations go live straight away with undo (recommended), or wait for a
    builder's OK.
-2. **Do members see what was learned?** Today only builders read notes.
-   Recommended: titles in "Learned lately"; a click asks the guide.
+2. Do members see the titles of what was learned? Recommended: yes, and a
+   click asks the guide.
