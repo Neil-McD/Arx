@@ -427,13 +427,13 @@ function MemberRecordView(props: {
           </div>
         ) : null}
         {!props.self && ((props.onMessage && !record.out) || canManage || props.onComp) ? (
-          <div style={{ display: "flex", gap: 6 }}>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
             {props.onMessage && !record.out ? <Btn small go onClick={() => props.onMessage?.(record.user_id)}>Message</Btn> : null}
-            {canManage ? <Btn small onClick={manage}>Change role</Btn> : null}
             {props.onComp ? <Btn small onClick={async () => { setComping(true); try { await props.onComp?.(); } finally { setComping(false); } }}>{comping ? "Comping…" : "Comp"}</Btn> : null}
+            {/* One way into the one place a role is changed and someone is removed or blocked. */}
             {canManage ? (
-              <button type="button" className={cx("btn sm")} style={{ marginLeft: "auto", padding: "0 7px" }} aria-label={`Remove or block ${first}`} title="Remove or block" onClick={manage}>
-                <Icon name="more" />
+              <button type="button" className={cx("btn sm")} style={{ marginLeft: "auto" }} aria-label={`Change ${first}'s role, remove or block`} title="Change role, remove or block" onClick={manage}>
+                Manage<Icon name="more" />
               </button>
             ) : null}
           </div>
