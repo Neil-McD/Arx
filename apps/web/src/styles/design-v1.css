@@ -542,42 +542,41 @@
 
 /* Narrow windows collapse the left column to icons: section labels go, and
    the account row shows only the avatar, its menu opening to the right. */
-@media (max-width: 720px) {
-  :root[data-design="v1"] .app-shell.community-layout.sessions-compact.no-right .community-nav-section-label {
-    display: none;
-  }
+/* phone layout */
+:root[data-design="v1"]:where([data-layout="phone"]) .app-shell.community-layout.sessions-compact.no-right .community-nav-section-label {
+  display: none;
+}
 
-  :root[data-design="v1"] .app-shell.community-layout.sessions-compact.no-right .community-nav-v1-primary {
-    margin-bottom: 8px;
-  }
+:root[data-design="v1"]:where([data-layout="phone"]) .app-shell.community-layout.sessions-compact.no-right .community-nav-v1-primary {
+  margin-bottom: 8px;
+}
 
-  :root[data-design="v1"] .app-shell.community-layout.sessions-compact.no-right .account-menu-trigger {
-    justify-content: center;
-    padding: 0;
-  }
+:root[data-design="v1"]:where([data-layout="phone"]) .app-shell.community-layout.sessions-compact.no-right .account-menu-trigger {
+  justify-content: center;
+  padding: 0;
+}
 
-  :root[data-design="v1"] .app-shell.community-layout.sessions-compact.no-right .account-menu-trigger > svg {
-    display: none;
-  }
+:root[data-design="v1"]:where([data-layout="phone"]) .app-shell.community-layout.sessions-compact.no-right .account-menu-trigger > svg {
+  display: none;
+}
 
-  /* The name stays readable to screen readers; it is only hidden visually. */
-  :root[data-design="v1"] .app-shell.community-layout.sessions-compact.no-right .account-menu-identity {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    overflow: hidden;
-    clip-path: inset(50%);
-    white-space: nowrap;
-  }
+/* The name stays readable to screen readers; it is only hidden visually. */
+:root[data-design="v1"]:where([data-layout="phone"]) .app-shell.community-layout.sessions-compact.no-right .account-menu-identity {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
 
-  /* The column clips overflow, so the menu opens beside it instead. */
-  :root[data-design="v1"] .app-shell.community-layout.sessions-compact.no-right .account-menu-popover {
-    position: fixed;
-    right: auto;
-    bottom: 12px;
-    left: 64px;
-    width: 220px;
-  }
+/* The column clips overflow, so the menu opens beside it instead. */
+:root[data-design="v1"]:where([data-layout="phone"]) .app-shell.community-layout.sessions-compact.no-right .account-menu-popover {
+  position: fixed;
+  right: auto;
+  bottom: 12px;
+  left: 64px;
+  width: 220px;
 }
 
 /*
@@ -1067,47 +1066,45 @@
 }
 
 /* Narrow windows: without the rail the column still collapses to icons. */
-@media (max-width: 720px) {
-  /* The banner goes; the switcher stays as one small button whose list opens
-     beside the column, so moving between communities is never lost. */
-  :root[data-design="v1"] .app-shell.community-layout.sessions-compact.no-right .community-nav-header,
-  :root[data-design="v1"] .app-shell.community-layout.sessions-compact.no-right .community-switcher-name {
-    display: none;
-  }
+/* phone layout */
+/* The banner goes; the switcher stays as one small button whose list opens
+   beside the column, so moving between communities is never lost. */
+:root[data-design="v1"]:where([data-layout="phone"]) .app-shell.community-layout.sessions-compact.no-right .community-nav-header,
+:root[data-design="v1"]:where([data-layout="phone"]) .app-shell.community-layout.sessions-compact.no-right .community-switcher-name {
+  display: none;
+}
 
-  :root[data-design="v1"] .app-shell.community-layout.sessions-compact.no-right .community-nav-identity:has(.community-switcher) {
-    margin: 0 0 8px;
-    padding: 0;
-    border-bottom: 0;
-  }
+:root[data-design="v1"]:where([data-layout="phone"]) .app-shell.community-layout.sessions-compact.no-right .community-nav-identity:has(.community-switcher) {
+  margin: 0 0 8px;
+  padding: 0;
+  border-bottom: 0;
+}
 
-  :root[data-design="v1"] .app-shell.community-layout.sessions-compact.no-right .community-switcher-trigger {
-    justify-content: center;
-    padding: 0;
-  }
+:root[data-design="v1"]:where([data-layout="phone"]) .app-shell.community-layout.sessions-compact.no-right .community-switcher-trigger {
+  justify-content: center;
+  padding: 0;
+}
 
 
-  :root[data-design="v1"] .app-shell.community-layout.sessions-compact.no-right .community-nav .nav-item {
-    justify-content: center;
-    gap: 0;
-    padding: 10px 6px;
-    font-size: 0;
-  }
+:root[data-design="v1"]:where([data-layout="phone"]) .app-shell.community-layout.sessions-compact.no-right .community-nav .nav-item {
+  justify-content: center;
+  gap: 0;
+  padding: 10px 6px;
+  font-size: 0;
+}
 
-  :root[data-design="v1"] .app-shell.community-layout.sessions-compact.no-right .community-nav .nav-item-count,
-  :root[data-design="v1"] .app-shell.community-layout.sessions-compact.no-right .community-nav .nav-item-hint {
-    display: none;
-  }
+:root[data-design="v1"]:where([data-layout="phone"]) .app-shell.community-layout.sessions-compact.no-right .community-nav .nav-item-count,
+:root[data-design="v1"]:where([data-layout="phone"]) .app-shell.community-layout.sessions-compact.no-right .community-nav .nav-item-hint {
+  display: none;
 }
 
 /*
  * Design system v1: Home's layout (spec section 5). A narrower left column, a
  * quiet header, and beside the greeting a panel of where things stand.
  */
-@media (min-width: 721px) {
-  :root[data-design="v1"] .product-shell-surface--community {
-    grid-template-columns: var(--left-column-width) minmax(0, 1fr);
-  }
+/* desktop layout */
+:root[data-design="v1"]:where(:not([data-layout="phone"])) .product-shell-surface--community {
+  grid-template-columns: var(--left-column-width) minmax(0, 1fr);
 }
 
 /* Home needs no title bar of its own: the left column already says where you
@@ -1223,38 +1220,37 @@
   --surface-raised-edge: rgba(13, 17, 23, 0.08);
 }
 
-@media (min-width: 721px) {
-  /* .app-shell too: the old frame's ".app-shell:not(.with-community-rail)"
-     8px left inset ties on specificity and would otherwise win, leaving the
-     app 8px off the window edge and the Inbox page over the column's line. */
-  :root[data-design="v1"] .app-shell .product-shell-surface--community {
-    margin: 0;
-    border: 0;
-    border-radius: 0;
-    background: var(--surface-app);
-  }
+/* desktop layout */
+/* .app-shell too: the old frame's ".app-shell:not(.with-community-rail)"
+   8px left inset ties on specificity and would otherwise win, leaving the
+   app 8px off the window edge and the Inbox page over the column's line. */
+:root[data-design="v1"]:where(:not([data-layout="phone"])) .app-shell .product-shell-surface--community {
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  background: var(--surface-app);
+}
 
-  :root[data-design="v1"] .product-shell-surface--community > .community-nav {
-    border-right: 1px solid var(--surface-raised-edge);
-    border-left: 0;
-    background: var(--surface-app);
-  }
+:root[data-design="v1"]:where(:not([data-layout="phone"])) .product-shell-surface--community > .community-nav {
+  border-right: 1px solid var(--surface-raised-edge);
+  border-left: 0;
+  background: var(--surface-app);
+}
 
-  /* Pages other than Home sit inside a display:contents slot, which cannot
-     carry a box, so the page inside it is the content area. */
-  :root[data-design="v1"] .product-shell-surface--community > main,
-  :root[data-design="v1"] .product-shell-surface--community > .web-main-surface-slot > * {
-    --bg-workspace: var(--surface-raised);
-    --surface-workspace: var(--surface-raised);
-    --surface-panel: var(--surface-raised);
-    --bg-panel: var(--surface-raised);
-    --community-chat-surface: var(--surface-raised);
-    margin: 0;
-    overflow: hidden;
-    border: 0;
-    border-radius: 0;
-    background: var(--surface-raised);
-  }
+/* Pages other than Home sit inside a display:contents slot, which cannot
+   carry a box, so the page inside it is the content area. */
+:root[data-design="v1"]:where(:not([data-layout="phone"])) .product-shell-surface--community > main,
+:root[data-design="v1"]:where(:not([data-layout="phone"])) .product-shell-surface--community > .web-main-surface-slot > * {
+  --bg-workspace: var(--surface-raised);
+  --surface-workspace: var(--surface-raised);
+  --surface-panel: var(--surface-raised);
+  --bg-panel: var(--surface-raised);
+  --community-chat-surface: var(--surface-raised);
+  margin: 0;
+  overflow: hidden;
+  border: 0;
+  border-radius: 0;
+  background: var(--surface-raised);
 }
 
 /* The header no longer takes a row, so the conversation gets the first one. */
@@ -1419,11 +1415,10 @@
  * place at the same width, names itself in a header level with the channel's,
  * and keeps its reply box at the bottom.
  */
-@media (min-width: 641px) {
-  :root[data-design="v1"] .community-interaction-projection.has-drawer,
-  :root[data-design="v1"] .community-interaction-projection.has-channel-context {
-    grid-template-columns: minmax(0, 1fr) var(--right-column-width);
-  }
+/* desktop layout */
+:root[data-design="v1"]:where(:not([data-layout="phone"])) .community-interaction-projection.has-drawer,
+:root[data-design="v1"]:where(:not([data-layout="phone"])) .community-interaction-projection.has-channel-context {
+  grid-template-columns: minmax(0, 1fr) var(--right-column-width);
 }
 
 /* An ordinary channel has no right column: nothing is picked, so the feed
@@ -1700,344 +1695,343 @@
  * 36px avatar, 14px gap, 14px 12px padding and 12px corners, name 14/600,
  * kind 13, message 15/1.45, a 7px unread dot; bubbles 15/1.45 at 9px 13px.
  */
-@media (min-width: 721px) {
-  :root[data-design="v1"] .web-direct-messages-host.is-page .community-dm-inbox-panel {
-    top: 0;
-    right: 0;
-    bottom: 0;
-    left: var(--left-column-width);
-    z-index: 48;
-    width: auto;
-    height: auto;
-    max-height: none;
-    gap: 0;
-    /* Fixed gutters, like a channel; only Home is centred. */
-    --inbox-gutter: 56px;
-    padding: 52px calc(var(--inbox-thread-width) + var(--inbox-gutter)) 0 var(--inbox-gutter);
-    /* The left column's own line divides it, as on every page. */
-    border: 0;
-    border-radius: 0;
-    background: var(--surface-raised);
-    box-shadow: none;
+/* desktop layout */
+:root[data-design="v1"]:where(:not([data-layout="phone"])) .web-direct-messages-host.is-page .community-dm-inbox-panel {
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: var(--left-column-width);
+  z-index: 48;
+  width: auto;
+  height: auto;
+  max-height: none;
+  gap: 0;
+  /* Fixed gutters, like a channel; only Home is centred. */
+  --inbox-gutter: 56px;
+  padding: 52px calc(var(--inbox-thread-width) + var(--inbox-gutter)) 0 var(--inbox-gutter);
+  /* The left column's own line divides it, as on every page. */
+  border: 0;
+  border-radius: 0;
+  background: var(--surface-raised);
+  box-shadow: none;
+}
+
+/* The page's header line, like every other page's. */
+:root[data-design="v1"]:where(:not([data-layout="phone"])) .web-direct-messages-host.is-page .community-dm-inbox-header {
+  position: absolute;
+  top: 0;
+  right: var(--inbox-thread-width);
+  left: 0;
+  flex: none;
+  height: 52px;
+  margin: 0;
+  padding: 0 20px 0 var(--inbox-gutter);
+  align-items: center;
+  border-bottom: 0;
+  border-radius: 0;
+}
+
+:root[data-design="v1"]:where(:not([data-layout="phone"])) .web-direct-messages-host.is-page .community-dm-inbox-header > div:first-child {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+
+:root[data-design="v1"]:where(:not([data-layout="phone"])) .web-direct-messages-host.is-page .community-dm-inbox-title {
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: -0.005em;
+}
+
+:root[data-design="v1"]:where(:not([data-layout="phone"])) .web-direct-messages-host.is-page .community-dm-inbox-subtitle {
+  display: block;
+  margin: 0;
+  color: var(--text-faint);
+  font-size: 13px;
+}
+
+/* Finding someone is a small field in the header line, not a bar in the list. */
+:root[data-design="v1"]:where(:not([data-layout="phone"])) .web-direct-messages-host.is-page .community-dm-inbox-search {
+  position: absolute;
+  top: 10px;
+  right: calc(var(--inbox-thread-width) + var(--inbox-gutter));
+  z-index: 3;
+  width: 220px;
+  height: 32px;
+  min-height: 0;
+  margin: 0;
+  padding: 0 10px;
+  border: 1px solid var(--border-default);
+  border-radius: 8px;
+  background: var(--bg-input);
+  font-size: 13px;
+}
+
+:root[data-design="v1"]:where(:not([data-layout="phone"])) .web-direct-messages-host.is-page .community-dm-inbox-search input {
+  font-size: 13px;
+}
+
+/* Smaller windows: the title keeps its room. The second line of the title
+   goes first, then the field narrows. */
+@media (max-width: 1240px) {
+  :root[data-design="v1"]:where(:not([data-layout="phone"])) .web-direct-messages-host.is-page .community-dm-inbox-subtitle {
+    display: none;
   }
 
-  /* The page's header line, like every other page's. */
-  :root[data-design="v1"] .web-direct-messages-host.is-page .community-dm-inbox-header {
-    position: absolute;
-    top: 0;
-    right: var(--inbox-thread-width);
-    left: 0;
-    flex: none;
-    height: 52px;
-    margin: 0;
-    padding: 0 20px 0 var(--inbox-gutter);
-    align-items: center;
-    border-bottom: 0;
-    border-radius: 0;
+  :root[data-design="v1"]:where(:not([data-layout="phone"])) .web-direct-messages-host.is-page .community-dm-inbox-search {
+    width: clamp(120px, 16vw, 200px);
   }
+}
 
-  :root[data-design="v1"] .web-direct-messages-host.is-page .community-dm-inbox-header > div:first-child {
-    display: flex;
-    align-items: baseline;
-    gap: 8px;
-    min-width: 0;
-  }
+/* The kit Inbox: the field sits on the filters' line, left of Done. */
+:root[data-design="v1"]:where(:not([data-layout="phone"])) .web-direct-messages-host.is-page .community-dm-inbox-panel.is-kit .community-dm-inbox-search {
+  position: relative;
+  top: auto;
+  right: auto;
+  flex: 0 1 320px;
+  min-width: 0;
+  width: auto;
+  height: 28px;
+}
+:root[data-design="v1"]:where(:not([data-layout="phone"])) .web-direct-messages-host.is-page .community-dm-inbox-panel.is-kit .community-dm-inbox-search:focus-within {
+  /* The same quiet grey a channel's message box takes, never blue. */
+  border-color: color-mix(in srgb, var(--text-primary) 24%, transparent);
+}
+:root[data-design="v1"]:where(:not([data-layout="phone"])) .web-direct-messages-host.is-page .community-dm-inbox-panel.is-kit .community-dm-inbox-search input,
+:root[data-design="v1"]:where(:not([data-layout="phone"])) .web-direct-messages-host.is-page .community-dm-inbox-panel.is-kit .community-dm-inbox-search input:focus {
+  height: 100%;
+  padding: 0 0 0 24px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
 
-  :root[data-design="v1"] .web-direct-messages-host.is-page .community-dm-inbox-title {
-    font-size: 14px;
-    font-weight: 600;
-    letter-spacing: -0.005em;
-  }
+:root[data-design="v1"]:where(:not([data-layout="phone"])) .web-direct-messages-host.is-page .community-dm-inbox-list {
+  gap: 0;
+  margin: 0 -12px;
+  padding: 0 0 40px;
+  mask-image: none;
+}
 
-  :root[data-design="v1"] .web-direct-messages-host.is-page .community-dm-inbox-subtitle {
-    display: block;
-    margin: 0;
-    color: var(--text-faint);
-    font-size: 13px;
-  }
+:root[data-design="v1"]:where(:not([data-layout="phone"])) .web-direct-messages-host.is-page .community-dm-inbox-label {
+  margin: 22px 12px 8px;
+  color: var(--text-faint);
+  font-size: 12px;
+  font-weight: 500;
+}
 
-  /* Finding someone is a small field in the header line, not a bar in the list. */
-  :root[data-design="v1"] .web-direct-messages-host.is-page .community-dm-inbox-search {
-    position: absolute;
-    top: 10px;
-    right: calc(var(--inbox-thread-width) + var(--inbox-gutter));
-    z-index: 3;
-    width: 220px;
-    height: 32px;
-    min-height: 0;
-    margin: 0;
-    padding: 0 10px;
-    border: 1px solid var(--border-default);
-    border-radius: 8px;
-    background: var(--bg-input);
-    font-size: 13px;
-  }
+:root[data-design="v1"]:where(:not([data-layout="phone"])) .web-direct-messages-host.is-page .community-dm-inbox-row {
+  flex: 0 0 auto;
+  min-height: 0;
+  gap: 14px;
+  padding: 14px 12px;
+  border: 0;
+  border-radius: 12px;
+}
 
-  :root[data-design="v1"] .web-direct-messages-host.is-page .community-dm-inbox-search input {
-    font-size: 13px;
-  }
+:root[data-design="v1"]:where(:not([data-layout="phone"])) .web-direct-messages-host.is-page .community-dm-inbox-row:hover {
+  background: var(--hover-overlay);
+}
 
-  /* Smaller windows: the title keeps its room. The second line of the title
-     goes first, then the field narrows. */
-  @media (max-width: 1240px) {
-    :root[data-design="v1"] .web-direct-messages-host.is-page .community-dm-inbox-subtitle {
-      display: none;
-    }
+:root[data-design="v1"]:where(:not([data-layout="phone"])) .web-direct-messages-host.is-page .community-dm-inbox-row.is-selected {
+  background: var(--bg-card);
+}
 
-    :root[data-design="v1"] .web-direct-messages-host.is-page .community-dm-inbox-search {
-      width: clamp(120px, 16vw, 200px);
-    }
-  }
+:root[data-design="v1"]:where(:not([data-layout="phone"])) .web-direct-messages-host.is-page .community-dm-inbox-avatar-wrap,
+:root[data-design="v1"]:where(:not([data-layout="phone"])) .web-direct-messages-host.is-page .community-dm-inbox-avatar {
+  width: 36px;
+  height: 36px;
+  flex: 0 0 36px;
+}
 
-  /* The kit Inbox: the field sits on the filters' line, left of Done. */
-  :root[data-design="v1"] .web-direct-messages-host.is-page .community-dm-inbox-panel.is-kit .community-dm-inbox-search {
-    position: relative;
-    top: auto;
-    right: auto;
-    flex: 0 1 320px;
-    min-width: 0;
-    width: auto;
-    height: 28px;
-  }
-  :root[data-design="v1"] .web-direct-messages-host.is-page .community-dm-inbox-panel.is-kit .community-dm-inbox-search:focus-within {
-    /* The same quiet grey a channel's message box takes, never blue. */
-    border-color: color-mix(in srgb, var(--text-primary) 24%, transparent);
-  }
-  :root[data-design="v1"] .web-direct-messages-host.is-page .community-dm-inbox-panel.is-kit .community-dm-inbox-search input,
-  :root[data-design="v1"] .web-direct-messages-host.is-page .community-dm-inbox-panel.is-kit .community-dm-inbox-search input:focus {
-    height: 100%;
-    padding: 0 0 0 24px;
-    border: 0;
-    border-radius: 0;
-    background: transparent;
-    box-shadow: none;
-  }
+:root[data-design="v1"]:where(:not([data-layout="phone"])) .web-direct-messages-host.is-page .community-dm-inbox-row-body {
+  gap: 2px;
+}
 
-  :root[data-design="v1"] .web-direct-messages-host.is-page .community-dm-inbox-list {
-    gap: 0;
-    margin: 0 -12px;
-    padding: 0 0 40px;
-    mask-image: none;
-  }
+:root[data-design="v1"]:where(:not([data-layout="phone"])) .web-direct-messages-host.is-page .community-dm-inbox-row-name-line {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
 
-  :root[data-design="v1"] .web-direct-messages-host.is-page .community-dm-inbox-label {
-    margin: 22px 12px 8px;
-    color: var(--text-faint);
-    font-size: 12px;
-    font-weight: 500;
-  }
+:root[data-design="v1"]:where(:not([data-layout="phone"])) .web-direct-messages-host.is-page .community-dm-inbox-row-name {
+  color: var(--text-ink-primary);
+  font-size: 14px;
+  font-weight: 600;
+}
 
-  :root[data-design="v1"] .web-direct-messages-host.is-page .community-dm-inbox-row {
-    flex: 0 0 auto;
-    min-height: 0;
-    gap: 14px;
-    padding: 14px 12px;
-    border: 0;
-    border-radius: 12px;
-  }
+:root[data-design="v1"]:where(:not([data-layout="phone"])) .web-direct-messages-host.is-page .community-dm-inbox-row-kind,
+:root[data-design="v1"]:where(:not([data-layout="phone"])) .web-direct-messages-host.is-page .community-dm-inbox-row.is-person .community-dm-inbox-row-meta {
+  color: var(--text-faint);
+  font-size: 13px;
+  font-weight: 400;
+}
 
-  :root[data-design="v1"] .web-direct-messages-host.is-page .community-dm-inbox-row:hover {
-    background: var(--hover-overlay);
-  }
+:root[data-design="v1"]:where(:not([data-layout="phone"])) .web-direct-messages-host.is-page .community-dm-inbox-row-time {
+  color: var(--text-faint);
+  font-size: 12px;
+}
 
-  :root[data-design="v1"] .web-direct-messages-host.is-page .community-dm-inbox-row.is-selected {
-    background: var(--bg-card);
-  }
+:root[data-design="v1"]:where(:not([data-layout="phone"])) .web-direct-messages-host.is-page .community-dm-inbox-row-meta {
+  color: var(--text-ink-primary);
+  font-size: 15px;
+  line-height: 1.45;
+}
 
-  :root[data-design="v1"] .web-direct-messages-host.is-page .community-dm-inbox-avatar-wrap,
-  :root[data-design="v1"] .web-direct-messages-host.is-page .community-dm-inbox-avatar {
-    width: 36px;
-    height: 36px;
-    flex: 0 0 36px;
-  }
+:root[data-design="v1"]:where(:not([data-layout="phone"])) .web-direct-messages-host.is-page .community-dm-inbox-row-unread {
+  width: 7px;
+  height: 7px;
+  margin-left: 6px;
+  border-radius: 50%;
+  background: var(--text-ink-primary);
+  box-shadow: none;
+}
 
-  :root[data-design="v1"] .web-direct-messages-host.is-page .community-dm-inbox-row-body {
-    gap: 2px;
-  }
+/* The conversation column: 328px, padded 20px 24px 24px. */
+:root[data-design="v1"]:where(:not([data-layout="phone"])) .web-direct-messages-host.is-page .community-dm-panel:not(.community-dm-inbox-panel) {
+  top: 0;
+  right: 0;
+  bottom: 0;
+  /* The mock's Inbox conversation column is 400px, wider on big windows. */
+  width: var(--inbox-thread-width);
+  height: auto;
+  max-height: none;
+  gap: 0;
+  padding: 20px 24px 24px;
+  border: 0;
+  border-left: 1px solid var(--surface-raised-edge);
+  border-radius: 0;
+  background: var(--surface-raised);
+  box-shadow: none;
+}
 
-  :root[data-design="v1"] .web-direct-messages-host.is-page .community-dm-inbox-row-name-line {
-    display: flex;
-    align-items: baseline;
-    gap: 8px;
-    min-width: 0;
-  }
+:root[data-design="v1"]:where(:not([data-layout="phone"])) .web-direct-messages-host.is-page .community-dm-panel-header {
+  gap: 12px;
+  padding-bottom: 18px;
+  /* The mock's .sep: its hairline, not the old stronger border. */
+  border-bottom: 1px solid var(--surface-raised-edge);
+}
 
-  :root[data-design="v1"] .web-direct-messages-host.is-page .community-dm-inbox-row-name {
-    color: var(--text-ink-primary);
-    font-size: 14px;
-    font-weight: 600;
-  }
+:root[data-design="v1"]:where(:not([data-layout="phone"])) .web-direct-messages-host.is-page .community-dm-panel-avatar-wrap,
+:root[data-design="v1"]:where(:not([data-layout="phone"])) .web-direct-messages-host.is-page .community-dm-panel-avatar {
+  width: 36px;
+  height: 36px;
+}
 
-  :root[data-design="v1"] .web-direct-messages-host.is-page .community-dm-inbox-row-kind,
-  :root[data-design="v1"] .web-direct-messages-host.is-page .community-dm-inbox-row.is-person .community-dm-inbox-row-meta {
-    color: var(--text-faint);
-    font-size: 13px;
-    font-weight: 400;
-  }
+:root[data-design="v1"]:where(:not([data-layout="phone"])) .web-direct-messages-host.is-page .community-dm-panel-title {
+  font-size: 15px;
+  font-weight: 600;
+}
 
-  :root[data-design="v1"] .web-direct-messages-host.is-page .community-dm-inbox-row-time {
-    color: var(--text-faint);
-    font-size: 12px;
-  }
+:root[data-design="v1"]:where(:not([data-layout="phone"])) .web-direct-messages-host.is-page .community-dm-panel-context {
+  color: var(--text-ink-secondary);
+  font-size: 13px;
+}
 
-  :root[data-design="v1"] .web-direct-messages-host.is-page .community-dm-inbox-row-meta {
-    color: var(--text-ink-primary);
-    font-size: 15px;
-    line-height: 1.45;
-  }
+/* The mock's .bub: theirs on the left with a small corner, yours (the
+   mock's .mine) on the right, a shade brighter. */
+:root[data-design="v1"]:where(:not([data-layout="phone"])) .web-direct-messages-host.is-page .community-dm-panel-message-bubble {
+  max-width: 300px;
+  padding: 9px 13px;
+  border: 0;
+  border-radius: 14px 14px 14px 4px;
+  background: var(--bubble-theirs);
+  color: var(--text-ink-primary);
+  font-size: 15px;
+  line-height: 1.45;
+}
 
-  :root[data-design="v1"] .web-direct-messages-host.is-page .community-dm-inbox-row-unread {
-    width: 7px;
-    height: 7px;
-    margin-left: 6px;
-    border-radius: 50%;
-    background: var(--text-ink-primary);
-    box-shadow: none;
-  }
+:root[data-design="v1"]:where(:not([data-layout="phone"])) .web-direct-messages-host.is-page .community-dm-panel-message.is-own .community-dm-panel-message-bubble {
+  border-radius: 14px 14px 4px 14px;
+  background: var(--bubble-mine);
+}
 
-  /* The conversation column: 328px, padded 20px 24px 24px. */
-  :root[data-design="v1"] .web-direct-messages-host.is-page .community-dm-panel:not(.community-dm-inbox-panel) {
-    top: 0;
-    right: 0;
-    bottom: 0;
-    /* The mock's Inbox conversation column is 400px, wider on big windows. */
-    width: var(--inbox-thread-width);
-    height: auto;
-    max-height: none;
-    gap: 0;
-    padding: 20px 24px 24px;
-    border: 0;
-    border-left: 1px solid var(--surface-raised-edge);
-    border-radius: 0;
-    background: var(--surface-raised);
-    box-shadow: none;
-  }
+:root[data-design="v1"]:where(:not([data-layout="phone"]))[data-theme="light"] .web-direct-messages-host.is-page .community-dm-panel-message-bubble {
+  background: rgba(13, 17, 23, 0.06);
+}
 
-  :root[data-design="v1"] .web-direct-messages-host.is-page .community-dm-panel-header {
-    gap: 12px;
-    padding-bottom: 18px;
-    /* The mock's .sep: its hairline, not the old stronger border. */
-    border-bottom: 1px solid var(--surface-raised-edge);
-  }
+:root[data-design="v1"]:where(:not([data-layout="phone"]))[data-theme="light"] .web-direct-messages-host.is-page .community-dm-panel-message.is-own .community-dm-panel-message-bubble {
+  background: #0d1117;
+  color: #f6f7f9;
+}
 
-  :root[data-design="v1"] .web-direct-messages-host.is-page .community-dm-panel-avatar-wrap,
-  :root[data-design="v1"] .web-direct-messages-host.is-page .community-dm-panel-avatar {
-    width: 36px;
-    height: 36px;
-  }
+:root[data-design="v1"]:where(:not([data-layout="phone"])) .web-direct-messages-host.is-page .community-dm-panel-message-time {
+  color: var(--text-faint);
+  font-size: 12px;
+}
 
-  :root[data-design="v1"] .web-direct-messages-host.is-page .community-dm-panel-title {
-    font-size: 15px;
-    font-weight: 600;
-  }
+:root[data-design="v1"]:where(:not([data-layout="phone"])) .web-direct-messages-host.is-page .community-dm-composer-float {
+  right: 24px;
+  bottom: 24px;
+  left: 24px;
+}
 
-  :root[data-design="v1"] .web-direct-messages-host.is-page .community-dm-panel-context {
-    color: var(--text-ink-secondary);
-    font-size: 13px;
-  }
+/* The mock's reply box: a 46px .ask, a quiet send that turns blue while
+   you type in it. */
+:root[data-design="v1"]:where(:not([data-layout="phone"])) .web-direct-messages-host.is-page .community-dm-panel-composer {
+  align-items: center;
+  min-height: 46px;
+  padding: 0 8px 0 12px;
+  border: 1px solid var(--field-edge);
+  border-radius: 14px;
+  background: var(--surface-field, rgba(10, 12, 16, 0.6));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
 
-  /* The mock's .bub: theirs on the left with a small corner, yours (the
-     mock's .mine) on the right, a shade brighter. */
-  :root[data-design="v1"] .web-direct-messages-host.is-page .community-dm-panel-message-bubble {
-    max-width: 300px;
-    padding: 9px 13px;
-    border: 0;
-    border-radius: 14px 14px 14px 4px;
-    background: var(--bubble-theirs);
-    color: var(--text-ink-primary);
-    font-size: 15px;
-    line-height: 1.45;
-  }
+:root[data-design="v1"]:where(:not([data-layout="phone"])) .web-direct-messages-host.is-page .community-dm-panel-composer:focus-within {
+  border-color: var(--accent-agent-edge);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 0 0 4px var(--accent-agent-halo);
+}
 
-  :root[data-design="v1"] .web-direct-messages-host.is-page .community-dm-panel-message.is-own .community-dm-panel-message-bubble {
-    border-radius: 14px 14px 4px 14px;
-    background: var(--bubble-mine);
-  }
+/* The send button's colours come through the conversation tokens (the
+   older rule sets them with !important), so the mock's are set there. */
+:root[data-design="v1"]:where(:not([data-layout="phone"])) .web-direct-messages-host.is-page .community-dm-panel-composer .community-dm-panel-send {
+  --conversation-primary-action-surface: rgba(255, 255, 255, 0.06);
+  --conversation-primary-action-hover-surface: rgba(255, 255, 255, 0.09);
+  --conversation-primary-action-foreground: rgba(238, 240, 244, 0.52);
+  flex-basis: 30px;
+  width: 30px;
+  height: 30px;
+  min-height: 30px;
+  border-radius: 10px;
+  box-shadow: none;
+  opacity: 1;
+}
 
-  :root[data-design="v1"][data-theme="light"] .web-direct-messages-host.is-page .community-dm-panel-message-bubble {
-    background: rgba(13, 17, 23, 0.06);
-  }
+:root[data-design="v1"]:where(:not([data-layout="phone"])) .web-direct-messages-host.is-page .community-dm-panel-composer:focus-within .community-dm-panel-send:not(:disabled) {
+  --conversation-primary-action-surface: linear-gradient(180deg, #1077d2, #0b69c4);
+  --conversation-primary-action-hover-surface: linear-gradient(180deg, #0e74ce, #0a66c2);
+  --conversation-primary-action-foreground: #fff;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.28);
+}
 
-  :root[data-design="v1"][data-theme="light"] .web-direct-messages-host.is-page .community-dm-panel-message.is-own .community-dm-panel-message-bubble {
-    background: #0d1117;
-    color: #f6f7f9;
-  }
+:root[data-design="v1"]:where(:not([data-layout="phone"]))[data-theme="light"] .web-direct-messages-host.is-page .community-dm-panel-composer {
+  border-color: rgba(13, 17, 23, 0.14);
+  background: #ffffff;
+}
 
-  :root[data-design="v1"] .web-direct-messages-host.is-page .community-dm-panel-message-time {
-    color: var(--text-faint);
-    font-size: 12px;
-  }
+/* No conversation yet: the column is there, with one line in it. */
+:root[data-design="v1"]:where(:not([data-layout="phone"])) .web-direct-messages-host.is-page .community-dm-empty-column {
+  align-items: center;
+  justify-content: center;
+  color: var(--text-faint);
+  font-size: 14px;
+  text-align: center;
+}
 
-  :root[data-design="v1"] .web-direct-messages-host.is-page .community-dm-composer-float {
-    right: 24px;
-    bottom: 24px;
-    left: 24px;
-  }
+:root[data-design="v1"]:where(:not([data-layout="phone"])) .web-direct-messages-host.is-page .community-dm-empty-column p {
+  max-width: 220px;
+  margin: 0;
+  line-height: 1.5;
+}
 
-  /* The mock's reply box: a 46px .ask, a quiet send that turns blue while
-     you type in it. */
-  :root[data-design="v1"] .web-direct-messages-host.is-page .community-dm-panel-composer {
-    align-items: center;
-    min-height: 46px;
-    padding: 0 8px 0 12px;
-    border: 1px solid var(--field-edge);
-    border-radius: 14px;
-    background: var(--surface-field, rgba(10, 12, 16, 0.6));
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
-  }
-
-  :root[data-design="v1"] .web-direct-messages-host.is-page .community-dm-panel-composer:focus-within {
-    border-color: var(--accent-agent-edge);
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 0 0 4px var(--accent-agent-halo);
-  }
-
-  /* The send button's colours come through the conversation tokens (the
-     older rule sets them with !important), so the mock's are set there. */
-  :root[data-design="v1"] .web-direct-messages-host.is-page .community-dm-panel-composer .community-dm-panel-send {
-    --conversation-primary-action-surface: rgba(255, 255, 255, 0.06);
-    --conversation-primary-action-hover-surface: rgba(255, 255, 255, 0.09);
-    --conversation-primary-action-foreground: rgba(238, 240, 244, 0.52);
-    flex-basis: 30px;
-    width: 30px;
-    height: 30px;
-    min-height: 30px;
-    border-radius: 10px;
-    box-shadow: none;
-    opacity: 1;
-  }
-
-  :root[data-design="v1"] .web-direct-messages-host.is-page .community-dm-panel-composer:focus-within .community-dm-panel-send:not(:disabled) {
-    --conversation-primary-action-surface: linear-gradient(180deg, #1077d2, #0b69c4);
-    --conversation-primary-action-hover-surface: linear-gradient(180deg, #0e74ce, #0a66c2);
-    --conversation-primary-action-foreground: #fff;
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.28);
-  }
-
-  :root[data-design="v1"][data-theme="light"] .web-direct-messages-host.is-page .community-dm-panel-composer {
-    border-color: rgba(13, 17, 23, 0.14);
-    background: #ffffff;
-  }
-
-  /* No conversation yet: the column is there, with one line in it. */
-  :root[data-design="v1"] .web-direct-messages-host.is-page .community-dm-empty-column {
-    align-items: center;
-    justify-content: center;
-    color: var(--text-faint);
-    font-size: 14px;
-    text-align: center;
-  }
-
-  :root[data-design="v1"] .web-direct-messages-host.is-page .community-dm-empty-column p {
-    max-width: 220px;
-    margin: 0;
-    line-height: 1.5;
-  }
-
-  /* While Inbox is the page, it is the one selected row in the left column. */
-  :root[data-design="v1"] .community-nav:has(.community-nav-inbox.active) .nav-item.active:not(.community-nav-inbox) {
-    background: transparent;
-    color: var(--text-ink-secondary);
-  }
+/* While Inbox is the page, it is the one selected row in the left column. */
+:root[data-design="v1"]:where(:not([data-layout="phone"])) .community-nav:has(.community-nav-inbox.active) .nav-item.active:not(.community-nav-inbox) {
+  background: transparent;
+  color: var(--text-ink-secondary);
 }
 
 /*
@@ -2059,30 +2053,29 @@
  * 14/600, time 12, body 15/1.55, the guide 17/1.45 serif; composer one 52px row
  * in a 56px-gutter dock.
  */
-@media (min-width: 721px) {
-  :root[data-design="v1"] .community-channel-header {
-    flex-basis: 52px;
-    height: 52px;
-    padding: 0 56px;
-  }
+/* desktop layout */
+:root[data-design="v1"]:where(:not([data-layout="phone"])) .community-channel-header {
+  flex-basis: 52px;
+  height: 52px;
+  padding: 0 56px;
+}
 
-  :root[data-design="v1"] .community-chat .community-interaction-feed-scroll {
-    /* The composer floats over the feed and is measured as it grows. */
-    /* A channel uses the whole width on fixed gutters, as in the mock; it is
-       not a centred column (Neil, 2026-11-10 and again 2026-11-11). Only
-       Home is centred. */
-    padding: 8px 44px calc(var(--mobile-community-composer-height, 86px) + 18px);
-  }
+:root[data-design="v1"]:where(:not([data-layout="phone"])) .community-chat .community-interaction-feed-scroll {
+  /* The composer floats over the feed and is measured as it grows. */
+  /* A channel uses the whole width on fixed gutters, as in the mock; it is
+     not a centred column (Neil, 2026-11-10 and again 2026-11-11). Only
+     Home is centred. */
+  padding: 8px 44px calc(var(--mobile-community-composer-height, 86px) + 18px);
+}
 
-  :root[data-design="v1"] .community-chat .community-interaction-main-composer {
-    padding: 0 56px 26px;
-  }
+:root[data-design="v1"]:where(:not([data-layout="phone"])) .community-chat .community-interaction-main-composer {
+  padding: 0 56px 26px;
+}
 
-  :root[data-design="v1"] .community-chat .community-interaction-main-composer > .chat-input-bar,
-  :root[data-design="v1"] .community-chat .community-interaction-thread-drawer:not(.community-interaction-thread-page) .community-interaction-drawer-composer .chat-input-bar {
-    width: 100%;
-    margin: 0;
-  }
+:root[data-design="v1"]:where(:not([data-layout="phone"])) .community-chat .community-interaction-main-composer > .chat-input-bar,
+:root[data-design="v1"]:where(:not([data-layout="phone"])) .community-chat .community-interaction-thread-drawer:not(.community-interaction-thread-page) .community-interaction-drawer-composer .chat-input-bar {
+  width: 100%;
+  margin: 0;
 }
 
 :root[data-design="v1"] .community-channel-header h1 {
@@ -2164,62 +2157,61 @@
 }
 
 /* The composer: one 52px row. Tools at the left, the text, then mic and send. */
-@media (min-width: 721px) {
-  /* The mock's .ask: its edge, field and inner light; blue when you type. */
-  :root[data-design="v1"] .community-chat .community-interaction-main-composer > .chat-input-bar,
-  :root[data-design="v1"] .community-chat .community-interaction-thread-drawer:not(.community-interaction-thread-page) .community-interaction-drawer-composer .chat-input-bar {
-    min-height: 52px;
-    padding: 0 8px 0 8px;
-    border-radius: 14px;
-    border: 1px solid var(--field-edge);
-    background: var(--surface-field);
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
-    -webkit-backdrop-filter: blur(18px);
-    backdrop-filter: blur(18px);
-    align-items: center;
-    transition: border-color 0.2s ease, box-shadow 0.2s ease;
-  }
+/* desktop layout */
+/* The mock's .ask: its edge, field and inner light; blue when you type. */
+:root[data-design="v1"]:where(:not([data-layout="phone"])) .community-chat .community-interaction-main-composer > .chat-input-bar,
+:root[data-design="v1"]:where(:not([data-layout="phone"])) .community-chat .community-interaction-thread-drawer:not(.community-interaction-thread-page) .community-interaction-drawer-composer .chat-input-bar {
+  min-height: 52px;
+  padding: 0 8px 0 8px;
+  border-radius: 14px;
+  border: 1px solid var(--field-edge);
+  background: var(--surface-field);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  -webkit-backdrop-filter: blur(18px);
+  backdrop-filter: blur(18px);
+  align-items: center;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
 
-  :root[data-design="v1"] .community-chat .community-interaction-main-composer > .chat-input-bar:focus-within,
-  :root[data-design="v1"] .community-chat .community-interaction-thread-drawer:not(.community-interaction-thread-page) .community-interaction-drawer-composer .chat-input-bar:focus-within {
-    border-color: var(--accent-act-edge);
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 0 0 4px var(--accent-act-halo);
-  }
+:root[data-design="v1"]:where(:not([data-layout="phone"])) .community-chat .community-interaction-main-composer > .chat-input-bar:focus-within,
+:root[data-design="v1"]:where(:not([data-layout="phone"])) .community-chat .community-interaction-thread-drawer:not(.community-interaction-thread-page) .community-interaction-drawer-composer .chat-input-bar:focus-within {
+  border-color: var(--accent-act-edge);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 0 0 4px var(--accent-act-halo);
+}
 
-  :root[data-design="v1"] .community-chat .community-interaction-main-composer .community-composer-authoring-row,
-  :root[data-design="v1"] .community-chat .community-interaction-thread-drawer:not(.community-interaction-thread-page) .community-interaction-drawer-composer .community-composer-authoring-row {
-    grid-template-columns: auto minmax(0, 1fr) auto;
-    grid-template-rows: auto;
-    align-items: center;
-    column-gap: 6px;
-  }
+:root[data-design="v1"]:where(:not([data-layout="phone"])) .community-chat .community-interaction-main-composer .community-composer-authoring-row,
+:root[data-design="v1"]:where(:not([data-layout="phone"])) .community-chat .community-interaction-thread-drawer:not(.community-interaction-thread-page) .community-interaction-drawer-composer .community-composer-authoring-row {
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-rows: auto;
+  align-items: center;
+  column-gap: 6px;
+}
 
-  :root[data-design="v1"] .community-chat .community-interaction-main-composer .community-composer-toolbar,
-  :root[data-design="v1"] .community-chat .community-interaction-thread-drawer:not(.community-interaction-thread-page) .community-interaction-drawer-composer .community-composer-toolbar {
-    display: contents;
-  }
+:root[data-design="v1"]:where(:not([data-layout="phone"])) .community-chat .community-interaction-main-composer .community-composer-toolbar,
+:root[data-design="v1"]:where(:not([data-layout="phone"])) .community-chat .community-interaction-thread-drawer:not(.community-interaction-thread-page) .community-interaction-drawer-composer .community-composer-toolbar {
+  display: contents;
+}
 
-  :root[data-design="v1"] .community-chat .community-interaction-main-composer .community-composer-tools,
-  :root[data-design="v1"] .community-chat .community-interaction-thread-drawer:not(.community-interaction-thread-page) .community-interaction-drawer-composer .community-composer-tools {
-    order: 1;
-  }
+:root[data-design="v1"]:where(:not([data-layout="phone"])) .community-chat .community-interaction-main-composer .community-composer-tools,
+:root[data-design="v1"]:where(:not([data-layout="phone"])) .community-chat .community-interaction-thread-drawer:not(.community-interaction-thread-page) .community-interaction-drawer-composer .community-composer-tools {
+  order: 1;
+}
 
-  :root[data-design="v1"] .community-chat .community-interaction-main-composer .community-composer-editor-row,
-  :root[data-design="v1"] .community-chat .community-interaction-thread-drawer:not(.community-interaction-thread-page) .community-interaction-drawer-composer .community-composer-editor-row {
-    order: 2;
-    padding: 6px 4px;
-  }
+:root[data-design="v1"]:where(:not([data-layout="phone"])) .community-chat .community-interaction-main-composer .community-composer-editor-row,
+:root[data-design="v1"]:where(:not([data-layout="phone"])) .community-chat .community-interaction-thread-drawer:not(.community-interaction-thread-page) .community-interaction-drawer-composer .community-composer-editor-row {
+  order: 2;
+  padding: 6px 4px;
+}
 
-  :root[data-design="v1"] .community-chat .community-interaction-main-composer .community-composer-submit-tools,
-  :root[data-design="v1"] .community-chat .community-interaction-thread-drawer:not(.community-interaction-thread-page) .community-interaction-drawer-composer .community-composer-submit-tools {
-    order: 3;
-  }
+:root[data-design="v1"]:where(:not([data-layout="phone"])) .community-chat .community-interaction-main-composer .community-composer-submit-tools,
+:root[data-design="v1"]:where(:not([data-layout="phone"])) .community-chat .community-interaction-thread-drawer:not(.community-interaction-thread-page) .community-interaction-drawer-composer .community-composer-submit-tools {
+  order: 3;
+}
 
-  :root[data-design="v1"] .community-chat .community-interaction-main-composer .mention-composer-field,
-  :root[data-design="v1"] .community-chat .community-interaction-thread-drawer:not(.community-interaction-thread-page) .community-interaction-drawer-composer .mention-composer-field {
-    min-height: 38px;
-    font-size: 15px;
-  }
+:root[data-design="v1"]:where(:not([data-layout="phone"])) .community-chat .community-interaction-main-composer .mention-composer-field,
+:root[data-design="v1"]:where(:not([data-layout="phone"])) .community-chat .community-interaction-thread-drawer:not(.community-interaction-thread-page) .community-interaction-drawer-composer .mention-composer-field {
+  min-height: 38px;
+  font-size: 15px;
 }
 
 /* Tags by a name: "guide" in the guide's colour, "host" in plain ink. */
@@ -2347,65 +2339,64 @@
   gap: 2px;
 }
 
-@media (min-width: 721px) {
-  /* Home: left-aligned on a 56px gutter, like every other page. */
-  :root[data-design="v1"] .community-agent-page .community-agent-dock-panel.has-home-rail .community-agent-dock-transcript {
-    padding: 0 var(--main-gutter) 24px;
-  }
+/* desktop layout */
+/* Home: left-aligned on a 56px gutter, like every other page. */
+:root[data-design="v1"]:where(:not([data-layout="phone"])) .community-agent-page .community-agent-dock-panel.has-home-rail .community-agent-dock-transcript {
+  padding: 0 var(--main-gutter) 24px;
+}
 
-  /* The mock's eyebrow sits 40px under a 52px header line. Home has no line,
-     so the same 92px keeps the greeting where the mock has it and leaves the
-     new-conversation button its own row, on the gutter. */
-  :root[data-design="v1"] .community-agent-page .community-home {
-    max-width: 760px;
-    margin: 0 0 32px;
-    padding-top: 92px;
-  }
+/* The mock's eyebrow sits 40px under a 52px header line. Home has no line,
+   so the same 92px keeps the greeting where the mock has it and leaves the
+   new-conversation button its own row, on the gutter. */
+:root[data-design="v1"]:where(:not([data-layout="phone"])) .community-agent-page .community-home {
+  max-width: 760px;
+  margin: 0 0 32px;
+  padding-top: 92px;
+}
 
-  :root[data-design="v1"] .community-agent-page .community-agent-page-header {
-    top: 10px;
-    left: 48px;
-  }
+:root[data-design="v1"]:where(:not([data-layout="phone"])) .community-agent-page .community-agent-page-header {
+  top: 10px;
+  left: 48px;
+}
 
-  :root[data-design="v1"] .community-agent-page .community-agent-dock-panel.has-home-rail .community-agent-dock-composer-shell {
-    width: auto;
-    margin: 0;
-    padding: 0 var(--main-gutter) 26px;
-  }
+:root[data-design="v1"]:where(:not([data-layout="phone"])) .community-agent-page .community-agent-dock-panel.has-home-rail .community-agent-dock-composer-shell {
+  width: auto;
+  margin: 0;
+  padding: 0 var(--main-gutter) 26px;
+}
 
-  /* One 52px row: attach, the text, then mic and send. */
-  :root[data-design="v1"] .community-agent-page .community-agent-dock-composer {
-    grid-template-columns: auto minmax(0, 1fr) auto;
-    grid-template-rows: auto;
-    align-items: center;
-    column-gap: 6px;
-    min-height: 52px;
-    padding: 0 8px 0 10px;
-    border: 1px solid var(--border-strong);
-    border-radius: 14px;
-  }
+/* One 52px row: attach, the text, then mic and send. */
+:root[data-design="v1"]:where(:not([data-layout="phone"])) .community-agent-page .community-agent-dock-composer {
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-rows: auto;
+  align-items: center;
+  column-gap: 6px;
+  min-height: 52px;
+  padding: 0 8px 0 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: 14px;
+}
 
-  :root[data-design="v1"] .community-agent-page .community-agent-dock-composer .community-composer-toolbar {
-    display: contents;
-  }
+:root[data-design="v1"]:where(:not([data-layout="phone"])) .community-agent-page .community-agent-dock-composer .community-composer-toolbar {
+  display: contents;
+}
 
-  :root[data-design="v1"] .community-agent-page .community-agent-dock-composer .community-composer-tools {
-    order: 1;
-  }
+:root[data-design="v1"]:where(:not([data-layout="phone"])) .community-agent-page .community-agent-dock-composer .community-composer-tools {
+  order: 1;
+}
 
-  :root[data-design="v1"] .community-agent-page .community-agent-dock-composer .community-composer-editor-row {
-    order: 2;
-    padding: 6px 4px;
-  }
+:root[data-design="v1"]:where(:not([data-layout="phone"])) .community-agent-page .community-agent-dock-composer .community-composer-editor-row {
+  order: 2;
+  padding: 6px 4px;
+}
 
-  :root[data-design="v1"] .community-agent-page .community-agent-dock-composer .community-composer-submit-tools {
-    order: 3;
-  }
+:root[data-design="v1"]:where(:not([data-layout="phone"])) .community-agent-page .community-agent-dock-composer .community-composer-submit-tools {
+  order: 3;
+}
 
-  :root[data-design="v1"] .community-agent-page .community-agent-dock-composer .mention-composer-field {
-    min-height: 38px;
-    font-size: 15px;
-  }
+:root[data-design="v1"]:where(:not([data-layout="phone"])) .community-agent-page .community-agent-dock-composer .mention-composer-field {
+  min-height: 38px;
+  font-size: 15px;
 }
 
 :root[data-design="v1"] .community-home-hello {
@@ -2453,63 +2444,62 @@
  * 12/500 label; a row is a 52px date block, a 16px gap and 13px 12px padding,
  * title 15/500, details 13; the right column is 328px padded 20px 24px 24px.
  */
-@media (min-width: 721px) {
-  :root[data-design="v1"] .community-page-body {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr);
-    min-height: 0;
-    flex: 1 1 auto;
-  }
+/* desktop layout */
+:root[data-design="v1"]:where(:not([data-layout="phone"])) .community-page-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  min-height: 0;
+  flex: 1 1 auto;
+}
 
-  :root[data-design="v1"] .community-page-body {
-    grid-template-rows: 52px minmax(0, 1fr);
-  }
+:root[data-design="v1"]:where(:not([data-layout="phone"])) .community-page-body {
+  grid-template-rows: 52px minmax(0, 1fr);
+}
 
-  :root[data-design="v1"] .community-page-body > .community-page-header {
-    grid-column: 1;
-    grid-row: 1;
-    /* The title sits in one spot on every page, with or without a right column. */
-    padding: 0 56px;
-  }
+:root[data-design="v1"]:where(:not([data-layout="phone"])) .community-page-body > .community-page-header {
+  grid-column: 1;
+  grid-row: 1;
+  /* The title sits in one spot on every page, with or without a right column. */
+  padding: 0 56px;
+}
 
-  :root[data-design="v1"] .community-page-body > .community-tab-scroll {
-    grid-column: 1;
-    grid-row: 2;
-  }
+:root[data-design="v1"]:where(:not([data-layout="phone"])) .community-page-body > .community-tab-scroll {
+  grid-column: 1;
+  grid-row: 2;
+}
 
-  :root[data-design="v1"] .community-page-body > .community-page-rail {
-    grid-column: 2;
-    grid-row: 1 / span 2;
-  }
+:root[data-design="v1"]:where(:not([data-layout="phone"])) .community-page-body > .community-page-rail {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+}
 
-  :root[data-design="v1"] .community-page-body:has(.community-page-rail-content) {
-    grid-template-columns: minmax(0, 1fr) var(--right-column-width);
-  }
+:root[data-design="v1"]:where(:not([data-layout="phone"])) .community-page-body:has(.community-page-rail-content) {
+  grid-template-columns: minmax(0, 1fr) var(--right-column-width);
+}
 
-  :root[data-design="v1"] .community-page-body > .community-tab-scroll {
-    min-height: 0;
-  }
+:root[data-design="v1"]:where(:not([data-layout="phone"])) .community-page-body > .community-tab-scroll {
+  min-height: 0;
+}
 
-  :root[data-design="v1"] .community-page-rail:empty {
-    display: none;
-  }
+:root[data-design="v1"]:where(:not([data-layout="phone"])) .community-page-rail:empty {
+  display: none;
+}
 
-  :root[data-design="v1"] .community-page-rail {
-    min-height: 0;
-    overflow-y: auto;
-    padding: 20px 24px 24px;
-    border-left: 1px solid var(--surface-raised-edge);
-  }
+:root[data-design="v1"]:where(:not([data-layout="phone"])) .community-page-rail {
+  min-height: 0;
+  overflow-y: auto;
+  padding: 20px 24px 24px;
+  border-left: 1px solid var(--surface-raised-edge);
+}
 
-  /* Every page sits on the 56px gutter, like a channel, whether or not it
-     has a right column: picking something (which opens the column) must not
-     move the page. Without a column the page stops at its reading width. */
-  :root[data-design="v1"] .community-page-body > .community-tab-scroll > .web-community-centered-pane {
-    width: 100%;
-    max-width: calc(var(--content-wide) + 112px);
-    margin: 0;
-    padding: 28px 56px 56px;
-  }
+/* Every page sits on the 56px gutter, like a channel, whether or not it
+   has a right column: picking something (which opens the column) must not
+   move the page. Without a column the page stops at its reading width. */
+:root[data-design="v1"]:where(:not([data-layout="phone"])) .community-page-body > .community-tab-scroll > .web-community-centered-pane {
+  width: 100%;
+  max-width: calc(var(--content-wide) + 112px);
+  margin: 0;
+  padding: 28px 56px 56px;
 }
 
 /*
@@ -2517,57 +2507,55 @@
  * kit (apps/web/src/v1/KitMembersPage.tsx, KitMembersDirectory.tsx); these
  * rules only place it in the app's grid, with the record as the right column.
  */
-@media (min-width: 721px) {
-  :root[data-design="v1"] .community-interaction-projection:has(> .members-page) > .community-interaction-main {
-    display: none;
-  }
+/* desktop layout */
+:root[data-design="v1"]:where(:not([data-layout="phone"])) .community-interaction-projection:has(> .members-page) > .community-interaction-main {
+  display: none;
+}
 
-  :root[data-design="v1"] .community-interaction-projection:has(> .members-page) {
-    grid-template-columns: minmax(0, 1fr) var(--right-column-width);
-  }
+:root[data-design="v1"]:where(:not([data-layout="phone"])) .community-interaction-projection:has(> .members-page) {
+  grid-template-columns: minmax(0, 1fr) var(--right-column-width);
+}
 
-  :root[data-design="v1"] .members-page {
-    grid-column: 1;
-    grid-row: 1;
-    display: flex;
-    flex-direction: column;
-    min-width: 0;
-    min-height: 0;
-    overflow: hidden;
-  }
+:root[data-design="v1"]:where(:not([data-layout="phone"])) .members-page {
+  grid-column: 1;
+  grid-row: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
 
-  :root[data-design="v1"] .community-interaction-projection:has(> .members-page) > .community-interaction-drawer {
-    grid-column: 2;
-    grid-row: 1;
-  }
+:root[data-design="v1"]:where(:not([data-layout="phone"])) .community-interaction-projection:has(> .members-page) > .community-interaction-drawer {
+  grid-column: 2;
+  grid-row: 1;
+}
 
-  /* The short channel panel steps aside while Members is the page. */
-  :root[data-design="v1"] .community-interaction-projection:has(> .members-page) > .channel-roster-panel {
-    display: none;
-  }
+/* The short channel panel steps aside while Members is the page. */
+:root[data-design="v1"]:where(:not([data-layout="phone"])) .community-interaction-projection:has(> .members-page) > .channel-roster-panel {
+  display: none;
 }
 
 /* Members for the people who run it: the kit page, and the member's record
    as a wider right column (a record has more to say than a profile). */
-@media (min-width: 721px) {
-  :root[data-design="v1"] .community-interaction-projection:has(> .members-page-record) {
-    grid-template-columns: minmax(0, 1fr) var(--record-column-width);
-  }
+/* desktop layout */
+:root[data-design="v1"]:where(:not([data-layout="phone"])) .community-interaction-projection:has(> .members-page-record) {
+  grid-template-columns: minmax(0, 1fr) var(--record-column-width);
+}
 
-  :root[data-design="v1"] .members-page.is-kit {
-    background: var(--surface-raised);
-  }
+:root[data-design="v1"]:where(:not([data-layout="phone"])) .members-page.is-kit {
+  background: var(--surface-raised);
+}
 
-  :root[data-design="v1"] .members-page-record {
-    grid-column: 2;
-    grid-row: 1;
-    display: flex;
-    min-height: 0;
-    padding: 0;
-    overflow: hidden;
-    border-left: 1px solid var(--surface-raised-edge);
-    background: var(--surface-raised);
-  }
+:root[data-design="v1"]:where(:not([data-layout="phone"])) .members-page-record {
+  grid-column: 2;
+  grid-row: 1;
+  display: flex;
+  min-height: 0;
+  padding: 0;
+  overflow: hidden;
+  border-left: 1px solid var(--surface-raised-edge);
+  background: var(--surface-raised);
 }
 
 /* Members is the one selected row in the left column while it is the page. */
@@ -2625,101 +2613,99 @@
 
 /* A channel's composer: the plus at the left; mentions, emoji, voice and send
    at the right, as in the mock. */
-@media (min-width: 721px) {
-  :root[data-design="v1"] .community-chat .community-interaction-main-composer .community-composer-authoring-row,
-  :root[data-design="v1"] .community-chat .community-interaction-thread-drawer:not(.community-interaction-thread-page) .community-interaction-drawer-composer .community-composer-authoring-row {
-    display: flex;
-    align-items: center;
-    gap: 4px;
-  }
+/* desktop layout */
+:root[data-design="v1"]:where(:not([data-layout="phone"])) .community-chat .community-interaction-main-composer .community-composer-authoring-row,
+:root[data-design="v1"]:where(:not([data-layout="phone"])) .community-chat .community-interaction-thread-drawer:not(.community-interaction-thread-page) .community-interaction-drawer-composer .community-composer-authoring-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
 
-  :root[data-design="v1"] .community-chat .community-interaction-main-composer .community-composer-tools,
-  :root[data-design="v1"] .community-chat .community-interaction-thread-drawer:not(.community-interaction-thread-page) .community-interaction-drawer-composer .community-composer-tools {
-    display: contents;
-  }
+:root[data-design="v1"]:where(:not([data-layout="phone"])) .community-chat .community-interaction-main-composer .community-composer-tools,
+:root[data-design="v1"]:where(:not([data-layout="phone"])) .community-chat .community-interaction-thread-drawer:not(.community-interaction-thread-page) .community-interaction-drawer-composer .community-composer-tools {
+  display: contents;
+}
 
-  :root[data-design="v1"] .community-chat .community-interaction-main-composer .community-composer-add,
-  :root[data-design="v1"] .community-chat .community-interaction-thread-drawer:not(.community-interaction-thread-page) .community-interaction-drawer-composer .community-composer-add {
-    order: 1;
-  }
+:root[data-design="v1"]:where(:not([data-layout="phone"])) .community-chat .community-interaction-main-composer .community-composer-add,
+:root[data-design="v1"]:where(:not([data-layout="phone"])) .community-chat .community-interaction-thread-drawer:not(.community-interaction-thread-page) .community-interaction-drawer-composer .community-composer-add {
+  order: 1;
+}
 
-  :root[data-design="v1"] .community-chat .community-interaction-main-composer .community-composer-editor-row,
-  :root[data-design="v1"] .community-chat .community-interaction-thread-drawer:not(.community-interaction-thread-page) .community-interaction-drawer-composer .community-composer-editor-row {
-    order: 2;
-    flex: 1 1 auto;
-    min-width: 0;
-    padding: 0 6px;
-  }
+:root[data-design="v1"]:where(:not([data-layout="phone"])) .community-chat .community-interaction-main-composer .community-composer-editor-row,
+:root[data-design="v1"]:where(:not([data-layout="phone"])) .community-chat .community-interaction-thread-drawer:not(.community-interaction-thread-page) .community-interaction-drawer-composer .community-composer-editor-row {
+  order: 2;
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 0 6px;
+}
 
-  :root[data-design="v1"] .community-chat .community-interaction-main-composer .community-composer-tools > :not(.community-composer-add),
-  :root[data-design="v1"] .community-chat .community-interaction-thread-drawer:not(.community-interaction-thread-page) .community-interaction-drawer-composer .community-composer-tools > :not(.community-composer-add) {
-    order: 3;
-  }
+:root[data-design="v1"]:where(:not([data-layout="phone"])) .community-chat .community-interaction-main-composer .community-composer-tools > :not(.community-composer-add),
+:root[data-design="v1"]:where(:not([data-layout="phone"])) .community-chat .community-interaction-thread-drawer:not(.community-interaction-thread-page) .community-interaction-drawer-composer .community-composer-tools > :not(.community-composer-add) {
+  order: 3;
+}
 
-  :root[data-design="v1"] .community-chat .community-interaction-main-composer .community-composer-submit-tools,
-  :root[data-design="v1"] .community-chat .community-interaction-thread-drawer:not(.community-interaction-thread-page) .community-interaction-drawer-composer .community-composer-submit-tools {
-    order: 4;
-  }
+:root[data-design="v1"]:where(:not([data-layout="phone"])) .community-chat .community-interaction-main-composer .community-composer-submit-tools,
+:root[data-design="v1"]:where(:not([data-layout="phone"])) .community-chat .community-interaction-thread-drawer:not(.community-interaction-thread-page) .community-interaction-drawer-composer .community-composer-submit-tools {
+  order: 4;
+}
 
-  /* The mock has no @ button: typing @ opens the same list. */
-  :root[data-design="v1"] .community-chat .community-interaction-main-composer .ask-mention,
-  :root[data-design="v1"] .community-chat .community-interaction-thread-drawer:not(.community-interaction-thread-page) .community-interaction-drawer-composer .ask-mention {
-    display: none;
-  }
+/* The mock has no @ button: typing @ opens the same list. */
+:root[data-design="v1"]:where(:not([data-layout="phone"])) .community-chat .community-interaction-main-composer .ask-mention,
+:root[data-design="v1"]:where(:not([data-layout="phone"])) .community-chat .community-interaction-thread-drawer:not(.community-interaction-thread-page) .community-interaction-drawer-composer .ask-mention {
+  display: none;
+}
 
-  /* The mock's icon buttons (.ib): 32px, rounded squares, quiet until hovered. */
-  :root[data-design="v1"] .community-chat .community-interaction-main-composer .ask-icon-btn,
-  :root[data-design="v1"] .community-chat .community-interaction-thread-drawer:not(.community-interaction-thread-page) .community-interaction-drawer-composer .ask-icon-btn {
-    width: 32px;
-    height: 32px;
-    min-height: 32px;
-    flex: 0 0 32px;
-    border-radius: 8px;
-    color: var(--text-faint);
-  }
+/* The mock's icon buttons (.ib): 32px, rounded squares, quiet until hovered. */
+:root[data-design="v1"]:where(:not([data-layout="phone"])) .community-chat .community-interaction-main-composer .ask-icon-btn,
+:root[data-design="v1"]:where(:not([data-layout="phone"])) .community-chat .community-interaction-thread-drawer:not(.community-interaction-thread-page) .community-interaction-drawer-composer .ask-icon-btn {
+  width: 32px;
+  height: 32px;
+  min-height: 32px;
+  flex: 0 0 32px;
+  border-radius: 8px;
+  color: var(--text-faint);
+}
 
-  :root[data-design="v1"] .community-chat .community-interaction-main-composer .ask-icon-btn:hover:not(:disabled),
-  :root[data-design="v1"] .community-chat .community-interaction-thread-drawer:not(.community-interaction-thread-page) .community-interaction-drawer-composer .ask-icon-btn:hover:not(:disabled) {
-    background: var(--hover-overlay);
-    color: var(--text-ink-primary);
-  }
+:root[data-design="v1"]:where(:not([data-layout="phone"])) .community-chat .community-interaction-main-composer .ask-icon-btn:hover:not(:disabled),
+:root[data-design="v1"]:where(:not([data-layout="phone"])) .community-chat .community-interaction-thread-drawer:not(.community-interaction-thread-page) .community-interaction-drawer-composer .ask-icon-btn:hover:not(:disabled) {
+  background: var(--hover-overlay);
+  color: var(--text-ink-primary);
+}
 
-  /* The mock's send: quiet, blue while you type. Its colours come through
-     the conversation tokens, which the older rule sets with !important. */
-  :root[data-design="v1"] .community-chat .community-interaction-main-composer .chat-send.ask-send-btn,
-  :root[data-design="v1"] .community-chat .community-interaction-thread-drawer:not(.community-interaction-thread-page) .community-interaction-drawer-composer .chat-send.ask-send-btn {
-    --conversation-primary-action-surface: var(--hover-overlay);
-    --conversation-primary-action-hover-surface: var(--hover-overlay);
-    --conversation-primary-action-foreground: var(--text-faint);
-    width: 34px;
-    height: 34px;
-    min-height: 34px;
-    flex: 0 0 34px;
-    border-radius: 10px;
-    opacity: 1;
-    box-shadow: none;
-  }
+/* The mock's send: quiet, blue while you type. Its colours come through
+   the conversation tokens, which the older rule sets with !important. */
+:root[data-design="v1"]:where(:not([data-layout="phone"])) .community-chat .community-interaction-main-composer .chat-send.ask-send-btn,
+:root[data-design="v1"]:where(:not([data-layout="phone"])) .community-chat .community-interaction-thread-drawer:not(.community-interaction-thread-page) .community-interaction-drawer-composer .chat-send.ask-send-btn {
+  --conversation-primary-action-surface: var(--hover-overlay);
+  --conversation-primary-action-hover-surface: var(--hover-overlay);
+  --conversation-primary-action-foreground: var(--text-faint);
+  width: 34px;
+  height: 34px;
+  min-height: 34px;
+  flex: 0 0 34px;
+  border-radius: 10px;
+  opacity: 1;
+  box-shadow: none;
+}
 
-  :root[data-design="v1"] .community-chat .community-interaction-main-composer > .chat-input-bar:focus-within .chat-send.ask-send-btn:not(:disabled),
-  :root[data-design="v1"] .community-chat .community-interaction-thread-drawer:not(.community-interaction-thread-page) .community-interaction-drawer-composer .chat-input-bar:focus-within .chat-send.ask-send-btn:not(:disabled) {
-    --conversation-primary-action-surface: linear-gradient(180deg, #1077d2, #0b69c4);
-    --conversation-primary-action-hover-surface: linear-gradient(180deg, #0e74ce, #0a66c2);
-    --conversation-primary-action-foreground: #ffffff;
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.28);
-  }
+:root[data-design="v1"]:where(:not([data-layout="phone"])) .community-chat .community-interaction-main-composer > .chat-input-bar:focus-within .chat-send.ask-send-btn:not(:disabled),
+:root[data-design="v1"]:where(:not([data-layout="phone"])) .community-chat .community-interaction-thread-drawer:not(.community-interaction-thread-page) .community-interaction-drawer-composer .chat-input-bar:focus-within .chat-send.ask-send-btn:not(:disabled) {
+  --conversation-primary-action-surface: linear-gradient(180deg, #1077d2, #0b69c4);
+  --conversation-primary-action-hover-surface: linear-gradient(180deg, #0e74ce, #0a66c2);
+  --conversation-primary-action-foreground: #ffffff;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.28);
 }
 
 /* The Inbox page on the kit (WebDirectMessageInboxPanel's KitInboxPage): the
    kit draws the page; the panel only places it between the left column and
    the conversation column. */
-@media (min-width: 721px) {
-  :root[data-design="v1"] .web-direct-messages-host.is-page .community-dm-inbox-panel.is-kit {
-    display: block;
-    /* Exactly the conversation column: the list then sits in the middle
-       with the page's own gutter on both sides. */
-    padding: 0 var(--inbox-thread-width) 0 0;
-    overflow: hidden;
-  }
+/* desktop layout */
+:root[data-design="v1"]:where(:not([data-layout="phone"])) .web-direct-messages-host.is-page .community-dm-inbox-panel.is-kit {
+  display: block;
+  /* Exactly the conversation column: the list then sits in the middle
+     with the page's own gutter on both sides. */
+  padding: 0 var(--inbox-thread-width) 0 0;
+  overflow: hidden;
 }
 
 :root[data-design="v1"] .community-dm-kit-avatar {
@@ -2742,16 +2728,15 @@
 
 /* The Inbox conversation column on the kit (WebDirectMessagePanel, beside
    the Inbox): the kit draws it, the panel only holds its place. */
-@media (min-width: 721px) {
-  :root[data-design="v1"] .web-direct-messages-host.is-page .community-dm-panel.is-kit:not(.community-dm-inbox-panel) {
-    padding: 0;
-    gap: 0;
-  }
+/* desktop layout */
+:root[data-design="v1"]:where(:not([data-layout="phone"])) .web-direct-messages-host.is-page .community-dm-panel.is-kit:not(.community-dm-inbox-panel) {
+  padding: 0;
+  gap: 0;
+}
 
-  :root[data-design="v1"] .web-direct-messages-host.is-page .community-dm-panel.is-kit:not(.community-dm-inbox-panel) > :not(.community-dm-drop-overlay) {
-    height: 100%;
-    min-height: 0;
-  }
+:root[data-design="v1"]:where(:not([data-layout="phone"])) .web-direct-messages-host.is-page .community-dm-panel.is-kit:not(.community-dm-inbox-panel) > :not(.community-dm-drop-overlay) {
+  height: 100%;
+  min-height: 0;
 }
 
 :root[data-design="v1"] .community-dm-kit-thread {
@@ -2904,30 +2889,28 @@
   margin-left: 12px;
 }
 
-@media (max-width: 720px) {
-  :root[data-design="v1"] .community-search-ask {
-    display: none;
-  }
+/* phone layout */
+:root[data-design="v1"]:where([data-layout="phone"]) .community-search-ask {
+  display: none;
 }
 
 /* The mock's top bar: the channel's name opens its menu (no menu button),
    and a faint glowing line runs under the bar (.hline). */
-@media (min-width: 721px) {
-  :root[data-design="v1"] .community-channel-header {
-    position: relative;
-  }
+/* desktop layout */
+:root[data-design="v1"]:where(:not([data-layout="phone"])) .community-channel-header {
+  position: relative;
+}
 
-  :root[data-design="v1"] .community-chat .community-channel-header::after,
-  :root[data-design="v1"] .community-page-header::after {
-    content: "";
-    position: absolute;
-    right: 0;
-    bottom: 0;
-    left: 0;
-    height: 1px;
-    pointer-events: none;
-    background: linear-gradient(90deg, transparent, transparent 8%, var(--header-line-glow) 50%, transparent 92%, transparent);
-  }
+:root[data-design="v1"]:where(:not([data-layout="phone"])) .community-chat .community-channel-header::after,
+:root[data-design="v1"]:where(:not([data-layout="phone"])) .community-page-header::after {
+  content: "";
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: 1px;
+  pointer-events: none;
+  background: linear-gradient(90deg, transparent, transparent 8%, var(--header-line-glow) 50%, transparent 92%, transparent);
 }
 
 :root[data-design="v1"] .community-channel-header-actions.is-title {
@@ -3086,31 +3069,29 @@
   --accent-act-halo: transparent;
 }
 
-@media (min-width: 721px) {
-  :root[data-design="v1"] .community-chat .community-interaction-main-composer > .chat-input-bar:focus-within .chat-send.ask-send-btn:not(:disabled),
-  :root[data-design="v1"] .community-chat .community-interaction-thread-drawer:not(.community-interaction-thread-page) .community-interaction-drawer-composer .chat-input-bar:focus-within .chat-send.ask-send-btn:not(:disabled) {
-    --conversation-primary-action-surface: var(--bg-button);
-    --conversation-primary-action-hover-surface: var(--bg-button-hover);
-    box-shadow: none;
-  }
+/* desktop layout */
+:root[data-design="v1"]:where(:not([data-layout="phone"])) .community-chat .community-interaction-main-composer > .chat-input-bar:focus-within .chat-send.ask-send-btn:not(:disabled),
+:root[data-design="v1"]:where(:not([data-layout="phone"])) .community-chat .community-interaction-thread-drawer:not(.community-interaction-thread-page) .community-interaction-drawer-composer .chat-input-bar:focus-within .chat-send.ask-send-btn:not(:disabled) {
+  --conversation-primary-action-surface: var(--bg-button);
+  --conversation-primary-action-hover-surface: var(--bg-button-hover);
+  box-shadow: none;
 }
 
-@media (min-width: 721px) {
-  :root[data-design="v1"] .app-shell .product-shell-surface--community {
-    background: var(--linear-window);
-  }
+/* desktop layout */
+:root[data-design="v1"]:where(:not([data-layout="phone"])) .app-shell .product-shell-surface--community {
+  background: var(--linear-window);
+}
 
-  :root[data-design="v1"] .product-shell-surface--community > .community-nav {
-    border-right: 0;
-    background: var(--linear-window);
-  }
+:root[data-design="v1"]:where(:not([data-layout="phone"])) .product-shell-surface--community > .community-nav {
+  border-right: 0;
+  background: var(--linear-window);
+}
 
-  :root[data-design="v1"] .product-shell-surface--community > main,
-  :root[data-design="v1"] .product-shell-surface--community > .web-main-surface-slot > * {
-    margin: 8px 8px 8px 0;
-    border: 1px solid var(--surface-raised-edge);
-    border-radius: 10px;
-  }
+:root[data-design="v1"]:where(:not([data-layout="phone"])) .product-shell-surface--community > main,
+:root[data-design="v1"]:where(:not([data-layout="phone"])) .product-shell-surface--community > .web-main-surface-slot > * {
+  margin: 8px 8px 8px 0;
+  border: 1px solid var(--surface-raised-edge);
+  border-radius: 10px;
 }
 
 /* The left column, tighter: 28px rows, 13px type. */
@@ -3151,22 +3132,21 @@
 
 /* The Inbox draws over the page (fixed), so it takes the frame itself: the
    same inset, edge and corners, with its conversation column inside. */
-@media (min-width: 721px) {
-  :root[data-design="v1"] .web-direct-messages-host.is-page .community-dm-inbox-panel.is-kit {
-    top: 8px;
-    right: 8px;
-    bottom: 8px;
-    border: 1px solid var(--surface-raised-edge);
-    border-radius: 10px;
-    background: var(--surface-raised);
-  }
+/* desktop layout */
+:root[data-design="v1"]:where(:not([data-layout="phone"])) .web-direct-messages-host.is-page .community-dm-inbox-panel.is-kit {
+  top: 8px;
+  right: 8px;
+  bottom: 8px;
+  border: 1px solid var(--surface-raised-edge);
+  border-radius: 10px;
+  background: var(--surface-raised);
+}
 
-  :root[data-design="v1"] .web-direct-messages-host.is-page .community-dm-panel.is-kit:not(.community-dm-inbox-panel) {
-    top: 9px;
-    right: 9px;
-    bottom: 9px;
-    border-radius: 0 9px 9px 0;
-  }
+:root[data-design="v1"]:where(:not([data-layout="phone"])) .web-direct-messages-host.is-page .community-dm-panel.is-kit:not(.community-dm-inbox-panel) {
+  top: 9px;
+  right: 9px;
+  bottom: 9px;
+  border-radius: 0 9px 9px 0;
 }
 
 /* Pods: the arrow from a pod's room back to every pod. */
@@ -3410,10 +3390,9 @@
 }
 :root[data-design="v1"] .settings-v1-switch.is-on { background: var(--settings-accent); }
 :root[data-design="v1"] .settings-v1-switch.is-on span { left: 17px; background: #fff; }
-@media (max-width: 720px) {
-  :root[data-design="v1"] .settings-v1-row { flex-direction: column; align-items: stretch; gap: 8px; }
-  :root[data-design="v1"] .settings-v1-row-control { justify-content: flex-start; flex: 1 1 auto; }
-}
+/* phone layout */
+:root[data-design="v1"]:where([data-layout="phone"]) .settings-v1-row { flex-direction: column; align-items: stretch; gap: 8px; }
+:root[data-design="v1"]:where([data-layout="phone"]) .settings-v1-row-control { justify-content: flex-start; flex: 1 1 auto; }
 /* No header row on the Settings page: the title starts at the top. */
 :root[data-design="v1"] .community-page-body:has(.settings-page-v1) { grid-template-rows: 0 minmax(0, 1fr); }
 
@@ -3652,38 +3631,38 @@
    conversation and Members' record narrow the same way. Only below 1024px,
    where the middle would be too narrow to read, it hides; there Inbox
    becomes two layers (list, then the conversation with a back arrow). */
-@media (min-width: 721px) and (max-width: 1023px) {
+@media (max-width: 1023px) {
   /* Pages in the frame, a channel, Members: one column, no right column. */
-  :root[data-design="v1"] .community-page-body:has(.community-page-rail-content) { grid-template-columns: minmax(0, 1fr); }
-  :root[data-design="v1"] .community-page-body > .community-page-rail { display: none; }
-  :root[data-design="v1"] .community-interaction-projection.has-channel-context,
-  :root[data-design="v1"] .community-interaction-projection:has(> .members-page),
-  :root[data-design="v1"] .community-interaction-projection:has(> .members-page-record) { grid-template-columns: minmax(0, 1fr); }
-  :root[data-design="v1"] .community-interaction-projection.has-channel-context > .channel-roster-panel,
-  :root[data-design="v1"] .community-interaction-projection > .members-page-record { display: none; }
+  :root[data-design="v1"]:where(:not([data-layout="phone"])) .community-page-body:has(.community-page-rail-content) { grid-template-columns: minmax(0, 1fr); }
+  :root[data-design="v1"]:where(:not([data-layout="phone"])) .community-page-body > .community-page-rail { display: none; }
+  :root[data-design="v1"]:where(:not([data-layout="phone"])) .community-interaction-projection.has-channel-context,
+  :root[data-design="v1"]:where(:not([data-layout="phone"])) .community-interaction-projection:has(> .members-page),
+  :root[data-design="v1"]:where(:not([data-layout="phone"])) .community-interaction-projection:has(> .members-page-record) { grid-template-columns: minmax(0, 1fr); }
+  :root[data-design="v1"]:where(:not([data-layout="phone"])) .community-interaction-projection.has-channel-context > .channel-roster-panel,
+  :root[data-design="v1"]:where(:not([data-layout="phone"])) .community-interaction-projection > .members-page-record { display: none; }
 
   /* Inbox: the list takes the page; an open conversation replaces it. */
-  :root[data-design="v1"] .web-direct-messages-host.is-page .community-dm-inbox-panel { padding-right: var(--inbox-gutter); }
-  :root[data-design="v1"] .web-direct-messages-host.is-page .community-dm-inbox-panel.is-kit { padding-right: 0; }
-  :root[data-design="v1"] .web-direct-messages-host.is-page .community-dm-inbox-header { right: 0; }
-  :root[data-design="v1"] .web-direct-messages-host.is-page .community-dm-inbox-search { right: var(--inbox-gutter); }
-  :root[data-design="v1"] .web-direct-messages-host.is-page .community-dm-empty-column { display: none; }
-  :root[data-design="v1"] .web-direct-messages-host.is-page.has-open .community-dm-inbox-panel { display: none; }
-  :root[data-design="v1"] .web-direct-messages-host.is-page.has-open .community-dm-panel:not(.community-dm-inbox-panel) {
+  :root[data-design="v1"]:where(:not([data-layout="phone"])) .web-direct-messages-host.is-page .community-dm-inbox-panel { padding-right: var(--inbox-gutter); }
+  :root[data-design="v1"]:where(:not([data-layout="phone"])) .web-direct-messages-host.is-page .community-dm-inbox-panel.is-kit { padding-right: 0; }
+  :root[data-design="v1"]:where(:not([data-layout="phone"])) .web-direct-messages-host.is-page .community-dm-inbox-header { right: 0; }
+  :root[data-design="v1"]:where(:not([data-layout="phone"])) .web-direct-messages-host.is-page .community-dm-inbox-search { right: var(--inbox-gutter); }
+  :root[data-design="v1"]:where(:not([data-layout="phone"])) .web-direct-messages-host.is-page .community-dm-empty-column { display: none; }
+  :root[data-design="v1"]:where(:not([data-layout="phone"])) .web-direct-messages-host.is-page.has-open .community-dm-inbox-panel { display: none; }
+  :root[data-design="v1"]:where(:not([data-layout="phone"])) .web-direct-messages-host.is-page.has-open .community-dm-panel:not(.community-dm-inbox-panel) {
     left: var(--left-column-width);
     width: auto;
   }
-  :root[data-design="v1"] .web-direct-messages-host.is-page.has-open .community-dm-panel.is-kit:not(.community-dm-inbox-panel) {
+  :root[data-design="v1"]:where(:not([data-layout="phone"])) .web-direct-messages-host.is-page.has-open .community-dm-panel.is-kit:not(.community-dm-inbox-panel) {
     padding: 0;
     border: 1px solid var(--surface-raised-edge);
     border-radius: 10px;
   }
-  :root[data-design="v1"] .web-direct-messages-host.is-page .community-dm-panel-back.is-layered-only { display: inline-flex; }
+  :root[data-design="v1"]:where(:not([data-layout="phone"])) .web-direct-messages-host.is-page .community-dm-panel-back.is-layered-only { display: inline-flex; }
 }
 :root[data-design="v1"] .community-dm-panel-back.is-layered-only { display: none; }
-@media (min-width: 721px) and (max-width: 1023px) {
-  :root[data-design="v1"] .web-direct-messages-host.is-page .community-dm-panel-back.is-layered-only { display: inline-flex; }
-  :root[data-design="v1"] .web-direct-messages-host.is-page .community-dm-panel.is-kit .community-dm-panel-back.is-layered-only {
+@media (max-width: 1023px) {
+  :root[data-design="v1"]:where(:not([data-layout="phone"])) .web-direct-messages-host.is-page .community-dm-panel-back.is-layered-only { display: inline-flex; }
+  :root[data-design="v1"]:where(:not([data-layout="phone"])) .web-direct-messages-host.is-page .community-dm-panel.is-kit .community-dm-panel-back.is-layered-only {
     flex: none;
     width: 30px;
     height: 30px;
@@ -3703,16 +3682,16 @@
 /* Below 1180px Inbox's list narrows its side margins (56 -> 32px) so it
    keeps its room beside the open conversation. Pages keep 56px: the title
    sits in one spot on every page at every width (Neil, Nov 13). */
-@media (min-width: 721px) and (max-width: 1179px) {
-  :root[data-design="v1"] .web-direct-messages-host.is-page .community-dm-inbox-panel { --inbox-gutter: 32px; }
+@media (max-width: 1179px) {
+  :root[data-design="v1"]:where(:not([data-layout="phone"])) .web-direct-messages-host.is-page .community-dm-inbox-panel { --inbox-gutter: 32px; }
 }
 /* Members on narrow windows (below 1024px): two layers, like Inbox. Picking
    someone replaces the table with their record; "Members" goes back. */
 :root[data-design="v1"] .members-record-back { display: none; }
-@media (min-width: 721px) and (max-width: 1023px) {
-  :root[data-design="v1"] .community-interaction-projection:has(> .members-page.has-picked) > .members-page { display: none; }
-  :root[data-design="v1"] .community-interaction-projection:has(> .members-page.has-picked) > .members-page-record { display: flex; grid-column: 1; }
-  :root[data-design="v1"] .members-record-back {
+@media (max-width: 1023px) {
+  :root[data-design="v1"]:where(:not([data-layout="phone"])) .community-interaction-projection:has(> .members-page.has-picked) > .members-page { display: none; }
+  :root[data-design="v1"]:where(:not([data-layout="phone"])) .community-interaction-projection:has(> .members-page.has-picked) > .members-page-record { display: flex; grid-column: 1; }
+  :root[data-design="v1"]:where(:not([data-layout="phone"])) .members-record-back {
     display: inline-flex;
     align-items: center;
     gap: 6px;
@@ -3727,7 +3706,7 @@
     border-radius: 7px;
     cursor: pointer;
   }
-  :root[data-design="v1"] .members-record-back:hover { color: var(--text-ink-primary); }
+  :root[data-design="v1"]:where(:not([data-layout="phone"])) .members-record-back:hover { color: var(--text-ink-primary); }
 }
 
 /* ---------- One header on every page (Nov 13, Neil) ----------
@@ -3821,68 +3800,66 @@
    the last line instead of floating in the middle. A line is 22px with 9px
    below it, so its middle is 20px up; a 32px button 4px up and the 34px
    send 3px up share that middle. One line looks exactly as before. */
-@media (min-width: 721px) {
-  :root[data-design="v1"] .community-chat .community-interaction-main-composer .community-composer-authoring-row,
-  :root[data-design="v1"] .community-chat .community-interaction-drawer-composer .community-composer-authoring-row {
-    align-items: flex-end;
-  }
-  :root[data-design="v1"] .community-chat .community-interaction-main-composer .community-composer-authoring-row .ask-icon-btn,
-  :root[data-design="v1"] .community-chat .community-interaction-drawer-composer .community-composer-authoring-row .ask-icon-btn {
-    margin-bottom: 4px;
-  }
-  :root[data-design="v1"] .community-chat .community-interaction-main-composer .community-composer-authoring-row .chat-send.ask-send-btn,
-  :root[data-design="v1"] .community-chat .community-interaction-drawer-composer .community-composer-authoring-row .chat-send.ask-send-btn {
-    margin-bottom: 3px;
-  }
-  :root[data-design="v1"] .chat-input-bar .mention-composer-field { align-items: flex-end; }
+/* desktop layout */
+:root[data-design="v1"]:where(:not([data-layout="phone"])) .community-chat .community-interaction-main-composer .community-composer-authoring-row,
+:root[data-design="v1"]:where(:not([data-layout="phone"])) .community-chat .community-interaction-drawer-composer .community-composer-authoring-row {
+  align-items: flex-end;
 }
+:root[data-design="v1"]:where(:not([data-layout="phone"])) .community-chat .community-interaction-main-composer .community-composer-authoring-row .ask-icon-btn,
+:root[data-design="v1"]:where(:not([data-layout="phone"])) .community-chat .community-interaction-drawer-composer .community-composer-authoring-row .ask-icon-btn {
+  margin-bottom: 4px;
+}
+:root[data-design="v1"]:where(:not([data-layout="phone"])) .community-chat .community-interaction-main-composer .community-composer-authoring-row .chat-send.ask-send-btn,
+:root[data-design="v1"]:where(:not([data-layout="phone"])) .community-chat .community-interaction-drawer-composer .community-composer-authoring-row .chat-send.ask-send-btn {
+  margin-bottom: 3px;
+}
+:root[data-design="v1"]:where(:not([data-layout="phone"])) .chat-input-bar .mention-composer-field { align-items: flex-end; }
 
 /* ---------- A thread's composer (Nov 13, Neil) ----------
    Two rows (the thread is narrow): the text, then the tools. It wears the
    channel composer's look: the same field and edge, quiet icon buttons, no
    @ button (typing @ opens the list), and the same send. */
-@media (min-width: 721px) {
-  :root[data-design="v1"] .community-interaction-reply-input-bar {
-    border: 1px solid var(--field-edge);
-    border-radius: 14px;
-    background: var(--surface-field);
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
-    transition: border-color 0.2s ease, box-shadow 0.2s ease;
-  }
-  :root[data-design="v1"] .community-interaction-reply-input-bar:focus-within {
-    border-color: var(--accent-act-edge);
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 0 0 4px var(--accent-act-halo);
-  }
-  :root[data-design="v1"] .community-interaction-reply-input-bar .ask-mention { display: none; }
-  :root[data-design="v1"] .community-interaction-reply-input-bar .ask-icon-btn {
-    width: 32px;
-    height: 32px;
-    min-height: 32px;
-    flex: 0 0 32px;
-    border-radius: 8px;
-    color: var(--text-faint);
-  }
-  :root[data-design="v1"] .community-interaction-reply-input-bar .ask-icon-btn:hover:not(:disabled) {
-    background: var(--hover-overlay);
-    color: var(--text-ink-primary);
-  }
-  :root[data-design="v1"] .community-interaction-reply-input-bar .chat-send.ask-send-btn {
-    --conversation-primary-action-surface: var(--hover-overlay);
-    --conversation-primary-action-hover-surface: var(--hover-overlay);
-    --conversation-primary-action-foreground: var(--text-faint);
-    width: 34px;
-    height: 34px;
-    min-height: 34px;
-    flex: 0 0 34px;
-    border-radius: 10px;
-    opacity: 1;
-    box-shadow: none;
-  }
-  :root[data-design="v1"] .community-interaction-reply-input-bar:focus-within .chat-send.ask-send-btn:not(:disabled) {
-    --conversation-primary-action-surface: var(--bg-button);
-    --conversation-primary-action-hover-surface: var(--bg-button-hover);
-    --conversation-primary-action-foreground: #ffffff;
-  }
+/* desktop layout */
+:root[data-design="v1"]:where(:not([data-layout="phone"])) .community-interaction-reply-input-bar {
+  border: 1px solid var(--field-edge);
+  border-radius: 14px;
+  background: var(--surface-field);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+:root[data-design="v1"]:where(:not([data-layout="phone"])) .community-interaction-reply-input-bar:focus-within {
+  border-color: var(--accent-act-edge);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 0 0 4px var(--accent-act-halo);
+}
+:root[data-design="v1"]:where(:not([data-layout="phone"])) .community-interaction-reply-input-bar .ask-mention { display: none; }
+:root[data-design="v1"]:where(:not([data-layout="phone"])) .community-interaction-reply-input-bar .ask-icon-btn {
+  width: 32px;
+  height: 32px;
+  min-height: 32px;
+  flex: 0 0 32px;
+  border-radius: 8px;
+  color: var(--text-faint);
+}
+:root[data-design="v1"]:where(:not([data-layout="phone"])) .community-interaction-reply-input-bar .ask-icon-btn:hover:not(:disabled) {
+  background: var(--hover-overlay);
+  color: var(--text-ink-primary);
+}
+:root[data-design="v1"]:where(:not([data-layout="phone"])) .community-interaction-reply-input-bar .chat-send.ask-send-btn {
+  --conversation-primary-action-surface: var(--hover-overlay);
+  --conversation-primary-action-hover-surface: var(--hover-overlay);
+  --conversation-primary-action-foreground: var(--text-faint);
+  width: 34px;
+  height: 34px;
+  min-height: 34px;
+  flex: 0 0 34px;
+  border-radius: 10px;
+  opacity: 1;
+  box-shadow: none;
+}
+:root[data-design="v1"]:where(:not([data-layout="phone"])) .community-interaction-reply-input-bar:focus-within .chat-send.ask-send-btn:not(:disabled) {
+  --conversation-primary-action-surface: var(--bg-button);
+  --conversation-primary-action-hover-surface: var(--bg-button-hover);
+  --conversation-primary-action-foreground: #ffffff;
 }
 
 /* ---------- Composers on a phone (Nov 13, Neil) ----------
@@ -3890,20 +3867,19 @@
    a button are both 42px, so the bottoms line up). Send is quiet while
    there is nothing to send and blue once there is, so a blue arrow always
    means it will go. */
-@media (max-width: 720px) {
-  :root[data-design="v1"] .app-root.mobile-shell .chat-input-bar .community-composer-authoring-row {
-    align-items: end;
-  }
-  :root[data-design="v1"] .app-root.mobile-shell .chat-input-bar .mention-composer-field {
-    align-items: flex-end;
-  }
-  :root[data-design="v1"] .app-root.mobile-shell .chat-send.ask-send-btn:disabled {
-    --conversation-primary-action-surface: var(--hover-overlay);
-    --conversation-primary-action-hover-surface: var(--hover-overlay);
-    --conversation-primary-action-foreground: var(--text-faint);
-    box-shadow: none;
-    opacity: 1;
-  }
+/* phone layout */
+:root[data-design="v1"]:where([data-layout="phone"]) .app-root.mobile-shell .chat-input-bar .community-composer-authoring-row {
+  align-items: end;
+}
+:root[data-design="v1"]:where([data-layout="phone"]) .app-root.mobile-shell .chat-input-bar .mention-composer-field {
+  align-items: flex-end;
+}
+:root[data-design="v1"]:where([data-layout="phone"]) .app-root.mobile-shell .chat-send.ask-send-btn:disabled {
+  --conversation-primary-action-surface: var(--hover-overlay);
+  --conversation-primary-action-hover-surface: var(--hover-overlay);
+  --conversation-primary-action-foreground: var(--text-faint);
+  box-shadow: none;
+  opacity: 1;
 }
 
 /* ---------- The phone's tabs (Neil, Nov 14 mock) ----------
@@ -4126,21 +4102,20 @@
 
 /* Members on a phone: the page, full screen over the channel it opened from,
    with the arrow back; the channel's name steps aside. */
-@media (max-width: 720px) {
-  :root[data-design="v1"] .app-root.mobile-shell .members-page {
-    position: fixed;
-    inset: env(safe-area-inset-top, 0px) 0 0 0;
-    z-index: 25;
-    display: flex;
-    flex-direction: column;
-    min-width: 0;
-    min-height: 0;
-    background: var(--surface-workspace, var(--surface-app));
-  }
+/* phone layout */
+:root[data-design="v1"]:where([data-layout="phone"]) .app-root.mobile-shell .members-page {
+  position: fixed;
+  inset: env(safe-area-inset-top, 0px) 0 0 0;
+  z-index: 25;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  background: var(--surface-workspace, var(--surface-app));
+}
 
-  :root[data-design="v1"] .app-root.mobile-shell:has(.members-page) .mobile-topbar-center {
-    display: none;
-  }
+:root[data-design="v1"]:where([data-layout="phone"]) .app-root.mobile-shell:has(.members-page) .mobile-topbar-center {
+  display: none;
 }
 
 /* With no title of its own (the page draws its name), the middle of the bar
@@ -4158,74 +4133,72 @@
 
 /* Settings on a phone: 16px gutters, and a row's buttons wrap rather than
    run past the edge. */
-@media (max-width: 720px) {
-  :root[data-design="v1"] .app-root.mobile-shell .web-community-centered-pane {
-    padding-left: 16px;
-    padding-right: 16px;
-  }
+/* phone layout */
+:root[data-design="v1"]:where([data-layout="phone"]) .app-root.mobile-shell .web-community-centered-pane {
+  padding-left: 16px;
+  padding-right: 16px;
+}
 
-  /* The page's header is in the flow here, so the room the classic layout
-     left for a floating bar is just a blank band above the page. */
-  :root[data-design="v1"] .app-root.mobile-shell .community-page-body > .community-tab-scroll {
-    padding-top: 0;
-  }
-  :root[data-design="v1"] .app-root.mobile-shell .community-page-body > .community-tab-scroll > .web-community-centered-pane {
-    padding-top: 12px;
-  }
+/* The page's header is in the flow here, so the room the classic layout
+   left for a floating bar is just a blank band above the page. */
+:root[data-design="v1"]:where([data-layout="phone"]) .app-root.mobile-shell .community-page-body > .community-tab-scroll {
+  padding-top: 0;
+}
+:root[data-design="v1"]:where([data-layout="phone"]) .app-root.mobile-shell .community-page-body > .community-tab-scroll > .web-community-centered-pane {
+  padding-top: 12px;
+}
 
-  :root[data-design="v1"] .app-root.mobile-shell .community-settings-pane-content,
-  :root[data-design="v1"] .app-root.mobile-shell .settings-v1-group {
-    min-width: 0;
-    max-width: 100%;
-  }
+:root[data-design="v1"]:where([data-layout="phone"]) .app-root.mobile-shell .community-settings-pane-content,
+:root[data-design="v1"]:where([data-layout="phone"]) .app-root.mobile-shell .settings-v1-group {
+  min-width: 0;
+  max-width: 100%;
+}
 
-  :root[data-design="v1"] .settings-v1-row-control {
-    flex-wrap: wrap;
-  }
+:root[data-design="v1"]:where([data-layout="phone"]) .settings-v1-row-control {
+  flex-wrap: wrap;
 }
 
 /* Members on a phone, two layers as on a narrow window: picking someone
    replaces the list with their record, full screen; "Members" goes back. */
-@media (max-width: 720px) {
-  :root[data-design="v1"] .app-root.mobile-shell .members-page.has-picked {
-    display: none;
-  }
+/* phone layout */
+:root[data-design="v1"]:where([data-layout="phone"]) .app-root.mobile-shell .members-page.has-picked {
+  display: none;
+}
 
-  :root[data-design="v1"] .app-root.mobile-shell:has(.members-page.has-picked) .members-page-record {
-    position: fixed;
-    inset: env(safe-area-inset-top, 0px) 0 0 0;
-    z-index: 25;
-    display: flex;
-    flex-direction: column;
-    min-width: 0;
-    overflow-y: auto;
-    background: var(--surface-workspace, var(--surface-app));
-  }
+:root[data-design="v1"]:where([data-layout="phone"]) .app-root.mobile-shell:has(.members-page.has-picked) .members-page-record {
+  position: fixed;
+  inset: env(safe-area-inset-top, 0px) 0 0 0;
+  z-index: 25;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow-y: auto;
+  background: var(--surface-workspace, var(--surface-app));
+}
 
-  :root[data-design="v1"] .app-root.mobile-shell:has(.members-page.has-picked) .mobile-topbar {
-    display: none;
-  }
+:root[data-design="v1"]:where([data-layout="phone"]) .app-root.mobile-shell:has(.members-page.has-picked) .mobile-topbar {
+  display: none;
+}
 
-  :root[data-design="v1"] .app-root.mobile-shell .members-page-record > * {
-    flex-direction: column;
-  }
+:root[data-design="v1"]:where([data-layout="phone"]) .app-root.mobile-shell .members-page-record > * {
+  flex-direction: column;
+}
 
-  :root[data-design="v1"] .app-root.mobile-shell .members-record-back {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    min-height: 44px;
-    margin: 4px 10px 0;
-    padding: 0 10px 0 6px;
-    color: var(--text-ink-secondary);
-    font: inherit;
-    font-size: 14px;
-    background: none;
-    border: 0;
-    border-radius: 8px;
-    cursor: pointer;
-    align-self: flex-start;
-  }
+:root[data-design="v1"]:where([data-layout="phone"]) .app-root.mobile-shell .members-record-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+  margin: 4px 10px 0;
+  padding: 0 10px 0 6px;
+  color: var(--text-ink-secondary);
+  font: inherit;
+  font-size: 14px;
+  background: none;
+  border: 0;
+  border-radius: 8px;
+  cursor: pointer;
+  align-self: flex-start;
 }
 
 /* ---------- One level in: the way back is in the header (Neil, Nov 14) ----------

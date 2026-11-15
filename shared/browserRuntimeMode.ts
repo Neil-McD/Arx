@@ -14,17 +14,18 @@ export function isStandaloneWebApp(): boolean {
   }
 }
 
-// Phone width: a phone, or a desktop window narrowed to one (Neil, Nov 14:
-// every phone gets the phone layout, /m/..., whatever link it opened; and a
-// narrowed window must not fall into a third, undrawn layout between the two).
-// There are two layouts, and this is the one line between them.
-export const PHONE_VIEWPORT_MEDIA_QUERY = "(max-width: 720px)";
+// A phone: a narrow screen worked by touch (Neil, Nov 14: every phone gets the
+// phone layout, /m/..., whatever link it opened). A desktop window is never a
+// phone, however narrow it is dragged: the two layouts are separate, and the
+// window's width does not pick between them.
+export const PHONE_VIEWPORT_MEDIA_QUERY = "(max-width: 720px) and (pointer: coarse)";
 
-// Which layout a window gets when it crosses that line. A touch screen turned
-// on its side keeps the phone layout it opened in.
-export function shellVariantAfterResize(params: { phoneWidth: boolean; touch: boolean; current: "standard" | "mobile" }): "standard" | "mobile" {
-  if (params.phoneWidth) return "mobile";
-  return params.touch ? params.current : "standard";
+// Which of the two layouts the styles draw. The app writes it on the page's
+// root (data-layout) from the shell it chose; design-v1.css and the kit key
+// every phone rule and every desktop rule on it, never on the window's width.
+export type AppLayout = "phone" | "desktop";
+export function appLayoutForShell(shellVariant: "standard" | "mobile"): AppLayout {
+  return shellVariant === "mobile" ? "phone" : "desktop";
 }
 
 export function isPhoneViewport(): boolean {

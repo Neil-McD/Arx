@@ -32,7 +32,7 @@ import {
 import {
   readOAuthCallbackShellVariantFromLocation,
 } from "../../../../shared/cloudPkce";
-import { isPhoneViewport, isStandaloneWebApp } from "../../../../shared/browserRuntimeMode";
+import { appLayoutForShell, isPhoneViewport, isStandaloneWebApp } from "../../../../shared/browserRuntimeMode";
 import type {
   MobileOverlay,
   MobileRootPage,
@@ -61,6 +61,12 @@ export function useWebShellState() {
   const [shellVariant, setShellVariant] = useState<AppShellVariant>(
     initialShellVariant,
   );
+  // The styles draw the phone layout or the desktop one from this mark, never
+  // from the window's width. Written here so it is set before any page renders.
+  if (typeof document !== "undefined") {
+    const layout = appLayoutForShell(shellVariant);
+    if (document.documentElement.dataset.layout !== layout) document.documentElement.dataset.layout = layout;
+  }
   const [mobileOverlay, setMobileOverlay] = useState<MobileOverlay>(null);
   const [mobileRootPage, setMobileRootPage] =
     useState<MobileRootPage>("community");
