@@ -54,7 +54,7 @@ async function renderPod(ctx: any, args: { communityId: any; lens: LensName }, c
   if (sight === "inside") {
     const people: string[] = [];
     for (const grant of grants.slice(0, NAMES_SHOWN)) people.push(await displayName(ctx, String(grant.principalKey).slice("user:".length), names));
-    lines.push(`- In it (${grants.length}): ${people.join(", ")}${grants.length > NAMES_SHOWN ? ", …" : ""}`);
+    lines.push(grants.length ? `- In it (${grants.length}): ${people.join(", ")}${grants.length > NAMES_SHOWN ? ", …" : ""}` : "- In it: nobody yet");
     lines.push(`- Seats: ${typeof record?.seats === "number" ? `${grants.length} of ${record.seats}` : "no limit"}`);
     const call = await nextPodCall(ctx, channel._id, Date.now());
     if (call) lines.push(`- Next call: ${call.title}, ${call.starts_at}`);
