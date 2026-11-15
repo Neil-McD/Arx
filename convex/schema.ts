@@ -1674,18 +1674,18 @@ export default defineSchema({
   })
     .index("by_scope", ["scopeKey"]),
 
-  // A place's brief (shared/communityBriefs.ts): what's happening there and
-  // what matters next, rewritten by the guide after new activity. One per
-  // scope, read by everyone who can enter the place.
+  // A place's brief (shared/communityBriefs.ts): what's happening there,
+  // rewritten by the guide after new activity. One per scope, read by
+  // everyone who can enter the place. Each point cites the posts it came
+  // from; a point whose post is gone stops showing.
   communityBriefs: defineTable({
     communityId: v.id("communities"),
     // "community:<communityId>" or "pod:<roomId>" (convex/communityNotesStore.ts).
     scopeKey: v.string(),
     headline: v.string(),
-    points: v.array(v.string()),
-    nextStep: v.optional(v.string()),
+    points: v.array(v.object({ text: v.string(), refs: v.array(v.string()) })),
     runId: v.optional(v.id("agentWorkRuns")),
-    // The brief has read everything up to here.
+    // Written from the place's threads up to here.
     windowEnd: v.number(),
     createdAt: v.number(),
     updatedAt: v.number(),
