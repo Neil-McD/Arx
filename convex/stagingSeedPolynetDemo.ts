@@ -11,6 +11,7 @@
 //
 // Hand-run (staging):
 //   npx convex run stagingSeedPolynetDemo:seedPolynetDemoInternal '{"sourceCommunitySlug":"founder-walk-nov7"}'
+import { communityScopeKey, insertNote, noteBySlug } from "./communityNotesStore";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import { internalMutation } from "./_generated/server";
@@ -276,10 +277,10 @@ export const seedPolynetDemoInternal = internalMutation({
 
     for (const note of NOTES) {
       const slug = communityNoteSlug(note.title);
-      const existing = await ctx.db.query("communityNotes").withIndex("by_community_slug", (q: any) => q.eq("communityId", communityId).eq("slug", slug)).first();
+      const existing = await noteBySlug(ctx, communityScopeKey(communityId), slug);
       const fields = { title: note.title, bodyMd: note.body, searchText: buildCommunityNoteSearchText({ title: note.title, bodyMd: note.body }), updatedByUserId: ownerId, updatedAt: nowMs };
       if (existing) await ctx.db.patch(existing._id, fields);
-      else await ctx.db.insert("communityNotes", { communityId, slug, source: "founder", createdByUserId: ownerId, createdAt: nowMs, ...fields });
+      else await insertNote(ctx, communityScopeKey(communityId), { communityId, slug, source: "founder", createdByUserId: ownerId, createdAt: nowMs, ...fields });
     }
 
     return {
@@ -500,9 +501,9 @@ export const seedPolynetDemoKnowledgeInternal = internalMutation({
       const at = nowMs - note.daysAgo * DAY_MS;
       const fields = { title: note.title, bodyMd: note.body, source: note.source, searchText: buildCommunityNoteSearchText({ title: note.title, bodyMd: note.body }),
         updatedByUserId: community.ownerId, createdAt: at, updatedAt: at, createdByUserId: community.ownerId };
-      const existing = await ctx.db.query("communityNotes").withIndex("by_community_slug", (q: any) => q.eq("communityId", communityId).eq("slug", slug)).first();
+      const existing = await noteBySlug(ctx, communityScopeKey(communityId), slug);
       if (existing) await ctx.db.patch(existing._id, fields);
-      else await ctx.db.insert("communityNotes", { communityId, slug, ...fields });
+      else await insertNote(ctx, communityScopeKey(communityId), { communityId, slug, ...fields });
       written += 1;
     }
     return { written };

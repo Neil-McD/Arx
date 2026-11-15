@@ -1,4 +1,5 @@
 import { COMMUNITY_NOTES_MAX_PER_COMMUNITY } from "../shared/communityNotes";
+import { communityScopeKey, notesByUpdated } from "./communityNotesStore";
 import { v } from "convex/values";
 import { internalQuery } from "./_generated/server";
 import { communityIsActive } from "../shared/communityLifecycle";
@@ -67,8 +68,7 @@ export const loadCommunityCardSourceInternal = internalQuery({
 
     const handbook = await ctx.db.query("communityHandbooks").withIndex("by_community", (q) => q.eq("communityId", args.communityId)).first();
     let canonicalUrl: string | null = null;
-    const notesCount = (await ctx.db.query("communityNotes")
-      .withIndex("by_community_updatedAt", (q: any) => q.eq("communityId", community._id))
+    const notesCount = (await notesByUpdated(ctx, communityScopeKey(community._id))
       .take(COMMUNITY_NOTES_MAX_PER_COMMUNITY)).length;
     if (!canonicalUrl) {
       try { canonicalUrl = `${readCanonicalPublicAppOrigin()}/c/${community.slug}`; } catch { canonicalUrl = `/c/${community.slug}`; }

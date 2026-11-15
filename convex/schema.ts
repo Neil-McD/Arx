@@ -1581,6 +1581,9 @@ export default defineSchema({
   // that is worth sharing with everyone, one short markdown note each.
   communityNotes: defineTable({
     communityId: v.id("communities"),
+    // Which scope this belongs to: "community:<communityId>" or "pod:<roomId>"
+    // (convex/communityNotesStore.ts). Every index starts with it.
+    scopeKey: v.optional(v.string()),
     slug: v.string(),
     title: v.string(),
     bodyMd: v.string(),
@@ -1599,6 +1602,9 @@ export default defineSchema({
     migratedFromNodeId: v.optional(v.string()),
     // A copy a builder published from a pod's knowledge: the pod's name.
     fromPodName: v.optional(v.string()),
+    // On a pod's note: the community copy it was published as, and when.
+    publishedNoteId: v.optional(v.id("communityNotes")),
+    publishedAt: v.optional(v.number()),
     // The last write's retry key, so a retried write is not applied twice.
     lastOperationKey: v.optional(v.string()),
     createdByUserId: v.optional(v.id("users")),
@@ -1606,15 +1612,18 @@ export default defineSchema({
     createdAt: v.number(),
     updatedAt: v.number(),
   })
-    .index("by_community_slug", ["communityId", "slug"])
-    .index("by_community_updatedAt", ["communityId", "updatedAt"])
+    .index("by_scope_slug", ["scopeKey", "slug"])
+    .index("by_scope_updatedAt", ["scopeKey", "updatedAt"])
     .index("by_migrated_node", ["migratedFromNodeId"])
-    .searchIndex("search_text", { searchField: "searchText", filterFields: ["communityId"] }),
+    .searchIndex("search_text", { searchField: "searchText", filterFields: ["scopeKey"] }),
 
   // What a note was before each change, so a change can be undone: one
   // note, or everything one review did (communityMemory.ts).
   communityNoteRevisions: defineTable({
     communityId: v.id("communities"),
+    // Which scope this belongs to: "community:<communityId>" or "pod:<roomId>"
+    // (convex/communityNotesStore.ts). Every index starts with it.
+    scopeKey: v.optional(v.string()),
     slug: v.string(),
     change: v.union(v.literal("added"), v.literal("changed"), v.literal("index")),
     // The note (or the memory index) before the change; absent when it was added.
@@ -1634,30 +1643,36 @@ export default defineSchema({
     createdAt: v.number(),
   })
     .index("by_run", ["runId"])
-    .index("by_community_slug_createdAt", ["communityId", "slug", "createdAt"]),
+    .index("by_scope_slug_createdAt", ["scopeKey", "slug", "createdAt"]),
 
   // A guide note a builder removed, with what it was learned from, so the
   // same posts never bring it back.
   communityNoteRemovals: defineTable({
     communityId: v.id("communities"),
+    // Which scope this belongs to: "community:<communityId>" or "pod:<roomId>"
+    // (convex/communityNotesStore.ts). Every index starts with it.
+    scopeKey: v.optional(v.string()),
     slug: v.string(),
     title: v.string(),
     evidenceRefs: v.array(v.string()),
     removedByUserId: v.optional(v.id("users")),
     createdAt: v.number(),
   })
-    .index("by_community_createdAt", ["communityId", "createdAt"]),
+    .index("by_scope_createdAt", ["scopeKey", "createdAt"]),
 
   // The community's short memory (memory.md): what matters most, with links
   // to notes. Written by the guide's nightly review, read at the start of
   // every turn. Capped (shared/communityMemory.ts).
   communityMemoryIndex: defineTable({
     communityId: v.id("communities"),
+    // Which scope this belongs to: "community:<communityId>" or "pod:<roomId>"
+    // (convex/communityNotesStore.ts). Every index starts with it.
+    scopeKey: v.optional(v.string()),
     bodyMd: v.string(),
     runId: v.optional(v.id("agentWorkRuns")),
     updatedAt: v.number(),
   })
-    .index("by_community", ["communityId"]),
+    .index("by_scope", ["scopeKey"]),
 
   // Personal memory (shared/personalMemory.ts): what the guide remembers about
   // one member in one community, from that member's own private talks. One
@@ -1677,7 +1692,10 @@ export default defineSchema({
   // §3.5): one row per community, scope and kind, made due by what happens.
   agentWork: defineTable({
     communityId: v.id("communities"),
-    scope: v.literal("community"),
+    // Which scope this belongs to: "community:<communityId>" or "pod:<roomId>"
+    // (convex/communityNotesStore.ts). Every index starts with it.
+    scopeKey: v.optional(v.string()),
+    scope: v.union(v.literal("community"), v.literal("pod")),
     kind: v.literal("memory_review"),
     // Evidence since the last review, and when the first of it arrived.
     pending: v.number(),
@@ -1691,13 +1709,16 @@ export default defineSchema({
     createdAt: v.number(),
     updatedAt: v.number(),
   })
-    .index("by_community_scope_kind", ["communityId", "scope", "kind"])
+    .index("by_scope_kind", ["scopeKey", "kind"])
     .index("by_dueAt", ["dueAt"]),
 
   // One review, as its record: what it read, what it changed and why, and
   // what it cost. Builders read these and can undo one.
   agentWorkRuns: defineTable({
     communityId: v.id("communities"),
+    // Which scope this belongs to: "community:<communityId>" or "pod:<roomId>"
+    // (convex/communityNotesStore.ts). Every index starts with it.
+    scopeKey: v.optional(v.string()),
     workId: v.id("agentWork"),
     kind: v.literal("memory_review"),
     status: v.union(v.literal("running"), v.literal("done"), v.literal("empty"), v.literal("failed"), v.literal("undone")),
@@ -1716,8 +1737,9 @@ export default defineSchema({
     .index("by_community_createdAt", ["communityId", "createdAt"])
     .index("by_work_createdAt", ["workId", "createdAt"]),
 
-  // Pod knowledge (communityPodNotes.ts): notes that belong to one pod. Their
-  // own table, so no reader of community notes can show them.
+  // Retired: pod notes now live in communityNotes as "pod:<roomId>" notes
+  // (convex/communityNotesStore.ts). backfillMemoryScopeInternal moves these
+  // rows; the table is dropped in a later release once empty.
   communityPodNotes: defineTable({
     communityId: v.id("communities"),
     channelId: v.id("communityChannels"),

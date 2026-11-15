@@ -2,6 +2,7 @@
 // read under memory/. Only the founder (owners and admins, in Studio) edits or
 // deletes them; no agent, member or connected AI writes them (Nov 5: closed
 // both a private-room leak path and a shared-memory injection path).
+import { communityScopeKey, insertNote, noteBySlug, notesByUpdated, searchNotes } from "./communityNotesStore";
 import { v } from "convex/values";
 import { internalQuery, mutation, query } from "./_generated/server";
 import { resolveUserIdForAuthenticatedRequest } from "./authActor";
@@ -40,9 +41,7 @@ export const listCommunityNotesInternal = internalQuery({
   args: { communityId: v.id("communities"), limit: v.optional(v.number()) },
   handler: async (ctx, args) => {
     const limit = Math.max(1, Math.min(LIST_LIMIT_MAX, Math.floor(args.limit ?? 20)));
-    const rows = await ctx.db.query("communityNotes")
-      .withIndex("by_community_updatedAt", (q) => q.eq("communityId", args.communityId))
-      .order("desc").take(limit + 1);
+    const rows = await notesByUpdated(ctx, communityScopeKey(args.communityId)).order("desc").take(limit + 1);
     return { notes: rows.slice(0, limit).map(noteSummary), hasMore: rows.length > limit };
   },
 });
@@ -50,8 +49,7 @@ export const listCommunityNotesInternal = internalQuery({
 export const readCommunityNoteInternal = internalQuery({
   args: { communityId: v.id("communities"), slug: v.string() },
   handler: async (ctx, args) => {
-    const row = await ctx.db.query("communityNotes")
-      .withIndex("by_community_slug", (q) => q.eq("communityId", args.communityId).eq("slug", args.slug)).first();
+    const row = await noteBySlug(ctx, communityScopeKey(args.communityId), args.slug);
     return row ? { ...noteSummary(row), bodyMd: row.bodyMd } : null;
   },
 });
@@ -62,10 +60,8 @@ export const searchCommunityNotesInternal = internalQuery({
     const limit = Math.max(1, Math.min(SEARCH_LIMIT_MAX, Math.floor(args.limit ?? 8)));
     const searchQuery = buildCommunitySearchQuery(args.query);
     if (!searchQuery) return { notes: [] };
-    const rows = await ctx.db.query("communityNotes")
-      .withSearchIndex("search_text", (q) => q.search("searchText", searchQuery).eq("communityId", args.communityId))
-      .take(limit);
-    return { notes: rows.map((row) => ({ ...noteSummary(row), snippet: noteSnippet(row.bodyMd, args.query) })) };
+    const rows = await searchNotes(ctx, communityScopeKey(args.communityId), searchQuery).take(limit);
+    return { notes: rows.map((row: any) => ({ ...noteSummary(row), snippet: noteSnippet(row.bodyMd, args.query) })) };
   },
 });
 
@@ -86,8 +82,7 @@ export const listCommunityNotes = query({
     const { canManage } = await viewer(ctx, args);
     if (!canManage) return { can_manage: false, has_more: false, notes: [] };
     const limit = Math.max(1, Math.min(COMMUNITY_NOTES_MAX_PER_COMMUNITY, Math.floor(args.limit ?? 100)));
-    const rows = await ctx.db.query("communityNotes")
-      .withIndex("by_community_updatedAt", (q) => q.eq("communityId", args.communityId)).order("desc").take(limit + 1);
+    const rows = await notesByUpdated(ctx, communityScopeKey(args.communityId)).order("desc").take(limit + 1);
     // Knowledge says who wrote a note only when a host wrote it; a note saved
     // from someone's conversation never names them.
     const names = new Map<string, string | null>();
@@ -122,8 +117,7 @@ export const updateCommunityNote = mutation({
     if (!canManage) throw new Error("community_forbidden");
     const text = normalizeCommunityNoteBody(args.text);
     if (!text) throw new Error("invalid_tool_args");
-    const row = await ctx.db.query("communityNotes")
-      .withIndex("by_community_slug", (q) => q.eq("communityId", args.communityId).eq("slug", args.slug)).first();
+    const row = await noteBySlug(ctx, communityScopeKey(args.communityId), args.slug);
     if (!row) throw new Error("semantic_not_found");
     const title = normalizeCommunityNoteTitle(args.title) ?? row.title;
     // A builder's correction makes the note theirs: the guide won't change it again.
@@ -144,15 +138,15 @@ export const createCommunityNote = mutation({
     const title = normalizeCommunityNoteTitle(args.title);
     const text = normalizeCommunityNoteBody(args.text);
     if (!title || !text) throw new Error("invalid_tool_args");
-    const existing = await ctx.db.query("communityNotes")
-      .withIndex("by_community_updatedAt", (q) => q.eq("communityId", args.communityId)).take(COMMUNITY_NOTES_MAX_PER_COMMUNITY + 1);
+    const scope = communityScopeKey(args.communityId);
+    const existing = await notesByUpdated(ctx, scope).take(COMMUNITY_NOTES_MAX_PER_COMMUNITY + 1);
     if (existing.length >= COMMUNITY_NOTES_MAX_PER_COMMUNITY) throw new Error("community_notes_full");
     const base = communityNoteSlug(title) || "note";
-    const taken = new Set(existing.map((row) => row.slug));
+    const taken = new Set<string>(existing.map((row: any) => row.slug));
     let slug = base;
     for (let n = 2; taken.has(slug); n++) slug = `${base.slice(0, 60)}-${n}`;
     const nowMs = Date.now();
-    await ctx.db.insert("communityNotes", {
+    await insertNote(ctx, scope, {
       communityId: args.communityId, slug, title, bodyMd: text, source: "founder",
       searchText: buildCommunityNoteSearchText({ title, bodyMd: text }),
       createdByUserId: userId, updatedByUserId: userId, createdAt: nowMs, updatedAt: nowMs,
@@ -166,8 +160,7 @@ export const deleteCommunityNote = mutation({
   handler: async (ctx, args) => {
     const { userId, canManage } = await viewer(ctx, args);
     if (!canManage) throw new Error("community_forbidden");
-    const row = await ctx.db.query("communityNotes")
-      .withIndex("by_community_slug", (q) => q.eq("communityId", args.communityId).eq("slug", args.slug)).first();
+    const row = await noteBySlug(ctx, communityScopeKey(args.communityId), args.slug);
     // A guide note's posts are remembered, so they don't bring it back.
     if (row && noteAuthorKind(row) === "guide") await removeGuideNote(ctx, row, userId, Date.now());
     else if (row) await ctx.db.delete(row._id);
