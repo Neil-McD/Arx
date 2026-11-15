@@ -189,6 +189,21 @@ css += """
 .app .today-line em{font-style:normal;font-size:12px;color:var(--ink3)}
 .app button.today-line{cursor:pointer}.app button.today-line:hover b{text-decoration:underline;text-decoration-color:var(--line2);text-underline-offset:3px}
 .app .here-row{display:flex;align-items:center;gap:12px}
+/* The guide's brief, the first part of a right panel (mock: Pods3Inside,
+   Home3): a quiet aurora card, its label and age, a headline, and points
+   that open the channel they came from. */
+.app .brief{border:1px solid rgba(var(--au),.26);background:linear-gradient(180deg,rgba(var(--au),.09),rgba(var(--au),.03));border-radius:10px;padding:12px 14px 13px;display:flex;flex-direction:column;gap:8px}
+.app .brief .gl{display:flex;align-items:center;gap:6px;font-size:11.5px;font-weight:600;letter-spacing:.02em;color:var(--aurora-ink)}
+.app .brief .gl .ic{width:13px;height:13px}
+.app .brief .gl em{margin-left:auto;font-style:normal;font-weight:400;color:rgba(196,178,252,.6)}
+.app .brief p{margin:0;font-size:13.5px;line-height:1.5;color:var(--ink)}
+.app .brief p b{font-weight:600}
+.app .brief-points{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px}
+.app .brief-point{display:flex;flex-direction:column;gap:1px;width:100%;text-align:left;font-size:13.5px;line-height:1.5;color:var(--ink2)}
+.app .brief-point em{font-style:normal;font-size:12px;color:var(--ink3)}
+.app button.brief-point{cursor:pointer}.app button.brief-point:hover span{color:var(--ink)}
+.app .brief-acts{display:flex;align-items:center;justify-content:flex-end;gap:6px;margin-top:2px;font-size:12px;color:var(--ink3)}
+.app .brief-acts>span{margin-right:auto}
 .app button.kmini-btn{width:100%;padding:0}.app button.kmini-btn:disabled{cursor:default}
 .app .kmini+.kline{margin-top:10px}
 

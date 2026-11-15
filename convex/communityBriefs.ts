@@ -12,9 +12,12 @@
 // which ends the run. A quiet place costs nothing; with AI off nothing runs.
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
-import { internalAction, internalMutation, internalQuery } from "./_generated/server";
+import { internalAction, internalMutation, internalQuery, mutation, query } from "./_generated/server";
+import { resolveUserIdForAuthenticatedRequest } from "./authActor";
+import { getCommunityChannelCapabilities, resolveCommunityChannelActor } from "./communityChannelAccess";
+import { requirePodEventManager } from "./communityEventAudience";
 import { runAgentWork } from "./agentWork";
-import { getUniqueCommunityMembershipByPair, normalizeCommunityRoleForOutput } from "./communityCore";
+import { getUniqueCommunityMembershipByPair, normalizeCommunityRoleForOutput, requireCommunityChatAccess, requireCommunityManager } from "./communityCore";
 import { displayName } from "./communityFounderBrief";
 import { briefFor, communityScopeKey, insertWork, memoryIndexFor, podScopeKey, workFor, writeBrief, type ScopeKey } from "./communityNotesStore";
 import { evidenceFacts, guideSeatedInPod, openRun, podRoom, scheduleAgentWork } from "./communityMemory";
@@ -268,7 +271,7 @@ export async function readPlaceBrief(ctx: any, args: { communityId: any; podRoom
   if (args.podRoomId && !room) return null;
   const scope = room ? podScopeKey(room._id) : communityScopeKey(args.communityId);
   const stored: any = await briefFor(ctx, scope);
-  if (!stored) return null;
+  if (!stored || stored.hiddenAt) return null;
   // Where each cited post is now; null once it is gone, hidden or moved out of the place.
   const where = new Map<string, { slug: string; name: string } | null>();
   for (const ref of new Set<string>(stored.points.flatMap((point: any) => point.refs as string[]))) {
@@ -296,6 +299,55 @@ export async function readPlaceBrief(ctx: any, args: { communityId: any; podRoom
 export const readBriefInternal = internalQuery({
   args: { communityId: v.id("communities"), podRoomId: v.optional(v.string()) },
   handler: async (ctx, args) => await readPlaceBrief(ctx, { ...args, nowMs: Date.now() }),
+});
+
+// ---------- the panels (Home's and a pod's right column)
+
+const placeArgs = { authSubject: v.optional(v.string()), communityId: v.id("communities"),
+  // A pod's brief: its room. Missing: the community's.
+  podChannelId: v.optional(v.id("communityChannels")) };
+
+// Someone who can enter the place: the community, or the pod's room (the
+// room's own read check, as for pod notes).
+async function placeReader(ctx: any, args: { authSubject?: string; communityId: any; podChannelId?: any }) {
+  const userId = await resolveUserIdForAuthenticatedRequest({ ctx, authSubject: args.authSubject ?? null });
+  await requireCommunityChatAccess({ ctx, communityId: args.communityId, userId });
+  if (args.podChannelId) {
+    const channel: any = await podRoom(ctx, args.communityId, args.podChannelId);
+    if (!channel) throw new Error("community_pod_not_found");
+    const actor = await resolveCommunityChannelActor({ ctx, communityId: args.communityId, userId });
+    if (!(await getCommunityChannelCapabilities({ ctx, channel, actor })).canRead) throw new Error("community_pod_not_found");
+  }
+  return userId;
+}
+
+// Who may take a brief down: builders; for a pod's, its hosts too.
+async function mayHideBrief(ctx: any, args: { communityId: any; podChannelId?: any }, userId: any): Promise<boolean> {
+  const allowed = args.podChannelId
+    ? requirePodEventManager(ctx, args.communityId, args.podChannelId, userId)
+    : requireCommunityManager({ ctx, communityId: args.communityId, userId });
+  return await allowed.then(() => true, () => false);
+}
+
+export const getPlaceBrief = query({
+  args: placeArgs,
+  handler: async (ctx, args) => {
+    const userId = await placeReader(ctx, args);
+    const brief = await readPlaceBrief(ctx, { communityId: args.communityId, podRoomId: args.podChannelId, nowMs: Date.now() });
+    return { brief, can_hide: brief ? await mayHideBrief(ctx, args, userId) : false };
+  },
+});
+
+// Takes the place's brief down until the guide writes the next one.
+export const hidePlaceBrief = mutation({
+  args: placeArgs,
+  handler: async (ctx, args) => {
+    const userId = await placeReader(ctx, args);
+    if (!(await mayHideBrief(ctx, args, userId))) throw new Error("community_forbidden");
+    const stored: any = await briefFor(ctx, args.podChannelId ? podScopeKey(args.podChannelId) : communityScopeKey(args.communityId));
+    if (stored && !stored.hiddenAt) await ctx.db.patch(stored._id, { hiddenAt: Date.now(), hiddenByUserId: userId });
+    return { hidden: Boolean(stored) };
+  },
 });
 
 // Operator tool: write a place's brief now, or as of an earlier time

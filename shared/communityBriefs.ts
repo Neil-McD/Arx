@@ -139,3 +139,17 @@ export function renderBriefDocument(brief: BriefView | null | undefined, place: 
     `Written by the guide from recent posts, ${brief.updated_at}. Each point names the channel its posts are in.`,
   ].join("\n");
 }
+
+// How long ago a brief was written, in a few words ("just now", "3h ago",
+// "yesterday", "2 days ago").
+export function briefAge(updatedAtIso: string, nowMs: number): string {
+  const at = Date.parse(updatedAtIso);
+  if (!Number.isFinite(at)) return "";
+  const minutes = Math.max(0, Math.floor((nowMs - at) / 60_000));
+  if (minutes < 5) return "just now";
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  return days === 1 ? "yesterday" : `${days} days ago`;
+}
