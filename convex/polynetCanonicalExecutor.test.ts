@@ -3759,6 +3759,8 @@ test("brief.md: the community's for everyone in it; a pod's inside only; gone po
   const after = body(await member("polynet_read", `${base}/brief.md`));
   expect(after).toContain("The Saturday meet");
   expect(after).not.toContain("Chalk");
+  // The headline summed up both points, so it goes with the one that went.
+  expect(after).not.toContain("A busy week at the wall");
 
   // Over a week old: no brief.
   await t.run((ctx: any) => ctx.db.patch(made.briefId, { updatedAt: nowMs - 8 * 24 * 60 * 60_000 }));

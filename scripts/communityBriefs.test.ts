@@ -41,7 +41,9 @@ test("a little over what was asked is kept; far over is refused with the reason"
 test("a reader sees only points whose posts are all still there, and nothing once the brief is old", () => {
   const brief = { headline: "Busy week", updatedAt: 1_000, points: [point("kept", ["post:a1"]), point("its reply is gone", ["post:a1", "reply:b2"]), point("gone", ["post:c3"])] };
   const live = (ref: string) => ref === "post:a1";
-  expect(visibleBrief(brief, 2_000, live)).toEqual({ headline: "Busy week", updatedAt: 1_000, points: [point("kept", ["post:a1"])] });
+  // A point went, so the headline that summed it up goes too.
+  expect(visibleBrief(brief, 2_000, live)).toEqual({ headline: null, updatedAt: 1_000, points: [point("kept", ["post:a1"])] });
+  expect(visibleBrief(brief, 2_000, () => true)).toMatchObject({ headline: "Busy week" });
   expect(visibleBrief(brief, 2_000, () => false)).toBeNull();
   expect(visibleBrief(brief, 1_000 + BRIEF_EXPIRES_MS + 1, live)).toBeNull();
   expect(visibleBrief(null, 2_000, live)).toBeNull();

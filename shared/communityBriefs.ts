@@ -86,15 +86,18 @@ export function briefMarkdown(brief: { headline: string; points: Array<{ text: s
 }
 
 // What a reader is shown of a stored brief: nothing once it is old, and only
-// the points whose posts are all still there.
+// the points whose posts are all still there. The headline sums up every
+// point, so once any point has gone it goes too: what a removed post said
+// must not live on in it.
 export function visibleBrief(
   brief: { headline: string; points: BriefPoint[]; updatedAt: number } | null | undefined,
   nowMs: number,
   refIsLive: (ref: string) => boolean,
-): { headline: string; points: BriefPoint[]; updatedAt: number } | null {
+): { headline: string | null; points: BriefPoint[]; updatedAt: number } | null {
   if (!brief || nowMs - brief.updatedAt > BRIEF_EXPIRES_MS) return null;
   const points = brief.points.filter((point) => point.refs.length > 0 && point.refs.every(refIsLive));
-  return points.length ? { headline: brief.headline, points, updatedAt: brief.updatedAt } : null;
+  if (points.length === 0) return null;
+  return { headline: points.length === brief.points.length ? brief.headline : null, points, updatedAt: brief.updatedAt };
 }
 
 // When a place's brief is next due: an hour after the first new activity, and
@@ -116,7 +119,8 @@ export const BRIEF_INSTRUCTIONS = [
 // A brief as a reader gets it: the points still standing, each with the
 // channels its posts are in, and when it was written.
 export type BriefView = {
-  headline: string;
+  // Null once a point has been dropped (its post is gone).
+  headline: string | null;
   points: Array<{ text: string; refs: string[]; channels: Array<{ slug: string; name: string }> }>;
   updated_at: string;
 };
@@ -128,8 +132,7 @@ export function renderBriefDocument(brief: BriefView | null | undefined, place: 
   return [
     title,
     "",
-    `**${brief.headline}**`,
-    "",
+    ...(brief.headline ? [`**${brief.headline}**`, ""] : []),
     ...brief.points.map((point) => `- ${point.text}${point.channels.length ? ` (${point.channels.map((channel) => `#${channel.name}`).join(", ")})` : ""}`),
     "",
     `Written by the guide from recent posts, ${brief.updated_at}. Each point names the channel its posts are in.`,
