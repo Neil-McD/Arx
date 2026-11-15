@@ -305,6 +305,8 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
   own, then listed pods they could ask to join; a pod is an invite-only room plus
   its purpose, hosts, seats and listed/hidden, [spec](specs/pods-v0.md)).
   Tables: `communityPods`, `communityPodRequests` (asks to join and the waitlist).
+  Pods in the guide's folder (`pods/`, `pods/<slug>/pod.md`, inside or outside by
+  lens; the guide inside only the pod it works in) are `communityPodFacts`.
 - **Tiers and grants (one door):** `communityTiers` (a membership holds one tier;
   each gives grants, the names a connected app reads; today's price is the base tier
   "member", and every reader of the price reads only it). Table: `communityTiers`;

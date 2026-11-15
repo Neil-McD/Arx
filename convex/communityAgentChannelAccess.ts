@@ -24,6 +24,8 @@ export const authorizeServeToolsInternal = internalQuery({
     const root = await ctx.db.get(request.sourceRootId);
     if (!root || root.communityId !== request.communityId || root.status !== "live") throw new Error("community_agent_serve_source_unavailable");
     const channel = await requireAgentSourceChannelAccess({ ctx, root, userId: request.requesterUserId });
-    return { restricted: channel?.accessMode === "restricted" };
+    // A tag in a pod's room: this run works in that pod (its lens sees it).
+    const restricted = channel?.accessMode === "restricted";
+    return { restricted, ...(restricted && channel?._id ? { podRoomId: String(channel._id) } : {}) };
   },
 });

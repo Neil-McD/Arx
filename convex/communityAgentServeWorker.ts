@@ -399,6 +399,7 @@ export async function executeConciergeTool(args: {
       errorMessage: "Community concierge tool is not allowed.",
     };
   }
+  let podRoomId: string | null = null;
   try {
     const scope = await args.ctx.runQuery(internalRefs.communityAgentChannelAccess.authorizeServeToolsInternal, {
       requestId: args.requestId, expectedAttempt: args.context.request.attempt,
@@ -411,6 +412,7 @@ export async function executeConciergeTool(args: {
       return { status: "error", exitCode: null, outputText: "", errorCode: "private_channel_output_scoped",
         errorMessage: "This private-room turn can read shared knowledge and answer in its originating thread; it cannot publish elsewhere or modify shared memory." };
     }
+    podRoomId = scope.podRoomId ?? null;
   } catch {
     return { status: "error", exitCode: null, outputText: "", errorCode: "channel_access_missing", errorMessage: "The run no longer has access to its source." };
   }
@@ -426,6 +428,7 @@ export async function executeConciergeTool(args: {
     toolName: args.toolName,
     args: args.rawArguments,
     evidenceSurface: "community_concierge",
+    podRoomId,
   });
 }
 
