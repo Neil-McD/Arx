@@ -103,7 +103,13 @@ assert.match(
   "The guide's run must budget and send one resolved provider tool surface",
 );
 assert.match(read("convex/communityAgentServeWorker.ts"), /runFundedCommunityAgent\(\{/, "the tagged guide runs on the shared run entry");
-assert.match(read("convex/communityMemoryReview.ts"), /runFundedCommunityAgent\(\{/, "the nightly review runs on the shared run entry");
+// The guide's work with nobody present (the nightly review, a place's brief)
+// runs through one helper, which runs on the shared run entry.
+assert.match(read("convex/agentWork.ts"), /export async function runAgentWork[\s\S]*runFundedCommunityAgent\(\{\s*lens: "worker",/, "the guide's unattended work runs on the shared run entry");
+for (const path of ["convex/communityMemoryReview.ts", "convex/communityBriefs.ts"]) {
+  assert.match(read(path), /await runAgentWork\(ctx, \{/, `${path} runs through the worker helper`);
+  assert.doesNotMatch(read(path), /runFundedCommunityAgent|settleCommunityInferenceFundingSession/, `${path} has no run or funding code of its own`);
+}
 
 // Funding is claimed only by the run entry, after admission (below); a
 // private talk's handler never claims it.

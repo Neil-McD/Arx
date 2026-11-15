@@ -200,11 +200,14 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
   read it.
 - **Code:** `communityNotesStore` (the one door to memory records, by scope), `communityNotes`, `communityMemory` (tables `communityNoteRevisions`,
   `communityNoteRemovals`, `communityMemoryIndex`, `agentWork`, `agentWorkRuns`),
+  `agentWork` (the guide's work with nobody present: claiming and completing a
+  work row, and the one run every kind goes through),
   `communityMemoryReview` (the guide's nightly review: made due by posts in open
   channels, run on the shared run entry `communityAgentRun` in one pass: the
   server hands the guide memory.md, the notes and the new posts, and it writes
   once with `memory.apply`), `communityBriefs` (a place's brief, table
-  `communityBriefs`: written by the guide after new posts in open channels, at
+  `communityBriefs`: written by the guide after new posts in a place, the
+  community's open channels or a pod's own room where the guide works, at
   most every three hours, on the same run entry in one request, with one
   `brief.write` whose points cite the posts they came from), `communityEvidence*`,
   `communityCognitionLifecycle`, `communityWikiArchitect`; member knowledge stays in

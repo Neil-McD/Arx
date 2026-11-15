@@ -1,23 +1,23 @@
 // A place's brief (shared/communityBriefs.ts): the guide, with nobody
-// present, writes what's happening in the community, after new activity in
-// its open channels: an hour after the first new post, and at most once
-// every three hours, so a burst is read once and a busy place stays cheap.
-// It runs on the one run entry with the worker lens, in one model request:
-// the server hands it who the community is, its handbook, its memory.md and
-// its recent threads (picked by how much they matter, each post with the id
-// a point cites), and it answers with one brief.write, which ends the run.
-// A quiet place costs nothing; with AI off nothing runs. Pods get their own
-// briefs next.
+// present, writes what's happening in a place after new activity there: an
+// hour after the first new post, and at most once every three hours, so a
+// burst is read once and a busy place stays cheap. The places are the
+// community (its open channels) and each pod the guide works in (its own
+// room); a pod's brief is written from that room alone and kept in the pod's
+// scope, so it never leaves the pod. It is one kind of the guide's work with
+// nobody present (convex/agentWork.ts runs it), in one model request: the
+// server hands the guide who the community is, its handbook, the place's
+// memory.md and its recent threads (picked by how much they matter, each
+// post with the id a point cites), and it answers with one brief.write,
+// which ends the run. A quiet place costs nothing; with AI off nothing runs.
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import { internalAction, internalMutation, internalQuery } from "./_generated/server";
+import { runAgentWork } from "./agentWork";
 import { getUniqueCommunityMembershipByPair, normalizeCommunityRoleForOutput } from "./communityCore";
 import { displayName } from "./communityFounderBrief";
-import { communityScopeKey, insertWork, memoryIndexFor, workFor, writeBrief, type ScopeKey } from "./communityNotesStore";
-import { scheduleAgentWork } from "./communityMemory";
-import { runFundedCommunityAgent, type CommunityAgentRunEvent } from "./communityAgentRun";
-import { founderProviderRequests } from "./founderInferenceUsage";
-import { settleCommunityInferenceFundingSession } from "./founderInferenceRuntime";
+import { communityScopeKey, insertWork, memoryIndexFor, podScopeKey, workFor, writeBrief, type ScopeKey } from "./communityNotesStore";
+import { guideSeatedInPod, openRun, podRoom, scheduleAgentWork } from "./communityMemory";
 import { renderCommunityCard } from "../shared/communityOntology";
 import { renderCommunityHandbook } from "../shared/communityHandbook";
 import { BRIEF_INSTRUCTIONS, BRIEF_WINDOW_MS, BRIEF_WRITE_OPERATION, nextBriefAtMs, parseBriefWriteCall } from "../shared/communityBriefs";
@@ -33,14 +33,17 @@ const REPLY_CHARS = 200;
 const PER_CHANNEL_SCAN = 60;
 const CHANNELS_MAX = 50;
 
-// A person's post or reply in an open channel makes the community's brief
-// due; more activity before then joins it.
+// A person's post or reply makes its place's brief due; more activity before
+// then joins it. An open channel's post is the community's; a pod room's is
+// that pod's, where the guide works (a builder seated it there).
 export async function markCommunityBriefDue(ctx: any, args: { communityId: any; channelId: any; actorType: string; nowMs: number }) {
   if (args.actorType !== "human" || !args.channelId) return;
   const channel = await ctx.db.get(args.channelId);
   if (!channel || channel.status !== "active" || String(channel.communityId) !== String(args.communityId)) return;
-  if (channel.accessMode !== "all_members") return;
-  const scope = communityScopeKey(args.communityId);
+  let scope: ScopeKey;
+  if (channel.accessMode === "all_members") scope = communityScopeKey(args.communityId);
+  else if (channel.accessMode === "restricted" && await guideSeatedInPod(ctx, channel._id)) scope = podScopeKey(channel._id);
+  else return;
   const work = await workFor(ctx, scope, "brief");
   if (work?.dueAt) {
     await ctx.db.patch(work._id, { pending: work.pending + 1, updatedAt: args.nowMs });
@@ -68,21 +71,24 @@ function clip(raw: unknown, max: number): string {
 
 const asksSomething = (row: any) => row.kind === "question" || String(row.title ?? row.contentSummary ?? "").includes("?");
 
-// What the brief is written from: the community's memory.md and its recent
-// threads in open channels, as any member sees them. Threads are picked by
-// how much they matter (a host wrote it, people replied, a question nobody
-// answered, how recent), not only by time, so a busy community's brief is
-// about what counts. Each post and reply carries the id a point cites; refs
-// lists exactly those. Never pods, private talks, join requests or people's
-// plans.
+// What the brief is written from: the place's memory.md and its recent
+// threads, as anyone in the place sees them. The community's: its open
+// channels. A pod's: its own room and its own memory, never the community's
+// posts or another pod's. Threads are picked by how much they matter (a host
+// wrote it, people replied, a question nobody answered, how recent), not
+// only by time, so a busy place's brief is about what counts. Each post and
+// reply carries the id a point cites; refs lists exactly those. Never
+// private talks, join requests or people's plans.
 export const readCommunityBriefInputInternal = internalQuery({
-  args: { communityId: v.id("communities"), untilMs: v.number() },
+  args: { communityId: v.id("communities"), untilMs: v.number(), podRoomId: v.optional(v.string()) },
   handler: async (ctx, args) => {
     const none = { threads: 0, text: "", refs: [] as string[] };
     const community: any = await ctx.db.get(args.communityId);
     if (!community) return none;
+    const room: any = args.podRoomId ? await podRoom(ctx, args.communityId, args.podRoomId) : null;
+    if (args.podRoomId && !room) return none;
     const sinceMs = args.untilMs - BRIEF_WINDOW_MS;
-    const channels: any[] = await ctx.db.query("communityChannels")
+    const channels: any[] = room ? [room] : await ctx.db.query("communityChannels")
       .withIndex("by_community_access_status_position", (q: any) => q.eq("communityId", args.communityId).eq("accessMode", "all_members").eq("status", "active"))
       .take(CHANNELS_MAX);
     const channelNames = new Map<string, string>(channels.map((channel) => [String(channel._id), String(channel.name ?? "a channel")]));
@@ -117,7 +123,10 @@ export const readCommunityBriefInputInternal = internalQuery({
     }
     if (threads.size === 0) return none;
 
-    const hosts = new Map<string, boolean>();
+    // A pod's hosts count as hosts there, beside the community's.
+    const podRecord: any = room ? await ctx.db.query("communityPods")
+      .withIndex("by_community_channel", (q: any) => q.eq("communityId", args.communityId).eq("channelId", room._id)).first() : null;
+    const hosts = new Map<string, boolean>(((podRecord?.hostUserIds ?? []) as any[]).map((id) => [String(id), true]));
     const isHost = async (userId: any) => {
       const key = String(userId);
       if (!hosts.has(key)) {
@@ -161,11 +170,11 @@ export const readCommunityBriefInputInternal = internalQuery({
       }
       blocks.push(lines.join("\n"));
     }
-    const memory: any = await memoryIndexFor(ctx, communityScopeKey(args.communityId));
+    const memory: any = await memoryIndexFor(ctx, room ? podScopeKey(room._id) : communityScopeKey(args.communityId));
     const text = [
-      "## memory.md (what this community has settled; for context, not to repeat)",
+      `## memory.md (what this ${room ? "pod" : "community"} has settled; for context, not to repeat)`,
       memory?.bodyMd ? String(memory.bodyMd) : "(empty)",
-      "## Recent threads in the open channels, the ones that matter most first",
+      room ? "## Recent threads in the pod's room, the ones that matter most first" : "## Recent threads in the open channels, the ones that matter most first",
       ...blocks,
     ].join("\n\n");
     return { threads: blocks.length, text, refs };
@@ -177,8 +186,11 @@ export const writeCommunityBriefInternal = internalMutation({
   args: { communityId: v.id("communities"), runId: v.id("agentWorkRuns"), headline: v.string(),
     points: v.array(v.object({ text: v.string(), refs: v.array(v.string()) })), windowEnd: v.number(), nowMs: v.number() },
   handler: async (ctx, args) => {
-    const run: any = await ctx.db.get(args.runId);
-    if (!run || String(run.communityId) !== String(args.communityId) || run.status !== "running" || run.kind !== "brief") return { ok: false as const };
+    // Checked when the write happens: the run is still open, and for a pod,
+    // its room is open and the guide still works there (a builder taking the
+    // guide out stops a brief already being written).
+    const run: any = await openRun(ctx, args.communityId, args.runId);
+    if (!run || run.kind !== "brief") return { ok: false as const };
     const scope = (run.scopeKey as ScopeKey | undefined) ?? communityScopeKey(args.communityId);
     await writeBrief(ctx, scope, {
       communityId: args.communityId, headline: args.headline, points: args.points,
@@ -189,138 +201,68 @@ export const writeCommunityBriefInternal = internalMutation({
   },
 });
 
-function eventRecorder(ctx: any, communityId: any, runId: string) {
-  let seq = 1;
-  let buffer: Array<CommunityAgentRunEvent & { seq: number }> = [];
-  const flushAll = async () => {
-    if (buffer.length === 0) return;
-    const events = buffer;
-    buffer = [];
-    await ctx.runMutation(internalRefs.communityAgentServeWorker.recordCommunityAgentRunEventsInternal, { communityId, runId, events });
-  };
-  const record = async (event: CommunityAgentRunEvent) => {
-    buffer.push({ ...event, seq: seq++ });
-    if (buffer.length >= 10) await flushAll();
-  };
-  return { record, recordRequired: async (event: CommunityAgentRunEvent) => { await record(event); await flushAll(); }, flushAll };
-}
-
 export const runCommunityBriefInternal = internalAction({
   // asOfMs: operator runs only, to write the brief as of an earlier time
   // (acceptance on seeded data whose posts are older than the window).
   args: { workId: v.id("agentWork"), asOfMs: v.optional(v.number()) },
-  handler: async (ctx, args) => {
-    const claim = await ctx.runMutation(internalRefs.communityMemoryReview.claimMemoryReviewInternal, { workId: args.workId, nowMs: Date.now() });
-    if (!claim) return { status: "not_due" };
-    if ("skipped" in claim) return { status: "skipped" };
-    const complete = (outcome: "reviewed" | "failed" | "skipped", errorCode?: string) =>
-      ctx.runMutation(internalRefs.communityMemoryReview.completeMemoryReviewInternal, {
-        workId: args.workId, outcome, windowEnd: claim.windowEnd, claimedPending: claim.claimedPending, nowMs: Date.now(),
-        ...(errorCode ? { errorCode } : {}),
-      });
-    const admission = await ctx.runQuery(internalRefs.communityMemoryReview.readReviewAdmissionInternal, { communityId: claim.communityId });
-    if (!admission.ok) {
-      await complete("skipped");
-      return { status: "skipped" };
-    }
-    const untilMs = args.asOfMs ?? claim.windowEnd;
-    const { runId } = await ctx.runMutation(internalRefs.communityMemory.openMemoryReviewRunInternal, {
-      communityId: claim.communityId, windowStart: untilMs - BRIEF_WINDOW_MS, windowEnd: untilMs, nowMs: Date.now(), kind: "brief",
-    });
-    const finish = (extra: Record<string, unknown>) => ctx.runMutation(internalRefs.communityMemory.finishMemoryReviewRunInternal, {
-      communityId: claim.communityId, runId, nowMs: Date.now(), ...extra,
-    });
-    const [input, cardSource, handbook] = await Promise.all([
-      ctx.runQuery(internalRefs.communityBriefs.readCommunityBriefInputInternal, { communityId: claim.communityId, untilMs }),
-      ctx.runQuery(internalRefs.communityOntologyCards.loadCommunityCardSourceInternal, { communityId: claim.communityId }).catch(() => null),
-      ctx.runQuery(internalRefs.communityHandbook.readApprovedCommunityHandbookInternal, { communityId: claim.communityId }).catch(() => null),
-    ]);
-    if (input.threads === 0) {
-      await finish({});
-      await complete("reviewed");
-      return { status: "empty" };
-    }
-    // Who the community is and how its builder wants the guide to speak:
-    // stable text first, so requests share a cached prefix. What's coming up
-    // is left off the card: the page shows it live.
-    const system = [
-      BRIEF_INSTRUCTIONS,
-      `This place: the ${claim.communityName} community.`,
-      ...(cardSource ? [renderCommunityCard({ ...cardSource, channels: [], events: [] }, "member")] : []),
-      ...(handbook ? [renderCommunityHandbook(handbook)] : []),
-    ].join("\n\n");
-    const shownRefs = new Set<string>(input.refs);
-    // The run counts only if the brief was written, and the write ends it.
-    const brief = { written: null as string | null };
-    const run = await runFundedCommunityAgent({
-      lens: "worker",
-      ctx,
-      communityId: claim.communityId,
-      actorUserId: claim.ownerUserId,
-      surface: "community_autonomous_cognition",
-      receiptKey: `community_brief:${String(runId)}`,
-      sourceRunId: `community-brief:${String(runId)}`,
-      admission,
-      messages: [{ role: "system", content: system }, { role: "user", content: input.text }],
-      maxOutputTokens: BRIEF_MAX_OUTPUT_TOKENS,
-      maxToolSteps: BRIEF_MAX_TOOL_STEPS,
-      promptCacheKey: `pn:${String(claim.communityId)}:brief`,
-      recorder: eventRecorder(ctx, claim.communityId, `community-brief:${String(runId)}`),
-      // The call's input is parsed here, by the brief's own rules.
-      normalizeToolArguments: (_toolName, rawArgs) => rawArgs,
-      describeToolCall: (toolName, callArgs) => `${toolName} ${String(callArgs.operation ?? "")}`.trim(),
-      maxConsecutiveFailures: 2,
-      // The first answer is the brief: a model that describes it instead of
-      // writing it would leave the place without one.
-      firstToolChoice: { type: "function", name: "polynet_call" },
-      endWith: () => brief.written,
-      executeTool: async (_toolName, rawArguments) => {
-        const parsed = parseBriefWriteCall(rawArguments, shownRefs);
-        if ("error" in parsed) {
-          return { status: "error" as const, exitCode: null, outputText: "", errorCode: parsed.error,
-            errorMessage: `${parsed.why} Write with polynet_call { operation: "${BRIEF_WRITE_OPERATION}", input: { headline, points: [{ text, refs }] } }.` };
-        }
-        const saved = await ctx.runMutation(internalRefs.communityBriefs.writeCommunityBriefInternal, {
-          communityId: claim.communityId, runId, headline: parsed.headline, points: parsed.points, windowEnd: untilMs, nowMs: Date.now(),
-        });
-        if (saved?.ok) brief.written = parsed.headline;
-        return saved?.ok
-          ? { status: "ok" as const, exitCode: 0, outputText: JSON.stringify({ written: "brief" }), errorCode: null, errorMessage: null }
-          : { status: "error" as const, exitCode: null, outputText: "", errorCode: "run_closed", errorMessage: "This brief's run is no longer open." };
-      },
-    });
-    if (!run.ok) {
-      await finish({ failed: true, errorCode: run.failureCode });
-      await complete("failed", run.failureCode);
-      return { status: "failed", errorCode: run.failureCode };
-    }
-    try {
-      await settleCommunityInferenceFundingSession({
-        ctx, session: run.fundingSession, promptTokens: run.usage.promptTokens, completionTokens: run.usage.completionTokens,
-        providerRequests: founderProviderRequests(run.usage), usageComplete: run.usage.complete, outcomeCode: "provider_completed",
-      });
-    } catch {
-      // The receipt's own lease settles it as indeterminate; the brief stands.
-    }
-    if (brief.written === null) {
-      // It answered but never wrote a valid brief: what it spent is settled, and the work is retried.
-      await finish({ failed: true, errorCode: "brief_not_written" });
-      await complete("failed", "brief_not_written");
-      return { status: "failed", errorCode: "brief_not_written" };
-    }
-    await finish({ summary: brief.written, promptTokens: run.usage.promptTokens, completionTokens: run.usage.completionTokens });
-    await complete("reviewed");
-    return { status: "written" };
-  },
+  handler: async (ctx, args) => await runAgentWork(ctx, {
+    workId: args.workId,
+    kind: "brief",
+    names: { receipt: "community_brief", source: "community-brief", events: "community-brief", cache: "brief" },
+    maxOutputTokens: BRIEF_MAX_OUTPUT_TOKENS,
+    maxToolSteps: BRIEF_MAX_TOOL_STEPS,
+    // A run that ends in words leaves the place's activity for the retry.
+    mustWrite: "brief_not_written",
+    done: "written",
+    window: (claim) => ({ start: (args.asOfMs ?? claim.windowEnd) - BRIEF_WINDOW_MS, end: args.asOfMs ?? claim.windowEnd }),
+    prepare: async (claim, runId) => {
+      const untilMs = args.asOfMs ?? claim.windowEnd;
+      const [input, cardSource, handbook] = await Promise.all([
+        ctx.runQuery(internalRefs.communityBriefs.readCommunityBriefInputInternal, {
+          communityId: claim.communityId, untilMs, ...(claim.pod ? { podRoomId: claim.pod.roomId } : {}) }),
+        ctx.runQuery(internalRefs.communityOntologyCards.loadCommunityCardSourceInternal, { communityId: claim.communityId }).catch(() => null),
+        ctx.runQuery(internalRefs.communityHandbook.readApprovedCommunityHandbookInternal, { communityId: claim.communityId }).catch(() => null),
+      ]);
+      // Who the community is and how its builder wants the guide to speak:
+      // stable text first, so requests share a cached prefix. What's coming
+      // up is left off the card: the page shows it live.
+      const system = [
+        BRIEF_INSTRUCTIONS,
+        claim.pod
+          ? `This place: the ${claim.pod.name} pod, in the ${claim.communityName} community. Only people in this pod read this brief: write what's happening in the pod, from its own room.`
+          : `This place: the ${claim.communityName} community.`,
+        ...(cardSource ? [renderCommunityCard({ ...cardSource, channels: [], events: [] }, "member")] : []),
+        ...(handbook ? [renderCommunityHandbook(handbook)] : []),
+      ].join("\n\n");
+      const shownRefs = new Set<string>(input.refs);
+      return {
+        empty: input.threads === 0,
+        messages: [{ role: "system", content: system }, { role: "user", content: input.text }],
+        write: async (rawArguments) => {
+          const brief = parseBriefWriteCall(rawArguments, shownRefs);
+          if ("error" in brief) {
+            return { ok: false, code: brief.error,
+              message: `${brief.why} Write with polynet_call { operation: "${BRIEF_WRITE_OPERATION}", input: { headline, points: [{ text, refs }] } }.` };
+          }
+          const saved = await ctx.runMutation(internalRefs.communityBriefs.writeCommunityBriefInternal, {
+            communityId: claim.communityId, runId, headline: brief.headline, points: brief.points, windowEnd: untilMs, nowMs: Date.now(),
+          });
+          return saved?.ok
+            ? { ok: true, output: { written: "brief" }, ended: brief.headline }
+            : { ok: false, code: "run_closed", message: "This brief's run is no longer open." };
+        },
+      };
+    },
+  }),
 });
 
-// Operator tool: write a community's brief now, or as of an earlier time
-// (acceptance runs on staging).
+// Operator tool: write a place's brief now, or as of an earlier time
+// (acceptance runs on staging). podRoomId: a pod's brief.
 export const requestCommunityBriefNowInternal = internalMutation({
-  args: { communityId: v.id("communities"), asOfMs: v.optional(v.number()) },
+  args: { communityId: v.id("communities"), asOfMs: v.optional(v.number()), podRoomId: v.optional(v.id("communityChannels")) },
   handler: async (ctx, args) => {
     const nowMs = Date.now();
-    const scope = communityScopeKey(args.communityId);
+    const scope = args.podRoomId ? podScopeKey(args.podRoomId) : communityScopeKey(args.communityId);
     const work = await workFor(ctx, scope, "brief");
     let workId = work?._id;
     if (work) {

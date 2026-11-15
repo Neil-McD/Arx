@@ -102,7 +102,7 @@ test("a pod's review is skipped once the guide is taken out of the pod", async (
     const seat = await ctx.db.query("communityChannelParticipants").withIndex("by_channel_principal", (q: any) => q.eq("channelId", w.climbersId).eq("principalKey", "community_agent")).first();
     await ctx.db.patch(seat._id, { status: "revoked" });
   });
-  expect(await t.mutation(internal.communityMemoryReview.claimMemoryReviewInternal, { workId, nowMs: Date.now() + 1_000 })).toEqual({ skipped: true });
+  expect(await t.mutation(internal.agentWork.claimAgentWorkInternal, { workId, nowMs: Date.now() + 1_000 })).toEqual({ skipped: true });
 });
 
 test("a pod's hosts may undo its memory; not the community's", async () => {
