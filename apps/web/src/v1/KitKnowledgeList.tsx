@@ -8,6 +8,7 @@ import { BookOpen, FileText, Link2, StickyNote } from "lucide-react";
 import type { CommunityNoteView } from "../../../../shared/cloudCommunityNotesGateway";
 import type { CommunityResource } from "../components/communityResourcesContracts";
 import { noteIsNew } from "./KitKnowledgeNotes";
+import { askInApp } from "../../../../shared/inAppConfirm";
 import { cx, Icon } from "./kit";
 
 export type KnowledgeAddResult = { ok: true } | { ok: false; message: string };
@@ -31,6 +32,8 @@ function noteFrom(note: CommunityNoteView): string {
   if (note.kind === "tag") return "From a channel";
   return "";
 }
+
+const sourceFailed = (resource: CommunityResource) => (resource as { source_ingestion_status?: string }).source_ingestion_status === "failed";
 
 function sourceState(resource: CommunityResource): string {
   const status = (resource as { source_ingestion_status?: string }).source_ingestion_status;
@@ -222,7 +225,29 @@ export function KitKnowledgeList(props: {
   sources: CommunityResource[];
   now: number;
   onOpenNote: (slug: string) => void;
+  // Read everything that couldn't be read again; take one source away.
+  onRetrySources?: () => Promise<KnowledgeAddResult>;
+  onRemoveSource?: (resourceId: string) => Promise<void>;
 }) {
+  const [busy, setBusy] = useState<string | null>(null);
+  const [problem, setProblem] = useState<string | null>(null);
+  const retry = async () => {
+    if (busy || !props.onRetrySources) return;
+    setBusy("retry");
+    setProblem(null);
+    try {
+      const result = await props.onRetrySources();
+      if (!result.ok) setProblem(result.message);
+    } finally { setBusy(null); }
+  };
+  const remove = async (source: CommunityResource) => {
+    if (busy || !props.onRemoveSource) return;
+    const yes = await askInApp({ message: `Remove "${source.title}"? Your guide forgets what it read there.`, yes: "Remove", no: "Keep", danger: true });
+    if (!yes) return;
+    setBusy(source.id);
+    setProblem(null);
+    try { await props.onRemoveSource(source.id); } catch { setProblem("That couldn't be removed. Try again."); } finally { setBusy(null); }
+  };
   const rows = [
     ...props.sources.map((source) => ({ key: `s:${source.id}`, at: Date.parse(source.created_at) || 0, source, note: null as CommunityNoteView | null })),
     ...props.notes.map((note) => ({ key: `n:${note.slug}`, at: Date.parse(note.created_at ?? note.updated_at) || 0, source: null as CommunityResource | null, note })),
@@ -231,6 +256,7 @@ export function KitKnowledgeList(props: {
 
   return (
     <>
+      {problem ? <div className={cx("khint")} role="alert" style={{ color: "var(--bad)" }}>{problem}</div> : null}
       <div className={cx("krows")}>
         {rows.map((row) => row.note ? (
           <button key={row.key} type="button" className={cx("krow")} onClick={() => props.onOpenNote(row.note!.slug)}>
@@ -242,7 +268,11 @@ export function KitKnowledgeList(props: {
           <div key={row.key} className={cx("krow")}>
             {row.source.type === "file" ? <FileText className={cx("ic")} aria-hidden="true" /> : <Link2 className={cx("ic")} aria-hidden="true" />}
             <span className={cx("t")}><b>{row.source.title}</b></span>
-            <span className={cx("from")}>{sourceState(row.source)}</span>
+            <span className={cx("from")}>
+              <span style={sourceFailed(row.source) ? { color: "var(--bad)" } : undefined}>{sourceState(row.source)}</span>
+              {sourceFailed(row.source) && props.onRetrySources ? <button type="button" className={cx("btn sm")} disabled={Boolean(busy)} onClick={() => void retry()}>{busy === "retry" ? "Reading…" : "Try again"}</button> : null}
+              {props.onRemoveSource ? <button type="button" className={cx("btn sm txt")} disabled={Boolean(busy)} onClick={() => void remove(row.source!)}>{busy === row.source.id ? "Removing…" : "Remove"}</button> : null}
+            </span>
           </div>
         ) : null)}
       </div>

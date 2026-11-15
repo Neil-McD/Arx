@@ -6,6 +6,7 @@ import {
   type CommunityResourceLike,
   communityResourceBodyChars,
   communityResourceIsLiveModulePage,
+  normalizeLessonLinks,
   communityResourceSourceHasReadyText,
   communityResourceModuleIsLive,
   getCommunityAndMembership,
@@ -2003,6 +2004,11 @@ export const crawlCommunitySourceRoot: any = action({
   },
 });
 
+function lessonLinksOrNone(raw: unknown): Array<{ title: string; url: string }> | undefined {
+  const links = normalizeLessonLinks(raw);
+  return links.length ? links : undefined;
+}
+
 export const saveCommunityResource = mutation({
   args: {
     userId: v.optional(v.id("users")),
@@ -2132,6 +2138,10 @@ export const saveCommunityResource = mutation({
         title: nextTitle,
         url: nextUrl,
         fileKey: nextFileKey,
+        // A lesson's links change only when sent, and only a page has them.
+        ...(Object.prototype.hasOwnProperty.call(payload, "lesson_links")
+          ? { lessonLinks: nextRole === "page" ? lessonLinksOrNone(payload.lesson_links) : undefined }
+          : {}),
         sourceIngestionStatus: nextSourceIngestionStatus,
         sourceIngestionKind: nextSourceIngestionKind,
         ...(sourceRevisionChanged
@@ -2238,6 +2248,7 @@ export const saveCommunityResource = mutation({
       title,
       url,
       fileKey,
+      ...(role === "page" && lessonLinksOrNone(payload.lesson_links) ? { lessonLinks: lessonLinksOrNone(payload.lesson_links) } : {}),
       sourceIngestionStatus,
       sourceIngestionKind,
       ...(Object.prototype.hasOwnProperty.call(payload, "source_ingestion_error")

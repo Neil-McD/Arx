@@ -91,6 +91,13 @@ function KnowledgeV1({ resources, context }: Props) {
             return { ok: true };
           } : undefined}
           onReorderCourses={canManage ? resources.actions.handleReorderModules : undefined}
+          onRetrySources={canManage ? async () => {
+            const result = await resources.actions.handleAddCommunitySources({ links: [], files: [], retryExisting: true });
+            const failed = result?.ingestion?.failures.length ?? 0;
+            if (!result || result.errors.length || failed) return { ok: false, message: failed ? `${failed === 1 ? "One still" : `${failed} still`} couldn't be read. ${sourceProblem(result?.ingestion?.failures[0]?.message)}` : sourceProblem(result?.errors[0]) };
+            return { ok: true };
+          } : undefined}
+          onRemoveSource={canManage ? async (resourceId) => { await resources.actions.handleDeleteResource(resourceId); } : undefined}
           onSetCourseStatus={canManage ? async (id, status) => {
             const course = resources.state.modules.find((module) => module.id === id);
             if (course) await resources.actions.handleSetModuleStatus(course, status);
@@ -135,8 +142,15 @@ function KnowledgeV1({ resources, context }: Props) {
           } : undefined}
           lessonEditing={canManage ? {
             save: async (resourceId, patch) => {
+              const before = resources.state.resources.find((resource) => resource.id === resourceId)?.lesson_links ?? [];
               await saveCloudCommunityResource({ session: context.session, resourceId, isPatch: true, payload: patch });
               await resources.actions.retryRead("resources");
+              // New links on a lesson are also handed to the guide to read, as
+              // any link is. One it already has is skipped; a page it can't
+              // read still opens for members, so a failure here is not the
+              // lesson's problem (it shows in What your guide knows).
+              const added = (patch.lesson_links ?? []).map((link) => link.url).filter((url) => !before.some((link) => link.url === url));
+              if (added.length) void resources.actions.handleAddCommunitySources({ links: added, files: [] }).catch(() => null);
             },
             addLesson: async (id) => {
               const created = await resources.actions.handleCreateBlankPageDraft(id);

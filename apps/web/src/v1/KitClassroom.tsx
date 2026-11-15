@@ -85,6 +85,10 @@ export function KitClassroom(props: {
   onOpenGuideMemory?: (open: boolean) => void;
   // Makes a draft course with these lessons and opens it (hosts).
   onCreateCourse?: (name: string, lessons: string[]) => Promise<KnowledgeAddResult>;
+  // Files and links the guide was given: read the failed ones again, or take
+  // one away (hosts).
+  onRetrySources?: () => Promise<KnowledgeAddResult>;
+  onRemoveSource?: (resourceId: string) => Promise<void>;
   // The shelf's order, as members see it (hosts).
   onReorderCourses?: (moduleIds: string[]) => Promise<boolean> | boolean;
   // A course's own tools (hosts): change its name, description and cover in
@@ -431,7 +435,8 @@ export function KitClassroom(props: {
         <p className={cx("sub")} style={{ margin: 0 }}>Your guide answers from this. Members never see the list.</p>
         <KitKnowledgeAdd seed={null} communityName={props.communityName} closedLabel="Teach your guide"
           onAddNote={teach} onAddSources={props.canManage ? props.onAddSources : undefined} />
-        <KitKnowledgeList notes={notes} now={now} sources={guideSources} onOpenNote={(slug) => setNote({ slug, mode: "read" })} />
+        <KitKnowledgeList notes={notes} now={now} sources={guideSources} onOpenNote={(slug) => setNote({ slug, mode: "read" })}
+          onRetrySources={props.onRetrySources} onRemoveSource={props.onRemoveSource} />
         {notes.length === 0 && guideSources.length === 0 ? <p className={cx("sub")} style={{ marginTop: 20 }}>Nothing yet. Teach it something above, and what gets answered in channels is saved here on its own.</p> : null}
       </div>
     );
@@ -477,6 +482,16 @@ export function KitClassroom(props: {
               ) : null}
             </div>
             <div className="kit-lesson-body"><WebCommunityResourceViewerContent resource={lesson} /></div>
+            {lesson.lesson_links?.length ? (
+              <div className={cx("kres")}>
+                <span className={cx("lab")}>Resources for this lesson</span>
+                {lesson.lesson_links.map((link) => (
+                  <a key={link.url} className={cx("kresrow", "klink")} href={link.url} target="_blank" rel="noreferrer noopener">
+                    <Icon name="link" /><span><b>{link.title}</b><em>{link.url.replace(/^https?:\/\//i, "").replace(/\/$/, "")}</em></span><Icon name="arrow" />
+                  </a>
+                ))}
+              </div>
+            ) : null}
             <div className={cx("acts")} style={{ marginTop: 22 }}>
               {!props.canManage && !done.has(lesson.id) ? (
                 <button type="button" className={cx("btn go")} disabled={saving} onClick={async () => { await mark(lesson.id, true); if (next) setLessonId(next.id); }}>
