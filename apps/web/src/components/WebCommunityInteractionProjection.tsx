@@ -514,10 +514,15 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
   const ThreadSurface = isMobileThreadPage ? "section" : "aside";
   const hasDetailPanel = Boolean(selectedRoot || props.profilePanel);
   const kitFeed = isDesignV1Active() && isDesktopWidth && !props.mobileThreadPage;
+  // The right column is for something you picked (Neil, Nov 14: question
+  // every requirement). An ordinary channel has nothing picked, so the feed
+  // takes the room; a thread still opens there, and a pod's room keeps its
+  // column (its call, its people, its requests).
+  const openChannelNoColumn = isDesignV1Active() && props.activeChannel?.access_mode !== "restricted";
 
   return (
     <>
-    <div className={`community-interaction-projection${hasDetailPanel ? " has-drawer" : hasChannelContext ? " has-channel-context" : ""}${isMobileThreadPage ? " mobile-thread-page-open" : ""}${peopleOpen && !hasDetailPanel ? " people-panel-open" : ""}`}>
+    <div className={`community-interaction-projection${hasDetailPanel ? " has-drawer" : hasChannelContext ? ` has-channel-context${openChannelNoColumn ? " is-open-channel" : ""}` : ""}${isMobileThreadPage ? " mobile-thread-page-open" : ""}${peopleOpen && !hasDetailPanel ? " people-panel-open" : ""}`}>
       <div className="community-interaction-main" ref={mainRef}>
         {props.activeChannel ? (
           <WebCommunityChannelHeader

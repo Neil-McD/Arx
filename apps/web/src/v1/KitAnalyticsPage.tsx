@@ -5,10 +5,10 @@ import { useState, type ReactNode } from "react";
 import { AnalyticsLineChart } from "../../../../shared/AnalyticsLineChart";
 import { formatCount, formatMoneyBaseUnits } from "../../../../shared/contentFormatting";
 import type { AnalyticsRange, CommunityAnalyticsPlan } from "../../../../shared/communityTypes";
-import { CommunityPageHeader, CommunityPageRail } from "../components/CommunityPageHeader";
+import { CommunityPageHeader } from "../components/CommunityPageHeader";
 import { SettingsSegmented } from "../components/SettingsRows";
 import type { CommunityAnalyticsActions, CommunityAnalyticsState } from "../components/communityAnalyticsContracts";
-import { cx, Figs, KitApp, Rail, Sec } from "./kit";
+import { cx, Figs, KitApp } from "./kit";
 
 const RANGES: readonly { id: AnalyticsRange; label: string }[] = [
   { id: "7d", label: "7d" },
@@ -95,21 +95,13 @@ export function KitAnalyticsPage(props: { state: CommunityAnalyticsState; action
             <AnalyticsLineChart points={points} height={170} valueFormatter={metric === "revenue" ? (value) => money(value) : undefined} />
           </div>
 
-          {/* Below 900px the right column is hidden, so the plans sit here. */}
+          {/* The plans sit in the page: nothing is picked here, so there is no right column. */}
           <div className="analytics-v1-plans-inline">
             <span className={cx("lab")} style={{ display: "block", marginTop: 34 }}>By plan</span>
             {planList}
           </div>
         </div>
       </KitApp>
-      <CommunityPageRail label="By plan">
-        {/* The kit shows a right column by its view; Members' column (r5) is the plain one. */}
-        <KitApp view="members" host part="rail" className="kit-page-rail">
-          <Rail index={5} label="By plan">
-            <Sec label="By plan">{planList}</Sec>
-          </Rail>
-        </KitApp>
-      </CommunityPageRail>
     </>
   );
 }

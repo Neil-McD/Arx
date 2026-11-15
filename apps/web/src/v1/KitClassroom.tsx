@@ -417,13 +417,15 @@ export function KitClassroom(props: {
     </>
   ) : null;
 
-  const rail = (
+  // The right column is what you picked (a note, a course) or, for a builder
+  // on the shelf, what is theirs to act on. A member on the shelf has nothing
+  // picked and their progress is already on each course, so no column.
+  const railBody = noteRail ?? courseRail ?? (inGuideMemory || !props.canManage ? null : libraryRail);
+  const rail = railBody ? (
     <KitApp view="know" host={props.canManage} part="rail" className="kit-page-rail">
-      <Rail index={2} label="Knowledge">{noteRail ?? courseRail ?? (inGuideMemory ? (
-        <Sec label="How it fills up"><p>You teach it here. It also saves what gets answered in channels, on its own. Edit or remove anything it got wrong.</p></Sec>
-      ) : libraryRail)}</Rail>
+      <Rail index={2} label="Knowledge">{railBody}</Rail>
     </KitApp>
-  );
+  ) : null;
 
   // ---------- the page
   let page: ReactNode;
@@ -616,5 +618,5 @@ export function KitClassroom(props: {
     );
   }
 
-  return <><KitApp view="know" host={props.canManage} part="flow">{page}</KitApp>{props.renderRail(rail)}</>;
+  return <><KitApp view="know" host={props.canManage} part="flow">{page}</KitApp>{rail ? props.renderRail(rail) : null}</>;
 }
