@@ -10,15 +10,18 @@ import { PanelLearned } from "./KitPanel";
 
 // null: not loaded, the guide has nothing, or it could not be read. A panel
 // never fails for want of it.
-export function useLearnedLately(session: unknown, communityId: string | null): LearnedLatelyView | null {
+// version: anything that changes when the notes do (a builder adding,
+// correcting or removing one), so the panel reads them again.
+export function useLearnedLately(session: unknown, communityId: string | null, version?: string): LearnedLatelyView | null {
   const [view, setView] = useState<LearnedLatelyView | null>(null);
+  // Another community: what was shown belongs to the last one.
+  useEffect(() => { setView(null); }, [session, communityId]);
   useEffect(() => {
-    setView(null);
     if (!session || !communityId) return;
     let live = true;
     fetchLearnedLately({ session, communityId }).then((next) => { if (live) setView(next); }).catch(() => undefined);
     return () => { live = false; };
-  }, [session, communityId]);
+  }, [session, communityId, version]);
   return view;
 }
 

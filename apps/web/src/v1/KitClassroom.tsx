@@ -119,6 +119,8 @@ export function KitClassroom(props: {
   const [progressLoaded, setProgressLoaded] = useState(false);
   const [summary, setSummary] = useState<CourseProgressSummary[]>([]);
   const [notes, setNotes] = useState<CommunityNoteView[]>([]);
+  // Read again whenever a builder's notes change.
+  const learned = useLearnedLately(props.session, props.communityId, notes.map((entry) => `${entry.slug}:${entry.updated_at}`).join("|"));
   const [canWriteNotes, setCanWriteNotes] = useState(false);
   const [lessonId, setLessonId] = useState<string | null>(null);
   const [shelfPage, setShelfPage] = useState(0);
@@ -158,7 +160,7 @@ export function KitClassroom(props: {
   // Asking Knowledge is the guide's; a community without it doesn't offer it.
   const agentOn = useCommunityAgentOn();
   const brief = usePlaceBrief(props.session, props.communityId, null, agentOn);
-  const learned = useLearnedLately(props.session, props.communityId);
+
   const [now] = useState(Date.now);
 
   const loadProgress = useCallback(async () => {
