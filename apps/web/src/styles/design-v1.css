@@ -1429,7 +1429,8 @@
 /* An ordinary channel has no right column: nothing is picked, so the feed
    takes the room. The short panel is not drawn; the people list (asked for
    from the header on a narrow window) still is. */
-:root[data-design="v1"] .community-interaction-projection.has-channel-context.is-open-channel {
+/* (Members is drawn in this same frame with its own two columns: left alone.) */
+:root[data-design="v1"] .community-interaction-projection.has-channel-context.is-open-channel:not(:has(> .members-page)):not(:has(> .members-page-record)) {
   grid-template-columns: minmax(0, 1fr);
 }
 :root[data-design="v1"] .community-interaction-projection.has-channel-context.is-open-channel > .channel-roster-panel.is-kit {
