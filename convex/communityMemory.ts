@@ -169,7 +169,13 @@ export async function liveLessons(ctx: any, communityId: any): Promise<Array<{ i
 async function resolveAbout(ctx: any, communityId: any, scope: ScopeKey, raw: string): Promise<{ aboutLessonId?: any; subject?: string } | { error: string }> {
   const about = parseMemoryAbout(raw);
   if (!about) return { error: "about_invalid" };
-  if (about.kind === "subject") return { subject: about.name, aboutLessonId: undefined };
+  if (about.kind === "subject") {
+    // A subject groups notes; a note's own name groups nothing.
+    const named = about.name.toLowerCase();
+    const notes: any[] = await notesByUpdated(ctx, scope).take(COMMUNITY_NOTES_MAX_PER_COMMUNITY);
+    if (notes.some((note) => String(note.title).trim().toLowerCase() === named)) return { error: "about_is_a_title" };
+    return { subject: about.name, aboutLessonId: undefined };
+  }
   if (parseScopeKey(scope)?.kind === "pod") return { error: "about_lesson_in_pod" };
   const id = ctx.db.normalizeId("communityResources", about.id);
   const lesson = id ? (await liveLessons(ctx, communityId)).find((entry) => String(entry.id) === String(id)) : null;

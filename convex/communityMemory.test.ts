@@ -296,6 +296,7 @@ test("the guide files a note under a lesson members can take, or a subject; neve
   for (const [about, code] of [
     [`lesson:${c.unpublished}`, "about_lesson_missing"], [`lesson:${c.file}`, "about_lesson_missing"], ["lesson:nope", "about_lesson_missing"],
     ["memory/refunds.md", "about_invalid"], ["x".repeat(41), "about_invalid"], ["post:abc", "about_invalid"],
+    ["How we handle every refund", "about_invalid"], ["refunds", "about_is_a_title"],
   ]) {
     expect(await observe(t, w.communityId, runId, refs, { title: "Another", about })).toEqual({ ok: false, code });
   }
@@ -320,18 +321,19 @@ test("a review files notes that exist without rewriting them, a builder's too; t
   expect(before.text).toMatch(/memory\/refunds\.md · Refunds · by you · unfiled/);
 
   const file = (slug: string, about: string) => t.mutation(internal.communityMemory.fileCommunityNoteInternal, { communityId: w.communityId, runId, slug, about });
-  expect(await file("house-rules", "House rules")).toEqual({ ok: true, slug: "house-rules" });
+  expect(await file("house-rules", "House rules")).toEqual({ ok: false, code: "about_is_a_title" });
+  expect(await file("house-rules", "The house")).toEqual({ ok: true, slug: "house-rules" });
   expect(await file("refunds", `lesson:${c.refunds}`)).toEqual({ ok: true, slug: "refunds" });
-  expect(await file("nothing-here", "House rules")).toEqual({ ok: false, code: "note_missing" });
+  expect(await file("nothing-here", "The house")).toEqual({ ok: false, code: "note_missing" });
   expect(await file("refunds", "lesson:nope")).toEqual({ ok: false, code: "about_lesson_missing" });
   const builders: any = await t.run((ctx: any) => ctx.db.query("communityNotes").filter((q: any) => q.eq(q.field("slug"), "house-rules")).first());
   // Filed, and otherwise untouched: still the builder's words.
-  expect(builders).toMatchObject({ subject: "House rules", bodyMd: "Be kind.", source: "founder" });
+  expect(builders).toMatchObject({ subject: "The house", bodyMd: "Be kind.", source: "founder" });
 
   const after: any = await t.query(internal.communityMemory.readMemoryReviewInputInternal, { communityId: w.communityId, sinceMs: NOW - 86_400_000, untilMs: NOW });
-  expect(after.text).toContain("# Subjects in use: House rules");
+  expect(after.text).toContain("# Subjects in use: The house");
   expect(after.text).toContain(`memory/refunds.md · Refunds · by you · filed: lesson:${c.refunds}`);
-  expect(after.text).toContain("by a builder · filed: House rules");
+  expect(after.text).toContain("by a builder · filed: The house");
   // A finished review files nothing more.
   await t.mutation(internal.communityMemory.finishMemoryReviewRunInternal, { communityId: w.communityId, runId, nowMs: NOW });
   expect(await file("refunds", "Money")).toEqual({ ok: false, code: "run_not_open" });
