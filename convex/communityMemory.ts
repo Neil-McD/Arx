@@ -648,10 +648,18 @@ export const readMemoryReviewInputInternal = internalQuery({
       for (const lesson of lessons) lines.push(`- lesson:${String(lesson.id)} · ${lesson.course} › ${lesson.order}. ${lesson.title}`);
       lines.push("");
     }
-    const subjects = [...new Set(notes.map((note: any) => note.subject).filter(Boolean) as string[])].sort();
+    // A filing that no longer holds reads as unfiled, so this review files it
+    // again: a lesson that has gone, or a subject that isn't one by today's
+    // rules (too long, or some note's own title).
+    const titles = new Set(notes.map((note: any) => String(note.title).trim().toLowerCase()));
+    const subjectOf = (note: any): string | null => {
+      const about = note.subject ? parseMemoryAbout(note.subject) : null;
+      return about?.kind === "subject" && !titles.has(about.name.toLowerCase()) ? about.name : null;
+    };
+    const subjects = [...new Set(notes.map(subjectOf).filter(Boolean) as string[])].sort();
     if (subjects.length) lines.push(`# Subjects in use: ${subjects.join(" · ")}`, "");
     const filedAs = (note: any) => note.aboutLessonId && lessonIds.has(String(note.aboutLessonId)) ? `filed: lesson:${String(note.aboutLessonId)}`
-      : note.subject ? `filed: ${note.subject}` : "unfiled";
+      : subjectOf(note) ? `filed: ${subjectOf(note)}` : "unfiled";
     lines.push(`# The notes (${notes.length}${notes.length === NOTES_LISTED_MAX ? ", newest first" : ""})`, "");
     if (notes.length === 0) lines.push("_None yet._");
     const rewritable: string[] = [];
