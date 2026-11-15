@@ -18,6 +18,7 @@ import { runOpenAiNativeToolCompletion } from "./openAiNativeToolCompletion";
 import { buildResponsesApiFunctionTools, normalizeToolArguments } from "../shared/toolRegistry";
 import type { RetrievalToolName } from "../shared/retrievalTools";
 import { LENS_TOOLS, lensHasTool } from "../shared/lens";
+import { knowledgeRefFromRead } from "../shared/communityKnowledgeUse";
 import type { NativeToolAwareCompletionSuccess, NativeToolAwareMessage, NativeToolChoice } from "../shared/nativeToolProtocol";
 import { runPiRuntimeKernel } from "../shared/piRuntimeKernel";
 import {
@@ -157,6 +158,9 @@ export async function runFundedCommunityAgent(args: {
   onToolStepFinish?: RuntimeKernelParams<RetrievalToolName>["onToolStepFinish"];
 }): Promise<CommunityAgentRunResult> {
   const abortable = args.abortable ?? runDirectly;
+  // Work with nobody present (reviews, briefs) is not an answer.
+  const answersAPerson = args.lens !== "worker";
+  const readRefs = new Set<string>();
   const lensTools = LENS_TOOLS[args.lens];
   let firstCompletionChecked = !args.beforeFirstCompletion;
   const tools = buildResponsesApiFunctionTools(lensTools);
@@ -277,8 +281,15 @@ export async function runFundedCommunityAgent(args: {
         });
         await args.onToolStepFinish?.(finished);
       },
-      executeTool: async ({ toolName, rawArguments, providerCallId, normalizedArgs, iteration }) =>
-        await args.executeTool(toolName, rawArguments, { providerCallId, normalizedArgs, iteration }),
+      executeTool: async ({ toolName, rawArguments, providerCallId, normalizedArgs, iteration }) => {
+        const result = await args.executeTool(toolName, rawArguments, { providerCallId, normalizedArgs, iteration });
+        // A note or lesson opened in full is something this answer drew on.
+        if (answersAPerson && String(toolName) === "polynet_read" && result.status === "ok") {
+          const ref = knowledgeRefFromRead(result.outputText);
+          if (ref) readRefs.add(ref);
+        }
+        return result;
+      },
     });
   } catch (error) {
     // A stop before the loop began (the person pressed stop) is a stop, not a crash.
@@ -299,6 +310,13 @@ export async function runFundedCommunityAgent(args: {
   }
   const assistantText = String(completion?.assistantText ?? "");
   await args.recorder.record({ kind: "final", status: "completed", content: assistantText });
+  // What this answer read, for the community brain: the things only, never
+  // who asked or what. Recording it must never cost someone their answer.
+  if (readRefs.size > 0) {
+    await args.ctx.runMutation((internal as any).communityKnowledgeUse.recordKnowledgeUseInternal, {
+      communityId: args.communityId, refs: [...readRefs], nowMs: Date.now(),
+    }).catch(() => undefined);
+  }
   if (!fundingSession) {
     return { ok: false, failureCode: "community_inference_funding_session_missing", providerStarted, kernel: completion };
   }

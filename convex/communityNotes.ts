@@ -26,7 +26,7 @@ const SNIPPET_CHARS = 240;
 
 
 function noteSummary(row: any) {
-  return { slug: row.slug, title: row.title, source: row.source, createdAt: row.createdAt, updatedAt: row.updatedAt };
+  return { id: String(row._id), slug: row.slug, title: row.title, source: row.source, createdAt: row.createdAt, updatedAt: row.updatedAt };
 }
 
 export function noteSnippet(bodyMd: string, query: string): string {

@@ -11,6 +11,7 @@ const root = join(import.meta.dirname, "..");
 
 const ALLOWED = new Map<string, string>([
   ["communityMemoryReview:requestMemoryReviewNowInternal", "operator tool: run a community's memory review now (staging acceptance), by hand"],
+  ["communityKnowledgeUse:readKnowledgeUseInternal", "operator diagnostic: a community's use summary (what answers read), by hand; the map read uses the same helper"],
   ["communityBriefs:requestCommunityBriefNowInternal", "operator tool: write a community's brief now (staging acceptance), by hand"],
   ["stagingSeedSunrise:seedSunriseSettersPodInternal", "staging seed: an operator makes Sunrise's Setters room a pod with the guide in it (npx convex run) without re-seeding"],
   ["memberOntology:confirmMemberInterviewFacts", "people facts slice: the member-stated, consented write that 'members add their own facts' will call (its only caller was an agent tool no lens offered, deleted Nov 15)"],

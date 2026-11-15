@@ -1679,6 +1679,17 @@ export default defineSchema({
   })
     .index("by_scope", ["scopeKey"]),
 
+  // What the guide read to answer (shared/communityKnowledgeUse.ts): one
+  // record per answer to a person, holding only the notes and lessons it
+  // opened ("note:<id>", "resource:<id>") and the day. No question, no
+  // person, no run: it can't be traced to a conversation.
+  communityKnowledgeUse: defineTable({
+    communityId: v.id("communities"),
+    // Days since 1970, UTC.
+    day: v.number(),
+    refs: v.array(v.string()),
+  }).index("by_community_day", ["communityId", "day"]),
+
   // A place's brief (shared/communityBriefs.ts): what's happening there,
   // rewritten by the guide after new activity. One per scope, read by
   // everyone who can enter the place: a short summary and the posts it drew

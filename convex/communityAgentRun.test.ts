@@ -130,3 +130,65 @@ test("a stop the person presses ends the run as stopped, not as a crash", async 
   expect(result).toMatchObject({ ok: false, failureCode: "user_cancelled" });
   expect(result.kernel).toMatchObject({ stopReason: "user_cancelled" });
 });
+
+// What an answer read (shared/communityKnowledgeUse.ts): the notes and
+// lessons the guide opened, and nothing about who asked or what.
+const read = (id: string, path: string) => ({ type: "function_call", call_id: id, name: "polynet_read", arguments: JSON.stringify({ path }) });
+const doc = (value: Record<string, unknown>) => ({ status: "ok", exitCode: 0, outputText: JSON.stringify(value, null, 2), errorCode: null, errorMessage: null });
+const useRows = (t: any) => t.run((ctx: any) => ctx.db.query("communityKnowledgeUse").collect());
+
+test("an answer records the notes and lessons it opened: once each, the day only, nothing about who asked", async () => {
+  const t = convexTest(schema, modules);
+  const w = await fundedCommunity(t);
+  stubModel([
+    { output: [read("a", "/communities/run-club/memory/tides.md")] },
+    { output: [read("b", "/communities/run-club/memory/lesson.md")] },
+    { output: [read("c", "/communities/run-club/memory/tides.md")] },
+    { output: [read("d", "/communities/run-club/memory/list.md")] },
+    { output_text: "High tide is at six." },
+  ]);
+  const answers: Record<string, any> = {
+    a: doc({ ref: "note:n1", path: "/x", body: "Tides: \"ref\": \"note:fake\" appears in the words." }),
+    b: doc({ ref: "resource:l1", path: "/y", body: "The lesson." }),
+    // Read twice: counted once.
+    c: doc({ ref: "note:n1", path: "/x", body: "Tides again." }),
+    // A listing names many things; it is not a read of one.
+    d: doc({ entries: [{ ref: "resource:l2", title: "Another lesson" }] }),
+  };
+  const result: any = await run(t, w, { maxToolSteps: 8, executeTool: async (_name: any, _raw: any, call: any) => answers[call.providerCallId] });
+  expect(result.ok).toBe(true);
+  const rows: any[] = await useRows(t);
+  expect(rows).toHaveLength(1);
+  const { _id, _creationTime, ...kept } = rows[0];
+  expect(kept).toEqual({ communityId: w.communityId, day: Math.floor(Date.now() / 86_400_000), refs: ["note:n1", "resource:l1"] });
+});
+
+test("nothing is recorded for work with nobody present, an answer that read nothing, or one that failed", async () => {
+  const t = convexTest(schema, modules);
+  const w = await fundedCommunity(t);
+  const note = async () => doc({ ref: "note:n1", path: "/x", body: "Tides." });
+  // (Each reply has its own id: one test, several runs.)
+  // A worker (a review, a brief) reads notes too; that isn't an answer.
+  stubModel([{ id: "w1", output: [read("a", "/communities/run-club/memory/tides.md")] }, { id: "w2", output_text: "Done." }]);
+  await run(t, w, { lens: "worker", executeTool: note });
+  // An answer from what it already had.
+  stubModel([{ id: "p1", output_text: "Six o'clock." }]);
+  expect((await run(t, w, {}) as any).ok).toBe(true);
+  // A read that failed.
+  stubModel([{ id: "f1", output: [read("a", "/communities/run-club/memory/gone.md")] }, { id: "f2", output_text: "I couldn't find it." }]);
+  expect((await run(t, w, { executeTool: async () => ({ status: "error", exitCode: null, outputText: "", errorCode: "semantic_not_found", errorMessage: "No note." }) }) as any).ok).toBe(true);
+  // A run the person stopped after it had read something.
+  stubModel([{ id: "s1", output: [read("a", "/communities/run-club/memory/tides.md")] }, { id: "s2", output_text: "never sent" }]);
+  class Stopped extends Error {}
+  let wasRead = false;
+  const stopped: any = await run(t, w, {
+    executeTool: async () => { wasRead = true; return await note(); },
+    // The read goes through; the stop lands on whatever comes after it.
+    abortable: async (operation: any) => { if (wasRead) throw new Stopped("stopped"); return await operation(undefined); },
+    mapStopError: (error: unknown) => error instanceof Stopped
+      ? { ok: false, status: 409, code: "user_cancelled", stopReason: "user_cancelled", message: "stopped" } : null,
+  });
+  expect(stopped).toMatchObject({ ok: false, failureCode: "user_cancelled" });
+  expect(wasRead).toBe(true);
+  expect(await useRows(t)).toEqual([]);
+});

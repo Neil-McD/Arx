@@ -71,6 +71,7 @@ import type * as communityInteractionEvidence from "../communityInteractionEvide
 import type * as communityInteractionEvidenceCore from "../communityInteractionEvidenceCore.js";
 import type * as communityInteractions from "../communityInteractions.js";
 import type * as communityJoinRequestCore from "../communityJoinRequestCore.js";
+import type * as communityKnowledgeUse from "../communityKnowledgeUse.js";
 import type * as communityLanding from "../communityLanding.js";
 import type * as communityLessonProgress from "../communityLessonProgress.js";
 import type * as communityLifecycle from "../communityLifecycle.js";
@@ -296,6 +297,7 @@ declare const fullApi: ApiFromModules<{
   communityInteractionEvidenceCore: typeof communityInteractionEvidenceCore;
   communityInteractions: typeof communityInteractions;
   communityJoinRequestCore: typeof communityJoinRequestCore;
+  communityKnowledgeUse: typeof communityKnowledgeUse;
   communityLanding: typeof communityLanding;
   communityLessonProgress: typeof communityLessonProgress;
   communityLifecycle: typeof communityLifecycle;
