@@ -205,7 +205,9 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
   `communityMemoryReview` (the guide's nightly review: made due by posts in open
   channels, run on the shared run entry `communityAgentRun` in one pass: the
   server hands the guide memory.md, the notes and the new posts, and it writes
-  once with `memory.apply`), `communityBriefs` (a place's brief, table
+  once with `memory.apply`; each note is filed where it belongs on the
+  community brain, under the lesson it adds to or a short subject, and notes
+  that exist are filed without being rewritten), `communityBriefs` (a place's brief, table
   `communityBriefs`: written by the guide after new posts in a place, the
   community's open channels or a pod's own room where the guide works, at
   most every three hours, on the same run entry in one request, with one

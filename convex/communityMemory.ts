@@ -31,6 +31,7 @@ import {
   memoryEvidenceWasRemoved,
   memoryIndexRefusal,
   noteAuthorKind,
+  parseMemoryAbout,
   parseMemoryEvidenceRef,
   parseMemoryEvidenceRefs,
   type MemoryEvidenceFacts,
@@ -141,6 +142,41 @@ export const openMemoryReviewRunInternal = internalMutation({
   },
 });
 
+// The lessons a note can be filed under: every lesson of a course members can
+// take, in the builder's order.
+const LESSONS_LISTED_MAX = 200;
+export async function liveLessons(ctx: any, communityId: any): Promise<Array<{ id: any; course: string; order: number; title: string }>> {
+  const modules: any[] = await ctx.db.query("communityResourceModules")
+    .withIndex("by_community_sortOrder", (q: any) => q.eq("communityId", communityId)).take(60);
+  const lessons: Array<{ id: any; course: string; order: number; title: string }> = [];
+  for (const module of modules) {
+    if (module.status === "draft") continue;
+    const rows: any[] = await ctx.db.query("communityResources")
+      .withIndex("by_community_module_sortOrder", (q: any) => q.eq("communityId", communityId).eq("moduleId", module._id)).take(100);
+    let order = 0;
+    for (const row of rows) {
+      if (row.role === "source" || !String(row.title ?? "").trim()) continue;
+      lessons.push({ id: row._id, course: String(module.name ?? ""), order: ++order, title: String(row.title) });
+      if (lessons.length >= LESSONS_LISTED_MAX) return lessons;
+    }
+  }
+  return lessons;
+}
+
+// Where a note is filed, checked when it is written: a lesson of this
+// community that members can take, or a subject name. A pod's notes take a
+// subject only.
+async function resolveAbout(ctx: any, communityId: any, scope: ScopeKey, raw: string): Promise<{ aboutLessonId?: any; subject?: string } | { error: string }> {
+  const about = parseMemoryAbout(raw);
+  if (!about) return { error: "about_invalid" };
+  if (about.kind === "subject") return { subject: about.name, aboutLessonId: undefined };
+  if (parseScopeKey(scope)?.kind === "pod") return { error: "about_lesson_in_pod" };
+  const id = ctx.db.normalizeId("communityResources", about.id);
+  const lesson = id ? (await liveLessons(ctx, communityId)).find((entry) => String(entry.id) === String(id)) : null;
+  if (!lesson) return { error: "about_lesson_missing" };
+  return { aboutLessonId: lesson.id, subject: undefined };
+}
+
 // The guide's one write: add a note, or change one of its own. Refusals are
 // returned (and kept on the run's record), never thrown, so the guide can
 // correct the note and the record survives.
@@ -152,6 +188,8 @@ export const observeCommunityMemoryInternal = internalMutation({
     body: v.string(),
     evidenceRefs: v.array(v.string()),
     supersedes: v.optional(v.string()),
+    // Where it belongs: lesson:<id> or a subject name.
+    about: v.optional(v.string()),
     nowMs: v.number(),
   },
   handler: async (ctx, args): Promise<Written | Refused> => {
@@ -171,6 +209,8 @@ export const observeCommunityMemoryInternal = internalMutation({
     const refs = parsed.refs.map((ref) => ref.raw);
     const removals = await removalsFor(ctx, scope).order("desc").take(REMOVALS_SCAN);
     if (memoryEvidenceWasRemoved(refs, removals)) return refuse(ctx, run, title, "evidence_removed");
+    const filed = args.about ? await resolveAbout(ctx, args.communityId, scope, args.about) : {};
+    if ("error" in filed) return refuse(ctx, run, title, filed.error);
 
     if (args.supersedes) {
       const note = await noteBySlug(ctx, scope, args.supersedes);
@@ -184,6 +224,8 @@ export const observeCommunityMemoryInternal = internalMutation({
       await ctx.db.patch(note._id, {
         title, bodyMd: body, searchText: buildCommunityNoteSearchText({ title, bodyMd: body }),
         evidenceRefs: refs, lastRunId: run._id, updatedAt: args.nowMs,
+        // Rewritten without saying where it belongs: it stays where it was.
+        ...filed,
       });
       await ctx.db.patch(run._id, { changed: [...new Set([...run.changed, note.slug])] });
       return { ok: true, slug: note.slug, title, change: "changed" };
@@ -199,11 +241,29 @@ export const observeCommunityMemoryInternal = internalMutation({
     await insertNote(ctx, scope, {
       communityId: args.communityId, slug, title, bodyMd: body, source: "learned", authorKind: "guide",
       evidenceRefs: refs, lastRunId: run._id, searchText: buildCommunityNoteSearchText({ title, bodyMd: body }),
-      createdAt: args.nowMs, updatedAt: args.nowMs,
+      ...filed, createdAt: args.nowMs, updatedAt: args.nowMs,
     });
     await insertRevision(ctx, scope, { communityId: args.communityId, slug, change: "added", runId: run._id, createdAt: args.nowMs });
     await ctx.db.patch(run._id, { added: [...run.added, slug] });
     return { ok: true, slug, title, change: "added" };
+  },
+});
+
+// Files a note that exists where it belongs, without rewriting it: the guide
+// during a review (a builder's note too: filing changes where it sits, never
+// what it says).
+export const fileCommunityNoteInternal = internalMutation({
+  args: { communityId: v.id("communities"), runId: v.id("agentWorkRuns"), slug: v.string(), about: v.string() },
+  handler: async (ctx, args): Promise<{ ok: true; slug: string } | Refused> => {
+    const run = await openRun(ctx, args.communityId, args.runId);
+    if (!run) return { ok: false, code: "run_not_open" };
+    const scope = scopeOfRun(run);
+    const note = await noteBySlug(ctx, scope, args.slug);
+    if (!note) return { ok: false, code: "note_missing" };
+    const filed = await resolveAbout(ctx, args.communityId, scope, args.about);
+    if ("error" in filed) return { ok: false, code: filed.error };
+    await ctx.db.patch(note._id, filed);
+    return { ok: true, slug: note.slug };
   },
 });
 
@@ -573,19 +633,32 @@ export const readMemoryReviewInputInternal = internalQuery({
       const community = await memoryIndexFor(ctx, communityScopeKey(args.communityId));
       lines.push("# The community's memory.md (context only: never copy it into this pod's notes)", "", community?.bodyMd?.trim() || "_Nothing yet._", "");
     }
-    lines.push(room ? `# The ${String(room.name ?? "")} pod's memory.md` : "# memory.md", "", index?.bodyMd?.trim() || "_Nothing yet._", "", `# The notes (${notes.length}${notes.length === NOTES_LISTED_MAX ? ", newest first" : ""})`, "");
+    lines.push(room ? `# The ${String(room.name ?? "")} pod's memory.md` : "# memory.md", "", index?.bodyMd?.trim() || "_Nothing yet._", "");
+    // Where notes are filed: the lessons (the community's only) and the subjects in use.
+    const lessons = room ? [] : await liveLessons(ctx, args.communityId);
+    const lessonIds = new Set(lessons.map((lesson) => String(lesson.id)));
+    if (lessons.length) {
+      lines.push("# The lessons (file a note under the one it adds to)", "");
+      for (const lesson of lessons) lines.push(`- lesson:${String(lesson.id)} · ${lesson.course} › ${lesson.order}. ${lesson.title}`);
+      lines.push("");
+    }
+    const subjects = [...new Set(notes.map((note: any) => note.subject).filter(Boolean) as string[])].sort();
+    if (subjects.length) lines.push(`# Subjects in use: ${subjects.join(" · ")}`, "");
+    const filedAs = (note: any) => note.aboutLessonId && lessonIds.has(String(note.aboutLessonId)) ? `filed: lesson:${String(note.aboutLessonId)}`
+      : note.subject ? `filed: ${note.subject}` : "unfiled";
+    lines.push(`# The notes (${notes.length}${notes.length === NOTES_LISTED_MAX ? ", newest first" : ""})`, "");
     if (notes.length === 0) lines.push("_None yet._");
     const rewritable: string[] = [];
     let wholeChars = 0;
     notes.forEach((note: any, i: number) => {
       const body = note.bodyMd.trim();
       if (noteAuthorKind(note) === "builder") {
-        lines.push(`- memory/${note.slug}.md · ${note.title} · by a builder`);
+        lines.push(`- memory/${note.slug}.md · ${note.title} · by a builder · ${filedAs(note)}`);
         if (i < NOTES_WITH_TEXT) lines.push(`  > ${body.replace(/\s+/g, " ").slice(0, BUILDER_NOTE_SHOWN_CHARS)}`);
         return;
       }
       const whole = i < NOTES_WITH_TEXT && wholeChars + body.length <= WHOLE_NOTES_BUDGET_CHARS;
-      lines.push(`- memory/${note.slug}.md · ${note.title} · by you${whole ? "" : " (not shown; can't be rewritten in this review)"}`);
+      lines.push(`- memory/${note.slug}.md · ${note.title} · by you${whole ? "" : " (not shown; can't be rewritten in this review)"} · ${filedAs(note)}`);
       if (whole) {
         wholeChars += body.length;
         rewritable.push(note.slug);

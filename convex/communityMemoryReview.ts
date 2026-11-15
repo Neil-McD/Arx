@@ -25,7 +25,7 @@ const REVIEW_MAX_OUTPUT_TOKENS = 4_000;
 // Each item says what happened, so a refused one can be fixed.
 // A rewrite replaces a note whole, so only notes the guide was shown whole
 // can be rewritten.
-async function applyMemory(ctx: any, communityId: any, runId: any, rewritable: Set<string>, apply: { notes: Array<{ title: string; body: string; evidenceRefs: string[]; supersedes?: string }>; index: string | null }) {
+async function applyMemory(ctx: any, communityId: any, runId: any, rewritable: Set<string>, apply: { notes: Array<{ title: string; body: string; evidenceRefs: string[]; supersedes?: string; about?: string }>; filings: Array<{ slug: string; about: string }>; index: string | null }) {
   const results: Array<Record<string, unknown>> = [];
   for (const note of apply.notes) {
     if (note.supersedes && !rewritable.has(note.supersedes)) {
@@ -34,11 +34,18 @@ async function applyMemory(ctx: any, communityId: any, runId: any, rewritable: S
     }
     const answer = await ctx.runMutation(internalRefs.communityMemory.observeCommunityMemoryInternal, {
       communityId, runId, title: note.title, body: note.body, evidenceRefs: note.evidenceRefs,
-      ...(note.supersedes ? { supersedes: note.supersedes } : {}), nowMs: Date.now(),
+      ...(note.supersedes ? { supersedes: note.supersedes } : {}), ...(note.about ? { about: note.about } : {}), nowMs: Date.now(),
     });
     results.push(answer?.ok
       ? { note: note.title, written: `memory/${String(answer.slug ?? "")}.md` }
       : { note: note.title, refused: String(answer?.code ?? "refused"), why: MEMORY_REFUSAL_WORDS[String(answer?.code)] ?? "Refused." });
+  }
+  // Notes that exist, filed where they belong.
+  for (const filing of apply.filings) {
+    const answer = await ctx.runMutation(internalRefs.communityMemory.fileCommunityNoteInternal, { communityId, runId, slug: filing.slug, about: filing.about });
+    results.push(answer?.ok
+      ? { filed: `memory/${filing.slug}.md` }
+      : { filed: `memory/${filing.slug}.md`, refused: String(answer?.code ?? "refused"), why: MEMORY_REFUSAL_WORDS[String(answer?.code)] ?? "Refused." });
   }
   if (apply.index !== null) {
     const answer = await ctx.runMutation(internalRefs.communityMemory.writeCommunityMemoryIndexInternal, {
@@ -73,7 +80,7 @@ export const runMemoryReviewInternal = internalAction({
         write: async (rawArguments) => {
           const apply = parseMemoryApplyCall(rawArguments);
           if ("error" in apply) {
-            return { ok: false, code: apply.error, message: `Write with polynet_call { operation: "${MEMORY_APPLY_OPERATION}", input: { notes, index, summary } }.` };
+            return { ok: false, code: apply.error, message: `Write with polynet_call { operation: "${MEMORY_APPLY_OPERATION}", input: { notes, file, index, summary } }.` };
           }
           const results = await applyMemory(ctx, claim.communityId, runId, new Set<string>(input.rewritable), apply);
           // Anything refused gets one more turn to fix it; otherwise the write is the whole answer.
