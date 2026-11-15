@@ -16,7 +16,7 @@ import { communityIsActive } from "../shared/communityLifecycle";
 import { MEMORY_APPLY_OPERATION, MEMORY_REFUSAL_WORDS, MEMORY_REVIEW_INSTRUCTIONS, nextMemoryReviewAtMs, parseMemoryApplyCall, podReviewInstructions } from "../shared/communityMemory";
 import { communityTimeZone, scheduleAgentWork } from "./communityMemory";
 import { runFundedCommunityAgent, type CommunityAgentRunEvent } from "./communityAgentRun";
-import { BRIEF_DELAY_MS } from "../shared/communityBriefs";
+import { nextBriefAtMs } from "../shared/communityBriefs";
 import { founderProviderRequests } from "./founderInferenceUsage";
 import { settleCommunityInferenceFundingSession } from "./founderInferenceRuntime";
 import { communityAgentIsOn } from "./communityApps";
@@ -96,10 +96,10 @@ export const completeMemoryReviewInternal = internalMutation({
       // Posts written while the review ran, or left over from a busy window,
       // wait for the next one: a backlog soon, new posts at the quiet hour.
       const pending = args.backlog ? Math.max(1, work.pending) : Math.max(0, work.pending - args.claimedPending);
-      // A brief written while more happened is due again an hour later.
+      // A brief written while more happened is due again once its gap has passed.
       const dueAt = args.backlog ? args.nowMs + BACKLOG_NEXT_MS
         : pending <= 0 ? undefined
-          : work.kind === "brief" ? args.nowMs + BRIEF_DELAY_MS
+          : work.kind === "brief" ? nextBriefAtMs(args.nowMs, args.nowMs)
             : nextMemoryReviewAtMs(args.nowMs, await communityTimeZone(ctx, work.communityId));
       await ctx.db.patch(work._id, { reviewedThrough: args.windowEnd, pending, dueAt, leaseUntil: undefined, failures: 0, lastErrorCode: undefined, updatedAt: args.nowMs });
       if (dueAt) await scheduleAgentWork(ctx, work._id, dueAt);
@@ -211,6 +211,9 @@ export const runMemoryReviewInternal = internalAction({
       { role: "user", content: input.text },
     ];
     const recorder = eventRecorder(ctx, claim.communityId, `memory-review:${String(runId)}`);
+    // A write with nothing refused ends the run, with its own summary: no
+    // second model request just to say what changed.
+    const review = { ended: null as string | null };
     const run = await runFundedCommunityAgent({
       lens: "worker",
       ctx,
@@ -232,12 +235,16 @@ export const runMemoryReviewInternal = internalAction({
       // The review's first answer is its write (it may be empty): a model that
       // describes the write instead of making it would lose the night.
       firstToolChoice: { type: "function", name: "polynet_call" },
+      endWith: () => review.ended,
       executeTool: async (toolName, rawArguments) => {
         const failed = (errorCode: string, errorMessage: string) => ({ status: "error" as const, exitCode: null, outputText: "", errorCode, errorMessage });
         if (toolName !== "polynet_call") return failed("review_reads_nothing", `Everything is in front of you. Write with polynet_call ${MEMORY_APPLY_OPERATION}.`);
         const apply = parseMemoryApplyCall(rawArguments);
         if ("error" in apply) return failed(apply.error, `Write with polynet_call { operation: "${MEMORY_APPLY_OPERATION}", input: { notes, index } }.`);
         const results = await applyMemory(ctx, claim.communityId, runId, new Set<string>(input.rewritable), apply);
+        if (!results.some((result) => "refused" in result)) {
+          review.ended = apply.summary ?? (results.length ? "Updated the memory from what was said." : "Nothing new worth keeping.");
+        }
         return { status: "ok" as const, exitCode: 0, outputText: JSON.stringify({ results }), errorCode: null, errorMessage: null };
       },
     });

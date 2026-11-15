@@ -135,6 +135,10 @@ export async function runFundedCommunityAgent(args: {
   // The first model request's tool choice, e.g. a review that must write
   // (its one write may be empty).
   firstToolChoice?: NativeToolChoice<RetrievalToolName>;
+  // Asked before every model request after the first. Text ends the run
+  // there, as its answer, with no further request: a worker whose write
+  // went through has nothing left to say worth a model call.
+  endWith?: () => string | null;
   // The loop's limits, when a caller sets its own (a private talk does).
   budget?: RuntimeKernelBudget;
   // Each model request's text as it arrives, with which request it was.
@@ -210,6 +214,12 @@ export async function runFundedCommunityAgent(args: {
           firstCompletionChecked = true;
           const refused = await args.beforeFirstCompletion!(kernelMessages);
           if (refused) return refused;
+        }
+        if (completions > 0) {
+          const ending = args.endWith?.();
+          if (ending !== null && ending !== undefined) {
+            return { ok: true, type: "assistant", assistantText: ending, promptTokens: null, completionTokens: null, resolvedModelId: null };
+          }
         }
         let toolCompletion;
         const completionIndex = completions++;
