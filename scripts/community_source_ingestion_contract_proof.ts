@@ -20,7 +20,6 @@ const http = read("convex/http.ts");
 const gateway = read("shared/cloudCommunityAdminGateway.ts");
 const resourceController = read("shared/useCommunityResourceController.ts");
 const sourceIntake = read("apps/web/src/components/WebCommunityKnowledgeSourceIntake.tsx");
-const sourceCrawler = read("shared/communitySourceCrawler.ts");
 const sourceCrawlerServicePath = join(root, "services/community-source-crawler/app.py");
 const app = read("apps/web/src/App.tsx");
 
@@ -43,11 +42,6 @@ assert.match(
   packageJson,
   /"check:community-source-url-policy-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts\/community_source_url_policy_behavior_proof\.ts"/,
   "source URL policy behavior proof should be wired into package scripts",
-);
-assert.match(
-  packageJson,
-  /"check:community-source-crawl-behavior-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts\/community_source_crawl_behavior_proof\.ts"/,
-  "source crawl behavior proof should be wired into package scripts",
 );
 
 assert.match(
@@ -138,43 +132,18 @@ assert.match(
 );
 assert.match(
   schema,
-  /communitySourceCrawlJobs:[\s\S]*provider: v\.union\(v\.literal\("simple"\), v\.literal\("crawl4ai"\), v\.literal\("firecrawl"\)\)[\s\S]*rootUrl: v\.string\(\)[\s\S]*status: v\.union\([\s\S]*v\.literal\("queued"\)[\s\S]*v\.literal\("crawling"\)[\s\S]*v\.literal\("saving_sources"\)[\s\S]*v\.literal\("ready"\)[\s\S]*v\.literal\("failed"\)[\s\S]*sourceResourceIds:[\s\S]*\.index\("by_community_status_createdAt", \["communityId", "status", "createdAt"\]\)/,
-  "source crawling should persist durable crawl job state, tolerate legacy firecrawl rows, and keep status, limits, counts, and saved source ids",
-);
-assert.match(
-  schema,
   /communityResourceContents:[\s\S]*resourceId: v\.id\("communityResources"\)[\s\S]*bodyMd: v\.string\(\)[\s\S]*bodyChars: v\.number\(\)[\s\S]*bodyHash: v\.string\(\)[\s\S]*\.index\("by_resource", \["resourceId"\]\)/,
   "large parsed source text should live in resource content rows, not only the hot communityResources metadata row",
-);
-assert.match(
-  schema,
-  /communitySourceUnits:[\s\S]*crawlJobId: v\.id\("communitySourceCrawlJobs"\)[\s\S]*sourceResourceId: v\.optional\(v\.id\("communityResources"\)\)[\s\S]*unitKey: v\.string\(\)[\s\S]*unitKind: v\.union\(v\.literal\("page"\), v\.literal\("virtual_section"\)\)[\s\S]*status: v\.union\([\s\S]*v\.literal\("ready"\)[\s\S]*v\.literal\("failed"\)[\s\S]*v\.literal\("skipped"\)[\s\S]*bodyChars: v\.number\(\)[\s\S]*bodyOriginalChars: v\.number\(\)[\s\S]*bodyHash: v\.string\(\)[\s\S]*bodyTruncated: v\.optional\(v\.boolean\(\)\)[\s\S]*seenCount: v\.number\(\)[\s\S]*lastSeenAt: v\.number\(\)[\s\S]*\.index\("by_community_unit_key", \["communityId", "unitKey"\]\)[\s\S]*\.index\("by_source_resource", \["sourceResourceId"\]\)/,
-  "crawler source units should be a bounded deduped evidence layer separate from user-facing resources",
 );
 assert.match(
   schema,
   /communitySourceUnitContents:[\s\S]*sourceUnitId: v\.id\("communitySourceUnits"\)[\s\S]*bodyMd: v\.string\(\)[\s\S]*bodyChars: v\.number\(\)[\s\S]*bodyHash: v\.string\(\)[\s\S]*\.index\("by_source_unit", \["sourceUnitId"\]\)/,
   "source unit bodies should be stored outside source unit metadata rows",
 );
-assert.match(
-  sourceCrawler,
-  /buildCommunitySourceCrawlerUnitKey[\s\S]*communitySourceCrawlerUrlInRootScope[\s\S]*root\.origin !== candidate\.origin[\s\S]*rootPath === "\/"[\s\S]*candidatePath === rootPath \|\| candidatePath\.startsWith\(`\$\{rootPath\}\/`\)[\s\S]*planCommunitySourceCrawlerPageSave[\s\S]*existingSourcesByAlias[\s\S]*seenAliases[\s\S]*"existing_ready"[\s\S]*"update_existing"[\s\S]*summarizeCommunitySourceCrawlerPageSaveDecisions/,
-  "source crawler save behavior should be covered by shared pure decision helpers",
-);
 assert.equal(
   existsSync(sourceCrawlerServicePath),
   false,
   "legacy Fly/Crawl4AI community-source-crawler service must be deleted from the repo",
-);
-assert.match(
-  resources,
-  /saveCommunitySourceUnitsForPage[\s\S]*COMMUNITY_SOURCE_UNIT_MAX_BODY_CHARS \+ 1[\s\S]*bodyOriginalChars = bodyRaw\.length[\s\S]*bodyTruncated = bodyOriginalChars > COMMUNITY_SOURCE_UNIT_MAX_BODY_CHARS[\s\S]*by_community_unit_key[\s\S]*existing\.bodyHash !== bodyHash[\s\S]*writeCommunitySourceUnitContent/,
-  "crawler source persistence should dedupe source units",
-);
-assert.match(
-  resources,
-  /planCommunitySourceCrawlerPageSave[\s\S]*existingSourcesByAlias: existingByUrl[\s\S]*seenAliases: seenUrls[\s\S]*decision\.action === "update_existing"[\s\S]*writeCommunityResourceBodyContent/,
-  "crawler page saves should preserve the existing source-resource save path",
 );
 
 assert.match(
@@ -243,68 +212,10 @@ assert.match(
   /fetchSourceUrlViaConfiguredFetcher[\s\S]*payload\.text[\s\S]*normalizeExtractedText[\s\S]*community_source_url_no_readable_content/,
   "URL ingestion should accept bounded readable text from the configured fetch broker",
 );
-assert.match(
-  sourceCrawler,
-  /export type CommunitySourceCrawlerProvider = "simple"[\s\S]*export type CommunitySourceCrawlJobStatus = "queued" \| "crawling" \| "saving_sources" \| "ready" \| "failed"[\s\S]*export type CommunitySourcePageResult = \{[\s\S]*requested_url: string[\s\S]*final_url: string[\s\S]*canonical_url: string[\s\S]*root_url: string[\s\S]*parent_url: string \| null[\s\S]*depth: number[\s\S]*markdown: string[\s\S]*links: CommunitySourcePageLink\[\][\s\S]*status: CommunitySourcePageStatus[\s\S]*error: string \| null/,
-  "source crawling should use a stable Polynet-owned page result contract",
-);
-assert.match(
-  resources,
-  /COMMUNITY_RESOURCE_SOURCE_CRAWLER_DEFAULT_MAX_PAGES = 1[\s\S]*COMMUNITY_RESOURCE_SOURCE_CRAWLER_MAX_PAGES = 1[\s\S]*COMMUNITY_RESOURCE_SOURCE_CRAWLER_DEFAULT_MAX_DEPTH = 0[\s\S]*COMMUNITY_RESOURCE_SOURCE_CRAWLER_MAX_DEPTH = 0/,
-  "source crawling should be bounded to simple one-page ingestion",
-);
-assert.match(
-  resources,
-  /normalizeSourceCrawlerProvider\(\): CommunitySourceCrawlerProvider \{[\s\S]*return "simple";[\s\S]*getCommunitySourceCrawlerStatusValue[\s\S]*provider: "simple" as const[\s\S]*configured: true[\s\S]*max_pages: COMMUNITY_RESOURCE_SOURCE_CRAWLER_MAX_PAGES[\s\S]*message: "Only the linked page will be read\."/,
-  "source crawler provider should be irreducibly simple and always use the first-party URL fetch broker",
-);
-assert.match(
-  resources,
-  /crawlSourceRootWithConfiguredProvider[\s\S]*normalizeSourceCrawlerProvider\(\)[\s\S]*crawlSourceRootWithSimpleFetcher\(\{ rootUrl \}\)/,
-  "configured source crawling should execute only the simple brokered URL fetch path",
-);
 assert.doesNotMatch(
   resources,
   /ARX_SOURCE_CRAWLER_PROVIDER|ARX_CRAWL4AI|Crawl4AI|crawl4ai|resolveCrawl4AiEndpoint|crawl4AiHeaders|crawlSourceRootWithCrawl4AI|sourceCrawlerEndpointUrl|COMMUNITY_RESOURCE_SOURCE_CRAWLER_MAX_RESPONSE_BYTES/,
   "source ingestion must not retain the deleted external Crawl4AI/Fly crawler adapter",
-);
-assert.match(
-  resources,
-  /processCommunitySourceCrawlJobInternal = internalAction\(\{[\s\S]*status: "crawling"[\s\S]*crawlSourceRootWithConfiguredProvider[\s\S]*status: "saving_sources"[\s\S]*saveCommunitySourceCrawlPagesInternal[\s\S]*sourceResourceIds\.length === 0[\s\S]*community_source_crawl_no_usable_sources[\s\S]*status: "ready"[\s\S]*status: "failed"/,
-  "source crawl jobs should move through crawling, saving, ready, and failed states and fail when no usable source rows exist",
-);
-assert.match(
-  resources,
-  /crawlWebRoot: any = internalAction\(\{[\s\S]*userId: v\.id\("users"\)[\s\S]*communityId: v\.id\("communities"\)/,
-  "agent-visible web crawling must remain internal and require an explicit community funding scope",
-);
-const crawlWebRootActiveSourceSection = resources.match(
-  /if \(!args\.communityId\) throw new Error\("web_crawl_active_community_required"\);[\s\S]*?\n  },\n}\);\n\nexport const crawlCommunitySourceRoot/,
-)?.[0] ?? "";
-assert.match(
-  crawlWebRootActiveSourceSection,
-  /requireCommunityManagerForAction[\s\S]*createCommunitySourceCrawlJobInternal[\s\S]*ctx\.runAction\([\s\S]*processCommunitySourceCrawlJobInternal[\s\S]*kind: "web_crawl"/,
-  "agent-visible active-community crawling should create a durable job and wait on the canonical crawl worker",
-);
-assert.doesNotMatch(
-  crawlWebRootActiveSourceSection,
-  /crawlSourceRootWithConfiguredProvider|saveCommunitySourceCrawlPagesInternal|patchCommunitySourceCrawlJobInternal/,
-  "agent-visible active-community crawling must not duplicate provider, persistence, or job-transition logic",
-);
-assert.match(
-  resources,
-  /saveCommunitySourceCrawlPagesInternal = internalMutation\(\{[\s\S]*communitySourceCrawlerPageArg[\s\S]*requireCommunityManager[\s\S]*by_community_role_status[\s\S]*communitySourceCrawlerUrlAliases\(maybeSafeSourceCrawlerUrl, source\.url\)[\s\S]*planCommunitySourceCrawlerPageSave[\s\S]*existingSourcesByAlias: existingByUrl[\s\S]*seenAliases: seenUrls[\s\S]*decision\.action === "skip"[\s\S]*decision\.action === "update_existing"[\s\S]*role: "source"[\s\S]*status: "review"[\s\S]*sourceIngestionStatus: "ready"[\s\S]*sourceIngestionKind: "url"[\s\S]*writeCommunityResourceBodyContent/,
-  "source crawl pages should dedupe root/redirect URL aliases and persist canonical ready URL source rows through the memory lifecycle",
-);
-assert.match(
-  resources,
-  /decision\.action === "update_existing"[\s\S]*sourceIngestionStatus: "ready"[\s\S]*sourceIngestionLeaseId: undefined[\s\S]*sourceIngestionLeaseExpiresAt: undefined[\s\S]*sourceIngestionAttempt: undefined/,
-  "a crawler update should invalidate any older direct-ingestion claim on the same source",
-);
-assert.match(
-  resources,
-  /getCommunitySourceCrawlerStatus = query\(\{[\s\S]*requireCommunityManager[\s\S]*getCommunitySourceCrawlerStatusValue[\s\S]*listCommunitySourceCrawlJobs = query\(\{[\s\S]*requireCommunityManager[\s\S]*by_community_createdAt[\s\S]*mapCommunitySourceCrawlJob[\s\S]*getCommunitySourceCrawlJob = query\(\{[\s\S]*community_source_crawl_job_not_found/,
-  "source crawl jobs should have manager-gated status and progress queries for launch polling",
 );
 assert.doesNotMatch(
   app,
@@ -374,8 +285,8 @@ assert.doesNotMatch(
 
 assert.match(
   gateway,
-  /(?=[\s\S]*communityResources:generateCommunityResourceSourceUploadUrl)(?=[\s\S]*uploadCloudCommunityResourceSourceFile)(?=[\s\S]*getCloudCommunitySourceCrawlerStatus[\s\S]*client\.query\("communityResources:getCommunitySourceCrawlerStatus" as any)(?=[\s\S]*crawlCloudCommunitySourceRoot[\s\S]*client\.action\("communityResources:crawlCommunitySourceRoot" as any)(?=[\s\S]*getCloudCommunitySourceCrawlJob[\s\S]*client\.query\("communityResources:getCommunitySourceCrawlJob" as any)(?=[\s\S]*listCloudCommunitySourceCrawlJobs[\s\S]*communityResources:listCommunitySourceCrawlJobs)(?=[\s\S]*ingestCloudCommunitySources[\s\S]*client\.action\("communityResources:ingestCommunitySources" as any)(?=[\s\S]*listCloudCommunityLaunchKnowledgeSources[\s\S]*communityResources:listCommunityLaunchKnowledgeSources)/,
-  "web gateway should call the source upload, crawler and ingestion actions",
+  /(?=[\s\S]*communityResources:generateCommunityResourceSourceUploadUrl)(?=[\s\S]*uploadCloudCommunityResourceSourceFile)(?=[\s\S]*ingestCloudCommunitySources[\s\S]*client\.action\("communityResources:ingestCommunitySources" as any)(?=[\s\S]*listCloudCommunityLaunchKnowledgeSources[\s\S]*communityResources:listCommunityLaunchKnowledgeSources)/,
+  "web gateway should call the source upload and ingestion actions",
 );
 assert.match(
   gateway,
@@ -392,4 +303,6 @@ assert.match(
   /const failedCount = result\.ingestion\?\.failed_sources \?\? 0/,
   "source intake feedback should use persisted failed-source truth",
 );
+assert.equal(existsSync(join(root, "shared/communitySourceCrawler.ts")), false, "the crawl pipeline stays deleted");
+assert.doesNotMatch(resources, /crawlWebRoot|crawlCommunitySourceRoot|CommunitySourceCrawlJob|saveCommunitySourceUnitsForPage/, "the crawl pipeline stays deleted");
 console.log("community_source_ingestion_contract_proof: ok");

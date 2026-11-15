@@ -10,12 +10,6 @@ import {
 import {
   hydrateCommunityResourceBody,
 } from "./communityResourceContent";
-import type {
-  CommunitySourceCrawlJobStatus,
-  CommunitySourceCrawlerProvider,
-  CommunitySourceUnitKind,
-  CommunitySourceUnitStatus,
-} from "../shared/communitySourceCrawler";
 import {
   COMMUNITY_RESOURCE_DIRECTORY_TOOL_READ_DEFAULT_CHARS,
   COMMUNITY_RESOURCE_DIRECTORY_TOOL_READ_MAX_CHARS,
@@ -31,28 +25,7 @@ export async function mapCommunityResourceRowWithBody(
   return await mapCommunityResourceRow(ctx, hydrated, userIdCache, moduleNameCache);
 }
 
-export type CommunitySourceCrawlJobLike = {
-  _id?: unknown;
-  communityId: unknown;
-  createdByUserId: unknown;
-  provider: CommunitySourceCrawlerProvider;
-  rootUrl: string;
-  status: CommunitySourceCrawlJobStatus;
-  maxPages: number;
-  maxDepth: number;
-  pageCount: number;
-  readyPageCount: number;
-  failedPageCount: number;
-  savedSourceCount: number;
-  skippedSourceCount: number;
-  sourceResourceIds?: unknown[];
-  error?: string;
-  startedAt?: number;
-  completedAt?: number;
-  createdAt: number;
-  updatedAt: number;
-};
-
+// Source units: page evidence old crawls saved (nothing writes them now).
 export type CommunitySourceUnitLike = {
   _id?: unknown;
   communityId: unknown;
@@ -60,14 +33,14 @@ export type CommunitySourceUnitLike = {
   sourceResourceId?: unknown;
   rootUrl: string;
   unitKey: string;
-  unitKind: CommunitySourceUnitKind;
+  unitKind: "page" | "virtual_section";
   title?: string | null;
   sourceUrl: string;
   parentUrl?: string | null;
   path?: string | null;
   order: number;
   depth: number;
-  status: CommunitySourceUnitStatus;
+  status: "ready" | "failed" | "skipped";
   bodyChars: number;
   bodyOriginalChars?: number;
   bodyHash: string;

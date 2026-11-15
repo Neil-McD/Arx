@@ -21,7 +21,6 @@ const COMMUNITY_AGENT_DOCK_TOOL_NAME_SET = new Set<RetrievalToolName>([
   "polynet_write",
   "polynet_call",
   "web_research",
-  "web_crawl",
 ]);
 
 export function normalizeRuntimeInvocationSurface(

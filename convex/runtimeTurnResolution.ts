@@ -238,7 +238,7 @@ export function resolveAllowedToolNames(params: {
     );
   }
   if (params.activeCapabilityFamilies.includes("web_research")) {
-    toolNames.push("web_research", "web_crawl");
+    toolNames.push("web_research");
   }
   return toolNames.filter((value, index, list) => list.indexOf(value) === index);
 }

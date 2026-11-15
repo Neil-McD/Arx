@@ -563,20 +563,11 @@ function buildPlatformHarnessOperatingPolicyPrompt(params: {
   }
   if (params.allowedToolNames.includes("web_research")) {
     toolGuidance.push(
-      "- Use web_research for current external facts, official references, frontier signal, or information unlikely to exist in community Resources or product docs.",
+      "- Use web_research for current external facts, official references, frontier signal, or information unlikely to exist in the community.",
       "- Do not use web_research for localhost, 127.0.0.1, private-network URLs, or app visual verification.",
       "- If you start web research, complete the research loop: find relevant sources, open the best sources, extract facts, synthesize the answer, and name or cite the sources used.",
       "- For latest/current/recent queries, anchor on the runtime date, compare dates when available, and state exact dates when they matter.",
       "- Use short, specific search queries. Refine noisy searches instead of overstuffing the first query.",
-    );
-  }
-  if (params.allowedToolNames.includes("web_crawl")) {
-    toolGuidance.push(
-      "- Use web_crawl when the user provides a site, wiki, docs, course, or multi-page URL and asks for comprehensive extraction, structure, or page-tree understanding.",
-      "- Use web_research for search and one-page lookup; use web_crawl for bounded same-origin crawling.",
-      hasCommunityResourceBuilderTools(params.allowedToolNames)
-        ? "- For Resources Architect URL extraction/import requests, call web_crawl with destination active_community_sources, then inspect the saved source records before staging resource changes. Report saved versus reused state, page count, source-unit count when visible, failed pages or units, and whether the material is source inbox, draft, or live."
-        : "- Use web_crawl with destination context unless the user is explicitly importing into an active community Resources workflow.",
     );
   }
   return [

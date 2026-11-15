@@ -191,11 +191,9 @@ test("the tools a member's private talk is offered today", async () => {
   const requests = fakeModel([answer("Hi.")]);
   const { member, conversation } = await startTalk(t, w, "Hi");
   await (await turn(member, conversation.thread_key)).text();
-  // Pinned as it is before the engine move. web_crawl is offered to members
-  // but only runs for builders; the lens tools table (PR 3) offers it to
-  // builders only.
+  // The five Polynet tools and web research (web_crawl was deleted).
   expect((requests[0].tools ?? []).map((tool: any) => tool.name).sort())
-    .toEqual(["polynet_call", "polynet_list", "polynet_read", "polynet_search", "polynet_write", "web_crawl", "web_research"]);
+    .toEqual(["polynet_call", "polynet_list", "polynet_read", "polynet_search", "polynet_write", "web_research"]);
 });
 
 test("the same turn sent twice is answered once", async () => {
