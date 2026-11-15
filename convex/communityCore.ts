@@ -219,6 +219,7 @@ export type CommunityResourceLike = {
   bodyMigratedAt?: number;
   url?: string;
   fileKey?: string;
+  lessonLinks?: Array<{ title: string; url: string }>;
   sourceIngestionStatus?: string;
   sourceIngestionKind?: string;
   sourceIngestionError?: string;
@@ -674,6 +675,25 @@ export function communityResourceIsLiveModulePage(
   return communityResourceIsMemberVisiblePage(row, liveModuleIds);
 }
 
+// A lesson's resources: at most 12 links, each a name and a public http(s)
+// address. Anything else is dropped, so what a member is shown always opens.
+export const LESSON_LINKS_MAX = 12;
+export function normalizeLessonLinks(raw: unknown): Array<{ title: string; url: string }> {
+  if (!Array.isArray(raw)) return [];
+  const links: Array<{ title: string; url: string }> = [];
+  const seen = new Set<string>();
+  for (const entry of raw) {
+    let url: string | undefined;
+    try { url = normalizeOptionalUrl((entry as { url?: unknown } | null)?.url); } catch { url = undefined; }
+    if (!url || seen.has(url)) continue;
+    seen.add(url);
+    const title = String((entry as { title?: unknown } | null)?.title ?? "").replace(/\s+/g, " ").trim().slice(0, 120);
+    links.push({ title: title || url.replace(/^https?:\/\//i, "").slice(0, 120), url });
+    if (links.length >= LESSON_LINKS_MAX) break;
+  }
+  return links;
+}
+
 export function normalizeOptionalUrl(raw: unknown): string | undefined {
   const value = String(raw ?? "").trim();
   if (!value) return undefined;
@@ -987,6 +1007,7 @@ export async function mapCommunityResourceRow(
     body_chars: communityResourceBodyChars(row),
     url: row.url ?? null,
     file_key: row.fileKey ?? null,
+    lesson_links: normalizeLessonLinks(row.lessonLinks),
     source_ingestion_status: normalizeResourceSourceIngestionStatus(row),
     source_ingestion_kind: normalizeResourceSourceIngestionKind(row),
     source_ingestion_error: row.sourceIngestionError ?? null,
