@@ -9,7 +9,6 @@ const fixedToolNames: RetrievalToolName[] = [
   "polynet_list",
   "polynet_read",
   "polynet_search",
-  "search_product_docs",
   "web_research",
   "polynet_write",
 ];
@@ -18,7 +17,6 @@ const surface = buildRuntimeToolPolicySurface({ fixedToolNames });
 const parallelReads = classifyRuntimeToolSchedule({
   toolCalls: [
     { providerCallId: "list", toolName: "polynet_list" },
-    { providerCallId: "docs", toolName: "search_product_docs" },
     { providerCallId: "web", toolName: "web_research" },
   ],
   policies: surface.policies,
@@ -26,7 +24,7 @@ const parallelReads = classifyRuntimeToolSchedule({
 });
 assert.equal(parallelReads.decision, "parallel_read_batch_enabled");
 assert.equal(parallelReads.executionMode, "parallel_read_batch");
-assert.equal(parallelReads.summary.parallelEligible, 3);
+assert.equal(parallelReads.summary.parallelEligible, 2);
 assert.equal(parallelReads.summary.mutating, 0);
 assert.equal(parallelReads.summary.requiresWorkspace, 0);
 

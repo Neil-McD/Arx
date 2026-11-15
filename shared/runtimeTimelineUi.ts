@@ -191,7 +191,6 @@ function categoryForTool(toolName: string): RuntimeToolCategory {
   if (isHistoricalComputerUseToolName(toolName)) {
     return "computer";
   }
-  if (toolName === "search_product_docs" || toolName === "get_product_doc") return "docs";
   if (toolName === "web_research" || toolName === "web_crawl") return "web";
   if (
     toolName === "polynet_list" ||
@@ -218,16 +217,12 @@ function buildCallTitle(toolName: string, args: Record<string, unknown> | null):
   const command = toStringValue(args?.command);
   const changeCount = toFiniteNumberValue(args?.changes_count);
   const shortPath = path ? path.split("/").filter(Boolean).pop() || path : null;
-  if (toolName === "search_product_docs") return `Docs search${query ? `: ${query}` : ""}`;
-  if (toolName === "get_product_doc") return `Read docs${slug ? `: ${slug}` : ""}`;
   if (toolName === "polynet_list") {
     return `Community files${path && path !== "/" ? `: ${path}` : ""}`;
   }
   if (toolName === "polynet_read") {
     return `Read community${shortPath ? `: ${shortPath}` : ""}`;
   }
-  if (toolName === "member_conversations_list") return "Past conversations";
-  if (toolName === "member_conversation_read") return "Recall conversation";
   if (toolName === "community_resources_map") return "Resource map";
   if (toolName === "community_resources_list") return `Community resources${path ? `: ${path}` : ""}`;
   if (toolName === "community_resource_read") return `Read resource${ref ? `: ${ref}` : ""}`;
@@ -238,7 +233,6 @@ function buildCallTitle(toolName: string, args: Record<string, unknown> | null):
   }
   if (toolName === "community_resource_builder_stage_changeset") return "Resource changeset";
   if (toolName === "community_resource_builder_apply_changeset") return "Apply resource changeset";
-  if (toolName === "member_profile_confirm_facts") return "Profile facts";
   if (toolName === "list_dir") return `Listed ${path || "."}`;
   if (toolName === "read") return `Read ${shortPath || path || "file"}`;
   if (toolName === "glob") return `Glob ${pattern || "pattern"}`;

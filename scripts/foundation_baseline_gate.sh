@@ -59,7 +59,6 @@ run_step "Runtime input budget proof" npm run check:runtime-input-budget-proof
 run_step "Runtime persisted-history pagination proof" npm run check:runtime-persisted-history-pagination-proof
 run_step "Platform cost safety contract" npm run check:platform-cost-safety-contract-proof
 run_step "Product documentation truth proof" npm run check:product-docs-index-proof
-run_step "Product documentation runtime proof" npm run check:product-docs-runtime-tool-proof
 run_step "Member entry destination contract" npm run check:member-entry-destination-contract
 run_step "Community activity events proof" npm run check:community-activity-events-proof
 run_step "Community member entry retirement contract" npm run check:community-member-entry-retirement
