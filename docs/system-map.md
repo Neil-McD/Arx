@@ -213,7 +213,10 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
   on, or nothing when the posts are only noise; read back as
   `brief.md` and `pods/<pod>/brief.md` through one reader, `readPlaceBrief`;
   the same reader feeds the first part of Home's and a pod's right panel,
-  `getPlaceBrief`), `communityEvidence*`,
+  `getPlaceBrief`; the panels' "community brain" and "learned lately" read
+  `communityMemory:getLearnedLately`: counts for everyone in the community,
+  every title for a builder, and for a member only titles learned from posts
+  they can read), `communityEvidence*`,
   `communityCognitionLifecycle`, `communityWikiArchitect`; member knowledge stays in
   `memberOntology` and `memberOntologyCore` (`memberFacts`, `memberProfileSpines`, no
   longer read; dropped in a later release); people facts, one view of a person

@@ -25,9 +25,12 @@ import { continueLesson, courseLessons, courseProgress, pageOf } from "../../../
 import type { CommunityResource, CommunityResourceModule } from "../components/communityResourcesContracts";
 import { askGuide, openGuideFromSearch } from "../components/guideSearch";
 import { WebCommunityResourceViewerContent } from "../components/WebCommunityResourceViewerContent";
-import { NoteForm, OpenNote, noteIsNew } from "./KitKnowledgeNotes";
+import { LearnedRows, useLearnedLately } from "./KitBrain";
+import { BriefPart, usePlaceBrief } from "./KitBrief";
+import { NoteForm, OpenNote } from "./KitKnowledgeNotes";
+import { PanelAction, PanelLine, PanelNext, PanelPart } from "./KitPanel";
 import { KitLessonEditor, lessonLinkPlace, type LessonPatch } from "./KitLessonEditor";
-import { Btn, cx, Icon, KitApp, Rail, Sec, Sep, TextLink, useMinWidth } from "./kit";
+import { Btn, cx, Icon, KitApp, Rail, Sec, TextLink, useMinWidth } from "./kit";
 import { KitCourseEdit, type CourseEditPatch } from "./KitCourseEdit";
 import { askInApp } from "../../../../shared/inAppConfirm";
 import { KitKnowledgeAdd, KitKnowledgeList, type KnowledgeAddMode, type KnowledgeAddResult } from "./KitKnowledgeList";
@@ -116,6 +119,8 @@ export function KitClassroom(props: {
   const [progressLoaded, setProgressLoaded] = useState(false);
   const [summary, setSummary] = useState<CourseProgressSummary[]>([]);
   const [notes, setNotes] = useState<CommunityNoteView[]>([]);
+  // Read again whenever a builder's notes change.
+  const learned = useLearnedLately(props.session, props.communityId, notes.map((entry) => `${entry.slug}:${entry.updated_at}`).join("|"));
   const [canWriteNotes, setCanWriteNotes] = useState(false);
   const [lessonId, setLessonId] = useState<string | null>(null);
   const [shelfPage, setShelfPage] = useState(0);
@@ -154,6 +159,8 @@ export function KitClassroom(props: {
   };
   // Asking Knowledge is the guide's; a community without it doesn't offer it.
   const agentOn = useCommunityAgentOn();
+  const brief = usePlaceBrief(props.session, props.communityId, null, agentOn);
+
   const [now] = useState(Date.now);
 
   const loadProgress = useCallback(async () => {
@@ -277,64 +284,53 @@ export function KitClassroom(props: {
     </>
   ) : null;
 
-  const libraryRail = (
-    <>
-      {canWriteNotes && waiting.length ? (
-        <>
-          <div className={cx("sec")}>
-            <span className={cx("lab")} style={{ display: "flex", alignItems: "center", gap: 6, color: "var(--aurora-ink)" }}><Icon name="spark" extra="xs" />Questions nobody answered</span>
-            {waiting.slice(0, 3).map((question, index) => (
-              <div key={`${question.author}:${index}`} className={cx("kwait")}>
-                <p>“{question.text}”</p>
-                <span className={cx("sub")}>{question.author} in #{question.channel} · {question.hoursAgo < 48 ? `${question.hoursAgo}h ago` : `${Math.round(question.hoursAgo / 24)}d ago`}</span>
-                <button type="button" className={cx("btn sm")} onClick={() => { setNote(null); props.onOpenGuideMemory?.(false); setSeed({ text: `${question.text}\n`, nonce: Date.now() }); }}>Teach the answer</button>
-              </div>
-            ))}
-          </div>
-          <Sep />
-        </>
-      ) : null}
-      {canWriteNotes && props.onOpenGuideMemory ? (
-        <>
-          <Sec label="What your guide knows">
-            <div className={cx("kline")}><span>You taught it</span><em>{notes.filter((entry) => entry.kind === "founder").length}</em></div>
-            <div className={cx("kline")}><span>It picked up from conversations</span><em>{notes.filter((entry) => entry.kind !== "founder").length}</em></div>
-            <div className={cx("kline")}><span>Files and links it read</span><em>{guideSources.filter((source) => !sourceFailed(source)).length}</em></div>
-            {guideSources.some(sourceFailed) ? <div className={cx("kline")} style={{ color: "var(--bad)" }}><span>Couldn't be read</span><em style={{ color: "inherit" }}>{guideSources.filter(sourceFailed).length}</em></div> : null}
-            <div><button type="button" className={cx("btn sm")} onClick={() => props.onOpenGuideMemory?.(true)}>Open</button></div>
-            <p className={cx("sub")}>Only builders see this. Members get it through the guide's answers.</p>
-          </Sec>
-          <Sep />
-        </>
-      ) : null}
-      {courses.length ? (
-        <>
-          {props.canManage ? (courses.some((entry) => entry.course.module_status === "live") ? (
-            <Sec label="Learning">
-              {courses.filter((entry) => entry.course.module_status === "live").slice(0, 5).map(({ course }) => {
-                const row = summaryBy.get(course.id);
-                return <div key={course.id} className={cx("kline")}><span>{course.name}</span><em>{row ? `${row.started} started · ${row.finished} finished` : "—"}</em></div>;
-              })}
-            </Sec>
-          ) : <Sec label="Learning"><p>Publish a course and you'll see who started and finished it here.</p></Sec>) : (
-            <Sec label="Your progress">
-              {courses.filter(({ lessons }) => courseProgress(lessons, done).done > 0).length === 0 ? <p>Start a course and it shows here.</p> : null}
-              {courses.map(({ course, lessons }) => {
-                const progress = courseProgress(lessons, done);
-                if (!progress.done) return null;
-                return (
-                  <div key={course.id}>
-                    <div className={cx("kline")}><span>{course.name}</span><em>{progress.finished ? "finished" : `${progress.done} of ${progress.total}`}</em></div>
-                    <div className={cx("bar")} style={{ marginTop: 6 }}><i style={{ width: `${progress.percent}%` }} /></div>
-                  </div>
-                );
-              })}
-            </Sec>
-          )}
-        </>
-      ) : null}
-    </>
-  );
+  // The shelf's right column (mock: "Right panels, second pass"): the
+  // guide's brief; the next thing (a member's next lesson; for a builder, a
+  // question nobody answered, to teach); what the community knows; what it
+  // learned lately; and, for a builder, who is learning what.
+  const liveCourses = courses.filter((entry) => entry.course.module_status === "live");
+  const lessonCount = courses.reduce((sum, entry) => sum + entry.lessons.length, 0);
+  const shelfParts: ReactNode[] = [
+    brief ? <BriefPart key="brief" brief={brief} now={now} /> : null,
+    resume ? (
+      <PanelPart key="next" label="Continue" fact={`lesson ${resume.index + 1} of ${resume.total}`}>
+        <PanelNext title={resume.lesson.title} sub={resume.course.name}
+          action={<Btn go onClick={() => { props.onOpenCourse(resume.course.id); setLessonId(resume.lesson.id); }}>Resume</Btn>} />
+      </PanelPart>
+    ) : canWriteNotes && waiting.length ? (
+      <PanelPart key="next" label="Waiting on an answer" fact={String(waiting.length)}>
+        {waiting.slice(0, 2).map((question, index) => (
+          <PanelLine key={`${question.author}:${index}`}
+            action={<PanelAction onClick={() => { setNote(null); props.onOpenGuideMemory?.(false); setSeed({ text: `${question.text}\n`, nonce: Date.now() }); }}>Teach</PanelAction>}>
+            <span title={`${question.author} in #${question.channel}`}>“{question.text}”</span>
+          </PanelLine>
+        ))}
+      </PanelPart>
+    ) : null,
+    courses.length || learned?.total ? (
+      <PanelPart key="brain" label="The community brain"
+        action={canWriteNotes && props.onOpenGuideMemory ? <PanelAction onClick={() => props.onOpenGuideMemory?.(true)}>Open</PanelAction> : null}>
+        {courses.length ? <PanelLine fact={String(courses.length)}>Courses</PanelLine> : null}
+        {lessonCount ? <PanelLine fact={String(lessonCount)}>Lessons</PanelLine> : null}
+        {learned?.total ? <PanelLine fact={`${learned.total}${learned.more ? "+" : ""}`}>Learned from the community</PanelLine> : null}
+        {guideSources.some(sourceFailed) ? <PanelLine fact={String(guideSources.filter(sourceFailed).length)}>Files it couldn't read</PanelLine> : null}
+      </PanelPart>
+    ) : null,
+    learned?.latest.length ? (
+      <PanelPart key="learned" label="Learned lately" fact={learned.this_week ? `${learned.this_week} this week` : null}>
+        <LearnedRows view={learned} now={now} />
+      </PanelPart>
+    ) : null,
+    props.canManage && liveCourses.length ? (
+      <PanelPart key="learning" label="Learning">
+        {liveCourses.slice(0, 5).map(({ course }) => {
+          const row = summaryBy.get(course.id);
+          return <PanelLine key={course.id} fact={row ? `${row.started} started · ${row.finished} finished` : null}>{course.name}</PanelLine>;
+        })}
+      </PanelPart>
+    ) : null,
+  ].filter(Boolean);
+  const shelfRail = shelfParts.length ? <>{shelfParts}</> : null;
 
   const moveCourse = async (index: number, by: -1 | 1) => {
     const ids = courseOrderAfterMove(courses.map((entry) => entry.course.id), index, by);
@@ -436,10 +432,10 @@ export function KitClassroom(props: {
     </>
   ) : null;
 
-  // The right column is what you picked (a note, a course) or, for a builder
-  // on the shelf, what is theirs to act on. A member on the shelf has nothing
-  // picked and their progress is already on each course, so no column.
-  const railBody = noteRail ?? courseRail ?? (inGuideMemory || !props.canManage ? null : libraryRail);
+  // The right column is what you picked (a note, a course) or, on the shelf,
+  // the fast read of Knowledge: the brief, what's next, what the community
+  // knows and what it learned lately.
+  const railBody = noteRail ?? courseRail ?? (inGuideMemory ? null : shelfRail);
   const rail = railBody ? (
     <KitApp view="know" host={props.canManage} part="rail" className="kit-page-rail">
       <Rail index={2} label="Knowledge">{railBody}</Rail>

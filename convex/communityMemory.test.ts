@@ -221,3 +221,33 @@ test("a builder sees what a guide note was learned from; a removed post shows as
   // The reply belongs to the hidden post, so it's gone too.
   expect(after.sources[1]).toMatchObject({ available: false });
 });
+
+test("what the community learned: a member sees only names learned from posts they can read; a builder sees all; never the text", async () => {
+  const t = convexTest(schema, modules);
+  const w = await world(t);
+  const asOwner = t.withIdentity({ subject: "owner" });
+  const asMember = t.withIdentity({ subject: "member" });
+  const night = await run(t, w.communityId);
+  await observe(t, w.communityId, night.runId, [`post:${w.open}`, `reply:${w.reply}`]);
+  await t.mutation(internal.communityMemory.finishMemoryReviewRunInternal, { communityId: w.communityId, runId: night.runId, nowMs: NOW });
+  const learnedTitle: string = (await t.run((ctx: any) => ctx.db.query("communityNotes").first()) as any).title;
+  // A note a builder taught the guide: its name is the builders' to see.
+  await t.run((ctx: any) => ctx.db.insert("communityNotes", { communityId: w.communityId, scopeKey: `community:${String(w.communityId)}`,
+    slug: "vip-exceptions", title: "VIP refund exceptions", bodyMd: "Only for the first ten.", source: "founder", searchText: "vip refund exceptions",
+    createdAt: Date.now(), updatedAt: Date.now() }));
+
+  const member: any = await asMember.query(api.communityMemory.getLearnedLately, { communityId: w.communityId });
+  expect(member).toMatchObject({ total: 2, can_manage: false });
+  expect(member.latest.map((note: any) => note.title)).toEqual([learnedTitle]);
+  expect(JSON.stringify(member)).not.toContain("first ten");
+  const builder: any = await asOwner.query(api.communityMemory.getLearnedLately, { communityId: w.communityId });
+  expect(builder.can_manage).toBe(true);
+  expect(builder.latest.map((note: any) => note.title).sort()).toEqual([learnedTitle, "VIP refund exceptions"].sort());
+
+  // The post it was learned from is taken down: a member no longer sees its name.
+  await t.run((ctx: any) => ctx.db.patch(w.open, { status: "hidden" }));
+  const after: any = await asMember.query(api.communityMemory.getLearnedLately, { communityId: w.communityId });
+  expect(after).toMatchObject({ total: 2, latest: [] });
+  // Someone outside the community gets nothing.
+  await expect(t.withIdentity({ subject: "stranger" }).query(api.communityMemory.getLearnedLately, { communityId: w.communityId })).rejects.toThrow();
+});

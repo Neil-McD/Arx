@@ -1,31 +1,17 @@
 // Design system v1: Home's right column (mock: "Every right panel"), in
 // this order: the guide's brief (what's happening, from recent posts); the
 // next event, when one is planned; the community brain (how much the guide
-// knows and the latest things it learned: builders only, its notes are
-// theirs, not the members'); and who is here: how many members, who is
-// online now, who joined this week and, for a host, who is waiting to join.
-import { useEffect, useState } from "react";
+// knows and the latest things it learned; a member is sent only the names
+// they may read); and who is here: how many members, who is online now, who
+// joined this week and, for a host, who is waiting to join.
 import type { CloudCommunityHomeSnapshot } from "../../../../shared/cloudCommunityAdminGateway";
 import type { CommunityPresenceSummary } from "../../../../shared/communityTypes";
-import { fetchCommunityNotes } from "../../../../shared/cloudCommunityNotesGateway";
 import { UserAvatar } from "../../../../shared/UserAvatar";
 import { cx } from "./kit";
+import { LearnedRows, learnedFact, useLearnedLately } from "./KitBrain";
 import { BriefPart, usePlaceBrief } from "./KitBrief";
 import { KitNextEvent } from "./KitNextEvent";
-import { PanelAction, PanelLearned, PanelLine, PanelPart } from "./KitPanel";
-import { noteIsNew } from "./KitKnowledgeNotes";
-
-const LEARNED_SHOWN = 2;
-
-// When something was learned, in a word: "today", "Tue", "Nov 3".
-function learnedWhen(iso: string, now: number): string {
-  const at = new Date(iso);
-  if (Number.isNaN(at.getTime())) return "";
-  const days = Math.floor((now - at.getTime()) / 86_400_000);
-  if (days <= 0 && at.getDate() === new Date(now).getDate()) return "today";
-  if (days < 7) return at.toLocaleDateString(undefined, { weekday: "short" });
-  return at.toLocaleDateString(undefined, { month: "short", day: "numeric" });
-}
+import { PanelAction, PanelLine, PanelPart } from "./KitPanel";
 
 function hereLine(presence: CommunityPresenceSummary | null | undefined): string {
   const faces = presence?.online_faces ?? [];
@@ -53,22 +39,7 @@ export function KitHomeRail(props: {
   onOpenMembers: () => void;
   onOpenKnowledge?: () => void;
 }) {
-  const [memory, setMemory] = useState<{ total: number; more: boolean; fresh: number; canManage: boolean; latest: Array<{ title: string; at: string }> } | null>(null);
-  useEffect(() => {
-    let cancelled = false;
-    fetchCommunityNotes({ session: props.session, communityId: props.communityId, limit: 50 })
-      .then((view) => {
-        if (cancelled) return;
-        const dated = view.notes.map((note) => ({ title: note.title, at: note.created_at ?? note.updated_at }))
-          .sort((a, b) => Date.parse(b.at) - Date.parse(a.at));
-        setMemory({ total: view.notes.length, more: view.has_more, fresh: view.notes.filter((note) => noteIsNew(note, props.now)).length,
-          canManage: view.can_manage, latest: dated.slice(0, LEARNED_SHOWN) });
-      })
-      .catch(() => { if (!cancelled) setMemory(null); });
-    return () => { cancelled = true; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [props.session, props.communityId]);
-
+  const learned = useLearnedLately(props.session, props.communityId);
   const brief = usePlaceBrief(props.session, props.communityId, null, props.agentOn !== false);
   const faces = props.presence?.online_faces ?? [];
   const { snapshot } = props;
@@ -79,15 +50,12 @@ export function KitHomeRail(props: {
     <>
       {brief ? <BriefPart brief={brief} now={props.now} onOpenChannel={(channel) => props.onOpenChannelByName(channel.name)} /> : null}
       <KitNextEvent session={props.session} communityId={props.communityId} now={props.now} onOpenEvents={props.onOpenEvents} />
-      {/* What the guide knows is the builders' to see; the server sends a
-          member nothing here, so the part is simply absent for them. */}
-      {memory && memory.canManage ? (
-        <PanelPart label="The community brain"
-          fact={memory.total ? [`${memory.total}${memory.more ? "+" : ""} learned`, memory.fresh ? `${memory.fresh} this week` : null].filter(Boolean).join(" · ") : null}
+      {/* What the community knows: everyone sees how much and what is new;
+          the server sends a member only the names they may read. */}
+      {learned && learned.total ? (
+        <PanelPart label="The community brain" fact={learnedFact(learned)}
           action={props.onOpenKnowledge ? <PanelAction onClick={props.onOpenKnowledge}>Open</PanelAction> : null}>
-          {memory.latest.length
-            ? memory.latest.map((note, index) => <PanelLearned key={index} title={note.title} when={learnedWhen(note.at, props.now)} />)
-            : <PanelLine dim>Nothing yet</PanelLine>}
+          <LearnedRows view={learned} now={props.now} max={2} />
         </PanelPart>
       ) : null}
       <PanelPart label="Here" fact={members ? `${members} ${members === 1 ? "member" : "members"}` : null}>

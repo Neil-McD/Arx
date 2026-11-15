@@ -248,6 +248,11 @@ function PodPitch(props: WebCommunityPodsSectionProps & { podSlug: string; inlin
         <PanelLine fact={price}>Price</PanelLine>
         {seats ? <PanelLine fact={seats}>Seats</PanelLine> : null}
       </PanelPart>
+      {page.knows ? (
+        <PanelPart label="What this pod knows" fact="for its members">
+          <PanelLine>{page.knows >= 99 ? "99+" : page.knows} {page.knows === 1 ? "thing" : "things"} learned</PanelLine>
+        </PanelPart>
+      ) : null}
       {page.hosts.length ? (
         <PanelPart label="Hosted by"><PanelPeople names={page.hosts} /></PanelPart>
       ) : null}

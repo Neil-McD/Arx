@@ -30,6 +30,8 @@ export type CloudPodPage =
     my_request: "pending" | "waitlist" | "declined" | null;
     checkout_open: boolean;
     // When it meets: never the link or who is going.
+    // How many things the pod knows; a number only.
+    knows?: number;
     rhythm: { recurrence_frequency: string; next_starts_at: string } | null;
     // The plans that include this pod, and whether this member can move to one here.
     included_with: CloudPlanOffer[];

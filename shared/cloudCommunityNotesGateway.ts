@@ -39,6 +39,16 @@ export async function createCommunityNote(params: NotesCall & { title: string; t
   return await client.mutation("communityNotes:createCommunityNote" as any, { authSubject, communityId: params.communityId, title: params.title, text: params.text });
 }
 
+// What the community knows, for anyone in it (convex/communityMemory.ts
+// getLearnedLately): counts, and the latest few by name. A member gets only
+// names of what was learned from posts they can read.
+export type LearnedLatelyView = { total: number; more: boolean; this_week: number; latest: Array<{ title: string; at: string }>; can_manage: boolean };
+
+export async function fetchLearnedLately(params: NotesCall): Promise<LearnedLatelyView> {
+  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
+  return await client.query("communityMemory:getLearnedLately" as any, { authSubject, communityId: params.communityId });
+}
+
 // What a guide note was learned from (convex/communityMemory.ts listNoteSources).
 export type NoteSourceView =
   | { ref: string; kind: "post" | "reply"; available: false }

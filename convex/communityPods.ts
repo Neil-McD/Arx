@@ -11,6 +11,7 @@ import { listAuthorizedCommunityChannelPage } from "./communityChannelCore";
 import { setChannelParticipantCore } from "./communityChannelParticipants";
 import { normalizeIdValue, requireCommunityChatAccess, requireCommunityManager } from "./communityCore";
 import { displayName } from "./communityFounderBrief";
+import { notesByUpdated, podScopeKey } from "./communityNotesStore";
 import { podPaymentStateOf, podPriceOf } from "./communityPodPayments";
 import { nextPodCall } from "./communityEvents";
 import { canChangePlanHere, plansIncludingPod } from "./communityPlanChange";
@@ -39,6 +40,9 @@ async function viewerOf(ctx: Ctx, authSubject: string | undefined, communityId: 
   const actor = await resolveCommunityChannelActor({ ctx, communityId, userId });
   return { userId, actor };
 }
+
+// The most a pod's page counts of what the pod knows.
+const POD_KNOWS_CAP = 99;
 
 export async function podRecord(ctx: Ctx, communityId: any, channelId: any) {
   return await ctx.db.query("communityPods")
@@ -344,6 +348,8 @@ export const getPodPage = query({
       seats_left: typeof record?.seats === "number" ? Math.max(0, record.seats - grants.length) : null,
       my_request: request && request.status !== "approved" ? request.status : null,
       checkout_open: checkoutOpen,
+      // How much the pod knows, as a number only: never a note's name or text.
+      knows: (await notesByUpdated(ctx, podScopeKey(channel._id)).take(POD_KNOWS_CAP)).length,
       // The pod's rhythm only: when it meets, never the link or who is going.
       rhythm: await (async () => {
         const call = await nextPodCall(ctx, channel._id, nowMs);
