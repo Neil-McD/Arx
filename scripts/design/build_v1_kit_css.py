@@ -199,8 +199,31 @@ css += """
 .app .brief p{margin:0;font-size:13.5px;line-height:1.55;color:var(--ink)}
 .app .brief-from{display:flex;flex-wrap:wrap;gap:4px 10px;font-size:12px;color:var(--ink3)}
 .app .brief-from button{color:inherit;cursor:pointer}.app .brief-from button:hover{color:var(--ink)}
-.app .brief-acts{display:flex;align-items:center;justify-content:flex-end;gap:6px;margin-top:2px;font-size:12px;color:var(--ink3)}
-.app .brief-acts>span{margin-right:auto}
+.app .brief p.fold{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.app button.brief-more{align-self:flex-start;margin-top:-2px;font-size:12.5px;font-weight:500;color:var(--aurora-ink);cursor:pointer}
+/* A right panel's parts (mock: "Every right panel"): each a label with a
+   small fact on its right, then a line or two. */
+.app .rz{padding-top:16px;margin-top:16px;border-top:1px solid var(--line);display:flex;flex-direction:column;gap:8px}
+.app .rz:first-child{padding-top:0;margin-top:0;border-top:0}
+.app .rz>.lab{display:flex;align-items:center}
+.app .rz>.lab em{margin-left:auto;font-style:normal;font-weight:400;color:var(--ink3)}
+.app .rz h4{margin:0;font-size:15px;font-weight:600;color:var(--ink)}
+.app .ln{display:flex;align-items:center;gap:8px;min-height:26px;font-size:13px;color:var(--ink2)}
+.app .ln em{margin-left:auto;font-style:normal;font-size:12px;color:var(--ink3);white-space:nowrap}
+.app .ln .btn{margin-left:auto}
+.app .recent{display:flex;align-items:center;gap:8px;min-height:24px;font-size:13px;color:var(--ink2)}
+.app .recent i{width:6px;height:6px;border-radius:50%;background:rgb(var(--au));flex:none}
+.app .recent em{margin-left:auto;font-style:normal;font-size:12px;color:var(--ink3)}
+.app .quiet{margin:0;font-size:13px;line-height:1.5;color:var(--ink3)}
+/* A pod's landing page, the Pods page's right panel. */
+.app .land{display:flex;flex-direction:column;min-height:100%}
+.app .land h2{margin:0;font-size:20px;font-weight:600;letter-spacing:-.01em;color:var(--ink)}
+.app .land-p{margin:6px 0 0;font-size:14px;line-height:1.5;color:var(--ink2)}
+.app .land .podget{margin-top:10px}
+.app .land .brief{margin-top:14px}
+.app .joinbar{margin-top:auto;padding-top:16px;display:flex;flex-direction:column;gap:6px}
+.app .joinbar .btn{height:38px;font-size:14px;border-radius:9px;justify-content:center}
+.app .joinbar small{font-size:12px;color:var(--ink3);text-align:center}
 .app button.kmini-btn{width:100%;padding:0}.app button.kmini-btn:disabled{cursor:default}
 .app .kmini+.kline{margin-top:10px}
 
@@ -218,15 +241,12 @@ css += """
 .app .podform input:focus,.app .podform textarea:focus{border-color:rgba(var(--w),.2)}
 .app .podask{font-size:12px;color:var(--accent,var(--blue))}
 .app .podout{display:flex;flex-direction:column;align-items:flex-start;gap:6px;min-height:120px;padding:16px;border-radius:10px;border:1px solid var(--line2);background:var(--panel2,var(--s1))}
-.app .podout .btn{margin-top:auto}
+.app button.podout{text-align:left;cursor:pointer;transition:border-color .15s var(--ease),background .15s var(--ease)}
+.app button.podout:hover{border-color:rgba(var(--w),.18);background:var(--s2)}
 /* The pod picked: its pitch is in the right column. */
 .app .podsel{border-color:var(--accent,var(--line2));box-shadow:inset 0 0 0 1px var(--accent,var(--line2))}
 .app .podpage .acts{display:flex;flex-wrap:wrap;gap:8px}
 /* The pitch in the right column: its width, smaller type, long words wrap. */
-.app .podpitch{max-width:100%;min-width:0;margin-top:0;overflow-wrap:anywhere}
-.app .podpitch .lead{font-size:17px;max-width:100%;margin-top:0}
-.app .podpitch .podname{font-size:17px}
-.app .podpitch .sub2,.app .podpitch .sub,.app .podpitch .podmeta{white-space:normal;max-width:100%}
 .app .podform-row{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap}
 .app .podform-check{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--ink2);cursor:pointer}
 .app .podform-check input{width:auto}
@@ -236,8 +256,6 @@ css += """
 .app .podpage{display:flex;flex-direction:column;gap:14px;max-width:620px;margin-top:20px}
 .app .podpage .podname{font-size:20px}
 .app .podget{margin:4px 0 0;padding-left:18px;display:flex;flex-direction:column;gap:6px;font-size:14px;color:var(--ink)}
-.app .podlink{background:none;border:0;padding:0;cursor:pointer;text-align:left;color:inherit;font:inherit}
-.app .podlink:hover{text-decoration:underline}
 .app .podtag{margin-left:8px;font-size:11px;color:var(--ink3);border:1px solid var(--line2);border-radius:999px;padding:1px 7px;white-space:nowrap}
 .app .podleave{display:flex;flex-direction:column;gap:8px;margin-top:8px}
 .app .podnote{padding:6px 0;border-bottom:1px solid var(--line)}

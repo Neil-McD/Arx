@@ -213,8 +213,7 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
   on, or nothing when the posts are only noise; read back as
   `brief.md` and `pods/<pod>/brief.md` through one reader, `readPlaceBrief`;
   the same reader feeds the first part of Home's and a pod's right panel,
-  `getPlaceBrief`, and builders or a pod's hosts can take a brief down until
-  the next one with `hidePlaceBrief`), `communityEvidence*`,
+  `getPlaceBrief`), `communityEvidence*`,
   `communityCognitionLifecycle`, `communityWikiArchitect`; member knowledge stays in
   `memberOntology` and `memberOntologyCore` (`memberFacts`, `memberProfileSpines`, no
   longer read; dropped in a later release); people facts, one view of a person
