@@ -12,6 +12,7 @@ import {
 } from "./polynetSemanticRepositoryContract.ts";
 
 import { COMMUNITY_MEMBER_SELF_DIRECTORY, COMMUNITY_MEMBER_SELF_CONTEXT_PATH } from "./communityMemberSelfContext.ts";
+import { PERSONAL_MEMORY_PATH } from "./personalMemory.ts";
 
 export const POLYNET_SEMANTIC_ROOT_PATH = "/";
 export const POLYNET_COMMUNITY_PROFILE_PATH = "/community.md";
@@ -609,7 +610,8 @@ export function validatePolynetSemanticRepositoryOperationInput(args: {
       }
       return { ...validated, path: repositoryPath.path };
     }
-    if (repositoryPath.localPath === COMMUNITY_MEMBER_SELF_DIRECTORY || repositoryPath.localPath === COMMUNITY_MEMBER_SELF_CONTEXT_PATH) {
+    if (repositoryPath.localPath === COMMUNITY_MEMBER_SELF_DIRECTORY || repositoryPath.localPath === COMMUNITY_MEMBER_SELF_CONTEXT_PATH ||
+      repositoryPath.localPath === PERSONAL_MEMORY_PATH) {
       const validated = validateCommunitySemanticOperationInput({
         ...args,
         path: repositoryPath.localPath === COMMUNITY_MEMBER_SELF_DIRECTORY ? "/" : "/community.md",
