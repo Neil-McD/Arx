@@ -2,7 +2,7 @@
 // right column of Knowledge. Notes only ever appear there (Neil, Nov 11):
 // they are what the guide has learned, not a list to browse.
 import { Fragment, useEffect, useState } from "react";
-import type { CommunityNoteView } from "../../../../shared/cloudCommunityNotesGateway";
+import type { CommunityNoteView, NoteSourceView } from "../../../../shared/cloudCommunityNotesGateway";
 import { Btn, cx, Icon, Sec, Sep } from "./kit";
 
 const WEEK_MS = 7 * 86_400_000;
@@ -14,8 +14,12 @@ export function noteIsNew(note: Pick<CommunityNoteView, "created_at" | "updated_
 
 // Where a note came from, in the record's words; never names a member whose
 // conversation it was saved from.
-export function noteOrigin(note: Pick<CommunityNoteView, "kind" | "written_by" | "from_pod">): string {
+export function noteOrigin(note: Pick<CommunityNoteView, "kind" | "written_by" | "from_pod" | "author_kind" | "evidence_count">): string {
   if (note.from_pod) return `Shared from the ${note.from_pod} pod`;
+  if (note.author_kind === "guide") {
+    const count = note.evidence_count ?? 0;
+    return count > 0 ? `Learned by the guide from ${count} ${count === 1 ? "post" : "posts"}` : "Learned by the guide";
+  }
   if (note.kind === "founder") return note.written_by ? `Written by ${note.written_by}` : "Written by a host";
   if (note.kind === "ask") return "Saved from a conversation with the guide";
   if (note.kind === "tag") return "Saved from a conversation in a channel";
@@ -35,9 +39,26 @@ export function OpenNote(props: {
   onOpen: (slug: string) => void;
   onEdit: () => void;
   onDelete: () => Promise<void>;
+  // A guide note: what it was learned from, and undoing it.
+  loadSources?: () => Promise<NoteSourceView[]>;
+  onUndo?: () => Promise<void>;
 }) {
   const [confirming, setConfirming] = useState(false);
+  const [undoing, setUndoing] = useState(false);
+  const learned = props.note.author_kind === "guide";
+  const [sources, setSources] = useState<NoteSourceView[] | null>(null);
+  const [sourcesFailed, setSourcesFailed] = useState(false);
   useEffect(() => setConfirming(false), [props.note.slug]);
+  const { loadSources } = props;
+  useEffect(() => {
+    setSources(null);
+    setSourcesFailed(false);
+    if (!learned || !loadSources) return;
+    let live = true;
+    loadSources().then((rows) => { if (live) setSources(rows); }, () => { if (live) setSourcesFailed(true); });
+    return () => { live = false; };
+    // A note put back by Undo has its earlier sources: load them again.
+  }, [props.note.slug, props.note.updated_at, learned, loadSources]);
   const paragraphs = props.note.body_md.split(/\n{2,}/).map((part) => part.trim()).filter(Boolean);
   return (
     <>
@@ -50,7 +71,17 @@ export function OpenNote(props: {
       </div>
       <Sep />
       <Sec label="Learned from">
-        <div className={cx("src")}><Icon name={props.note.kind === "founder" ? "users" : "spark"} />{noteOrigin(props.note)}<em>{noteDay(props.note.created_at ?? props.note.updated_at)}</em></div>
+        <div className={cx("src")}><Icon name={learned || props.note.kind !== "founder" ? "spark" : "users"} />{noteOrigin(props.note)}<em>{noteDay(props.note.created_at ?? props.note.updated_at)}</em></div>
+        {learned && props.loadSources ? (
+          sourcesFailed ? <p className={cx("sub")}>Its sources couldn't be loaded.</p>
+            : sources === null ? <p className={cx("sub")}>Loading its sources…</p>
+            : sources.map((source) => source.available ? (
+              <div key={source.ref} className={cx("kwait")}>
+                <p>“{source.excerpt}”</p>
+                <span className={cx("sub2")}>{[source.author, source.channel_name ? `#${source.channel_name}` : null, noteDay(source.created_at)].filter(Boolean).join(" · ")}</span>
+              </div>
+            ) : <p key={source.ref} className={cx("sub")}>A {source.kind} that has since been removed.</p>)
+        ) : null}
       </Sec>
       {props.related.length ? (
         <>
@@ -69,7 +100,28 @@ export function OpenNote(props: {
           <span className={cx("lab")}>Who can read it</span>
           <span className={cx("sub2")}>All members and the guide</span>
         </div>
-        {props.canManage ? (
+        {props.canManage && learned && props.onUndo ? (
+          // Undo is how a builder corrects the guide: a change goes back, a
+          // new note goes and its posts won't teach it again. Editing makes
+          // the note the builder's.
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            <div style={{ display: "flex", gap: 8 }}>
+              <Btn small onClick={props.onEdit}>Edit</Btn>
+              {confirming ? (
+                <>
+                  <button type="button" className={cx("btn sm no")} disabled={undoing} onClick={() => {
+                    // One confirmed Undo puts back one change, however often it's clicked.
+                    if (undoing) return;
+                    setUndoing(true);
+                    void props.onUndo!().finally(() => { setUndoing(false); setConfirming(false); });
+                  }}>{undoing ? "Undoing…" : "Undo what it learned"}</button>
+                  <Btn small txt onClick={() => setConfirming(false)}>Keep it</Btn>
+                </>
+              ) : <Btn small txt onClick={() => setConfirming(true)}>Undo</Btn>}
+            </div>
+            <p className={cx("sub")}>Undo removes what the guide learned here; it won't learn it again from the same posts. Editing makes the note yours.</p>
+          </div>
+        ) : props.canManage ? (
           <div style={{ display: "flex", gap: 8 }}>
             <Btn small onClick={props.onEdit}>Edit</Btn>
             {confirming ? (
