@@ -92,7 +92,7 @@ export function KitMembersPage(props: {
   const [loading, setLoading] = useState(false);
   const [sort, setSort] = useState<{ key: SortKey; desc: boolean } | null>(null);
   const [openKey, setOpenKey] = useState<string | null>(null);
-  // Narrow windows (below 900px) show Members as layers: picking someone
+  // Narrow windows (below 1024px) show Members as layers: picking someone
   // replaces the table with their record, with a way back.
   const [picked, setPicked] = useState(false);
   const [record, setRecord] = useState<CloudMemberRecord | null>(null);

@@ -22,7 +22,7 @@ import {
   pushUniqueNavSnapshot,
 } from "../../../../shared/navSnapshot";
 import { resolveAuthSubject } from "../../../../shared/authSession";
-import { isPhoneViewport, isStandaloneWebApp } from "../../../../shared/browserRuntimeMode";
+import { isPhoneViewport, isStandaloneWebApp, PHONE_VIEWPORT_MEDIA_QUERY, shellVariantAfterResize } from "../../../../shared/browserRuntimeMode";
 import { hasOAuthCallbackParamsInLocation } from "../../../../shared/cloudPkce";
 import {
   STANDALONE_APP_LAUNCH_SEARCH_PARAM,
@@ -313,6 +313,29 @@ export function useWebShellNavigationController(params: {
     const next = applyShellVariantToKnownPath(current, "mobile");
     if (next === current) return;
     window.history.replaceState(window.history.state ?? {}, document.title, next);
+  }, []);
+
+  // A window dragged narrower than a phone gets the phone layout, and the
+  // regular one back when it is widened: never a third layout in between.
+  // The address follows (/m/...), so reload and back stay in the same layout.
+  useEffect(() => {
+    if (isStandaloneWebApp()) return;
+    const query = window.matchMedia?.(PHONE_VIEWPORT_MEDIA_QUERY);
+    if (!query?.addEventListener) return;
+    const onChange = () => {
+      const current = readShellVariantFromPathname(window.location.pathname || "/");
+      const next = shellVariantAfterResize({
+        phoneWidth: query.matches,
+        touch: window.matchMedia("(pointer: coarse)").matches,
+        current,
+      });
+      const path = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+      const nextPath = applyShellVariantToKnownPath(path, next);
+      if (nextPath !== path) window.history.replaceState(window.history.state ?? {}, document.title, nextPath);
+      paramsRef.current.setShellVariant(next);
+    };
+    query.addEventListener("change", onChange);
+    return () => query.removeEventListener("change", onChange);
   }, []);
 
   useEffect(() => {
