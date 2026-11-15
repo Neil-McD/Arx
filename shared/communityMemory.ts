@@ -104,6 +104,7 @@ export const MEMORY_REFUSAL_WORDS: Record<string, string> = {
   evidence_removed: "A builder removed a note learned from these same posts. Don't learn it again from them.",
   builder_note: "A builder wrote that note. Add your own note beside it instead of changing it.",
   note_missing: "There is no note with that name to change.",
+  note_not_shown: "Only a note shown to you whole can be rewritten in this review. Add your own note beside it instead.",
   run_note_limit: `A review adds at most ${MEMORY_NEW_NOTES_PER_RUN} new notes. Change an existing note instead.`,
   notes_full: "The community's memory is full. Merge or change notes instead of adding.",
   title_or_body_missing: "A note needs a title and a body.",

@@ -190,6 +190,7 @@ test("one pass: the guide gets everything in one prompt and writes once; refused
     notes: [
       { title: "Saturday meet", body: "Saturday climbs meet at 8 am at the north wall.", evidence_refs: [`post:${postId}`] },
       { title: "Made up", body: "Nobody said this.", evidence_refs: ["post:nope"] },
+      { title: "Unseen", body: "Rewrites a note it never saw.", evidence_refs: [`post:${postId}`], supersedes: "never-shown" },
     ],
     index: "- [Saturday meet](memory/saturday-meet.md)",
   } };
@@ -216,10 +217,29 @@ test("one pass: the guide gets everything in one prompt and writes once; refused
   const toolOutput = JSON.stringify(bodies[1].input);
   expect(toolOutput).toContain("memory/saturday-meet.md");
   expect(toolOutput).toContain("evidence_missing");
+  expect(toolOutput).toContain("note_not_shown");
   const notes: any[] = await t.run((ctx: any) => ctx.db.query("communityNotes").collect());
   expect(notes.map((note: any) => [note.slug, note.authorKind, note.evidenceRefs])).toEqual([["saturday-meet", "guide", [`post:${postId}`]]]);
   const index: any = await t.run((ctx: any) => ctx.db.query("communityMemoryIndex").first());
   expect(index.bodyMd).toContain("memory/saturday-meet.md");
   const runs: any[] = await t.run((ctx: any) => ctx.db.query("agentWorkRuns").collect());
   expect(runs[0]).toMatchObject({ summary: "Added when Saturday climbs meet.", promptTokens: 6000 });
+});
+
+test("the guide's notes are shown whole within a budget; only those can be rewritten", async () => {
+  const t = convexTest(schema, modules);
+  const w = await world(t);
+  await t.run(async (ctx: any) => {
+    for (let i = 0; i < 8; i++) {
+      await ctx.db.insert("communityNotes", { communityId: w.communityId, slug: `long-${i}`, title: `Long ${i}`, bodyMd: `${i} `.repeat(2_000),
+        source: "learned", searchText: "", authorKind: "guide", createdAt: NOW + i, updatedAt: NOW + i });
+    }
+    await ctx.db.insert("communityInteractionRoots", { communityId: w.communityId, channelId: w.general, actorType: "human", actorUserId: w.ownerId,
+      kind: "discussion", status: "live", visibilityScope: "community", contentSummary: "x", replyCount: 0, reactionSummary: [],
+      idempotencyKey: "one", createdAt: NOW + 10, updatedAt: NOW + 10 });
+  });
+  const input: any = await t.query(internal.communityMemory.readMemoryReviewInputInternal, { communityId: w.communityId, sinceMs: NOW, untilMs: NOW + 1_000 });
+  // 4,000 characters each in a 24,000 budget: the six newest.
+  expect(input.rewritable).toEqual(["long-7", "long-6", "long-5", "long-4", "long-3", "long-2"]);
+  expect(input.text).toContain("Long 1 · by you (not shown; can't be rewritten in this review)");
 });

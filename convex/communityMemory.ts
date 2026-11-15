@@ -336,10 +336,13 @@ export const listMemoryRuns = query({
 
 // ---------- what the nightly review reads, in one prompt
 
-// The newest notes are shown whole (so the guide changes one instead of
-// repeating it); older ones by title.
-const NOTES_SHOWN_WHOLE = 40;
-const NOTE_SHOWN_CHARS = 600;
+// The guide's newest notes are shown whole, within a budget, so it can
+// rewrite one instead of repeating it; only those can be rewritten in this
+// review. Builders' notes (which it never changes) show their start; older
+// notes their title.
+const NOTES_WITH_TEXT = 40;
+const BUILDER_NOTE_SHOWN_CHARS = 600;
+const WHOLE_NOTES_BUDGET_CHARS = 24_000;
 const NOTES_LISTED_MAX = 200;
 
 async function authorWord(ctx: any, row: any, names: Map<string, string>): Promise<string> {
@@ -391,17 +394,29 @@ export const readMemoryReviewInputInternal = internalQuery({
     const read = rows.filter((entry) => entry.row.createdAt <= readUntil)
       // Shown channel by channel, oldest first in each.
       .sort((a, b) => a.order - b.order || a.row.createdAt - b.row.createdAt);
-    if (read.length === 0) return { posts: 0, readUntil, text: "" };
+    if (read.length === 0) return { posts: 0, readUntil, text: "", rewritable: [] as string[] };
 
     const index = await ctx.db.query("communityMemoryIndex").withIndex("by_community", (q) => q.eq("communityId", args.communityId)).first();
     const notes = await ctx.db.query("communityNotes")
       .withIndex("by_community_updatedAt", (q) => q.eq("communityId", args.communityId)).order("desc").take(NOTES_LISTED_MAX);
     const lines = ["# memory.md", "", index?.bodyMd?.trim() || "_Nothing yet._", "", `# The notes (${notes.length}${notes.length === NOTES_LISTED_MAX ? ", newest first" : ""})`, ""];
     if (notes.length === 0) lines.push("_None yet._");
+    const rewritable: string[] = [];
+    let wholeChars = 0;
     notes.forEach((note, i) => {
-      const who = noteAuthorKind(note) === "builder" ? "a builder" : "you";
-      lines.push(`- memory/${note.slug}.md · ${note.title} · by ${who}`);
-      if (i < NOTES_SHOWN_WHOLE) lines.push(`  > ${note.bodyMd.replace(/\s+/g, " ").trim().slice(0, NOTE_SHOWN_CHARS)}`);
+      const body = note.bodyMd.trim();
+      if (noteAuthorKind(note) === "builder") {
+        lines.push(`- memory/${note.slug}.md · ${note.title} · by a builder`);
+        if (i < NOTES_WITH_TEXT) lines.push(`  > ${body.replace(/\s+/g, " ").slice(0, BUILDER_NOTE_SHOWN_CHARS)}`);
+        return;
+      }
+      const whole = i < NOTES_WITH_TEXT && wholeChars + body.length <= WHOLE_NOTES_BUDGET_CHARS;
+      lines.push(`- memory/${note.slug}.md · ${note.title} · by you${whole ? "" : " (not shown; can't be rewritten in this review)"}`);
+      if (whole) {
+        wholeChars += body.length;
+        rewritable.push(note.slug);
+        lines.push(...body.split("\n").map((line) => `  > ${line}`));
+      }
     });
     lines.push("", `# What people said, ${new Date(args.sinceMs).toISOString()} to ${new Date(readUntil).toISOString()}`);
     const names = new Map<string, string>();
@@ -420,7 +435,7 @@ export const readMemoryReviewInputInternal = internalQuery({
       lines.push(`- ${said} · ${new Date(row.createdAt).toISOString()}`, `  > ${text}`);
     }
     if (readUntil < args.untilMs) lines.push("", "The rest is read in the next review.");
-    return { posts: read.length, readUntil, text: lines.join("\n") };
+    return { posts: read.length, readUntil, text: lines.join("\n"), rewritable };
   },
 });
 

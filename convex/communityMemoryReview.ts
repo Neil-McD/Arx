@@ -107,9 +107,15 @@ export const readReviewAdmissionInternal = internalQuery({
 // Applies one memory.apply: each note through the same checks as ever
 // (cited posts, builder notes untouched, the run's limit), then memory.md.
 // Each item says what happened, so a refused one can be fixed.
-async function applyMemory(ctx: any, communityId: any, runId: any, apply: { notes: Array<{ title: string; body: string; evidenceRefs: string[]; supersedes?: string }>; index: string | null }) {
+// A rewrite replaces a note whole, so only notes the guide was shown whole
+// can be rewritten.
+async function applyMemory(ctx: any, communityId: any, runId: any, rewritable: Set<string>, apply: { notes: Array<{ title: string; body: string; evidenceRefs: string[]; supersedes?: string }>; index: string | null }) {
   const results: Array<Record<string, unknown>> = [];
   for (const note of apply.notes) {
+    if (note.supersedes && !rewritable.has(note.supersedes)) {
+      results.push({ note: note.title, refused: "note_not_shown", why: MEMORY_REFUSAL_WORDS.note_not_shown });
+      continue;
+    }
     const answer = await ctx.runMutation(internalRefs.communityMemory.observeCommunityMemoryInternal, {
       communityId, runId, title: note.title, body: note.body, evidenceRefs: note.evidenceRefs,
       ...(note.supersedes ? { supersedes: note.supersedes } : {}), nowMs: Date.now(),
@@ -207,7 +213,7 @@ export const runMemoryReviewInternal = internalAction({
         if (toolName !== "polynet_call") return failed("review_reads_nothing", `Everything is in front of you. Write with polynet_call ${MEMORY_APPLY_OPERATION}.`);
         const apply = parseMemoryApplyCall(rawArguments);
         if ("error" in apply) return failed(apply.error, `Write with polynet_call { operation: "${MEMORY_APPLY_OPERATION}", input: { notes, index } }.`);
-        const results = await applyMemory(ctx, claim.communityId, runId, apply);
+        const results = await applyMemory(ctx, claim.communityId, runId, new Set<string>(input.rewritable), apply);
         return { status: "ok" as const, exitCode: 0, outputText: JSON.stringify({ results }), errorCode: null, errorMessage: null };
       },
     });
