@@ -1,8 +1,9 @@
 # Pods (v0 spec)
 
-Status: draft for Neil's review, 2026-11-12. Direction agreed in conversation
-the same day; nothing here is built. Pods replace private channels as a
-concept.
+Status: direction agreed 2026-11-12. Slices 1–3 are built on staging (see
+"Slices"); members' own agents in a pod (slice 4) and the agents' table are
+not. Pods replace private channels as a concept. How the guide and memory
+work inside a pod is owned by `agent-system-end-state.md`.
 
 ## What a pod is
 
@@ -241,15 +242,18 @@ membership); one branch in the Stripe notice handler routes anything carrying
    3b slice 1 (built): pod notes in the pod's right column. The pod reads,
    its hosts and the builders write, and a builder can publish a note to the
    community's Knowledge as a copy marked "Shared from the X pod". The wall is
-   built in: pod notes are their own table (`communityPodNotes`), so no reader
-   of community notes, search, Home, the handbook or the agent's file system
-   can show them, and a test lets only `convex/communityPodNotes.ts` touch the
-   table. Decided for safety, differing from the first plan: a separate table
-   rather than a scope field (fails closed); members read but don't write yet
-   (a member's text in shared memory is the injection path closed Nov 5); no
-   agent reads pod notes yet (that arrives with the guide in a pod and
-   members' agents, with its own access rule); "save from a message" moves to
-   the provenance slice. Research and reasoning: markdown notes with
+   built in, as a scope (Nov 15, replacing the first build's separate
+   `communityPodNotes` table): every memory row carries a scope key
+   (`community:<id>` or `pod:<roomId>`) and every read names one scope,
+   through one door (`convex/communityNotesStore.ts`), so no reader of
+   community notes, search, Home, the handbook or the agent's file system
+   can show a pod's notes; a test (`scripts/memory_scope_wall.test.ts`) keeps
+   every other module away from the tables. Members read but don't write
+   yet (a member's text in shared memory is the injection path closed Nov 5).
+   The guide working inside a pod reads that pod (its facts, room and
+   memory, `convex/communityPodFacts.ts`) and no other, and a nightly review
+   per pod keeps the pod's memory. "Save from a message" moves to the
+   provenance slice. Research and reasoning: markdown notes with
    provenance, supersession and an index, on the file system agents already
    read; no graph database. Pod-scoped notes with the one-way wall and
    "publish to community"; pod-only events; with the Agent plan, the guide in
