@@ -152,11 +152,6 @@ const FIXED_TOOL_POLICIES: Record<RetrievalToolName, RuntimeToolPolicy> = {
     readOnly: true, mutatesState: false, parallelSafe: true, exclusive: false,
     requiresWorkspace: false, requiresCommunity: true,
   },
-  web_crawl: {
-    toolName: "web_crawl", source: "fixed", category: "web", riskLevel: "write",
-    readOnly: false, mutatesState: true, parallelSafe: false, exclusive: true,
-    requiresWorkspace: false, requiresCommunity: true,
-  },
 };
 
 function emptyRiskCounts(): Record<RuntimeToolRiskLevel, number> {

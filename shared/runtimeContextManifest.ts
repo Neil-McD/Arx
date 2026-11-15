@@ -164,7 +164,6 @@ const COMMUNITY_CONTEXT_MUTATION_TOOL_NAMES = new Set<RetrievalToolName>([
 
 const WEB_RESEARCH_TOOL_NAMES = new Set<RetrievalToolName>([
   "web_research",
-  "web_crawl",
 ]);
 
 function compactText(value: unknown, limit: number): string | null {
@@ -299,7 +298,7 @@ function buildResourceEntries(params: BuildRuntimeContextManifestInput & {
       owner: "web",
       retrieval: "tool_available",
       visibility: "public",
-      source: "web_research/web_crawl",
+      source: "web_research",
       reason: "external web evidence on demand",
     });
   }
