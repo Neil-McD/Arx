@@ -1778,6 +1778,7 @@ export const processQueuedCommunityAgentServeRequestsInternal = internalAction({
         });
         context.communityCardMd = layers.communityCardMd;
         context.communityHandbookMd = layers.communityHandbookMd;
+        context.communityMemoryMd = layers.communityMemoryMd;
       }
       const servePromptBundle = buildCommunityAgentServePromptBundle(context);
       const initialMessages = servePromptBundle.messages;

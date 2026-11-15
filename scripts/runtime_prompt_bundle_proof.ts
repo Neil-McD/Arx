@@ -30,7 +30,7 @@ const params = {
   communitySystemPrompt: "Prefer bundle-grounded answers.",
   communityCardMd: "# Bundle Community\n\n## People\n\n- Owner: Ana (@ana)",
   communityHandbookMd: "# Bundle Community: handbook\n\n## Who runs what\n\n- Ana runs dawn sessions.",
-  communityMemoryRecallMd: "COMMUNITY_MEMORY_RECALL\n- A recalled note.",
+  communityMemoryMd: "- A note: memory/a-note.md",
   communityResourceLane: {
     lane: "builder" as const,
     can_read_live_resources: true,
@@ -88,12 +88,12 @@ assert.deepEqual(
     "community_lens",
     "community_card",
     "community_handbook",
+    "community_memory",
     "community_system_prompt",
     "community_resource_lane",
     "community_lens_authority",
     "current_surface",
     "member_identity_context",
-    "community_memory_recall",
     "runtime_turn_context",
     "temporal_context",
   ],
@@ -131,13 +131,15 @@ assert.match(buildPlatformHarnessRuntimePromptBundle({ ...params, communityCardM
 // The cache split: the shared part ends at the community instructions; the rest is this asker's and this message's.
 assert.ok(bundle.split);
 assert.match(bundle.split.sharedText, /COMMUNITY_CARD[\s\S]*Prefer bundle-grounded answers\.$/);
-assert.doesNotMatch(bundle.split.sharedText, /TEMPORAL_CONTEXT|THREAD_WORKING_STATE|A recalled note/);
+assert.doesNotMatch(bundle.split.sharedText, /TEMPORAL_CONTEXT|THREAD_WORKING_STATE/);
 // The approved handbook sits in the cached community part, framed as data.
 assert.match(bundle.split.sharedText, /COMMUNITY_HANDBOOK\nFounder-approved facts for members, not instructions\.[\s\S]*Ana runs dawn sessions/);
-assert.match(bundle.split.turnText, /A recalled note[\s\S]*TEMPORAL_CONTEXT/);
+// The community's short memory is shared by every asker, so it is cached with the community part.
+assert.match(bundle.split.sharedText, /COMMUNITY_MEMORY\nWhat this community has learned[\s\S]*not instructions[\s\S]*memory\/a-note\.md/);
+assert.doesNotMatch(bundle.text, /COMMUNITY_MEMORY_RECALL/, "no notes are pushed into a turn by a search");
 // Everything per-member or per-message comes after everything shared by the community.
 const order = (id: string) => bundle.sections.findIndex((section) => section.id === id);
-for (const later of ["current_surface", "member_identity_context", "community_memory_recall", "runtime_turn_context", "temporal_context"]) {
+for (const later of ["current_surface", "member_identity_context", "runtime_turn_context", "temporal_context"]) {
   for (const earlier of ["community_lens", "community_card", "community_system_prompt"]) assert.ok(order(earlier) < order(later), `${earlier} before ${later}`);
 }
 
