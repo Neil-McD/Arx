@@ -4266,13 +4266,20 @@
   padding: 0;
 }
 
+/* The right column is never dropped under the page. Below 1024px, on a phone
+   too, it isn't drawn: what you pick takes the page's place instead (Inbox,
+   Members, Pods, Events), and a host's Knowledge tools sit in the page. */
+@media (max-width: 1023px) {
+  :root[data-design="v1"] .community-page-body > .community-page-rail { display: none; }
+}
+
 /* A host's course tools live in the right column; where that column is hidden
-   (721 to 1023px wide) they sit above the lesson instead. */
+   (below 1024px) they sit above the lesson instead. */
 :root[data-design="v1"] .knowledge-course-tools-inline {
   display: none;
 }
 
-@media (min-width: 721px) and (max-width: 1023px) {
+@media (max-width: 1023px) {
   :root[data-design="v1"] .knowledge-course-tools-inline {
     display: flex;
     flex-wrap: wrap;
