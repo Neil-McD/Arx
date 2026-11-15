@@ -222,7 +222,7 @@ Two rules across lenses:
 | Piece | Today | Gap to the end state |
 |---|---|---|
 | Pi kernel | `shared/piRuntimeKernel.ts` on `pi-agent-core` 1.4.0 | Kept |
-| Run entry | `convex/communityAgentRun.ts` (`runFundedCommunityAgent`): funding, budget, events, Pi, tools from the run's lens. The guide tagged in a channel and the nightly review run on it | The member's private talk still runs on `runtimeAgentLoop` (slice 5) |
+| Run entry | `convex/communityAgentRun.ts` (`runFundedCommunityAgent`): funding, budget, events, Pi, tools from the run's lens, streamed text, a stop, the context receipt and side-by-side reads. A person's private talk, the guide tagged in a channel and the nightly review all run on it | Kept |
 | Run ledgers | `runtimeRuns` + `runtimeRunEvents` (private talks); `communityAgentRunEvents` (tags); `agentWorkRuns` (nights) | One ledger |
 | Lenses | `shared/lens.ts`: reads, calls, tools, person views, the private talk's lens | Kept; operations not yet declared with effect and approval (slice 6) |
 | Tools | Five Polynet tools; `web_research` in private talks only (OpenAI web search today; the Exa version waits for its key). One router, `convex/agentTools.ts`. `web_crawl` deleted Nov 15 | Exa only |
@@ -288,7 +288,7 @@ something onto the new system deletes the old path in the same slice.
    deleted.
 4. **Pods.** *Built: `pods/` in the folder, pod facts, pod memory and its nightly review, the guide working inside one pod. Not yet pod briefs.* `pods/<pod>/` in the folder; pod lens; pod memory review and
    briefs; the pod panels (landing page, inside a pod).
-5. **One engine.** *Half: the tagged guide is on the run entry; the member's session is next.* The tagged guide (serve worker) and then the member's
+5. **One engine.** *Built: the tagged guide, the nightly review and the member's private talk run on one run entry. Not yet one ledger.* The tagged guide (serve worker) and then the member's
    session (turn loop) move onto the run entry; their engines and ledgers are
    deleted.
 6. **Operations declared.** *Not started.* Every verb with its effect and approval rule;
