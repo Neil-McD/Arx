@@ -291,7 +291,7 @@ assert.match(intake, /resolveCommunityInferenceFundingAdmission/);
 assert.doesNotMatch(intake, /connect an OpenAI API key|activate an OpenAI API key/);
 assert.doesNotMatch(intake + worker + admissionResolver, /legacy_requester_chatgpt|requesterHasChatgptConnection|owner_api_key/);
 assert.match(worker, /receiptKey: communityAgentMentionReceiptKey\(requestId\)/);
-assert.match(agentRun, /runOpenAiNativeToolCompletion\(\{[\s\S]*modelId: fundingSession\.modelId/);
+assert.match(agentRun, /const modelId = fundingSession\.modelId;[\s\S]*runOpenAiNativeToolCompletion\(\{\s*modelId,/);
 assert.doesNotMatch(worker + agentRun, /userProviderConnections|getOpenAiConnectionForUserInternal|decryptStoredSecret|runChatgptNativeToolCompletion|apiKeyOverride/);
 assert.match(agentRun, /observeFounderProviderResult\(usage, toolCompletion/);
 assert.match(usageCollector, /recordFounderProviderSuccess\(totals, result\)/);

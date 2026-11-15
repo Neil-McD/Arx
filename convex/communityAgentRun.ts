@@ -1,13 +1,16 @@
 // The run entry (docs/specs/agent-system-end-state.md §3.4): one funded agent
 // run on Pi for the community's guide, whatever started it. It admits the
 // model, claims the owner's funding once, offers the run's lens tools
-// (shared/lens.ts) and runs them through the caller's executor, records the run's events, and on any failure releases
-// the funding with what was spent. The caller decides what the answer means
-// (a reply in a thread, a review's record) and settles the receipt with it.
+// (shared/lens.ts) and runs them through the caller's executor, records the
+// run's events, and on any failure releases the funding with what was spent.
+// The caller decides what the answer means (a reply in a thread, a review's
+// record) and settles the receipt with it.
 //
 // Callers: the guide tagged in a channel (communityAgentServeWorker) and the
-// nightly memory review (communityMemoryReview). The member's own session
-// moves here in slice 5.
+// nightly memory review (communityMemoryReview). A person's private talk
+// (runtimeTurnHandlers) moves here next; what it adds is optional below:
+// streamed text, a stop the person can press, the context receipt before the
+// first request, and reads run side by side.
 import { internal } from "./_generated/api";
 import { createFounderInferenceUsageTotals, founderProviderRequests, observeFounderProviderResult } from "./founderInferenceUsage";
 import { assertPaidLuna6ProviderHeadroom, founderInferenceBudgetFailureCode } from "./founderInferenceBudget";
@@ -15,13 +18,17 @@ import { runOpenAiNativeToolCompletion } from "./openAiNativeToolCompletion";
 import { buildResponsesApiFunctionTools, normalizeToolArguments } from "../shared/toolRegistry";
 import type { RetrievalToolName } from "../shared/retrievalTools";
 import { LENS_TOOLS, lensHasTool } from "../shared/lens";
-import type { NativeToolAwareCompletionSuccess, NativeToolChoice } from "../shared/nativeToolProtocol";
+import type { NativeToolAwareCompletionSuccess, NativeToolAwareMessage, NativeToolChoice } from "../shared/nativeToolProtocol";
 import { runPiRuntimeKernel } from "../shared/piRuntimeKernel";
 import {
   DEFAULT_RUNTIME_KERNEL_BUDGET,
+  type RuntimeKernelBudget,
   type RuntimeKernelFailureInput,
+  type RuntimeKernelResult,
   type RuntimeKernelToolExecutionResult,
 } from "../shared/runtimeKernelTypes";
+import type { RuntimeKernelParams } from "../shared/runtimeKernel";
+import { buildRuntimeToolPolicySurface, classifyRuntimeToolSchedule, type RuntimeToolSchedulePlan } from "../shared/runtimeToolPolicy";
 import type { CommunityInferenceFundingAdmission, CommunityInferenceSurface } from "../shared/founderInference";
 import {
   claimCommunityInferenceFundingSession,
@@ -51,9 +58,12 @@ export type CommunityAgentRunRecorder = {
 
 export type CommunityAgentRunUsage = ReturnType<typeof createFounderInferenceUsageTotals>;
 
+// kernel: the loop's own result (transcript, steps, stop reason), when the
+// loop ran to an end.
 export type CommunityAgentRunResult =
-  | { ok: true; assistantText: string; fundingSession: CommunityInferenceFundingSession; usage: CommunityAgentRunUsage; providerStarted: boolean }
-  | { ok: false; failureCode: string; providerStarted: boolean };
+  | { ok: true; assistantText: string; fundingSession: CommunityInferenceFundingSession; usage: CommunityAgentRunUsage; providerStarted: boolean;
+      kernel: RuntimeKernelResult<RetrievalToolName> }
+  | { ok: false; failureCode: string; providerStarted: boolean; kernel?: RuntimeKernelResult<RetrievalToolName> };
 
 function unsupportedToolFailure(toolName: unknown): RuntimeKernelFailureInput {
   const pendingToolName = String(toolName ?? "").trim();
@@ -87,8 +97,12 @@ function coerceToLensTools(
   return completion as NativeToolAwareCompletionSuccess<RetrievalToolName>;
 }
 
-// The guide tagged in a channel, or the worker with nobody present.
-export type AgentRunLens = "guide_public" | "worker";
+// The guide tagged in a channel, the worker with nobody present, or the
+// guide in a person's private talk.
+export type AgentRunLens = "guide_public" | "worker" | "member_private" | "builder_private";
+
+// Runs an operation without a signal: for callers with no stop button.
+const runDirectly = <T>(operation: (signal: AbortSignal | undefined) => Promise<T>): Promise<T> => operation(undefined);
 
 export async function runFundedCommunityAgent(args: {
   ctx: any;
@@ -106,7 +120,9 @@ export async function runFundedCommunityAgent(args: {
   maxToolSteps: number;
   promptCacheKey: string;
   recorder: CommunityAgentRunRecorder;
-  executeTool: (toolName: RetrievalToolName, rawArguments: Record<string, unknown>) => Promise<RuntimeKernelToolExecutionResult>;
+  executeTool: (toolName: RetrievalToolName, rawArguments: Record<string, unknown>, call: {
+    providerCallId: string; normalizedArgs: Record<string, unknown>; iteration: number;
+  }) => Promise<RuntimeKernelToolExecutionResult>;
   // Checked before each model request (a source's access can end mid-run).
   beforeEachCompletion?: () => Promise<void>;
   // Tool results the caller's rules refused are logged as refused.
@@ -120,8 +136,32 @@ export async function runFundedCommunityAgent(args: {
   // The first model request's tool choice, e.g. a review that must write
   // (its one write may be empty).
   firstToolChoice?: NativeToolChoice<RetrievalToolName>;
+  // The loop's limits, when a caller sets its own (a private talk does).
+  budget?: RuntimeKernelBudget;
+  // Each model request's text as it arrives, with which request it was.
+  onTextDelta?: (delta: string, completionIndex: number) => void;
+  // Runs a model request or a tool call so the person can stop it: passes an
+  // abort signal, and throws when the run was stopped.
+  abortable?: <T>(operation: (signal: AbortSignal | undefined) => Promise<T>) => Promise<T>;
+  // Turns what abortable threw into how the run stops (stopped by the person,
+  // no longer active); anything else is a crash, as before.
+  mapStopError?: (error: unknown) => RuntimeKernelFailureInput | null;
+  // Before the first model request, with exactly the messages it will send
+  // (a private talk records its context receipt); a failure stops the run.
+  beforeFirstCompletion?: (messages: NativeToolAwareMessage[]) => Promise<RuntimeKernelFailureInput | null>;
+  // Reads in one model answer may run side by side; writes always run alone.
+  parallelReads?: boolean;
+  // Told how each batch of tool calls was scheduled.
+  onToolSchedule?: (schedule: RuntimeToolSchedulePlan, batch: { isBatch: boolean; remainingToolBudget: number; toolStepCount: number }) => Promise<void>;
+  // Told about each tool call as it starts and ends, beside the run's events.
+  onToolStepStart?: RuntimeKernelParams<RetrievalToolName>["onToolStepStart"];
+  onToolStepFinish?: RuntimeKernelParams<RetrievalToolName>["onToolStepFinish"];
 }): Promise<CommunityAgentRunResult> {
-  const tools = buildResponsesApiFunctionTools(LENS_TOOLS[args.lens]);
+  const abortable = args.abortable ?? runDirectly;
+  const lensTools = LENS_TOOLS[args.lens];
+  const toolPolicies = buildRuntimeToolPolicySurface({ fixedToolNames: lensTools }).policies;
+  let firstCompletionChecked = !args.beforeFirstCompletion;
+  const tools = buildResponsesApiFunctionTools(lensTools);
   let usage = createFounderInferenceUsageTotals("");
   let providerStarted = false;
   let fundingSession: CommunityInferenceFundingSession | null = null;
@@ -139,6 +179,7 @@ export async function runFundedCommunityAgent(args: {
 
   let completion: any;
   let requests = 0;
+  let completions = 0;
   try {
     await args.beforeEachCompletion?.();
     const admittedModelId = await args.ctx.runQuery(internalRefs.founderInference.resolveCommunityInferenceModelInternal, {
@@ -147,7 +188,7 @@ export async function runFundedCommunityAgent(args: {
     usage = createFounderInferenceUsageTotals(admittedModelId);
     completion = await runPiRuntimeKernel<RetrievalToolName>({
       messages: args.messages,
-      budget: {
+      budget: args.budget ?? {
         ...DEFAULT_RUNTIME_KERNEL_BUDGET, maxToolSteps: args.maxToolSteps,
         maxConsecutiveFailures: args.maxConsecutiveFailures ?? 2, maxNoProgressSteps: args.maxConsecutiveFailures ?? 2,
       },
@@ -171,7 +212,13 @@ export async function runFundedCommunityAgent(args: {
         },
       },
       runCompletion: async (kernelMessages, options) => {
+        if (!firstCompletionChecked) {
+          firstCompletionChecked = true;
+          const refused = await args.beforeFirstCompletion!(kernelMessages);
+          if (refused) return refused;
+        }
         let toolCompletion;
+        const completionIndex = completions++;
         try {
           await args.beforeEachCompletion?.();
           if (!fundingSession) {
@@ -187,17 +234,22 @@ export async function runFundedCommunityAgent(args: {
             providerStarted = true;
           }
           const toolChoice = options?.toolChoice ?? (requests++ === 0 ? args.firstToolChoice : undefined);
-          toolCompletion = await runOpenAiNativeToolCompletion({
-            modelId: fundingSession.modelId,
+          const modelId = fundingSession.modelId;
+          toolCompletion = await abortable((signal) => runOpenAiNativeToolCompletion({
+            modelId,
             messages: kernelMessages,
             maxTokens: args.maxOutputTokens,
             tools,
             ...(toolChoice ? { toolChoice } : {}),
-            parallelToolCalls: false,
+            parallelToolCalls: args.parallelReads === true,
             promptCacheKey: args.promptCacheKey,
-          });
+            ...(args.onTextDelta ? { onTextDelta: (delta: string) => args.onTextDelta!(delta, completionIndex) } : {}),
+            ...(signal ? { signal } : {}),
+          }));
         } catch (error) {
           if (providerStarted && !founderInferenceBudgetFailureCode(error)) usage.complete = false;
+          const stopped = args.mapStopError?.(error);
+          if (stopped) return stopped;
           throw error;
         }
         observeFounderProviderResult(usage, toolCompletion,
@@ -205,20 +257,35 @@ export async function runFundedCommunityAgent(args: {
         return coerceToLensTools(args.lens, toolCompletion);
       },
       normalizeToolArguments: args.normalizeToolArguments ?? normalizeToolArguments,
-      onToolStepStart: async ({ step }) => {
+      ...(args.parallelReads ? {
+        onToolBatchResolved: async ({ steps, isBatch, remainingToolBudget, toolStepCount }) => {
+          const schedule = classifyRuntimeToolSchedule({
+            toolCalls: steps.map((step, index) => ({ providerCallId: step.providerCallId, toolName: step.toolName, index, normalizedArgs: step.normalizedArgs })),
+            policies: toolPolicies,
+            enableParallelReadBatches: true,
+          });
+          await args.onToolSchedule?.(schedule, { isBatch, remainingToolBudget, toolStepCount });
+          return { executionMode: schedule.executionMode === "parallel_read_batch" ? "parallel" as const : "serial" as const };
+        },
+      } : {}),
+      onToolStepStart: async (step) => {
         await args.recorder.flushAll();
-        const content = args.describeToolCall?.(String(step.toolName), (step as any).normalizedArgs ?? {}) ?? String(step.toolName);
-        await args.recorder.record({ kind: "tool_call", toolName: String(step.toolName), status: "running", content });
+        const content = args.describeToolCall?.(String(step.step.toolName), step.step.normalizedArgs ?? {}) ?? String(step.step.toolName);
+        await args.recorder.record({ kind: "tool_call", toolName: String(step.step.toolName), status: "running", content });
+        await args.onToolStepStart?.(step);
       },
-      onToolStepFinish: async ({ step, toolResult }) => {
+      onToolStepFinish: async (finished) => {
+        const { step, toolResult } = finished;
         const refused = Boolean(args.isRefusal?.(toolResult.errorCode));
         await args.recorder.record({
           kind: "tool_result", toolName: String(step.toolName),
           status: refused ? "refused" : toolResult.status, errorCode: toolResult.errorCode ?? undefined,
           content: toolResult.status === "ok" ? "Tool completed" : refused ? "Tool call refused by the turn's rules" : "Tool failed",
         });
+        await args.onToolStepFinish?.(finished);
       },
-      executeTool: async ({ toolName, rawArguments }) => await args.executeTool(toolName, rawArguments),
+      executeTool: async ({ toolName, rawArguments, providerCallId, normalizedArgs, iteration }) =>
+        await args.executeTool(toolName, rawArguments, { providerCallId, normalizedArgs, iteration }),
     });
   } catch (error) {
     const failureCode = founderInferenceBudgetFailureCode(error) ?? (providerStarted
@@ -234,12 +301,12 @@ export async function runFundedCommunityAgent(args: {
     const failureCode = String(completion.code ?? "provider_error");
     await releaseFunding(failureCode, !providerStarted || providerFailureIsKnownPreSpend(failureCode) ? "failed" : "indeterminate");
     await args.recorder.record({ kind: "error", errorCode: failureCode, content: "The community agent could not complete this turn." });
-    return { ok: false, failureCode, providerStarted };
+    return { ok: false, failureCode, providerStarted, kernel: completion };
   }
   const assistantText = String(completion?.assistantText ?? "");
   await args.recorder.record({ kind: "final", status: "completed", content: assistantText });
   if (!fundingSession) {
-    return { ok: false, failureCode: "community_inference_funding_session_missing", providerStarted };
+    return { ok: false, failureCode: "community_inference_funding_session_missing", providerStarted, kernel: completion };
   }
-  return { ok: true, assistantText, fundingSession, usage, providerStarted };
+  return { ok: true, assistantText, fundingSession, usage, providerStarted, kernel: completion };
 }

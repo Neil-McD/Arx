@@ -150,6 +150,13 @@ A person's conversation with the guide is one ongoing session. Older turns
 become a written summary plus the recent messages; everything older is
 searched when needed.
 
+Tool calls in one model answer run one at a time, except calls that change
+nothing (today `polynet_list`; reads and searches record a receipt, so they
+count as writes): a run may let those run side by side (`parallelReads` on
+the run entry). The guide tagged in a channel and a private talk do; the
+nightly review has one write and no reads. Anything that writes always runs
+alone, in order.
+
 Wide work fans out: helpers on a small model read and draft; the run applies
 their drafts in one checked operation. Helpers never write.
 
