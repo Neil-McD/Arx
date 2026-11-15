@@ -178,32 +178,25 @@ function HostChannel() {
   );
 }
 
-// The guide's brief as the panels draw it: Home's (points open their channel,
-// a builder can hide it) and a pod's (plain; one point's post is gone, so no
-// headline).
+// The guide's brief as the panels draw it: Home's (its channels open, a
+// builder can hide it) and a pod's (plain).
 function BriefPanels() {
   const now = Date.now();
-  const general = [{ slug: "general", name: "general" }];
-  const wins = [{ slug: "wins", name: "wins" }];
   return (
     <KitApp view="wins" host fillWindow scale={labScale()} banner={BANNER} bannerPosition="72% 38%" aura={0.08}>
       <HostSide />
       <Main><Top /></Main>
       <Rail index={1} label="The guide's brief">
         <BriefPart now={now} onOpenChannel={() => undefined} onHide={async () => undefined} brief={{
-          headline: "Friday's build call is the talk of the week",
+          summary: "Most of the talk is about getting a first paid pod out the door: pricing it, and what the launch post should say. Stripe payouts are the sticking point for a couple of people, and Friday's build call is where it's all headed.",
+          channels: [{ slug: "general", name: "general" }, { slug: "wins", name: "wins" }],
           updated_at: new Date(now - 3 * 3_600_000).toISOString(),
-          points: [
-            { text: "Jon is bringing his invitation flow to Friday's call and wants blunt feedback.", refs: ["post:a"], channels: general },
-            { text: "Priya shipped her first paid pod and shared what the launch post looked like.", refs: ["post:b"], channels: wins },
-            { text: "Two people are stuck on Stripe payouts; Sara pointed them at the lesson.", refs: ["post:c"], channels: general },
-          ],
         }} />
         <Sep />
         <BriefPart now={now} brief={{
-          headline: null,
+          summary: "The pod has moved on to fingerboard work for week three, and people are comparing hang times.",
+          channels: [],
           updated_at: new Date(now - 26 * 3_600_000).toISOString(),
-          points: [{ text: "Week 3 is fingerboard work; Maya posted the plan and asked for hang times.", refs: ["post:d"], channels: [] }],
         }} />
       </Rail>
     </KitApp>

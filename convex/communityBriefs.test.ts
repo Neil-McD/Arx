@@ -97,8 +97,7 @@ test("one model request: the guide is shown who the community is and its threads
   await post(t, w, { contentSummary: "LAST MONTH", createdAt: NOW - 30 * 24 * HOUR });
   await t.run((ctx: any) => ctx.db.insert("communityJoinRequests", { communityId: w.communityId, userId: w.mayaId, status: "pending", createdAt: NOW, updatedAt: NOW } as any));
 
-  const bodies = fakeModel([writeCall("c1", { headline: "Saturday climb is on",
-    points: [{ text: "Maya's Saturday climb at the north wall has two takers.", refs: [`post:${climb}`, `reply:${yes}`] }] })]);
+  const bodies = fakeModel([writeCall("c1", { summary: "Saturday's climb at the north wall is coming together.", refs: [`post:${climb}`, `reply:${yes}`] })]);
   const row = await due(t, w);
   expect(await t.action(internal.communityBriefs.runCommunityBriefInternal, { workId: row._id })).toEqual({ status: "written" });
 
@@ -108,7 +107,7 @@ test("one model request: the guide is shown who the community is and its threads
   // Who the community is, and how its builder wants the guide to speak.
   expect(prompt).toContain("Brief club");
   expect(prompt).toContain("Keep it friendly and short.");
-  // The thread people replied to comes before the one nobody answered, each post with the id a point cites.
+  // The thread people replied to comes before the one nobody answered, each post with the id the brief names.
   expect(prompt.indexOf("north wall")).toBeLessThan(prompt.indexOf("spare harness"));
   expect(prompt).toContain(`post:${climb}`);
   expect(prompt).toContain(`reply:${yes}`);
@@ -122,10 +121,9 @@ test("one model request: the guide is shown who the community is and its threads
 
   const briefs: any[] = await t.run((ctx: any) => ctx.db.query("communityBriefs").collect());
   expect(briefs).toHaveLength(1);
-  expect(briefs[0]).toMatchObject({ scopeKey: `community:${String(w.communityId)}`, headline: "Saturday climb is on",
-    points: [{ text: "Maya's Saturday climb at the north wall has two takers.", refs: [`post:${climb}`, `reply:${yes}`] }] });
+  expect(briefs[0]).toMatchObject({ scopeKey: `community:${String(w.communityId)}`, summary: "Saturday's climb at the north wall is coming together.", refs: [`post:${climb}`, `reply:${yes}`] });
   const runs: any[] = await t.run((ctx: any) => ctx.db.query("agentWorkRuns").collect());
-  expect(runs[0]).toMatchObject({ kind: "brief", status: "done", summary: "Saturday climb is on", promptTokens: 2000 });
+  expect(runs[0]).toMatchObject({ kind: "brief", status: "done", summary: "Saturday's climb at the north wall is coming together.", promptTokens: 2000 });
   // Nothing new since: no more work is due, and the next brief waits out its gap.
   const after: any = await briefWork(t, w.communityId);
   expect(after).toMatchObject({ pending: 0, reviewedThrough: row.dueAt });
@@ -141,8 +139,8 @@ test("a point citing a post it wasn't shown, or a link, is refused with the reas
   const climb = await post(t, w, { contentSummary: "Saturday climb at the north wall.", createdAt: NOW + 10 });
   const elsewhere = await post(t, w, { channelId: w.pod, contentSummary: "POD SECRET", createdAt: NOW + 6 });
   const bodies = fakeModel([
-    writeCall("c1", { headline: "News", points: [{ text: "From the pod.", refs: [`post:${elsewhere}`] }] }),
-    writeCall("c2", { headline: "News", points: [{ text: "Sign up at evil.com", refs: [`post:${climb}`] }] }),
+    writeCall("c1", { summary: "From the pod.", refs: [`post:${elsewhere}`] }),
+    writeCall("c2", { summary: "Sign up at evil.com", refs: [`post:${climb}`] }),
   ]);
   const row = await due(t, w);
   // Two refusals use up the run: nothing is written, and it is retried.
@@ -157,7 +155,7 @@ test("a run that ends in words without a valid brief leaves the activity for the
   const t = convexTest(schema, modules);
   const w = await world(t);
   await post(t, w, { contentSummary: "Anyone climbing?", createdAt: NOW + 10 });
-  fakeModel([writeCall("c1", { headline: "", points: [] }),
+  fakeModel([writeCall("c1", { summary: "", refs: [] }),
     { id: "r2", model: "gpt-6-luna", service_tier: "default", usage, output_text: "I couldn't write it." }]);
   const row = await due(t, w);
   expect(await t.action(internal.communityBriefs.runCommunityBriefInternal, { workId: row._id })).toEqual({ status: "failed", errorCode: "brief_not_written" });
@@ -167,12 +165,28 @@ test("a run that ends in words without a valid brief leaves the activity for the
   expect(after.dueAt).toBeGreaterThan(row.dueAt);
 });
 
+test("posts that are only noise: the guide says there's nothing worth a brief, and the place has none", async () => {
+  stubProvider();
+  const t = convexTest(schema, modules);
+  const w = await world(t);
+  const noise = await post(t, w, { contentSummary: "asdf", createdAt: NOW + 10 });
+  await t.run((ctx: any) => ctx.db.insert("communityBriefs", { communityId: w.communityId, scopeKey: `community:${String(w.communityId)}`,
+    summary: "An older brief.", refs: [`post:${noise}`], windowEnd: NOW - HOUR, createdAt: NOW - HOUR, updatedAt: NOW - HOUR }));
+  const bodies = fakeModel([writeCall("c1", { nothing: true })]);
+  const row = await due(t, w);
+  expect(await t.action(internal.communityBriefs.runCommunityBriefInternal, { workId: row._id })).toEqual({ status: "written" });
+  expect(bodies).toHaveLength(1);
+  // The brief before it goes too: it was about a place that has moved on.
+  expect(await t.run((ctx: any) => ctx.db.query("communityBriefs").collect())).toHaveLength(0);
+  expect(await briefWork(t, w.communityId)).toMatchObject({ pending: 0 });
+});
+
 test("a place with nothing recent to say costs nothing", async () => {
   stubProvider();
   const t = convexTest(schema, modules);
   const w = await world(t);
   await post(t, w, { contentSummary: "LAST MONTH", createdAt: NOW - 30 * 24 * HOUR });
-  const bodies = fakeModel([writeCall("c1", { headline: "x", points: [] })]);
+  const bodies = fakeModel([writeCall("c1", { summary: "x", refs: [] })]);
   const row = await due(t, w);
   expect(await t.action(internal.communityBriefs.runCommunityBriefInternal, { workId: row._id })).toEqual({ status: "empty" });
   expect(bodies).toHaveLength(0);
@@ -218,8 +232,8 @@ test("a pod's brief is written from its own room alone and kept in the pod's sco
 
   const bodies = fakeModel([
     // A point citing the community's post is refused: the pod's brief cites the pod's room.
-    writeCall("c1", { headline: "From outside", points: [{ text: "Something from the open channels.", refs: [`post:${open}`] }] }),
-    writeCall("c2", { headline: "Pitch practice has moved", points: [{ text: "Pitch practice is in the back room now.", refs: [`post:${pitch}`] }] }),
+    writeCall("c1", { summary: "Something from the open channels.", refs: [`post:${open}`] }),
+    writeCall("c2", { summary: "Pitch practice has moved to the back room.", refs: [`post:${pitch}`] }),
   ]);
   await t.run((ctx: any) => markCommunityBriefDue(ctx, { communityId: w.communityId, channelId: w.pod, actorType: "human", nowMs: NOW }));
   const row: any = await podWork(t, w.pod);
@@ -237,7 +251,7 @@ test("a pod's brief is written from its own room alone and kept in the pod's sco
   expect(JSON.stringify(bodies[1].input)).toContain("refs_invalid");
 
   const briefs: any[] = await t.run((ctx: any) => ctx.db.query("communityBriefs").collect());
-  expect(briefs.map((brief: any) => [brief.scopeKey, brief.headline])).toEqual([[`pod:${String(w.pod)}`, "Pitch practice has moved"]]);
+  expect(briefs.map((brief: any) => [brief.scopeKey, brief.summary])).toEqual([[`pod:${String(w.pod)}`, "Pitch practice has moved to the back room."]]);
   const runs: any[] = await t.run((ctx: any) => ctx.db.query("agentWorkRuns").collect());
   expect(runs[0]).toMatchObject({ kind: "brief", scopeKey: `pod:${String(w.pod)}`, status: "done" });
 
@@ -260,7 +274,7 @@ test("a builder taking the guide out of a pod stops its brief", async () => {
     const seat = await ctx.db.query("communityChannelParticipants").withIndex("by_channel_principal", (q: any) => q.eq("channelId", w.pod).eq("principalKey", "community_agent")).first();
     await ctx.db.patch(seat._id, { status: "revoked" });
   });
-  const bodies = fakeModel([writeCall("c1", { headline: "x", points: [] })]);
+  const bodies = fakeModel([writeCall("c1", { summary: "x", refs: [] })]);
   vi.useFakeTimers({ toFake: ["Date"] });
   vi.setSystemTime(row.dueAt);
   expect(await t.action(internal.communityBriefs.runCommunityBriefInternal, { workId: row._id })).toEqual({ status: "skipped" });
@@ -283,7 +297,7 @@ test("the guide taken out of a pod while its brief is being written: the brief i
       const seat = await ctx.db.query("communityChannelParticipants").withIndex("by_channel_principal", (q: any) => q.eq("channelId", w.pod).eq("principalKey", "community_agent")).first();
       await ctx.db.patch(seat._id, { status: "revoked" });
     });
-    return new Response(JSON.stringify(writeCall(`c${request}`, { headline: "Pitch practice has moved", points: [{ text: "It moved.", refs: [`post:${pitch}`] }] })), { status: 200 });
+    return new Response(JSON.stringify(writeCall(`c${request}`, { summary: "Pitch practice has moved.", refs: [`post:${pitch}`] })), { status: 200 });
   }));
   vi.useFakeTimers({ toFake: ["Date"] });
   vi.setSystemTime(row.dueAt);

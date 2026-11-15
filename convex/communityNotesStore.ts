@@ -96,6 +96,12 @@ export async function writeBrief(ctx: any, scopeKey: ScopeKey, doc: Record<strin
   return await ctx.db.insert("communityBriefs", { ...doc, scopeKey, createdAt: doc.updatedAt });
 }
 
+// The place goes back to having no brief.
+export async function removeBrief(ctx: any, scopeKey: ScopeKey) {
+  const existing = await briefFor(ctx, scopeKey);
+  if (existing) await ctx.db.delete(existing._id);
+}
+
 // ---------- work the guide does with nobody present
 
 export type AgentWorkKind = "memory_review" | "brief";

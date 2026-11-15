@@ -8,8 +8,9 @@
 // nobody present (convex/agentWork.ts runs it), in one model request: the
 // server hands the guide who the community is, its handbook, the place's
 // memory.md and its recent threads (picked by how much they matter, each
-// post with the id a point cites), and it answers with one brief.write,
-// which ends the run. A quiet place costs nothing; with AI off nothing runs.
+// post with the id the brief names), and it answers with one brief.write:
+// a summary of one to three sentences, or that there is nothing worth one.
+// That ends the run. A quiet place costs nothing; with AI off nothing runs.
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import { internalAction, internalMutation, internalQuery, mutation, query } from "./_generated/server";
@@ -19,7 +20,7 @@ import { requirePodEventManager } from "./communityEventAudience";
 import { runAgentWork } from "./agentWork";
 import { getUniqueCommunityMembershipByPair, normalizeCommunityRoleForOutput, requireCommunityChatAccess, requireCommunityManager } from "./communityCore";
 import { displayName } from "./communityFounderBrief";
-import { briefFor, communityScopeKey, insertWork, memoryIndexFor, podScopeKey, workFor, writeBrief, type ScopeKey } from "./communityNotesStore";
+import { briefFor, communityScopeKey, insertWork, memoryIndexFor, podScopeKey, removeBrief, workFor, writeBrief, type ScopeKey } from "./communityNotesStore";
 import { evidenceFacts, guideSeatedInPod, openRun, podRoom, scheduleAgentWork } from "./communityMemory";
 import { communityAgentIsOn } from "./communityApps";
 import { memoryEvidenceRefusal, parseMemoryEvidenceRef } from "../shared/communityMemory";
@@ -82,7 +83,7 @@ const asksSomething = (row: any) => row.kind === "question" || String(row.title 
 // posts or another pod's. Threads are picked by how much they matter (a host
 // wrote it, people replied, a question nobody answered, how recent), not
 // only by time, so a busy place's brief is about what counts. Each post and
-// reply carries the id a point cites; refs lists exactly those. Never
+// reply carries the id the brief names; refs lists exactly those. Never
 // private talks, join requests or people's plans.
 export const readCommunityBriefInputInternal = internalQuery({
   args: { communityId: v.id("communities"), untilMs: v.number(), podRoomId: v.optional(v.string()) },
@@ -188,8 +189,9 @@ export const readCommunityBriefInputInternal = internalQuery({
 
 // The brief's one write: a place has one brief, and this replaces it.
 export const writeCommunityBriefInternal = internalMutation({
-  args: { communityId: v.id("communities"), runId: v.id("agentWorkRuns"), headline: v.string(),
-    points: v.array(v.object({ text: v.string(), refs: v.array(v.string()) })), windowEnd: v.number(), nowMs: v.number() },
+  // No summary: the guide found nothing worth a brief, so the place has none.
+  args: { communityId: v.id("communities"), runId: v.id("agentWorkRuns"), summary: v.optional(v.string()),
+    refs: v.array(v.string()), windowEnd: v.number(), nowMs: v.number() },
   handler: async (ctx, args) => {
     // Checked when the write happens: the run is still open, and for a pod,
     // its room is open and the guide still works there (a builder taking the
@@ -197,11 +199,15 @@ export const writeCommunityBriefInternal = internalMutation({
     const run: any = await openRun(ctx, args.communityId, args.runId);
     if (!run || run.kind !== "brief") return { ok: false as const };
     const scope = (run.scopeKey as ScopeKey | undefined) ?? communityScopeKey(args.communityId);
-    await writeBrief(ctx, scope, {
-      communityId: args.communityId, headline: args.headline, points: args.points,
-      runId: args.runId, windowEnd: args.windowEnd, updatedAt: args.nowMs,
-    });
-    await ctx.db.patch(run._id, { changed: ["brief"] });
+    if (args.summary) {
+      await writeBrief(ctx, scope, {
+        communityId: args.communityId, summary: args.summary, refs: args.refs,
+        runId: args.runId, windowEnd: args.windowEnd, updatedAt: args.nowMs,
+      });
+    } else {
+      await removeBrief(ctx, scope);
+    }
+    await ctx.db.patch(run._id, { changed: [args.summary ? "brief" : "no brief"] });
     return { ok: true as const };
   },
 });
@@ -247,13 +253,14 @@ export const runCommunityBriefInternal = internalAction({
           const brief = parseBriefWriteCall(rawArguments, shownRefs);
           if ("error" in brief) {
             return { ok: false, code: brief.error,
-              message: `${brief.why} Write with polynet_call { operation: "${BRIEF_WRITE_OPERATION}", input: { headline, points: [{ text, refs }] } }.` };
+              message: `${brief.why} Write with polynet_call { operation: "${BRIEF_WRITE_OPERATION}", input: { summary, refs } }.` };
           }
           const saved = await ctx.runMutation(internalRefs.communityBriefs.writeCommunityBriefInternal, {
-            communityId: claim.communityId, runId, headline: brief.headline, points: brief.points, windowEnd: untilMs, nowMs: Date.now(),
+            communityId: claim.communityId, runId, windowEnd: untilMs, nowMs: Date.now(),
+            ...("nothing" in brief ? { refs: [] } : { summary: brief.summary, refs: brief.refs }),
           });
           return saved?.ok
-            ? { ok: true, output: { written: "brief" }, ended: brief.headline }
+            ? { ok: true, output: { written: "nothing" in brief ? "no brief" : "brief" }, ended: "nothing" in brief ? "Nothing worth a brief." : brief.summary }
             : { ok: false, code: "run_closed", message: "This brief's run is no longer open." };
         },
       };
@@ -262,8 +269,8 @@ export const runCommunityBriefInternal = internalAction({
 });
 
 // A place's brief, as its readers get it (brief.md in the folder; the panels
-// next): nothing when the guide is off or the brief is over three days old, and
-// only the points whose posts are all still there, live, in the place. The
+// too): nothing when the guide is off, the brief is over three days old, or
+// any post it drew on is no longer there, live, in the place. The
 // caller has already checked the reader may enter the place.
 export async function readPlaceBrief(ctx: any, args: { communityId: any; podRoomId?: unknown; nowMs: number }): Promise<BriefView | null> {
   if (!(await communityAgentIsOn(ctx, args.communityId))) return null;
@@ -274,7 +281,7 @@ export async function readPlaceBrief(ctx: any, args: { communityId: any; podRoom
   if (!stored || stored.hiddenAt) return null;
   // Where each cited post is now; null once it is gone, hidden or moved out of the place.
   const where = new Map<string, { slug: string; name: string } | null>();
-  for (const ref of new Set<string>(stored.points.flatMap((point: any) => point.refs as string[]))) {
+  for (const ref of new Set<string>(stored.refs as string[])) {
     const parsed = parseMemoryEvidenceRef(ref);
     if (!parsed || memoryEvidenceRefusal(await evidenceFacts(ctx, args.communityId, parsed, scope))) {
       where.set(ref, null);
@@ -287,11 +294,8 @@ export async function readPlaceBrief(ctx: any, args: { communityId: any; podRoom
   const visible = visibleBrief(stored, args.nowMs, (ref) => Boolean(where.get(ref)));
   if (!visible) return null;
   return {
-    headline: visible.headline,
-    points: visible.points.map((point) => ({
-      text: point.text, refs: point.refs,
-      channels: [...new Map(point.refs.map((ref) => where.get(ref)!).map((channel) => [channel.slug, channel])).values()],
-    })),
+    summary: visible.summary,
+    channels: [...new Map(visible.refs.map((ref) => where.get(ref)!).map((channel) => [channel.slug, channel])).values()],
     updated_at: new Date(visible.updatedAt).toISOString(),
   };
 }
