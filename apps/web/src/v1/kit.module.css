@@ -890,6 +890,13 @@
 .app .kseg button{height:24px;padding:0 10px;border-radius:6px;font-size:12.5px;font-weight:500;color:var(--ink2)}
 .app .kseg button[aria-pressed="true"]{background:var(--s2);color:var(--ink)}
 
+/* A right column drawn as a part of a page takes the room the page gives it
+   (the app's column narrows in a smaller window; the mock's fixed width ran
+   past its edge), and its lines and buttons wrap. */
+.app.part.rail-part .rail{width:100%;box-sizing:border-box;min-width:0}
+.app.part.rail-part .rail .sub2{white-space:normal}
+.app.part.rail-part .rail .acts{flex-wrap:wrap;row-gap:6px}
+
 /* Kit addition: a lesson's resources (links members open), under the lesson
    and in its editor. */
 .app .kres{display:flex;flex-direction:column;gap:2px;margin-top:26px}
