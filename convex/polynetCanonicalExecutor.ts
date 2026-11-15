@@ -24,6 +24,7 @@ import {
   parseCommunityChannelSemanticPath,
 } from "../shared/communitySemanticRepository.ts";
 import { PERSONAL_MEMORY_OPERATION, PERSONAL_MEMORY_PATH } from "../shared/personalMemory.ts";
+import { lensCalls, lensReads, peopleLensFor, resolveLens, type Lens, type LensView } from "../shared/lens.ts";
 import {
   COMMUNITY_MEMBER_SELF_DIRECTORY,
   COMMUNITY_MEMBER_SELF_CONTEXT_PATH,
@@ -795,10 +796,18 @@ function canonicalJsonDocument(args: {
 // Notes are the guide's memory (Neil, Nov 14): the guide reads them to answer,
 // and builders read them to fix what it knows. A member's own agent, or the
 // community's own app acting for a member, does not get the list or a note.
+// The call's lens (shared/lens.ts): who it acts for and how it came in. The
+// lens table, not the caller's type, says what it may read and do.
+function lensOf(args: { principalKind: PolynetPrincipalKind; evidenceSurface: CommunityEvidenceSurface }, target: ResolvedCommunityTarget): Lens {
+  return resolveLens({ principalKind: args.principalKind, evidenceSurface: args.evidenceSurface, authority: target.authority });
+}
+
+function reads(args: { principalKind: PolynetPrincipalKind; evidenceSurface: CommunityEvidenceSurface }, target: ResolvedCommunityTarget, view: LensView): boolean {
+  return lensReads(lensOf(args, target), view);
+}
+
 function notesReadable(args: { principalKind: PolynetPrincipalKind; evidenceSurface: CommunityEvidenceSurface }, target: ResolvedCommunityTarget): boolean {
-  if (args.evidenceSurface === "community_funnel_builder") return false;
-  if (args.principalKind === "community_agent" || args.principalKind === "community_agent_for_member") return true;
-  return target.authority.canUseBuilderProjection === true;
+  return reads(args, target, "memory_notes");
 }
 
 function capabilityDocument(args: {
@@ -807,38 +816,18 @@ function capabilityDocument(args: {
   evidenceSurface: CommunityEvidenceSurface;
   principalKind: PolynetPrincipalKind;
 }): Record<string, unknown> | null {
-  // Decisions about people and others' posts run only from a harness the
-  // person operates directly (the moderator lens: owners, admins, moderators).
-  // The native community agent reads member-authored evidence and has no
-  // per-call human confirmation.
-  const isAdmissionCapability = ADMISSION_OPERATIONS.includes(args.operation) &&
-    args.evidenceSurface === "external_mcp" &&
-    args.principalKind === "external_mcp" && args.target.authority.canReviewJoinRequests;
-  const isRemovePostsCapability = args.operation === REMOVE_POSTS_OPERATION &&
-    args.evidenceSurface === "external_mcp" &&
-    args.principalKind === "external_mcp" && args.target.authority.canModerateContent;
-  // Reacting and marking a lesson done speak for the member, so only the
-  // member's own tools do them (their site, their MCP harness); the community
-  // agent in an Ask suggests, and the member acts.
-  const memberActs = args.principalKind === "external_mcp" || args.principalKind === "community_app";
-  const isReactCapability = args.operation === REACT_OPERATION &&
-    args.evidenceSurface !== "community_funnel_builder" && memberActs;
-  const isLessonDoneCapability = args.operation === LESSON_DONE_OPERATION &&
-    args.evidenceSurface !== "community_funnel_builder" && memberActs;
-  const isMarkReadCapability = args.operation === MARK_READ_OPERATION &&
-    args.evidenceSurface !== "community_funnel_builder" && args.principalKind !== "community_agent";
+  // What the lens may do comes from the lens table (shared/lens.ts).
+  const lens = resolveLens({ principalKind: args.principalKind, evidenceSurface: args.evidenceSurface, authority: args.target.authority });
+  const isAdmissionCapability = ADMISSION_OPERATIONS.includes(args.operation) && lensCalls(lens, "review_joins");
+  const isRemovePostsCapability = args.operation === REMOVE_POSTS_OPERATION && lensCalls(lens, "remove_posts");
+  const isReactCapability = args.operation === REACT_OPERATION && lensCalls(lens, "react");
+  const isLessonDoneCapability = args.operation === LESSON_DONE_OPERATION && lensCalls(lens, "lesson_done");
+  const isMarkReadCapability = args.operation === MARK_READ_OPERATION && lensCalls(lens, "mark_read");
   const isPresenceCapability = (args.operation === PRESENCE_HEARTBEAT_OPERATION || args.operation === TYPING_SET_OPERATION) &&
-    args.principalKind === "community_app";
-  // The guide's memory of a member is written only in that member's own
-  // private talk with it: never in a channel, a pod or anyone else's harness.
-  const isPersonalMemoryCapability = args.operation === PERSONAL_MEMORY_OPERATION &&
-    args.principalKind === "community_agent_for_member" && args.evidenceSurface === "member_agent_dock";
-  const isMembersCapability = MEMBERS_OPERATIONS.includes(args.operation) &&
-    args.evidenceSurface === "external_mcp" &&
-    args.principalKind === "external_mcp" && args.target.authority.canUseBuilderProjection;
-  const isCommunityCapability = COMMUNITY_OPERATIONS.includes(args.operation) &&
-    args.evidenceSurface === "external_mcp" &&
-    args.principalKind === "external_mcp" && args.target.authority.canUseBuilderProjection;
+    lensCalls(lens, "presence");
+  const isPersonalMemoryCapability = args.operation === PERSONAL_MEMORY_OPERATION && lensCalls(lens, "personal_memory");
+  const isMembersCapability = MEMBERS_OPERATIONS.includes(args.operation) && lensCalls(lens, "builder_change");
+  const isCommunityCapability = COMMUNITY_OPERATIONS.includes(args.operation) && lensCalls(lens, "builder_change");
   if (!isAdmissionCapability && !isRemovePostsCapability && !isCommunityCapability && !isMembersCapability && !isReactCapability && !isLessonDoneCapability &&
     !isMarkReadCapability && !isPresenceCapability && !isPersonalMemoryCapability) {
     return null;
@@ -988,7 +977,7 @@ async function executeCanonicalList(args: {
   const absolutePath = mountedPath(target.communitySlug, target.localPath);
 
   if (target.localPath.startsWith(COMMUNITY_MEMBER_SELF_DIRECTORY)) {
-    if (args.principalKind === "community_agent" || target.localPath !== COMMUNITY_MEMBER_SELF_DIRECTORY) {
+    if (!reads(args, target, "members_self") || target.localPath !== COMMUNITY_MEMBER_SELF_DIRECTORY) {
       return canonicalError("semantic_not_found", "Repository path not found or not accessible.");
     }
     return {
@@ -1283,7 +1272,7 @@ async function executeCanonicalList(args: {
     }
   }
   if (target.localPath === POLYNET_BUILDER_DIRECTORY_PATH) {
-    if (!target.authority.canUseBuilderProjection && !target.authority.canReviewJoinRequests) {
+    if (!reads(args, target, "builder_directory")) {
       return canonicalError(
         "semantic_not_found",
         "Community path not found or not accessible.",
@@ -1291,7 +1280,7 @@ async function executeCanonicalList(args: {
     }
     const joinRequests = { path: mountedPath(target.communitySlug, POLYNET_JOIN_REQUESTS_DIRECTORY_PATH), kind: "directory", type: "builder", name: "Pending admission requests" };
     // A moderator's builder/ holds the join requests they review.
-    if (!target.authority.canUseBuilderProjection) {
+    if (!reads(args, target, "builder_records")) {
       return { ok: true, value: virtualDirectory({ path: absolutePath, entries: [joinRequests] }) };
     }
     return {
@@ -1315,7 +1304,7 @@ async function executeCanonicalList(args: {
     };
   }
   if (target.localPath === POLYNET_BUILDER_RESOURCES_DIRECTORY_PATH) {
-    if (!target.authority.canUseBuilderProjection) {
+    if (!reads(args, target, "builder_records")) {
       return canonicalError(
         "semantic_not_found",
         "Community path not found or not accessible.",
@@ -1392,7 +1381,7 @@ async function executeCanonicalList(args: {
   });
   if (!execution.ok) return execution;
   const value = execution.value as Record<string, unknown>;
-  if (target.localPath === POLYNET_MEMBERS_DIRECTORY_PATH && args.principalKind !== "community_agent") {
+  if (target.localPath === POLYNET_MEMBERS_DIRECTORY_PATH && reads(args, target, "members_self")) {
     const entries = Array.isArray(value.entries) ? value.entries as Array<Record<string, unknown>> : [];
     return { ok: true, value: { ...value, entries: args.input.cursor ? entries : [
       { path: mountedPath(target.communitySlug, COMMUNITY_MEMBER_SELF_DIRECTORY), kind: "directory", type: "member_self_context" },
@@ -1401,7 +1390,7 @@ async function executeCanonicalList(args: {
   }
   if (target.localPath !== "/") return { ok: true, value };
   const rawEntries = Array.isArray(value.entries) ? value.entries : [];
-  const builderEntry = target.authority.canUseBuilderProjection || target.authority.canReviewJoinRequests
+  const builderEntry = reads(args, target, "builder_directory")
     ? [
         {
           path: mountedPath(
@@ -1500,7 +1489,7 @@ async function executeCanonicalRead(args: {
 
   // The founder-approved handbook (members only; the approved text only).
   if (target.localPath === COMMUNITY_HANDBOOK_PATH) {
-    if (args.evidenceSurface === "community_funnel_builder")
+    if (!reads(args, target, "handbook"))
       return canonicalError("semantic_not_found", "Repository path not found or not accessible.");
     const handbook = await args.ctx.runQuery((internal as any).communityHandbook.readApprovedCommunityHandbookInternal, { communityId: target.communityId });
     if (!handbook) return canonicalError("semantic_not_found", "This community has no approved handbook yet.");
@@ -1511,7 +1500,7 @@ async function executeCanonicalRead(args: {
   const timelineMatch = MEMBER_TIMELINE_PATH.exec(target.localPath);
   if (timelineMatch) {
     // The community agent has no "me": it never reads its sponsor's own context.
-    if (args.evidenceSurface === "community_funnel_builder" || (timelineMatch[1] === "me" && args.principalKind === "community_agent"))
+    if (!reads(args, target, timelineMatch[1] === "me" ? "members_self" : "member_timeline"))
       return canonicalError("semantic_not_found", "Repository path not found or not accessible.");
     const timeline = await args.ctx.runQuery((internal as any).communityMemberTimeline.loadMemberTimelineInternal, {
       userId: args.userId, actorKind: channelActorKind(args.principalKind), communityId: target.communityId,
@@ -1534,18 +1523,18 @@ async function executeCanonicalRead(args: {
   if (memberProfileMatch) {
     // People facts (convex/communityPersonFacts.ts), cut by lens. The guide
     // speaking in a channel sees what any member sees, whoever sponsors it.
-    if (args.evidenceSurface === "community_funnel_builder")
+    if (!reads(args, target, "member_profile"))
       return canonicalError("semantic_not_found", "Repository path not found or not accessible.");
     const subject = memberProfileMatch[1] ? { userId: memberProfileMatch[1] } : { handle: memberProfileMatch[2] };
     const payload = await args.ctx.runQuery((internal as any).communityPersonFacts.readPersonFactsInternal, {
-      communityId: target.communityId, as: args.principalKind === "community_agent" ? "public" : "viewer",
-      viewerUserId: args.userId, viewerIsBuilder: target.authority.canUseBuilderProjection === true, ...subject });
+      communityId: target.communityId, as: peopleLensFor(lensOf(args, target)),
+      viewerUserId: args.userId, viewerIsBuilder: lensOf(args, target).family === "builder", ...subject });
     if (!payload) return canonicalError("semantic_not_found", "Repository path not found or not accessible.");
     return { ok: true, value: { ...canonicalJsonDocument({ target, localPath: target.localPath, payload, ref: payload.ref }),
       writable: false, searchable: false } };
   }
   if (target.localPath === POLYNET_PRESENCE_DOCUMENT_PATH) {
-    if (args.principalKind === "community_agent" || args.evidenceSurface === "community_funnel_builder")
+    if (!reads(args, target, "presence"))
       return canonicalError("semantic_not_found", "Repository path not found or not accessible.");
     try {
       const payload = await args.ctx.runQuery((internal as any).communityPublic.listCommunityOnlineMembersForUserInternal,
@@ -1561,7 +1550,7 @@ async function executeCanonicalRead(args: {
   if (target.localPath === PERSONAL_MEMORY_PATH) {
     // What the guide remembers about the member who is reading: theirs only.
     // A community agent's sponsor is not a self identity.
-    if (args.principalKind === "community_agent") {
+    if (!reads(args, target, "members_self")) {
       return canonicalError("semantic_not_found", "Repository path not found or not accessible.");
     }
     const memory = await args.ctx.runQuery((internal as any).memberMemory.readMemberMemoryInternal,
@@ -1572,7 +1561,7 @@ async function executeCanonicalRead(args: {
   if (target.localPath.startsWith(COMMUNITY_MEMBER_SELF_DIRECTORY)) {
     // A community agent's sponsor is not a self identity. Never fall through
     // into the legacy reader for any path in this private subtree.
-    if (args.principalKind === "community_agent" || target.localPath !== COMMUNITY_MEMBER_SELF_CONTEXT_PATH) {
+    if (!reads(args, target, "members_self") || target.localPath !== COMMUNITY_MEMBER_SELF_CONTEXT_PATH) {
       return canonicalError("semantic_not_found", "Repository path not found or not accessible.");
     }
     const resolvedSelf = await args.ctx.runQuery(
@@ -1589,7 +1578,7 @@ async function executeCanonicalRead(args: {
 
   // The community itself, as its owners and admins change it.
   if (target.localPath === BUILDER_COMMUNITY_PATH) {
-    if (!target.authority.canUseBuilderProjection || args.principalKind === "community_agent") {
+    if (!reads(args, target, "builder_records")) {
       return canonicalError("semantic_not_found", "Community path not found or not accessible.");
     }
     try {
@@ -1760,7 +1749,7 @@ async function executeCanonicalRead(args: {
   const builderResourceMatch =
     /^\/builder\/resources\/([A-Za-z0-9_-]+)\.json$/.exec(target.localPath);
   if (builderResourceMatch) {
-    if (!target.authority.canUseBuilderProjection) {
+    if (!reads(args, target, "builder_records")) {
       return canonicalError(
         "semantic_not_found",
         "Builder resource not found or not accessible.",
