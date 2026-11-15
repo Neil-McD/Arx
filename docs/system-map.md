@@ -201,8 +201,9 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
 - **Code:** `communityNotes`, `communityMemory` (tables `communityNoteRevisions`,
   `communityNoteRemovals`, `communityMemoryIndex`, `agentWork`, `agentWorkRuns`),
   `communityMemoryReview` (the guide's nightly review: made due by posts in open
-  channels, run on the shared run entry `communityAgentRun` with the memory
-  review lens, `shared/agentLens.ts`), `communityEvidence*`,
+  channels, run on the shared run entry `communityAgentRun` in one pass: the
+  server hands the guide memory.md, the notes and the new posts, and it writes
+  once with `memory.apply`), `communityEvidence*`,
   `communityCognitionLifecycle`, `communityWikiArchitect`; member knowledge stays in
   `memberOntology` and `memberOntologyCore` (`memberFacts`, `memberProfileSpines`).
 - **Legacy, until the old tables drop (POL-39 slice 3):** `communityMemoryMigration`

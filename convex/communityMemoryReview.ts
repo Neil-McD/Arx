@@ -1,19 +1,19 @@
 // The guide's nightly memory review (docs/specs/agent-system-slice-1.md,
 // step 4). A post or reply by a person in an open channel makes the
 // community's review due at its next quiet hour; a job is scheduled for that
-// one row. The review runs the guide on the run entry with the memory review
-// lens: it reads what was said, writes notes with memory.observe and
-// rewrites memory.md. A quiet community costs nothing; with AI off nothing
-// runs. A daily sweep re-schedules any due row whose job was lost.
+// one row. The review runs the guide on the run entry in one pass: the
+// server hands it memory.md, the notes and what was said in open channels;
+// it answers with one memory.apply (notes with cited posts, a new
+// memory.md), which the server checks note by note. A quiet community costs
+// nothing; with AI off nothing runs. A daily sweep re-schedules any due row
+// whose job was lost.
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import { internalAction, internalMutation, internalQuery } from "./_generated/server";
 import { communityIsActive } from "../shared/communityLifecycle";
-import { MEMORY_REVIEW_INSTRUCTIONS, type AgentLens } from "../shared/agentLens";
-import { nextMemoryReviewAtMs } from "../shared/communityMemory";
+import { MEMORY_APPLY_OPERATION, MEMORY_REFUSAL_WORDS, MEMORY_REVIEW_INSTRUCTIONS, nextMemoryReviewAtMs, parseMemoryApplyCall } from "../shared/communityMemory";
 import { communityTimeZone, scheduleMemoryReview } from "./communityMemory";
 import { runFundedCommunityAgent, type CommunityAgentRunEvent } from "./communityAgentRun";
-import { executePolynetCanonicalTool } from "./polynetCanonicalExecutor";
 import { founderProviderRequests } from "./founderInferenceUsage";
 import { settleCommunityInferenceFundingSession } from "./founderInferenceRuntime";
 import { communityAgentIsOn } from "./communityApps";
@@ -23,11 +23,11 @@ const internalRefs = internal as any;
 const LEASE_MS = 15 * 60_000;
 const RETRY_MS = 30 * 60_000;
 const MAX_FAILURES = 3;
-const REVIEW_MAX_TOOL_STEPS = 24;
-const REVIEW_MAX_OUTPUT_TOKENS = 1_500;
+// One write, one fix-up of anything refused, and a spare.
+const REVIEW_MAX_TOOL_STEPS = 3;
+const REVIEW_MAX_OUTPUT_TOKENS = 4_000;
 const LOST_AFTER_MS = 2 * 60 * 60_000;
 const SWEEP_LIMIT = 100;
-const NEW_PER_CHANNEL = 200;
 const BACKLOG_NEXT_MS = 15 * 60_000;
 
 export const claimMemoryReviewInternal = internalMutation({
@@ -104,39 +104,34 @@ export const readReviewAdmissionInternal = internalQuery({
   handler: async (ctx, args) => await resolveCommunityInferenceFundingAdmission(ctx, args.communityId),
 });
 
-// The open channels with something new since the last review, and where this
-// review must stop: a channel's new.md shows 200 at most, so with more than
-// that the review reads up to its 200th and the next review the rest.
-export const listOpenChannelsWithNewInternal = internalQuery({
-  args: { communityId: v.id("communities"), sinceMs: v.number(), untilMs: v.optional(v.number()) },
-  handler: async (ctx, args) => {
-    const channels = await ctx.db.query("communityChannels")
-      .withIndex("by_community_access_status_position", (q) => q.eq("communityId", args.communityId).eq("accessMode", "all_members").eq("status", "active"))
-      .take(100);
-    const out: Array<{ slug: string; name: string; count: number }> = [];
-    let readUntil = args.untilMs ?? Number.MAX_SAFE_INTEGER;
-    for (const channel of channels) {
-      const times: number[] = [];
-      for (const table of ["communityInteractionRoots", "communityInteractionReplies"] as const) {
-        for (const scope of ["community", "public"] as const) {
-          const rows = await ctx.db.query(table).withIndex("by_community_channel_visibility_status_createdAt", (q: any) => {
-            const range = q.eq("communityId", args.communityId).eq("channelId", channel._id).eq("visibilityScope", scope).eq("status", "live").gt("createdAt", args.sinceMs);
-            return args.untilMs !== undefined ? range.lte("createdAt", args.untilMs) : range;
-          }).take(NEW_PER_CHANNEL + 1);
-          for (const row of rows as any[]) {
-            if (table === "communityInteractionReplies" && ((await ctx.db.get(row.rootId)) as any)?.status !== "live") continue;
-            times.push(row.createdAt);
-          }
-        }
-      }
-      if (times.length === 0) continue;
-      times.sort((a, b) => a - b);
-      if (times.length > NEW_PER_CHANNEL) readUntil = Math.min(readUntil, times[NEW_PER_CHANNEL - 1]);
-      out.push({ slug: channel.slug, name: channel.name, count: times.length });
+// Applies one memory.apply: each note through the same checks as ever
+// (cited posts, builder notes untouched, the run's limit), then memory.md.
+// Each item says what happened, so a refused one can be fixed.
+// A rewrite replaces a note whole, so only notes the guide was shown whole
+// can be rewritten.
+async function applyMemory(ctx: any, communityId: any, runId: any, rewritable: Set<string>, apply: { notes: Array<{ title: string; body: string; evidenceRefs: string[]; supersedes?: string }>; index: string | null }) {
+  const results: Array<Record<string, unknown>> = [];
+  for (const note of apply.notes) {
+    if (note.supersedes && !rewritable.has(note.supersedes)) {
+      results.push({ note: note.title, refused: "note_not_shown", why: MEMORY_REFUSAL_WORDS.note_not_shown });
+      continue;
     }
-    return { channels: out, readUntil: readUntil === Number.MAX_SAFE_INTEGER ? null : readUntil };
-  },
-});
+    const answer = await ctx.runMutation(internalRefs.communityMemory.observeCommunityMemoryInternal, {
+      communityId, runId, title: note.title, body: note.body, evidenceRefs: note.evidenceRefs,
+      ...(note.supersedes ? { supersedes: note.supersedes } : {}), nowMs: Date.now(),
+    });
+    results.push(answer?.ok
+      ? { note: note.title, written: `memory/${String(answer.slug ?? "")}.md` }
+      : { note: note.title, refused: String(answer?.code ?? "refused"), why: MEMORY_REFUSAL_WORDS[String(answer?.code)] ?? "Refused." });
+  }
+  if (apply.index !== null) {
+    const answer = await ctx.runMutation(internalRefs.communityMemory.writeCommunityMemoryIndexInternal, {
+      communityId, runId, bodyMd: apply.index, nowMs: Date.now(),
+    });
+    results.push(answer?.ok ? { index: "written" } : { index: "refused", refused: String(answer?.code), why: MEMORY_REFUSAL_WORDS[String(answer?.code)] ?? "Refused." });
+  }
+  return results;
+}
 
 function eventRecorder(ctx: any, communityId: any, runId: string) {
   let seq = 1;
@@ -180,30 +175,20 @@ export const runMemoryReviewInternal = internalAction({
     const finish = (extra: Record<string, unknown>) => ctx.runMutation(internalRefs.communityMemory.finishMemoryReviewRunInternal, {
       communityId: claim.communityId, runId, nowMs: Date.now(), ...extra,
     });
-    const offered = await ctx.runQuery(internalRefs.communityMemoryReview.listOpenChannelsWithNewInternal, {
+    const input = await ctx.runQuery(internalRefs.communityMemory.readMemoryReviewInputInternal, {
       communityId: claim.communityId, sinceMs: claim.windowStart, untilMs: claim.windowEnd });
-    const channels = offered.channels;
-    // A busy window: read through the 200th post of the busiest channel; the rest waits.
-    const readUntil: number = offered.readUntil ?? claim.windowEnd;
-    const backlog = readUntil < claim.windowEnd;
-    readThrough = readUntil;
-    backlogLeft = backlog;
-    if (channels.length === 0) {
+    // A busy window is read in parts: through the last post shown; the rest waits.
+    readThrough = input.readUntil;
+    backlogLeft = input.readUntil < claim.windowEnd;
+    if (input.posts === 0) {
       await finish({});
       await complete("reviewed");
       return { status: "empty" };
     }
 
-    const root = `/communities/${claim.communitySlug}/`;
-    const lens: AgentLens = { name: "memory_review", runId: String(runId), sinceMs: claim.windowStart, untilMs: readUntil };
     const messages = [
-      { role: "system", content: `${MEMORY_REVIEW_INSTRUCTIONS}\n\nThis community: ${claim.communityName} (${root}).` },
-      { role: "user", content: [
-        `Review what was said from ${new Date(claim.windowStart).toISOString()} to ${new Date(readUntil).toISOString()}.`,
-        "Channels with something new:",
-        ...channels.map((channel: any) => `- #${channel.name}: ${root}channels/${channel.slug}/new.md`),
-        `Start with ${root}memory.md.`,
-      ].join("\n") },
+      { role: "system", content: `${MEMORY_REVIEW_INSTRUCTIONS}\n\nThis community: ${claim.communityName}.` },
+      { role: "user", content: input.text },
     ];
     const recorder = eventRecorder(ctx, claim.communityId, `memory-review:${String(runId)}`);
     const run = await runFundedCommunityAgent({
@@ -219,19 +204,17 @@ export const runMemoryReviewInternal = internalAction({
       maxToolSteps: REVIEW_MAX_TOOL_STEPS,
       promptCacheKey: `pn:${String(claim.communityId)}:memory-review`,
       recorder,
-      // The lens checks every path itself and normalises what it hands on.
+      // The call's input is parsed here, by the review's own rules.
       normalizeToolArguments: (_toolName, rawArgs) => rawArgs,
-      // The log names where each call went (paths and verbs, never post text).
-      describeToolCall: (toolName, callArgs) => `${toolName} ${String(callArgs.path ?? callArgs.operation ?? "")}`.trim(),
-      maxConsecutiveFailures: 4,
+      describeToolCall: (toolName, callArgs) => `${toolName} ${String(callArgs.operation ?? "")}`.trim(),
+      maxConsecutiveFailures: 2,
       executeTool: async (toolName, rawArguments) => {
-        const result = await executePolynetCanonicalTool({
-          ctx, authSubject: claim.ownerAuthSubject, userId: String(claim.ownerUserId), principalKind: "community_agent",
-          mountedCommunityId: String(claim.communityId), evidenceSurface: "community_concierge", toolName, input: rawArguments, lens,
-        });
-        return result.ok
-          ? { status: "ok", exitCode: 0, outputText: JSON.stringify(result.value), errorCode: null, errorMessage: null }
-          : { status: "error", exitCode: null, outputText: "", errorCode: result.code, errorMessage: result.message };
+        const failed = (errorCode: string, errorMessage: string) => ({ status: "error" as const, exitCode: null, outputText: "", errorCode, errorMessage });
+        if (toolName !== "polynet_call") return failed("review_reads_nothing", `Everything is in front of you. Write with polynet_call ${MEMORY_APPLY_OPERATION}.`);
+        const apply = parseMemoryApplyCall(rawArguments);
+        if ("error" in apply) return failed(apply.error, `Write with polynet_call { operation: "${MEMORY_APPLY_OPERATION}", input: { notes, index } }.`);
+        const results = await applyMemory(ctx, claim.communityId, runId, new Set<string>(input.rewritable), apply);
+        return { status: "ok" as const, exitCode: 0, outputText: JSON.stringify({ results }), errorCode: null, errorMessage: null };
       },
     });
     if (!run.ok) {
