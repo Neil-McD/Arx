@@ -203,7 +203,9 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
   `communityMemoryReview` (the guide's nightly review: made due by posts in open
   channels, run on the shared run entry `communityAgentRun` in one pass: the
   server hands the guide memory.md, the notes and the new posts, and it writes
-  once with `memory.apply`), `communityEvidence*`,
+  once with `memory.apply`), `communityBriefs` (a place's brief, table
+  `communityBriefs`: rewritten by the guide an hour after the first new post in
+  an open channel, on the same run entry, with one `brief.write`), `communityEvidence*`,
   `communityCognitionLifecycle`, `communityWikiArchitect`; member knowledge stays in
   `memberOntology` and `memberOntologyCore` (`memberFacts`, `memberProfileSpines`, no
   longer read; dropped in a later release); people facts, one view of a person

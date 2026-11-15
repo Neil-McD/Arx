@@ -1674,6 +1674,24 @@ export default defineSchema({
   })
     .index("by_scope", ["scopeKey"]),
 
+  // A place's brief (shared/communityBriefs.ts): what's happening there and
+  // what matters next, rewritten by the guide after new activity. One per
+  // scope, read by everyone who can enter the place.
+  communityBriefs: defineTable({
+    communityId: v.id("communities"),
+    // "community:<communityId>" or "pod:<roomId>" (convex/communityNotesStore.ts).
+    scopeKey: v.string(),
+    headline: v.string(),
+    points: v.array(v.string()),
+    nextStep: v.optional(v.string()),
+    runId: v.optional(v.id("agentWorkRuns")),
+    // The brief has read everything up to here.
+    windowEnd: v.number(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_scope", ["scopeKey"]),
+
   // Personal memory (shared/personalMemory.ts): what the guide remembers about
   // one member in one community, from that member's own private talks. One
   // row per member and community, capped small; only that member reads it.
@@ -1696,7 +1714,9 @@ export default defineSchema({
     // (convex/communityNotesStore.ts). Every index starts with it.
     scopeKey: v.optional(v.string()),
     scope: v.union(v.literal("community"), v.literal("pod")),
-    kind: v.literal("memory_review"),
+    // memory_review: the nightly review. brief: the place's brief, an hour
+    // after the first new activity.
+    kind: v.union(v.literal("memory_review"), v.literal("brief")),
     // Evidence since the last review, and when the first of it arrived.
     pending: v.number(),
     firstPendingAt: v.optional(v.number()),
@@ -1720,7 +1740,7 @@ export default defineSchema({
     // (convex/communityNotesStore.ts). Every index starts with it.
     scopeKey: v.optional(v.string()),
     workId: v.id("agentWork"),
-    kind: v.literal("memory_review"),
+    kind: v.union(v.literal("memory_review"), v.literal("brief")),
     status: v.union(v.literal("running"), v.literal("done"), v.literal("empty"), v.literal("failed"), v.literal("undone")),
     windowStart: v.number(),
     windowEnd: v.number(),
