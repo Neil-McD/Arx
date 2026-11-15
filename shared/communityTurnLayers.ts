@@ -9,7 +9,7 @@ export const COMMUNITY_TURN_LAYER_MAX_CHARS = 6_000;
 
 export type CommunityTurnLayerReader = (
   path: string,
-  layer: "community_card" | "community_handbook" | "community_memory" | "personal_memory",
+  layer: "community_card" | "community_handbook" | "community_memory" | "personal_memory" | "pod_memory",
 ) => Promise<{ status: string; outputText: string }>;
 
 export type CommunityTurnLayers = {
@@ -21,6 +21,8 @@ export type CommunityTurnLayers = {
   // members/me/memory.md: what the guide remembers about the member it is
   // talking with. Only in that member's own private talk (personal: true).
   personalMemoryMd: string | null;
+  // pods/<slug>/memory.md: the pod the guide is working in (podSlug), if any.
+  podMemoryMd: string | null;
   cardStatus: "loaded" | "empty" | "error" | "skipped";
 };
 
@@ -40,10 +42,11 @@ export async function loadCommunityTurnLayers(args: {
   communitySlug: string | null | undefined;
   read: CommunityTurnLayerReader;
   personal?: boolean;
+  podSlug?: string | null;
 }): Promise<CommunityTurnLayers> {
   const slug = String(args.communitySlug ?? "").trim();
-  if (!args.contract || !slug) return { communityCardMd: null, communityHandbookMd: null, communityMemoryMd: null, personalMemoryMd: null, cardStatus: "skipped" };
-  const load = async (file: "community.md" | "handbook.md" | "memory.md" | "members/me/memory.md", layer: "community_card" | "community_handbook" | "community_memory" | "personal_memory") => {
+  if (!args.contract || !slug) return { communityCardMd: null, communityHandbookMd: null, communityMemoryMd: null, personalMemoryMd: null, podMemoryMd: null, cardStatus: "skipped" };
+  const load = async (file: string, layer: "community_card" | "community_handbook" | "community_memory" | "personal_memory" | "pod_memory") => {
     try {
       const read = await args.read(`/communities/${slug}/${file}`, layer);
       return read.status === "ok" ? { ok: true, body: parseCommunityTurnLayerBody(read.outputText) } : { ok: false, body: null };
@@ -55,7 +58,11 @@ export async function loadCommunityTurnLayers(args: {
   const handbook = args.contract.uses.handbook ? await load("handbook.md", "community_handbook") : { ok: false, body: null };
   const memory = args.contract.uses.communityCard ? await load("memory.md", "community_memory") : { ok: false, body: null };
   const personal = args.personal && args.contract.uses.communityCard ? await load("members/me/memory.md", "personal_memory") : { ok: false, body: null };
+  const podSlug = String(args.podSlug ?? "").trim();
+  const pod = podSlug && /^[a-z0-9-]{1,64}$/.test(podSlug) && args.contract.uses.communityCard
+    ? await load(`pods/${podSlug}/memory.md`, "pod_memory") : { ok: false, body: null };
   return {
+    podMemoryMd: pod.body,
     personalMemoryMd: personal.body,
     communityCardMd: card.body,
     communityHandbookMd: handbook.body,

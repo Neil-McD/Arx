@@ -100,7 +100,7 @@ export const MEMORY_REFUSAL_WORDS: Record<string, string> = {
   evidence_other_community: "A cited post is from another community.",
   evidence_not_live: "A cited post was removed or hidden.",
   evidence_not_by_a_person: "Cite what people said, not the guide's own posts.",
-  evidence_not_shared: "Only posts in channels open to every member can become community memory.",
+  evidence_not_shared: "Cite only posts from this memory's place: channels open to every member, or this pod's own room. Never another pod, a direct message or a private talk.",
   evidence_removed: "A builder removed a note learned from these same posts. Don't learn it again from them.",
   builder_note: "A builder wrote that note. Add your own note beside it instead of changing it.",
   note_missing: "There is no note with that name to change.",
@@ -183,6 +183,15 @@ export function parseMemoryApplyCall(raw: unknown): MemoryApply | { error: strin
   }
   const index = typeof input.index === "string" && input.index.trim() ? input.index : null;
   return { notes, index };
+}
+
+// A pod's review: the same work, for one pod's memory.
+export function podReviewInstructions(podName: string): string {
+  return [
+    `You are writing the ${podName} pod's memory, not the community's. Only people in this pod read it.`,
+    "What people said in the pod's room is shown; the community's memory.md is there for context only. Write what this pod settled, how it works, its answers and its open questions; never copy the community's memory into it, and never write anything meant for the whole community.",
+    "Cite the pod's own posts (or posts from the community's open channels).",
+  ].join("\n\n");
 }
 
 export const MEMORY_REVIEW_INSTRUCTIONS = [

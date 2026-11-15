@@ -7,12 +7,13 @@
 // memory.md), which the server checks note by note. A quiet community costs
 // nothing; with AI off nothing runs. A daily sweep re-schedules any due row
 // whose job was lost.
-import { communityScopeKey, dueWork, insertWork, workFor } from "./communityNotesStore";
+import { communityScopeKey, dueWork, insertWork, parseScopeKey, podScopeKey, workFor, type ScopeKey } from "./communityNotesStore";
+import { guideSeatedInPod } from "./communityMemory";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import { internalAction, internalMutation, internalQuery } from "./_generated/server";
 import { communityIsActive } from "../shared/communityLifecycle";
-import { MEMORY_APPLY_OPERATION, MEMORY_REFUSAL_WORDS, MEMORY_REVIEW_INSTRUCTIONS, nextMemoryReviewAtMs, parseMemoryApplyCall } from "../shared/communityMemory";
+import { MEMORY_APPLY_OPERATION, MEMORY_REFUSAL_WORDS, MEMORY_REVIEW_INSTRUCTIONS, nextMemoryReviewAtMs, parseMemoryApplyCall, podReviewInstructions } from "../shared/communityMemory";
 import { communityTimeZone, scheduleMemoryReview } from "./communityMemory";
 import { runFundedCommunityAgent, type CommunityAgentRunEvent } from "./communityAgentRun";
 import { founderProviderRequests } from "./founderInferenceUsage";
@@ -54,8 +55,21 @@ export const claimMemoryReviewInternal = internalMutation({
       await ctx.db.patch(work._id, { dueAt: undefined, updatedAt: args.nowMs });
       return { skipped: true as const };
     }
+    // A pod's review runs only while its room is open and the guide works there.
+    const scope = parseScopeKey((work.scopeKey as ScopeKey | undefined) ?? communityScopeKey(work.communityId));
+    let pod: { roomId: string; name: string } | null = null;
+    if (scope?.kind === "pod") {
+      const room = await ctx.db.get(ctx.db.normalizeId("communityChannels", scope.id) as any) as any;
+      if (!room || String(room.communityId) !== String(work.communityId) || room.accessMode !== "restricted" || room.status !== "active"
+        || !(await guideSeatedInPod(ctx, room._id))) {
+        await ctx.db.patch(work._id, { dueAt: undefined, updatedAt: args.nowMs });
+        return { skipped: true as const };
+      }
+      pod = { roomId: String(room._id), name: String(room.name ?? "") };
+    }
     await ctx.db.patch(work._id, { leaseUntil: args.nowMs + LEASE_MS, updatedAt: args.nowMs });
     return {
+      pod,
       communityId: work.communityId, communitySlug: community.slug, communityName: community.name,
       ownerUserId: community.ownerId, ownerAuthSubject: owner.authSubject,
       windowStart: work.reviewedThrough, windowEnd: args.nowMs, claimedPending: work.pending,
@@ -170,14 +184,15 @@ export const runMemoryReviewInternal = internalAction({
       await complete("skipped");
       return { status: "skipped" };
     }
+    const podArgs = claim.pod ? { podRoomId: claim.pod.roomId } : {};
     const { runId } = await ctx.runMutation(internalRefs.communityMemory.openMemoryReviewRunInternal, {
-      communityId: claim.communityId, windowStart: claim.windowStart, windowEnd: claim.windowEnd, nowMs: Date.now(),
+      communityId: claim.communityId, windowStart: claim.windowStart, windowEnd: claim.windowEnd, nowMs: Date.now(), ...podArgs,
     });
     const finish = (extra: Record<string, unknown>) => ctx.runMutation(internalRefs.communityMemory.finishMemoryReviewRunInternal, {
       communityId: claim.communityId, runId, nowMs: Date.now(), ...extra,
     });
     const input = await ctx.runQuery(internalRefs.communityMemory.readMemoryReviewInputInternal, {
-      communityId: claim.communityId, sinceMs: claim.windowStart, untilMs: claim.windowEnd });
+      communityId: claim.communityId, sinceMs: claim.windowStart, untilMs: claim.windowEnd, ...podArgs });
     // A busy window is read in parts: through the last post shown; the rest waits.
     readThrough = input.readUntil;
     backlogLeft = input.readUntil < claim.windowEnd;
@@ -188,7 +203,7 @@ export const runMemoryReviewInternal = internalAction({
     }
 
     const messages = [
-      { role: "system", content: `${MEMORY_REVIEW_INSTRUCTIONS}\n\nThis community: ${claim.communityName}.` },
+      { role: "system", content: `${MEMORY_REVIEW_INSTRUCTIONS}\n\nThis community: ${claim.communityName}.${claim.pod ? `\n\n${podReviewInstructions(claim.pod.name)}` : ""}` },
       { role: "user", content: input.text },
     ];
     const recorder = eventRecorder(ctx, claim.communityId, `memory-review:${String(runId)}`);
@@ -203,12 +218,15 @@ export const runMemoryReviewInternal = internalAction({
       messages,
       maxOutputTokens: REVIEW_MAX_OUTPUT_TOKENS,
       maxToolSteps: REVIEW_MAX_TOOL_STEPS,
-      promptCacheKey: `pn:${String(claim.communityId)}:memory-review`,
+      promptCacheKey: `pn:${String(claim.communityId)}:memory-review${claim.pod ? `:${claim.pod.roomId}` : ""}`,
       recorder,
       // The call's input is parsed here, by the review's own rules.
       normalizeToolArguments: (_toolName, rawArgs) => rawArgs,
       describeToolCall: (toolName, callArgs) => `${toolName} ${String(callArgs.operation ?? "")}`.trim(),
       maxConsecutiveFailures: 2,
+      // The review's first answer is its write (it may be empty): a model that
+      // describes the write instead of making it would lose the night.
+      firstToolChoice: { type: "function", name: "polynet_call" },
       executeTool: async (toolName, rawArguments) => {
         const failed = (errorCode: string, errorMessage: string) => ({ status: "error" as const, exitCode: null, outputText: "", errorCode, errorMessage });
         if (toolName !== "polynet_call") return failed("review_reads_nothing", `Everything is in front of you. Write with polynet_call ${MEMORY_APPLY_OPERATION}.`);
@@ -258,10 +276,10 @@ export const repairMemoryReviewScheduleInternal = internalMutation({
 // Operator tool: run a community's review now, reading from a chosen time
 // (acceptance runs on staging; a review after turning learning on).
 export const requestMemoryReviewNowInternal = internalMutation({
-  args: { communityId: v.id("communities"), sinceMs: v.optional(v.number()) },
+  args: { communityId: v.id("communities"), sinceMs: v.optional(v.number()), podRoomId: v.optional(v.id("communityChannels")) },
   handler: async (ctx, args) => {
     const nowMs = Date.now();
-    const scope = communityScopeKey(args.communityId);
+    const scope = args.podRoomId ? podScopeKey(args.podRoomId) : communityScopeKey(args.communityId);
     const work = await workFor(ctx, scope, "memory_review");
     const reviewedThrough = args.sinceMs ?? work?.reviewedThrough ?? nowMs - 24 * 60 * 60_000;
     let workId = work?._id;

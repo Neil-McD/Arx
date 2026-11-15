@@ -3617,6 +3617,9 @@ test("pods: inside for people in it, builders and the guide working there; outsi
     await ctx.db.insert("communityInteractionRoots", { communityId: f.communityId, channelId: foundersId, actorType: "human", actorUserId: f.ownerId,
       kind: "discussion", status: "live", visibilityScope: "community", contentSummary: "Founders-only numbers.", replyCount: 0,
       reactionSummary: [], idempotencyKey: "found-1", createdAt: nowMs, updatedAt: nowMs });
+    await ctx.db.insert("communityNotes", { scopeKey: `pod:${String(climbersId)}`, communityId: f.communityId, slug: "session-log", title: "Session log",
+      bodyMd: "Log every session by Sunday.", source: "learned", authorKind: "guide", searchText: "session", createdAt: nowMs, updatedAt: nowMs });
+    await ctx.db.insert("communityMemoryIndex", { scopeKey: `pod:${String(climbersId)}`, communityId: f.communityId, bodyMd: "- [Session log](memory/session-log.md)", updatedAt: nowMs });
     const climbPostId = (await ctx.db.query("communityInteractionRoots").collect()).find((row: any) => row.idempotencyKey === "climb-1")._id;
     const foundersPostId = (await ctx.db.query("communityInteractionRoots").collect()).find((row: any) => row.idempotencyKey === "found-1")._id;
     return { climbersId, climbPostId, foundersPostId };
@@ -3639,6 +3642,14 @@ test("pods: inside for people in it, builders and the guide working there; outsi
   expect(outside).not.toContain("In it");
   expect(await member("polynet_read", `${base}/pods/founders/pod.md`)).toMatchObject({ ok: false });
 
+  // Its memory, inside only.
+  expect(body(await member("polynet_read", `${base}/pods/climbers/memory.md`))).toContain("Session log");
+  expect(body(await member("polynet_read", `${base}/pods/climbers/memory/session-log.md`))).toContain("Log every session");
+  expect(JSON.stringify(await member("polynet_list", `${base}/pods/climbers/memory/`))).toContain("/pods/climbers/memory/session-log.md");
+  expect(await member("polynet_read", `${base}/pods/scouts/memory.md`)).toMatchObject({ ok: false });
+  // Never the community's memory.
+  expect(JSON.stringify(await member("polynet_list", `${base}/memory/`))).not.toContain("session-log");
+
   // A builder's own AI: every pod, inside.
   const builder = as(f.ownerSubject, f.ownerId, "external_mcp", "external_mcp");
   expect(listed(await builder("polynet_list", `${base}/pods/`)).sort()).toEqual(["climbers/+in", "founders/+in", "scouts/+in"]);
@@ -3648,11 +3659,13 @@ test("pods: inside for people in it, builders and the guide working there; outsi
   expect(listed(await guide("polynet_list", `${base}/pods/`)).sort()).toEqual(["climbers/", "scouts/"]);
   expect(body(await guide("polynet_read", `${base}/pods/climbers/pod.md`))).not.toContain("In it");
   expect(await guide("polynet_list", `${base}/channels/climbers/`)).toMatchObject({ ok: false });
+  expect(await guide("polynet_read", `${base}/pods/climbers/memory.md`)).toMatchObject({ ok: false });
 
   // The guide working in the climbers pod: inside that pod and its room; no other pod.
   const working = as(f.ownerSubject, f.ownerId, "community_agent", "community_concierge", String(climbersId));
   expect(listed(await working("polynet_list", `${base}/pods/`)).sort()).toEqual(["climbers/+in", "scouts/"]);
   expect(body(await working("polynet_read", `${base}/pods/climbers/pod.md`))).toContain("Its room: channels/climbers/");
+  expect(body(await working("polynet_read", `${base}/pods/climbers/memory.md`))).toContain("Session log");
   const room = await working("polynet_list", `${base}/channels/climbers/`);
   expect(room.ok, JSON.stringify(room)).toBe(true);
   expect(JSON.stringify(room)).toContain("Fingerboard plan");

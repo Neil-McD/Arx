@@ -1765,11 +1765,17 @@ export const processQueuedCommunityAgentServeRequestsInternal = internalAction({
         })
         : null;
       if (turnContract) {
+        // A tag in a pod's room: that pod's memory comes too.
+        const source = await ctx.runQuery(internalRefs.communityAgentChannelAccess.authorizeServeToolsInternal, {
+          requestId, expectedAttempt: context.request.attempt,
+        }).catch(() => null);
         const layers = await loadCommunityTurnLayers({
           contract: turnContract,
           communitySlug: context.community?.slug,
+          podSlug: source?.podSlug ?? null,
           read: (path) => executeConciergeTool({ ctx, context, requestId, toolName: "polynet_read", rawArguments: { path } }),
         });
+        context.podMemoryMd = layers.podMemoryMd;
         context.communityCardMd = layers.communityCardMd;
         context.communityHandbookMd = layers.communityHandbookMd;
         context.communityMemoryMd = layers.communityMemoryMd;

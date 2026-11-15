@@ -333,6 +333,9 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
   where every memory row carries a scope key and every read names one scope
   (`scripts/memory_scope_wall.test.ts` lets only the store touch memory tables).
   Table `communityPodNotes` is retired: the scope backfill empties it; dropped later.
+  A pod with the guide in it keeps its own memory: posts in its room make its
+  `pod:<roomId>` review due (`communityMemory`, `communityMemoryReview`), read at
+  `pods/<slug>/memory.md` and `memory/` inside the pod only; its hosts may undo.
 - **Pod calls:** `communityEventAudience` (the one rule: an event with a pod is
   visible only to people who can enter that pod; every reader of `communityEvents`
   goes through it, enforced by `scripts/community_event_audience.test.ts`).

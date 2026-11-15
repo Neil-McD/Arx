@@ -26,6 +26,6 @@ export const authorizeServeToolsInternal = internalQuery({
     const channel = await requireAgentSourceChannelAccess({ ctx, root, userId: request.requesterUserId });
     // A tag in a pod's room: this run works in that pod (its lens sees it).
     const restricted = channel?.accessMode === "restricted";
-    return { restricted, ...(restricted && channel?._id ? { podRoomId: String(channel._id) } : {}) };
+    return { restricted, ...(restricted && channel?._id ? { podRoomId: String(channel._id), podSlug: String(channel.slug ?? "") } : {}) };
   },
 });
