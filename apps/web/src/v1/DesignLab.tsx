@@ -30,7 +30,7 @@ import {
   Ask,
 } from "./kit";
 import { BriefPart } from "./KitBrief";
-import { PanelLearned, PanelLine, PanelPart, PanelPeople } from "./KitPanel";
+import { PanelLearned, PanelLine, PanelNext, PanelPart, PanelPeople } from "./KitPanel";
 import { KitChannelFeed } from "./KitChannelFeed";
 import { KitHomeRail } from "./KitHomeRail";
 import { KitPodRail } from "./KitPodRail";
@@ -242,30 +242,35 @@ function PodsPage(props: { join: boolean }) {
       <Rail index={1} label="Pods">
         {props.join ? (
           <div className={cx("land")}>
-            <h2>Comp team</h2>
-            <p className={cx("land-p")}>Training for the spring comp, with weekly feedback.</p>
-            <ul className={cx("podget")}><li>Weekly call with the host</li><li>Feedback on your sends</li><li>The pod's own notes and call takeaways</li></ul>
+            <header>
+              <h2>Comp team</h2>
+              <p className={cx("land-p")}>Training for the spring comp, with weekly feedback.</p>
+              <ul className={cx("podget")}><li>Weekly call with the host</li><li>Feedback on your sends</li><li>The pod's own notes and call takeaways</li></ul>
+            </header>
             <PanelPart label="The way in">
               <PanelLine>Meets every week · next Tue 7:00 pm</PanelLine>
-              <PanelLine fact="3 seats left">Free for members</PanelLine>
+              <PanelLine fact="Free for members">Price</PanelLine>
+              <PanelLine fact="3 left">Seats</PanelLine>
             </PanelPart>
             <PanelPart label="Hosted by"><PanelPeople names={["Maya Chen"]} /></PanelPart>
             <div className={cx("joinbar")}><Btn go>Ask to join</Btn><small>The host reviews each request.</small></div>
           </div>
         ) : (
           <div className={cx("land")}>
-            <h2>Setters</h2>
-            <p className={cx("land-p")}>The route setters plan resets and the comp.</p>
+            <header>
+              <h2>Setters</h2>
+              <p className={cx("land-p")}>The route setters plan resets and the comp.</p>
+            </header>
             <BriefPart now={now} brief={{
               summary: "The setters have settled a clear reset routine: Maya takes Tuesdays, Priya Thursdays, and old holds come off by the night before. Comp problems use blue tape, everyday ones white, with grades pencilled in until the round ends.",
               channels: [], updated_at: new Date(now - 14 * 60_000).toISOString(),
             }} />
-            <PanelPart label="Next call" fact="every week"><PanelLine><h4>Tue 7:00 pm</h4></PanelLine></PanelPart>
+            <PanelPart label="Next call" fact="every week"><PanelNext title="Tue 7:00 pm" sub="Setters call" /></PanelPart>
             <PanelPart label="What this pod knows" fact="2">
               <PanelLearned title="Reset rota" when="Nov 15" />
               <PanelLearned title="Tape colours for comps" when="Nov 15" />
             </PanelPart>
-            <PanelPart label="In this pod" fact="3 members"><PanelPeople names={["Maya Chen", "Priya Raman", "Neil McDevitt"]} /></PanelPart>
+            <PanelPart label="In this pod" fact="3"><PanelPeople names={["Maya Chen", "Priya Raman", "Neil McDevitt"]} /></PanelPart>
             <div className={cx("joinbar")}><Btn go>Open the pod</Btn></div>
           </div>
         )}

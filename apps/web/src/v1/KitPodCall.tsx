@@ -7,7 +7,8 @@ import { cancelCloudCommunityEvent, saveCloudCommunityEvent } from "../../../../
 import type { CloudPodDetail } from "../../../../shared/cloudCommunityPodsGateway";
 import { formatMomentWhen } from "../../../../shared/communityHomeMoments";
 import { announceCommunityEventsChanged } from "../../../../shared/communityEventsChanged";
-import { Btn, Sec, cx } from "./kit";
+import { Btn, cx } from "./kit";
+import { PanelAction, PanelLine, PanelNext, PanelPart } from "./KitPanel";
 
 type Repeat = "none" | "weekly" | "monthly";
 const REPEAT_WORD: Record<string, string> = { daily: "Every day", weekly: "Every week", monthly: "Every month" };
@@ -61,19 +62,20 @@ export function KitPodCall(props: { session: unknown; communityId: string; pod: 
     catch { /* stays */ } finally { setBusy(false); }
   };
 
+  // No call and nobody here to plan one: the part is not drawn.
   if (!call && !pod.can_manage) return null;
+  if (call) {
+    return (
+      <PanelPart label="Next call" fact={REPEAT_WORD[call.recurrence_frequency]?.toLowerCase() ?? null}
+        action={pod.can_manage ? <PanelAction disabled={busy} onClick={() => void cancel()}>Cancel call</PanelAction> : null}>
+        <PanelNext title={formatMomentWhen(call.starts_at)} sub={call.title}
+          action={call.url ? <a className={cx("btn go")} href={call.url} target="_blank" rel="noreferrer noopener">Join</a> : null} />
+      </PanelPart>
+    );
+  }
   return (
-    <Sec label="Next call">
-      {call ? (
-        <>
-          <p className={cx("sub")}><b>{call.title}</b></p>
-          <span className={cx("sub2")}>{[formatMomentWhen(call.starts_at), REPEAT_WORD[call.recurrence_frequency]].filter(Boolean).join(" · ")}</span>
-          <div className={cx("acts")} style={{ marginTop: 8 }}>
-            {call.url ? <a className={cx("link")} href={call.url} target="_blank" rel="noreferrer noopener">Join the call</a> : null}
-            {pod.can_manage ? <Btn small txt disabled={busy} onClick={() => void cancel()}>Cancel call</Btn> : null}
-          </div>
-        </>
-      ) : scheduling ? (
+    <PanelPart label="Next call" action={scheduling ? null : <PanelAction onClick={() => setScheduling(true)}>Schedule a call</PanelAction>}>
+      {scheduling ? (
         <div className={cx("podform")} style={{ marginTop: 0 }}>
           <input value={draft.title} onChange={(event) => setDraft({ ...draft, title: event.target.value })} placeholder={`${pod.name} call`} aria-label="Call title" maxLength={80} />
           <input type="datetime-local" value={draft.when} onChange={(event) => setDraft({ ...draft, when: event.target.value })} aria-label="Day and time" />
@@ -92,9 +94,7 @@ export function KitPodCall(props: { session: unknown; communityId: string; pod: 
             <Btn txt small onClick={() => { setScheduling(false); setError(null); }}>Cancel</Btn>
           </div>
         </div>
-      ) : (
-        <div className={cx("acts")}><Btn small onClick={() => setScheduling(true)}>Schedule a call</Btn></div>
-      )}
-    </Sec>
+      ) : <PanelLine dim>No call planned</PanelLine>}
+    </PanelPart>
   );
 }

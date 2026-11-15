@@ -1,7 +1,7 @@
 // Pods (docs/specs/pods-v0.md): a pod's own right column, in place of a
 // channel's. In order: who is asking to join (hosts); the guide's brief; the
-// next call; what the pod knows; who is in it and, for the people who can
-// edit it, how each person is in. What the pod is for and the viewer's own
+// next call; what the pod knows; who is in it (Manage opens how each person
+// is in, for the people who manage it). What the pod is for and the viewer's own
 // membership (paying, leaving, a payment problem, Leave pod) open from two
 // links at the foot.
 import { Fragment, useCallback, useEffect, useState, type ReactNode } from "react";
@@ -16,11 +16,11 @@ import {
   setCloudPodHost,
   type CloudPodDetail,
 } from "../../../../shared/cloudCommunityPodsGateway";
-import { Btn, KitApp, Rail, Sec, Sep, cx } from "./kit";
+import { Btn, KitApp, Rail, Sec, cx } from "./kit";
 import { BriefPart, usePlaceBrief } from "./KitBrief";
 import { KitPodCall } from "./KitPodCall";
 import { KitPodKnowledge } from "./KitPodKnowledge";
-import { PanelPeople } from "./KitPanel";
+import { PanelAction, PanelLine, PanelPart, PanelPeople } from "./KitPanel";
 import { askForPodPagePreview, forgetPod, goToPodsPath, rememberPod } from "./podMemory";
 
 type Draft = { purpose: string; whatYouGet: string; listed: boolean; seats: string; price: string };
@@ -46,6 +46,8 @@ export function KitPodRail(props: { session: unknown; communityId: string; pod: 
   const [confirmLeave, setConfirmLeave] = useState(false);
   const [leaveError, setLeaveError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  // The people part, opened to how each person is in.
+  const [managing, setManaging] = useState(false);
   // Which of the foot's two things is open.
   // It starts open on what needs the viewer: a payment that failed, or
   // (for someone who can edit it) a pod that doesn't yet say what it's for.
@@ -103,24 +105,24 @@ export function KitPodRail(props: { session: unknown; communityId: string; pod: 
   const mine = pod.my_membership;
   const paid = Boolean(mine && mine.state !== "added");
 
-  // The panel's parts, in order (mock: "Every right panel"): who is asking
-  // to join (hosts), the guide's brief, the next call, what the pod knows,
-  // who is in it. What the pod is and the viewer's own membership are looked
-  // at rarely: two links at the foot open them in place. Each part keeps its
-  // own key, so one coming or going never resets a draft in another.
+  // The panel's parts, in order (mock: "Right panels, second pass"): who is
+  // asking to join (hosts), the guide's brief, the next call, what the pod
+  // knows, who is in it. What the pod is and the viewer's own membership are
+  // looked at rarely: two links at the foot open them in place. Each part
+  // keeps its own key, so one coming or going never resets a draft in
+  // another.
+  const names = pod.members.map((member) => member.name);
   const parts = ([
     ["requests", pod.can_manage && pod.requests.length ? (
-      <Sec label={`Asking to join · ${pod.requests.length}`}>
+      <div className={cx("needs")}>
         {pod.requests.map((request) => (
-          <div key={request.user_id} className={cx("podreq")}>
-            <span>{request.name}{request.status === "waitlist" ? <em> · waitlist</em> : null}</span>
-            <span className={cx("podreq-acts")}>
-              <Btn small go disabled={Boolean(busy)} onClick={() => void act(`yes:${request.user_id}`, () => decideCloudPodRequest({ session: props.session, communityId: props.communityId, channelId: pod.channel_id, userId: request.user_id, approve: true }))}>Add</Btn>
-              <Btn small txt disabled={Boolean(busy)} onClick={() => void act(`no:${request.user_id}`, () => decideCloudPodRequest({ session: props.session, communityId: props.communityId, channelId: pod.channel_id, userId: request.user_id, approve: false }))}>Decline</Btn>
-            </span>
+          <div key={request.user_id} className={cx("need")}>
+            <span className={cx("t")}><b>{request.name}</b> {request.status === "waitlist" ? "is on the waitlist" : "asked to join"}</span>
+            <Btn small go disabled={Boolean(busy)} onClick={() => void act(`yes:${request.user_id}`, () => decideCloudPodRequest({ session: props.session, communityId: props.communityId, channelId: pod.channel_id, userId: request.user_id, approve: true }))}>Add</Btn>
+            <Btn small txt disabled={Boolean(busy)} onClick={() => void act(`no:${request.user_id}`, () => decideCloudPodRequest({ session: props.session, communityId: props.communityId, channelId: pod.channel_id, userId: request.user_id, approve: false }))}>Decline</Btn>
           </div>
         ))}
-      </Sec>
+      </div>
     ) : null],
     ["brief", brief ? <BriefPart brief={brief} now={now} /> : null],
     ["call", pod.next_call || pod.can_manage ? (
@@ -128,23 +130,24 @@ export function KitPodRail(props: { session: unknown; communityId: string; pod: 
     ) : null],
     ["knowledge", <KitPodKnowledge session={props.session} communityId={props.communityId} channelId={pod.channel_id} />],
     ["people", (
-      <Sec label={`In this pod · ${pod.members.length}`}>
-        {pod.can_manage ? pod.members.map((member) => (
-          <div key={member.user_id} className={cx("podreq")}>
-            <span>
-              {member.name}{member.is_host ? <em> · host</em> : null}
-              {member.payment ? <span className={cx("podtag")}>{memberTag(member.payment)}</span> : null}
-            </span>
-            <span className={cx("podreq-acts")}>
-              <Btn small txt disabled={Boolean(busy)} onClick={() => void act(`host:${member.user_id}`, () => setCloudPodHost({ session: props.session, communityId: props.communityId, channelId: pod.channel_id, userId: member.user_id, host: !member.is_host }))}>
+      // Everyone sees who is in it. Those who manage it open how each person
+      // is in (paying, leaving, a payment problem) and, to edit, the host switch.
+      <PanelPart label="In this pod" fact={String(pod.members.length)}
+        action={pod.can_manage && pod.members.length ? <PanelAction expanded={managing} onClick={() => setManaging(!managing)}>{managing ? "Done" : "Manage"}</PanelAction> : null}>
+        {!pod.members.length ? <PanelLine dim>No one yet</PanelLine> : managing ? pod.members.map((member) => (
+          <div key={member.user_id} className={cx("ln")}>
+            <span className={cx("t")}>{member.name}{member.is_host ? " · host" : ""}</span>
+            {member.payment ? <em>{memberTag(member.payment)}</em> : null}
+            {pod.can_edit ? (
+              <PanelAction disabled={Boolean(busy)} onClick={() => void act(`host:${member.user_id}`, () => setCloudPodHost({ session: props.session, communityId: props.communityId, channelId: pod.channel_id, userId: member.user_id, host: !member.is_host }))}>
                 {member.is_host ? "Not host" : "Make host"}
-              </Btn>
-            </span>
+              </PanelAction>
+            ) : null}
           </div>
-        )) : pod.members.length ? <PanelPeople names={pod.members.map((member) => member.name)} max={5} /> : <p className={cx("sub")}>No one yet.</p>}
-      </Sec>
+        )) : <PanelPeople names={names} max={5} />}
+      </PanelPart>
     )],
-    ["about", foot === "about" ? (
+    ["about", foot === "about" ? foot === "about" ? (
       <Sec label="About this pod">
         {editing ? (
           <div className={cx("podform")} style={{ marginTop: 0 }}>
@@ -199,7 +202,7 @@ export function KitPodRail(props: { session: unknown; communityId: string; pod: 
           </>
         )}
       </Sec>
-    ) : null],
+    ) : null : null],
     ["membership", foot === "membership" && mine ? (
       <Sec label="Your membership">
         <p className={cx("sub")}>
@@ -231,7 +234,7 @@ export function KitPodRail(props: { session: unknown; communityId: string; pod: 
   return (
     <KitApp view="wins" part="rail">
       <Rail index={1} label="About this pod">
-        {parts.map(([key, part], index) => <Fragment key={key}>{index ? <Sep /> : null}{part}</Fragment>)}
+        {parts.map(([key, part]) => <Fragment key={key}>{part}</Fragment>)}
         <div className={cx("railfoot")}>
           <button type="button" aria-expanded={foot === "about"} onClick={() => setFoot(foot === "about" ? null : "about")}>About this pod</button>
           {mine ? <button type="button" aria-expanded={foot === "membership"} onClick={() => setFoot(foot === "membership" ? null : "membership")}>Your membership</button> : null}
