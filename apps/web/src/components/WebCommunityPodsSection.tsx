@@ -1,8 +1,13 @@
 // Pods (docs/specs/pods-v0.md): one page for every pod, never rows in the
 // left column. Builders see all pods and start new ones; a member sees the
 // pods they are in, then listed pods they could join, from the outside only.
-// Picking a pod you're not in shows its pitch in the right column (on a narrow
-// screen, the page itself). Each pod keeps its own address
+// On a wide screen one pod is always picked (the first, until another is),
+// and the right column is its landing page: for a pod you're in, its brief,
+// next call, what it knows and who is in it, with the way in; for one you're
+// not in, its pitch. A whole card picks its pod; what you do about a pod
+// (open it, join, ask) is on its landing page. On a narrow screen there is
+// no right column: a card opens the pod's room, or its pitch as the page.
+// Each pod keeps its own address
 // (/c/:slug/pods/:podSlug): its room for someone in it, this page with it
 // picked for anyone else who may see it.
 import { useCallback, useEffect, useState } from "react";
@@ -23,7 +28,9 @@ import {
   type CloudPodPrice,
 } from "../../../../shared/cloudCommunityPodsGateway";
 import { changeCloudMyCommunityPlan } from "../../../../shared/cloudCommunityPlanChangeGateway";
-import { Btn, cx, Icon, KitApp, Sec } from "../v1/kit";
+import { Btn, cx, Icon, KitApp } from "../v1/kit";
+import { KitPodLanding } from "../v1/KitPodLanding";
+import { PanelLine, PanelPart, PanelPeople } from "../v1/KitPanel";
 import { forgetPod, recallPod, takePodPagePreview } from "../v1/podMemory";
 import { podRhythmText } from "../v1/KitPodCall";
 
@@ -135,7 +142,7 @@ const planPrice = (plan: CloudPlanOffer) => {
 // how you get in (a plan that includes it, its own price, or asking), and the
 // one button. Never who is in it or what is said. On the Pods page it fills
 // the right column (on a narrow screen, the page itself).
-function PodPitch(props: WebCommunityPodsSectionProps & { podSlug: string; inline: boolean; reloadKey: number }) {
+function PodPitch(props: WebCommunityPodsSectionProps & { podSlug: string; inline: boolean; reloadKey: number; onChanged?: () => void }) {
   const [page, setPage] = useState<CloudPodPage | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -178,7 +185,7 @@ function PodPitch(props: WebCommunityPodsSectionProps & { podSlug: string; inlin
     if (busy) return;
     setBusy(true);
     setError(null);
-    try { if ((await joinOrAsk(props, page)) === "asked") await load(); }
+    try { if ((await joinOrAsk(props, page)) === "asked") { await load(); props.onChanged?.(); } }
     catch (failure) { setError(joinErrorText(failure, Boolean(page.price))); await load(); }
     finally { setBusy(false); }
   };
@@ -198,51 +205,52 @@ function PodPitch(props: WebCommunityPodsSectionProps & { podSlug: string; inlin
       setError(String((failure as Error)?.message ?? "").includes("already_on_plan") ? "You're already on that plan." : "Couldn't change your plan just now. Try again.");
     } finally { setBusy(false); }
   };
-  const meta = [
-    plans.length ? `Included with ${plans.map((plan) => plan.name).join(" or ")}`
-      : page.price ? `+${formatPodPrice(page.price)} on top of your membership` : "Free for members",
-    page.seats_left === null || plans.length ? null : full ? "Full" : `${page.seats_left} ${page.seats_left === 1 ? "seat" : "seats"} left`,
-  ].filter(Boolean).join(" · ");
+  const price = plans.length ? `Included with ${plans.map((plan) => plan.name).join(" or ")}`
+    : page.price ? `+${formatPodPrice(page.price)} on top of your membership` : "Free for members";
+  const seats = page.seats_left === null || plans.length ? null : full ? "Full" : `${page.seats_left} ${page.seats_left === 1 ? "seat" : "seats"} left`;
+  const rhythm = page.rhythm ? podRhythmText(page.rhythm) : null;
+  const way = page.can_enter ? (
+    <Btn go onClick={() => props.onNavigate({ kind: "room", slug: page.slug })}>Open the pod</Btn>
+  ) : status ? (
+    <span className={cx("podask")}>{status}</span>
+  ) : plans.length ? (
+    page.can_switch_plan ? (
+      <>
+        {plans.map((plan) => (
+          <Btn key={plan.key ?? "base"} go disabled={busy} onClick={() => void switchTo(plan)}>
+            {busy ? "Changing…" : `Switch to ${plan.name} · ${planPrice(plan)}`}
+          </Btn>
+        ))}
+      </>
+    ) : (
+      <span className={cx("podask")}>Comes with {plans.map((plan) => plan.name).join(" or ")}</span>
+    )
+  ) : page.price && full ? (
+    <span className={cx("podask")}>Full</span>
+  ) : (
+    <>
+      <Btn go disabled={busy} onClick={() => void join()}>
+        {busy && page.price ? "Opening checkout…" : page.price ? `Join · ${formatPodPrice(page.price)}` : full ? "Join the waitlist" : "Ask to join"}
+      </Btn>
+      {page.price ? <small>On top of your membership. Leave any time.</small> : full ? null : <small>The host reviews each request.</small>}
+    </>
+  );
   return (
-    <div className={cx(props.inline ? "podpage" : "podpage podpitch")}>
+    <div className={cx(props.inline ? "podpage land" : "land")}>
       {back}
-      <span className={cx("podname")}><Icon name={page.can_enter ? "users" : "lock"} />{page.name}</span>
-      {page.purpose ? <p className={cx("lead")}>{page.purpose}</p> : null}
-      {page.what_you_get.length ? (
-        <Sec label="What you get">
-          <ul className={cx("podget")}>{page.what_you_get.map((line) => <li key={line}>{line}</li>)}</ul>
-        </Sec>
+      <h2>{page.name}</h2>
+      {page.purpose ? <p className={cx("land-p")}>{page.purpose}</p> : null}
+      {page.what_you_get.length ? <ul className={cx("podget")}>{page.what_you_get.map((line) => <li key={line}>{line}</li>)}</ul> : null}
+      <PanelPart label="The way in">
+        {rhythm ? <PanelLine>{rhythm}</PanelLine> : null}
+        <PanelLine fact={seats}>{price}</PanelLine>
+      </PanelPart>
+      {page.hosts.length ? (
+        <PanelPart label="Hosted by"><PanelPeople names={page.hosts} /></PanelPart>
       ) : null}
-      {page.hosts.length ? <p className={cx("sub")}>Hosted by {page.hosts.join(" and ")}</p> : null}
-      {page.rhythm ? <p className={cx("sub")}>{podRhythmText(page.rhythm)}</p> : null}
-      <p className={cx("podmeta")}>{meta}</p>
       {note ? <p className={cx("sub")} role="status">{note}</p> : null}
       {error ? <p className={cx("bad")} role="alert">{error}</p> : null}
-      <div className={cx("acts")}>
-        {page.can_enter ? (
-          <Btn go small onClick={() => props.onNavigate({ kind: "room", slug: page.slug })}>Open the pod</Btn>
-        ) : status ? (
-          <span className={cx("podask")}>{status}</span>
-        ) : plans.length ? (
-          page.can_switch_plan ? (
-            <>
-              {plans.map((plan) => (
-                <Btn key={plan.key ?? "base"} go small disabled={busy} onClick={() => void switchTo(plan)}>
-                  {busy ? "Changing…" : `Switch to ${plan.name} · ${planPrice(plan)}`}
-                </Btn>
-              ))}
-            </>
-          ) : (
-            <span className={cx("podask")}>Comes with {plans.map((plan) => plan.name).join(" or ")}</span>
-          )
-        ) : page.price && full ? (
-          <span className={cx("podask")}>Full</span>
-        ) : (
-          <Btn go small disabled={busy} onClick={() => void join()}>
-            {busy && page.price ? "Opening checkout…" : page.price ? `Join · ${formatPodPrice(page.price)}` : full ? "Join the waitlist" : "Ask to join"}
-          </Btn>
-        )}
-      </div>
+      <div className={cx("joinbar")}>{way}</div>
       {page.can_edit ? (
         <p className={cx("sub2")}>This is what members who aren't in it see. Edit it from the pod's right column.{page.visibility === "hidden" ? " It's hidden, so only its members know it's here." : ""}</p>
       ) : null}
@@ -260,13 +268,15 @@ function PodsList(props: WebCommunityPodsSectionProps) {
   const [creating, setCreating] = useState(false);
   const [draft, setDraft] = useState({ name: "", purpose: "", listed: true, seats: "" });
   const [saving, setSaving] = useState(false);
-  const [asking, setAsking] = useState<string | null>(null);
+  // The pod picked on this page (one you're in); a pod you're not in is
+  // picked by its address. The session the lists loaded with, for the panel.
+  const [picked, setPicked] = useState<string | null>(null);
+  const [liveSession, setLiveSession] = useState<unknown>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
   // The right column exists only in design v1, and only on a wide screen.
   const wide = useWideRail() && isDesignV1Active();
-  const selected = props.podSlug;
   const now = Date.now();
 
   const load = useCallback(async () => {
@@ -275,6 +285,7 @@ function PodsList(props: WebCommunityPodsSectionProps) {
       const session = await props.ensureSession(props.session);
       if (!session) return;
       const result = await fetchCloudCommunityPods({ session, communityId: props.communityId, asMember: props.asMember });
+      setLiveSession(session);
       setState({ canManage: result.can_manage, pods: result.pods, outside: result.outside });
       setFailed(false);
       setReloadKey((key) => key + 1);
@@ -289,14 +300,14 @@ function PodsList(props: WebCommunityPodsSectionProps) {
   // enter it. Its "← Pods" arrow forgets it, and this list shows instead.
   const [recalled, setRecalled] = useState(() => recallPod());
   // Once a pod is picked, the remembered one no longer decides where Pods goes.
-  useEffect(() => { if (selected) setRecalled(null); }, [selected]);
+  useEffect(() => { if (props.podSlug) setRecalled(null); }, [props.podSlug]);
   useEffect(() => {
-    if (!recalled || !state || notice || selected) return;
+    if (!recalled || !state || notice || props.podSlug) return;
     if (state.pods.some((pod) => pod.slug === recalled)) props.onNavigate({ kind: "room", slug: recalled });
     else forgetPod();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [recalled, state]);
-  const returning = Boolean(recalled && !notice && !selected && (!state || state.pods.some((pod) => pod.slug === recalled)));
+  const returning = Boolean(recalled && !notice && !props.podSlug && (!state || state.pods.some((pod) => pod.slug === recalled)));
 
   const create = async () => {
     const name = draft.name.trim();
@@ -326,34 +337,33 @@ function PodsList(props: WebCommunityPodsSectionProps) {
     }
   };
 
-  const ask = async (pod: CloudOutsidePod) => {
-    if (asking || !props.communityId) return;
-    setAsking(pod.channel_id);
-    setError(null);
-    try {
-      if ((await joinOrAsk(props, pod)) === "asked") await load();
-    } catch (failure) {
-      setError(joinErrorText(failure, Boolean(pod.price)));
-      await load();
-    } finally { setAsking(null); }
-  };
-
   const canManage = Boolean(state?.canManage);
   const pods = state?.pods ?? [];
   const outside = state?.outside ?? [];
+  // One pod is always picked on a wide screen: the one in the address, else
+  // the one picked here, else the first card.
+  const mine = picked ? pods.find((pod) => pod.slug === picked) ?? null : null;
+  const selected = props.podSlug ?? mine?.slug ?? (wide ? (pods[0]?.slug ?? outside[0]?.slug ?? null) : null);
+  const selectedMine = props.podSlug ? null : pods.find((pod) => pod.slug === selected) ?? null;
+  const pick = (pod: CloudCommunityPod) => {
+    // No right column: straight into the room.
+    if (!wide) { props.onNavigate({ kind: "room", slug: pod.slug }); return; }
+    setPicked(pod.slug);
+    if (props.podSlug) props.onNavigate({ kind: "pods" });
+  };
   const lead = !state ? " " : canManage
     ? (pods.length ? `${pods.length} ${pods.length === 1 ? "pod" : "pods"} in ${props.communityName}.` : "Start your first pod.")
     : (pods.length ? "Your pods." : outside.length ? "Pods you can join." : "No pods to join yet.");
 
   // A narrow screen has no right column: a picked pod's pitch is the page.
-  if (selected && !wide) {
+  if (props.podSlug && !wide) {
     return (
       <div className="community-panel community-pods-panel">
         <CommunityPageHeader title="Pods"><div className="resources-header">Pods</div></CommunityPageHeader>
         <KitApp view="events" host={canManage} part="flow">
           <div className={cx("page")} style={{ padding: 0, overflow: "visible" }}>
             {notice ? <p className={cx("sub")} role="status">{notice}</p> : null}
-            <PodPitch {...props} podSlug={selected} inline reloadKey={reloadKey} />
+            <PodPitch {...props} podSlug={props.podSlug} inline reloadKey={reloadKey} onChanged={() => void load()} />
           </div>
         </KitApp>
       </div>
@@ -371,7 +381,8 @@ function PodsList(props: WebCommunityPodsSectionProps) {
           {pods.length || canManage ? (
             <div className={cx("podgrid")}>
               {pods.map((pod) => (
-                <button key={pod.channel_id} type="button" className={cx("podcard")} onClick={() => props.onNavigate({ kind: "room", slug: pod.slug })}>
+                <button key={pod.channel_id} type="button" className={cx(selected === pod.slug ? "podcard podsel" : "podcard")} aria-current={selected === pod.slug ? "true" : undefined}
+                  onClick={() => pick(pod)} onDoubleClick={() => props.onNavigate({ kind: "room", slug: pod.slug })}>
                   <span className={cx("podname")}><Icon name="users" />{pod.name}</span>
                   <span className={cx("podpurpose")}>{pod.purpose || (pod.can_manage ? "Add what this pod is for." : "")}</span>
                   {pod.can_manage && pod.waiting ? <span className={cx("podask")}>{pod.waiting} asking to join</span> : null}
@@ -418,8 +429,9 @@ function PodsList(props: WebCommunityPodsSectionProps) {
                   const status = pod.my_request === "pending" ? "Asked · the host will reply"
                     : pod.my_request === "waitlist" ? "On the waitlist" : null;
                   return (
-                    <div key={pod.channel_id} className={cx(selected === pod.slug ? "podcard podout podsel" : "podcard podout")} aria-current={selected === pod.slug ? "true" : undefined}>
-                      <button type="button" className={cx("podname podlink")} onClick={() => props.onNavigate({ kind: "pod", slug: pod.slug })}><Icon name="lock" />{pod.name}</button>
+                    <button key={pod.channel_id} type="button" className={cx(selected === pod.slug ? "podcard podout podsel" : "podcard podout")} aria-current={selected === pod.slug ? "true" : undefined}
+                      onClick={() => { setPicked(null); props.onNavigate({ kind: "pod", slug: pod.slug }); }}>
+                      <span className={cx("podname")}><Icon name="lock" />{pod.name}</span>
                       <span className={cx("podpurpose")}>{pod.purpose}</span>
                       {pod.included_with?.length ? <span className={cx("podprice")}>Included with {pod.included_with.join(" or ")}</span>
                         : price ? <span className={cx("podprice")}>+{price} on top of your membership</span> : null}
@@ -427,16 +439,8 @@ function PodsList(props: WebCommunityPodsSectionProps) {
                         {[pod.hosts.length ? `Hosted by ${pod.hosts.join(" and ")}` : null,
                           pod.seats_left === null ? null : full ? "Full" : `${pod.seats_left} ${pod.seats_left === 1 ? "seat" : "seats"} left`].filter(Boolean).join(" · ")}
                       </span>
-                      {status ? <span className={cx("podask")}>{status}</span> : pod.included_with?.length ? (
-                        <Btn small go onClick={() => props.onNavigate({ kind: "pod", slug: pod.slug })}>See how to join</Btn>
-                      ) : pod.price && full ? (
-                        <span className={cx("podask")}>Full</span>
-                      ) : (
-                        <Btn small go={Boolean(pod.price)} disabled={asking === pod.channel_id} onClick={() => void ask(pod)}>
-                          {asking === pod.channel_id && pod.price ? "Opening checkout…" : pod.price ? "Join" : full ? "Join the waitlist" : "Ask to join"}
-                        </Btn>
-                      )}
-                    </div>
+                      {status ? <span className={cx("podask")}>{status}</span> : null}
+                    </button>
                   );
                 })}
               </div>
@@ -444,11 +448,16 @@ function PodsList(props: WebCommunityPodsSectionProps) {
           ) : null}
         </div>
       </KitApp>
-      {/* The right column is the pod you picked; with none picked there is no column. */}
+      {/* The right column is the picked pod's landing page. */}
       {selected ? (
         <CommunityPageRail label="Pods">
           <KitApp view="events" host={canManage} part="rail">
-            <PodPitch {...props} podSlug={selected} inline={false} reloadKey={reloadKey} />
+            {selectedMine && props.communityId ? (
+              <KitPodLanding session={liveSession} communityId={props.communityId} pod={selectedMine}
+                onOpen={() => props.onNavigate({ kind: "room", slug: selectedMine.slug })} />
+            ) : (
+              <PodPitch {...props} podSlug={selected} inline={false} reloadKey={reloadKey} onChanged={() => void load()} />
+            )}
           </KitApp>
         </CommunityPageRail>
       ) : null}

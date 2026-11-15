@@ -54,7 +54,7 @@ export function KitHomeRail(props: {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [props.session, props.communityId]);
 
-  const { brief, canHide, hide } = usePlaceBrief(props.session, props.communityId, null, props.agentOn !== false);
+  const brief = usePlaceBrief(props.session, props.communityId, null, props.agentOn !== false);
   // The brief says what's going on; beside it Today keeps only what is the
   // host's to act on (who is waiting to join).
   const lines = props.agentOn === false ? [] : todayLines(props.snapshot, props.audience)
@@ -71,7 +71,7 @@ export function KitHomeRail(props: {
     <>
       {brief ? (
         <>
-          <BriefPart brief={brief} now={props.now} onOpenChannel={(channel) => props.onOpenChannelByName(channel.name)} onHide={canHide ? hide : undefined} />
+          <BriefPart brief={brief} now={props.now} onOpenChannel={(channel) => props.onOpenChannelByName(channel.name)} />
           <Sep />
         </>
       ) : null}

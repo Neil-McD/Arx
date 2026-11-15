@@ -91,7 +91,7 @@ export function KitPodRail(props: { session: unknown; communityId: string; pod: 
     } finally { setBusy(null); }
   };
 
-  const { brief, canHide, hide } = usePlaceBrief(props.session, props.communityId, pod.channel_id);
+  const brief = usePlaceBrief(props.session, props.communityId, pod.channel_id);
   const [now] = useState(() => Date.now());
   const mine = pod.my_membership;
   const paid = Boolean(mine && mine.state !== "added");
@@ -114,7 +114,7 @@ export function KitPodRail(props: { session: unknown; communityId: string; pod: 
         ))}
       </Sec>
     ) : null],
-    ["brief", brief ? <BriefPart brief={brief} now={now} onHide={canHide ? hide : undefined} /> : null],
+    ["brief", brief ? <BriefPart brief={brief} now={now} /> : null],
     ["call", pod.next_call || pod.can_manage ? (
       <KitPodCall session={props.session} communityId={props.communityId} pod={pod} onChanged={props.onChanged} />
     ) : null],
