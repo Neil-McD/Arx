@@ -4,16 +4,11 @@ import { buildPlatformHarnessRuntimePromptBundle } from "../shared/runtimePrompt
 import { buildRuntimeTurnContextPacket } from "../shared/runtimeTurnContextPacket.ts";
 
 const allowedToolNames = [
-  "search_product_docs",
-  "get_product_doc",
   "polynet_list",
   "polynet_read",
   "polynet_search",
   "polynet_write",
   "polynet_call",
-  "member_conversations_list",
-  "member_conversation_read",
-  "member_profile_confirm_facts",
   "web_research",
 ] as const;
 const packet = buildRuntimeTurnContextPacket({
@@ -85,7 +80,7 @@ assert.equal(
   manifest.tools.find((tool) => tool.name === "polynet_write")?.effect,
   "write",
 );
-assert.ok(manifest.resources.some((resource) => resource.id === "product_docs"));
+assert.ok(!manifest.resources.some((resource) => resource.id === "product_docs"));
 assert.ok(
   manifest.resources.some((resource) => resource.id === "active_community_context"),
 );

@@ -40,9 +40,11 @@ forbid "$HANDLERS" 'runtimeExecutionMode|capability_composed_chat_v1|legacy_proj
 forbid "$LOOP" 'runtimeExecutionSession|workspaceRuntime|workspaceTerminals|daytonaCodexRuntime|executeTerminalTool|executeComputerTool' "agent loop cannot reach Workspace execution"
 forbid "$PROMPT" 'workspace_harness_context|PLATFORM_HARNESS_CONTEXT|terminal_start|computer_screenshot' "prompt cannot advertise Workspace capabilities"
 forbid "$TOOLS" '"list_dir"|"bash"|"terminal_start"|"computer_screenshot"' "retired Workspace tools stay outside the model tool type"
-for tool in search_product_docs get_product_doc polynet_list polynet_read polynet_search polynet_write polynet_call web_research web_crawl; do
+for tool in polynet_list polynet_read polynet_search polynet_write polynet_call web_research web_crawl; do
   require "$TOOLS" "\"$tool\"" "active tool type includes $tool"
 done
+# No lens offers them; deleted with their chains (engine cleanup).
+forbid "$TOOLS" '"search_product_docs"|"get_product_doc"|"member_conversations_list"|"member_conversation_read"|"member_profile_confirm_facts"' "retired tools stay outside the model tool type"
 
 node --experimental-strip-types --experimental-specifier-resolution=node "$ROOT/scripts/runtime_tool_loop_proof.ts"
 echo "runtime_router_loop_contract_check: ok"

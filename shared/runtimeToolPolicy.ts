@@ -122,8 +122,6 @@ function buildPlatformOperationRuntimePolicy(
 }
 
 const FIXED_TOOL_POLICIES: Record<RetrievalToolName, RuntimeToolPolicy> = {
-  search_product_docs: buildPlatformOperationRuntimePolicy("search_product_docs"),
-  get_product_doc: buildPlatformOperationRuntimePolicy("get_product_doc"),
   polynet_list: {
     toolName: "polynet_list", source: "fixed", category: "community", riskLevel: "read",
     readOnly: true, mutatesState: false, parallelSafe: true, exclusive: false,
@@ -148,21 +146,6 @@ const FIXED_TOOL_POLICIES: Record<RetrievalToolName, RuntimeToolPolicy> = {
     toolName: "polynet_call", source: "fixed", category: "community", riskLevel: "write",
     readOnly: false, mutatesState: true, parallelSafe: false, exclusive: true,
     requiresWorkspace: false, requiresCommunity: false,
-  },
-  member_conversations_list: {
-    toolName: "member_conversations_list", source: "fixed", category: "community", riskLevel: "read",
-    readOnly: true, mutatesState: false, parallelSafe: true, exclusive: false,
-    requiresWorkspace: false, requiresCommunity: false,
-  },
-  member_conversation_read: {
-    toolName: "member_conversation_read", source: "fixed", category: "community", riskLevel: "read",
-    readOnly: true, mutatesState: false, parallelSafe: true, exclusive: false,
-    requiresWorkspace: false, requiresCommunity: false,
-  },
-  member_profile_confirm_facts: {
-    toolName: "member_profile_confirm_facts", source: "fixed", category: "community", riskLevel: "write",
-    readOnly: false, mutatesState: true, parallelSafe: false, exclusive: true,
-    requiresWorkspace: false, requiresCommunity: true,
   },
   web_research: {
     toolName: "web_research", source: "fixed", category: "web", riskLevel: "read",

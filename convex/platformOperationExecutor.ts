@@ -1,13 +1,7 @@
-import productDocsIndexJson from "../docs/product/generated/index.json";
 import {
   getPlatformOperationContract,
   type PlatformOperationId,
 } from "../shared/platformOperationContract.ts";
-import {
-  executeGetProductDocTool,
-  executeSearchProductDocsTool,
-} from "../shared/productDocsRuntime.ts";
-import type { ProductDocsSearchIndex } from "../shared/productDocsSearch.ts";
 import type { CommunityEvidenceSurface } from "../shared/communityEvidenceContract.ts";
 import {
   renderPlatformUserProfileMarkdown,
@@ -28,7 +22,6 @@ import { parseCommunityResourceEvidenceRef } from "../shared/communityEvidenceCo
 import { parseCommunityResourceDirectoryUri } from "../shared/communityResourceDirectory.ts";
 import { internal } from "./_generated/api";
 
-const productDocsIndex = productDocsIndexJson as ProductDocsSearchIndex;
 
 export type PlatformOperationExecutionResult =
   | { ok: true; value: unknown }
@@ -445,62 +438,6 @@ export async function executePlatformOperation(args: {
     }
   }
 
-  if (operation.executor === "productDocs.search") {
-    const query = requiredString(args.input.query);
-    if (!query) {
-      return {
-        ok: false,
-        code: "product_docs_query_required",
-        message: "query is required.",
-      };
-    }
-    return {
-      ok: true,
-      value: executeSearchProductDocsTool({
-        index: productDocsIndex,
-        query,
-        limit:
-          typeof args.input.limit === "number" ? args.input.limit : undefined,
-        section:
-          typeof args.input.section === "string"
-            ? args.input.section
-            : undefined,
-        audience:
-          typeof args.input.audience === "string"
-            ? args.input.audience
-            : undefined,
-      }),
-    };
-  }
-
-  if (operation.executor === "productDocs.read") {
-    const slug = requiredString(args.input.slug);
-    if (!slug) {
-      return {
-        ok: false,
-        code: "product_doc_slug_required",
-        message: "slug is required.",
-      };
-    }
-    const productDoc = executeGetProductDocTool({
-      index: productDocsIndex,
-      slug,
-      heading:
-        typeof args.input.heading === "string" ? args.input.heading : undefined,
-    });
-    if (!productDoc.ok) {
-      return {
-        ok: false,
-        code: productDoc.code,
-        message: productDoc.message,
-        value: productDoc,
-      };
-    }
-    return {
-      ok: true,
-      value: productDoc,
-    };
-  }
   return {
     ok: false,
     code: "platform_operation_executor_missing",

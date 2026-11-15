@@ -151,11 +151,6 @@ export type BuildRuntimeContextManifestInput = {
   memberIdentityContextStatus?: MemberIdentityContextStatus | null;
 };
 
-const PRODUCT_DOC_TOOL_NAMES = new Set<RetrievalToolName>([
-  "search_product_docs",
-  "get_product_doc",
-]);
-
 const COMMUNITY_CONTEXT_TOOL_NAMES = new Set<RetrievalToolName>([
   "polynet_list",
   "polynet_read",
@@ -165,15 +160,6 @@ const COMMUNITY_CONTEXT_TOOL_NAMES = new Set<RetrievalToolName>([
 const COMMUNITY_CONTEXT_MUTATION_TOOL_NAMES = new Set<RetrievalToolName>([
   "polynet_write",
   "polynet_call",
-]);
-
-const MEMBER_CONVERSATION_TOOL_NAMES = new Set<RetrievalToolName>([
-  "member_conversations_list",
-  "member_conversation_read",
-]);
-
-const MEMBER_PROFILE_WRITE_TOOL_NAMES = new Set<RetrievalToolName>([
-  "member_profile_confirm_facts",
 ]);
 
 const WEB_RESEARCH_TOOL_NAMES = new Set<RetrievalToolName>([
@@ -221,9 +207,6 @@ function uniqueToolNames(values: readonly RetrievalToolName[] | null | undefined
 }
 
 function classifyFixedTool(toolName: RetrievalToolName): Omit<RuntimeContextManifestTool, "name" | "source"> {
-  if (PRODUCT_DOC_TOOL_NAMES.has(toolName)) {
-    return { family: "product_docs", grantedBy: "product_docs_capability", effect: "read" };
-  }
   if (COMMUNITY_CONTEXT_TOOL_NAMES.has(toolName)) {
     return { family: "community_context", grantedBy: "validated_community_lens", effect: "read" };
   }
@@ -231,16 +214,6 @@ function classifyFixedTool(toolName: RetrievalToolName): Omit<RuntimeContextMani
     return {
       family: "community_context",
       grantedBy: "server_derived_community_authority",
-      effect: "write",
-    };
-  }
-  if (MEMBER_CONVERSATION_TOOL_NAMES.has(toolName)) {
-    return { family: "member_conversations", grantedBy: "authenticated_member_owner_scope", effect: "read" };
-  }
-  if (MEMBER_PROFILE_WRITE_TOOL_NAMES.has(toolName)) {
-    return {
-      family: "member_profile",
-      grantedBy: "explicit_profile_confirmation_flow",
       effect: "write",
     };
   }
@@ -288,26 +261,6 @@ function buildResourceEntries(params: BuildRuntimeContextManifestInput & {
       visibility: "private",
       source: "profiles.resolveCommunityAgentIdentityContextInternal",
       reason: "deterministic account identity for the member's private agent",
-    });
-  }
-  if (hasAnyTool(params.allowedToolNames, MEMBER_CONVERSATION_TOOL_NAMES)) {
-    resources.push({
-      id: "member_conversations",
-      owner: "user",
-      retrieval: "tool_available",
-      visibility: "private",
-      source: "member_conversations_list/member_conversation_read",
-      reason: "the member's private episodes are retrievable on demand across community lenses",
-    });
-  }
-  if (hasAnyTool(params.allowedToolNames, PRODUCT_DOC_TOOL_NAMES)) {
-    resources.push({
-      id: "product_docs",
-      owner: "platform",
-      retrieval: "tool_available",
-      visibility: "public",
-      source: "search_product_docs/get_product_doc",
-      reason: "platform product truth is retrievable on demand",
     });
   }
   if (hasText(params.communityId)) {

@@ -10,7 +10,6 @@ export const COMMUNITY_AGENT_THREAD_KEY_PREFIX = "member-agent";
 export const COMMUNITY_AGENT_GLOBAL_SCOPE_KEY = "global";
 
 const COMMUNITY_AGENT_DOCK_CAPABILITY_FAMILY_SET = new Set<CapabilityFamily>([
-  "product_docs",
   "community_tools",
   "web_research",
 ]);
