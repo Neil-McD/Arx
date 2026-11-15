@@ -125,6 +125,7 @@ export const observeCommunityMemoryInternal = internalMutation({
       if (noteAuthorKind(note) !== "guide") return refuse(ctx, run, title, "builder_note");
       await ctx.db.insert("communityNoteRevisions", {
         communityId: args.communityId, slug: note.slug, change: "changed", runId: run._id, createdAt: args.nowMs,
+        ...(note.lastRunId ? { previousRunId: note.lastRunId } : {}),
         before: { title: note.title, bodyMd: note.bodyMd, source: note.source, authorKind: "guide", evidenceRefs: note.evidenceRefs ?? [] },
       });
       await ctx.db.patch(note._id, {
@@ -167,6 +168,7 @@ export const writeCommunityMemoryIndexInternal = internalMutation({
     const current = await ctx.db.query("communityMemoryIndex").withIndex("by_community", (q) => q.eq("communityId", args.communityId)).first();
     await ctx.db.insert("communityNoteRevisions", {
       communityId: args.communityId, slug: "memory.md", change: "index", runId: run._id, createdAt: args.nowMs,
+      ...(current?.runId ? { previousRunId: current.runId } : {}),
       ...(current ? { before: { title: "memory.md", bodyMd: current.bodyMd } } : {}),
     });
     const bodyMd = args.bodyMd.trim();
@@ -251,6 +253,7 @@ export const undoLearnedNote = mutation({
       await ctx.db.patch(note._id, {
         title: before.title, bodyMd: before.bodyMd, evidenceRefs: before.evidenceRefs ?? [],
         searchText: buildCommunityNoteSearchText({ title: before.title, bodyMd: before.bodyMd }), updatedAt: nowMs,
+        lastRunId: last.previousRunId,
       });
       await ctx.db.patch(last._id, { undoneAt: nowMs });
       return { undone: "changed" as const };
@@ -271,24 +274,33 @@ export const undoMemoryRun = mutation({
     if (!run || String(run.communityId) !== String(args.communityId)) throw new Error("semantic_not_found");
     if (run.status === "undone") return { undone: 0 };
     const nowMs = Date.now();
-    const revisions = (await ctx.db.query("communityNoteRevisions").withIndex("by_run", (q) => q.eq("runId", run._id)).collect())
-      .filter((row) => !row.undoneAt).sort((a, b) => b.createdAt - a.createdAt);
+    // Newest first, in the order they were written (a review can change the
+    // same note twice within one moment).
+    const revisions = (await ctx.db.query("communityNoteRevisions").withIndex("by_run", (q) => q.eq("runId", run._id)).order("desc").collect())
+      .filter((row) => !row.undoneAt);
     let undone = 0;
+    let kept = 0;
     for (const revision of revisions) {
       if (revision.change === "index") {
         const index = await ctx.db.query("communityMemoryIndex").withIndex("by_community", (q) => q.eq("communityId", args.communityId)).first();
-        if (index && revision.before) await ctx.db.patch(index._id, { bodyMd: revision.before.bodyMd, updatedAt: nowMs });
+        // A later review rewrote memory.md since: its version stays.
+        if (index && String(index.runId ?? "") !== String(run._id)) { kept += 1; continue; }
+        if (index && revision.before) await ctx.db.patch(index._id, { bodyMd: revision.before.bodyMd, runId: revision.previousRunId, updatedAt: nowMs });
         else if (index) await ctx.db.delete(index._id);
       } else {
         const note = await ctx.db.query("communityNotes")
           .withIndex("by_community_slug", (q) => q.eq("communityId", args.communityId).eq("slug", revision.slug)).first();
+        // A later review changed the note since: its work stays.
+        if (note && String(note.lastRunId ?? "") !== String(run._id)) { kept += 1; continue; }
         // A builder took the note over since: it is theirs now, and stays.
         if (note && noteAuthorKind(note) === "guide") {
           if (revision.change === "added") await removeGuideNote(ctx, note, userId, nowMs);
           else if (revision.before) {
+            // Back to how it was, in the hands of the review that wrote that version.
             await ctx.db.patch(note._id, {
               title: revision.before.title, bodyMd: revision.before.bodyMd, evidenceRefs: revision.before.evidenceRefs ?? [],
               searchText: buildCommunityNoteSearchText({ title: revision.before.title, bodyMd: revision.before.bodyMd }), updatedAt: nowMs,
+              lastRunId: revision.previousRunId,
             });
           }
         }
@@ -296,8 +308,10 @@ export const undoMemoryRun = mutation({
       await ctx.db.patch(revision._id, { undoneAt: nowMs });
       undone += 1;
     }
-    await ctx.db.patch(run._id, { status: "undone" });
-    return { undone };
+    // A review whose work a later one built on stays open: undo the later one
+    // first, then this one.
+    if (kept === 0) await ctx.db.patch(run._id, { status: "undone" });
+    return { undone, kept };
   },
 });
 

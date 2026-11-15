@@ -137,7 +137,7 @@ test("a builder undoes one note or a whole night, and removed posts don't bring 
   await t.mutation(internal.communityMemory.finishMemoryReviewRunInternal, { communityId: w.communityId, runId: second.runId, nowMs: NOW });
 
   await expect(asMember.mutation(api.communityMemory.undoMemoryRun, { communityId: w.communityId, runId: second.runId })).rejects.toThrow();
-  expect(await asOwner.mutation(api.communityMemory.undoMemoryRun, { communityId: w.communityId, runId: second.runId })).toEqual({ undone: 3 });
+  expect(await asOwner.mutation(api.communityMemory.undoMemoryRun, { communityId: w.communityId, runId: second.runId })).toEqual({ undone: 3, kept: 0 });
   const notes: any = await t.run((ctx: any) => ctx.db.query("communityNotes").collect());
   expect(notes.map((note: any) => [note.slug, note.bodyMd])).toEqual([["refunds", "Refunds go through Stripe within 7 days."]]);
   expect((await t.query(internal.communityMemory.readCommunityMemoryIndexInternal, { communityId: w.communityId }))?.bodyMd).toBe("- memory/refunds.md");
@@ -165,4 +165,35 @@ test("a builder's correction makes a guide note theirs; deleting one remembers i
   expect(await observe(t, w.communityId, second.runId, [`reply:${w.reply}`], { title: "Welcome again" })).toEqual({ ok: false, code: "evidence_removed" });
   const listed = await asOwner.query(api.communityNotes.listCommunityNotes, { communityId: w.communityId });
   expect(listed.notes.map((note: any) => [note.slug, note.author_kind])).toEqual([["refunds", "builder"]]);
+});
+
+test("undoing an older review keeps what a later review wrote over it", async () => {
+  const t = convexTest(schema, modules);
+  const w = await world(t);
+  const asOwner = t.withIdentity({ subject: "owner" });
+  const first = await run(t, w.communityId);
+  await observe(t, w.communityId, first.runId, [`post:${w.open}`]);
+  await observe(t, w.communityId, first.runId, [`post:${w.open}`], { supersedes: "refunds", body: "B" });
+  await observe(t, w.communityId, first.runId, [`post:${w.open}`], { supersedes: "refunds", body: "C" });
+  await t.mutation(internal.communityMemory.writeCommunityMemoryIndexInternal, { communityId: w.communityId, runId: first.runId, bodyMd: "- memory/refunds.md", nowMs: NOW });
+  await t.mutation(internal.communityMemory.finishMemoryReviewRunInternal, { communityId: w.communityId, runId: first.runId, nowMs: NOW });
+  const second = await run(t, w.communityId);
+  await observe(t, w.communityId, second.runId, [`post:${w.open}`, `reply:${w.reply}`], { supersedes: "refunds", body: "D, from the next night." });
+  await t.mutation(internal.communityMemory.writeCommunityMemoryIndexInternal, { communityId: w.communityId, runId: second.runId, bodyMd: "- Refunds: memory/refunds.md", nowMs: NOW });
+  await t.mutation(internal.communityMemory.finishMemoryReviewRunInternal, { communityId: w.communityId, runId: second.runId, nowMs: NOW });
+
+  const result: any = await asOwner.mutation(api.communityMemory.undoMemoryRun, { communityId: w.communityId, runId: first.runId });
+  expect(result.kept).toBe(4);
+  const note: any = await t.run((ctx: any) => ctx.db.query("communityNotes").first());
+  expect(note.bodyMd).toBe("D, from the next night.");
+  expect((await t.query(internal.communityMemory.readCommunityMemoryIndexInternal, { communityId: w.communityId }))?.bodyMd).toBe("- Refunds: memory/refunds.md");
+
+  // Undoing the later night first, then the earlier one, walks the note back
+  // in order: to C, then through B and A to gone.
+  await asOwner.mutation(api.communityMemory.undoMemoryRun, { communityId: w.communityId, runId: second.runId });
+  expect(((await t.run((ctx: any) => ctx.db.query("communityNotes").first())) as any).bodyMd).toBe("C");
+  expect((await t.query(internal.communityMemory.readCommunityMemoryIndexInternal, { communityId: w.communityId }))?.bodyMd).toBe("- memory/refunds.md");
+  expect(await asOwner.mutation(api.communityMemory.undoMemoryRun, { communityId: w.communityId, runId: first.runId })).toEqual({ undone: 4, kept: 0 });
+  expect(await t.run((ctx: any) => ctx.db.query("communityNotes").collect())).toEqual([]);
+  expect(await t.query(internal.communityMemory.readCommunityMemoryIndexInternal, { communityId: w.communityId })).toBeNull();
 });
