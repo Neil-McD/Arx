@@ -358,7 +358,9 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
 ### 10. Official Polynet MCP — Keep (protected; every role in its own lens)
 
 - **Code:** `httpMcp`, `platformOperationExecutor`, `polynetCanonicalExecutor`
-  (member, moderator and builder lenses; selections), `communityOperations`
+  (works out each call's lens once and asks the lens table, `shared/lens.ts`:
+  member, builder and community lenses, what each reads and may do; selections),
+  `communityOperations`
   (a change to the community itself and its receipt in one transaction),
   `polynetCanonicalReceipts`; Vercel `api/mcp/*` (OAuth metadata, proxy).
 - **Reached by:** `/runtime/mcp`, `/.well-known/oauth-*`.
