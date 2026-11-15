@@ -244,31 +244,43 @@ person answered; here the owner pays (decided Nov 12).
 Each slice ships to staging, then Neil's acceptance. Each one that moves
 something onto the new system deletes the old path in the same slice.
 
-1. **The run entry and the worker's first job.** One run entry on Pi with
-   lens, mount, funding and one ledger. `agentWork` rows, made due by events.
-   The memory shape, `observe`, and the nightly memory review for the
-   community scope (open channels only). `memory.md` replaces the three
-   pushed notes. Builders see sources and can remove; Home shows "Learned
-   lately". *Acceptance:* a week on the seeded staging community; Neil keeps
-   most of what was learned; twenty fixed questions answered better.
-2. **Briefs.** Brief work per place; Home's and channels' right panels read
+1. **The run entry and community memory.** One run entry on Pi with lens,
+   mount, funding and one ledger. `agentWork` rows, made due by events. The
+   memory shape, `observe`, and the nightly memory review for the community
+   scope (open channels only). `memory.md` (capped at about 2,200
+   characters) replaces the three pushed notes. Memories go live at once; a
+   builder can undo one memory or a whole night, and reads each night's
+   record (what was added, changed and why). A night that finds nothing
+   writes nothing. Members see the titles in "Learned lately" on Home and
+   nothing else. *Acceptance:* a week on the seeded staging community; Neil
+   keeps most of what was learned; twenty fixed questions answered better.
+2. **Each member's own memory.** Moved up from fifth: it is what every
+   leading agent is built around. The guide writes to `/me/memory.md`
+   (capped at about 1,375 characters) during a member's talk when they ask
+   or when something is clearly worth keeping, and a nightly review per
+   member tidies it. It is loaded at the start of every talk with that
+   member. "What do you remember about me?" and "Forget that" work in chat;
+   the You page shows each line with its source. Visible only to the member
+   until they share it. When a member asks the guide to remember something
+   for everyone, it becomes a suggestion a builder approves or rejects.
+3. **Briefs.** Brief work per place; Home's and channels' right panels read
    them. The founder brief moves onto the run entry and its old pipeline is
    deleted.
-3. **Pods.** `pods/<pod>/` in the folder; pod lens; pod memory review and
+4. **Pods.** `pods/<pod>/` in the folder; pod lens; pod memory review and
    briefs; the pod panels (landing page, inside a pod).
-4. **One engine.** The tagged guide (serve worker) and then the member's
+5. **One engine.** The tagged guide (serve worker) and then the member's
    session (turn loop) move onto the run entry; their engines and ledgers are
    deleted.
-5. **People.** People facts as files; the member's own memory from their
-   private talk; the You page.
 6. **Operations declared.** Every verb with its effect and approval rule;
    two steps for destroy and broadcast; the builder's activity page.
 7. **The guide wakes.** Unanswered questions answered with sources, behind
-   the builder's dial.
-8. **Personal agents.** `observe` candidates from the MCP; parity verbs.
+   the builder's dial; after answering in a thread it follows that thread
+   without being tagged again.
+8. **Personal agents.** Parity verbs; what their `observe` proposes for
+   everyone goes into the same approval list as slice 2.
 9. **Calls.** Transcripts as evidence, with consent.
 10. **The map**, drawn from memories and their evidence, on Knowledge, Home
-    and pods.
+    and pods, with "Learned lately" under it.
 
 ## 9. Tests the system must always pass
 
