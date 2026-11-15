@@ -28,7 +28,7 @@ import {
   type CloudPodPrice,
 } from "../../../../shared/cloudCommunityPodsGateway";
 import { changeCloudMyCommunityPlan } from "../../../../shared/cloudCommunityPlanChangeGateway";
-import { Btn, cx, Icon, KitApp } from "../v1/kit";
+import { Btn, cx, Icon, KitApp, Rail } from "../v1/kit";
 import { KitPodLanding } from "../v1/KitPodLanding";
 import { PanelLine, PanelPart, PanelPeople } from "../v1/KitPanel";
 import { forgetPod, recallPod, takePodPagePreview } from "../v1/podMemory";
@@ -206,8 +206,8 @@ function PodPitch(props: WebCommunityPodsSectionProps & { podSlug: string; inlin
     } finally { setBusy(false); }
   };
   const price = plans.length ? `Included with ${plans.map((plan) => plan.name).join(" or ")}`
-    : page.price ? `+${formatPodPrice(page.price)} on top of your membership` : "Free for members";
-  const seats = page.seats_left === null || plans.length ? null : full ? "Full" : `${page.seats_left} ${page.seats_left === 1 ? "seat" : "seats"} left`;
+    : page.price ? `+${formatPodPrice(page.price)}` : "Free for members";
+  const seats = page.seats_left === null || plans.length ? null : full ? "Full" : `${page.seats_left} left`;
   const rhythm = page.rhythm ? podRhythmText(page.rhythm) : null;
   const way = page.can_enter ? (
     <Btn go onClick={() => props.onNavigate({ kind: "room", slug: page.slug })}>Open the pod</Btn>
@@ -238,12 +238,15 @@ function PodPitch(props: WebCommunityPodsSectionProps & { podSlug: string; inlin
   return (
     <div className={cx(props.inline ? "podpage land" : "land")}>
       {back}
-      <h2>{page.name}</h2>
-      {page.purpose ? <p className={cx("land-p")}>{page.purpose}</p> : null}
-      {page.what_you_get.length ? <ul className={cx("podget")}>{page.what_you_get.map((line) => <li key={line}>{line}</li>)}</ul> : null}
+      <header>
+        <h2>{page.name}</h2>
+        {page.purpose ? <p className={cx("land-p")}>{page.purpose}</p> : null}
+        {page.what_you_get.length ? <ul className={cx("podget")}>{page.what_you_get.map((line) => <li key={line}>{line}</li>)}</ul> : null}
+      </header>
       <PanelPart label="The way in">
         {rhythm ? <PanelLine>{rhythm}</PanelLine> : null}
-        <PanelLine fact={seats}>{price}</PanelLine>
+        <PanelLine fact={price}>Price</PanelLine>
+        {seats ? <PanelLine fact={seats}>Seats</PanelLine> : null}
       </PanelPart>
       {page.hosts.length ? (
         <PanelPart label="Hosted by"><PanelPeople names={page.hosts} /></PanelPart>
@@ -451,13 +454,17 @@ function PodsList(props: WebCommunityPodsSectionProps) {
       {/* The right column is the picked pod's landing page. */}
       {selected ? (
         <CommunityPageRail label="Pods">
-          <KitApp view="events" host={canManage} part="rail">
+          {/* The kit's own rail, as on Events and Knowledge: its padding, its
+              rhythm, and never wider than the column. */}
+          <KitApp view="events" host={canManage} part="rail" className="kit-page-rail">
+            <Rail index={4} label="This pod">
             {selectedMine && props.communityId ? (
               <KitPodLanding session={liveSession} communityId={props.communityId} pod={selectedMine}
                 onOpen={() => props.onNavigate({ kind: "room", slug: selectedMine.slug })} />
             ) : (
               <PodPitch {...props} podSlug={selected} inline={false} reloadKey={reloadKey} onChanged={() => void load()} />
             )}
+            </Rail>
           </KitApp>
         </CommunityPageRail>
       ) : null}

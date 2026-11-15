@@ -8,7 +8,7 @@ import { fetchCloudPod, fetchCloudPodNotes, formatPodDate, type CloudPodDetail, 
 import { formatMomentWhen } from "../../../../shared/communityHomeMoments";
 import { Btn, cx } from "./kit";
 import { BriefPart, usePlaceBrief } from "./KitBrief";
-import { PanelLearned, PanelLine, PanelPart, PanelPeople } from "./KitPanel";
+import { PanelLearned, PanelNext, PanelPart, PanelPeople } from "./KitPanel";
 
 const REPEATS: Record<string, string> = { daily: "every day", weekly: "every week", monthly: "every month" };
 const LEARNED_SHOWN = 3;
@@ -41,12 +41,14 @@ export function KitPodLanding(props: {
   const latest = [...notes].sort((a, b) => Date.parse(b.updated_at) - Date.parse(a.updated_at)).slice(0, LEARNED_SHOWN);
   return (
     <div className={cx("land")}>
-      <h2>{props.pod.name}</h2>
-      {props.pod.purpose ? <p className={cx("land-p")}>{props.pod.purpose}</p> : null}
+      <header>
+        <h2>{props.pod.name}</h2>
+        {props.pod.purpose ? <p className={cx("land-p")}>{props.pod.purpose}</p> : null}
+      </header>
       {brief ? <BriefPart brief={brief} now={now} /> : null}
       {call ? (
         <PanelPart label="Next call" fact={REPEATS[call.recurrence_frequency] ?? null}>
-          <PanelLine><h4>{formatMomentWhen(call.starts_at)}</h4></PanelLine>
+          <PanelNext title={formatMomentWhen(call.starts_at)} sub={call.title} />
         </PanelPart>
       ) : null}
       {latest.length ? (
@@ -55,7 +57,7 @@ export function KitPodLanding(props: {
         </PanelPart>
       ) : null}
       {members.length ? (
-        <PanelPart label="In this pod" fact={`${members.length} ${members.length === 1 ? "member" : "members"}`}>
+        <PanelPart label="In this pod" fact={String(members.length)}>
           <PanelPeople names={members.map((member) => member.name)} />
         </PanelPart>
       ) : null}

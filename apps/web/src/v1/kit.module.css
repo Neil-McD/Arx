@@ -756,33 +756,57 @@
 .app .brief p{margin:0;font-size:13.5px;line-height:1.55;color:var(--ink)}
 .app .brief-from{display:flex;flex-wrap:wrap;gap:4px 10px;font-size:12px;color:var(--ink3)}
 .app .brief-from button{color:inherit;cursor:pointer}.app .brief-from button:hover{color:var(--ink)}
-.app .brief p.fold{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.app .brief p.fold{display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;overflow:hidden}
 .app button.brief-more{align-self:flex-start;margin-top:-2px;font-size:12.5px;font-weight:500;color:var(--aurora-ink);cursor:pointer}
-/* A right panel's parts (mock: "Every right panel"): each a label with a
-   small fact on its right, then a line or two. */
-.app .rz{padding-top:16px;margin-top:16px;border-top:1px solid var(--line);display:flex;flex-direction:column;gap:8px}
-.app .rz:first-child{padding-top:0;margin-top:0;border-top:0}
-.app .rz>.lab{display:flex;align-items:center}
-.app .rz>.lab em{margin-left:auto;font-style:normal;font-weight:400;color:var(--ink3)}
-.app .rz h4{margin:0;font-size:15px;font-weight:600;color:var(--ink)}
-.app .ln{display:flex;align-items:center;gap:8px;min-height:26px;font-size:13px;color:var(--ink2)}
-.app .ln em{margin-left:auto;font-style:normal;font-size:12px;color:var(--ink3);white-space:nowrap}
-.app .ln .btn{margin-left:auto}
-.app .recent{display:flex;align-items:center;gap:8px;min-height:24px;font-size:13px;color:var(--ink2)}
-.app .recent i{width:6px;height:6px;border-radius:50%;background:rgb(var(--au));flex:none}
-.app .recent em{margin-left:auto;font-style:normal;font-size:12px;color:var(--ink3)}
-.app .quiet{margin:0;font-size:13px;line-height:1.5;color:var(--ink3)}
+/* A right panel's parts (mock: "Right panels, second pass"). No dividers:
+   parts are set apart by space (the rail's own gap) and type. Each is a
+   small label, with a fact after it and an action on its right, then rows
+   of one line that never wrap. */
+.app .rz{display:flex;flex-direction:column;gap:6px;min-width:0}
+.app .rz>.lab{display:flex;align-items:center;gap:8px;min-height:22px;margin-bottom:2px;font-size:11.5px;font-weight:500;letter-spacing:.01em;color:var(--ink3)}
+.app .rz>.lab em{font-style:normal;font-weight:400;opacity:.8}
+.app .rz>.lab em::before{content:"·";margin-right:8px}
+.app .rz>.lab .la{margin-left:auto}
+.app button.la,.app a.la{font-size:12px;font-weight:500;letter-spacing:0;color:var(--ink2);cursor:pointer;display:inline-flex;align-items:center;text-decoration:none}
+.app button.la:hover,.app a.la:hover{color:var(--ink)}
+.app button.la.ico{width:22px;height:22px;justify-content:center;border-radius:6px;border:1px solid var(--line2)}
+.app button.la.ico .ic{width:13px;height:13px}
+.app .ln{display:flex;align-items:center;gap:9px;min-height:28px;min-width:0;font-size:13.5px;color:var(--ink);white-space:nowrap}
+.app .ln>.t{min-width:0;overflow:hidden;text-overflow:ellipsis}
+.app .ln>.t.dim{color:var(--ink3)}
+.app .ln>em{margin-left:auto;padding-left:8px;font-style:normal;font-size:12.5px;color:var(--ink3);flex:none}
+.app .ln>.la{margin-left:auto}
+.app .ln>i.dot{width:6px;height:6px;border-radius:50%;background:rgb(var(--au));flex:none}
+.app .ln>i.dot.amber{background:#e0a84f}
+.app button.ln{width:100%;text-align:left;cursor:pointer}.app button.ln:hover>.t{text-decoration:underline;text-decoration-color:var(--line2);text-underline-offset:3px}
+.app .ln .stack .av{box-shadow:0 0 0 2px var(--panel,var(--bg))}
+/* The next thing to do: what, a small line under it, the way in on the right. */
+.app .nx{display:flex;align-items:center;gap:12px;min-width:0}
+.app .nx>div{min-width:0;display:flex;flex-direction:column;gap:1px}
+.app .nx b{font-size:15px;font-weight:600;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.app .nx small{font-size:12.5px;color:var(--ink3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.app .nx .btn{margin-left:auto;height:30px;padding:0 14px;border-radius:8px;flex:none;text-decoration:none}
+/* What needs the host, first in the panel: one row and its two answers. */
+.app .need{display:flex;align-items:center;gap:8px;font-size:13.5px;color:var(--ink2)}
+.app .need>.t{margin-right:auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.app .need>.t b{font-weight:600;color:var(--ink)}
+.app .need .btn{height:26px;padding:0 10px;font-size:12px}
+.app .needs{display:flex;flex-direction:column;gap:6px}
 /* What a panel keeps at its foot: things looked at rarely, opened in place. */
-.app .railfoot{display:flex;gap:16px;margin-top:16px;padding-top:14px;border-top:1px solid var(--line)}
+.app .railfoot{margin-top:auto;display:flex;gap:18px}
 .app .railfoot button{font-size:12.5px;color:var(--ink3);cursor:pointer}.app .railfoot button:hover,.app .railfoot button[aria-expanded="true"]{color:var(--ink)}
 /* A pod's landing page, the Pods page's right panel. */
-.app .land{display:flex;flex-direction:column;min-height:100%}
+.app .land{display:flex;flex-direction:column;gap:26px;flex:1;min-width:0;max-width:100%}
+.app .land>*{min-width:0;max-width:100%}
+.app .land header{overflow-wrap:anywhere}
+/* A panel that keeps something at its foot fills the column's height. */
+.app.part.rail-part:has(>.rail>.land),.app.part.rail-part:has(>.rail>.railfoot){display:flex;flex-direction:column}
+.app.part.rail-part>.rail:has(>.land),.app.part.rail-part>.rail:has(>.railfoot){flex:1}
 .app .land h2{margin:0;font-size:20px;font-weight:600;letter-spacing:-.01em;color:var(--ink)}
 .app .land-p{margin:6px 0 0;font-size:14px;line-height:1.5;color:var(--ink2)}
-.app .land .podget{margin-top:10px}
-.app .land .brief{margin-top:14px}
-.app .joinbar{margin-top:auto;padding-top:16px;display:flex;flex-direction:column;gap:6px}
-.app .joinbar .btn{height:38px;font-size:14px;border-radius:9px;justify-content:center}
+.app .land .podget{margin:14px 0 0}
+.app .joinbar{margin-top:auto;display:flex;flex-direction:column;gap:7px}
+.app .joinbar .btn{height:40px;font-size:14px;border-radius:10px;justify-content:center}
 .app .joinbar small{font-size:12px;color:var(--ink3);text-align:center}
 .app button.kmini-btn{width:100%;padding:0}.app button.kmini-btn:disabled{cursor:default}
 .app .kmini+.kline{margin-top:10px}
@@ -818,10 +842,6 @@
 .app .podget{margin:4px 0 0;padding-left:18px;display:flex;flex-direction:column;gap:6px;font-size:14px;color:var(--ink)}
 .app .podtag{margin-left:8px;font-size:11px;color:var(--ink3);border:1px solid var(--line2);border-radius:999px;padding:1px 7px;white-space:nowrap}
 .app .podleave{display:flex;flex-direction:column;gap:8px;margin-top:8px}
-.app .podnote{padding:6px 0;border-bottom:1px solid var(--line)}
-.app .podnote:last-of-type{border-bottom:0}
-.app .podnote-title{background:none;border:0;padding:0;font:inherit;font-size:13px;font-weight:500;color:var(--ink);cursor:pointer;text-align:left;width:100%}
-.app .podnote-title:hover{text-decoration:underline}
 .app .podnote-body{margin:8px 0 6px;font-size:13px;line-height:1.55;color:var(--ink2)}
 .app .podnote-body p{margin:0 0 8px}
 .app .podform select{padding:7px 10px;border-radius:8px;border:1px solid var(--line2);background:var(--field);color:var(--ink);font:inherit;font-size:13px}
