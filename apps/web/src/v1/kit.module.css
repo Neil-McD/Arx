@@ -907,6 +907,8 @@
 .app .kresadd input:focus{border-color:var(--line2)}
 .app .kresadd input::placeholder{color:var(--ink3)}
 .app .krow .from .btn.sm{height:24px;padding:0 8px;font-size:12px}
+.app .kedit-bar{flex-wrap:wrap;row-gap:8px}
+.app .kedit-pub{white-space:nowrap}
 @media (max-width:720px){.app .kresadd{grid-template-columns:minmax(0,1fr)}}
 
 /* Kit addition: arranging the shelf (two arrows on each book) and moving a
