@@ -59,6 +59,7 @@ async function renderPod(ctx: any, args: { communityId: any; lens: LensName }, c
     const call = await nextPodCall(ctx, channel._id, Date.now());
     if (call) lines.push(`- Next call: ${call.title}, ${call.starts_at}`);
     lines.push(`- Its room: channels/${String(channel.slug ?? "")}/`);
+    lines.push(`- What it knows: pods/${String(channel.slug ?? "")}/memory.md`);
     if (args.lens === "builder_private" || args.lens === "builder_own_ai") {
       const waiting = (await ctx.db.query("communityPodRequests").withIndex("by_channel_status", (q: any) => q.eq("channelId", channel._id).eq("status", "pending")).take(100)).length;
       if (waiting) lines.push(`- Waiting to join: ${waiting}`);
@@ -98,6 +99,6 @@ export const readPodFactsInternal = internalQuery({
     const record = await podRecord(ctx, args.communityId, channel._id);
     const sight = await sightOf(ctx, args, channel, record);
     if (!sight) return null;
-    return { body: await renderPod(ctx, args, channel, record, sight), inside: sight === "inside" };
+    return { body: await renderPod(ctx, args, channel, record, sight), inside: sight === "inside", roomId: String(channel._id) };
   },
 });

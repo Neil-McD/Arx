@@ -18,7 +18,7 @@ import {
   normalizeCommunityAgentConciergeToolArguments,
   type CommunityAgentConciergeToolName,
 } from "../shared/communityAgentConciergeTools";
-import type { NativeToolAwareCompletionSuccess } from "../shared/nativeToolProtocol";
+import type { NativeToolAwareCompletionSuccess, NativeToolChoice } from "../shared/nativeToolProtocol";
 import { runPiRuntimeKernel } from "../shared/piRuntimeKernel";
 import {
   DEFAULT_RUNTIME_KERNEL_BUDGET,
@@ -116,6 +116,9 @@ export async function runFundedCommunityAgent(args: {
   // What the run's log says about a call (by default, the tool's name).
   describeToolCall?: (toolName: string, args: Record<string, unknown>) => string;
   maxConsecutiveFailures?: number;
+  // The first model request's tool choice, e.g. a review that must write
+  // (its one write may be empty).
+  firstToolChoice?: NativeToolChoice<CommunityAgentConciergeToolName>;
 }): Promise<CommunityAgentRunResult> {
   const tools = buildCommunityAgentConciergeFunctionTools();
   let usage = createFounderInferenceUsageTotals("");
@@ -134,6 +137,7 @@ export async function runFundedCommunityAgent(args: {
   };
 
   let completion: any;
+  let requests = 0;
   try {
     await args.beforeEachCompletion?.();
     const admittedModelId = await args.ctx.runQuery(internalRefs.founderInference.resolveCommunityInferenceModelInternal, {
@@ -181,12 +185,13 @@ export async function runFundedCommunityAgent(args: {
             await markCommunityInferenceFundingSessionProviderStarted({ ctx: args.ctx, session: fundingSession });
             providerStarted = true;
           }
+          const toolChoice = options?.toolChoice ?? (requests++ === 0 ? args.firstToolChoice : undefined);
           toolCompletion = await runOpenAiNativeToolCompletion({
             modelId: fundingSession.modelId,
             messages: kernelMessages,
             maxTokens: args.maxOutputTokens,
             tools,
-            ...(options?.toolChoice ? { toolChoice: options.toolChoice } : {}),
+            ...(toolChoice ? { toolChoice } : {}),
             parallelToolCalls: false,
             promptCacheKey: args.promptCacheKey,
           });

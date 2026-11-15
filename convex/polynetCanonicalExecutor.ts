@@ -985,7 +985,8 @@ async function executeCanonicalList(args: {
 
   const podPath = parseCommunityPodPath(target.localPath);
   if (podPath) {
-    if (!reads(args, target, "pods") || podPath.kind === "pod_facts") return canonicalError("semantic_not_found", "Repository path not found or not accessible.");
+    if (!reads(args, target, "pods") || (podPath.kind !== "pods" && podPath.kind !== "pod" && podPath.kind !== "pod_memory"))
+      return canonicalError("semantic_not_found", "Repository path not found or not accessible.");
     const lens = lensOf(args, target);
     if (podPath.kind === "pods") {
       const pods = await args.ctx.runQuery((internal as any).communityPodFacts.listPodsForLensInternal,
@@ -997,9 +998,23 @@ async function executeCanonicalList(args: {
     const pod = await args.ctx.runQuery((internal as any).communityPodFacts.readPodFactsInternal,
       { communityId: target.communityId, userId: args.userId, lens: lens.name, slug: podPath.slug, ...(lens.podRoomId ? { podRoomId: lens.podRoomId } : {}) });
     if (!pod) return canonicalError("semantic_not_found", "Repository path not found or not accessible.");
+    const podBase = `${POLYNET_PODS_DIRECTORY_PATH}${podPath.slug}/`;
+    // A pod's memory: inside only, like everything else in it.
+    if (podPath.kind === "pod_memory") {
+      if (!pod.inside) return canonicalError("semantic_not_found", "Repository path not found or not accessible.");
+      const listed = await args.ctx.runQuery((internal as any).communityNotes.listCommunityNotesInternal,
+        { communityId: target.communityId, podRoomId: pod.roomId, limit: 50 }) as { notes: any[]; hasMore: boolean };
+      return { ok: true, value: virtualDirectory({ path: absolutePath, entries: listed.notes.map((note) => ({
+        path: mountedPath(target.communitySlug, `${podBase}memory/${note.slug}.md`), kind: "document", title: note.title,
+        updated_at: new Date(note.updatedAt).toISOString() })), truncated: listed.hasMore }) };
+    }
     return { ok: true, value: virtualDirectory({ path: absolutePath, entries: [
-      { path: mountedPath(target.communitySlug, `${POLYNET_PODS_DIRECTORY_PATH}${podPath.slug}/pod.md`), kind: "document", type: "pod_facts" },
-      ...(pod.inside ? [{ path: mountedPath(target.communitySlug, `/channels/${podPath.slug}/`), kind: "directory", type: "channel", name: "Its room" }] : []),
+      { path: mountedPath(target.communitySlug, `${podBase}pod.md`), kind: "document", type: "pod_facts" },
+      ...(pod.inside ? [
+        { path: mountedPath(target.communitySlug, `/channels/${podPath.slug}/`), kind: "directory", type: "channel", name: "Its room" },
+        { path: mountedPath(target.communitySlug, `${podBase}memory.md`), kind: "document", type: "pod_memory_index", name: "What it knows, in short" },
+        { path: mountedPath(target.communitySlug, `${podBase}memory/`), kind: "directory", type: "pod_memory", name: "Its notes" },
+      ] : []),
     ] }) };
   }
 
@@ -1581,12 +1596,24 @@ async function executeCanonicalRead(args: {
 
   const podFacts = parseCommunityPodPath(target.localPath);
   if (podFacts) {
-    if (podFacts.kind !== "pod_facts" || !reads(args, target, "pods")) return canonicalError("semantic_not_found", "Repository path not found or not accessible.");
+    const readable = podFacts.kind === "pod_facts" || podFacts.kind === "pod_memory_index" || podFacts.kind === "pod_memory_note";
+    if (!readable || !reads(args, target, "pods")) return canonicalError("semantic_not_found", "Repository path not found or not accessible.");
     const lens = lensOf(args, target);
     const pod = await args.ctx.runQuery((internal as any).communityPodFacts.readPodFactsInternal,
       { communityId: target.communityId, userId: args.userId, lens: lens.name, slug: podFacts.slug, ...(lens.podRoomId ? { podRoomId: lens.podRoomId } : {}) });
     if (!pod) return canonicalError("semantic_not_found", "Repository path not found or not accessible.");
-    return { ok: true, value: { path: mountedPath(target.communitySlug, target.localPath), body: pod.body, writable: false } };
+    const path = mountedPath(target.communitySlug, target.localPath);
+    if (podFacts.kind === "pod_facts") return { ok: true, value: { path, body: pod.body, writable: false } };
+    // A pod's memory: inside only.
+    if (!pod.inside) return canonicalError("semantic_not_found", "Repository path not found or not accessible.");
+    if (podFacts.kind === "pod_memory_index") {
+      const index = await args.ctx.runQuery((internal as any).communityMemory.readCommunityMemoryIndexInternal, { communityId: target.communityId, podRoomId: pod.roomId });
+      return { ok: true, value: { path, body: index?.bodyMd ?? "_Nothing yet._", writable: false } };
+    }
+    const note = await args.ctx.runQuery((internal as any).communityNotes.readCommunityNoteInternal,
+      { communityId: target.communityId, podRoomId: pod.roomId, slug: (podFacts as any).note });
+    if (!note) return canonicalError("semantic_not_found", "Repository path not found or not accessible.");
+    return { ok: true, value: { path, body: `# ${note.title}\n\n${note.bodyMd}`, writable: false } };
   }
 
   if (target.localPath === PERSONAL_MEMORY_PATH) {

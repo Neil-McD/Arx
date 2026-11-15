@@ -228,8 +228,58 @@ async function ensureSettersChannel(ctx: any, communityId: any, createdByUserId:
     await setChannelParticipantCore(ctx, { communityId, channelId: channel._id, createdByUserId,
       active: true, target: { kind: "member", userId: ids[key] } });
   }
+  await ensureSettersPod(ctx, communityId, channel, createdByUserId, ids, nowMs);
   return channel;
 }
+
+const SETTERS_POD_POSTS: Array<{ key: string; by: MemberKey; text: string }> = [
+  { key: "rota", by: "maya", text: "Reset rota from now on: I set Tuesdays, Priya sets Thursdays. Whoever sets strips the old holds by 9pm the night before." },
+  { key: "tape", by: "priya", text: "Agreed for good: comp problems get blue tape, everyday problems keep white. Grades go on the tape in pencil until the round is over." },
+  { key: "brushes", by: "maya", text: "The new boar-hair brushes live in the setters' cupboard, top shelf. Put them back after a reset so we stop losing them." },
+];
+
+// The Setters room is a pod (listed, hosted by Maya) with the guide in it, so
+// it keeps its own memory (pods slice C).
+async function ensureSettersPod(ctx: any, communityId: any, channel: any, createdByUserId: any, ids: Record<MemberKey, any>, nowMs: number) {
+  const record = await ctx.db.query("communityPods")
+    .withIndex("by_community_channel", (q: any) => q.eq("communityId", communityId).eq("channelId", channel._id)).first();
+  const fields = { purpose: "The route setters plan resets and the comp.", visibility: "listed" as const, hostUserIds: [ids.maya], updatedAt: nowMs };
+  if (record) await ctx.db.patch(record._id, fields);
+  else await ctx.db.insert("communityPods", { communityId, channelId: channel._id, ...fields, createdAt: nowMs });
+  await setChannelParticipantCore(ctx, { communityId, channelId: channel._id, createdByUserId, active: true, target: { kind: "community_agent" } });
+}
+
+// Staging: make the Setters room a pod with the guide in it, without
+// re-seeding (which would clear the posts memory notes cite).
+export const seedSunriseSettersPodInternal = internalMutation({
+  args: { communityId: v.id("communities") },
+  handler: async (ctx: any, args) => {
+    assertSeedAllowed();
+    const community = await ctx.db.get(args.communityId);
+    if (!community) throw new Error("community_not_found");
+    const channel = await ctx.db.query("communityChannels")
+      .withIndex("by_community_status_normalizedName", (q: any) =>
+        q.eq("communityId", args.communityId).eq("status", "active").eq("normalizedName", "setters")).first();
+    if (!channel || channel.accessMode !== "restricted") throw new Error("seed_setters_channel_missing");
+    const ids = await seedUserIds(ctx);
+    const nowMs = Date.now();
+    await ensureSettersPod(ctx, args.communityId, channel, community.ownerId, ids, nowMs);
+    // A few lasting things the setters agreed (once each, by key).
+    let added = 0;
+    for (const [i, post] of SETTERS_POD_POSTS.entries()) {
+      const key = `sunrise-setters-pod:${post.key}`;
+      const exists = (await ctx.db.query("communityInteractionRoots").withIndex("by_channel_updatedAt", (q: any) => q.eq("channelId", channel._id)).collect())
+        .some((row: any) => row.idempotencyKey === key);
+      if (exists) continue;
+      const at = nowMs - (SETTERS_POD_POSTS.length - i) * 60_000;
+      await ctx.db.insert("communityInteractionRoots", { communityId: args.communityId, channelId: channel._id, actorType: "human",
+        actorUserId: ids[post.by], kind: "discussion", status: "live", visibilityScope: "community", contentSummary: post.text,
+        replyCount: 0, reactionSummary: [], idempotencyKey: key, createdAt: at, updatedAt: at });
+      added += 1;
+    }
+    return { roomId: String(channel._id), postsAdded: added };
+  },
+});
 
 // ---------- clearing the previous seed's activity ----------
 
