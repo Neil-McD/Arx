@@ -120,3 +120,20 @@ test("a pod's hosts may undo its memory; not the community's", async () => {
   await expect(host.mutation(api.communityMemory.undoLearnedNote, { communityId: w.communityId, slug: "community-note" })).rejects.toThrow(/community_forbidden/);
   await expect(host.mutation(api.communityMemory.undoLearnedNote, { communityId: w.communityId, slug: "x", podRoomId: String(w.foundersId) })).rejects.toThrow();
 });
+
+test("taking the guide out of a pod stops a review already under way from writing", async () => {
+  const t = convexTest(schema, modules);
+  const w = await world(t);
+  const { runId } = await t.mutation(internal.communityMemory.openMemoryReviewRunInternal,
+    { communityId: w.communityId, windowStart: NOW, windowEnd: NOW + 100, nowMs: NOW, podRoomId: String(w.climbersId) });
+  await t.run(async (ctx: any) => {
+    const seat = await ctx.db.query("communityChannelParticipants").withIndex("by_channel_principal", (q: any) => q.eq("channelId", w.climbersId).eq("principalKey", "community_agent")).first();
+    await ctx.db.patch(seat._id, { status: "revoked" });
+  });
+  expect(await t.mutation(internal.communityMemory.observeCommunityMemoryInternal, { communityId: w.communityId, runId, title: "Session log",
+    body: "Log every session.", evidenceRefs: [`post:${w.climbPost}`], nowMs: NOW + 200 })).toEqual({ ok: false, code: "run_not_open" });
+  expect(await t.mutation(internal.communityMemory.writeCommunityMemoryIndexInternal, { communityId: w.communityId, runId, bodyMd: "- x", nowMs: NOW + 200 }))
+    .toEqual({ ok: false, code: "run_not_open" });
+  const left = await t.run(async (ctx: any) => (await notesByUpdated(ctx, podScopeKey(w.climbersId)).collect()).length);
+  expect(left).toBe(0);
+});
