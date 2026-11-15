@@ -31,6 +31,8 @@ function normalizeSourceFormatting(source: string): string {
 }
 
 const worker = normalizeSourceFormatting(workerSource);
+// The funded run itself is the shared run entry (docs/specs/agent-system-end-state.md §3.4).
+const run = normalizeSourceFormatting(readFileSync(join(root, "convex/communityAgentRun.ts"), "utf8"));
 const claimBlock = normalizeSourceFormatting(
   exportedFunctionBlock(workerSource, "claimNextCommunityAgentServeRequestInternal"),
 );
@@ -213,21 +215,26 @@ assert.match(
 
 assert.match(
   actionBlock,
-  /requestId: v\.optional\(v\.id\("communityAgentServeRequests"\)\)[\s\S]*iterationLimit = args\.requestId \? 1 : limit[\s\S]*runPiRuntimeKernel<CommunityAgentConciergeToolName>\(\{[\s\S]*inputBudget:[\s\S]*runCompletion: async[\s\S]*claimCommunityInferenceFundingSession\([\s\S]*surface: "community_agent_mention"[\s\S]*markCommunityInferenceFundingSessionProviderStarted\([\s\S]*runOpenAiNativeToolCompletion\(\{[\s\S]*modelId: fundingSession\.modelId/,
-  "serve action should admit model input before claiming canonical hosted funding and starting the provider",
-);
-assert.doesNotMatch(
-  actionBlock,
-  /claimCommunityInferenceReceiptInternal|markCommunityInferenceProviderStartedInternal|finalizeCommunityInferenceFailureInternal/,
-  "serve action should not duplicate the canonical inference receipt lifecycle",
+  /requestId: v\.optional\(v\.id\("communityAgentServeRequests"\)\)[\s\S]*iterationLimit = args\.requestId \? 1 : limit[\s\S]*runFundedCommunityAgent\(\{[\s\S]*surface: "community_agent_mention"/,
+  "serve action should run the tag as a funded community-agent run on the mention surface",
 );
 assert.match(
-  actionBlock,
+  run,
+  /runPiRuntimeKernel<CommunityAgentConciergeToolName>\(\{[\s\S]*inputBudget:[\s\S]*runCompletion: async[\s\S]*claimCommunityInferenceFundingSession\([\s\S]*surface: args\.surface[\s\S]*markCommunityInferenceFundingSessionProviderStarted\([\s\S]*runOpenAiNativeToolCompletion\(\{[\s\S]*modelId: fundingSession\.modelId/,
+  "the run entry should admit model input before claiming canonical hosted funding and starting the provider",
+);
+for (const source of [actionBlock, run]) assert.doesNotMatch(
+  source,
+  /claimCommunityInferenceReceiptInternal|markCommunityInferenceProviderStartedInternal|finalizeCommunityInferenceFailureInternal/,
+  "the run should not duplicate the canonical inference receipt lifecycle",
+);
+assert.match(
+  run,
   /runCompletion: async[\s\S]*if \(!providerStarted\)[\s\S]*markCommunityInferenceFundingSessionProviderStarted\([\s\S]*providerStarted = true[\s\S]*runOpenAiNativeToolCompletion/,
   "provider start should be persisted once immediately before the first OpenAI request",
 );
 assert.match(
-  actionBlock,
+  run,
   /catch \(error\) \{[\s\S]*if \(providerStarted && !founderInferenceBudgetFailureCode\(error\)\) usage\.complete = false[\s\S]*observeFounderProviderResult\(usage, toolCompletion,\s*toolCompletion\.ok === false && providerFailureIsKnownPreSpend\(toolCompletion\.code\)\)/,
   "unknown provider crashes and returned failures should settle conservatively",
 );
@@ -243,8 +250,8 @@ assert.match(
   "serve worker tools should execute as the server-resolved requester and within the single serve-request community",
 );
 assert.match(
-  worker,
-  /isCommunityAgentConciergeToolName[\s\S]*unsupported_concierge_tool[\s\S]*normalizeCommunityAgentConciergeToolArguments/,
+  run,
+  /unsupported_concierge_tool[\s\S]*isCommunityAgentConciergeToolName[\s\S]*normalizeCommunityAgentConciergeToolArguments/,
   "serve worker should reject model-requested tools outside the Concierge allowlist before execution",
 );
 assert.match(
@@ -275,7 +282,7 @@ assert.match(
 assert.doesNotMatch(servePrompt, /Thread root:\\n|Mentioned reply:\\n|Mentioned post:\\n/);
 assert.match(
   actionBlock,
-  /const servePromptBundle = buildCommunityAgentServePromptBundle\(context\)[\s\S]*const initialMessages = servePromptBundle\.messages[\s\S]*version: 2[\s\S]*prompt_sections: servePromptBundle\.systemPromptBundle\.sections[\s\S]*recordCommunityAgentServeContextSnapshotInternal[\s\S]*runPiRuntimeKernel<CommunityAgentConciergeToolName>\(\{[\s\S]*messages: initialMessages[\s\S]*inputBudget:[\s\S]*runCompletion: async \(kernelMessages, options\)[\s\S]*claimCommunityInferenceFundingSession[\s\S]*runOpenAiNativeToolCompletion\(\{[\s\S]*messages: kernelMessages/,
+  /const servePromptBundle = buildCommunityAgentServePromptBundle\(context\)[\s\S]*const initialMessages = servePromptBundle\.messages[\s\S]*version: 2[\s\S]*prompt_sections: servePromptBundle\.systemPromptBundle\.sections[\s\S]*recordCommunityAgentServeContextSnapshotInternal[\s\S]*runFundedCommunityAgent\(\{[\s\S]*messages: initialMessages/,
   "the exact audited initial messages should be persisted and budgeted before funding, then the admitted kernel projection should reach the provider",
 );
 assert.match(
@@ -346,9 +353,13 @@ assert.match(
   "serve worker should persist deterministic error state on failed serve requests",
 );
 assert.match(
+  run,
+  /catch \(error\)[\s\S]*const failureCode = founderInferenceBudgetFailureCode\(error\) \?\? \(providerStarted[\s\S]*return \{ ok: false, failureCode, providerStarted \}/,
+  "the run entry should turn provider exceptions into a failure code",
+);
+assert.match(
   actionBlock,
-  /catch \(error\)[\s\S]*const failureCode = founderInferenceBudgetFailureCode\(error\) \?\? \(providerStarted[\s\S]*errorCode: failureCode[\s\S]*catch \(error\)[\s\S]*errorCode: "serve_finalize_exception"/,
-  "serve worker should mark provider and finalize exceptions as deterministic request errors",
+  /if \(!run\.ok\)[\s\S]*const failureCode = run\.failureCode[\s\S]*errorCode: failureCode[\s\S]*catch \(error\)[\s\S]*errorCode: "serve_finalize_exception"/,
 );
 assert.doesNotMatch(
   crons,
