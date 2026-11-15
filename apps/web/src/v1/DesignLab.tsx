@@ -3,6 +3,7 @@
 // pixel before real pages move onto the kit. Reached at /design-lab.
 import {
   Btn,
+  cx,
   Chips,
   Cover,
   Dock,
@@ -29,6 +30,7 @@ import {
   Ask,
 } from "./kit";
 import { BriefPart } from "./KitBrief";
+import { PanelLearned, PanelLine, PanelPart, PanelPeople } from "./KitPanel";
 import { KitChannelFeed } from "./KitChannelFeed";
 
 const BANNER = "/design-lab/polynet-earth.webp";
@@ -179,7 +181,7 @@ function HostChannel() {
 }
 
 // The guide's brief as the panels draw it: Home's (its channels open, a
-// builder can hide it) and a pod's (plain).
+// long one folds) and a pod's (plain).
 function BriefPanels() {
   const now = Date.now();
   return (
@@ -187,7 +189,7 @@ function BriefPanels() {
       <HostSide />
       <Main><Top /></Main>
       <Rail index={1} label="The guide's brief">
-        <BriefPart now={now} onOpenChannel={() => undefined} onHide={async () => undefined} brief={{
+        <BriefPart now={now} onOpenChannel={() => undefined} brief={{
           summary: "Most of the talk is about getting a first paid pod out the door: pricing it, and what the launch post should say. Stripe payouts are the sticking point for a couple of people, and Friday's build call is where it's all headed.",
           channels: [{ slug: "general", name: "general" }, { slug: "wins", name: "wins" }],
           updated_at: new Date(now - 3 * 3_600_000).toISOString(),
@@ -203,6 +205,73 @@ function BriefPanels() {
   );
 }
 
+// The Pods page: one card is always picked and the right column is its
+// landing page. join: a pod the viewer could join is picked (its pitch).
+function PodsPage(props: { join: boolean }) {
+  const now = Date.now();
+  const card = (name: string, purpose: string, meta: string, picked: boolean, locked = false) => (
+    <button type="button" className={cx(picked ? `podcard${locked ? " podout" : ""} podsel` : `podcard${locked ? " podout" : ""}`)}>
+      <span className={cx("podname")}>{name}</span>
+      <span className={cx("podpurpose")}>{purpose}</span>
+      <span className={cx("podmeta")}>{meta}</span>
+    </button>
+  );
+  return (
+    <KitApp view="wins" host fillWindow scale={labScale()} banner={BANNER} bannerPosition="72% 38%" aura={0.08}>
+      <HostSide />
+      <Main>
+        <Top title="Pods" titleView={1} />
+        <View index={1}>
+          <div style={{ padding: "8px 44px 18px" }}>
+            <KitApp view="wins" part="flow">
+              <p className={cx("lead")} style={{ marginTop: 0 }}>Your pods.</p>
+              <div className={cx("podgrid")}>
+                {card("Setters", "The route setters plan resets and the comp.", "3 members · Active 2 h ago", !props.join)}
+                {card("Dawn patrol", "The 6am crew. Projects, beta and coffee.", "8 members · Active yesterday", false)}
+              </div>
+              <span className={cx("lab")} style={{ display: "block", marginTop: 32 }}>Pods you can join</span>
+              <div className={cx("podgrid")}>
+                {card("Comp team", "Training for the spring comp, with weekly feedback.", "Hosted by Maya Chen · 3 seats left", props.join, true)}
+              </div>
+            </KitApp>
+          </div>
+        </View>
+      </Main>
+      <Rail index={1} label="Pods">
+        {props.join ? (
+          <div className={cx("land")}>
+            <h2>Comp team</h2>
+            <p className={cx("land-p")}>Training for the spring comp, with weekly feedback.</p>
+            <ul className={cx("podget")}><li>Weekly call with the host</li><li>Feedback on your sends</li><li>The pod's own notes and call takeaways</li></ul>
+            <PanelPart label="The way in">
+              <PanelLine>Meets every week · next Tue 7:00 pm</PanelLine>
+              <PanelLine fact="3 seats left">Free for members</PanelLine>
+            </PanelPart>
+            <PanelPart label="Hosted by"><PanelPeople names={["Maya Chen"]} /></PanelPart>
+            <div className={cx("joinbar")}><Btn go>Ask to join</Btn><small>The host reviews each request.</small></div>
+          </div>
+        ) : (
+          <div className={cx("land")}>
+            <h2>Setters</h2>
+            <p className={cx("land-p")}>The route setters plan resets and the comp.</p>
+            <BriefPart now={now} brief={{
+              summary: "The setters have settled a clear reset routine: Maya takes Tuesdays, Priya Thursdays, and old holds come off by the night before. Comp problems use blue tape, everyday ones white, with grades pencilled in until the round ends.",
+              channels: [], updated_at: new Date(now - 14 * 60_000).toISOString(),
+            }} />
+            <PanelPart label="Next call" fact="every week"><PanelLine><h4>Tue 7:00 pm</h4></PanelLine></PanelPart>
+            <PanelPart label="What this pod knows" fact="2">
+              <PanelLearned title="Reset rota" when="Nov 15" />
+              <PanelLearned title="Tape colours for comps" when="Nov 15" />
+            </PanelPart>
+            <PanelPart label="In this pod" fact="3 members"><PanelPeople names={["Maya Chen", "Priya Raman", "Neil McDevitt"]} /></PanelPart>
+            <div className={cx("joinbar")}><Btn go>Open the pod</Btn></div>
+          </div>
+        )}
+      </Rail>
+    </KitApp>
+  );
+}
+
 // ?scale=1.25 draws the lab larger, to try a size for big monitors.
 function labScale(): number {
   if (typeof window === "undefined") return 1;
@@ -212,5 +281,5 @@ function labScale(): number {
 
 export function DesignLab() {
   const page = typeof window === "undefined" ? "" : new URLSearchParams(window.location.search).get("page");
-  return page === "channel" ? <HostChannel /> : page === "brief" ? <BriefPanels /> : <HostHomeQuiet />;
+  return page === "channel" ? <HostChannel /> : page === "brief" ? <BriefPanels /> : page === "pods" ? <PodsPage join={false} /> : page === "pods-join" ? <PodsPage join /> : <HostHomeQuiet />;
 }
