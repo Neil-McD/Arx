@@ -2,7 +2,8 @@ import { internal } from "./_generated/api";
 import { loadCommunityTurnLayers } from "../shared/communityTurnLayers";
 import { buildCommunityTurnContract, checkCommunityTurnToolCall, COMMUNITY_TURN_HISTORY_TURNS, summarizeCommunityTurnContract } from "../shared/communityTurnContract";
 import type { FounderProviderRequestUsage } from "../shared/founderInference";
-import { normalizeCommunityResourceRuntimeLaneState } from "../shared/communityResourceLane";
+import { buildCommunityResourceRuntimeLaneState } from "../shared/communityResourceLane";
+import { LENS_FAMILY } from "../shared/lens";
 import {
   appendRuntimeToolCallFinished,
   appendRuntimeToolCallStarted,
@@ -254,15 +255,10 @@ async function executeRetrievalAgentLoop(
   },
 ): Promise<RuntimeAgentLoopSuccess | RuntimeAgentLoopFailure> {
   const now = new Date();
-  const communityResourceLane = normalizeCommunityResourceRuntimeLaneState(
-    await params.ctx.runQuery(
-      internal.runtimeCommunityResourceLane.resolveRuntimeCommunityResourceLaneInternal,
-      {
-        userId: params.userId as any,
-        authSubject: params.authSubject ?? undefined,
-        communityId: params.communityId ? (params.communityId as any) : undefined,
-      },
-    ),
+  // The resources lane follows the talk's lens: builders get the builder
+  // lane (and the resources architect); members read live resources.
+  const communityResourceLane = buildCommunityResourceRuntimeLaneState(
+    !params.communityLens ? "none" : LENS_FAMILY[params.communityLens.lens] === "builder" ? "builder" : "member",
   );
   const resolvedHarness = composeResolvedRuntimeHarness({
     communityResourceLane,
@@ -282,7 +278,7 @@ async function executeRetrievalAgentLoop(
     threadId: params.threadId ?? null,
     communityId: params.communityId ?? null,
     communityResourceLane: resolvedHarness.communityResourceLane,
-    communityLensAuthority: params.communityLensAuthority ?? null,
+    communityLens: params.communityLens ?? null,
     allowedToolNames: effectiveAllowedToolNames,
     communityAgentSurfaceContext: params.communityAgentSurfaceContext,
   });
@@ -423,7 +419,7 @@ async function executeRetrievalAgentLoop(
     communityAbout: params.communityAbout,
     communityChannels: params.communityChannels,
     communitySystemPrompt: params.communitySystemPrompt,
-    communityLensAuthority: params.communityLensAuthority,
+    communityLens: params.communityLens,
     runtimeTurnContext,
     currentDateTimeIso: runtimeDateTimeIso,
     currentDateLabel: runtimeDateLabel,

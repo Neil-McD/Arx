@@ -283,8 +283,9 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
 - **Deleted Oct 28 (POL-21, Neil):** skills and the skill harness (skill packages,
   community skill attachments, platform and personal skills, `harnessMounts`,
   `harnessSkills`, `runtimeSkillResolution`, `platformSkillRuntime`). What stays:
-  `runtimeCommunityResourceLane` resolves each turn's resource lane (fails closed
-  without community entry; a community site always gets the member lane), and
+  each turn's resource lane follows the private talk's lens (`TalkLens` in
+  `shared/lens.ts`, worked out once in `communityAgent`; fails closed without
+  community entry), and
   `runtimeHarnessComposition` adds the resources architect instructions
   (`shared/communityResourcesArchitect.ts`) to builder-lane turns only.
 

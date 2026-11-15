@@ -187,8 +187,48 @@ export function guideRunLens(evidenceSurface: string | null | undefined): "guide
   return evidenceSurface === "community_concierge" ? "guide_public" : "member_private";
 }
 
-// People facts (convex/communityPersonFacts.ts): the guide in public sees
-// people as any member does; everyone else at their own lens.
-export function peopleLensFor(lens: Lens): "public" | "viewer" {
-  return lens.family === "community" ? "public" : "viewer";
+// A private talk's lens, worked out once when the turn starts (from the same
+// authority the executor checks every call against) and who the person is.
+export type TalkLens = {
+  lens: "member_private" | "builder_private";
+  relation: "owner" | "admin" | "moderator" | "member";
+};
+
+const RELATIONS = new Set(["owner", "admin", "moderator", "member"]);
+
+export function parseTalkLens(value: unknown): TalkLens | null {
+  const record = value && typeof value === "object" ? value as Record<string, unknown> : {};
+  const lens = record.lens === "member_private" || record.lens === "builder_private" ? record.lens : null;
+  const relation = RELATIONS.has(String(record.relation)) ? record.relation as TalkLens["relation"] : null;
+  return lens && relation ? { lens, relation } : null;
+}
+
+// What the guide is told about the lens it is working in. Orientation only:
+// the executor checks every call.
+export function renderTalkLensForPrompt(talk: TalkLens | null | undefined): string | null {
+  if (!talk) return null;
+  const builder = talk.lens === "builder_private";
+  const does = (Object.keys(LENS_CALLS) as LensAction[]).filter((action) => LENS_CALLS[action].includes(talk.lens));
+  return [
+    "COMMUNITY_LENS_AUTHORITY",
+    `Lens: ${talk.lens}. You are talking privately with ${talk.relation === "member" ? "a member" : `the community's ${talk.relation}`}.`,
+    builder
+      ? "You can see what builders see: the builder records, every member's plan and notes, and the guide's memory."
+      : "You can see what a member sees, their own context and the guide's memory. Never another member's plan, payments or notes.",
+    `You can act for them on: ${does.length > 0 ? does.join(", ") : "nothing"}.`,
+    "Reviewing join requests, removing posts and changing members or settings are done by the person through their own AI, never in this talk.",
+    "This is orientation only. Backend checks and your tools remain authoritative.",
+  ].join("\n");
+}
+
+// How a lens sees one person (people facts, convex/communityPersonFacts.ts):
+// - member: what any member sees; the guide in public always sees this;
+// - self: a person about themselves (adds when they joined);
+// - builder: owners and admins (adds plan, state and their notes).
+export type PersonView = "member" | "self" | "builder";
+
+export function personViewFor(family: LensFamily | null, isSelf: boolean): PersonView {
+  if (family === "community" || family === null) return "member";
+  if (isSelf) return "self";
+  return family === "builder" ? "builder" : "member";
 }

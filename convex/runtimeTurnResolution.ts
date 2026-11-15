@@ -2,15 +2,11 @@ import { api, internal } from "./_generated/api";
 import { parseCommunityConversationIdentity } from "../shared/communityConversationIdentity";
 import { type RetrievalToolName } from "../shared/retrievalTools";
 import type { ThreadWorkingStatePrompt } from "../shared/runtimePrompt";
-import { LENS_TOOLS, guideRunLens } from "../shared/lens";
+import { LENS_TOOLS, guideRunLens, parseTalkLens, type TalkLens } from "../shared/lens";
 import {
   normalizeRuntimeEngine,
   type RuntimeEngine,
 } from "../shared/runtimeEngine";
-import {
-  normalizeCommunityLensAuthority,
-  type CommunityLensAuthority,
-} from "../shared/communityLensAuthority";
 import {
   asRuntimeMessages,
   normalizeMaxTokens,
@@ -100,7 +96,7 @@ export type RuntimeTurnResolution = {
   runtimeCommunityAbout: string | null;
   runtimeCommunityChannels: Array<{ slug: string; name: string }>;
   runtimeCommunitySystemPrompt: string | null;
-  runtimeCommunityLensAuthority: CommunityLensAuthority | null;
+  runtimeCommunityLens: TalkLens | null;
   allowedToolNames: RetrievalToolName[];
   invocationSurface: RuntimeInvocationSurface;
   communityAgentSurfaceContext: CommunityAgentSurfaceContextV1 | null;
@@ -437,7 +433,7 @@ export async function resolveAuthenticatedRuntimeTurn(args: {
   let runtimeCommunityAbout: string | null = null;
   let runtimeCommunityChannels: Array<{ slug: string; name: string }> = [];
   let runtimeCommunitySystemPrompt: string | null = null;
-  let runtimeCommunityLensAuthority: CommunityLensAuthority | null = null;
+  let runtimeCommunityLens: TalkLens | null = null;
   const threadCommunityId = String(ownedThread.communityId ?? "").trim();
   if (
     invocationSurface === "member_agent_dock" &&
@@ -473,7 +469,7 @@ export async function resolveAuthenticatedRuntimeTurn(args: {
         community_about?: unknown;
         community_channels?: unknown;
         community_system_prompt?: unknown;
-        community_lens_authority?: unknown;
+        community_lens?: unknown;
       } | null;
       runtimeCommunityId =
         String(resolvedCommunity?.community_id ?? "").trim() || null;
@@ -492,14 +488,12 @@ export async function resolveAuthenticatedRuntimeTurn(args: {
         : [];
       runtimeCommunitySystemPrompt =
         String(resolvedCommunity?.community_system_prompt ?? "").trim() || null;
-      runtimeCommunityLensAuthority = normalizeCommunityLensAuthority(
-        resolvedCommunity?.community_lens_authority,
-      );
+      runtimeCommunityLens = parseTalkLens(resolvedCommunity?.community_lens);
       if (!runtimeCommunityId) {
         throw new Error("community_lens_unavailable");
       }
-      if (!runtimeCommunityLensAuthority) {
-        throw new Error("community_lens_authority_unavailable");
+      if (!runtimeCommunityLens) {
+        throw new Error("community_lens_unavailable");
       }
     } catch (error) {
       console.warn("runtime_community_prompt_resolution_failed", {
@@ -602,7 +596,7 @@ export async function resolveAuthenticatedRuntimeTurn(args: {
       runtimeCommunityAbout,
       runtimeCommunityChannels,
       runtimeCommunitySystemPrompt,
-      runtimeCommunityLensAuthority,
+      runtimeCommunityLens,
       allowedToolNames,
       invocationSurface,
       communityAgentSurfaceContext,

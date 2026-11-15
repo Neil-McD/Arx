@@ -27,16 +27,12 @@ function main() {
   const communityAgentDock = readText(
     join(root, "apps/web/src/components/WebCommunityAgentDock.tsx"),
   );
-  const runtimeCommunityResourceLane = readText(
-    join(root, "convex/runtimeCommunityResourceLane.ts"),
-  );
   const runtimeHarnessComposition = readText(
     join(root, "convex/runtimeHarnessComposition.ts"),
   );
   const runtimePrompt = readText(join(root, "shared/runtimePrompt.ts"));
-  const communityLensAuthority = readText(
-    join(root, "shared/communityLensAuthority.ts"),
-  );
+  const lens = readText(join(root, "shared/lens.ts"));
+  const communityAgent = readText(join(root, "convex/communityAgent.ts"));
 
   assertNotIncludes(
     runtimeAgentLoop,
@@ -50,13 +46,18 @@ function main() {
   );
   assertIncludes(
     runtimeAgentLoop,
-    "internal.runtimeCommunityResourceLane.resolveRuntimeCommunityResourceLaneInternal",
-    "community-lens resource lane query",
+    'LENS_FAMILY[params.communityLens.lens] === "builder" ? "builder" : "member"',
+    "the resources lane follows the talk's lens",
   );
   assertIncludes(
-    runtimeCommunityResourceLane,
+    communityAgent,
     'throw new Error("community_entitlement_required")',
-    "community-lens resource lane fails closed without community entry",
+    "the talk's lens fails closed without community entry",
+  );
+  assertIncludes(
+    communityAgent,
+    'resolveLens({ principalKind: "community_agent_for_member", evidenceSurface: "member_agent_dock", authority })',
+    "the talk's lens comes from the executor's own authority",
   );
   assertIncludes(
     runtimeAgentLoop,
@@ -103,21 +104,8 @@ function main() {
     "The about excerpt is not a complete knowledge base.",
     "community lens prompt distinguishes identity excerpt from retrievable knowledge",
   );
-  assertIncludes(
-    communityLensAuthority,
-    'export type CommunityLensAuthorityRelation =',
-    "canonical community lens authority relation type",
-  );
-  assertNotIncludes(
-    communityLensAuthority,
-    '"pending"',
-    "runtime community lens authority excludes pending users",
-  );
-  assertNotIncludes(
-    communityLensAuthority,
-    '"visitor"',
-    "runtime community lens authority excludes visitor role",
-  );
+  assertIncludes(lens, "export type TalkLens = {", "the private talk's lens type");
+  assertIncludes(lens, 'const RELATIONS = new Set(["owner", "admin", "moderator", "member"]);', "a talk's relation is never pending or visitor");
   assertIncludes(
     runtimePrompt,
     "community_lens_authority",
@@ -125,13 +113,13 @@ function main() {
   );
   assertIncludes(
     runtimeTurnResolution,
-    "runtimeCommunityLensAuthority",
-    "runtime resolver returns canonical community lens authority",
+    "runtimeCommunityLens = parseTalkLens(",
+    "runtime resolver returns the talk's lens",
   );
   assertIncludes(
     runtimeTurnHandlers,
-    "communityLensAuthority: runtimeCommunityLensAuthority",
-    "runtime handlers pass community lens authority into harnesses",
+    "communityLens: runtimeCommunityLens",
+    "runtime handlers pass the talk's lens into harnesses",
   );
 
   console.log("community_lens_runtime_contract_proof: ok");

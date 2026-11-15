@@ -1,5 +1,6 @@
 import { expect, test } from "vitest";
-import { LENS_CALLS, LENS_READS, LENS_TOOLS, guideRunLens, lensCalls, lensHasTool, lensReads, resolveLens } from "../shared/lens";
+import { LENS_CALLS, LENS_READS, LENS_TOOLS, guideRunLens, lensCalls, lensHasTool, lensReads, parseTalkLens, personViewFor, renderTalkLensForPrompt, resolveLens } from "../shared/lens";
+import { isPeopleFact } from "../shared/memberOntology";
 
 const member = { canUseBuilderProjection: false, canReviewJoinRequests: false, canModerateContent: false };
 const builder = { canUseBuilderProjection: true, canReviewJoinRequests: true, canModerateContent: true };
@@ -48,4 +49,36 @@ test("a lens's tools: private talks research the web, the guide in public and ow
   expect(lensHasTool("member_private", "web_crawl")).toBe(false);
   expect(guideRunLens("community_concierge")).toBe("guide_public");
   expect(guideRunLens("member_agent_dock")).toBe("member_private");
+});
+
+test("how a lens sees one person", () => {
+  // The guide in public sees anyone, even its sponsor, as any member does.
+  expect(personViewFor("community", true)).toBe("member");
+  expect(personViewFor("member", true)).toBe("self");
+  expect(personViewFor("member", false)).toBe("member");
+  expect(personViewFor("builder", false)).toBe("builder");
+  expect(personViewFor("builder", true)).toBe("self");
+  expect(personViewFor(null, false)).toBe("member");
+});
+
+test("a people fact is one the person stated or approved, here or on their profile", () => {
+  const fact = (over: Record<string, unknown>) => ({ communityId: "c1", kind: "goal", body: "x", provenance: "stated_interview", consentState: "approved", ...over }) as any;
+  expect(isPeopleFact(fact({}), "c1")).toBe(true);
+  expect(isPeopleFact(fact({ communityId: null }), "c1")).toBe(true);
+  expect(isPeopleFact(fact({ communityId: "c2" }), "c1")).toBe(false);
+  expect(isPeopleFact(fact({ consentState: "pending" }), "c1")).toBe(false);
+  expect(isPeopleFact(fact({ provenance: "observed_behavior" }), "c1")).toBe(false);
+});
+
+test("a private talk is told its lens, and that moderation never happens in it", () => {
+  expect(parseTalkLens({ lens: "builder_private", relation: "owner" })).toEqual({ lens: "builder_private", relation: "owner" });
+  expect(parseTalkLens({ lens: "guide_public", relation: "owner" })).toBeNull();
+  expect(parseTalkLens({ lens: "member_private", relation: "visitor" })).toBeNull();
+  const member = renderTalkLensForPrompt({ lens: "member_private", relation: "moderator" })!;
+  expect(member).toContain("Lens: member_private");
+  expect(member).toContain("the community's moderator");
+  expect(member).toContain("personal_memory");
+  expect(member).not.toContain("review_joins");
+  expect(member).toContain("never in this talk");
+  expect(renderTalkLensForPrompt(null)).toBeNull();
 });

@@ -26,7 +26,7 @@ import {
   POLYNET_PODS_DIRECTORY_PATH,
 } from "../shared/communitySemanticRepository.ts";
 import { PERSONAL_MEMORY_OPERATION, PERSONAL_MEMORY_PATH } from "../shared/personalMemory.ts";
-import { lensCalls, lensReads, peopleLensFor, resolveLens, type Lens, type LensView } from "../shared/lens.ts";
+import { lensCalls, lensReads, resolveLens, type Lens, type LensView } from "../shared/lens.ts";
 import {
   COMMUNITY_MEMBER_SELF_DIRECTORY,
   COMMUNITY_MEMBER_SELF_CONTEXT_PATH,
@@ -1574,8 +1574,8 @@ async function executeCanonicalRead(args: {
       return canonicalError("semantic_not_found", "Repository path not found or not accessible.");
     const subject = memberProfileMatch[1] ? { userId: memberProfileMatch[1] } : { handle: memberProfileMatch[2] };
     const payload = await args.ctx.runQuery((internal as any).communityPersonFacts.readPersonFactsInternal, {
-      communityId: target.communityId, as: peopleLensFor(lensOf(args, target)),
-      viewerUserId: args.userId, viewerIsBuilder: lensOf(args, target).family === "builder", ...subject });
+      communityId: target.communityId, lensFamily: lensOf(args, target).family ?? "community",
+      viewerUserId: args.userId, ...subject });
     if (!payload) return canonicalError("semantic_not_found", "Repository path not found or not accessible.");
     return { ok: true, value: { ...canonicalJsonDocument({ target, localPath: target.localPath, payload, ref: payload.ref }),
       writable: false, searchable: false } };

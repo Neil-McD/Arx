@@ -37,9 +37,6 @@ import {
 import {
   type RuntimeTurnEnvelopeV1,
 } from "../shared/runtimeTurnEnvelope";
-import type {
-  CommunityLensAuthority,
-} from "../shared/communityLensAuthority";
 import {
   buildRuntimeFailureFinalAnswer,
 } from "../shared/runtimeFailureFinalizer";
@@ -154,21 +151,6 @@ type RuntimeCompletionFailure = {
   code: string;
   message: string;
 };
-
-function buildCommunityLensAuthorityReceipt(
-  authority: CommunityLensAuthority | null | undefined,
-) {
-  if (!authority) return null;
-  return {
-    relation: authority.relation,
-    effective_role: authority.effectiveRole,
-    community_resource_lane: authority.communityResourceLane.lane,
-    can_manage: authority.canManage,
-    can_moderate: authority.canModerate,
-    can_manage_resources: authority.canManageResources,
-    can_review_join_requests: authority.canReviewJoinRequests,
-  };
-}
 
 function openAiModelIdFromRef(modelRef: string): string | null {
   const trimmed = String(modelRef ?? "").trim();
@@ -386,7 +368,7 @@ export async function handleRuntimeTurnRequest(args: {
       runtimeCommunityAbout,
       runtimeCommunityChannels,
       runtimeCommunitySystemPrompt,
-      runtimeCommunityLensAuthority,
+      runtimeCommunityLens,
       allowedToolNames,
       invocationSurface,
       communityAgentSurfaceContext,
@@ -981,8 +963,7 @@ export async function handleRuntimeTurnRequest(args: {
         thread_id: String(ownedThread._id),
         community_id: runtimeCommunityId ?? null,
         community_context_version: runtimeCommunityId ? runtimeCommunityContextVersion : null,
-        community_lens_authority:
-          buildCommunityLensAuthorityReceipt(runtimeCommunityLensAuthority),
+        community_lens: runtimeCommunityLens,
         runtime_engine_requested:
           runtimeEngineResolution.requestedRuntimeEngine ?? null,
         runtime_engine_resolved: runtimeEngineResolution.resolvedRuntimeEngine,
@@ -1101,7 +1082,7 @@ export async function handleRuntimeTurnRequest(args: {
             communityAbout: runtimeCommunityAbout,
             communityChannels: runtimeCommunityChannels,
             communitySystemPrompt: runtimeCommunitySystemPrompt,
-            communityLensAuthority: runtimeCommunityLensAuthority,
+            communityLens: runtimeCommunityLens,
             communityContextVersion: runtimeCommunityId
               ? runtimeCommunityContextVersion
               : null,
@@ -1469,7 +1450,7 @@ export async function handleRuntimeTurnRequest(args: {
         communityAbout: runtimeCommunityAbout,
             communityChannels: runtimeCommunityChannels,
         communitySystemPrompt: runtimeCommunitySystemPrompt,
-        communityLensAuthority: runtimeCommunityLensAuthority,
+        communityLens: runtimeCommunityLens,
         communityContextVersion: runtimeCommunityId
           ? runtimeCommunityContextVersion
           : null,
