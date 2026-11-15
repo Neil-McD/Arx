@@ -65,7 +65,7 @@ assert.match(
 );
 assert.match(
   read("convex/communityAgentRun.ts"),
-  /markCommunityInferenceFundingSessionProviderStarted\(\{[\s\S]*runOpenAiNativeToolCompletion\(\{[\s\S]*modelId: fundingSession\.modelId/,
+  /markCommunityInferenceFundingSessionProviderStarted\(\{[\s\S]*const modelId = fundingSession\.modelId;[\s\S]*runOpenAiNativeToolCompletion\(\{\s*modelId,/,
   "operator-funded community turns must fence provider start and use the authorized platform model",
 );
 assert.match(
