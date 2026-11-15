@@ -1278,7 +1278,7 @@
   border-top: 0;
 }
 
-@media (min-width: 900px) {
+@media (min-width: 1024px) {
   :root[data-design="v1"] .community-agent-dock-panel.has-home-rail {
     grid-template-columns: minmax(0, 1fr) var(--right-column-width);
   }
@@ -1501,7 +1501,7 @@
    name-and-time line and text as a message in the feed (the kit's row:
    36px avatar, 12px gap, 13px name, 12px time, 15px text), and it gets a
    little more room than a page's right column. */
-@media (min-width: 900px) {
+@media (min-width: 1024px) {
   :root[data-design="v1"] .community-interaction-projection.has-drawer {
     grid-template-columns: minmax(0, 1fr) clamp(320px, 30vw, 480px);
   }
@@ -3639,12 +3639,21 @@
 :root[data-design="v1"] { --mobile-community-rail-width: var(--community-shell-inset); }
 
 /* ---------- The desktop shell: the right column stays open (Nov 13, Neil) ----------
+   The window's width picks one of three shapes, and nothing in between
+   (Nov 14, Neil: "the snap points aren't logical"):
+     1024px and wider   left menu, the middle, the right column
+     721 to 1023px      left menu and the middle; what the right column holds
+                        opens over the middle (Inbox, Members) or is left out
+     720px and narrower the phone layout (shared/browserRuntimeMode.ts)
+   The right column used to arrive at 900px, where it squeezed the middle to
+   about 420px, narrower than it had just been at 899px. At 1024px the middle
+   keeps at least 480px.
    No open/close button. The right column is always there beside the middle
    and narrows with the window (--right-column-width, 248-440px); Inbox's
-   conversation and Members' record narrow the same way. Only below 900px,
+   conversation and Members' record narrow the same way. Only below 1024px,
    where the middle would be too narrow to read, it hides; there Inbox
    becomes two layers (list, then the conversation with a back arrow). */
-@media (min-width: 721px) and (max-width: 899px) {
+@media (min-width: 721px) and (max-width: 1023px) {
   /* Pages in the frame, a channel, Members: one column, no right column. */
   :root[data-design="v1"] .community-page-body:has(.community-page-rail-content) { grid-template-columns: minmax(0, 1fr); }
   :root[data-design="v1"] .community-page-body > .community-page-rail { display: none; }
@@ -3673,7 +3682,7 @@
   :root[data-design="v1"] .web-direct-messages-host.is-page .community-dm-panel-back.is-layered-only { display: inline-flex; }
 }
 :root[data-design="v1"] .community-dm-panel-back.is-layered-only { display: none; }
-@media (min-width: 721px) and (max-width: 899px) {
+@media (min-width: 721px) and (max-width: 1023px) {
   :root[data-design="v1"] .web-direct-messages-host.is-page .community-dm-panel-back.is-layered-only { display: inline-flex; }
   :root[data-design="v1"] .web-direct-messages-host.is-page .community-dm-panel.is-kit .community-dm-panel-back.is-layered-only {
     flex: none;
@@ -3698,10 +3707,10 @@
 @media (min-width: 721px) and (max-width: 1179px) {
   :root[data-design="v1"] .web-direct-messages-host.is-page .community-dm-inbox-panel { --inbox-gutter: 32px; }
 }
-/* Members on narrow windows (below 900px): two layers, like Inbox. Picking
+/* Members on narrow windows (below 1024px): two layers, like Inbox. Picking
    someone replaces the table with their record; "Members" goes back. */
 :root[data-design="v1"] .members-record-back { display: none; }
-@media (min-width: 721px) and (max-width: 899px) {
+@media (min-width: 721px) and (max-width: 1023px) {
   :root[data-design="v1"] .community-interaction-projection:has(> .members-page.has-picked) > .members-page { display: none; }
   :root[data-design="v1"] .community-interaction-projection:has(> .members-page.has-picked) > .members-page-record { display: flex; grid-column: 1; }
   :root[data-design="v1"] .members-record-back {
@@ -4258,12 +4267,12 @@
 }
 
 /* A host's course tools live in the right column; where that column is hidden
-   (721 to 899px wide) they sit above the lesson instead. */
+   (721 to 1023px wide) they sit above the lesson instead. */
 :root[data-design="v1"] .knowledge-course-tools-inline {
   display: none;
 }
 
-@media (min-width: 721px) and (max-width: 899px) {
+@media (min-width: 721px) and (max-width: 1023px) {
   :root[data-design="v1"] .knowledge-course-tools-inline {
     display: flex;
     flex-wrap: wrap;
