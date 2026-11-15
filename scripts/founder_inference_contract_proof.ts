@@ -23,6 +23,8 @@ const lifecycle = read("convex/communityLifecycle.ts");
 const communityPublic = read("convex/communityPublic.ts");
 const intake = read("convex/communityAgentConciergeCore.ts");
 const worker = read("convex/communityAgentServeWorker.ts");
+// The guide's funded run, shared by the tagged guide and the nightly review.
+const agentRun = read("convex/communityAgentRun.ts");
 const memberRuntime = read("convex/runtimeAgentLoop.ts");
 const memberTurnHandlers = read("convex/runtimeTurnHandlers.ts");
 const wikiArchitect = read("convex/communityWikiArchitect.ts");
@@ -288,20 +290,21 @@ assert.match(
 assert.match(intake, /resolveCommunityInferenceFundingAdmission/);
 assert.doesNotMatch(intake, /connect an OpenAI API key|activate an OpenAI API key/);
 assert.doesNotMatch(intake + worker + admissionResolver, /legacy_requester_chatgpt|requesterHasChatgptConnection|owner_api_key/);
-assert.match(worker, /const receiptKey = communityAgentMentionReceiptKey\(requestId\)/);
-assert.match(worker, /runOpenAiNativeToolCompletion\(\{[\s\S]*modelId: fundingSession\.modelId/);
-assert.doesNotMatch(worker, /userProviderConnections|getOpenAiConnectionForUserInternal|decryptStoredSecret|runChatgptNativeToolCompletion|apiKeyOverride/);
-assert.match(worker, /observeFounderProviderResult\(usage, toolCompletion/);
+assert.match(worker, /receiptKey: communityAgentMentionReceiptKey\(requestId\)/);
+assert.match(agentRun, /runOpenAiNativeToolCompletion\(\{[\s\S]*modelId: fundingSession\.modelId/);
+assert.doesNotMatch(worker + agentRun, /userProviderConnections|getOpenAiConnectionForUserInternal|decryptStoredSecret|runChatgptNativeToolCompletion|apiKeyOverride/);
+assert.match(agentRun, /observeFounderProviderResult\(usage, toolCompletion/);
 assert.match(usageCollector, /recordFounderProviderSuccess\(totals, result\)/);
-assert.doesNotMatch(worker, /claimCommunityInferenceReceiptInternal|markCommunityInferenceProviderStartedInternal|finalizeCommunityInferenceFailureInternal/);
-assert.match(worker, /claimCommunityInferenceFundingSession/);
-assert.match(worker, /claimCommunityInferenceFundingSession\(\{[\s\S]*surface: "community_agent_mention"/);
+assert.doesNotMatch(worker + agentRun, /claimCommunityInferenceReceiptInternal|markCommunityInferenceProviderStartedInternal|finalizeCommunityInferenceFailureInternal/);
+assert.match(agentRun, /claimCommunityInferenceFundingSession/);
+assert.match(agentRun, /claimCommunityInferenceFundingSession\(\{[\s\S]*surface: args\.surface/);
+assert.match(worker, /runFundedCommunityAgent\(\{[\s\S]*surface: "community_agent_mention"/);
 assert.match(
-  worker,
+  agentRun,
   /runCompletion: async[\s\S]*if \(!providerStarted\)[\s\S]*markCommunityInferenceFundingSessionProviderStarted\([\s\S]*providerStarted = true[\s\S]*runOpenAiNativeToolCompletion/,
 );
 assert.match(
-  worker,
+  agentRun,
   /if \(providerStarted && !founderInferenceBudgetFailureCode\(error\)\) usage\.complete = false[\s\S]*observeFounderProviderResult\(usage, toolCompletion,[\s\S]*providerFailureIsKnownPreSpend\(toolCompletion\.code\)/,
 );
 assert.match(

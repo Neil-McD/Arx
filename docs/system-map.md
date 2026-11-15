@@ -199,7 +199,10 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
   notes overview (`communityIntelligenceDirectory`) is deleted (Nov 6): nothing
   read it.
 - **Code:** `communityNotes`, `communityMemory` (tables `communityNoteRevisions`,
-  `communityNoteRemovals`, `communityMemoryIndex`, `agentWork`, `agentWorkRuns`), `communityEvidence*`,
+  `communityNoteRemovals`, `communityMemoryIndex`, `agentWork`, `agentWorkRuns`),
+  `communityMemoryReview` (the guide's nightly review: made due by posts in open
+  channels, run on the shared run entry `communityAgentRun` with the memory
+  review lens, `shared/agentLens.ts`), `communityEvidence*`,
   `communityCognitionLifecycle`, `communityWikiArchitect`; member knowledge stays in
   `memberOntology` and `memberOntologyCore` (`memberFacts`, `memberProfileSpines`).
 - **Legacy, until the old tables drop (POL-39 slice 3):** `communityMemoryMigration`

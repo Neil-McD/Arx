@@ -54,9 +54,11 @@ assert.doesNotMatch(
   "Member provider context must not apply a separate raw character budget before model-aware admission",
 );
 
+// The guide's funded runs (tagged in a channel, the nightly review) share one
+// run entry: convex/communityAgentRun.ts.
 for (const path of [
   "convex/runtimeAgentLoop.ts",
-  "convex/communityAgentServeWorker.ts",
+  "convex/communityAgentRun.ts",
 ]) {
   const source = read(path);
   const callAt = source.indexOf("runPiRuntimeKernel<");
@@ -95,12 +97,14 @@ assert.match(
   "pre-provider lifecycle failures must escape unchanged for role-level mapping",
 );
 
-const conciergeRuntime = read("convex/communityAgentServeWorker.ts");
+const conciergeRuntime = read("convex/communityAgentRun.ts");
 assert.match(
   conciergeRuntime,
-  /const conciergeProviderTools =[\s\S]*buildCommunityAgentConciergeFunctionTools\(\)[\s\S]*toolSchemas: conciergeProviderTools[\s\S]*tools: conciergeProviderTools/,
-  "Concierge must budget and send one resolved provider tool surface",
+  /const tools = buildCommunityAgentConciergeFunctionTools\(\)[\s\S]*toolSchemas: tools[\s\S]*\btools,/,
+  "The guide's run must budget and send one resolved provider tool surface",
 );
+assert.match(read("convex/communityAgentServeWorker.ts"), /runFundedCommunityAgent\(\{/, "the tagged guide runs on the shared run entry");
+assert.match(read("convex/communityMemoryReview.ts"), /runFundedCommunityAgent\(\{/, "the nightly review runs on the shared run entry");
 
 const turnHandlers = read("convex/runtimeTurnHandlers.ts");
 const turnFundingClaims = Array.from(
@@ -119,7 +123,7 @@ for (const match of turnFundingClaims) {
 }
 
 for (const path of [
-  "convex/communityAgentServeWorker.ts",
+  "convex/communityAgentRun.ts",
 ]) {
   const source = read(path);
   const completionAt = source.indexOf("runCompletion:");
