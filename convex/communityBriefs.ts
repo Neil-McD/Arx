@@ -166,6 +166,9 @@ export const runCommunityBriefInternal = internalAction({
       await complete("reviewed");
       return { status: "empty" };
     }
+    // The run counts only if the brief was written: a model that ends with
+    // words after a refusal leaves the place's activity for the retry.
+    let written = false;
     const run = await runFundedCommunityAgent({
       lens: "worker",
       ctx,
@@ -196,11 +199,12 @@ export const runCommunityBriefInternal = internalAction({
           return { status: "error" as const, exitCode: null, outputText: "", errorCode: brief.error,
             errorMessage: `${brief.why} Write with polynet_call { operation: "${BRIEF_WRITE_OPERATION}", input: { headline, points, next_step? } }.` };
         }
-        const written = await ctx.runMutation(internalRefs.communityBriefs.writeCommunityBriefInternal, {
+        const saved = await ctx.runMutation(internalRefs.communityBriefs.writeCommunityBriefInternal, {
           communityId: claim.communityId, runId, headline: brief.headline, points: brief.points,
           ...(brief.nextStep ? { nextStep: brief.nextStep } : {}), windowEnd: claim.windowEnd, nowMs: Date.now(),
         });
-        return written?.ok
+        if (saved?.ok) written = true;
+        return saved?.ok
           ? { status: "ok" as const, exitCode: 0, outputText: JSON.stringify({ written: "brief" }), errorCode: null, errorMessage: null }
           : { status: "error" as const, exitCode: null, outputText: "", errorCode: "run_closed", errorMessage: "This brief's run is no longer open." };
       },
@@ -209,6 +213,20 @@ export const runCommunityBriefInternal = internalAction({
       await finish({ failed: true, errorCode: run.failureCode });
       await complete("failed", run.failureCode);
       return { status: "failed", errorCode: run.failureCode };
+    }
+    if (!written) {
+      // It answered but never wrote a valid brief: settle what it spent, and retry.
+      try {
+        await settleCommunityInferenceFundingSession({
+          ctx, session: run.fundingSession, promptTokens: run.usage.promptTokens, completionTokens: run.usage.completionTokens,
+          providerRequests: founderProviderRequests(run.usage), usageComplete: run.usage.complete, outcomeCode: "provider_completed",
+        });
+      } catch {
+        // The receipt's own lease settles it as indeterminate.
+      }
+      await finish({ failed: true, errorCode: "brief_not_written" });
+      await complete("failed", "brief_not_written");
+      return { status: "failed", errorCode: "brief_not_written" };
     }
     try {
       await settleCommunityInferenceFundingSession({

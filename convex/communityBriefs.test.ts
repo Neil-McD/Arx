@@ -96,3 +96,34 @@ test("the guide writes the brief once from what was said; a refused brief is wri
   expect(await briefWork(t, w.communityId)).toMatchObject({ pending: 0 });
   expect((await briefWork(t, w.communityId)).dueAt).toBeUndefined();
 });
+
+test("a run that ends without a valid brief leaves the activity for the retry", async () => {
+  vi.stubEnv("OPENAI_API_KEY", "test-key");
+  vi.stubEnv("POLYNET_LUNA_INPUT_COST_MICROS_PER_MILLION_TOKENS", "1000000");
+  vi.stubEnv("POLYNET_LUNA_OUTPUT_COST_MICROS_PER_MILLION_TOKENS", "2000000");
+  vi.stubEnv("POLYNET_FOUNDER_MAX_RUN_RESERVATION_COST_MICROS", "1000000");
+  const t = convexTest(schema, modules);
+  const w = await world(t);
+  await t.run((ctx: any) => ctx.db.insert("operatorRoles", { userId: w.ownerId, role: "owner", active: true, createdAt: NOW, updatedAt: NOW }));
+  await t.run((ctx: any) => ctx.db.insert("communityInteractionRoots", { communityId: w.communityId, channelId: w.general, actorType: "human", actorUserId: w.mayaId,
+    kind: "discussion", status: "live", visibilityScope: "community", contentSummary: "Anyone climbing?", replyCount: 0, reactionSummary: [],
+    idempotencyKey: "q", createdAt: NOW + 10, updatedAt: NOW + 10 }));
+  await t.run((ctx: any) => markCommunityBriefDue(ctx, { communityId: w.communityId, channelId: w.general, actorType: "human", nowMs: NOW }));
+  const row: any = await briefWork(t, w.communityId);
+  await t.run((ctx: any) => ctx.db.patch(row._id, { reviewedThrough: NOW }));
+  const usage = { input_tokens: 2000, output_tokens: 100, input_tokens_details: { cached_tokens: 0, cache_write_tokens: 0 } };
+  const replies = [
+    { id: "c1", model: "gpt-6-luna", service_tier: "default", usage, output: [{ type: "function_call", call_id: "c1", name: "polynet_call",
+      arguments: JSON.stringify({ operation: "brief.write", input: { headline: "", points: [] } }) }] },
+    { id: "r2", model: "gpt-6-luna", service_tier: "default", usage, output_text: "I couldn't write it." },
+  ];
+  let n = 0;
+  vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify(replies[Math.min(n++, 1)]), { status: 200 })));
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(row.dueAt);
+  expect(await t.action(internal.communityBriefs.runCommunityBriefInternal, { workId: row._id })).toEqual({ status: "failed", errorCode: "brief_not_written" });
+  expect(await t.run((ctx: any) => ctx.db.query("communityBriefs").collect())).toHaveLength(0);
+  const after: any = await briefWork(t, w.communityId);
+  expect(after).toMatchObject({ pending: 1, failures: 1 });
+  expect(after.dueAt).toBeGreaterThan(row.dueAt);
+});
