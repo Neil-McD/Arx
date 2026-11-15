@@ -32,6 +32,7 @@ import {
 import { BriefPart } from "./KitBrief";
 import { PanelLearned, PanelLine, PanelNext, PanelPart, PanelPeople } from "./KitPanel";
 import { KitChannelFeed } from "./KitChannelFeed";
+import { CommunityPageFrame, CommunityPageRail } from "../components/CommunityPageHeader";
 import { KitHomeRail } from "./KitHomeRail";
 import { KitPodRail } from "./KitPodRail";
 
@@ -307,6 +308,41 @@ function RealPanels(props: { pod: boolean }) {
   );
 }
 
+// The Pods landing panel in the page's real right-column shell (the frame's
+// slot, the kit's rail inside it), to check it never runs past the column.
+function PodsShell() {
+  const now = Date.now();
+  return (
+    <div style={{ height: "100vh", display: "grid" }}>
+      <CommunityPageFrame>
+        <div style={{ padding: 40 }}>Pods</div>
+        <CommunityPageRail label="Pods">
+          <KitApp view="events" host part="rail" className="kit-page-rail">
+            <Rail index={4} label="This pod">
+              <div className={cx("land")}>
+                <header>
+                  <h2>Setters</h2>
+                  <p className={cx("land-p")}>The route setters plan resets and the comp, and keep the wall fresh for everyone.</p>
+                </header>
+                <BriefPart now={now} brief={{
+                  summary: "The setters have settled a clear reset routine: Maya takes Tuesdays, Priya Thursdays, and old holds come off by the night-before deadline. Comp problems use blue tape, everyday ones white, with grades pencilled in until the round ends.",
+                  channels: [], updated_at: new Date(now - 3_600_000).toISOString(),
+                }} />
+                <PanelPart label="What this pod knows" fact="2">
+                  <PanelLearned title="Setters' brush storage" when="Nov 15" />
+                  <PanelLearned title="Setters reset rota and hold labeling for the spring comp" when="Nov 15" />
+                </PanelPart>
+                <PanelPart label="In this pod" fact="2"><PanelPeople names={["Priya Raman", "Maya Chen"]} /></PanelPart>
+                <div className={cx("joinbar")}><Btn go>Open the pod</Btn></div>
+              </div>
+            </Rail>
+          </KitApp>
+        </CommunityPageRail>
+      </CommunityPageFrame>
+    </div>
+  );
+}
+
 // ?scale=1.25 draws the lab larger, to try a size for big monitors.
 function labScale(): number {
   if (typeof window === "undefined") return 1;
@@ -316,5 +352,5 @@ function labScale(): number {
 
 export function DesignLab() {
   const page = typeof window === "undefined" ? "" : new URLSearchParams(window.location.search).get("page");
-  return page === "channel" ? <HostChannel /> : page === "brief" ? <BriefPanels /> : page === "pods" ? <PodsPage join={false} /> : page === "home-panel" ? <RealPanels pod={false} /> : page === "pod-panel" ? <RealPanels pod /> : page === "pods-join" ? <PodsPage join /> : <HostHomeQuiet />;
+  return page === "channel" ? <HostChannel /> : page === "brief" ? <BriefPanels /> : page === "pods-shell" ? <PodsShell /> : page === "pods" ? <PodsPage join={false} /> : page === "home-panel" ? <RealPanels pod={false} /> : page === "pod-panel" ? <RealPanels pod /> : page === "pods-join" ? <PodsPage join /> : <HostHomeQuiet />;
 }

@@ -774,7 +774,7 @@
 .app .ln{display:flex;align-items:center;gap:9px;min-height:28px;min-width:0;font-size:13.5px;color:var(--ink);white-space:nowrap}
 .app .ln>.t{min-width:0;overflow:hidden;text-overflow:ellipsis}
 .app .ln>.t.dim{color:var(--ink3)}
-.app .ln>em{margin-left:auto;padding-left:8px;font-style:normal;font-size:12.5px;color:var(--ink3);overflow:hidden;text-overflow:ellipsis}
+.app .ln>em{margin-left:auto;padding-left:8px;font-style:normal;font-size:12.5px;color:var(--ink3);flex:none}
 .app .ln>.la{margin-left:auto}
 .app .ln>i.dot{width:6px;height:6px;border-radius:50%;background:rgb(var(--au));flex:none}
 .app .ln>i.dot.amber{background:#e0a84f}
@@ -799,7 +799,9 @@
 .app .land{display:flex;flex-direction:column;gap:26px;flex:1;min-width:0;max-width:100%}
 .app .land>*{min-width:0;max-width:100%}
 .app .land header{overflow-wrap:anywhere}
-.app.part.rail-part .rail:has(>.land){min-height:100%}
+/* A panel that keeps something at its foot fills the column's height. */
+.app.part.rail-part:has(>.rail>.land),.app.part.rail-part:has(>.rail>.railfoot){display:flex;flex-direction:column}
+.app.part.rail-part>.rail:has(>.land),.app.part.rail-part>.rail:has(>.railfoot){flex:1}
 .app .land h2{margin:0;font-size:20px;font-weight:600;letter-spacing:-.01em;color:var(--ink)}
 .app .land-p{margin:6px 0 0;font-size:14px;line-height:1.5;color:var(--ink2)}
 .app .land .podget{margin:14px 0 0}
