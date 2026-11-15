@@ -17,6 +17,8 @@ import {
 } from "../shared/communityNotes";
 import {
   MEMORY_NEW_NOTES_PER_RUN,
+  MEMORY_REVIEW_POSTS_MAX,
+  MEMORY_REVIEW_POST_CHARS,
   nextMemoryReviewAtMs,
   memoryEvidenceRefusal,
   memoryEvidenceWasRemoved,
@@ -332,21 +334,10 @@ export const listMemoryRuns = query({
   },
 });
 
-// ---------- what the review lens reads
+// ---------- what the nightly review reads, in one prompt
 
-const NEW_POSTS_MAX = 200;
-const POST_TEXT_MAX = 2_000;
-
-async function openChannelBySlug(ctx: any, communityId: any, slug: string) {
-  const channel = await ctx.db.query("communityChannels")
-    .withIndex("by_community_slug", (q: any) => q.eq("communityId", communityId).eq("slug", slug)).first();
-  return channel && channel.accessMode === "all_members" && channel.status === "active" ? channel : null;
-}
-
-export const isOpenChannelInternal = internalQuery({
-  args: { communityId: v.id("communities"), slug: v.string() },
-  handler: async (ctx, args) => Boolean(await openChannelBySlug(ctx, args.communityId, args.slug)),
-});
+const NOTES_WITH_FIRST_LINE = 40;
+const NOTES_LISTED_MAX = 200;
 
 async function authorWord(ctx: any, row: any, names: Map<string, string>): Promise<string> {
   if (row.actorType !== "human" || !row.actorUserId) return "the guide";
@@ -358,45 +349,71 @@ async function authorWord(ctx: any, row: any, names: Map<string, string>): Promi
   return names.get(key)!;
 }
 
-// channels/<channel>/new.md: what people said there since the last review,
-// oldest first, each post and reply with the name memory.observe cites.
-export const renderChannelNewPostsInternal = internalQuery({
-  args: { communityId: v.id("communities"), slug: v.string(), sinceMs: v.number(), untilMs: v.optional(v.number()) },
+// Everything the review needs: memory.md, the notes the community has, and
+// what people said in its open channels since the last review, oldest
+// first, each post and reply with the name a note cites. At most
+// MEMORY_REVIEW_POSTS_MAX posts: with more, the review reads through the
+// last one shown (readUntil) and the next review reads the rest. A reply in
+// a thread that was deleted isn't readable, so it isn't shown or counted.
+export const readMemoryReviewInputInternal = internalQuery({
+  args: { communityId: v.id("communities"), sinceMs: v.number(), untilMs: v.number() },
   handler: async (ctx, args) => {
-    const channel = await openChannelBySlug(ctx, args.communityId, args.slug);
-    if (!channel) return null;
-    const take = async (table: "communityInteractionRoots" | "communityInteractionReplies", scope: "community" | "public") =>
-      await ctx.db.query(table).withIndex("by_community_channel_visibility_status_createdAt", (q: any) => {
-        const range = q.eq("communityId", args.communityId).eq("channelId", channel._id).eq("visibilityScope", scope).eq("status", "live").gt("createdAt", args.sinceMs);
-        return args.untilMs !== undefined ? range.lte("createdAt", args.untilMs) : range;
-      }).take(NEW_POSTS_MAX);
-    // A reply is readable only while its thread is (a deleted thread's replies stay live).
+    const channels = await ctx.db.query("communityChannels")
+      .withIndex("by_community_access_status_position", (q) => q.eq("communityId", args.communityId).eq("accessMode", "all_members").eq("status", "active"))
+      .take(100);
     const liveRoots = new Map<string, boolean>();
-    const inLiveThread = async (row: any) => {
-      const key = String(row.rootId);
-      if (!liveRoots.has(key)) liveRoots.set(key, ((await ctx.db.get(row.rootId)) as any)?.status === "live");
+    const inLiveThread = async (rootId: any) => {
+      const key = String(rootId);
+      if (!liveRoots.has(key)) liveRoots.set(key, ((await ctx.db.get(rootId)) as any)?.status === "live");
       return liveRoots.get(key)!;
     };
-    const replies = [];
-    for (const row of [...(await take("communityInteractionReplies", "community")), ...(await take("communityInteractionReplies", "public"))]) {
-      if (await inLiveThread(row)) replies.push(row);
+    const rows: Array<{ row: any; kind: "post" | "reply"; channelName: string; order: number }> = [];
+    for (const [order, channel] of channels.entries()) {
+      for (const table of ["communityInteractionRoots", "communityInteractionReplies"] as const) {
+        for (const scope of ["community", "public"] as const) {
+          const found = await ctx.db.query(table).withIndex("by_community_channel_visibility_status_createdAt", (q: any) => q
+            .eq("communityId", args.communityId).eq("channelId", channel._id).eq("visibilityScope", scope).eq("status", "live")
+            .gt("createdAt", args.sinceMs).lte("createdAt", args.untilMs)).take(MEMORY_REVIEW_POSTS_MAX + 1);
+          for (const row of found as any[]) {
+            if (table === "communityInteractionReplies" && !(await inLiveThread(row.rootId))) continue;
+            rows.push({ row, kind: table === "communityInteractionRoots" ? "post" : "reply", channelName: channel.name, order });
+          }
+        }
+      }
     }
-    const rows = [
-      ...(await take("communityInteractionRoots", "community")).map((row: any) => ({ row, kind: "post" as const })),
-      ...(await take("communityInteractionRoots", "public")).map((row: any) => ({ row, kind: "post" as const })),
-      ...replies.map((row: any) => ({ row, kind: "reply" as const })),
-    ].sort((a, b) => a.row.createdAt - b.row.createdAt).slice(0, NEW_POSTS_MAX);
+    rows.sort((a, b) => a.row.createdAt - b.row.createdAt);
+    const shown = rows.slice(0, MEMORY_REVIEW_POSTS_MAX);
+    const readUntil = rows.length > MEMORY_REVIEW_POSTS_MAX ? shown[shown.length - 1].row.createdAt : args.untilMs;
+    // Posts at the same instant as the last one shown are read now too.
+    const read = rows.filter((entry) => entry.row.createdAt <= readUntil)
+      // Shown channel by channel, oldest first in each.
+      .sort((a, b) => a.order - b.order || a.row.createdAt - b.row.createdAt);
+    if (read.length === 0) return { posts: 0, readUntil, text: "" };
+
+    const index = await ctx.db.query("communityMemoryIndex").withIndex("by_community", (q) => q.eq("communityId", args.communityId)).first();
+    const notes = await ctx.db.query("communityNotes")
+      .withIndex("by_community_updatedAt", (q) => q.eq("communityId", args.communityId)).order("desc").take(NOTES_LISTED_MAX);
+    const lines = ["# memory.md", "", index?.bodyMd?.trim() || "_Nothing yet._", "", `# The notes (${notes.length}${notes.length === NOTES_LISTED_MAX ? ", newest first" : ""})`, ""];
+    if (notes.length === 0) lines.push("_None yet._");
+    notes.forEach((note, i) => {
+      const who = noteAuthorKind(note) === "builder" ? "a builder" : "you";
+      const first = i < NOTES_WITH_FIRST_LINE ? `: ${note.bodyMd.replace(/\s+/g, " ").trim().slice(0, 120)}` : "";
+      lines.push(`- memory/${note.slug}.md · ${note.title} · by ${who}${first}`);
+    });
+    lines.push("", `# What people said, ${new Date(args.sinceMs).toISOString()} to ${new Date(readUntil).toISOString()}`);
     const names = new Map<string, string>();
-    const lines = [`# #${channel.name}: new since ${new Date(args.sinceMs).toISOString()}`, ""];
-    if (rows.length === 0) lines.push("Nothing new.");
-    for (const { row, kind } of rows) {
-      const ref = `${kind}:${String(row._id)}`;
+    let current = "";
+    for (const { row, kind, channelName } of read) {
+      if (channelName !== current) {
+        current = channelName;
+        lines.push("", `## #${channelName}`);
+      }
       const where = kind === "reply" ? ` (reply to post:${String(row.rootId)})` : "";
-      const text = String(row.contentSummary ?? "").replace(/\s+/g, " ").trim().slice(0, POST_TEXT_MAX);
-      lines.push(`- ${ref}${where} · ${await authorWord(ctx, row, names)} · ${new Date(row.createdAt).toISOString()}`, `  > ${text}`);
+      const text = String(row.contentSummary ?? "").replace(/\s+/g, " ").trim().slice(0, MEMORY_REVIEW_POST_CHARS);
+      lines.push(`- ${kind}:${String(row._id)}${where} · ${await authorWord(ctx, row, names)} · ${new Date(row.createdAt).toISOString()}`, `  > ${text}`);
     }
-    if (rows.length === NEW_POSTS_MAX) lines.push("", `Showing the first ${NEW_POSTS_MAX}; the next review reads the rest.`);
-    return { body: lines.join("\n"), count: rows.length };
+    if (readUntil < args.untilMs) lines.push("", "The rest is read in the next review.");
+    return { posts: read.length, readUntil, text: lines.join("\n") };
   },
 });
 

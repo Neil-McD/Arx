@@ -110,7 +110,7 @@ export async function runFundedCommunityAgent(args: {
   beforeEachCompletion?: () => Promise<void>;
   // Tool results the caller's rules refused are logged as refused.
   isRefusal?: (errorCode: string | null | undefined) => boolean;
-  // A lens that validates its own paths (shared/agentLens.ts) takes the
+  // A caller that parses its own calls (the nightly review) takes the
   // model's arguments as they are; otherwise the general rules apply.
   normalizeToolArguments?: (toolName: CommunityAgentConciergeToolName, rawArgs: Record<string, unknown>) => Record<string, unknown>;
   // What the run's log says about a call (by default, the tool's name).
