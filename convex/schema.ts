@@ -1679,15 +1679,17 @@ export default defineSchema({
   })
     .index("by_scope", ["scopeKey"]),
 
-  // What the guide read to answer (shared/communityKnowledgeUse.ts): one
-  // record per answer to a person, holding only the notes and lessons it
-  // opened ("note:<id>", "resource:<id>") and the day. No question, no
-  // person, no run: it can't be traced to a conversation.
+  // What the guide read to answer (shared/communityKnowledgeUse.ts): one row
+  // of counts per community per day, for the notes and lessons answers
+  // opened ("note:<id>", "resource:<id>"). No row stands for one answer, and
+  // answers are added hours later at a random time: nothing here can be
+  // traced to a conversation.
   communityKnowledgeUse: defineTable({
     communityId: v.id("communities"),
     // Days since 1970, UTC.
     day: v.number(),
-    refs: v.array(v.string()),
+    uses: v.array(v.object({ ref: v.string(), count: v.number() })),
+    pairs: v.array(v.object({ a: v.string(), b: v.string(), count: v.number() })),
   }).index("by_community_day", ["communityId", "day"]),
 
   // A place's brief (shared/communityBriefs.ts): what's happening there,

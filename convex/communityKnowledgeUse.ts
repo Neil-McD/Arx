@@ -1,32 +1,35 @@
-// What the guide read to answer (shared/communityKnowledgeUse.ts): one small
-// record per answer, written by the run entry (convex/communityAgentRun.ts)
-// when an answer to a person finishes. The community brain reads them for
-// how much each note and lesson is used and what is answered together.
+// What the guide read to answer (shared/communityKnowledgeUse.ts): one row
+// of counts per community per day. The run entry (convex/communityAgentRun.ts)
+// schedules an answer's refs to be added at a random time within a few hours,
+// so neither a row nor the moment it changes can be matched to a
+// conversation. The community brain reads the last month of rows.
 import { v } from "convex/values";
 import { internalMutation, internalQuery } from "./_generated/server";
-import { KNOWLEDGE_USE_DAYS, knowledgeUseDay, knowledgeUseRefs, summarizeKnowledgeUse, type KnowledgeUse } from "../shared/communityKnowledgeUse";
+import { KNOWLEDGE_USE_DAYS, addToKnowledgeUseDay, knowledgeUseDay, summarizeKnowledgeUse, type KnowledgeUse } from "../shared/communityKnowledgeUse";
 
-// The most records read for one summary: enough for a busy month, and a
-// bound on what a page load can cost.
-const RECORDS_READ_MAX = 2_000;
+// An answer's refs reach its day's row this long after it, at most.
+export const KNOWLEDGE_USE_DELAY_MAX_MS = 4 * 60 * 60_000;
 
-export const recordKnowledgeUseInternal = internalMutation({
-  args: { communityId: v.id("communities"), refs: v.array(v.string()), nowMs: v.number() },
+export const addKnowledgeUseInternal = internalMutation({
+  // day: the day the answer happened (days since 1970, UTC).
+  args: { communityId: v.id("communities"), day: v.number(), refs: v.array(v.string()) },
   handler: async (ctx, args) => {
-    const refs = knowledgeUseRefs(args.refs);
-    if (refs.length === 0) return { recorded: 0 };
-    // The day only: a record can't be matched to a conversation by its time.
-    await ctx.db.insert("communityKnowledgeUse", { communityId: args.communityId, day: knowledgeUseDay(args.nowMs), refs });
-    return { recorded: refs.length };
+    const row: any = await ctx.db.query("communityKnowledgeUse")
+      .withIndex("by_community_day", (q: any) => q.eq("communityId", args.communityId).eq("day", args.day)).first();
+    const next = addToKnowledgeUseDay(row ?? { uses: [], pairs: [] }, args.refs);
+    if (next.uses.length === 0) return { added: false };
+    if (row) await ctx.db.patch(row._id, next);
+    else await ctx.db.insert("communityKnowledgeUse", { communityId: args.communityId, day: args.day, ...next });
+    return { added: true };
   },
 });
 
-// Use over the last month, newest records first when there are too many.
+// Use over the last month.
 export async function knowledgeUseFor(ctx: any, communityId: any, nowMs: number): Promise<KnowledgeUse> {
   const since = knowledgeUseDay(nowMs) - KNOWLEDGE_USE_DAYS;
-  const records: any[] = await ctx.db.query("communityKnowledgeUse")
-    .withIndex("by_community_day", (q: any) => q.eq("communityId", communityId).gte("day", since)).order("desc").take(RECORDS_READ_MAX);
-  return summarizeKnowledgeUse(records);
+  const days: any[] = await ctx.db.query("communityKnowledgeUse")
+    .withIndex("by_community_day", (q: any) => q.eq("communityId", communityId).gte("day", since)).take(KNOWLEDGE_USE_DAYS + 2);
+  return summarizeKnowledgeUse(days);
 }
 
 // Operator diagnostic (and the map's read, next): a community's use summary.

@@ -18,7 +18,8 @@ import { runOpenAiNativeToolCompletion } from "./openAiNativeToolCompletion";
 import { buildResponsesApiFunctionTools, normalizeToolArguments } from "../shared/toolRegistry";
 import type { RetrievalToolName } from "../shared/retrievalTools";
 import { LENS_TOOLS, lensHasTool } from "../shared/lens";
-import { knowledgeRefFromRead } from "../shared/communityKnowledgeUse";
+import { knowledgeRefFromRead, knowledgeUseDay } from "../shared/communityKnowledgeUse";
+import { KNOWLEDGE_USE_DELAY_MAX_MS } from "./communityKnowledgeUse";
 import type { NativeToolAwareCompletionSuccess, NativeToolAwareMessage, NativeToolChoice } from "../shared/nativeToolProtocol";
 import { runPiRuntimeKernel } from "../shared/piRuntimeKernel";
 import {
@@ -311,11 +312,12 @@ export async function runFundedCommunityAgent(args: {
   const assistantText = String(completion?.assistantText ?? "");
   await args.recorder.record({ kind: "final", status: "completed", content: assistantText });
   // What this answer read, for the community brain: the things only, never
-  // who asked or what. Recording it must never cost someone their answer.
+  // who asked or what, added to its day's counts at a random time within a
+  // few hours. Recording it must never cost someone their answer.
   if (readRefs.size > 0) {
-    await args.ctx.runMutation((internal as any).communityKnowledgeUse.recordKnowledgeUseInternal, {
-      communityId: args.communityId, refs: [...readRefs], nowMs: Date.now(),
-    }).catch(() => undefined);
+    await args.ctx.scheduler.runAfter(Math.floor(Math.random() * KNOWLEDGE_USE_DELAY_MAX_MS),
+      (internal as any).communityKnowledgeUse.addKnowledgeUseInternal,
+      { communityId: args.communityId, day: knowledgeUseDay(Date.now()), refs: [...readRefs] }).catch(() => undefined);
   }
   if (!fundingSession) {
     return { ok: false, failureCode: "community_inference_funding_session_missing", providerStarted, kernel: completion };
