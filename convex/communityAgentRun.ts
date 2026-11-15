@@ -9,8 +9,8 @@
 // Callers: a person's private talk (runtimeAgentLoop), the guide tagged in a
 // channel (communityAgentServeWorker) and the nightly memory review
 // (communityMemoryReview). What a private talk adds is optional below:
-// streamed text, a stop the person can press, the context receipt before the
-// first request, and reads run side by side.
+// streamed text, a stop the person can press, and the context receipt before
+// the first request. Tool calls run one at a time, in order.
 import { internal } from "./_generated/api";
 import { createFounderInferenceUsageTotals, founderProviderRequests, observeFounderProviderResult } from "./founderInferenceUsage";
 import { assertPaidLuna6ProviderHeadroom, founderInferenceBudgetFailureCode } from "./founderInferenceBudget";
@@ -28,7 +28,6 @@ import {
   type RuntimeKernelToolExecutionResult,
 } from "../shared/runtimeKernelTypes";
 import type { RuntimeKernelParams } from "../shared/runtimeKernel";
-import { buildRuntimeToolPolicySurface, classifyRuntimeToolSchedule, type RuntimeToolSchedulePlan } from "../shared/runtimeToolPolicy";
 import type { CommunityInferenceFundingAdmission, CommunityInferenceSurface } from "../shared/founderInference";
 import {
   claimCommunityInferenceFundingSession,
@@ -149,17 +148,12 @@ export async function runFundedCommunityAgent(args: {
   // Before the first model request, with exactly the messages it will send
   // (a private talk records its context receipt); a failure stops the run.
   beforeFirstCompletion?: (messages: NativeToolAwareMessage[]) => Promise<RuntimeKernelFailureInput | null>;
-  // Reads in one model answer may run side by side; writes always run alone.
-  parallelReads?: boolean;
-  // Told how each batch of tool calls was scheduled.
-  onToolSchedule?: (schedule: RuntimeToolSchedulePlan, batch: { isBatch: boolean; remainingToolBudget: number; toolStepCount: number }) => Promise<void>;
   // Told about each tool call as it starts and ends, beside the run's events.
   onToolStepStart?: RuntimeKernelParams<RetrievalToolName>["onToolStepStart"];
   onToolStepFinish?: RuntimeKernelParams<RetrievalToolName>["onToolStepFinish"];
 }): Promise<CommunityAgentRunResult> {
   const abortable = args.abortable ?? runDirectly;
   const lensTools = LENS_TOOLS[args.lens];
-  const toolPolicies = buildRuntimeToolPolicySurface({ fixedToolNames: lensTools }).policies;
   let firstCompletionChecked = !args.beforeFirstCompletion;
   const tools = buildResponsesApiFunctionTools(lensTools);
   let usage = createFounderInferenceUsageTotals("");
@@ -241,7 +235,7 @@ export async function runFundedCommunityAgent(args: {
             maxTokens: args.maxOutputTokens,
             tools,
             ...(toolChoice ? { toolChoice } : {}),
-            parallelToolCalls: args.parallelReads === true,
+            parallelToolCalls: false,
             promptCacheKey: args.promptCacheKey,
             ...(args.onTextDelta ? { onTextDelta: (delta: string) => args.onTextDelta!(delta, completionIndex) } : {}),
             ...(signal ? { signal } : {}),
@@ -257,17 +251,6 @@ export async function runFundedCommunityAgent(args: {
         return coerceToLensTools(args.lens, toolCompletion);
       },
       normalizeToolArguments: args.normalizeToolArguments ?? normalizeToolArguments,
-      ...(args.parallelReads ? {
-        onToolBatchResolved: async ({ steps, isBatch, remainingToolBudget, toolStepCount }) => {
-          const schedule = classifyRuntimeToolSchedule({
-            toolCalls: steps.map((step, index) => ({ providerCallId: step.providerCallId, toolName: step.toolName, index, normalizedArgs: step.normalizedArgs })),
-            policies: toolPolicies,
-            enableParallelReadBatches: true,
-          });
-          await args.onToolSchedule?.(schedule, { isBatch, remainingToolBudget, toolStepCount });
-          return { executionMode: schedule.executionMode === "parallel_read_batch" ? "parallel" as const : "serial" as const };
-        },
-      } : {}),
       onToolStepStart: async (step) => {
         await args.recorder.flushAll();
         const content = args.describeToolCall?.(String(step.step.toolName), step.step.normalizedArgs ?? {}) ?? String(step.step.toolName);

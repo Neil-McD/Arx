@@ -178,7 +178,6 @@
     "check:platform-harness-prompt-contract": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/platform_harness_prompt_contract_proof.ts",
     "check:runtime-failure-finalization-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/runtime_failure_finalization_proof.ts",
     "check:runtime-live-timeline-polynet-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/runtime_live_timeline_polynet_contract_proof.ts",
-    "check:runtime-tool-scheduler-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/runtime_tool_scheduler_proof.ts",
     "check:community-semantic-repository-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_semantic_repository_contract_proof.ts",
     "check:native-tool-provider-parser-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/native_tool_provider_parser_proof.ts",
     "check:community-lens-runtime-contract-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_lens_runtime_contract_proof.ts",

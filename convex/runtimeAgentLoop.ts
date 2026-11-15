@@ -127,21 +127,6 @@ type RuntimeProviderLifecycleHooks = {
 type RuntimeInferenceSource = "platform";
 const CHAT_TOOLS_RUNTIME_KERNEL_BUDGET: RuntimeKernelBudget =
   DEFAULT_RUNTIME_KERNEL_BUDGET;
-const RUNTIME_PARALLEL_READ_TOOLS_FLAG =
-  "RUNTIME_PARALLEL_READ_TOOLS_ENABLED";
-
-function readRuntimeBooleanFlag(name: string, defaultValue: boolean): boolean {
-  try {
-    const rawValue = (globalThis as any)?.process?.env?.[name];
-    if (typeof rawValue !== "string" || !rawValue.trim()) return defaultValue;
-    const value = rawValue.trim().toLowerCase();
-    if (["1", "true", "yes", "on"].includes(value)) return true;
-    if (["0", "false", "no", "off"].includes(value)) return false;
-  } catch {
-    // Convex runtime may not expose process.env; keep the safe default.
-  }
-  return defaultValue;
-}
 
 // The asker's profile timezone when it's a real IANA zone; otherwise UTC.
 export function resolveRuntimeTimeZone(value: unknown): string {
@@ -585,10 +570,6 @@ async function executeRetrievalAgentLoop(
   } catch {
     // Best-effort audit evidence only; prompt/tool assembly remains canonical for the turn.
   }
-  const parallelReadToolsEnabled = readRuntimeBooleanFlag(
-    RUNTIME_PARALLEL_READ_TOOLS_FLAG,
-    true,
-  );
   try {
     await params.appendRunEvent({
       eventType: "provider_tool_surface_resolved",
@@ -642,7 +623,7 @@ async function executeRetrievalAgentLoop(
         modelRef: params.modelRef,
         maxOutputTokens: params.maxTokens,
         toolChoice: "auto",
-        parallelToolCalls: parallelReadToolsEnabled,
+        parallelToolCalls: false,
         messages: providerMessages,
         promptSections: runtimePromptBundle.sections,
         contextManifest: runtimeContextManifest,
@@ -719,32 +700,7 @@ async function executeRetrievalAgentLoop(
     abortable,
     mapStopError: stopFailure,
     beforeFirstCompletion: recordContextReceipt,
-    parallelReads: parallelReadToolsEnabled,
     ...(params.onAssistantTextDelta ? { onTextDelta: params.onAssistantTextDelta } : {}),
-    onToolSchedule: async (schedule, batch) => {
-      try {
-        await params.appendRunEvent({
-          eventType: "tool_schedule_resolved",
-          eventKey: `${params.runId}:tool_schedule_resolved:${batch.toolStepCount + 1}:${schedule.calls.map((call) => call.providerCallId).join(":")}`,
-          payload: {
-            run_id: params.runId,
-            harness_name: params.harnessName,
-            decision: schedule.decision,
-            execution_mode: schedule.executionMode,
-            reason: schedule.reason,
-            parallel_read_tools_enabled: parallelReadToolsEnabled,
-            is_batch: batch.isBatch,
-            batch_call_count: schedule.calls.length,
-            starting_iteration: batch.toolStepCount + 1,
-            remaining_tool_budget: batch.remainingToolBudget,
-            summary: schedule.summary,
-            calls: schedule.calls,
-          },
-        });
-      } catch {
-        // Best-effort runtime evidence only.
-      }
-    },
     onToolStepStart: async ({ iteration, step }) => {
       await appendRuntimeToolCallStarted({
         appendRunEvent: params.appendRunEvent,
