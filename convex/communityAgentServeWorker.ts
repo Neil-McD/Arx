@@ -19,12 +19,9 @@ import {
   requireCommunityManager,
 } from "./communityCore";
 import { CANONICAL_COMMUNITY_AGENT_KEY } from "../shared/communityAgentToolProtocol";
-import {
-  isCommunityAgentConciergeToolName,
-  type CommunityAgentConciergeToolName,
-} from "../shared/communityAgentConciergeTools";
+import type { RetrievalToolName } from "../shared/retrievalTools";
 import type { RuntimeKernelToolExecutionResult } from "../shared/runtimeKernelTypes";
-import { executeRetrievalHarnessTool } from "./runtimeAgentLoop";
+import { runAgentTool } from "./agentTools";
 import { runFundedCommunityAgent } from "./communityAgentRun";
 import {
   COMMUNITY_AGENT_SERVE_LEASE_MS,
@@ -387,18 +384,9 @@ export async function executeConciergeTool(args: {
   ctx: any;
   context: any;
   requestId: any;
-  toolName: CommunityAgentConciergeToolName;
+  toolName: RetrievalToolName;
   rawArguments: Record<string, unknown>;
 }): Promise<RuntimeKernelToolExecutionResult> {
-  if (!isCommunityAgentConciergeToolName(args.toolName)) {
-    return {
-      status: "error",
-      exitCode: null,
-      outputText: "",
-      errorCode: "unsupported_concierge_tool",
-      errorMessage: "Community concierge tool is not allowed.",
-    };
-  }
   let podRoomId: string | null = null;
   try {
     const scope = await args.ctx.runQuery(internalRefs.communityAgentChannelAccess.authorizeServeToolsInternal, {
@@ -412,7 +400,7 @@ export async function executeConciergeTool(args: {
   } catch {
     return { status: "error", exitCode: null, outputText: "", errorCode: "channel_access_missing", errorMessage: "The run no longer has access to its source." };
   }
-  return await executeRetrievalHarnessTool({
+  return await runAgentTool({
     ctx: args.ctx,
     userId: normalizeIdValue(args.context.request.sponsorUserId),
     authSubject: normalizeIdValue(args.context.request.authSubject),
@@ -1826,6 +1814,7 @@ export const processQueuedCommunityAgentServeRequestsInternal = internalAction({
         attempt: context.request.attempt,
       });
       const run = await runFundedCommunityAgent({
+        lens: "guide_public",
         ctx,
         communityId: context.request.communityId,
         actorUserId: context.request.requesterUserId,

@@ -1,5 +1,3 @@
-import type { CapabilityFamily } from "./canonicalGateEngine.ts";
-import type { RetrievalToolName } from "./retrievalTools.ts";
 import { COMMUNITY_CONVERSATION_PREFIX } from "./communityConversationIdentity.ts";
 
 export type RuntimeInvocationSurface = "member_agent_dock";
@@ -8,20 +6,6 @@ export type RuntimeInvocationFundingPolicy = "community_owner";
 
 export const COMMUNITY_AGENT_THREAD_KEY_PREFIX = "member-agent";
 export const COMMUNITY_AGENT_GLOBAL_SCOPE_KEY = "global";
-
-const COMMUNITY_AGENT_DOCK_CAPABILITY_FAMILY_SET = new Set<CapabilityFamily>([
-  "community_tools",
-  "web_research",
-]);
-
-const COMMUNITY_AGENT_DOCK_TOOL_NAME_SET = new Set<RetrievalToolName>([
-  "polynet_list",
-  "polynet_read",
-  "polynet_search",
-  "polynet_write",
-  "polynet_call",
-  "web_research",
-]);
 
 export function normalizeRuntimeInvocationSurface(
   raw: unknown,
@@ -109,30 +93,6 @@ export function isCommunityAgentThreadKeyForCommunity(
   return (
     normalizedThreadKey.startsWith(`${legacyKey}:episode:`) &&
     /^[1-9]\d*$/.test(episodeOrdinal)
-  );
-}
-
-export function restrictCapabilityFamiliesForInvocationSurface(params: {
-  invocationSurface: RuntimeInvocationSurface;
-  capabilityFamilies: readonly CapabilityFamily[];
-}): CapabilityFamily[] {
-  if (params.invocationSurface !== "member_agent_dock") {
-    throw new Error("invalid_runtime_invocation_surface");
-  }
-  return params.capabilityFamilies.filter((family) =>
-    COMMUNITY_AGENT_DOCK_CAPABILITY_FAMILY_SET.has(family),
-  );
-}
-
-export function restrictToolNamesForInvocationSurface(params: {
-  invocationSurface: RuntimeInvocationSurface;
-  toolNames: readonly RetrievalToolName[];
-}): RetrievalToolName[] {
-  if (params.invocationSurface !== "member_agent_dock") {
-    throw new Error("invalid_runtime_invocation_surface");
-  }
-  return params.toolNames.filter((toolName) =>
-    COMMUNITY_AGENT_DOCK_TOOL_NAME_SET.has(toolName),
   );
 }
 

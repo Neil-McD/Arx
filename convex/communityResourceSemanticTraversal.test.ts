@@ -8,7 +8,7 @@ import { executeConciergeTool } from "./communityAgentServeWorker";
 import { executePolynetCanonicalTool } from "./polynetCanonicalExecutor";
 import { listCommunityResourceSemanticDirectoryCore } from "./communityResourceDirectory";
 import { executePlatformOperation } from "./platformOperationExecutor";
-import { executeRetrievalHarnessTool } from "./runtimeAgentLoop";
+import { runAgentTool } from "./agentTools";
 import { ensureGeneralChannel } from "./communityChannelCore";
 import schema from "./schema";
 import { selectRuntimePolynetSemanticMount } from "../shared/polynetSemanticRepositoryContract";
@@ -946,7 +946,7 @@ test("platform communities directory paginates bounded authorization results wit
   let totalSkipped = 0;
   let completed = false;
   for (let pageNumber = 0; pageNumber < 12; pageNumber += 1) {
-    const page = await executeRetrievalHarnessTool({
+    const page = await runAgentTool({
       ctx,
       authSubject: fixture.memberSubject,
       userId: String(fixture.memberId),
@@ -996,7 +996,7 @@ test("platform communities directory paginates bounded authorization results wit
     code: "invalid_selector",
   });
   await expect(
-    executeRetrievalHarnessTool({
+    runAgentTool({
       ctx,
       authSubject: fixture.memberSubject,
       userId: String(fixture.memberId),

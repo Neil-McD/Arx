@@ -2,12 +2,7 @@ import { api, internal } from "./_generated/api";
 import { parseCommunityConversationIdentity } from "../shared/communityConversationIdentity";
 import { type RetrievalToolName } from "../shared/retrievalTools";
 import type { ThreadWorkingStatePrompt } from "../shared/runtimePrompt";
-import {
-  resolveActiveCapabilityFamiliesFromEntitlements,
-  resolveEntitledCapabilityFamiliesForGate,
-  resolveHarnessProfileFromActiveCapabilities,
-  type CapabilityFamily,
-} from "../shared/canonicalGateEngine";
+import { LENS_TOOLS, guideRunLens } from "../shared/lens";
 import {
   normalizeRuntimeEngine,
   type RuntimeEngine,
@@ -24,8 +19,6 @@ import {
   isReadOnlyLegacyCommunityAgentThreadKey,
   resolveRuntimeInvocationFundingPolicy,
   resolveRuntimeInvocationSurfaceForThread,
-  restrictCapabilityFamiliesForInvocationSurface,
-  restrictToolNamesForInvocationSurface,
   type RuntimeInvocationSurface,
 } from "../shared/runtimeInvocationSurface";
 import {
@@ -43,8 +36,6 @@ import {
   COMMUNITY_OWNER_FUNDED_MODEL_SUPPORTS_IMAGE_INPUT,
   type CommunityInferenceFundingAdmission,
 } from "../shared/founderInference";
-
-export type RuntimeCapabilityFamily = CapabilityFamily;
 
 export type RuntimeTurnInput = {
   thread_id?: string;
@@ -111,8 +102,6 @@ export type RuntimeTurnResolution = {
   runtimeCommunitySystemPrompt: string | null;
   runtimeCommunityLensAuthority: CommunityLensAuthority | null;
   allowedToolNames: RetrievalToolName[];
-  resolvedRuntimeCapabilityFamilies: RuntimeCapabilityFamily[];
-  resolvedRuntimeHarnessProfile: string;
   invocationSurface: RuntimeInvocationSurface;
   communityAgentSurfaceContext: CommunityAgentSurfaceContextV1 | null;
   communityInferenceAdmission: CommunityInferenceFundingAdmission | null;
@@ -221,26 +210,6 @@ function normalizeThreadWorkingState(raw: unknown): ThreadWorkingStatePrompt | n
     blocker,
     nextAction,
   };
-}
-
-export function resolveAllowedToolNames(params: {
-  activeCapabilityFamilies: readonly RuntimeCapabilityFamily[];
-  inferenceSource: "platform";
-}): RetrievalToolName[] {
-  const toolNames: RetrievalToolName[] = [];
-  if (params.activeCapabilityFamilies.includes("community_tools")) {
-    toolNames.push(
-      "polynet_list",
-      "polynet_read",
-      "polynet_search",
-      "polynet_write",
-      "polynet_call",
-    );
-  }
-  if (params.activeCapabilityFamilies.includes("web_research")) {
-    toolNames.push("web_research");
-  }
-  return toolNames.filter((value, index, list) => list.indexOf(value) === index);
 }
 
 export async function resolveAuthenticatedRuntimeTurn(args: {
@@ -460,9 +429,6 @@ export async function resolveAuthenticatedRuntimeTurn(args: {
   const lane = "platform" as const;
   const modelRef = `openai/${COMMUNITY_OWNER_FUNDED_MODEL_ID}`;
   const inferenceSource = "platform" as const;
-  const entitledCapabilityFamilies = resolveEntitledCapabilityFamiliesForGate({
-    authState: "authenticated",
-  }) as RuntimeCapabilityFamily[];
 
   let runtimeCommunityId: string | null = null;
   let runtimeCommunityName: string | null = null;
@@ -608,34 +574,8 @@ export async function resolveAuthenticatedRuntimeTurn(args: {
   }
   communityInferenceAdmission = admission;
 
-  const resolvedRuntimeCapabilityFamilies = restrictCapabilityFamiliesForInvocationSurface({
-    invocationSurface,
-    capabilityFamilies: resolveActiveCapabilityFamiliesFromEntitlements({
-      entitledCapabilityFamilies,
-      hasProjectContext: false,
-      hasCommunityContext: Boolean(runtimeCommunityId),
-    }) as RuntimeCapabilityFamily[],
-  });
-  const allowedToolNames = restrictToolNamesForInvocationSurface({
-    invocationSurface,
-    toolNames: [
-      ...resolveAllowedToolNames({
-        activeCapabilityFamilies: resolvedRuntimeCapabilityFamilies,
-        inferenceSource,
-      }),
-    ],
-  });
-  if (allowedToolNames.length === 0) {
-    return {
-      ok: false,
-      response: fail(403, {
-        ok: false,
-        code: "governed_agent_tools_unavailable",
-        error: "governed_agent_tools_unavailable",
-        message: "No governed tools are available for this agent surface.",
-      }),
-    };
-  }
+  // A private talk's tools come from its lens (shared/lens.ts).
+  const allowedToolNames = [...LENS_TOOLS[guideRunLens(invocationSurface)]];
   return {
     ok: true,
     value: {
@@ -664,11 +604,6 @@ export async function resolveAuthenticatedRuntimeTurn(args: {
       runtimeCommunitySystemPrompt,
       runtimeCommunityLensAuthority,
       allowedToolNames,
-      resolvedRuntimeCapabilityFamilies,
-      resolvedRuntimeHarnessProfile: resolveHarnessProfileFromActiveCapabilities({
-        authState: "authenticated",
-        activeCapabilityFamilies: resolvedRuntimeCapabilityFamilies,
-      }),
       invocationSurface,
       communityAgentSurfaceContext,
       communityInferenceAdmission,

@@ -1122,7 +1122,7 @@ await assert.rejects(
   /user_handle_ambiguous/,
 );
 
-const runtimeAgentLoop = readSource("convex/runtimeAgentLoop.ts");
+const runtimeAgentLoop = readSource("convex/runtimeAgentLoop.ts") + readSource("convex/agentTools.ts");
 const httpMcp = readSource("convex/httpMcp.ts");
 const canonicalExecutor = readSource("convex/polynetCanonicalExecutor.ts");
 const platformExecutor = readSource("convex/platformOperationExecutor.ts");

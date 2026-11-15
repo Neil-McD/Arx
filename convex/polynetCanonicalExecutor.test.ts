@@ -11,7 +11,7 @@ afterEach(() => {vi.restoreAllMocks(); vi.unstubAllEnvs(); vi.useRealTimers();})
 import { api, internal } from "./_generated/api";
 import { fitJsonDocument, executePolynetCanonicalTool } from "./polynetCanonicalExecutor";
 import { POLYNET_CANONICAL_TOOL_DEFINITIONS } from "../shared/polynetCanonicalToolContract";
-import { executeRetrievalHarnessTool } from "./runtimeAgentLoop";
+import { runAgentTool } from "./agentTools";
 import schema from "./schema";
 import { formatCommunityEventZonedDateTime } from "../shared/communityEventTime";
 import { PLATFORM_LEGAL_DOCUMENTS } from "../shared/legalDocuments";
@@ -24,7 +24,7 @@ test("retired integration paths are not found", async () => {
   const t = convexTest(schema, modules);
   const f = await createFixture(t);
   const ctx = executionContext(t.withIdentity({ subject: f.memberSubject }));
-  const read = await executeRetrievalHarnessTool({ ctx, userId: f.memberId, authSubject: f.memberSubject,
+  const read = await runAgentTool({ ctx, userId: f.memberId, authSubject: f.memberSubject,
     runId: "integration-retired", toolCallId: "integration-call", communityId: f.communityId,
     communityBoundConversation: true, toolName: "polynet_read" as const,
     args: { path: "/communities/canonical-community/integrations/hubspot/contacts/123" },
@@ -36,13 +36,13 @@ test("retired integration paths are not found", async () => {
 test("scoped interactive harness reads member context without gaining builder or platform access", async () => {
   const t = convexTest(schema, modules);
   const f = await createFixture(t);
-  const execute = (path: string) => executeRetrievalHarnessTool({ ctx: executionContext(t.withIdentity({ subject: f.memberSubject })), userId: f.memberId, authSubject: f.memberSubject, runId: "scoped-tools", communityId: f.communityId, communityBoundConversation: true, toolName: "polynet_read", args: { path }, evidenceSurface: "member_agent_dock" });
+  const execute = (path: string) => runAgentTool({ ctx: executionContext(t.withIdentity({ subject: f.memberSubject })), userId: f.memberId, authSubject: f.memberSubject, runId: "scoped-tools", communityId: f.communityId, communityBoundConversation: true, toolName: "polynet_read", args: { path }, evidenceSurface: "member_agent_dock" });
   expect((await execute(selfContextPath)).status).toBe("ok");
-  const root = await executeRetrievalHarnessTool({ ctx: executionContext(t.withIdentity({ subject: f.memberSubject })), userId: f.memberId, authSubject: f.memberSubject, runId: "scoped-root", communityId: f.communityId, communityBoundConversation: true, toolName: "polynet_list", args: { path: "/" }, evidenceSurface: "member_agent_dock" });
+  const root = await runAgentTool({ ctx: executionContext(t.withIdentity({ subject: f.memberSubject })), userId: f.memberId, authSubject: f.memberSubject, runId: "scoped-root", communityId: f.communityId, communityBoundConversation: true, toolName: "polynet_list", args: { path: "/" }, evidenceSurface: "member_agent_dock" });
   expect(root.status, root.outputText || root.errorMessage || undefined).toBe("ok");
   expect((await execute("/communities/canonical-community/builder/workflow-members/")).status).toBe("error");
   expect((await execute("/members/me/context.md")).status).toBe("error");
-  expect((await executeRetrievalHarnessTool({ ctx: executionContext(t.withIdentity({ subject: f.memberSubject })), userId: f.memberId, authSubject: f.memberSubject, runId: "wrong-mount", communityId: "other-community", communityBoundConversation: true, toolName: "polynet_read", args: { path: selfContextPath }, evidenceSurface: "member_agent_dock" })).errorCode).toBe("community_context_mismatch");
+  expect((await runAgentTool({ ctx: executionContext(t.withIdentity({ subject: f.memberSubject })), userId: f.memberId, authSubject: f.memberSubject, runId: "wrong-mount", communityId: "other-community", communityBoundConversation: true, toolName: "polynet_read", args: { path: selfContextPath }, evidenceSurface: "member_agent_dock" })).errorCode).toBe("community_context_mismatch");
 });
 
 test.each(["community_agent_for_member", "external_mcp"] as const)("%s discovers and reads its own community context without writing state", async (principalKind) => {
@@ -3519,7 +3519,7 @@ test("personal memory is the member's own: written in their private talk, read b
 
   // On the Agent page (a community conversation), the call goes through the
   // conversation's guard by its target.
-  const viaPage = await executeRetrievalHarnessTool({ ctx: executionContext(t.withIdentity({ subject: f.memberSubject })), userId: f.memberId,
+  const viaPage = await runAgentTool({ ctx: executionContext(t.withIdentity({ subject: f.memberSubject })), userId: f.memberId,
     authSubject: f.memberSubject, runId: "member-talk", communityId: f.communityId, communityBoundConversation: true, toolName: "polynet_call",
     args: remember([{ action: "add", content: "Training for a V6 by March." }], "pm-page"), evidenceSurface: "member_agent_dock" });
   expect(viaPage.status, JSON.stringify(viaPage)).toBe("ok");

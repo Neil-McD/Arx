@@ -1,12 +1,7 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 
-import {
-  AUTHENTICATED_PLATFORM_CAPABILITIES,
-  resolveActiveCapabilityFamiliesFromEntitlements,
-  resolveEntitledCapabilityFamiliesForGate,
-  resolveHarnessProfileFromActiveCapabilities,
-} from "../shared/canonicalGateEngine.ts";
+import { LENS_TOOLS } from "../shared/lens.ts";
 import {
   RUNTIME_ENGINE_POLYNET,
   canUseRuntimeEngine,
@@ -14,52 +9,15 @@ import {
 } from "../shared/runtimeEngine.ts";
 
 const read = (path: string) => readFileSync(path, "utf8");
-const capabilities = [...AUTHENTICATED_PLATFORM_CAPABILITIES];
-const expectedCapabilities = [
-  "community_tools",
-  "web_research",
-];
-
-assert.deepEqual(capabilities, expectedCapabilities);
-assert.deepEqual(
-  resolveEntitledCapabilityFamiliesForGate({ authState: "authenticated", tier: "free" }),
-  expectedCapabilities,
-);
-assert.deepEqual(
-  resolveEntitledCapabilityFamiliesForGate({ authState: "authenticated", tier: "architect" }),
-  expectedCapabilities,
-  "the archived architect value must not create a different product capability tier",
-);
-assert.deepEqual(
-  resolveEntitledCapabilityFamiliesForGate({ authState: "anonymous", tier: "free" }),
-  [],
-);
-assert.deepEqual(
-  resolveActiveCapabilityFamiliesFromEntitlements({
-    entitledCapabilityFamilies: capabilities,
-    hasProjectContext: false,
-  }),
-  expectedCapabilities,
-);
-assert.deepEqual(
-  resolveActiveCapabilityFamiliesFromEntitlements({
-    entitledCapabilityFamilies: capabilities,
-    hasProjectContext: true,
-  }),
-  expectedCapabilities,
-);
-assert.equal(
-  resolveHarnessProfileFromActiveCapabilities({
-    authState: "authenticated",
-    activeCapabilityFamilies: capabilities,
-  }),
-  "authenticated_cloud_tools",
-);
+// Every signed-in member's private talk has the same tools, from its lens;
+// no plan, tier or capability family changes them.
+assert.equal(existsSync("shared/canonicalGateEngine.ts"), false, "capability families stay deleted");
+assert.deepEqual([...LENS_TOOLS.member_private], ["polynet_list", "polynet_read", "polynet_search", "polynet_write", "polynet_call", "web_research"]);
 assert.equal(getRuntimeEngineAccessLevel(RUNTIME_ENGINE_POLYNET), "included");
 assert.equal(canUseRuntimeEngine({ engine: RUNTIME_ENGINE_POLYNET }), true);
 
 const runtimePrompt = read("shared/runtimePrompt.ts");
-const runtimeAgentLoop = read("convex/runtimeAgentLoop.ts");
+const runtimeAgentLoop = read("convex/runtimeAgentLoop.ts") + read("convex/agentTools.ts");
 const docs = read("docs/auth-money-access-matrix.md");
 
 assert.doesNotMatch(runtimePrompt, /RuntimeAccountPlan|Account plan:|Premium-only|Billing to upgrade/);

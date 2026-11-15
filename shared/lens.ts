@@ -19,6 +19,7 @@
 // pod. People and builders see the pods their own access lets them enter.
 
 import type { PolynetPrincipalKind, PolynetResolvedAuthority } from "./polynetAuthority.ts";
+import type { RetrievalToolName } from "./retrievalTools.ts";
 
 export type LensFamily = "member" | "builder" | "community";
 
@@ -153,6 +154,37 @@ export function lensCalls(lens: Lens, action: LensAction): boolean {
   if (action === "review_joins") return lens.reviewsJoins;
   if (action === "remove_posts") return lens.moderatesPosts;
   return true;
+}
+
+// The tools a lens is given: the one list a run's model sees. What each call
+// may then see and do is the executor's, per call, from the tables above.
+const POLYNET_TOOLS = ["polynet_list", "polynet_read", "polynet_search", "polynet_write", "polynet_call"] as const;
+
+export const LENS_TOOLS: Record<LensName, readonly RetrievalToolName[]> = {
+  // A private talk also researches the web, paid by the community.
+  member_private: [...POLYNET_TOOLS, "web_research"],
+  builder_private: [...POLYNET_TOOLS, "web_research"],
+  // Through MCP: the five tools; the person's own AI does its own web.
+  member_own_ai: POLYNET_TOOLS,
+  builder_own_ai: POLYNET_TOOLS,
+  // A site calls operations through its app API, not tools.
+  member_site: [],
+  guide_public: POLYNET_TOOLS,
+  // The night review is handed everything and makes one write, checked by
+  // the review's own rules (convex/communityMemoryReview.ts).
+  worker: ["polynet_call"],
+  retired: [],
+};
+
+export function lensHasTool(name: LensName, toolName: string): toolName is RetrievalToolName {
+  return (LENS_TOOLS[name] as readonly string[]).includes(toolName);
+}
+
+// A guide run's lens before any call resolves it: in public (tagged in a
+// channel) or a private talk. Members and builders get the same tools in a
+// private talk, so the member lens stands for both here.
+export function guideRunLens(evidenceSurface: string | null | undefined): "guide_public" | "member_private" {
+  return evidenceSurface === "community_concierge" ? "guide_public" : "member_private";
 }
 
 // People facts (convex/communityPersonFacts.ts): the guide in public sees

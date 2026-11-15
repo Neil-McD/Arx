@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { COMMUNITY_AGENT_CONCIERGE_TOOL_NAMES } from "../shared/communityAgentConciergeTools.ts";
+import { LENS_TOOLS } from "../shared/lens.ts";
 import {
   POLYNET_CANONICAL_TOOL_DEFINITIONS,
   POLYNET_CANONICAL_TOOL_NAMES,
@@ -11,7 +11,6 @@ import {
   getPolynetMcpToolDefinition,
   getPolynetMcpToolDefinitions,
 } from "../shared/polynetMcp.ts";
-import { restrictToolNamesForInvocationSurface } from "../shared/runtimeInvocationSurface.ts";
 import { getFixedRuntimeToolPolicy } from "../shared/runtimeToolPolicy.ts";
 import { getToolDefinition } from "../shared/toolRegistry.ts";
 
@@ -81,22 +80,12 @@ assert.equal(
   false,
   "the native harness must not keep a duplicate five-tool authority",
 );
-assert.deepEqual(
-  COMMUNITY_AGENT_CONCIERGE_TOOL_NAMES,
-  expected,
-  "community agent must receive the same five tool names",
-);
-assert.deepEqual(
-  restrictToolNamesForInvocationSurface({
-    invocationSurface: "member_agent_dock",
-    toolNames: [
-      ...expected,
-      "search_product_docs",
-    ],
-  }),
-  expected,
-  "community agent must expose only the canonical Polynet verbs from the Polynet family",
-);
+// The guide in public and every own-AI lens get exactly the five verbs.
+for (const lens of ["guide_public", "member_own_ai", "builder_own_ai"] as const) {
+  assert.deepEqual([...LENS_TOOLS[lens]], expected, `${lens} must receive the same five tool names`);
+}
+assert.deepEqual(LENS_TOOLS.member_private.filter((name) => name !== "web_research"), expected,
+  "a private talk gets the five verbs plus paid web research only");
 
 for (const name of expected) {
   const canonical = POLYNET_CANONICAL_TOOL_DEFINITIONS[name];
@@ -153,7 +142,7 @@ for (const retiredPublicName of [
 const mcpContract = read("shared/polynetMcp.ts");
 const executor = read("convex/polynetCanonicalExecutor.ts");
 const repositorySearch = read("convex/communityRepositorySearch.ts");
-const nativeRuntime = read("convex/runtimeAgentLoop.ts");
+const nativeRuntime = read("convex/runtimeAgentLoop.ts") + read("convex/agentTools.ts");
 const mcpRuntime = read("convex/httpMcp.ts");
 const authority = read("shared/polynetAuthority.ts");
 

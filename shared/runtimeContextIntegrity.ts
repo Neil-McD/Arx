@@ -24,8 +24,6 @@ export type RuntimeContextIntegrityRunInput = {
   communityContextVersion?: unknown;
   modelId?: unknown;
   executionMode?: unknown;
-  harnessProfile?: unknown;
-  capabilityFamilies?: unknown;
 };
 
 export type RuntimeContextIntegrityCheckFlags = {
@@ -40,7 +38,6 @@ export type RuntimeContextIntegrityCheckFlags = {
   provider_context_attestation_valid: boolean;
   scope_matches_run: boolean;
   community_context_version_matches: boolean;
-  capability_families_match_policy: boolean;
   tools_match_policy: boolean;
   prompt_sections_present: boolean;
   manifest_sections_present: boolean;
@@ -317,12 +314,6 @@ export async function buildRuntimeContextIntegrityCheck(params: {
     );
   if (!communityContextVersionMatches) failures.push("community_context_version_mismatch");
 
-  const capabilityFamiliesMatchPolicy =
-    Boolean(run && contextResolved && toolPolicy) &&
-    sameStringSet(run?.capabilityFamilies, contextResolved?.capability_families) &&
-    sameStringSet(contextResolved?.capability_families, toolPolicy?.capability_families);
-  if (!capabilityFamiliesMatchPolicy) failures.push("capability_families_mismatch");
-
   const allowedToolNames = normalizeStringArray(toolPolicy?.allowed_tool_names);
   const manifestTools = manifestToolNames(manifest);
   const toolsMatchPolicy =
@@ -461,7 +452,6 @@ export async function buildRuntimeContextIntegrityCheck(params: {
     provider_context_attestation_valid: providerContextAttestationValid,
     scope_matches_run: scopeMatchesRun,
     community_context_version_matches: communityContextVersionMatches,
-    capability_families_match_policy: capabilityFamiliesMatchPolicy,
     tools_match_policy: toolsMatchPolicy,
     prompt_sections_present: promptSectionsPresent,
     manifest_sections_present: manifestSectionsPresent,
