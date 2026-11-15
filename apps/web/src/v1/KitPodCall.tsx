@@ -6,6 +6,7 @@ import { useState } from "react";
 import { cancelCloudCommunityEvent, saveCloudCommunityEvent } from "../../../../shared/cloudCommunityEventsGateway";
 import type { CloudPodDetail } from "../../../../shared/cloudCommunityPodsGateway";
 import { formatMomentWhen } from "../../../../shared/communityHomeMoments";
+import { announceCommunityEventsChanged } from "../../../../shared/communityEventsChanged";
 import { Btn, Sec, cx } from "./kit";
 
 type Repeat = "none" | "weekly" | "monthly";
@@ -47,7 +48,7 @@ export function KitPodCall(props: { session: unknown; communityId: string; pod: 
       });
       setScheduling(false);
       setDraft({ title: "", when: "", repeat: "weekly", url: "" });
-      props.onChanged();
+      props.onChanged(); announceCommunityEventsChanged();
     } catch (failure) {
       setError(String((failure as Error)?.message ?? "").includes("url") ? "That link doesn't look right." : "Couldn't schedule it. Try again.");
     } finally { setBusy(false); }
@@ -56,7 +57,7 @@ export function KitPodCall(props: { session: unknown; communityId: string; pod: 
   const cancel = async () => {
     if (!call || busy) return;
     setBusy(true);
-    try { await cancelCloudCommunityEvent({ session: props.session, eventId: call.event_id }); props.onChanged(); }
+    try { await cancelCloudCommunityEvent({ session: props.session, eventId: call.event_id }); props.onChanged(); announceCommunityEventsChanged(); }
     catch { /* stays */ } finally { setBusy(false); }
   };
 

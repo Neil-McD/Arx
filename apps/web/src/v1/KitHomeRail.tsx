@@ -63,7 +63,7 @@ export function KitHomeRail(props: {
 
   return (
     <>
-      <KitNextEvent session={props.session} communityId={props.communityId} now={props.now} onOpenEvents={props.onOpenEvents} todayOnly />
+      <KitNextEvent session={props.session} communityId={props.communityId} now={props.now} onOpenEvents={props.onOpenEvents} quietWhenNone />
       <Sec label="Today">
         {lines.length ? <ul className={cx("today")}>
           {lines.map((line, index) => {
