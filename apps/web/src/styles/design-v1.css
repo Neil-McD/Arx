@@ -2487,7 +2487,10 @@
 
 :root[data-design="v1"]:where(:not([data-layout="phone"])) .community-page-rail {
   min-height: 0;
+  min-width: 0;
   overflow-y: auto;
+  /* A right column never scrolls sideways. */
+  overflow-x: hidden;
   padding: 20px 24px 24px;
   border-left: 1px solid var(--surface-raised-edge);
 }
