@@ -62,3 +62,19 @@ test("the owner is a person here; someone who left isn't listed to anyone", asyn
     .toMatchObject({ role: "owner", shared: [] });
   expect(await t.run((ctx: any) => readPersonFacts(ctx, { communityId: w.communityId, subjectUserId: w.goneId, lens: "builder" }))).toBeNull();
 });
+
+test("many superseded rows don't hide what's current", async () => {
+  const t = convexTest(schema, modules);
+  const w = await world(t);
+  await t.run(async (ctx: any) => {
+    for (let i = 0; i < 60; i++) await ctx.db.insert("memberFacts", { userId: w.mayaId, communityId: w.communityId, kind: "goal", body: `Old goal ${i}`,
+      provenance: "stated_interview", confidence: 1, evidenceRefs: [], stalenessScore: 0, consentState: "superseded", createdByActorType: "member",
+      version: 1, createdAt: NOW - 10_000 + i, updatedAt: NOW - 10_000 + i });
+    await ctx.db.insert("memberFacts", { userId: w.mayaId, communityId: w.communityId, kind: "goal", body: "Current goal",
+      provenance: "stated_interview", confidence: 1, evidenceRefs: [], stalenessScore: 0, consentState: "approved", createdByActorType: "member",
+      version: 1, createdAt: NOW + 1, updatedAt: NOW + 1 });
+  });
+  const maya: any = await t.run((ctx: any) => readPersonFacts(ctx, { communityId: w.communityId, subjectUserId: w.mayaId, lens: "member" }));
+  expect(maya.shared.map((fact: any) => fact.body)).toContain("Current goal");
+  expect(JSON.stringify(maya)).not.toContain("Old goal");
+});

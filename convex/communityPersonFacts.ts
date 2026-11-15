@@ -45,6 +45,7 @@ export type PersonFacts = {
 };
 
 const FACTS_CAP = 40;
+const FACTS_SCANNED = 300;
 const NOTES_SHOWN = 5;
 const iso = (ms: number | null | undefined) => (typeof ms === "number" && Number.isFinite(ms) ? new Date(ms).toISOString() : null);
 
@@ -84,9 +85,12 @@ export async function readPersonFacts(ctx: any, args: { communityId: any; subjec
   ]);
   const shared: PersonFacts["shared"] = [];
   for (const scope of [args.communityId, undefined]) {
+    // Newest first, so superseded rows can't crowd out what's current; the
+    // cap applies to what's shown, after the rule.
     const rows = await ctx.db.query("memberFacts")
-      .withIndex("by_user_community", (q: any) => q.eq("userId", user._id).eq("communityId", scope)).take(FACTS_CAP);
+      .withIndex("by_user_community", (q: any) => q.eq("userId", user._id).eq("communityId", scope)).order("desc").take(FACTS_SCANNED);
     for (const fact of rows) {
+      if (shared.length >= FACTS_CAP * 2) break;
       if (!isPeopleFact(fact, args.communityId)) continue;
       shared.push({ kind: fact.kind, label: FACT_LABELS[fact.kind] ?? fact.kind, body: String(fact.body).trim(), at: fact.updatedAt } as any);
     }
@@ -103,7 +107,7 @@ export async function readPersonFacts(ctx: any, args: { communityId: any; subjec
     here_now: communityPresenceLeaseIsActive(presence, Date.now()),
     bio: String(detail?.bio ?? "").trim() || null,
     links: { youtube: links.youtube || null, x: links.x || null, instagram: links.instagram || null },
-    shared: shared.map(({ kind, label, body }) => ({ kind, label, body })),
+    shared: shared.slice(0, FACTS_CAP).map(({ kind, label, body }) => ({ kind, label, body })),
   };
   if (args.lens === "member") return person;
   person.joined_at = membership ? iso(membership.activatedAt ?? membership.createdAt) : null;
