@@ -192,8 +192,8 @@ assert.match(
 );
 assert.match(
   worker,
-  /readMemberFactsForLens\([\s\S]*kind: "member_orientation"[\s\S]*scope: \{ communityId: args\.communityId \}/,
-  "participant enrichment should reuse the exact-community member-orientation lens",
+  /readPersonFacts\(args\.ctx, \{ communityId: args\.communityId, subjectUserId: args\.userId, lens: "member" \}\)/,
+  "participant enrichment reads people facts at the member lens (what any member could see)",
 );
 assert.doesNotMatch(worker, /lens:\s*\{\s*kind:\s*"self"/);
 

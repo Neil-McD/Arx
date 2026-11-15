@@ -61,7 +61,7 @@ import {
   type CommunityAgentThreadParticipantInput,
   type CommunityAgentThreadTurnInput,
 } from "../shared/communityAgentThreadContext";
-import { readMemberFactsForLens, readMemberSpine } from "./memberOntologyCore";
+import { readPersonFacts } from "./communityPersonFacts";
 import { readCanonicalUserIdentityProjection } from "./profileCore";
 
 const SERVE_WORKER_DEFAULT_LIMIT = 3;
@@ -627,30 +627,21 @@ async function loadThreadParticipantContext(args: {
     };
   }
 
-  const [spine, facts] = await Promise.all([
-    readMemberSpine(args.ctx, args.userId),
-    readMemberFactsForLens(args.ctx, {
-      subjectUserId: args.userId,
-      lens: {
-        kind: "member_orientation",
-        communityId: normalizeIdValue(args.communityId),
-      },
-      scope: { communityId: args.communityId },
-    }),
-  ]);
+  // People facts at the member lens (convex/communityPersonFacts.ts): what
+  // any member could see about them, never a guess or a private talk.
+  const person = await readPersonFacts(args.ctx, { communityId: args.communityId, subjectUserId: args.userId, lens: "member" });
+  const shared = person?.shared ?? [];
+  const bodies = (kind: string) => shared.filter((fact) => fact.kind === kind).map((fact) => fact.body);
   return {
     userId: normalizeIdValue(args.userId),
     displayName: args.identity.displayName,
     handle: args.identity.handle,
     role,
     activeInCommunity: true,
-    situation: spine?.situation ?? null,
-    goals: spine?.goals ?? [],
-    interests: spine?.interests ?? [],
-    facts: facts
-      .slice()
-      .sort((left, right) => right.updatedAt - left.updatedAt)
-      .slice(0, 8)
+    situation: bodies("situation")[0] ?? null,
+    goals: bodies("goal").slice(0, 8),
+    interests: bodies("interest").slice(0, 8),
+    facts: shared.filter((fact) => !["situation", "goal", "interest"].includes(fact.kind)).slice(0, 8)
       .map((fact) => ({ kind: fact.kind, body: fact.body })),
   };
 }

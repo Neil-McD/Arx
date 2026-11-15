@@ -231,27 +231,6 @@ export async function recomputeMemberSpine(ctx: any, userId: any, nowMs: number)
   }
 }
 
-export async function readMemberFactsForLens(ctx: any, args: {
-  subjectUserId: any;
-  lens: MemberOntologyLens;
-  scope?: { communityId: any | null };
-}): Promise<MemberFactRow[]> {
-  const rows = args.scope
-    ? ((await ctx.db
-        .query("memberFacts")
-        .withIndex("by_user_community", (q: any) =>
-          q
-            .eq("userId", args.subjectUserId)
-            .eq("communityId", args.scope?.communityId ?? undefined),
-        )
-        .collect()) as any[])
-    : ((await ctx.db
-        .query("memberFacts")
-        .withIndex("by_user", (q: any) => q.eq("userId", args.subjectUserId))
-        .collect()) as any[]);
-  return rows.filter((row) => memberFactVisibleToLens(toFactLike(row), args.lens)) as MemberFactRow[];
-}
-
 // Bounded semantic projection, not an exhaustive fact export. Filtering remains
 // owned by the same visibility predicate as all other fact readers.
 export async function readBoundedMemberOrientationFacts(ctx: any, args: {
@@ -269,21 +248,3 @@ export async function readBoundedMemberOrientationFacts(ctx: any, args: {
   return { facts: visible.slice(0, 12), truncated: rows.length > scanLimit || visible.length > 12 };
 }
 
-export async function readMemberSpine(ctx: any, userId: any): Promise<{
-  situation: string | null;
-  goals: string[];
-  interests: string[];
-  links: string[];
-} | null> {
-  const row = await ctx.db
-    .query("memberProfileSpines")
-    .withIndex("by_user", (q: any) => q.eq("userId", userId))
-    .first();
-  if (!row) return null;
-  return {
-    situation: row.situation ?? null,
-    goals: row.goals ?? [],
-    interests: row.interests ?? [],
-    links: row.links ?? [],
-  };
-}

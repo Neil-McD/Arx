@@ -1531,19 +1531,28 @@ async function executeCanonicalRead(args: {
   // Who is online, and one member's profile, as JSON for a member's site or
   // harness. The community agent reads members through the .md paths only.
   const memberProfileMatch = /^\/members\/(?:by-user\/([A-Za-z0-9_-]+)|([^/]+))\.json$/.exec(target.localPath);
-  if (target.localPath === POLYNET_PRESENCE_DOCUMENT_PATH || memberProfileMatch) {
+  if (memberProfileMatch) {
+    // People facts (convex/communityPersonFacts.ts), cut by lens. The guide
+    // speaking in a channel sees what any member sees, whoever sponsors it.
+    if (args.evidenceSurface === "community_funnel_builder")
+      return canonicalError("semantic_not_found", "Repository path not found or not accessible.");
+    const subject = memberProfileMatch[1] ? { userId: memberProfileMatch[1] } : { handle: memberProfileMatch[2] };
+    const payload = await args.ctx.runQuery((internal as any).communityPersonFacts.readPersonFactsInternal, {
+      communityId: target.communityId, as: args.principalKind === "community_agent" ? "public" : "viewer",
+      viewerUserId: args.userId, viewerIsBuilder: target.authority.canUseBuilderProjection === true, ...subject });
+    if (!payload) return canonicalError("semantic_not_found", "Repository path not found or not accessible.");
+    return { ok: true, value: { ...canonicalJsonDocument({ target, localPath: target.localPath, payload, ref: payload.ref }),
+      writable: false, searchable: false } };
+  }
+  if (target.localPath === POLYNET_PRESENCE_DOCUMENT_PATH) {
     if (args.principalKind === "community_agent" || args.evidenceSurface === "community_funnel_builder")
       return canonicalError("semantic_not_found", "Repository path not found or not accessible.");
     try {
-      const payload = memberProfileMatch
-        ? await args.ctx.runQuery((internal as any).profiles.readCommunityMemberProfileInternal, {
-          viewerUserId: args.userId, communityId: target.communityId,
-          ...(memberProfileMatch[1] ? { userId: memberProfileMatch[1] } : { handle: memberProfileMatch[2] }) })
-        : await args.ctx.runQuery((internal as any).communityPublic.listCommunityOnlineMembersForUserInternal,
+      const payload = await args.ctx.runQuery((internal as any).communityPublic.listCommunityOnlineMembersForUserInternal,
           { userId: args.userId, communityId: target.communityId });
       if (!payload) return canonicalError("semantic_not_found", "Repository path not found or not accessible.");
-      return { ok: true, value: { ...canonicalJsonDocument({ target, localPath: target.localPath, payload,
-        ref: memberProfileMatch ? payload.ref : null }), writable: false, searchable: false } };
+      return { ok: true, value: { ...canonicalJsonDocument({ target, localPath: target.localPath, payload, ref: null }),
+        writable: false, searchable: false } };
     } catch {
       return canonicalError("semantic_not_found", "Repository path not found or not accessible.");
     }

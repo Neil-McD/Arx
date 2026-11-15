@@ -219,7 +219,7 @@ const modules = import.meta.glob([
   "./communityOntologyCards.ts",
   "./communitySearchDocs.ts",
   "./communityMemberTimeline.ts",
-  "./communityHandbook.ts", "./communityNotes.ts", "./communityMemory.ts", "./memberMemory.ts", "./communityLessonProgress.ts", "./memberWriteRateLimit.ts", "./communityLifecycle.ts", "./communityOperations.ts", "./communityPeople.ts", "./userProfileProjection.ts",
+  "./communityHandbook.ts", "./communityNotes.ts", "./communityMemory.ts", "./memberMemory.ts", "./communityPersonFacts.ts", "./communityLessonProgress.ts", "./memberWriteRateLimit.ts", "./communityLifecycle.ts", "./communityOperations.ts", "./communityPeople.ts", "./userProfileProjection.ts",
   "./communityAccessQueries.ts",
   "./communityAdmin.ts",
   "./email.ts",
@@ -2862,7 +2862,7 @@ test.each(["same-key", "different-key", "external-approve", "first-party-approve
   if (mode === "same-key") expect(results.every(r => r.status === "fulfilled" && (r.value as any).ok)).toBe(true);
 });
 
-test("site rails: the community agent gets no read state, presence, typing or member JSON; a member harness gets read state only", async () => {
+test("site rails: the community agent gets no read state, presence or typing, and people only as any member sees them; a member harness gets read state only", async () => {
   const t = convexTest(schema, modules);
   const f = await createFixture(t);
   const execute = (principalKind: "community_agent" | "external_mcp", toolName: "polynet_list" | "polynet_read" | "polynet_call", input: Record<string, unknown>) =>
@@ -2878,9 +2878,13 @@ test("site rails: the community agent gets no read state, presence, typing or me
     expect(entry).not.toHaveProperty("unread");
     expect(entry).not.toHaveProperty("seen_through_at");
   }
-  for (const path of [`${community}/presence.json`, `${community}/members/canonical-owner.json`]) {
-    expect(await execute("community_agent", "polynet_read", { path })).toMatchObject({ ok: false, code: "semantic_not_found" });
-  }
+  expect(await execute("community_agent", "polynet_read", { path: `${community}/presence.json` })).toMatchObject({ ok: false, code: "semantic_not_found" });
+  // People facts at the member lens, whoever sponsors the guide.
+  const owner = await execute("community_agent", "polynet_read", { path: `${community}/members/canonical-owner.json` });
+  expect(owner.ok, JSON.stringify(owner)).toBe(true);
+  const ownerPerson = JSON.parse(String((owner as any).value.body));
+  expect(ownerPerson).toMatchObject({ lens: "member", role: "owner", handle: "canonical-owner", shared: [] });
+  for (const hidden of ["plan", "notes", "joined_at", "state"]) expect(ownerPerson).not.toHaveProperty(hidden);
   for (const [operation, input] of [["community.channel.mark_read", { channel: "general" }], ["community.presence.heartbeat", {}],
     ["community.typing.set", { channel: "general", on: true }]] as const) {
     expect(await execute("community_agent", "polynet_call", callInput(operation, input))).toMatchObject({ ok: false, code: "operation_not_found" });

@@ -203,7 +203,7 @@ assert.deepEqual(spine.interests, []);
 assert.match(core, /memberFactVisibleToLens/, "db reads must filter through the shared predicate");
 assert.match(core, /deriveBornConsentState/, "born consent must come from the shared derivation");
 assert.match(core, /canTransitionMemberFactConsent/, "transitions must consult the shared state machine");
-assert.match(surface, /readMemberFactsForLens/, "the public surface must read through the lens helper");
+assert.match(read("convex/communityPersonFacts.ts"), /memberFactVisibleToLens/, "people facts must read through the shared predicate");
 assert.doesNotMatch(
   surface,
   /consentState\s*===|consent_state\s*===/,

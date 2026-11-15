@@ -440,15 +440,11 @@ test("thread context is chronological, cutoff-bound, and scoped through member o
       createdAt: 1_100,
       updatedAt: 1_100,
     });
-    await ctx.db.insert("memberProfileSpines", {
-      userId: memberId,
-      situation: "Helping launch the first cohort",
-      goals: ["Welcome the first members"],
-      interests: ["Community design"],
-      links: [],
-      factCount: 3,
-      updatedAt: 1_100,
-    });
+    // What the member said about themselves, approved: people facts.
+    for (const [kind, body] of [["situation", "Helping launch the first cohort"], ["goal", "Welcome the first members"], ["interest", "Community design"]] as const) {
+      await ctx.db.insert("memberFacts", { userId: memberId, communityId: fixture.communityId, kind, body, provenance: "stated_bridge",
+        confidence: 1, evidenceRefs: [], stalenessScore: 0, consentState: "approved", createdByActorType: "member", version: 1, createdAt: 1_100, updatedAt: 1_100 });
+    }
     await ctx.db.insert("memberFacts", {
       userId: memberId,
       communityId: fixture.communityId,
