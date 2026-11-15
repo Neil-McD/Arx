@@ -54,10 +54,9 @@ assert.doesNotMatch(
   "Member provider context must not apply a separate raw character budget before model-aware admission",
 );
 
-// The guide's funded runs (tagged in a channel, the nightly review) share one
-// run entry: convex/communityAgentRun.ts.
+// Every guide run (a private talk, tagged in a channel, the nightly review)
+// goes through one run entry: convex/communityAgentRun.ts.
 for (const path of [
-  "convex/runtimeAgentLoop.ts",
   "convex/communityAgentRun.ts",
 ]) {
   const source = read(path);
@@ -80,21 +79,21 @@ for (const path of [
 }
 
 const memberRuntime = read("convex/runtimeAgentLoop.ts");
+assert.doesNotMatch(memberRuntime, /runPiRuntimeKernel|buildActiveProviderTools/, "a private talk has no loop of its own");
 assert.match(
   memberRuntime,
-  /const activeProviderTools = \{[\s\S]*toolSchemas:[\s\S]*activeProviderTools\.responsesTools[\s\S]*tools: activeProviderTools\.responsesTools/,
-  "Member and Funnel must budget and send one resolved provider tool surface",
+  /runFundedCommunityAgent\(\{[\s\S]*lens: params\.communityLens\?\.lens \?\? "member_private"[\s\S]*beforeFirstCompletion: recordContextReceipt/,
+  "a private talk runs on the run entry under its lens, with its context receipt",
+);
+assert.match(
+  read("convex/communityAgentRun.ts"),
+  /if \(!firstCompletionChecked\)[\s\S]*args\.beforeFirstCompletion![\s\S]*claimCommunityInferenceFundingSession\(/,
+  "the context receipt is recorded with the actual provider messages before funding is claimed",
 );
 assert.match(
   memberRuntime,
-  /ensureInitialProviderContextAttestation\(messages\)[\s\S]*beforeProviderRequest/,
-  "Member and Funnel must attest the actual projected provider messages before funding",
-);
-assert.doesNotMatch(memberRuntime, /buildActiveProviderTools/);
-assert.match(
-  memberRuntime,
-  /class RuntimeProviderLifecycleHookError[\s\S]*throw new RuntimeProviderLifecycleHookError\(error\)[\s\S]*throw error\.originalError/,
-  "pre-provider lifecycle failures must escape unchanged for role-level mapping",
+  /if \(stoppedBeforeAnything\) throw new Error\(run\.failureCode\)/,
+  "a refused funding claim escapes unchanged for the handler to explain",
 );
 
 const conciergeRuntime = read("convex/communityAgentRun.ts");
@@ -106,21 +105,9 @@ assert.match(
 assert.match(read("convex/communityAgentServeWorker.ts"), /runFundedCommunityAgent\(\{/, "the tagged guide runs on the shared run entry");
 assert.match(read("convex/communityMemoryReview.ts"), /runFundedCommunityAgent\(\{/, "the nightly review runs on the shared run entry");
 
-const turnHandlers = read("convex/runtimeTurnHandlers.ts");
-const turnFundingClaims = Array.from(
-  turnHandlers.matchAll(
-    /communityFundingSession = await claimCommunityFundingSession\(\)/g,
-  ),
-);
-assert.equal(turnFundingClaims.length, 2);
-for (const match of turnFundingClaims) {
-  const prefix = turnHandlers.slice(Math.max(0, match.index! - 220), match.index);
-  assert.match(
-    prefix,
-    /beforeProviderRequest:/,
-    "Member/Funnel funding must remain lazy until after kernel admission",
-  );
-}
+// Funding is claimed only by the run entry, after admission (below); a
+// private talk's handler never claims it.
+assert.doesNotMatch(read("convex/runtimeTurnHandlers.ts"), /claimCommunityFundingSession|claimCommunityInferenceFundingSession/);
 
 for (const path of [
   "convex/communityAgentRun.ts",

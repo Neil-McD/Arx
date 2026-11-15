@@ -790,45 +790,39 @@ assert.match(
 );
 
 const firstRuntimeReplayLookup = runtimeHandlers.indexOf("lookupExistingRuntimeReplay");
-const firstMemberFundingClaim = runtimeHandlers.indexOf("claimCommunityFundingSession()");
+// The run entry claims funding; the turn runs only after the replay lookup.
+const firstMemberFundingClaim = runtimeHandlers.indexOf("executeChatToolsAgentLoop({");
 assert.ok(firstRuntimeReplayLookup >= 0 && firstMemberFundingClaim > firstRuntimeReplayLookup);
-const memberFundingBlock = runtimeHandlers.slice(
-  runtimeHandlers.indexOf("const communityInferenceSurface"),
-  runtimeHandlers.indexOf("const polynetToolSurface"),
-);
-assert.doesNotMatch(memberFundingBlock, /beginCommunityInferenceFundingSession/);
-assert.match(memberFundingBlock, /claimCommunityInferenceFundingSession/);
-assert.match(memberFundingBlock, /markCommunityInferenceFundingSessionProviderStarted/);
+// A private talk is funded by the one run entry: it claims the owner's
+// funding just before the first model request, counts every request's usage,
+// and on failure releases what was spent; the handler settles a finished run.
+const runEntry = read("convex/communityAgentRun.ts");
+assert.doesNotMatch(runEntry + runtimeHandlers + runtimeLoop, /beginCommunityInferenceFundingSession/);
+assert.match(runEntry, /claimCommunityInferenceFundingSession\(/);
+assert.match(runEntry, /markCommunityInferenceFundingSessionProviderStarted\(/);
 assert.match(
-  memberFundingBlock,
-  /observeFounderProviderResult\(communityFundingUsage, result/,
-  "member funding must aggregate every completed provider call instead of trusting the loop's final call only",
-);
-assert.match(
-  memberFundingBlock,
-  /usageComplete: communityFundingProviderStarted[\s\S]*communityFundingUsage\.complete[\s\S]*: true/,
-  "member funding should release pre-provider failures and preserve post-provider usage certainty",
+  runEntry,
+  /observeFounderProviderResult\(usage, toolCompletion,/,
+  "funding must count every model request's usage, not only the last one's",
 );
 assert.match(
-  runtimeLoop,
-  /operation: async \(signal\) => \{[\s\S]*beforeProviderRequest\?\.\(\)[\s\S]*runProviderNativeToolCompletion/,
-  "provider-start authority must run inside the abortable operation immediately before the provider request",
+  runEntry,
+  /usageComplete: providerStarted \? usage\.complete : true/,
+  "funding released before the provider started is certain; after, it keeps what is known",
 );
 assert.match(
   runtimeLoop,
-  /providerResultObserved = true[\s\S]*observeProviderResult[\s\S]*catch \(error\)[\s\S]*if \(!providerResultObserved\)/,
-  "already-observed provider usage must not be reclassified as unknown by a later cancellation check",
+  /runFundedCommunityAgent\(\{[\s\S]*surface: "member_agent_dock"[\s\S]*receiptKey: `member_agent_dock:\$\{params\.runId\}`[\s\S]*abortable[\s\S]*beforeFirstCompletion: recordContextReceipt/,
+  "a private talk runs on the run entry with its own receipt key, stop and context receipt",
 );
+assert.doesNotMatch(runtimeLoop + runtimeHandlers, /claimCommunityInferenceFundingSession|beforeProviderRequest|observeProviderResult/,
+  "a private talk has no funding claim of its own");
 assert.equal(
-  (runtimeHandlers.match(/observeProviderResult: observeCommunityFundingProviderResult/g) ?? []).length,
+  (runtimeHandlers.match(/await settlePrivateTalkFunding\(loopResult\)/g) ?? []).length,
   2,
-  "streaming and JSON member turns must use the same provider result accounting",
+  "streaming and JSON member turns settle the same way",
 );
-assert.match(
-  runtimeHandlers,
-  /invocationSurface === "member_agent_dock" \? invocationSurface : null[\s\S]*surface: communityInferenceSurface[\s\S]*receiptKey: `\$\{communityInferenceSurface\}:\$\{runId\}`[\s\S]*settleCommunityInferenceFundingSession[\s\S]*failCommunityInferenceFundingSession/,
-  "member turns must reuse the canonical idempotent community inference receipt lifecycle",
-);
+assert.match(runtimeHandlers, /settlePrivateTalkFunding = async[\s\S]*settleCommunityInferenceFundingSession\(/);
 assert.match(
   runtimeHandlers,
   /community_inference_settlement_failed/,

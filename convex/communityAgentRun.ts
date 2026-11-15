@@ -6,9 +6,9 @@
 // The caller decides what the answer means (a reply in a thread, a review's
 // record) and settles the receipt with it.
 //
-// Callers: the guide tagged in a channel (communityAgentServeWorker) and the
-// nightly memory review (communityMemoryReview). A person's private talk
-// (runtimeTurnHandlers) moves here next; what it adds is optional below:
+// Callers: a person's private talk (runtimeAgentLoop), the guide tagged in a
+// channel (communityAgentServeWorker) and the nightly memory review
+// (communityMemoryReview). What a private talk adds is optional below:
 // streamed text, a stop the person can press, the context receipt before the
 // first request, and reads run side by side.
 import { internal } from "./_generated/api";
@@ -288,7 +288,8 @@ export async function runFundedCommunityAgent(args: {
         await args.executeTool(toolName, rawArguments, { providerCallId, normalizedArgs, iteration }),
     });
   } catch (error) {
-    const failureCode = founderInferenceBudgetFailureCode(error) ?? (providerStarted
+    // A stop before the loop began (the person pressed stop) is a stop, not a crash.
+    const failureCode = founderInferenceBudgetFailureCode(error) ?? args.mapStopError?.(error)?.code ?? (providerStarted
       ? "provider_exception"
       : String(error instanceof Error ? error.message : error).slice(0, 120) || "funding_authority_changed");
     await releaseFunding(failureCode, providerStarted ? "indeterminate" : "failed");

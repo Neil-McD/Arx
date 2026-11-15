@@ -323,22 +323,16 @@ assert.match(fundingRuntime, /settleCommunityInferenceReceiptInternal/);
 assert.doesNotMatch(fundingRuntime, /owner_api_key|userProviderConnections|getOpenAiConnectionForUserInternal|decryptStoredSecret|apiKeyOverride/);
 assert.doesNotMatch(memberTurnHandlers, /beginCommunityAgentFundingSession/);
 assert.doesNotMatch(memberTurnHandlers, /claimCommunityAgentFundingSession/);
-assert.match(memberTurnHandlers, /claimCommunityFundingSession/);
+// A private talk is funded by the one run entry (convex/communityAgentRun.ts):
+// its own receipt key, the context receipt before any claim, every request's
+// usage counted, and the handler settles a finished run.
 assert.match(
-  memberTurnHandlers,
-  /invocationSurface === "member_agent_dock" \? invocationSurface : null[\s\S]*surface: communityInferenceSurface[\s\S]*receiptKey: `\$\{communityInferenceSurface\}:\$\{runId\}`/,
-);
-assert.match(
-  memberTurnHandlers,
-  /beforeProviderRequest: async[\s\S]*markCommunityFundingProviderStarted[\s\S]*observeProviderResult: observeCommunityFundingProviderResult/,
+  memberRuntime,
+  /runFundedCommunityAgent\(\{[\s\S]*surface: "member_agent_dock"[\s\S]*receiptKey: `member_agent_dock:\$\{params\.runId\}`/,
 );
 assert.match(
   memberRuntime,
-  /operation: async \(signal\) => \{[\s\S]*beforeProviderRequest\?\.\(\)[\s\S]*runProviderNativeToolCompletion/,
-);
-assert.match(
-  memberRuntime,
-  /class RuntimeProviderLifecycleHookError[\s\S]*throw new RuntimeProviderLifecycleHookError\(error\)[\s\S]*throw error\.originalError/,
+  /if \(stoppedBeforeAnything\) throw new Error\(run\.failureCode\)/,
   "pre-provider funding failures must reach the existing turn-level funding mapper unchanged",
 );
 assert.match(
@@ -347,18 +341,18 @@ assert.match(
   "Member and Funnel must retain their specific pre-provider funding error mapping",
 );
 assert.match(
-  memberRuntime,
-  /recordInitialProviderContextAttestation\(attestation\)[\s\S]*runPiRuntimeKernel/,
-  "Member and Funnel evidence must persist before the provider/tool kernel starts",
+  agentRun,
+  /if \(!firstCompletionChecked\)[\s\S]*beforeFirstCompletion[\s\S]*claimCommunityInferenceFundingSession\(/,
+  "Member evidence must persist before funding is claimed and the provider starts",
+);
+assert.match(
+  agentRun,
+  /usageComplete: providerStarted \? usage\.complete : true[\s\S]*failureCode, disposition/,
+  "funding released before the provider started is failed with certain usage, not indeterminate",
 );
 assert.match(
   memberTurnHandlers,
-  /communityFundingProviderStarted[\s\S]*usageComplete: communityFundingProviderStarted[\s\S]*disposition: communityFundingProviderStarted \? "indeterminate" : "failed"/,
-  "pre-provider attestation failures must finalize claimed funding as failed, not indeterminate",
-);
-assert.match(
-  memberTurnHandlers,
-  /observeFounderProviderResult\(communityFundingUsage, result,[\s\S]*settleCommunityInferenceFundingSession\([\s\S]*promptTokens: communityFundingUsage\.promptTokens[\s\S]*completionTokens: communityFundingUsage\.completionTokens/,
+  /settlePrivateTalkFunding = async[\s\S]*settleCommunityInferenceFundingSession\([\s\S]*promptTokens: usage\.promptTokens[\s\S]*completionTokens: usage\.completionTokens/,
 );
 assert.match(wikiArchitect, /surface: "community_setup_generation"/g);
 assert.match(wikiArchitect, /receiptKey: `community_setup_generation:wiki_architect:\$\{requestId\}`/);

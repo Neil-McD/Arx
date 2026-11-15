@@ -66,10 +66,15 @@ events.push(
   },
 );
 
+// The run entry's funding: the model is admitted, then claiming the owner's
+// funding is the first write, and it is refused here (no provider is called).
+const providerBoundaryOrder: string[] = [];
+let claimAttempts = 0;
 const ctx = {
   async runQuery(_functionRef: unknown, args: unknown): Promise<unknown> {
     queryCalls.push({ args });
     const record = args && typeof args === "object" ? args as Record<string, unknown> : null;
+    if (record && typeof record.receiptKey === "string") return "gpt-6-luna";
     if (
       record &&
       typeof record.ownerId === "string" &&
@@ -81,7 +86,9 @@ const ctx = {
     return [];
   },
   async runMutation(): Promise<unknown> {
-    return null;
+    claimAttempts += 1;
+    providerBoundaryOrder.push("funding_claim");
+    throw new Error("founder_usage_exhausted");
   },
   async runAction(): Promise<unknown> {
     return { active: [], recent: [] };
@@ -114,6 +121,7 @@ const loopParams = {
   communityAbout: "This fixture proves prompt and manifest receipts are emitted from the real agent loop.",
   communitySystemPrompt: "Stay focused on context receipt verification.",
   communityContextVersion: 7,
+  communityInferenceAdmission: { ok: true, mode: "platform_subscription", transitional: false, payerUserId: "owner", subscriptionId: "sub" } as any,
   threadWorkingState: {
     version: 3,
     goal: "Verify runtime prompt and context receipts.",
@@ -126,9 +134,10 @@ const loopParams = {
   refreshRuntimeContextSnapshot: async () => {},
   touchRunHeartbeat: async () => {},
 };
-const providerBoundaryOrder: string[] = [];
 let capturedAttestation: RuntimeProviderContextAttestationV1 | null = null;
-const result = await executeChatToolsAgentLoop({
+// The funding claim is refused, so the loop stops there; the handler turns
+// that into "this community has used its AI allowance".
+await assert.rejects(executeChatToolsAgentLoop({
   ...loopParams,
   recordInitialProviderContextAttestation: async (attestation) => {
     providerBoundaryOrder.push("attestation");
@@ -140,21 +149,12 @@ const result = await executeChatToolsAgentLoop({
     });
     return { ok: true };
   },
-  beforeProviderRequest: async () => {
-    providerBoundaryOrder.push("provider_start");
-  },
-});
-
-assert.equal(result.ok, false, "smoke should stop at provider execution after prompt assembly");
-assert.equal(
-  result.code,
-  "provider_inference_misconfigured",
-  "smoke should fail only because provider inference is intentionally disabled",
-);
+}), (error: unknown) => error instanceof Error && error.message === "founder_usage_exhausted",
+  "a refused funding claim must escape unchanged for the handler to explain");
 assert.deepEqual(
   providerBoundaryOrder,
-  ["attestation", "provider_start"],
-  "mandatory evidence must persist before provider start",
+  ["attestation", "funding_claim"],
+  "mandatory evidence must persist before funding is claimed or the provider starts",
 );
 assert.ok(
   capturedAttestation &&
@@ -162,7 +162,7 @@ assert.ok(
   "member runtime should build a valid provider-context attestation",
 );
 
-let failedProviderStartCount = 0;
+const claimsBeforeFailure = claimAttempts;
 const originalConsoleError = console.error;
 let failedAttestationResult: Awaited<
   ReturnType<typeof executeChatToolsAgentLoop>
@@ -177,9 +177,6 @@ try {
       ok: false,
       errorCode: "forced_write_failure",
     }),
-    beforeProviderRequest: async () => {
-      failedProviderStartCount += 1;
-    },
   });
 } finally {
   console.error = originalConsoleError;
@@ -190,33 +187,9 @@ assert.equal(
   RUNTIME_PROVIDER_CONTEXT_ATTESTATION_FAILURE_CODE,
 );
 assert.equal(
-  failedProviderStartCount,
+  claimAttempts - claimsBeforeFailure,
   0,
-  "failed mandatory evidence must make provider start unreachable",
-);
-
-let lifecycleProviderResultCount = 0;
-await assert.rejects(
-  executeChatToolsAgentLoop({
-    ...loopParams,
-    runId: "provider_lifecycle_failure_smoke_run",
-    appendRunEvent: async () => {},
-    recordInitialProviderContextAttestation: async () => ({ ok: true }),
-    beforeProviderRequest: async () => {
-      throw new Error("founder_usage_exhausted");
-    },
-    observeProviderResult: () => {
-      lifecycleProviderResultCount += 1;
-    },
-  }),
-  (error: unknown) =>
-    error instanceof Error && error.message === "founder_usage_exhausted",
-  "pre-provider lifecycle failures must escape unchanged for role-level mapping",
-);
-assert.equal(
-  lifecycleProviderResultCount,
-  0,
-  "a pre-provider lifecycle failure must not be observed as a provider result",
+  "failed mandatory evidence must make funding and the provider unreachable",
 );
 
 const promptReceipt = events.find((event) => event.eventType === "runtime_prompt_bundle_resolved");
