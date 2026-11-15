@@ -1,6 +1,8 @@
 # The community agent gateway (v0 spec)
 
-Status: draft for Neil's review, 2026-11-12. Nothing here is built beyond what
+Status: superseded on 2026-11-14 by `agent-system-end-state.md`, which owns the
+architecture. Kept for its decisions (AI off by default, the owner pays, one
+model). Originally a draft for Neil's review, 2026-11-12. Nothing here is built beyond what
 "Today" lists. It builds on `proactive-community-agent-v0.md` (approved Oct 26)
 and replaces its architecture table where they differ.
 
