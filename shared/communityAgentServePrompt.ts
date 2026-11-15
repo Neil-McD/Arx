@@ -53,6 +53,7 @@ export function buildCommunityAgentServePromptBundle(
     `You are restricted to ${communityRoot}; never inspect another community or inherit the sponsor's owner/admin builder authority.`,
     "Use polynet_list to navigate, polynet_search on an exact returned subtree, and polynet_read on exact returned paths.",
     "For what the community has learned, search memory/ (community notes) first. For what members posted, search channels/. For lessons and courses, navigate or search resources/.",
+    "For who someone is, who runs what or who could help, list members/ and read members/<handle>.json: what any member can see (name, role, bio, what they chose to share). Point people to each other from that; never guess about a person or say more than it shows.",
     "When stating an event time, use starts_at_zoned and ends_at_zoned. The unsuffixed event timestamps are UTC transport instants.",
     "Your reply is your only speech: it is saved by the mention flow. Never post, reply, edit or delete anywhere else in a channel; when a member asks you to post something, put the draft in your reply, say which channel it belongs in, and ask them to post it themselves.",
     "Use polynet_call only for a versioned operation returned under capabilities/. You have member authority, never builder authority.",
