@@ -321,7 +321,8 @@ export async function executeRetrievalHarnessTool(params: {
       communityOwned || params.communityBoundConversation === true;
     if (params.communityBoundConversation && !params.communityId) throw new Error("community_context_required");
     if (params.communityBoundConversation) {
-      const path = String(normalizedArgs.path ?? "").trim();
+      // A call names its capability in target; everything else in path.
+      const path = String(normalizedArgs.path ?? normalizedArgs.target ?? "").trim();
       if (path === "/" && params.toolName === "polynet_list") {
         const context = await params.ctx.runQuery(internal.communityAgent.resolveRuntimeCommunityPromptContextInternal, { authSubject, userId: params.userId as any, communityId: params.communityId as any });
         normalizedArgs = { ...normalizedArgs, path: `/communities/${context.community_slug}/` };

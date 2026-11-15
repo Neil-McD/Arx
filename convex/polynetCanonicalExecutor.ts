@@ -2392,12 +2392,12 @@ async function executeCanonicalCall(args: {
     } catch { return canonicalError("interaction_unavailable", "That post is not available to react to."); }
   }
   if (operation === PERSONAL_MEMORY_OPERATION) {
-    if (target.localPath !== `${POLYNET_CAPABILITIES_DIRECTORY_PATH}${operation}.json` || !args.runId ||
-        Object.keys(rawInput).some(key => key !== "operations"))
-      return canonicalError("invalid_tool_args", "Give input: { operations: [...] }, from the member's private talk.");
+    if (target.localPath !== `${POLYNET_CAPABILITIES_DIRECTORY_PATH}${operation}.json` || !args.runId || !idempotencyKey ||
+        idempotencyKey.length > 200 || Object.keys(rawInput).some(key => key !== "operations"))
+      return canonicalError("invalid_tool_args", "Give an idempotencyKey and input: { operations: [...] }, from the member's private talk.");
     // Whose memory: the signed-in member. Which turn: the run, checked as theirs.
     const value = await args.ctx.runMutation((internal as any).memberMemory.rememberForMemberInternal,
-      { communityId: target.communityId, userId: args.userId, runId: args.runId, operations: rawInput.operations, nowMs: Date.now() });
+      { communityId: target.communityId, userId: args.userId, runId: args.runId, operationKey: idempotencyKey, operations: rawInput.operations, nowMs: Date.now() });
     if (!value.ok) return canonicalError(value.code, value.message,
       value.current_entries ? { current_entries: value.current_entries, usage: value.usage } : undefined);
     return { ok: true, value: callAnswer({ operation, principalKind: args.principalKind, target, idempotencyKey,

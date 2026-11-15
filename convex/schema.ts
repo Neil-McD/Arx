@@ -1667,6 +1667,8 @@ export default defineSchema({
     communityId: v.id("communities"),
     userId: v.id("users"),
     entries: v.array(v.object({ text: v.string(), sourceRef: v.string(), at: v.number() })),
+    // The last write's retry key: a retried batch isn't applied twice.
+    lastOperationKey: v.optional(v.string()),
     updatedAt: v.number(),
   })
     .index("by_community_user", ["communityId", "userId"]),

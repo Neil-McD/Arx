@@ -3507,6 +3507,18 @@ test("personal memory is the member's own: written in their private talk, read b
   expect(await as(f.memberSubject, f.memberId, "external_mcp", "member-talk")("polynet_call", remember([{ action: "add", content: "x" }], "pm-4")))
     .toMatchObject({ ok: false, code: "operation_not_found" });
 
+  // A retried write isn't applied twice.
+  await memberTalk("polynet_call", remember([{ action: "patch", old_text: "short", content: "very short" }], "pm-retry"));
+  await memberTalk("polynet_call", remember([{ action: "patch", old_text: "short", content: "very short" }], "pm-retry"));
+  expect(((await memberTalk("polynet_read", { path: memoryPath })) as any).value.body).toContain("- Keep answers very short.");
+
+  // On the Agent page (a community conversation), the call goes through the
+  // conversation's guard by its target.
+  const viaPage = await executeRetrievalHarnessTool({ ctx: executionContext(t.withIdentity({ subject: f.memberSubject })), userId: f.memberId,
+    authSubject: f.memberSubject, runId: "member-talk", communityId: f.communityId, communityBoundConversation: true, toolName: "polynet_call",
+    args: remember([{ action: "add", content: "Training for a V6 by March." }], "pm-page"), evidenceSurface: "member_agent_dock" });
+  expect(viaPage.status, JSON.stringify(viaPage)).toBe("ok");
+
   // Forget: remove one, then clear.
   await memberTalk("polynet_call", remember([{ action: "remove", old_text: "Tuesdays" }], "pm-5"));
   expect(((await memberTalk("polynet_read", { path: memoryPath })) as any).value.body).not.toContain("Tuesdays");

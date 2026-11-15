@@ -30,7 +30,7 @@ export const readMemberMemoryInternal = internalQuery({
 // be this member's own run in this community; the write keeps it as the
 // entry's source.
 export const rememberForMemberInternal = internalMutation({
-  args: { communityId: v.id("communities"), userId: v.id("users"), runId: v.string(), operations: v.any(), nowMs: v.number() },
+  args: { communityId: v.id("communities"), userId: v.id("users"), runId: v.string(), operationKey: v.string(), operations: v.any(), nowMs: v.number() },
   handler: async (ctx, args) => {
     const run = await ctx.db.query("runtimeRuns")
       .withIndex("by_owner_runId", (q) => q.eq("ownerId", args.userId).eq("runId", args.runId)).first();
@@ -41,14 +41,16 @@ export const rememberForMemberInternal = internalMutation({
     if (!Array.isArray(operations)) return { ok: false as const, ...operations };
     const current = await row(ctx, args.communityId, args.userId);
     const entries: PersonalMemoryEntry[] = current?.entries ?? [];
+    // A retry of the last write answers with what it left, without applying again.
+    if (current?.lastOperationKey === args.operationKey) {
+      return { ok: true as const, changed: false, entries: entries.map((entry) => entry.text), usage: `${personalMemoryChars(entries)}/${PERSONAL_MEMORY_MAX_CHARS}` };
+    }
     const applied = applyPersonalMemoryOperations(entries, operations, { sourceRef: `run:${args.runId}`, at: args.nowMs });
     if ("code" in applied) {
       return { ok: false as const, ...applied, current_entries: entries.map((entry) => entry.text), usage: `${personalMemoryChars(entries)}/${PERSONAL_MEMORY_MAX_CHARS}` };
     }
-    if (applied.changed) {
-      if (current) await ctx.db.patch(current._id, { entries: applied.entries, updatedAt: args.nowMs });
-      else await ctx.db.insert("memberMemories", { communityId: args.communityId, userId: args.userId, entries: applied.entries, updatedAt: args.nowMs });
-    }
+    if (current) await ctx.db.patch(current._id, { entries: applied.entries, lastOperationKey: args.operationKey, updatedAt: args.nowMs });
+    else await ctx.db.insert("memberMemories", { communityId: args.communityId, userId: args.userId, entries: applied.entries, lastOperationKey: args.operationKey, updatedAt: args.nowMs });
     return {
       ok: true as const,
       changed: applied.changed,
