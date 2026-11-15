@@ -1547,6 +1547,14 @@
   line-height: 22.2px;
 }
 
+/* The reply box names who you are answering; in a narrow thread that line
+   stays one line and is cut short, not wrapped into a taller box. */
+:root[data-design="v1"] .community-interaction-thread-drawer .community-interaction-drawer-composer textarea::placeholder {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 /* The post and its replies take the room; the reply box stays at the bottom. */
 :root[data-design="v1"] .community-interaction-thread-drawer:not(.community-interaction-thread-page) .community-interaction-drawer-scroll {
   flex: 1 1 auto;
