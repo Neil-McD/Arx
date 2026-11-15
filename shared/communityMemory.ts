@@ -1,7 +1,8 @@
-// Community memory (docs/specs/agent-system-end-state.md, slice 1): what the
-// guide learns from what was said in a community's open channels. Every note
-// it writes cites the posts it came from; code checks each one. These are the
-// rules, kept free of the database so they can be tested on their own.
+// Memory (docs/specs/agent-system-end-state.md): what the guide learns from
+// what was said, for the community (its open channels) or one pod (its room).
+// Every note it writes cites the posts it came from; code checks each one.
+// These are the rules, kept free of the database so they can be tested on
+// their own.
 
 // The most a review may add, and the size of memory.md (Hermes keeps its
 // always-loaded memory near this size).
@@ -40,8 +41,9 @@ export type MemoryEvidenceFacts = {
   communityMatches: boolean;
   live: boolean;
   byPerson: boolean;
-  // In a channel open to every member, and shared with the community.
-  openChannel: boolean;
+  // Readable in this memory's place: a channel open to every member, or, for
+  // a pod's memory, that pod's own room.
+  inScope: boolean;
   sharedVisibility: boolean;
 };
 
@@ -59,7 +61,7 @@ export function memoryEvidenceRefusal(facts: MemoryEvidenceFacts): MemoryEvidenc
   if (!facts.communityMatches) return "evidence_other_community";
   if (!facts.live) return "evidence_not_live";
   if (!facts.byPerson) return "evidence_not_by_a_person";
-  if (!facts.openChannel || !facts.sharedVisibility) return "evidence_not_shared";
+  if (!facts.inScope || !facts.sharedVisibility) return "evidence_not_shared";
   return null;
 }
 

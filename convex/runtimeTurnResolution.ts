@@ -228,9 +228,6 @@ export function resolveAllowedToolNames(params: {
   inferenceSource: "platform";
 }): RetrievalToolName[] {
   const toolNames: RetrievalToolName[] = [];
-  if (params.activeCapabilityFamilies.includes("product_docs")) {
-    toolNames.push("search_product_docs", "get_product_doc");
-  }
   if (params.activeCapabilityFamilies.includes("community_tools")) {
     toolNames.push(
       "polynet_list",

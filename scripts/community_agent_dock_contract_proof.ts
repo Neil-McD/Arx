@@ -13,12 +13,6 @@ import {
 } from "../shared/runtimeInvocationSurface.ts";
 import { buildCommunityAgentConversationContext } from "../shared/communityAgentConversationContext.ts";
 import {
-  MEMBER_CONVERSATION_READ_MAX_CHARS,
-  MEMBER_CONVERSATION_READ_MAX_MESSAGES,
-  buildMemberConversationRecallTranscript,
-  deriveMemberConversationTitle,
-} from "../shared/communityAgentEpisodeRecall.ts";
-import {
   COMMUNITY_AGENT_IDENTITY_CONTEXT_MAX_CHARS,
   renderCommunityAgentIdentityContext,
 } from "../shared/communityAgentIdentityContext.ts";
@@ -214,7 +208,7 @@ assert.deepEqual(
       "workspace_tools",
     ],
   }),
-  ["product_docs", "community_tools", "web_research"],
+  ["community_tools", "web_research"],
 );
 assert.deepEqual(
   restrictToolNamesForInvocationSurface({
@@ -248,20 +242,6 @@ assert.match(
   /this community's agent in a private conversation with the authenticated member[\s\S]*requesting member's current permissions/,
 );
 
-assert.deepEqual(normalizeToolArguments("member_conversations_list", { limit: 99 }), { limit: 12 });
-assert.deepEqual(
-  normalizeToolArguments("member_conversation_read", { episode_id: "episode_1" }),
-  { episodeId: "episode_1" },
-);
-assert.deepEqual(
-  normalizeToolArguments("member_conversation_read", { episodeId: "episode_1" }),
-  { episodeId: "episode_1" },
-  "member conversation read normalization must be idempotent across runtime dispatch",
-);
-assert.throws(
-  () => normalizeToolArguments("member_conversation_read", {}),
-  /requires episode_id/,
-);
 assert.throws(
   () =>
     normalizeToolArguments("polynet_search", {
@@ -292,23 +272,6 @@ assert.deepEqual(
     relation: "owner",
   },
 );
-for (const toolName of [
-  "member_conversations_list",
-  "member_conversation_read",
-] as const) {
-  assert.deepEqual(getFixedRuntimeToolPolicy(toolName), {
-    toolName,
-    source: "fixed",
-    category: "community",
-    riskLevel: "read",
-    readOnly: true,
-    mutatesState: false,
-    parallelSafe: true,
-    exclusive: false,
-    requiresWorkspace: false,
-    requiresCommunity: false,
-  });
-}
 const retiredAgentToolNames = [
   "polynet_list_communities",
   "polynet_get_community",
@@ -372,7 +335,7 @@ const dockPromptBundle = buildPlatformHarnessRuntimePromptBundle({
     maxConsecutiveFailures: 1,
     maxNoProgressSteps: 1,
   },
-  allowedToolNames: ["search_product_docs"],
+  allowedToolNames: ["polynet_list"],
   harnessName: "chat_tools",
   runtimeTurnContext: buildRuntimeTurnContextPacket({}),
   invocationSurface: "member_agent_dock",
@@ -510,16 +473,6 @@ assert.match(
   threads,
   /listCommunityAgentRuntimeMessagesInternal = internalQuery[\s\S]*expectedUserMessageKey[\s\S]*lte\("seq", expected\.seq\)[\s\S]*order\("desc"\)/,
   "runtime history must stop at the persisted user message that started the turn",
-);
-assert.match(
-  threads,
-  /listMemberConversationsForToolInternal = internalQuery[\s\S]*\.withIndex\("by_owner"[\s\S]*by_channel_ordinal[\s\S]*lens_history: await buildMemberConversationLensHistory/,
-  "episode discovery must federate the authenticated member's global and legacy channels with lens provenance",
-);
-assert.match(
-  threads,
-  /readMemberConversationForToolInternal = internalQuery[\s\S]*ctx\.db\.get\(episode\.channelId\)[\s\S]*channel\.ownerId !== args\.ownerId[\s\S]*isMemberConversationThreadForChannel[\s\S]*buildMemberConversationRecallTranscript[\s\S]*community_context_version/,
-  "episode reads must fail closed across owners while preserving per-turn lens provenance",
 );
 assert.match(
   threads,
@@ -665,13 +618,8 @@ assert.doesNotMatch(
   /buildEffectiveAllowedToolNames|buildPlatformSkillToolNamesForSelection/,
   "skill activation must never widen the pre-authorized tool surface",
 );
-assert.match(
-  runtimeLoop,
-  /toolName === "member_conversations_list"[\s\S]*listMemberConversationsForToolInternal[\s\S]*toolName === "member_conversation_read"[\s\S]*readMemberConversationForToolInternal/,
-  "the runtime must execute both private recall tools through server-scoped internal queries",
-);
-assert.match(timelineUi, /member_conversations_list[\s\S]*Past conversations/);
-assert.match(timelineUi, /member_conversation_read[\s\S]*Recall conversation/);
+// Private recall tools were never offered by any lens and are deleted.
+assert.doesNotMatch(runtimeLoop, /member_conversations_list|member_conversation_read|search_product_docs/);
 assert.match(
   runner,
   /invocation_surface: params\.invocationSurface[\s\S]*surface_context: params\.surfaceContext/,
@@ -1143,81 +1091,19 @@ assert.deepEqual(
   { ok: false, code: "expected_message_not_user" },
 );
 
-const recallRows = Array.from({ length: 70 }, (_, index) => {
-  const seq = index + 1;
-  return {
-    messageKey: `message-${seq}`,
-    seq,
-    role: (seq % 9 === 0 ? "system" : seq % 2 === 0 ? "assistant" : "user") as
-      | "user"
-      | "assistant"
-      | "system",
-    contentJson: { text: `${seq}:${"x".repeat(700)}` },
-    runId: seq % 2 === 0 ? `run-${seq}` : undefined,
-  };
-});
-const boundedRecall = buildMemberConversationRecallTranscript({
-  headRows: recallRows.slice(0, 64),
-  tailRows: recallRows.slice().reverse(),
-});
-assert.ok(boundedRecall.messages.length <= MEMBER_CONVERSATION_READ_MAX_MESSAGES);
-assert.ok(boundedRecall.characterCount <= MEMBER_CONVERSATION_READ_MAX_CHARS);
-assert.ok(boundedRecall.messages.every((message) => message.role !== ("system" as any)));
-assert.deepEqual(
-  boundedRecall.messages.map((message) => message.seq),
-  boundedRecall.messages.map((message) => message.seq).slice().sort((a, b) => a - b),
-  "bounded recall must preserve transcript chronology",
-);
-assert.equal(new Set(boundedRecall.messages.map((message) => message.seq)).size, boundedRecall.messages.length);
-assert.ok(
-  boundedRecall.messages
-    .filter((message) => message.role === "assistant")
-    .every((message) => message.runId === `run-${message.seq}`),
-  "bounded recall must preserve assistant run provenance for lens reconstruction",
-);
-assert.equal(
-  deriveMemberConversationTitle({
-    storedTitle: "Polynet agent",
-    communityName: "Polynet",
-    firstUserContentJson: { text: "  Continue   the launch plan  " },
-    ordinal: 3,
-  }),
-  "Continue the launch plan",
-);
-assert.equal(
-  deriveMemberConversationTitle({ storedTitle: null, ordinal: 4 }),
-  "Conversation 4",
-);
 
 const recallManifest = buildRuntimeContextManifest({
   invocationSurface: "member_agent_dock",
   communityAgentSurfaceContext: communitySurface,
   communityId: "community_1",
   allowedToolNames: [
-    "member_conversations_list",
-    "member_conversation_read",
     "polynet_list",
     "polynet_read",
   ],
   promptSections: [],
 });
 assert.deepEqual(recallManifest.scope.communityAgentSurfaceContext, communitySurface);
-assert.deepEqual(
-  recallManifest.resources.find((resource) => resource.id === "member_conversations"),
-  {
-    id: "member_conversations",
-    owner: "user",
-    retrieval: "tool_available",
-    visibility: "private",
-    source: "member_conversations_list/member_conversation_read",
-    reason: "the member's private episodes are retrievable on demand across community lenses",
-  },
-);
-assert.ok(
-  recallManifest.tools
-    .filter((tool) => tool.family === "member_conversations")
-    .every((tool) => tool.effect === "read"),
-);
+assert.ok(!recallManifest.resources.some((resource) => resource.id === "member_conversations"));
 assert.deepEqual(
   recallManifest.resources.find((resource) => resource.id === "active_community_context"),
   {

@@ -16,7 +16,6 @@ import {
 const read = (path: string) => readFileSync(path, "utf8");
 const capabilities = [...AUTHENTICATED_PLATFORM_CAPABILITIES];
 const expectedCapabilities = [
-  "product_docs",
   "community_tools",
   "web_research",
 ];

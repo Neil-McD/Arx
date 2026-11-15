@@ -21,9 +21,7 @@ export type PlatformOperationJsonSchema =
 
 export type PlatformOperationId =
   | "community.semantic.list"
-  | "community.semantic.read"
-  | "product_docs.search"
-  | "product_docs.read";
+  | "community.semantic.read";
 
 export type PlatformOperationEffect = {
   domainState: "read" | "write";
@@ -39,12 +37,10 @@ export type PlatformOperationAuthority = {
 export type PlatformOperationNativeProjection = {
   name:
     | "polynet_list"
-    | "polynet_read"
-    | "search_product_docs"
-    | "get_product_doc";
+    | "polynet_read";
   description: string;
   inputSchema: PlatformOperationJsonSchema;
-  category: "community" | "docs";
+  category: "community";
   parallelSafe: boolean;
   requiresWorkspace: boolean;
   requiresCommunity: boolean;
@@ -53,9 +49,7 @@ export type PlatformOperationNativeProjection = {
 export type PlatformOperationMcpProjection = {
   name:
     | "polynet_list"
-    | "polynet_read"
-    | "polynet_product_docs_search"
-    | "polynet_product_doc_read";
+    | "polynet_read";
   title: string;
   description: string;
   annotations: {
@@ -80,9 +74,7 @@ export type PlatformOperationContract = {
   version: 1;
   executor:
     | "communitySemantic.list"
-    | "communitySemantic.read"
-    | "productDocs.search"
-    | "productDocs.read";
+    | "communitySemantic.read";
   authority: PlatformOperationAuthority;
   target: "platform" | "community";
   effects: PlatformOperationEffect;
@@ -312,126 +304,6 @@ const COMMUNITY_SEMANTIC_READ_OUTPUT_SCHEMA: PlatformOperationJsonSchema = {
   },
 };
 
-const PRODUCT_DOCS_SEARCH_NATIVE_INPUT_SCHEMA: PlatformOperationJsonSchema = {
-  type: "object",
-  additionalProperties: false,
-  required: ["query"],
-  properties: {
-    query: {
-      type: "string",
-      minLength: 1,
-      maxLength: 240,
-    },
-    limit: {
-      type: "integer",
-      minimum: 1,
-      maximum: 10,
-    },
-    section: {
-      type: "string",
-      minLength: 1,
-      maxLength: 80,
-    },
-    audience: {
-      type: "string",
-      minLength: 1,
-      maxLength: 40,
-    },
-  },
-};
-
-const PRODUCT_DOCS_SEARCH_MCP_INPUT_SCHEMA: PlatformOperationJsonSchema = {
-  type: "object",
-  additionalProperties: false,
-  required: ["query"],
-  properties: {
-    query: {
-      type: "string",
-      minLength: 1,
-      maxLength: 240,
-      description: "Focused product documentation query.",
-    },
-    limit: {
-      type: "number",
-      description: "Maximum matching snippets to return, clamped by the server.",
-    },
-    section: {
-      type: "string",
-      minLength: 1,
-      maxLength: 80,
-      description: "Optional documentation section filter.",
-    },
-    audience: {
-      type: "string",
-      minLength: 1,
-      maxLength: 40,
-      description: "Optional audience filter.",
-    },
-  },
-};
-
-const PRODUCT_DOC_READ_NATIVE_INPUT_SCHEMA: PlatformOperationJsonSchema = {
-  type: "object",
-  additionalProperties: false,
-  required: ["slug"],
-  properties: {
-    slug: {
-      type: "string",
-      minLength: 1,
-      maxLength: 160,
-    },
-    heading: {
-      type: "string",
-      minLength: 1,
-      maxLength: 160,
-    },
-  },
-};
-
-const PRODUCT_DOC_READ_MCP_INPUT_SCHEMA: PlatformOperationJsonSchema = {
-  type: "object",
-  additionalProperties: false,
-  required: ["slug"],
-  properties: {
-    slug: {
-      type: "string",
-      minLength: 1,
-      maxLength: 160,
-      description: "Product documentation slug returned by product docs search.",
-    },
-    heading: {
-      type: "string",
-      minLength: 1,
-      maxLength: 160,
-      description: "Optional heading or heading slug to read from the page.",
-    },
-  },
-};
-
-const PRODUCT_DOCS_SEARCH_OUTPUT_SCHEMA: PlatformOperationJsonSchema = {
-  type: "object",
-  additionalProperties: true,
-  required: ["product_docs"],
-  properties: {
-    product_docs: {
-      type: "object",
-      additionalProperties: true,
-    },
-  },
-};
-
-const PRODUCT_DOC_READ_OUTPUT_SCHEMA: PlatformOperationJsonSchema = {
-  type: "object",
-  additionalProperties: true,
-  required: ["product_doc"],
-  properties: {
-    product_doc: {
-      type: "object",
-      additionalProperties: true,
-    },
-  },
-};
-
 function readOperationBase(
   id: PlatformOperationId,
   executor: PlatformOperationContract["executor"],
@@ -553,80 +425,6 @@ export const PLATFORM_OPERATION_CONTRACTS = [
         },
         inputSchema: COMMUNITY_SEMANTIC_READ_MCP_INPUT_SCHEMA,
         outputSchema: COMMUNITY_SEMANTIC_READ_OUTPUT_SCHEMA,
-      },
-      worker: {
-        enabled: true,
-        billingPolicy: "free",
-        requiredCommunityResourceLane: "none",
-      },
-    },
-  },
-  {
-    ...readOperationBase(
-      "product_docs.search",
-      "productDocs.search",
-      "platform",
-      "none",
-    ),
-    projections: {
-      native: {
-        name: "search_product_docs",
-        description:
-          "Search canonical Polynet product documentation and return small ranked snippets with slugs for follow-up lookup.",
-        inputSchema: PRODUCT_DOCS_SEARCH_NATIVE_INPUT_SCHEMA,
-        category: "docs",
-        parallelSafe: true,
-        requiresWorkspace: false,
-        requiresCommunity: false,
-      },
-      mcp: {
-        name: "polynet_product_docs_search",
-        title: "Search Polynet Product Docs",
-        description:
-          "Search canonical Polynet product documentation and return small ranked snippets with slugs for follow-up reads.",
-        annotations: {
-          title: "Search Polynet Product Docs",
-          readOnlyHint: true,
-        },
-        inputSchema: PRODUCT_DOCS_SEARCH_MCP_INPUT_SCHEMA,
-        outputSchema: PRODUCT_DOCS_SEARCH_OUTPUT_SCHEMA,
-      },
-      worker: {
-        enabled: true,
-        billingPolicy: "free",
-        requiredCommunityResourceLane: "none",
-      },
-    },
-  },
-  {
-    ...readOperationBase(
-      "product_docs.read",
-      "productDocs.read",
-      "platform",
-      "none",
-    ),
-    projections: {
-      native: {
-        name: "get_product_doc",
-        description:
-          "Read one canonical Polynet product documentation page, or one heading section from that page.",
-        inputSchema: PRODUCT_DOC_READ_NATIVE_INPUT_SCHEMA,
-        category: "docs",
-        parallelSafe: true,
-        requiresWorkspace: false,
-        requiresCommunity: false,
-      },
-      mcp: {
-        name: "polynet_product_doc_read",
-        title: "Read Polynet Product Doc",
-        description:
-          "Read one canonical Polynet product documentation page, or one heading section from that page.",
-        annotations: {
-          title: "Read Polynet Product Doc",
-          readOnlyHint: true,
-        },
-        inputSchema: PRODUCT_DOC_READ_MCP_INPUT_SCHEMA,
-        outputSchema: PRODUCT_DOC_READ_OUTPUT_SCHEMA,
       },
       worker: {
         enabled: true,

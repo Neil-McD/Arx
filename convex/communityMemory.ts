@@ -1,8 +1,10 @@
-// Community memory (docs/specs/agent-system-slice-1.md, step 1): the guide's
-// one write into the community's memory, and a builder's undo. The guide
-// writes only from a review run; every note cites the open-channel posts it
-// came from, and code checks each citation (shared/communityMemory.ts). A
-// builder's note is never changed by the guide. Nothing here calls a model.
+// Memory (docs/specs/agent-system-end-state.md): the guide's one checked write
+// into a scope's memory (the community's, or one pod's), the review's input,
+// what makes a review due, and builders' and pod hosts' undo. The guide writes
+// only from a review run; every note cites the posts it came from, and code
+// checks each citation against the scope (shared/communityMemory.ts). A
+// builder's note is never changed by the guide. Records go through the one
+// memory store (communityNotesStore.ts). Nothing here calls a model.
 import { v } from "convex/values";
 import {
   communityScopeKey, insertMemoryIndex, insertNote, insertRemoval, insertRevision, insertRun, insertWork,
@@ -61,10 +63,10 @@ const RUNS_LIST_MAX = 30;
 type Refused = { ok: false; code: string };
 type Written = { ok: true; slug: string; title: string; change: "added" | "changed" };
 
-// "openChannel" means readable in this memory's place: a channel open to every
+// "inScope": readable in this memory's place: a channel open to every
 // member, or, for a pod's memory, that pod's own room. Never another pod.
 async function evidenceFacts(ctx: any, communityId: any, ref: MemoryEvidenceRef, scope: ScopeKey): Promise<MemoryEvidenceFacts> {
-  const none = { exists: false, communityMatches: false, live: false, byPerson: false, openChannel: false, sharedVisibility: false };
+  const none = { exists: false, communityMatches: false, live: false, byPerson: false, inScope: false, sharedVisibility: false };
   const table = ref.kind === "post" ? "communityInteractionRoots" : "communityInteractionReplies";
   const id = ctx.db.normalizeId(table, ref.id);
   const row = id ? await ctx.db.get(id) : null;
@@ -80,7 +82,7 @@ async function evidenceFacts(ctx: any, communityId: any, ref: MemoryEvidenceRef,
     communityMatches: String(row.communityId) === String(communityId),
     live,
     byPerson: row.actorType === "human",
-    openChannel: Boolean(channel && channel.status === "active" && String(channel.communityId) === String(communityId) && (
+    inScope: Boolean(channel && channel.status === "active" && String(channel.communityId) === String(communityId) && (
       channel.accessMode === "all_members" ||
       (parseScopeKey(scope)?.kind === "pod" && channel.accessMode === "restricted" && podScopeKey(channel._id) === scope))),
     sharedVisibility: row.visibilityScope === "community" || row.visibilityScope === "public",

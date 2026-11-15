@@ -214,20 +214,10 @@ assert.match(
   /provenance !== "stated_interview" && draft\.provenance !== "form_answer"/,
   "the confirm-card mutation accepts only interview/form provenances",
 );
-assert.match(
+assert.doesNotMatch(
   toolRegistry,
-  /MEMBER_PROFILE_CONFIRM_FACTS_TOOL_SCHEMA[\s\S]*enum: \["stated_interview", "form_answer"\]/,
-  "the member profile confirmation tool schema must accept only interview/form provenances",
-);
-assert.match(
-  toolRegistry,
-  /toolName === "member_profile_confirm_facts"[\s\S]*supports at most 12 facts/,
-  "the member profile confirmation tool must accept only bounded confirmed interview/form facts",
-);
-assert.match(
-  runtimeAgentLoop,
-  /params\.toolName === "member_profile_confirm_facts"[\s\S]*community_required[\s\S]*authenticated_user_required[\s\S]*memberOntology\.confirmMemberInterviewFacts/,
-  "the dormant profile confirmation primitive must require active community/auth and delegate to the existing confirmation mutation",
+  /member_profile_confirm_facts/,
+  "no agent tool writes member facts (the confirm card is the member's own mutation)",
 );
 assert.match(surface, /communityMembershipRowIsActive/, "membership checks use the canonical helper");
 assert.match(

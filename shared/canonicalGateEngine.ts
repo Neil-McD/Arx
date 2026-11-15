@@ -11,11 +11,9 @@ export type RequestedFundingSource =
   | "platform"
   | "auto";
 export type CapabilityFamily =
-  | "product_docs"
   | "community_tools"
   | "web_research";
 export const AUTHENTICATED_PLATFORM_CAPABILITIES: readonly CapabilityFamily[] = [
-  "product_docs",
   "community_tools",
   "web_research",
 ];
@@ -67,7 +65,6 @@ const VALID_REQUESTED_FUNDING_SOURCE = new Set<RequestedFundingSource>([
   "auto",
 ]);
 const VALID_CAPABILITY_FAMILY = new Set<CapabilityFamily>([
-  "product_docs",
   "community_tools",
   "web_research",
 ]);
@@ -136,9 +133,6 @@ export function resolveActiveCapabilityFamiliesFromEntitlements(input: {
     ? input.entitledCapabilityFamilies
     : [];
   const active: CapabilityFamily[] = [];
-  if (entitled.includes("product_docs")) {
-    active.push("product_docs");
-  }
   if (entitled.includes("community_tools")) {
     active.push("community_tools");
   }

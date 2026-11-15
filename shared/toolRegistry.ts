@@ -54,10 +54,6 @@ function getPlatformNativeToolContract(name: RetrievalToolName): {
   };
 }
 
-const SEARCH_PRODUCT_DOCS_TOOL = getPlatformNativeToolContract(
-  "search_product_docs",
-);
-const GET_PRODUCT_DOC_TOOL = getPlatformNativeToolContract("get_product_doc");
 
 function getPolynetCanonicalToolContract(
   name: PolynetCanonicalToolName,
@@ -142,97 +138,7 @@ const WEB_CRAWL_TOOL_SCHEMA: JsonSchema = {
   },
 };
 
-const MEMBER_PROFILE_CONFIRM_FACTS_TOOL_SCHEMA: JsonSchema = {
-  type: "object",
-  additionalProperties: false,
-  required: ["confirm_marker", "facts"],
-  properties: {
-    confirm_marker: {
-      type: "string",
-      minLength: 1,
-      maxLength: 160,
-      description: "Stable marker for the member-approved interview batch.",
-    },
-    facts: {
-      type: "array",
-      minItems: 1,
-      maxItems: 12,
-      items: {
-        type: "object",
-        additionalProperties: false,
-        required: ["kind", "body", "provenance"],
-        properties: {
-          kind: {
-            type: "string",
-            enum: [
-              "situation",
-              "goal",
-              "skill",
-              "interest",
-              "availability",
-              "preference",
-              "link",
-            ],
-          },
-          body: {
-            type: "string",
-            minLength: 1,
-            maxLength: 500,
-          },
-          provenance: {
-            type: "string",
-            enum: ["stated_interview", "form_answer"],
-          },
-          confidence: {
-            type: "number",
-            minimum: 0,
-            maximum: 1,
-          },
-          evidence_ref: {
-            type: "string",
-            minLength: 1,
-            maxLength: 180,
-          },
-        },
-      },
-    },
-  },
-};
-
-const MEMBER_CONVERSATIONS_LIST_TOOL_SCHEMA: JsonSchema = {
-  type: "object",
-  additionalProperties: false,
-  properties: {
-    limit: {
-      type: "integer",
-      minimum: 1,
-      maximum: 12,
-    },
-  },
-};
-
-const MEMBER_CONVERSATION_READ_TOOL_SCHEMA: JsonSchema = {
-  type: "object",
-  additionalProperties: false,
-  required: ["episode_id"],
-  properties: {
-    episode_id: {
-      type: "string",
-      minLength: 1,
-      maxLength: 160,
-    },
-  },
-};
-
 const TOOL_REGISTRY: Record<RetrievalToolName, ToolRegistryEntry> = {
-  search_product_docs: {
-    name: "search_product_docs",
-    ...SEARCH_PRODUCT_DOCS_TOOL,
-  },
-  get_product_doc: {
-    name: "get_product_doc",
-    ...GET_PRODUCT_DOC_TOOL,
-  },
   polynet_list: {
     name: "polynet_list",
     ...POLYNET_LIST_TOOL,
@@ -252,24 +158,6 @@ const TOOL_REGISTRY: Record<RetrievalToolName, ToolRegistryEntry> = {
   polynet_call: {
     name: "polynet_call",
     ...POLYNET_CALL_TOOL,
-  },
-  member_conversations_list: {
-    name: "member_conversations_list",
-    description:
-      "List the signed-in member's recent private Polynet agent conversation episodes across community lenses. Returns bounded metadata and lens provenance only; use member_conversation_read for relevant transcript evidence.",
-    inputSchema: MEMBER_CONVERSATIONS_LIST_TOOL_SCHEMA,
-  },
-  member_conversation_read: {
-    name: "member_conversation_read",
-    description:
-      "Read a bounded user-and-assistant transcript window with lens provenance from one of the signed-in member's private Polynet agent conversation episodes.",
-    inputSchema: MEMBER_CONVERSATION_READ_TOOL_SCHEMA,
-  },
-  member_profile_confirm_facts: {
-    name: "member_profile_confirm_facts",
-    description:
-      "Write member-approved onboarding interview facts to the active member profile ontology for the active community lens.",
-    inputSchema: MEMBER_PROFILE_CONFIRM_FACTS_TOOL_SCHEMA,
   },
   web_research: {
     name: "web_research",
@@ -666,21 +554,6 @@ export function normalizeToolArguments(
     rawArgs && typeof rawArgs === "object" && !Array.isArray(rawArgs)
       ? rawArgs
       : {};
-  if (toolName === "member_conversations_list") {
-    const limit = normalizeBoundedInteger(
-      args.limit,
-      "member_conversations_list limit",
-      1,
-      12,
-    );
-    return limit ? { limit } : {};
-  }
-  if (toolName === "member_conversation_read") {
-    const episodeId = normalizeString(args.episode_id ?? args.episodeId);
-    if (!episodeId)
-      throw new Error("member_conversation_read requires episode_id.");
-    return { episodeId: episodeId.slice(0, 160) };
-  }
   if (toolName === "polynet_list") {
     const validated = validatePolynetSemanticRepositoryOperationInput({
       operation: "list",
@@ -841,105 +714,6 @@ export function normalizeToolArguments(
       ...(target ? { target: target.slice(0, 1024) } : {}),
       input: args.input,
       idempotencyKey: idempotencyKey.slice(0, 200),
-    };
-  }
-  if (toolName === "member_profile_confirm_facts") {
-    const confirmMarker = normalizeString(
-      args.confirm_marker ?? args.confirmMarker,
-    );
-    if (!confirmMarker)
-      throw new Error("member_profile_confirm_facts requires confirm_marker.");
-    if (!Array.isArray(args.facts)) {
-      throw new Error("member_profile_confirm_facts requires facts.");
-    }
-    if (args.facts.length < 1) {
-      throw new Error("member_profile_confirm_facts facts cannot be empty.");
-    }
-    if (args.facts.length > 12) {
-      throw new Error(
-        "member_profile_confirm_facts supports at most 12 facts.",
-      );
-    }
-    const validKinds = new Set([
-      "situation",
-      "goal",
-      "skill",
-      "interest",
-      "availability",
-      "preference",
-      "link",
-    ]);
-    const facts = args.facts.map((rawFact, index) => {
-      if (!rawFact || typeof rawFact !== "object" || Array.isArray(rawFact)) {
-        throw new Error(
-          `member_profile_confirm_facts fact ${index + 1} must be an object.`,
-        );
-      }
-      const fact = rawFact as Record<string, unknown>;
-      const kind = normalizeString(fact.kind)?.toLowerCase() ?? "";
-      if (!validKinds.has(kind)) {
-        throw new Error(
-          `member_profile_confirm_facts fact ${index + 1} has invalid kind.`,
-        );
-      }
-      const provenance = normalizeString(fact.provenance)?.toLowerCase() ?? "";
-      if (provenance !== "stated_interview" && provenance !== "form_answer") {
-        throw new Error(
-          "member_profile_confirm_facts only accepts stated_interview or form_answer provenance.",
-        );
-      }
-      const body = normalizeString(fact.body);
-      if (!body) {
-        throw new Error(
-          `member_profile_confirm_facts fact ${index + 1} requires body.`,
-        );
-      }
-      const confidenceRaw = fact.confidence;
-      const confidence =
-        typeof confidenceRaw === "number" && Number.isFinite(confidenceRaw)
-          ? Math.max(0, Math.min(1, confidenceRaw))
-          : null;
-      const evidenceRef = normalizeString(
-        fact.evidence_ref ?? fact.evidenceRef,
-      );
-      return {
-        kind,
-        body: body.slice(0, 500),
-        provenance,
-        ...(confidence !== null ? { confidence } : null),
-        ...(evidenceRef ? { evidenceRef: evidenceRef.slice(0, 180) } : null),
-      };
-    });
-    return {
-      confirmMarker: confirmMarker.slice(0, 160),
-      facts,
-    };
-  }
-  if (toolName === "search_product_docs") {
-    const query = normalizeString(args.query);
-    if (!query) throw new Error("search_product_docs requires query.");
-    const limit = normalizeBoundedInteger(
-      args.limit,
-      "search_product_docs limit",
-      1,
-      10,
-    );
-    const section = normalizeString(args.section);
-    const audience = normalizeString(args.audience);
-    return {
-      query: query.slice(0, 240),
-      ...(limit ? { limit } : null),
-      ...(section ? { section: section.slice(0, 80) } : null),
-      ...(audience ? { audience: audience.slice(0, 40) } : null),
-    };
-  }
-  if (toolName === "get_product_doc") {
-    const slug = normalizeString(args.slug);
-    if (!slug) throw new Error("get_product_doc requires slug.");
-    const heading = normalizeString(args.heading);
-    return {
-      slug: slug.slice(0, 160),
-      ...(heading ? { heading: heading.slice(0, 160) } : null),
     };
   }
   if (toolName === "web_research") {

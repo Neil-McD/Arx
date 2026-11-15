@@ -30,7 +30,7 @@ for (const toolName of RETRIEVAL_TOOL_NAMES) {
 }
 assert.equal(getFixedRuntimeToolPolicy("polynet_list").readOnly, true);
 assert.equal(getFixedRuntimeToolPolicy("polynet_write").exclusive, true);
-assert.equal(getFixedRuntimeToolPolicy("member_profile_confirm_facts").mutatesState, true);
+assert.equal(getFixedRuntimeToolPolicy("polynet_call").mutatesState, true);
 
 const source = [
   readFileSync("shared/retrievalTools.ts", "utf8"),

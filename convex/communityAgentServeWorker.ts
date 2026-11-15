@@ -404,10 +404,6 @@ export async function executeConciergeTool(args: {
     const scope = await args.ctx.runQuery(internalRefs.communityAgentChannelAccess.authorizeServeToolsInternal, {
       requestId: args.requestId, expectedAttempt: args.context.request.attempt,
     });
-    if (scope.timed) {
-      return { status: "error", exitCode: null, outputText: "", errorCode: "timed_check_in_prompt_only",
-        errorMessage: "This timed check-in can produce one message using its supplied context. It cannot retrieve member-private context or perform additional tool actions." };
-    }
     if (scope.restricted && (args.toolName === "polynet_write" || args.toolName === "polynet_call")) {
       return { status: "error", exitCode: null, outputText: "", errorCode: "private_channel_output_scoped",
         errorMessage: "This private-room turn can read shared knowledge and answer in its originating thread; it cannot publish elsewhere or modify shared memory." };
