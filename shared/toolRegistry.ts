@@ -96,48 +96,6 @@ const WEB_RESEARCH_TOOL_SCHEMA: JsonSchema = {
   },
 };
 
-const WEB_CRAWL_TOOL_SCHEMA: JsonSchema = {
-  type: "object",
-  additionalProperties: false,
-  required: ["url"],
-  properties: {
-    url: {
-      type: "string",
-      minLength: 1,
-      maxLength: 2048,
-    },
-    strategy: {
-      type: "string",
-      enum: ["auto", "simple", "crawl"],
-      description:
-        "auto uses the configured platform crawler, simple reads one page, crawl requires the robust crawler provider.",
-    },
-    destination: {
-      type: "string",
-      enum: ["context", "active_community_sources"],
-      description:
-        "context returns bounded crawl output; active_community_sources saves crawled pages as source records for the active community.",
-    },
-    max_pages: {
-      type: "integer",
-      minimum: 1,
-      maximum: 100,
-    },
-    max_depth: {
-      type: "integer",
-      minimum: 0,
-      maximum: 4,
-    },
-    max_chars: {
-      type: "integer",
-      minimum: 1000,
-      maximum: 80000,
-      description:
-        "Maximum total crawled text returned to the model when destination is context.",
-    },
-  },
-};
-
 const TOOL_REGISTRY: Record<RetrievalToolName, ToolRegistryEntry> = {
   polynet_list: {
     name: "polynet_list",

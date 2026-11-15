@@ -24,7 +24,7 @@ assert.equal((schema.match(/"personal_agent"/g) ?? []).length, 0, "the retired v
 
 const authority = read("shared/polynetAuthority.ts");
 assert.match(authority, /\| "community_agent_for_member"\n\s*\| "external_mcp"\n\s*\| "community_agent"/, "the agent has two permission modes");
-assert.match(read("convex/runtimeAgentLoop.ts"), /principalKind: communityOwned \? "community_agent" : "community_agent_for_member"/);
+assert.match(read("convex/agentTools.ts"), /principalKind: communityOwned \? "community_agent" : "community_agent_for_member"/);
 
 const surface = read("shared/runtimeInvocationSurface.ts");
 assert.doesNotMatch(surface, /Polynet Intelligence|personal agent in Polynet|You do not belong to any community/, "the retired personal-agent prompt stays deleted");

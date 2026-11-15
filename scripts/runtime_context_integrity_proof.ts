@@ -36,8 +36,6 @@ const run = {
   communityId: "community_1",
   communityContextVersion: 3,
   executionMode: "agentic",
-  harnessProfile: "authenticated_cloud_tools",
-  capabilityFamilies: ["product_docs", "community_tools", "sandbox_tools", "workspace_tools"],
 };
 
 const baseEvents = [
@@ -49,7 +47,6 @@ const baseEvents = [
       community_id: "community_1",
       community_context_version: 3,
       execution_mode: "agentic",
-      capability_families: ["product_docs", "community_tools", "sandbox_tools", "workspace_tools"],
     },
   },
   {
@@ -60,7 +57,6 @@ const baseEvents = [
       project_id: "project_1",
       community_id: "community_1",
       community_context_version: 3,
-      capability_families: ["product_docs", "community_tools", "sandbox_tools", "workspace_tools"],
       harness_profile: "authenticated_cloud_tools",
     },
   },
@@ -75,7 +71,6 @@ const baseEvents = [
         "polynet_read",
         "read",
       ],
-      capability_families: ["product_docs", "community_tools", "sandbox_tools", "workspace_tools"],
       harness_profile: "authenticated_cloud_tools",
     },
   },
@@ -146,7 +141,6 @@ assert.deepEqual(okVerdict.failures, []);
 assert.equal(okVerdict.checked.run_id_matches, true);
 assert.equal(okVerdict.checked.scope_matches_run, true);
 assert.equal(okVerdict.checked.community_context_version_matches, true);
-assert.equal(okVerdict.checked.capability_families_match_policy, true);
 assert.equal(okVerdict.checked.tools_match_policy, true);
 assert.equal(okVerdict.checked.prompt_sections_present, true);
 assert.equal(okVerdict.checked.manifest_sections_present, true);

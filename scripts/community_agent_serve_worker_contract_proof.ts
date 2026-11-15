@@ -7,7 +7,7 @@ const workerSource = readFileSync(join(root, "convex/communityAgentServeWorker.t
 const schema = readFileSync(join(root, "convex/schema.ts"), "utf8");
 const serveContract = readFileSync(join(root, "shared/communityAgentServeContract.ts"), "utf8");
 const threadContext = readFileSync(join(root, "shared/communityAgentThreadContext.ts"), "utf8");
-const conciergeTools = readFileSync(join(root, "shared/communityAgentConciergeTools.ts"), "utf8");
+const lens = readFileSync(join(root, "shared/lens.ts"), "utf8");
 const context = readFileSync(join(root, "convex/communityAgentContext.ts"), "utf8");
 const servePrompt = readFileSync(join(root, "shared/communityAgentServePrompt.ts"), "utf8");
 const crons = readFileSync(join(root, "convex/crons.ts"), "utf8");
@@ -220,7 +220,7 @@ assert.match(
 );
 assert.match(
   run,
-  /runPiRuntimeKernel<CommunityAgentConciergeToolName>\(\{[\s\S]*inputBudget:[\s\S]*runCompletion: async[\s\S]*claimCommunityInferenceFundingSession\([\s\S]*surface: args\.surface[\s\S]*markCommunityInferenceFundingSessionProviderStarted\([\s\S]*runOpenAiNativeToolCompletion\(\{[\s\S]*modelId: fundingSession\.modelId/,
+  /runPiRuntimeKernel<RetrievalToolName>\(\{[\s\S]*inputBudget:[\s\S]*runCompletion: async[\s\S]*claimCommunityInferenceFundingSession\([\s\S]*surface: args\.surface[\s\S]*markCommunityInferenceFundingSessionProviderStarted\([\s\S]*runOpenAiNativeToolCompletion\(\{[\s\S]*modelId: fundingSession\.modelId/,
   "the run entry should admit model input before claiming canonical hosted funding and starting the provider",
 );
 for (const source of [actionBlock, run]) assert.doesNotMatch(
@@ -246,24 +246,20 @@ assert.match(
 assert.doesNotMatch(actionBlock, /owner_api_key|ownerApiKey|runChatgptNativeToolCompletion|apiKeyOverride/);
 assert.match(
   worker,
-  /executeConciergeTool[\s\S]*executeRetrievalHarnessTool\(\{[\s\S]*userId: normalizeIdValue\(args\.context\.request\.sponsorUserId\)[\s\S]*authSubject: normalizeIdValue\(args\.context\.request\.authSubject\)[\s\S]*communityId: normalizeIdValue\(args\.context\.request\.communityId\)[\s\S]*toolName: args\.toolName/,
+  /executeConciergeTool[\s\S]*runAgentTool\(\{[\s\S]*userId: normalizeIdValue\(args\.context\.request\.sponsorUserId\)[\s\S]*authSubject: normalizeIdValue\(args\.context\.request\.authSubject\)[\s\S]*communityId: normalizeIdValue\(args\.context\.request\.communityId\)[\s\S]*toolName: args\.toolName/,
   "serve worker tools should execute as the server-resolved requester and within the single serve-request community",
 );
 assert.match(
   run,
-  /unsupported_concierge_tool[\s\S]*isCommunityAgentConciergeToolName[\s\S]*normalizeCommunityAgentConciergeToolArguments/,
-  "serve worker should reject model-requested tools outside the Concierge allowlist before execution",
+  /unsupported_concierge_tool[\s\S]*function coerceToLensTools[\s\S]*lensHasTool\(lens, completion\.toolName\)[\s\S]*buildResponsesApiFunctionTools\(LENS_TOOLS\[args\.lens\]\)/,
+  "the run should offer only its lens tools and reject any other tool the model asks for before execution",
 );
 assert.match(
-  conciergeTools,
-  /COMMUNITY_AGENT_CONCIERGE_TOOL_NAMES = \[[\s\S]*"polynet_list"[\s\S]*"polynet_read"[\s\S]*"polynet_search"[\s\S]*"polynet_write"[\s\S]*"polynet_call"[\s\S]*\] as const satisfies readonly RetrievalToolName\[\]/,
-  "Concierge must expose exactly the canonical five Polynet tools",
+  lens,
+  /const POLYNET_TOOLS = \["polynet_list", "polynet_read", "polynet_search", "polynet_write", "polynet_call"\] as const;[\s\S]*guide_public: POLYNET_TOOLS,/,
+  "the guide in public must get exactly the canonical five Polynet tools",
 );
-assert.doesNotMatch(
-  conciergeTools,
-  /community_memory_|community_chat_|community_ai_feed_|community_resources_|search_product_docs|get_product_doc|web_research|web_crawl|bash|terminal_|computer_/i,
-  "Concierge allowlist must exclude specialized duplicate, premium, filesystem, terminal, and computer tools",
-);
+assert.match(worker, /runFundedCommunityAgent\(\{\s*lens: "guide_public",/, "a tag runs under the guide's public lens");
 assert.match(
   servePrompt,
   /communityInstructions[\s\S]*context\.agent\.systemPrompt[\s\S]*Community-wide instructions from the AI Agent settings:/,

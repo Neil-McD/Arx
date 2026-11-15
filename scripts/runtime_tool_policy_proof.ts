@@ -4,18 +4,11 @@ import {
   RETRIEVAL_TOOL_NAMES,
   type RetrievalToolName,
 } from "../shared/retrievalTools.ts";
-import { resolvePolynetHarnessToolPolicy } from "../shared/harnessToolPolicy.ts";
 import {
   buildRuntimeToolPolicySurface,
   getFixedRuntimeToolPolicy,
 } from "../shared/runtimeToolPolicy.ts";
 
-assert.deepEqual(
-  resolvePolynetHarnessToolPolicy({
-    allowedToolNames: RETRIEVAL_TOOL_NAMES,
-  }).fixedRuntimeToolNames,
-  RETRIEVAL_TOOL_NAMES,
-);
 const surface = buildRuntimeToolPolicySurface({
   fixedToolNames: [...RETRIEVAL_TOOL_NAMES],
 });
@@ -34,7 +27,6 @@ assert.equal(getFixedRuntimeToolPolicy("polynet_call").mutatesState, true);
 
 const source = [
   readFileSync("shared/retrievalTools.ts", "utf8"),
-  readFileSync("shared/harnessToolPolicy.ts", "utf8"),
   readFileSync("shared/runtimeToolPolicy.ts", "utf8"),
 ].join("\n");
 assert.doesNotMatch(

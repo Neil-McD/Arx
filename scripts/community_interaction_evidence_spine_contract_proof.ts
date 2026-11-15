@@ -41,10 +41,10 @@ const [
   read("convex/communityEvidenceAudit.ts"),
   read("convex/communityChat.ts"),
   read("convex/communityInteractions.ts"),
-  read("convex/runtimeAgentLoop.ts"),
+  Promise.all([read("convex/runtimeAgentLoop.ts"), read("convex/agentTools.ts")]).then((parts) => parts.join("\n")),
   read("shared/retrievalTools.ts"),
   read("shared/runtimeInvocationSurface.ts"),
-  read("shared/communityAgentConciergeTools.ts"),
+  read("shared/lens.ts"),
   read("convex/communityAgentServeWorker.ts"),
   read("shared/polynetMcp.ts"),
   read("convex/httpMcp.ts"),
@@ -118,7 +118,7 @@ for (const source of [invocationSurface, conciergeTools]) {
 }
 assert.match(runtimeLoop, /executePolynetCanonicalTool/);
 assert.match(conciergeWorker, /executeConciergeTool/);
-assert.match(conciergeWorker, /executeRetrievalHarnessTool/);
+assert.match(conciergeWorker, /runAgentTool/);
 assert.match(conciergeWorker, /evidenceSurface: "community_concierge"/);
 assert.match(mcp, /getPolynetCanonicalToolDefinitions/);
 assert.doesNotMatch(mcp, /polynet_community_chat_search|polynet_community_chat_read/);

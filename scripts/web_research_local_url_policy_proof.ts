@@ -42,7 +42,7 @@ assert.match(webResearchToolsSource, /classifyWebResearchUrlAccess\(params\.url\
 assert.match(webResearchToolsSource, /const url = access\.normalizedUrl/);
 
 const runtimeAgentLoopSource = readFileSync(
-  new URL("../convex/runtimeAgentLoop.ts", import.meta.url),
+  new URL("../convex/agentTools.ts", import.meta.url),
   "utf8",
 );
 const classifyIndex = runtimeAgentLoopSource.indexOf("classifyWebResearchUrlAccess");

@@ -14,7 +14,7 @@ const planCore = read("convex/founderPlanCore.ts");
 const paidToolReceipts = read("convex/founderPaidTools.ts");
 const paidToolRuntime = read("convex/founderPaidToolRuntime.ts");
 const providerCostCore = read("convex/providerCostCore.ts");
-const runtimeAgentLoop = read("convex/runtimeAgentLoop.ts");
+const runtimeAgentLoop = read("convex/runtimeAgentLoop.ts") + read("convex/agentTools.ts");
 const communityResources = readCommunityResourceSources();
 const runtimePolicy = read("shared/runtimeToolPolicy.ts");
 const runtimeInvocationSurface = read("shared/runtimeInvocationSurface.ts");
@@ -97,16 +97,11 @@ assert.match(
 );
 assert.doesNotMatch(runtimePolicy, /web_crawl:/
 );
-assert.match(
-  runtimeInvocationSurface,
-  /COMMUNITY_AGENT_DOCK_CAPABILITY_FAMILY_SET[\s\S]*"web_research"/,
-);
-assert.match(
-  runtimeInvocationSurface,
-  /COMMUNITY_AGENT_DOCK_TOOL_NAME_SET[\s\S]*"web_research"/,
-);
-assert.doesNotMatch(runtimeInvocationSurface, /"web_crawl"/
-);
+// Paid web research is a private-talk tool only (shared/lens.ts).
+const lens = read("shared/lens.ts");
+assert.match(lens, /member_private: \[\.\.\.POLYNET_TOOLS, "web_research"\]/);
+assert.match(lens, /guide_public: POLYNET_TOOLS,/);
+assert.doesNotMatch(lens + runtimeInvocationSurface, /"web_crawl"/);
 assert.doesNotMatch(providerPricing, /WEB_RESEARCH_CREDITS_PER_CALL/);
 assert.doesNotMatch(providerPricing, /priceWebResearchCredits/);
 assert.doesNotMatch(providerPricing, /priceFixedPaidToolCredits/);
