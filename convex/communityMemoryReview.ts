@@ -179,6 +179,11 @@ export const runMemoryReviewInternal = internalAction({
       maxToolSteps: REVIEW_MAX_TOOL_STEPS,
       promptCacheKey: `pn:${String(claim.communityId)}:memory-review`,
       recorder,
+      // The lens checks every path itself and normalises what it hands on.
+      normalizeToolArguments: (_toolName, rawArgs) => rawArgs,
+      // The log names where each call went (paths and verbs, never post text).
+      describeToolCall: (toolName, callArgs) => `${toolName} ${String(callArgs.path ?? callArgs.operation ?? "")}`.trim(),
+      maxConsecutiveFailures: 4,
       executeTool: async (toolName, rawArguments) => {
         const result = await executePolynetCanonicalTool({
           ctx, authSubject: claim.ownerAuthSubject, userId: String(claim.ownerUserId), principalKind: "community_agent",

@@ -110,6 +110,12 @@ export async function runFundedCommunityAgent(args: {
   beforeEachCompletion?: () => Promise<void>;
   // Tool results the caller's rules refused are logged as refused.
   isRefusal?: (errorCode: string | null | undefined) => boolean;
+  // A lens that validates its own paths (shared/agentLens.ts) takes the
+  // model's arguments as they are; otherwise the general rules apply.
+  normalizeToolArguments?: (toolName: CommunityAgentConciergeToolName, rawArgs: Record<string, unknown>) => Record<string, unknown>;
+  // What the run's log says about a call (by default, the tool's name).
+  describeToolCall?: (toolName: string, args: Record<string, unknown>) => string;
+  maxConsecutiveFailures?: number;
 }): Promise<CommunityAgentRunResult> {
   const tools = buildCommunityAgentConciergeFunctionTools();
   let usage = createFounderInferenceUsageTotals("");
@@ -136,7 +142,10 @@ export async function runFundedCommunityAgent(args: {
     usage = createFounderInferenceUsageTotals(admittedModelId);
     completion = await runPiRuntimeKernel<CommunityAgentConciergeToolName>({
       messages: args.messages,
-      budget: { ...DEFAULT_RUNTIME_KERNEL_BUDGET, maxToolSteps: args.maxToolSteps, maxConsecutiveFailures: 2, maxNoProgressSteps: 2 },
+      budget: {
+        ...DEFAULT_RUNTIME_KERNEL_BUDGET, maxToolSteps: args.maxToolSteps,
+        maxConsecutiveFailures: args.maxConsecutiveFailures ?? 2, maxNoProgressSteps: args.maxConsecutiveFailures ?? 2,
+      },
       inputBudget: {
         transport: "openai_responses",
         modelRef: `openai/${admittedModelId}`,
@@ -189,10 +198,11 @@ export async function runFundedCommunityAgent(args: {
           toolCompletion.ok === false && providerFailureIsKnownPreSpend(toolCompletion.code));
         return coerceToFiveTools(toolCompletion);
       },
-      normalizeToolArguments: normalizeCommunityAgentConciergeToolArguments,
+      normalizeToolArguments: args.normalizeToolArguments ?? normalizeCommunityAgentConciergeToolArguments,
       onToolStepStart: async ({ step }) => {
         await args.recorder.flushAll();
-        await args.recorder.record({ kind: "tool_call", toolName: String(step.toolName), status: "running", content: String(step.toolName) });
+        const content = args.describeToolCall?.(String(step.toolName), (step as any).normalizedArgs ?? {}) ?? String(step.toolName);
+        await args.recorder.record({ kind: "tool_call", toolName: String(step.toolName), status: "running", content });
       },
       onToolStepFinish: async ({ step, toolResult }) => {
         const refused = Boolean(args.isRefusal?.(toolResult.errorCode));
