@@ -197,3 +197,27 @@ test("undoing an older review keeps what a later review wrote over it", async ()
   expect(await t.run((ctx: any) => ctx.db.query("communityNotes").collect())).toEqual([]);
   expect(await t.query(internal.communityMemory.readCommunityMemoryIndexInternal, { communityId: w.communityId })).toBeNull();
 });
+
+test("a builder sees what a guide note was learned from; a removed post shows as gone; members can't look", async () => {
+  const t = convexTest(schema, modules);
+  const w = await world(t);
+  const asOwner = t.withIdentity({ subject: "owner" });
+  const asMember = t.withIdentity({ subject: "member" });
+  const night = await run(t, w.communityId);
+  await observe(t, w.communityId, night.runId, [`post:${w.open}`, `reply:${w.reply}`]);
+  await t.mutation(internal.communityMemory.finishMemoryReviewRunInternal, { communityId: w.communityId, runId: night.runId, nowMs: NOW });
+
+  const seen: any = await asOwner.query(api.communityMemory.listNoteSources, { communityId: w.communityId, slug: "refunds" });
+  expect(seen.sources).toEqual([
+    expect.objectContaining({ ref: `post:${w.open}`, available: true, author: "Jon", channel_name: "general", excerpt: "Refunds go through Stripe within 7 days." }),
+    expect.objectContaining({ ref: `reply:${w.reply}`, available: true, author: "Owner", excerpt: "Yes, and say so in the welcome." }),
+  ]);
+  await expect(asMember.query(api.communityMemory.listNoteSources, { communityId: w.communityId, slug: "refunds" })).rejects.toThrow();
+
+  // The post is taken down: the note still says it came from somewhere, without showing it.
+  await t.run((ctx: any) => ctx.db.patch(w.open, { status: "hidden" }));
+  const after: any = await asOwner.query(api.communityMemory.listNoteSources, { communityId: w.communityId, slug: "refunds" });
+  expect(after.sources[0]).toEqual({ ref: `post:${w.open}`, kind: "post", available: false });
+  // The reply belongs to the hidden post, so it's gone too.
+  expect(after.sources[1]).toMatchObject({ available: false });
+});

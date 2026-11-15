@@ -15,6 +15,8 @@ import {
   createCommunityNote,
   deleteCommunityNote,
   fetchCommunityNotes,
+  fetchNoteSources,
+  undoLearnedNote,
   updateCommunityNote,
   type CommunityNoteView,
 } from "../../../../shared/cloudCommunityNotesGateway";
@@ -219,6 +221,11 @@ export function KitClassroom(props: {
   };
 
   const openNote = note?.slug ? notes.find((entry) => entry.slug === note.slug) ?? null : null;
+  const openNoteSlug = openNote?.slug ?? null;
+  const loadOpenNoteSources = useCallback(
+    () => fetchNoteSources({ session: props.session, communityId: props.communityId, slug: openNoteSlug ?? "" }),
+    [props.session, props.communityId, openNoteSlug],
+  );
   // Files and links the guide was given to read (builders only).
   const guideSources = props.canManage ? props.resources.filter((resource) => resource.resource_role === "source") : [];
   const sourceFailed = (source: CommunityResource) => (source as { source_ingestion_status?: string }).source_ingestion_status === "failed";
@@ -258,6 +265,12 @@ export function KitClassroom(props: {
           onDelete={async () => {
             await deleteCommunityNote({ session: props.session, communityId: props.communityId, slug: openNote.slug });
             setNote(null);
+            await loadNotes();
+          }}
+          loadSources={loadOpenNoteSources}
+          onUndo={async () => {
+            const undone = await undoLearnedNote({ session: props.session, communityId: props.communityId, slug: openNote.slug });
+            if (undone === "removed") setNote(null);
             await loadNotes();
           }} />
       ) : null}
