@@ -6,6 +6,7 @@
 // builder's note is never changed by the guide. Records go through the one
 // memory store (communityNotesStore.ts). Nothing here calls a model.
 import { v } from "convex/values";
+import { communityResourceIsMemberVisiblePage, communityResourceModuleIsMemberLive } from "../shared/communityResourceVisibility";
 import {
   communityScopeKey, insertMemoryIndex, insertNote, insertRemoval, insertRevision, insertRun, insertWork,
   memoryIndexFor, noteBySlug, notesByUpdated, parseScopeKey, podScopeKey, removalsFor, revisionsForRun, revisionsForSlug,
@@ -150,12 +151,15 @@ export async function liveLessons(ctx: any, communityId: any): Promise<Array<{ i
     .withIndex("by_community_sortOrder", (q: any) => q.eq("communityId", communityId)).take(60);
   const lessons: Array<{ id: any; course: string; order: number; title: string }> = [];
   for (const module of modules) {
-    if (module.status === "draft") continue;
+    if (!communityResourceModuleIsMemberLive(module)) continue;
+    const live = new Set([String(module._id)]);
     const rows: any[] = await ctx.db.query("communityResources")
       .withIndex("by_community_module_sortOrder", (q: any) => q.eq("communityId", communityId).eq("moduleId", module._id)).take(100);
     let order = 0;
     for (const row of rows) {
-      if (row.role === "source" || !String(row.title ?? "").trim()) continue;
+      // The same rule as the lessons members are shown: a titled placeholder
+      // with nothing in it isn't one.
+      if (!communityResourceIsMemberVisiblePage(row, live)) continue;
       lessons.push({ id: row._id, course: String(module.name ?? ""), order: ++order, title: String(row.title) });
       if (lessons.length >= LESSONS_LISTED_MAX) return lessons;
     }
@@ -166,14 +170,15 @@ export async function liveLessons(ctx: any, communityId: any): Promise<Array<{ i
 // Where a note is filed, checked when it is written: a lesson of this
 // community that members can take, or a subject name. A pod's notes take a
 // subject only.
-async function resolveAbout(ctx: any, communityId: any, scope: ScopeKey, raw: string): Promise<{ aboutLessonId?: any; subject?: string } | { error: string }> {
+async function resolveAbout(ctx: any, communityId: any, scope: ScopeKey, raw: string, ownTitle?: string): Promise<{ aboutLessonId?: any; subject?: string } | { error: string }> {
   const about = parseMemoryAbout(raw);
   if (!about) return { error: "about_invalid" };
   if (about.kind === "subject") {
     // A subject groups notes; a note's own name groups nothing.
     const named = about.name.toLowerCase();
     const notes: any[] = await notesByUpdated(ctx, scope).take(COMMUNITY_NOTES_MAX_PER_COMMUNITY);
-    if (notes.some((note) => String(note.title).trim().toLowerCase() === named)) return { error: "about_is_a_title" };
+    // The note being written counts too: its own title is no subject for it.
+    if (ownTitle?.trim().toLowerCase() === named || notes.some((note) => String(note.title).trim().toLowerCase() === named)) return { error: "about_is_a_title" };
     return { subject: about.name, aboutLessonId: undefined };
   }
   if (parseScopeKey(scope)?.kind === "pod") return { error: "about_lesson_in_pod" };
@@ -215,7 +220,7 @@ export const observeCommunityMemoryInternal = internalMutation({
     const refs = parsed.refs.map((ref) => ref.raw);
     const removals = await removalsFor(ctx, scope).order("desc").take(REMOVALS_SCAN);
     if (memoryEvidenceWasRemoved(refs, removals)) return refuse(ctx, run, title, "evidence_removed");
-    const filed = args.about ? await resolveAbout(ctx, args.communityId, scope, args.about) : {};
+    const filed = args.about ? await resolveAbout(ctx, args.communityId, scope, args.about, title) : {};
     if ("error" in filed) return refuse(ctx, run, title, filed.error);
 
     if (args.supersedes) {

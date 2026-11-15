@@ -260,7 +260,7 @@ async function course(t: any, w: any) {
     const module = (name: string, status: "live" | "draft", sortOrder: number) => ctx.db.insert("communityResourceModules", {
       communityId: w.communityId, createdByUserId: w.ownerId, status, name, sortOrder, createdAt: NOW, updatedAt: NOW });
     const lesson = (moduleId: any, title: string, sortOrder: number, extra: Record<string, unknown> = {}) => ctx.db.insert("communityResources", {
-      communityId: w.communityId, moduleId, createdByUserId: w.ownerId, type: "page", title, sortOrder, pinned: false, createdAt: NOW, updatedAt: NOW, ...extra } as any);
+      communityId: w.communityId, moduleId, createdByUserId: w.ownerId, type: "page", title, bodyMd: "What the lesson says.", bodyChars: 21, sortOrder, pinned: false, createdAt: NOW, updatedAt: NOW, ...extra } as any);
     const basics = await module("Money basics", "live", 0);
     const draft = await module("Not out yet", "draft", 1);
     return {
@@ -268,6 +268,8 @@ async function course(t: any, w: any) {
       pricing: await lesson(basics, "Pricing", 1),
       file: await lesson(basics, "A file the guide read", 2, { role: "source" }),
       unpublished: await lesson(draft, "Secret lesson", 0),
+      // Titled, with nothing in it yet: members aren't shown it.
+      empty: await lesson(basics, "Coming soon", 3, { bodyMd: undefined, bodyChars: undefined }),
     };
   });
 }
@@ -294,7 +296,9 @@ test("the guide files a note under a lesson members can take, or a subject; neve
 
   // Refused, with the reason, so the guide can fix it.
   for (const [about, code] of [
-    [`lesson:${c.unpublished}`, "about_lesson_missing"], [`lesson:${c.file}`, "about_lesson_missing"], ["lesson:nope", "about_lesson_missing"],
+    [`lesson:${c.unpublished}`, "about_lesson_missing"], [`lesson:${c.file}`, "about_lesson_missing"], [`lesson:${c.empty}`, "about_lesson_missing"], ["lesson:nope", "about_lesson_missing"],
+    // Its own title is no subject for it.
+    ["another", "about_is_a_title"],
     ["memory/refunds.md", "about_invalid"], ["x".repeat(41), "about_invalid"], ["post:abc", "about_invalid"],
     ["How we handle every refund", "about_invalid"], ["refunds", "about_is_a_title"],
   ]) {
@@ -317,6 +321,7 @@ test("a review files notes that exist without rewriting them, a builder's too; t
   expect(before.text).toContain(`- lesson:${c.pricing} · Money basics › 2. Pricing`);
   expect(before.text).not.toContain("Secret lesson");
   expect(before.text).not.toContain("A file the guide read");
+  expect(before.text).not.toContain("Coming soon");
   expect(before.text).toMatch(/memory\/house-rules\.md · House rules · by a builder · unfiled/);
   expect(before.text).toMatch(/memory\/refunds\.md · Refunds · by you · unfiled/);
 
