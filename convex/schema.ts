@@ -1687,6 +1687,10 @@ export default defineSchema({
     runId: v.optional(v.id("agentWorkRuns")),
     // Written from the place's threads up to here.
     windowEnd: v.number(),
+    // A builder (or a pod's host) took it down; the next brief the guide
+    // writes replaces the row, so it shows again.
+    hiddenAt: v.optional(v.number()),
+    hiddenByUserId: v.optional(v.id("users")),
     createdAt: v.number(),
     updatedAt: v.number(),
   })

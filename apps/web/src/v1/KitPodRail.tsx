@@ -1,8 +1,9 @@
 // Pods (docs/specs/pods-v0.md): a pod's own right column, in place of a
-// channel's. What it is for; the viewer's own membership (paying, leaving, a
-// payment problem) and Leave pod; who is asking to join; who is in it and, for
-// the people who manage it, how each person is in.
-import { useCallback, useEffect, useState } from "react";
+// channel's. In order: who is asking to join (hosts); the guide's brief; the
+// next call; who is in it and, for the people who manage it, how each person
+// is in; what the pod knows; what it is for; the viewer's own membership
+// (paying, leaving, a payment problem) and Leave pod.
+import { Fragment, useCallback, useEffect, useState, type ReactNode } from "react";
 import {
   decideCloudPodRequest,
   fetchCloudPod,
@@ -15,6 +16,7 @@ import {
   type CloudPodDetail,
 } from "../../../../shared/cloudCommunityPodsGateway";
 import { Btn, KitApp, Rail, Sec, Sep, cx } from "./kit";
+import { BriefPart, usePlaceBrief } from "./KitBrief";
 import { KitPodCall } from "./KitPodCall";
 import { KitPodKnowledge } from "./KitPodKnowledge";
 import { askForPodPagePreview, forgetPod, goToPodsPath, rememberPod } from "./podMemory";
@@ -89,137 +91,141 @@ export function KitPodRail(props: { session: unknown; communityId: string; pod: 
     } finally { setBusy(null); }
   };
 
+  const { brief, canHide, hide } = usePlaceBrief(props.session, props.communityId, pod.channel_id);
+  const [now] = useState(() => Date.now());
   const mine = pod.my_membership;
   const paid = Boolean(mine && mine.state !== "added");
+
+  // The panel's parts, in order: who is asking to join (hosts), the guide's
+  // brief, the next call, who is in it, what the pod knows, then what the pod
+  // is and the viewer's own membership. Each keeps its own key, so one
+  // coming or going never resets a draft in another.
+  const parts = ([
+    ["requests", pod.can_manage && pod.requests.length ? (
+      <Sec label={`Asking to join · ${pod.requests.length}`}>
+        {pod.requests.map((request) => (
+          <div key={request.user_id} className={cx("podreq")}>
+            <span>{request.name}{request.status === "waitlist" ? <em> · waitlist</em> : null}</span>
+            <span className={cx("podreq-acts")}>
+              <Btn small go disabled={Boolean(busy)} onClick={() => void act(`yes:${request.user_id}`, () => decideCloudPodRequest({ session: props.session, communityId: props.communityId, channelId: pod.channel_id, userId: request.user_id, approve: true }))}>Add</Btn>
+              <Btn small txt disabled={Boolean(busy)} onClick={() => void act(`no:${request.user_id}`, () => decideCloudPodRequest({ session: props.session, communityId: props.communityId, channelId: pod.channel_id, userId: request.user_id, approve: false }))}>Decline</Btn>
+            </span>
+          </div>
+        ))}
+      </Sec>
+    ) : null],
+    ["brief", brief ? <BriefPart brief={brief} now={now} onHide={canHide ? hide : undefined} /> : null],
+    ["call", pod.next_call || pod.can_manage ? (
+      <KitPodCall session={props.session} communityId={props.communityId} pod={pod} onChanged={props.onChanged} />
+    ) : null],
+    ["people", (
+      <Sec label="In this pod">
+        {pod.members.length ? pod.members.map((member) => (
+          <div key={member.user_id} className={cx("podreq")}>
+            <span>
+              {member.name}{member.is_host ? <em> · host</em> : null}
+              {member.payment ? <span className={cx("podtag")}>{memberTag(member.payment)}</span> : null}
+            </span>
+            {pod.can_edit ? (
+              <span className={cx("podreq-acts")}>
+                <Btn small txt disabled={Boolean(busy)} onClick={() => void act(`host:${member.user_id}`, () => setCloudPodHost({ session: props.session, communityId: props.communityId, channelId: pod.channel_id, userId: member.user_id, host: !member.is_host }))}>
+                  {member.is_host ? "Not host" : "Make host"}
+                </Btn>
+              </span>
+            ) : null}
+          </div>
+        )) : <p className={cx("sub")}>No one yet.</p>}
+      </Sec>
+    )],
+    ["knowledge", <KitPodKnowledge session={props.session} communityId={props.communityId} channelId={pod.channel_id} />],
+    ["about", (
+      <Sec label="About this pod">
+        {editing ? (
+          <div className={cx("podform")} style={{ marginTop: 0 }}>
+            <textarea value={editing.purpose} onChange={(event) => setEditing({ ...editing, purpose: event.target.value })} placeholder="What is this pod for? One sentence." aria-label="What the pod is for" rows={3} maxLength={280} autoFocus />
+            <textarea value={editing.whatYouGet} onChange={(event) => setEditing({ ...editing, whatYouGet: event.target.value })} placeholder={"What you get, one per line\nWeekly call with the host\nFeedback on your work"} aria-label="What you get, one per line" rows={4} />
+            <label className={cx("podform-check")}>
+              <input type="checkbox" checked={editing.listed} onChange={(event) => setEditing({ ...editing, listed: event.target.checked })} />
+              Listed: members can see it and join or ask to
+            </label>
+            <label className={cx("podform-seats")}>
+              Seats
+              <input value={editing.seats} onChange={(event) => setEditing({ ...editing, seats: event.target.value.replace(/[^0-9]/g, "") })} placeholder="No limit" aria-label="Seats" inputMode="numeric" />
+            </label>
+            <label className={cx("podform-seats")}>
+              Price $
+              <input value={editing.price} onChange={(event) => setEditing({ ...editing, price: event.target.value.replace(/[^0-9]/g, "") })} placeholder="Free" aria-label="Monthly price in dollars" inputMode="numeric" />
+              <span>/month, on top of membership</span>
+            </label>
+            {editError ? <p className={cx("bad")} role="alert">{editError}</p> : null}
+            <div className={cx("acts")}>
+              <Btn go small disabled={Boolean(busy)} onClick={() => void save()}>{busy === "edit" ? "Saving…" : "Save"}</Btn>
+              <Btn txt small onClick={() => { setEditing(null); setEditError(null); }}>Cancel</Btn>
+            </div>
+          </div>
+        ) : (
+          <>
+            <p className={cx("sub")}>{pod.purpose || (pod.can_edit ? "Add what this pod is for." : "A small group with closer time with its hosts.")}</p>
+            {pod.what_you_get.length ? (
+              <ul className={cx("podget")}>{pod.what_you_get.map((line) => <li key={line}>{line}</li>)}</ul>
+            ) : null}
+            <span className={cx("sub2")}>
+              {[pod.visibility === "listed" ? (pod.price ? "Listed: members can join" : "Listed: members can ask to join") : "Hidden: only its members know it's here",
+                pod.price ? `${formatPodPrice(pod.price)} on top of membership` : null,
+                pod.seats ? `${pod.members.length} of ${pod.seats} seats` : `${pod.members.length} ${pod.members.length === 1 ? "member" : "members"}`].filter(Boolean).join(" · ")}
+            </span>
+            {pod.can_edit || (pod.can_manage && pod.visibility === "listed") ? (
+              <div className={cx("acts")} style={{ marginTop: 10 }}>
+                {pod.can_edit ? (
+                  <Btn small txt onClick={() => setEditing({
+                    purpose: pod.purpose, whatYouGet: pod.what_you_get.join("\n"), listed: pod.visibility === "listed",
+                    seats: pod.seats ? String(pod.seats) : "", price: pod.price ? String(Math.round(pod.price.amount_base_units / 100)) : "",
+                  })}>Edit</Btn>
+                ) : null}
+                {pod.visibility === "listed" && pod.slug ? (
+                  <Btn small txt onClick={() => {
+                    void navigator.clipboard?.writeText(podLink(pod.slug)).then(() => { setCopied(true); window.setTimeout(() => setCopied(false), 1500); }, () => undefined);
+                  }}>{copied ? "Copied" : "Copy link"}</Btn>
+                ) : null}
+                {pod.slug ? <Btn small txt onClick={() => { askForPodPagePreview(pod.slug); goToPodsPath(pod.slug); }}>See it as members do</Btn> : null}
+              </div>
+            ) : null}
+          </>
+        )}
+      </Sec>
+    )],
+    ["membership", mine ? (
+      <Sec label="Your membership">
+        <p className={cx("sub")}>
+          {mine.state === "added" ? "You're in."
+            : mine.state === "leaving" ? `Leaving · access until ${formatPodDate(mine.until) || "the end of this period"}.`
+              : mine.state === "payment_problem" ? "Your last payment didn't go through. Update your card in Settings → Billing to keep your place."
+                : `${formatPodPrice({ amount_base_units: mine.amount_base_units, currency: mine.currency })} · renews ${formatPodDate(mine.until) || "monthly"}.`}
+        </p>
+        {mine.state === "leaving" ? null : confirmLeave ? (
+          <div className={cx("podleave")}>
+            <span className={cx("sub2")}>
+              {paid ? `You'll keep access until ${formatPodDate(mine.until) || "the end of this period"}, then you're out. No more charges.` : "You'll leave the pod now."}
+            </span>
+            {leaveError ? <p className={cx("bad")} role="alert">{leaveError}</p> : null}
+            <span className={cx("acts")}>
+              <Btn small disabled={Boolean(busy)} onClick={() => void leave()}>{busy === "leave" ? "Leaving…" : "Leave pod"}</Btn>
+              <Btn small txt onClick={() => setConfirmLeave(false)}>Stay</Btn>
+            </span>
+          </div>
+        ) : (
+          <div className={cx("acts")} style={{ marginTop: 8 }}>
+            <Btn small txt onClick={() => setConfirmLeave(true)}>Leave pod</Btn>
+          </div>
+        )}
+      </Sec>
+    ) : null],
+  ] as Array<[string, ReactNode]>).filter(([, part]) => Boolean(part));
 
   return (
     <KitApp view="wins" part="rail">
       <Rail index={1} label="About this pod">
-        <Sec label="About this pod">
-          {editing ? (
-            <div className={cx("podform")} style={{ marginTop: 0 }}>
-              <textarea value={editing.purpose} onChange={(event) => setEditing({ ...editing, purpose: event.target.value })} placeholder="What is this pod for? One sentence." aria-label="What the pod is for" rows={3} maxLength={280} autoFocus />
-              <textarea value={editing.whatYouGet} onChange={(event) => setEditing({ ...editing, whatYouGet: event.target.value })} placeholder={"What you get, one per line\nWeekly call with the host\nFeedback on your work"} aria-label="What you get, one per line" rows={4} />
-              <label className={cx("podform-check")}>
-                <input type="checkbox" checked={editing.listed} onChange={(event) => setEditing({ ...editing, listed: event.target.checked })} />
-                Listed: members can see it and join or ask to
-              </label>
-              <label className={cx("podform-seats")}>
-                Seats
-                <input value={editing.seats} onChange={(event) => setEditing({ ...editing, seats: event.target.value.replace(/[^0-9]/g, "") })} placeholder="No limit" aria-label="Seats" inputMode="numeric" />
-              </label>
-              <label className={cx("podform-seats")}>
-                Price $
-                <input value={editing.price} onChange={(event) => setEditing({ ...editing, price: event.target.value.replace(/[^0-9]/g, "") })} placeholder="Free" aria-label="Monthly price in dollars" inputMode="numeric" />
-                <span>/month, on top of membership</span>
-              </label>
-              {editError ? <p className={cx("bad")} role="alert">{editError}</p> : null}
-              <div className={cx("acts")}>
-                <Btn go small disabled={Boolean(busy)} onClick={() => void save()}>{busy === "edit" ? "Saving…" : "Save"}</Btn>
-                <Btn txt small onClick={() => { setEditing(null); setEditError(null); }}>Cancel</Btn>
-              </div>
-            </div>
-          ) : (
-            <>
-              <p className={cx("sub")}>{pod.purpose || (pod.can_edit ? "Add what this pod is for." : "A small group with closer time with its hosts.")}</p>
-              {pod.what_you_get.length ? (
-                <ul className={cx("podget")}>{pod.what_you_get.map((line) => <li key={line}>{line}</li>)}</ul>
-              ) : null}
-              <span className={cx("sub2")}>
-                {[pod.visibility === "listed" ? (pod.price ? "Listed: members can join" : "Listed: members can ask to join") : "Hidden: only its members know it's here",
-                  pod.price ? `${formatPodPrice(pod.price)} on top of membership` : null,
-                  pod.seats ? `${pod.members.length} of ${pod.seats} seats` : `${pod.members.length} ${pod.members.length === 1 ? "member" : "members"}`].filter(Boolean).join(" · ")}
-              </span>
-              {pod.can_edit || (pod.can_manage && pod.visibility === "listed") ? (
-                <div className={cx("acts")} style={{ marginTop: 10 }}>
-                  {pod.can_edit ? (
-                    <Btn small txt onClick={() => setEditing({
-                      purpose: pod.purpose, whatYouGet: pod.what_you_get.join("\n"), listed: pod.visibility === "listed",
-                      seats: pod.seats ? String(pod.seats) : "", price: pod.price ? String(Math.round(pod.price.amount_base_units / 100)) : "",
-                    })}>Edit</Btn>
-                  ) : null}
-                  {pod.visibility === "listed" && pod.slug ? (
-                    <Btn small txt onClick={() => {
-                      void navigator.clipboard?.writeText(podLink(pod.slug)).then(() => { setCopied(true); window.setTimeout(() => setCopied(false), 1500); }, () => undefined);
-                    }}>{copied ? "Copied" : "Copy link"}</Btn>
-                  ) : null}
-                  {pod.slug ? <Btn small txt onClick={() => { askForPodPagePreview(pod.slug); goToPodsPath(pod.slug); }}>See it as members do</Btn> : null}
-                </div>
-              ) : null}
-            </>
-          )}
-        </Sec>
-        {pod.next_call || pod.can_manage ? (
-          <>
-            <Sep />
-            <KitPodCall session={props.session} communityId={props.communityId} pod={pod} onChanged={props.onChanged} />
-          </>
-        ) : null}
-        <Sep />
-        <KitPodKnowledge session={props.session} communityId={props.communityId} channelId={pod.channel_id} />
-        {mine ? (
-          <>
-            <Sep />
-            <Sec label="Your membership">
-              <p className={cx("sub")}>
-                {mine.state === "added" ? "You're in."
-                  : mine.state === "leaving" ? `Leaving · access until ${formatPodDate(mine.until) || "the end of this period"}.`
-                    : mine.state === "payment_problem" ? "Your last payment didn't go through. Update your card in Settings → Billing to keep your place."
-                      : `${formatPodPrice({ amount_base_units: mine.amount_base_units, currency: mine.currency })} · renews ${formatPodDate(mine.until) || "monthly"}.`}
-              </p>
-              {mine.state === "leaving" ? null : confirmLeave ? (
-                <div className={cx("podleave")}>
-                  <span className={cx("sub2")}>
-                    {paid ? `You'll keep access until ${formatPodDate(mine.until) || "the end of this period"}, then you're out. No more charges.` : "You'll leave the pod now."}
-                  </span>
-                  {leaveError ? <p className={cx("bad")} role="alert">{leaveError}</p> : null}
-                  <span className={cx("acts")}>
-                    <Btn small disabled={Boolean(busy)} onClick={() => void leave()}>{busy === "leave" ? "Leaving…" : "Leave pod"}</Btn>
-                    <Btn small txt onClick={() => setConfirmLeave(false)}>Stay</Btn>
-                  </span>
-                </div>
-              ) : (
-                <div className={cx("acts")} style={{ marginTop: 8 }}>
-                  <Btn small txt onClick={() => setConfirmLeave(true)}>Leave pod</Btn>
-                </div>
-              )}
-            </Sec>
-          </>
-        ) : null}
-        {pod.can_manage && pod.requests.length ? (
-          <>
-            <Sep />
-            <Sec label={`Asking to join · ${pod.requests.length}`}>
-              {pod.requests.map((request) => (
-                <div key={request.user_id} className={cx("podreq")}>
-                  <span>{request.name}{request.status === "waitlist" ? <em> · waitlist</em> : null}</span>
-                  <span className={cx("podreq-acts")}>
-                    <Btn small go disabled={Boolean(busy)} onClick={() => void act(`yes:${request.user_id}`, () => decideCloudPodRequest({ session: props.session, communityId: props.communityId, channelId: pod.channel_id, userId: request.user_id, approve: true }))}>Add</Btn>
-                    <Btn small txt disabled={Boolean(busy)} onClick={() => void act(`no:${request.user_id}`, () => decideCloudPodRequest({ session: props.session, communityId: props.communityId, channelId: pod.channel_id, userId: request.user_id, approve: false }))}>Decline</Btn>
-                  </span>
-                </div>
-              ))}
-            </Sec>
-          </>
-        ) : null}
-        <Sep />
-        <Sec label="In this pod">
-          {pod.members.length ? pod.members.map((member) => (
-            <div key={member.user_id} className={cx("podreq")}>
-              <span>
-                {member.name}{member.is_host ? <em> · host</em> : null}
-                {member.payment ? <span className={cx("podtag")}>{memberTag(member.payment)}</span> : null}
-              </span>
-              {pod.can_edit ? (
-                <span className={cx("podreq-acts")}>
-                  <Btn small txt disabled={Boolean(busy)} onClick={() => void act(`host:${member.user_id}`, () => setCloudPodHost({ session: props.session, communityId: props.communityId, channelId: pod.channel_id, userId: member.user_id, host: !member.is_host }))}>
-                    {member.is_host ? "Not host" : "Make host"}
-                  </Btn>
-                </span>
-              ) : null}
-            </div>
-          )) : <p className={cx("sub")}>No one yet.</p>}
-        </Sec>
+        {parts.map(([key, part], index) => <Fragment key={key}>{index ? <Sep /> : null}{part}</Fragment>)}
       </Rail>
     </KitApp>
   );
