@@ -410,7 +410,11 @@ export const readMemoryReviewInputInternal = internalQuery({
       }
       const where = kind === "reply" ? ` (reply to post:${String(row.rootId)})` : "";
       const text = String(row.contentSummary ?? "").replace(/\s+/g, " ").trim().slice(0, MEMORY_REVIEW_POST_CHARS);
-      lines.push(`- ${kind}:${String(row._id)}${where} · ${await authorWord(ctx, row, names)} · ${new Date(row.createdAt).toISOString()}`, `  > ${text}`);
+      // What the guide itself said is context, never evidence: no name to cite.
+      const said = row.actorType === "human" && row.actorUserId
+        ? `${kind}:${String(row._id)}${where} · ${await authorWord(ctx, row, names)}`
+        : `the guide (not citable)${where}`;
+      lines.push(`- ${said} · ${new Date(row.createdAt).toISOString()}`, `  > ${text}`);
     }
     if (readUntil < args.untilMs) lines.push("", "The rest is read in the next review.");
     return { posts: read.length, readUntil, text: lines.join("\n") };

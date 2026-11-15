@@ -102,9 +102,14 @@ test("the review is handed what people said in open channels only", async () => 
     await root(w.general, NOW + 10);
     await root(w.general, NOW + 20, "hidden");
     await root(w.pod, NOW + 10);
+    await ctx.db.insert("communityInteractionRoots", { communityId: w.communityId, channelId: w.general, actorType: "community_agent",
+      kind: "discussion", status: "live", visibilityScope: "community", contentSummary: "The guide's own answer.", replyCount: 0,
+      reactionSummary: [], idempotencyKey: "guide", createdAt: NOW + 30, updatedAt: NOW + 30 });
   });
   const input: any = await t.query(internal.communityMemory.readMemoryReviewInputInternal, { communityId: w.communityId, sinceMs: NOW, untilMs: NOW + 1_000 });
-  expect(input).toMatchObject({ posts: 1, readUntil: NOW + 1_000 });
+  expect(input).toMatchObject({ posts: 2, readUntil: NOW + 1_000 });
+  // The guide's own words are context without a name to cite.
+  expect(input.text).toContain("- the guide (not citable) · ");
   expect(input.text).toContain("## #general");
   expect(input.text).not.toContain("founders");
 });
