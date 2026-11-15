@@ -225,3 +225,27 @@ export const repairMemoryReviewScheduleInternal = internalMutation({
     return { rescheduled };
   },
 });
+
+// Operator tool: run a community's review now, reading from a chosen time
+// (acceptance runs on staging; a review after turning learning on).
+export const requestMemoryReviewNowInternal = internalMutation({
+  args: { communityId: v.id("communities"), sinceMs: v.optional(v.number()) },
+  handler: async (ctx, args) => {
+    const nowMs = Date.now();
+    const work = await ctx.db.query("agentWork")
+      .withIndex("by_community_scope_kind", (q) => q.eq("communityId", args.communityId).eq("scope", "community").eq("kind", "memory_review"))
+      .first();
+    const reviewedThrough = args.sinceMs ?? work?.reviewedThrough ?? nowMs - 24 * 60 * 60_000;
+    let workId = work?._id;
+    if (work) {
+      await ctx.db.patch(work._id, { pending: Math.max(1, work.pending), reviewedThrough, dueAt: nowMs, leaseUntil: undefined, failures: 0, updatedAt: nowMs });
+    } else {
+      workId = await ctx.db.insert("agentWork", {
+        communityId: args.communityId, scope: "community", kind: "memory_review", pending: 1, firstPendingAt: nowMs,
+        reviewedThrough, dueAt: nowMs, failures: 0, createdAt: nowMs, updatedAt: nowMs,
+      });
+    }
+    await scheduleMemoryReview(ctx, workId, nowMs);
+    return { workId };
+  },
+});

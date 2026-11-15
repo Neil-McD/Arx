@@ -10,6 +10,7 @@ import { basename, join } from "node:path";
 const root = join(import.meta.dirname, "..");
 
 const ALLOWED = new Map<string, string>([
+  ["communityMemoryReview:requestMemoryReviewNowInternal", "operator tool: run a community's memory review now (staging acceptance), by hand"],
   ["communityMemory:openMemoryReviewRunInternal", "community memory, slice 1: called by the review lens, the nightly review and the builders' page (docs/specs/agent-system-slice-1.md, steps 2-6)"],
   ["communityMemory:finishMemoryReviewRunInternal", "community memory, slice 1: called by the review lens, the nightly review and the builders' page (docs/specs/agent-system-slice-1.md, steps 2-6)"],
   ["communityMemory:undoLearnedNote", "community memory, slice 1: called by the review lens, the nightly review and the builders' page (docs/specs/agent-system-slice-1.md, steps 2-6)"],
