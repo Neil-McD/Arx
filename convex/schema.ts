@@ -1593,6 +1593,11 @@ export default defineSchema({
     // guide from what was said. Missing reads as a builder. A builder's note
     // outranks the guide's: the guide never changes one.
     authorKind: v.optional(v.union(v.literal("builder"), v.literal("guide"))),
+    // Where it belongs on the community brain (shared/communityMemory.ts
+    // parseMemoryAbout): the lesson it adds to, or a short subject name when
+    // no lesson fits. The guide files it; a builder can move it. Neither: unfiled.
+    aboutLessonId: v.optional(v.id("communityResources")),
+    subject: v.optional(v.string()),
     // The posts and replies a guide note was learned from ("post:<id>",
     // "reply:<id>"), each checked when it was written.
     evidenceRefs: v.optional(v.array(v.string())),
