@@ -175,7 +175,7 @@ cites the posts it came from, and only posts the guide was shown, so a reader
 can go there and a point whose post is removed stops showing; it is written
 fresh from the place's recent threads, never from the brief before it; it
 holds nothing that goes stale by itself (dates, counts, what's coming up are
-drawn live beside it) and no links; it stops showing a week after its last
+drawn live beside it) and no links; it stops showing three days after its last
 rewrite. A worker's write that goes through ends its run: a brief, or a
 review with nothing refused, is one model request.
 
@@ -236,7 +236,7 @@ Two rules across lenses:
 | Memories | `communityNotes` with a scope key (`community:<id>`, `pod:<roomId>`), revisions, removals and `memory.md` (`communityMemoryIndex`), all through one door (`communityNotesStore`, held by a test). Old `communityPodNotes` rows are moved by a backfill | Drop the old tables (cleanup slice C) |
 | Memory review | Nightly per scope (community and each pod), made due by posts (`agentWork`), one pass: the guide is handed the day and its notes and writes once with `memory.apply`. Undo a note or a night exists in the backend | Sources and undo on a note: built. The nights list and "Learned lately": deferred |
 | Personal memory | `shared/personalMemory.ts`, `convex/memberMemory.ts`: capped at 1,375 characters, written in a private talk with `member.memory.remember`, loaded into every talk with that member, never shown elsewhere | The You page |
-| Briefs | `communityBriefs`: a brief for the community and for each pod the guide works in (written from that pod's room alone, kept in its scope), in one model request from recent threads (picked by what matters), the card, handbook and `memory.md`; every point cites posts it was shown; no links; nothing that goes stale. Read back through one reader (`readPlaceBrief`) as `brief.md` and `pods/<pod>/brief.md`: gone posts' points dropped, nothing after a week or with AI off. Reviews and briefs run through one helper (`agentWork`). The founder brief (a fixed snapshot and one call, on a 15-minute cron) still runs beside it | The panels; the morning email reads the stored brief and the founder brief's model call goes |
+| Briefs | `communityBriefs`: a brief for the community and for each pod the guide works in (written from that pod's room alone, kept in its scope), in one model request from recent threads (picked by what matters), the card, handbook and `memory.md`; every point cites posts it was shown; no links; nothing that goes stale. Read back through one reader (`readPlaceBrief`) as `brief.md` and `pods/<pod>/brief.md`: gone posts' points dropped, nothing after three days or with AI off. Reviews and briefs run through one helper (`agentWork`). The founder brief (a fixed snapshot and one call, on a 15-minute cron) still runs beside it | The panels; the morning email reads the stored brief and the founder brief's model call goes |
 
 ## 7. What the leading agents do, and what we take
 

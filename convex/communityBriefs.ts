@@ -259,7 +259,7 @@ export const runCommunityBriefInternal = internalAction({
 });
 
 // A place's brief, as its readers get it (brief.md in the folder; the panels
-// next): nothing when the guide is off or the brief is over a week old, and
+// next): nothing when the guide is off or the brief is over three days old, and
 // only the points whose posts are all still there, live, in the place. The
 // caller has already checked the reader may enter the place.
 export async function readPlaceBrief(ctx: any, args: { communityId: any; podRoomId?: unknown; nowMs: number }): Promise<BriefView | null> {

@@ -20,8 +20,9 @@ export const BRIEF_DELAY_MS = 60 * 60_000;
 export const BRIEF_MIN_GAP_MS = 3 * 60 * 60_000;
 // What "recent" means: each brief is written from this much of the place.
 export const BRIEF_WINDOW_MS = 3 * 24 * 60 * 60_000;
-// A brief nobody has rewritten for this long stops showing.
-export const BRIEF_EXPIRES_MS = 7 * 24 * 60 * 60_000;
+// A brief nobody has rewritten for this long stops showing: as long as the
+// stretch it was written from, so what shows is never older than twice that.
+export const BRIEF_EXPIRES_MS = BRIEF_WINDOW_MS;
 // What the guide is asked for, and the most the server accepts: a brief a
 // little over what was asked is kept rather than paid for twice.
 export const BRIEF_HEADLINE_CHARS = 80;
