@@ -220,7 +220,7 @@ const modules = import.meta.glob([
   "./communityOntologyCards.ts",
   "./communitySearchDocs.ts",
   "./communityMemberTimeline.ts",
-  "./communityHandbook.ts", "./communityNotes.ts", "./communityMemory.ts", "./memberMemory.ts", "./communityPersonFacts.ts", "./communityLessonProgress.ts", "./memberWriteRateLimit.ts", "./communityLifecycle.ts", "./communityOperations.ts", "./communityPeople.ts", "./userProfileProjection.ts",
+  "./communityHandbook.ts", "./communityNotes.ts", "./communityMemory.ts", "./memberMemory.ts", "./communityPersonFacts.ts", "./communityPodFacts.ts", "./communityPods.ts", "./communityFounderBrief.ts", "./communityEvents.ts", "./communityPodPayments.ts", "./communityPlanChange.ts", "./communityLessonProgress.ts", "./memberWriteRateLimit.ts", "./communityLifecycle.ts", "./communityOperations.ts", "./communityPeople.ts", "./userProfileProjection.ts",
   "./communityAccessQueries.ts",
   "./communityAdmin.ts",
   "./email.ts",
@@ -3555,6 +3555,7 @@ test("lens grid: what each lens reads and may do is exactly what the lens table 
     memory_notes: ["polynet_list", `${base}/memory/`],
     builder_directory: ["polynet_list", `${base}/builder/`],
     builder_records: ["polynet_read", `${base}/builder/community.json`],
+    pods: ["polynet_list", `${base}/pods/`],
   };
   const actions: Record<string, string> = {
     react: "community.interaction.react", lesson_done: "community.lesson.set_done", mark_read: "community.channel.mark_read",
@@ -3582,4 +3583,94 @@ test("lens grid: what each lens reads and may do is exactly what the lens table 
     }
   }
   expect(mismatches).toEqual([]);
+});
+
+// Pods as community facts (convex/communityPodFacts.ts): each lens sees the
+// pods its access allows; the guide sees inside only the pod it works in.
+test("pods: inside for people in it, builders and the guide working there; outside for a listed pod; nothing for a hidden one", async () => {
+  vi.stubEnv("ARX_PUBLIC_APP_URL", "https://polynet-staging.vercel.app");
+  const t = convexTest(schema, modules);
+  const f = await createFixture(t);
+  const nowMs = 1_760_000_000_000;
+  const { climbersId, climbPostId, foundersPostId } = await t.run(async (ctx: any) => {
+    const membership = await ctx.db.query("communityMemberships").withIndex("by_community_user", (q: any) => q.eq("communityId", f.communityId).eq("userId", f.memberId)).first();
+    const room = (slug: string) => ctx.db.insert("communityChannels", { communityId: f.communityId, slug, name: slug, accessMode: "restricted",
+      postingPolicy: "members", status: "active", position: 5, createdAt: nowMs, updatedAt: nowMs });
+    const climbersId = await room("climbers");
+    const foundersId = await room("founders");
+    const scoutsId = await room("scouts");
+    await ctx.db.insert("communityPods", { communityId: f.communityId, channelId: climbersId, purpose: "Train for outdoor season.", visibility: "listed", seats: 8, createdAt: nowMs, updatedAt: nowMs });
+    await ctx.db.insert("communityPods", { communityId: f.communityId, channelId: foundersId, purpose: "Founders only.", visibility: "hidden", createdAt: nowMs, updatedAt: nowMs });
+    await ctx.db.insert("communityPods", { communityId: f.communityId, channelId: scoutsId, purpose: "Scout new crags.", visibility: "listed", seats: 4, whatYouGet: ["A weekly crag report"], createdAt: nowMs, updatedAt: nowMs });
+    // The member is in climbers; the guide was added to climbers.
+    await ctx.db.insert("communityChannelParticipants", { communityId: f.communityId, channelId: climbersId, principalKey: `user:${f.memberId}`,
+      membershipId: membership._id, membershipActivationSequence: Math.max(0, Math.floor(Number(membership.activationSequence ?? 0))),
+      status: "active", reasons: ["host"], createdByUserId: f.ownerId, createdAt: nowMs, updatedAt: nowMs });
+    await ctx.db.insert("communityChannelParticipants", { communityId: f.communityId, channelId: climbersId, principalKey: "community_agent",
+      status: "active", createdByUserId: f.ownerId, createdAt: nowMs, updatedAt: nowMs });
+    await ctx.db.insert("communityInteractionRoots", { communityId: f.communityId, channelId: climbersId, actorType: "human", actorUserId: f.memberId,
+      kind: "discussion", status: "live", visibilityScope: "community", contentSummary: "Fingerboard plan for week 3.", replyCount: 0,
+      reactionSummary: [], idempotencyKey: "climb-1", createdAt: nowMs, updatedAt: nowMs });
+    // The guide is seated in founders too, but works in one pod at a time.
+    await ctx.db.insert("communityChannelParticipants", { communityId: f.communityId, channelId: foundersId, principalKey: "community_agent",
+      status: "active", createdByUserId: f.ownerId, createdAt: nowMs, updatedAt: nowMs });
+    await ctx.db.insert("communityInteractionRoots", { communityId: f.communityId, channelId: foundersId, actorType: "human", actorUserId: f.ownerId,
+      kind: "discussion", status: "live", visibilityScope: "community", contentSummary: "Founders-only numbers.", replyCount: 0,
+      reactionSummary: [], idempotencyKey: "found-1", createdAt: nowMs, updatedAt: nowMs });
+    const climbPostId = (await ctx.db.query("communityInteractionRoots").collect()).find((row: any) => row.idempotencyKey === "climb-1")._id;
+    const foundersPostId = (await ctx.db.query("communityInteractionRoots").collect()).find((row: any) => row.idempotencyKey === "found-1")._id;
+    return { climbersId, climbPostId, foundersPostId };
+  });
+  const base = "/communities/canonical-community";
+  const as = (subject: string, userId: any, principalKind: any, evidenceSurface: any, podRoomId?: string) =>
+    (toolName: "polynet_list" | "polynet_read", path: string) => executePolynetCanonicalTool({ ctx: executionContext(t.withIdentity({ subject })),
+      authSubject: subject, userId, principalKind, evidenceSurface, mountedCommunityId: f.communityId, toolName, input: { path },
+      ...(podRoomId ? { podRoomId } : {}) });
+  const body = (result: any) => String(result?.value?.body ?? "");
+  const listed = (result: any) => (result?.value?.entries ?? []).map((entry: any) => `${entry.path.split("/pods/")[1]}${entry.inside ? "+in" : ""}`);
+
+  // A member: their pod inside, other listed pods outside, the hidden one not at all.
+  const member = as(f.memberSubject, f.memberId, "community_agent_for_member", "member_agent_dock");
+  expect(listed(await member("polynet_list", `${base}/pods/`)).sort()).toEqual(["climbers/+in", "scouts/"]);
+  expect(body(await member("polynet_read", `${base}/pods/climbers/pod.md`))).toMatch(/In it \(1\)[\s\S]*Its room: channels\/climbers\//);
+  const outside = body(await member("polynet_read", `${base}/pods/scouts/pod.md`));
+  expect(outside).toContain("a pod you're not in");
+  expect(outside).toContain("A weekly crag report");
+  expect(outside).not.toContain("In it");
+  expect(await member("polynet_read", `${base}/pods/founders/pod.md`)).toMatchObject({ ok: false });
+
+  // A builder's own AI: every pod, inside.
+  const builder = as(f.ownerSubject, f.ownerId, "external_mcp", "external_mcp");
+  expect(listed(await builder("polynet_list", `${base}/pods/`)).sort()).toEqual(["climbers/+in", "founders/+in", "scouts/+in"]);
+
+  // The guide in public: listed pods from outside; never inside one, never its room.
+  const guide = as(f.ownerSubject, f.ownerId, "community_agent", "community_concierge");
+  expect(listed(await guide("polynet_list", `${base}/pods/`)).sort()).toEqual(["climbers/", "scouts/"]);
+  expect(body(await guide("polynet_read", `${base}/pods/climbers/pod.md`))).not.toContain("In it");
+  expect(await guide("polynet_list", `${base}/channels/climbers/`)).toMatchObject({ ok: false });
+
+  // The guide working in the climbers pod: inside that pod and its room; no other pod.
+  const working = as(f.ownerSubject, f.ownerId, "community_agent", "community_concierge", String(climbersId));
+  expect(listed(await working("polynet_list", `${base}/pods/`)).sort()).toEqual(["climbers/+in", "scouts/"]);
+  expect(body(await working("polynet_read", `${base}/pods/climbers/pod.md`))).toContain("Its room: channels/climbers/");
+  const room = await working("polynet_list", `${base}/channels/climbers/`);
+  expect(room.ok, JSON.stringify(room)).toBe(true);
+  expect(JSON.stringify(room)).toContain("Fingerboard plan");
+  expect(await working("polynet_read", `${base}/pods/founders/pod.md`)).toMatchObject({ ok: false });
+  // One post, and a search, inside the pod it works in; never the other pod's.
+  const post = await working("polynet_read", `${base}/channels/climbers/interaction:root:${climbPostId}.md`);
+  expect(post.ok, JSON.stringify(post)).toBe(true);
+  expect(JSON.stringify(post)).toContain("Fingerboard plan");
+  const searched = await executePolynetCanonicalTool({ ctx: executionContext(t.withIdentity({ subject: f.ownerSubject })), authSubject: f.ownerSubject,
+    userId: f.ownerId, principalKind: "community_agent", evidenceSurface: "community_concierge", mountedCommunityId: f.communityId,
+    toolName: "polynet_search", input: { path: `${base}/channels/climbers/`, query: "fingerboard" }, podRoomId: String(climbersId) });
+  expect(searched.ok, JSON.stringify(searched)).toBe(true);
+  expect(JSON.stringify(searched)).toContain("Fingerboard plan");
+  expect(await working("polynet_read", `${base}/channels/founders/interaction:root:${foundersPostId}.md`)).toMatchObject({ ok: false });
+  const otherRoom = await working("polynet_list", `${base}/channels/founders/`);
+  expect(otherRoom.ok).toBe(false);
+  expect(JSON.stringify(otherRoom)).not.toContain("Founders-only");
+  // A pod scope is the server's to set: anyone else's call ignores it.
+  const memberClaimingPod = as(f.memberSubject, f.memberId, "external_mcp", "external_mcp", "anything");
+  expect(listed(await memberClaimingPod("polynet_list", `${base}/pods/`)).sort()).toEqual(["climbers/+in", "scouts/"]);
 });

@@ -123,6 +123,19 @@ function scoreEvidenceText(raw: unknown, tokens: string[]): number {
   return matches === 0 ? 0 : Number((matches / tokens.length).toFixed(4));
 }
 
+// A guide run working in a pod (its room id, set by the server) may read that
+// room; every other private room stays closed to the community agent.
+function podRoomOf(args: { actorKind?: ChannelActorKind; podRoomId?: string | null }, channel: { _id?: any; accessMode?: string }): boolean {
+  return args.actorKind === "community_agent" && Boolean(args.podRoomId) && channel.accessMode === "restricted" &&
+    String(channel._id) === String(args.podRoomId);
+}
+
+async function podAgentActor(ctx: any, args: { actorKind?: ChannelActorKind; podRoomId?: string | null; communityId: any; userId: any }) {
+  return args.actorKind === "community_agent" && args.podRoomId
+    ? await resolveCommunityChannelActor({ ctx, communityId: args.communityId, userId: args.userId, kind: "community_agent" })
+    : undefined;
+}
+
 async function loadReadableInteraction(args: {
   ctx: any;
   communityId: any;
@@ -319,6 +332,7 @@ async function searchRecentCommunityInteractionEvidence(args: {
   beforeCreatedAt?: number | null;
   actorKind?: ChannelActorKind;
   presentForViewer?: boolean;
+  podRoomId?: string | null;
 }) {
   await requireCommunityChatAccess({
     ctx: args.ctx,
@@ -327,7 +341,7 @@ async function searchRecentCommunityInteractionEvidence(args: {
   });
   const community = (await args.ctx.db.get(args.communityId)) as CommunityRow | null;
   if (!community) throw new Error("community_not_found");
-  const actor = args.actorKind && args.actorKind !== "community_agent" && (args.channelId || args.channelSlug)
+  let actor = args.actorKind && args.actorKind !== "community_agent" && (args.channelId || args.channelSlug)
     ? await resolveCommunityChannelActor({ ...args, kind: args.actorKind }) : undefined;
   const requestedChannelId = normalizeIdValue(args.channelId);
   const requestedChannelSlug = String(args.channelSlug ?? "").trim();
@@ -337,7 +351,11 @@ async function searchRecentCommunityInteractionEvidence(args: {
     selectedChannel = await resolveAuthorizedCommunityChannel({ ctx: args.ctx, communityId: args.communityId,
       channelId: requestedChannelId || null, channelSlug: requestedChannelSlug || null,
       actor: scopedActor, capability: "canRead" });
-    if (!actor && selectedChannel.accessMode !== "all_members") throw new Error("community_channel_unavailable");
+    if (!actor && selectedChannel.accessMode !== "all_members") {
+      // The guide working in a pod reads that pod's room, and no other.
+      if (podRoomOf(args, selectedChannel)) actor = scopedActor;
+      else throw new Error("community_channel_unavailable");
+    }
   }
   const channelsForRead = selectedChannel ? [selectedChannel] : await listSharedCommunityChannels({ ctx: args.ctx, communityId: args.communityId });
   const [roots, replies] = await Promise.all([
@@ -555,13 +573,14 @@ async function searchIndexedCommunityInteractionEvidence(args: {
   fromMs?: number | null;
   toMs?: number | null;
   sort?: "relevant" | "newest" | null;
+  podRoomId?: string | null;
 }) {
   await requireCommunityChatAccess({ ctx: args.ctx, communityId: args.communityId, userId: args.userId });
   const community = (await args.ctx.db.get(args.communityId)) as CommunityRow | null;
   if (!community) throw new Error("community_not_found");
   // Members search the rooms they can read, private ones included; the
   // community agent answering in public searches shared rooms only.
-  const memberActor = args.actorKind && args.actorKind !== "community_agent"
+  let memberActor = args.actorKind && args.actorKind !== "community_agent"
     ? await resolveCommunityChannelActor({ ...args, kind: args.actorKind }) : undefined;
   const requestedChannelId = normalizeIdValue(args.channelId);
   const requestedChannelSlug = String(args.channelSlug ?? "").trim();
@@ -570,7 +589,11 @@ async function searchIndexedCommunityInteractionEvidence(args: {
     const scopedActor = memberActor ?? await resolveCommunityChannelActor({ ...args, kind: "community_agent" });
     const selected = await resolveAuthorizedCommunityChannel({ ctx: args.ctx, communityId: args.communityId,
       channelId: requestedChannelId || null, channelSlug: requestedChannelSlug || null, actor: scopedActor, capability: "canRead" });
-    if (!memberActor && selected.accessMode !== "all_members") throw new Error("community_channel_unavailable");
+    if (!memberActor && selected.accessMode !== "all_members") {
+      // The guide working in a pod searches that pod's room, and no other.
+      if (podRoomOf(args, selected)) memberActor = scopedActor;
+      else throw new Error("community_channel_unavailable");
+    }
     channels = [selected];
   } else {
     channels = await listSharedCommunityChannels({ ctx: args.ctx, communityId: args.communityId });
@@ -675,6 +698,7 @@ export const searchIndexedCommunityInteractionEvidenceInternal = internalQuery({
     fromMs: v.optional(v.number()),
     toMs: v.optional(v.number()),
     sort: searchSortValidator,
+    podRoomId: v.optional(v.string()),
   },
   handler: async (ctx, args) =>
     await searchIndexedCommunityInteractionEvidence({ ctx, ...args, limit: normalizeCommunityEvidenceSearchLimit(args.limit) }),
@@ -689,6 +713,7 @@ export const searchRecentCommunityInteractionEvidenceInternal = internalQuery({
     limit: v.number(),
     channelId: v.optional(v.id("communityChannels")),
     channelSlug: v.optional(v.string()),
+    podRoomId: v.optional(v.string()),
   },
   handler: async (ctx, args) =>
     await searchRecentCommunityInteractionEvidence({
@@ -700,6 +725,7 @@ export const searchRecentCommunityInteractionEvidenceInternal = internalQuery({
       limit: normalizeCommunityEvidenceSearchLimit(args.limit),
       channelId: args.channelId,
       channelSlug: args.channelSlug,
+      podRoomId: args.podRoomId ?? null,
     }),
 });
 
@@ -712,6 +738,7 @@ export const listRecentCommunityInteractionEvidenceInternal = internalQuery({
     limit: v.number(),
     channelId: v.optional(v.id("communityChannels")),
     channelSlug: v.optional(v.string()),
+    podRoomId: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const requestedLimit = Math.floor(Number(args.limit));
@@ -736,6 +763,7 @@ export const listRecentCommunityInteractionEvidenceInternal = internalQuery({
       channelSlug: args.channelSlug,
       beforeCreatedAt,
       presentForViewer: true,
+      podRoomId: args.podRoomId ?? null,
     });
     const results = recent.results.slice(0, limit);
     const lastCreatedAt = results.length
@@ -764,6 +792,7 @@ export const listCommunityInteractionThreadInternal = internalQuery({
     userId: v.id("users"),
     communityId: v.id("communities"),
     channelSlug: v.string(),
+    podRoomId: v.optional(v.string()),
     rootId: v.string(),
     cursor: v.optional(v.string()),
   },
@@ -777,11 +806,15 @@ export const listCommunityInteractionThreadInternal = internalQuery({
       ctx,
       actor: args.actorKind && args.actorKind !== "community_agent"
         ? await resolveCommunityChannelActor({ ctx, communityId: args.communityId, userId: args.userId, kind: args.actorKind })
-        : undefined,
+        : await podAgentActor(ctx, args),
       communityId: args.communityId,
       objectType: "root",
       objectId: args.rootId,
     });
+    // The guide's pod run reads its own pod's room only.
+    if (args.actorKind === "community_agent" && channel.accessMode === "restricted" && !podRoomOf(args, channel)) {
+      throw new Error("community_interaction_evidence_channel_not_readable");
+    }
     if (channel.slug !== args.channelSlug) throw new Error("community_interaction_evidence_channel_mismatch");
     const community = (await ctx.db.get(args.communityId)) as CommunityRow | null;
     if (!community) throw new Error("community_not_found");
@@ -816,6 +849,7 @@ export const readCommunityInteractionEvidenceInternal = internalQuery({
     ref: v.string(),
     expectedChannelId: v.optional(v.id("communityChannels")),
     expectedChannelSlug: v.optional(v.string()),
+    podRoomId: v.optional(v.string()),
   },
   handler: async (ctx, args): Promise<Record<string, unknown>> => {
     await requireCommunityChatAccess({ ctx, communityId: args.communityId, userId: args.userId });
@@ -824,11 +858,16 @@ export const readCommunityInteractionEvidenceInternal = internalQuery({
     const { row, root, channel } = await loadReadableInteraction({
       ctx,
       actor: args.actorKind && args.actorKind !== "community_agent" && (args.expectedChannelId || args.expectedChannelSlug)
-        ? await resolveCommunityChannelActor({ ctx, communityId: args.communityId, userId: args.userId, kind: args.actorKind }) : undefined,
+        ? await resolveCommunityChannelActor({ ctx, communityId: args.communityId, userId: args.userId, kind: args.actorKind })
+        : await podAgentActor(ctx, args),
       communityId: args.communityId,
       objectType: parsed.objectType,
       objectId: parsed.objectId,
     });
+    // The guide's pod run reads its own pod's room only.
+    if (args.actorKind === "community_agent" && channel.accessMode === "restricted" && !podRoomOf(args, channel)) {
+      throw new Error("community_interaction_evidence_channel_not_readable");
+    }
     if (
       args.expectedChannelId &&
       normalizeIdValue(channel._id) !== normalizeIdValue(args.expectedChannelId)
@@ -926,6 +965,7 @@ export const searchCommunityInteractionEvidenceInternal = internalAction({
     toMs: v.optional(v.number()),
     sort: searchSortValidator,
     surface: communityEvidenceSurfaceValidator,
+    podRoomId: v.optional(v.string()),
   },
   handler: async (ctx, args): Promise<Record<string, unknown>> => {
     const userId = await resolveTrustedCommunityEvidenceUserId({
@@ -945,7 +985,8 @@ export const searchCommunityInteractionEvidenceInternal = internalAction({
     type SearchPage = { community: Record<string, unknown>; results: Array<Record<string, unknown>>; truncated: boolean };
     const recentScan = async () => (await ctx.runQuery(
       (internal as any).communityInteractionEvidence.searchRecentCommunityInteractionEvidenceInternal,
-      { actorKind: args.actorKind, userId, communityId: args.communityId, query, limit, channelId: args.channelId, channelSlug: args.channelSlug },
+      { actorKind: args.actorKind, userId, communityId: args.communityId, query, limit, channelId: args.channelId, channelSlug: args.channelSlug,
+        ...(args.podRoomId ? { podRoomId: args.podRoomId } : {}) },
     )) as SearchPage;
     let strategy = indexed ? "full_text_index" : "bounded_lexical";
     let recent = (await ctx.runQuery(
@@ -960,6 +1001,7 @@ export const searchCommunityInteractionEvidenceInternal = internalAction({
         limit,
         channelId: args.channelId,
         channelSlug: args.channelSlug,
+        ...(args.podRoomId ? { podRoomId: args.podRoomId } : {}),
         ...(indexed ? {
           ...(args.authorUserId ? { authorUserId: args.authorUserId } : {}),
           ...(args.kind ? { kind: args.kind } : {}),
@@ -1018,6 +1060,7 @@ export const readCommunityInteractionEvidenceForToolInternal = internalAction({
     expectedChannelId: v.optional(v.id("communityChannels")),
     expectedChannelSlug: v.optional(v.string()),
     surface: communityEvidenceSurfaceValidator,
+    podRoomId: v.optional(v.string()),
   },
   handler: async (ctx, args): Promise<Record<string, unknown>> => {
     const userId = await resolveTrustedCommunityEvidenceUserId({
@@ -1038,6 +1081,7 @@ export const readCommunityInteractionEvidenceForToolInternal = internalAction({
         ref,
         expectedChannelId: args.expectedChannelId,
         expectedChannelSlug: args.expectedChannelSlug,
+        ...(args.podRoomId ? { podRoomId: args.podRoomId } : {}),
       },
     );
     const retrievalId: any = await ctx.runMutation(

@@ -22,6 +22,8 @@ import {
   POLYNET_PRESENCE_DOCUMENT_PATH,
   POLYNET_RESOURCES_DIRECTORY_PATH,
   parseCommunityChannelSemanticPath,
+  parseCommunityPodPath,
+  POLYNET_PODS_DIRECTORY_PATH,
 } from "../shared/communitySemanticRepository.ts";
 import { PERSONAL_MEMORY_OPERATION, PERSONAL_MEMORY_PATH } from "../shared/personalMemory.ts";
 import { lensCalls, lensReads, peopleLensFor, resolveLens, type Lens, type LensView } from "../shared/lens.ts";
@@ -653,6 +655,7 @@ async function resolveCommunityTarget(args: {
 
 async function resolveRepositoryChannel(args: {
   ctx: any;
+  podRoomId?: string | null;
   userId: string;
   principalKind: PolynetPrincipalKind;
   target: ResolvedCommunityTarget;
@@ -665,6 +668,7 @@ async function resolveRepositoryChannel(args: {
       communityId: args.target.communityId,
       slug: args.slug,
       actorKind: channelActorKind(args.principalKind),
+      ...(args.principalKind === "community_agent" && args.podRoomId ? { podRoomId: String(args.podRoomId) } : {}),
     },
   )) as Record<string, unknown> | null;
   const id = requiredString(value?.id, 180);
@@ -798,11 +802,13 @@ function canonicalJsonDocument(args: {
 // community's own app acting for a member, does not get the list or a note.
 // The call's lens (shared/lens.ts): who it acts for and how it came in. The
 // lens table, not the caller's type, says what it may read and do.
-function lensOf(args: { principalKind: PolynetPrincipalKind; evidenceSurface: CommunityEvidenceSurface }, target: ResolvedCommunityTarget): Lens {
-  return resolveLens({ principalKind: args.principalKind, evidenceSurface: args.evidenceSurface, authority: target.authority });
+type LensArgs = { principalKind: PolynetPrincipalKind; evidenceSurface: CommunityEvidenceSurface; podRoomId?: string | null };
+
+function lensOf(args: LensArgs, target: ResolvedCommunityTarget): Lens {
+  return resolveLens({ principalKind: args.principalKind, evidenceSurface: args.evidenceSurface, authority: target.authority, podRoomId: args.podRoomId });
 }
 
-function reads(args: { principalKind: PolynetPrincipalKind; evidenceSurface: CommunityEvidenceSurface }, target: ResolvedCommunityTarget, view: LensView): boolean {
+function reads(args: LensArgs, target: ResolvedCommunityTarget, view: LensView): boolean {
   return lensReads(lensOf(args, target), view);
 }
 
@@ -930,6 +936,7 @@ function capabilityDocument(args: {
 }
 
 async function executeCanonicalList(args: {
+  podRoomId?: string | null;
   ctx: any;
   authSubject: string;
   userId: string;
@@ -975,6 +982,26 @@ async function executeCanonicalList(args: {
     );
   }
   const absolutePath = mountedPath(target.communitySlug, target.localPath);
+
+  const podPath = parseCommunityPodPath(target.localPath);
+  if (podPath) {
+    if (!reads(args, target, "pods") || podPath.kind === "pod_facts") return canonicalError("semantic_not_found", "Repository path not found or not accessible.");
+    const lens = lensOf(args, target);
+    if (podPath.kind === "pods") {
+      const pods = await args.ctx.runQuery((internal as any).communityPodFacts.listPodsForLensInternal,
+        { communityId: target.communityId, userId: args.userId, lens: lens.name, ...(lens.podRoomId ? { podRoomId: lens.podRoomId } : {}) }) as any[];
+      return { ok: true, value: virtualDirectory({ path: absolutePath, entries: pods.map((pod) => ({
+        path: mountedPath(target.communitySlug, `${POLYNET_PODS_DIRECTORY_PATH}${pod.slug}/`), kind: "directory", type: "pod",
+        name: pod.name, purpose: pod.purpose, inside: pod.inside })) }) };
+    }
+    const pod = await args.ctx.runQuery((internal as any).communityPodFacts.readPodFactsInternal,
+      { communityId: target.communityId, userId: args.userId, lens: lens.name, slug: podPath.slug, ...(lens.podRoomId ? { podRoomId: lens.podRoomId } : {}) });
+    if (!pod) return canonicalError("semantic_not_found", "Repository path not found or not accessible.");
+    return { ok: true, value: virtualDirectory({ path: absolutePath, entries: [
+      { path: mountedPath(target.communitySlug, `${POLYNET_PODS_DIRECTORY_PATH}${podPath.slug}/pod.md`), kind: "document", type: "pod_facts" },
+      ...(pod.inside ? [{ path: mountedPath(target.communitySlug, `/channels/${podPath.slug}/`), kind: "directory", type: "channel", name: "Its room" }] : []),
+    ] }) };
+  }
 
   if (target.localPath.startsWith(COMMUNITY_MEMBER_SELF_DIRECTORY)) {
     if (!reads(args, target, "members_self") || target.localPath !== COMMUNITY_MEMBER_SELF_DIRECTORY) {
@@ -1046,7 +1073,7 @@ async function executeCanonicalList(args: {
   if (channelPath?.kind === "directory") {
     try {
       const channel = await resolveRepositoryChannel({
-        ctx: args.ctx,
+        ctx: args.ctx, podRoomId: args.podRoomId,
         userId: args.userId,
         principalKind: args.principalKind,
         target,
@@ -1063,6 +1090,7 @@ async function executeCanonicalList(args: {
           .listRecentCommunityInteractionEvidenceInternal,
         {
           actorKind: channelActorKind(args.principalKind),
+          ...(args.podRoomId ? { podRoomId: String(args.podRoomId) } : {}),
           userId: args.userId,
           communityId: target.communityId,
           channelSlug: channel.slug,
@@ -1110,7 +1138,7 @@ async function executeCanonicalList(args: {
   if (channelPath?.kind === "thread") {
     try {
       const channel = await resolveRepositoryChannel({
-        ctx: args.ctx,
+        ctx: args.ctx, podRoomId: args.podRoomId,
         userId: args.userId,
         principalKind: args.principalKind,
         target,
@@ -1123,6 +1151,7 @@ async function executeCanonicalList(args: {
         (internal as any).communityInteractionEvidence.listCommunityInteractionThreadInternal,
         {
           actorKind: channelActorKind(args.principalKind),
+          ...(args.podRoomId ? { podRoomId: String(args.podRoomId) } : {}),
           userId: args.userId,
           communityId: target.communityId,
           channelSlug: channel.slug,
@@ -1412,7 +1441,9 @@ async function executeCanonicalList(args: {
     ok: true,
     value: {
       ...value,
-      entries: [...rawEntries, ...builderEntry],
+      entries: [...rawEntries,
+        ...(reads(args, target, "pods") ? [{ path: mountedPath(target.communitySlug, POLYNET_PODS_DIRECTORY_PATH), kind: "directory", type: "pods", name: "Pods" }] : []),
+        ...builderEntry],
       // Who this is: a front end's title, and the community agent's @mention token.
       ...(identity ? { community } : {}),
       // Who is asking: a front end's "signed in as".
@@ -1426,6 +1457,7 @@ async function executeCanonicalList(args: {
 }
 
 async function executeCanonicalRead(args: {
+  podRoomId?: string | null;
   toolCallId?: string | null;
   communityBoundConversation?: boolean;
   runId?: string;
@@ -1547,6 +1579,16 @@ async function executeCanonicalRead(args: {
     }
   }
 
+  const podFacts = parseCommunityPodPath(target.localPath);
+  if (podFacts) {
+    if (podFacts.kind !== "pod_facts" || !reads(args, target, "pods")) return canonicalError("semantic_not_found", "Repository path not found or not accessible.");
+    const lens = lensOf(args, target);
+    const pod = await args.ctx.runQuery((internal as any).communityPodFacts.readPodFactsInternal,
+      { communityId: target.communityId, userId: args.userId, lens: lens.name, slug: podFacts.slug, ...(lens.podRoomId ? { podRoomId: lens.podRoomId } : {}) });
+    if (!pod) return canonicalError("semantic_not_found", "Repository path not found or not accessible.");
+    return { ok: true, value: { path: mountedPath(target.communitySlug, target.localPath), body: pod.body, writable: false } };
+  }
+
   if (target.localPath === PERSONAL_MEMORY_PATH) {
     // What the guide remembers about the member who is reading: theirs only.
     // A community agent's sponsor is not a self identity.
@@ -1620,7 +1662,7 @@ async function executeCanonicalRead(args: {
     }
     try {
       const channel = await resolveRepositoryChannel({
-        ctx: args.ctx,
+        ctx: args.ctx, podRoomId: args.podRoomId,
         userId: args.userId,
         principalKind: args.principalKind,
         target,
@@ -1644,6 +1686,7 @@ async function executeCanonicalRead(args: {
           expectedChannelSlug: channel.slug,
           ...(channel.id ? { expectedChannelId: channel.id } : {}),
           surface: args.evidenceSurface,
+          ...(args.podRoomId ? { podRoomId: String(args.podRoomId) } : {}),
         },
       )) as Record<string, unknown>;
       return {
@@ -1797,6 +1840,7 @@ async function executeCanonicalRead(args: {
 }
 
 async function executeCanonicalSearch(args: {
+  podRoomId?: string | null;
   ctx: any;
   authSubject: string;
   userId: string;
@@ -1864,7 +1908,7 @@ async function executeCanonicalSearch(args: {
       }
       const channel = channelPath
         ? await resolveRepositoryChannel({
-            ctx: args.ctx,
+            ctx: args.ctx, podRoomId: args.podRoomId,
             userId: args.userId,
             principalKind: args.principalKind,
             target,
@@ -1893,6 +1937,7 @@ async function executeCanonicalSearch(args: {
             ? {
                 channelSlug: channel.slug,
                 ...(channel.id ? { channelId: channel.id } : {}),
+                ...(args.podRoomId ? { podRoomId: String(args.podRoomId) } : {}),
               }
             : {}),
         },
@@ -2694,6 +2739,9 @@ async function takeMemberWrite(args: { ctx: any; userId: string; principalKind: 
 }
 
 export async function executePolynetCanonicalTool(args: {
+  // The pod a guide run started in (set by the server, honoured for the
+  // community agent only): its lens sees that one pod.
+  podRoomId?: string | null;
   toolCallId?: string | null;
   communityBoundConversation?: boolean;
   runId?: string;
@@ -2740,6 +2788,7 @@ export async function executePolynetCanonicalTool(args: {
   }
   const common = {
     ...args,
+    podRoomId: args.principalKind === "community_agent" ? args.podRoomId ?? null : null,
     authSubject,
     userId,
     input,
