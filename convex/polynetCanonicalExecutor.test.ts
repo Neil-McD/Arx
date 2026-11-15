@@ -63,7 +63,8 @@ test.each(["community_agent_for_member", "external_mcp"] as const)("%s discovers
     expect.objectContaining({ path: "/communities/canonical-community/members/me/", kind: "directory" }),
   ]) } });
   expect(await execute("polynet_list", "/communities/canonical-community/members/me/")).toMatchObject({
-    ok: true, value: { writable: false, entries: [expect.objectContaining({ path: selfContextPath })] },
+    ok: true, value: { writable: false, entries: [expect.objectContaining({ path: selfContextPath }),
+      expect.objectContaining({ path: "/communities/canonical-community/members/me/memory.md", type: "personal_memory" })] },
   });
   const read = await execute("polynet_read", selfContextPath);
   expect(read.ok).toBe(true);
@@ -218,7 +219,7 @@ const modules = import.meta.glob([
   "./communityOntologyCards.ts",
   "./communitySearchDocs.ts",
   "./communityMemberTimeline.ts",
-  "./communityHandbook.ts", "./communityNotes.ts", "./communityMemory.ts", "./communityLessonProgress.ts", "./memberWriteRateLimit.ts", "./communityLifecycle.ts", "./communityOperations.ts", "./communityPeople.ts", "./userProfileProjection.ts",
+  "./communityHandbook.ts", "./communityNotes.ts", "./communityMemory.ts", "./memberMemory.ts", "./communityPersonFacts.ts", "./communityLessonProgress.ts", "./memberWriteRateLimit.ts", "./communityLifecycle.ts", "./communityOperations.ts", "./communityPeople.ts", "./userProfileProjection.ts",
   "./communityAccessQueries.ts",
   "./communityAdmin.ts",
   "./email.ts",
@@ -2861,7 +2862,7 @@ test.each(["same-key", "different-key", "external-approve", "first-party-approve
   if (mode === "same-key") expect(results.every(r => r.status === "fulfilled" && (r.value as any).ok)).toBe(true);
 });
 
-test("site rails: the community agent gets no read state, presence, typing or member JSON; a member harness gets read state only", async () => {
+test("site rails: the community agent gets no read state, presence or typing, and people only as any member sees them; a member harness gets read state only", async () => {
   const t = convexTest(schema, modules);
   const f = await createFixture(t);
   const execute = (principalKind: "community_agent" | "external_mcp", toolName: "polynet_list" | "polynet_read" | "polynet_call", input: Record<string, unknown>) =>
@@ -2877,9 +2878,13 @@ test("site rails: the community agent gets no read state, presence, typing or me
     expect(entry).not.toHaveProperty("unread");
     expect(entry).not.toHaveProperty("seen_through_at");
   }
-  for (const path of [`${community}/presence.json`, `${community}/members/canonical-owner.json`]) {
-    expect(await execute("community_agent", "polynet_read", { path })).toMatchObject({ ok: false, code: "semantic_not_found" });
-  }
+  expect(await execute("community_agent", "polynet_read", { path: `${community}/presence.json` })).toMatchObject({ ok: false, code: "semantic_not_found" });
+  // People facts at the member lens, whoever sponsors the guide.
+  const owner = await execute("community_agent", "polynet_read", { path: `${community}/members/canonical-owner.json` });
+  expect(owner.ok, JSON.stringify(owner)).toBe(true);
+  const ownerPerson = JSON.parse(String((owner as any).value.body));
+  expect(ownerPerson).toMatchObject({ lens: "member", role: "owner", handle: "canonical-owner", shared: [] });
+  for (const hidden of ["plan", "notes", "joined_at", "state"]) expect(ownerPerson).not.toHaveProperty(hidden);
   for (const [operation, input] of [["community.channel.mark_read", { channel: "general" }], ["community.presence.heartbeat", {}],
     ["community.typing.set", { channel: "general", on: true }]] as const) {
     expect(await execute("community_agent", "polynet_call", callInput(operation, input))).toMatchObject({ ok: false, code: "operation_not_found" });
@@ -3452,3 +3457,75 @@ test("asking to change where members spend time was retired with custom sites: i
   expect(read).toMatchObject({ ok: false });
 });
 
+
+// Personal memory (shared/personalMemory.ts): written only in the member's own
+// private talk, read only by that member.
+test("personal memory is the member's own: written in their private talk, read by them only", async () => {
+  vi.stubEnv("ARX_PUBLIC_APP_URL", "https://polynet-staging.vercel.app");
+  const t = convexTest(schema, modules);
+  const f = await createFixture(t);
+  const nowMs = 1_760_000_000_000;
+  const run = async (userId: any, runId: string, communityId: any) => await t.run(async (ctx: any) => {
+    const threadId = await ctx.db.insert("threads", { ownerId: userId, titleSource: "auto", createdAt: nowMs, updatedAt: nowMs });
+    await ctx.db.insert("runtimeRuns", { ownerId: userId, threadId, runId, lane: "platform", communityId, status: "running",
+      lastEventSeq: 0, startedAt: nowMs, createdAt: nowMs, updatedAt: nowMs });
+  });
+  await run(f.memberId, "member-talk", f.communityId);
+  await run(f.ownerId, "owner-talk", f.communityId);
+  const base = "/communities/canonical-community/";
+  const memoryPath = `${base}members/me/memory.md`;
+  const target = `${base}capabilities/member.memory.remember.json`;
+  const as = (subject: string, userId: any, principalKind: "community_agent_for_member" | "community_agent" | "external_mcp", runId?: string) =>
+    (toolName: "polynet_list" | "polynet_read" | "polynet_call", input: Record<string, unknown>) =>
+      executePolynetCanonicalTool({ ctx: executionContext(t.withIdentity({ subject })), authSubject: subject, userId, principalKind,
+        mountedCommunityId: f.communityId, evidenceSurface: principalKind === "community_agent_for_member" ? "member_agent_dock" : "external_mcp",
+        toolName, input, ...(runId ? { runId } : {}) });
+  const remember = (operations: unknown[], idempotencyKey: string) =>
+    ({ target, operation: "member.memory.remember", version: 1, idempotencyKey, input: { operations } });
+
+  const memberTalk = as(f.memberSubject, f.memberId, "community_agent_for_member", "member-talk");
+  // Discoverable in the member's private talk.
+  const caps = await memberTalk("polynet_list", { path: `${base}capabilities/` });
+  expect(JSON.stringify(caps)).toContain("member.memory.remember");
+  const saved = await memberTalk("polynet_call", remember([{ action: "add", content: "Climbs on Tuesdays." }, { action: "add", content: "Keep answers short." }], "pm-1"));
+  expect(saved.ok, JSON.stringify(saved)).toBe(true);
+  expect(JSON.stringify(saved)).toContain("Keep answers short.");
+  const read = await memberTalk("polynet_read", { path: memoryPath });
+  expect((read as any).value.body).toContain("- Climbs on Tuesdays.");
+  const listing = await memberTalk("polynet_list", { path: `${base}members/me/` });
+  expect(JSON.stringify(listing)).toContain(memoryPath);
+
+  // A run that isn't this member's in this community can't write it.
+  const borrowed = await as(f.memberSubject, f.memberId, "community_agent_for_member", "owner-talk")("polynet_call",
+    remember([{ action: "add", content: "Injected." }], "pm-2"));
+  expect(borrowed).toMatchObject({ ok: false, code: "private_talk_required" });
+
+  // The owner reads only their own (empty) memory; the guide in a channel and
+  // a harness can't read or write it.
+  const ownersOwn = await as(f.ownerSubject, f.ownerId, "community_agent_for_member", "owner-talk")("polynet_read", { path: memoryPath });
+  expect((ownersOwn as any).value.body).toContain("_Nothing yet._");
+  expect(JSON.stringify(ownersOwn)).not.toContain("Tuesdays");
+  const channelGuide = as(f.ownerSubject, f.ownerId, "community_agent");
+  expect(await channelGuide("polynet_read", { path: memoryPath })).toMatchObject({ ok: false });
+  expect(await channelGuide("polynet_call", remember([{ action: "add", content: "x" }], "pm-3"))).toMatchObject({ ok: false, code: "operation_not_found" });
+  expect(await as(f.memberSubject, f.memberId, "external_mcp", "member-talk")("polynet_call", remember([{ action: "add", content: "x" }], "pm-4")))
+    .toMatchObject({ ok: false, code: "operation_not_found" });
+
+  // A retried write isn't applied twice.
+  await memberTalk("polynet_call", remember([{ action: "patch", old_text: "short", content: "very short" }], "pm-retry"));
+  await memberTalk("polynet_call", remember([{ action: "patch", old_text: "short", content: "very short" }], "pm-retry"));
+  expect(((await memberTalk("polynet_read", { path: memoryPath })) as any).value.body).toContain("- Keep answers very short.");
+
+  // On the Agent page (a community conversation), the call goes through the
+  // conversation's guard by its target.
+  const viaPage = await executeRetrievalHarnessTool({ ctx: executionContext(t.withIdentity({ subject: f.memberSubject })), userId: f.memberId,
+    authSubject: f.memberSubject, runId: "member-talk", communityId: f.communityId, communityBoundConversation: true, toolName: "polynet_call",
+    args: remember([{ action: "add", content: "Training for a V6 by March." }], "pm-page"), evidenceSurface: "member_agent_dock" });
+  expect(viaPage.status, JSON.stringify(viaPage)).toBe("ok");
+
+  // Forget: remove one, then clear.
+  await memberTalk("polynet_call", remember([{ action: "remove", old_text: "Tuesdays" }], "pm-5"));
+  expect(((await memberTalk("polynet_read", { path: memoryPath })) as any).value.body).not.toContain("Tuesdays");
+  await memberTalk("polynet_call", remember([{ action: "clear" }], "pm-6"));
+  expect(((await memberTalk("polynet_read", { path: memoryPath })) as any).value.body).toContain("_Nothing yet._");
+});

@@ -23,6 +23,7 @@ import {
   POLYNET_RESOURCES_DIRECTORY_PATH,
   parseCommunityChannelSemanticPath,
 } from "../shared/communitySemanticRepository.ts";
+import { PERSONAL_MEMORY_OPERATION, PERSONAL_MEMORY_PATH } from "../shared/personalMemory.ts";
 import {
   COMMUNITY_MEMBER_SELF_DIRECTORY,
   COMMUNITY_MEMBER_SELF_CONTEXT_PATH,
@@ -127,6 +128,8 @@ const REACT_OPERATION = "community.interaction.react";
 // A member marks a lesson done or not done (their own progress).
 const LESSON_DONE_OPERATION = "community.lesson.set_done";
 const MARK_READ_OPERATION = "community.channel.mark_read";
+// The guide remembers something about the member it is talking with
+// (shared/personalMemory.ts): only in that member's own private talk.
 // Presence and typing say a person is here right now, so only a member's own
 // site (community_app) may set them, never an agent or harness acting for them.
 const PRESENCE_HEARTBEAT_OPERATION = "community.presence.heartbeat";
@@ -826,6 +829,10 @@ function capabilityDocument(args: {
     args.evidenceSurface !== "community_funnel_builder" && args.principalKind !== "community_agent";
   const isPresenceCapability = (args.operation === PRESENCE_HEARTBEAT_OPERATION || args.operation === TYPING_SET_OPERATION) &&
     args.principalKind === "community_app";
+  // The guide's memory of a member is written only in that member's own
+  // private talk with it: never in a channel, a pod or anyone else's harness.
+  const isPersonalMemoryCapability = args.operation === PERSONAL_MEMORY_OPERATION &&
+    args.principalKind === "community_agent_for_member" && args.evidenceSurface === "member_agent_dock";
   const isMembersCapability = MEMBERS_OPERATIONS.includes(args.operation) &&
     args.evidenceSurface === "external_mcp" &&
     args.principalKind === "external_mcp" && args.target.authority.canUseBuilderProjection;
@@ -833,7 +840,7 @@ function capabilityDocument(args: {
     args.evidenceSurface === "external_mcp" &&
     args.principalKind === "external_mcp" && args.target.authority.canUseBuilderProjection;
   if (!isAdmissionCapability && !isRemovePostsCapability && !isCommunityCapability && !isMembersCapability && !isReactCapability && !isLessonDoneCapability &&
-    !isMarkReadCapability && !isPresenceCapability) {
+    !isMarkReadCapability && !isPresenceCapability && !isPersonalMemoryCapability) {
     return null;
   }
   const operationDefinition: Record<string, unknown> = {
@@ -898,6 +905,11 @@ function capabilityDocument(args: {
       through_at: "the newest activity the member saw, in epoch milliseconds (default: everything readable now)",
       result: "{ channel, advanced, seen_through_at }",
       effects: ["advance_own_read_position"], forbidden_effects: ["mark_read_for_someone_else", "move_read_position_back"] };
+  } else if (isPersonalMemoryCapability) {
+    operationDefinition.input = { required: ["operations"],
+      operations: "1 to 10 of { action: \"add\", content } | { action: \"patch\", old_text, content } | { action: \"remove\", old_text } | { action: \"clear\" }; old_text is a unique part of one entry",
+      result: "{ changed, entries, usage }; when memory would be full, the call fails with current_entries: merge or remove in the same batch",
+      effects: ["remember_for_this_member"], forbidden_effects: ["remember_for_someone_else", "share_with_the_community"] };
   } else if (args.operation === PRESENCE_HEARTBEAT_OPERATION) {
     operationDefinition.input = { required: [], result: "{ active_until }",
       guidance: "Send about once a minute while the member has the site open and visible.",
@@ -983,7 +995,10 @@ async function executeCanonicalList(args: {
       ok: true,
       value: virtualDirectory({
         path: absolutePath,
-        entries: [{ path: mountedPath(target.communitySlug, COMMUNITY_MEMBER_SELF_CONTEXT_PATH), kind: "document", type: "member_self_context" }],
+        entries: [
+          { path: mountedPath(target.communitySlug, COMMUNITY_MEMBER_SELF_CONTEXT_PATH), kind: "document", type: "member_self_context" },
+          { path: mountedPath(target.communitySlug, PERSONAL_MEMORY_PATH), kind: "document", type: "personal_memory" },
+        ],
         searchable: false, writable: false,
       }),
     };
@@ -1225,7 +1240,7 @@ async function executeCanonicalList(args: {
   }
   if (target.localPath === POLYNET_CAPABILITIES_DIRECTORY_PATH) {
     const operations = [
-      ...[REACT_OPERATION, LESSON_DONE_OPERATION, MARK_READ_OPERATION, PRESENCE_HEARTBEAT_OPERATION, TYPING_SET_OPERATION,
+      ...[REACT_OPERATION, LESSON_DONE_OPERATION, MARK_READ_OPERATION, PRESENCE_HEARTBEAT_OPERATION, TYPING_SET_OPERATION, PERSONAL_MEMORY_OPERATION,
         ...ADMISSION_OPERATIONS, REMOVE_POSTS_OPERATION, ...COMMUNITY_OPERATIONS, ...MEMBERS_OPERATIONS].filter(operation => capabilityDocument({ target, operation,
         evidenceSurface: args.evidenceSurface, principalKind: args.principalKind })),
     ];
@@ -1516,22 +1531,42 @@ async function executeCanonicalRead(args: {
   // Who is online, and one member's profile, as JSON for a member's site or
   // harness. The community agent reads members through the .md paths only.
   const memberProfileMatch = /^\/members\/(?:by-user\/([A-Za-z0-9_-]+)|([^/]+))\.json$/.exec(target.localPath);
-  if (target.localPath === POLYNET_PRESENCE_DOCUMENT_PATH || memberProfileMatch) {
+  if (memberProfileMatch) {
+    // People facts (convex/communityPersonFacts.ts), cut by lens. The guide
+    // speaking in a channel sees what any member sees, whoever sponsors it.
+    if (args.evidenceSurface === "community_funnel_builder")
+      return canonicalError("semantic_not_found", "Repository path not found or not accessible.");
+    const subject = memberProfileMatch[1] ? { userId: memberProfileMatch[1] } : { handle: memberProfileMatch[2] };
+    const payload = await args.ctx.runQuery((internal as any).communityPersonFacts.readPersonFactsInternal, {
+      communityId: target.communityId, as: args.principalKind === "community_agent" ? "public" : "viewer",
+      viewerUserId: args.userId, viewerIsBuilder: target.authority.canUseBuilderProjection === true, ...subject });
+    if (!payload) return canonicalError("semantic_not_found", "Repository path not found or not accessible.");
+    return { ok: true, value: { ...canonicalJsonDocument({ target, localPath: target.localPath, payload, ref: payload.ref }),
+      writable: false, searchable: false } };
+  }
+  if (target.localPath === POLYNET_PRESENCE_DOCUMENT_PATH) {
     if (args.principalKind === "community_agent" || args.evidenceSurface === "community_funnel_builder")
       return canonicalError("semantic_not_found", "Repository path not found or not accessible.");
     try {
-      const payload = memberProfileMatch
-        ? await args.ctx.runQuery((internal as any).profiles.readCommunityMemberProfileInternal, {
-          viewerUserId: args.userId, communityId: target.communityId,
-          ...(memberProfileMatch[1] ? { userId: memberProfileMatch[1] } : { handle: memberProfileMatch[2] }) })
-        : await args.ctx.runQuery((internal as any).communityPublic.listCommunityOnlineMembersForUserInternal,
+      const payload = await args.ctx.runQuery((internal as any).communityPublic.listCommunityOnlineMembersForUserInternal,
           { userId: args.userId, communityId: target.communityId });
       if (!payload) return canonicalError("semantic_not_found", "Repository path not found or not accessible.");
-      return { ok: true, value: { ...canonicalJsonDocument({ target, localPath: target.localPath, payload,
-        ref: memberProfileMatch ? payload.ref : null }), writable: false, searchable: false } };
+      return { ok: true, value: { ...canonicalJsonDocument({ target, localPath: target.localPath, payload, ref: null }),
+        writable: false, searchable: false } };
     } catch {
       return canonicalError("semantic_not_found", "Repository path not found or not accessible.");
     }
+  }
+
+  if (target.localPath === PERSONAL_MEMORY_PATH) {
+    // What the guide remembers about the member who is reading: theirs only.
+    // A community agent's sponsor is not a self identity.
+    if (args.principalKind === "community_agent") {
+      return canonicalError("semantic_not_found", "Repository path not found or not accessible.");
+    }
+    const memory = await args.ctx.runQuery((internal as any).memberMemory.readMemberMemoryInternal,
+      { communityId: target.communityId, userId: args.userId });
+    return { ok: true, value: { path: mountedPath(target.communitySlug, target.localPath), body: memory.body, writable: false } };
   }
 
   if (target.localPath.startsWith(COMMUNITY_MEMBER_SELF_DIRECTORY)) {
@@ -2297,6 +2332,7 @@ async function executeCanonicalWrite(args: {
 }
 
 async function executeCanonicalCall(args: {
+  runId?: string;
   ctx: any;
   authSubject: string;
   userId: string;
@@ -2363,6 +2399,18 @@ async function executeCanonicalCall(args: {
         { targetType: ref.objectType, targetId: String(ref.objectId), emoji, on: rawInput.on, trustedUserId: args.userId });
       return { ok: true, value: callAnswer({ operation, principalKind: args.principalKind, target, idempotencyKey, result: value }) };
     } catch { return canonicalError("interaction_unavailable", "That post is not available to react to."); }
+  }
+  if (operation === PERSONAL_MEMORY_OPERATION) {
+    if (target.localPath !== `${POLYNET_CAPABILITIES_DIRECTORY_PATH}${operation}.json` || !args.runId || !idempotencyKey ||
+        idempotencyKey.length > 200 || Object.keys(rawInput).some(key => key !== "operations"))
+      return canonicalError("invalid_tool_args", "Give an idempotencyKey and input: { operations: [...] }, from the member's private talk.");
+    // Whose memory: the signed-in member. Which turn: the run, checked as theirs.
+    const value = await args.ctx.runMutation((internal as any).memberMemory.rememberForMemberInternal,
+      { communityId: target.communityId, userId: args.userId, runId: args.runId, operationKey: idempotencyKey, operations: rawInput.operations, nowMs: Date.now() });
+    if (!value.ok) return canonicalError(value.code, value.message,
+      value.current_entries ? { current_entries: value.current_entries, usage: value.usage } : undefined);
+    return { ok: true, value: callAnswer({ operation, principalKind: args.principalKind, target, idempotencyKey,
+      result: { changed: value.changed, entries: value.entries, usage: value.usage } }) };
   }
   if (operation === LESSON_DONE_OPERATION) {
     if (target.localPath !== `${POLYNET_CAPABILITIES_DIRECTORY_PATH}${operation}.json` || typeof rawInput.ref !== "string" ||

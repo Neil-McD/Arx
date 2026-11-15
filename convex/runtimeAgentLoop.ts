@@ -321,7 +321,8 @@ export async function executeRetrievalHarnessTool(params: {
       communityOwned || params.communityBoundConversation === true;
     if (params.communityBoundConversation && !params.communityId) throw new Error("community_context_required");
     if (params.communityBoundConversation) {
-      const path = String(normalizedArgs.path ?? "").trim();
+      // A call names its capability in target; everything else in path.
+      const path = String(normalizedArgs.path ?? normalizedArgs.target ?? "").trim();
       if (path === "/" && params.toolName === "polynet_list") {
         const context = await params.ctx.runQuery(internal.communityAgent.resolveRuntimeCommunityPromptContextInternal, { authSubject, userId: params.userId as any, communityId: params.communityId as any });
         normalizedArgs = { ...normalizedArgs, path: `/communities/${context.community_slug}/` };
@@ -971,6 +972,8 @@ async function executeRetrievalAgentLoop(
   let communityCardMd: string | null = null;
   let communityHandbookMd: string | null = null;
   let communityMemoryMd: string | null = null;
+  // Undefined outside a private talk: the personal section isn't drawn at all.
+  let personalMemoryMd: string | null | undefined = undefined;
   const communityCardSlug = String(params.communitySlug ?? "").trim();
   if (
     turnContract?.uses.communityCard &&
@@ -982,6 +985,8 @@ async function executeRetrievalAgentLoop(
     const layers = await loadCommunityTurnLayers({
       contract: turnContract,
       communitySlug: communityCardSlug,
+      // The member's own private talk: what the guide remembers about them.
+      personal: params.invocationSurface === "member_agent_dock",
       read: (path, layer) => executeRetrievalHarnessTool({
         ctx: params.ctx,
         userId: params.userId,
@@ -998,6 +1003,7 @@ async function executeRetrievalAgentLoop(
     communityCardMd = layers.communityCardMd;
     communityHandbookMd = layers.communityHandbookMd;
     communityMemoryMd = layers.communityMemoryMd;
+    if (params.invocationSurface === "member_agent_dock") personalMemoryMd = layers.personalMemoryMd;
     const cardStatus = layers.cardStatus;
     try {
       await params.appendRunEvent({
@@ -1030,6 +1036,7 @@ async function executeRetrievalAgentLoop(
     communityAgentSurfaceContext: params.communityAgentSurfaceContext,
     memberIdentityContextMd,
     communityMemoryMd,
+    personalMemoryMd,
     communityCardMd,
     communityHandbookMd,
     promptExtensions: resolvedHarness.promptExtensions,

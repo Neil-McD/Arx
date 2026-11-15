@@ -89,6 +89,7 @@ assert.deepEqual(
     "community_card",
     "community_handbook",
     "community_memory",
+    "personal_memory",
     "community_system_prompt",
     "community_resource_lane",
     "community_lens_authority",
