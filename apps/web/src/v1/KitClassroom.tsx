@@ -25,7 +25,7 @@ import { askGuide, openGuideFromSearch } from "../components/guideSearch";
 import { WebCommunityResourceViewerContent } from "../components/WebCommunityResourceViewerContent";
 import { NoteForm, OpenNote, noteIsNew } from "./KitKnowledgeNotes";
 import { KitLessonEditor, lessonLinkPlace, type LessonPatch } from "./KitLessonEditor";
-import { Btn, cx, Icon, KitApp, Rail, Sec, Sep, TextLink } from "./kit";
+import { Btn, cx, Icon, KitApp, Rail, Sec, Sep, TextLink, useMinWidth } from "./kit";
 import { KitCourseEdit, type CourseEditPatch } from "./KitCourseEdit";
 import { askInApp } from "../../../../shared/inAppConfirm";
 import { KitKnowledgeAdd, KitKnowledgeList, type KnowledgeAddMode, type KnowledgeAddResult } from "./KitKnowledgeList";
@@ -371,6 +371,34 @@ export function KitClassroom(props: {
     </>
   ) : null;
   const openProgress = open ? courseProgress(open.lessons, done) : null;
+  // The course's lessons: pick one, and for a host put them in order or add
+  // one. In the right column; in the page, under the lesson, where there is
+  // no column (below 1024px).
+  const lessonList = open ? (
+    <div className={cx("sec")}>
+      {open.lessons.map((lesson, index) => (
+        <div key={lesson.id} className={cx("kl-row")}>
+          <button type="button" className={cx("kl", lesson.id === lessonId && "on", done.has(lesson.id) && lesson.id !== lessonId && "d")} onClick={() => { setEditingLessonId(null); setLessonId(lesson.id); }}>
+            {done.has(lesson.id) ? <Icon name="check" /> : <i />}{index + 1}. {lesson.title}
+          </button>
+          {editingTools ? (
+            <span className={cx("kl-move")}>
+              <button type="button" aria-label={`Move ${lesson.title} up`} disabled={index === 0}
+                onClick={() => { const ids = open.lessons.map((entry) => entry.id); [ids[index - 1], ids[index]] = [ids[index], ids[index - 1]]; void editingTools.reorder(open.course.id, ids); }}>↑</button>
+              <button type="button" aria-label={`Move ${lesson.title} down`} disabled={index === open.lessons.length - 1}
+                onClick={() => { const ids = open.lessons.map((entry) => entry.id); [ids[index + 1], ids[index]] = [ids[index], ids[index + 1]]; void editingTools.reorder(open.course.id, ids); }}>↓</button>
+            </span>
+          ) : null}
+        </div>
+      ))}
+      {editingTools ? (
+        <TextLink onClick={async () => {
+          const id = await editingTools.addLesson(open.course.id);
+          if (id) { setLessonId(id); setEditingLessonId(id); }
+        }}>+ Add lesson</TextLink>
+      ) : null}
+    </div>
+  ) : null;
   const courseRail = open && openProgress ? (
     <>
       <Sec label={open.course.name}>
@@ -384,29 +412,7 @@ export function KitClassroom(props: {
           </>
         )}
       </Sec>
-      <div className={cx("sec")}>
-        {open.lessons.map((lesson, index) => (
-          <div key={lesson.id} className={cx("kl-row")}>
-            <button type="button" className={cx("kl", lesson.id === lessonId && "on", done.has(lesson.id) && lesson.id !== lessonId && "d")} onClick={() => { setEditingLessonId(null); setLessonId(lesson.id); }}>
-              {done.has(lesson.id) ? <Icon name="check" /> : <i />}{index + 1}. {lesson.title}
-            </button>
-            {editingTools ? (
-              <span className={cx("kl-move")}>
-                <button type="button" aria-label={`Move ${lesson.title} up`} disabled={index === 0}
-                  onClick={() => { const ids = open.lessons.map((entry) => entry.id); [ids[index - 1], ids[index]] = [ids[index], ids[index - 1]]; void editingTools.reorder(open.course.id, ids); }}>↑</button>
-                <button type="button" aria-label={`Move ${lesson.title} down`} disabled={index === open.lessons.length - 1}
-                  onClick={() => { const ids = open.lessons.map((entry) => entry.id); [ids[index + 1], ids[index]] = [ids[index], ids[index + 1]]; void editingTools.reorder(open.course.id, ids); }}>↓</button>
-              </span>
-            ) : null}
-          </div>
-        ))}
-        {editingTools ? (
-          <TextLink onClick={async () => {
-            const id = await editingTools.addLesson(open.course.id);
-            if (id) { setLessonId(id); setEditingLessonId(id); }
-          }}>+ Add lesson</TextLink>
-        ) : null}
-      </div>
+      {lessonList}
       {agentOn ? (
         <div style={{ marginTop: "auto" }}>
           <button type="button" className={cx("ask kask-btn")} style={{ height: 46 }} onClick={() => openGuideFromSearch()}>
@@ -428,8 +434,14 @@ export function KitClassroom(props: {
   ) : null;
 
   // ---------- the page
+  // Below 1024px there is no right column (design-v1.css), so what it holds
+  // is drawn in the page instead: a picked note takes the page's place, and a
+  // course's lessons sit under the lesson.
+  const wide = useMinWidth(1024);
   let page: ReactNode;
-  if (inGuideMemory) {
+  if (!wide && noteRail) {
+    page = <div className={cx("page")} style={{ padding: 0, overflow: "visible" }}><div className={cx("evlayer")} style={{ marginTop: 0 }}>{noteRail}</div></div>;
+  } else if (inGuideMemory) {
     // Builders only: everything the guide answers from. Members never get
     // this list (the server doesn't send it to them either).
     page = (
@@ -515,6 +527,12 @@ export function KitClassroom(props: {
             ) : null}
           </div>
         )}
+        {!wide && lessonList && open.lessons.length ? (
+          <div style={{ marginTop: 34 }}>
+            <span className={cx("lab")} style={{ display: "block", marginBottom: 8 }}>Lessons</span>
+            {lessonList}
+          </div>
+        ) : null}
       </div>
     );
   } else {
@@ -618,5 +636,5 @@ export function KitClassroom(props: {
     );
   }
 
-  return <><KitApp view="know" host={props.canManage} part="flow">{page}</KitApp>{rail ? props.renderRail(rail) : null}</>;
+  return <><KitApp view="know" host={props.canManage} part="flow">{page}</KitApp>{wide && rail ? props.renderRail(rail) : null}</>;
 }
