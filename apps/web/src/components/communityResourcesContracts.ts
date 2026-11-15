@@ -18,6 +18,8 @@ export type CommunityResource = {
   body_chars?: number | null;
   url: string | null;
   file_key?: string | null;
+  // A lesson's resources: links a member can open from the lesson.
+  lesson_links?: Array<{ title: string; url: string }>;
   source_ingestion_status?: "not_required" | "queued" | "processing" | "ready" | "failed";
   source_ingestion_kind?: "manual" | "url" | "file";
   source_ingestion_error?: string | null;

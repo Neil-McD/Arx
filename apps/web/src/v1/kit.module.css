@@ -890,6 +890,27 @@
 .app .kseg button{height:24px;padding:0 10px;border-radius:6px;font-size:12.5px;font-weight:500;color:var(--ink2)}
 .app .kseg button[aria-pressed="true"]{background:var(--s2);color:var(--ink)}
 
+/* Kit addition: a lesson's resources (links members open), under the lesson
+   and in its editor. */
+.app .kres{display:flex;flex-direction:column;gap:2px;margin-top:26px}
+.app .kres>.lab{margin-bottom:6px}
+.app .kres>.sub{margin-top:8px;font-size:12.5px;color:var(--ink3)}
+.app .kresrow{display:grid;grid-template-columns:18px minmax(0,1fr) auto;gap:0 12px;align-items:center;min-height:44px;border-top:1px solid var(--line);color:inherit;text-decoration:none}
+.app .kres>.lab+.kresrow{border-top:0}
+.app .kresrow .ic{width:16px;height:16px;color:var(--ink3)}
+.app .kresrow span{min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:13.5px}
+.app .kresrow b{font-weight:550;margin-right:8px}
+.app .kresrow em{font-style:normal;font-size:12px;color:var(--ink3)}
+.app a.kresrow.klink:hover b{text-decoration:underline;text-decoration-color:var(--line2)}
+.app .kresadd{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr) auto;gap:8px;margin-top:8px}
+.app .kresadd input{min-width:0;height:32px;padding:0 10px;border-radius:8px;border:1px solid var(--line);background:var(--field);color:var(--ink);font:inherit;font-size:13.5px;outline:0}
+.app .kresadd input:focus{border-color:var(--line2)}
+.app .kresadd input::placeholder{color:var(--ink3)}
+.app .krow .from .btn.sm{height:24px;padding:0 8px;font-size:12px}
+.app .kedit-bar{flex-wrap:wrap;row-gap:8px}
+.app .kedit-pub{white-space:nowrap}
+@media (max-width:720px){.app .kresadd{grid-template-columns:minmax(0,1fr)}}
+
 /* Kit addition: arranging the shelf (two arrows on each book) and moving a
    lesson to another course from its editor. */
 .app .kcourse.karr{position:relative;cursor:default}

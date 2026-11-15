@@ -2244,6 +2244,9 @@ export default defineSchema({
     bodyMigratedAt: v.optional(v.number()),
     url: v.optional(v.string()),
     fileKey: v.optional(v.string()),
+    // A lesson's resources: links a member can open from the lesson (Nov 14).
+    // Only on pages; the guide reads the same links as ordinary sources.
+    lessonLinks: v.optional(v.array(v.object({ title: v.string(), url: v.string() }))),
     sourceIngestionStatus: v.optional(
       v.union(
         v.literal("not_required"),

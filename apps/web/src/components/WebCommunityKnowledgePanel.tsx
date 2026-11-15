@@ -39,6 +39,9 @@ function sourceProblem(raw: string | undefined): string {
   return "Polynet couldn't read that. Check it and try again.";
 }
 
+// The source intake takes at most this many at a time.
+const GUIDE_INTAKE_BATCH = 10;
+
 function KnowledgeV1({ resources, context }: Props) {
   // The classroom is the page, for reading and for a host's tools. The earlier
   // editor and its pop-ups are not reachable from here (Nov 14); they stay in
@@ -46,6 +49,20 @@ function KnowledgeV1({ resources, context }: Props) {
   const canManage = resources.capabilities.canOperateResources;
   const moduleId = resources.state.selectedModuleId;
   const openCourse = moduleId ? resources.state.modules.find((module) => module.id === moduleId && !module.is_virtual) ?? null : null;
+  // Hands links to the guide in the intake's own batch size, and waits its
+  // turn when another intake is running (it answers null while busy).
+  const handLinksToGuide = async (urls: string[]) => {
+    const known = new Set(resources.state.resources.filter((resource) => resource.resource_role === "source").map((resource) => resource.url));
+    const missing = urls.filter((url) => !known.has(url));
+    for (let start = 0; start < missing.length; start += GUIDE_INTAKE_BATCH) {
+      const batch = missing.slice(start, start + GUIDE_INTAKE_BATCH);
+      for (let attempt = 0; attempt < 20; attempt += 1) {
+        const result = await resources.actions.handleAddCommunitySources({ links: batch, files: [] }).catch(() => undefined);
+        if (result !== null) break;
+        await new Promise((resolve) => setTimeout(resolve, 1500));
+      }
+    }
+  };
   // "What your guide knows": the builders' list, one level in from Knowledge.
   const [guideMemoryOpen, setGuideMemoryOpen] = useState(false);
   useEffect(() => { setGuideMemoryOpen(false); }, [context.communityId, canManage]);
@@ -91,6 +108,13 @@ function KnowledgeV1({ resources, context }: Props) {
             return { ok: true };
           } : undefined}
           onReorderCourses={canManage ? resources.actions.handleReorderModules : undefined}
+          onRetrySources={canManage ? async () => {
+            const result = await resources.actions.handleAddCommunitySources({ links: [], files: [], retryExisting: true });
+            const failed = result?.ingestion?.failures.length ?? 0;
+            if (!result || result.errors.length || failed) return { ok: false, message: failed ? `${failed === 1 ? "One still" : `${failed} still`} couldn't be read. ${sourceProblem(result?.ingestion?.failures[0]?.message)}` : sourceProblem(result?.errors[0]) };
+            return { ok: true };
+          } : undefined}
+          onRemoveSource={canManage ? async (resourceId) => { await resources.actions.handleDeleteResource(resourceId); } : undefined}
           onSetCourseStatus={canManage ? async (id, status) => {
             const course = resources.state.modules.find((module) => module.id === id);
             if (course) await resources.actions.handleSetModuleStatus(course, status);
@@ -137,6 +161,12 @@ function KnowledgeV1({ resources, context }: Props) {
             save: async (resourceId, patch) => {
               await saveCloudCommunityResource({ session: context.session, resourceId, isPatch: true, payload: patch });
               await resources.actions.retryRead("resources");
+              // A lesson's links are also handed to the guide to read, as any
+              // link is. Every link the guide doesn't have yet goes, not only
+              // the ones just added, so a hand-off that was missed is made up
+              // on the next save. A page it can't read still opens for
+              // members; that failure shows in What your guide knows.
+              if (patch.lesson_links?.length) void handLinksToGuide(patch.lesson_links.map((link) => link.url));
             },
             addLesson: async (id) => {
               const created = await resources.actions.handleCreateBlankPageDraft(id);
