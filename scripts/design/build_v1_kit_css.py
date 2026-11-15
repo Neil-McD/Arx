@@ -181,14 +181,7 @@ css += """
 .app .pal .opt-label b{font-weight:500;color:var(--ink)}
 .app .pal .pal-mark{width:20px;height:20px;border-radius:6px;font-size:9px}
 
-/* Home's right column: Today's lines (each opens what it names), who is
-   online, and the memory map as a button. */
-.app .today{list-style:none;margin:2px 0 10px;padding:0;display:flex;flex-direction:column;gap:12px}
-.app .today-line{display:flex;flex-direction:column;gap:2px;width:100%;text-align:left}
-.app .today-line b{font-weight:500;font-size:14px;line-height:1.4;color:var(--ink)}
-.app .today-line em{font-style:normal;font-size:12px;color:var(--ink3)}
-.app button.today-line{cursor:pointer}.app button.today-line:hover b{text-decoration:underline;text-decoration-color:var(--line2);text-underline-offset:3px}
-.app .here-row{display:flex;align-items:center;gap:12px}
+/* Home's right column. */
 /* The guide's brief, the first part of a right panel (mock: Pods3Inside,
    Home3): a quiet aurora card, its label and age, a short summary, and the
    channels it came from. */
@@ -215,6 +208,9 @@ css += """
 .app .recent i{width:6px;height:6px;border-radius:50%;background:rgb(var(--au));flex:none}
 .app .recent em{margin-left:auto;font-style:normal;font-size:12px;color:var(--ink3)}
 .app .quiet{margin:0;font-size:13px;line-height:1.5;color:var(--ink3)}
+/* What a panel keeps at its foot: things looked at rarely, opened in place. */
+.app .railfoot{display:flex;gap:16px;margin-top:16px;padding-top:14px;border-top:1px solid var(--line)}
+.app .railfoot button{font-size:12.5px;color:var(--ink3);cursor:pointer}.app .railfoot button:hover,.app .railfoot button[aria-expanded="true"]{color:var(--ink)}
 /* A pod's landing page, the Pods page's right panel. */
 .app .land{display:flex;flex-direction:column;min-height:100%}
 .app .land h2{margin:0;font-size:20px;font-weight:600;letter-spacing:-.01em;color:var(--ink)}
