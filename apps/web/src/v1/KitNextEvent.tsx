@@ -20,9 +20,10 @@ export function KitNextEvent(props: {
   presence?: CommunityPresenceSummary | null;
   // A member's column also says who is here now.
   showHere?: boolean;
-  // Home's "Today": only an event that is live or starts today, and nothing
-  // at all when there is none.
-  todayOnly?: boolean;
+  // Home: the next event in the coming two weeks (so a call on Thursday is
+  // there on Monday, not only on the day), and nothing at all when there is
+  // none.
+  quietWhenNone?: boolean;
 }) {
   const [event, setEvent] = useState<CloudCommunityEvent | null | undefined>(undefined);
   useEffect(() => {
@@ -37,12 +38,7 @@ export function KitNextEvent(props: {
   }, [props.session, props.communityId]);
 
   const label = event ? featuredEventLabel(event, props.now) : null;
-  const startsToday = event ? (() => {
-    const starts = new Date(event.starts_at);
-    const today = new Date(props.now);
-    return starts.getFullYear() === today.getFullYear() && starts.getMonth() === today.getMonth() && starts.getDate() === today.getDate();
-  })() : false;
-  if (props.todayOnly && !(event && label && (label.live || startsToday))) return null;
+  if (props.quietWhenNone && !(event && label)) return null;
   const faces = props.presence?.online_faces ?? [];
   const hereCount = props.presence?.online_count ?? faces.length;
   return (
