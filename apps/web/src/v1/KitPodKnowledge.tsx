@@ -1,5 +1,5 @@
 // Pod knowledge (docs/specs/pods-v0.md, slice 3b): the pod's own notes, in
-// its right column. Everyone in the pod reads them; its hosts write them. A
+// its right column, each a row with its date that opens in place. Everyone in the pod reads them; its hosts write them. A
 // builder can publish one to the community's Knowledge, on purpose; nothing
 // else leaves the pod.
 import { Fragment, useCallback, useEffect, useRef, useState } from "react";
@@ -11,7 +11,8 @@ import {
   saveCloudPodNote,
   type CloudPodNotes,
 } from "../../../../shared/cloudCommunityPodsGateway";
-import { Btn, Sec, cx } from "./kit";
+import { Btn, Icon, cx } from "./kit";
+import { PanelAction, PanelLearned, PanelLine, PanelPart } from "./KitPanel";
 
 type Draft = { slug: string | null; title: string; text: string };
 
@@ -53,7 +54,10 @@ export function KitPodKnowledge(props: { session: unknown; communityId: string; 
   if (!state.notes.length && !state.can_write) return null;
 
   return (
-    <Sec label={`Pod knowledge${state.notes.length ? ` · ${state.notes.length}` : ""}`}>
+    <PanelPart label="What this pod knows" fact={state.notes.length ? String(state.notes.length) : null}
+      action={state.can_write && !draft ? (
+        <PanelAction icon label="New note" onClick={() => { setDraft({ slug: null, title: "", text: "" }); setError(null); }}><Icon name="plus" /></PanelAction>
+      ) : null}>
       {draft ? (
         <div className={cx("podform")} style={{ marginTop: 0 }}>
           <input value={draft.title} onChange={(event) => setDraft({ ...draft, title: event.target.value })} placeholder="Title" aria-label="Note title" maxLength={120} autoFocus />
@@ -69,17 +73,16 @@ export function KitPodKnowledge(props: { session: unknown; communityId: string; 
         </div>
       ) : (
         <>
-          {!state.notes.length ? <p className={cx("sub")}>Notes only this pod can read: decisions, call takeaways, what's working.</p> : null}
+          {!state.notes.length ? <PanelLine dim>Nothing yet</PanelLine> : null}
           {state.notes.length > 5 ? (
             <div className={cx("podform")} style={{ marginTop: 0, marginBottom: 8 }}>
               <input value={filter} onChange={(event) => setFilter(event.target.value)} placeholder="Find in pod knowledge" aria-label="Find in pod knowledge" />
             </div>
           ) : null}
           {notes.map((note) => (
-            <div key={note.slug} className={cx("podnote")}>
-              <button type="button" className={cx("podnote-title")} aria-expanded={open === note.slug} onClick={() => { setOpen(open === note.slug ? null : note.slug); setConfirm(null); setError(null); }}>
-                {note.title}
-              </button>
+            <div key={note.slug}>
+              <PanelLearned title={note.title} when={formatPodDate(note.updated_at)} expanded={open === note.slug}
+                onOpen={() => { setOpen(open === note.slug ? null : note.slug); setConfirm(null); setError(null); }} />
               {open === note.slug ? (
                 <>
                   <div className={cx("podnote-body")}>
@@ -121,13 +124,8 @@ export function KitPodKnowledge(props: { session: unknown; communityId: string; 
             </div>
           ))}
           {words && !notes.length ? <p className={cx("sub")}>Nothing matches.</p> : null}
-          {state.can_write ? (
-            <div className={cx("acts")} style={{ marginTop: 8 }}>
-              <Btn small txt onClick={() => { setDraft({ slug: null, title: "", text: "" }); setError(null); }}>New note</Btn>
-            </div>
-          ) : null}
         </>
       )}
-    </Sec>
+    </PanelPart>
   );
 }
