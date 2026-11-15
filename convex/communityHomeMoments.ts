@@ -3,6 +3,7 @@ import { eventViewer, visibleEvents } from "./communityEventAudience";
 // visit, what happened since, and a member's next step. No model. Everything
 // read here is what this viewer may already see: shared channels, Knowledge's
 // notes, events; names of who joined only for the owner.
+import { communityScopeKey, notesByUpdated } from "./communityNotesStore";
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { resolveUserIdForAuthenticatedRequest } from "./authActor";
@@ -105,8 +106,7 @@ export const getHomeMoments = query({
     }
 
     // What the guide learned is the host's to see; a member never gets a note's title.
-    const notes = audience !== "host" ? [] : (await ctx.db.query("communityNotes")
-      .withIndex("by_community_updatedAt", (q: any) => q.eq("communityId", args.communityId).gte("updatedAt", since)).take(20))
+    const notes = audience !== "host" ? [] : (await notesByUpdated(ctx, communityScopeKey(args.communityId), since).take(20))
       .map((note: any) => ({ slug: String(note.slug), title: String(note.title), createdAt: Number(note.createdAt) }));
 
     const joinedRows = (await ctx.db.query("communityMemberships")

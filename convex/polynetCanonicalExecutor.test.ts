@@ -459,7 +459,7 @@ async function createCanonicalSearchFixture(
       updatedAt: nowMs + 3,
     });
     // A community note, which is what memory/ serves.
-    await ctx.db.insert("communityNotes", {
+    await ctx.db.insert("communityNotes", { scopeKey: `community:${String(fixture.communityId)}`,
       communityId: fixture.communityId,
       slug: "canonical-repository-search",
       title: "Canonical repository search",
@@ -2950,7 +2950,7 @@ test("community.md is the community card: the reader's restricted channels (from
 test("community notes: the guide and builders read them, a member's own AI does not, and nobody writes them; nothing marks private rooms any more", async () => {
   const t = convexTest(schema, modules);
   const f = await createFixture(t);
-  await t.run(ctx => ctx.db.insert("communityNotes", {
+  await t.run(ctx => ctx.db.insert("communityNotes", { scopeKey: `community:${String(f.communityId)}`,
     communityId: f.communityId, slug: "liquid-chalk-helps", title: "Liquid chalk helps", bodyMd: "Liquid chalk under block chalk helps cold hands.",
     source: "founder", searchText: "liquid chalk helps cold hands", createdAt: Date.now(), updatedAt: Date.now(),
   }));

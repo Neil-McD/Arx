@@ -1,8 +1,8 @@
 // Pod knowledge (docs/specs/pods-v0.md, slice 3b): markdown notes that belong
-// to one pod. The one-way wall is built in: pod notes live in their own table
-// (communityPodNotes), so nothing that reads the community's notes, search,
-// Home, the handbook or the agent's file system can show them. This module is
-// the only reader and writer (scripts/community_pod_notes_wall.test.ts).
+// to one pod. The one-way wall is the scope: a pod's notes are "pod:<roomId>"
+// rows in communityNotes, read only through convex/communityNotesStore.ts, where
+// every read names one scope, so nothing that reads the community's notes,
+// search, Home, the handbook or the agent's file system can show them.
 //
 // Who reads: people who can enter the pod. Who writes: the pod's hosts and the
 // builders. The only way out: a builder publishes a note to the community, on
@@ -15,6 +15,7 @@ import { getCommunityChannelCapabilities, resolveCommunityChannelActor } from ".
 import { requireCommunityChatAccess, requireCommunityManager } from "./communityCore";
 import { requirePodEventManager as requirePodManager } from "./communityEventAudience";
 import { resolveUserProfileDisplayProjection } from "./userProfileProjection";
+import { communityScopeKey, insertNote, noteBySlug, notesByUpdated, podScopeKey } from "./communityNotesStore";
 import {
   buildCommunityNoteSearchText,
   communityNoteSlug,
@@ -40,13 +41,11 @@ async function podReader(ctx: any, args: { authSubject?: string; communityId: an
 }
 
 async function podNotes(ctx: any, channelId: any) {
-  return await ctx.db.query("communityPodNotes")
-    .withIndex("by_channel_updatedAt", (q: any) => q.eq("channelId", channelId)).order("desc").take(POD_NOTES_MAX + 1);
+  return await notesByUpdated(ctx, podScopeKey(channelId)).order("desc").take(POD_NOTES_MAX + 1);
 }
 
 async function podNote(ctx: any, channelId: any, slug: string) {
-  return await ctx.db.query("communityPodNotes")
-    .withIndex("by_channel_slug", (q: any) => q.eq("channelId", channelId).eq("slug", slug)).first();
+  return await noteBySlug(ctx, podScopeKey(channelId), slug);
 }
 
 export const listPodNotes = query({
@@ -67,7 +66,7 @@ export const listPodNotes = query({
     };
     const rows = await podNotes(ctx, args.channelId);
     const notes = [];
-    for (const row of rows.slice(0, POD_NOTES_MAX)) {
+    for (const row of rows.slice(0, POD_NOTES_MAX) as any[]) {
       notes.push({
         slug: row.slug, title: row.title, body_md: row.bodyMd,
         written_by: await writer(row.createdByUserId),
@@ -94,7 +93,7 @@ export const savePodNote = mutation({
     if (args.slug) {
       const row = await podNote(ctx, args.channelId, args.slug);
       if (!row) throw new Error("semantic_not_found");
-      await ctx.db.patch(row._id, { title, bodyMd: text, updatedByUserId: userId, updatedAt: nowMs });
+      await ctx.db.patch(row._id, { title, bodyMd: text, searchText: buildCommunityNoteSearchText({ title, bodyMd: text }), updatedByUserId: userId, updatedAt: nowMs });
       return { slug: row.slug, title };
     }
     const existing = await podNotes(ctx, args.channelId);
@@ -103,8 +102,9 @@ export const savePodNote = mutation({
     const taken = new Set(existing.map((row: any) => row.slug));
     let slug = base;
     for (let n = 2; taken.has(slug); n++) slug = `${base.slice(0, 60)}-${n}`;
-    await ctx.db.insert("communityPodNotes", {
-      communityId: args.communityId, channelId: args.channelId, slug, title, bodyMd: text,
+    await insertNote(ctx, podScopeKey(args.channelId), {
+      communityId: args.communityId, slug, title, bodyMd: text, source: "founder", authorKind: "builder",
+      searchText: buildCommunityNoteSearchText({ title, bodyMd: text }),
       createdByUserId: userId, updatedByUserId: userId, createdAt: nowMs, updatedAt: nowMs,
     });
     return { slug, title };
@@ -141,21 +141,21 @@ export const publishPodNote = mutation({
     // since deleted it, publishing makes a new copy rather than overwriting
     // whatever note now has its slug.
     const publishedRow = row.publishedNoteId ? await ctx.db.get(row.publishedNoteId as Id<"communityNotes">) : null;
-    const published = publishedRow && String(publishedRow.communityId) === String(args.communityId) ? publishedRow : null;
+    const published = publishedRow && publishedRow.scopeKey === communityScopeKey(args.communityId) ? publishedRow : null;
     if (published) {
       await ctx.db.patch(published._id, fields);
       await ctx.db.patch(row._id, { publishedAt: nowMs });
       return { slug: published.slug };
     }
-    const existing = await ctx.db.query("communityNotes")
-      .withIndex("by_community_updatedAt", (q) => q.eq("communityId", args.communityId)).take(COMMUNITY_NOTES_MAX_PER_COMMUNITY + 1);
+    const community = communityScopeKey(args.communityId);
+    const existing = await notesByUpdated(ctx, community).take(COMMUNITY_NOTES_MAX_PER_COMMUNITY + 1);
     if (existing.length >= COMMUNITY_NOTES_MAX_PER_COMMUNITY) throw new Error("community_notes_full");
     const base = communityNoteSlug(row.title) || "note";
-    const taken = new Set(existing.map((note) => note.slug));
+    const taken = new Set<string>(existing.map((note: any) => note.slug));
     let slug = base;
     for (let n = 2; taken.has(slug); n++) slug = `${base.slice(0, 60)}-${n}`;
-    const publishedNoteId = await ctx.db.insert("communityNotes", { communityId: args.communityId, slug, source: "founder", createdByUserId: userId, createdAt: nowMs, ...fields });
-    await ctx.db.patch(row._id, { publishedSlug: slug, publishedNoteId, publishedAt: nowMs });
+    const publishedNoteId = await insertNote(ctx, community, { communityId: args.communityId, slug, source: "founder", createdByUserId: userId, createdAt: nowMs, ...fields });
+    await ctx.db.patch(row._id, { publishedNoteId, publishedAt: nowMs });
     return { slug };
   },
 });

@@ -304,7 +304,7 @@ describe("founder brief delivery", () => {
     });
     // Notes the agent saved in the window are listed; the founder's own and older ones aren't.
     await t.run(async (ctx) => {
-      const note = (slug: string, source: string, at: number) => ctx.db.insert("communityNotes", {
+      const note = (slug: string, source: string, at: number) => ctx.db.insert("communityNotes", { scopeKey: `community:${String(f.communityId)}`,
         communityId: f.communityId, slug, title: slug, bodyMd: "x", source, searchText: slug, createdAt: at, updatedAt: at } as any);
       await note("new-from-ask", "ask", nowMs - HOUR_MS);
       await note("founder-wrote-this", "founder", nowMs - HOUR_MS);

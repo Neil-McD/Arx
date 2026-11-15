@@ -11,6 +11,7 @@ const root = join(import.meta.dirname, "..");
 
 const ALLOWED = new Map<string, string>([
   ["communityMemoryReview:requestMemoryReviewNowInternal", "operator tool: run a community's memory review now (staging acceptance), by hand"],
+  ["communityNotesStore:backfillMemoryScopeInternal", "pods slice B release step: an operator runs it once after the deploy that adds memory scope keys (npx convex run), until remaining is false"],
   ["communityMemory:undoLearnedNote", "community memory, slice 1: called by the builders' page (docs/specs/agent-system-slice-1.md, steps 2-6)"],
   ["communityMemory:undoMemoryRun", "community memory, slice 1: called by the builders' page (docs/specs/agent-system-slice-1.md, steps 2-6)"],
   ["communityMemory:listMemoryRuns", "community memory, slice 1: called by the builders' page (docs/specs/agent-system-slice-1.md, steps 2-6)"],

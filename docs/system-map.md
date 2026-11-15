@@ -198,7 +198,7 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
   builder can undo one note or a whole review. The old
   notes overview (`communityIntelligenceDirectory`) is deleted (Nov 6): nothing
   read it.
-- **Code:** `communityNotes`, `communityMemory` (tables `communityNoteRevisions`,
+- **Code:** `communityNotesStore` (the one door to memory records, by scope), `communityNotes`, `communityMemory` (tables `communityNoteRevisions`,
   `communityNoteRemovals`, `communityMemoryIndex`, `agentWork`, `agentWorkRuns`),
   `communityMemoryReview` (the guide's nightly review: made due by posts in open
   channels, run on the shared run entry `communityAgentRun` in one pass: the
@@ -328,9 +328,11 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
   through its own checkout, reported to `POST /apps/v1/sales`; no fee; lets a
   verified account in, or waits for one). Table: `communityAppGrants`.
 - **Pod knowledge:** `communityPodNotes` (notes that belong to one pod: the pod
-  reads, its hosts write, a builder may publish a copy to the community's notes;
-  their own table, and `scripts/community_pod_notes_wall.test.ts` lets only this
-  module touch it). Table: `communityPodNotes`.
+  reads, its hosts write, a builder may publish a copy to the community's notes).
+  They are `pod:<roomId>` notes in the one memory store, `communityNotesStore`,
+  where every memory row carries a scope key and every read names one scope
+  (`scripts/memory_scope_wall.test.ts` lets only the store touch memory tables).
+  Table `communityPodNotes` is retired: the scope backfill empties it; dropped later.
 - **Pod calls:** `communityEventAudience` (the one rule: an event with a pod is
   visible only to people who can enter that pod; every reader of `communityEvents`
   goes through it, enforced by `scripts/community_event_audience.test.ts`).

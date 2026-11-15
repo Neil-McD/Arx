@@ -7,6 +7,7 @@
 // memory.md), which the server checks note by note. A quiet community costs
 // nothing; with AI off nothing runs. A daily sweep re-schedules any due row
 // whose job was lost.
+import { communityScopeKey, dueWork, insertWork, workFor } from "./communityNotesStore";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import { internalAction, internalMutation, internalQuery } from "./_generated/server";
@@ -242,7 +243,7 @@ export const repairMemoryReviewScheduleInternal = internalMutation({
   args: {},
   handler: async (ctx) => {
     const nowMs = Date.now();
-    const lost = await ctx.db.query("agentWork").withIndex("by_dueAt", (q) => q.gt("dueAt", 0).lt("dueAt", nowMs - LOST_AFTER_MS)).take(SWEEP_LIMIT);
+    const lost = await dueWork(ctx, nowMs - LOST_AFTER_MS).take(SWEEP_LIMIT);
     let rescheduled = 0;
     for (const work of lost) {
       if (work.leaseUntil && work.leaseUntil > nowMs) continue;
@@ -260,16 +261,15 @@ export const requestMemoryReviewNowInternal = internalMutation({
   args: { communityId: v.id("communities"), sinceMs: v.optional(v.number()) },
   handler: async (ctx, args) => {
     const nowMs = Date.now();
-    const work = await ctx.db.query("agentWork")
-      .withIndex("by_community_scope_kind", (q) => q.eq("communityId", args.communityId).eq("scope", "community").eq("kind", "memory_review"))
-      .first();
+    const scope = communityScopeKey(args.communityId);
+    const work = await workFor(ctx, scope, "memory_review");
     const reviewedThrough = args.sinceMs ?? work?.reviewedThrough ?? nowMs - 24 * 60 * 60_000;
     let workId = work?._id;
     if (work) {
       await ctx.db.patch(work._id, { pending: Math.max(1, work.pending), reviewedThrough, dueAt: nowMs, leaseUntil: undefined, failures: 0, updatedAt: nowMs });
     } else {
-      workId = await ctx.db.insert("agentWork", {
-        communityId: args.communityId, scope: "community", kind: "memory_review", pending: 1, firstPendingAt: nowMs,
+      workId = await insertWork(ctx, scope, {
+        communityId: args.communityId, kind: "memory_review", pending: 1, firstPendingAt: nowMs,
         reviewedThrough, dueAt: nowMs, failures: 0, createdAt: nowMs, updatedAt: nowMs,
       });
     }
