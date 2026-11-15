@@ -329,3 +329,60 @@ export const listMemoryRuns = query({
     }));
   },
 });
+
+// ---------- what the review lens reads
+
+const NEW_POSTS_MAX = 200;
+const POST_TEXT_MAX = 2_000;
+
+async function openChannelBySlug(ctx: any, communityId: any, slug: string) {
+  const channel = await ctx.db.query("communityChannels")
+    .withIndex("by_community_slug", (q: any) => q.eq("communityId", communityId).eq("slug", slug)).first();
+  return channel && channel.accessMode === "all_members" && channel.status === "active" ? channel : null;
+}
+
+export const isOpenChannelInternal = internalQuery({
+  args: { communityId: v.id("communities"), slug: v.string() },
+  handler: async (ctx, args) => Boolean(await openChannelBySlug(ctx, args.communityId, args.slug)),
+});
+
+async function authorWord(ctx: any, row: any, names: Map<string, string>): Promise<string> {
+  if (row.actorType !== "human" || !row.actorUserId) return "the guide";
+  const key = String(row.actorUserId);
+  if (!names.has(key)) {
+    const user = await ctx.db.get(row.actorUserId);
+    names.set(key, user?.handle ? `@${user.handle}` : user?.displayName ?? "a member");
+  }
+  return names.get(key)!;
+}
+
+// channels/<channel>/new.md: what people said there since the last review,
+// oldest first, each post and reply with the name memory.observe cites.
+export const renderChannelNewPostsInternal = internalQuery({
+  args: { communityId: v.id("communities"), slug: v.string(), sinceMs: v.number() },
+  handler: async (ctx, args) => {
+    const channel = await openChannelBySlug(ctx, args.communityId, args.slug);
+    if (!channel) return null;
+    const take = async (table: "communityInteractionRoots" | "communityInteractionReplies", scope: "community" | "public") =>
+      await ctx.db.query(table).withIndex("by_community_channel_visibility_status_createdAt", (q: any) =>
+        q.eq("communityId", args.communityId).eq("channelId", channel._id).eq("visibilityScope", scope).eq("status", "live").gt("createdAt", args.sinceMs))
+        .take(NEW_POSTS_MAX);
+    const rows = [
+      ...(await take("communityInteractionRoots", "community")).map((row: any) => ({ row, kind: "post" as const })),
+      ...(await take("communityInteractionRoots", "public")).map((row: any) => ({ row, kind: "post" as const })),
+      ...(await take("communityInteractionReplies", "community")).map((row: any) => ({ row, kind: "reply" as const })),
+      ...(await take("communityInteractionReplies", "public")).map((row: any) => ({ row, kind: "reply" as const })),
+    ].sort((a, b) => a.row.createdAt - b.row.createdAt).slice(0, NEW_POSTS_MAX);
+    const names = new Map<string, string>();
+    const lines = [`# #${channel.name}: new since ${new Date(args.sinceMs).toISOString()}`, ""];
+    if (rows.length === 0) lines.push("Nothing new.");
+    for (const { row, kind } of rows) {
+      const ref = `${kind}:${String(row._id)}`;
+      const where = kind === "reply" ? ` (reply to post:${String(row.rootId)})` : "";
+      const text = String(row.contentSummary ?? "").replace(/\s+/g, " ").trim().slice(0, POST_TEXT_MAX);
+      lines.push(`- ${ref}${where} · ${await authorWord(ctx, row, names)} · ${new Date(row.createdAt).toISOString()}`, `  > ${text}`);
+    }
+    if (rows.length === NEW_POSTS_MAX) lines.push("", `Showing the first ${NEW_POSTS_MAX}; the next review reads the rest.`);
+    return { body: lines.join("\n"), count: rows.length };
+  },
+});

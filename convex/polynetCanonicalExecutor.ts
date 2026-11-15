@@ -45,6 +45,8 @@ import {
 import { normalizeToolArguments } from "../shared/toolRegistry.ts";
 import { COMMUNITY_CARD_LIMITS, renderCommunityCard, renderMemberTimeline } from "../shared/communityOntology.ts";
 import { executePlatformOperation } from "./platformOperationExecutor.ts";
+import { isMemoryReviewCall, memoryReviewPlace, memoryReviewRootEntries, type AgentLens } from "../shared/agentLens.ts";
+import { MEMORY_REFUSAL_WORDS } from "../shared/communityMemory.ts";
 
 export type PolynetCanonicalExecutionResult =
   | { ok: true; value: Record<string, unknown> }
@@ -2660,6 +2662,9 @@ export async function executePolynetCanonicalTool(args: {
   evidenceSurface: CommunityEvidenceSurface;
   toolName: PolynetCanonicalToolName;
   input: Record<string, unknown>;
+  // A run with nobody present sees only what its lens mounts
+  // (shared/agentLens.ts), checked here on every call.
+  lens?: AgentLens;
 }): Promise<PolynetCanonicalExecutionResult> {
   if (!POLYNET_CANONICAL_TOOL_DEFINITIONS[args.toolName]) {
     return canonicalError("unknown_tool", "Unknown Polynet tool.");
@@ -2684,6 +2689,10 @@ export async function executePolynetCanonicalTool(args: {
       );
     }
   }
+  // A lens's own views (new.md, memory.md) aren't in the general path
+  // grammar: the lens validates its paths itself, then normalises what it
+  // hands on.
+  if (args.lens) return await executeMemoryReviewLensTool({ ...args, authSubject, userId, input: args.input ?? {}, lens: args.lens });
   let input: Record<string, unknown>;
   try {
     input = normalizeToolArguments(args.toolName, args.input);
@@ -2713,4 +2722,95 @@ export async function executePolynetCanonicalTool(args: {
   if (args.toolName === "polynet_write")
     return await executeCanonicalWrite(common);
   return await executeCanonicalCall(common);
+}
+
+// The guide's memory review (shared/agentLens.ts): open channels and memory
+// only. Everything else in the community is not there for this run, and its
+// only writes are memory.observe and memory.write_index.
+async function executeMemoryReviewLensTool(args: {
+  ctx: any;
+  authSubject: string;
+  userId: string;
+  principalKind: PolynetPrincipalKind;
+  mountedCommunityId?: string | null;
+  evidenceSurface: CommunityEvidenceSurface;
+  toolName: PolynetCanonicalToolName;
+  input: Record<string, unknown>;
+  lens: AgentLens;
+}): Promise<PolynetCanonicalExecutionResult> {
+  const notMounted = canonicalError("semantic_not_found", "This review sees the community's open channels and its memory only.");
+  if (args.lens.name !== "memory_review" || args.principalKind !== "community_agent" || !args.mountedCommunityId) {
+    return canonicalError("lens_invalid", "This run's lens isn't available.");
+  }
+  const communityId = args.mountedCommunityId;
+  if (args.toolName === "polynet_write") {
+    return canonicalError("lens_read_only", "This review writes only with memory.observe and memory.write_index.");
+  }
+  if (args.toolName === "polynet_call") {
+    const operation = args.input.operation;
+    const raw = args.input.input && typeof args.input.input === "object" && !Array.isArray(args.input.input)
+      ? args.input.input as Record<string, unknown> : {};
+    if (!isMemoryReviewCall(operation)) {
+      return canonicalError("operation_not_found", "This review's only writes are memory.observe and memory.write_index.");
+    }
+    const answer = operation === "memory.observe"
+      ? await args.ctx.runMutation((internal as any).communityMemory.observeCommunityMemoryInternal, {
+        communityId, runId: args.lens.runId, title: String(raw.title ?? ""), body: String(raw.body ?? ""),
+        evidenceRefs: Array.isArray(raw.evidence_refs) ? raw.evidence_refs.map(String) : [],
+        ...(typeof raw.supersedes === "string" && raw.supersedes ? { supersedes: raw.supersedes } : {}),
+        nowMs: Date.now(),
+      })
+      : await args.ctx.runMutation((internal as any).communityMemory.writeCommunityMemoryIndexInternal, {
+        communityId, runId: args.lens.runId, bodyMd: String(raw.body ?? ""), nowMs: Date.now(),
+      });
+    if (!answer?.ok) return canonicalError(String(answer?.code ?? "memory_refused"), MEMORY_REFUSAL_WORDS[String(answer?.code)] ?? "That was refused.");
+    return { ok: true, value: { operation, ...answer } };
+  }
+
+  const parsed = parsePolynetSemanticRepositoryPath(args.input.path);
+  if (!parsed.ok || parsed.kind !== "community") return notMounted;
+  const communityPath = `/communities/${parsed.communitySlug}/`;
+  const place = memoryReviewPlace(parsed.localPath);
+  if (place.kind === "not_mounted") return notMounted;
+  if (args.toolName === "polynet_search" && place.kind !== "memory" && place.kind !== "channel") return notMounted;
+  // The path must name this run's own community (checked on the community's
+  // root: new.md and memory.md are this lens's own views).
+  const target = await resolveCommunityTarget({ ...args, path: communityPath });
+  if (!target.ok) return canonicalError(target.code, target.message);
+
+  if (place.kind === "root") {
+    if (args.toolName !== "polynet_list") return notMounted;
+    return { ok: true, value: { path: communityPath, entries: memoryReviewRootEntries(communityPath), next_cursor: null, truncated: false } };
+  }
+  if (place.kind === "memory_index") {
+    if (args.toolName !== "polynet_read") return notMounted;
+    const index = await args.ctx.runQuery((internal as any).communityMemory.readCommunityMemoryIndexInternal, { communityId });
+    return { ok: true, value: { path: `${communityPath}memory.md`, body: index?.bodyMd ?? "_Nothing yet. Write memory.md once there are notes worth pointing to._" } };
+  }
+  if (place.kind === "channel_new") {
+    if (args.toolName !== "polynet_read") return notMounted;
+    const view = await args.ctx.runQuery((internal as any).communityMemory.renderChannelNewPostsInternal, {
+      communityId, slug: place.channel, sinceMs: args.lens.sinceMs });
+    return view ? { ok: true, value: { path: String(args.input.path), body: view.body } } : notMounted;
+  }
+  if (place.kind === "channel") {
+    const open = await args.ctx.runQuery((internal as any).communityMemory.isOpenChannelInternal, { communityId, slug: place.channel });
+    if (!open) return notMounted;
+  }
+  let normalized: Record<string, unknown>;
+  try {
+    normalized = normalizeToolArguments(args.toolName, args.input);
+  } catch (error) {
+    return canonicalError("invalid_tool_args", error instanceof Error ? error.message : "Invalid tool arguments.");
+  }
+  const handed = { ...args, input: normalized };
+  const result = args.toolName === "polynet_search"
+    ? await executeCanonicalSearch(handed)
+    : args.toolName === "polynet_list" ? await executeCanonicalList(handed) : await executeCanonicalRead(handed);
+  if (!result.ok || place.kind !== "channels") return result;
+  // The channel list: open channels only, each with its new.md.
+  const entries = Array.isArray((result.value as any).entries) ? (result.value as any).entries : [];
+  return { ok: true, value: { ...result.value, next_cursor: null, entries: entries
+    .filter((entry: any) => entry?.access_mode === "all_members")
+    .map((entry: any) => ({ ...entry, new: `${String(entry.path)}new.md` })) } };
 }

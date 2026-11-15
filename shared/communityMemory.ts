@@ -11,11 +11,15 @@ export const MEMORY_INDEX_MAX_CHARS = 2_200;
 
 export type MemoryEvidenceRef = { kind: "post" | "reply"; id: string; raw: string };
 
-// "post:<id>" or "reply:<id>". Anything else is not evidence.
+// "post:<id>" or "reply:<id>", or the folder's own names for them
+// ("interaction:root:<id>", "interaction:reply:<id>"). Anything else is not
+// evidence. Stored as post:/reply:.
 export function parseMemoryEvidenceRef(raw: unknown): MemoryEvidenceRef | null {
-  const text = typeof raw === "string" ? raw.trim() : "";
-  const match = /^(post|reply):([A-Za-z0-9_-]{1,64})$/.exec(text);
-  return match ? { kind: match[1] as "post" | "reply", id: match[2], raw: `${match[1]}:${match[2]}` } : null;
+  const text = typeof raw === "string" ? raw.trim().replace(/\.md$/, "") : "";
+  const match = /^(post|reply|interaction:root|interaction:reply):([A-Za-z0-9_-]{1,64})$/.exec(text);
+  if (!match) return null;
+  const kind = match[1] === "post" || match[1] === "interaction:root" ? "post" : "reply";
+  return { kind, id: match[2], raw: `${kind}:${match[2]}` };
 }
 
 export function parseMemoryEvidenceRefs(raw: unknown): { refs: MemoryEvidenceRef[] } | { error: "evidence_required" | "evidence_invalid" | "evidence_too_many" } {

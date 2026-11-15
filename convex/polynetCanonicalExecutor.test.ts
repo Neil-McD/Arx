@@ -218,7 +218,7 @@ const modules = import.meta.glob([
   "./communityOntologyCards.ts",
   "./communitySearchDocs.ts",
   "./communityMemberTimeline.ts",
-  "./communityHandbook.ts", "./communityNotes.ts", "./communityLessonProgress.ts", "./memberWriteRateLimit.ts", "./communityLifecycle.ts", "./communityOperations.ts", "./communityPeople.ts", "./userProfileProjection.ts",
+  "./communityHandbook.ts", "./communityNotes.ts", "./communityMemory.ts", "./communityLessonProgress.ts", "./memberWriteRateLimit.ts", "./communityLifecycle.ts", "./communityOperations.ts", "./communityPeople.ts", "./userProfileProjection.ts",
   "./communityAccessQueries.ts",
   "./communityAdmin.ts",
   "./email.ts",
@@ -3452,3 +3452,68 @@ test("asking to change where members spend time was retired with custom sites: i
   expect(read).toMatchObject({ ok: false });
 });
 
+
+// The guide's memory review sees open channels and memory only, and writes
+// only through memory.observe and memory.write_index (shared/agentLens.ts).
+test("the memory review lens mounts open channels and memory, nothing else", async () => {
+  vi.stubEnv("ARX_PUBLIC_APP_URL", "https://polynet-staging.vercel.app");
+  const t = convexTest(schema, modules);
+  const f = await createFixture(t);
+  const nowMs = 1_760_000_000_000;
+  const ids = await t.run(async (ctx) => {
+    const podId = await ctx.db.insert("communityChannels", { communityId: f.communityId, slug: "founders", name: "Founders",
+      accessMode: "restricted", postingPolicy: "members", status: "active", position: 9, createdAt: nowMs, updatedAt: nowMs });
+    const root = (channelId: any, text: string, key: string) => ctx.db.insert("communityInteractionRoots", {
+      communityId: f.communityId, channelId, actorType: "human", actorUserId: f.memberId, kind: "discussion", status: "live",
+      visibilityScope: "community", contentSummary: text, replyCount: 0, reactionSummary: [], idempotencyKey: key,
+      createdAt: nowMs + 10, updatedAt: nowMs + 10 });
+    const open = await root(f.generalChannelId, "Refunds go through Stripe within 7 days.", "lens-open");
+    const pod = await root(podId, "Pod-only pricing talk.", "lens-pod");
+    return { open, pod };
+  });
+  const { runId } = await t.mutation(internal.communityMemory.openMemoryReviewRunInternal, {
+    communityId: f.communityId, windowStart: nowMs, windowEnd: nowMs + 100, nowMs });
+  const actor = t.withIdentity({ subject: f.ownerSubject });
+  const lens = { name: "memory_review" as const, runId: String(runId), sinceMs: nowMs };
+  const run = (toolName: "polynet_list" | "polynet_read" | "polynet_search" | "polynet_write" | "polynet_call", input: Record<string, unknown>) =>
+    executePolynetCanonicalTool({ ctx: executionContext(actor), authSubject: f.ownerSubject, userId: f.ownerId,
+      principalKind: "community_agent", mountedCommunityId: f.communityId, evidenceSurface: "community_concierge", toolName, input, lens });
+  const base = "/communities/canonical-community/";
+
+  const root = await run("polynet_list", { path: base });
+  expect(root.ok && (root.value as any).entries.map((entry: any) => entry.path)).toEqual([`${base}memory.md`, `${base}memory/`, `${base}channels/`]);
+  const channels = await run("polynet_list", { path: `${base}channels/` });
+  expect(channels.ok, JSON.stringify(channels)).toBe(true);
+  const slugs = (channels as any).value.entries.map((entry: any) => entry.path);
+  expect(slugs).toContain(`${base}channels/general/`);
+  expect(slugs).not.toContain(`${base}channels/founders/`);
+
+  const fresh = await run("polynet_read", { path: `${base}channels/general/new.md` });
+  expect(fresh.ok, JSON.stringify(fresh)).toBe(true);
+  expect(fresh.ok && String((fresh.value as any).body)).toContain(`post:${ids.open}`);
+  expect(JSON.stringify(fresh)).not.toContain("Pod-only");
+  // The pod, members, builder files and a member's own context aren't there.
+  for (const [toolName, path] of [
+    ["polynet_read", `${base}channels/founders/new.md`],
+    ["polynet_list", `${base}channels/founders/`],
+    ["polynet_list", `${base}members/`],
+    ["polynet_read", `${base}community.md`],
+    ["polynet_list", `${base}builder/`],
+    ["polynet_search", `${base}`],
+    ["polynet_list", "/communities/other-community/"],
+  ] as const) {
+    expect(await run(toolName, { path, ...(toolName === "polynet_search" ? { query: "pricing" } : {}) }), path).toMatchObject({ ok: false });
+  }
+  expect(await run("polynet_write", { path: `${base}memory/x.md`, content: "x" })).toMatchObject({ ok: false, code: "lens_read_only" });
+  expect(await run("polynet_call", { target: `${base}capabilities/community.interaction.react.json`, operation: "community.interaction.react", version: 1, input: {} }))
+    .toMatchObject({ ok: false, code: "operation_not_found" });
+
+  // Its writes: refused with a reason for evidence from the pod; accepted from the open channel.
+  const refused = await run("polynet_call", { operation: "memory.observe", input: { title: "Pricing", body: "x", evidence_refs: [`interaction:root:${ids.pod}`] } });
+  expect(refused).toMatchObject({ ok: false, code: "evidence_not_shared" });
+  const written = await run("polynet_call", { operation: "memory.observe", input: { title: "Refunds", body: "Refunds go through Stripe within 7 days.", evidence_refs: [`post:${ids.open}`] } });
+  expect(written).toMatchObject({ ok: true, value: { operation: "memory.observe", slug: "refunds", change: "added" } });
+  expect(await run("polynet_call", { operation: "memory.write_index", input: { body: "- Refunds: memory/refunds.md" } })).toMatchObject({ ok: true });
+  const index = await run("polynet_read", { path: `${base}memory.md` });
+  expect(index.ok && (index.value as any).body).toBe("- Refunds: memory/refunds.md");
+});

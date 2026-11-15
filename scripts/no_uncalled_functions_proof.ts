@@ -11,10 +11,7 @@ const root = join(import.meta.dirname, "..");
 
 const ALLOWED = new Map<string, string>([
   ["communityMemory:openMemoryReviewRunInternal", "community memory, slice 1: called by the review lens, the nightly review and the builders' page (docs/specs/agent-system-slice-1.md, steps 2-6)"],
-  ["communityMemory:observeCommunityMemoryInternal", "community memory, slice 1: called by the review lens, the nightly review and the builders' page (docs/specs/agent-system-slice-1.md, steps 2-6)"],
-  ["communityMemory:writeCommunityMemoryIndexInternal", "community memory, slice 1: called by the review lens, the nightly review and the builders' page (docs/specs/agent-system-slice-1.md, steps 2-6)"],
   ["communityMemory:finishMemoryReviewRunInternal", "community memory, slice 1: called by the review lens, the nightly review and the builders' page (docs/specs/agent-system-slice-1.md, steps 2-6)"],
-  ["communityMemory:readCommunityMemoryIndexInternal", "community memory, slice 1: called by the review lens, the nightly review and the builders' page (docs/specs/agent-system-slice-1.md, steps 2-6)"],
   ["communityMemory:undoLearnedNote", "community memory, slice 1: called by the review lens, the nightly review and the builders' page (docs/specs/agent-system-slice-1.md, steps 2-6)"],
   ["communityMemory:undoMemoryRun", "community memory, slice 1: called by the review lens, the nightly review and the builders' page (docs/specs/agent-system-slice-1.md, steps 2-6)"],
   ["communityMemory:listMemoryRuns", "community memory, slice 1: called by the review lens, the nightly review and the builders' page (docs/specs/agent-system-slice-1.md, steps 2-6)"],
