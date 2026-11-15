@@ -3686,6 +3686,10 @@
     cursor: pointer;
   }
 }
+/* A kit rail fills the column's height, so what it keeps at its foot (a
+   pod's way in) sits at the bottom. */
+:root[data-design="v1"] .community-page-rail-content:has(> .kit-page-rail) { min-height: 100%; display: flex; flex-direction: column; }
+:root[data-design="v1"] .community-page-rail-content > .kit-page-rail { flex: 1; }
 /* Kit rails fill whatever width the column has. */
 :root[data-design="v1"] .community-page-rail .kit-page-rail,
 :root[data-design="v1"] .community-home-rail > * { max-width: 100%; }
