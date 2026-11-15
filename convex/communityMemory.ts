@@ -66,7 +66,7 @@ type Written = { ok: true; slug: string; title: string; change: "added" | "chang
 
 // "inScope": readable in this memory's place: a channel open to every
 // member, or, for a pod's memory, that pod's own room. Never another pod.
-async function evidenceFacts(ctx: any, communityId: any, ref: MemoryEvidenceRef, scope: ScopeKey): Promise<MemoryEvidenceFacts> {
+export async function evidenceFacts(ctx: any, communityId: any, ref: MemoryEvidenceRef, scope: ScopeKey): Promise<MemoryEvidenceFacts> {
   const none = { exists: false, communityMatches: false, live: false, byPerson: false, inScope: false, sharedVisibility: false };
   const table = ref.kind === "post" ? "communityInteractionRoots" : "communityInteractionReplies";
   const id = ctx.db.normalizeId(table, ref.id);

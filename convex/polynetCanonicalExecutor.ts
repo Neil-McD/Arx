@@ -1,6 +1,7 @@
 import { COMMUNITY_HANDBOOK_MAX_CHARS } from "../shared/communityHandbook";
 import { DRAFT_ONLY_REFUSAL_MESSAGE } from "../shared/communityTurnContract";
 import { renderCommunityNote, type CommunityNote } from "../shared/communityNotes";
+import { renderBriefDocument } from "../shared/communityBriefs";
 import { internal } from "./_generated/api";
 import { renderCommunityHandbook } from "../shared/communityHandbook";
 import { buildCommunitySearchQuery } from "../shared/communitySearchText";
@@ -19,6 +20,7 @@ import {
   POLYNET_MEMBERS_DIRECTORY_PATH,
   MEMBER_TIMELINE_PATH,
   COMMUNITY_HANDBOOK_PATH,
+  COMMUNITY_BRIEF_PATH,
   POLYNET_PRESENCE_DOCUMENT_PATH,
   POLYNET_RESOURCES_DIRECTORY_PATH,
   parseCommunityChannelSemanticPath,
@@ -1012,6 +1014,7 @@ async function executeCanonicalList(args: {
       { path: mountedPath(target.communitySlug, `${podBase}pod.md`), kind: "document", type: "pod_facts" },
       ...(pod.inside ? [
         { path: mountedPath(target.communitySlug, `/channels/${podPath.slug}/`), kind: "directory", type: "channel", name: "Its room" },
+        { path: mountedPath(target.communitySlug, `${podBase}brief.md`), kind: "document", type: "pod_brief", name: "What's happening in it" },
         { path: mountedPath(target.communitySlug, `${podBase}memory.md`), kind: "document", type: "pod_memory_index", name: "What it knows, in short" },
         { path: mountedPath(target.communitySlug, `${podBase}memory/`), kind: "directory", type: "pod_memory", name: "Its notes" },
       ] : []),
@@ -1457,6 +1460,7 @@ async function executeCanonicalList(args: {
     value: {
       ...value,
       entries: [...rawEntries,
+        ...(reads(args, target, "brief") ? [{ path: mountedPath(target.communitySlug, COMMUNITY_BRIEF_PATH), kind: "document", type: "brief", name: "What's happening" }] : []),
         ...(reads(args, target, "pods") ? [{ path: mountedPath(target.communitySlug, POLYNET_PODS_DIRECTORY_PATH), kind: "directory", type: "pods", name: "Pods" }] : []),
         ...builderEntry],
       // Who this is: a front end's title, and the community agent's @mention token.
@@ -1596,7 +1600,7 @@ async function executeCanonicalRead(args: {
 
   const podFacts = parseCommunityPodPath(target.localPath);
   if (podFacts) {
-    const readable = podFacts.kind === "pod_facts" || podFacts.kind === "pod_memory_index" || podFacts.kind === "pod_memory_note";
+    const readable = podFacts.kind === "pod_facts" || podFacts.kind === "pod_brief" || podFacts.kind === "pod_memory_index" || podFacts.kind === "pod_memory_note";
     if (!readable || !reads(args, target, "pods")) return canonicalError("semantic_not_found", "Repository path not found or not accessible.");
     const lens = lensOf(args, target);
     const pod = await args.ctx.runQuery((internal as any).communityPodFacts.readPodFactsInternal,
@@ -1604,8 +1608,12 @@ async function executeCanonicalRead(args: {
     if (!pod) return canonicalError("semantic_not_found", "Repository path not found or not accessible.");
     const path = mountedPath(target.communitySlug, target.localPath);
     if (podFacts.kind === "pod_facts") return { ok: true, value: { path, body: pod.body, writable: false } };
-    // A pod's memory: inside only.
+    // A pod's brief and memory: inside only.
     if (!pod.inside) return canonicalError("semantic_not_found", "Repository path not found or not accessible.");
+    if (podFacts.kind === "pod_brief") {
+      const brief = await args.ctx.runQuery((internal as any).communityBriefs.readBriefInternal, { communityId: target.communityId, podRoomId: pod.roomId });
+      return { ok: true, value: { path, body: renderBriefDocument(brief, "this pod"), writable: false } };
+    }
     if (podFacts.kind === "pod_memory_index") {
       const index = await args.ctx.runQuery((internal as any).communityMemory.readCommunityMemoryIndexInternal, { communityId: target.communityId, podRoomId: pod.roomId });
       return { ok: true, value: { path, body: index?.bodyMd ?? "_Nothing yet._", writable: false } };
@@ -1769,6 +1777,13 @@ async function executeCanonicalRead(args: {
         error instanceof Error ? error.message : "Event not found.",
       );
     }
+  }
+
+  // brief.md: what's happening in the community, for everyone in it.
+  if (target.localPath === COMMUNITY_BRIEF_PATH) {
+    if (!reads(args, target, "brief")) return canonicalError("semantic_not_found", "Repository path not found or not accessible.");
+    const brief = await args.ctx.runQuery((internal as any).communityBriefs.readBriefInternal, { communityId: target.communityId });
+    return { ok: true, value: { path: mountedPath(target.communitySlug, target.localPath), body: renderBriefDocument(brief, "the community"), truncated: false } };
   }
 
   // memory.md: the community's short memory, for whoever may read its notes.

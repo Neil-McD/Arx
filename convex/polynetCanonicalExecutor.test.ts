@@ -220,7 +220,7 @@ const modules = import.meta.glob([
   "./communityOntologyCards.ts",
   "./communitySearchDocs.ts",
   "./communityMemberTimeline.ts",
-  "./communityHandbook.ts", "./communityNotes.ts", "./communityMemory.ts", "./memberMemory.ts", "./communityPersonFacts.ts", "./communityPodFacts.ts", "./communityPods.ts", "./communityFounderBrief.ts", "./communityEvents.ts", "./communityPodPayments.ts", "./communityPlanChange.ts", "./communityLessonProgress.ts", "./memberWriteRateLimit.ts", "./communityLifecycle.ts", "./communityOperations.ts", "./communityPeople.ts", "./userProfileProjection.ts",
+  "./communityHandbook.ts", "./communityNotes.ts", "./communityMemory.ts", "./communityBriefs.ts", "./memberMemory.ts", "./communityPersonFacts.ts", "./communityPodFacts.ts", "./communityPods.ts", "./communityFounderBrief.ts", "./communityEvents.ts", "./communityPodPayments.ts", "./communityPlanChange.ts", "./communityLessonProgress.ts", "./memberWriteRateLimit.ts", "./communityLifecycle.ts", "./communityOperations.ts", "./communityPeople.ts", "./userProfileProjection.ts",
   "./communityAccessQueries.ts",
   "./communityAdmin.ts",
   "./email.ts",
@@ -3686,4 +3686,87 @@ test("pods: inside for people in it, builders and the guide working there; outsi
   // A pod scope is the server's to set: anyone else's call ignores it.
   const memberClaimingPod = as(f.memberSubject, f.memberId, "external_mcp", "external_mcp", "anything");
   expect(listed(await memberClaimingPod("polynet_list", `${base}/pods/`)).sort()).toEqual(["climbers/+in", "scouts/"]);
+});
+
+// brief.md (convex/communityBriefs.ts readPlaceBrief): what's happening in a
+// place, for everyone who can enter it.
+test("brief.md: the community's for everyone in it; a pod's inside only; gone points, old briefs and AI off don't show", async () => {
+  vi.stubEnv("ARX_PUBLIC_APP_URL", "https://polynet-staging.vercel.app");
+  const t = convexTest(schema, modules);
+  const f = await createFixture(t);
+  const nowMs = Date.now();
+  const made = await t.run(async (ctx: any) => {
+    // Funded: the owner is the platform operator, so the guide is on.
+    const operator = await ctx.db.insert("operatorRoles", { userId: f.ownerId, role: "owner", active: true, createdAt: nowMs, updatedAt: nowMs });
+    const membership = await ctx.db.query("communityMemberships").withIndex("by_community_user", (q: any) => q.eq("communityId", f.communityId).eq("userId", f.memberId)).first();
+    const open = await ctx.db.query("communityChannels").withIndex("by_community_access_status_position", (q: any) => q.eq("communityId", f.communityId).eq("accessMode", "all_members").eq("status", "active")).first();
+    const room = (slug: string) => ctx.db.insert("communityChannels", { communityId: f.communityId, slug, name: slug, accessMode: "restricted",
+      postingPolicy: "members", status: "active", position: 5, createdAt: nowMs, updatedAt: nowMs });
+    const climbersId = await room("climbers");
+    const scoutsId = await room("scouts");
+    await ctx.db.insert("communityPods", { communityId: f.communityId, channelId: climbersId, purpose: "Train.", visibility: "listed", createdAt: nowMs, updatedAt: nowMs });
+    await ctx.db.insert("communityPods", { communityId: f.communityId, channelId: scoutsId, purpose: "Scout.", visibility: "listed", createdAt: nowMs, updatedAt: nowMs });
+    await ctx.db.insert("communityChannelParticipants", { communityId: f.communityId, channelId: climbersId, principalKey: `user:${f.memberId}`,
+      membershipId: membership._id, membershipActivationSequence: Math.max(0, Math.floor(Number(membership.activationSequence ?? 0))),
+      status: "active", reasons: ["host"], createdByUserId: f.ownerId, createdAt: nowMs, updatedAt: nowMs });
+    const post = (channelId: any, text: string, key: string) => ctx.db.insert("communityInteractionRoots", { communityId: f.communityId, channelId,
+      actorType: "human", actorUserId: f.memberId, kind: "discussion", status: "live", visibilityScope: "community", contentSummary: text,
+      replyCount: 0, reactionSummary: [], idempotencyKey: key, createdAt: nowMs, updatedAt: nowMs });
+    const meet = await post(open._id, "Saturday meet at the north wall.", "brief-meet");
+    const chalk = await post(open._id, "Chalk is restocked.", "brief-chalk");
+    const plan = await post(climbersId, "Fingerboard plan for week 3.", "brief-plan");
+    const briefId = await ctx.db.insert("communityBriefs", { communityId: f.communityId, scopeKey: `community:${String(f.communityId)}`,
+      headline: "A busy week at the wall", points: [
+        { text: "The Saturday meet is at the north wall.", refs: [`post:${meet}`] },
+        { text: "Chalk is back in stock.", refs: [`post:${chalk}`] },
+      ], windowEnd: nowMs, createdAt: nowMs, updatedAt: nowMs });
+    await ctx.db.insert("communityBriefs", { communityId: f.communityId, scopeKey: `pod:${String(climbersId)}`,
+      headline: "Week 3 is fingerboards", points: [{ text: "The week 3 plan is fingerboard work.", refs: [`post:${plan}`] }],
+      windowEnd: nowMs, createdAt: nowMs, updatedAt: nowMs });
+    return { operator, openName: String(open.name), climbersId, chalk, briefId };
+  });
+  const base = "/communities/canonical-community";
+  const as = (subject: string, userId: any, principalKind: any, evidenceSurface: any, podRoomId?: string) =>
+    (toolName: "polynet_list" | "polynet_read", path: string) => executePolynetCanonicalTool({ ctx: executionContext(t.withIdentity({ subject })),
+      authSubject: subject, userId, principalKind, evidenceSurface, mountedCommunityId: f.communityId, toolName, input: { path },
+      ...(podRoomId ? { podRoomId } : {}) });
+  const body = (result: any) => String(result?.value?.body ?? "");
+  const member = as(f.memberSubject, f.memberId, "community_agent_for_member", "member_agent_dock");
+  const guide = as(f.ownerSubject, f.ownerId, "community_agent", "community_concierge");
+
+  // The community's brief: listed at the root, read by a member and by the guide in public.
+  expect(JSON.stringify(await member("polynet_list", `${base}/`))).toContain("/brief.md");
+  const read = body(await member("polynet_read", `${base}/brief.md`));
+  expect(read).toContain("A busy week at the wall");
+  expect(read).toContain(`The Saturday meet is at the north wall. (#${made.openName})`);
+  expect(read).toContain("Chalk is back in stock.");
+  expect(body(await guide("polynet_read", `${base}/brief.md`))).toContain("A busy week at the wall");
+
+  // A pod's brief: inside only. Never from outside, and never for the guide in public.
+  expect(JSON.stringify(await member("polynet_list", `${base}/pods/climbers/`))).toContain("/pods/climbers/brief.md");
+  expect(body(await member("polynet_read", `${base}/pods/climbers/brief.md`))).toContain("Week 3 is fingerboards");
+  expect(await member("polynet_read", `${base}/pods/scouts/brief.md`)).toMatchObject({ ok: false });
+  expect(await guide("polynet_read", `${base}/pods/climbers/brief.md`)).toMatchObject({ ok: false });
+  const working = as(f.ownerSubject, f.ownerId, "community_agent", "community_concierge", String(made.climbersId));
+  await t.run((ctx: any) => ctx.db.insert("communityChannelParticipants", { communityId: f.communityId, channelId: made.climbersId, principalKey: "community_agent",
+    status: "active", createdByUserId: f.ownerId, createdAt: nowMs, updatedAt: nowMs }));
+  expect(body(await working("polynet_read", `${base}/pods/climbers/brief.md`))).toContain("Week 3 is fingerboards");
+  // The community's brief never holds the pod's.
+  expect(read).not.toContain("fingerboard");
+
+  // A post is taken down: its point goes; the rest stays.
+  await t.run((ctx: any) => ctx.db.patch(made.chalk, { status: "hidden" }));
+  const after = body(await member("polynet_read", `${base}/brief.md`));
+  expect(after).toContain("The Saturday meet");
+  expect(after).not.toContain("Chalk");
+
+  // Over a week old: no brief.
+  await t.run((ctx: any) => ctx.db.patch(made.briefId, { updatedAt: nowMs - 8 * 24 * 60 * 60_000 }));
+  expect(body(await member("polynet_read", `${base}/brief.md`))).toContain("No brief yet.");
+  await t.run((ctx: any) => ctx.db.patch(made.briefId, { updatedAt: nowMs }));
+  expect(body(await member("polynet_read", `${base}/brief.md`))).toContain("The Saturday meet");
+
+  // The guide off (nobody pays for it): no brief.
+  await t.run((ctx: any) => ctx.db.delete(made.operator));
+  expect(body(await member("polynet_read", `${base}/brief.md`))).toContain("No brief yet.");
 });

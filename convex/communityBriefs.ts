@@ -16,11 +16,13 @@ import { internalAction, internalMutation, internalQuery } from "./_generated/se
 import { runAgentWork } from "./agentWork";
 import { getUniqueCommunityMembershipByPair, normalizeCommunityRoleForOutput } from "./communityCore";
 import { displayName } from "./communityFounderBrief";
-import { communityScopeKey, insertWork, memoryIndexFor, podScopeKey, workFor, writeBrief, type ScopeKey } from "./communityNotesStore";
-import { guideSeatedInPod, openRun, podRoom, scheduleAgentWork } from "./communityMemory";
+import { briefFor, communityScopeKey, insertWork, memoryIndexFor, podScopeKey, workFor, writeBrief, type ScopeKey } from "./communityNotesStore";
+import { evidenceFacts, guideSeatedInPod, openRun, podRoom, scheduleAgentWork } from "./communityMemory";
+import { communityAgentIsOn } from "./communityApps";
+import { memoryEvidenceRefusal, parseMemoryEvidenceRef } from "../shared/communityMemory";
 import { renderCommunityCard } from "../shared/communityOntology";
 import { renderCommunityHandbook } from "../shared/communityHandbook";
-import { BRIEF_INSTRUCTIONS, BRIEF_WINDOW_MS, BRIEF_WRITE_OPERATION, nextBriefAtMs, parseBriefWriteCall } from "../shared/communityBriefs";
+import { BRIEF_INSTRUCTIONS, BRIEF_WINDOW_MS, BRIEF_WRITE_OPERATION, nextBriefAtMs, parseBriefWriteCall, visibleBrief, type BriefView } from "../shared/communityBriefs";
 
 const internalRefs = internal as any;
 // The write, and one more if it's refused.
@@ -254,6 +256,46 @@ export const runCommunityBriefInternal = internalAction({
       };
     },
   }),
+});
+
+// A place's brief, as its readers get it (brief.md in the folder; the panels
+// next): nothing when the guide is off or the brief is over a week old, and
+// only the points whose posts are all still there, live, in the place. The
+// caller has already checked the reader may enter the place.
+export async function readPlaceBrief(ctx: any, args: { communityId: any; podRoomId?: unknown; nowMs: number }): Promise<BriefView | null> {
+  if (!(await communityAgentIsOn(ctx, args.communityId))) return null;
+  const room: any = args.podRoomId ? await podRoom(ctx, args.communityId, args.podRoomId) : null;
+  if (args.podRoomId && !room) return null;
+  const scope = room ? podScopeKey(room._id) : communityScopeKey(args.communityId);
+  const stored: any = await briefFor(ctx, scope);
+  if (!stored) return null;
+  // Where each cited post is now; null once it is gone, hidden or moved out of the place.
+  const where = new Map<string, { slug: string; name: string } | null>();
+  for (const ref of new Set<string>(stored.points.flatMap((point: any) => point.refs as string[]))) {
+    const parsed = parseMemoryEvidenceRef(ref);
+    if (!parsed || memoryEvidenceRefusal(await evidenceFacts(ctx, args.communityId, parsed, scope))) {
+      where.set(ref, null);
+      continue;
+    }
+    const row: any = await ctx.db.get(ctx.db.normalizeId(parsed.kind === "post" ? "communityInteractionRoots" : "communityInteractionReplies", parsed.id)!);
+    const channel: any = row?.channelId ? await ctx.db.get(row.channelId) : null;
+    where.set(ref, channel ? { slug: String(channel.slug ?? ""), name: String(channel.name ?? "") } : null);
+  }
+  const visible = visibleBrief(stored, args.nowMs, (ref) => Boolean(where.get(ref)));
+  if (!visible) return null;
+  return {
+    headline: visible.headline,
+    points: visible.points.map((point) => ({
+      text: point.text, refs: point.refs,
+      channels: [...new Map(point.refs.map((ref) => where.get(ref)!).map((channel) => [channel.slug, channel])).values()],
+    })),
+    updated_at: new Date(visible.updatedAt).toISOString(),
+  };
+}
+
+export const readBriefInternal = internalQuery({
+  args: { communityId: v.id("communities"), podRoomId: v.optional(v.string()) },
+  handler: async (ctx, args) => await readPlaceBrief(ctx, { ...args, nowMs: Date.now() }),
 });
 
 // Operator tool: write a place's brief now, or as of an earlier time

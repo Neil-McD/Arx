@@ -117,14 +117,14 @@ The folder each lens sees, all drawn from records:
 /handbook.md             the builder's rules for the guide
 /memory.md               the community's short memory (capped), with links
 /memory/<topic>.md       one memory each, with its sources
-/channels/<channel>/     posts and threads; brief.md for the channel
+/brief.md                what's happening in the community, from the guide
+/channels/<channel>/     posts and threads
 /courses/<course>/       lessons and their resources
 /events/                 events, who came
 /people/<handle>.md      people facts this lens may see
 /pods/<pod>/             a pod: room, calls, members, memory.md, brief.md
 /me/memory.md            the person's own memory (their lenses only)
 /builder/                builder-only views and records
-/places/<place>/brief.md the latest brief for a place
 ```
 
 A view exists only where the lens may see it. Paths select; they never
@@ -236,7 +236,7 @@ Two rules across lenses:
 | Memories | `communityNotes` with a scope key (`community:<id>`, `pod:<roomId>`), revisions, removals and `memory.md` (`communityMemoryIndex`), all through one door (`communityNotesStore`, held by a test). Old `communityPodNotes` rows are moved by a backfill | Drop the old tables (cleanup slice C) |
 | Memory review | Nightly per scope (community and each pod), made due by posts (`agentWork`), one pass: the guide is handed the day and its notes and writes once with `memory.apply`. Undo a note or a night exists in the backend | Sources and undo on a note: built. The nights list and "Learned lately": deferred |
 | Personal memory | `shared/personalMemory.ts`, `convex/memberMemory.ts`: capped at 1,375 characters, written in a private talk with `member.memory.remember`, loaded into every talk with that member, never shown elsewhere | The You page |
-| Briefs | `communityBriefs`: a brief for the community and for each pod the guide works in (written from that pod's room alone, kept in its scope), in one model request from recent threads (picked by what matters), the card, handbook and `memory.md`; every point cites posts it was shown; no links; nothing that goes stale. Reviews and briefs run through one helper (`agentWork`). The founder brief (a fixed snapshot and one call, on a 15-minute cron) still runs beside it | `brief.md` in the folder, the panels; the morning email reads the stored brief and the founder brief's model call goes |
+| Briefs | `communityBriefs`: a brief for the community and for each pod the guide works in (written from that pod's room alone, kept in its scope), in one model request from recent threads (picked by what matters), the card, handbook and `memory.md`; every point cites posts it was shown; no links; nothing that goes stale. Read back through one reader (`readPlaceBrief`) as `brief.md` and `pods/<pod>/brief.md`: gone posts' points dropped, nothing after a week or with AI off. Reviews and briefs run through one helper (`agentWork`). The founder brief (a fixed snapshot and one call, on a 15-minute cron) still runs beside it | The panels; the morning email reads the stored brief and the founder brief's model call goes |
 
 ## 7. What the leading agents do, and what we take
 
@@ -287,7 +287,7 @@ something onto the new system deletes the old path in the same slice.
    the You page shows each line with its source. Visible only to the member
    until they share it. When a member asks the guide to remember something
    for everyone, it becomes a suggestion a builder approves or rejects.
-3. **Briefs.** *Under way: the community's and pods' briefs are written; the folder file, the panels and the email are next.* Brief work per place; Home's and channels' right panels read
+3. **Briefs.** *Under way: the community's and pods' briefs are written and readable in the folder; the panels and the email are next.* Brief work per place; Home's and channels' right panels read
    them. The founder brief moves onto the run entry and its old pipeline is
    deleted.
 4. **Pods.** *Built: `pods/` in the folder, pod facts, pod memory and its nightly review, the guide working inside one pod. Not yet pod briefs.* `pods/<pod>/` in the folder; pod lens; pod memory review and
