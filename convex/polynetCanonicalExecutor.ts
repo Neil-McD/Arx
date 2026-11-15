@@ -1686,6 +1686,7 @@ async function executeCanonicalRead(args: {
           expectedChannelSlug: channel.slug,
           ...(channel.id ? { expectedChannelId: channel.id } : {}),
           surface: args.evidenceSurface,
+          ...(args.podRoomId ? { podRoomId: String(args.podRoomId) } : {}),
         },
       )) as Record<string, unknown>;
       return {
@@ -1936,6 +1937,7 @@ async function executeCanonicalSearch(args: {
             ? {
                 channelSlug: channel.slug,
                 ...(channel.id ? { channelId: channel.id } : {}),
+                ...(args.podRoomId ? { podRoomId: String(args.podRoomId) } : {}),
               }
             : {}),
         },

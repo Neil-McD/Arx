@@ -3592,7 +3592,7 @@ test("pods: inside for people in it, builders and the guide working there; outsi
   const t = convexTest(schema, modules);
   const f = await createFixture(t);
   const nowMs = 1_760_000_000_000;
-  const { climbersId } = await t.run(async (ctx: any) => {
+  const { climbersId, climbPostId, foundersPostId } = await t.run(async (ctx: any) => {
     const membership = await ctx.db.query("communityMemberships").withIndex("by_community_user", (q: any) => q.eq("communityId", f.communityId).eq("userId", f.memberId)).first();
     const room = (slug: string) => ctx.db.insert("communityChannels", { communityId: f.communityId, slug, name: slug, accessMode: "restricted",
       postingPolicy: "members", status: "active", position: 5, createdAt: nowMs, updatedAt: nowMs });
@@ -3617,7 +3617,9 @@ test("pods: inside for people in it, builders and the guide working there; outsi
     await ctx.db.insert("communityInteractionRoots", { communityId: f.communityId, channelId: foundersId, actorType: "human", actorUserId: f.ownerId,
       kind: "discussion", status: "live", visibilityScope: "community", contentSummary: "Founders-only numbers.", replyCount: 0,
       reactionSummary: [], idempotencyKey: "found-1", createdAt: nowMs, updatedAt: nowMs });
-    return { climbersId };
+    const climbPostId = (await ctx.db.query("communityInteractionRoots").collect()).find((row: any) => row.idempotencyKey === "climb-1")._id;
+    const foundersPostId = (await ctx.db.query("communityInteractionRoots").collect()).find((row: any) => row.idempotencyKey === "found-1")._id;
+    return { climbersId, climbPostId, foundersPostId };
   });
   const base = "/communities/canonical-community";
   const as = (subject: string, userId: any, principalKind: any, evidenceSurface: any, podRoomId?: string) =>
@@ -3655,6 +3657,16 @@ test("pods: inside for people in it, builders and the guide working there; outsi
   expect(room.ok, JSON.stringify(room)).toBe(true);
   expect(JSON.stringify(room)).toContain("Fingerboard plan");
   expect(await working("polynet_read", `${base}/pods/founders/pod.md`)).toMatchObject({ ok: false });
+  // One post, and a search, inside the pod it works in; never the other pod's.
+  const post = await working("polynet_read", `${base}/channels/climbers/interaction:root:${climbPostId}.md`);
+  expect(post.ok, JSON.stringify(post)).toBe(true);
+  expect(JSON.stringify(post)).toContain("Fingerboard plan");
+  const searched = await executePolynetCanonicalTool({ ctx: executionContext(t.withIdentity({ subject: f.ownerSubject })), authSubject: f.ownerSubject,
+    userId: f.ownerId, principalKind: "community_agent", evidenceSurface: "community_concierge", mountedCommunityId: f.communityId,
+    toolName: "polynet_search", input: { path: `${base}/channels/climbers/`, query: "fingerboard" }, podRoomId: String(climbersId) });
+  expect(searched.ok, JSON.stringify(searched)).toBe(true);
+  expect(JSON.stringify(searched)).toContain("Fingerboard plan");
+  expect(await working("polynet_read", `${base}/channels/founders/interaction:root:${foundersPostId}.md`)).toMatchObject({ ok: false });
   const otherRoom = await working("polynet_list", `${base}/channels/founders/`);
   expect(otherRoom.ok).toBe(false);
   expect(JSON.stringify(otherRoom)).not.toContain("Founders-only");
