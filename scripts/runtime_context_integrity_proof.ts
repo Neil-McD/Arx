@@ -343,11 +343,6 @@ assert.match(
   /streamAppendRunEvent[\s\S]*executeChatToolsAgentLoop[\s\S]*await appendContextIntegrityCheckBestEffortForRun\(\)/,
   "streaming agentic path should append integrity internally after the loop returns",
 );
-assert.match(
-  handlerSource,
-  /executeChatToolsAgentLoop\(\{[\s\S]*appendRunEvent: async \(event\): Promise<void>[\s\S]*await appendContextIntegrityCheckBestEffortForRun\(\)/,
-  "non-streaming agentic path should append integrity after the loop returns",
-);
 
 const adapterSource = readFileSync("convex/runtimeContextIntegrity.ts", "utf8");
 assert.match(adapterSource, /getRuntimeRunByOwnerRunIdInternal/);

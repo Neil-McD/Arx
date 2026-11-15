@@ -819,8 +819,8 @@ assert.doesNotMatch(runtimeLoop + runtimeHandlers, /claimCommunityInferenceFundi
   "a private talk has no funding claim of its own");
 assert.equal(
   (runtimeHandlers.match(/await settlePrivateTalkFunding\(loopResult\)/g) ?? []).length,
-  2,
-  "streaming and JSON member turns settle the same way",
+  1,
+  "every turn streams, and settles in one place",
 );
 assert.match(runtimeHandlers, /settlePrivateTalkFunding = async[\s\S]*settleCommunityInferenceFundingSession\(/);
 assert.match(

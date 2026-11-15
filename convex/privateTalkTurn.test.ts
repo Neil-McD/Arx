@@ -86,7 +86,7 @@ const turn = (member: any, threadKey: string, extra: Record<string, unknown> = {
   body: JSON.stringify({
     thread_id: threadKey, invocation_surface: "member_agent_dock", requested_agentic_tools: true,
     surface_context: { version: 1, kind: "community", community_slug: "club", section: "agent" },
-    user_message_key: "user-1", idempotency_key: "turn-1", stream: false, ...extra,
+    user_message_key: "user-1", idempotency_key: "turn-1", ...extra,
   }),
 });
 
@@ -99,8 +99,9 @@ test("a private talk: the guide uses a tool through the canonical door, answers,
   const response = await turn(member, conversation.thread_key);
   const text = await response.text();
   expect(response.status, text).toBe(200);
-  const body = JSON.parse(text);
-  expect(JSON.stringify(body)).toContain("The club meets on Saturdays.");
+  // Every turn streams; the done event carries the whole reply.
+  expect(text).toContain("event: done");
+  expect(text).toContain("The club meets on Saturdays.");
 
   // The model saw the member's message and the tools of this lens.
   expect(requests.length).toBe(2);
@@ -140,7 +141,7 @@ test("streamed: the answer arrives in pieces as it is written, then the whole re
   const w = await world(t);
   const requests = fakeModel([answer("Saturdays at the north wall.")]);
   const { member, conversation } = await startTalk(t, w, "When do we climb?");
-  const response = await turn(member, conversation.thread_key, { stream: true });
+  const response = await turn(member, conversation.thread_key);
   expect(response.status).toBe(200);
   expect(response.headers.get("content-type")).toContain("text/event-stream");
   const body = await response.text();
@@ -212,7 +213,7 @@ test("the same turn sent twice is answered once", async () => {
   expect(state.receipts).toHaveLength(1);
 });
 
-test("cancelled mid-turn: the run stops as cancelled and no answer is saved", async () => {
+test("cancelled mid-turn: the run stops as cancelled and no finished answer is saved", async () => {
   stubProviderEnv();
   const t = convexTest(schema, modules);
   const w = await world(t);
@@ -228,6 +229,11 @@ test("cancelled mid-turn: the run stops as cancelled and no answer is saved", as
   await (await turn(member, conversation.thread_key)).text();
   const state = await stateOf(t);
   expect(state.runs[0]?.status).toBe("cancelled");
-  expect(state.messages.some((message: any) => message.role === "assistant" && JSON.stringify(message.contentJson).includes("Too late."))).toBe(false);
+  // What the member already saw stream in is kept, marked as a cancelled,
+  // incomplete reply; it is never saved as a finished answer.
+  const replies = state.messages.filter((message: any) => message.role === "assistant");
+  for (const reply of replies) {
+    expect(reply.contentJson?.meta?.partial_run).toMatchObject({ status: "cancelled", incomplete: true });
+  }
   for (const receipt of state.receipts) expect(receipt.status).not.toBe("reserved");
 });
