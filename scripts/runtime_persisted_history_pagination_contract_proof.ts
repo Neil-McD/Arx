@@ -30,8 +30,8 @@ assert.match(
 );
 assert.equal(
   (handlers.match(/persistedConversationHistory,/g) ?? []).length,
-  3,
-  "the resolved history seed must reach both streaming and non-streaming runtime calls",
+  2,
+  "the resolved history seed must reach the (streamed) runtime call",
 );
 assert.match(
   runtimeLoop,

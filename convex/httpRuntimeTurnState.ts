@@ -51,36 +51,13 @@ export function normalizePersistedSeq(value: unknown): number | null {
 
 export function buildRuntimeTurnSuccessResponder(params: {
   req: Request;
-  stream: boolean;
   runId: string;
   requestId: string;
   lane: RuntimeLane;
   requestedModelId: string | null;
-  jsonResponse: JsonResponseFn;
   sseResponse: SseResponseFn;
 }): (payload: RuntimeSuccessPayload) => Response {
   return (payload) => {
-    if (!params.stream) {
-      return params.jsonResponse(params.req, 200, {
-        ok: true,
-        run_id: params.runId,
-        request_id: params.requestId,
-        lane: params.lane,
-        engine_id: "runtime_convex",
-        model_id: params.requestedModelId,
-        inference_source: payload.resolvedInferenceSource,
-        inference_lane_fallbacks: payload.inferenceLaneFallbacks ?? null,
-        content: payload.content,
-        prompt_tokens: payload.promptTokens,
-        completion_tokens: payload.completionTokens,
-        user_message_id: payload.userMessageId,
-        user_message_key: payload.userMessageKey,
-        user_message_seq: payload.userMessageSeq,
-        assistant_message_id: payload.assistantMessageId,
-        assistant_message_key: payload.assistantMessageKey,
-        assistant_message_seq: payload.assistantMessageSeq,
-      });
-    }
     return params.sseResponse(params.req, [
       {
         event: "start",

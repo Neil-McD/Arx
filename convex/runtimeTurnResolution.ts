@@ -41,7 +41,6 @@ export type RuntimeTurnInput = {
   invocation_surface?: RuntimeInvocationSurface | null;
   surface_context?: unknown;
   requested_agentic_tools?: boolean | null;
-  stream?: boolean;
   idempotency_key?: string | null;
   user_message_key?: string | null;
   message?: {
@@ -86,7 +85,6 @@ export type RuntimeTurnResolution = {
   lane: "platform";
   modelRef: string;
   maxTokens: number;
-  stream: boolean;
   inferenceSource: "platform";
   requestedRuntimeEngine: RuntimeEngine | null;
   runtimeCommunityId: string | null;
@@ -421,7 +419,6 @@ export async function resolveAuthenticatedRuntimeTurn(args: {
     };
   }
   const maxTokens = normalizeMaxTokens(input.max_tokens, 2048);
-  const stream = input.stream !== false;
   const lane = "platform" as const;
   const modelRef = `openai/${COMMUNITY_OWNER_FUNDED_MODEL_ID}`;
   const inferenceSource = "platform" as const;
@@ -586,7 +583,6 @@ export async function resolveAuthenticatedRuntimeTurn(args: {
       lane,
       modelRef,
       maxTokens,
-      stream,
       inferenceSource,
       requestedRuntimeEngine,
       runtimeCommunityId,
