@@ -390,6 +390,15 @@ css += """
 .app .mrow.one .h time{flex:none;white-space:nowrap}
 .app .mrow.one p{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 
+/* Kit addition: the shelf is two courses across at every width (Nov 14 walk:
+   never one course stretched over the whole page), one only where two would
+   each be under 150px. */
+.app .kgrid{grid-template-columns:repeat(auto-fill,minmax(max(150px,calc((100% - 12px) / 2)),1fr))}
+
+/* Kit addition: an event you picked, where there is no right column (below
+   1024px): the column's parts, in the page. */
+.app .evlayer{display:flex;flex-direction:column;gap:26px;margin-top:14px;max-width:560px}
+
 /* Kit addition: states the mock doesn't draw, in its own terms. */
 .app .msg.cont{padding-top:3px;padding-bottom:3px}
 .app .msg.cont>.gap{width:36px;flex:none}
