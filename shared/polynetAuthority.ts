@@ -35,8 +35,12 @@ function normalizeRelation(
   return null;
 }
 
+// The fields of a community access bundle the authority reads.
+type AuthorityAccess = Partial<Pick<CommunityAccess, "relation" | "is_entitled" | "can_enter_community" | "can_read_chat"
+  | "can_manage_resources" | "can_post_chat" | "can_post_message" | "can_review_join_requests" | "can_moderate_content">>;
+
 export function derivePolynetHumanAuthority(args: {
-  access: Partial<CommunityAccess>;
+  access: AuthorityAccess;
   principalKind: "community_agent_for_member" | "external_mcp" | "community_app";
 }): PolynetResolvedAuthority | null {
   const relation = normalizeRelation(args.access.relation);

@@ -1,16 +1,15 @@
 /* Proof obligations from docs/member-ontology-contract-v1.md §Proof Obligations.
    Exercises the pure core directly plus static asserts on the Convex glue. */
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import {
   MEMBER_FACT_PROVENANCES,
   buildMemberSpine,
   canTransitionMemberFactConsent,
   deriveBornConsentState,
-  memberFactVisibleToLens,
+  isPeopleFact,
   type MemberFactLike,
 } from "../shared/memberOntology.ts";
-import { renderMemberContextMarkdown } from "../shared/memberContextMarkdown.ts";
 
 function read(path: string): string {
   return readFileSync(path, "utf8");
@@ -82,26 +81,8 @@ const factInA: MemberFactLike = {
   provenance: "stated_interview",
   consentState: "approved",
 };
-assert.ok(
-  memberFactVisibleToLens(factInA, { kind: "member_orientation", communityId: "community_a" }),
-  "approved community fact is visible to that community's orientation lens",
-);
-assert.ok(
-  !memberFactVisibleToLens(factInA, { kind: "member_orientation", communityId: "community_b" }),
-  "community A facts must never surface through community B's orientation lens",
-);
-assert.ok(
-  !memberFactVisibleToLens(factInA, { kind: "founder_admin", communityId: "community_b" }),
-  "community A facts must never surface through community B's founder lens",
-);
-assert.ok(
-  memberFactVisibleToLens(factInA, { kind: "founder_admin", communityId: "community_a" }),
-  "approved community facts are visible through that community's founder/admin lens",
-);
-assert.ok(
-  !memberFactVisibleToLens(factInA, { kind: "external_profile" }),
-  "external profile must never expose community-scoped facts",
-);
+assert.ok(isPeopleFact(factInA, "community_a"), "an approved community fact is a people fact in that community");
+assert.ok(!isPeopleFact(factInA, "community_b"), "community A facts must never surface in community B");
 
 const approvedPlatformFact: MemberFactLike = {
   communityId: null,
@@ -110,79 +91,24 @@ const approvedPlatformFact: MemberFactLike = {
   provenance: "stated_interview",
   consentState: "approved",
 };
+assert.ok(isPeopleFact(approvedPlatformFact, "community_a"), "approved platform facts show in every community");
 assert.ok(
-  memberFactVisibleToLens(approvedPlatformFact, { kind: "external_profile" }),
-  "external profile exposes approved platform-scoped facts",
-);
-assert.ok(
-  !memberFactVisibleToLens(
-    { ...approvedPlatformFact, consentState: "retracted" },
-    { kind: "external_profile" },
-  ),
-  "external profile excludes audit-history states",
+  !isPeopleFact({ ...approvedPlatformFact, consentState: "retracted" }, "community_a"),
+  "audit-history states are never people facts",
 );
 
-/* 4. Unapproved and internal facts never reach founder/admin or orientation. */
-const founderHiddenFacts: MemberFactLike[] = [
+/* 4. Unapproved and observed facts never reach anyone else, in any state. */
+const hiddenFacts: MemberFactLike[] = [
   { communityId: "community_a", kind: "goal", body: "Pending", provenance: "inferred_agent", consentState: "pending" },
   { communityId: "community_a", kind: "goal", body: "Rejected", provenance: "inferred_agent", consentState: "rejected" },
   { communityId: "community_a", kind: "goal", body: "Retracted", provenance: "stated_interview", consentState: "retracted" },
   { communityId: "community_a", kind: "goal", body: "Superseded", provenance: "stated_interview", consentState: "superseded" },
   { communityId: "community_a", kind: "preference", body: "Observed", provenance: "observed_behavior", consentState: "agent_internal" },
+  { communityId: "community_a", kind: "preference", body: "Observed, approved", provenance: "observed_behavior", consentState: "approved" },
 ];
-for (const fact of founderHiddenFacts) {
-  assert.ok(
-    !memberFactVisibleToLens(fact, { kind: "founder_admin", communityId: "community_a" }),
-    `founder/admin must not see ${fact.consentState} facts`,
-  );
-  assert.ok(
-    memberFactVisibleToLens(fact, { kind: "self" }),
-    `the member's self lens must retain its own ${fact.consentState} facts`,
-  );
+for (const fact of hiddenFacts) {
+  assert.ok(!isPeopleFact(fact, "community_a"), `${fact.provenance}/${fact.consentState} facts are never people facts`);
 }
-
-/* observed_behavior never reaches member-to-member orientation, any state. */
-for (const consentState of ["approved", "pending", "agent_internal"] as const) {
-  assert.ok(
-    !memberFactVisibleToLens(
-      {
-        communityId: "community_a",
-        kind: "preference",
-        body: "Posts at night, quiet on weekends",
-        provenance: "observed_behavior",
-        consentState,
-      },
-      { kind: "member_orientation", communityId: "community_a" },
-    ),
-    `observed_behavior must be invisible member-to-member (state ${consentState})`,
-  );
-}
-assert.ok(
-  !memberFactVisibleToLens(
-    {
-      communityId: "community_a",
-      kind: "preference",
-      body: "Posts at night",
-      provenance: "observed_behavior",
-      consentState: "agent_internal",
-    },
-    { kind: "founder_admin", communityId: "community_a" },
-  ),
-  "observed behavior must not escape through the human founder/admin lens",
-);
-assert.ok(
-  !memberFactVisibleToLens(
-    {
-      communityId: "community_a",
-      kind: "goal",
-      body: "Automate client reports",
-      provenance: "inferred_agent",
-      consentState: "pending",
-    },
-    { kind: "member_orientation", communityId: "community_a" },
-  ),
-  "pending facts are invisible member-to-member until approved",
-);
 
 /* 5. The spine projects only approved, platform-scoped facts. */
 const spine = buildMemberSpine([
@@ -200,10 +126,10 @@ assert.deepEqual(spine.interests, []);
 
 /* 6. Static: the Convex glue routes through the shared core and never
    hand-rolls consent or visibility; retention-on-leave is structural. */
-assert.match(core, /memberFactVisibleToLens/, "db reads must filter through the shared predicate");
+assert.match(core, /isPeopleFact/, "db reads must filter through the shared rule");
 assert.match(core, /deriveBornConsentState/, "born consent must come from the shared derivation");
 assert.match(core, /canTransitionMemberFactConsent/, "transitions must consult the shared state machine");
-assert.match(read("convex/communityPersonFacts.ts"), /memberFactVisibleToLens/, "people facts must read through the shared predicate");
+assert.match(read("convex/communityPersonFacts.ts"), /isPeopleFact/, "people facts must read through the shared rule");
 assert.doesNotMatch(
   surface,
   /consentState\s*===|consent_state\s*===/,
@@ -269,88 +195,9 @@ assert.doesNotMatch(
   "only recomputeMemberSpine writes the spine",
 );
 
-/* 7. Golden render: the exact member.md/{community}.md the agent is injected
-   with (and the member reads) — locks format drift. */
-const goldenAccount = {
-  displayName: "Neil",
-  handle: "neil",
-  timezone: "America/New_York",
-  socialLinks: ["https://x.com/neil"],
-  memberships: [{ communityName: "Polynet", role: "member", accessSource: "free_grant" }],
-  ownedCommunities: [{ name: "Atlas Collective" }],
-};
-const goldenFacts: MemberFactLike[] = [
-  { communityId: null, kind: "link", body: "https://x.com/neil", provenance: "stated_bridge", consentState: "approved" },
-  { communityId: null, kind: "situation", body: "Building Polynet", provenance: "stated_interview", consentState: "approved" },
-  { communityId: null, kind: "goal", body: "Ship the bridge", provenance: "stated_interview", consentState: "approved" },
-  { communityId: "c1", kind: "goal", body: "Meet builders", provenance: "stated_interview", consentState: "approved" },
-];
-const golden = renderMemberContextMarkdown({
-  account: goldenAccount,
-  facts: goldenFacts,
-  lens: { kind: "self" },
-  communityId: "c1",
-  communityName: "Atlas Collective",
-});
-assert.equal(
-  golden.memberMd,
-  [
-    "# Member — Neil (@neil)",
-    "",
-    "## Account",
-    "- Timezone: America/New_York",
-    "- Member of: Polynet (member · free_grant)",
-    "- Owns: Atlas Collective",
-    "- Link: https://x.com/neil",
-    "",
-    "## Person",
-    "",
-    "### Situation",
-    "- Building Polynet",
-    "",
-    "### Goals",
-    "- Ship the bridge",
-  ].join("\n"),
-  "member.md golden output drifted",
-);
-assert.equal(
-  golden.memberMd.match(/https:\/\/x\.com\/neil/g)?.length ?? 0,
-  1,
-  "account social links and bridge link facts must not duplicate in member.md",
-);
-assert.equal(
-  golden.communityMd,
-  ["# Atlas Collective — member context", "", "## Goals", "- Meet builders"].join("\n"),
-  "{community}.md golden output drifted",
-);
-
-/* 8. Leak test: the renderer re-applies the predicate — an orientation-lens
-   render over a dirty rowset must never emit pending, observed, cross-
-   community, or platform-only fact bodies. */
-const dirtyRows: MemberFactLike[] = [
-  { communityId: "c1", kind: "goal", body: "VISIBLE_OK", provenance: "stated_interview", consentState: "approved" },
-  { communityId: "c1", kind: "goal", body: "LEAK_PENDING", provenance: "inferred_agent", consentState: "pending" },
-  { communityId: "c1", kind: "preference", body: "LEAK_OBSERVED", provenance: "observed_behavior", consentState: "agent_internal" },
-  { communityId: "c2", kind: "goal", body: "LEAK_CROSS_COMMUNITY", provenance: "stated_interview", consentState: "approved" },
-  { communityId: null, kind: "goal", body: "LEAK_PLATFORM_SCOPE", provenance: "stated_interview", consentState: "approved" },
-];
-const leakRender = renderMemberContextMarkdown({
-  account: goldenAccount,
-  facts: dirtyRows,
-  lens: { kind: "member_orientation", communityId: "c1" },
-  communityId: "c1",
-  communityName: "Atlas Collective",
-});
-const leakOutput = `${leakRender.memberMd}\n${leakRender.communityMd ?? ""}`;
-assert.match(leakOutput, /VISIBLE_OK/, "approved shared-community fact must render for orientation");
-for (const leaked of ["LEAK_PENDING", "LEAK_OBSERVED", "LEAK_CROSS_COMMUNITY", "LEAK_PLATFORM_SCOPE"]) {
-  assert.doesNotMatch(leakOutput, new RegExp(leaked), `orientation render leaked ${leaked}`);
-}
-
-/* 9. Static: the renderer stays pure and the Convex surface uses it. */
-const rendererModule = read("shared/memberContextMarkdown.ts");
-assert.doesNotMatch(rendererModule, /Date\.now|new Date\(/, "the renderer must be clock-free (deterministic golden output)");
-assert.match(rendererModule, /memberFactVisibleToLens/, "the renderer must re-apply the one visibility predicate");
+/* 7. The four lens types are one: people views come from the agent lens. */
+assert.equal(existsSync("shared/memberContextMarkdown.ts"), false, "the unused member.md renderer stays deleted");
+assert.doesNotMatch(read("shared/memberOntology.ts"), /MemberOntologyLens|memberFactVisibleToLens/, "one rule, not four lenses");
 assert.match(
   contractDoc,
   /\| Founder\/admin \| one community \|[^\n]*`approved` facts scoped to that community; nothing pending, rejected, retracted, superseded, or observed/,
@@ -362,4 +209,4 @@ assert.doesNotMatch(
   "the contract must not restore the old all-consent-state founder lens",
 );
 
-console.log("PASS: member ontology contract holds — consent from provenance, one predicate, one renderer, isolated scopes.");
+console.log("PASS: member ontology contract holds — consent from provenance, one rule, isolated scopes.");

@@ -8,13 +8,12 @@ import {
   deriveBornConsentState,
   isMemberFactKind,
   isMemberFactProvenance,
-  memberFactVisibleToLens,
+  isPeopleFact,
   normalizeMemberFactBody,
   type MemberFactActorType,
   type MemberFactKind,
   type MemberFactLike,
   type MemberFactProvenance,
-  type MemberOntologyLens,
 } from "../shared/memberOntology";
 
 export type MemberFactRow = MemberFactLike & {
@@ -242,9 +241,7 @@ export async function readBoundedMemberOrientationFacts(ctx: any, args: {
     .withIndex("by_user_community", (q: any) =>
       q.eq("userId", args.subjectUserId).eq("communityId", args.communityId))
     .order("desc").take(scanLimit + 1) as MemberFactRow[];
-  const visible = rows.slice(0, scanLimit).filter((row) => memberFactVisibleToLens(toFactLike(row), {
-    kind: "member_orientation", communityId: String(args.communityId),
-  })).sort((a, b) => b.updatedAt - a.updatedAt || String(a._id).localeCompare(String(b._id)));
+  const visible = rows.slice(0, scanLimit).filter((row) => isPeopleFact(toFactLike(row), String(args.communityId))).sort((a, b) => b.updatedAt - a.updatedAt || String(a._id).localeCompare(String(b._id)));
   return { facts: visible.slice(0, 12), truncated: rows.length > scanLimit || visible.length > 12 };
 }
 
