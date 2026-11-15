@@ -24,7 +24,7 @@ import type { CommunityResource, CommunityResourceModule } from "../components/c
 import { askGuide, openGuideFromSearch } from "../components/guideSearch";
 import { WebCommunityResourceViewerContent } from "../components/WebCommunityResourceViewerContent";
 import { NoteForm, OpenNote, noteIsNew } from "./KitKnowledgeNotes";
-import { KitLessonEditor, type LessonPatch } from "./KitLessonEditor";
+import { KitLessonEditor, lessonLinkPlace, type LessonPatch } from "./KitLessonEditor";
 import { Btn, cx, Icon, KitApp, Rail, Sec, Sep, TextLink } from "./kit";
 import { KitCourseEdit, type CourseEditPatch } from "./KitCourseEdit";
 import { askInApp } from "../../../../shared/inAppConfirm";
@@ -487,7 +487,7 @@ export function KitClassroom(props: {
                 <span className={cx("lab")}>Resources for this lesson</span>
                 {lesson.lesson_links.map((link) => (
                   <a key={link.url} className={cx("kresrow", "klink")} href={link.url} target="_blank" rel="noreferrer noopener">
-                    <Icon name="link" /><span><b>{link.title}</b><em>{link.url.replace(/^https?:\/\//i, "").replace(/\/$/, "")}</em></span><Icon name="arrow" />
+                    <Icon name="link" /><span><b>{link.title}</b><em>{lessonLinkPlace(link)}</em></span><Icon name="arrow" />
                   </a>
                 ))}
               </div>

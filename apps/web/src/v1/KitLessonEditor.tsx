@@ -17,6 +17,12 @@ export type LessonLink = { title: string; url: string };
 export type LessonPatch = { title: string; url: string | null; body_md: string; lesson_links?: LessonLink[] };
 export const LESSON_LINKS_MAX = 12;
 
+// Where a link goes, in short; nothing when its name already says so.
+export function lessonLinkPlace(link: LessonLink): string {
+  const place = link.url.replace(/^https?:\/\/(www\.)?/i, "").replace(/\/$/, "");
+  return place === link.title ? "" : place;
+}
+
 // A pasted address as a lesson's resource: a real http(s) link, named by the
 // host's words or, without any, by where it goes.
 export function readLessonLink(address: string, name: string): LessonLink | null {
@@ -145,7 +151,7 @@ export function KitLessonEditor(props: {
         <span className={cx("lab")}>Resources for this lesson</span>
         {links.map((link) => (
           <div key={link.url} className={cx("kresrow")}>
-            <Icon name="link" /><span><b>{link.title}</b><em>{link.url.replace(/^https?:\/\//i, "")}</em></span>
+            <Icon name="link" /><span><b>{link.title}</b><em>{lessonLinkPlace(link)}</em></span>
             <Btn small txt onClick={() => setLinks(links.filter((entry) => entry.url !== link.url))}>Remove</Btn>
           </div>
         ))}

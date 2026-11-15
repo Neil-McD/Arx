@@ -26,3 +26,11 @@ describe("a lesson's resources", () => {
     expect(lessonPatchFor(lesson, { ...draft, body: "New words.", links: lesson.lesson_links })).toEqual({ title: lesson.title, url: null, body_md: "New words." });
   });
 });
+
+const { lessonLinkPlace } = await import("../apps/web/src/v1/KitLessonEditor");
+describe("where a lesson's link goes", () => {
+  it("is said once: not repeated when the name is the address", () => {
+    expect(lessonLinkPlace({ title: "example.com/handoff-map", url: "https://example.com/handoff-map" })).toBe("");
+    expect(lessonLinkPlace({ title: "The talk", url: "https://www.example.com/talk/" })).toBe("example.com/talk");
+  });
+});
