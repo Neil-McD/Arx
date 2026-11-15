@@ -38,7 +38,7 @@ const webResearchToolsSource = readFileSync(
   new URL("../convex/webResearchTools.ts", import.meta.url),
   "utf8",
 );
-assert.match(webResearchToolsSource, /classifyWebResearchUrlAccess\(params\.url\)/);
+assert.match(webResearchToolsSource, /classifyWebResearchUrlAccess\(rawUrl\)/);
 assert.match(webResearchToolsSource, /const url = access\.normalizedUrl/);
 
 const runtimeAgentLoopSource = readFileSync(

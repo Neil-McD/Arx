@@ -1,5 +1,7 @@
+// Exa list prices (used only when a response doesn't report its cost):
+// search with highlights on 8 results, or one page's text.
 export const WEB_RESEARCH_VENDOR_COST_ESTIMATE_USD_BY_ACTION = {
-  search: 0.005,
+  search: 0.013,
   open_page: 0.001,
   find_in_page: 0.001,
   crawl: 0.03,

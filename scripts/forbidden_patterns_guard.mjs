@@ -15,7 +15,7 @@ const RULES = [
   {
     why: "Model calls go through the funded inference gateway or these provider transports, so every call is metered and paid for.",
     files: tsFiles("convex"),
-    allow: ["convex/httpRuntimeSupport.ts", "convex/openAiWebSearchTransport.ts", "convex/httpVoice.ts", "convex/openAiNativeToolCompletion.ts"],
+    allow: ["convex/httpRuntimeSupport.ts", "convex/httpVoice.ts", "convex/openAiNativeToolCompletion.ts"],
     forbidden: /api\.openai\.com/,
   },
   {

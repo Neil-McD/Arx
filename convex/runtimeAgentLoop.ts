@@ -188,23 +188,11 @@ function buildWebResearchCostMetadata(params: {
   finalVendorCostUsd: number;
   billingEvidence?: WebResearchBillingEvidence;
 }): Record<string, unknown> {
-  const evidence = params.billingEvidence as any;
-  const usage = evidence?.usage && typeof evidence.usage === "object" ? evidence.usage : null;
   return {
     estimated_vendor_cost_usd: params.estimatedVendorCostUsd,
     final_vendor_cost_usd: params.finalVendorCostUsd,
-    final_cost_source: typeof evidence?.costSource === "string" ? evidence.costSource : "estimated",
-    final_provider: typeof evidence?.provider === "string" ? evidence.provider : null,
-    final_backends: Array.isArray(evidence?.backends) ? evidence.backends : [],
-    final_model: typeof evidence?.model === "string" ? evidence.model : null,
-    xai_cost_in_usd_ticks:
-      typeof usage?.costInUsdTicks === "number" ? usage.costInUsdTicks : null,
-    server_side_tool_usage:
-      usage?.serverSideToolUsage && typeof usage.serverSideToolUsage === "object"
-        ? usage.serverSideToolUsage
-        : null,
-    num_server_side_tools_used:
-      typeof usage?.numServerSideToolsUsed === "number" ? usage.numServerSideToolsUsed : null,
+    final_cost_source: params.billingEvidence?.costSource ?? "estimated",
+    final_provider: params.billingEvidence?.provider ?? null,
   };
 }
 
@@ -435,7 +423,7 @@ export async function executeRetrievalHarnessTool(params: {
       typeof result.billingEvidence?.rawVendorCostUsd === "number"
         ? Math.max(0, result.billingEvidence.rawVendorCostUsd)
         : webResearchVendorCostUsd;
-    const provider = String(result.billingEvidence?.provider ?? "mixed").trim() || "mixed";
+    const provider = result.billingEvidence?.provider ?? "exa";
     const settlement = await settleFounderPaidToolFundingSession({
       ctx: params.ctx,
       session: fundingSession,
