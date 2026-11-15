@@ -208,6 +208,7 @@ export const runMemoryReviewInternal = internalAction({
     ];
     const recorder = eventRecorder(ctx, claim.communityId, `memory-review:${String(runId)}`);
     const run = await runFundedCommunityAgent({
+      lens: "worker",
       ctx,
       communityId: claim.communityId,
       actorUserId: claim.ownerUserId,

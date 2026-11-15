@@ -239,7 +239,7 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
   `communityRepositorySearch`, `threads`, `communityAgent`, `communityAgentRuntime`,
   `communityAgentFilesystem`,
   `communityAgentContext`, `communityAgentChannelAccess`, `communityAgentConcierge*`,
-  `communityAgentServeWorker`, `httpRuntimeRoutes`,
+  `communityAgentServeWorker`, `agentTools` (the one router for the guide's tools: a run gets its lens's tools, `LENS_TOOLS` in `shared/lens.ts`, and any other tool is refused), `httpRuntimeRoutes`,
   `httpStreaming`, `fundedInferenceGateway`, `founderInference*`,
   `openAiNativeToolCompletion`, `httpInferenceConfig`, `httpCommunityAgentAttachments`, `httpRuntimeSupport`,
   `httpRuntimeTurnState`, `runtimeCancellation`, `runtimeHarnessTelemetry`,

@@ -60,10 +60,6 @@ import {
   resolveRuntimeRunContinuation,
 } from "./runtimeTurnPersistence";
 import { resolvePolynetRuntimeEngine } from "../shared/runtimeEngine";
-import {
-  buildPolynetHarnessToolPolicyReceipt,
-  resolvePolynetHarnessToolPolicy,
-} from "../shared/harnessToolPolicy";
 import { logStructuredError } from "./errorLogging";
 import {
   claimCommunityInferenceFundingSession,
@@ -392,8 +388,6 @@ export async function handleRuntimeTurnRequest(args: {
       runtimeCommunitySystemPrompt,
       runtimeCommunityLensAuthority,
       allowedToolNames,
-      resolvedRuntimeCapabilityFamilies,
-      resolvedRuntimeHarnessProfile,
       invocationSurface,
       communityAgentSurfaceContext,
       communityInferenceAdmission,
@@ -455,8 +449,6 @@ export async function handleRuntimeTurnRequest(args: {
       requestedRuntimeEngine: runtimeEngineResolution.requestedRuntimeEngine ?? undefined,
       resolvedRuntimeEngine: runtimeEngineResolution.resolvedRuntimeEngine,
       executionMode: "agentic",
-      capabilityFamilies: resolvedRuntimeCapabilityFamilies,
-      harnessProfile: resolvedRuntimeHarnessProfile,
       invocationSurface,
     };
     const runStartArgs: Record<string, unknown> = {
@@ -473,11 +465,8 @@ export async function handleRuntimeTurnRequest(args: {
       runtimeEngineResolved: runtimeEngineResolution.resolvedRuntimeEngine,
       runtimeEngineSource: runtimeEngineResolution.runtimeEngineSource,
       executionMode: "agentic",
-      contractName: "capability_composed_tools_v1",
+      contractName: "lens_tools_v1",
       contractVersion: "v1",
-      harnessProfile: resolvedRuntimeHarnessProfile,
-      harnessProfileSource: "runtime_capability_resolution_v1",
-      capabilityFamilies: resolvedRuntimeCapabilityFamilies,
       latestUserText,
       startedAt: runStartedAt,
       nowMs: runStartedAt,
@@ -999,8 +988,6 @@ export async function handleRuntimeTurnRequest(args: {
         runtime_engine_resolved: runtimeEngineResolution.resolvedRuntimeEngine,
         runtime_engine_source: runtimeEngineResolution.runtimeEngineSource,
         engine_id: runtimeEngineId,
-        capability_families: resolvedRuntimeCapabilityFamilies,
-        harness_profile: resolvedRuntimeHarnessProfile,
         invocation_surface: invocationSurface,
         member_agent_surface_context: communityAgentSurfaceContext,
       },
@@ -1017,19 +1004,15 @@ export async function handleRuntimeTurnRequest(args: {
         engine_id: runtimeEngineId,
       },
     });
-    const polynetHarnessToolPolicy = resolvePolynetHarnessToolPolicy({
-      allowedToolNames: polynetAllowedToolNamesForRun,
-    });
     await appendRunEvent({
       eventType: "tool_policy_resolved",
       eventKey: `${runId}:tool_policy_resolved:1`,
       payload: {
         run_id: runId,
-        ...buildPolynetHarnessToolPolicyReceipt(polynetHarnessToolPolicy),
+        harness_kind: "polynet",
+        fixed_runtime_tool_names: polynetAllowedToolNamesForRun,
         policy_scope: "active_harness",
-        allowed_tool_names: polynetHarnessToolPolicy.fixedRuntimeToolNames,
-        capability_families: resolvedRuntimeCapabilityFamilies,
-        harness_profile: resolvedRuntimeHarnessProfile,
+        allowed_tool_names: polynetAllowedToolNamesForRun,
         invocation_surface: invocationSurface,
         member_agent_surface_context: communityAgentSurfaceContext,
       },

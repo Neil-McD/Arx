@@ -30,7 +30,6 @@ const runRecord = {
   communityContextVersion: 7,
   executionMode: "agentic",
   harnessProfile: "authenticated_cloud_tools",
-  capabilityFamilies: ["community_tools"],
   status: "running",
 };
 events.push(
@@ -42,7 +41,6 @@ events.push(
       community_id: "community_context_receipt_smoke",
       community_context_version: 7,
       execution_mode: "agentic",
-      capability_families: ["community_tools"],
     },
   },
   {
@@ -53,7 +51,6 @@ events.push(
       thread_id: "thread_context_receipt_smoke",
       community_id: "community_context_receipt_smoke",
       community_context_version: 7,
-      capability_families: ["community_tools"],
       harness_profile: "authenticated_cloud_tools",
       invocation_surface: "member_agent_dock",
     },
@@ -64,7 +61,6 @@ events.push(
     payload: {
       run_id: runId,
       allowed_tool_names: ["polynet_list", "polynet_read"],
-      capability_families: ["community_tools"],
       harness_profile: "authenticated_cloud_tools",
     },
   },

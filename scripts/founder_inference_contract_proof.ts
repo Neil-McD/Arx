@@ -309,9 +309,9 @@ assert.match(
 );
 assert.match(
   worker,
-  /executeRetrievalHarnessTool\(\{[\s\S]*userId: normalizeIdValue\(args\.context\.request\.sponsorUserId\)[\s\S]*authSubject: normalizeIdValue\(args\.context\.request\.authSubject\)/,
+  /runAgentTool\(\{[\s\S]*userId: normalizeIdValue\(args\.context\.request\.sponsorUserId\)[\s\S]*authSubject: normalizeIdValue\(args\.context\.request\.authSubject\)/,
 );
-assert.doesNotMatch(worker, /executeRetrievalHarnessTool\(\{[\s\S]{0,300}userId: normalizeIdValue\(context\.funding\.payerUserId\)/);
+assert.doesNotMatch(worker, /runAgentTool\(\{[\s\S]{0,300}userId: normalizeIdValue\(context\.funding\.payerUserId\)/);
 
 assert.match(fundingRuntime, /resolveCommunityInferenceFundingAdmissionInternal/);
 assert.doesNotMatch(fundingRuntime, /beginCommunityInferenceFundingSession/);

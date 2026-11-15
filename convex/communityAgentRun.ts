@@ -1,7 +1,7 @@
 // The run entry (docs/specs/agent-system-end-state.md §3.4): one funded agent
 // run on Pi for the community's guide, whatever started it. It admits the
-// model, claims the owner's funding once, runs the five tools through the
-// caller's executor, records the run's events, and on any failure releases
+// model, claims the owner's funding once, offers the run's lens tools
+// (shared/lens.ts) and runs them through the caller's executor, records the run's events, and on any failure releases
 // the funding with what was spent. The caller decides what the answer means
 // (a reply in a thread, a review's record) and settles the receipt with it.
 //
@@ -12,12 +12,9 @@ import { internal } from "./_generated/api";
 import { createFounderInferenceUsageTotals, founderProviderRequests, observeFounderProviderResult } from "./founderInferenceUsage";
 import { assertPaidLuna6ProviderHeadroom, founderInferenceBudgetFailureCode } from "./founderInferenceBudget";
 import { runOpenAiNativeToolCompletion } from "./openAiNativeToolCompletion";
-import {
-  buildCommunityAgentConciergeFunctionTools,
-  isCommunityAgentConciergeToolName,
-  normalizeCommunityAgentConciergeToolArguments,
-  type CommunityAgentConciergeToolName,
-} from "../shared/communityAgentConciergeTools";
+import { buildResponsesApiFunctionTools, normalizeToolArguments } from "../shared/toolRegistry";
+import type { RetrievalToolName } from "../shared/retrievalTools";
+import { LENS_TOOLS, lensHasTool } from "../shared/lens";
 import type { NativeToolAwareCompletionSuccess, NativeToolChoice } from "../shared/nativeToolProtocol";
 import { runPiRuntimeKernel } from "../shared/piRuntimeKernel";
 import {
@@ -72,26 +69,30 @@ function unsupportedToolFailure(toolName: unknown): RuntimeKernelFailureInput {
   };
 }
 
-// The model may ask only for the five tools.
-function coerceToFiveTools(
+// The model may ask only for the run's lens tools.
+function coerceToLensTools(
+  lens: AgentRunLens,
   completion: NativeToolAwareCompletionSuccess<string> | RuntimeKernelFailureInput,
-): NativeToolAwareCompletionSuccess<CommunityAgentConciergeToolName> | RuntimeKernelFailureInput {
+): NativeToolAwareCompletionSuccess<RetrievalToolName> | RuntimeKernelFailureInput {
   if (completion.ok === false) return completion;
   if (completion.type === "tool_call") {
-    if (!isCommunityAgentConciergeToolName(completion.toolName)) return unsupportedToolFailure(completion.toolName);
+    if (!lensHasTool(lens, completion.toolName)) return unsupportedToolFailure(completion.toolName);
     return { ...completion, toolName: completion.toolName };
   }
   if (completion.type === "tool_calls") {
     for (const toolCall of completion.toolCalls) {
-      if (!isCommunityAgentConciergeToolName(toolCall.toolName)) return unsupportedToolFailure(toolCall.toolName);
+      if (!lensHasTool(lens, toolCall.toolName)) return unsupportedToolFailure(toolCall.toolName);
     }
-    return completion as NativeToolAwareCompletionSuccess<CommunityAgentConciergeToolName>;
   }
-  return completion as NativeToolAwareCompletionSuccess<CommunityAgentConciergeToolName>;
+  return completion as NativeToolAwareCompletionSuccess<RetrievalToolName>;
 }
+
+// The guide tagged in a channel, or the worker with nobody present.
+export type AgentRunLens = "guide_public" | "worker";
 
 export async function runFundedCommunityAgent(args: {
   ctx: any;
+  lens: AgentRunLens;
   communityId: unknown;
   // Whose request this is (the member who tagged the guide, or the owner for
   // work with nobody present). Funding is always the owner's.
@@ -105,22 +106,22 @@ export async function runFundedCommunityAgent(args: {
   maxToolSteps: number;
   promptCacheKey: string;
   recorder: CommunityAgentRunRecorder;
-  executeTool: (toolName: CommunityAgentConciergeToolName, rawArguments: Record<string, unknown>) => Promise<RuntimeKernelToolExecutionResult>;
+  executeTool: (toolName: RetrievalToolName, rawArguments: Record<string, unknown>) => Promise<RuntimeKernelToolExecutionResult>;
   // Checked before each model request (a source's access can end mid-run).
   beforeEachCompletion?: () => Promise<void>;
   // Tool results the caller's rules refused are logged as refused.
   isRefusal?: (errorCode: string | null | undefined) => boolean;
   // A caller that parses its own calls (the nightly review) takes the
   // model's arguments as they are; otherwise the general rules apply.
-  normalizeToolArguments?: (toolName: CommunityAgentConciergeToolName, rawArgs: Record<string, unknown>) => Record<string, unknown>;
+  normalizeToolArguments?: (toolName: RetrievalToolName, rawArgs: Record<string, unknown>) => Record<string, unknown>;
   // What the run's log says about a call (by default, the tool's name).
   describeToolCall?: (toolName: string, args: Record<string, unknown>) => string;
   maxConsecutiveFailures?: number;
   // The first model request's tool choice, e.g. a review that must write
   // (its one write may be empty).
-  firstToolChoice?: NativeToolChoice<CommunityAgentConciergeToolName>;
+  firstToolChoice?: NativeToolChoice<RetrievalToolName>;
 }): Promise<CommunityAgentRunResult> {
-  const tools = buildCommunityAgentConciergeFunctionTools();
+  const tools = buildResponsesApiFunctionTools(LENS_TOOLS[args.lens]);
   let usage = createFounderInferenceUsageTotals("");
   let providerStarted = false;
   let fundingSession: CommunityInferenceFundingSession | null = null;
@@ -144,7 +145,7 @@ export async function runFundedCommunityAgent(args: {
       communityId: args.communityId, receiptKey: args.receiptKey, surface: args.surface,
     });
     usage = createFounderInferenceUsageTotals(admittedModelId);
-    completion = await runPiRuntimeKernel<CommunityAgentConciergeToolName>({
+    completion = await runPiRuntimeKernel<RetrievalToolName>({
       messages: args.messages,
       budget: {
         ...DEFAULT_RUNTIME_KERNEL_BUDGET, maxToolSteps: args.maxToolSteps,
@@ -201,9 +202,9 @@ export async function runFundedCommunityAgent(args: {
         }
         observeFounderProviderResult(usage, toolCompletion,
           toolCompletion.ok === false && providerFailureIsKnownPreSpend(toolCompletion.code));
-        return coerceToFiveTools(toolCompletion);
+        return coerceToLensTools(args.lens, toolCompletion);
       },
-      normalizeToolArguments: args.normalizeToolArguments ?? normalizeCommunityAgentConciergeToolArguments,
+      normalizeToolArguments: args.normalizeToolArguments ?? normalizeToolArguments,
       onToolStepStart: async ({ step }) => {
         await args.recorder.flushAll();
         const content = args.describeToolCall?.(String(step.toolName), (step as any).normalizedArgs ?? {}) ?? String(step.toolName);

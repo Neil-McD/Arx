@@ -8,9 +8,8 @@ import {
   isCommunityAgentThreadKeyForCommunity,
   isReadOnlyLegacyCommunityAgentThreadKey,
   resolveRuntimeInvocationSurfaceForThread,
-  restrictCapabilityFamiliesForInvocationSurface,
-  restrictToolNamesForInvocationSurface,
 } from "../shared/runtimeInvocationSurface.ts";
+import { LENS_TOOLS, guideRunLens } from "../shared/lens.ts";
 import { buildCommunityAgentConversationContext } from "../shared/communityAgentConversationContext.ts";
 import {
   COMMUNITY_AGENT_IDENTITY_CONTEXT_MAX_CHARS,
@@ -41,7 +40,7 @@ const packageJson = read("package.json");
 const schema = read("convex/schema.ts");
 const threads = read("convex/threads.ts");
 const resolution = read("convex/runtimeTurnResolution.ts");
-const runtimeLoop = read("convex/runtimeAgentLoop.ts");
+const runtimeLoop = read("convex/runtimeAgentLoop.ts") + read("convex/agentTools.ts");
 const runtimeHandlers = read("convex/runtimeTurnHandlers.ts");
 const runner = read("shared/useWebTurnRunnerController.ts");
 const gateway = read("shared/cloudCommunityAgentConversationGateway.ts");
@@ -197,45 +196,10 @@ assert.equal(
   "member_agent_dock",
   "the explicit member surface must match the member thread identity",
 );
+// The dock is a private talk: its tools come from the private lens.
 assert.deepEqual(
-  restrictCapabilityFamiliesForInvocationSurface({
-    invocationSurface: "member_agent_dock",
-    capabilityFamilies: [
-      "product_docs",
-      "community_tools",
-      "web_research",
-      "sandbox_tools",
-      "workspace_tools",
-    ],
-  }),
-  ["community_tools", "web_research"],
-);
-assert.deepEqual(
-  restrictToolNamesForInvocationSurface({
-    invocationSurface: "member_agent_dock",
-    toolNames: [
-      "search_product_docs",
-      "polynet_list",
-      "polynet_read",
-      "polynet_search",
-      "polynet_write",
-      "polynet_call",
-      "member_conversations_list",
-      "member_conversation_read",
-      "community_write",
-      "web_research",
-      "read",
-      "terminal_start",
-    ],
-  }),
-  [
-    "polynet_list",
-    "polynet_read",
-    "polynet_search",
-    "polynet_write",
-    "polynet_call",
-    "web_research",
-  ],
+  [...LENS_TOOLS[guideRunLens("member_agent_dock")]],
+  ["polynet_list", "polynet_read", "polynet_search", "polynet_write", "polynet_call", "web_research"],
 );
 assert.match(
   buildRuntimeInvocationSurfacePrompt("member_agent_dock"),
@@ -520,8 +484,8 @@ assert.match(
 );
 assert.match(
   resolution,
-  /restrictCapabilityFamiliesForInvocationSurface[\s\S]*restrictToolNamesForInvocationSurface/,
-  "the server must constrain capabilities and tools instead of trusting the web client",
+  /const allowedToolNames = \[\.\.\.LENS_TOOLS\[guideRunLens\(invocationSurface\)\]\];/,
+  "the server picks the tools from the lens instead of trusting the web client",
 );
 assert.match(
   resolution,
@@ -537,11 +501,6 @@ assert.match(
   resolution,
   /resolveRuntimeCommunityPromptContextInternal[\s\S]*member_agent_surface_lens_mismatch[\s\S]*resolveCommunityInferenceFundingAdmissionInternal[\s\S]*community_ai_unavailable/,
   "membership, lens, and community funding authority must be resolved server-side in that order",
-);
-assert.match(
-  resolution,
-  /activeCapabilityFamilies\.includes\("community_tools"\)[\s\S]*"polynet_list"[\s\S]*"polynet_read"[\s\S]*"polynet_search"[\s\S]*"polynet_write"[\s\S]*"polynet_call"/,
-  "the server must resolve the exact canonical five from the community capability family",
 );
 assert.doesNotMatch(
   runtimeLoop,
@@ -610,8 +569,8 @@ assert.match(
 );
 assert.match(
   runtimeLoop,
-  /effectiveAllowedToolNames = restrictToolNamesForInvocationSurface\(\{[\s\S]*toolNames: params\.allowedToolNames/,
-  "the member-agent dock boundary must restrict the pre-authorized tool surface",
+  /const lens = guideRunLens\(params\.evidenceSurface\);\s*if \(!lensHasTool\(lens, params\.toolName\)\)[\s\S]*tool_not_in_lens/,
+  "the router must refuse any tool outside the run's lens before it runs",
 );
 assert.doesNotMatch(
   runtimeLoop,
