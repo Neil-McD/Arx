@@ -176,3 +176,92 @@ test("a place with nothing recent to say costs nothing", async () => {
   expect(await t.action(internal.communityBriefs.runCommunityBriefInternal, { workId: row._id })).toEqual({ status: "empty" });
   expect(bodies).toHaveLength(0);
 });
+
+// ---------- pods
+
+const podWork = (t: any, roomId: any) => t.run((ctx: any) => ctx.db.query("agentWork")
+  .withIndex("by_scope_kind", (q: any) => q.eq("scopeKey", `pod:${String(roomId)}`).eq("kind", "brief")).first());
+// The founders pod, with the guide working in it; a second pod without it.
+async function withPods(t: any, w: any) {
+  return await t.run(async (ctx: any) => {
+    await ctx.db.insert("communityPods", { communityId: w.communityId, channelId: w.pod, purpose: "Founders.", visibility: "hidden", hostUserIds: [w.mayaId], createdAt: NOW, updatedAt: NOW });
+    await ctx.db.insert("communityChannelParticipants", { communityId: w.communityId, channelId: w.pod, principalKey: "community_agent", status: "active", createdByUserId: w.ownerId, createdAt: NOW, updatedAt: NOW });
+    const other = await ctx.db.insert("communityChannels", { communityId: w.communityId, slug: "setters", name: "setters", accessMode: "restricted",
+      postingPolicy: "members", status: "active", position: 2, createdByUserId: w.ownerId, createdAt: NOW, updatedAt: NOW } as any);
+    await ctx.db.insert("communityPods", { communityId: w.communityId, channelId: other, purpose: "Setters.", visibility: "hidden", createdAt: NOW, updatedAt: NOW });
+    return { other };
+  });
+}
+
+test("a pod's brief is due from its own room, only where the guide works; it never makes the community's due", async () => {
+  const t = convexTest(schema, modules);
+  const w = await world(t);
+  const { other } = await withPods(t, w);
+  await t.run((ctx: any) => markCommunityBriefDue(ctx, { communityId: w.communityId, channelId: other, actorType: "human", nowMs: NOW }));
+  expect(await podWork(t, other)).toBeNull();
+  await t.run((ctx: any) => markCommunityBriefDue(ctx, { communityId: w.communityId, channelId: w.pod, actorType: "human", nowMs: NOW }));
+  expect(await podWork(t, w.pod)).toMatchObject({ kind: "brief", scope: "pod", pending: 1, dueAt: NOW + HOUR });
+  expect(await briefWork(t, w.communityId)).toBeNull();
+});
+
+test("a pod's brief is written from its own room alone and kept in the pod's scope", async () => {
+  stubProvider();
+  const t = convexTest(schema, modules);
+  const w = await world(t);
+  const { other } = await withPods(t, w);
+  const pitch = await post(t, w, { channelId: w.pod, contentSummary: "Pitch practice moved to the back room.", createdAt: NOW + 10 });
+  const open = await post(t, w, { contentSummary: "COMMUNITY POST", createdAt: NOW + 11 });
+  await post(t, w, { channelId: other, contentSummary: "OTHER POD POST", createdAt: NOW + 12 });
+  await t.run((ctx: any) => ctx.db.insert("communityMemoryIndex", { communityId: w.communityId, scopeKey: `community:${String(w.communityId)}`, bodyMd: "COMMUNITY MEMORY", updatedAt: NOW }));
+  await t.run((ctx: any) => ctx.db.insert("communityMemoryIndex", { communityId: w.communityId, scopeKey: `pod:${String(w.pod)}`, bodyMd: "Founders meet on Tuesdays.", updatedAt: NOW }));
+
+  const bodies = fakeModel([
+    // A point citing the community's post is refused: the pod's brief cites the pod's room.
+    writeCall("c1", { headline: "From outside", points: [{ text: "Something from the open channels.", refs: [`post:${open}`] }] }),
+    writeCall("c2", { headline: "Pitch practice has moved", points: [{ text: "Pitch practice is in the back room now.", refs: [`post:${pitch}`] }] }),
+  ]);
+  await t.run((ctx: any) => markCommunityBriefDue(ctx, { communityId: w.communityId, channelId: w.pod, actorType: "human", nowMs: NOW }));
+  const row: any = await podWork(t, w.pod);
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(row.dueAt);
+  expect(await t.action(internal.communityBriefs.runCommunityBriefInternal, { workId: row._id })).toEqual({ status: "written" });
+
+  const prompt = JSON.stringify(bodies[0].input) + JSON.stringify(bodies[0].instructions ?? "");
+  expect(prompt).toContain("the founders pod");
+  expect(prompt).toContain("back room");
+  expect(prompt).toContain("Founders meet on Tuesdays.");
+  // Maya hosts this pod.
+  expect(prompt).toContain("Maya (host)");
+  for (const never of ["COMMUNITY POST", "OTHER POD POST", "COMMUNITY MEMORY"]) expect(prompt).not.toContain(never);
+  expect(JSON.stringify(bodies[1].input)).toContain("refs_invalid");
+
+  const briefs: any[] = await t.run((ctx: any) => ctx.db.query("communityBriefs").collect());
+  expect(briefs.map((brief: any) => [brief.scopeKey, brief.headline])).toEqual([[`pod:${String(w.pod)}`, "Pitch practice has moved"]]);
+  const runs: any[] = await t.run((ctx: any) => ctx.db.query("agentWorkRuns").collect());
+  expect(runs[0]).toMatchObject({ kind: "brief", scopeKey: `pod:${String(w.pod)}`, status: "done" });
+
+  // The community's own brief never sees the pod's room.
+  const community: any = await t.query(internal.communityBriefs.readCommunityBriefInputInternal, { communityId: w.communityId, untilMs: NOW + HOUR });
+  expect(community.text).toContain("COMMUNITY POST");
+  expect(community.text).not.toContain("back room");
+  expect(community.text).not.toContain("OTHER POD POST");
+});
+
+test("a builder taking the guide out of a pod stops its brief", async () => {
+  stubProvider();
+  const t = convexTest(schema, modules);
+  const w = await world(t);
+  await withPods(t, w);
+  await post(t, w, { channelId: w.pod, contentSummary: "Pitch practice moved.", createdAt: NOW + 10 });
+  await t.run((ctx: any) => markCommunityBriefDue(ctx, { communityId: w.communityId, channelId: w.pod, actorType: "human", nowMs: NOW }));
+  const row: any = await podWork(t, w.pod);
+  await t.run(async (ctx: any) => {
+    const seat = await ctx.db.query("communityChannelParticipants").withIndex("by_channel_principal", (q: any) => q.eq("channelId", w.pod).eq("principalKey", "community_agent")).first();
+    await ctx.db.patch(seat._id, { status: "revoked" });
+  });
+  const bodies = fakeModel([writeCall("c1", { headline: "x", points: [] })]);
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(row.dueAt);
+  expect(await t.action(internal.communityBriefs.runCommunityBriefInternal, { workId: row._id })).toEqual({ status: "skipped" });
+  expect(bodies).toHaveLength(0);
+});

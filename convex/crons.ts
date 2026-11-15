@@ -58,7 +58,7 @@ crons.interval(
 crons.interval("send due founder briefs", { minutes: 15 },
   (internal as any).communityFounderBrief.processDueFounderBriefsInternal, {});
 // The guide's memory reviews schedule themselves per community; this only
-// re-schedules one whose job was lost (convex/communityMemoryReview.ts).
+// re-schedules one whose job was lost (convex/agentWork.ts).
 crons.interval("repair lost memory reviews", { hours: 24 },
-  (internal as any).communityMemoryReview.repairMemoryReviewScheduleInternal, {});
+  (internal as any).agentWork.repairAgentWorkScheduleInternal, {});
 export default crons;

@@ -236,7 +236,7 @@ Two rules across lenses:
 | Memories | `communityNotes` with a scope key (`community:<id>`, `pod:<roomId>`), revisions, removals and `memory.md` (`communityMemoryIndex`), all through one door (`communityNotesStore`, held by a test). Old `communityPodNotes` rows are moved by a backfill | Drop the old tables (cleanup slice C) |
 | Memory review | Nightly per scope (community and each pod), made due by posts (`agentWork`), one pass: the guide is handed the day and its notes and writes once with `memory.apply`. Undo a note or a night exists in the backend | Sources and undo on a note: built. The nights list and "Learned lately": deferred |
 | Personal memory | `shared/personalMemory.ts`, `convex/memberMemory.ts`: capped at 1,375 characters, written in a private talk with `member.memory.remember`, loaded into every talk with that member, never shown elsewhere | The You page |
-| Briefs | `communityBriefs`: the community's brief, written by the guide in one model request from its recent threads (picked by what matters), its card, handbook and `memory.md`; every point cites posts it was shown; no links; nothing that goes stale. The founder brief (a fixed snapshot and one call, on a 15-minute cron) still runs beside it | Pod briefs, `brief.md` in the folder, the panels; the morning email reads the stored brief and the founder brief's model call goes |
+| Briefs | `communityBriefs`: a brief for the community and for each pod the guide works in (written from that pod's room alone, kept in its scope), in one model request from recent threads (picked by what matters), the card, handbook and `memory.md`; every point cites posts it was shown; no links; nothing that goes stale. Reviews and briefs run through one helper (`agentWork`). The founder brief (a fixed snapshot and one call, on a 15-minute cron) still runs beside it | `brief.md` in the folder, the panels; the morning email reads the stored brief and the founder brief's model call goes |
 
 ## 7. What the leading agents do, and what we take
 
@@ -287,7 +287,7 @@ something onto the new system deletes the old path in the same slice.
    the You page shows each line with its source. Visible only to the member
    until they share it. When a member asks the guide to remember something
    for everyone, it becomes a suggestion a builder approves or rejects.
-3. **Briefs.** *Under way: the community's brief is written; pods, the panels and the email are next.* Brief work per place; Home's and channels' right panels read
+3. **Briefs.** *Under way: the community's and pods' briefs are written; the folder file, the panels and the email are next.* Brief work per place; Home's and channels' right panels read
    them. The founder brief moves onto the run entry and its old pipeline is
    deleted.
 4. **Pods.** *Built: `pods/` in the folder, pod facts, pod memory and its nightly review, the guide working inside one pod. Not yet pod briefs.* `pods/<pod>/` in the folder; pod lens; pod memory review and

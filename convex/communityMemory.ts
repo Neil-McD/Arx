@@ -40,7 +40,7 @@ import {
 const REMOVALS_SCAN = 500;
 
 // A pod's room in this community (its memory's scope), or null.
-async function podRoom(ctx: any, communityId: any, roomId: unknown) {
+export async function podRoom(ctx: any, communityId: any, roomId: unknown) {
   const id = roomId ? ctx.db.normalizeId("communityChannels", String(roomId)) : null;
   const channel = id ? await ctx.db.get(id) : null;
   return channel && String(channel.communityId) === String(communityId) && channel.accessMode === "restricted" && channel.status === "active"
