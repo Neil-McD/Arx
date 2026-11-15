@@ -971,6 +971,8 @@ async function executeRetrievalAgentLoop(
   let communityCardMd: string | null = null;
   let communityHandbookMd: string | null = null;
   let communityMemoryMd: string | null = null;
+  // Undefined outside a private talk: the personal section isn't drawn at all.
+  let personalMemoryMd: string | null | undefined = undefined;
   const communityCardSlug = String(params.communitySlug ?? "").trim();
   if (
     turnContract?.uses.communityCard &&
@@ -982,6 +984,8 @@ async function executeRetrievalAgentLoop(
     const layers = await loadCommunityTurnLayers({
       contract: turnContract,
       communitySlug: communityCardSlug,
+      // The member's own private talk: what the guide remembers about them.
+      personal: params.invocationSurface === "member_agent_dock",
       read: (path, layer) => executeRetrievalHarnessTool({
         ctx: params.ctx,
         userId: params.userId,
@@ -998,6 +1002,7 @@ async function executeRetrievalAgentLoop(
     communityCardMd = layers.communityCardMd;
     communityHandbookMd = layers.communityHandbookMd;
     communityMemoryMd = layers.communityMemoryMd;
+    if (params.invocationSurface === "member_agent_dock") personalMemoryMd = layers.personalMemoryMd;
     const cardStatus = layers.cardStatus;
     try {
       await params.appendRunEvent({
@@ -1030,6 +1035,7 @@ async function executeRetrievalAgentLoop(
     communityAgentSurfaceContext: params.communityAgentSurfaceContext,
     memberIdentityContextMd,
     communityMemoryMd,
+    personalMemoryMd,
     communityCardMd,
     communityHandbookMd,
     promptExtensions: resolvedHarness.promptExtensions,

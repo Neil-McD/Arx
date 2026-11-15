@@ -171,6 +171,7 @@ import type * as httpStreaming from "../httpStreaming.js";
 import type * as httpVoice from "../httpVoice.js";
 import type * as legalAcceptances from "../legalAcceptances.js";
 import type * as memberEntryDestination from "../memberEntryDestination.js";
+import type * as memberMemory from "../memberMemory.js";
 import type * as memberOntology from "../memberOntology.js";
 import type * as memberOntologyCore from "../memberOntologyCore.js";
 import type * as memberWriteRateLimit from "../memberWriteRateLimit.js";
@@ -391,6 +392,7 @@ declare const fullApi: ApiFromModules<{
   httpVoice: typeof httpVoice;
   legalAcceptances: typeof legalAcceptances;
   memberEntryDestination: typeof memberEntryDestination;
+  memberMemory: typeof memberMemory;
   memberOntology: typeof memberOntology;
   memberOntologyCore: typeof memberOntologyCore;
   memberWriteRateLimit: typeof memberWriteRateLimit;

@@ -205,7 +205,10 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
   server hands the guide memory.md, the notes and the new posts, and it writes
   once with `memory.apply`), `communityEvidence*`,
   `communityCognitionLifecycle`, `communityWikiArchitect`; member knowledge stays in
-  `memberOntology` and `memberOntologyCore` (`memberFacts`, `memberProfileSpines`).
+  `memberOntology` and `memberOntologyCore` (`memberFacts`, `memberProfileSpines`);
+  personal memory, what the guide remembers about one member from their own
+  private talks (`members/me/memory.md`, read by that member only), is
+  `memberMemory` (`memberMemories`) with its rules in `shared/personalMemory.ts`.
 - **Legacy, until the old tables drop (POL-39 slice 3):** `communityMemoryMigration`
   (one-time copy of old memory into notes), and the unused tables
   `communityIntelligenceNodes`, `communityIntelligenceEdges`,

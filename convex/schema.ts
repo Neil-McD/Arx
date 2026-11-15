@@ -1659,6 +1659,18 @@ export default defineSchema({
   })
     .index("by_community", ["communityId"]),
 
+  // Personal memory (shared/personalMemory.ts): what the guide remembers about
+  // one member in one community, from that member's own private talks. One
+  // row per member and community, capped small; only that member reads it.
+  // Each entry keeps the private turn it came from ("run:<runId>").
+  memberMemories: defineTable({
+    communityId: v.id("communities"),
+    userId: v.id("users"),
+    entries: v.array(v.object({ text: v.string(), sourceRef: v.string(), at: v.number() })),
+    updatedAt: v.number(),
+  })
+    .index("by_community_user", ["communityId", "userId"]),
+
   // Work the guide does with nobody present (docs/specs/agent-system-end-state.md
   // §3.5): one row per community, scope and kind, made due by what happens.
   agentWork: defineTable({
