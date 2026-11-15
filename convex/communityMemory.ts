@@ -348,6 +348,51 @@ export const listNoteSources = query({
   },
 });
 
+// What the community knows, for anyone in it (the panels' "community brain"
+// and "learned lately"): how many notes the guide answers from, how many are
+// new this week, and the latest few by name. A builder sees every title. A
+// member sees only titles of what the guide learned from posts they can read
+// themselves (every post it came from still live in an open channel), never
+// a note a builder taught it or one whose posts are gone: its name could say
+// more than they may see. Never a note's text, and never who said it.
+const LEARNED_SCAN = 60;
+const LEARNED_SHOWN = 3;
+const LEARNED_WEEK_MS = 7 * 24 * 60 * 60_000;
+export const getLearnedLately = query({
+  args: viewerArgs,
+  handler: async (ctx, args) => {
+    const userId = await resolveUserIdForAuthenticatedRequest({ ctx, userId: args.userId, authSubject: args.authSubject ?? null });
+    await requireCommunityChatAccess({ ctx, communityId: args.communityId, userId });
+    const isBuilder = await requireCommunityManager({ ctx, communityId: args.communityId, userId }).then(() => true, () => false);
+    const scope = communityScopeKey(args.communityId);
+    const nowMs = Date.now();
+    const rows: any[] = await notesByUpdated(ctx, scope).order("desc").take(LEARNED_SCAN + 1);
+    const notes = rows.slice(0, LEARNED_SCAN).sort((a, b) => b.createdAt - a.createdAt);
+    const latest: Array<{ title: string; at: string }> = [];
+    for (const note of notes) {
+      if (latest.length >= LEARNED_SHOWN) break;
+      if (!isBuilder) {
+        const refs = (note.evidenceRefs ?? []) as string[];
+        if (note.authorKind !== "guide" || refs.length === 0) continue;
+        let open = true;
+        for (const raw of refs) {
+          const ref = parseMemoryEvidenceRef(raw);
+          if (!ref || memoryEvidenceRefusal(await evidenceFacts(ctx, args.communityId, ref, scope))) { open = false; break; }
+        }
+        if (!open) continue;
+      }
+      latest.push({ title: String(note.title), at: new Date(note.createdAt).toISOString() });
+    }
+    return {
+      total: notes.length,
+      more: rows.length > LEARNED_SCAN,
+      this_week: notes.filter((note) => nowMs - note.createdAt <= LEARNED_WEEK_MS).length,
+      latest,
+      can_manage: isBuilder,
+    };
+  },
+});
+
 // Undo one guide note: its last change is put back; a note the guide added is
 // removed, and its posts won't bring it back.
 export const undoLearnedNote = mutation({
