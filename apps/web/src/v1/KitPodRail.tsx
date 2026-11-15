@@ -129,7 +129,7 @@ export function KitPodRail(props: { session: unknown; communityId: string; pod: 
     ["knowledge", <KitPodKnowledge session={props.session} communityId={props.communityId} channelId={pod.channel_id} />],
     ["people", (
       <Sec label={`In this pod · ${pod.members.length}`}>
-        {pod.can_edit ? pod.members.map((member) => (
+        {pod.can_manage ? pod.members.map((member) => (
           <div key={member.user_id} className={cx("podreq")}>
             <span>
               {member.name}{member.is_host ? <em> · host</em> : null}
