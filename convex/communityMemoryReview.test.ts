@@ -214,6 +214,9 @@ test("one pass: the guide gets everything in one prompt and writes once; refused
   // Two model calls; the first already holds the posts.
   expect(bodies).toHaveLength(2);
   expect(JSON.stringify(bodies[0].input)).toContain("Saturday climbs meet at 8 am");
+  // The first answer must be the write; after it, the guide may just finish.
+  expect(JSON.stringify(bodies[0].tool_choice)).toContain("polynet_call");
+  expect(JSON.stringify(bodies[1].tool_choice ?? "auto")).not.toContain("polynet_call");
   const toolOutput = JSON.stringify(bodies[1].input);
   expect(toolOutput).toContain("memory/saturday-meet.md");
   expect(toolOutput).toContain("evidence_missing");

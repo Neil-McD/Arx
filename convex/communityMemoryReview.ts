@@ -224,6 +224,9 @@ export const runMemoryReviewInternal = internalAction({
       normalizeToolArguments: (_toolName, rawArgs) => rawArgs,
       describeToolCall: (toolName, callArgs) => `${toolName} ${String(callArgs.operation ?? "")}`.trim(),
       maxConsecutiveFailures: 2,
+      // The review's first answer is its write (it may be empty): a model that
+      // describes the write instead of making it would lose the night.
+      firstToolChoice: { type: "function", name: "polynet_call" },
       executeTool: async (toolName, rawArguments) => {
         const failed = (errorCode: string, errorMessage: string) => ({ status: "error" as const, exitCode: null, outputText: "", errorCode, errorMessage });
         if (toolName !== "polynet_call") return failed("review_reads_nothing", `Everything is in front of you. Write with polynet_call ${MEMORY_APPLY_OPERATION}.`);
