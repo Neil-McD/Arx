@@ -232,7 +232,10 @@ css += """
 .app .railfoot{margin-top:auto;display:flex;gap:18px}
 .app .railfoot button{font-size:12.5px;color:var(--ink3);cursor:pointer}.app .railfoot button:hover,.app .railfoot button[aria-expanded="true"]{color:var(--ink)}
 /* A pod's landing page, the Pods page's right panel. */
-.app .land{display:flex;flex-direction:column;gap:26px;min-height:100%}
+.app .land{display:flex;flex-direction:column;gap:26px;flex:1;min-width:0;max-width:100%}
+.app .land>*{min-width:0;max-width:100%}
+.app .land header{overflow-wrap:anywhere}
+.app.part.rail-part .rail:has(>.land){min-height:100%}
 .app .land h2{margin:0;font-size:20px;font-weight:600;letter-spacing:-.01em;color:var(--ink)}
 .app .land-p{margin:6px 0 0;font-size:14px;line-height:1.5;color:var(--ink2)}
 .app .land .podget{margin:14px 0 0}
