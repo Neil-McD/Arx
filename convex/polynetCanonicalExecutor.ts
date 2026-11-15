@@ -1679,6 +1679,14 @@ async function executeCanonicalRead(args: {
     }
   }
 
+  // memory.md: the community's short memory, for whoever may read its notes.
+  if (target.localPath === "/memory.md") {
+    const index = !notesReadable(args, target) ? null : (await args.ctx.runQuery(
+      (internal as any).communityMemory.readCommunityMemoryIndexInternal, { communityId: target.communityId })) as { bodyMd: string } | null;
+    if (!index) return canonicalError("semantic_not_found", "This community has no memory.md yet. List memory/ for notes.");
+    return { ok: true, value: { path: mountedPath(target.communitySlug, target.localPath), body: index.bodyMd, truncated: false } };
+  }
+
   const memoryMatch = /^\/memory\/([A-Za-z0-9_-]+)\.md$/.exec(target.localPath);
   if (memoryMatch) {
     const note = !notesReadable(args, target) ? null : (await args.ctx.runQuery(
