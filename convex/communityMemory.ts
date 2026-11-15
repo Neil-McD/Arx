@@ -93,7 +93,7 @@ async function evidenceFacts(ctx: any, communityId: any, ref: MemoryEvidenceRef,
 // A run that may still write: open, this community's, and for a pod's memory,
 // only while the pod's room is open and the guide still works there (a
 // builder taking the guide out stops a review already under way).
-async function openRun(ctx: any, communityId: any, runId: any) {
+export async function openRun(ctx: any, communityId: any, runId: any) {
   const run = await ctx.db.get(runId);
   if (!run || String(run.communityId) !== String(communityId) || run.status !== "running") return null;
   const scope = parseScopeKey((run.scopeKey as string | undefined) ?? "");

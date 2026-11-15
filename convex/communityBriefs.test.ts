@@ -265,3 +265,27 @@ test("a builder taking the guide out of a pod stops its brief", async () => {
   expect(await t.action(internal.communityBriefs.runCommunityBriefInternal, { workId: row._id })).toEqual({ status: "skipped" });
   expect(bodies).toHaveLength(0);
 });
+
+test("the guide taken out of a pod while its brief is being written: the brief isn't saved", async () => {
+  stubProvider();
+  const t = convexTest(schema, modules);
+  const w = await world(t);
+  await withPods(t, w);
+  const pitch = await post(t, w, { channelId: w.pod, contentSummary: "Pitch practice moved.", createdAt: NOW + 10 });
+  await t.run((ctx: any) => markCommunityBriefDue(ctx, { communityId: w.communityId, channelId: w.pod, actorType: "human", nowMs: NOW }));
+  const row: any = await podWork(t, w.pod);
+  // The builder removes the guide while the model is answering.
+  let request = 0;
+  vi.stubGlobal("fetch", vi.fn(async () => {
+    request += 1;
+    await t.run(async (ctx: any) => {
+      const seat = await ctx.db.query("communityChannelParticipants").withIndex("by_channel_principal", (q: any) => q.eq("channelId", w.pod).eq("principalKey", "community_agent")).first();
+      await ctx.db.patch(seat._id, { status: "revoked" });
+    });
+    return new Response(JSON.stringify(writeCall(`c${request}`, { headline: "Pitch practice has moved", points: [{ text: "It moved.", refs: [`post:${pitch}`] }] })), { status: 200 });
+  }));
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(row.dueAt);
+  expect(await t.action(internal.communityBriefs.runCommunityBriefInternal, { workId: row._id })).toMatchObject({ status: "failed" });
+  expect(await t.run((ctx: any) => ctx.db.query("communityBriefs").collect())).toHaveLength(0);
+});

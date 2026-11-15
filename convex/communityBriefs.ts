@@ -17,7 +17,7 @@ import { runAgentWork } from "./agentWork";
 import { getUniqueCommunityMembershipByPair, normalizeCommunityRoleForOutput } from "./communityCore";
 import { displayName } from "./communityFounderBrief";
 import { communityScopeKey, insertWork, memoryIndexFor, podScopeKey, workFor, writeBrief, type ScopeKey } from "./communityNotesStore";
-import { guideSeatedInPod, podRoom, scheduleAgentWork } from "./communityMemory";
+import { guideSeatedInPod, openRun, podRoom, scheduleAgentWork } from "./communityMemory";
 import { renderCommunityCard } from "../shared/communityOntology";
 import { renderCommunityHandbook } from "../shared/communityHandbook";
 import { BRIEF_INSTRUCTIONS, BRIEF_WINDOW_MS, BRIEF_WRITE_OPERATION, nextBriefAtMs, parseBriefWriteCall } from "../shared/communityBriefs";
@@ -186,8 +186,11 @@ export const writeCommunityBriefInternal = internalMutation({
   args: { communityId: v.id("communities"), runId: v.id("agentWorkRuns"), headline: v.string(),
     points: v.array(v.object({ text: v.string(), refs: v.array(v.string()) })), windowEnd: v.number(), nowMs: v.number() },
   handler: async (ctx, args) => {
-    const run: any = await ctx.db.get(args.runId);
-    if (!run || String(run.communityId) !== String(args.communityId) || run.status !== "running" || run.kind !== "brief") return { ok: false as const };
+    // Checked when the write happens: the run is still open, and for a pod,
+    // its room is open and the guide still works there (a builder taking the
+    // guide out stops a brief already being written).
+    const run: any = await openRun(ctx, args.communityId, args.runId);
+    if (!run || run.kind !== "brief") return { ok: false as const };
     const scope = (run.scopeKey as ScopeKey | undefined) ?? communityScopeKey(args.communityId);
     await writeBrief(ctx, scope, {
       communityId: args.communityId, headline: args.headline, points: args.points,
