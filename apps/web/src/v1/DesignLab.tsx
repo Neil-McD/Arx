@@ -32,6 +32,8 @@ import {
 import { BriefPart } from "./KitBrief";
 import { PanelLearned, PanelLine, PanelPart, PanelPeople } from "./KitPanel";
 import { KitChannelFeed } from "./KitChannelFeed";
+import { KitHomeRail } from "./KitHomeRail";
+import { KitPodRail } from "./KitPodRail";
 
 const BANNER = "/design-lab/polynet-earth.webp";
 const SMALL_BUTTON = { height: 32, fontSize: 13 } as const;
@@ -272,6 +274,34 @@ function PodsPage(props: { join: boolean }) {
   );
 }
 
+// Home's and a pod's right panels, as the app draws them (nothing loads in
+// the lab, so the brief and what loads from the server are absent).
+function RealPanels(props: { pod: boolean }) {
+  const noop = () => undefined;
+  const pod = {
+    channel_id: "lab", slug: "setters", name: "Setters", purpose: "The route setters plan resets and the comp.", visibility: "listed", seats: 6, price: null,
+    what_you_get: ["Weekly call with the host"], hosts: ["Maya Chen"], can_manage: true, can_edit: true, requests: [{ user_id: "theo", name: "Theo Park", status: "pending" }],
+    next_call: { event_id: "e", title: "Setters call", starts_at: new Date(Date.now() + 2 * 86_400_000).toISOString(), url: "https://example.com", recurrence_frequency: "weekly" },
+    members: [{ user_id: "maya", name: "Maya Chen", is_host: true, payment: { state: "added", until: null } }, { user_id: "priya", name: "Priya Raman", is_host: false, payment: { state: "added", until: null } }],
+    my_membership: { state: "added", until: null, amount_base_units: 0, currency: "usd" },
+  } as any;
+  const snapshot = { memberCount: 62, newMembers: { count: 1, names: ["Priya"] }, activity: { posts: 4, replies: 9, activePeople: 5 }, week: { joined: 3, activePeople: 21 },
+    busiest: null, highlight: null, unanswered: [], quietNewcomers: { count: 0, names: [] }, joinRequestsPending: 2, upcomingEvents: [] } as any;
+  const presence = { online_count: 2, online_faces: [{ user_id: "n", display_name: "Neil McDevitt" }, { user_id: "m", display_name: "Maya Chen" }] } as any;
+  return (
+    <KitApp view="wins" host fillWindow scale={labScale()} banner={BANNER} bannerPosition="72% 38%" aura={0.08}>
+      <HostSide />
+      <Main><Top /></Main>
+      {props.pod ? <KitPodRail session={null} communityId="lab" pod={pod} onChanged={noop} /> : (
+        <Rail index={1} label="Home">
+          <KitHomeRail session={null} communityId="lab" audience="host" snapshot={snapshot} presence={presence} now={Date.now()}
+            onOpenEvents={noop} onOpenChannelByName={noop} onOpenMembers={noop} onOpenKnowledge={noop} />
+        </Rail>
+      )}
+    </KitApp>
+  );
+}
+
 // ?scale=1.25 draws the lab larger, to try a size for big monitors.
 function labScale(): number {
   if (typeof window === "undefined") return 1;
@@ -281,5 +311,5 @@ function labScale(): number {
 
 export function DesignLab() {
   const page = typeof window === "undefined" ? "" : new URLSearchParams(window.location.search).get("page");
-  return page === "channel" ? <HostChannel /> : page === "brief" ? <BriefPanels /> : page === "pods" ? <PodsPage join={false} /> : page === "pods-join" ? <PodsPage join /> : <HostHomeQuiet />;
+  return page === "channel" ? <HostChannel /> : page === "brief" ? <BriefPanels /> : page === "pods" ? <PodsPage join={false} /> : page === "home-panel" ? <RealPanels pod={false} /> : page === "pod-panel" ? <RealPanels pod /> : page === "pods-join" ? <PodsPage join /> : <HostHomeQuiet />;
 }

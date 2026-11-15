@@ -117,7 +117,8 @@ signals, a fixed output shape, and a cost cap. v0 has three:
   An area nobody looks at is never summarised. An unchanged area is never
   re-summarised.
 - **Fallback**: when AI is off, the budget is spent, or the call fails, the page
-  shows the deterministic lines (today's `shared/communityHomeToday.ts`).
+  shows no summary (Home's code-built Today lines went on Nov 15 2026, when the
+  guide's brief took their place).
 - Stored in one table `communityAreaSummaries` (community, area, audience,
   text, moment ids, input watermark, cost, written at).
 
