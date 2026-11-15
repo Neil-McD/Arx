@@ -8,6 +8,7 @@ import { listCloudCommunityEvents, type CloudCommunityEvent } from "../../../../
 import type { CommunityPresenceSummary } from "../../../../shared/communityTypes";
 import { eventRepeatWord, featuredEventLabel, splitCommunityEvents } from "../components/communityEventsList";
 import { eventClock, eventPlaceWord } from "./KitEventsList";
+import { onCommunityEventsChanged } from "../../../../shared/communityEventsChanged";
 import { cx, Sec, Sep, TextLink } from "./kit";
 
 const LOOKAHEAD_MS = 14 * 86_400_000;
@@ -26,6 +27,9 @@ export function KitNextEvent(props: {
   quietWhenNone?: boolean;
 }) {
   const [event, setEvent] = useState<CloudCommunityEvent | null | undefined>(undefined);
+  // Bumped when an event is added, changed or cancelled anywhere in the app.
+  const [changed, setChanged] = useState(0);
+  useEffect(() => onCommunityEventsChanged(() => setChanged((count) => count + 1)), []);
   useEffect(() => {
     let cancelled = false;
     const start = new Date(props.now - 6 * 3_600_000).toISOString();
@@ -35,7 +39,7 @@ export function KitNextEvent(props: {
       .catch(() => { if (!cancelled) setEvent(null); });
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [props.session, props.communityId]);
+  }, [props.session, props.communityId, changed]);
 
   const label = event ? featuredEventLabel(event, props.now) : null;
   if (props.quietWhenNone && !(event && label)) return null;

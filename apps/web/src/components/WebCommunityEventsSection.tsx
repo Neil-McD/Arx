@@ -1,6 +1,7 @@
 import { CommunityPageHeader, CommunityPageRail } from "./CommunityPageHeader";
 import { KitEventsList } from "../v1/KitEventsList";
 import { KitEventForm } from "../v1/KitEventForm";
+import { announceCommunityEventsChanged } from "../../../../shared/communityEventsChanged";
 import { isDesignV1Active } from "../../../../shared/designSystem";
 import { splitCommunityEvents } from "./communityEventsList";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
@@ -484,7 +485,7 @@ export function WebCommunityEventsSection(props: WebCommunityEventsSectionProps)
         : `Cancel "${event.title}"? This will remove it from events.`,
     );
     if (!confirmed) return;
-    void actions.cancelEvent(event.parent_event_id, currentRange);
+    void actions.cancelEvent(event.parent_event_id, currentRange).then((done) => { if (done) announceCommunityEventsChanged(); });
   };
 
   const showMonth = (date: Date) => {
@@ -544,6 +545,7 @@ export function WebCommunityEventsSection(props: WebCommunityEventsSectionProps)
       currentRange,
     );
     setIsSaving(false);
+    if (didSave) announceCommunityEventsChanged();
     return didSave;
   };
 
@@ -587,7 +589,7 @@ export function WebCommunityEventsSection(props: WebCommunityEventsSectionProps)
         timeLabel={formatEventTime} calendarUrl={buildGoogleCalendarUrl}
         form={eventForm} editingId={editingEventId}
         onNew={() => openNewEvent(null)} onEdit={openEditEvent}
-        onCancel={(event) => actions.cancelEvent(event.parent_event_id, currentRange)}
+        onCancel={async (event) => { if (await actions.cancelEvent(event.parent_event_id, currentRange)) announceCommunityEventsChanged(); }}
         onSetPublic={(event, isPublic) => saveEventDraft({ ...makeDraftFromEvent(event), visibility: isPublic ? "public" : "members" }, event.parent_event_id)}
         renderRail={(rail) => <CommunityPageRail label="This event">{rail}</CommunityPageRail>} />
     );
