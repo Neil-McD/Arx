@@ -232,6 +232,8 @@ export async function executeRetrievalHarnessTool(params: {
   args: Record<string, unknown>;
   evidenceSurface?: CommunityEvidenceSurface;
   communityBoundConversation?: boolean;
+  // The pod a guide run started in (community concierge only).
+  podRoomId?: string | null;
   signal?: AbortSignal;
 }): Promise<NativeToolExecutionResult> {
   let normalizedArgs: Record<string, unknown>;
@@ -331,6 +333,7 @@ export async function executeRetrievalHarnessTool(params: {
       }
     }
     const execution = await executePolynetCanonicalTool({
+      ...(communityOwned && params.podRoomId ? { podRoomId: params.podRoomId } : {}),
       toolCallId: params.toolCallId,
       communityBoundConversation: params.communityBoundConversation,
       runId: params.runId,

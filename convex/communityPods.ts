@@ -40,12 +40,12 @@ async function viewerOf(ctx: Ctx, authSubject: string | undefined, communityId: 
   return { userId, actor };
 }
 
-async function podRecord(ctx: Ctx, communityId: any, channelId: any) {
+export async function podRecord(ctx: Ctx, communityId: any, channelId: any) {
   return await ctx.db.query("communityPods")
     .withIndex("by_community_channel", (q: any) => q.eq("communityId", communityId).eq("channelId", channelId)).first();
 }
 
-async function memberGrants(ctx: Ctx, channelId: any) {
+export async function memberGrants(ctx: Ctx, channelId: any) {
   return (await ctx.db.query("communityChannelParticipants")
     .withIndex("by_channel_principal", (q: any) => q.eq("channelId", channelId)).take(MEMBERS_CAP))
     .filter((row: any) => row.status === "active" && String(row.principalKey).startsWith("user:"));
@@ -60,7 +60,7 @@ async function activePodRoom(ctx: Ctx, communityId: any, channelId: any) {
   return channel;
 }
 
-function isHost(record: any, userId: any): boolean {
+export function isHost(record: any, userId: any): boolean {
   return Boolean(record?.hostUserIds?.some((id: any) => String(id) === String(userId)));
 }
 
@@ -73,7 +73,7 @@ async function requirePodManager(ctx: Ctx, authSubject: string | undefined, comm
   return { userId, actor, channel, record };
 }
 
-async function hostNames(ctx: Ctx, record: any, names: Map<string, string>) {
+export async function hostNames(ctx: Ctx, record: any, names: Map<string, string>) {
   const list: string[] = [];
   for (const id of (record?.hostUserIds ?? []).slice(0, 5)) list.push(await displayName(ctx, id, names));
   return list;

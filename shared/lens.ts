@@ -14,8 +14,9 @@
 // Moderating (reviewing join requests, removing posts) is a permission a
 // member or builder may hold through their own AI, not a lens.
 //
-// Scope (community, a pod, the person's own /me) is the next step: pods are
-// not mounted yet, so every lens here sees the community scope.
+// Scope: every lens sees the community. The guide working inside a pod (tagged
+// in its room) also sees that one pod: its facts and its room, and no other
+// pod. People and builders see the pods their own access lets them enter.
 
 import type { PolynetPrincipalKind, PolynetResolvedAuthority } from "./polynetAuthority.ts";
 
@@ -39,6 +40,8 @@ export type Lens = {
   // Moderation permissions, held only through someone's own AI.
   reviewsJoins: boolean;
   moderatesPosts: boolean;
+  // The pod (its room's id) the guide is working in, for this run only.
+  podRoomId: string | null;
 };
 
 export const LENS_FAMILY: Record<LensName, LensFamily | null> = {
@@ -57,6 +60,8 @@ export function resolveLens(args: {
   principalKind: PolynetPrincipalKind;
   evidenceSurface: string;
   authority: Pick<PolynetResolvedAuthority, "canUseBuilderProjection" | "canReviewJoinRequests" | "canModerateContent">;
+  // Set by the server for a guide run that started in a pod's room.
+  podRoomId?: string | null;
 }): Lens {
   const builder = args.authority.canUseBuilderProjection === true;
   let name: LensName;
@@ -73,6 +78,7 @@ export function resolveLens(args: {
     family: LENS_FAMILY[name],
     reviewsJoins: ownAi && args.authority.canReviewJoinRequests === true,
     moderatesPosts: ownAi && args.authority.canModerateContent === true,
+    podRoomId: name === "guide_public" && args.podRoomId ? String(args.podRoomId) : null,
   };
 }
 
@@ -85,7 +91,8 @@ export type LensView =
   | "presence"            // presence.json
   | "memory_notes"        // memory.md and memory/: what the guide knows
   | "builder_directory"   // builder/ (join requests for moderators)
-  | "builder_records";    // builder/community.json, builder/resources/
+  | "builder_records"     // builder/community.json, builder/resources/
+  | "pods";               // pods/ and pods/<slug>/pod.md (inside or outside, by access)
 
 const MEMBERS_AND_BUILDERS: LensName[] = ["member_private", "member_own_ai", "member_site", "builder_private", "builder_own_ai"];
 const PEOPLE: LensName[] = [...MEMBERS_AND_BUILDERS, "guide_public"];
@@ -104,6 +111,8 @@ export const LENS_READS: Record<LensView, LensName[]> = {
   memory_notes: ["guide_public", "member_private", "builder_private", "builder_own_ai"],
   builder_directory: BUILDERS,
   builder_records: BUILDERS,
+  // Each lens sees the pods its access allows (convex/communityPodFacts.ts).
+  pods: PEOPLE,
 };
 
 // What a lens may do: polynet_call operations.

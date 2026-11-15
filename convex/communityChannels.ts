@@ -346,6 +346,8 @@ export const resolveCommunityChannelBySlugInternal = internalQuery({
     communityId: v.id("communities"),
     slug: v.string(),
     actorKind: v.optional(channelActorKindValidator),
+    // The pod a guide run started in: its room opens to that run, no other.
+    podRoomId: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const actor = await resolveCommunityChannelActor({
@@ -364,7 +366,8 @@ export const resolveCommunityChannelBySlugInternal = internalQuery({
     }
     // Broad community-agent repository lookup remains shared-only, even when
     // that agent has an explicit grant for an originating private thread.
-    if (args.actorKind === "community_agent" && channel.accessMode !== "all_members") return null;
+    if (args.actorKind === "community_agent" && channel.accessMode !== "all_members" &&
+        !(args.podRoomId && String(args.podRoomId) === String(channel._id))) return null;
     const capabilities = await getCommunityChannelCapabilities({ ctx, channel, actor });
     return capabilities.canRead ? { ...mapCommunityChannelForRepository(channel), capabilities } : null;
   },
