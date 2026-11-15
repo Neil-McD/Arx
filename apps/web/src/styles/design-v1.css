@@ -1497,13 +1497,63 @@
   color: var(--text-ink-primary);
 }
 
+/* A thread reads like the channel it came from (Nov 14): the same avatar,
+   name-and-time line and text as a message in the feed (the kit's row:
+   36px avatar, 12px gap, 13px name, 12px time, 15px text), and it gets a
+   little more room than a page's right column. */
+@media (min-width: 900px) {
+  :root[data-design="v1"] .community-interaction-projection.has-drawer {
+    grid-template-columns: minmax(0, 1fr) clamp(320px, 30vw, 480px);
+  }
+}
+:root[data-design="v1"] .community-interaction-thread-drawer:not(.community-interaction-thread-page) .community-interaction-drawer-root {
+  padding: 8px 24px;
+}
+:root[data-design="v1"] .community-interaction-thread-drawer:not(.community-interaction-thread-page) .community-interaction-reply-list {
+  padding: 0 12px 24px;
+}
+:root[data-design="v1"] .community-interaction-thread-drawer .community-interaction-thread-anchor {
+  grid-template-columns: 36px minmax(0, 1fr);
+  gap: 12px;
+}
+:root[data-design="v1"] .community-interaction-thread-drawer .community-interaction-thread-anchor > .community-interaction-avatar-hover,
+:root[data-design="v1"] .community-interaction-thread-drawer .community-interaction-thread-anchor > .community-interaction-avatar-hover > .community-interaction-avatar-trigger,
+:root[data-design="v1"] .community-interaction-thread-drawer .community-interaction-thread-anchor > .community-interaction-avatar-hover .community-interaction-avatar {
+  width: 36px;
+  height: 36px;
+}
+:root[data-design="v1"] .community-interaction-thread-drawer .community-interaction-reply {
+  grid-template-columns: 36px minmax(0, 1fr);
+  gap: 12px;
+  padding: 8px 12px;
+}
+:root[data-design="v1"] .community-interaction-thread-drawer .community-interaction-meta-row {
+  flex-wrap: nowrap;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--text-faint);
+  white-space: nowrap;
+}
+:root[data-design="v1"] .community-interaction-thread-drawer .community-interaction-author {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+:root[data-design="v1"] .community-interaction-thread-drawer .community-interaction-body {
+  font-size: 15px;
+  line-height: 22.2px;
+}
+
 /* The post and its replies take the room; the reply box stays at the bottom. */
 :root[data-design="v1"] .community-interaction-thread-drawer:not(.community-interaction-thread-page) .community-interaction-drawer-scroll {
   flex: 1 1 auto;
 }
 
 :root[data-design="v1"] .community-interaction-thread-drawer:not(.community-interaction-thread-page) .community-interaction-drawer-composer {
-  padding: 0 12px 12px;
+  padding: 0 24px 18px;
 }
 
 /*
