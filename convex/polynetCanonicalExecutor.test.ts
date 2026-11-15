@@ -218,7 +218,7 @@ const modules = import.meta.glob([
   "./communityOntologyCards.ts",
   "./communitySearchDocs.ts",
   "./communityMemberTimeline.ts",
-  "./communityHandbook.ts", "./communityNotes.ts", "./communityLessonProgress.ts", "./memberWriteRateLimit.ts", "./communityLifecycle.ts", "./communityOperations.ts", "./communityPeople.ts", "./userProfileProjection.ts",
+  "./communityHandbook.ts", "./communityNotes.ts", "./communityMemory.ts", "./communityLessonProgress.ts", "./memberWriteRateLimit.ts", "./communityLifecycle.ts", "./communityOperations.ts", "./communityPeople.ts", "./userProfileProjection.ts",
   "./communityAccessQueries.ts",
   "./communityAdmin.ts",
   "./email.ts",

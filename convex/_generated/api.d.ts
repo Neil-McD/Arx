@@ -29,6 +29,7 @@ import type * as communityAgentChannelAccess from "../communityAgentChannelAcces
 import type * as communityAgentConcierge from "../communityAgentConcierge.js";
 import type * as communityAgentConciergeCore from "../communityAgentConciergeCore.js";
 import type * as communityAgentContext from "../communityAgentContext.js";
+import type * as communityAgentRun from "../communityAgentRun.js";
 import type * as communityAgentServeWorker from "../communityAgentServeWorker.js";
 import type * as communityAppJoin from "../communityAppJoin.js";
 import type * as communityAppSales from "../communityAppSales.js";
@@ -77,6 +78,7 @@ import type * as communityMemberTimeline from "../communityMemberTimeline.js";
 import type * as communityMembershipContextCore from "../communityMembershipContextCore.js";
 import type * as communityMembershipLifecycle from "../communityMembershipLifecycle.js";
 import type * as communityMemory from "../communityMemory.js";
+import type * as communityMemoryReview from "../communityMemoryReview.js";
 import type * as communityMentionBroadcasts from "../communityMentionBroadcasts.js";
 import type * as communityMentionEmailDelivery from "../communityMentionEmailDelivery.js";
 import type * as communityMentionEmails from "../communityMentionEmails.js";
@@ -247,6 +249,7 @@ declare const fullApi: ApiFromModules<{
   communityAgentConcierge: typeof communityAgentConcierge;
   communityAgentConciergeCore: typeof communityAgentConciergeCore;
   communityAgentContext: typeof communityAgentContext;
+  communityAgentRun: typeof communityAgentRun;
   communityAgentServeWorker: typeof communityAgentServeWorker;
   communityAppJoin: typeof communityAppJoin;
   communityAppSales: typeof communityAppSales;
@@ -295,6 +298,7 @@ declare const fullApi: ApiFromModules<{
   communityMembershipContextCore: typeof communityMembershipContextCore;
   communityMembershipLifecycle: typeof communityMembershipLifecycle;
   communityMemory: typeof communityMemory;
+  communityMemoryReview: typeof communityMemoryReview;
   communityMentionBroadcasts: typeof communityMentionBroadcasts;
   communityMentionEmailDelivery: typeof communityMentionEmailDelivery;
   communityMentionEmails: typeof communityMentionEmails;

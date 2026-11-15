@@ -1626,6 +1626,9 @@ export default defineSchema({
       evidenceRefs: v.optional(v.array(v.string())),
     })),
     runId: v.optional(v.id("agentWorkRuns")),
+    // The review that wrote the "before" version, so an undo hands the note
+    // back to it.
+    previousRunId: v.optional(v.id("agentWorkRuns")),
     actorUserId: v.optional(v.id("users")),
     undoneAt: v.optional(v.number()),
     createdAt: v.number(),

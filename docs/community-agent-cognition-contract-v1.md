@@ -2444,22 +2444,12 @@ member's agent turn reliably sees it, reads it, and cites it.
   shared post in a small funded community becomes memory within roughly 6–12
   hours. The daily Steward cycle cap, owner off-switch, funding gate and run
   reservation ceiling are unchanged.
-- Member-agent recall: before each `member_agent_dock` turn with an explicit
-  community and `polynet_search` available, the server runs one canonical
-  `polynet_search` on `/communities/<slug>/memory/` with the latest member text
-  (at most 500 characters, top three results) under the member's current
-  authority and mount. It writes the normal `member_agent_dock` retrieval
-  receipt and a `community_memory_recall` run event (status, result count,
-  memory paths, receipt id).
-- Results enter the prompt as the `community_memory_recall` section with
-  `evidence` authority: titles, type, grade, applies-when and exact paths only,
-  framed as data, not instructions. The model must `polynet_read` an entry
-  before relying on it and cite its path; the read writes its own receipt with
-  the injected node, preserving the receipt chain above.
-- Recall never blocks a turn. Search failure, empty memory, trivial messages
-  and non-member-agent surfaces render no section. The Concierge and external
-  MCP keep model-initiated search for now.
-- Recall receipts carry no feedback, so they do not change metabolizer scores.
+- Member-agent recall was replaced on 2026-11-15 (docs/specs/agent-system-slice-1.md,
+  step 5): no notes are pushed into a turn by a search any more. Every guide turn
+  (the member's dock and the tagged guide) loads `memory.md`, the community's
+  short memory kept by the guide's nightly review, beside the card and the
+  handbook, framed as data. Whole notes are read with `polynet_read` when they
+  help, under the asker's own authority.
 
 ## Thirty-Fifth Implementation Slice: Community Card In Every Ask
 

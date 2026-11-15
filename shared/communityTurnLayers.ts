@@ -9,12 +9,15 @@ export const COMMUNITY_TURN_LAYER_MAX_CHARS = 6_000;
 
 export type CommunityTurnLayerReader = (
   path: string,
-  layer: "community_card" | "community_handbook",
+  layer: "community_card" | "community_handbook" | "community_memory",
 ) => Promise<{ status: string; outputText: string }>;
 
 export type CommunityTurnLayers = {
   communityCardMd: string | null;
   communityHandbookMd: string | null;
+  // memory.md: what the community has learned, kept short by the guide's
+  // nightly review. Everything else in memory/ is read when it helps.
+  communityMemoryMd: string | null;
   cardStatus: "loaded" | "empty" | "error" | "skipped";
 };
 
@@ -35,8 +38,8 @@ export async function loadCommunityTurnLayers(args: {
   read: CommunityTurnLayerReader;
 }): Promise<CommunityTurnLayers> {
   const slug = String(args.communitySlug ?? "").trim();
-  if (!args.contract || !slug) return { communityCardMd: null, communityHandbookMd: null, cardStatus: "skipped" };
-  const load = async (file: "community.md" | "handbook.md", layer: "community_card" | "community_handbook") => {
+  if (!args.contract || !slug) return { communityCardMd: null, communityHandbookMd: null, communityMemoryMd: null, cardStatus: "skipped" };
+  const load = async (file: "community.md" | "handbook.md" | "memory.md", layer: "community_card" | "community_handbook" | "community_memory") => {
     try {
       const read = await args.read(`/communities/${slug}/${file}`, layer);
       return read.status === "ok" ? { ok: true, body: parseCommunityTurnLayerBody(read.outputText) } : { ok: false, body: null };
@@ -46,9 +49,11 @@ export async function loadCommunityTurnLayers(args: {
   };
   const card = args.contract.uses.communityCard ? await load("community.md", "community_card") : { ok: false, body: null };
   const handbook = args.contract.uses.handbook ? await load("handbook.md", "community_handbook") : { ok: false, body: null };
+  const memory = args.contract.uses.communityCard ? await load("memory.md", "community_memory") : { ok: false, body: null };
   return {
     communityCardMd: card.body,
     communityHandbookMd: handbook.body,
+    communityMemoryMd: memory.body,
     cardStatus: !args.contract.uses.communityCard ? "skipped" : card.body ? "loaded" : card.ok ? "empty" : "error",
   };
 }

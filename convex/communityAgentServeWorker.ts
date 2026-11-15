@@ -1,9 +1,7 @@
 import { buildCommunityTurnContract, checkCommunityTurnToolCall, summarizeCommunityTurnContract, isCommunityTurnRefusalCode } from "../shared/communityTurnContract";
 import { loadCommunityTurnLayers } from "../shared/communityTurnLayers";
 import { founderProviderRequestUsageValidator } from "./founderPlanPricing";
-import { createFounderInferenceUsageTotals, founderProviderRequests, observeFounderProviderResult } from "./founderInferenceUsage";
-import { assertPaidLuna6ProviderHeadroom, founderInferenceBudgetFailureCode } from "./founderInferenceBudget";
-import { COMMUNITY_OWNER_FUNDED_MODEL_ID } from "../shared/founderInference";
+import { founderProviderRequests } from "./founderInferenceUsage";
 import { internal } from "./_generated/api";
 import {
   internalAction,
@@ -12,7 +10,6 @@ import {
 } from "./_generated/server";
 import { requireLiveCommunityForCognitionWrite } from "./communityCognitionLifecycle";
 import { v } from "convex/values";
-import { runOpenAiNativeToolCompletion } from "./openAiNativeToolCompletion";
 import {
   communityMembershipRowIsActive,
   getUniqueCommunityMembershipByPair,
@@ -23,19 +20,12 @@ import {
 } from "./communityCore";
 import { CANONICAL_COMMUNITY_AGENT_KEY } from "../shared/communityAgentToolProtocol";
 import {
-  buildCommunityAgentConciergeFunctionTools,
   isCommunityAgentConciergeToolName,
-  normalizeCommunityAgentConciergeToolArguments,
   type CommunityAgentConciergeToolName,
 } from "../shared/communityAgentConciergeTools";
-import type { NativeToolAwareCompletionSuccess } from "../shared/nativeToolProtocol";
-import { runPiRuntimeKernel } from "../shared/piRuntimeKernel";
-import {
-  DEFAULT_RUNTIME_KERNEL_BUDGET,
-  type RuntimeKernelFailureInput,
-  type RuntimeKernelToolExecutionResult,
-} from "../shared/runtimeKernelTypes";
+import type { RuntimeKernelToolExecutionResult } from "../shared/runtimeKernelTypes";
 import { executeRetrievalHarnessTool } from "./runtimeAgentLoop";
+import { runFundedCommunityAgent } from "./communityAgentRun";
 import {
   COMMUNITY_AGENT_SERVE_LEASE_MS,
   COMMUNITY_AGENT_SERVE_MAX_ATTEMPTS,
@@ -60,14 +50,9 @@ import {
   settleAuthorizedFounderInferenceReceipt,
 } from "./founderInferenceCore";
 import {
-  claimCommunityInferenceFundingSession,
   failCommunityInferenceFundingSession,
-  markCommunityInferenceFundingSessionProviderStarted,
-  providerFailureIsKnownPreSpend,
   type CommunityInferenceFundingSession,
 } from "./founderInferenceRuntime";
-import { buildRuntimeInputBudgetEvidence } from "../shared/runtimeInputBudget.ts";
-import { buildRuntimeContextProjectionEvidence } from "../shared/providerContextWindow.ts";
 import {
   COMMUNITY_AGENT_THREAD_CONTEXT_MAX_CANDIDATE_REPLIES,
   COMMUNITY_AGENT_THREAD_CONTEXT_MAX_TURNS,
@@ -389,56 +374,6 @@ function createServeRunEventRecorder(args: {
     record,
     recordRequired: persist,
   };
-}
-
-function unsupportedConciergeToolFailure(
-  toolName: unknown,
-): RuntimeKernelFailureInput {
-  const pendingToolName = String(toolName ?? "").trim();
-  return {
-    ok: false,
-    status: 502,
-    code: "unsupported_concierge_tool",
-    stopReason: "invalid_model_output",
-    message: pendingToolName
-      ? `Community concierge returned unsupported tool call "${pendingToolName}".`
-      : "Community concierge returned an unsupported tool call.",
-    ...(pendingToolName ? { pendingToolName } : {}),
-  };
-}
-
-function coerceConciergeCompletion(
-  completion:
-    | NativeToolAwareCompletionSuccess<string>
-    | RuntimeKernelFailureInput,
-):
-  | NativeToolAwareCompletionSuccess<CommunityAgentConciergeToolName>
-  | RuntimeKernelFailureInput {
-  if (completion.ok === false) return completion;
-  if (completion.type === "tool_call") {
-    if (!isCommunityAgentConciergeToolName(completion.toolName)) {
-      return unsupportedConciergeToolFailure(completion.toolName);
-    }
-    return {
-      ...completion,
-      toolName: completion.toolName,
-    };
-  }
-  if (completion.type === "tool_calls") {
-    for (const toolCall of completion.toolCalls) {
-      if (!isCommunityAgentConciergeToolName(toolCall.toolName)) {
-        return unsupportedConciergeToolFailure(toolCall.toolName);
-      }
-    }
-    return {
-      ...completion,
-      toolCalls: completion.toolCalls.map((toolCall) => ({
-        ...toolCall,
-        toolName: toolCall.toolName as CommunityAgentConciergeToolName,
-      })),
-    };
-  }
-  return completion;
 }
 
 const SERVE_RATE_LIMITED_CODES = new Set([
@@ -1843,6 +1778,7 @@ export const processQueuedCommunityAgentServeRequestsInternal = internalAction({
         });
         context.communityCardMd = layers.communityCardMd;
         context.communityHandbookMd = layers.communityHandbookMd;
+        context.communityMemoryMd = layers.communityMemoryMd;
       }
       const servePromptBundle = buildCommunityAgentServePromptBundle(context);
       const initialMessages = servePromptBundle.messages;
@@ -1893,168 +1829,39 @@ export const processQueuedCommunityAgentServeRequestsInternal = internalAction({
         requestId,
         attempt: context.request.attempt,
       });
-      const conciergeProviderTools = buildCommunityAgentConciergeFunctionTools();
-      const receiptKey = communityAgentMentionReceiptKey(requestId);
-      let usage = createFounderInferenceUsageTotals(COMMUNITY_OWNER_FUNDED_MODEL_ID);
-      let providerStarted = false;
-
-      let fundingSession: CommunityInferenceFundingSession | null = null;
-
-      let completion: any;
-      try {
-        await ctx.runQuery(internalRefs.communityAgentChannelAccess.authorizeServeToolsInternal, {
-          requestId, expectedAttempt,
-        });
-        const admittedModelId = await ctx.runQuery(internalRefs.founderInference.resolveCommunityInferenceModelInternal, {
-          communityId: context.request.communityId, receiptKey,
-          surface: "community_agent_mention",
-        });
-        usage = createFounderInferenceUsageTotals(admittedModelId);
-        completion =
-          await runPiRuntimeKernel<CommunityAgentConciergeToolName>({
-          messages: initialMessages,
-          budget: {
-            ...DEFAULT_RUNTIME_KERNEL_BUDGET,
-            maxToolSteps: SERVE_TOOL_LOOP_MAX_STEPS,
-            maxConsecutiveFailures: 2,
-            maxNoProgressSteps: 2,
-          },
-          inputBudget: {
-            transport: "openai_responses",
-            modelRef: `openai/${admittedModelId}`,
-            reservedOutputTokens: SERVE_REPLY_MAX_TOKENS,
-            toolSchemas: conciergeProviderTools,
-            recordPlan: async (budgetPlan) => {
-              await eventRecorder.recordRequired({
-                kind: "input_budget",
-                status: budgetPlan.plan.fits ? "fits" : "rejected",
-                errorCode: budgetPlan.plan.failureCode ?? undefined,
-                content: JSON.stringify(
-                  buildRuntimeInputBudgetEvidence(budgetPlan),
-                ),
-              });
-            },
-            recordProjection: async (projection) => {
-              await eventRecorder.recordRequired({
-                kind: "context_projection",
-                status: "projected",
-                content: JSON.stringify(
-                  buildRuntimeContextProjectionEvidence(projection),
-                ),
-              });
-            },
-          },
-          runCompletion: async (kernelMessages, options) => {
-            let toolCompletion;
-            try {
-              // A previous tool/provider wait may outlive a participant grant.
-              await ctx.runQuery(internalRefs.communityAgentChannelAccess.authorizeServeToolsInternal, {
-                requestId, expectedAttempt,
-              });
-              if (!fundingSession) {
-                fundingSession = await claimCommunityInferenceFundingSession({
-                  ctx,
-                  receiptKey,
-                  sourceRunId: `community-agent-serve:${normalizeIdValue(requestId)}`,
-                  communityId: context.request.communityId,
-                  actorUserId: context.request.requesterUserId,
-                  surface: "community_agent_mention",
-                  admission: context.funding,
-                });
-              }
-              if (fundingSession.modelId !== admittedModelId) throw new Error("founder_inference_model_changed_before_start");
-              assertPaidLuna6ProviderHeadroom({
-                session: fundingSession, usage, maxOutputTokens: SERVE_REPLY_MAX_TOKENS,
-              });
-              if (!providerStarted) {
-                await markCommunityInferenceFundingSessionProviderStarted({
-                  ctx,
-                  session: fundingSession,
-                });
-                providerStarted = true;
-              }
-              toolCompletion = await runOpenAiNativeToolCompletion({
-                modelId: fundingSession.modelId,
-                messages: kernelMessages,
-                maxTokens: SERVE_REPLY_MAX_TOKENS,
-                tools: conciergeProviderTools,
-                ...(options?.toolChoice ? { toolChoice: options.toolChoice } : {}),
-                parallelToolCalls: false,
-                promptCacheKey: turnContract?.cacheKey ?? `pn:${normalizeIdValue(context.request.communityId)}:serve`,
-              });
-            } catch (error) {
-              if (providerStarted && !founderInferenceBudgetFailureCode(error)) usage.complete = false;
-              throw error;
-            }
-            observeFounderProviderResult(usage, toolCompletion,
-              toolCompletion.ok === false && providerFailureIsKnownPreSpend(toolCompletion.code));
-            return coerceConciergeCompletion(toolCompletion);
-          },
-            normalizeToolArguments:
-              normalizeCommunityAgentConciergeToolArguments,
-          onToolStepStart: async ({ step }) => {
-            await eventRecorder.flushAll();
-            await eventRecorder.record({
-              kind: "tool_call",
-              toolName: String(step.toolName),
-              status: "running",
-              content: String(step.toolName),
-            });
-          },
-          onToolStepFinish: async ({ step, toolResult }) => {
-            // A call the turn's rules refused (draft-only, a private source
-            // before a note) is logged as refused, as an Ask logs it.
-            const refused = isCommunityTurnRefusalCode(toolResult.errorCode);
-            await eventRecorder.record({
-              kind: "tool_result",
-              toolName: String(step.toolName),
-              status: refused ? "refused" : toolResult.status,
-              errorCode: toolResult.errorCode ?? undefined,
-                content:
-                  toolResult.status === "ok" ? "Tool completed" : refused ? "Tool call refused by the turn's rules" : "Tool failed",
-            });
-          },
-          executeTool: async ({ toolName, rawArguments }) => {
-            // The tag's reply is its only speech; a request to post becomes a draft in it.
-            const allowed = checkCommunityTurnToolCall(turnContract, toolName, rawArguments);
-            if (!allowed.ok) {
-              return { status: "error", exitCode: null, outputText: "", errorCode: allowed.errorCode, errorMessage: allowed.errorMessage };
-            }
-            const toolResult = await executeConciergeTool({
-              ctx,
-              context,
-              requestId,
-              toolName,
-              rawArguments,
-            });
-            return toolResult;
-          },
-        });
-      } catch (error) {
-        const failureCode = founderInferenceBudgetFailureCode(error) ?? (providerStarted
-          ? "provider_exception"
-          : boundedText(
-              error instanceof Error ? error.message : String(error),
-              ERROR_CODE_MAX_CHARS,
-            ) || "funding_authority_changed");
-        if (fundingSession) {
-          await failCommunityInferenceFundingSession({
-            ctx,
-            session: fundingSession,
-            promptTokens: usage.promptTokens,
-            completionTokens: usage.completionTokens,
-            providerRequests: founderProviderRequests(usage),
-            usageComplete: providerStarted ? usage.complete : true,
-            failureCode,
-            disposition: providerStarted ? "indeterminate" : "failed",
+      const run = await runFundedCommunityAgent({
+        ctx,
+        communityId: context.request.communityId,
+        actorUserId: context.request.requesterUserId,
+        surface: "community_agent_mention",
+        receiptKey: communityAgentMentionReceiptKey(requestId),
+        sourceRunId: `community-agent-serve:${normalizeIdValue(requestId)}`,
+        admission: context.funding,
+        messages: initialMessages,
+        maxOutputTokens: SERVE_REPLY_MAX_TOKENS,
+        maxToolSteps: SERVE_TOOL_LOOP_MAX_STEPS,
+        promptCacheKey: turnContract?.cacheKey ?? `pn:${normalizeIdValue(context.request.communityId)}:serve`,
+        recorder: eventRecorder,
+        // A previous tool/provider wait may outlive a participant grant.
+        beforeEachCompletion: async () => {
+          await ctx.runQuery(internalRefs.communityAgentChannelAccess.authorizeServeToolsInternal, {
+            requestId, expectedAttempt,
           });
-        }
-        await eventRecorder.flushAll();
-        await eventRecorder.record({
-          kind: "error",
-          errorCode: failureCode,
-          content: "The community agent could not complete this turn.",
-        });
+        },
+        // A call the turn's rules refused (draft-only, a private source
+        // before a note) is logged as refused, as an Ask logs it.
+        isRefusal: isCommunityTurnRefusalCode,
+        executeTool: async (toolName, rawArguments) => {
+          // The tag's reply is its only speech; a request to post becomes a draft in it.
+          const allowed = checkCommunityTurnToolCall(turnContract, toolName, rawArguments);
+          if (!allowed.ok) {
+            return { status: "error", exitCode: null, outputText: "", errorCode: allowed.errorCode, errorMessage: allowed.errorMessage };
+          }
+          return await executeConciergeTool({ ctx, context, requestId, toolName, rawArguments });
+        },
+      });
+      if (!run.ok) {
+        const failureCode = run.failureCode;
         // A tag over the AI rate limit still gets an answer in its thread, so
         // the member isn't left waiting on silence. No model ran, so no receipt.
         if (turnContract && SERVE_RATE_LIMITED_CODES.has(failureCode)) {
@@ -2068,71 +1875,22 @@ export const processQueuedCommunityAgentServeRequestsInternal = internalAction({
           }
         }
         await ctx.runMutation(
-          internalRefs.communityAgentServeWorker
-            .failCommunityAgentServeRequestInternal,
+          internalRefs.communityAgentServeWorker.failCommunityAgentServeRequestInternal,
           {
-          requestId,
-          expectedAttempt,
-          errorCode: failureCode,
-          errorMessage: "The community inference provider request failed.",
-          nowMs: Date.now(),
+            requestId,
+            expectedAttempt,
+            errorCode: failureCode,
+            errorMessage: "The community inference provider request failed.",
+            nowMs: Date.now(),
           },
         );
-        results.push({
-          request_id: normalizeIdValue(requestId),
-          status: "error",
-          error_code: failureCode,
-        });
+        results.push({ request_id: normalizeIdValue(requestId), status: "error", error_code: failureCode });
         continue;
       }
-      await eventRecorder.flushAll();
-      if ((completion as any)?.ok === false) {
-        const errorCode = (completion as any).code ?? "provider_error";
-        if (fundingSession) {
-          await failCommunityInferenceFundingSession({
-            ctx,
-            session: fundingSession,
-            promptTokens: usage.promptTokens,
-            completionTokens: usage.completionTokens,
-            providerRequests: founderProviderRequests(usage),
-            usageComplete: providerStarted ? usage.complete : true,
-            failureCode: errorCode,
-            disposition:
-              !providerStarted || providerFailureIsKnownPreSpend(errorCode)
-              ? "failed"
-              : "indeterminate",
-          });
-        }
-        await eventRecorder.record({
-          kind: "error",
-          errorCode: (completion as any).code ?? "provider_error",
-          content: "The community agent could not complete this turn.",
-        });
-        await ctx.runMutation(
-          internalRefs.communityAgentServeWorker
-            .failCommunityAgentServeRequestInternal,
-          {
-          requestId,
-          expectedAttempt,
-          errorCode: (completion as any).code ?? "provider_error",
-          errorMessage: "The community inference provider request failed.",
-          nowMs: Date.now(),
-          },
-        );
-        results.push({
-          request_id: normalizeIdValue(requestId),
-          status: "error",
-          error_code: (completion as any).code ?? "provider_error",
-        });
-        continue;
-      }
-
-      await eventRecorder.record({
-        kind: "final",
-        status: "completed",
-        content: String((completion as any).assistantText ?? ""),
-      });
-
+      const completion = { assistantText: run.assistantText };
+      const fundingSession: CommunityInferenceFundingSession | null = run.fundingSession;
+      const usage = run.usage;
+      const providerStarted = run.providerStarted;
       let finalized: any;
       const finalizedFundingSession = fundingSession as CommunityInferenceFundingSession | null;
       if (!finalizedFundingSession) {

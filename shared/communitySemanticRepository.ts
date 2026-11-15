@@ -17,6 +17,7 @@ export const POLYNET_SEMANTIC_ROOT_PATH = "/";
 export const POLYNET_COMMUNITY_PROFILE_PATH = "/community.md";
 export const POLYNET_MEMBERS_DIRECTORY_PATH = "/members/";
 export const COMMUNITY_HANDBOOK_PATH = "/handbook.md";
+export const COMMUNITY_MEMORY_INDEX_PATH = "/memory.md";
 export const MEMBER_TIMELINE_PATH = /^\/members\/([A-Za-z0-9_.-]{1,64})\/timeline\.md$/;
 // Who is online now, as JSON (a member read; never the community agent).
 export const POLYNET_PRESENCE_DOCUMENT_PATH = "/presence.json";
@@ -592,7 +593,9 @@ export function validatePolynetSemanticRepositoryOperationInput(args: {
       repositoryPath.localPath === POLYNET_PRESENCE_DOCUMENT_PATH ||
       /^\/members\/(?:by-user\/[A-Za-z0-9_-]+|[^/]+)\.json$/.test(repositoryPath.localPath) ||
       // A member's activity (members/<handle>/timeline.md) and the approved handbook too.
-      MEMBER_TIMELINE_PATH.test(repositoryPath.localPath) || repositoryPath.localPath === COMMUNITY_HANDBOOK_PATH) {
+      MEMBER_TIMELINE_PATH.test(repositoryPath.localPath) || repositoryPath.localPath === COMMUNITY_HANDBOOK_PATH ||
+      // The community's short memory (docs/specs/agent-system-slice-1.md).
+      repositoryPath.localPath === COMMUNITY_MEMORY_INDEX_PATH) {
       const validated = validateCommunitySemanticOperationInput({ ...args,
         path: "/community.md" });
       if (!validated.ok) return validated;

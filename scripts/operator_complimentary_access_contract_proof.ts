@@ -55,11 +55,16 @@ assert.match(
 );
 assert.match(
   worker,
-  /claimCommunityInferenceFundingSession\(\{[\s\S]*admission: context\.funding/,
+  /runFundedCommunityAgent\(\{[\s\S]*admission: context\.funding/,
+  "operator-funded community turns must hand their admission to the run entry",
+);
+assert.match(
+  read("convex/communityAgentRun.ts"),
+  /claimCommunityInferenceFundingSession\(\{[\s\S]*admission: args\.admission/,
   "operator-funded community turns must claim the canonical funding session",
 );
 assert.match(
-  worker,
+  read("convex/communityAgentRun.ts"),
   /markCommunityInferenceFundingSessionProviderStarted\(\{[\s\S]*runOpenAiNativeToolCompletion\(\{[\s\S]*modelId: fundingSession\.modelId/,
   "operator-funded community turns must fence provider start and use the authorized platform model",
 );
