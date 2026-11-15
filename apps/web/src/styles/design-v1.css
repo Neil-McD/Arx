@@ -2468,7 +2468,8 @@
   :root[data-design="v1"] .community-page-body > .community-page-header {
     grid-column: 1;
     grid-row: 1;
-    padding: 0 max(32px, calc((100% - var(--content-wide)) / 2 + 32px));
+    /* The title sits in one spot on every page, with or without a right column. */
+    padding: 0 56px;
   }
 
   :root[data-design="v1"] .community-page-body > .community-tab-scroll {
@@ -2483,10 +2484,6 @@
 
   :root[data-design="v1"] .community-page-body:has(.community-page-rail-content) {
     grid-template-columns: minmax(0, 1fr) var(--right-column-width);
-  }
-
-  :root[data-design="v1"] .community-page-body:has(.community-page-rail-content) > .community-page-header {
-    padding: 0 56px;
   }
 
   :root[data-design="v1"] .community-page-body > .community-tab-scroll {
@@ -2504,10 +2501,12 @@
     border-left: 1px solid var(--surface-raised-edge);
   }
 
-  /* With a right column the page sits on the 56px gutter, like a channel. */
-  :root[data-design="v1"] .community-page-body:has(.community-page-rail-content) > .community-tab-scroll > .web-community-centered-pane {
+  /* Every page sits on the 56px gutter, like a channel, whether or not it
+     has a right column: picking something (which opens the column) must not
+     move the page. Without a column the page stops at its reading width. */
+  :root[data-design="v1"] .community-page-body > .community-tab-scroll > .web-community-centered-pane {
     width: 100%;
-    max-width: none;
+    max-width: calc(var(--content-wide) + 112px);
     margin: 0;
     padding: 28px 56px 56px;
   }
