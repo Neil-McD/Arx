@@ -69,7 +69,7 @@ assert.match(paidToolRuntime, /authorizeFounderPaidToolFundingSession/);
 assert.match(paidToolRuntime, /markFounderPaidToolProviderStarted/);
 assert.doesNotMatch(paidToolRuntime, /beginFounderPaidToolFundingSession/);
 
-for (const toolName of ["web_crawl", "web_research"]) {
+for (const toolName of ["web_research"]) {
   const start = runtimeAgentLoop.indexOf(`if (params.toolName === "${toolName}")`);
   assert.notEqual(start, -1, `missing ${toolName} runtime branch`);
   const branch = runtimeAgentLoop.slice(start, start + 12_000);
@@ -87,15 +87,15 @@ assert.match(
 );
 assert.doesNotMatch(runtimeAgentLoop, /crypto\.randomUUID\(\)[\s\S]{0,200}provider_cost/);
 
-assert.match(communityResources, /export const crawlWebRoot: any = internalAction\(\{/);
-assert.doesNotMatch(
-  communityResources,
-  /processCommunitySourceCrawlJobInternal[\s\S]*authorizeFounderPaidToolFundingSession|processCommunitySourceCrawlJobInternal[\s\S]*settleFounderPaidToolFundingSession/,
-);
+// The crawl pipeline and the web_crawl tool are gone; web research is the one paid web tool.
+assert.doesNotMatch(communityResources, /crawlWebRoot|processCommunitySourceCrawlJobInternal/);
+assert.doesNotMatch(runtimeAgentLoop, /params\.toolName === "web_crawl"/);
 
 assert.match(
   runtimePolicy,
-  /web_research:[\s\S]*requiresCommunity: true[\s\S]*web_crawl:[\s\S]*requiresCommunity: true/,
+  /web_research:[\s\S]*requiresCommunity: true/,
+);
+assert.doesNotMatch(runtimePolicy, /web_crawl:/
 );
 assert.match(
   runtimeInvocationSurface,
@@ -103,7 +103,9 @@ assert.match(
 );
 assert.match(
   runtimeInvocationSurface,
-  /COMMUNITY_AGENT_DOCK_TOOL_NAME_SET[\s\S]*"web_research"[\s\S]*"web_crawl"/,
+  /COMMUNITY_AGENT_DOCK_TOOL_NAME_SET[\s\S]*"web_research"/,
+);
+assert.doesNotMatch(runtimeInvocationSurface, /"web_crawl"/
 );
 assert.doesNotMatch(providerPricing, /WEB_RESEARCH_CREDITS_PER_CALL/);
 assert.doesNotMatch(providerPricing, /priceWebResearchCredits/);

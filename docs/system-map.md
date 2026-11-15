@@ -166,8 +166,8 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
   `communityResourceConstants`, `communityResourceShared`,
   `communityResourceDirectory` (what the agent, MCP and builders read),
   `communityResourceChangesets` (staged builder edits and the health report),
-  `communitySourceFetch` (Polynet's URL fetcher, the crawler, text extraction) and
-  `communitySourceIngestion` (running ingestion, saving crawled pages);
+  `communitySourceFetch` (Polynet's URL fetcher and text extraction) and
+  `communitySourceIngestion` (running ingestion);
   `communityResourceContent`, `communityResourceEvidence*`,
   `communityResourceMemoryProjection`, `communitySourceUrlPolicy`,
   `communityBuilderKnowledgeSetup`, `communityLessonProgress` (lessons a member

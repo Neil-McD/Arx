@@ -2,26 +2,15 @@
 // turning HTML, text and uploaded files into readable text.
 import {
   type CommunityResourceLike,
-  normalizeIdValue,
-  normalizeName,
   normalizeOptionalFileKey,
   normalizeOptionalText,
   normalizeResourceSourceIngestionKind,
-  toIsoString,
 } from "./communityCore";
 import {
   requireSafeCommunitySourceFetcherEndpoint,
   requireSafeCommunitySourceUrl,
 } from "./communitySourceUrlPolicy";
-import type {
-  CommunitySourceCrawlerProvider,
-  CommunitySourcePageResult,
-} from "../shared/communitySourceCrawler";
 import {
-  COMMUNITY_RESOURCE_SOURCE_CRAWLER_DEFAULT_MAX_DEPTH,
-  COMMUNITY_RESOURCE_SOURCE_CRAWLER_DEFAULT_MAX_PAGES,
-  COMMUNITY_RESOURCE_SOURCE_CRAWLER_MAX_DEPTH,
-  COMMUNITY_RESOURCE_SOURCE_CRAWLER_MAX_PAGES,
   COMMUNITY_RESOURCE_SOURCE_INGESTION_MAX_BODY_CHARS,
   COMMUNITY_RESOURCE_SOURCE_INGESTION_MAX_BYTES,
   COMMUNITY_RESOURCE_SOURCE_INGESTION_MAX_REDIRECTS,
@@ -29,13 +18,7 @@ import {
   COMMUNITY_RESOURCE_SOURCE_INGESTION_USER_AGENT,
   COMMUNITY_RESOURCE_SOURCE_URL_FETCHER_ENDPOINT_ENV,
   COMMUNITY_RESOURCE_SOURCE_URL_FETCHER_SECRET_ENV,
-  COMMUNITY_RESOURCE_WEB_CRAWL_CONTEXT_DEFAULT_CHARS,
-  COMMUNITY_RESOURCE_WEB_CRAWL_CONTEXT_MAX_CHARS,
-  COMMUNITY_RESOURCE_WEB_CRAWL_CONTEXT_PAGE_CHARS,
 } from "./communityResourceConstants";
-import {
-  type CommunitySourceCrawlJobLike,
-} from "./communityResourceShared";
 
 function normalizeSourceString(value: unknown, maxLength = 2_000): string {
   return String(value ?? "").trim().slice(0, maxLength);
@@ -199,203 +182,6 @@ export async function fetchSourceUrlViaConfiguredFetcher(rawUrl: string): Promis
     title: normalizeOptionalText(payload.title, 240) ?? null,
     text,
     contentType,
-  };
-}
-
-export function normalizeSourceCrawlerProvider(): CommunitySourceCrawlerProvider {
-  return "simple";
-}
-
-export function getCommunitySourceCrawlerStatusValue() {
-  return {
-    ok: true,
-    kind: "community_source_crawler_status",
-    provider: "simple" as const,
-    configured: true,
-    default_max_pages: COMMUNITY_RESOURCE_SOURCE_CRAWLER_DEFAULT_MAX_PAGES,
-    default_max_depth: COMMUNITY_RESOURCE_SOURCE_CRAWLER_DEFAULT_MAX_DEPTH,
-    max_pages: COMMUNITY_RESOURCE_SOURCE_CRAWLER_MAX_PAGES,
-    max_depth: COMMUNITY_RESOURCE_SOURCE_CRAWLER_MAX_DEPTH,
-    missing: [] as string[],
-    code: null,
-    message: "Only the linked page will be read.",
-  };
-}
-
-export function normalizeSourceCrawlerLimit(raw: unknown, fallback: number, max: number): number {
-  const value = Math.floor(Number(raw));
-  if (!Number.isFinite(value) || value <= 0) return fallback;
-  return Math.min(value, max);
-}
-
-export function maybeSafeSourceCrawlerUrl(raw: unknown): string | null {
-  try {
-    return requireSafeSourceIngestionUrl(raw);
-  } catch {
-    return null;
-  }
-}
-
-export async function crawlSourceRootWithSimpleFetcher(args: {
-  rootUrl: string;
-}): Promise<CommunitySourcePageResult[]> {
-  const extracted = await fetchSourceUrlViaConfiguredFetcher(args.rootUrl);
-  const finalUrl = requireSafeSourceIngestionUrl(extracted.finalUrl);
-  return [{
-    requested_url: args.rootUrl,
-    final_url: finalUrl,
-    canonical_url: finalUrl,
-    root_url: args.rootUrl,
-    parent_url: null,
-    depth: 0,
-    title: extracted.title,
-    markdown: buildIngestedSourceBody({
-      title: extracted.title,
-      url: finalUrl,
-      text: extracted.text,
-    }),
-    links: [],
-    status: "ready",
-    error: null,
-  }];
-}
-
-export async function crawlSourceRootWithConfiguredProvider(args: {
-  rootUrl: string;
-}): Promise<{
-  provider: CommunitySourceCrawlerProvider;
-  pages: CommunitySourcePageResult[];
-}> {
-  const rootUrl = requireSafeSourceIngestionUrl(args.rootUrl);
-  const provider = normalizeSourceCrawlerProvider();
-  const pages = await crawlSourceRootWithSimpleFetcher({ rootUrl });
-  return { provider, pages };
-}
-
-export function normalizeWebCrawlStrategyProvider(raw: unknown): CommunitySourceCrawlerProvider | undefined {
-  const strategy = normalizeSourceString(raw, 20).toLowerCase();
-  if (strategy === "simple") return "simple";
-  if (strategy === "crawl") return "simple";
-  return undefined;
-}
-
-function normalizeWebCrawlContextBudget(raw: unknown): number {
-  const value = Math.floor(Number(raw));
-  if (!Number.isFinite(value) || value <= 0) {
-    return COMMUNITY_RESOURCE_WEB_CRAWL_CONTEXT_DEFAULT_CHARS;
-  }
-  return Math.min(value, COMMUNITY_RESOURCE_WEB_CRAWL_CONTEXT_MAX_CHARS);
-}
-
-export function buildWebCrawlContextPayload(args: {
-  rootUrl: string;
-  provider: CommunitySourceCrawlerProvider;
-  pages: CommunitySourcePageResult[];
-  maxChars?: number;
-}): Record<string, unknown> {
-  const budgetChars = normalizeWebCrawlContextBudget(args.maxChars);
-  let usedChars = 0;
-  const pagePayloads: Record<string, unknown>[] = [];
-  for (const page of args.pages) {
-    if (usedChars >= budgetChars) break;
-    const pageBudget = Math.min(
-      COMMUNITY_RESOURCE_WEB_CRAWL_CONTEXT_PAGE_CHARS,
-      Math.max(0, budgetChars - usedChars),
-    );
-    const markdown = String(page.markdown ?? "");
-    const markdownPreview = markdown.slice(0, pageBudget);
-    usedChars += markdownPreview.length;
-    pagePayloads.push({
-      requested_url: page.requested_url,
-      final_url: page.final_url,
-      canonical_url: page.canonical_url,
-      parent_url: page.parent_url,
-      depth: page.depth,
-      title: page.title,
-      status: page.status,
-      error: page.error,
-      chars: markdown.length,
-      markdown_preview: markdownPreview,
-      truncated: markdownPreview.length < markdown.length,
-      links: page.links.slice(0, 20),
-      virtual_page_count: Math.max(0, Math.floor(Number(page.virtual_page_count) || 0)),
-      virtual_page_strategy: normalizeOptionalText(page.virtual_page_strategy, 80) ?? null,
-      source_unit_count: Array.isArray(page.source_units) ? page.source_units.length : 0,
-      source_units: Array.isArray(page.source_units)
-        ? page.source_units.slice(0, 12).map((unit) => ({
-          unit_key: unit.unit_key ?? null,
-          unit_kind: unit.unit_kind,
-          title: unit.title,
-          source_url: unit.source_url,
-          path: unit.path,
-          order: unit.order,
-          status: unit.status,
-          chars: String(unit.markdown ?? "").length,
-        }))
-        : [],
-    });
-  }
-  const readyPages = args.pages.filter((page) => page.status === "ready");
-  const virtualPageCount = args.pages.reduce(
-    (total, page) => total + Math.max(0, Math.floor(Number(page.virtual_page_count) || 0)),
-    0,
-  );
-  const sourceUnitCount = args.pages.reduce(
-    (total, page) => total + (Array.isArray(page.source_units) ? page.source_units.length : 0),
-    0,
-  );
-  return {
-    ok: true,
-    kind: "web_crawl",
-    destination: "context",
-    provider: args.provider,
-    root_url: args.rootUrl,
-    page_count: args.pages.length,
-    virtual_page_count: virtualPageCount,
-    source_unit_count: sourceUnitCount,
-    ready_page_count: readyPages.length,
-    failed_page_count: args.pages.length - readyPages.length,
-    returned_page_count: pagePayloads.length,
-    pages_omitted: Math.max(0, args.pages.length - pagePayloads.length),
-    content_budget_chars: budgetChars,
-    content_used_chars: usedChars,
-    pages: pagePayloads,
-  };
-}
-
-export function titleFromSourceCrawlerUrl(rawUrl: string): string {
-  try {
-    const parsed = new URL(rawUrl);
-    const segment = parsed.pathname.split("/").filter(Boolean).pop();
-    return normalizeName(segment ? decodeURIComponent(segment).replace(/[-_]+/g, " ") : parsed.hostname);
-  } catch {
-    return "Crawled source";
-  }
-}
-
-export function mapCommunitySourceCrawlJob(row: CommunitySourceCrawlJobLike) {
-  return {
-    id: normalizeIdValue(row._id),
-    community_id: normalizeIdValue(row.communityId),
-    created_by_user_id: normalizeIdValue(row.createdByUserId),
-    provider: row.provider,
-    root_url: row.rootUrl,
-    status: row.status,
-    max_pages: Math.max(0, Math.floor(Number(row.maxPages) || 0)),
-    max_depth: Math.max(0, Math.floor(Number(row.maxDepth) || 0)),
-    page_count: Math.max(0, Math.floor(Number(row.pageCount) || 0)),
-    ready_page_count: Math.max(0, Math.floor(Number(row.readyPageCount) || 0)),
-    failed_page_count: Math.max(0, Math.floor(Number(row.failedPageCount) || 0)),
-    saved_source_count: Math.max(0, Math.floor(Number(row.savedSourceCount) || 0)),
-    skipped_source_count: Math.max(0, Math.floor(Number(row.skippedSourceCount) || 0)),
-    source_resource_ids: Array.isArray(row.sourceResourceIds)
-      ? row.sourceResourceIds.map((id) => normalizeIdValue(id)).filter(Boolean)
-      : [],
-    error: normalizeOptionalText(row.error, 1000) ?? null,
-    started_at: typeof row.startedAt === "number" ? toIsoString(row.startedAt) : null,
-    completed_at: typeof row.completedAt === "number" ? toIsoString(row.completedAt) : null,
-    created_at: toIsoString(row.createdAt),
-    updated_at: toIsoString(row.updatedAt),
   };
 }
 

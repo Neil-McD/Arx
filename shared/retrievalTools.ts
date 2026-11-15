@@ -5,7 +5,6 @@ export const RETRIEVAL_TOOL_NAMES = [
   "polynet_write",
   "polynet_call",
   "web_research",
-  "web_crawl",
 ] as const;
 
 export type RetrievalToolName = (typeof RETRIEVAL_TOOL_NAMES)[number];
