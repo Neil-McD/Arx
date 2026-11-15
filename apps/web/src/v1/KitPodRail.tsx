@@ -98,9 +98,10 @@ export function KitPodRail(props: { session: unknown; communityId: string; pod: 
 
   // The panel's parts, in order: who is asking to join (hosts), the guide's
   // brief, the next call, who is in it, what the pod knows, then what the pod
-  // is and the viewer's own membership.
-  const parts: ReactNode[] = [
-    pod.can_manage && pod.requests.length ? (
+  // is and the viewer's own membership. Each keeps its own key, so one
+  // coming or going never resets a draft in another.
+  const parts = ([
+    ["requests", pod.can_manage && pod.requests.length ? (
       <Sec label={`Asking to join · ${pod.requests.length}`}>
         {pod.requests.map((request) => (
           <div key={request.user_id} className={cx("podreq")}>
@@ -112,12 +113,12 @@ export function KitPodRail(props: { session: unknown; communityId: string; pod: 
           </div>
         ))}
       </Sec>
-    ) : null,
-    brief ? <BriefPart brief={brief} now={now} onHide={canHide ? hide : undefined} /> : null,
-    pod.next_call || pod.can_manage ? (
+    ) : null],
+    ["brief", brief ? <BriefPart brief={brief} now={now} onHide={canHide ? hide : undefined} /> : null],
+    ["call", pod.next_call || pod.can_manage ? (
       <KitPodCall session={props.session} communityId={props.communityId} pod={pod} onChanged={props.onChanged} />
-    ) : null,
-    (
+    ) : null],
+    ["people", (
       <Sec label="In this pod">
         {pod.members.length ? pod.members.map((member) => (
           <div key={member.user_id} className={cx("podreq")}>
@@ -135,9 +136,9 @@ export function KitPodRail(props: { session: unknown; communityId: string; pod: 
           </div>
         )) : <p className={cx("sub")}>No one yet.</p>}
       </Sec>
-    ),
-      <KitPodKnowledge session={props.session} communityId={props.communityId} channelId={pod.channel_id} />,
-    (
+    )],
+    ["knowledge", <KitPodKnowledge session={props.session} communityId={props.communityId} channelId={pod.channel_id} />],
+    ["about", (
       <Sec label="About this pod">
         {editing ? (
           <div className={cx("podform")} style={{ marginTop: 0 }}>
@@ -192,8 +193,8 @@ export function KitPodRail(props: { session: unknown; communityId: string; pod: 
           </>
         )}
       </Sec>
-    ),
-    mine ? (
+    )],
+    ["membership", mine ? (
       <Sec label="Your membership">
         <p className={cx("sub")}>
           {mine.state === "added" ? "You're in."
@@ -218,13 +219,13 @@ export function KitPodRail(props: { session: unknown; communityId: string; pod: 
           </div>
         )}
       </Sec>
-    ) : null,
-  ].filter(Boolean);
+    ) : null],
+  ] as Array<[string, ReactNode]>).filter(([, part]) => Boolean(part));
 
   return (
     <KitApp view="wins" part="rail">
       <Rail index={1} label="About this pod">
-        {parts.map((part, index) => <Fragment key={index}>{index ? <Sep /> : null}{part}</Fragment>)}
+        {parts.map(([key, part], index) => <Fragment key={key}>{index ? <Sep /> : null}{part}</Fragment>)}
       </Rail>
     </KitApp>
   );
