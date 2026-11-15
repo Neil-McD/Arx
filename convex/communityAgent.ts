@@ -14,7 +14,8 @@ import {
   resolveUserIdForAuthenticatedRequest,
   toIsoString,
 } from "./communityCore";
-import { normalizeCommunityLensAuthority } from "../shared/communityLensAuthority";
+import { derivePolynetHumanAuthority } from "../shared/polynetAuthority";
+import { resolveLens, type TalkLens } from "../shared/lens";
 import { communityAgentIsOn } from "./communityApps";
 
 function normalizeCommunitySystemPrompt(raw: unknown): string {
@@ -76,17 +77,15 @@ async function resolveRuntimeCommunityPromptContextForUser(args: {
     membership,
     userId: args.userId,
   });
-  const communityLensAuthority = normalizeCommunityLensAuthority({
-    relation: access.relation,
-    effective_role: access.effective_role,
-    can_manage_members: access.can_manage_members,
-    can_manage_resources: access.can_manage_resources,
-    can_moderate_content: access.can_moderate_content,
-    can_review_join_requests: access.can_review_join_requests,
-  });
-  if (!access.can_enter_community || !communityLensAuthority) {
+  // The private talk's lens, from the same authority the executor checks
+  // every call against (shared/lens.ts).
+  const authority = derivePolynetHumanAuthority({ access, principalKind: "community_agent_for_member" });
+  if (!access.can_enter_community || !authority) {
     throw new Error("community_entitlement_required");
   }
+  const lens = resolveLens({ principalKind: "community_agent_for_member", evidenceSurface: "member_agent_dock", authority });
+  if (lens.name !== "member_private" && lens.name !== "builder_private") throw new Error("community_entitlement_required");
+  const communityLens: TalkLens = { lens: lens.name, relation: authority.relation };
   const config = selectPrimaryCommunityAgentConfigRow(
     await listCommunityAgentConfigRows(args.ctx, args.communityId),
   );
@@ -116,7 +115,7 @@ async function resolveRuntimeCommunityPromptContextForUser(args: {
     community_about: communityAbout,
     community_channels: communityChannels,
     community_system_prompt: config?.systemPrompt ?? null,
-    community_lens_authority: communityLensAuthority,
+    community_lens: communityLens,
     system_prompt: config?.systemPrompt ?? null,
   };
 }

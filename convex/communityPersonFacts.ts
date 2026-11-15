@@ -23,9 +23,9 @@ import { getUniqueUserByNormalizedHandle, getUniqueUserProfileDetailByUserId } f
 import { resolveUserProfileDisplayProjection } from "./userProfileProjection";
 import { validateProfileHandle } from "../shared/profileHandle";
 import { FACT_LABELS, FACT_ORDER, planFor } from "../shared/communityMemberRecords";
-import { memberFactVisibleToLens } from "../shared/memberOntology";
+import { isPeopleFact as isPeopleFactLike } from "../shared/memberOntology";
 
-export type PersonLens = "member" | "self" | "builder";
+import { personViewFor, type LensFamily, type PersonView } from "../shared/lens";
 
 export type PersonFacts = {
   ref: string;
@@ -49,17 +49,10 @@ const FACTS_SCANNED = 300;
 const NOTES_SHOWN = 5;
 const iso = (ms: number | null | undefined) => (typeof ms === "number" && Number.isFinite(ms) ? new Date(ms).toISOString() : null);
 
-// The one rule for a people fact, through the shared visibility predicate
-// (shared/memberOntology.ts): stated or approved by the person, never only
-// observed, never a guess they haven't approved; this community's (the
-// member-orientation lens), or one they keep on their platform profile (the
-// external-profile lens).
+// The one rule for a people fact (shared/memberOntology.ts), on a stored row.
 export function isPeopleFact(fact: { consentState: string; provenance: string; communityId?: unknown; kind?: string; body?: string }, communityId: unknown): boolean {
-  const like = { communityId: fact.communityId ? String(fact.communityId) : null, kind: fact.kind as any, body: String(fact.body ?? ""),
-    provenance: fact.provenance as any, consentState: fact.consentState as any };
-  return like.communityId === null
-    ? memberFactVisibleToLens(like, { kind: "external_profile" })
-    : memberFactVisibleToLens(like, { kind: "member_orientation", communityId: String(communityId) });
+  return isPeopleFactLike({ communityId: fact.communityId ? String(fact.communityId) : null, kind: fact.kind as any, body: String(fact.body ?? ""),
+    provenance: fact.provenance as any, consentState: fact.consentState as any }, String(communityId));
 }
 
 async function latestSubscription(ctx: any, membershipId: any) {
@@ -70,7 +63,7 @@ async function latestSubscription(ctx: any, membershipId: any) {
 
 // The person, as the lens sees them; null when they aren't in the community
 // (people who are out aren't listed to anyone through this view).
-export async function readPersonFacts(ctx: any, args: { communityId: any; subjectUserId: any; lens: PersonLens }): Promise<PersonFacts | null> {
+export async function readPersonFacts(ctx: any, args: { communityId: any; subjectUserId: any; lens: PersonView }): Promise<PersonFacts | null> {
   const community = await ctx.db.get(args.communityId);
   const user = await ctx.db.get(args.subjectUserId);
   if (!community || !user) return null;
@@ -130,13 +123,11 @@ export async function readPersonFacts(ctx: any, args: { communityId: any; subjec
   return person;
 }
 
-// members/<handle>.json for the canonical executor. "public" is the member
-// lens whoever asks (the guide speaking in a channel); "viewer" picks the
-// viewer's own lens: self for their own record, builder for owners and
-// admins, member for everyone else.
+// members/<handle>.json for the canonical executor, seen through the
+// caller's lens family (shared/lens.ts personViewFor).
 export const readPersonFactsInternal = internalQuery({
-  args: { communityId: v.id("communities"), as: v.union(v.literal("public"), v.literal("viewer")),
-    viewerUserId: v.id("users"), viewerIsBuilder: v.boolean(), handle: v.optional(v.string()), userId: v.optional(v.string()) },
+  args: { communityId: v.id("communities"), lensFamily: v.union(v.literal("member"), v.literal("builder"), v.literal("community")),
+    viewerUserId: v.id("users"), handle: v.optional(v.string()), userId: v.optional(v.string()) },
   handler: async (ctx, args) => {
     const handle = args.handle !== undefined ? validateProfileHandle(args.handle) : null;
     const subjectId = args.userId !== undefined ? ctx.db.normalizeId("users", args.userId) : null;
@@ -144,8 +135,7 @@ export const readPersonFactsInternal = internalQuery({
       ? await getUniqueUserByNormalizedHandle<any>(ctx, handle.normalizedHandle)
       : subjectId ? await ctx.db.get(subjectId) : null;
     if (!user) return null;
-    const lens: PersonLens = args.as === "public" ? "member"
-      : String(user._id) === String(args.viewerUserId) ? "self" : args.viewerIsBuilder ? "builder" : "member";
+    const lens = personViewFor(args.lensFamily as LensFamily, String(user._id) === String(args.viewerUserId));
     const person = await readPersonFacts(ctx, { communityId: args.communityId, subjectUserId: user._id, lens });
     return person ? { ...person, lens } : null;
   },

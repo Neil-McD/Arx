@@ -1,6 +1,6 @@
 /* Member ontology public surface — docs/member-ontology-contract-v1.md.
    Members approve facts, agents propose facts, admins transition nothing.
-   Every read goes through memberFactVisibleToLens (the shared predicate); people
+   Every read goes through isPeopleFact (shared/memberOntology.ts); people
    facts for agents and members come from convex/communityPersonFacts.ts. */
 import { v, type ObjectType } from "convex/values";
 import { internalMutation, mutation, type MutationCtx } from "./_generated/server";

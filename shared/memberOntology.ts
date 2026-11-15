@@ -95,36 +95,15 @@ export type MemberFactLike = {
   consentState: MemberFactConsentState;
 };
 
-export type MemberOntologyLens =
-  | { kind: "self" }
-  | { kind: "external_profile" }
-  | { kind: "founder_admin"; communityId: string }
-  | { kind: "member_orientation"; communityId: string };
-
-/* THE visibility predicate. Every reader goes through this — no exceptions,
-   no hand-rolled consent checks at query sites. */
-export function memberFactVisibleToLens(fact: MemberFactLike, lens: MemberOntologyLens): boolean {
-  if (lens.kind === "self") return true;
-  if (lens.kind === "external_profile") {
-    return (
-      fact.communityId === null &&
-      fact.consentState === "approved" &&
-      fact.provenance !== "observed_behavior"
-    );
-  }
-  if (lens.kind === "founder_admin") {
-    /* Human founder/admin reads fail closed: only member-approved facts from
-       this exact community. Any future community-agent internal context needs
-       a distinct lens rather than widening this one. */
-    if (fact.consentState !== "approved") return false;
-    if (fact.provenance === "observed_behavior") return false;
-    return fact.communityId === lens.communityId;
-  }
-  /* member_orientation: approved facts of the shared community only. Never
-     observed behavior, never pending, never another community's facts. */
-  if (fact.provenance === "observed_behavior") return false;
+/* THE people-fact rule. Every reader goes through this, no exceptions:
+   a fact anyone else may see is one the person stated or approved (never
+   only observed, never pending), kept either on their platform profile or in
+   this community. Who sees which parts of a person is the lens's
+   (shared/lens.ts personViewFor); this decides which facts exist to see. */
+export function isPeopleFact(fact: MemberFactLike, communityId: string): boolean {
   if (fact.consentState !== "approved") return false;
-  return fact.communityId === lens.communityId;
+  if (fact.provenance === "observed_behavior") return false;
+  return fact.communityId === null || fact.communityId === communityId;
 }
 
 export type MemberSpine = {

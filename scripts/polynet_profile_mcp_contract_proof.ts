@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import {
-  memberFactVisibleToLens,
+  isPeopleFact,
   type MemberFactLike,
 } from "../shared/memberOntology.ts";
 import { getPolynetMcpToolDefinition } from "../shared/polynetMcp.ts";
@@ -22,24 +22,9 @@ const approvedPlatformFact: MemberFactLike = {
   provenance: "stated_interview",
   consentState: "approved",
 };
-assert.equal(
-  memberFactVisibleToLens(approvedPlatformFact, { kind: "external_profile" }),
-  true,
-);
-assert.equal(
-  memberFactVisibleToLens(
-    { ...approvedPlatformFact, communityId: "community-a" },
-    { kind: "external_profile" },
-  ),
-  false,
-);
-assert.equal(
-  memberFactVisibleToLens(
-    { ...approvedPlatformFact, consentState: "pending" },
-    { kind: "external_profile" },
-  ),
-  false,
-);
+// The profile is the person's approved platform facts (the one people-fact rule).
+assert.equal(isPeopleFact(approvedPlatformFact, "community-a"), true);
+assert.equal(isPeopleFact({ ...approvedPlatformFact, consentState: "pending" }, "community-a"), false);
 
 const mcp = read("shared/polynetMcp.ts");
 const http = read("convex/httpMcp.ts");

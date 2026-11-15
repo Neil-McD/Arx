@@ -10,10 +10,7 @@ import {
   normalizeCommunityResourceRuntimeLaneState,
   type CommunityResourceRuntimeLaneState,
 } from "./communityResourceLane.ts";
-import {
-  renderCommunityLensAuthorityForPrompt,
-  type CommunityLensAuthority,
-} from "./communityLensAuthority.ts";
+import { renderTalkLensForPrompt, type TalkLens } from "./lens.ts";
 import {
   buildRuntimeInvocationSurfacePrompt,
   type RuntimeInvocationSurface,
@@ -66,7 +63,7 @@ export type RuntimeCommunityIdentityPromptFields = {
 export type RuntimeCommunityPromptFields =
   RuntimeCommunityIdentityPromptFields & {
     communitySystemPrompt?: string | null;
-    communityLensAuthority?: CommunityLensAuthority | null;
+    communityLens?: TalkLens | null;
   };
 
 export type RuntimeTemporalContextPromptFields = {
@@ -744,10 +741,10 @@ export function buildPlatformHarnessRuntimePromptBundle(
       owner: "community",
       authority: "runtime_fact",
       source:
-        "shared/communityLensAuthority.ts#renderCommunityLensAuthorityForPrompt",
-      reason: "server-derived community relation and permissions",
+        "shared/lens.ts#renderTalkLensForPrompt",
+      reason: "the private talk's lens, worked out by the server",
       text: communityId
-        ? renderCommunityLensAuthorityForPrompt(params.communityLensAuthority)
+        ? renderTalkLensForPrompt(params.communityLens)
         : null,
     }),
     ...(isMemberAgentDock

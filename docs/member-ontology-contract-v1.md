@@ -125,8 +125,7 @@ that session, scoped to that community.
    scoped to community B. Enforced structurally by `communityId`, and
    procedurally by the single shared visibility predicate (below).
 2. `observed_behavior` facts never render on founder/admin or member-to-member
-   surfaces, regardless of consent state. The member's private self lens retains
-   the complete ledger.
+   surfaces, regardless of consent state. The ledger itself keeps every row.
 3. **Platform spine visibility (decided 2026-07-08):** the spine is visible by
    default to every community the member joins — it is an enriched profile
    card. A per-community hide toggle is the escape hatch.
@@ -147,15 +146,18 @@ write the spine directly.
 
 ## Read Models
 
-Each consumer is a lens with an exact visibility predicate. All four MUST go
-through one shared predicate function; no reader hand-rolls visibility.
+Which facts anyone may see is one rule, `isPeopleFact` (`shared/memberOntology.ts`):
+`approved`, never `observed_behavior`, and kept on the person's platform profile or
+in this community. Every reader goes through it; no reader hand-rolls visibility.
+How much of a person each viewer sees is the viewer's lens (`personViewFor` in
+`shared/lens.ts`, rendered by `convex/communityPersonFacts.ts`).
 
-| Lens | Scope | May see |
+| View | Scope | May see |
 | --- | --- | --- |
-| Founder/admin | one community | spine + `approved` facts scoped to that community; nothing pending, rejected, retracted, superseded, or observed; retains approved facts after member leaves (invariant 4) |
-| Member-help (self lens) | the member's own agent | everything of their own — the richest view; consent trivially satisfied |
+| Founder/admin | one community | spine + `approved` facts scoped to that community; nothing pending, rejected, retracted, superseded, or observed; plus plan, state and their notes; retains approved facts after member leaves (invariant 4) |
+| Self | the person about themselves | what a member sees, plus when they joined |
 | External profile | authenticated member through Polynet MCP | current `approved` platform facts only; no community facts or audit-history states |
-| Member-to-member (orientation card) | shared community | spine + `approved` facts scoped to the community both share; nothing pending, nothing observed, nothing from other communities |
+| Member (and the guide in public) | shared community | spine + `approved` facts of this community and the person's platform profile; nothing pending, nothing observed, nothing from other communities |
 
 Member workflows were retired on Nov 7 2026, and with them the separate
 workflow context and its execution lens. Every fact follows the lenses above.
