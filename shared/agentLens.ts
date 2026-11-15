@@ -11,6 +11,8 @@ export type AgentLens = {
   // The review this run writes into, and where "new" starts.
   runId: string;
   sinceMs: number;
+  // What this review reads up to; anything later waits for the next one.
+  untilMs: number;
 };
 
 export const MEMORY_REVIEW_CALLS = ["memory.observe", "memory.write_index"] as const;

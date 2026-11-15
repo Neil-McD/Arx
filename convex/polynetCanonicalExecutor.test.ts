@@ -3474,7 +3474,7 @@ test("the memory review lens mounts open channels and memory, nothing else", asy
   const { runId } = await t.mutation(internal.communityMemory.openMemoryReviewRunInternal, {
     communityId: f.communityId, windowStart: nowMs, windowEnd: nowMs + 100, nowMs });
   const actor = t.withIdentity({ subject: f.ownerSubject });
-  const lens = { name: "memory_review" as const, runId: String(runId), sinceMs: nowMs };
+  const lens = { name: "memory_review" as const, runId: String(runId), sinceMs: nowMs, untilMs: nowMs + 100 };
   const run = (toolName: "polynet_list" | "polynet_read" | "polynet_search" | "polynet_write" | "polynet_call", input: Record<string, unknown>) =>
     executePolynetCanonicalTool({ ctx: executionContext(actor), authSubject: f.ownerSubject, userId: f.ownerId,
       principalKind: "community_agent", mountedCommunityId: f.communityId, evidenceSurface: "community_concierge", toolName, input, lens });

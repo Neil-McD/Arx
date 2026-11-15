@@ -15,7 +15,9 @@ import { communityTimeZone, scheduleMemoryReview } from "./communityMemory";
 import { runFundedCommunityAgent, type CommunityAgentRunEvent } from "./communityAgentRun";
 import { executePolynetCanonicalTool } from "./polynetCanonicalExecutor";
 import { founderProviderRequests } from "./founderInferenceUsage";
-import { resolveCommunityInferenceFundingForAction, settleCommunityInferenceFundingSession } from "./founderInferenceRuntime";
+import { settleCommunityInferenceFundingSession } from "./founderInferenceRuntime";
+import { communityAgentIsOn } from "./communityApps";
+import { resolveCommunityInferenceFundingAdmission } from "./founderInferenceCore";
 
 const internalRefs = internal as any;
 const LEASE_MS = 15 * 60_000;
@@ -25,6 +27,8 @@ const REVIEW_MAX_TOOL_STEPS = 24;
 const REVIEW_MAX_OUTPUT_TOKENS = 1_500;
 const LOST_AFTER_MS = 2 * 60 * 60_000;
 const SWEEP_LIMIT = 100;
+const NEW_PER_CHANNEL = 200;
+const BACKLOG_NEXT_MS = 15 * 60_000;
 
 export const claimMemoryReviewInternal = internalMutation({
   args: { workId: v.id("agentWork"), nowMs: v.number() },
@@ -43,6 +47,12 @@ export const claimMemoryReviewInternal = internalMutation({
     }
     const owner = await ctx.db.get(community.ownerId);
     if (!owner?.authSubject) return null;
+    // The owner's agent switch and the funding, together: with either off,
+    // nothing runs and nothing is spent.
+    if (!(await communityAgentIsOn(ctx, work.communityId))) {
+      await ctx.db.patch(work._id, { dueAt: undefined, updatedAt: args.nowMs });
+      return { skipped: true as const };
+    }
     await ctx.db.patch(work._id, { leaseUntil: args.nowMs + LEASE_MS, updatedAt: args.nowMs });
     return {
       communityId: work.communityId, communitySlug: community.slug, communityName: community.name,
@@ -58,6 +68,8 @@ export const completeMemoryReviewInternal = internalMutation({
     outcome: v.union(v.literal("reviewed"), v.literal("failed"), v.literal("skipped")),
     windowEnd: v.number(),
     claimedPending: v.number(),
+    // Posts past windowEnd were left for the next review (a busy window).
+    backlog: v.optional(v.boolean()),
     errorCode: v.optional(v.string()),
     nowMs: v.number(),
   },
@@ -65,9 +77,11 @@ export const completeMemoryReviewInternal = internalMutation({
     const work = await ctx.db.get(args.workId);
     if (!work) return null;
     if (args.outcome === "reviewed") {
-      // Posts written while the review ran wait for the next one.
-      const pending = Math.max(0, work.pending - args.claimedPending);
-      const dueAt = pending > 0 ? nextMemoryReviewAtMs(args.nowMs, await communityTimeZone(ctx, work.communityId)) : undefined;
+      // Posts written while the review ran, or left over from a busy window,
+      // wait for the next one: a backlog soon, new posts at the quiet hour.
+      const pending = args.backlog ? Math.max(1, work.pending) : Math.max(0, work.pending - args.claimedPending);
+      const dueAt = args.backlog ? args.nowMs + BACKLOG_NEXT_MS
+        : pending > 0 ? nextMemoryReviewAtMs(args.nowMs, await communityTimeZone(ctx, work.communityId)) : undefined;
       await ctx.db.patch(work._id, { reviewedThrough: args.windowEnd, pending, dueAt, leaseUntil: undefined, failures: 0, lastErrorCode: undefined, updatedAt: args.nowMs });
       if (dueAt) await scheduleMemoryReview(ctx, work._id, dueAt);
       return { dueAt: dueAt ?? null };
@@ -85,26 +99,42 @@ export const completeMemoryReviewInternal = internalMutation({
   },
 });
 
-// The open channels with something new since the last review.
+export const readReviewAdmissionInternal = internalQuery({
+  args: { communityId: v.id("communities") },
+  handler: async (ctx, args) => await resolveCommunityInferenceFundingAdmission(ctx, args.communityId),
+});
+
+// The open channels with something new since the last review, and where this
+// review must stop: a channel's new.md shows 200 at most, so with more than
+// that the review reads up to its 200th and the next review the rest.
 export const listOpenChannelsWithNewInternal = internalQuery({
-  args: { communityId: v.id("communities"), sinceMs: v.number() },
+  args: { communityId: v.id("communities"), sinceMs: v.number(), untilMs: v.optional(v.number()) },
   handler: async (ctx, args) => {
     const channels = await ctx.db.query("communityChannels")
       .withIndex("by_community_access_status_position", (q) => q.eq("communityId", args.communityId).eq("accessMode", "all_members").eq("status", "active"))
       .take(100);
     const out: Array<{ slug: string; name: string; count: number }> = [];
+    let readUntil = args.untilMs ?? Number.MAX_SAFE_INTEGER;
     for (const channel of channels) {
-      let count = 0;
+      const times: number[] = [];
       for (const table of ["communityInteractionRoots", "communityInteractionReplies"] as const) {
         for (const scope of ["community", "public"] as const) {
-          count += (await ctx.db.query(table).withIndex("by_community_channel_visibility_status_createdAt", (q: any) =>
-            q.eq("communityId", args.communityId).eq("channelId", channel._id).eq("visibilityScope", scope).eq("status", "live").gt("createdAt", args.sinceMs))
-            .take(201)).length;
+          const rows = await ctx.db.query(table).withIndex("by_community_channel_visibility_status_createdAt", (q: any) => {
+            const range = q.eq("communityId", args.communityId).eq("channelId", channel._id).eq("visibilityScope", scope).eq("status", "live").gt("createdAt", args.sinceMs);
+            return args.untilMs !== undefined ? range.lte("createdAt", args.untilMs) : range;
+          }).take(NEW_PER_CHANNEL + 1);
+          for (const row of rows as any[]) {
+            if (table === "communityInteractionReplies" && ((await ctx.db.get(row.rootId)) as any)?.status !== "live") continue;
+            times.push(row.createdAt);
+          }
         }
       }
-      if (count > 0) out.push({ slug: channel.slug, name: channel.name, count });
+      if (times.length === 0) continue;
+      times.sort((a, b) => a - b);
+      if (times.length > NEW_PER_CHANNEL) readUntil = Math.min(readUntil, times[NEW_PER_CHANNEL - 1]);
+      out.push({ slug: channel.slug, name: channel.name, count: times.length });
     }
-    return out;
+    return { channels: out, readUntil: readUntil === Number.MAX_SAFE_INTEGER ? null : readUntil };
   },
 });
 
@@ -129,13 +159,17 @@ export const runMemoryReviewInternal = internalAction({
   handler: async (ctx, args) => {
     const claim = await ctx.runMutation(internalRefs.communityMemoryReview.claimMemoryReviewInternal, { workId: args.workId, nowMs: Date.now() });
     if (!claim) return { status: "not_due" };
+    if ("skipped" in claim) return { status: "skipped" };
+    let readThrough = claim.windowEnd;
+    let backlogLeft = false;
     const complete = (outcome: "reviewed" | "failed" | "skipped", errorCode?: string) =>
       ctx.runMutation(internalRefs.communityMemoryReview.completeMemoryReviewInternal, {
-        workId: args.workId, outcome, windowEnd: claim.windowEnd, claimedPending: claim.claimedPending, nowMs: Date.now(),
+        workId: args.workId, outcome, windowEnd: readThrough, claimedPending: claim.claimedPending, nowMs: Date.now(),
+        ...(backlogLeft ? { backlog: true } : {}),
         ...(errorCode ? { errorCode } : {}),
       });
 
-    const admission = await resolveCommunityInferenceFundingForAction(ctx, claim.communityId);
+    const admission = await ctx.runQuery(internalRefs.communityMemoryReview.readReviewAdmissionInternal, { communityId: claim.communityId });
     if (!admission.ok) {
       await complete("skipped");
       return { status: "skipped" };
@@ -146,8 +180,14 @@ export const runMemoryReviewInternal = internalAction({
     const finish = (extra: Record<string, unknown>) => ctx.runMutation(internalRefs.communityMemory.finishMemoryReviewRunInternal, {
       communityId: claim.communityId, runId, nowMs: Date.now(), ...extra,
     });
-    const channels = await ctx.runQuery(internalRefs.communityMemoryReview.listOpenChannelsWithNewInternal, {
-      communityId: claim.communityId, sinceMs: claim.windowStart });
+    const offered = await ctx.runQuery(internalRefs.communityMemoryReview.listOpenChannelsWithNewInternal, {
+      communityId: claim.communityId, sinceMs: claim.windowStart, untilMs: claim.windowEnd });
+    const channels = offered.channels;
+    // A busy window: read through the 200th post of the busiest channel; the rest waits.
+    const readUntil: number = offered.readUntil ?? claim.windowEnd;
+    const backlog = readUntil < claim.windowEnd;
+    readThrough = readUntil;
+    backlogLeft = backlog;
     if (channels.length === 0) {
       await finish({});
       await complete("reviewed");
@@ -155,13 +195,13 @@ export const runMemoryReviewInternal = internalAction({
     }
 
     const root = `/communities/${claim.communitySlug}/`;
-    const lens: AgentLens = { name: "memory_review", runId: String(runId), sinceMs: claim.windowStart };
+    const lens: AgentLens = { name: "memory_review", runId: String(runId), sinceMs: claim.windowStart, untilMs: readUntil };
     const messages = [
       { role: "system", content: `${MEMORY_REVIEW_INSTRUCTIONS}\n\nThis community: ${claim.communityName} (${root}).` },
       { role: "user", content: [
-        `Review what was said from ${new Date(claim.windowStart).toISOString()} to ${new Date(claim.windowEnd).toISOString()}.`,
+        `Review what was said from ${new Date(claim.windowStart).toISOString()} to ${new Date(readUntil).toISOString()}.`,
         "Channels with something new:",
-        ...channels.map((channel: any) => `- #${channel.name} (${channel.count}${channel.count > 200 ? "+" : ""}): ${root}channels/${channel.slug}/new.md`),
+        ...channels.map((channel: any) => `- #${channel.name}: ${root}channels/${channel.slug}/new.md`),
         `Start with ${root}memory.md.`,
       ].join("\n") },
     ];

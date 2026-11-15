@@ -361,19 +361,30 @@ async function authorWord(ctx: any, row: any, names: Map<string, string>): Promi
 // channels/<channel>/new.md: what people said there since the last review,
 // oldest first, each post and reply with the name memory.observe cites.
 export const renderChannelNewPostsInternal = internalQuery({
-  args: { communityId: v.id("communities"), slug: v.string(), sinceMs: v.number() },
+  args: { communityId: v.id("communities"), slug: v.string(), sinceMs: v.number(), untilMs: v.optional(v.number()) },
   handler: async (ctx, args) => {
     const channel = await openChannelBySlug(ctx, args.communityId, args.slug);
     if (!channel) return null;
     const take = async (table: "communityInteractionRoots" | "communityInteractionReplies", scope: "community" | "public") =>
-      await ctx.db.query(table).withIndex("by_community_channel_visibility_status_createdAt", (q: any) =>
-        q.eq("communityId", args.communityId).eq("channelId", channel._id).eq("visibilityScope", scope).eq("status", "live").gt("createdAt", args.sinceMs))
-        .take(NEW_POSTS_MAX);
+      await ctx.db.query(table).withIndex("by_community_channel_visibility_status_createdAt", (q: any) => {
+        const range = q.eq("communityId", args.communityId).eq("channelId", channel._id).eq("visibilityScope", scope).eq("status", "live").gt("createdAt", args.sinceMs);
+        return args.untilMs !== undefined ? range.lte("createdAt", args.untilMs) : range;
+      }).take(NEW_POSTS_MAX);
+    // A reply is readable only while its thread is (a deleted thread's replies stay live).
+    const liveRoots = new Map<string, boolean>();
+    const inLiveThread = async (row: any) => {
+      const key = String(row.rootId);
+      if (!liveRoots.has(key)) liveRoots.set(key, ((await ctx.db.get(row.rootId)) as any)?.status === "live");
+      return liveRoots.get(key)!;
+    };
+    const replies = [];
+    for (const row of [...(await take("communityInteractionReplies", "community")), ...(await take("communityInteractionReplies", "public"))]) {
+      if (await inLiveThread(row)) replies.push(row);
+    }
     const rows = [
       ...(await take("communityInteractionRoots", "community")).map((row: any) => ({ row, kind: "post" as const })),
       ...(await take("communityInteractionRoots", "public")).map((row: any) => ({ row, kind: "post" as const })),
-      ...(await take("communityInteractionReplies", "community")).map((row: any) => ({ row, kind: "reply" as const })),
-      ...(await take("communityInteractionReplies", "public")).map((row: any) => ({ row, kind: "reply" as const })),
+      ...replies.map((row: any) => ({ row, kind: "reply" as const })),
     ].sort((a, b) => a.row.createdAt - b.row.createdAt).slice(0, NEW_POSTS_MAX);
     const names = new Map<string, string>();
     const lines = [`# #${channel.name}: new since ${new Date(args.sinceMs).toISOString()}`, ""];

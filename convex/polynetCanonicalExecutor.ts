@@ -2790,7 +2790,7 @@ async function executeMemoryReviewLensTool(args: {
   if (place.kind === "channel_new") {
     if (args.toolName !== "polynet_read") return notMounted;
     const view = await args.ctx.runQuery((internal as any).communityMemory.renderChannelNewPostsInternal, {
-      communityId, slug: place.channel, sinceMs: args.lens.sinceMs });
+      communityId, slug: place.channel, sinceMs: args.lens.sinceMs, untilMs: args.lens.untilMs });
     return view ? { ok: true, value: { path: String(args.input.path), body: view.body } } : notMounted;
   }
   if (place.kind === "channel") {

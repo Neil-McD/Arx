@@ -45,6 +45,8 @@ test("a person's post in an open channel makes the review due at the quiet hour;
 test("a review is claimed once, carries over posts written while it ran, and retries a failure twice", async () => {
   const t = convexTest(schema, modules);
   const w = await world(t);
+  // Funded: the owner is the platform operator.
+  await t.run((ctx: any) => ctx.db.insert("operatorRoles", { userId: w.ownerId, role: "owner", active: true, createdAt: NOW, updatedAt: NOW }));
   await t.run((ctx: any) => markCommunityMemoryReviewDue(ctx, { communityId: w.communityId, channelId: w.general, actorType: "human", nowMs: NOW }));
   const row: any = await work(t, w.communityId);
   expect(await t.mutation(internal.communityMemoryReview.claimMemoryReviewInternal, { workId: row._id, nowMs: NOW })).toBeNull();
@@ -102,5 +104,60 @@ test("only open channels with something new are offered to the review", async ()
     await root(w.pod, NOW + 10);
   });
   expect(await t.query(internal.communityMemoryReview.listOpenChannelsWithNewInternal, { communityId: w.communityId, sinceMs: NOW }))
-    .toEqual([{ slug: "general", name: "general", count: 1 }]);
+    .toEqual({ channels: [{ slug: "general", name: "general", count: 1 }], readUntil: null });
+});
+
+test("a funded community whose owner switched the guide off is skipped; switched on, it's claimed", async () => {
+  const t = convexTest(schema, modules);
+  const w = await world(t);
+  await t.run(async (ctx: any) => {
+    await ctx.db.insert("operatorRoles", { userId: w.ownerId, role: "owner", active: true, createdAt: NOW, updatedAt: NOW });
+    await ctx.db.insert("communityAgentConfigs", { communityId: w.communityId, systemPrompt: "", agentEnabled: false, createdAt: NOW, updatedAt: NOW });
+  });
+  await t.run((ctx: any) => markCommunityMemoryReviewDue(ctx, { communityId: w.communityId, channelId: w.general, actorType: "human", nowMs: NOW }));
+  const row: any = await work(t, w.communityId);
+  expect(await t.mutation(internal.communityMemoryReview.claimMemoryReviewInternal, { workId: row._id, nowMs: row.dueAt })).toEqual({ skipped: true });
+
+  await t.run(async (ctx: any) => {
+    await ctx.db.insert("communityAgentConfigs", { communityId: w.communityId, systemPrompt: "", agentEnabled: true, createdAt: NOW, updatedAt: NOW + 1 });
+    await ctx.db.patch(row._id, { dueAt: row.dueAt });
+  });
+  expect(await t.mutation(internal.communityMemoryReview.claimMemoryReviewInternal, { workId: row._id, nowMs: row.dueAt }))
+    .toMatchObject({ communitySlug: "review-club", claimedPending: 1 });
+});
+
+test("a busy window is read through its 200th post; the rest is reviewed 15 minutes later", async () => {
+  const t = convexTest(schema, modules);
+  const w = await world(t);
+  await t.run(async (ctx: any) => {
+    for (let i = 1; i <= 205; i++) {
+      await ctx.db.insert("communityInteractionRoots", { communityId: w.communityId, channelId: w.general, actorType: "human", actorUserId: w.ownerId,
+        kind: "discussion", status: "live", visibilityScope: "community", contentSummary: "x", replyCount: 0, reactionSummary: [],
+        idempotencyKey: `busy${i}`, createdAt: NOW + i, updatedAt: NOW + i });
+    }
+  });
+  const offered: any = await t.query(internal.communityMemoryReview.listOpenChannelsWithNewInternal, { communityId: w.communityId, sinceMs: NOW, untilMs: NOW + 1_000 });
+  expect(offered.readUntil).toBe(NOW + 200);
+
+  await t.run((ctx: any) => markCommunityMemoryReviewDue(ctx, { communityId: w.communityId, channelId: w.general, actorType: "human", nowMs: NOW }));
+  const row: any = await work(t, w.communityId);
+  await t.mutation(internal.communityMemoryReview.claimMemoryReviewInternal, { workId: row._id, nowMs: row.dueAt });
+  const done: any = await t.mutation(internal.communityMemoryReview.completeMemoryReviewInternal, {
+    workId: row._id, outcome: "reviewed", windowEnd: offered.readUntil, claimedPending: 1, backlog: true, nowMs: NOW + 2_000 });
+  expect(done.dueAt).toBe(NOW + 2_000 + 15 * 60_000);
+  expect(await work(t, w.communityId)).toMatchObject({ reviewedThrough: NOW + 200, pending: 1 });
+});
+
+test("replies in a deleted thread aren't offered to the review", async () => {
+  const t = convexTest(schema, modules);
+  const w = await world(t);
+  await t.run(async (ctx: any) => {
+    const rootId = await ctx.db.insert("communityInteractionRoots", { communityId: w.communityId, channelId: w.general, actorType: "human", actorUserId: w.ownerId,
+      kind: "discussion", status: "deleted", visibilityScope: "community", contentSummary: "x", replyCount: 1, reactionSummary: [],
+      idempotencyKey: "gone", createdAt: NOW - 100, updatedAt: NOW });
+    await ctx.db.insert("communityInteractionReplies", { communityId: w.communityId, channelId: w.general, rootId, actorType: "human", actorUserId: w.ownerId,
+      status: "live", visibilityScope: "community", contentSummary: "reply", reactionSummary: [], idempotencyKey: "gone-reply", seq: 1, createdAt: NOW + 10, updatedAt: NOW + 10 });
+  });
+  expect(await t.query(internal.communityMemoryReview.listOpenChannelsWithNewInternal, { communityId: w.communityId, sinceMs: NOW }))
+    .toEqual({ channels: [], readUntil: null });
 });
