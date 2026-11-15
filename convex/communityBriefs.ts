@@ -206,7 +206,9 @@ function eventRecorder(ctx: any, communityId: any, runId: string) {
 }
 
 export const runCommunityBriefInternal = internalAction({
-  args: { workId: v.id("agentWork") },
+  // asOfMs: operator runs only, to write the brief as of an earlier time
+  // (acceptance on seeded data whose posts are older than the window).
+  args: { workId: v.id("agentWork"), asOfMs: v.optional(v.number()) },
   handler: async (ctx, args) => {
     const claim = await ctx.runMutation(internalRefs.communityMemoryReview.claimMemoryReviewInternal, { workId: args.workId, nowMs: Date.now() });
     if (!claim) return { status: "not_due" };
@@ -221,14 +223,15 @@ export const runCommunityBriefInternal = internalAction({
       await complete("skipped");
       return { status: "skipped" };
     }
+    const untilMs = args.asOfMs ?? claim.windowEnd;
     const { runId } = await ctx.runMutation(internalRefs.communityMemory.openMemoryReviewRunInternal, {
-      communityId: claim.communityId, windowStart: claim.windowEnd - BRIEF_WINDOW_MS, windowEnd: claim.windowEnd, nowMs: Date.now(), kind: "brief",
+      communityId: claim.communityId, windowStart: untilMs - BRIEF_WINDOW_MS, windowEnd: untilMs, nowMs: Date.now(), kind: "brief",
     });
     const finish = (extra: Record<string, unknown>) => ctx.runMutation(internalRefs.communityMemory.finishMemoryReviewRunInternal, {
       communityId: claim.communityId, runId, nowMs: Date.now(), ...extra,
     });
     const [input, cardSource, handbook] = await Promise.all([
-      ctx.runQuery(internalRefs.communityBriefs.readCommunityBriefInputInternal, { communityId: claim.communityId, untilMs: claim.windowEnd }),
+      ctx.runQuery(internalRefs.communityBriefs.readCommunityBriefInputInternal, { communityId: claim.communityId, untilMs }),
       ctx.runQuery(internalRefs.communityOntologyCards.loadCommunityCardSourceInternal, { communityId: claim.communityId }).catch(() => null),
       ctx.runQuery(internalRefs.communityHandbook.readApprovedCommunityHandbookInternal, { communityId: claim.communityId }).catch(() => null),
     ]);
@@ -278,7 +281,7 @@ export const runCommunityBriefInternal = internalAction({
             errorMessage: `${parsed.why} Write with polynet_call { operation: "${BRIEF_WRITE_OPERATION}", input: { headline, points: [{ text, refs }] } }.` };
         }
         const saved = await ctx.runMutation(internalRefs.communityBriefs.writeCommunityBriefInternal, {
-          communityId: claim.communityId, runId, headline: parsed.headline, points: parsed.points, windowEnd: claim.windowEnd, nowMs: Date.now(),
+          communityId: claim.communityId, runId, headline: parsed.headline, points: parsed.points, windowEnd: untilMs, nowMs: Date.now(),
         });
         if (saved?.ok) brief.written = parsed.headline;
         return saved?.ok
@@ -311,9 +314,10 @@ export const runCommunityBriefInternal = internalAction({
   },
 });
 
-// Operator tool: write a community's brief now (acceptance runs on staging).
+// Operator tool: write a community's brief now, or as of an earlier time
+// (acceptance runs on staging).
 export const requestCommunityBriefNowInternal = internalMutation({
-  args: { communityId: v.id("communities") },
+  args: { communityId: v.id("communities"), asOfMs: v.optional(v.number()) },
   handler: async (ctx, args) => {
     const nowMs = Date.now();
     const scope = communityScopeKey(args.communityId);
@@ -327,7 +331,7 @@ export const requestCommunityBriefNowInternal = internalMutation({
         reviewedThrough: 0, dueAt: nowMs, failures: 0, createdAt: nowMs, updatedAt: nowMs,
       });
     }
-    await scheduleAgentWork(ctx, workId, nowMs);
+    await ctx.scheduler.runAt(nowMs, internalRefs.communityBriefs.runCommunityBriefInternal, { workId, ...(args.asOfMs ? { asOfMs: args.asOfMs } : {}) });
     return { workId };
   },
 });
