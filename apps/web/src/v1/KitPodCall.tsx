@@ -63,7 +63,7 @@ export function KitPodCall(props: { session: unknown; communityId: string; pod: 
 
   if (!call && !pod.can_manage) return null;
   return (
-    <Sec label={call ? "Next call" : "Pod call"}>
+    <Sec label="Next call">
       {call ? (
         <>
           <p className={cx("sub")}><b>{call.title}</b></p>
@@ -93,10 +93,7 @@ export function KitPodCall(props: { session: unknown; communityId: string; pod: 
           </div>
         </div>
       ) : (
-        <>
-          <p className={cx("sub")}>Give the pod its rhythm: a call only its members see.</p>
-          <div className={cx("acts")} style={{ marginTop: 8 }}><Btn small txt onClick={() => setScheduling(true)}>Schedule a call</Btn></div>
-        </>
+        <div className={cx("acts")}><Btn small onClick={() => setScheduling(true)}>Schedule a call</Btn></div>
       )}
     </Sec>
   );

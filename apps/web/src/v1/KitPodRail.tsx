@@ -1,8 +1,9 @@
 // Pods (docs/specs/pods-v0.md): a pod's own right column, in place of a
 // channel's. In order: who is asking to join (hosts); the guide's brief; the
-// next call; who is in it and, for the people who manage it, how each person
-// is in; what the pod knows; what it is for; the viewer's own membership
-// (paying, leaving, a payment problem) and Leave pod.
+// next call; what the pod knows; who is in it and, for the people who can
+// edit it, how each person is in. What the pod is for and the viewer's own
+// membership (paying, leaving, a payment problem, Leave pod) open from two
+// links at the foot.
 import { Fragment, useCallback, useEffect, useState, type ReactNode } from "react";
 import {
   decideCloudPodRequest,
@@ -19,6 +20,7 @@ import { Btn, KitApp, Rail, Sec, Sep, cx } from "./kit";
 import { BriefPart, usePlaceBrief } from "./KitBrief";
 import { KitPodCall } from "./KitPodCall";
 import { KitPodKnowledge } from "./KitPodKnowledge";
+import { PanelPeople } from "./KitPanel";
 import { askForPodPagePreview, forgetPod, goToPodsPath, rememberPod } from "./podMemory";
 
 type Draft = { purpose: string; whatYouGet: string; listed: boolean; seats: string; price: string };
@@ -44,6 +46,11 @@ export function KitPodRail(props: { session: unknown; communityId: string; pod: 
   const [confirmLeave, setConfirmLeave] = useState(false);
   const [leaveError, setLeaveError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  // Which of the foot's two things is open.
+  // It starts open on what needs the viewer: a payment that failed, or
+  // (for someone who can edit it) a pod that doesn't yet say what it's for.
+  const [foot, setFoot] = useState<"about" | "membership" | null>(() =>
+    pod.my_membership?.state === "payment_problem" ? "membership" : pod.can_edit && !pod.purpose ? "about" : null);
   const act = async (key: string, work: () => Promise<void>) => {
     if (busy) return;
     setBusy(key);
@@ -96,10 +103,11 @@ export function KitPodRail(props: { session: unknown; communityId: string; pod: 
   const mine = pod.my_membership;
   const paid = Boolean(mine && mine.state !== "added");
 
-  // The panel's parts, in order: who is asking to join (hosts), the guide's
-  // brief, the next call, who is in it, what the pod knows, then what the pod
-  // is and the viewer's own membership. Each keeps its own key, so one
-  // coming or going never resets a draft in another.
+  // The panel's parts, in order (mock: "Every right panel"): who is asking
+  // to join (hosts), the guide's brief, the next call, what the pod knows,
+  // who is in it. What the pod is and the viewer's own membership are looked
+  // at rarely: two links at the foot open them in place. Each part keeps its
+  // own key, so one coming or going never resets a draft in another.
   const parts = ([
     ["requests", pod.can_manage && pod.requests.length ? (
       <Sec label={`Asking to join · ${pod.requests.length}`}>
@@ -118,27 +126,25 @@ export function KitPodRail(props: { session: unknown; communityId: string; pod: 
     ["call", pod.next_call || pod.can_manage ? (
       <KitPodCall session={props.session} communityId={props.communityId} pod={pod} onChanged={props.onChanged} />
     ) : null],
+    ["knowledge", <KitPodKnowledge session={props.session} communityId={props.communityId} channelId={pod.channel_id} />],
     ["people", (
-      <Sec label="In this pod">
-        {pod.members.length ? pod.members.map((member) => (
+      <Sec label={`In this pod · ${pod.members.length}`}>
+        {pod.can_edit ? pod.members.map((member) => (
           <div key={member.user_id} className={cx("podreq")}>
             <span>
               {member.name}{member.is_host ? <em> · host</em> : null}
               {member.payment ? <span className={cx("podtag")}>{memberTag(member.payment)}</span> : null}
             </span>
-            {pod.can_edit ? (
-              <span className={cx("podreq-acts")}>
-                <Btn small txt disabled={Boolean(busy)} onClick={() => void act(`host:${member.user_id}`, () => setCloudPodHost({ session: props.session, communityId: props.communityId, channelId: pod.channel_id, userId: member.user_id, host: !member.is_host }))}>
-                  {member.is_host ? "Not host" : "Make host"}
-                </Btn>
-              </span>
-            ) : null}
+            <span className={cx("podreq-acts")}>
+              <Btn small txt disabled={Boolean(busy)} onClick={() => void act(`host:${member.user_id}`, () => setCloudPodHost({ session: props.session, communityId: props.communityId, channelId: pod.channel_id, userId: member.user_id, host: !member.is_host }))}>
+                {member.is_host ? "Not host" : "Make host"}
+              </Btn>
+            </span>
           </div>
-        )) : <p className={cx("sub")}>No one yet.</p>}
+        )) : pod.members.length ? <PanelPeople names={pod.members.map((member) => member.name)} max={5} /> : <p className={cx("sub")}>No one yet.</p>}
       </Sec>
     )],
-    ["knowledge", <KitPodKnowledge session={props.session} communityId={props.communityId} channelId={pod.channel_id} />],
-    ["about", (
+    ["about", foot === "about" ? (
       <Sec label="About this pod">
         {editing ? (
           <div className={cx("podform")} style={{ marginTop: 0 }}>
@@ -193,8 +199,8 @@ export function KitPodRail(props: { session: unknown; communityId: string; pod: 
           </>
         )}
       </Sec>
-    )],
-    ["membership", mine ? (
+    ) : null],
+    ["membership", foot === "membership" && mine ? (
       <Sec label="Your membership">
         <p className={cx("sub")}>
           {mine.state === "added" ? "You're in."
@@ -226,6 +232,10 @@ export function KitPodRail(props: { session: unknown; communityId: string; pod: 
     <KitApp view="wins" part="rail">
       <Rail index={1} label="About this pod">
         {parts.map(([key, part], index) => <Fragment key={key}>{index ? <Sep /> : null}{part}</Fragment>)}
+        <div className={cx("railfoot")}>
+          <button type="button" aria-expanded={foot === "about"} onClick={() => setFoot(foot === "about" ? null : "about")}>About this pod</button>
+          {mine ? <button type="button" aria-expanded={foot === "membership"} onClick={() => setFoot(foot === "membership" ? null : "membership")}>Your membership</button> : null}
+        </div>
       </Rail>
     </KitApp>
   );

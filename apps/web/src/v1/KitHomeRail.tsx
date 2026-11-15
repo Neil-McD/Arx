@@ -1,18 +1,18 @@
-// Design system v1: Home's right column, in this order: the guide's brief
-// (what's happening, from recent posts); an event that is on today; Today
-// (the day's counts and, for a host, who is waiting to join); who is online
-// now. Until the guide has written a brief, Today carries a few code-built
-// lines on what is going on instead. Builders get one more line: how much
-// their guide knows (its notes are theirs, not the members').
+// Design system v1: Home's right column (mock: "Every right panel"), in
+// this order: the guide's brief (what's happening, from recent posts); the
+// next event; the community brain (how much the guide knows: builders only,
+// its notes are theirs, not the members'); and who is here: how many
+// members, who is online now, who joined this week and, for a host, who is
+// waiting to join.
 import { useEffect, useState } from "react";
 import type { CloudCommunityHomeSnapshot } from "../../../../shared/cloudCommunityAdminGateway";
 import type { CommunityPresenceSummary } from "../../../../shared/communityTypes";
-import { todayCounts, todayLines, type TodayLine } from "../../../../shared/communityHomeToday";
 import { fetchCommunityNotes } from "../../../../shared/cloudCommunityNotesGateway";
 import { UserAvatar } from "../../../../shared/UserAvatar";
-import { cx, Sec, Sep, TextLink } from "./kit";
+import { cx, TextLink } from "./kit";
 import { BriefPart, usePlaceBrief } from "./KitBrief";
 import { KitNextEvent } from "./KitNextEvent";
+import { PanelLine, PanelPart } from "./KitPanel";
 import { noteIsNew } from "./KitKnowledgeNotes";
 
 function hereLine(presence: CommunityPresenceSummary | null | undefined): string {
@@ -32,7 +32,7 @@ export function KitHomeRail(props: {
   communityId: string;
   audience: "host" | "member";
   snapshot: CloudCommunityHomeSnapshot;
-  // Off: Today is the day's counts only; the guide's lines are for paid communities.
+  // Off: no brief; the guide writes one only for paid communities.
   agentOn?: boolean;
   presence?: CommunityPresenceSummary | null;
   now: number;
@@ -55,45 +55,27 @@ export function KitHomeRail(props: {
   }, [props.session, props.communityId]);
 
   const brief = usePlaceBrief(props.session, props.communityId, null, props.agentOn !== false);
-  // The brief says what's going on; beside it Today keeps only what is the
-  // host's to act on (who is waiting to join).
-  const lines = props.agentOn === false ? [] : todayLines(props.snapshot, props.audience)
-    .filter((line) => !brief || line.target?.kind === "members");
-  const counts = todayCounts(props.snapshot);
-  const open = (line: TodayLine) => {
-    if (!line.target) return undefined;
-    const target = line.target;
-    return () => (target.kind === "channel" ? props.onOpenChannelByName(target.name) : props.onOpenMembers());
-  };
   const faces = props.presence?.online_faces ?? [];
+  const { snapshot } = props;
+  const members = snapshot.memberCount;
+  const waiting = props.audience === "host" ? snapshot.joinRequestsPending : 0;
 
   return (
     <>
-      {brief ? (
-        <>
-          <BriefPart brief={brief} now={props.now} onOpenChannel={(channel) => props.onOpenChannelByName(channel.name)} />
-          <Sep />
-        </>
+      {brief ? <BriefPart brief={brief} now={props.now} onOpenChannel={(channel) => props.onOpenChannelByName(channel.name)} /> : null}
+      <KitNextEvent session={props.session} communityId={props.communityId} now={props.now} onOpenEvents={props.onOpenEvents} />
+      {/* What the guide knows is the builders' to see; the server sends a
+          member nothing here, so the part is simply absent for them. */}
+      {memory && memory.canManage ? (
+        <PanelPart label="The community brain" fact={memory.total ? `${memory.total}${memory.more ? "+" : ""} learned` : null}>
+          <PanelLine>
+            <span>{memory.total === 0 ? "Nothing yet. Teach it in Knowledge." : memory.fresh ? `${memory.fresh} new this week` : "Nothing new this week"}</span>
+            {props.onOpenKnowledge ? <TextLink style={{ marginLeft: "auto" }} onClick={props.onOpenKnowledge}>Open</TextLink> : null}
+          </PanelLine>
+        </PanelPart>
       ) : null}
-      <KitNextEvent session={props.session} communityId={props.communityId} now={props.now} onOpenEvents={props.onOpenEvents} quietWhenNone />
-      <Sec label="Today">
-        {lines.length ? <ul className={cx("today")}>
-          {lines.map((line, index) => {
-            const onOpen = open(line);
-            return (
-              <li key={index}>
-                {onOpen
-                  ? <button type="button" className={cx("today-line")} onClick={onOpen}><b>{line.text}</b>{line.meta ? <em>{line.meta}</em> : null}</button>
-                  : <span className={cx("today-line")}><b>{line.text}</b>{line.meta ? <em>{line.meta}</em> : null}</span>}
-              </li>
-            );
-          })}
-        </ul> : null}
-        {counts ? <span className={cx("sub")}>{counts}</span> : props.agentOn === false ? <span className={cx("sub")}>No posts yet today.</span> : null}
-      </Sec>
-      <Sep />
-      <Sec label="Online now">
-        <div className={cx("here-row")}>
+      <PanelPart label="Here" fact={members ? `${members} ${members === 1 ? "member" : "members"}` : null}>
+        <div className={cx("ln")}>
           {faces.length ? (
             <span className={cx("stack")}>
               {faces.slice(0, 5).map((face) => (
@@ -105,22 +87,16 @@ export function KitHomeRail(props: {
               ))}
             </span>
           ) : null}
-          <span className={cx("sub2")}>{hereLine(props.presence)}</span>
+          <span>{hereLine(props.presence)}</span>
         </div>
-      </Sec>
-      {/* What the guide knows is the builders' to see; the server sends a
-          member nothing here, so the section is simply absent for them. */}
-      {memory && memory.canManage ? (
-        <>
-          <Sep />
-          <Sec label="What your guide knows">
-            <div className={cx("kline")}>
-              <span>{memory.total === 0 ? "Nothing yet. Teach it in Knowledge." : `${memory.total}${memory.more ? "+" : ""} ${memory.total === 1 && !memory.more ? "thing" : "things"}${memory.fresh ? ` · ${memory.fresh} new this week` : ""}`}</span>
-              {props.onOpenKnowledge ? <TextLink onClick={props.onOpenKnowledge}>Open</TextLink> : null}
-            </div>
-          </Sec>
-        </>
-      ) : null}
+        {snapshot.week.joined ? <PanelLine>{snapshot.week.joined} joined this week</PanelLine> : null}
+        {waiting ? (
+          <PanelLine>
+            <span>{waiting} waiting to join</span>
+            <TextLink style={{ marginLeft: "auto" }} onClick={props.onOpenMembers}>Review</TextLink>
+          </PanelLine>
+        ) : null}
+      </PanelPart>
     </>
   );
 }
