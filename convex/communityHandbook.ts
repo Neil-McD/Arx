@@ -1,4 +1,5 @@
 import { communityWideEvents } from "./communityEventAudience";
+import { communityScopeKey, notesByUpdated } from "./communityNotesStore";
 import { v } from "convex/values";
 import { hydrateCommunityResourceBody } from "./communityResourceContent";
 import { internal } from "./_generated/api";
@@ -228,9 +229,8 @@ export const loadCommunityHandbookSourcesInternal = internalQuery({
     }
 
     // Community notes: what the agent saved for everyone, newest first.
-    const notes = await ctx.db.query("communityNotes")
-      .withIndex("by_community_updatedAt", (q) => q.eq("communityId", args.communityId)).order("desc").take(12);
-    for (const note of notes) add(`Community note: ${clip(note.title, 80)}`, `${note.title}. ${note.bodyMd}`);
+    const notes = await notesByUpdated(ctx, communityScopeKey(args.communityId)).order("desc").take(12);
+    for (const note of notes as any[]) add(`Community note: ${clip(note.title, 80)}`, `${note.title}. ${note.bodyMd}`);
 
     // Posts: the founder's own, then the words that tend to answer handbook questions.
     const seenPosts = new Set<string>();

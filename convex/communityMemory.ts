@@ -4,6 +4,11 @@
 // came from, and code checks each citation (shared/communityMemory.ts). A
 // builder's note is never changed by the guide. Nothing here calls a model.
 import { v } from "convex/values";
+import {
+  communityScopeKey, insertMemoryIndex, insertNote, insertRemoval, insertRevision, insertRun, insertWork,
+  memoryIndexFor, noteBySlug, notesByUpdated, removalsFor, revisionsForRun, revisionsForSlug, runsOfCommunity, workFor,
+  type ScopeKey,
+} from "./communityNotesStore";
 import { internal } from "./_generated/api";
 import { internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import { resolveUserIdForAuthenticatedRequest } from "./authActor";
@@ -64,6 +69,11 @@ async function openRun(ctx: any, communityId: any, runId: any) {
   return run;
 }
 
+// The scope a review writes into (a community's memory, or a pod's).
+function scopeOfRun(run: any): ScopeKey {
+  return (run.scopeKey as ScopeKey | undefined) ?? communityScopeKey(run.communityId);
+}
+
 async function refuse(ctx: any, run: any, title: string, code: string): Promise<Refused> {
   if (run) await ctx.db.patch(run._id, { refused: [...run.refused, { title: title.slice(0, 120) || "(untitled)", reason: code }].slice(-50) });
   return { ok: false, code };
@@ -73,17 +83,16 @@ async function refuse(ctx: any, run: any, title: string, code: string): Promise<
 export const openMemoryReviewRunInternal = internalMutation({
   args: { communityId: v.id("communities"), windowStart: v.number(), windowEnd: v.number(), nowMs: v.number() },
   handler: async (ctx, args) => {
-    let work = await ctx.db.query("agentWork")
-      .withIndex("by_community_scope_kind", (q) => q.eq("communityId", args.communityId).eq("scope", "community").eq("kind", "memory_review"))
-      .first();
+    const scope = communityScopeKey(args.communityId);
+    let work = await workFor(ctx, scope, "memory_review");
     if (!work) {
-      const workId = await ctx.db.insert("agentWork", {
-        communityId: args.communityId, scope: "community", kind: "memory_review", pending: 0, reviewedThrough: args.windowStart,
+      const workId = await insertWork(ctx, scope, {
+        communityId: args.communityId, kind: "memory_review", pending: 0, reviewedThrough: args.windowStart,
         failures: 0, createdAt: args.nowMs, updatedAt: args.nowMs,
       });
       work = await ctx.db.get(workId);
     }
-    const runId = await ctx.db.insert("agentWorkRuns", {
+    const runId = await insertRun(ctx, scope, {
       communityId: args.communityId, workId: work!._id, kind: "memory_review", status: "running",
       windowStart: args.windowStart, windowEnd: args.windowEnd, added: [], changed: [], refused: [], createdAt: args.nowMs,
     });
@@ -118,16 +127,15 @@ export const observeCommunityMemoryInternal = internalMutation({
       if (refusal) return refuse(ctx, run, title, refusal);
     }
     const refs = parsed.refs.map((ref) => ref.raw);
-    const removals = await ctx.db.query("communityNoteRemovals")
-      .withIndex("by_community_createdAt", (q) => q.eq("communityId", args.communityId)).order("desc").take(REMOVALS_SCAN);
+    const scope = scopeOfRun(run);
+    const removals = await removalsFor(ctx, scope).order("desc").take(REMOVALS_SCAN);
     if (memoryEvidenceWasRemoved(refs, removals)) return refuse(ctx, run, title, "evidence_removed");
 
     if (args.supersedes) {
-      const note = await ctx.db.query("communityNotes")
-        .withIndex("by_community_slug", (q) => q.eq("communityId", args.communityId).eq("slug", args.supersedes!)).first();
+      const note = await noteBySlug(ctx, scope, args.supersedes);
       if (!note) return refuse(ctx, run, title, "note_missing");
       if (noteAuthorKind(note) !== "guide") return refuse(ctx, run, title, "builder_note");
-      await ctx.db.insert("communityNoteRevisions", {
+      await insertRevision(ctx, scope, {
         communityId: args.communityId, slug: note.slug, change: "changed", runId: run._id, createdAt: args.nowMs,
         ...(note.lastRunId ? { previousRunId: note.lastRunId } : {}),
         before: { title: note.title, bodyMd: note.bodyMd, source: note.source, authorKind: "guide", evidenceRefs: note.evidenceRefs ?? [] },
@@ -141,19 +149,18 @@ export const observeCommunityMemoryInternal = internalMutation({
     }
 
     if (run.added.length >= MEMORY_NEW_NOTES_PER_RUN) return refuse(ctx, run, title, "run_note_limit");
-    const existing = await ctx.db.query("communityNotes")
-      .withIndex("by_community_updatedAt", (q) => q.eq("communityId", args.communityId)).take(COMMUNITY_NOTES_MAX_PER_COMMUNITY + 1);
+    const existing = await notesByUpdated(ctx, scope).take(COMMUNITY_NOTES_MAX_PER_COMMUNITY + 1);
     if (existing.length >= COMMUNITY_NOTES_MAX_PER_COMMUNITY) return refuse(ctx, run, title, "notes_full");
-    const taken = new Set(existing.map((row) => row.slug));
+    const taken = new Set<string>(existing.map((row: any) => row.slug));
     const base = communityNoteSlug(title);
     let slug = base;
     for (let n = 2; taken.has(slug); n++) slug = `${base.slice(0, 60)}-${n}`;
-    await ctx.db.insert("communityNotes", {
+    await insertNote(ctx, scope, {
       communityId: args.communityId, slug, title, bodyMd: body, source: "learned", authorKind: "guide",
       evidenceRefs: refs, lastRunId: run._id, searchText: buildCommunityNoteSearchText({ title, bodyMd: body }),
       createdAt: args.nowMs, updatedAt: args.nowMs,
     });
-    await ctx.db.insert("communityNoteRevisions", { communityId: args.communityId, slug, change: "added", runId: run._id, createdAt: args.nowMs });
+    await insertRevision(ctx, scope, { communityId: args.communityId, slug, change: "added", runId: run._id, createdAt: args.nowMs });
     await ctx.db.patch(run._id, { added: [...run.added, slug] });
     return { ok: true, slug, title, change: "added" };
   },
@@ -165,19 +172,19 @@ export const writeCommunityMemoryIndexInternal = internalMutation({
   handler: async (ctx, args): Promise<{ ok: true } | Refused> => {
     const run = await openRun(ctx, args.communityId, args.runId);
     if (!run) return { ok: false, code: "run_not_open" };
-    const notes = await ctx.db.query("communityNotes")
-      .withIndex("by_community_updatedAt", (q) => q.eq("communityId", args.communityId)).take(COMMUNITY_NOTES_MAX_PER_COMMUNITY);
-    const refusal = memoryIndexRefusal(args.bodyMd, new Set(notes.map((note) => note.slug)));
+    const scope = scopeOfRun(run);
+    const notes = await notesByUpdated(ctx, scope).take(COMMUNITY_NOTES_MAX_PER_COMMUNITY);
+    const refusal = memoryIndexRefusal(args.bodyMd, new Set<string>(notes.map((note: any) => note.slug)));
     if (refusal) return refuse(ctx, run, "memory.md", refusal);
-    const current = await ctx.db.query("communityMemoryIndex").withIndex("by_community", (q) => q.eq("communityId", args.communityId)).first();
-    await ctx.db.insert("communityNoteRevisions", {
+    const current = await memoryIndexFor(ctx, scope);
+    await insertRevision(ctx, scope, {
       communityId: args.communityId, slug: "memory.md", change: "index", runId: run._id, createdAt: args.nowMs,
       ...(current?.runId ? { previousRunId: current.runId } : {}),
       ...(current ? { before: { title: "memory.md", bodyMd: current.bodyMd } } : {}),
     });
     const bodyMd = args.bodyMd.trim();
     if (current) await ctx.db.patch(current._id, { bodyMd, runId: run._id, updatedAt: args.nowMs });
-    else await ctx.db.insert("communityMemoryIndex", { communityId: args.communityId, bodyMd, runId: run._id, updatedAt: args.nowMs });
+    else await insertMemoryIndex(ctx, scope, { communityId: args.communityId, bodyMd, runId: run._id, updatedAt: args.nowMs });
     return { ok: true };
   },
 });
@@ -197,8 +204,7 @@ export const finishMemoryReviewRunInternal = internalMutation({
   handler: async (ctx, args) => {
     const run = await openRun(ctx, args.communityId, args.runId);
     if (!run) return null;
-    const wrote = run.added.length + run.changed.length > 0 || Boolean(await ctx.db.query("communityNoteRevisions")
-      .withIndex("by_run", (q) => q.eq("runId", run._id)).first());
+    const wrote = run.added.length + run.changed.length > 0 || Boolean(await revisionsForRun(ctx, run._id).first());
     const status = args.failed ? "failed" : wrote ? "done" : "empty";
     await ctx.db.patch(run._id, {
       status, finishedAt: args.nowMs,
@@ -214,7 +220,7 @@ export const finishMemoryReviewRunInternal = internalMutation({
 export const readCommunityMemoryIndexInternal = internalQuery({
   args: { communityId: v.id("communities") },
   handler: async (ctx, args) => {
-    const row = await ctx.db.query("communityMemoryIndex").withIndex("by_community", (q) => q.eq("communityId", args.communityId)).first();
+    const row = await memoryIndexFor(ctx, communityScopeKey(args.communityId));
     return row ? { bodyMd: row.bodyMd, updatedAt: row.updatedAt } : null;
   },
 });
@@ -232,7 +238,7 @@ async function manager(ctx: any, args: { userId?: any; authSubject?: string; com
 
 // Removes a guide note and remembers what it was learned from.
 export async function removeGuideNote(ctx: any, note: any, removedByUserId: any, nowMs: number) {
-  await ctx.db.insert("communityNoteRemovals", {
+  await insertRemoval(ctx, (note.scopeKey as ScopeKey | undefined) ?? communityScopeKey(note.communityId), {
     communityId: note.communityId, slug: note.slug, title: note.title, evidenceRefs: note.evidenceRefs ?? [],
     ...(removedByUserId ? { removedByUserId } : {}), createdAt: nowMs,
   });
@@ -245,13 +251,11 @@ export const undoLearnedNote = mutation({
   args: { ...viewerArgs, slug: v.string() },
   handler: async (ctx, args) => {
     const userId = await manager(ctx, args);
-    const note = await ctx.db.query("communityNotes")
-      .withIndex("by_community_slug", (q) => q.eq("communityId", args.communityId).eq("slug", args.slug)).first();
+    const scope = communityScopeKey(args.communityId);
+    const note = await noteBySlug(ctx, scope, args.slug);
     if (!note || noteAuthorKind(note) !== "guide") throw new Error("semantic_not_found");
     const nowMs = Date.now();
-    const last = (await ctx.db.query("communityNoteRevisions")
-      .withIndex("by_community_slug_createdAt", (q) => q.eq("communityId", args.communityId).eq("slug", args.slug))
-      .order("desc").take(10)).find((row) => !row.undoneAt && row.change !== "index");
+    const last = (await revisionsForSlug(ctx, scope, args.slug).order("desc").take(10)).find((row: any) => !row.undoneAt && row.change !== "index");
     if (last?.change === "changed" && last.before) {
       const before = last.before;
       await ctx.db.patch(note._id, {
@@ -280,20 +284,20 @@ export const undoMemoryRun = mutation({
     const nowMs = Date.now();
     // Newest first, in the order they were written (a review can change the
     // same note twice within one moment).
-    const revisions = (await ctx.db.query("communityNoteRevisions").withIndex("by_run", (q) => q.eq("runId", run._id)).order("desc").collect())
-      .filter((row) => !row.undoneAt);
+    const scope = scopeOfRun(run);
+    const revisions = (await revisionsForRun(ctx, run._id).order("desc").collect())
+      .filter((row: any) => !row.undoneAt);
     let undone = 0;
     let kept = 0;
     for (const revision of revisions) {
       if (revision.change === "index") {
-        const index = await ctx.db.query("communityMemoryIndex").withIndex("by_community", (q) => q.eq("communityId", args.communityId)).first();
+        const index = await memoryIndexFor(ctx, scope);
         // A later review rewrote memory.md since: its version stays.
         if (index && String(index.runId ?? "") !== String(run._id)) { kept += 1; continue; }
         if (index && revision.before) await ctx.db.patch(index._id, { bodyMd: revision.before.bodyMd, runId: revision.previousRunId, updatedAt: nowMs });
         else if (index) await ctx.db.delete(index._id);
       } else {
-        const note = await ctx.db.query("communityNotes")
-          .withIndex("by_community_slug", (q) => q.eq("communityId", args.communityId).eq("slug", revision.slug)).first();
+        const note = await noteBySlug(ctx, scope, revision.slug);
         // A later review changed the note since: its work stays.
         if (note && String(note.lastRunId ?? "") !== String(run._id)) { kept += 1; continue; }
         // A builder took the note over since: it is theirs now, and stays.
@@ -325,9 +329,8 @@ export const listMemoryRuns = query({
   handler: async (ctx, args) => {
     await manager(ctx, args);
     const limit = Math.max(1, Math.min(RUNS_LIST_MAX, Math.floor(args.limit ?? 10)));
-    const runs = await ctx.db.query("agentWorkRuns")
-      .withIndex("by_community_createdAt", (q) => q.eq("communityId", args.communityId)).order("desc").take(limit * 3);
-    return runs.filter((run) => run.status === "done" || run.status === "undone").slice(0, limit).map((run) => ({
+    const runs = await runsOfCommunity(ctx, args.communityId).order("desc").take(limit * 3);
+    return runs.filter((run: any) => run.status === "done" || run.status === "undone").slice(0, limit).map((run: any) => ({
       id: String(run._id), status: run.status, added: run.added, changed: run.changed, refused: run.refused.length,
       summary: run.summary ?? null, created_at: new Date(run.createdAt).toISOString(),
     }));
@@ -396,14 +399,14 @@ export const readMemoryReviewInputInternal = internalQuery({
       .sort((a, b) => a.order - b.order || a.row.createdAt - b.row.createdAt);
     if (read.length === 0) return { posts: 0, readUntil, text: "", rewritable: [] as string[] };
 
-    const index = await ctx.db.query("communityMemoryIndex").withIndex("by_community", (q) => q.eq("communityId", args.communityId)).first();
-    const notes = await ctx.db.query("communityNotes")
-      .withIndex("by_community_updatedAt", (q) => q.eq("communityId", args.communityId)).order("desc").take(NOTES_LISTED_MAX);
+    const scope = communityScopeKey(args.communityId);
+    const index = await memoryIndexFor(ctx, scope);
+    const notes = await notesByUpdated(ctx, scope).order("desc").take(NOTES_LISTED_MAX);
     const lines = ["# memory.md", "", index?.bodyMd?.trim() || "_Nothing yet._", "", `# The notes (${notes.length}${notes.length === NOTES_LISTED_MAX ? ", newest first" : ""})`, ""];
     if (notes.length === 0) lines.push("_None yet._");
     const rewritable: string[] = [];
     let wholeChars = 0;
-    notes.forEach((note, i) => {
+    notes.forEach((note: any, i: number) => {
       const body = note.bodyMd.trim();
       if (noteAuthorKind(note) === "builder") {
         lines.push(`- memory/${note.slug}.md · ${note.title} · by a builder`);
@@ -415,7 +418,7 @@ export const readMemoryReviewInputInternal = internalQuery({
       if (whole) {
         wholeChars += body.length;
         rewritable.push(note.slug);
-        lines.push(...body.split("\n").map((line) => `  > ${line}`));
+        lines.push(...body.split("\n").map((line: string) => `  > ${line}`));
       }
     });
     lines.push("", `# What people said, ${new Date(args.sinceMs).toISOString()} to ${new Date(readUntil).toISOString()}`);
@@ -456,9 +459,8 @@ export async function markCommunityMemoryReviewDue(ctx: any, args: { communityId
   if (args.actorType !== "human" || !args.channelId) return;
   const channel = await ctx.db.get(args.channelId);
   if (!channel || channel.accessMode !== "all_members" || channel.status !== "active") return;
-  const work = await ctx.db.query("agentWork")
-    .withIndex("by_community_scope_kind", (q: any) => q.eq("communityId", args.communityId).eq("scope", "community").eq("kind", "memory_review"))
-    .first();
+  const scope = communityScopeKey(args.communityId);
+  const work = await workFor(ctx, scope, "memory_review");
   if (work?.dueAt) {
     await ctx.db.patch(work._id, { pending: work.pending + 1, updatedAt: args.nowMs });
     return;
@@ -469,8 +471,8 @@ export async function markCommunityMemoryReviewDue(ctx: any, args: { communityId
     await scheduleMemoryReview(ctx, work._id, dueAt);
   } else {
     // The first review reads the last day, not the community's whole past.
-    const workId = await ctx.db.insert("agentWork", {
-      communityId: args.communityId, scope: "community", kind: "memory_review", pending: 1, firstPendingAt: args.nowMs,
+    const workId = await insertWork(ctx, scope, {
+      communityId: args.communityId, kind: "memory_review", pending: 1, firstPendingAt: args.nowMs,
       reviewedThrough: args.nowMs - 24 * 60 * 60_000, dueAt, failures: 0, createdAt: args.nowMs, updatedAt: args.nowMs,
     });
     await scheduleMemoryReview(ctx, workId, dueAt);

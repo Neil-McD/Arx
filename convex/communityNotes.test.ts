@@ -33,7 +33,7 @@ test("only owners and admins read, edit or delete the notes; a member gets none 
     await ctx.db.insert("communityMemberships", { communityId, userId: memberId, role: "member", accessSource: "free_grant", state: "active", createdAt: NOW, updatedAt: NOW });
     return memberId;
   });
-  await t.run((ctx: any) => ctx.db.insert("communityNotes", {
+  await t.run((ctx: any) => ctx.db.insert("communityNotes", { scopeKey: `community:${String(communityId)}`,
     communityId, slug: "saturday-carpool", title: "Saturday carpool", bodyMd: "Leaves at 4:50.", source: "migrated",
     searchText: "saturday carpool leaves at 4:50", createdAt: NOW, updatedAt: NOW,
   }));
@@ -62,7 +62,7 @@ test("hosts write notes from Knowledge; members can't; only a host's own notes n
     const memberId = await ctx.db.insert("users", { authSubject: "member", displayName: "Jon", createdAt: NOW, updatedAt: NOW });
     await ctx.db.insert("communityMemberships", { communityId, userId: memberId, role: "member", accessSource: "free_grant", state: "active", createdAt: NOW, updatedAt: NOW });
     // A note saved from a member's conversation (an older source).
-    await ctx.db.insert("communityNotes", { communityId, slug: "pods", title: "Pods of five", bodyMd: "Five people per pod.", source: "ask",
+    await ctx.db.insert("communityNotes", { scopeKey: `community:${String(communityId)}`, communityId, slug: "pods", title: "Pods of five", bodyMd: "Five people per pod.", source: "ask",
       searchText: "pods of five", createdByUserId: memberId, createdAt: NOW, updatedAt: NOW });
     expect(ownerId).toBeTruthy();
   });

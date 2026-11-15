@@ -23,7 +23,7 @@ async function world(t: any) {
 }
 
 const work = (t: any, communityId: any) => t.run((ctx: any) => ctx.db.query("agentWork")
-  .withIndex("by_community_scope_kind", (q: any) => q.eq("communityId", communityId).eq("scope", "community").eq("kind", "memory_review")).first());
+  .withIndex("by_scope_kind", (q: any) => q.eq("scopeKey", `community:${String(communityId)}`).eq("kind", "memory_review")).first());
 
 test("a person's post in an open channel makes the review due at the quiet hour; a pod, the guide or a private talk don't", async () => {
   const t = convexTest(schema, modules);
@@ -231,7 +231,7 @@ test("the guide's notes are shown whole within a budget; only those can be rewri
   const w = await world(t);
   await t.run(async (ctx: any) => {
     for (let i = 0; i < 8; i++) {
-      await ctx.db.insert("communityNotes", { communityId: w.communityId, slug: `long-${i}`, title: `Long ${i}`, bodyMd: `${i} `.repeat(2_000),
+      await ctx.db.insert("communityNotes", { scopeKey: `community:${String(w.communityId)}`, communityId: w.communityId, slug: `long-${i}`, title: `Long ${i}`, bodyMd: `${i} `.repeat(2_000),
         source: "learned", searchText: "", authorKind: "guide", createdAt: NOW + i, updatedAt: NOW + i });
     }
     await ctx.db.insert("communityInteractionRoots", { communityId: w.communityId, channelId: w.general, actorType: "human", actorUserId: w.ownerId,

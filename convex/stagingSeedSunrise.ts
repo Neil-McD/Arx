@@ -14,6 +14,7 @@
 //   npx convex run stagingSeedSunrise:seedSunriseInternal '{"communityId":"..."}'
 //   npx convex run stagingSeedSunrise:simulateSunriseLiveInternal \
 //     '{"communityId":"...","action":"post","memberKey":"theo","channelSlug":"beta","text":"Anyone on the board?"}'
+import { communityScopeKey, insertNote, noteBySlug } from "./communityNotesStore";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import { internalMutation } from "./_generated/server";
@@ -412,12 +413,11 @@ export const seedSunriseInternal = internalMutation({
     // Community notes (memory/), written as the founder's and updated in place.
     for (const memory of MEMORIES) {
       const slug = communityNoteSlug(memory.title);
-      const existing = await ctx.db.query("communityNotes")
-        .withIndex("by_community_slug", (q: any) => q.eq("communityId", args.communityId).eq("slug", slug)).first();
+      const existing = await noteBySlug(ctx, communityScopeKey(args.communityId), slug);
       const fields = { title: memory.title, bodyMd: memory.body, searchText: buildCommunityNoteSearchText({ title: memory.title, bodyMd: memory.body }),
         updatedByUserId: moderatorId, updatedAt: nowMs };
       if (existing) await ctx.db.patch(existing._id, fields);
-      else await ctx.db.insert("communityNotes", { communityId: args.communityId, slug, source: "founder", createdByUserId: moderatorId, createdAt: nowMs, ...fields });
+      else await insertNote(ctx, communityScopeKey(args.communityId), { communityId: args.communityId, slug, source: "founder", createdByUserId: moderatorId, createdAt: nowMs, ...fields });
     }
 
     return {

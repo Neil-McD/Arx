@@ -82,7 +82,7 @@ test("only what a person said in an open channel can become community memory", a
 test("the guide never changes a builder's note, only its own", async () => {
   const t = convexTest(schema, modules);
   const w = await world(t);
-  await t.run((ctx: any) => ctx.db.insert("communityNotes", { communityId: w.communityId, slug: "refund-policy", title: "Refund policy",
+  await t.run((ctx: any) => ctx.db.insert("communityNotes", { scopeKey: `community:${String(w.communityId)}`, communityId: w.communityId, slug: "refund-policy", title: "Refund policy",
     bodyMd: "Ask the owner.", source: "founder", searchText: "refund policy", createdAt: NOW, updatedAt: NOW }));
   const { runId } = await run(t, w.communityId);
   expect(await observe(t, w.communityId, runId, [`post:${w.open}`], { supersedes: "refund-policy" })).toEqual({ ok: false, code: "builder_note" });
@@ -90,7 +90,7 @@ test("the guide never changes a builder's note, only its own", async () => {
   await observe(t, w.communityId, runId, [`post:${w.open}`]);
   const changed = await observe(t, w.communityId, runId, [`post:${w.open}`, `reply:${w.reply}`], { supersedes: "refunds", body: "Within 7 days, and say so in the welcome." });
   expect(changed).toMatchObject({ ok: true, slug: "refunds", change: "changed" });
-  const builderNote: any = await t.run((ctx: any) => ctx.db.query("communityNotes").withIndex("by_community_slug", (q: any) => q.eq("communityId", w.communityId).eq("slug", "refund-policy")).first());
+  const builderNote: any = await t.run((ctx: any) => ctx.db.query("communityNotes").withIndex("by_scope_slug", (q: any) => q.eq("scopeKey", `community:${String(w.communityId)}`).eq("slug", "refund-policy")).first());
   expect(builderNote.bodyMd).toBe("Ask the owner.");
 });
 

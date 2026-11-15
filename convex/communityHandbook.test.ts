@@ -94,7 +94,7 @@ test("draft sources read lesson text from its contents table and community notes
       communityId: f.communityId, moduleId, type: "note", pinned: false, title: "First session", status: "published", role: "page", bodyChars: 34, sortOrder: 0, createdByUserId: f.owner, createdAt: NOW, updatedAt: NOW,
     });
     await ctx.db.insert("communityResourceContents", { communityId: f.communityId, resourceId, bodyMd: "Arrive at 5:20 and sign the waiver.", bodyChars: 34, bodyHash: "h", createdAt: NOW, updatedAt: NOW });
-    await ctx.db.insert("communityNotes", {
+    await ctx.db.insert("communityNotes", { scopeKey: `community:${String(f.communityId)}`,
       communityId: f.communityId, slug: "bring-liquid-chalk", title: "Bring liquid chalk", bodyMd: "Liquid chalk under block chalk helps cold hands.",
       source: "ask", searchText: "bring liquid chalk", createdAt: NOW, updatedAt: NOW,
     });
