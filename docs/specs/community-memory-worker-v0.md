@@ -32,6 +32,37 @@ the two drafts before it.
    event marks a review as due; the review runs once its inputs settle.
 8. **Sub-agents read and draft; the lead applies in one checked step.**
 
+## The layers (Neil, Nov 14: the same idea as DE's ledger, offer, market and profile)
+
+Each layer is a set of living Markdown files drawn from records. Each layer
+cites the one below it. Nothing in a higher layer is believed without its
+evidence.
+
+| Layer | Distribution Engineer | Polynet | Who writes it |
+|---|---|---|---|
+| 0. What happened | Content, placements, attribution, conversations | Posts and replies by place, calls, events held and who came, joins and leaves, lessons finished, payments, questions left unanswered | Nobody: it is recorded |
+| 1. What is offered | Products and offers | Courses and lessons, events, pods (what you get, price), channels and what they are for, plans | The builder |
+| 2. Who the people are | Market research | What members said about themselves: what they are working on, where they are, their goals | Members, in their own words |
+| 3. What it means | Business profile, positioning, strategy | What the community has settled and how it does things, gaps, the builder's rules (handbook), each member's picture, and the briefs | The guide (cited), and the builder (outranks the guide) |
+
+Layer 0 is the universe the model updates its picture from. Briefs and
+notes are layer 3: one step of interpretation above it.
+
+## Every agent works this way
+
+The same harness, folder and five tools for every surface. The lens decides
+what is mounted and which writes are allowed; nothing else differs.
+
+| Surface | Today | Change |
+|---|---|---|
+| The guide answering a member (dock, Ask) | `runtimeAgentLoop`; community card and handbook, plus three notes pushed into every turn | Card, handbook and `memory.md`; the rest read on demand |
+| The guide tagged in a channel | `communityAgentServeWorker`, a second engine; card and handbook | The same harness as above (the gateway spec's one engine) |
+| A builder's own AI over MCP | Five tools, builder paths | Unchanged, plus `observe` |
+| A member's own AI over MCP | Five tools, member paths | Unchanged; `observe` only proposes |
+| The founder's brief | Not an agent: a fixed JSON snapshot and one call | A review lens of the same guide, writing `places/community/brief.md` |
+| The memory review | Does not exist | A review lens; `observe` is its only write |
+| Pods | Pod notes exist in the database but are not in the folder | `pods/<pod>/` in the folder, mounted only for that pod's members and the guide working there |
+
 ## What this changes in Polynet
 
 | Today in Polynet | Change |
