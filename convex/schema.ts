@@ -1734,6 +1734,7 @@ export default defineSchema({
     createdAt: v.number(),
     finishedAt: v.optional(v.number()),
   })
+    .index("by_scope_createdAt", ["scopeKey", "createdAt"])
     .index("by_community_createdAt", ["communityId", "createdAt"])
     .index("by_work_createdAt", ["workId", "createdAt"]),
 

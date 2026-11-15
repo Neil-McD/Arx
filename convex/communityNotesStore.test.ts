@@ -57,7 +57,7 @@ test("the backfill scopes old rows to their community and moves old pod notes in
       bodyMd: "Week one: everyone shipped.", createdByUserId: w.ownerId, updatedByUserId: w.ownerId, createdAt: NOW, updatedAt: NOW });
   });
   const first: any = await t.mutation(internal.communityNotesStore.backfillMemoryScopeInternal, {});
-  expect(first).toMatchObject({ scoped: { communityNotes: 1, communityMemoryIndex: 1 }, movedPodNotes: 1 });
+  expect(first).toMatchObject({ scoped: { communityNotes: 1, communityMemoryIndex: 1 }, movedPodNotes: 1, remaining: false });
   await t.run(async (ctx: any) => {
     expect((await notesByUpdated(ctx, communityScopeKey(w.communityId)).collect()).map((row: any) => row.slug).sort()).toEqual(["old-note", "refunds"]);
     expect((await notesByUpdated(ctx, podScopeKey(w.climbersId)).collect()).map((row: any) => row.slug).sort()).toEqual(["call-notes", "fingerboard"]);
@@ -65,5 +65,21 @@ test("the backfill scopes old rows to their community and moves old pod notes in
     expect(await ctx.db.query("communityPodNotes").collect()).toEqual([]);
   });
   expect(await t.mutation(internal.communityNotesStore.backfillMemoryScopeInternal, {}))
-    .toEqual({ scoped: { communityNotes: 0, communityMemoryIndex: 0, communityNoteRevisions: 0, communityNoteRemovals: 0, agentWork: 0, agentWorkRuns: 0 }, movedPodNotes: 0 });
+    .toEqual({ scoped: { communityNotes: 0, communityMemoryIndex: 0, communityNoteRevisions: 0, communityNoteRemovals: 0, agentWork: 0, agentWorkRuns: 0 }, movedPodNotes: 0, remaining: false });
+});
+
+test("a table bigger than one run's limit is finished by running again", async () => {
+  const t = convexTest(schema, modules);
+  const w = await world(t);
+  await t.run(async (ctx: any) => {
+    for (let i = 0; i < 5; i++) await ctx.db.insert("communityNotes", { communityId: w.communityId, slug: `old-${i}`, title: `Old ${i}`,
+      bodyMd: "Before scopes.", source: "founder", searchText: "old", createdAt: NOW + i, updatedAt: NOW + i });
+  });
+  const runs: any[] = [];
+  for (let i = 0; i < 4; i++) runs.push(await t.mutation(internal.communityNotesStore.backfillMemoryScopeInternal, { limit: 2 }));
+  expect(runs.map((run) => run.scoped.communityNotes)).toEqual([2, 2, 1, 0]);
+  expect(runs.map((run) => run.remaining)).toEqual([true, true, false, false]);
+  await t.run(async (ctx: any) => {
+    expect((await notesByUpdated(ctx, communityScopeKey(w.communityId)).collect())).toHaveLength(6);
+  });
 });

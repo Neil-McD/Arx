@@ -110,24 +110,38 @@ export async function insertRun(ctx: any, scopeKey: ScopeKey, doc: Record<string
 // communityPodNotes rows move here as "pod:<roomId>" notes written by a host.
 // Run right after the deploy that adds scope keys; safe to run again.
 
-const BACKFILL_TABLES = ["communityNotes", "communityMemoryIndex", "communityNoteRevisions", "communityNoteRemovals", "agentWork", "agentWorkRuns"] as const;
+// Each table's rows with no scope key yet, through an index that starts with
+// it (a missing key sorts first), so every run moves on to rows still unscoped.
+const UNSCOPED: Record<string, string> = {
+  communityNotes: "by_scope_updatedAt",
+  communityMemoryIndex: "by_scope",
+  communityNoteRevisions: "by_scope_slug_createdAt",
+  communityNoteRemovals: "by_scope_createdAt",
+  agentWork: "by_scope_kind",
+  agentWorkRuns: "by_scope_createdAt",
+};
 
 export const backfillMemoryScopeInternal = internalMutation({
   args: { limit: v.optional(v.number()) },
   handler: async (ctx, args) => {
-    const limit = Math.max(1, Math.min(4_000, Math.floor(args.limit ?? 4_000)));
+    const limit = Math.max(1, Math.min(4_000, Math.floor(args.limit ?? 1_000)));
     const scoped: Record<string, number> = {};
-    for (const table of BACKFILL_TABLES) {
+    let remaining = false;
+    for (const [table, index] of Object.entries(UNSCOPED)) {
+      const rows = await (ctx.db.query(table as any) as any).withIndex(index, (q: any) => q.eq("scopeKey", undefined)).take(limit + 1);
       let n = 0;
-      for (const row of await (ctx.db.query(table) as any).take(limit)) {
-        if (row.scopeKey || !row.communityId) continue;
+      for (const row of rows.slice(0, limit)) {
+        if (!row.communityId) continue;
         await ctx.db.patch(row._id, { scopeKey: communityScopeKey(row.communityId) });
         n += 1;
       }
       scoped[table] = n;
+      if (rows.length > limit) remaining = true;
     }
     let moved = 0;
-    for (const old of await (ctx.db.query("communityPodNotes") as any).take(limit)) {
+    const oldPodNotes = await (ctx.db.query("communityPodNotes") as any).take(limit + 1);
+    if (oldPodNotes.length > limit) remaining = true;
+    for (const old of oldPodNotes.slice(0, limit)) {
       const scope = podScopeKey(old.channelId);
       if (!(await noteBySlug(ctx, scope, old.slug))) {
         await insertNote(ctx, scope, {
@@ -142,6 +156,7 @@ export const backfillMemoryScopeInternal = internalMutation({
       await ctx.db.delete(old._id);
       moved += 1;
     }
-    return { scoped, movedPodNotes: moved };
+    // remaining: run it again until false.
+    return { scoped, movedPodNotes: moved, remaining };
   },
 });
