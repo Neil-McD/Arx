@@ -57,4 +57,8 @@ crons.interval(
 // The founder's daily brief: due when the founder's local hour arrives.
 crons.interval("send due founder briefs", { minutes: 15 },
   (internal as any).communityFounderBrief.processDueFounderBriefsInternal, {});
+// The guide's memory reviews schedule themselves per community; this only
+// re-schedules one whose job was lost (convex/communityMemoryReview.ts).
+crons.interval("repair lost memory reviews", { hours: 24 },
+  (internal as any).communityMemoryReview.repairMemoryReviewScheduleInternal, {});
 export default crons;

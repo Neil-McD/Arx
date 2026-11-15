@@ -11,11 +11,15 @@ export const MEMORY_INDEX_MAX_CHARS = 2_200;
 
 export type MemoryEvidenceRef = { kind: "post" | "reply"; id: string; raw: string };
 
-// "post:<id>" or "reply:<id>". Anything else is not evidence.
+// "post:<id>" or "reply:<id>", or the folder's own names for them
+// ("interaction:root:<id>", "interaction:reply:<id>"). Anything else is not
+// evidence. Stored as post:/reply:.
 export function parseMemoryEvidenceRef(raw: unknown): MemoryEvidenceRef | null {
-  const text = typeof raw === "string" ? raw.trim() : "";
-  const match = /^(post|reply):([A-Za-z0-9_-]{1,64})$/.exec(text);
-  return match ? { kind: match[1] as "post" | "reply", id: match[2], raw: `${match[1]}:${match[2]}` } : null;
+  const text = typeof raw === "string" ? raw.trim().replace(/\.md$/, "") : "";
+  const match = /^(post|reply|interaction:root|interaction:reply):([A-Za-z0-9_-]{1,64})$/.exec(text);
+  if (!match) return null;
+  const kind = match[1] === "post" || match[1] === "interaction:root" ? "post" : "reply";
+  return { kind, id: match[2], raw: `${kind}:${match[2]}` };
 }
 
 export function parseMemoryEvidenceRefs(raw: unknown): { refs: MemoryEvidenceRef[] } | { error: "evidence_required" | "evidence_invalid" | "evidence_too_many" } {
@@ -108,3 +112,31 @@ export const MEMORY_REFUSAL_WORDS: Record<string, string> = {
   index_too_long: `memory.md must stay under ${MEMORY_INDEX_MAX_CHARS} characters.`,
   index_links_missing_note: "memory.md links to a note that doesn't exist.",
 };
+
+// When a community's nightly review runs: the next time it is this hour in
+// the community's time zone (a quiet hour; 3 am by default).
+export const MEMORY_REVIEW_LOCAL_HOUR = 3;
+
+function localHourMinute(ms: number, timeZone: string): { hour: number; minute: number } {
+  try {
+    const parts = new Intl.DateTimeFormat("en-US", { timeZone, hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).formatToParts(new Date(ms));
+    const hour = Number(parts.find((part) => part.type === "hour")?.value ?? "0");
+    const minute = Number(parts.find((part) => part.type === "minute")?.value ?? "0");
+    return { hour: hour === 24 ? 0 : hour, minute };
+  } catch {
+    const date = new Date(ms);
+    return { hour: date.getUTCHours(), minute: date.getUTCMinutes() };
+  }
+}
+
+export function nextMemoryReviewAtMs(nowMs: number, timeZone: string | null | undefined, hour = MEMORY_REVIEW_LOCAL_HOUR): number {
+  const zone = timeZone || "UTC";
+  const step = 15 * 60_000;
+  // Start at the next quarter hour; look a little over a day ahead.
+  let at = Math.ceil((nowMs + 60_000) / step) * step;
+  for (let i = 0; i < 4 * 26; i++, at += step) {
+    const local = localHourMinute(at, zone);
+    if (local.hour === hour && local.minute < 15) return at - local.minute * 60_000;
+  }
+  return nowMs + 24 * 60 * 60_000;
+}

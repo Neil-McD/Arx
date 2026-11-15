@@ -1,3 +1,4 @@
+import { markCommunityMemoryReviewDue } from "./communityMemory";
 import { type StoredInteractionActorType } from "../shared/communityAgentIdentity";
 import { internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import { resolveNotificationRecipientSource } from "./communityNotificationAccess";
@@ -1158,6 +1159,7 @@ async function createCommunityInteractionComposerMessageCore(
         communityAgentMention = mentionRows.communityAgentMention;
         root = (await ctx.db.get(rootId as any)) as InteractionRootRow | null;
         if (!root) throw new Error("interaction_root_create_failed");
+        await markCommunityMemoryReviewDue(ctx, { communityId: args.communityId, channelId: requestedChannel._id, actorType, nowMs });
         await claimInteractionAttachmentsForTarget({
           ctx,
           messageKey: args.idempotencyKey,
@@ -1303,6 +1305,7 @@ async function createCommunityInteractionComposerMessageCore(
       });
       reply = (await ctx.db.get(replyId as any)) as InteractionReplyRow | null;
       if (!reply) throw new Error("interaction_reply_create_failed");
+      await markCommunityMemoryReviewDue(ctx, { communityId: root.communityId, channelId: rootChannel._id, actorType, nowMs });
       await claimInteractionAttachmentsForTarget({
         ctx,
         messageKey: args.idempotencyKey,

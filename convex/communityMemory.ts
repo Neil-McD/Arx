@@ -4,6 +4,7 @@
 // came from, and code checks each citation (shared/communityMemory.ts). A
 // builder's note is never changed by the guide. Nothing here calls a model.
 import { v } from "convex/values";
+import { internal } from "./_generated/api";
 import { internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import { resolveUserIdForAuthenticatedRequest } from "./authActor";
 import { requireCommunityChatAccess, requireCommunityManager } from "./communityCore";
@@ -16,6 +17,7 @@ import {
 } from "../shared/communityNotes";
 import {
   MEMORY_NEW_NOTES_PER_RUN,
+  nextMemoryReviewAtMs,
   memoryEvidenceRefusal,
   memoryEvidenceWasRemoved,
   memoryIndexRefusal,
@@ -329,3 +331,110 @@ export const listMemoryRuns = query({
     }));
   },
 });
+
+// ---------- what the review lens reads
+
+const NEW_POSTS_MAX = 200;
+const POST_TEXT_MAX = 2_000;
+
+async function openChannelBySlug(ctx: any, communityId: any, slug: string) {
+  const channel = await ctx.db.query("communityChannels")
+    .withIndex("by_community_slug", (q: any) => q.eq("communityId", communityId).eq("slug", slug)).first();
+  return channel && channel.accessMode === "all_members" && channel.status === "active" ? channel : null;
+}
+
+export const isOpenChannelInternal = internalQuery({
+  args: { communityId: v.id("communities"), slug: v.string() },
+  handler: async (ctx, args) => Boolean(await openChannelBySlug(ctx, args.communityId, args.slug)),
+});
+
+async function authorWord(ctx: any, row: any, names: Map<string, string>): Promise<string> {
+  if (row.actorType !== "human" || !row.actorUserId) return "the guide";
+  const key = String(row.actorUserId);
+  if (!names.has(key)) {
+    const user = await ctx.db.get(row.actorUserId);
+    names.set(key, user?.handle ? `@${user.handle}` : user?.displayName ?? "a member");
+  }
+  return names.get(key)!;
+}
+
+// channels/<channel>/new.md: what people said there since the last review,
+// oldest first, each post and reply with the name memory.observe cites.
+export const renderChannelNewPostsInternal = internalQuery({
+  args: { communityId: v.id("communities"), slug: v.string(), sinceMs: v.number(), untilMs: v.optional(v.number()) },
+  handler: async (ctx, args) => {
+    const channel = await openChannelBySlug(ctx, args.communityId, args.slug);
+    if (!channel) return null;
+    const take = async (table: "communityInteractionRoots" | "communityInteractionReplies", scope: "community" | "public") =>
+      await ctx.db.query(table).withIndex("by_community_channel_visibility_status_createdAt", (q: any) => {
+        const range = q.eq("communityId", args.communityId).eq("channelId", channel._id).eq("visibilityScope", scope).eq("status", "live").gt("createdAt", args.sinceMs);
+        return args.untilMs !== undefined ? range.lte("createdAt", args.untilMs) : range;
+      }).take(NEW_POSTS_MAX);
+    // A reply is readable only while its thread is (a deleted thread's replies stay live).
+    const liveRoots = new Map<string, boolean>();
+    const inLiveThread = async (row: any) => {
+      const key = String(row.rootId);
+      if (!liveRoots.has(key)) liveRoots.set(key, ((await ctx.db.get(row.rootId)) as any)?.status === "live");
+      return liveRoots.get(key)!;
+    };
+    const replies = [];
+    for (const row of [...(await take("communityInteractionReplies", "community")), ...(await take("communityInteractionReplies", "public"))]) {
+      if (await inLiveThread(row)) replies.push(row);
+    }
+    const rows = [
+      ...(await take("communityInteractionRoots", "community")).map((row: any) => ({ row, kind: "post" as const })),
+      ...(await take("communityInteractionRoots", "public")).map((row: any) => ({ row, kind: "post" as const })),
+      ...replies.map((row: any) => ({ row, kind: "reply" as const })),
+    ].sort((a, b) => a.row.createdAt - b.row.createdAt).slice(0, NEW_POSTS_MAX);
+    const names = new Map<string, string>();
+    const lines = [`# #${channel.name}: new since ${new Date(args.sinceMs).toISOString()}`, ""];
+    if (rows.length === 0) lines.push("Nothing new.");
+    for (const { row, kind } of rows) {
+      const ref = `${kind}:${String(row._id)}`;
+      const where = kind === "reply" ? ` (reply to post:${String(row.rootId)})` : "";
+      const text = String(row.contentSummary ?? "").replace(/\s+/g, " ").trim().slice(0, POST_TEXT_MAX);
+      lines.push(`- ${ref}${where} · ${await authorWord(ctx, row, names)} · ${new Date(row.createdAt).toISOString()}`, `  > ${text}`);
+    }
+    if (rows.length === NEW_POSTS_MAX) lines.push("", `Showing the first ${NEW_POSTS_MAX}; the next review reads the rest.`);
+    return { body: lines.join("\n"), count: rows.length };
+  },
+});
+
+// ---------- when the nightly review is due (run by communityMemoryReview.ts)
+
+export async function communityTimeZone(ctx: any, communityId: any): Promise<string | null> {
+  const settings = await ctx.db.query("communityFounderBriefSettings").withIndex("by_community", (q: any) => q.eq("communityId", communityId)).first();
+  return settings?.timeZone ?? null;
+}
+
+export async function scheduleMemoryReview(ctx: any, workId: any, atMs: number) {
+  await ctx.scheduler.runAt(atMs, (internal as any).communityMemoryReview.runMemoryReviewInternal, { workId });
+}
+
+// Called where people's posts and replies are written: counts what the next
+// review has to read, and makes it due if it isn't already.
+export async function markCommunityMemoryReviewDue(ctx: any, args: { communityId: any; channelId: any; actorType: string; nowMs: number }) {
+  if (args.actorType !== "human" || !args.channelId) return;
+  const channel = await ctx.db.get(args.channelId);
+  if (!channel || channel.accessMode !== "all_members" || channel.status !== "active") return;
+  const work = await ctx.db.query("agentWork")
+    .withIndex("by_community_scope_kind", (q: any) => q.eq("communityId", args.communityId).eq("scope", "community").eq("kind", "memory_review"))
+    .first();
+  if (work?.dueAt) {
+    await ctx.db.patch(work._id, { pending: work.pending + 1, updatedAt: args.nowMs });
+    return;
+  }
+  const dueAt = nextMemoryReviewAtMs(args.nowMs, await communityTimeZone(ctx, args.communityId));
+  if (work) {
+    await ctx.db.patch(work._id, { pending: work.pending + 1, firstPendingAt: work.firstPendingAt ?? args.nowMs, dueAt, failures: 0, updatedAt: args.nowMs });
+    await scheduleMemoryReview(ctx, work._id, dueAt);
+  } else {
+    // The first review reads the last day, not the community's whole past.
+    const workId = await ctx.db.insert("agentWork", {
+      communityId: args.communityId, scope: "community", kind: "memory_review", pending: 1, firstPendingAt: args.nowMs,
+      reviewedThrough: args.nowMs - 24 * 60 * 60_000, dueAt, failures: 0, createdAt: args.nowMs, updatedAt: args.nowMs,
+    });
+    await scheduleMemoryReview(ctx, workId, dueAt);
+  }
+}
+
