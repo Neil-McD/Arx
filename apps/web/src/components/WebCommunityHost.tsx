@@ -2,6 +2,7 @@ import type { AppView, CommunityTab } from "../../../../shared/appShellNavigatio
 import { WebCommunityChatPanel, type WebCommunityChatPanelProps } from "./WebCommunityChatPanel";
 import type { CommunityAdmissionControl } from "./CommunityAutoJoinControl";
 import { WebCommunitySecondaryPanels, type WebCommunitySecondaryPanelsProps } from "./WebCommunitySecondaryPanels";
+import { WebCommunityMembersPage } from "./WebCommunityMembersPage";
 
 type WebCommunityHostProps = {
   admission?: CommunityAdmissionControl;
@@ -18,6 +19,8 @@ export function WebCommunityHost(props: WebCommunityHostProps) {
       {communityTab === "chat" ? (
         <WebCommunityChatPanel {...chatPanelProps} interactionProjection={chatPanelProps.interactionProjection
           ? { ...chatPanelProps.interactionProjection, admission: props.admission } : undefined} />
+      ) : communityTab === "members" ? (
+        <WebCommunityMembersPage chatPanelProps={chatPanelProps} admission={props.admission} />
       ) : (
         <WebCommunitySecondaryPanels {...secondaryPanelsProps} />
       )}

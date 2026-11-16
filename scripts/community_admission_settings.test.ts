@@ -12,7 +12,9 @@ test("Sidebar Auto-join retains canonical permission and save authority", () => 
   expect(app).toMatch(/admission: \{[\s\S]*entry_policy === "open"[\s\S]*entry_policy === "approval"[\s\S]*canManage: canManageMembersActiveCommunity[\s\S]*onChange: handleSetCommunityContextFreeAccessMode/);
   expect(read("apps/web/src/components/WebCommunityInteractionProjection.tsx")).not.toContain("onSetCommunityFreeAccessMode");
   expect(read("apps/web/src/components/WebCommunityHost.tsx")).toContain("admission: props.admission");
-  expect(read("apps/web/src/components/WebCommunityInteractionProjection.tsx")).toContain("admission={props.admission}");
+  // The people panel and the Members page get it from one builder.
+  expect(read("apps/web/src/components/WebCommunityInteractionProjection.tsx")).toContain("admission: props.admission,");
+  expect(read("apps/web/src/components/WebCommunityMembersPage.tsx")).toContain("admission: props.admission,");
   const roster = read("apps/web/src/components/ChannelRosterPanel.tsx");
   expect(roster).toContain("<CommunityAutoJoinControl admission={props.admission}");
   expect(roster).not.toContain("setCloudCommunityFreeAccessMode");

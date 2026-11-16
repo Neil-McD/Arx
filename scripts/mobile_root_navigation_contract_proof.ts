@@ -98,7 +98,8 @@ assert.doesNotMatch(
 );
 assert.doesNotMatch(
   app,
-  /mobileMembersOverlayOpen:[\s\S]*community_funnel|canViewMembers:[\s\S]*shellPublicRoute\.kind === "community_funnel"/,
+  // Within one value: canViewMembers must not be decided by the public funnel.
+  /mobileMembersOverlayOpen:[\s\S]*community_funnel|canViewMembers:[^,\n]*shellPublicRoute\.kind === "community_funnel"/,
   "the public funnel must not retain authenticated-shell member controls",
 );
 assert.match(

@@ -40,10 +40,18 @@ for (const retiredTab of ["ai_feed", "ai-feed", "feed"] as const) {
   );
 }
 
+// Since Nov 17 Members is a page of the community (design v1), opened only by
+// people the community lets see its members.
+assert.equal(parseCommunityTab("members"), "members", "/members is the Members page");
 assert.equal(
-  parseCommunityTab("members"),
+  normalizeCommunityTabForAccess("members", memberAccess),
   "chat",
-  "legacy /members routes should collapse to the member-facing chat/right-panel surface",
+  "without the right to see members, the Members page falls back to chat",
+);
+assert.equal(
+  normalizeCommunityTabForAccess("members", { ...memberAccess, canViewMembers: true }),
+  "members",
+  "someone who may see members keeps the Members page",
 );
 assert.equal(
   parseCommunityTab("polynet"),

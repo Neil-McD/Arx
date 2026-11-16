@@ -2,6 +2,7 @@
 // mock's markup (docs/design/hifi-mock, Members). Checked against
 // docs/design/members-invariants.md: every way someone is in and at which
 // price, who needs the host, who is out and why, and one member's record.
+import { useRouteDetail, writeRouteDetail } from "../../../../shared/routeDetails";
 import { useCallback, useContext, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { ArrowLeft } from "lucide-react";
 import { createPortal } from "react-dom";
@@ -78,18 +79,24 @@ export function KitMembersPage(props: {
   const [loaded, setLoaded] = useState<{ view: string; rows: CloudMemberRecordRow[]; past: CloudPastMemberRow[]; cursor: string | null; done: boolean } | null>(null);
   const [loading, setLoading] = useState(false);
   const [sort, setSort] = useState<{ key: MembersSortKey; desc: boolean } | null>(null);
-  const [openKey, setOpenKey] = useState<string | null>(null);
-  // What is open beside the table: one member's record, or the people
-  // waiting to join. Nothing until the host picks (in a narrow window it
-  // takes the table's place, with a way back).
-  const [side, setSide] = useState<"record" | "requests" | null>(null);
+  // What is open beside the table, kept in the address
+  // (/members/<membership id>, /members/requests): one member's record, or
+  // the people waiting to join. Nothing until the host picks (in a narrow
+  // window it takes the table's place, with a way back). Opening one is a
+  // step the back button returns from.
+  const routeMember = useRouteDetail("member");
+  const side: "record" | "requests" | null = routeMember === "requests" ? "requests" : routeMember ? "record" : null;
+  const openKey = routeMember && routeMember !== "requests" ? routeMember : null;
+  const setSide = (next: "record" | "requests" | null) =>
+    writeRouteDetail("member", next === "requests" ? "requests" : next === "record" ? openKey : null);
+  const openRecord = (key: string) => writeRouteDetail("member", key);
   const picked = side !== null;
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
   const [bulkBusy, setBulkBusy] = useState<string | null>(null);
   // Another view or community: what was ticked there is let go.
   useEffect(() => { setSelected(new Set()); }, [scope?.communityId, view]);
-  useEffect(() => { setSide(null); setOpenKey(null); setSearch(""); }, [scope?.communityId]);
+  useEffect(() => { setSearch(""); }, [scope?.communityId]);
   const [record, setRecord] = useState<CloudMemberRecord | null>(null);
   const [recordVersion, setRecordVersion] = useState(0);
   const [tableVersion, setTableVersion] = useState(0);
@@ -275,7 +282,7 @@ export function KitMembersPage(props: {
                 sort={sort} onSort={(key) => setSort((current) => ({ key, desc: current?.key === key ? !current.desc : key === "active" || key === "joined" }))}
                 selected={selected} onToggle={(key) => setSelected((last) => { const next = new Set(last); if (next.has(key)) next.delete(key); else next.add(key); return next; })}
                 onToggleAll={() => setSelected((last) => toggleAllShown(last, rows.map(keyOf)))}
-                openKey={side === "record" ? openKey : null} onOpen={(key) => { setOpenKey(key); setSide("record"); }}
+                openKey={side === "record" ? openKey : null} onOpen={openRecord}
                 empty={loading ? "Loading…" : search.trim() ? `No one matches "${search.trim()}".` : "No one here."}
                 getAvatarColor={props.getAvatarColor} getInitials={props.getInitials} />
             ) : null}
@@ -284,7 +291,7 @@ export function KitMembersPage(props: {
                 <div className={cx("trow th")} role="row"><span /><span>Member</span><span>What happened</span><span>Was on</span><span>When</span></div>
                 {(search.trim() ? pastRows.filter((row) => matchesMemberSearch({ name: row.name, handle: null }, search)) : pastRows).map((row) => (
                   <button key={`${row.user_id}:${row.reason}`} type="button" role="row" className={cx("trow", row.membership_id && openKey === row.membership_id && "sel")}
-                    onClick={() => { if (!row.membership_id) return; setOpenKey(row.membership_id); setSide("record"); }} disabled={!row.membership_id}>
+                    onClick={() => { if (!row.membership_id) return; openRecord(row.membership_id); }} disabled={!row.membership_id}>
                     <Face size="s" name={row.name} url={row.avatar_url} seed={row.user_id} getAvatarColor={props.getAvatarColor} getInitials={props.getInitials} />
                     <span><b>{row.name}</b>{row.reason === "blocked" ? <span className={cx("tag hold")}>blocked</span> : null}{row.rejoined ? <span className={cx("tag")}>rejoined before</span> : null}</span>
                     <span>{row.reason_text}</span>

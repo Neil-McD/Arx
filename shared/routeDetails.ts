@@ -19,7 +19,7 @@ import {
 // Before Nov 17 these rode on the query (?thread=, ?lesson=, ?view=). Those
 // links still open the same place, and are rewritten to the path.
 
-export type RouteDetailKey = "thread" | "lesson" | "view";
+export type RouteDetailKey = "thread" | "lesson" | "view" | "member";
 const LEGACY_TAGS: RouteDetailKey[] = ["thread", "lesson", "view"];
 const CHANGE_EVENT = "polynet:route-detail";
 
@@ -65,6 +65,7 @@ function detailOf(route: AppRoutePathState | null, key: RouteDetailKey): string 
   if (!route) return null;
   if (key === "thread") return route.communityThreadId ?? null;
   if (key === "lesson") return route.communityLessonId ?? null;
+  if (key === "member") return route.communityMemberKey ?? null;
   return route.communityKnowledgeView ?? null;
 }
 
@@ -81,6 +82,7 @@ export function pathWithRouteDetail(path: string, key: RouteDetailKey, value: st
   const next: AppRoutePathState = { ...route };
   if (key === "thread") next.communityThreadId = readRouteId(value);
   else if (key === "lesson") next.communityLessonId = readRouteId(value);
+  else if (key === "member") next.communityMemberKey = readRouteId(value);
   else next.communityKnowledgeView = value === "guide" || value === "brain" ? (value as CommunityKnowledgeView) : null;
   const built = buildAppRoutePath(next);
   if (!built) return null;
@@ -103,6 +105,7 @@ export function carryRouteDetails(nextPath: string, currentPath: string): string
     communityThreadId: current.communityThreadId ?? null,
     communityLessonId: current.communityLessonId ?? null,
     communityKnowledgeView: current.communityKnowledgeView ?? null,
+    communityMemberKey: current.communityMemberKey ?? null,
   });
   return built ? join({ ...next, pathname: built, search: withoutLegacyTags(next.search) }) : nextPath;
 }

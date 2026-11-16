@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { readPlaceParam, writeOpenPlace } from "../../../../shared/placeParams";
 
 type Scope = { userId?: string; communityId: string | null; channelSlug?: string | null };
 export function channelPeopleScopeKey(scope: Scope) {
@@ -8,8 +7,6 @@ export function channelPeopleScopeKey(scope: Scope) {
 
 export function useWebChannelPeoplePanel(params: Scope & {
   inChat: boolean;
-  // The channel itself has loaded (Members opens over it).
-  channelReady: boolean;
   canViewMembers: boolean;
   closeDetail: () => void;
   openGeneral: () => boolean;
@@ -20,21 +17,9 @@ export function useWebChannelPeoplePanel(params: Scope & {
   useEffect(() => {
     setOpenScope(scope => params.canViewMembers && scope === currentScope ? scope : null);
   }, [currentScope, params.canViewMembers]);
-  // Members rides on the address (?open=members), so a refresh comes back to
-  // it. Read once; opened when this channel and your rights are known.
-  const reopenRef = useRef(readPlaceParam("open") === "members");
-  useEffect(() => {
-    if (!reopenRef.current) return;
-    if (readPlaceParam("open") !== "members") { reopenRef.current = false; return; }
-    if (!params.canViewMembers || !currentScope || !params.channelReady) return;
-    reopenRef.current = false;
-    setOpenScope(currentScope);
-  }, [currentScope, params.canViewMembers, params.channelReady]);
+  // Design v1: Members is a page (/c/:slug/members); this is the classic
+  // layout's panel, and the phone's people button asking for that page.
   const peopleOpen = Boolean(params.canViewMembers && currentScope && openScope === currentScope);
-  useEffect(() => {
-    if (reopenRef.current && readPlaceParam("open") === "members") return;
-    writeOpenPlace("members", peopleOpen);
-  }, [peopleOpen]);
   const changeOpen = useCallback((open: boolean) => {
     if (open) {
       openerRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;

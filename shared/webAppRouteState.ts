@@ -41,6 +41,9 @@ export type AppRouteState = {
   communityThreadId?: string | null;
   communityLessonId?: string | null;
   communityKnowledgeView?: CommunityKnowledgeView | null;
+  // On Members: one member's record (their membership id), or the join
+  // requests waiting ("requests").
+  communityMemberKey?: string | null;
   docsSlug?: string | null;
 };
 
@@ -62,6 +65,7 @@ export type AppRoutePathState = {
   communityThreadId?: string | null;
   communityLessonId?: string | null;
   communityKnowledgeView?: CommunityKnowledgeView | null;
+  communityMemberKey?: string | null;
   docsSlug?: string | null;
 };
 
@@ -85,6 +89,7 @@ export type WebDestination =
   | { kind: "community_resources"; slug: string; moduleId: string | null }
   | { kind: "community_events"; slug: string }
   | { kind: "community_pods"; slug: string; podSlug: string | null }
+  | { kind: "community_members"; slug: string }
   | { kind: "community_agent"; slug: string }
   | { kind: "community_settings"; slug: string; pane: CommunitySettingsPane }
   | { kind: "community_analytics"; slug: string };
@@ -494,21 +499,6 @@ export function parseAppRouteFromPathname(pathname: string): AppRoutePathState |
     };
   }
 
-  if (segments[0] === "c" && segments.length === 3 && segments[2] === "members") {
-    const slug = String(segments[1] ?? "").trim() || null;
-    if (!slug) return null;
-    return {
-      page: "community",
-      view: "home",
-      settingsPage: "profile",
-      communitySlug: slug,
-      communityTab: "chat",
-      communityChannelSlug: null,
-      communityResourceModuleId: null,
-      communitySettingsPane: null,
-    };
-  }
-
   if (segments[0] === "c" && segments.length >= 3) {
     const slug = String(segments[1] ?? "").trim() || null;
     if (!slug) return null;
@@ -535,6 +525,7 @@ export function parseAppRouteFromPathname(pathname: string): AppRoutePathState |
     const communityChannelSlug =
       communityTab === "chat" ? String(segments[3] ?? "").trim().toLowerCase() || null : null;
     const communityThreadId = communityTab === "chat" && communityChannelSlug ? readRouteId(segments[4]) : null;
+    const communityMemberKey = communityTab === "members" ? readRouteId(segments[3]) : null;
     const communityPodSlug =
       communityTab === "pods" ? String(segments[3] ?? "").trim().toLowerCase() || null : null;
     const communitySettingsPane =
@@ -554,6 +545,7 @@ export function parseAppRouteFromPathname(pathname: string): AppRoutePathState |
       ...(communityThreadId ? { communityThreadId } : {}),
       ...(communityLessonId ? { communityLessonId } : {}),
       ...(knowledgeView ? { communityKnowledgeView: knowledgeView } : {}),
+      ...(communityMemberKey ? { communityMemberKey } : {}),
     };
   }
 
@@ -601,6 +593,8 @@ export function deriveWebDestinationFromAppRoute(
           return { kind: "community_events", slug };
         case "pods":
           return { kind: "community_pods", slug, podSlug: route.communityPodSlug ?? null };
+        case "members":
+          return { kind: "community_members", slug };
         case "agent":
           return { kind: "community_agent", slug };
         case "settings":
@@ -654,6 +648,7 @@ export function isWebCommunityDetailDestination(
     case "community_resources":
     case "community_events":
     case "community_pods":
+    case "community_members":
     case "community_agent":
     case "community_settings":
     case "community_analytics":
@@ -681,6 +676,7 @@ export function webDestinationHasCommunityNavSelection(
     case "community_resources":
     case "community_events":
     case "community_pods":
+    case "community_members":
     case "community_agent":
     case "community_settings":
     case "community_analytics":
@@ -724,7 +720,13 @@ export function readPublicRouteFromLocation(): PublicRoute {
 }
 
 export function readAppRouteFromLocation(): AppRouteState {
-  const fromPath = parseAppRouteFromPathname(stripShellVariantFromPathname(window.location.pathname || "/"));
+  const parsedPath = parseAppRouteFromPathname(stripShellVariantFromPathname(window.location.pathname || "/"));
+  // Before Nov 17 Members opened over a channel as ?open=members; that link
+  // now opens the Members page.
+  const fromPath = parsedPath?.page === "community" && parsedPath.communityTab === "chat"
+    && new URLSearchParams(window.location.search).get("open") === "members"
+    ? { ...withoutCommunityRouteDetails(parsedPath), communityTab: "members" as const, communityChannelSlug: null }
+    : parsedPath;
   if (fromPath) {
     return {
       page: fromPath.page,
@@ -740,6 +742,7 @@ export function readAppRouteFromLocation(): AppRouteState {
       ...(fromPath.communityThreadId ? { communityThreadId: fromPath.communityThreadId } : {}),
       ...(fromPath.communityLessonId ? { communityLessonId: fromPath.communityLessonId } : {}),
       ...(fromPath.communityKnowledgeView ? { communityKnowledgeView: fromPath.communityKnowledgeView } : {}),
+      ...(fromPath.communityMemberKey ? { communityMemberKey: fromPath.communityMemberKey } : {}),
       docsSlug: fromPath.docsSlug ?? null,
     };
   }
@@ -764,6 +767,10 @@ function appendCommunityRouteDetails(base: string, state: AppRoutePathState): st
     const channel = String(state.communityChannelSlug ?? "").trim().toLowerCase();
     return `${base}${channel && channel !== "general" ? "" : "/general"}/${encodeURIComponent(thread)}`;
   }
+  if (state.communityTab === "members") {
+    const key = readRouteId(state.communityMemberKey);
+    return key ? `${base}/${encodeURIComponent(key)}` : base;
+  }
   if (state.communityTab === "resources") {
     const moduleId = String(state.communityResourceModuleId ?? "").trim();
     if (moduleId) {
@@ -777,7 +784,7 @@ function appendCommunityRouteDetails(base: string, state: AppRoutePathState): st
 }
 
 export function withoutCommunityRouteDetails(state: AppRoutePathState): AppRoutePathState {
-  const { communityThreadId: _t, communityLessonId: _l, communityKnowledgeView: _v, ...base } = state;
+  const { communityThreadId: _t, communityLessonId: _l, communityKnowledgeView: _v, communityMemberKey: _m, ...base } = state;
   return base;
 }
 
