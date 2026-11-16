@@ -998,8 +998,14 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
         narrowOpen={peopleOpen}
         pinned={props.pinnedRoot ? {
           label: (props.pinnedRoot.root.title || props.pinnedRoot.root.content_summary || "Pinned post").trim().slice(0, 80),
+          author: actorLabel(props.pinnedRoot.root, props.displayName, props.activeCommunityName),
+          at: props.pinnedRoot.root.created_at ?? null,
+          title: props.pinnedRoot.root.title?.trim() || null,
+          excerpt: String(props.pinnedRoot.root.content_summary ?? "").trim().slice(0, 280),
           onOpen: () => props.onSelectRoot(props.pinnedRoot!.root.id),
+          ...(props.canManagePinnedRoot && props.onSetPinnedRoot ? { onUnpin: () => void props.onSetPinnedRoot?.(null), unpinning: Boolean(props.isUpdatingPinnedRoot) } : {}),
         } : null}
+        channelDescription={props.activeChannel?.description ?? null}
         joinReview={{
           canReviewJoinRequests: props.canReviewCommunityJoinRequests,
           joinReviewMode: props.communityJoinReviewMode,
