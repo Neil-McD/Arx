@@ -808,6 +808,50 @@
 .app .joinbar{margin-top:auto;display:flex;flex-direction:column;gap:7px}
 .app .joinbar .btn{height:40px;font-size:14px;border-radius:10px;justify-content:center}
 .app .joinbar small{font-size:12px;color:var(--ink3);text-align:center}
+/* The community brain (KitBrainMap): neurons and synapses. */
+.app svg.brain{display:block;width:100%;height:auto;overflow:visible}
+.app svg.brain-page{height:100%}
+.app .brain-glow-in{stop-color:rgb(var(--au));stop-opacity:.55}
+.app .brain-mine-in{stop-color:#8a91e3;stop-opacity:.55}
+.app .brain-glow-out{stop-color:rgb(var(--au));stop-opacity:0}
+.app .brain-fibre{fill:none;stroke:rgba(var(--w),.36);stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.app .brain-spoke{fill:none;stroke:rgba(var(--w),.2);stroke-width:1.2;stroke-linecap:round}
+.app .brain-spoke.gap{stroke:rgba(224,168,79,.5)}
+.app .brain-branch{fill:none;stroke:rgba(var(--w),.2);stroke-linecap:round}
+.app .brain-arc{fill:none;stroke:rgba(var(--au),.28);stroke-width:.9;stroke-linecap:round}
+.app .brain-arc.hot{stroke:rgba(var(--au),.75);stroke-width:1.3}
+.app .brain-fibre.dim,.app .brain-spoke.dim{stroke:rgba(var(--w),.1)}
+.app .brain-branch.dim,.app .brain-arc.dim{stroke:rgba(var(--w),.05)}
+.app .brain-dot{fill:#8b8f98}
+.app .brain-dot.fresh{fill:#c4b2fc}
+.app .brain-dot.taught{fill:var(--bg);stroke:#aeb2ba;stroke-width:1.5}
+.app .brain-dot.mine{fill:#8a91e3}
+.app .brain-dot.dim{fill:#34363c;stroke:none}
+.app .brain-lesson{fill:var(--bg);stroke:#aeb2ba;stroke-width:1.7}
+.app .brain-lesson.done{fill:var(--ink);stroke:none}
+.app .brain-lesson.mine{fill:#8a91e3;stroke:none}
+.app .brain-lesson.dim{fill:var(--bg);stroke:#34363c}
+.app .brain-cell{fill:var(--bg);stroke:var(--ink);stroke-width:1.6}
+.app .brain-cell.other{stroke-dasharray:2.4 2.2;stroke:#aeb2ba}
+.app .brain-cell.closed{stroke:#6b6e76;stroke-width:1.3}
+.app .brain-cell.dim{stroke:#34363c}
+.app .brain-cell.gap{stroke:#e0a84f}
+.app .brain-nucleus{fill:var(--ink)}.app .brain-nucleus.dim{fill:#34363c}.app .brain-nucleus.gap{fill:#e0a84f}
+.app .brain-membrane{fill:rgba(var(--w),.012);stroke:rgba(var(--w),.16);stroke-dasharray:1.5 4}
+.app .brain-ring{fill:none;stroke:#fff;stroke-width:1.3}
+.app .brain-core{fill:#fff}
+.app .brain-core-ring{fill:none;stroke:rgba(var(--au),.5)}
+.app .brain-hit{fill:transparent}
+.app .brain-node.pickable{cursor:pointer;outline:none}
+.app .brain-node.pickable:focus-visible .brain-hit{stroke:rgba(var(--w),.6);stroke-width:1}
+.app svg.brain text{font-family:inherit}
+.app .brain-center{font-size:12.5px;font-weight:600;fill:var(--ink)}
+.app .brain-hub{font-size:12.5px;font-weight:600;fill:var(--ink)}
+.app .brain-hub.dim{fill:rgba(var(--w),.4)}.app .brain-hub.gap{fill:#e0a84f}.app .brain-hub.closed{font-weight:400;fill:var(--ink3)}
+.app .brain-gapnote{font-size:10.5px;fill:#e0a84f}
+.app .brain-num{font-size:10px;fill:var(--ink3)}.app .brain-num.dim{fill:rgba(var(--w),.25)}
+.app .brain-name{font-size:11px;fill:rgba(var(--w),.78)}
+.app .brain-name.dim{fill:rgba(var(--w),.28)}.app .brain-name.on{fill:#fff;font-weight:600}
 .app button.kmini-btn{width:100%;padding:0}.app button.kmini-btn:disabled{cursor:default}
 .app .kmini+.kline{margin-top:10px}
 
