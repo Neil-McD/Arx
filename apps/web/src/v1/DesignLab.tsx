@@ -35,7 +35,7 @@ import { BriefPart } from "./KitBrief";
 import { PanelAction, PanelLearned, PanelLine, PanelNext, PanelPart, PanelPeople } from "./KitPanel";
 import { KitChannelFeed } from "./KitChannelFeed";
 import { BRAIN_MAP_MIN_POINTS, KitBrainMap, type BrainReading } from "./KitBrainMap";
-import { KitBrainPageView } from "./KitBrainPage";
+import { KitBrainPageFrame, KitBrainPageView } from "./KitBrainPage";
 import { fullExample, middlingExample, sunriseExample } from "./brainExamples";
 import { CommunityPageFrame, CommunityPageRail } from "../components/CommunityPageHeader";
 import { KitHomeRail } from "./KitHomeRail";
@@ -434,9 +434,7 @@ function BrainPageLab() {
     <div style={{ height: "100vh", display: "grid" }}>
       <CommunityPageFrame>
         <div style={{ padding: "0 56px" }}>
-          <KitApp view="know" host part="flow">
-            <KitBrainPageView session={null} communityId="lab" canManage onOpenCourse={() => undefined} map={map} />
-          </KitApp>
+          <KitBrainPageFrame canManage><KitBrainPageView session={null} communityId="lab" canManage onOpenCourse={() => undefined} map={map} /></KitBrainPageFrame>
         </div>
       </CommunityPageFrame>
     </div>

@@ -145,9 +145,17 @@ type PageProps = {
 
 export function KitBrainPage(props: PageProps) {
   const { map, failed } = useBrainMap(props.session, props.communityId);
-  if (failed) return <p className={cx("sub")}>The map couldn't load. Try again in a moment.</p>;
-  if (!map) return null;
-  return <KitBrainPageView {...props} map={map} />;
+  return (
+    <KitBrainPageFrame canManage={props.canManage}>
+      {failed ? <p className={cx("sub")}>The map couldn't load. Try again in a moment.</p> : map ? <KitBrainPageView {...props} map={map} /> : null}
+    </KitBrainPageFrame>
+  );
+}
+
+// The kit's styles live under its own container: without it the map has
+// none (SVG falls back to black). The page and the lab both draw inside it.
+export function KitBrainPageFrame(props: { canManage: boolean; children: ReactNode }) {
+  return <KitApp view="know" host={props.canManage} part="flow">{props.children}</KitApp>;
 }
 
 // The page for a map already in hand (the design lab draws it from examples).
