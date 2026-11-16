@@ -7,7 +7,7 @@ import {
 import { requireConvexUrl } from "./convexAuthenticatedClient";
 
 // One way for a page to read data that stays true (docs/specs/
-// web-architecture-end-state.md, step 3). A page names a server query and its
+// web-architecture-end-state.md, rule 2). A page names a server query and its
 // arguments; the answer comes over the one live connection per signed-in
 // person (shared/convexRealtimeAuth.ts) and updates when the data does.
 //
