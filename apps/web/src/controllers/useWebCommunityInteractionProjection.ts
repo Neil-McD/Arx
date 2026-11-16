@@ -16,7 +16,7 @@ import {
   subscribeCloudCommunityActivityEvents,
   type CloudCommunityChatLiveClient,
 } from "../../../../shared/cloudCommunityChatGateway";
-import { applyLiveRootWindow, mergeOlderRootPage } from "./communityRootWindows";
+import { applyLiveRootWindow, mergeOlderRootPage, oldestRootCreatedAtMs } from "./communityRootWindows";
 import type { CommunityActivityEvent } from "../../../../shared/communityTypes";
 import {
   subscribeCloudCommunityAgentServeIssue,
@@ -532,10 +532,17 @@ export function useWebCommunityInteractionProjection<
   }, [activeChannelId, activeCommunityId, ensureSession]);
 
   useEffect(() => {
-    if (!activeCommunityId || !canonicalSessionUserId) return;
+    // The feed is live only while a channel is on screen; elsewhere (Home,
+    // Events, Knowledge, Members...) it does not hold a subscription. What was
+    // shown stays cached, so coming back draws at once while it reconnects.
+    if (!isCommunityChatActive || !activeCommunityId || !canonicalSessionUserId) return;
     const hasCurrentRoots = rootsRef.current.some((bundle) =>
       rootMatchesChannel(bundle, activeCommunityId, activeChannelId)
     );
+    // Coming back to a channel shown before: if a full window arrived while
+    // away, the cached older posts may not join up with it, so the first
+    // answer replaces them rather than leaving a gap.
+    let firstUpdate = true;
     if (!hasCurrentRoots) {
       setIsLoadingRoots(true);
     }
@@ -568,9 +575,15 @@ export function useWebCommunityInteractionProjection<
               (bundle) => rootMatchesChannel(bundle, activeCommunityId, activeChannelId),
             );
             setRootChangeReason(hadLoadedRoots ? "newer" : "initial");
+            const replaceCached = firstUpdate && hasCurrentRoots
+              && incomingRoots.length >= COMMUNITY_INTERACTION_ROOT_LIMIT;
+            firstUpdate = false;
+            // The older pages are gone, so loading older posts continues from
+            // just below this window, leaving nothing out.
+            if (replaceCached) setNextBeforeCreatedAt(oldestRootCreatedAtMs(incomingRoots));
             setRoots((current) =>
               applyLiveRootWindow(
-                current.filter((bundle) => rootMatchesChannel(bundle, activeCommunityId, activeChannelId)),
+                replaceCached ? [] : current.filter((bundle) => rootMatchesChannel(bundle, activeCommunityId, activeChannelId)),
                 incomingRoots,
                 COMMUNITY_INTERACTION_ROOT_LIMIT,
               ),
@@ -639,7 +652,7 @@ export function useWebCommunityInteractionProjection<
       unsubscribePinnedRoot?.();
       liveClient?.close();
     };
-  }, [activeChannelId, activeCommunityId, canonicalSessionUserId, ensureSession]);
+  }, [activeChannelId, activeCommunityId, canonicalSessionUserId, ensureSession, isCommunityChatActive]);
 
   useEffect(() => {
     if (
