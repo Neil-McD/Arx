@@ -1,7 +1,7 @@
-// Pods (docs/specs/pods-v0.md): the pod someone is in is remembered per
-// community in this browser, so "Pods" in the left column goes back to it.
-// The pod's "← Pods" arrow forgets it and shows every pod. A convenience
-// only: the page works the same when storage is unavailable.
+// Pods (docs/specs/pods-v0.md): the pod someone was last in is remembered per
+// community in this browser, so the Pods page shows it first (it never
+// redirects). Leaving a pod forgets it. A convenience only: the page works
+// the same when storage is unavailable.
 
 function communitySlugFromPath(): string {
   const segments = window.location.pathname.split("/").filter(Boolean);
@@ -48,4 +48,31 @@ export function goToPodsPath(podSlug?: string): void {
   const path = `${mobile}/c/${encodeURIComponent(community)}/pods${podSlug ? `/${encodeURIComponent(podSlug)}` : ""}`;
   window.history.pushState({}, "", path);
   window.dispatchEvent(new PopStateEvent("popstate"));
+}
+
+// Which pod the Pods page shows, read from the address and the lists (never
+// stored by the page). /pods/<pod> shows that pod: its landing page for
+// someone who can enter it, its pitch for anyone else (or for a builder who
+// asked to see it as members do). /pods on a wide screen shows the pod they
+// were last in, else their first, else the first they could join; on a
+// narrow screen just the list. Nothing is shown until the lists have loaded,
+// so a landing page never starts as a pitch.
+export function podShown(input: {
+  podSlug: string | null;
+  mine: string[] | null;
+  outside: string[];
+  recalled: string | null;
+  wide: boolean;
+  preview: boolean;
+}): { slug: string; kind: "landing" | "pitch" } | null {
+  if (!input.mine) return null;
+  if (input.podSlug) {
+    const kind = input.mine.includes(input.podSlug) && !input.preview ? "landing" : "pitch";
+    return { slug: input.podSlug, kind };
+  }
+  if (!input.wide) return null;
+  const recalled = input.recalled && input.mine.includes(input.recalled) ? input.recalled : null;
+  const slug = recalled ?? input.mine[0] ?? null;
+  if (slug) return { slug, kind: "landing" };
+  return input.outside[0] ? { slug: input.outside[0], kind: "pitch" } : null;
 }

@@ -1,15 +1,13 @@
 // Pods (docs/specs/pods-v0.md): one page for every pod, never rows in the
 // left column. Builders see all pods and start new ones; a member sees the
 // pods they are in, then listed pods they could join, from the outside only.
-// On a wide screen one pod is always picked (the first, until another is),
-// and the right column is its landing page: for a pod you're in, its brief,
-// next call, what it knows and who is in it, with the way in; for one you're
-// not in, its pitch. A whole card picks its pod; what you do about a pod
-// (open it, join, ask) is on its landing page. On a narrow screen there is
-// no right column: a card opens the pod's room, or its pitch as the page.
-// Each pod keeps its own address
-// (/c/:slug/pods/:podSlug): its room for someone in it, this page with it
-// picked for anyone else who may see it.
+// The pod shown is read from the address (podShown): /pods/<pod> shows that
+// pod, its landing page for someone who can enter it (its brief, next call,
+// what it knows, who is in it, and the way in) or its pitch for anyone else.
+// /pods on a wide screen shows the pod they were last in, else the first, in
+// the right column. Picking a pod is a step to its address. On a narrow
+// screen there is no right column: a card opens the pod's room, and
+// /pods/<pod> is the pod's page.
 import { useCallback, useEffect, useState } from "react";
 import { CommunityPageHeader, CommunityPageRail } from "./CommunityPageHeader";
 import { isDesignV1Active } from "../../../../shared/designSystem";
@@ -31,7 +29,7 @@ import { changeCloudMyCommunityPlan } from "../../../../shared/cloudCommunityPla
 import { Btn, cx, Icon, KitApp, Rail } from "../v1/kit";
 import { KitPodLanding } from "../v1/KitPodLanding";
 import { PanelLine, PanelPart, PanelPeople } from "../v1/KitPanel";
-import { forgetPod, recallPod, takePodPagePreview } from "../v1/podMemory";
+import { podShown, recallPod, takePodPagePreview } from "../v1/podMemory";
 import { podRhythmText } from "../v1/KitPodCall";
 
 export type WebCommunityPodsSectionProps = {
@@ -142,21 +140,19 @@ const planPrice = (plan: CloudPlanOffer) => {
 // how you get in (a plan that includes it, its own price, or asking), and the
 // one button. Never who is in it or what is said. On the Pods page it fills
 // the right column (on a narrow screen, the page itself).
-function PodPitch(props: WebCommunityPodsSectionProps & { podSlug: string; inline: boolean; reloadKey: number; onChanged?: () => void }) {
+function PodPitch(props: WebCommunityPodsSectionProps & { podSlug: string; inline: boolean; reloadKey: number; preview: boolean; onChanged?: () => void }) {
   const [page, setPage] = useState<CloudPodPage | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
   // The builder or a host asked to see the page as members do.
-  const [preview] = useState(() => takePodPagePreview(props.podSlug));
+  const preview = props.preview;
   const load = useCallback(async () => {
     if (!props.communityId) return;
     try {
       const session = await props.ensureSession(props.session);
       if (!session) return;
       const next = await fetchCloudPodPage({ session, communityId: props.communityId, podSlug: props.podSlug, asMember: props.asMember, preview });
-      // In the pod: straight into its room.
-      if (next.kind === "inside") { props.onNavigate({ kind: "room", slug: next.slug }); return; }
       setPage(next);
     } catch { setPage({ kind: "not_found" }); }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -164,9 +160,19 @@ function PodPitch(props: WebCommunityPodsSectionProps & { podSlug: string; inlin
   useEffect(() => { setError(null); setNote(null); void load(); }, [load, props.reloadKey]);
 
   const back = props.inline
-    ? <button type="button" className={cx("link")} onClick={() => { forgetPod(); props.onNavigate({ kind: "pods" }); }}>← Pods</button>
+    ? <button type="button" className={cx("link")} onClick={() => props.onNavigate({ kind: "pods" })}>← Pods</button>
     : null;
   if (!page) return null;
+  // Someone who can enter it (it joined them since the list loaded): the way in.
+  if (page.kind === "inside") {
+    return (
+      <div className={cx(props.inline ? "podpage land" : "land")}>
+        {back}
+        <p className={cx("lead")}>You're in this pod.</p>
+        <div className={cx("joinbar")}><Btn go onClick={() => props.onNavigate({ kind: "room", slug: page.slug })}>Open the pod</Btn></div>
+      </div>
+    );
+  }
   if (page.kind !== "outside") {
     return (
       <div className={cx(props.inline ? "podpage" : "podpage podpitch")}>
@@ -276,9 +282,7 @@ function PodsList(props: WebCommunityPodsSectionProps) {
   const [creating, setCreating] = useState(false);
   const [draft, setDraft] = useState({ name: "", purpose: "", listed: true, seats: "" });
   const [saving, setSaving] = useState(false);
-  // The pod picked on this page (one you're in); a pod you're not in is
-  // picked by its address. The session the lists loaded with, for the panel.
-  const [picked, setPicked] = useState<string | null>(null);
+  // The session the lists loaded with, for the panel.
   const [liveSession, setLiveSession] = useState<unknown>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -304,18 +308,10 @@ function PodsList(props: WebCommunityPodsSectionProps) {
 
   usePodPaymentReturn(props, setNotice, load);
 
-  // "Pods" goes back to the pod they were last in, while they can still
-  // enter it. Its "← Pods" arrow forgets it, and this list shows instead.
-  const [recalled, setRecalled] = useState(() => recallPod());
-  // Once a pod is picked, the remembered one no longer decides where Pods goes.
-  useEffect(() => { if (props.podSlug) setRecalled(null); }, [props.podSlug]);
-  useEffect(() => {
-    if (!recalled || !state || notice || props.podSlug) return;
-    if (state.pods.some((pod) => pod.slug === recalled)) props.onNavigate({ kind: "room", slug: recalled });
-    else forgetPod();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [recalled, state]);
-  const returning = Boolean(recalled && !notice && !props.podSlug && (!state || state.pods.some((pod) => pod.slug === recalled)));
+  // The pod they were last in is the one shown first (read once per visit),
+  // and a builder's "see it as members do" is for the pod in the address.
+  const [recalled] = useState(() => recallPod());
+  const [previewSlug] = useState(() => (props.podSlug && takePodPagePreview(props.podSlug) ? props.podSlug : null));
 
   const create = async () => {
     const name = draft.name.trim();
@@ -348,22 +344,34 @@ function PodsList(props: WebCommunityPodsSectionProps) {
   const canManage = Boolean(state?.canManage);
   const pods = state?.pods ?? [];
   const outside = state?.outside ?? [];
-  // One pod is always picked on a wide screen: the one in the address, else
-  // the one picked here, else the first card.
-  const mine = picked ? pods.find((pod) => pod.slug === picked) ?? null : null;
-  const selected = props.podSlug ?? mine?.slug ?? (wide ? (pods[0]?.slug ?? outside[0]?.slug ?? null) : null);
-  const selectedMine = props.podSlug ? null : pods.find((pod) => pod.slug === selected) ?? null;
+  // The pod shown is read from the address and the lists (podShown).
+  const shown = podShown({
+    podSlug: props.podSlug,
+    mine: state ? pods.map((pod) => pod.slug) : null,
+    outside: outside.map((pod) => pod.slug),
+    recalled,
+    wide,
+    preview: Boolean(props.podSlug && previewSlug === props.podSlug),
+  });
+  const selected = shown?.slug ?? null;
+  const selectedMine = shown?.kind === "landing" ? pods.find((pod) => pod.slug === shown.slug) ?? null : null;
+  // Picking a pod is a step to its address; with no right column, a pod you're
+  // in opens its room.
   const pick = (pod: CloudCommunityPod) => {
-    // No right column: straight into the room.
     if (!wide) { props.onNavigate({ kind: "room", slug: pod.slug }); return; }
-    setPicked(pod.slug);
-    if (props.podSlug) props.onNavigate({ kind: "pods" });
+    if (props.podSlug !== pod.slug) props.onNavigate({ kind: "pod", slug: pod.slug });
   };
+  const shownPage = (inline: boolean) => !shown ? null : selectedMine && props.communityId ? (
+    <KitPodLanding session={liveSession} communityId={props.communityId} pod={selectedMine}
+      onOpen={() => props.onNavigate({ kind: "room", slug: selectedMine.slug })} />
+  ) : (
+    <PodPitch {...props} podSlug={shown.slug} inline={inline} reloadKey={reloadKey} preview={shown.kind === "pitch" && previewSlug === shown.slug} onChanged={() => void load()} />
+  );
   const lead = !state ? " " : canManage
     ? (pods.length ? `${pods.length} ${pods.length === 1 ? "pod" : "pods"} in ${props.communityName}.` : "Start your first pod.")
     : (pods.length ? "Your pods." : outside.length ? "Pods you can join." : "No pods to join yet.");
 
-  // A narrow screen has no right column: a picked pod's pitch is the page.
+  // A narrow screen has no right column: the pod in the address is the page.
   if (props.podSlug && !wide) {
     return (
       <div className="community-panel community-pods-panel">
@@ -371,7 +379,11 @@ function PodsList(props: WebCommunityPodsSectionProps) {
         <KitApp view="events" host={canManage} part="flow">
           <div className={cx("page")} style={{ padding: 0, overflow: "visible" }}>
             {notice ? <p className={cx("sub")} role="status">{notice}</p> : null}
-            <PodPitch {...props} podSlug={props.podSlug} inline reloadKey={reloadKey} onChanged={() => void load()} />
+            {/* The pitch carries its own way back; the landing page and a
+                failed or loading list need one here. */}
+            {shown?.kind !== "pitch" ? <button type="button" className={cx("link")} onClick={() => props.onNavigate({ kind: "pods" })}>← Pods</button> : null}
+            {failed ? <p className={cx("sub")} role="alert">Pods couldn't load. <button type="button" className={cx("link")} onClick={() => void load()}>Try again</button></p> : null}
+            {shownPage(true)}
           </div>
         </KitApp>
       </div>
@@ -382,7 +394,7 @@ function PodsList(props: WebCommunityPodsSectionProps) {
     <div className="community-panel community-pods-panel">
       <CommunityPageHeader title="Pods"><div className="resources-header">Pods</div></CommunityPageHeader>
       <KitApp view="events" host={canManage} part="flow">
-        <div className={cx("page")} style={{ padding: 0, overflow: "visible", ...(returning ? { visibility: "hidden" as const } : {}) }}>
+        <div className={cx("page")} style={{ padding: 0, overflow: "visible" }}>
           <p className={cx("lead")} style={{ marginTop: 0 }}>{lead}</p>
           {notice ? <p className={cx("sub")} role="status">{notice}</p> : null}
           {failed ? <p className={cx("sub")} role="alert">Pods couldn't load. <button type="button" className={cx("link")} onClick={() => void load()}>Try again</button></p> : null}
@@ -438,7 +450,7 @@ function PodsList(props: WebCommunityPodsSectionProps) {
                     : pod.my_request === "waitlist" ? "On the waitlist" : null;
                   return (
                     <button key={pod.channel_id} type="button" className={cx(selected === pod.slug ? "podcard podout podsel" : "podcard podout")} aria-current={selected === pod.slug ? "true" : undefined}
-                      onClick={() => { setPicked(null); props.onNavigate({ kind: "pod", slug: pod.slug }); }}>
+                      onClick={() => { if (props.podSlug !== pod.slug) props.onNavigate({ kind: "pod", slug: pod.slug }); }}>
                       <span className={cx("podname")}><Icon name="lock" />{pod.name}</span>
                       <span className={cx("podpurpose")}>{pod.purpose}</span>
                       {pod.included_with?.length ? <span className={cx("podprice")}>Included with {pod.included_with.join(" or ")}</span>
@@ -463,12 +475,7 @@ function PodsList(props: WebCommunityPodsSectionProps) {
               rhythm, and never wider than the column. */}
           <KitApp view="events" host={canManage} part="rail" className="kit-page-rail">
             <Rail index={4} label="This pod">
-            {selectedMine && props.communityId ? (
-              <KitPodLanding session={liveSession} communityId={props.communityId} pod={selectedMine}
-                onOpen={() => props.onNavigate({ kind: "room", slug: selectedMine.slug })} />
-            ) : (
-              <PodPitch {...props} podSlug={selected} inline={false} reloadKey={reloadKey} onChanged={() => void load()} />
-            )}
+            {shownPage(false)}
             </Rail>
           </KitApp>
         </CommunityPageRail>
