@@ -257,10 +257,18 @@ function useProfileHarness(props: any) {
       await test(`desktop rail ${kind} to ${target} preserves canonical navigation`, async () => {
         const communities = ["alpha", "beta"].map(id => ({ id, slug: id, name: id, avatar_url: null }));
         const snapshots: any[] = [];
+        // A page you choose is a history step: the controller goes to the
+        // address and the screen follows it (as applyLocationToState does).
+        const navigated: string[] = [];
         const hook = await mountHook(() => {
           const [state, setState] = useState<any>({ activePage: kind === "global_settings" ? "settings" : kind === "discover" ? "discover" : "community", activeView: "home", communityTab: "events", activeCommunityId: "alpha", activeCommunitySlug: "alpha" });
           const route = useWebCommunityRouteController({
-            ...state, communities, navigateTo: () => { throw new Error("unexpected public route"); },
+            ...state, communities, navigateTo: (path: string) => {
+              navigated.push(path);
+              const match = path.match(/^\/c\/([^/]+)\/chat$/);
+              if (!match) throw new Error(`unexpected address ${path}`);
+              setState((s: any) => ({ ...s, activePage: "community", activeView: "home", communityTab: "chat", activeCommunitySlug: match[1], activeCommunityId: match[1] }));
+            },
             pushNavSnapshot: () => snapshots.push({ ...state }),
             setActivePage: (activePage: any) => setState((s: any) => ({ ...s, activePage })),
             setActiveView: (activeView: any) => setState((s: any) => ({ ...s, activeView })),
@@ -286,8 +294,10 @@ function useProfileHarness(props: any) {
         assert(hook.value.state.activeCommunityId === target, "selected requested community");
         if (kind === "community_events") {
           assert(hook.value.state.communityTab === "events" && snapshots.length === 0, "existing community tab remains unchanged");
+          assert(navigated.length === 0, "switching community on a community page adds no history step here");
         } else {
           assert(hook.value.state.activePage === "community" && hook.value.state.communityTab === "chat", "rail leaves global surface for chat");
+          assert(navigated.length === 1 && navigated[0] === `/c/${target}/chat`, "rail goes to the community's channels address as one history step");
           assert(snapshots.length === 1, "exactly one navigation snapshot");
           assert(snapshots[0].activeCommunityId === "alpha", "snapshot retains pre-click selection");
           flushSync(() => hook.value.setState(snapshots.pop()));
