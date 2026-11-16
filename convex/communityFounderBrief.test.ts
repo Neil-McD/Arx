@@ -353,7 +353,7 @@ describe("founder brief delivery", () => {
     expect(brief.contentJson.text).toContain("Ben");
     const email = state.emails.find((row: any) => row.templateKey === "founder_daily_brief") as any;
     expect(email).toMatchObject({ recipientUserId: f.ownerId });
-    expect(email.payload.actionUrl).toBe("https://polynet.test/c/dawn-patrol/agent");
+    expect(email.payload.actionUrl).toBe("https://polynet.test/c/dawn-patrol/home");
   });
 });
 
