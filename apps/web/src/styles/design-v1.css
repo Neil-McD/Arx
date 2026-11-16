@@ -1258,6 +1258,22 @@
   grid-auto-rows: auto;
 }
 
+/* In Home's conversation, the title is the way back to Home. */
+:root[data-design="v1"] .kit-home-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 0 -6px;
+  padding: 4px 8px 4px 6px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+:root[data-design="v1"] .kit-home-back:hover { background: var(--hover-overlay); }
+
 /* On a phone, Home is the page itself: no inset, frame or rounded corners
    left over from the floating guide it used to be. */
 :root[data-design="v1"] .community-agent-dock.community-agent-page.mobile-root {
