@@ -869,6 +869,10 @@
 .app .brainside{position:absolute;top:0;right:0;bottom:0;width:380px;max-width:100%;box-sizing:border-box;overflow-y:auto;overflow-x:hidden;padding:20px 24px 24px;background:var(--bg);border-left:1px solid var(--line2);display:flex;flex-direction:column;gap:14px;animation:brainside .18s ease-out}
 @keyframes brainside{from{transform:translateX(24px)}to{transform:none}}
 @media (prefers-reduced-motion:reduce){.app .brainside{animation:none}}
+.app .brainside .sub2{white-space:normal;line-height:1.45}
+.app .brainside .acts{margin-top:2px;flex-wrap:wrap}
+.app .brainside .podform select{width:100%}
+.app .brainside .bad{margin:0;font-size:13px}
 .app .brainside-x{align-self:flex-end;min-width:28px;height:28px;padding:0 8px;border-radius:8px;color:var(--ink3);font-size:15px;line-height:1;cursor:pointer}
 .app .brainside-x:hover{color:var(--ink);background:rgba(var(--w),.07)}
 @media (max-width:1023px){.app .brainside{width:100%;border-left:0}.app .brainside-x{align-self:flex-start;font-size:13px;padding:0}.app .brainbar{padding:14px 16px 0}.app .brainzoom{left:16px}}
