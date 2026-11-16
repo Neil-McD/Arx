@@ -813,6 +813,7 @@ export default function App() {
     activeCommunityId: selectedActiveCommunityId,
     activeCommunitySlug: selectedActiveCommunitySlug,
     communityTab,
+    communityChannelSlug,
     communities,
     navigateTo,
     pushNavSnapshot,
