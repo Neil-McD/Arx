@@ -316,6 +316,8 @@ export function stageWindow(view: BrainView, scale: number, stage: BrainStage): 
 export function revealPoint(view: BrainView, at: Placed, scale: number, stage: BrainStage, free: { left: number; right: number; top: number; bottom: number }, bounds: Bounds): BrainView {
   const sx = (at.x - view.cx) * scale + stage.w / 2;
   const sy = (at.y - view.cy) * scale + stage.h / 2;
+  // Too little free room to aim for an edge: aim for its middle.
+  if (stage.w - free.left - free.right < 40) free = { ...free, left: (stage.w - free.right) / 2, right: free.right + (stage.w - free.right) / 2 - 1 };
   const dx = sx < free.left ? sx - free.left : sx > stage.w - free.right ? sx - (stage.w - free.right) : 0;
   const dy = sy < free.top ? sy - free.top : sy > stage.h - free.bottom ? sy - (stage.h - free.bottom) : 0;
   if (!dx && !dy) return view;

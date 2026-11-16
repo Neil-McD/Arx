@@ -9,7 +9,7 @@
 //   things apart (dots and names keep their size) and names more of them.
 // Readings: community (everything), yours (your lessons and your things lit),
 // gaps (for builders: the biggest subjects, which no course teaches, lit).
-import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { BrainMap } from "../../../../shared/communityBrain";
 import { chooseLabels, fitStage, fitView, isFitView, layoutBrain, panBy, revealPoint, scaleLayout, stageWindow, zoomAt, type BrainView, type LabelBox, type LayoutPoint } from "../../../../shared/communityBrainLayout";
 import { cx } from "./kit";
@@ -49,7 +49,8 @@ export function KitBrainMap(props: {
   // The page's map is drawn in screen pixels: the stage it fills, measured.
   const wrapRef = useRef<HTMLDivElement>(null);
   const [stage, setStage] = useState({ w: 900, h: 640 });
-  useEffect(() => {
+  // Measured before the first paint, so the map never flashes at a guessed size.
+  useLayoutEffect(() => {
     const wrap = wrapRef.current;
     if (!wrap || !page || typeof ResizeObserver === "undefined") return;
     const measure = () => {
@@ -158,7 +159,7 @@ export function KitBrainMap(props: {
     if (!page || !props.selectedId) return;
     const at = [...base.points, ...base.lessons, ...base.hubs.map((hub) => ({ ...hub, id: hub.key }))].find((entry) => entry.id === props.selectedId);
     if (!at) return;
-    setView((current) => revealPoint(current, at, fit * current.k, stage, { left: 70, right: (props.coverRight ?? 0) + (props.coverRight ? 210 : 90), top: 80, bottom: 70 }, bounds));
+    setView((current) => revealPoint(current, at, fit * current.k, stage, { left: 70, right: (props.coverRight ?? 0) + 60, top: 80, bottom: 70 }, bounds));
   }, [props.selectedId, props.coverRight]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const lit = (p: LayoutPoint) => reading === "yours" ? p.point.mine : reading === "gaps" ? p.point.at.kind === "subject" && gapKeys.has(`subject:${p.point.at.name}`) : true;
@@ -280,8 +281,11 @@ export function KitBrainMap(props: {
       {page && props.selectedId && !labelled.has(props.selectedId) ? (() => {
         const p = layout.points.find((entry) => entry.id === props.selectedId);
         if (!p?.point.title) return null;
-        const right = p.x >= p.anchor.x;
-        return <text className={cx("brain-name on")} x={p.x + (right ? p.r * dot + 7 : -p.r * dot - 7)} y={p.y + 4} textAnchor={right ? "start" : "end"}>{p.point.title}</text>;
+        const title = p.point.title.length > 28 ? `${p.point.title.slice(0, 27)}…` : p.point.title;
+        // Its name goes on whichever side has room, clear of the panel.
+        const room = stage.w - (props.coverRight ?? 0) - (p.x - win.x);
+        const right = room < title.length * 7.4 + 24 ? false : p.x - win.x < title.length * 7.4 + 24 ? true : p.x >= p.anchor.x;
+        return <text className={cx("brain-name on")} x={p.x + (right ? p.r * dot + 7 : -p.r * dot - 7)} y={p.y + 4} textAnchor={right ? "start" : "end"}>{title}</text>;
       })() : null}
 
       <circle className={cx("brain-core")} cx={0} cy={0} r={8} />

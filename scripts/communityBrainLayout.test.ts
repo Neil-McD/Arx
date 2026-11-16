@@ -182,6 +182,11 @@ test("a picked point under the panel is brought just into the free part, and one
   expect((300 - shown.cx) * 1 + stage.w / 2).toBeCloseTo(stage.w - free.right);
   expect(shown.cy).toBe(view.cy);
   expect(revealPoint(view, { x: -100, y: 50 }, 1, stage, free, B)).toBe(view);
+  // A stage almost all under the panel: the point goes to the middle of what is left, never off it.
+  const tight = revealPoint(view, { x: 100, y: 0 }, 1, { w: 500, h: 600 }, { left: 70, right: 440, top: 60, bottom: 60 }, B);
+  const sx = (100 - tight.cx) + 250;
+  expect(sx).toBeGreaterThan(0);
+  expect(sx).toBeLessThan(60);
 });
 
 test("only what is in view is named", () => {
