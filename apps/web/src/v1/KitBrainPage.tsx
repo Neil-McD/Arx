@@ -229,7 +229,7 @@ type PageProps = {
 export function KitBrainPage(props: PageProps) {
   // A builder's change on the page: read the map again.
   const [version, setVersion] = useState(0);
-  const { map, failed } = useBrainMap(props.session, props.communityId, null, String(version));
+  const { map, failed } = useBrainMap(props.session, props.communityId, null);
   return (
     <KitBrainPageFrame canManage={props.canManage} fill={!!map && map.points.length >= BRAIN_MAP_MIN_POINTS}>
       {failed ? <p className={cx("sub")}>The map couldn't load. Try again in a moment.</p> : map ? <KitBrainPageView {...props} map={map} version={version} onChanged={() => setVersion((last) => last + 1)} /> : null}
