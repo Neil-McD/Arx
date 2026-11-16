@@ -530,6 +530,10 @@ export function useWebOnboardingProfileController(params: {
     }).catch(() => null);
   }, [cloudProfile, params.session]);
 
+  // Once per signed-in person. loadProfileForOnboarding is a new function on
+  // most renders, so without this the write ran again on every render until
+  // the first answer came back (6 times on a page load).
+  const hydratingProfileForRef = useRef<string | null>(null);
   useEffect(() => {
     if (
       !params.shouldHydrateAccountSetup ||
@@ -540,7 +544,13 @@ export function useWebOnboardingProfileController(params: {
     ) {
       return;
     }
-    void loadProfileForOnboarding(params.session).catch(() => undefined);
+    const subject = resolveAuthSubject(params.session);
+    if (!subject || hydratingProfileForRef.current === subject) return;
+    hydratingProfileForRef.current = subject;
+    void loadProfileForOnboarding(params.session).catch(() => {
+      // A failed read may be tried again on the next change.
+      if (hydratingProfileForRef.current === subject) hydratingProfileForRef.current = null;
+    });
   }, [
     cloudProfile,
     hasLoadedOnboardingProfile,
