@@ -36,6 +36,9 @@ import { PanelAction, PanelLearned, PanelLine, PanelNext, PanelPart, PanelPeople
 import { KitChannelFeed } from "./KitChannelFeed";
 import { BRAIN_MAP_MIN_POINTS, KitBrainMap, type BrainReading } from "./KitBrainMap";
 import { KitBrainPageFrame, KitBrainPageView, NoteActions } from "./KitBrainPage";
+import { JoinRequestsDrawer, JoinRequestsLine, MembersBulkBar, MembersTable, MembersToolbar, type MembersSortKey } from "./KitMembersTable";
+import { memberTimeFor, shortDay } from "./KitMembersPage";
+import { compableMembers, matchesMemberSearch, memberKey, toggleAllShown } from "../../../../shared/communityMembersTable";
 import { fullExample, middlingExample, sunriseExample } from "./brainExamples";
 import { CommunityPageFrame, CommunityPageRail } from "../components/CommunityPageHeader";
 import { KitHomeRail } from "./KitHomeRail";
@@ -462,6 +465,68 @@ function BrainActionsLab() {
   );
 }
 
+// The host's Members table with made-up people: search, the status filter,
+// ticking rows, the bulk bar, and the join requests in their drawer.
+function MembersLab() {
+  const now = Date.now();
+  const names = ["Maya Chen", "Priya Raman", "Theo Brennan", "Ana Ruiz", "Jon Park", "Sam Okafor", "Lena Fischer", "Diego Morales", "Hana Sato", "Omar Haddad", "Ivy Nguyen", "Noah Kim",
+    "Zoe Martin", "Raj Patel", "Elif Demir", "Marco Rossi", "Tara Singh", "Ben Cohen", "Lucia Alvarez", "Kofi Mensah", "Nina Petrova", "Eli Walker", "Mina Hosseini", "Tom Becker"];
+  const all = names.map((name, i) => ({
+    membership_id: i === 0 ? null : `m${i}`, user_id: `u${i}`, name, handle: name.toLowerCase().replace(/\s+/g, "-"), avatar_url: null,
+    role: i === 0 ? "owner" : i === 3 ? "admin" : "member",
+    plan: i === 0 ? { kind: "owner" as const, label: "Owner", price_point_id: null } : i % 5 === 2 ? { kind: "comped" as const, label: "Comped", price_point_id: null }
+      : i % 3 === 0 ? { kind: "free" as const, label: "Free", price_point_id: null } : { kind: "paid" as const, label: i % 2 ? "$20 a month" : "$180 a year", price_point_id: "p" },
+    money: i === 4 ? { kind: "on_hold" as const, label: "on hold", since_at: null, ends_at: null } : i === 9 ? { kind: "cancelling" as const, label: "cancelling", since_at: null, ends_at: null } : null,
+    joined_at: new Date(now - (i + 2) * 9 * 86_400_000).toISOString(), last_active_at: new Date(now - i * 7 * 3_600_000).toISOString(), working_on: null,
+  }));
+  const requests = [
+    { id: "r1", userId: "x1", displayName: "Kai Tanaka", avatarUrl: null, message: "Climbing at Sunrise for a year, would love the board sessions.", createdAtLabel: "2 hours ago" },
+    { id: "r2", userId: "x2", displayName: "Rosa Lind", avatarUrl: null, message: null, createdAtLabel: "yesterday" },
+    { id: "r3", userId: "x3", displayName: "Felix Braun", avatarUrl: null, message: "Friend of Maya's.", createdAtLabel: "Nov 12" },
+  ];
+  const [search, setSearch] = useStateLab("");
+  const [filter, setFilter] = useStateLab("everyone");
+  const [selected, setSelected] = useStateLab<ReadonlySet<string>>(new Set());
+  const [open, setOpen] = useStateLab<string | null>(null);
+  const [drawer, setDrawer] = useStateLab(false);
+  const [sort, setSort] = useStateLab<{ key: MembersSortKey; desc: boolean } | null>(null);
+  const inFilter = (row: typeof all[number]) => filter === "everyone" ? true : filter === "on_hold" ? row.money?.kind === "on_hold" : filter === "comped" ? row.plan.kind === "comped" : row.plan.kind === "paid";
+  const rows = all.filter((row) => inFilter(row) && matchesMemberSearch(row, search));
+  const chosen = all.filter((row) => selected.has(memberKey(row)));
+  const colour = (id: string) => `hsl(${(id.charCodeAt(1) * 47) % 360} 35% 38%)`;
+  const initials = (name: string) => name.split(" ").map((part) => part[0]).join("").slice(0, 2);
+  return (
+    <div style={{ height: "100vh", display: "grid", gridTemplateColumns: drawer || open ? "minmax(0,1fr) 380px" : "minmax(0,1fr)" }}>
+      <KitApp view="members" host part="main">
+        <View index={5}>
+          <Top title="Members" titleView={5} />
+          <div className={cx("page")} style={{ overflowY: "auto" }}>
+            <p className={cx("sub")} style={{ margin: 0 }}>Everyone in Sunrise Climbing Club, what they pay and who needs you.</p>
+            <JoinRequestsLine count={requests.length} open={drawer} onOpen={() => { setDrawer(!drawer); setOpen(null); }} />
+            <MembersToolbar search={search} onSearch={setSearch} filter={filter} onFilter={setFilter} onExport={() => undefined} exporting={false} canExport
+              filters={[{ id: "everyone", label: "Everyone", count: all.length }, { id: "paid", label: "$20 a month", count: all.filter((r) => r.plan.kind === "paid").length },
+                { id: "on_hold", label: "On hold", count: 1 }, { id: "comped", label: "Comped", count: all.filter((r) => r.plan.kind === "comped").length }]} />
+            <MembersTable rows={sort ? [...rows].sort((a, b) => (sort.desc ? -1 : 1) * a.name.localeCompare(b.name)) : rows} avatarOf={() => null} now={now} timeFor={memberTimeFor} dayFor={shortDay}
+              sort={sort} onSort={(key) => setSort((current) => ({ key, desc: current?.key === key ? !current.desc : false }))}
+              selected={selected} onToggle={(key) => setSelected((last) => { const next = new Set(last); if (next.has(key)) next.delete(key); else next.add(key); return next; })}
+              onToggleAll={() => setSelected((last) => toggleAllShown(last, rows.map(memberKey)))}
+              openKey={open} onOpen={(key) => { setOpen(key); setDrawer(false); }} empty={search ? `No one matches "${search}".` : "No one here."}
+              getAvatarColor={colour} getInitials={initials} />
+            <MembersBulkBar count={chosen.length} compable={compableMembers(chosen).length} busy={null} onExport={() => undefined} onComp={() => undefined} onClear={() => setSelected(new Set())} />
+          </div>
+        </View>
+      </KitApp>
+      {drawer ? (
+        <KitApp view="members" host part="rail">
+          <JoinRequestsDrawer requests={requests} decidingId={null} onApprove={() => undefined} onDecline={() => undefined} onClose={() => setDrawer(false)} getAvatarColor={colour} getInitials={initials} />
+        </KitApp>
+      ) : open ? (
+        <KitApp view="members" host part="rail"><div className={cx("mdrawer")}><header><div><span className={cx("lab")}>Member</span><h2>{all.find((row) => memberKey(row) === open)?.name}</h2></div></header><p className={cx("mnone")} style={{ padding: 0 }}>The member's record opens here.</p></div></KitApp>
+      ) : null}
+    </div>
+  );
+}
+
 // ?scale=1.25 draws the lab larger, to try a size for big monitors.
 function labScale(): number {
   if (typeof window === "undefined") return 1;
@@ -471,5 +536,5 @@ function labScale(): number {
 
 export function DesignLab() {
   const page = typeof window === "undefined" ? "" : new URLSearchParams(window.location.search).get("page");
-  return page === "channel" ? <HostChannel /> : page === "brief" ? <BriefPanels /> : page === "brain" ? <BrainLab /> : page === "brain-actions" ? <BrainActionsLab /> : page === "brain-page" ? <BrainPageLab /> : page === "pods-shell" ? <PodsShell /> : page === "know-panel" ? <KnowShell builder={false} /> : page === "know-panel-builder" ? <KnowShell builder /> : page === "pods" ? <PodsPage join={false} /> : page === "home-panel" ? <RealPanels pod={false} /> : page === "pod-panel" ? <RealPanels pod /> : page === "pods-join" ? <PodsPage join /> : <HostHomeQuiet />;
+  return page === "channel" ? <HostChannel /> : page === "brief" ? <BriefPanels /> : page === "brain" ? <BrainLab /> : page === "members" ? <MembersLab /> : page === "brain-actions" ? <BrainActionsLab /> : page === "brain-page" ? <BrainPageLab /> : page === "pods-shell" ? <PodsShell /> : page === "know-panel" ? <KnowShell builder={false} /> : page === "know-panel-builder" ? <KnowShell builder /> : page === "pods" ? <PodsPage join={false} /> : page === "home-panel" ? <RealPanels pod={false} /> : page === "pod-panel" ? <RealPanels pod /> : page === "pods-join" ? <PodsPage join /> : <HostHomeQuiet />;
 }

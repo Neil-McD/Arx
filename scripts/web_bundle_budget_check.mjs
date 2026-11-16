@@ -14,10 +14,10 @@ const limits = {
   maxHostOnlyJsBytes: readLimit("WEB_BUNDLE_MAX_HOST_ONLY_JS_BYTES", 800_000),
 };
 
-// Chunks only hosts load, on demand (the lesson editor). Members never fetch
-// them, so they have their own budget and the total stays what a member can
-// download. (From Rashid's PR #290.)
-const HOST_ONLY_CHUNK = /^LessonEditor-/;
+// Chunks only hosts load, on demand (the lesson editor, the host's Members
+// table). Members never fetch them, so they have their own budget and the
+// total stays what a member can download. (From Rashid's PR #290.)
+const HOST_ONLY_CHUNK = /^(LessonEditor|KitMembersPage)-/;
 // The design lab: loaded on demand at /design-lab on staging only, never by a
 // member or a host, so it counts toward neither budget; it is listed so it
 // can't grow unseen.
