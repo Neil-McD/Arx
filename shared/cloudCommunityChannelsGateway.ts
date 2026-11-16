@@ -18,6 +18,7 @@ export type CloudCommunityChannel = {
   position: number;
   access_mode?: "all_members" | "restricted";
   description?: string | null;
+  has_pinned_root?: boolean;
   capabilities?: { canRead: boolean; canPost: boolean; canReply: boolean; canManage: boolean };
 };
 

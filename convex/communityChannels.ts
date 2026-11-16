@@ -40,6 +40,9 @@ function mapCommunityChannel(channel: CommunityChannelLike) {
     position: channel.position,
     access_mode: channel.accessMode,
     description: channel.description ?? null,
+    // Whether a post is pinned, so the app knows before it draws the channel
+    // that its right column will hold it (the post itself is read separately).
+    has_pinned_root: Boolean(channel.pinnedRootId),
   };
 }
 
