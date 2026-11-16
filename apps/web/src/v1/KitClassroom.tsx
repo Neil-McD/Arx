@@ -6,7 +6,7 @@
 // opens in the right column.
 import { courseProgressWord } from "../../../../shared/communityMemberWords";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { readPlaceParam, writePlaceParam } from "../../../../shared/placeParams";
+import { useRouteDetail, writeRouteDetail } from "../../../../shared/routeDetails";
 import {
   fetchCourseProgressSummary,
   fetchMyLessonProgress,
@@ -220,30 +220,31 @@ export function KitClassroom(props: {
   // arrive after the course does: a lesson picked for the reader is picked
   // again then, but one the reader chose stays.
   const autoLessonRef = useRef<string | null>(null);
-  // The lesson you're on rides on the address (?lesson=), so a refresh comes
-  // back to it. Read once; used when its course is showing.
-  const lessonToReopenRef = useRef<string | null>(readPlaceParam("lesson"));
+  // The lesson you're on is part of the address (/resources/<course>/<lesson>):
+  // a refresh, the back button and a link open it.
+  const routeLesson = useRouteDetail("lesson");
   useEffect(() => {
-    if (!open) {
-      if (props.loaded) lessonToReopenRef.current = null;
-      setLessonId(null); autoLessonRef.current = null; return;
+    if (!open) { setLessonId(null); autoLessonRef.current = null; return; }
+    // The course can arrive before its lessons: wait for them before choosing.
+    if (routeLesson && !props.loaded) return;
+    if (routeLesson && open.lessons.some((lesson) => lesson.id === routeLesson)) {
+      if (lessonId !== routeLesson) { autoLessonRef.current = null; setLessonId(routeLesson); }
+      return;
     }
-    const wanted = lessonToReopenRef.current;
-    // The course can arrive before its lessons: wait for them before giving up.
-    if (wanted && !props.loaded) return;
-    lessonToReopenRef.current = null;
-    if (wanted && open.lessons.some((lesson) => lesson.id === wanted)) { autoLessonRef.current = null; setLessonId(wanted); return; }
     if (lessonId && lessonId !== autoLessonRef.current && open.lessons.some((lesson) => lesson.id === lessonId)) return;
     const next = courseProgress(open.lessons, done).nextLessonId ?? open.lessons[0]?.id ?? null;
     autoLessonRef.current = next;
     setLessonId(next);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open?.course.id, open?.lessons.length, progressLoaded, props.loaded]);
+  }, [open?.course.id, open?.lessons.length, progressLoaded, props.loaded, routeLesson]);
 
+  // The lesson you chose goes in the address as a step you can go back from;
+  // one picked for you only fills it in.
   useEffect(() => {
-    if (lessonToReopenRef.current) return;
-    writePlaceParam("lesson", open ? lessonId : null);
-  }, [lessonId, open?.course.id]);
+    if (!open || !props.loaded || !lessonId || lessonId === routeLesson) return;
+    writeRouteDetail("lesson", lessonId, { replace: !routeLesson || lessonId === autoLessonRef.current });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lessonId, open?.course.id, props.loaded]);
 
   const mark = async (resourceId: string, value: boolean) => {
     if (saving) return;

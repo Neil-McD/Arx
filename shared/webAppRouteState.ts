@@ -8,6 +8,15 @@ import {
   type SettingsPage,
 } from "./appShellNavigation";
 
+export type CommunityKnowledgeView = "guide" | "brain";
+const KNOWLEDGE_VIEWS = new Set<string>(["guide", "brain"]);
+// Ids in an address are plain ids; anything else is not a place.
+const ROUTE_ID = /^[A-Za-z0-9_-]{1,80}$/;
+export function readRouteId(value: unknown): string | null {
+  const id = String(value ?? "").trim();
+  return ROUTE_ID.test(id) ? id : null;
+}
+
 export type PublicRoute =
   | { kind: "app" }
   | { kind: "community_funnel"; slug: string };
@@ -26,6 +35,12 @@ export type AppRouteState = {
   // Pods: /c/:slug/pods/:podSlug opens that pod's page (docs/specs/pods-v0.md).
   communityPodSlug?: string | null;
   communitySettingsPane?: CommunitySettingsPane | null;
+  // Where you are inside a page, kept in the address so a refresh, the back
+  // button and a shared link come back to it: the open thread in a channel or
+  // a pod's room, the lesson in a course, a view of Knowledge.
+  communityThreadId?: string | null;
+  communityLessonId?: string | null;
+  communityKnowledgeView?: CommunityKnowledgeView | null;
   docsSlug?: string | null;
 };
 
@@ -41,6 +56,12 @@ export type AppRoutePathState = {
   // Pods: /c/:slug/pods/:podSlug opens that pod's page (docs/specs/pods-v0.md).
   communityPodSlug?: string | null;
   communitySettingsPane?: CommunitySettingsPane | null;
+  // Where you are inside a page, kept in the address so a refresh, the back
+  // button and a shared link come back to it: the open thread in a channel or
+  // a pod's room, the lesson in a course, a view of Knowledge.
+  communityThreadId?: string | null;
+  communityLessonId?: string | null;
+  communityKnowledgeView?: CommunityKnowledgeView | null;
   docsSlug?: string | null;
 };
 
@@ -504,10 +525,16 @@ export function parseAppRouteFromPathname(pathname: string): AppRoutePathState |
         : legacyAgentSettingsPane
           ? "settings"
           : parseCommunityTabSegment(tabSegment);
+    const knowledgeView =
+      communityTab === "resources" && KNOWLEDGE_VIEWS.has(String(segments[3] ?? ""))
+        ? (segments[3] as CommunityKnowledgeView)
+        : null;
     const communityResourceModuleId =
-      communityTab === "resources" ? String(segments[3] ?? "").trim() || null : null;
+      communityTab === "resources" && !knowledgeView ? String(segments[3] ?? "").trim() || null : null;
+    const communityLessonId = communityResourceModuleId ? readRouteId(segments[4]) : null;
     const communityChannelSlug =
       communityTab === "chat" ? String(segments[3] ?? "").trim().toLowerCase() || null : null;
+    const communityThreadId = communityTab === "chat" && communityChannelSlug ? readRouteId(segments[4]) : null;
     const communityPodSlug =
       communityTab === "pods" ? String(segments[3] ?? "").trim().toLowerCase() || null : null;
     const communitySettingsPane =
@@ -524,6 +551,9 @@ export function parseAppRouteFromPathname(pathname: string): AppRoutePathState |
       communityResourceModuleId,
       communityPodSlug,
       communitySettingsPane,
+      ...(communityThreadId ? { communityThreadId } : {}),
+      ...(communityLessonId ? { communityLessonId } : {}),
+      ...(knowledgeView ? { communityKnowledgeView: knowledgeView } : {}),
     };
   }
 
@@ -707,6 +737,9 @@ export function readAppRouteFromLocation(): AppRouteState {
       communityResourceModuleId: fromPath.communityResourceModuleId ?? null,
       communityPodSlug: fromPath.communityPodSlug ?? null,
       communitySettingsPane: fromPath.communitySettingsPane ?? null,
+      ...(fromPath.communityThreadId ? { communityThreadId: fromPath.communityThreadId } : {}),
+      ...(fromPath.communityLessonId ? { communityLessonId: fromPath.communityLessonId } : {}),
+      ...(fromPath.communityKnowledgeView ? { communityKnowledgeView: fromPath.communityKnowledgeView } : {}),
       docsSlug: fromPath.docsSlug ?? null,
     };
   }
@@ -719,6 +752,33 @@ export function readAppRouteFromLocation(): AppRouteState {
     communityTab: "chat",
     docsSlug: null,
   };
+}
+
+// The details of a community page, on the end of its address. Only the page
+// they belong to carries them: a thread on a channel, a lesson in a course,
+// a view on Knowledge's shelf.
+function appendCommunityRouteDetails(base: string, state: AppRoutePathState): string {
+  if (state.communityTab === "chat") {
+    const thread = readRouteId(state.communityThreadId);
+    if (!thread) return base;
+    const channel = String(state.communityChannelSlug ?? "").trim().toLowerCase();
+    return `${base}${channel && channel !== "general" ? "" : "/general"}/${encodeURIComponent(thread)}`;
+  }
+  if (state.communityTab === "resources") {
+    const moduleId = String(state.communityResourceModuleId ?? "").trim();
+    if (moduleId) {
+      const lesson = readRouteId(state.communityLessonId);
+      return lesson ? `${base}/${encodeURIComponent(lesson)}` : base;
+    }
+    const view = state.communityKnowledgeView;
+    return view && KNOWLEDGE_VIEWS.has(view) ? `${base}/${view}` : base;
+  }
+  return base;
+}
+
+export function withoutCommunityRouteDetails(state: AppRoutePathState): AppRoutePathState {
+  const { communityThreadId: _t, communityLessonId: _l, communityKnowledgeView: _v, ...base } = state;
+  return base;
 }
 
 export function buildAppRoutePath(state: AppRoutePathState): string | null {
@@ -736,7 +796,7 @@ export function buildAppRoutePath(state: AppRoutePathState): string | null {
     if (state.view === "community_home") {
       return buildCommunityHomePath(state.communitySlug);
     }
-    return buildCommunityTabPath(
+    const base = buildCommunityTabPath(
       state.communitySlug,
       state.communityTab,
       state.communityResourceModuleId,
@@ -744,6 +804,7 @@ export function buildAppRoutePath(state: AppRoutePathState): string | null {
       state.communityChannelSlug,
       state.communityPodSlug,
     );
+    return base ? appendCommunityRouteDetails(base, state) : base;
   }
 
   if (state.page === "docs") {

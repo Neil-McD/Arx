@@ -1,7 +1,7 @@
 import {
   setCloudCommunityChannelPinnedRoot,
 } from "../../../../shared/cloudCommunityChannelsGateway";
-import { readPlaceParam, writePlaceParam } from "../../../../shared/placeParams";
+import { useRouteDetail, writeRouteDetail } from "../../../../shared/routeDetails";
 import {
   useCallback,
   useEffect,
@@ -308,9 +308,11 @@ export function useWebCommunityInteractionProjection<
   const [error, setError] = useState<string | null>(null);
   const [sidecar, setSidecar] = useState<CommunityInteractionSidecar>({ kind: "context" });
   const selectedRootId = sidecar.kind === "thread" ? sidecar.rootId : null;
-  // The open thread rides on the address (?thread=), so a refresh comes back
-  // to it. Read once; opened again when this channel's posts are showing.
-  const threadToReopenRef = useRef<string | null>(readPlaceParam("thread"));
+  // The open thread is part of the address (/chat/<channel>/<thread>): a
+  // refresh, the back button and a link open it; opening one is a step back.
+  const routeThread = useRouteDetail("thread");
+  // The thread the address and the panel last agreed on.
+  const syncedThreadRef = useRef<string | null>(null);
   const [selectedRoot, setSelectedRoot] = useState<CommunityInteractionRootBundle | null>(null);
   const [repliesByRootId, setRepliesByRootId] = useState<
     Record<string, CommunityInteractionReplyBundle[]>
@@ -1112,21 +1114,24 @@ export function useWebCommunityInteractionProjection<
       : [];
   const presentedRepliesByRootId = isPresentationScopedToBoundary ? repliesByRootId : {};
   const presentedSelectedRootId = isPresentationScopedToBoundary ? selectedRootId : null;
+  // The address changed (a refresh, back, a link, another channel): the panel
+  // follows once this channel's posts are showing.
   useEffect(() => {
-    const wanted = threadToReopenRef.current;
-    if (!wanted) return;
-    // Another page since then: the tag is gone, and so is the wish.
-    if (readPlaceParam("thread") !== wanted) { threadToReopenRef.current = null; return; }
+    if (routeThread === syncedThreadRef.current) return;
     if (!isCommunityChatActive || !isPresentationScopedToBoundary || isLoadingRoots) return;
-    threadToReopenRef.current = null;
-    setSidecar({ kind: "thread", rootId: wanted });
-  }, [isCommunityChatActive, isLoadingRoots, isPresentationScopedToBoundary]);
+    syncedThreadRef.current = routeThread;
+    if (routeThread) setSidecar({ kind: "thread", rootId: routeThread });
+    else { setSidecar({ kind: "context" }); setSelectedRoot(null); }
+  }, [routeThread, isCommunityChatActive, isLoadingRoots, isPresentationScopedToBoundary]);
+  // You opened or closed a thread: the address follows. Until a change of
+  // address has been applied, the address leads.
   useEffect(() => {
     if (!isCommunityChatActive) return;
-    if (threadToReopenRef.current && readPlaceParam("thread") === threadToReopenRef.current) return;
-    threadToReopenRef.current = null;
-    writePlaceParam("thread", selectedRootId);
-  }, [isCommunityChatActive, selectedRootId]);
+    if (selectedRootId === syncedThreadRef.current) return;
+    if (routeThread !== syncedThreadRef.current) return;
+    syncedThreadRef.current = selectedRootId;
+    writeRouteDetail("thread", selectedRootId);
+  }, [isCommunityChatActive, selectedRootId, routeThread]);
   const presentedSelectedRoot = isPresentationScopedToBoundary ? selectedRoot : null;
   const visibleRoots = useMemo(
     () => appendPendingRoots(

@@ -1,8 +1,9 @@
-// Where you are inside a page (the open thread, the lesson, a view of
-// Knowledge) rides on the address as a small tag, so a refresh or a shared
-// link comes back to the same place. The page's own address still decides the
-// page: these tags only survive while that address stays the same.
-export const PLACE_PARAMS = ["thread", "lesson", "view", "open"] as const;
+// Members and Inbox open over the page you were on, so for now they ride on
+// the address as a tag (?open=members, ?open=inbox) that survives while the
+// page's address stays the same. They become pages of their own in step 5 of
+// docs/specs/web-architecture-end-state.md, and this file goes. Details inside
+// a page (thread, lesson, Knowledge view) are part of the path: shared/routeDetails.ts.
+export const PLACE_PARAMS = ["open"] as const;
 export type PlaceParam = (typeof PLACE_PARAMS)[number];
 
 const SAFE_VALUE = /^[A-Za-z0-9_-]{1,80}$/;
