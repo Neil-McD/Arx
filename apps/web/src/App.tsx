@@ -1609,7 +1609,12 @@ export default function App() {
 
   // Design system v1: "Search or ask" and ⌘K open your guide on Home.
   useGuideSearchShortcut(handleSelectCommunityTab, communityAgentComposerApiRef);
-  const activeCommunityAgentOn = useCommunityAgentOnState({ session, ensureSession: ensureUsableAuthSession, communityId: activeCommunity?.id ?? null });
+  const activeCommunityAgentOn = useCommunityAgentOnState({
+    session,
+    ensureSession: ensureUsableAuthSession,
+    communityId: activeCommunity?.id ?? null,
+    known: activeCommunity && activeCommunityAccess?.community_id === activeCommunity.id ? activeCommunityAccess.agent_on : null,
+  });
   const activeCommunityAppLinks = useCommunityAppLinksState({ session, ensureSession: ensureUsableAuthSession, communityId: activeCommunity?.id ?? null });
 
   const { peopleOpen, changeOpen: handlePeoplePanelOpenChange, openMembers: handleOpenCommunityMembers } =
