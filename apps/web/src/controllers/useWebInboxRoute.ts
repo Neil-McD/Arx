@@ -25,17 +25,18 @@ export function useWebInboxRoute(params: {
   const latest = useRef(params);
   latest.current = params;
   const shownConversationRef = useRef<string | null>(null);
-
-  useEffect(() => {
-    directMessages.followRoute(isInboxRoute);
-    // Off Inbox nothing is shown, so nothing is remembered as shown.
-    if (!isInboxRoute) shownConversationRef.current = null;
-  }, [directMessages.followRoute, isInboxRoute]);
   // The page Inbox was opened from, so closing it goes back there directly,
   // however many conversations were opened in between.
   const openedFromRef = useRef<string | null>(null);
+  // Off Inbox nothing is shown, and a later return (Back, a link) was not
+  // opened from anywhere.
+  if (!isInboxRoute) {
+    shownConversationRef.current = null;
+    openedFromRef.current = null;
+  }
 
-  directMessages.navigatorRef.current = isDesignV1Active() ? {
+  directMessages.addressRef.current = isDesignV1Active() ? {
+    isOpen: () => isInboxRouteRef.current,
     open: () => {
       if (isInboxRouteRef.current) return true;
       const path = buildCommunityTabPath(latest.current.communitySlug, "inbox");
@@ -44,20 +45,16 @@ export function useWebInboxRoute(params: {
       latest.current.navigateTo(path);
       return true;
     },
-    leave: (byUser) => {
-      if (!isInboxRouteRef.current) return;
-      // Closed by its own button or Escape: to the page it was opened from.
+    close: () => {
       const openedFrom = openedFromRef.current;
       openedFromRef.current = null;
-      if (byUser && openedFrom) {
+      if (openedFrom) {
         latest.current.navigateTo(openedFrom);
         return;
       }
-      // Another page is opening. On a phone that is a bottom tab, which has
-      // no address of its own yet (slice B), so the community's list is
-      // where the address rests; on a wide window, its channels.
-      const onPhone = document.documentElement.dataset.layout === "phone";
-      const path = onPhone
+      // Reached by Back, a link or a refresh: the community's front page,
+      // in Inbox's place.
+      const path = document.documentElement.dataset.layout === "phone"
         ? buildCommunityHomePath(latest.current.communitySlug)
         : buildCommunityTabPath(latest.current.communitySlug, "chat");
       if (path) latest.current.navigateTo(path, { replace: true });
@@ -83,5 +80,8 @@ export function useWebInboxRoute(params: {
     writeRouteDetail("conversation", conversationId, { replace: !inAddress || !conversationId });
   };
 
-  return { isInboxRoute, onActiveConversationChange };
+  // Open exactly while the address is Inbox's; in place only when there is no
+  // address to use.
+  const isOpen = isInboxRoute || directMessages.isOpenInPlace;
+  return { isInboxRoute, isOpen, onActiveConversationChange };
 }

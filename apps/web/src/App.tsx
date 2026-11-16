@@ -176,7 +176,6 @@ export default function App() {
   const appActivity = useWebAppActivityController();
   const directMessages = useWebDirectMessagesController();
   const {
-    isOpen: isDirectMessagesOpen,
     openRequest: directMessageOpenRequest,
     openConversationRequest: directMessageOpenConversationRequest,
     unreadCount: directMessagesUnreadCount,
@@ -406,6 +405,8 @@ export default function App() {
     navigateTo,
     openConversationById: handleOpenDirectConversationById,
   });
+  // Inbox is open exactly while the address is Inbox's (design v1).
+  const isDirectMessagesOpen = inboxRoute.isOpen;
   const memberEntry = useWebMemberEntryController({
     session,
     shellVariant,
@@ -2555,7 +2556,7 @@ export default function App() {
         canManageResources: canManageResourcesActiveCommunity,
         mobileShellActive: showMobileShell,
         mobileRoot: showMobileShell && mobileRootPage === "agent",
-        onRequestOpen: () => showMobileShell ? setMobileRootPage("agent") : handleSelectCommunityTab("agent"),
+        onRequestOpen: () => showMobileShell ? handleSelectMobileRootPage("agent") : handleSelectCommunityTab("agent"),
         community: communityAgentDockCommunity,
         surfaceContext: communityAgentSurfaceContext,
         session: shownSession,

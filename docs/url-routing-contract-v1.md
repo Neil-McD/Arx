@@ -210,7 +210,10 @@ through `shared/routeDetails.ts`.
     community; the one in the address is the one whose left column shows.
   - Opening a record, the join requests or another conversation is a history
     step; the conversation Inbox opens for you only fills in the address.
-    Inbox's own close button returns to the page it was opened from.
+    Inbox's own close button returns to the page it was opened from (or, when
+    it was reached by Back, a link or a refresh, the community's front page).
+  - Inbox is open exactly while the address is Inbox's; nothing else keeps an
+    open/closed flag. A page that opens over Inbox closes it by its own address.
   - The earlier `?open=members` and `?open=inbox` links open these pages. The
     classic layout keeps its panel and overlay.
 
@@ -288,6 +291,10 @@ and the same access decision (rule 6), drawn for a phone.
   and reload stay in it (`resolveInitialAppShellVariant` and the navigation
   controller's location handling in `apps/web/src/controllers`).
 - A narrow desktop window keeps the standard layout.
+- The phone's bottom tab is read from the address (design v1): `/home` selects
+  Home, `/inbox` selects Inbox, any other address the community tab
+  (`phoneTabForRoute` in `apps/web/src/components/webShellChromeShared.ts`).
+  A tab tap goes to the tab's address; nothing stores the selected tab.
 - Links Polynet hands out (invites, the community page `/c/<slug>`) stay
   without `/m`; the phone adds it on arrival.
 
