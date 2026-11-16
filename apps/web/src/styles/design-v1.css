@@ -1272,7 +1272,8 @@
   font: inherit;
   cursor: pointer;
 }
-:root[data-design="v1"] .kit-home-back:hover { background: var(--hover-overlay); }
+:root[data-design="v1"] .kit-home-back:hover:not(:disabled) { background: var(--hover-overlay); }
+:root[data-design="v1"] .kit-home-back:disabled { cursor: default; opacity: 0.55; }
 
 /* On a phone, Home is the page itself: no inset, frame or rounded corners
    left over from the floating guide it used to be. */

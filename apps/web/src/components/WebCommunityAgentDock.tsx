@@ -1373,16 +1373,17 @@ function WebCommunityAgentDock(props, ref) {
       <KitApp view="home" host={kitHomeIsHost} part="main" talking={kitTalking || conversationNeedsYou}>
         <View index={0}>
           {/* In the conversation the top row stays put and is the way back to Home. */}
-          {kitTalking ? (
+          {/* While the guide is answering or waiting on you, the conversation stays open: the arrow waits too. */}
+          {kitTalking || conversationNeedsYou ? (
             <Top titleView={0} title={
-              <button type="button" className="kit-home-back" onClick={closeTalk} aria-label="Back to Home" title="Back to Home">
+              <button type="button" className="kit-home-back" onClick={closeTalk} disabled={conversationNeedsYou} aria-label="Back to Home" title={conversationNeedsYou ? "Your guide is still on this" : "Back to Home"}>
                 <ArrowLeft size={16} strokeWidth={1.8} aria-hidden="true" />Home
               </button>
             } />
           ) : null}
           {/* The top row scrolls with Home, so the eyebrow's glow is never cut. */}
           <Scroll ref={scrollRef}>
-            {kitTalking ? null : <Top title="Home" titleView={0} />}
+            {kitTalking || conversationNeedsYou ? null : <Top title="Home" titleView={0} />}
             <WebCommunityHomeSection
               {...props.home}
               session={props.session}
