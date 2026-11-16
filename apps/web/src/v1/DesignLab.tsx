@@ -30,7 +30,7 @@ import {
   View,
   Ask,
 } from "./kit";
-import { LearnedRows } from "./KitBrain";
+import { PanelBrain, rememberBrainMap } from "./KitBrain";
 import { BriefPart } from "./KitBrief";
 import { PanelAction, PanelLearned, PanelLine, PanelNext, PanelPart, PanelPeople } from "./KitPanel";
 import { KitChannelFeed } from "./KitChannelFeed";
@@ -289,6 +289,10 @@ function PodsPage(props: { join: boolean }) {
 // the lab, so the brief and what loads from the server are absent).
 function RealPanels(props: { pod: boolean }) {
   const noop = () => undefined;
+  const example = new URLSearchParams(window.location.search).get("example") ?? "sunrise";
+  const labMap = example === "full" ? fullExample(Date.now()) : example === "middling" ? middlingExample(Date.now()) : sunriseExample(Date.now());
+  rememberBrainMap("lab", null, labMap);
+  rememberBrainMap("lab", "lab", { ...labMap, center: { name: "Setters", kind: "pod" }, courses: [], pods: [] });
   const pod = {
     channel_id: "lab", slug: "setters", name: "Setters", purpose: "The route setters plan resets and the comp.", visibility: "listed", seats: 6, price: null,
     what_you_get: ["Weekly call with the host"], hosts: ["Maya Chen"], can_manage: true, can_edit: true, requests: [{ user_id: "theo", name: "Theo Park", status: "pending" }],
@@ -352,8 +356,11 @@ function PodsShell() {
 // builder (a question to teach, and who is learning).
 function KnowShell(props: { builder: boolean }) {
   const now = Date.now();
-  const learned = { total: 11, more: false, this_week: 4, can_manage: props.builder,
-    latest: [{ title: "Who runs dawn sessions", at: new Date(now - 3_600_000).toISOString() }, { title: "Yellow V5: toe-hook", at: new Date(now - 2 * 86_400_000).toISOString() }, { title: "Purple V4: drop-knee", at: new Date(now - 3 * 86_400_000).toISOString() }] };
+  const params = new URLSearchParams(window.location.search);
+  const example = params.get("example") ?? "sunrise";
+  const whole = example === "full" ? fullExample(now) : example === "middling" ? middlingExample(now) : example === "few" ? { ...sunriseExample(now), points: sunriseExample(now).points.slice(0, 3) } : sunriseExample(now);
+  // A member is sent no name for what a host taught.
+  const brain = props.builder ? whole : { ...whole, can_manage: false, points: whole.points.map((p) => (p.kind === "taught" ? { ...p, title: null } : p)) };
   return (
     <div style={{ height: "100vh", display: "grid" }}>
       <CommunityPageFrame>
@@ -372,12 +379,7 @@ function KnowShell(props: { builder: boolean }) {
                   <PanelNext title="Reading a board problem" sub="Board basics" action={<Btn go>Resume</Btn>} />
                 </PanelPart>
               )}
-              <PanelPart label="The community brain" action={props.builder ? <PanelAction onClick={() => undefined}>Open</PanelAction> : null}>
-                <PanelLine fact="1">Courses</PanelLine>
-                <PanelLine fact="3">Lessons</PanelLine>
-                <PanelLine fact="11">Learned from the community</PanelLine>
-              </PanelPart>
-              <PanelPart label="Learned lately" fact="4 this week"><LearnedRows view={learned} now={now} /></PanelPart>
+              <PanelBrain map={brain} now={now} onOpen={() => undefined} />
               {props.builder ? (
                 <PanelPart label="Learning"><PanelLine fact="4 started · 1 finished">Board basics</PanelLine></PanelPart>
               ) : null}
