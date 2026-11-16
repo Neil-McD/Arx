@@ -1258,6 +1258,19 @@
   grid-auto-rows: auto;
 }
 
+/* On a phone, Home is the page itself: no inset, frame or rounded corners
+   left over from the floating guide it used to be. */
+:root[data-design="v1"] .community-agent-dock.community-agent-page.mobile-root {
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+}
+:root[data-design="v1"] .community-agent-dock.community-agent-page.mobile-root .community-agent-dock-panel {
+  border: 0;
+  border-radius: 0;
+}
+
 /* Home's conversation starts under the greeting, with no band above it. */
 :root[data-design="v1"] .community-agent-dock-panel.has-home-rail .community-agent-dock-transcript {
   padding-top: 40px;
