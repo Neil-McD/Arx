@@ -159,3 +159,26 @@ test("an operator reads a map as a given person", async () => {
   const map: any = await t.query(internal.communityBrain.readBrainMapInternal, { communityId: w.communityId, userId: w.memberId });
   expect(map.can_manage).toBe(false);
 });
+
+test("a picked learned thing: a member gets its name, place and partners, never its text; a builder gets the text too", async () => {
+  const t = convexTest(schema, modules);
+  const w = await world(t);
+  const member: any = await as(t, "member").query(api.communityBrain.getBrainNote, { communityId: w.communityId, noteId: `note:${w.toeHook}` });
+  expect(member).toMatchObject({ title: "Yellow V5: toe-hook", kind: "learned", mine: true, use: 5,
+    lesson: { id: `resource:${w.reading}`, title: "Reading the board", course: "Board basics", order: 1 },
+    with: [{ id: `resource:${w.reading}`, title: "Reading the board", count: 3 }] });
+  expect(member.body_md).toBeUndefined();
+  expect(member.slug).toBeUndefined();
+  // Taught by a host: no name, no text, for a member.
+  const taught: any = await as(t, "member").query(api.communityBrain.getBrainNote, { communityId: w.communityId, noteId: `note:${w.refunds}` });
+  expect(taught).toMatchObject({ title: null, kind: "taught" });
+  expect(JSON.stringify(taught)).not.toMatch(/VIP|TEXT OF/);
+  // A builder: name, text and slug.
+  const builder: any = await as(t, "owner").query(api.communityBrain.getBrainNote, { communityId: w.communityId, noteId: `note:${w.refunds}` });
+  expect(builder).toMatchObject({ title: "VIP refund exceptions", body_md: "TEXT OF VIP refund exceptions", slug: "refunds" });
+  // A pod's thing is for people in the pod.
+  const scoutsNote: any = await t.run((ctx: any) => ctx.db.query("communityNotes").filter((q: any) => q.eq(q.field("slug"), "scouting")).first());
+  await expect(as(t, "member").query(api.communityBrain.getBrainNote, { communityId: w.communityId, noteId: `note:${scoutsNote._id}` })).rejects.toThrow("semantic_not_found");
+  await expect(as(t, "member").query(api.communityBrain.getBrainNote, { communityId: w.communityId, noteId: "note:nonsense" })).rejects.toThrow();
+  await expect(as(t, "stranger").query(api.communityBrain.getBrainNote, { communityId: w.communityId, noteId: `note:${w.toeHook}` })).rejects.toThrow();
+});

@@ -176,3 +176,66 @@ export const readBrainMapInternal = internalQuery({
     return await brainMap(ctx, args);
   },
 });
+
+// One learned thing on the map, picked: what this viewer may read of it. A
+// member gets its name (only if they may read it), where it sits, when it was
+// learned and what it is answered with; a builder also gets its text and
+// slug, to open its sources and correct it. A pod's thing is for people in
+// the pod. Never who said it.
+export const getBrainNote = query({
+  args: { authSubject: v.optional(v.string()), communityId: v.id("communities"), noteId: v.string() },
+  handler: async (ctx, args) => {
+    const userId = await resolveUserIdForAuthenticatedRequest({ ctx, authSubject: args.authSubject ?? null });
+    await requireCommunityChatAccess({ ctx, communityId: args.communityId, userId });
+    const id = ctx.db.normalizeId("communityNotes", args.noteId.replace(/^note:/, ""));
+    const row: any = id ? await ctx.db.get(id) : null;
+    if (!row || String(row.communityId) !== String(args.communityId)) throw new Error("semantic_not_found");
+    const canManage = await requireCommunityManager({ ctx, communityId: args.communityId, userId }).then(() => true, () => false);
+    const scope = (row.scopeKey ?? communityScopeKey(args.communityId)) as ScopeKey;
+    let insidePod = false;
+    if (scope.startsWith("pod:")) {
+      const room = await podRoom(ctx, args.communityId, scope.slice(4));
+      const actor = await resolveCommunityChannelActor({ ctx, communityId: args.communityId, userId });
+      if (!room || !(await getCommunityChannelCapabilities({ ctx, channel: room, actor })).canRead) throw new Error("semantic_not_found");
+      insidePod = true;
+    }
+    const lessons = scope.startsWith("pod:") ? [] : await liveLessons(ctx, args.communityId, MAP_LESSONS);
+    const lessonIds = new Set(lessons.map((lesson) => String(lesson.id)));
+    const input = await noteInput(ctx, args.communityId, scope, row, String(userId), attachOf(row, lessonIds, null));
+    const title = brainTitleFor(input, { canManage, insidePod });
+    const lesson = row.aboutLessonId && lessonIds.has(String(row.aboutLessonId)) ? lessons.find((entry) => String(entry.id) === String(row.aboutLessonId)) : null;
+    // What answers read it with, among things this viewer may name.
+    const use = await knowledgeUseFor(ctx, args.communityId, Date.now());
+    const ref = `note:${String(row._id)}`;
+    const partners: Array<{ id: string; title: string; count: number }> = [];
+    for (const pair of use.together) {
+      if (partners.length >= 3) break;
+      const other = pair.a === ref ? pair.b : pair.b === ref ? pair.a : null;
+      if (!other) continue;
+      if (other.startsWith("resource:")) {
+        const found = lessons.find((entry) => `resource:${String(entry.id)}` === other);
+        if (found) partners.push({ id: other, title: found.title, count: pair.count });
+        continue;
+      }
+      const otherId = ctx.db.normalizeId("communityNotes", other.replace(/^note:/, ""));
+      const otherRow: any = otherId ? await ctx.db.get(otherId) : null;
+      if (!otherRow || otherRow.scopeKey !== row.scopeKey) continue;
+      const otherInput = await noteInput(ctx, args.communityId, scope, otherRow, String(userId), attachOf(otherRow, lessonIds, null));
+      const otherTitle = brainTitleFor(otherInput, { canManage, insidePod });
+      if (otherTitle) partners.push({ id: other, title: otherTitle, count: pair.count });
+    }
+    return {
+      id: ref,
+      title,
+      kind: input.taught ? "taught" as const : "learned" as const,
+      learned_at: new Date(input.createdAt).toISOString(),
+      at: input.at,
+      lesson: lesson ? { id: `resource:${String(lesson.id)}`, title: lesson.title, course: lesson.course, order: lesson.order } : null,
+      use: use.use[ref] ?? 0,
+      with: partners,
+      mine: input.mine,
+      // A builder's only: the words, and the name the note goes by.
+      ...(canManage ? { body_md: String(row.bodyMd ?? ""), slug: String(row.slug) } : {}),
+    };
+  },
+});

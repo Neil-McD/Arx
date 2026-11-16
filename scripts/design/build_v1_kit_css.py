@@ -281,13 +281,21 @@ css += """
 .app .brain-node.pickable{cursor:pointer;outline:none}
 .app .brain-node.pickable:focus-visible .brain-hit{stroke:rgba(var(--w),.6);stroke-width:1}
 .app svg.brain text{font-family:inherit}
-.app .brain-center{font-size:12.5px;font-weight:600;fill:var(--ink)}
-.app .brain-hub{font-size:12.5px;font-weight:600;fill:var(--ink)}
+.app .brain-center{font-size:14px;font-weight:600;fill:var(--ink)}
+.app .brain-hub{font-size:14px;font-weight:600;fill:var(--ink)}
 .app .brain-hub.dim{fill:rgba(var(--w),.4)}.app .brain-hub.gap{fill:#e0a84f}.app .brain-hub.closed{font-weight:400;fill:var(--ink3)}
-.app .brain-gapnote{font-size:10.5px;fill:#e0a84f}
-.app .brain-num{font-size:10px;fill:var(--ink3)}.app .brain-num.dim{fill:rgba(var(--w),.25)}
-.app .brain-name{font-size:11px;fill:rgba(var(--w),.78)}
+.app .brain-gapnote{font-size:11.5px;fill:#e0a84f}
+.app .brain-num{font-size:11px;fill:var(--ink3)}.app .brain-num.dim{fill:rgba(var(--w),.25)}
+.app .brain-name{font-size:12.5px;fill:rgba(var(--w),.78)}
 .app .brain-name.dim{fill:rgba(var(--w),.28)}.app .brain-name.on{fill:#fff;font-weight:600}
+/* The brain as a page in Knowledge: its counts and readings, then the map filling the rest. */
+.app .brainpage{display:flex;flex-direction:column;gap:10px;min-height:calc(100vh - 160px)}
+.app .brainbar{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.app .seg{margin-left:auto;display:flex;padding:2px;border-radius:8px;border:1px solid var(--line2)}
+.app .seg button{height:26px;padding:0 12px;border-radius:6px;font-size:12.5px;color:var(--ink2);cursor:pointer}
+.app .seg button.on{background:rgba(var(--w),.09);color:var(--ink)}
+.app .brainstage{flex:1;min-height:420px;display:flex}
+.app .brainstage svg.brain-page{width:100%;height:auto;max-height:calc(100vh - 200px)}
 .app button.kmini-btn{width:100%;padding:0}.app button.kmini-btn:disabled{cursor:default}
 .app .kmini+.kline{margin-top:10px}
 

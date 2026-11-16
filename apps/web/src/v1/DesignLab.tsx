@@ -35,6 +35,7 @@ import { BriefPart } from "./KitBrief";
 import { PanelAction, PanelLearned, PanelLine, PanelNext, PanelPart, PanelPeople } from "./KitPanel";
 import { KitChannelFeed } from "./KitChannelFeed";
 import { BRAIN_MAP_MIN_POINTS, KitBrainMap, type BrainReading } from "./KitBrainMap";
+import { KitBrainPageView } from "./KitBrainPage";
 import { fullExample, middlingExample, sunriseExample } from "./brainExamples";
 import { CommunityPageFrame, CommunityPageRail } from "../components/CommunityPageHeader";
 import { KitHomeRail } from "./KitHomeRail";
@@ -422,6 +423,26 @@ function BrainLab() {
   );
 }
 
+// The brain as a page in Knowledge, from an example map (a picked learned
+// thing reads from the server, so in the lab only lessons and subjects open).
+function BrainPageLab() {
+  const params = new URLSearchParams(window.location.search);
+  const now = Date.now();
+  const example = params.get("example") ?? "sunrise";
+  const map = example === "full" ? fullExample(now) : example === "middling" ? middlingExample(now) : sunriseExample(now);
+  return (
+    <div style={{ height: "100vh", display: "grid" }}>
+      <CommunityPageFrame>
+        <div style={{ padding: "0 56px" }}>
+          <KitApp view="know" host part="flow">
+            <KitBrainPageView session={null} communityId="lab" canManage onOpenCourse={() => undefined} map={map} />
+          </KitApp>
+        </div>
+      </CommunityPageFrame>
+    </div>
+  );
+}
+
 // ?scale=1.25 draws the lab larger, to try a size for big monitors.
 function labScale(): number {
   if (typeof window === "undefined") return 1;
@@ -431,5 +452,5 @@ function labScale(): number {
 
 export function DesignLab() {
   const page = typeof window === "undefined" ? "" : new URLSearchParams(window.location.search).get("page");
-  return page === "channel" ? <HostChannel /> : page === "brief" ? <BriefPanels /> : page === "brain" ? <BrainLab /> : page === "pods-shell" ? <PodsShell /> : page === "know-panel" ? <KnowShell builder={false} /> : page === "know-panel-builder" ? <KnowShell builder /> : page === "pods" ? <PodsPage join={false} /> : page === "home-panel" ? <RealPanels pod={false} /> : page === "pod-panel" ? <RealPanels pod /> : page === "pods-join" ? <PodsPage join /> : <HostHomeQuiet />;
+  return page === "channel" ? <HostChannel /> : page === "brief" ? <BriefPanels /> : page === "brain" ? <BrainLab /> : page === "brain-page" ? <BrainPageLab /> : page === "pods-shell" ? <PodsShell /> : page === "know-panel" ? <KnowShell builder={false} /> : page === "know-panel-builder" ? <KnowShell builder /> : page === "pods" ? <PodsPage join={false} /> : page === "home-panel" ? <RealPanels pod={false} /> : page === "pod-panel" ? <RealPanels pod /> : page === "pods-join" ? <PodsPage join /> : <HostHomeQuiet />;
 }

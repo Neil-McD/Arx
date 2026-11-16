@@ -42,7 +42,7 @@ export function KitBrainMap(props: {
   const layout = useMemo(() => layoutBrain(props.map, props.now), [props.map, props.now]);
   // The biggest subjects are where the community knows what no course teaches.
   const gapKeys = useMemo(() => new Set(props.map.subjects.filter((s) => s.size >= 3).sort((a, b) => b.size - a.size).slice(0, 3).map((s) => `subject:${s.name}`)), [props.map]);
-  const labels = useMemo(() => page ? chooseLabels(layout, { max: 9 }) : [], [layout, page]);
+  const labels = useMemo(() => page ? chooseLabels(layout, { max: 9, charW: 7, lineH: 15 }) : [], [layout, page]);
   const labelled = new Map(labels.map((label) => [label.id, label]));
   // Room for the names too, so none is cut at the edge.
   let { minX, minY, maxX, maxY } = layout.bounds;
@@ -123,8 +123,12 @@ export function KitBrainMap(props: {
       {layout.hubs.map((hub) => {
         const gap = reading === "gaps" && gapKeys.has(hub.key);
         const right = Math.cos((hub.angle * Math.PI) / 180) >= -0.2;
+        const pickable = page && hub.kind === "subject";
         return (
-          <g key={hub.key}>
+          <g key={hub.key} className={cx(pickable ? "brain-node pickable" : "brain-node")}
+            {...(pickable ? { tabIndex: 0, role: "button", "aria-label": `Subject: ${hub.label}`, onClick: () => pick(hub.key), onKeyDown: (e: any) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); pick(hub.key); } } } : {})}>
+            {pickable ? <circle className={cx("brain-hit")} cx={hub.x} cy={hub.y} r={14} /> : null}
+            {props.selectedId === hub.key ? <circle className={cx("brain-ring")} cx={hub.x} cy={hub.y} r={11} /> : null}
             {hub.kind === "pod" ? (
               <>
                 <circle className={cx("brain-membrane")} cx={hub.x} cy={hub.y} r={hub.inside ? 44 : 18} />

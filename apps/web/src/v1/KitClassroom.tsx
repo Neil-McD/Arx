@@ -88,6 +88,8 @@ export function KitClassroom(props: {
   // from. The page's header belongs to the caller, so it holds this.
   guideMemoryOpen?: boolean;
   onOpenGuideMemory?: (open: boolean) => void;
+  // The community brain: the map of what the community knows.
+  onOpenBrain?: () => void;
   // Makes a draft course with these lessons and opens it (hosts).
   onCreateCourse?: (name: string, lessons: string[]) => Promise<KnowledgeAddResult>;
   // Files and links the guide was given: read the failed ones again, or take
@@ -309,7 +311,7 @@ export function KitClassroom(props: {
     ) : null,
     courses.length || learned?.total ? (
       <PanelPart key="brain" label="The community brain"
-        action={canWriteNotes && props.onOpenGuideMemory ? <PanelAction onClick={() => props.onOpenGuideMemory?.(true)}>Open</PanelAction> : null}>
+        action={props.onOpenBrain ? <PanelAction onClick={props.onOpenBrain}>Open</PanelAction> : null}>
         {courses.length ? <PanelLine fact={String(courses.length)}>Courses</PanelLine> : null}
         {lessonCount ? <PanelLine fact={String(lessonCount)}>Lessons</PanelLine> : null}
         {learned?.total ? <PanelLine fact={`${learned.total}${learned.more ? "+" : ""}`}>Learned from the community</PanelLine> : null}

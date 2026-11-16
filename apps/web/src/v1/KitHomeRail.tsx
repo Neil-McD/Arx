@@ -9,6 +9,7 @@ import type { CommunityPresenceSummary } from "../../../../shared/communityTypes
 import { UserAvatar } from "../../../../shared/UserAvatar";
 import { cx } from "./kit";
 import { LearnedRows, learnedFact, useLearnedLately } from "./KitBrain";
+import { askToOpenBrain } from "./KitBrainPage";
 import { BriefPart, usePlaceBrief } from "./KitBrief";
 import { KitNextEvent } from "./KitNextEvent";
 import { PanelAction, PanelLine, PanelPart } from "./KitPanel";
@@ -54,7 +55,7 @@ export function KitHomeRail(props: {
           the server sends a member only the names they may read. */}
       {learned && learned.total ? (
         <PanelPart label="The community brain" fact={learnedFact(learned)}
-          action={props.onOpenKnowledge ? <PanelAction onClick={props.onOpenKnowledge}>Open</PanelAction> : null}>
+          action={props.onOpenKnowledge ? <PanelAction onClick={() => { askToOpenBrain(); props.onOpenKnowledge!(); }}>Open</PanelAction> : null}>
           <LearnedRows view={learned} now={props.now} max={2} />
         </PanelPart>
       ) : null}
