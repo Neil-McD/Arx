@@ -921,26 +921,28 @@ export function CommunityInteractionFeedList(props: CommunityInteractionFeedList
     : null;
   const unreadDivider = <div className="community-interaction-unread-divider"><span>New</span></div>;
   return (
+          // Each state is its own element (the keys): the posts are a new
+          // box that appears, never the loading line's box stretched.
           props.error && props.roots.length === 0 && props.activityEvents.length === 0 ? (
-            <div className="community-interaction-state" role="alert">
+            <div key="error" className="community-interaction-state" role="alert">
               <div>{props.error}</div>
               <button type="button" onClick={props.onRetryRoots}>
                 {props.errorActionLabel ?? "Retry"}
               </button>
             </div>
           ) : props.isLoadingRoots && props.roots.length === 0 && props.activityEvents.length === 0 ? (
-            <div className="community-interaction-state" aria-live="polite">
+            <div key="loading" className="community-interaction-state" aria-live="polite">
               <div>Loading messages…</div>
               <div className="community-interaction-loading web-skeleton-pill" aria-hidden="true" />
             </div>
           ) : props.roots.length === 0 && props.activityEvents.length === 0 ? (
-            <div className="community-interaction-empty">
+            <div key="empty" className="community-interaction-empty">
               <MessageSquare size={22} aria-hidden="true" />
               <div>No messages yet</div>
               <span>Say hello. The first message starts the conversation.</span>
             </div>
           ) : (
-            <div className="community-interaction-feed">
+            <div key="feed" className="community-interaction-feed">
               {props.error ? (
                 <div className="community-interaction-refresh-warning" role="status">
                   <span>{props.error}</span>
