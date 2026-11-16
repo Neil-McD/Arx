@@ -90,6 +90,9 @@ export type WebDirectMessagesHostProps<SessionT> = {
   isOpen: boolean;
   // The conversation shown changed (or closed), so the address can hold it.
   onActiveConversationChange?: (conversationId: string | null) => void;
+  // The conversation named in the address (design v1). Inbox opens that one,
+  // so it does not pick its own first.
+  addressConversationId?: string | null;
   mobileRoot?: boolean;
   openRequest: DirectMessageOpenRequest;
   openConversationRequest?: DirectMessageOpenConversationRequest;
@@ -803,7 +806,7 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
     const conversationAsked = Boolean(
       openConversationRequest && openConversationRequest.requestId !== openConversationRequestHandledRef.current,
     );
-    if (personAsked || conversationAsked) return;
+    if (personAsked || conversationAsked || props.addressConversationId) return;
     // The list's top row: what needs a reply first, else the latest.
     const withMessages = conversations.filter((conversation) => Math.floor(Number(conversation.last_seq ?? 0)) > 0);
     const needsReply = withMessages.find((conversation) =>
@@ -812,7 +815,7 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
     // Narrower windows show Inbox as layers: start on the list, not inside a conversation.
     if (typeof window !== "undefined" && window.matchMedia("(max-width: 1023px)").matches) return;
     if (first) openConversationRef.current?.(first, { deferRead: true });
-  }, [activeConversationId, conversations, inboxIsPage, isLoadingInbox, isOpen, openConversationRequest, openRequest]);
+  }, [activeConversationId, conversations, inboxIsPage, isLoadingInbox, isOpen, openConversationRequest, openRequest, props.addressConversationId]);
   useEffect(() => {
     if (!isOpen || (activeConversationId && !listStaysVisible)) return;
     const timeoutId = window.setTimeout(
@@ -1210,6 +1213,9 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
     if (!isOpen || props.mobileRoot) return;
 
     const handlePointerDown = (event: PointerEvent) => {
+      // A page is left by going somewhere else (that page's address closes
+      // it), not by a click beside it; closing here would race that click.
+      if (inboxIsPage) return;
       const target = event.target;
       if (!(target instanceof Node)) return;
       const host = document.querySelector(".web-direct-messages-host");
@@ -1231,7 +1237,7 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
       document.removeEventListener("pointerdown", handlePointerDown, true);
       document.removeEventListener("keydown", handleKeyDown);
     };
-  }, [isOpen, onClose, props.mobileRoot]);
+  }, [inboxIsPage, isOpen, onClose, props.mobileRoot]);
 
   const openConversation = useCallback(
     (conversation: DirectMessageConversation, options?: { deferRead?: boolean }) => {

@@ -23,6 +23,16 @@ export type MobileOverlay =
   | null;
 export type MobileRootPage = "agent" | "community" | "messages";
 
+// Design v1: the phone's bottom tab is read from the address, never stored.
+// Home's address selects Home, Inbox's selects Inbox, anything else the
+// community, so Back, Forward and a refresh always agree with the tab.
+export function phoneTabForRoute(activePage: AppPage, communityTab: CommunityTab): MobileRootPage {
+  if (activePage !== "community") return "community";
+  if (communityTab === "agent") return "agent";
+  if (communityTab === "inbox") return "messages";
+  return "community";
+}
+
 export type MobileMemberFace = CommunityPresenceFace;
 
 export type CommunityLike = CommunityShellCommunity;
