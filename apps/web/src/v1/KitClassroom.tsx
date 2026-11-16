@@ -245,11 +245,6 @@ export function KitClassroom(props: {
     writePlaceParam("lesson", open ? lessonId : null);
   }, [lessonId, open?.course.id]);
 
-  useEffect(() => {
-    if (lessonToReopenRef.current) return;
-    writePlaceParam("lesson", open ? lessonId : null);
-  }, [lessonId, open?.course.id]);
-
   const mark = async (resourceId: string, value: boolean) => {
     if (saving) return;
     setSaving(true);
