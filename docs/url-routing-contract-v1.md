@@ -33,8 +33,11 @@ Current canonical/pathname routes include:
 - `/settings/billing`
 - `/settings/appearance`
 - `/c/:slug`
-- `/c/:slug/chat`
-- `/c/:slug/resources`
+- `/c/:slug/chat`, `/c/:slug/chat/:channel`
+- `/c/:slug/chat/:channel/:thread` (a thread open; General is `/chat/general/:thread`)
+- `/c/:slug/resources`, `/c/:slug/resources/:course`
+- `/c/:slug/resources/:course/:lesson` (a lesson in a course)
+- `/c/:slug/resources/guide`, `/c/:slug/resources/brain` (What your guide knows, the community brain)
 - `/c/:slug/events`
 - `/c/:slug/pods` (the Pods page)
 - `/c/:slug/pods/:pod` (a pod's own address: its room for someone in it, its outside page for a member who may see it, not found otherwise; the room itself is `/c/:slug/chat/:pod`)
@@ -170,6 +173,27 @@ So the contract direction is:
 - keep `/c/:slug`
 - use `/u/:handle`
 - use `/app/:slug`
+
+### Details inside a page
+
+Since Nov 17 2026 (#594), where you are inside a community page is part of its
+path: the open thread, the lesson, and a view of Knowledge. One parser and one
+builder own the format (`shared/webAppRouteState.ts`); pages read and write it
+through `shared/routeDetails.ts`.
+
+- Ids in a path are plain ids (`[A-Za-z0-9_-]`, at most 80); anything else is
+  not a place and is dropped.
+- A detail belongs to one page: a thread to a channel or a pod's room, a lesson
+  to a course, a view to the Knowledge shelf. It is dropped when the page
+  changes.
+- History: opening a thread, a lesson you chose, or a view adds a history step,
+  so the back button closes it. A lesson picked for you (the next unfinished
+  one) only fills in the address, without a step.
+- Compatibility: the earlier `?thread=`, `?lesson=` and `?view=` tags still open
+  the same place and are rewritten to the path once.
+- Members and Inbox still open over the page you were on with `?open=members`
+  and `?open=inbox`, until they become pages of their own
+  (docs/specs/web-architecture-end-state.md, step 5).
 
 ## Internal Operating Routes
 
