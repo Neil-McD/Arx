@@ -42,10 +42,10 @@ test("adding a learned thing moves no other point", () => {
 });
 
 test("adding a subject or a pod moves no hub, lesson or point already there", () => {
-  const before = where(layoutBrain(map({ subjects: 3, pods: 1 }), NOW));
-  const after = where(layoutBrain(map({ subjects: 4, pods: 2 }), NOW));
-  // A new subject comes after the old ones; pods follow subjects, so they take later angles too.
-  for (const [key, at] of before) if (!key.startsWith("pod:")) expect(after.get(key)).toBe(at);
+  const before = where(layoutBrain(map({ courses: 2, subjects: 3, pods: 1 }), NOW));
+  // A new course, subject and pod each: everything already there stays put.
+  const after = where(layoutBrain(map({ courses: 3, subjects: 4, pods: 2 }), NOW));
+  for (const [key, at] of before) expect(after.get(key)).toBe(at);
 });
 
 test("twenty hubs keep their distance", () => {
@@ -92,4 +92,11 @@ test("arcs join only what the map draws", () => {
   const m = map();
   m.arcs = [{ a: "note:a", b: "resource:c0l1", count: 2 }, { a: "note:a", b: "note:missing", count: 9 }];
   expect(layoutBrain(m, NOW).arcs.map((arc) => arc.ids)).toEqual([["note:a", "resource:c0l1"]]);
+});
+
+test("a long course stays inside the core", () => {
+  const m = map();
+  m.courses[0].lessons = Array.from({ length: 100 }, (_, l) => ({ id: `resource:long${l}`, title: `L${l}`, order: l + 1, done: false, use: 0 }));
+  const layout = layoutBrain(m, NOW);
+  for (const lesson of layout.lessons) expect(Math.hypot(lesson.x, lesson.y)).toBeLessThanOrEqual(305);
 });

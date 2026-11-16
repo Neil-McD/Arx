@@ -18,7 +18,6 @@ const COURSE_INNER = 64;
 const SUBJECT_RING = 380;
 const POD_RING = 480;
 const LESSON_STEP = 64;
-const LESSON_STEP_MIN = 36;
 const FIBRE_MAX = 300;
 // A hub's name, roughly, so the map makes room for it.
 const HUB_CHAR_W = 7.4;
@@ -90,19 +89,25 @@ export function layoutBrain(map: BrainMap, nowMs: number): BrainLayout {
   const lessons: LayoutLesson[] = [];
   const anchors = new Map<string, { at: Placed; out: number }>();
 
+  // Each kind keeps its own run of the golden angle, so a new hub of one kind
+  // moves no hub of another (they sit on different rings).
+  const seen: Record<string, number> = {};
+  const KIND_OFFSET: Record<string, number> = { course: 200, subject: 250, pod: 300, other: 160 };
   hubOrder(map).forEach((hub, index) => {
-    const angle = (index * GOLDEN_ANGLE + 200) % 360;
+    const slot = seen[hub.kind] = (seen[hub.kind] ?? -1) + 1;
+    const angle = (slot * GOLDEN_ANGLE + KIND_OFFSET[hub.kind]) % 360;
     if (hub.kind === "course") {
       const course = map.courses.find((entry) => entry.id === hub.key)!;
       const n = Math.max(1, course.lessons.length);
-      const step = Math.max(LESSON_STEP_MIN, Math.min(LESSON_STEP, (FIBRE_MAX - COURSE_INNER) / n));
+      // A long course packs its lessons closer; it never reaches past the core.
+      const step = Math.min(LESSON_STEP, (FIBRE_MAX - COURSE_INNER) / n);
       // A fibre bends a little, the same way every time.
       const bend = (hashUnit(hub.key) - 0.5) * 16;
       const path: Placed[] = [center];
       course.lessons.forEach((lesson, i) => {
         const at = polar(angle + bend * (i / n), COURSE_INNER + i * step);
         path.push(at);
-        lessons.push({ ...at, id: lesson.id, courseKey: hub.key, order: lesson.order, title: lesson.title, done: lesson.done, use: lesson.use, r: sizeFor(lesson.use, 4.6, 0.8, 8) });
+        lessons.push({ ...at, id: lesson.id, courseKey: hub.key, order: lesson.order, title: lesson.title, done: lesson.done, use: lesson.use, r: Math.min(sizeFor(lesson.use, 4.6, 0.8, 8), Math.max(1.6, step / 2.4)) });
         anchors.set(`lesson:${lesson.id}`, { at, out: angle + bend * (i / n) });
       });
       const end = polar(angle + bend, COURSE_INNER + n * step - step / 2);
@@ -112,7 +117,7 @@ export function layoutBrain(map: BrainMap, nowMs: number): BrainLayout {
     }
     // Subjects on their ring, pods outside them; with many, alternate rings so neighbours don't touch.
     const base = hub.kind === "pod" ? POD_RING : SUBJECT_RING;
-    const r = base + (index % 2 === 0 ? 0 : 44);
+    const r = base + (slot % 2 === 0 ? 0 : 44);
     const at = polar(angle, r);
     hubs.push({ ...hub, ...at, angle });
     const key = hub.kind === "subject" ? hub.key : hub.kind === "pod" ? `pod:${hub.key.replace(/^pod:/, "")}` : "other";
