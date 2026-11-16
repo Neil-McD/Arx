@@ -2,7 +2,7 @@
 // Knowledge) rides on the address as a small tag, so a refresh or a shared
 // link comes back to the same place. The page's own address still decides the
 // page: these tags only survive while that address stays the same.
-export const PLACE_PARAMS = ["thread", "lesson", "view"] as const;
+export const PLACE_PARAMS = ["thread", "lesson", "view", "open"] as const;
 export type PlaceParam = (typeof PLACE_PARAMS)[number];
 
 const SAFE_VALUE = /^[A-Za-z0-9_-]{1,80}$/;
@@ -46,4 +46,11 @@ export function writePlaceParam(key: PlaceParam, value: string | null): void {
   const search = searchWithPlaceParam(window.location.search, key, value);
   if (search === window.location.search) return;
   window.history.replaceState(window.history.state, "", `${window.location.pathname}${search}${window.location.hash}`);
+}
+
+// Members and Inbox open over the page you were on (?open=members, ?open=inbox).
+// Each keeps only its own word: closing one never clears the other's.
+export function writeOpenPlace(place: "members" | "inbox", open: boolean): void {
+  if (open) writePlaceParam("open", place);
+  else if (readPlaceParam("open") === place) writePlaceParam("open", null);
 }
