@@ -18,6 +18,10 @@ const limits = {
 // them, so they have their own budget and the total stays what a member can
 // download. (From Rashid's PR #290.)
 const HOST_ONLY_CHUNK = /^LessonEditor-/;
+// The design lab: loaded on demand at /design-lab on staging only, never by a
+// member or a host, so it counts toward neither budget; it is listed so it
+// can't grow unseen.
+const LAB_CHUNK = /^DesignLab-/;
 
 function readLimit(name, fallback) {
   const value = Number(process.env[name]);
@@ -49,7 +53,8 @@ try {
   throw error;
 }
 
-const totalJsBytes = files.filter((file) => !HOST_ONLY_CHUNK.test(file.name)).reduce((sum, file) => sum + file.bytes, 0);
+const totalJsBytes = files.filter((file) => !HOST_ONLY_CHUNK.test(file.name) && !LAB_CHUNK.test(file.name)).reduce((sum, file) => sum + file.bytes, 0);
+const labJsBytes = files.filter((file) => LAB_CHUNK.test(file.name)).reduce((sum, file) => sum + file.bytes, 0);
 const hostOnlyJsBytes = files.filter((file) => HOST_ONLY_CHUNK.test(file.name)).reduce((sum, file) => sum + file.bytes, 0);
 const largest = files[0] ?? null;
 const indexChunk = files.find((file) => file.name.startsWith("index-"));
@@ -83,6 +88,6 @@ if (process.exitCode) {
   }
 } else {
   console.log(
-    `web_bundle_budget_check: ok (${files.length} JS chunks, total ${formatBytes(totalJsBytes)}, host-only ${formatBytes(hostOnlyJsBytes)})`,
+    `web_bundle_budget_check: ok (${files.length} JS chunks, total ${formatBytes(totalJsBytes)}, host-only ${formatBytes(hostOnlyJsBytes)}, design lab ${formatBytes(labJsBytes)})`,
   );
 }
