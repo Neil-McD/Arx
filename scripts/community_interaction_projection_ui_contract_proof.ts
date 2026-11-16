@@ -517,8 +517,8 @@ assert.match(
 );
 assert.match(
   app,
-  /const shouldHydrateCommunityContextPanel =[\s\S]*activePage === "community" &&[\s\S]*communityTab === "chat";[\s\S]*shouldLoad: shouldHydrateCommunityContextPanel/,
-  "join request review data should load from the community chat context rail",
+  /const shouldHydrateCommunityContextPanel =[\s\S]*activePage === "community" &&[\s\S]*\(communityTab === "chat" \|\| communityTab === "members"\);[\s\S]*shouldLoad: shouldHydrateCommunityContextPanel/,
+  "join request review data should load beside a channel and on the Members page",
 );
 assert.doesNotMatch(
   app,

@@ -1066,9 +1066,11 @@ export default function App() {
     lastDiscoverLoadAttemptedAt,
     loadDiscoverCommunities,
   });
+  // Join requests and the member tools load where they are shown: beside a
+  // channel, and on the Members page (design v1).
   const shouldHydrateCommunityContextPanel =
     activePage === "community" &&
-    communityTab === "chat";
+    (communityTab === "chat" || communityTab === "members");
 
   useCommunitySettingsAccessLifecycle<AuthSession>({
     activePage,

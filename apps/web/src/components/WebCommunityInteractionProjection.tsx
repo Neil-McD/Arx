@@ -1,6 +1,6 @@
 import { onChannelDescription } from "../v1/KitChannelRail";
 import { askInApp } from "../../../../shared/inAppConfirm";
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ComponentProps, type ReactNode } from "react";
 import {
   Users,
 } from "lucide-react";
@@ -1033,6 +1033,16 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
 // What the people panel needs about the community and the viewer, whether it
 // sits beside a channel or is the Members page (WebCommunityMembersPage).
 export function communityRosterProps(props: WebCommunityInteractionProjectionProps) {
+  const memberSettings: ComponentProps<typeof ChannelRosterPanel>["memberSettings"] = {
+    activeCommunity: { id: props.communityId!, owner_id: props.communityOwnerId ?? null },
+    canManageMembers: Boolean(props.canManageCommunityMembers && props.onSetCommunityMemberRole && props.onRemoveCommunityMember && props.onBanCommunityMember),
+    canViewMemberPlanDetails: Boolean(props.canViewMemberPlanDetails), isActiveCommunityOwner: Boolean(props.isActiveCommunityOwner),
+    displayName: props.displayName, getInitials: props.getInitials, communityInitials: props.communityInitials ?? props.getInitials,
+    handleSetCommunityMemberRole: (id, role) => props.onSetCommunityMemberRole?.(id, role),
+    handleRemoveCommunityMember: id => props.onRemoveCommunityMember?.(id),
+    handleBanCommunityMember: id => props.onBanCommunityMember?.(id),
+    loadMemberBillingHistory: id => props.loadMemberBillingHistory?.(id) ?? Promise.resolve(null),
+  };
   return {
     joinReview: {
       canReviewJoinRequests: props.canReviewCommunityJoinRequests,
@@ -1051,16 +1061,7 @@ export function communityRosterProps(props: WebCommunityInteractionProjectionPro
     isLoadingPresence: props.isLoadingCommunityPresence,
     currentUserId: props.currentUserId,
     onMessageUser: props.onMessageUser,
-    memberSettings: {
-      activeCommunity: { id: props.communityId!, owner_id: props.communityOwnerId ?? null },
-      canManageMembers: Boolean(props.canManageCommunityMembers && props.onSetCommunityMemberRole && props.onRemoveCommunityMember && props.onBanCommunityMember),
-      canViewMemberPlanDetails: Boolean(props.canViewMemberPlanDetails), isActiveCommunityOwner: Boolean(props.isActiveCommunityOwner),
-      displayName: props.displayName, getInitials: props.getInitials, communityInitials: props.communityInitials ?? props.getInitials,
-      handleSetCommunityMemberRole: (id: string, role: Parameters<NonNullable<WebCommunityInteractionProjectionProps["onSetCommunityMemberRole"]>>[1]) => props.onSetCommunityMemberRole?.(id, role),
-      handleRemoveCommunityMember: (id: string) => props.onRemoveCommunityMember?.(id),
-      handleBanCommunityMember: (id: string) => props.onBanCommunityMember?.(id),
-      loadMemberBillingHistory: (id: string) => props.loadMemberBillingHistory?.(id) ?? Promise.resolve(null),
-    },
+    memberSettings,
     onOpenProfile: props.onOpenProfile,
     getAvatarColor: props.getAvatarColor,
     getInitials: props.getInitials,
