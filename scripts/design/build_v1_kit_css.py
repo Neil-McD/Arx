@@ -200,7 +200,8 @@ css += """
    of one line that never wrap. */
 .app .rz{display:flex;flex-direction:column;gap:6px;min-width:0}
 .app .rz>.lab{display:flex;align-items:center;gap:8px;min-height:22px;margin-bottom:2px;font-size:11.5px;font-weight:500;letter-spacing:.01em;color:var(--ink3)}
-.app .rz>.lab em{font-style:normal;font-weight:400;opacity:.8}
+.app .rz>.lab{white-space:nowrap}
+.app .rz>.lab em{font-style:normal;font-weight:400;opacity:.8;min-width:0;overflow:hidden;text-overflow:ellipsis}
 .app .rz>.lab em::before{content:"·";margin-right:8px}
 .app .rz>.lab .la{margin-left:auto}
 .app button.la,.app a.la{font-size:12px;font-weight:500;letter-spacing:0;color:var(--ink2);cursor:pointer;display:inline-flex;align-items:center;text-decoration:none}
@@ -247,6 +248,10 @@ css += """
 /* The community brain (KitBrainMap): neurons and synapses. */
 .app svg.brain{display:block;width:100%;height:auto;overflow:visible}
 .app svg.brain-page{height:100%}
+.app .brainmini{display:block;width:100%;padding:6px 0;margin:0 0 4px;border-radius:10px;text-align:center}
+.app button.brainmini{cursor:pointer;transition:background .12s}
+.app button.brainmini:hover{background:rgba(var(--w),.035)}
+.app .brainmini svg.brain-panel{max-height:210px;margin:0 auto}
 .app .brain-glow-in{stop-color:rgb(var(--au));stop-opacity:.55}
 .app .brain-mine-in{stop-color:#8a91e3;stop-opacity:.55}
 .app .brain-glow-out{stop-color:rgb(var(--au));stop-opacity:0}

@@ -13,6 +13,7 @@ import {
 } from "../../../../shared/cloudCommunityPodsGateway";
 import { Btn, Icon, cx } from "./kit";
 import { PanelAction, PanelLearned, PanelLine, PanelPart } from "./KitPanel";
+import { PanelBrainMap, useBrainMap } from "./KitBrain";
 
 type Draft = { slug: string | null; title: string; text: string };
 
@@ -48,6 +49,10 @@ export function KitPodKnowledge(props: { session: unknown; communityId: string; 
     try { await work(); await load(); } catch { setError(failed); } finally { setBusy(false); }
   };
 
+  // The pod's own map: its things only, read again when its notes change.
+  const { map: brain } = useBrainMap(props.session, props.communityId, props.channelId, state ? state.notes.map((note) => `${note.slug}:${note.updated_at}`).join("|") : "");
+  const [now] = useState(() => Date.now());
+
   if (!state) return null;
   const words = filter.trim().toLowerCase();
   const notes = words ? state.notes.filter((note) => `${note.title}\n${note.body_md}`.toLowerCase().includes(words)) : state.notes;
@@ -73,6 +78,7 @@ export function KitPodKnowledge(props: { session: unknown; communityId: string; 
         </div>
       ) : (
         <>
+          {brain ? <PanelBrainMap map={brain} now={now} /> : null}
           {!state.notes.length ? <PanelLine dim>Nothing yet</PanelLine> : null}
           {state.notes.length > 5 ? (
             <div className={cx("podform")} style={{ marginTop: 0, marginBottom: 8 }}>
