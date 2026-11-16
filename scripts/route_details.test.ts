@@ -23,6 +23,11 @@ describe("every community address survives a refresh", () => {
     "/c/a/home",
     "/c/a/settings/community",
     "/c/a/analytics",
+    "/c/a/members",
+    "/c/a/members/m1",
+    "/c/a/members/requests",
+    "/c/a/inbox",
+    "/c/a/inbox/conv1",
   ];
   for (const address of addresses) {
     it(address, () => expect(roundTrip(address)).toBe(address));

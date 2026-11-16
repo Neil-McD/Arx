@@ -39,6 +39,8 @@ Current canonical/pathname routes include:
 - `/c/:slug/resources/:course/:lesson` (a lesson in a course)
 - `/c/:slug/resources/guide`, `/c/:slug/resources/brain` (What your guide knows, the community brain)
 - `/c/:slug/events`
+- `/c/:slug/members`, `/c/:slug/members/:membershipId`, `/c/:slug/members/requests`
+- `/c/:slug/inbox`, `/c/:slug/inbox/:conversationId`
 - `/c/:slug/pods` (the Pods page)
 - `/c/:slug/pods/:pod` (a pod's own address: its room for someone in it, its outside page for a member who may see it, not found otherwise; the room itself is `/c/:slug/chat/:pod`)
 - `/c/:slug/settings`
@@ -191,9 +193,16 @@ through `shared/routeDetails.ts`.
   one) only fills in the address, without a step.
 - Compatibility: the earlier `?thread=`, `?lesson=` and `?view=` tags still open
   the same place and are rewritten to the path once.
-- Members and Inbox still open over the page you were on with `?open=members`
-  and `?open=inbox`, until they become pages of their own
-  (docs/specs/web-architecture-end-state.md, step 5).
+- Members and Inbox are pages of the community (design v1, Nov 17):
+  - `/c/:slug/members`, `/c/:slug/members/:membershipId` (a member's record),
+    `/c/:slug/members/requests` (people waiting to join);
+  - `/c/:slug/inbox`, `/c/:slug/inbox/:conversationId`. Inbox spans every
+    community; the one in the address is the one whose left column shows.
+  - Opening a record, the join requests or another conversation is a history
+    step; the conversation Inbox opens for you only fills in the address.
+    Inbox's own close button returns to the page it was opened from.
+  - The earlier `?open=members` and `?open=inbox` links open these pages. The
+    classic layout keeps its panel and overlay.
 
 ## Internal Operating Routes
 

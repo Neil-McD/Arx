@@ -44,6 +44,8 @@ export type AppRouteState = {
   // On Members: one member's record (their membership id), or the join
   // requests waiting ("requests").
   communityMemberKey?: string | null;
+  // In Inbox: the conversation open.
+  communityConversationId?: string | null;
   docsSlug?: string | null;
 };
 
@@ -66,6 +68,8 @@ export type AppRoutePathState = {
   communityLessonId?: string | null;
   communityKnowledgeView?: CommunityKnowledgeView | null;
   communityMemberKey?: string | null;
+  // In Inbox: the conversation open.
+  communityConversationId?: string | null;
   docsSlug?: string | null;
 };
 
@@ -90,6 +94,7 @@ export type WebDestination =
   | { kind: "community_events"; slug: string }
   | { kind: "community_pods"; slug: string; podSlug: string | null }
   | { kind: "community_members"; slug: string }
+  | { kind: "community_inbox"; slug: string }
   | { kind: "community_agent"; slug: string }
   | { kind: "community_settings"; slug: string; pane: CommunitySettingsPane }
   | { kind: "community_analytics"; slug: string };
@@ -526,6 +531,7 @@ export function parseAppRouteFromPathname(pathname: string): AppRoutePathState |
       communityTab === "chat" ? String(segments[3] ?? "").trim().toLowerCase() || null : null;
     const communityThreadId = communityTab === "chat" && communityChannelSlug ? readRouteId(segments[4]) : null;
     const communityMemberKey = communityTab === "members" ? readRouteId(segments[3]) : null;
+    const communityConversationId = communityTab === "inbox" ? readRouteId(segments[3]) : null;
     const communityPodSlug =
       communityTab === "pods" ? String(segments[3] ?? "").trim().toLowerCase() || null : null;
     const communitySettingsPane =
@@ -546,6 +552,7 @@ export function parseAppRouteFromPathname(pathname: string): AppRoutePathState |
       ...(communityLessonId ? { communityLessonId } : {}),
       ...(knowledgeView ? { communityKnowledgeView: knowledgeView } : {}),
       ...(communityMemberKey ? { communityMemberKey } : {}),
+      ...(communityConversationId ? { communityConversationId } : {}),
     };
   }
 
@@ -595,6 +602,8 @@ export function deriveWebDestinationFromAppRoute(
           return { kind: "community_pods", slug, podSlug: route.communityPodSlug ?? null };
         case "members":
           return { kind: "community_members", slug };
+        case "inbox":
+          return { kind: "community_inbox", slug };
         case "agent":
           return { kind: "community_agent", slug };
         case "settings":
@@ -649,6 +658,7 @@ export function isWebCommunityDetailDestination(
     case "community_events":
     case "community_pods":
     case "community_members":
+    case "community_inbox":
     case "community_agent":
     case "community_settings":
     case "community_analytics":
@@ -677,6 +687,7 @@ export function webDestinationHasCommunityNavSelection(
     case "community_events":
     case "community_pods":
     case "community_members":
+    case "community_inbox":
     case "community_agent":
     case "community_settings":
     case "community_analytics":
@@ -723,9 +734,11 @@ export function readAppRouteFromLocation(): AppRouteState {
   const parsedPath = parseAppRouteFromPathname(stripShellVariantFromPathname(window.location.pathname || "/"));
   // Before Nov 17 Members opened over a channel as ?open=members; that link
   // now opens the Members page.
-  const fromPath = parsedPath?.page === "community" && parsedPath.communityTab === "chat"
-    && new URLSearchParams(window.location.search).get("open") === "members"
-    ? { ...withoutCommunityRouteDetails(parsedPath), communityTab: "members" as const, communityChannelSlug: null }
+  // Before Nov 17 Inbox did the same with ?open=inbox, over any page.
+  const openTag = new URLSearchParams(window.location.search).get("open");
+  const fromPath = parsedPath?.page === "community" && (openTag === "members" || openTag === "inbox")
+    && (openTag === "inbox" || parsedPath.communityTab === "chat")
+    ? { ...withoutCommunityRouteDetails(parsedPath), communityTab: openTag as "members" | "inbox", communityChannelSlug: null }
     : parsedPath;
   if (fromPath) {
     return {
@@ -743,6 +756,7 @@ export function readAppRouteFromLocation(): AppRouteState {
       ...(fromPath.communityLessonId ? { communityLessonId: fromPath.communityLessonId } : {}),
       ...(fromPath.communityKnowledgeView ? { communityKnowledgeView: fromPath.communityKnowledgeView } : {}),
       ...(fromPath.communityMemberKey ? { communityMemberKey: fromPath.communityMemberKey } : {}),
+      ...(fromPath.communityConversationId ? { communityConversationId: fromPath.communityConversationId } : {}),
       docsSlug: fromPath.docsSlug ?? null,
     };
   }
@@ -771,6 +785,10 @@ function appendCommunityRouteDetails(base: string, state: AppRoutePathState): st
     const key = readRouteId(state.communityMemberKey);
     return key ? `${base}/${encodeURIComponent(key)}` : base;
   }
+  if (state.communityTab === "inbox") {
+    const conversation = readRouteId(state.communityConversationId);
+    return conversation ? `${base}/${encodeURIComponent(conversation)}` : base;
+  }
   if (state.communityTab === "resources") {
     const moduleId = String(state.communityResourceModuleId ?? "").trim();
     if (moduleId) {
@@ -784,7 +802,7 @@ function appendCommunityRouteDetails(base: string, state: AppRoutePathState): st
 }
 
 export function withoutCommunityRouteDetails(state: AppRoutePathState): AppRoutePathState {
-  const { communityThreadId: _t, communityLessonId: _l, communityKnowledgeView: _v, communityMemberKey: _m, ...base } = state;
+  const { communityThreadId: _t, communityLessonId: _l, communityKnowledgeView: _v, communityMemberKey: _m, communityConversationId: _c, ...base } = state;
   return base;
 }
 

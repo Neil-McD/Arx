@@ -1,3 +1,4 @@
+import { useWebInboxRoute } from "./controllers/useWebInboxRoute";
 import { askInApp } from "../../../shared/inAppConfirm";
 import { useCommunityAppLinksState } from "./controllers/communityAppLinks";
 import { useGuideSearchShortcut } from "./controllers/useGuideSearchShortcut";
@@ -184,6 +185,7 @@ export default function App() {
     toggle: handleToggleDirectMessages,
     open: handleOpenDirectMessages,
     close: handleCloseDirectMessages,
+    closeByUser: handleCloseDirectMessagesByUser,
     openFromCommunity: handleOpenDirectMessageFromCommunity,
   } = directMessages;
   const resetWebSessionStateRef =
@@ -396,6 +398,14 @@ export default function App() {
     backTargetSnapshot,
     backTargetLabel: effectiveBackTargetLabel,
   } = shellNavigation;
+  const inboxRoute = useWebInboxRoute({
+    directMessages,
+    activePage,
+    communityTab,
+    communitySlug: selectedActiveCommunitySlug,
+    navigateTo,
+    openConversationById: handleOpenDirectConversationById,
+  });
   const memberEntry = useWebMemberEntryController({
     session,
     shellVariant,
@@ -2562,6 +2572,7 @@ export default function App() {
       directMessagesHostProps={{
         activeCommunityId: activeCommunity?.id ?? null,
         isOpen: isDirectMessagesOpen,
+        onActiveConversationChange: inboxRoute.onActiveConversationChange,
         mobileRoot:
           showMobileShell && mobileRootPage === "messages",
         openRequest: directMessageOpenRequest,
@@ -2583,7 +2594,7 @@ export default function App() {
           directMessageWebNotifications.notificationsState,
         onToggleNotifications:
           directMessageWebNotifications.toggleNotifications,
-        onClose: handleCloseDirectMessages,
+        onClose: handleCloseDirectMessagesByUser,
       }}
       mainSurfaceHostProps={mainSurfaceHostProps}
       shellChromeHostProps={shellChromeHostProps}

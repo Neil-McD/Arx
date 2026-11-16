@@ -19,6 +19,10 @@ export function WebCommunityHost(props: WebCommunityHostProps) {
       {communityTab === "chat" ? (
         <WebCommunityChatPanel {...chatPanelProps} interactionProjection={chatPanelProps.interactionProjection
           ? { ...chatPanelProps.interactionProjection, admission: props.admission } : undefined} />
+      ) : communityTab === "inbox" ? (
+        // Inbox draws itself (WebDirectMessagesHost, as a page); nothing
+        // loads underneath it.
+        null
       ) : communityTab === "members" ? (
         <WebCommunityMembersPage chatPanelProps={chatPanelProps} admission={props.admission} />
       ) : (
