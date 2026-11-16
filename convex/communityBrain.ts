@@ -21,6 +21,7 @@ import {
 } from "../shared/communityBrain";
 
 const PODS_MAX = 50;
+const MAP_LESSONS = { total: 2_000, perCourse: 500 };
 
 // One note, as the map sees it before this viewer's rules: who wrote it,
 // whether its posts are still readable, whether they are the viewer's own.
@@ -76,7 +77,8 @@ async function brainMap(ctx: any, args: { communityId: any; userId: any; podChan
       inputs.push(await noteInput(ctx, args.communityId, scope, row, viewerId, attachOf(row, new Set(), null)));
     }
   } else {
-    const lessons = await liveLessons(ctx, args.communityId);
+    // Every course whole: a map that silently dropped lessons would be wrong.
+    const lessons = await liveLessons(ctx, args.communityId, MAP_LESSONS);
     const done = new Set<string>();
     for (const lesson of lessons) {
       const row = await ctx.db.query("communityLessonProgress")
