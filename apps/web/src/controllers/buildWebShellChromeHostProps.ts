@@ -9,6 +9,7 @@ import {
   type WebDestination,
 } from "../../../../shared/webAppRouteState";
 import type { WebShellChromeHostProps } from "../components/WebShellChromeHost";
+import { forgetPod, goToPodsPath } from "../v1/podMemory";
 import type { MobileMemberFace, MobileOverlay } from "../components/webShellChromeShared";
 import type { CommunityShellCommunity } from "../../../../shared/communityTypes";
 
@@ -103,6 +104,8 @@ export function buildWebShellChromeHostProps(params: {
   settingsGroup: SettingsGroup;
   setSettingsPage: (page: WebShellChromeHostProps["settingsSidebar"]["onSelectPage"] extends (page: infer T) => void ? T : never) => void;
   // Opens one of your own settings pages from anywhere (a community's Settings page too).
+  // On a phone the list and a page are two screens: choosing a page goes to its address.
+  openMobileSettingsPage?: (page: WebShellChromeHostProps["settingsSidebar"]["onSelectPage"] extends (page: infer T) => void ? T : never) => void;
   openGlobalSettings?: (page: WebShellChromeHostProps["settingsSidebar"]["onSelectPage"] extends (page: infer T) => void ? T : never) => void;
   hasLeftPanel: boolean;
   isGlobalSettings: boolean;
@@ -126,6 +129,10 @@ export function buildWebShellChromeHostProps(params: {
         (channel) => channel.slug === mobileChannelSlug,
       ) ?? null
     : null;
+  const isMobilePodRoom = selectedMobileChannel?.access_mode === "restricted";
+  // A phone's Settings page (yours or the community's) goes back to the Settings list.
+  const isMobileSettingsPage = params.showMobileAppShell && !params.showMobileSettingsIndex
+    && (params.showMobileSettingsShell || params.destination.kind === "community_settings");
   const mobileChannelLabel = mobileChannelSlug
     ? selectedMobileChannel?.name ?? (
         mobileChannelSlug === "general"
@@ -147,8 +154,9 @@ export function buildWebShellChromeHostProps(params: {
       isThreadPage: params.mobileThreadPageOpen,
       isCommunityHome: isMobileCommunityHome,
       communityDetailLabel: mobileChannelLabel,
+      communityDetailIsPod: isMobilePodRoom,
       showBackButton:
-        params.showMobileSettingsIndex ||
+        params.showMobileSettingsShell ||
         params.mobileThreadPageOpen ||
         isMobileCommunityDetail,
       showDrawerButton:
@@ -180,6 +188,10 @@ export function buildWebShellChromeHostProps(params: {
         ? params.handleCloseMobileThreadPage
         : params.showMobileSettingsIndex
           ? params.handleExitMobileSettings
+          : isMobileSettingsPage
+            ? params.handleOpenGlobalSettings
+          : isMobileCommunityDetail && isMobilePodRoom
+            ? () => { forgetPod(); goToPodsPath(); }
           : isMobileCommunityDetail
             ? () => {
                 const slug = String(params.activeCommunity?.slug ?? "").trim();
@@ -298,7 +310,11 @@ export function buildWebShellChromeHostProps(params: {
       isGlobalSettings: params.isGlobalSettings,
       settingsGroup: params.settingsGroup,
       // On your own settings, switch page; from a community's Settings page, go to it.
-      onSelectPage: (page) => (params.isGlobalSettings || !params.openGlobalSettings ? params.setSettingsPage(page) : params.openGlobalSettings(page)),
+      onSelectPage: (page) => (
+        params.showMobileSettingsShell && params.openMobileSettingsPage
+          ? params.openMobileSettingsPage(page)
+          : params.isGlobalSettings || !params.openGlobalSettings ? params.setSettingsPage(page) : params.openGlobalSettings(page)
+      ),
     },
     hasLeftPanel: params.hasLeftPanel,
     isGlobalSettings: params.isGlobalSettings,
