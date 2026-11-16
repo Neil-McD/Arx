@@ -417,7 +417,8 @@ function RosterSurface(props: RosterProps & {
   // member's record (docs/design/members-invariants.md).
   if (kitMembers) {
     return <>
-    <Suspense fallback={null}><KitMembersPage communityName={props.communityName}
+    {/* While it is fetched the page keeps its place, so the layout does not jump. */}
+    <Suspense fallback={<section className="members-page is-kit" aria-label="Community members" aria-busy="true" />}><KitMembersPage communityName={props.communityName}
       joinRequests={props.joinReview?.canReviewJoinRequests ? props.joinReview.pendingJoinRequests ?? [] : []}
       decidingJoinRequestId={props.joinReview?.decidingJoinRequestId ?? null}
       onApprove={id => void props.joinReview?.onApproveJoinRequest?.(id)}
