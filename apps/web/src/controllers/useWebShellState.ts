@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type Dispatch, type SetStateAction } from "react";
 
 import type {
   AppPage,
@@ -37,7 +37,11 @@ import type {
   MobileOverlay,
   MobileRootPage,
 } from "../components/webShellChromeShared";
+import { phoneTabForRoute } from "../components/webShellChromeShared";
+import { isDesignV1Active } from "../../../../shared/designSystem";
 import { readFirstLocalStorageValue } from "../webAppRuntime";
+
+const ignorePhoneTab: Dispatch<SetStateAction<MobileRootPage>> = () => undefined;
 
 export function useWebShellState() {
   const initialShellVariant: AppShellVariant =
@@ -68,7 +72,9 @@ export function useWebShellState() {
     if (document.documentElement.dataset.layout !== layout) document.documentElement.dataset.layout = layout;
   }
   const [mobileOverlay, setMobileOverlay] = useState<MobileOverlay>(null);
-  const [mobileRootPage, setMobileRootPage] =
+  // The classic layout's stored phone tab (design v1 reads it from the
+  // address below; this goes when the classic layout is deleted).
+  const [storedMobileRootPage, setStoredMobileRootPage] =
     useState<MobileRootPage>("community");
   const [mobileSettingsView, setMobileSettingsView] =
     useState<"index" | "detail">(
@@ -117,6 +123,11 @@ export function useWebShellState() {
         ? initialAppRoute.communitySettingsPane ?? "community"
         : "community",
     );
+  const designV1 = isDesignV1Active();
+  const mobileRootPage = designV1 ? phoneTabForRoute(activePage, communityTab) : storedMobileRootPage;
+  // Design v1: the tab follows the address, so there is nothing to set; a tab
+  // is chosen by going to its address.
+  const setMobileRootPage = designV1 ? ignorePhoneTab : setStoredMobileRootPage;
   const [appTheme, setAppTheme] = useState<AppTheme>(() => {
     try {
       return parseAppTheme(readFirstLocalStorageValue([

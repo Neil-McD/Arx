@@ -5,25 +5,26 @@ import type {
   DirectMessageOpenRequest,
 } from "../components/WebDirectMessagesHost";
 
-// How Inbox reaches its address (/c/<slug>/inbox; design v1). App sets it once
-// the shell can navigate. Without it (the classic layout, or no community to
-// put in the address) Inbox opens in place, as before.
-export type InboxNavigator = {
+// Inbox's address (/c/<slug>/inbox; design v1). App sets it once the shell
+// can navigate. Inbox is open exactly while the address is Inbox's; without
+// an address (the classic layout, or no community to put in it) Inbox opens
+// in place, as before.
+export type InboxAddress = {
+  // The address is Inbox's now.
+  isOpen: () => boolean;
   // Go to Inbox's address. False when there is none to go to.
   open: () => boolean;
-  // Leave Inbox's address. byUser: closed by its own button or Escape, so the
-  // back button's way is the right one; otherwise another page is about to
-  // open, and leaving must not race it.
-  leave: (byUser: boolean) => void;
+  // Inbox's own close button or Escape: back to the page it was opened from.
+  close: () => void;
 };
 
 export function useWebDirectMessagesController() {
-  // Open while the address is Inbox's (App follows the address with
-  // followRoute); in place when there is no address to use.
-  const [isOpen, setIsOpen] = useState(false);
-  const isOpenRef = useRef(isOpen);
-  isOpenRef.current = isOpen;
-  const navigatorRef = useRef<InboxNavigator | null>(null);
+  // Open in place (no address to use). With an address, App reads "open"
+  // from the address instead.
+  const [isOpenInPlace, setIsOpenInPlace] = useState(false);
+  const isOpenInPlaceRef = useRef(isOpenInPlace);
+  isOpenInPlaceRef.current = isOpenInPlace;
+  const addressRef = useRef<InboxAddress | null>(null);
   const [openRequest, setOpenRequest] = useState<DirectMessageOpenRequest>(null);
   const [openConversationRequest, setOpenConversationRequest] =
     useState<DirectMessageOpenConversationRequest>(null);
@@ -31,12 +32,13 @@ export function useWebDirectMessagesController() {
   const nextRequestIdRef = useRef(0);
 
   const show = useCallback(() => {
-    if (navigatorRef.current?.open()) return;
-    setIsOpen(true);
+    if (addressRef.current?.open()) return;
+    setIsOpenInPlace(true);
   }, []);
   const hide = useCallback((byUser: boolean) => {
-    if (navigatorRef.current) navigatorRef.current.leave(byUser);
-    setIsOpen(false);
+    // Closed by another page opening: that page's address closes Inbox.
+    if (byUser && addressRef.current?.isOpen()) addressRef.current.close();
+    setIsOpenInPlace(false);
   }, []);
 
   const openConversationById = useCallback((conversationId: string) => {
@@ -53,7 +55,7 @@ export function useWebDirectMessagesController() {
 
   const toggle = useCallback(() => {
     setOpenRequest(null);
-    if (isOpenRef.current) hide(true);
+    if (addressRef.current?.isOpen() || isOpenInPlaceRef.current) hide(true);
     else show();
   }, [hide, show]);
 
@@ -90,13 +92,8 @@ export function useWebDirectMessagesController() {
     show();
   }, [show]);
 
-  // The address says Inbox (refresh, back, a link) or not (any other page).
-  const followRoute = useCallback((inboxRoute: boolean) => {
-    setIsOpen(inboxRoute);
-  }, []);
-
   return {
-    isOpen,
+    isOpenInPlace,
     openRequest,
     openConversationRequest,
     unreadCount,
@@ -107,7 +104,6 @@ export function useWebDirectMessagesController() {
     close,
     closeByUser,
     openFromCommunity,
-    followRoute,
-    navigatorRef,
+    addressRef,
   };
 }
