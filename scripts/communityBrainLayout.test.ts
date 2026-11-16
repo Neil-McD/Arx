@@ -1,6 +1,6 @@
 import { expect, test } from "vitest";
 import type { BrainMap, BrainPoint } from "../shared/communityBrain";
-import { BRAIN_ZOOM_MAX, chooseLabels, fitView, layoutBrain, panBy, reachFor, scaleLayout, viewWindow, zoomAt } from "../shared/communityBrainLayout";
+import { BRAIN_FIT_MAX, BRAIN_ZOOM_MAX, chooseLabels, fitScale, fitStage, fitView, isFitView, layoutBrain, panBy, reachFor, revealPoint, scaleLayout, stageWindow, zoomAt } from "../shared/communityBrainLayout";
 
 const NOW = Date.UTC(2026, 10, 15);
 const DAY = 86_400_000;
@@ -127,18 +127,86 @@ test("zoom has limits, panning stays on the map, and all the way out is the whol
   expect(panBy({ k: 2, cx: 0, cy: 0 }, 40, 0, B).cx).toBe(-20);
 });
 
-test("a zoomed map is the same layout spread apart, seen through a window the size of the whole", () => {
+test("a zoomed map is the same layout spread apart, seen through a window the size of the stage", () => {
   const layout = layoutBrain(map(), NOW);
   const spread = scaleLayout(layout, 2);
   expect(spread.points[0].x).toBeCloseTo(layout.points[0].x * 2);
   expect(spread.points[0].r).toBe(layout.points[0].r);
   expect(spread.lessons[0].r).toBe(layout.lessons[0].r);
+  expect(spread.extent.maxX).toBeCloseTo(layout.extent.maxX * 2);
   expect(scaleLayout(layout, 1)).toBe(layout);
-  const whole = viewWindow(fitView(layout.bounds), layout.bounds);
-  const close = viewWindow({ k: 3, cx: 10, cy: -5 }, layout.bounds);
-  expect([close.w, close.h]).toEqual([whole.w, whole.h]);
-  expect(close.x + close.w / 2).toBeCloseTo(30);
+  const stage = { w: 900, h: 600 };
+  const close = stageWindow({ k: 3, cx: 10, cy: -5 }, 3 * 0.8, stage);
+  expect([close.w, close.h]).toEqual([900, 600]);
+  expect(close.x + close.w / 2).toBeCloseTo(24);
   // Closer in, more things can be named.
   const many = layoutBrain(map({ points: Array.from({ length: 30 }, (_, i) => point(`n${i}`, { kind: "subject", name: "Subject 0" }, i % 5)) }), NOW);
   expect(chooseLabels(scaleLayout(many, 4), { max: 30 }).length).toBeGreaterThan(chooseLabels(many, { max: 30 }).length);
+});
+
+test("the whole map fits the stage, whatever its shape, and a small map is not blown up", () => {
+  const layout = layoutBrain(map({ courses: 6, subjects: 10, pods: 3 }), NOW);
+  const inset = { x: 100, y: 50 };
+  for (const stage of [{ w: 1400, h: 700 }, { w: 500, h: 900 }, { w: 800, h: 800 }]) {
+    const scale = fitScale(layout.extent, stage, inset);
+    expect((layout.extent.maxX - layout.extent.minX) * scale).toBeLessThanOrEqual(stage.w - 200 + 0.01);
+    expect((layout.extent.maxY - layout.extent.minY) * scale).toBeLessThanOrEqual(stage.h - 100 + 0.01);
+  }
+  const tiny = { minX: -20, minY: -20, maxX: 20, maxY: 20 };
+  expect(fitScale(tiny, { w: 1400, h: 900 }, inset)).toBe(BRAIN_FIT_MAX);
+});
+
+test("a small community's map is small: its rings sit close to its one short course", () => {
+  const small = map({ courses: 1, subjects: 2, pods: 0 });
+  small.courses[0].lessons = small.courses[0].lessons.slice(0, 2);
+  const big = map({ courses: 3, subjects: 2, pods: 0 });
+  big.courses[0].lessons = Array.from({ length: 12 }, (_, l) => ({ id: `resource:big${l}`, title: `L${l}`, order: l + 1, done: false, use: 0 }));
+  const ring = (m: BrainMap) => Math.min(...layoutBrain(m, NOW).hubs.filter((h) => h.kind === "subject").map((h) => Math.hypot(h.x, h.y)));
+  expect(ring(small)).toBeLessThan(ring(big));
+  expect(ring(small)).toBeLessThan(201);
+});
+
+test("the map can be dragged at rest, and Fit knows when there is nothing to do", () => {
+  const moved = panBy(fitView(B), 60, 0, B);
+  expect(moved).toEqual({ k: 1, cx: -60, cy: 0 });
+  expect(isFitView(moved, B)).toBe(false);
+  expect(isFitView(fitView(B), B)).toBe(true);
+});
+
+test("a picked point under the panel is brought just into the free part, and one already seen stays put", () => {
+  const stage = { w: 1000, h: 600 };
+  const free = { left: 60, right: 440, top: 60, bottom: 60 };
+  const view = fitView(B);
+  // At scale 1 the layout point (300, 0) is at screen x 800: under a panel covering the right 380.
+  const shown = revealPoint(view, { x: 300, y: 0 }, 1, stage, free, B);
+  expect((300 - shown.cx) * 1 + stage.w / 2).toBeCloseTo(stage.w - free.right);
+  expect(shown.cy).toBe(view.cy);
+  expect(revealPoint(view, { x: -100, y: 50 }, 1, stage, free, B)).toBe(view);
+});
+
+test("only what is in view is named", () => {
+  const points = Array.from({ length: 30 }, (_, i) => point(`n${i}`, { kind: "subject", name: `Subject ${i % 3}` }, i % 5));
+  const layout = layoutBrain(map({ points }), NOW);
+  const within = { x: layout.extent.minX, y: layout.extent.minY, w: (layout.extent.maxX - layout.extent.minX) / 2, h: layout.extent.maxY - layout.extent.minY };
+  const named = chooseLabels(layout, { max: 30, within });
+  expect(named.length).toBeGreaterThan(0);
+  for (const label of named) expect(layout.points.find((p) => p.id === label.id)!.x).toBeLessThanOrEqual(within.x + within.w);
+});
+
+test("on a narrow stage the map is drawn smaller so its names stay on it", () => {
+  const m = map({ courses: 3, subjects: 4, pods: 1 });
+  m.courses.forEach((course, i) => { course.name = `Course number ${i}`; });
+  const layout = layoutBrain(m, NOW);
+  const opts = { inset: { x: 40, y: 64 }, hubCharW: 8.2, edge: 16 };
+  const narrow = fitStage(layout, { w: 430, h: 800 }, opts);
+  const wide = fitStage(layout, { w: 1400, h: 850 }, opts);
+  expect(narrow.scale).toBeLessThan(wide.scale);
+  const view = fitView(narrow.frame);
+  for (const hub of layout.hubs.filter((h) => h.kind === "course")) {
+    const right = Math.cos((hub.angle * Math.PI) / 180) >= -0.2;
+    const sx = (hub.x - view.cx) * narrow.scale + 430 / 2;
+    const end = sx + (right ? 1 : -1) * (hub.label.length * 8.2 + 8);
+    expect(end).toBeGreaterThanOrEqual(15);
+    expect(end).toBeLessThanOrEqual(415);
+  }
 });

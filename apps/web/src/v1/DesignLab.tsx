@@ -433,9 +433,7 @@ function BrainPageLab() {
   return (
     <div style={{ height: "100vh", display: "grid" }}>
       <CommunityPageFrame>
-        <div style={{ padding: "0 56px" }}>
-          <KitBrainPageFrame canManage><KitBrainPageView session={null} communityId="lab" canManage onOpenCourse={() => undefined} map={map} /></KitBrainPageFrame>
-        </div>
+        <KitBrainPageFrame canManage fill><KitBrainPageView session={null} communityId="lab" canManage onOpenCourse={() => undefined} map={map} /></KitBrainPageFrame>
       </CommunityPageFrame>
     </div>
   );

@@ -4276,3 +4276,17 @@
     margin-bottom: 14px;
   }
 }
+
+/* The community brain fills its page to the edges: no reading column, no
+   margins, nothing scrolling but the map itself (which pans). */
+:root[data-design="v1"] .community-page-body > .community-tab-scroll:has(.kit-brain-fill) { overflow: hidden; }
+:root[data-design="v1"]:where(:not([data-layout="phone"])) .community-page-body > .community-tab-scroll > .web-community-centered-pane:has(.kit-brain-fill),
+:root[data-design="v1"]:where([data-layout="phone"]) .app-root.mobile-shell .community-page-body > .community-tab-scroll > .web-community-centered-pane:has(.kit-brain-fill) {
+  width: 100%;
+  max-width: none;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+:root[data-design="v1"] .community-knowledge-page:has(> .kit-brain-fill),
+:root[data-design="v1"] .kit-brain-fill { height: 100%; }

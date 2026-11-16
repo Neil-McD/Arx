@@ -1,6 +1,7 @@
 // Design system v1: the community brain, as a page in Knowledge (mock: "The
-// map, third pass"). The map fills the middle; picking a point shows what it
-// is in the right column (on a narrow screen, as the page, with a way back).
+// map, third pass"). The map fills the page edge to edge, with its counts and
+// readings over it. Nothing sits beside it until a point is picked: then
+// what it is slides in over the map's right side (the whole page when narrow).
 // Readings: Community and Yours for everyone, Gaps for builders. With fewer
 // than five learned things a list says more than a map, so the page is a list.
 import { useEffect, useState, type ReactNode } from "react";
@@ -8,11 +9,10 @@ import type { BrainMap } from "../../../../shared/communityBrain";
 import { fetchBrainMap, fetchBrainNote, type BrainNoteView } from "../../../../shared/cloudCommunityBrainGateway";
 import { fetchNoteSources, type NoteSourceView } from "../../../../shared/cloudCommunityNotesGateway";
 import { askGuide } from "../components/guideSearch";
-import { Btn, cx, KitApp, Rail, useMinWidth } from "./kit";
+import { Btn, cx, KitApp, useMinWidth } from "./kit";
 import { BRAIN_MAP_MIN_POINTS, KitBrainMap, type BrainReading } from "./KitBrainMap";
 import { learnedWhen } from "./KitBrain";
 import { PanelLine, PanelPart } from "./KitPanel";
-import { CommunityPageRail } from "../components/CommunityPageHeader";
 
 // Asking Knowledge to open the brain (from Home's panel). One use, this tab.
 const OPEN_KEY = "polynet_open_brain";
@@ -146,7 +146,7 @@ type PageProps = {
 export function KitBrainPage(props: PageProps) {
   const { map, failed } = useBrainMap(props.session, props.communityId);
   return (
-    <KitBrainPageFrame canManage={props.canManage}>
+    <KitBrainPageFrame canManage={props.canManage} fill={!!map && map.points.length >= BRAIN_MAP_MIN_POINTS}>
       {failed ? <p className={cx("sub")}>The map couldn't load. Try again in a moment.</p> : map ? <KitBrainPageView {...props} map={map} /> : null}
     </KitBrainPageFrame>
   );
@@ -154,8 +154,10 @@ export function KitBrainPage(props: PageProps) {
 
 // The kit's styles live under its own container: without it the map has
 // none (SVG falls back to black). The page and the lab both draw inside it.
-export function KitBrainPageFrame(props: { canManage: boolean; children: ReactNode }) {
-  return <KitApp view="know" host={props.canManage} part="flow">{props.children}</KitApp>;
+// fill: the map takes the whole page, to its edges (the app's stylesheet
+// drops the page's own margins around "kit-brain-fill").
+export function KitBrainPageFrame(props: { canManage: boolean; fill?: boolean; children: ReactNode }) {
+  return <KitApp view="know" host={props.canManage} part="flow" className={props.fill ? "kit-brain-fill" : undefined}>{props.children}</KitApp>;
 }
 
 // The page for a map already in hand (the design lab draws it from examples).
@@ -184,35 +186,20 @@ export function KitBrainPageView(props: PageProps & { map: BrainMap }) {
     );
   }
 
-  // Narrow: a picked point is the page, with a way back.
-  if (!wide && detail) {
-    return (
-      <div className={cx("page")} style={{ padding: 0, overflow: "visible" }}>
-        <button type="button" className={cx("link")} onClick={() => setPicked(null)}>← The map</button>
-        <div style={{ marginTop: 16 }}>{detail}</div>
-      </div>
-    );
-  }
-
-  const rail: ReactNode = (
-    <CommunityPageRail label="What you picked">
-      <KitApp view="know" host={props.canManage} part="rail" className="kit-page-rail">
-        <Rail index={2} label="What you picked">
-          {detail ?? (
-            <div className={cx("land")}>
-              <header><span className={cx("lab")}>The community brain</span><h2>{map.center.name}</h2>
-                <p className={cx("land-p")}>Courses run out from the middle with their lessons along them. What the community learned branches off the lesson or subject it belongs to; the newest reach furthest. Lines between points join what answers use together.</p>
-              </header>
-              <PanelPart label="Pick a point"><PanelLine dim>See what it is, where it came from, and what it's used with.</PanelLine></PanelPart>
-            </div>
-          )}
-        </Rail>
-      </KitApp>
-    </CommunityPageRail>
-  );
+  // Escape puts down what was picked.
+  useEffect(() => {
+    if (!picked) return;
+    const onKey = (event: KeyboardEvent) => { if (event.key === "Escape") setPicked(null); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [picked]);
 
   return (
     <div className={cx("brainpage")}>
+      <div className={cx("brainstage")}>
+        <KitBrainMap map={map} size="page" reading={reading} now={now} selectedId={picked} coverRight={picked && wide ? SIDE_WIDTH : 0}
+          onSelect={(id) => setPicked(id === picked ? null : id)} onClear={() => setPicked(null)} />
+      </div>
       <div className={cx("brainbar")}>
         <span className={cx("sub")}>{counts}</span>
         <div className={cx("seg")} role="tablist" aria-label="Reading">
@@ -221,10 +208,15 @@ export function KitBrainPageView(props: PageProps & { map: BrainMap }) {
           ))}
         </div>
       </div>
-      <div className={cx("brainstage")}>
-        <KitBrainMap map={map} size="page" reading={reading} now={now} selectedId={picked} onSelect={(id) => setPicked(id === picked ? null : id)} />
-      </div>
-      {wide ? rail : null}
+      {detail ? (
+        <aside className={cx("brainside")} aria-label="What you picked">
+          <button type="button" className={cx("brainside-x")} aria-label="Close" onClick={() => setPicked(null)}>{wide ? "×" : "← The map"}</button>
+          {detail}
+        </aside>
+      ) : null}
     </div>
   );
 }
+
+// How wide the picked point's panel is over the map (kit css: .brainside).
+const SIDE_WIDTH = 380;
