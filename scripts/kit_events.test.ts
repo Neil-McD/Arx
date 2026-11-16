@@ -4,8 +4,7 @@ import * as React from "react";
 const web = createRequire(new URL("../apps/web/package.json", import.meta.url));
 const root = createRequire(import.meta.url);
 if (web.resolve("react") !== root.resolve("react")) vi.doMock(web.resolve("react"), () => React);
-const { eventPlaceWord } = await import("../apps/web/src/v1/KitEventsList");
-const { eventDraftWords } = await import("../apps/web/src/v1/KitEventForm");
+const { eventPlaceWord, eventSoonWord } = await import("../apps/web/src/v1/KitEventsList");
 const { eventRepeatWord } = await import("../apps/web/src/components/communityEventsList");
 const { readFileSync } = await import("node:fs");
 
@@ -22,11 +21,22 @@ test("a repeating event says how often in words", () => {
   expect(eventRepeatWord({ starts_at: "2026-11-19T12:00:00.000Z", recurrence_frequency: "none" })).toBeNull();
 });
 
-test("the add box says back what its fields hold", () => {
-  expect(eventDraftWords({ starts_at: "2026-12-01T15:00", ends_at: "2026-12-01T16:00", recurrence_frequency: "weekly", location_type: "online", location_label: "" }))
-    .toEqual({ day: "Tue, Dec 1", time: "3:00 to 4:00 pm", repeats: "Every Tuesday", where: "Online" });
-  expect(eventDraftWords({ starts_at: "2026-12-12T11:00", ends_at: "2026-12-12T13:30", recurrence_frequency: "none", location_type: "physical", location_label: "The Foundry" }))
-    .toEqual({ day: "Sat, Dec 12", time: "11:00 am to 1:30 pm", repeats: null, where: "The Foundry" });
+test("how soon an event is, in words", () => {
+  const now = Date.parse("2026-11-16T12:00:00.000Z");
+  const at = (minutes: number) => new Date(now + minutes * 60_000).toISOString();
+  expect(eventSoonWord(at(30), now)).toMatch(/· in 30 minutes$/);
+  expect(eventSoonWord(at(21 * 60), now)).toMatch(/· in 21 hours$/);
+  expect(eventSoonWord(at(3 * 24 * 60), now)).toMatch(/· in 3 days$/);
+  // Far off, or already started: just the day.
+  expect(eventSoonWord(at(40 * 24 * 60), now)).not.toContain("·");
+  expect(eventSoonWord(at(-10), now)).not.toContain("·");
+});
+
+// Neil, Nov 15: adding is by a button and a plain form, not a sentence.
+test("an event is added with a form, not by typing a sentence", () => {
+  const form = readFileSync(new URL("../apps/web/src/v1/KitEventForm.tsx", import.meta.url), "utf8");
+  expect(form).not.toMatch(/readEventLine|Office hours every Tuesday/);
+  expect(readFileSync(new URL("../apps/web/src/v1/KitEventsList.tsx", import.meta.url), "utf8")).toContain("Add an event");
 });
 
 // Neil, Nov 14: no "I'll be there" for now. The page, Home and a pod's call
