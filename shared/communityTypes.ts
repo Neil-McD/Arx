@@ -325,6 +325,9 @@ export type CommunityAccess = {
   can_manage_branding?: boolean;
   can_manage_publishing?: boolean;
   can_manage_payouts?: boolean;
+  // Whether the community's guide is on; null when you may not read its chat
+  // (convex/communityAccessQueries.ts).
+  agent_on?: boolean | null;
 };
 
 export type CommunityAgentConfig<TLanding = unknown> = {

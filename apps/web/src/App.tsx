@@ -2,7 +2,7 @@ import { askInApp } from "../../../shared/inAppConfirm";
 import { useCommunityAppLinksState } from "./controllers/communityAppLinks";
 import { useGuideSearchShortcut } from "./controllers/useGuideSearchShortcut";
 import { useCloseInboxOnSettings } from "./controllers/useCloseInboxOnSettings";
-import { useCommunityAgentOnState } from "./controllers/communityAgentOn";
+import { communityAgentOnFromAccess } from "./controllers/communityAgentOn";
 import {
   useMemo,
   useRef,
@@ -1609,7 +1609,9 @@ export default function App() {
 
   // Design system v1: "Search or ask" and ⌘K open your guide on Home.
   useGuideSearchShortcut(handleSelectCommunityTab, communityAgentComposerApiRef);
-  const activeCommunityAgentOn = useCommunityAgentOnState({ session, ensureSession: ensureUsableAuthSession, communityId: activeCommunity?.id ?? null });
+  const activeCommunityAgentOn = communityAgentOnFromAccess(
+    activeCommunity && activeCommunityAccess?.community_id === activeCommunity.id ? activeCommunityAccess.agent_on : null,
+  );
   const activeCommunityAppLinks = useCommunityAppLinksState({ session, ensureSession: ensureUsableAuthSession, communityId: activeCommunity?.id ?? null });
 
   const { peopleOpen, changeOpen: handlePeoplePanelOpenChange, openMembers: handleOpenCommunityMembers } =
