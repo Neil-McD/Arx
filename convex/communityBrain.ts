@@ -25,8 +25,11 @@ const PODS_MAX = 50;
 // One note, as the map sees it before this viewer's rules: who wrote it,
 // whether its posts are still readable, whether they are the viewer's own.
 async function noteInput(ctx: any, communityId: any, scope: ScopeKey, row: any, viewerId: string, at: BrainAttach): Promise<BrainNoteInput> {
-  const taught = noteAuthorKind(row) !== "guide";
-  let sourcesOpen = !taught && (row.evidenceRefs ?? []).length > 0;
+  // Taught: a host wrote it in Knowledge. Notes the guide saved from
+  // conversations before it cited posts (source ask, tag, migrated) were
+  // learned, not taught; with no posts to check, members see no name.
+  const taught = row.source === "founder";
+  let sourcesOpen = noteAuthorKind(row) === "guide" && (row.evidenceRefs ?? []).length > 0;
   let mine = false;
   for (const raw of (row.evidenceRefs ?? []) as string[]) {
     const ref = parseMemoryEvidenceRef(raw);

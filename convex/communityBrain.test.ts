@@ -60,6 +60,7 @@ async function world(t: any) {
     const passes = await note(scope, "passes", "Guest passes", { evidenceRefs: [`post:${goneLater}`], subject: "Gym logistics", createdAt: NOW - 10 * DAY });
     const loose = await note(scope, "loose", "Unfiled thing", { evidenceRefs: [`post:${ownersPost}`], createdAt: NOW - 9 * DAY });
     const orphan = await note(scope, "orphan", "Was on a lesson", { evidenceRefs: [`post:${ownersPost}`], aboutLessonId: gone, createdAt: NOW - 8 * DAY });
+    const older = await note(scope, "older", "OLDER SAVED NOTE", { source: "tag", authorKind: undefined, subject: "Gym logistics", createdAt: NOW - 60 * DAY });
     await note(`pod:${String(climbers)}`, "rota", "Reset rota", { evidenceRefs: [], subject: "Resets" });
     await note(`pod:${String(scouts)}`, "scouting", "SCOUTS NOTE", { evidenceRefs: [] });
     await note(`pod:${String(secret)}`, "hush", "SECRET NOTE", { evidenceRefs: [] });
@@ -69,7 +70,7 @@ async function world(t: any) {
     // Taken down after it was learned from.
     await ctx.db.patch(goneLater, { status: "hidden" });
     await ctx.db.delete(gone);
-    return { ownerId, memberId, communityId, general, climbers, scouts, secret, reading, warmup, toeHook, chalk, refunds, passes, loose, orphan };
+    return { ownerId, memberId, communityId, general, climbers, scouts, secret, reading, warmup, toeHook, chalk, refunds, passes, loose, orphan, older };
   });
 }
 
@@ -92,10 +93,12 @@ test("a member's map: courses and lessons members can take, their own progress, 
   // A host taught it: a point with no name. Its post is gone: no name either.
   expect(point(w.refunds)).toMatchObject({ title: null, kind: "taught" });
   expect(point(w.passes)).toMatchObject({ title: null, kind: "learned" });
+  // Saved by the guide from a conversation before notes cited posts: learned, and no name for a member.
+  expect(point(w.older)).toMatchObject({ title: null, kind: "learned" });
   // Unfiled, or filed under a lesson that's gone: nowhere yet.
   expect(point(w.loose).at).toEqual({ kind: "other" });
   expect(point(w.orphan).at).toEqual({ kind: "other" });
-  expect(map.subjects.map((subject: any) => [subject.name, subject.size])).toEqual([["Gym logistics", 3]]);
+  expect(map.subjects.map((subject: any) => [subject.name, subject.size])).toEqual([["Gym logistics", 4]]);
   // Pods: the one they're in with its things; a listed one as a count; a hidden one not at all.
   expect(map.pods).toEqual([
     { id: `pod:${w.climbers}`, name: "climbers", inside: true, count: 1 },
@@ -104,9 +107,9 @@ test("a member's map: courses and lessons members can take, their own progress, 
   expect(map.points.find((entry: any) => entry.title === "Reset rota")).toMatchObject({ at: { kind: "pod", id: `pod:${w.climbers}` } });
   // Arcs only between things this map draws.
   expect(map.arcs).toEqual([{ a: `note:${w.toeHook}`, b: `resource:${w.reading}`, count: 3 }]);
-  expect(map.counts).toEqual({ courses: 1, lessons: 2, learned: 6, this_week: 1 });
+  expect(map.counts).toEqual({ courses: 1, lessons: 2, learned: 7, this_week: 1 });
   const text = JSON.stringify(map);
-  for (const never of ["TEXT OF", "VIP refund", "Guest passes", "Secret lesson", "SCOUTS NOTE", "SECRET NOTE", "secret"]) expect(text).not.toContain(never);
+  for (const never of ["TEXT OF", "VIP refund", "Guest passes", "OLDER SAVED", "Secret lesson", "SCOUTS NOTE", "SECRET NOTE", "secret"]) expect(text).not.toContain(never);
 });
 
 test("a builder sees every name and every pod's things; a pod's own map is for the people in it", async () => {
