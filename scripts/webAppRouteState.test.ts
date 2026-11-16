@@ -59,8 +59,9 @@ describe("installed app shell selection", () => {
 
 describe("community channel routes", () => {
   it("round-trips the mobile community directory route", () => {
+    // The community's list (the phone's middle tab) is /browse since Nov 17.
     const path = buildCommunityHomePath("polynet");
-    expect(path).toBe("/c/polynet/home");
+    expect(path).toBe("/c/polynet/browse");
     expect(parseAppRouteFromPathname(path ?? "")).toMatchObject({
       page: "community",
       view: "community_home",
@@ -186,7 +187,7 @@ describe("community channel routes", () => {
       communityChannelSlug: "product-feedback",
       communityResourceModuleId: "module-1",
       }),
-    ).toBe("/c/polynet/resources/module-1");
+    ).toBe("/c/polynet/knowledge/module-1");
   });
 });
 
@@ -206,7 +207,9 @@ describe("canonical web destinations", () => {
     ["/m/c/polynet", { kind: "community_funnel", slug: "polynet" }],
     ["/c/polynet/preview", { kind: "community_funnel", slug: "polynet" }],
     ["/m/c/polynet/onboarding/preview", { kind: "community_chat", slug: "polynet", channelSlug: null }],
-    ["/m/c/polynet/home", { kind: "community_home", slug: "polynet" }],
+    ["/m/c/polynet/browse", { kind: "community_home", slug: "polynet" }],
+    ["/m/c/polynet/home", { kind: "community_agent", slug: "polynet" }],
+    ["/m/c/polynet/knowledge/module-1", { kind: "community_resources", slug: "polynet", moduleId: "module-1" }],
     ["/m/c/polynet/members", { kind: "community_members", slug: "polynet" }],
     ["/m/c/polynet/chat", { kind: "community_chat", slug: "polynet", channelSlug: null }],
     ["/m/c/polynet/chat/wins", { kind: "community_chat", slug: "polynet", channelSlug: "wins" }],
@@ -232,6 +235,7 @@ describe("canonical web destinations", () => {
     ["/c/polynet/preview", "/m/c/polynet/preview"],
     ["/c/polynet/onboarding/preview", "/m/c/polynet/onboarding/preview"],
     ["/c/polynet/home", "/m/c/polynet/home"],
+    ["/c/polynet/browse", "/m/c/polynet/browse"],
     ["/c/polynet/members", "/m/c/polynet/members"],
     ["/c/polynet/chat/wins", "/m/c/polynet/chat/wins"],
     ["/c/polynet/resources/module-1", "/m/c/polynet/resources/module-1"],

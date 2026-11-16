@@ -31,16 +31,29 @@ export function useWebMobileShellController(params: {
     opts?: { pushSnapshot?: boolean },
   ) => void;
   handleOpenDiscover: () => void;
+  // Home's own address (/c/:slug/home), so the Home tab survives a refresh.
+  openHomePage?: () => void;
   openDirectMessages: () => void;
   closeDirectMessages: () => void;
   closeThreadPage: () => void;
   openCommunityCreateFlow: () => void;
 }) {
+  // The Home tab follows Home's address both ways: arriving at /home selects
+  // it, and leaving it (Back to /browse, a link) hands the tab back to the
+  // community, so the tab never shows Home over another address.
   useEffect(() => {
-    if (params.showMobileShell && params.isCommunityAgentPage) {
+    if (!params.showMobileShell) return;
+    if (params.isCommunityAgentPage) {
       params.setMobileRootPage("agent");
+    } else if (params.mobileRootPage === "agent") {
+      params.setMobileRootPage("community");
     }
-  }, [params.showMobileShell, params.isCommunityAgentPage, params.setMobileRootPage]);
+  }, [
+    params.showMobileShell,
+    params.isCommunityAgentPage,
+    params.mobileRootPage,
+    params.setMobileRootPage,
+  ]);
 
   const openMobileCommunitySurface = useCallback(() => {
     const nextCommunitySlug = String(
@@ -87,6 +100,7 @@ export function useWebMobileShellController(params: {
         params.closeDirectMessages();
         params.setMobileOverlay(null);
         params.setMobileRootPage("agent");
+        params.openHomePage?.();
         return;
       }
 
@@ -99,6 +113,7 @@ export function useWebMobileShellController(params: {
       params.closeThreadPage,
       params.isThreadPageOpen,
       params.openDirectMessages,
+      params.openHomePage,
       params.setMobileOverlay,
       params.setMobileRootPage,
       openMobileCommunitySurface,
