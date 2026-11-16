@@ -31,6 +31,10 @@ export type WebCommunityHomeSectionProps = {
   onOpenKnowledge?: () => void;
   // Changes each time Home is opened, so the facts are read again.
   refreshKey?: number;
+  // Home stays mounted, hidden, while you are on another page. Its facts are
+  // read, and the visit recorded, only while it is the page you are on;
+  // refreshKey changes when it opens, so they are read then.
+  open?: boolean;
   // Where the right-hand column goes on wide windows (the page's own rail).
   // The rail stays open, narrowing with the window, and hides only below 1024px.
   asideContainer?: HTMLElement | null;
@@ -232,6 +236,7 @@ export function WebCommunityHomeSection(props: WebCommunityHomeSectionProps) {
   const loadedCommunityIdRef = useRef<string | null>(null);
 
   useEffect(() => {
+    if (props.open === false) return;
     let cancelled = false;
     // A new community starts blank; reopening the same one keeps what is shown
     // until the fresh facts arrive.
@@ -257,6 +262,7 @@ export function WebCommunityHomeSection(props: WebCommunityHomeSectionProps) {
   }, [props.communityId, props.refreshKey, props.audience]);
 
   useEffect(() => {
+    if (props.open === false) return;
     if (props.audience !== "host" || !props.kit) { setOwnerMoment(null); return; }
     let cancelled = false;
     void (async () => {
@@ -273,6 +279,7 @@ export function WebCommunityHomeSection(props: WebCommunityHomeSectionProps) {
   }, [props.communityId, props.refreshKey, props.audience]);
 
   useEffect(() => {
+    if (props.open === false) return;
     if (!props.kit) return;
     let cancelled = false;
     void (async () => {
