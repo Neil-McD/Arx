@@ -3,11 +3,13 @@
 // not only on the day); with nothing planned it draws nothing. It reads the same expanded event list as the Events
 // page, so a weekly call that began weeks ago still shows, and says the same
 // things about it as the Events page.
-import { useEffect, useState } from "react";
-import { listCloudCommunityEvents, type CloudCommunityEvent } from "../../../../shared/cloudCommunityEventsGateway";
+import { useMemo } from "react";
+import type { CloudCommunityEvent } from "../../../../shared/cloudCommunityEventsGateway";
+import { coerceGatewayRows } from "../../../../shared/cloudGateway";
+import { resolveAuthSubject, type AuthSessionLike } from "../../../../shared/authSession";
+import { useLiveQuery } from "../../../../shared/liveQuery";
 import { eventRepeatWord, featuredEventLabel, splitCommunityEvents } from "../components/communityEventsList";
 import { eventClock, eventPlaceWord } from "./KitEventsList";
-import { onCommunityEventsChanged } from "../../../../shared/communityEventsChanged";
 import { cx } from "./kit";
 import { PanelAction, PanelNext, PanelPart } from "./KitPanel";
 
@@ -19,20 +21,25 @@ export function KitNextEvent(props: {
   now: number;
   onOpenEvents: () => void;
 }) {
-  const [event, setEvent] = useState<CloudCommunityEvent | null | undefined>(undefined);
-  // Bumped when an event is added, changed or cancelled anywhere in the app.
-  const [changed, setChanged] = useState(0);
-  useEffect(() => onCommunityEventsChanged(() => setChanged((count) => count + 1)), []);
-  useEffect(() => {
-    let cancelled = false;
-    const start = new Date(props.now - 6 * 3_600_000).toISOString();
-    const end = new Date(props.now + LOOKAHEAD_MS).toISOString();
-    listCloudCommunityEvents({ session: props.session, communityId: props.communityId, startIso: start, endIso: end, overlap: true, limit: 50 })
-      .then((events) => { if (!cancelled) setEvent(splitCommunityEvents(events, props.now).featured); })
-      .catch(() => { if (!cancelled) setEvent(null); });
-    return () => { cancelled = true; };
+  // Live (shared/liveQuery.ts): an event added, moved or cancelled anywhere
+  // shows here at once. The window moves by the hour, so the subscription
+  // isn't remade on every draw.
+  const hour = Math.floor(props.now / 3_600_000) * 3_600_000;
+  const subject = props.session ? resolveAuthSubject(props.session as AuthSessionLike) : null;
+  const { data } = useLiveQuery<unknown>(props.session, "communityEvents:listCommunityEvents", subject ? {
+    authSubject: subject,
+    communityId: props.communityId,
+    startIso: new Date(hour - 6 * 3_600_000).toISOString(),
+    endIso: new Date(hour + LOOKAHEAD_MS + 3_600_000).toISOString(),
+    includeCancelled: false,
+    overlap: true,
+    limit: 50,
+  } : null);
+  const event = useMemo(
+    () => (data === undefined ? undefined : splitCommunityEvents(coerceGatewayRows<CloudCommunityEvent>(data), props.now).featured),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [props.session, props.communityId, changed]);
+    [data, hour],
+  );
 
   const label = event ? featuredEventLabel(event, props.now) : null;
   // Nothing planned: the part is not drawn.
