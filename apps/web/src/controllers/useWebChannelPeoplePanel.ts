@@ -8,6 +8,8 @@ export function channelPeopleScopeKey(scope: Scope) {
 
 export function useWebChannelPeoplePanel(params: Scope & {
   inChat: boolean;
+  // The channel itself has loaded (Members opens over it).
+  channelReady: boolean;
   canViewMembers: boolean;
   closeDetail: () => void;
   openGeneral: () => boolean;
@@ -24,10 +26,10 @@ export function useWebChannelPeoplePanel(params: Scope & {
   useEffect(() => {
     if (!reopenRef.current) return;
     if (readPlaceParam("open") !== "members") { reopenRef.current = false; return; }
-    if (!params.canViewMembers || !currentScope) return;
+    if (!params.canViewMembers || !currentScope || !params.channelReady) return;
     reopenRef.current = false;
     setOpenScope(currentScope);
-  }, [currentScope, params.canViewMembers]);
+  }, [currentScope, params.canViewMembers, params.channelReady]);
   const peopleOpen = Boolean(params.canViewMembers && currentScope && openScope === currentScope);
   useEffect(() => {
     if (reopenRef.current && readPlaceParam("open") === "members") return;
