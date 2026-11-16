@@ -1019,6 +1019,35 @@
   font-size: 13px;
 }
 
+/* A section heading with an action at its end (Channels' +), where a
+   count sits on the rows below it. */
+:root[data-design="v1"] .community-nav-section-label.has-action {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+:root[data-design="v1"] .community-nav-section-add {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  margin: -2px 0 -2px auto;
+  padding: 0;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-faint);
+  cursor: pointer;
+}
+:root[data-design="v1"] .community-nav-section-add:hover:not(:disabled),
+:root[data-design="v1"] .community-nav-section-add:focus-visible {
+  color: var(--text-ink-primary);
+  background: var(--hover-overlay);
+}
+:root[data-design="v1"] .community-nav-section-add:disabled { cursor: default; opacity: 0.5; }
+
 /* Inbox's unread count and the member count: ink, never colour. */
 :root[data-design="v1"] .nav-item-count,
 :root[data-design="v1"] .nav-item-hint {
