@@ -10,7 +10,7 @@ import { resolveUserIdForAuthenticatedRequest } from "./authActor";
 import { getCommunityChannelCapabilities, resolveCommunityChannelActor } from "./communityChannelAccess";
 import { listAuthorizedCommunityChannelPage } from "./communityChannelCore";
 import { requireCommunityChatAccess, requireCommunityManager } from "./communityCore";
-import { docReader, evidenceFacts, liveLessons, podRoom, type DocReader } from "./communityMemory";
+import { MAP_LESSONS, docReader, evidenceFacts, liveLessons, podRoom, type DocReader } from "./communityMemory";
 import { communityScopeKey, notesByUpdated, podScopeKey, type ScopeKey } from "./communityNotesStore";
 import { knowledgeUseFor } from "./communityKnowledgeUse";
 import { COMMUNITY_NOTES_MAX_PER_COMMUNITY } from "../shared/communityNotes";
@@ -21,7 +21,6 @@ import {
 } from "../shared/communityBrain";
 
 const PODS_MAX = 50;
-const MAP_LESSONS = { total: 2_000, perCourse: 500 };
 
 // One note, as the map sees it before this viewer's rules: who wrote it,
 // whether its posts are still readable, whether they are the viewer's own.

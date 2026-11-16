@@ -188,7 +188,11 @@ export async function liveLessons(ctx: any, communityId: any, limits: { total: n
 // Where a note is filed, checked when it is written: a lesson of this
 // community that members can take, or a subject name. A pod's notes take a
 // subject only.
-async function resolveAbout(ctx: any, communityId: any, scope: ScopeKey, raw: string, ownTitle?: string): Promise<{ aboutLessonId?: any; subject?: string } | { error: string }> {
+// Every lesson a map draws (convex/communityBrain.ts): a builder moving a
+// note may pick any of them.
+export const MAP_LESSONS = { total: 2_000, perCourse: 500 };
+
+async function resolveAbout(ctx: any, communityId: any, scope: ScopeKey, raw: string, ownTitle?: string, lessonLimits?: { total: number; perCourse: number }): Promise<{ aboutLessonId?: any; subject?: string } | { error: string }> {
   const about = parseMemoryAbout(raw);
   if (!about) return { error: "about_invalid" };
   if (about.kind === "subject") {
@@ -201,7 +205,7 @@ async function resolveAbout(ctx: any, communityId: any, scope: ScopeKey, raw: st
   }
   if (parseScopeKey(scope)?.kind === "pod") return { error: "about_lesson_in_pod" };
   const id = ctx.db.normalizeId("communityResources", about.id);
-  const lesson = id ? (await liveLessons(ctx, communityId)).find((entry) => String(entry.id) === String(id)) : null;
+  const lesson = id ? (await liveLessons(ctx, communityId, lessonLimits)).find((entry) => String(entry.id) === String(id)) : null;
   if (!lesson) return { error: "about_lesson_missing" };
   return { aboutLessonId: lesson.id, subject: undefined };
 }
@@ -448,7 +452,8 @@ export const fileCommunityNote = mutation({
     const scope = communityScopeKey(args.communityId);
     const note = await noteBySlug(ctx, scope, args.slug);
     if (!note) throw new Error("semantic_not_found");
-    const filed = await resolveAbout(ctx, args.communityId, scope, args.about, String(note.title));
+    // Any lesson the map offered: the same reach as the map's own read.
+    const filed = await resolveAbout(ctx, args.communityId, scope, args.about, String(note.title), MAP_LESSONS);
     if ("error" in filed) return { ok: false, code: filed.error };
     await ctx.db.patch(note._id, filed);
     return { ok: true };
