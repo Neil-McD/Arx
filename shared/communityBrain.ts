@@ -104,11 +104,11 @@ export function subjectsOf(notes: Array<Pick<BrainNoteInput, "at" | "createdAt">
     .sort((a, b) => a.first_at.localeCompare(b.first_at) || a.name.localeCompare(b.name));
 }
 
-// What a panel says of a map in a few words: "11 learned · 4 new" (new: this
-// week). Short, to sit on one line in a narrow panel.
+// What a panel says of a map in a few words, under it: "14 learned · 7 new
+// this week", or "14 learned" in a quiet week.
 export function brainFact(map: BrainMap): string | null {
   if (!map.counts.learned) return null;
-  return [`${map.counts.learned} learned`, map.counts.this_week ? `${map.counts.this_week} new` : null].filter(Boolean).join(" · ");
+  return map.counts.this_week ? `${map.counts.learned} learned · ${map.counts.this_week} new this week` : `${map.counts.learned} learned`;
 }
 
 // The latest things learned that this viewer may read by name (the map
