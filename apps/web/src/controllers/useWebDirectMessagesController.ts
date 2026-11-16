@@ -1,4 +1,6 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+
+import { readPlaceParam, writeOpenPlace } from "../../../../shared/placeParams";
 
 import type {
   DirectMessageOpenConversationRequest,
@@ -6,7 +8,9 @@ import type {
 } from "../components/WebDirectMessagesHost";
 
 export function useWebDirectMessagesController() {
-  const [isOpen, setIsOpen] = useState(false);
+  // Inbox rides on the address (?open=inbox), so a refresh comes back to it.
+  const [isOpen, setIsOpen] = useState(() => readPlaceParam("open") === "inbox");
+  useEffect(() => { writeOpenPlace("inbox", isOpen); }, [isOpen]);
   const [openRequest, setOpenRequest] = useState<DirectMessageOpenRequest>(null);
   const [openConversationRequest, setOpenConversationRequest] =
     useState<DirectMessageOpenConversationRequest>(null);
