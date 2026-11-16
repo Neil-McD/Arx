@@ -556,6 +556,14 @@ export function KitClassroom(props: {
           </button>
         ) : null}
 
+        {/* Builders: the way into what the guide answers from, where notes,
+            links and files are added. Shown at every width. */}
+        {canWriteNotes && props.onOpenGuideMemory ? (
+          <div className={cx("kbtns")}><div className={cx("kbtns-row")}>
+            <button type="button" className={cx("btn sm")} onClick={() => props.onOpenGuideMemory?.(true)}>What your guide knows · {notes.length + guideSources.length}</button>
+          </div></div>
+        ) : null}
+
         {resume ? (
           <button type="button" className={cx("card kcont")} onClick={() => { props.onOpenCourse(resume.course.id); setLessonId(resume.lesson.id); }}>
             <div className={cx("meta")}><span>Continue · {resume.course.name}</span><span>Lesson {resume.index + 1} of {resume.total}</span></div>
@@ -630,13 +638,6 @@ export function KitClassroom(props: {
             <span>{shelf.from}–{shelf.to} of {courses.length} courses</span>
             <button type="button" className={cx("btn sm")} disabled={shelf.page === 0} onClick={() => setShelfPage(shelf.page - 1)}>Previous</button>
             <button type="button" className={cx("btn sm")} disabled={shelf.page >= shelf.pages - 1} onClick={() => setShelfPage(shelf.page + 1)}>Next</button>
-          </div>
-        ) : null}
-        {/* Where the right column is hidden (narrow windows), builders still
-            need the way into what the guide knows. */}
-        {canWriteNotes && props.onOpenGuideMemory ? (
-          <div className="knowledge-course-tools-inline" style={{ marginTop: 24 }}>
-            <button type="button" className={cx("btn sm")} onClick={() => props.onOpenGuideMemory?.(true)}>What your guide knows · {notes.length + guideSources.length}</button>
           </div>
         ) : null}
       </div>
