@@ -5,6 +5,8 @@ import { convexTest } from "convex-test";
 import { expect, test } from "vitest";
 import { api, internal } from "./_generated/api";
 import schema from "./schema";
+import { noteInput } from "./communityBrain";
+import { docReader } from "./communityMemory";
 import { BRAIN_POINTS_MAX, brainTitleFor, chooseArcs, choosePoints, subjectsOf } from "../shared/communityBrain";
 
 const modules = import.meta.glob(["./*.ts", "!./*.test.ts", "./_generated/**/*.*s"]);
@@ -181,4 +183,51 @@ test("a picked learned thing: a member gets its name, place and partners, never 
   await expect(as(t, "member").query(api.communityBrain.getBrainNote, { communityId: w.communityId, noteId: `note:${scoutsNote._id}` })).rejects.toThrow("semantic_not_found");
   await expect(as(t, "member").query(api.communityBrain.getBrainNote, { communityId: w.communityId, noteId: "note:nonsense" })).rejects.toThrow();
   await expect(as(t, "stranger").query(api.communityBrain.getBrainNote, { communityId: w.communityId, noteId: `note:${w.toeHook}` })).rejects.toThrow();
+});
+
+test("a post taken down hides the name it taught on the very next load", async () => {
+  const t = convexTest(schema, modules);
+  const w = await world(t);
+  const named = async () => (await as(t, "member").query(api.communityBrain.getBrainMap, { communityId: w.communityId }) as any)
+    .points.find((entry: any) => entry.id === `note:${w.chalk}`).title;
+  expect(await named()).toBe("Chalk day");
+  await t.run(async (ctx: any) => {
+    const posts = await ctx.db.query("communityInteractionRoots").collect();
+    await ctx.db.patch(posts.find((post: any) => post.contentSummary === "Chalk is restocked Tuesdays.")._id, { status: "hidden" });
+  });
+  expect(await named()).toBeNull();
+  // A builder still reads it.
+  const builders: any = await as(t, "owner").query(api.communityBrain.getBrainMap, { communityId: w.communityId });
+  expect(builders.points.find((entry: any) => entry.id === `note:${w.chalk}`).title).toBe("Chalk day");
+});
+
+test("a big map reads each post and channel once, and a builder's map reads no channels at all", async () => {
+  const t = convexTest(schema, modules);
+  const w = await world(t);
+  await t.run(async (ctx: any) => {
+    // 150 learned things, six posts each, drawn from 60 posts in one channel.
+    const posts: any[] = [];
+    for (let i = 0; i < 60; i++) {
+      posts.push(await ctx.db.insert("communityInteractionRoots", { communityId: w.communityId, channelId: w.general, actorType: "human", actorUserId: i % 2 ? w.memberId : w.ownerId,
+        kind: "discussion", status: "live", visibilityScope: "community", contentSummary: `Post ${i}`, replyCount: 0, reactionSummary: [], idempotencyKey: `big${i}`, createdAt: NOW, updatedAt: NOW }));
+    }
+    const scope = `community:${String(w.communityId)}` as any;
+    const rows = Array.from({ length: 150 }, (_, n) => ({ _id: `n${n}`, title: `Thing ${n}`, source: "learned", authorKind: "guide", createdAt: NOW,
+      evidenceRefs: Array.from({ length: 6 }, (_, k) => `post:${posts[(n * 7 + k * 11) % 60]}`) }));
+    const run = async (checkSources: boolean) => {
+      const reader = docReader(ctx);
+      const inputs = [];
+      for (const row of rows) inputs.push(await noteInput(ctx, w.communityId, scope, row, String(w.memberId), { kind: "other" }, { reader, checkSources }));
+      return { reader, inputs };
+    };
+    // A member: 900 checks, but 60 posts and one channel read (before: about 2,700 reads).
+    const member = await run(true);
+    expect(member.reader.reads).toBe(61);
+    expect(member.inputs.every((input) => input.sourcesOpen)).toBe(true);
+    expect(member.inputs.some((input) => input.mine)).toBe(true);
+    // A builder reads every name anyway: only the posts, for "is it mine".
+    const builder = await run(false);
+    expect(builder.reader.reads).toBe(60);
+    expect(builder.inputs.map((input) => input.mine)).toEqual(member.inputs.map((input) => input.mine));
+  });
 });

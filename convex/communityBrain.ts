@@ -10,7 +10,7 @@ import { resolveUserIdForAuthenticatedRequest } from "./authActor";
 import { getCommunityChannelCapabilities, resolveCommunityChannelActor } from "./communityChannelAccess";
 import { listAuthorizedCommunityChannelPage } from "./communityChannelCore";
 import { requireCommunityChatAccess, requireCommunityManager } from "./communityCore";
-import { evidenceFacts, liveLessons, podRoom } from "./communityMemory";
+import { docReader, evidenceFacts, liveLessons, podRoom, type DocReader } from "./communityMemory";
 import { communityScopeKey, notesByUpdated, podScopeKey, type ScopeKey } from "./communityNotesStore";
 import { knowledgeUseFor } from "./communityKnowledgeUse";
 import { COMMUNITY_NOTES_MAX_PER_COMMUNITY } from "../shared/communityNotes";
@@ -25,18 +25,23 @@ const MAP_LESSONS = { total: 2_000, perCourse: 500 };
 
 // One note, as the map sees it before this viewer's rules: who wrote it,
 // whether its posts are still readable, whether they are the viewer's own.
-async function noteInput(ctx: any, communityId: any, scope: ScopeKey, row: any, viewerId: string, at: BrainAttach): Promise<BrainNoteInput> {
+// The posts are checked live on every load (a removed post hides the name at
+// once), each record read once through `reader`. checkSources false: this
+// viewer reads every name anyway (a builder, or someone in the pod), so only
+// "is it from my posts" is read.
+export async function noteInput(ctx: any, communityId: any, scope: ScopeKey, row: any, viewerId: string, at: BrainAttach, opts: { reader: DocReader; checkSources: boolean }): Promise<BrainNoteInput> {
   // Taught: a host wrote it in Knowledge. Notes the guide saved from
   // conversations before it cited posts (source ask, tag, migrated) were
   // learned, not taught; with no posts to check, members see no name.
   const taught = row.source === "founder";
-  let sourcesOpen = noteAuthorKind(row) === "guide" && (row.evidenceRefs ?? []).length > 0;
+  let sourcesOpen = opts.checkSources && noteAuthorKind(row) === "guide" && (row.evidenceRefs ?? []).length > 0;
   let mine = false;
   for (const raw of (row.evidenceRefs ?? []) as string[]) {
     const ref = parseMemoryEvidenceRef(raw);
     if (!ref) { sourcesOpen = false; continue; }
-    if (sourcesOpen && memoryEvidenceRefusal(await evidenceFacts(ctx, communityId, ref, scope))) sourcesOpen = false;
-    const post: any = await ctx.db.get(ctx.db.normalizeId(ref.kind === "post" ? "communityInteractionRoots" : "communityInteractionReplies", ref.id)!);
+    if (sourcesOpen && memoryEvidenceRefusal(await evidenceFacts(ctx, communityId, ref, scope, opts.reader))) sourcesOpen = false;
+    const postId = ctx.db.normalizeId(ref.kind === "post" ? "communityInteractionRoots" : "communityInteractionReplies", ref.id);
+    const post: any = postId ? await opts.reader.get(postId) : null;
     if (post?.actorUserId && String(post.actorUserId) === viewerId) mine = true;
   }
   return { id: `note:${String(row._id)}`, title: String(row.title), taught, sourcesOpen, mine, createdAt: Number(row.createdAt), at };
@@ -51,6 +56,26 @@ function attachOf(row: any, lessonIds: ReadonlySet<string>, inPod: string | null
   return subject?.kind === "subject" ? { kind: "subject", name: subject.name } : { kind: "other" };
 }
 
+// Which of these lessons this person has finished. One read of their
+// finished lessons rather than one per lesson; someone with more finished
+// lessons than the read holds is asked lesson by lesson instead.
+const PROGRESS_READ = 4_000;
+async function lessonsDone(ctx: any, userId: any, lessonIds: any[]): Promise<Set<string>> {
+  const done = new Set<string>();
+  if (lessonIds.length === 0) return done;
+  const wanted = new Set(lessonIds.map(String));
+  const rows: any[] = await ctx.db.query("communityLessonProgress").withIndex("by_user_resource", (q: any) => q.eq("userId", userId)).take(PROGRESS_READ);
+  if (rows.length < PROGRESS_READ) {
+    for (const row of rows) if (wanted.has(String(row.resourceId))) done.add(String(row.resourceId));
+    return done;
+  }
+  for (const id of lessonIds) {
+    const row = await ctx.db.query("communityLessonProgress").withIndex("by_user_resource", (q: any) => q.eq("userId", userId).eq("resourceId", id)).first();
+    if (row) done.add(String(id));
+  }
+  return done;
+}
+
 async function brainMap(ctx: any, args: { communityId: any; userId: any; podChannelId?: any }): Promise<BrainMap> {
   const community: any = await ctx.db.get(args.communityId);
   const canManage = await requireCommunityManager({ ctx, communityId: args.communityId, userId: args.userId }).then(() => true, () => false);
@@ -58,6 +83,7 @@ async function brainMap(ctx: any, args: { communityId: any; userId: any; podChan
   const nowMs = Date.now();
   const use = await knowledgeUseFor(ctx, args.communityId, nowMs);
   const useOf = (ref: string) => use.use[ref] ?? 0;
+  const reader = docReader(ctx);
 
   let room: any = null;
   if (args.podChannelId) {
@@ -74,17 +100,12 @@ async function brainMap(ctx: any, args: { communityId: any; userId: any; podChan
     // A pod's map: its own things, filed by subject. Everyone reading it is in the pod.
     const scope = podScopeKey(room._id);
     for (const row of await notesByUpdated(ctx, scope).take(COMMUNITY_NOTES_MAX_PER_COMMUNITY)) {
-      inputs.push(await noteInput(ctx, args.communityId, scope, row, viewerId, attachOf(row, new Set(), null)));
+      inputs.push(await noteInput(ctx, args.communityId, scope, row, viewerId, attachOf(row, new Set(), null), { reader, checkSources: false }));
     }
   } else {
     // Every course whole: a map that silently dropped lessons would be wrong.
     const lessons = await liveLessons(ctx, args.communityId, MAP_LESSONS);
-    const done = new Set<string>();
-    for (const lesson of lessons) {
-      const row = await ctx.db.query("communityLessonProgress")
-        .withIndex("by_user_resource", (q: any) => q.eq("userId", args.userId).eq("resourceId", lesson.id)).first();
-      if (row) done.add(String(lesson.id));
-    }
+    const done = await lessonsDone(ctx, args.userId, lessons.map((lesson) => lesson.id));
     const byCourse = new Map<string, BrainCourse>();
     for (const lesson of lessons) {
       const key = String(lesson.courseId);
@@ -96,7 +117,7 @@ async function brainMap(ctx: any, args: { communityId: any; userId: any; podChan
     const lessonIds = new Set(lessons.map((lesson) => String(lesson.id)));
     const scope = communityScopeKey(args.communityId);
     for (const row of await notesByUpdated(ctx, scope).take(COMMUNITY_NOTES_MAX_PER_COMMUNITY)) {
-      inputs.push(await noteInput(ctx, args.communityId, scope, row, viewerId, attachOf(row, lessonIds, null)));
+      inputs.push(await noteInput(ctx, args.communityId, scope, row, viewerId, attachOf(row, lessonIds, null), { reader, checkSources: !canManage }));
     }
 
     // Pods: the ones this viewer can enter, with their things; a listed one
@@ -112,7 +133,7 @@ async function brainMap(ctx: any, args: { communityId: any; userId: any; podChan
       const podId = `pod:${String(channel._id)}`;
       const scope = podScopeKey(channel._id);
       const rows = await notesByUpdated(ctx, scope).take(COMMUNITY_NOTES_MAX_PER_COMMUNITY);
-      for (const row of rows) inputs.push({ ...(await noteInput(ctx, args.communityId, scope, row, viewerId, attachOf(row, new Set(), podId))), sourcesOpen: true });
+      for (const row of rows) inputs.push(await noteInput(ctx, args.communityId, scope, row, viewerId, attachOf(row, new Set(), podId), { reader, checkSources: false }));
       pods.push({ id: podId, name: String(channel.name ?? ""), inside: true, count: rows.length });
     }
     const records: any[] = await ctx.db.query("communityPods")
@@ -201,7 +222,9 @@ export const getBrainNote = query({
     }
     const lessons = scope.startsWith("pod:") ? [] : await liveLessons(ctx, args.communityId, MAP_LESSONS);
     const lessonIds = new Set(lessons.map((lesson) => String(lesson.id)));
-    const input = await noteInput(ctx, args.communityId, scope, row, String(userId), attachOf(row, lessonIds, null));
+    const reader = docReader(ctx);
+    const checkSources = !canManage && !insidePod;
+    const input = await noteInput(ctx, args.communityId, scope, row, String(userId), attachOf(row, lessonIds, null), { reader, checkSources });
     const title = brainTitleFor(input, { canManage, insidePod });
     const lesson = row.aboutLessonId && lessonIds.has(String(row.aboutLessonId)) ? lessons.find((entry) => String(entry.id) === String(row.aboutLessonId)) : null;
     // What answers read it with, among things this viewer may name.
@@ -220,7 +243,7 @@ export const getBrainNote = query({
       const otherId = ctx.db.normalizeId("communityNotes", other.replace(/^note:/, ""));
       const otherRow: any = otherId ? await ctx.db.get(otherId) : null;
       if (!otherRow || otherRow.scopeKey !== row.scopeKey) continue;
-      const otherInput = await noteInput(ctx, args.communityId, scope, otherRow, String(userId), attachOf(otherRow, lessonIds, null));
+      const otherInput = await noteInput(ctx, args.communityId, scope, otherRow, String(userId), attachOf(otherRow, lessonIds, null), { reader, checkSources });
       const otherTitle = brainTitleFor(otherInput, { canManage, insidePod });
       if (otherTitle) partners.push({ id: other, title: otherTitle, count: pair.count });
     }

@@ -68,18 +68,35 @@ type Written = { ok: true; slug: string; title: string; change: "added" | "chang
 
 // "inScope": readable in this memory's place: a channel open to every
 // member, or, for a pod's memory, that pod's own room. Never another pod.
-export async function evidenceFacts(ctx: any, communityId: any, ref: MemoryEvidenceRef, scope: ScopeKey): Promise<MemoryEvidenceFacts> {
+// A read that fetches each record once: a map checks hundreds of posts that
+// share a few threads and channels. `reads` counts what reached the database.
+export type DocReader = { get: (id: any) => Promise<any>; reads: number };
+export function docReader(ctx: any): DocReader {
+  const seen = new Map<string, Promise<any>>();
+  const reader: DocReader = {
+    reads: 0,
+    get: (id: any) => {
+      const key = String(id);
+      if (!seen.has(key)) { reader.reads += 1; seen.set(key, ctx.db.get(id)); }
+      return seen.get(key)!;
+    },
+  };
+  return reader;
+}
+
+export async function evidenceFacts(ctx: any, communityId: any, ref: MemoryEvidenceRef, scope: ScopeKey, reader?: DocReader): Promise<MemoryEvidenceFacts> {
   const none = { exists: false, communityMatches: false, live: false, byPerson: false, inScope: false, sharedVisibility: false };
+  const get = reader ? reader.get : (docId: any) => ctx.db.get(docId);
   const table = ref.kind === "post" ? "communityInteractionRoots" : "communityInteractionReplies";
   const id = ctx.db.normalizeId(table, ref.id);
-  const row = id ? await ctx.db.get(id) : null;
+  const row = id ? await get(id) : null;
   if (!row) return none;
   let live = row.status === "live";
   if (ref.kind === "reply") {
-    const root = await ctx.db.get(row.rootId);
+    const root = await get(row.rootId);
     live = live && root?.status === "live";
   }
-  const channel = row.channelId ? await ctx.db.get(row.channelId) : null;
+  const channel = row.channelId ? await get(row.channelId) : null;
   return {
     exists: true,
     communityMatches: String(row.communityId) === String(communityId),
