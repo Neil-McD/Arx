@@ -1,4 +1,4 @@
-import { ArrowLeft, Hash, Settings } from "lucide-react";
+import { ArrowLeft, Hash, LockKeyhole, Settings } from "lucide-react";
 import { CommunityAvatar } from "../../../../shared/CommunityAvatar";
 import { CommunityPresenceFacepile } from "./CommunityPresenceFacepile";
 import type { MobileMemberFace, MobileRootPage } from "./webShellChromeShared";
@@ -11,6 +11,7 @@ type WebMobileTopBarProps = {
   isCommunityHome?: boolean;
   hasCommunityRail?: boolean;
   communityDetailLabel?: string | null;
+  communityDetailIsPod?: boolean;
   showDrawerButton?: boolean;
   showBackButton?: boolean;
   hasActiveCommunity: boolean;
@@ -48,6 +49,7 @@ export function WebMobileTopBar({
   isCommunityHome = false,
   hasCommunityRail = false,
   communityDetailLabel = null,
+  communityDetailIsPod = false,
   showDrawerButton = true,
   showBackButton = false,
   hasActiveCommunity,
@@ -134,8 +136,8 @@ export function WebMobileTopBar({
           <button
             type="button"
             className="mobile-topbar-icon mobile-topbar-back"
-            aria-label="Back to community"
-            title="Back to community"
+            aria-label="Back"
+            title="Back"
             onClick={onBack}
           >
             <ArrowLeft aria-hidden="true" />
@@ -164,7 +166,7 @@ export function WebMobileTopBar({
           <span className="mobile-topbar-context-label">Settings</span>
         ) : communityDetailLabel ? (
           <span className="mobile-topbar-context-label mobile-topbar-channel-label">
-            <Hash aria-hidden="true" />
+            {communityDetailIsPod ? <LockKeyhole aria-hidden="true" /> : <Hash aria-hidden="true" />}
             <span>{communityDetailLabel}</span>
           </span>
         ) : (

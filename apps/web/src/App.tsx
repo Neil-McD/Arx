@@ -2437,6 +2437,7 @@ export default function App() {
       ? () => navigateTo(buildSettingsIndexPath())
       : () => openGlobalSettings("profile"),
     openGlobalSettings,
+    openMobileSettingsPage: (page) => navigateTo(buildSettingsPath(page)),
     settingsGroup: settingsGroup as SettingsGroup,
     setSettingsPage,
     hasLeftPanel,
