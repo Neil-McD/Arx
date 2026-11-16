@@ -123,3 +123,20 @@ describe("community resource markdown rendering", () => {
     expect(markup).not.toContain("<iframe");
   });
 });
+
+describe("markdown pieces stay the same between draws", () => {
+  const pieces = (node: unknown) => (node as { props: { components: unknown } }).props.components;
+
+  it("uses one set of components for the same options, so text is not rebuilt on every redraw", () => {
+    expect(pieces(renderMarkdown("one"))).toBe(pieces(renderMarkdown("two")));
+    expect(pieces(renderMarkdown("one", { headingLevelOffset: 1, embedStandaloneMedia: true })))
+      .toBe(pieces(renderMarkdown("two", { headingLevelOffset: 1, embedStandaloneMedia: true })));
+  });
+
+  it("keeps different options and copy handlers apart", () => {
+    const copy = () => undefined;
+    expect(pieces(renderMarkdown("one"))).not.toBe(pieces(renderMarkdown("one", { headingLevelOffset: 1 })));
+    expect(pieces(renderMarkdown("one"))).not.toBe(pieces(renderMarkdown("one", { onCopyCode: copy })));
+    expect(pieces(renderMarkdown("one", { onCopyCode: copy }))).toBe(pieces(renderMarkdown("two", { onCopyCode: copy })));
+  });
+});
