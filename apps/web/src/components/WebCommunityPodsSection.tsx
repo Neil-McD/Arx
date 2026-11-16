@@ -379,7 +379,10 @@ function PodsList(props: WebCommunityPodsSectionProps) {
         <KitApp view="events" host={canManage} part="flow">
           <div className={cx("page")} style={{ padding: 0, overflow: "visible" }}>
             {notice ? <p className={cx("sub")} role="status">{notice}</p> : null}
-            {selectedMine ? <button type="button" className={cx("link")} onClick={() => props.onNavigate({ kind: "pods" })}>← Pods</button> : null}
+            {/* The pitch carries its own way back; the landing page and a
+                failed or loading list need one here. */}
+            {shown?.kind !== "pitch" ? <button type="button" className={cx("link")} onClick={() => props.onNavigate({ kind: "pods" })}>← Pods</button> : null}
+            {failed ? <p className={cx("sub")} role="alert">Pods couldn't load. <button type="button" className={cx("link")} onClick={() => void load()}>Try again</button></p> : null}
             {shownPage(true)}
           </div>
         </KitApp>
