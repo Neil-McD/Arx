@@ -1,6 +1,7 @@
 // Design lab (staging only, design v1): pages built from the kit with the
 // mock's own sample content, so they can be compared with the mock pixel for
 // pixel before real pages move onto the kit. Reached at /design-lab.
+import { useState as useStateLab } from "react";
 import {
   Btn,
   cx,
@@ -33,6 +34,8 @@ import { LearnedRows } from "./KitBrain";
 import { BriefPart } from "./KitBrief";
 import { PanelAction, PanelLearned, PanelLine, PanelNext, PanelPart, PanelPeople } from "./KitPanel";
 import { KitChannelFeed } from "./KitChannelFeed";
+import { BRAIN_MAP_MIN_POINTS, KitBrainMap, type BrainReading } from "./KitBrainMap";
+import { fullExample, middlingExample, sunriseExample } from "./brainExamples";
 import { CommunityPageFrame, CommunityPageRail } from "../components/CommunityPageHeader";
 import { KitHomeRail } from "./KitHomeRail";
 import { KitPodRail } from "./KitPodRail";
@@ -385,6 +388,40 @@ function KnowShell(props: { builder: boolean }) {
   );
 }
 
+// The community brain: Sunrise as it is on staging, a middling community and
+// a full one; each at page size in a reading, and at panel size in all three.
+// ?example=sunrise|middling|full  ?reading=community|yours|gaps
+function BrainLab() {
+  const params = new URLSearchParams(window.location.search);
+  const now = Date.now();
+  const example = params.get("example") ?? "sunrise";
+  const reading = (params.get("reading") ?? "community") as BrainReading;
+  const map = example === "full" ? fullExample(now) : example === "middling" ? middlingExample(now) : sunriseExample(now);
+  const [picked, setPicked] = useStateLab<string | null>("note:v5");
+  const memberView = { ...map, can_manage: false, points: map.points.map((p) => (p.kind === "taught" ? { ...p, title: null } : p)) };
+  return (
+    <KitApp view="wins" host fillWindow scale={labScale()} banner={BANNER} bannerPosition="72% 38%" aura={0.08}>
+      <HostSide />
+      <Main>
+        <Top title={<>The community brain <small>{map.counts.courses} courses · {map.counts.lessons} lessons · {map.counts.learned} learned · {map.counts.this_week} this week</small></>} titleView={1} />
+        <View index={1}>
+          <div style={{ flex: 1, minHeight: 0, display: "flex", padding: "0 16px 16px" }}>
+            <KitBrainMap map={map} size="page" reading={reading} now={now} selectedId={picked} onSelect={setPicked} />
+          </div>
+        </View>
+      </Main>
+      <Rail index={1} label="Panel size">
+        {(["community", "yours", "gaps"] as const).map((r) => (
+          <PanelPart key={r} label={r === "community" ? "The community brain" : r === "yours" ? "Yours" : "Gaps"} fact={r === "community" ? `${map.counts.learned} learned · ${map.counts.this_week} this week` : null}>
+            {map.points.length >= BRAIN_MAP_MIN_POINTS ? <KitBrainMap map={r === "community" ? memberView : map} size="panel" reading={r} now={now} /> : <PanelLine dim>Under five things: the list instead.</PanelLine>}
+          </PanelPart>
+        ))}
+        <PanelLine dim>Picked: {picked ?? "nothing"}</PanelLine>
+      </Rail>
+    </KitApp>
+  );
+}
+
 // ?scale=1.25 draws the lab larger, to try a size for big monitors.
 function labScale(): number {
   if (typeof window === "undefined") return 1;
@@ -394,5 +431,5 @@ function labScale(): number {
 
 export function DesignLab() {
   const page = typeof window === "undefined" ? "" : new URLSearchParams(window.location.search).get("page");
-  return page === "channel" ? <HostChannel /> : page === "brief" ? <BriefPanels /> : page === "pods-shell" ? <PodsShell /> : page === "know-panel" ? <KnowShell builder={false} /> : page === "know-panel-builder" ? <KnowShell builder /> : page === "pods" ? <PodsPage join={false} /> : page === "home-panel" ? <RealPanels pod={false} /> : page === "pod-panel" ? <RealPanels pod /> : page === "pods-join" ? <PodsPage join /> : <HostHomeQuiet />;
+  return page === "channel" ? <HostChannel /> : page === "brief" ? <BriefPanels /> : page === "brain" ? <BrainLab /> : page === "pods-shell" ? <PodsShell /> : page === "know-panel" ? <KnowShell builder={false} /> : page === "know-panel-builder" ? <KnowShell builder /> : page === "pods" ? <PodsPage join={false} /> : page === "home-panel" ? <RealPanels pod={false} /> : page === "pod-panel" ? <RealPanels pod /> : page === "pods-join" ? <PodsPage join /> : <HostHomeQuiet />;
 }
