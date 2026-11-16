@@ -36,6 +36,8 @@ import { PanelAction, PanelLearned, PanelLine, PanelNext, PanelPart, PanelPeople
 import { KitChannelFeed } from "./KitChannelFeed";
 import { BRAIN_MAP_MIN_POINTS, KitBrainMap, type BrainReading } from "./KitBrainMap";
 import { KitBrainPageFrame, KitBrainPageView, NoteActions } from "./KitBrainPage";
+import { KitEventsList, eventClock } from "./KitEventsList";
+import { KitEventForm } from "./KitEventForm";
 import { JoinRequestsDrawer, JoinRequestsLine, MembersBulkBar, MembersTable, MembersToolbar, type MembersSortKey } from "./KitMembersTable";
 import { memberTimeFor, shortDay } from "./KitMembersPage";
 import { compableMembers, matchesMemberSearch, memberKey, toggleAllShown } from "../../../../shared/communityMembersTable";
@@ -527,6 +529,42 @@ function MembersLab() {
   );
 }
 
+// Events with made-up dates, in the page's real shell.
+// ?as=member  ?empty=1  ?adding=1
+function EventsLab() {
+  const params = new URLSearchParams(window.location.search);
+  const host = params.get("as") !== "member";
+  const now = Date.now();
+  const H = 3_600_000;
+  const ev = (id: string, title: string, inHours: number, extra: Record<string, unknown> = {}) => ({
+    id, parent_event_id: id, title, status: "live", starts_at: new Date(now + inHours * H).toISOString(), ends_at: new Date(now + (inHours + 1.25) * H).toISOString(),
+    timezone: "America/Los_Angeles", description_md: null, url: null, location_type: "physical", location_label: "Sunrise Bouldering, back board", visibility: "members",
+    recurrence_frequency: "none", recurrence_interval: 1, recurrence_until: null, pod_name: null, pod_channel_id: null, ...extra }) as any;
+  const upcoming = params.get("empty") ? [] : [
+    ev("a", "Tuesday Board Session", 21, { recurrence_frequency: "weekly", description_md: "Warm-up circuit at 5:45, board in pairs from 6:00. Bring tape." }),
+    ev("b", "Thursday Hangboard Warm-up", 69, { recurrence_frequency: "weekly", location_type: "online", location_label: "Zoom", url: "https://example.com/call", description_md: "Twenty minutes on the hangboard before work. Have a board or a doorframe edge ready; no weights needed." }),
+    ev("c", "Saturday Sunrise Session", 117, { location_label: "Castle Rock trailhead", visibility: "public" }),
+    ev("d", "Setters call", 198, { location_type: "online", location_label: null, pod_name: "Setters", pod_channel_id: "p" }),
+  ];
+  const past = [ev("p1", "Tuesday Board Session", -150), ev("p2", "Saturday Sunrise Session", -220, { location_label: "Castle Rock trailhead" }), ev("p3", "Thursday Hangboard Warm-up", -270, { location_type: "online", location_label: null })];
+  const [adding, setAdding] = useStateLab(Boolean(params.get("adding")));
+  const [draft, setDraft] = useStateLab<any>({ title: "Friday Fingerboard Clinic", starts_at: "2026-11-20T18:00", ends_at: "2026-11-20T19:00", timezone: "America/Los_Angeles",
+    recurrence_frequency: "none", recurrence_until: "", location_type: "physical", location_label: "Sunrise Bouldering, training room", url: "", description_md: "", visibility: "members" });
+  const time = (event: any) => ({ primary: `${eventClock(event.starts_at)} – ${eventClock(event.ends_at)}`, secondary: event.id === "b" ? "5:45 am where it is held (Pacific)" : null });
+  return (
+    <div style={{ height: "100vh", display: "grid" }}>
+      <CommunityPageFrame>
+        <KitEventsList featured={upcoming[0] ?? null} comingUp={upcoming.slice(1)} past={past} now={now} canManage={host} communityName="Sunrise Climbing Club"
+          timeLabel={time} calendarUrl={() => "https://example.com/calendar"} editingId={null}
+          form={adding ? <KitEventForm draft={draft} isNew isSeries={false} canBePublic communityName="Sunrise Climbing Club" isSaving={false} error={null}
+            timeZones={[{ value: "America/Los_Angeles", label: "Pacific time" }]} onChange={setDraft} onClose={() => setAdding(false)} onSubmit={() => setAdding(false)} /> : null}
+          onNew={() => setAdding(true)} onEdit={() => setAdding(true)} onCancel={() => undefined} onSetPublic={() => undefined}
+          renderRail={(rail) => <CommunityPageRail label="This event">{rail}</CommunityPageRail>} />
+      </CommunityPageFrame>
+    </div>
+  );
+}
+
 // ?scale=1.25 draws the lab larger, to try a size for big monitors.
 function labScale(): number {
   if (typeof window === "undefined") return 1;
@@ -536,5 +574,5 @@ function labScale(): number {
 
 export function DesignLab() {
   const page = typeof window === "undefined" ? "" : new URLSearchParams(window.location.search).get("page");
-  return page === "channel" ? <HostChannel /> : page === "brief" ? <BriefPanels /> : page === "brain" ? <BrainLab /> : page === "members" ? <MembersLab /> : page === "brain-actions" ? <BrainActionsLab /> : page === "brain-page" ? <BrainPageLab /> : page === "pods-shell" ? <PodsShell /> : page === "know-panel" ? <KnowShell builder={false} /> : page === "know-panel-builder" ? <KnowShell builder /> : page === "pods" ? <PodsPage join={false} /> : page === "home-panel" ? <RealPanels pod={false} /> : page === "pod-panel" ? <RealPanels pod /> : page === "pods-join" ? <PodsPage join /> : <HostHomeQuiet />;
+  return page === "channel" ? <HostChannel /> : page === "brief" ? <BriefPanels /> : page === "brain" ? <BrainLab /> : page === "events" ? <EventsLab /> : page === "members" ? <MembersLab /> : page === "brain-actions" ? <BrainActionsLab /> : page === "brain-page" ? <BrainPageLab /> : page === "pods-shell" ? <PodsShell /> : page === "know-panel" ? <KnowShell builder={false} /> : page === "know-panel-builder" ? <KnowShell builder /> : page === "pods" ? <PodsPage join={false} /> : page === "home-panel" ? <RealPanels pod={false} /> : page === "pod-panel" ? <RealPanels pod /> : page === "pods-join" ? <PodsPage join /> : <HostHomeQuiet />;
 }
