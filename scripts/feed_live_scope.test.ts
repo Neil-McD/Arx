@@ -19,3 +19,11 @@ test("the feed subscribes only while the channel page is open", () => {
 test("coming back to a channel never leaves a gap in its posts", () => {
   expect(projection).toMatch(/const replaceCached = firstUpdate && hasCurrentRoots\s*&& incomingRoots\.length >= COMMUNITY_INTERACTION_ROOT_LIMIT;/);
 });
+
+test("replacing the cached posts moves 'load older' to just below the new window", async () => {
+  expect(projection).toMatch(/if \(replaceCached\) setNextBeforeCreatedAt\(oldestRootCreatedAtMs\(incomingRoots\)\);/);
+  const { oldestRootCreatedAtMs } = await import("../apps/web/src/controllers/communityRootWindows");
+  const root = (iso: string) => ({ root: { id: iso, created_at: iso } }) as any;
+  expect(oldestRootCreatedAtMs([root("2026-11-03T10:00:00Z"), root("2026-11-01T10:00:00Z")])).toBe(Date.parse("2026-11-01T10:00:00Z"));
+  expect(oldestRootCreatedAtMs([])).toBeNull();
+});

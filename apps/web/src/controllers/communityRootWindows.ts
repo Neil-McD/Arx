@@ -9,6 +9,12 @@ function newestFirst(roots: CommunityInteractionRootBundle[]): CommunityInteract
   return roots.sort((left, right) => rootCreatedAtMs(right) - rootCreatedAtMs(left));
 }
 
+// Where loading older posts continues from, for a full window (the server's
+// next_before_created_at: the oldest post's time).
+export function oldestRootCreatedAtMs(roots: CommunityInteractionRootBundle[]): number | null {
+  return roots.length ? Math.min(...roots.map(rootCreatedAtMs)) : null;
+}
+
 // An older page: add it to what is loaded.
 export function mergeOlderRootPage(
   current: CommunityInteractionRootBundle[],
