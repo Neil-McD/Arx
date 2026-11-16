@@ -37,8 +37,9 @@ export function KitNextEvent(props: {
   } : null);
   const event = useMemo(
     () => (data === undefined ? undefined : splitCommunityEvents(coerceGatewayRows<CloudCommunityEvent>(data), props.now).featured),
+    // Which event is next changes as time passes: read again each minute.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [data, hour],
+    [data, Math.floor(props.now / 60_000)],
   );
 
   const label = event ? featuredEventLabel(event, props.now) : null;

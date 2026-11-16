@@ -85,6 +85,9 @@ function open(key: string, session: unknown, name: LiveQueryName, args: Record<s
     for (const listener of [...entry.listeners]) listener();
   };
   try {
+    // No ensureSession here: the connection is shared per person, and the
+    // community's chat (always mounted on community pages) hands it the
+    // refresh function the connection uses when its token expires.
     const lease = acquireAuthenticatedConvexRealtimeClient({ convexUrl: requireConvexUrl(), session });
     // A name string is a function reference at runtime (convex/server getFunctionName).
     const watch = lease.client.watchQuery(name as any, args as any);
@@ -144,13 +147,4 @@ export function useLiveQuery<T>(session: unknown, name: LiveQueryName, args: Rec
     [key],
   );
   return useSyncExternalStore(subscribe, getSnapshot, () => NOTHING);
-}
-
-// Tests and sign-out: forget every answer.
-export function closeAllLiveQueries(): void {
-  for (const [key, entry] of entries) {
-    if (entry.linger !== null) clearTimeout(entry.linger);
-    entries.delete(key);
-    entry.stop();
-  }
 }

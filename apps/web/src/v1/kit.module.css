@@ -1256,6 +1256,9 @@
 :where(:root[data-layout="phone"]) .app .chips::-webkit-scrollbar{display:none}
 :where(:root[data-layout="phone"]) .app .chips>*{flex:none}
 :where(:root[data-layout="phone"]) .app .filters{flex-wrap:wrap}
+.app .grp.has-act{display:flex;align-items:center;justify-content:space-between}
+.app .grp-add{display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;color:var(--ink3)}
+.app .grp-add svg{width:15px;height:15px}
 :where(:root[data-layout="phone"]) .app .mrow .h{flex-wrap:wrap;row-gap:0}
 :where(:root[data-layout="phone"]) .app .mrow .h b{flex:none;white-space:nowrap}
 :where(:root[data-layout="phone"]) .app .trow{grid-template-columns:28px minmax(0,1fr) auto auto;gap:0 12px}
