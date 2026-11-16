@@ -1,4 +1,4 @@
-import { Fragment, useContext, useEffect, useRef, useState, type ComponentProps, type KeyboardEvent, type CSSProperties } from "react";
+import { Fragment, useContext, useEffect, useRef, useState, type ComponentProps, type KeyboardEvent, type CSSProperties, lazy, Suspense } from "react";
 import { ArrowRight, MessageCircle, MoreHorizontal, Pin, Search, X } from "lucide-react";
 import { isDesignV1Active } from "../../../../shared/designSystem";
 import { createPortal } from "react-dom";
@@ -21,11 +21,14 @@ import { CommunityPresenceFacepile } from "./CommunityPresenceFacepile";
 import { WebCommunityNotes } from "./WebCommunityNotes";
 import { KitChannelRail } from "../v1/KitChannelRail";
 import { KitPodRail, useCloudPod } from "../v1/KitPodRail";
-import { KitMembersPage } from "../v1/KitMembersPage";
 import { KitMembersDirectory } from "../v1/KitMembersDirectory";
 import { CommunityMembersBulkBar, type SelectedMember } from "./CommunityMembersBulkBar";
 import type { CommunityPresenceSummary } from "../../../../shared/communityTypes";
 import { resolveAuthSubject, type AuthSessionLike } from "../../../../shared/authSession";
+
+// The host's Members table: only the people who run a community ever open
+// it, so it is fetched when they do, not shipped to every member.
+const KitMembersPage = lazy(() => import("../v1/KitMembersPage").then((module) => ({ default: module.KitMembersPage })));
 
 type Page = FunctionReturnType<typeof api.communityChannelParticipants.listChannelRoster>;
 
@@ -414,14 +417,14 @@ function RosterSurface(props: RosterProps & {
   // member's record (docs/design/members-invariants.md).
   if (kitMembers) {
     return <>
-    <KitMembersPage communityName={props.communityName}
+    <Suspense fallback={null}><KitMembersPage communityName={props.communityName}
       joinRequests={props.joinReview?.canReviewJoinRequests ? props.joinReview.pendingJoinRequests ?? [] : []}
       decidingJoinRequestId={props.joinReview?.decidingJoinRequestId ?? null}
       onApprove={id => void props.joinReview?.onApproveJoinRequest?.(id)}
       onDecline={id => void props.joinReview?.onDenyJoinRequest?.(id)}
       onMessage={props.onMessageUser} onManage={setKitTarget} refreshKey={kitVersion}
       currentUserId={props.currentUserId ?? null} recordContainer={recordEl}
-      getAvatarColor={props.getAvatarColor} getInitials={props.getInitials} />
+      getAvatarColor={props.getAvatarColor} getInitials={props.getInitials} /></Suspense>
     <aside ref={setRecordEl} className="community-context-panel members-page-record" aria-label="Member record" />
     {kitTarget ? createPortal(<div ref={settingsRef} onKeyDown={event => {
       if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); setKitTarget(null); }
