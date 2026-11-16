@@ -370,6 +370,16 @@ export function acquireAuthenticatedConvexRealtimeClient<SessionT>(params: {
   return authenticatedRealtimePool.acquire(params);
 }
 
+// Whatever kept answers over a person's connection hears when it is closed
+// (sign-out, or another person signing in), so nothing reuses a dead one.
+const subjectClosedListeners = new Set<(authSubject: string) => void>();
+export function onAuthenticatedConvexRealtimeSubjectClosed(listener: (authSubject: string) => void): () => void {
+  subjectClosedListeners.add(listener);
+  return () => { subjectClosedListeners.delete(listener); };
+}
+
 export function closeAuthenticatedConvexRealtimeClientsForSubject(authSubject: string): void {
   authenticatedRealtimePool.closeForSubject(authSubject);
+  const subject = String(authSubject ?? "").trim();
+  if (subject) for (const listener of [...subjectClosedListeners]) listener(subject);
 }
