@@ -2136,6 +2136,12 @@
   margin-top: 0;
 }
 
+/* The feed fills that box and grows with its posts (never squeezed into it:
+   a long channel scrolls, it does not spill out of the top). */
+:root[data-design="v1"] .community-interaction-feed-scroll > .kit-channel-feed-part > [class*="feed"] {
+  flex: 1 0 auto;
+}
+
 /* The left column's loading rows are the size of real channel rows (28px,
    no gap), as many as the list had last time (shared/channelRowsMemory.ts). */
 :root[data-design="v1"] .community-channel-loading {
