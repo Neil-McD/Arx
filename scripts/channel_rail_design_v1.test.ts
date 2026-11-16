@@ -8,7 +8,7 @@ if (web.resolve("react") !== root.resolve("react")) vi.doMock(web.resolve("react
 
 const design = { v1: true };
 vi.doMock("../shared/designSystem", () => ({ isDesignV1Active: () => design.v1 }));
-const { ChannelRosterPanel } = await import("../apps/web/src/components/ChannelRosterPanel");
+const { ChannelRosterPanel, CommunityMembersPagePanel } = await import("../apps/web/src/components/ChannelRosterPanel");
 
 const props = {
   communityName: "Kiln",
@@ -80,22 +80,29 @@ test("design v1: a thread names itself and its channel, and has a close button",
   expect(bare).toContain('<h2 class="community-thread-title">Thread</h2>');
 });
 
-test("design v1: asking for members shows the Members page, not a pop-up", () => {
+test("design v1: the Members page draws the directory, with no channel around it", () => {
   design.v1 = true;
-  const html = renderToStaticMarkup(React.createElement(ChannelRosterPanel, { ...props, narrowOpen: true, onCloseNarrow: () => {} }));
+  const html = renderToStaticMarkup(React.createElement(CommunityMembersPagePanel, props));
   // A member gets the kit directory (who is here, what they shared); the
   // person they open is the right column.
   expect(html).toContain('<section class="members-page is-kit" aria-label="Community members">');
   expect(html).toContain('class="community-context-panel members-page-record"');
   expect(html).not.toContain("modal-overlay");
-  // The short channel panel steps aside for it.
   expect(html).not.toContain("channel-rail-label");
+});
+
+test("design v1: beside a channel, asking for members never draws them over the channel", () => {
+  design.v1 = true;
+  const html = renderToStaticMarkup(React.createElement(ChannelRosterPanel, { ...props, narrowOpen: true, onCloseNarrow: () => {} }));
+  // The page is its own address now; the channel's panel stays the panel.
+  expect(html).not.toContain("members-page");
+  expect(html).not.toContain("modal-overlay");
 });
 
 test("design v1: people who manage members get the table and the record", () => {
   design.v1 = true;
-  const html = renderToStaticMarkup(React.createElement(ChannelRosterPanel, {
-    ...props, narrowOpen: true, memberSettings: { ...props.memberSettings, canManageMembers: true } }));
+  const html = renderToStaticMarkup(React.createElement(CommunityMembersPagePanel, {
+    ...props, memberSettings: { ...props.memberSettings, canManageMembers: true } }));
   // The host's page is fetched on demand: its place is held while it loads.
   expect(html).toContain('class="members-page is-kit"');
   expect(html).toContain('aria-label="Member record"');

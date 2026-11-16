@@ -2,11 +2,16 @@ import { existsSync, readFileSync } from "node:fs";
 import { expect, test } from "vitest";
 import { parseAppRouteFromPathname, buildAppRoutePath } from "../shared/webAppRouteState";
 const read = (path: string) => readFileSync(new URL("../" + path, import.meta.url), "utf8");
-test("old Members links resolve to the channel view", () => {
+// Since Nov 17 Members is a page of the community again (design v1), with
+// one member's record in the address; it is still the one member surface.
+test("Members links open the Members page, and a member's record", () => {
   const route = parseAppRouteFromPathname("/c/example/members");
   expect(route?.view).toBe("home");
-  expect(route?.communityTab).toBe("chat");
-  expect(buildAppRoutePath(route!)).toBe("/c/example/chat");
+  expect(route?.communityTab).toBe("members");
+  expect(buildAppRoutePath(route!)).toBe("/c/example/members");
+  const record = parseAppRouteFromPathname("/c/example/members/m123");
+  expect(record?.communityMemberKey).toBe("m123");
+  expect(buildAppRoutePath(record!)).toBe("/c/example/members/m123");
 });
 test("one member surface retains search, settings, profiles and admission", () => {
   expect(existsSync(new URL("../apps/web/src/components/WebCommunityMembersPanel.tsx", import.meta.url))).toBe(false);

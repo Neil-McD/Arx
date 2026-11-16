@@ -71,28 +71,21 @@ export function ChannelRosterPanel(props: RosterProps) {
 
 function ChannelRosterWorkspace(props: RosterProps) {
   const [membersOpen, setMembersOpen] = useState(false);
-  const [askedNarrow, setAskedNarrow] = useState(false);
   const [channel, setChannel] = useState(props.channelId);
   if (channel !== props.channelId) {
     setChannel(props.channelId);
     setMembersOpen(false);
   }
-  // Design system v1: the member list opens in the right column, in the
-  // panel's place, instead of in a pop-up. The Members row in the left column
-  // asks for it through narrowOpen, as the people button does on a phone.
-  // Once open it stays open (hidden while a profile or thread has the column)
-  // until it is closed, so looking at one member never loses the list.
-  if (isDesignV1Active() && Boolean(props.narrowOpen) !== askedNarrow) {
-    setAskedNarrow(Boolean(props.narrowOpen));
-    if (props.narrowOpen) setMembersOpen(true);
-  }
-  // Members is a page in both layouts, at every window width.
-  if (isDesignV1Active() && membersOpen) {
-    const close = () => { setMembersOpen(false); props.onCloseNarrow?.(); };
-    return <><MembersPageLeaver onLeave={close} /><RosterSurface {...props} channelId={undefined} narrowOpen={false}
-      onCloseNarrow={undefined} directory inline onCloseMembers={close}
-      onMessageUser={props.onMessageUser ? id => { close(); props.onMessageUser?.(id); } : undefined} /></>;
-  }
+  // Design system v1: Members is a page of its own (/c/:slug/members). The
+  // channel's column links to it, and the people button on a phone goes there.
+  const asksForMembers = isDesignV1Active() && Boolean(props.narrowOpen);
+  useEffect(() => {
+    if (!asksForMembers) return;
+    props.onCloseNarrow?.();
+    goToMembersPage();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [asksForMembers]);
+  if (isDesignV1Active()) return <RosterSurface {...props} narrowOpen={false} onOpenMembers={goToMembersPage} />;
   return <>
     <RosterSurface {...props} onOpenMembers={() => setMembersOpen(true)} />
     {membersOpen ? <RosterSurface {...props} channelId={undefined} narrowOpen={false}
@@ -101,22 +94,21 @@ function ChannelRosterWorkspace(props: RosterProps) {
   </>;
 }
 
+// The Members page of the community in the address bar (the app follows the
+// address on popstate, as goToPodsPath does).
+function goToMembersPage(): void {
+  const match = window.location.pathname.match(/^(\/m)?\/c\/([^/]+)/);
+  if (!match) return;
+  window.history.pushState({}, "", `${match[1] ?? ""}/c/${match[2]}/members`);
+  window.dispatchEvent(new PopStateEvent("popstate"));
+}
 
-// Members is a page while it is open (design v1). It has no address yet, so
-// choosing anything else in the left column is what leaves it.
-function MembersPageLeaver(props: { onLeave: () => void }) {
-  const onLeaveRef = useRef(props.onLeave);
-  onLeaveRef.current = props.onLeave;
-  useEffect(() => {
-    const onClick = (event: MouseEvent) => {
-      const target = event.target instanceof Element ? event.target : null;
-      const row = target?.closest(".community-nav .nav-item, .community-switcher-item");
-      if (row && !row.closest(".nav-item-members")) onLeaveRef.current();
-    };
-    document.addEventListener("click", onClick, true);
-    return () => document.removeEventListener("click", onClick, true);
-  }, []);
-  return null;
+// Design system v1: the Members page itself (WebCommunityMembersPage), with no
+// channel around it.
+export function CommunityMembersPagePanel(props: RosterProps) {
+  const scope = useContext(CommunityChannelSessionContext);
+  const scopeKey = JSON.stringify([props.currentUserId, resolveAuthSubject(scope?.session as AuthSessionLike), scope?.communityId]);
+  return <RosterSurface key={scopeKey} {...props} channelId={undefined} narrowOpen={false} onCloseNarrow={undefined} directory inline />;
 }
 
 // Both presentations share the same authorized readers, row rendering and actions.

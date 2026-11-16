@@ -691,6 +691,7 @@ export default function App() {
     canViewSettings: canViewActiveCommunitySettings,
     canManageMembers: canManageMembersActiveCommunity,
     canViewAnalytics: canViewActiveCommunityAnalytics,
+    canViewMembers: canViewMembersActiveCommunity,
     setCommunityResourceModuleId,
     applyCommunityShellState,
   });
@@ -1065,9 +1066,11 @@ export default function App() {
     lastDiscoverLoadAttemptedAt,
     loadDiscoverCommunities,
   });
+  // Join requests and the member tools load where they are shown: beside a
+  // channel, and on the Members page (design v1).
   const shouldHydrateCommunityContextPanel =
     activePage === "community" &&
-    communityTab === "chat";
+    (communityTab === "chat" || communityTab === "members");
 
   useCommunitySettingsAccessLifecycle<AuthSession>({
     activePage,
@@ -1620,7 +1623,6 @@ export default function App() {
       communityId: activeCommunityId,
       channelSlug: communityChannelSlug,
       inChat: activePage === "community" && communityTab === "chat",
-      channelReady: Boolean(activeCommunityId && activeCommunityChannel),
       canViewMembers: canViewMembersActiveCommunity,
       closeDetail: () => {
         if (showMobileShell) prepareMobileGlobalNavigation();
@@ -2334,7 +2336,13 @@ export default function App() {
           onSignOut: handleSignOut,
         }
       : undefined,
-    onOpenCommunityMembers: handleOpenCommunityMembers,
+    // Design v1: Members is a page of the community (/c/:slug/members).
+    onOpenCommunityMembers: isDesignV1Active()
+      ? () => {
+          const path = buildCommunityTabPath(selectedActiveCommunitySlug, "members");
+          if (path) navigateTo(path);
+        }
+      : handleOpenCommunityMembers,
     onToggleDirectMessages: handleToggleDirectMessages,
     isDirectMessagesOpen,
     showMobileAppShell,

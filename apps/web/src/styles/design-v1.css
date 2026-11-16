@@ -2618,17 +2618,6 @@
   background: var(--surface-raised);
 }
 
-/* Members is the one selected row in the left column while it is the page. */
-:root[data-design="v1"] .app-root:has(.members-page) .community-nav .nav-item.active:not(.nav-item-members) {
-  background: transparent;
-  color: var(--text-ink-secondary);
-}
-
-:root[data-design="v1"] .app-root:has(.members-page) .community-nav .nav-item-members {
-  background: var(--bg-card);
-  color: var(--text-ink-primary);
-}
-
 /*
  * Design system v1: every composer is one row with its text centred on its
  * icons. The text box had 2px above the text and about 18px below it, so the

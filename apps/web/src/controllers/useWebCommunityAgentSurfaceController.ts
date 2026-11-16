@@ -32,8 +32,9 @@ export function useWebCommunityAgentSurfaceController(params: {
           version: 1,
           kind: "community",
           community_slug: community.slug,
-          // A pod is a room, so the guide hears "chat" on the Pods page.
-          section: params.communityTab === "pods" ? "chat" : params.communityTab,
+          // A pod is a room, so the guide hears "chat" on the Pods page; the
+          // Members page has no section of its own for the guide either.
+          section: params.communityTab === "pods" || params.communityTab === "members" ? "chat" : params.communityTab,
         }
       : null;
   const isVisible =
