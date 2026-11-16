@@ -35,7 +35,7 @@ import { BriefPart } from "./KitBrief";
 import { PanelAction, PanelLearned, PanelLine, PanelNext, PanelPart, PanelPeople } from "./KitPanel";
 import { KitChannelFeed } from "./KitChannelFeed";
 import { BRAIN_MAP_MIN_POINTS, KitBrainMap, type BrainReading } from "./KitBrainMap";
-import { KitBrainPageFrame, KitBrainPageView } from "./KitBrainPage";
+import { KitBrainPageFrame, KitBrainPageView, NoteActions } from "./KitBrainPage";
 import { fullExample, middlingExample, sunriseExample } from "./brainExamples";
 import { CommunityPageFrame, CommunityPageRail } from "../components/CommunityPageHeader";
 import { KitHomeRail } from "./KitHomeRail";
@@ -441,6 +441,27 @@ function BrainPageLab() {
   );
 }
 
+// What a builder can do to a picked learned thing, in the map's side panel.
+function BrainActionsLab() {
+  const now = Date.now();
+  const map = sunriseExample(now);
+  const point = map.points.find((entry) => entry.title && entry.at.kind === "lesson") ?? map.points[0];
+  const note = { id: point.id, title: point.title, kind: point.kind, learned_at: point.learned_at, at: point.at, lesson: null, use: 0, with: [], mine: false,
+    body_md: "Open hands on the big holds for ten minutes before anything crimpy, then two easy laps.", slug: "lab-note" };
+  return (
+    <KitBrainPageFrame canManage fill>
+      <div className={cx("brainpage")} style={{ height: "100vh" }}>
+        <aside className={cx("brainside")}>
+          <div className={cx("land")}>
+            <header><span className={cx("lab")}>Learned · today</span><h2>{note.title}</h2><p className={cx("land-p")}>{note.body_md}</p></header>
+            <NoteActions map={map} note={note} session={null} communityId="lab" onChanged={() => undefined} />
+          </div>
+        </aside>
+      </div>
+    </KitBrainPageFrame>
+  );
+}
+
 // ?scale=1.25 draws the lab larger, to try a size for big monitors.
 function labScale(): number {
   if (typeof window === "undefined") return 1;
@@ -450,5 +471,5 @@ function labScale(): number {
 
 export function DesignLab() {
   const page = typeof window === "undefined" ? "" : new URLSearchParams(window.location.search).get("page");
-  return page === "channel" ? <HostChannel /> : page === "brief" ? <BriefPanels /> : page === "brain" ? <BrainLab /> : page === "brain-page" ? <BrainPageLab /> : page === "pods-shell" ? <PodsShell /> : page === "know-panel" ? <KnowShell builder={false} /> : page === "know-panel-builder" ? <KnowShell builder /> : page === "pods" ? <PodsPage join={false} /> : page === "home-panel" ? <RealPanels pod={false} /> : page === "pod-panel" ? <RealPanels pod /> : page === "pods-join" ? <PodsPage join /> : <HostHomeQuiet />;
+  return page === "channel" ? <HostChannel /> : page === "brief" ? <BriefPanels /> : page === "brain" ? <BrainLab /> : page === "brain-actions" ? <BrainActionsLab /> : page === "brain-page" ? <BrainPageLab /> : page === "pods-shell" ? <PodsShell /> : page === "know-panel" ? <KnowShell builder={false} /> : page === "know-panel-builder" ? <KnowShell builder /> : page === "pods" ? <PodsPage join={false} /> : page === "home-panel" ? <RealPanels pod={false} /> : page === "pod-panel" ? <RealPanels pod /> : page === "pods-join" ? <PodsPage join /> : <HostHomeQuiet />;
 }
