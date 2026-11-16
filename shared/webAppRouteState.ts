@@ -247,7 +247,8 @@ export function buildCommunityTabPath(
   if (communityTab === "pods" && podSlug) {
     return `/c/${encodeURIComponent(slug)}/pods/${encodeURIComponent(podSlug)}`;
   }
-  const tabSegment = communityTab;
+  // The words in the address; inside the app the tabs keep their names.
+  const tabSegment = communityTab === "agent" ? "home" : communityTab === "resources" ? "knowledge" : communityTab;
   const moduleId = String(communityResourceModuleId ?? "").trim();
   const channelSlug = String(communityChannelSlug ?? "").trim().toLowerCase();
   if (communityTab === "chat" && channelSlug && channelSlug !== "general") {
@@ -268,7 +269,7 @@ export function buildCommunityHomePath(
 ): string | null {
   const slug = String(communitySlug ?? "").trim();
   if (!slug) return null;
-  return `/c/${encodeURIComponent(slug)}/home`;
+  return `/c/${encodeURIComponent(slug)}/browse`;
 }
 
 
@@ -374,6 +375,12 @@ function parseCommunityTabSegment(value: string | null | undefined): CommunityTa
   switch ((value ?? "").trim()) {
     case "ai-feed":
       return "chat";
+    // Nov 17: Home is /home (it was /agent) and Knowledge /knowledge (it was
+    // /resources); the old words still open them.
+    case "home":
+      return "agent";
+    case "knowledge":
+      return "resources";
     default:
       return parseCommunityTab(value);
   }
@@ -489,7 +496,9 @@ export function parseAppRouteFromPathname(pathname: string): AppRoutePathState |
     };
   }
 
-  if (segments[0] === "c" && segments.length === 3 && segments[2] === "home") {
+  // The community's list of channels and pages, the phone's middle tab
+  // (/c/:slug/browse; it was /home until Nov 17, when Home took that name).
+  if (segments[0] === "c" && segments.length === 3 && segments[2] === "browse") {
     const slug = String(segments[1] ?? "").trim() || null;
     if (!slug) return null;
     return {

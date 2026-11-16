@@ -11,16 +11,16 @@ describe("every community address survives a refresh", () => {
     "/c/a/chat/general/t1",
     "/c/a/chat/beta/t1",
     "/c/a/chat/setters/t9",
-    "/c/a/resources",
-    "/c/a/resources/course1",
-    "/c/a/resources/course1/lesson2",
-    "/c/a/resources/guide",
-    "/c/a/resources/brain",
+    "/c/a/knowledge",
+    "/c/a/knowledge/course1",
+    "/c/a/knowledge/course1/lesson2",
+    "/c/a/knowledge/guide",
+    "/c/a/knowledge/brain",
     "/c/a/events",
     "/c/a/pods",
     "/c/a/pods/setters",
-    "/c/a/agent",
     "/c/a/home",
+    "/c/a/browse",
     "/c/a/settings/community",
     "/c/a/analytics",
     "/c/a/members",
@@ -32,6 +32,12 @@ describe("every community address survives a refresh", () => {
   for (const address of addresses) {
     it(address, () => expect(roundTrip(address)).toBe(address));
   }
+
+  it("turns the old words into the new ones", () => {
+    expect(roundTrip("/c/a/agent")).toBe("/c/a/home");
+    expect(roundTrip("/c/a/resources/course1/lesson2")).toBe("/c/a/knowledge/course1/lesson2");
+    expect(roundTrip("/c/a/resources/guide")).toBe("/c/a/knowledge/guide");
+  });
 
   it("refuses a detail that is not a plain id", () => {
     expect(parseAppRouteFromPathname("/c/a/chat/beta/a.b")?.communityThreadId).toBeUndefined();
@@ -51,7 +57,7 @@ describe("details inside a page", () => {
   it("sets and clears one, on the phone too, and drops old tags", () => {
     expect(pathWithRouteDetail("/c/a/chat", "thread", "t1")).toBe("/c/a/chat/general/t1");
     expect(pathWithRouteDetail("/m/c/a/chat/beta/t1", "thread", null)).toBe("/m/c/a/chat/beta");
-    expect(pathWithRouteDetail("/c/a/resources?view=guide&utm=x", "view", "brain")).toBe("/c/a/resources/brain?utm=x");
+    expect(pathWithRouteDetail("/c/a/resources?view=guide&utm=x", "view", "brain")).toBe("/c/a/knowledge/brain?utm=x");
     expect(pathWithRouteDetail("/c/a/events", "thread", "t1")).toBe("/c/a/events");
   });
 
@@ -64,6 +70,6 @@ describe("details inside a page", () => {
 
   it("turn an old tag link into the path", () => {
     expect(carryRouteDetails("/c/a/chat/beta", "/c/a/chat/beta?thread=t1")).toBe("/c/a/chat/beta/t1");
-    expect(carryRouteDetails("/c/a/resources/c1", "/c/a/resources/c1?lesson=l2")).toBe("/c/a/resources/c1/l2");
+    expect(carryRouteDetails("/c/a/resources/c1", "/c/a/resources/c1?lesson=l2")).toBe("/c/a/knowledge/c1/l2");
   });
 });
