@@ -1,6 +1,6 @@
 /// <reference types="vite/client" />
 import { convexTest } from "convex-test";
-import { MEMORY_REFUSAL_WORDS, parseMemoryAbout, parseMemoryApplyCall } from "../shared/communityMemory";
+import { MEMORY_REFUSAL_WORDS, memoryIndexRefusal, parseMemoryAbout, parseMemoryApplyCall } from "../shared/communityMemory";
 import { expect, test } from "vitest";
 import { api, internal } from "./_generated/api";
 import schema from "./schema";
@@ -354,4 +354,12 @@ test("memory.apply carries where each note belongs, and a list of existing notes
   expect(parseMemoryAbout("lesson:abc_1")).toEqual({ kind: "lesson", id: "abc_1" });
   expect(parseMemoryAbout("comp prep!")).toEqual({ kind: "subject", name: "Comp prep" });
   for (const bad of ["", "   ", "123", "memory/x.md", "post:abc", "y".repeat(41)]) expect(parseMemoryAbout(bad)).toBeNull();
+});
+
+test("memory.md links notes only: where notes are filed is kept with the notes", () => {
+  const slugs = new Set(["refunds"]);
+  expect(memoryIndexRefusal("- [Refunds](memory/refunds.md)", slugs)).toBeNull();
+  expect(memoryIndexRefusal("- [Refunds](memory/refunds.md)\n- lesson:abc · Money › 1. Refunds", slugs)).toBe("index_has_filing");
+  expect(memoryIndexRefusal("- [Refunds](memory/refunds.md)\n## Subjects in use\nMoney", slugs)).toBe("index_has_filing");
+  expect(MEMORY_REFUSAL_WORDS.index_has_filing).toContain("links notes only");
 });
