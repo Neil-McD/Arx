@@ -295,7 +295,13 @@ css += """
 .app .seg button{height:26px;padding:0 12px;border-radius:6px;font-size:12.5px;color:var(--ink2);cursor:pointer}
 .app .seg button.on{background:rgba(var(--w),.09);color:var(--ink)}
 .app .brainstage{flex:1;min-height:420px;display:flex}
-.app .brainstage svg.brain-page{width:100%;height:auto;max-height:calc(100vh - 200px)}
+.app .brainwrap{position:relative;flex:1;min-width:0;display:flex}
+.app .brainwrap svg.brain-page{width:100%;height:auto;max-height:calc(100vh - 200px);touch-action:none;cursor:grab;user-select:none;overflow:hidden}
+.app .brainwrap svg.brain-page:active{cursor:grabbing}
+.app .brainzoom{position:absolute;right:8px;bottom:8px;display:flex;gap:4px}
+.app .brainzoom button{min-width:30px;height:30px;padding:0 9px;border-radius:8px;border:1px solid var(--line2);background:var(--bg);color:var(--ink2);font-size:13px;cursor:pointer}
+.app .brainzoom button:hover{color:var(--ink)}
+.app .brainzoom button:disabled{opacity:.4;cursor:default}
 .app button.kmini-btn{width:100%;padding:0}.app button.kmini-btn:disabled{cursor:default}
 .app .kmini+.kline{margin-top:10px}
 
