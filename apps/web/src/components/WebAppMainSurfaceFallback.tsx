@@ -1,5 +1,4 @@
 import type { WebAppMainSurfaceHostProps } from "./WebAppMainSurfaceHost";
-import { readPlaceParam } from "../../../../shared/placeParams";
 import { WebCommunityInteractionBootstrap } from "./WebCommunityInteractionBootstrap";
 
 export function WebAppMainSurfaceFallback(
@@ -9,10 +8,8 @@ export function WebAppMainSurfaceFallback(
     !props.showPublicCommunityFunnel && props.activePage === "community";
 
   // A channel's skeleton (posts and a message box) is only right for a channel.
-  // Members and Inbox open over one and replace it, so they are not one here.
-  const opensOver = readPlaceParam("open");
   const isChannel = props.communityHostProps.communityTab === "chat"
-    && props.communityHostProps.activeView === "home" && !opensOver;
+    && props.communityHostProps.activeView === "home";
 
   return (
     <main
