@@ -30,7 +30,7 @@ import {
   View,
   Ask,
 } from "./kit";
-import { PanelBrain, rememberBrainMap } from "./KitBrain";
+import { PanelBrain, labSession, rememberBrainMap } from "./KitBrain";
 import { BriefPart } from "./KitBrief";
 import { PanelAction, PanelLearned, PanelLine, PanelNext, PanelPart, PanelPeople } from "./KitPanel";
 import { KitChannelFeed } from "./KitChannelFeed";
@@ -307,9 +307,9 @@ function RealPanels(props: { pod: boolean }) {
     <KitApp view="wins" host fillWindow scale={labScale()} banner={BANNER} bannerPosition="72% 38%" aura={0.08}>
       <HostSide />
       <Main><Top /></Main>
-      {props.pod ? <KitPodRail session={null} communityId="lab" pod={pod} onChanged={noop} /> : (
+      {props.pod ? <KitPodRail session={labSession} communityId="lab" pod={pod} onChanged={noop} /> : (
         <Rail index={1} label="Home">
-          <KitHomeRail session={null} communityId="lab" audience="host" snapshot={snapshot} presence={presence} now={Date.now()}
+          <KitHomeRail session={labSession} communityId="lab" audience="host" snapshot={snapshot} presence={presence} now={Date.now()}
             onOpenEvents={noop} onOpenChannelByName={noop} onOpenMembers={noop} onOpenKnowledge={noop} />
         </Rail>
       )}
