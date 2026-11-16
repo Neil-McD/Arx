@@ -374,8 +374,9 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
 - **Home moments:** `communityHomeMoments` ("since you were last here" from the
   visit before this one, and a member's next step; ranked in
   `shared/communityHomeMoments.ts`). Table: `communityMemberVisits`.
-- **Agent on/off:** `communityAgent.getCommunityAgentOn` (pages show the guide only
-  when the Agent plan is paid and the agent is enabled).
+- **Agent on/off:** `agent_on` on the access record
+  (`communityAccessQueries.getMyCommunityAccess`, from `communityApps.communityAgentIsOn`);
+  pages show the guide only when the Agent plan is paid and the agent is enabled.
 - **Handbook:** `communityHandbook` (the founder-approved handbook: owners and admins
   draft it with the agent, edit and approve it in Studio; members and the agent read
   only the approved text at `handbook.md`). Table: `communityHandbooks`.
