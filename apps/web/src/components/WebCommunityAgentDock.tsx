@@ -22,6 +22,7 @@ import {
   Square,
   X,
   House,
+  ArrowLeft,
 } from "lucide-react";
 import { isDesignV1Active } from "../../../../shared/designSystem";
 import { Chips, Dock, Icon, KitApp, Mine, Scroll, Talk, Theirs, Top, View, cx } from "../v1/kit";
@@ -1350,6 +1351,11 @@ function WebCommunityAgentDock(props, ref) {
     followConversationRef.current = true;
     setKitTalking(true);
   };
+  const closeTalk = () => {
+    followConversationRef.current = false;
+    setKitTalking(false);
+    scrollRef.current?.scrollTo({ top: 0 });
+  };
   const kitSubmit = (event: FormEvent) => {
     if (draftTextRef.current.trim() || attachmentsRef.current.length > 0) openTalk();
     void submit(event);
@@ -1366,9 +1372,17 @@ function WebCommunityAgentDock(props, ref) {
     <section className="community-agent-dock-panel has-home-rail is-kit-home" aria-label={presentation.title}>
       <KitApp view="home" host={kitHomeIsHost} part="main" talking={kitTalking || conversationNeedsYou}>
         <View index={0}>
+          {/* In the conversation the top row stays put and is the way back to Home. */}
+          {kitTalking ? (
+            <Top titleView={0} title={
+              <button type="button" className="kit-home-back" onClick={closeTalk} aria-label="Back to Home" title="Back to Home">
+                <ArrowLeft size={16} strokeWidth={1.8} aria-hidden="true" />Home
+              </button>
+            } />
+          ) : null}
           {/* The top row scrolls with Home, so the eyebrow's glow is never cut. */}
           <Scroll ref={scrollRef}>
-            <Top title="Home" titleView={0} />
+            {kitTalking ? null : <Top title="Home" titleView={0} />}
             <WebCommunityHomeSection
               {...props.home}
               session={props.session}
