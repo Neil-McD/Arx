@@ -49,6 +49,10 @@ test("the feed's loading line and its posts are separate elements", () => {
   const feed = read("apps/web/src/v1/KitChannelFeed.tsx");
   expect(feed).toContain('<div key="loading" className="community-interaction-state" aria-live="polite">');
   expect(feed).toContain('<div key="feed" className={cx("feed")}>');
+  // The phone's feed, the same way.
+  const phoneFeed = read("apps/web/src/components/communityInteractionFeed.tsx");
+  expect(phoneFeed).toContain('<div key="loading" className="community-interaction-state" aria-live="polite">');
+  expect(phoneFeed).toContain('<div key="feed" className="community-interaction-feed">');
 });
 
 test("a channel's header row is held until its record arrives", () => {
