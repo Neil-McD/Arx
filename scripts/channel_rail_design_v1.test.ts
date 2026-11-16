@@ -84,8 +84,22 @@ test("design v1: people who manage members get the table and the record", () => 
   design.v1 = true;
   const html = renderToStaticMarkup(React.createElement(ChannelRosterPanel, {
     ...props, narrowOpen: true, memberSettings: { ...props.memberSettings, canManageMembers: true } }));
+  // The host's page is fetched on demand: its place is held while it loads.
   expect(html).toContain('class="members-page is-kit"');
   expect(html).toContain('aria-label="Member record"');
+});
+
+test("design v1: the host's Members page is a toolbar and a table, with nobody opened", async () => {
+  const { KitMembersPage } = await import("../apps/web/src/v1/KitMembersPage");
+  const html = renderToStaticMarkup(React.createElement(KitMembersPage, {
+    communityName: "Kiln", joinRequests: [{ id: "r", userId: "u", displayName: "Kai", avatarUrl: null, message: null, createdAtLabel: "today" }],
+    decidingJoinRequestId: null, onApprove: () => {}, onDecline: () => {}, currentUserId: null, recordContainer: null,
+    getAvatarColor: () => "#000", getInitials: (name: string) => name.slice(0, 1) }));
+  expect(html).toContain('class="members-page is-kit"');
+  expect(html).not.toContain("has-picked");
+  expect(html).toContain('aria-label="Search members by name"');
+  expect(html).toContain("One person is waiting to join");
+  expect(html).toContain("Review");
 });
 
 test("design v1: a thread names itself and its channel, and has a close button", async () => {
