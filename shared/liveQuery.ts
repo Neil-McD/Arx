@@ -1,7 +1,9 @@
 import { useCallback, useSyncExternalStore } from "react";
-import { anyApi } from "convex/server";
 import { resolveAuthSubject, type AuthSessionLike } from "./authSession";
-import { acquireAuthenticatedConvexRealtimeClient } from "./convexRealtimeAuth";
+import {
+  acquireAuthenticatedConvexRealtimeClient,
+  onAuthenticatedConvexRealtimeSubjectClosed,
+} from "./convexRealtimeAuth";
 import { requireConvexUrl } from "./convexAuthenticatedClient";
 
 // One way for a page to read data that stays true (docs/specs/
@@ -17,6 +19,15 @@ import { requireConvexUrl } from "./convexAuthenticatedClient";
 //   LINGER_MS, so going back draws it at once instead of blank.
 
 const LINGER_MS = 30_000;
+
+// The queries pages may read live. A fixed list, so the release check can
+// prove each one is a public query (scripts/convex_client_operation_integrity_proof.ts)
+// and no page can ask for any other function by name.
+export type LiveQueryName =
+  | "communityBriefs:getPlaceBrief"
+  | "communityBrain:getBrainMap"
+  | "communityEvents:listCommunityEvents"
+  | "communityPublic:getCommunityPresenceSummary";
 
 export type LiveResult<T> = { data: T | undefined; error: unknown };
 const NOTHING: LiveResult<never> = { data: undefined, error: null };
@@ -45,13 +56,30 @@ export function liveQueryKey(subject: string, name: string, args: Record<string,
   return `${subject}\u0000${name}\u0000${stable(args)}`;
 }
 
-function functionRef(name: string): unknown {
-  const [module, fn] = name.split(":");
-  if (!module || !fn) throw new Error(`live_query_name_invalid:${name}`);
-  return (anyApi as any)[module][fn];
+// Bumped when a person's connection closes; pages showing their answers then
+// subscribe again, over a fresh connection.
+let generation = 0;
+const generationListeners = new Set<() => void>();
+function subscribeGeneration(onChange: () => void): () => void {
+  generationListeners.add(onChange);
+  return () => { generationListeners.delete(onChange); };
 }
 
-function open(key: string, session: unknown, name: string, args: Record<string, unknown>): Entry {
+onAuthenticatedConvexRealtimeSubjectClosed((subject) => {
+  let dropped = false;
+  for (const [key, entry] of entries) {
+    if (!key.startsWith(`${subject}\u0000`)) continue;
+    if (entry.linger !== null) clearTimeout(entry.linger);
+    entries.delete(key);
+    entry.stop();
+    dropped = true;
+  }
+  if (!dropped) return;
+  generation += 1;
+  for (const listener of [...generationListeners]) listener();
+});
+
+function open(key: string, session: unknown, name: LiveQueryName, args: Record<string, unknown>): Entry {
   const entry: Entry = { snapshot: NOTHING, listeners: new Set(), stop: () => undefined, linger: null };
   const publish = (next: LiveResult<unknown>) => {
     entry.snapshot = next;
@@ -59,7 +87,8 @@ function open(key: string, session: unknown, name: string, args: Record<string, 
   };
   try {
     const lease = acquireAuthenticatedConvexRealtimeClient({ convexUrl: requireConvexUrl(), session });
-    const watch = lease.client.watchQuery(functionRef(name) as any, args as any);
+    // A name string is a function reference at runtime (convex/server getFunctionName).
+    const watch = lease.client.watchQuery(name as any, args as any);
     const read = () => {
       try {
         const value = watch.localQueryResult();
@@ -92,9 +121,10 @@ function releaseEntry(key: string, entry: Entry): void {
 }
 
 // args null: nothing to read (signed out, or not this page's turn).
-export function useLiveQuery<T>(session: unknown, name: string, args: Record<string, unknown> | null): LiveResult<T> {
+export function useLiveQuery<T>(session: unknown, name: LiveQueryName, args: Record<string, unknown> | null): LiveResult<T> {
   const subject = session ? resolveAuthSubject(session as AuthSessionLike) : null;
   const key = subject && args ? liveQueryKey(subject, name, args) : null;
+  const gen = useSyncExternalStore(subscribeGeneration, () => generation, () => 0);
   const subscribe = useCallback((onChange: () => void) => {
     if (!key || !args) return () => undefined;
     const entry = entries.get(key) ?? open(key, session, name, args);
@@ -106,9 +136,10 @@ export function useLiveQuery<T>(session: unknown, name: string, args: Record<str
       entry.listeners.delete(onChange);
       releaseEntry(key, entry);
     };
-    // The key holds the session's person, the name and the arguments.
+    // The key holds the session's person, the name and the arguments; gen
+    // changes when that person's connection was closed.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [key]);
+  }, [key, gen]);
   const getSnapshot = useCallback(
     () => (key ? (entries.get(key)?.snapshot as LiveResult<T> | undefined) ?? NOTHING : NOTHING),
     [key],
