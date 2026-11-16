@@ -50,3 +50,14 @@ test("the feed's loading line and its posts are separate elements", () => {
   expect(feed).toContain('<div key="loading" className="community-interaction-state" aria-live="polite">');
   expect(feed).toContain('<div key="feed" className={cx("feed")}>');
 });
+
+test("a channel's header row is held until its record arrives", () => {
+  expect(read("apps/web/src/components/WebCommunityInteractionProjection.tsx"))
+    .toMatch(/\) : isDesignV1Active\(\) \? \([\s\S]{0,220}<header className="community-channel-header" aria-hidden="true" \/>/);
+});
+
+test("Knowledge holds its builder row and draws its right column as one piece", () => {
+  const classroom = read("apps/web/src/v1/KitClassroom.tsx");
+  expect(classroom).toMatch(/usePanelSettled\(briefSettled && brainSettled && progressLoaded\)/);
+  expect(classroom).toMatch(/props\.onOpenGuideMemory && \(canWriteNotes \|\| \(props\.canManage && !notesAnswered\)\)/);
+});
