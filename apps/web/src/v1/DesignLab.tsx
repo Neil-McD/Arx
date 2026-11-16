@@ -29,6 +29,7 @@ import {
   Top,
   View,
   Ask,
+  Icon,
 } from "./kit";
 import { PanelBrain, labSession, rememberBrainMap } from "./KitBrain";
 import { BriefPart } from "./KitBrief";
@@ -56,13 +57,12 @@ function HostSide() {
       <Spacer height={10} />
       <NavRow icon="home" label="Home" view="home" />
       <NavRow icon="inbox" label="Inbox" view="inbox" hint="4" />
-      <Group>Channels</Group>
+      <Group action={<span className={cx("grp-add", "h-only")} aria-label="Add a channel"><Icon name="plus" /></span>}>Channels</Group>
       <NavRow icon="hash" label="general" />
       <NavRow icon="hash" label="wins" view="wins" unread dot />
       <NavRow icon="hash" label="tech" />
       <NavRow icon="hash" label="biz" />
       <NavRow icon="lock" label="founders" />
-      <NavRow icon="plus" label="Add a channel" add hostOnly />
       <Group>Community</Group>
       <NavRow icon="stars" label="Knowledge" view="know" hint="3 new" />
       <NavRow icon="cal" label="Events" view="events" live="20 min" />

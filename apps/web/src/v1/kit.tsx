@@ -208,8 +208,10 @@ export function NavRow(props: {
   );
 }
 
-export function Group(props: { children: ReactNode }) {
-  return <div className={cx("grp")}>{props.children}</div>;
+// A section heading; `action` sits at its end, where counts sit on rows
+// (Channels' +).
+export function Group(props: { children: ReactNode; action?: ReactNode }) {
+  return <div className={cx("grp", props.action ? "has-act" : undefined)}>{props.children}{props.action ?? null}</div>;
 }
 
 export function Foot(props: { children: ReactNode }) {
