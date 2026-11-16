@@ -42,9 +42,15 @@ export function KitBrainMap(props: {
   const mineGlow = `brain-mine-${uid}`;
   const page = props.size === "page";
   const base = useMemo(() => layoutBrain(props.map, props.now), [props.map, props.now]);
+  // The whole map at rest, with room for its names so none is cut at the edge.
+  const rest = useMemo(() => {
+    let { minX, minY, maxX, maxY } = base.bounds;
+    for (const { box } of page ? chooseLabels(base, { max: 9, charW: 7, lineH: 15 }) : []) { minX = Math.min(minX, box.x - 8); maxX = Math.max(maxX, box.x + box.w + 8); }
+    return { minX, minY, maxX, maxY };
+  }, [base, page]);
   // The view (page only): how far in, and what is at its middle.
-  const [view, setView] = useState<BrainView>(() => fitView(base.bounds));
-  useEffect(() => { setView(fitView(base.bounds)); }, [props.map]); // eslint-disable-line react-hooks/exhaustive-deps
+  const [view, setView] = useState<BrainView>(() => fitView(rest));
+  useEffect(() => { setView(fitView(rest)); }, [props.map]); // eslint-disable-line react-hooks/exhaustive-deps
   const k = page ? view.k : 1;
   const layout = useMemo(() => scaleLayout(base, k), [base, k]);
   // The biggest subjects are where the community knows what no course teaches.
@@ -52,12 +58,6 @@ export function KitBrainMap(props: {
   // Closer in, more things have room for their name.
   const labels = useMemo(() => page ? chooseLabels(layout, { max: Math.round(9 * k * k), charW: 7, lineH: 15 }) : [], [layout, page, k]);
   const labelled = new Map(labels.map((label) => [label.id, label]));
-  // The whole map at rest, with room for its names so none is cut at the edge.
-  const rest = useMemo(() => {
-    let { minX, minY, maxX, maxY } = base.bounds;
-    for (const { box } of page ? chooseLabels(base, { max: 9, charW: 7, lineH: 15 }) : []) { minX = Math.min(minX, box.x - 8); maxX = Math.max(maxX, box.x + box.w + 8); }
-    return { minX, minY, maxX, maxY };
-  }, [base, page]);
   const win = viewWindow(page ? view : fitView(rest), rest);
 
   // Gestures (page only). Offsets from the middle of the drawing, in view units.
