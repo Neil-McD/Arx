@@ -54,6 +54,10 @@ test("a post in a pod's room makes that pod's memory due, only where the guide w
 });
 
 test("a pod's review reads its room, writes the pod's notes from its own posts, and can't cite another pod", async () => {
+  // The posts are dated NOW; a review reads at most the last twelve hours,
+  // so the clock is pinned beside them (the test once failed by the calendar).
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(NOW + 60_000);
   vi.stubEnv("OPENAI_API_KEY", "test-key");
   vi.stubEnv("POLYNET_LUNA_INPUT_COST_MICROS_PER_MILLION_TOKENS", "1000000");
   vi.stubEnv("POLYNET_LUNA_OUTPUT_COST_MICROS_PER_MILLION_TOKENS", "2000000");
