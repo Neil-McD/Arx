@@ -44,3 +44,9 @@ test("the channel feed's box is in place before its posts", () => {
   expect(read("apps/web/src/components/WebCommunityInteractionProjection.tsx")).toContain('<KitApp view="wins" part="flow" className="kit-channel-feed-part">');
   expect(read("apps/web/src/styles/design-v1.css")).toMatch(/\.community-interaction-feed-scroll > \.kit-channel-feed-part \{[^}]*flex: 1 0 auto;/);
 });
+
+test("the feed's loading line and its posts are separate elements", () => {
+  const feed = read("apps/web/src/v1/KitChannelFeed.tsx");
+  expect(feed).toContain('<div key="loading" className="community-interaction-state" aria-live="polite">');
+  expect(feed).toContain('<div key="feed" className={cx("feed")}>');
+});
