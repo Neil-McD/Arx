@@ -215,10 +215,7 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
   on, or nothing when the posts are only noise; read back as
   `brief.md` and `pods/<pod>/brief.md` through one reader, `readPlaceBrief`;
   the same reader feeds the first part of Home's and a pod's right panel,
-  `getPlaceBrief`; the panels' "community brain" and "learned lately" read
-  `communityMemory:getLearnedLately`: counts for everyone in the community,
-  every title for a builder, and for a member only titles learned from posts
-  they can read; `communityKnowledgeUse` keeps one row of counts per community
+  `getPlaceBrief`; `communityKnowledgeUse` keeps one row of counts per community
   per day of the notes and lessons answers opened, added hours later at a
   random time so nothing traces to a conversation, for how much each is used
   and what is answered together; `communityBrain` (`getBrainMap`) reads it all
@@ -226,6 +223,10 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
   is filed, the pods they can enter, and what is answered together, with the
   same naming rules; `shared/communityBrainLayout.ts` places it by fixed
   rules so it keeps its shape as it grows, and `KitBrainMap` draws it;
+  the panels' "community brain" (`PanelBrain` in `KitBrain`: a count, a small
+  map with no words, the latest names) reads the same map: counts for everyone
+  in the community, every title for a builder, and for a member only titles
+  learned from posts they can read;
   `KitBrainPage` is the map as a page in Knowledge, and `getBrainNote` reads
   one picked thing with the same rules: a member never gets a note's text),
   `communityEvidence*`,

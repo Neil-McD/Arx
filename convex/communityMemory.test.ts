@@ -1,6 +1,7 @@
 /// <reference types="vite/client" />
 import { convexTest } from "convex-test";
 import { MEMORY_REFUSAL_WORDS, memoryIndexRefusal, parseMemoryAbout, parseMemoryApplyCall } from "../shared/communityMemory";
+import { brainFact, latestLearned } from "../shared/communityBrain";
 import { expect, test } from "vitest";
 import { api, internal } from "./_generated/api";
 import schema from "./schema";
@@ -237,20 +238,24 @@ test("what the community learned: a member sees only names learned from posts th
     slug: "vip-exceptions", title: "VIP refund exceptions", bodyMd: "Only for the first ten.", source: "founder", searchText: "vip refund exceptions",
     createdAt: Date.now(), updatedAt: Date.now() }));
 
-  const member: any = await asMember.query(api.communityMemory.getLearnedLately, { communityId: w.communityId });
-  expect(member).toMatchObject({ total: 2, can_manage: false });
-  expect(member.latest.map((note: any) => note.title)).toEqual([learnedTitle]);
+  // The panels read it from the community brain's map.
+  const member: any = await asMember.query(api.communityBrain.getBrainMap, { communityId: w.communityId });
+  expect(member).toMatchObject({ counts: { learned: 2 }, can_manage: false });
+  expect(latestLearned(member, 3).map((note) => note.title)).toEqual([learnedTitle]);
   expect(JSON.stringify(member)).not.toContain("first ten");
-  const builder: any = await asOwner.query(api.communityMemory.getLearnedLately, { communityId: w.communityId });
+  expect(JSON.stringify(member)).not.toContain("VIP refund");
+  const builder: any = await asOwner.query(api.communityBrain.getBrainMap, { communityId: w.communityId });
   expect(builder.can_manage).toBe(true);
-  expect(builder.latest.map((note: any) => note.title).sort()).toEqual([learnedTitle, "VIP refund exceptions"].sort());
+  expect(latestLearned(builder, 3).map((note) => note.title).sort()).toEqual([learnedTitle, "VIP refund exceptions"].sort());
+  expect(brainFact(builder)).toMatch(/^2 learned/);
 
   // The post it was learned from is taken down: a member no longer sees its name.
   await t.run((ctx: any) => ctx.db.patch(w.open, { status: "hidden" }));
-  const after: any = await asMember.query(api.communityMemory.getLearnedLately, { communityId: w.communityId });
-  expect(after).toMatchObject({ total: 2, latest: [] });
+  const after: any = await asMember.query(api.communityBrain.getBrainMap, { communityId: w.communityId });
+  expect(after.counts.learned).toBe(2);
+  expect(latestLearned(after, 3)).toEqual([]);
   // Someone outside the community gets nothing.
-  await expect(t.withIdentity({ subject: "stranger" }).query(api.communityMemory.getLearnedLately, { communityId: w.communityId })).rejects.toThrow();
+  await expect(t.withIdentity({ subject: "stranger" }).query(api.communityBrain.getBrainMap, { communityId: w.communityId })).rejects.toThrow();
 });
 
 // The community brain: every note is filed under the lesson it adds to, or a

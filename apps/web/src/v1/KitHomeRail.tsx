@@ -8,7 +8,7 @@ import type { CloudCommunityHomeSnapshot } from "../../../../shared/cloudCommuni
 import type { CommunityPresenceSummary } from "../../../../shared/communityTypes";
 import { UserAvatar } from "../../../../shared/UserAvatar";
 import { cx } from "./kit";
-import { LearnedRows, learnedFact, useLearnedLately } from "./KitBrain";
+import { PanelBrain, useBrainMap } from "./KitBrain";
 import { askToOpenBrain } from "./KitBrainPage";
 import { BriefPart, usePlaceBrief } from "./KitBrief";
 import { KitNextEvent } from "./KitNextEvent";
@@ -40,7 +40,7 @@ export function KitHomeRail(props: {
   onOpenMembers: () => void;
   onOpenKnowledge?: () => void;
 }) {
-  const learned = useLearnedLately(props.session, props.communityId);
+  const { map: brain } = useBrainMap(props.session, props.communityId);
   const brief = usePlaceBrief(props.session, props.communityId, null, props.agentOn !== false);
   const faces = props.presence?.online_faces ?? [];
   const { snapshot } = props;
@@ -53,12 +53,7 @@ export function KitHomeRail(props: {
       <KitNextEvent session={props.session} communityId={props.communityId} now={props.now} onOpenEvents={props.onOpenEvents} />
       {/* What the community knows: everyone sees how much and what is new;
           the server sends a member only the names they may read. */}
-      {learned && learned.total ? (
-        <PanelPart label="The community brain" fact={learnedFact(learned)}
-          action={props.onOpenKnowledge ? <PanelAction onClick={() => { askToOpenBrain(); props.onOpenKnowledge!(); }}>Open</PanelAction> : null}>
-          <LearnedRows view={learned} now={props.now} max={2} />
-        </PanelPart>
-      ) : null}
+      <PanelBrain map={brain} now={props.now} max={2} onOpen={props.onOpenKnowledge ? () => { askToOpenBrain(); props.onOpenKnowledge!(); } : undefined} />
       <PanelPart label="Here" fact={members ? `${members} ${members === 1 ? "member" : "members"}` : null}>
         <div className={cx("ln")}>
           {faces.length ? (
