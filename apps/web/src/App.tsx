@@ -1614,6 +1614,7 @@ export default function App() {
       communityId: activeCommunityId,
       channelSlug: communityChannelSlug,
       inChat: activePage === "community" && communityTab === "chat",
+      channelReady: Boolean(activeCommunityId && activeCommunityChannel),
       canViewMembers: canViewMembersActiveCommunity,
       closeDetail: () => {
         if (showMobileShell) prepareMobileGlobalNavigation();
