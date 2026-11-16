@@ -16,7 +16,7 @@ import {
   subscribeCloudCommunityActivityEvents,
   type CloudCommunityChatLiveClient,
 } from "../../../../shared/cloudCommunityChatGateway";
-import { applyLiveRootWindow, mergeOlderRootPage } from "./communityRootWindows";
+import { applyLiveRootWindow, mergeOlderRootPage, oldestRootCreatedAtMs } from "./communityRootWindows";
 import type { CommunityActivityEvent } from "../../../../shared/communityTypes";
 import {
   subscribeCloudCommunityAgentServeIssue,
@@ -578,6 +578,9 @@ export function useWebCommunityInteractionProjection<
             const replaceCached = firstUpdate && hasCurrentRoots
               && incomingRoots.length >= COMMUNITY_INTERACTION_ROOT_LIMIT;
             firstUpdate = false;
+            // The older pages are gone, so loading older posts continues from
+            // just below this window, leaving nothing out.
+            if (replaceCached) setNextBeforeCreatedAt(oldestRootCreatedAtMs(incomingRoots));
             setRoots((current) =>
               applyLiveRootWindow(
                 replaceCached ? [] : current.filter((bundle) => rootMatchesChannel(bundle, activeCommunityId, activeChannelId)),
