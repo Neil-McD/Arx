@@ -607,7 +607,7 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
         >
           {kitFeed ? (
             // Design system v1 on desktop: the mock's feed, from the kit.
-            <KitApp view="wins" part="flow">
+            <KitApp view="wins" part="flow" className="kit-channel-feed-part">
               <KitChannelFeed
                 {...props}
                 editing={editing}

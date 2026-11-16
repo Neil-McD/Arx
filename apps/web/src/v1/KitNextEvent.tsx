@@ -15,26 +15,32 @@ import { PanelAction, PanelNext, PanelPart } from "./KitPanel";
 
 const LOOKAHEAD_MS = 14 * 86_400_000;
 
-export function KitNextEvent(props: {
-  session: unknown;
-  communityId: string;
-  now: number;
-  onOpenEvents: () => void;
-}) {
-  // Live (shared/liveQuery.ts): an event added, moved or cancelled anywhere
-  // shows here at once. The window moves by the hour, so the subscription
-  // isn't remade on every draw.
-  const hour = Math.floor(props.now / 3_600_000) * 3_600_000;
-  const subject = props.session ? resolveAuthSubject(props.session as AuthSessionLike) : null;
-  const { data } = useLiveQuery<unknown>(props.session, "communityEvents:listCommunityEvents", subject ? {
+// The read behind the part: the events of the coming two weeks, live
+// (shared/liveQuery.ts): an event added, moved or cancelled anywhere shows at
+// once. The window moves by the hour, so the subscription isn't remade on
+// every draw. data undefined: not answered yet.
+export function useNextEventRead(session: unknown, communityId: string, now: number): { data: unknown; settled: boolean } {
+  const hour = Math.floor(now / 3_600_000) * 3_600_000;
+  const subject = session ? resolveAuthSubject(session as AuthSessionLike) : null;
+  const { data, error } = useLiveQuery<unknown>(session, "communityEvents:listCommunityEvents", subject ? {
     authSubject: subject,
-    communityId: props.communityId,
+    communityId,
     startIso: new Date(hour - 6 * 3_600_000).toISOString(),
     endIso: new Date(hour + LOOKAHEAD_MS + 3_600_000).toISOString(),
     includeCancelled: false,
     overlap: true,
     limit: 50,
   } : null);
+  return { data, settled: data !== undefined || Boolean(error) };
+}
+
+export function KitNextEvent(props: {
+  session: unknown;
+  communityId: string;
+  now: number;
+  onOpenEvents: () => void;
+}) {
+  const { data } = useNextEventRead(props.session, props.communityId, props.now);
   const event = useMemo(
     () => (data === undefined ? undefined : splitCommunityEvents(coerceGatewayRows<CloudCommunityEvent>(data), props.now).featured),
     // Which event is next changes as time passes: read again each minute.

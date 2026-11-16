@@ -1338,8 +1338,10 @@ function WebCommunityAgentDock(props, ref) {
 
   // A turn under way, an approval waiting or an error opens the conversation
   // by itself, so nothing that needs you is hidden behind Home at rest.
+  // Opening the guide's thread on arrival is not one of them: it loads behind
+  // Home, so Home's layout is the same before and after (no top row moving).
   const conversationNeedsYou =
-    turnIsActive || isPreparing || Boolean(dockError) || Boolean(memberLimitNotice) || persistentResourceChangesetCards.length > 0;
+    turnIsActive || Boolean(dockError) || Boolean(memberLimitNotice) || persistentResourceChangesetCards.length > 0;
   // Home on the kit: Home in design v1, the host's and a member's, on desktop
   // and as the phone's Home tab.
   const agentOn = useCommunityAgentOn();

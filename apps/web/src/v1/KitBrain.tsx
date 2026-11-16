@@ -29,13 +29,14 @@ export function rememberBrainMap(communityId: string, podChannelId: string | nul
 // member's doesn't); answers are kept per signed-in person, never shared.
 // map null: not read yet, or it could not be read; a panel never fails for
 // want of it.
-export function useBrainMap(session: unknown, communityId: string | null, podChannelId?: string | null): { map: BrainMap | null; failed: boolean } {
+export function useBrainMap(session: unknown, communityId: string | null, podChannelId?: string | null): { map: BrainMap | null; failed: boolean; settled: boolean } {
   const lab = session === LAB_SESSION;
   const subject = session && !lab ? resolveAuthSubject(session as AuthSessionLike) : null;
   const { data, error } = useLiveQuery<BrainMap>(session, "communityBrain:getBrainMap",
     subject && communityId ? { authSubject: subject, communityId, ...(podChannelId ? { podChannelId } : {}) } : null);
-  if (lab) return { map: labMaps.get(`${communityId ?? ""}:${podChannelId ?? ""}`) ?? null, failed: false };
-  return { map: data ?? null, failed: Boolean(error) && !data };
+  if (lab) return { map: labMaps.get(`${communityId ?? ""}:${podChannelId ?? ""}`) ?? null, failed: false, settled: true };
+  // settled: it has answered (a map, or the news that it can't be read).
+  return { map: data ?? null, failed: Boolean(error) && !data, settled: data !== undefined || Boolean(error) };
 }
 
 // When something was learned, in a word: "today", "Tue", "Nov 3".

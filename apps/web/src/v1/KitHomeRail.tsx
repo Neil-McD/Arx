@@ -10,9 +10,9 @@ import { UserAvatar } from "../../../../shared/UserAvatar";
 import { cx } from "./kit";
 import { PanelBrain, useBrainMap } from "./KitBrain";
 import { askToOpenBrain } from "./KitBrainPage";
-import { BriefPart, usePlaceBrief } from "./KitBrief";
-import { KitNextEvent } from "./KitNextEvent";
-import { PanelAction, PanelLine, PanelPart } from "./KitPanel";
+import { BriefPart, usePlaceBriefRead } from "./KitBrief";
+import { KitNextEvent, useNextEventRead } from "./KitNextEvent";
+import { PanelAction, PanelLine, PanelPart, usePanelSettled } from "./KitPanel";
 
 function hereLine(presence: CommunityPresenceSummary | null | undefined): string {
   const faces = presence?.online_faces ?? [];
@@ -40,13 +40,18 @@ export function KitHomeRail(props: {
   onOpenMembers: () => void;
   onOpenKnowledge?: () => void;
 }) {
-  const { map: brain } = useBrainMap(props.session, props.communityId);
-  const brief = usePlaceBrief(props.session, props.communityId, null, props.agentOn !== false);
+  const { map: brain, settled: brainSettled } = useBrainMap(props.session, props.communityId);
+  const { brief, settled: briefSettled } = usePlaceBriefRead(props.session, props.communityId, null, props.agentOn !== false);
+  const { settled: nextSettled } = useNextEventRead(props.session, props.communityId, props.now);
+  // The column draws as one piece once its parts have answered, so "Here"
+  // is never drawn at the top and then pushed down by the brief and the map.
+  const settled = usePanelSettled(briefSettled && nextSettled && brainSettled);
   const faces = props.presence?.online_faces ?? [];
   const { snapshot } = props;
   const members = snapshot.memberCount;
   const waiting = props.audience === "host" ? snapshot.joinRequestsPending : 0;
 
+  if (!settled) return null;
   return (
     <>
       {brief ? <BriefPart brief={brief} now={props.now} onOpenChannel={(channel) => props.onOpenChannelByName(channel.name)} /> : null}

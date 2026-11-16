@@ -5,8 +5,23 @@
 // are set apart by space and type. A part with nothing to say is not drawn.
 // Rows are one line and never wrap. What only a host does sits as an action
 // in a part's label row.
-import type { ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { cx } from "./kit";
+
+// Layout before data: a panel whose parts load separately draws once they
+// have all answered, as one piece, so no part is drawn and then pushed down
+// by one that arrives above it. If an answer is slow, it stops waiting after
+// PANEL_WAIT_MS and draws what it has.
+export const PANEL_WAIT_MS = 3000;
+export function usePanelSettled(allSettled: boolean): boolean {
+  const [waitedEnough, setWaitedEnough] = useState(false);
+  useEffect(() => {
+    if (allSettled) return;
+    const timer = setTimeout(() => setWaitedEnough(true), PANEL_WAIT_MS);
+    return () => clearTimeout(timer);
+  }, [allSettled]);
+  return allSettled || waitedEnough;
+}
 
 // A part: a small label, a fact after it, an action on its right.
 export function PanelPart(props: { label: string; fact?: string | null; action?: ReactNode; children?: ReactNode }) {
