@@ -229,6 +229,8 @@ export function KitClassroom(props: {
       setLessonId(null); autoLessonRef.current = null; return;
     }
     const wanted = lessonToReopenRef.current;
+    // The course can arrive before its lessons: wait for them before giving up.
+    if (wanted && !props.loaded) return;
     lessonToReopenRef.current = null;
     if (wanted && open.lessons.some((lesson) => lesson.id === wanted)) { autoLessonRef.current = null; setLessonId(wanted); return; }
     if (lessonId && lessonId !== autoLessonRef.current && open.lessons.some((lesson) => lesson.id === lessonId)) return;
@@ -236,7 +238,7 @@ export function KitClassroom(props: {
     autoLessonRef.current = next;
     setLessonId(next);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open?.course.id, open?.lessons.length, progressLoaded]);
+  }, [open?.course.id, open?.lessons.length, progressLoaded, props.loaded]);
 
   useEffect(() => {
     if (lessonToReopenRef.current) return;
