@@ -22,13 +22,15 @@ import { fetchCloudCommunityMemberBillingHistory, type CloudCommunityMemberBilli
 import { formatPrice } from "../../../../shared/communityMemberRecords";
 import { CommunityChannelSessionContext } from "../components/CommunityChannelSessionContext";
 import type { CommunityAdmissionJoinRequest } from "../components/CommunityJoinRequestReview";
+import { askInApp } from "../../../../shared/inAppConfirm";
+import { compableMembers, matchesMemberSearch, memberKey, membersCsv, toggleAllShown } from "../../../../shared/communityMembersTable";
 import { Btn, cx, Icon, KitApp, Rail, Sep, Sec, Top, View } from "./kit";
+import { Face, JoinRequestsDrawer, JoinRequestsLine, MembersBulkBar, MembersTable, MembersToolbar, type MembersFilter, type MembersSortKey } from "./KitMembersTable";
 
 type MembersView = "everyone" | `price:${string}` | "on_hold" | "cancelling" | "comped" | "know_little" | "past";
-type SortKey = "name" | "plan" | "active";
 
 const OWNER_KEY = "owner";
-const keyOf = (row: { membership_id: string | null }) => row.membership_id ?? OWNER_KEY;
+const keyOf = memberKey;
 
 export function memberTimeFor(iso: string | null, now: number): string {
   if (!iso) return "—";
@@ -50,21 +52,6 @@ export function shortDay(iso: string | null, now: number): string | null {
   if (!Number.isFinite(date.getTime())) return null;
   const sameYear = date.getFullYear() === new Date(now).getFullYear();
   return date.toLocaleDateString("en-US", sameYear ? { month: "short", day: "numeric" } : { month: "short", day: "numeric", year: "numeric" });
-}
-
-function csvFor(rows: CloudMemberRecordRow[]): string {
-  const cell = (value: string | null) => `"${String(value ?? "").replace(/"/g, '""')}"`;
-  const head = ["Name", "Handle", "Role", "Plan", "Standing", "Joined", "Last active", "Working on"];
-  return [head.map(cell).join(","), ...rows.map((row) => [row.name, row.handle, row.role, row.plan.label, row.money?.label ?? "", row.joined_at, row.last_active_at, row.working_on].map(cell).join(","))].join("\n");
-}
-
-function Face(props: { name: string; url: string | null; seed: string; size?: "s"; getAvatarColor: (id: string) => string; getInitials: (name: string) => string; style?: CSSProperties }) {
-  return (
-    <span className={cx("av", props.size)} style={props.style}>
-      <UserAvatar className="community-dm-kit-avatar" readyClassName="has-image" name={props.name} imageUrl={props.url} alt=""
-        fallback={<span>{props.getInitials(props.name)}</span>} fallbackStyle={{ backgroundColor: props.getAvatarColor(props.seed) }} />
-    </span>
-  );
 }
 
 const roleTag = (role: string) => (role === "owner" ? "host" : role === "admin" ? "admin" : role === "moderator" ? "moderator" : null);
@@ -90,11 +77,19 @@ export function KitMembersPage(props: {
   const [view, setView] = useState<MembersView>("everyone");
   const [loaded, setLoaded] = useState<{ view: string; rows: CloudMemberRecordRow[]; past: CloudPastMemberRow[]; cursor: string | null; done: boolean } | null>(null);
   const [loading, setLoading] = useState(false);
-  const [sort, setSort] = useState<{ key: SortKey; desc: boolean } | null>(null);
+  const [sort, setSort] = useState<{ key: MembersSortKey; desc: boolean } | null>(null);
   const [openKey, setOpenKey] = useState<string | null>(null);
-  // Narrow windows (below 1024px) show Members as layers: picking someone
-  // replaces the table with their record, with a way back.
-  const [picked, setPicked] = useState(false);
+  // What is open beside the table: one member's record, or the people
+  // waiting to join. Nothing until the host picks (in a narrow window it
+  // takes the table's place, with a way back).
+  const [side, setSide] = useState<"record" | "requests" | null>(null);
+  const picked = side !== null;
+  const [search, setSearch] = useState("");
+  const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
+  const [bulkBusy, setBulkBusy] = useState<string | null>(null);
+  // Another view or community: what was ticked there is let go.
+  useEffect(() => { setSelected(new Set()); }, [scope?.communityId, view]);
+  useEffect(() => { setSide(null); setOpenKey(null); setSearch(""); }, [scope?.communityId]);
   const [record, setRecord] = useState<CloudMemberRecord | null>(null);
   const [recordVersion, setRecordVersion] = useState(0);
   const [tableVersion, setTableVersion] = useState(0);
@@ -160,12 +155,10 @@ export function KitMembersPage(props: {
     return () => observer.disconnect();
   }, [loaded, loading, loadMore]);
 
-  // The person who needs the host most opens first: on hold, then cancelling.
+  // A search looks through everyone, so the rest of the list is fetched.
   useEffect(() => {
-    if (!loaded || openKey || loaded.view !== "everyone") return;
-    const first = loaded.rows.find((row) => row.money?.kind === "on_hold") ?? loaded.rows.find((row) => row.money) ?? loaded.rows[0];
-    if (first) setOpenKey(keyOf(first));
-  }, [loaded, openKey]);
+    if (search.trim() && loaded && !loaded.done && !loading) void loadMore(false);
+  }, [search, loaded, loading, loadMore]);
 
   useEffect(() => {
     if (!scope || !openKey) return;
@@ -190,36 +183,63 @@ export function KitMembersPage(props: {
 
   const rows = useMemo(() => {
     if (!loaded || loaded.view !== view) return [];
-    const list = loaded.rows;
+    const list = search.trim() ? loaded.rows.filter((row) => matchesMemberSearch(row, search)) : loaded.rows;
     if (!sort) return list;
     const dir = sort.desc ? -1 : 1;
     return [...list].sort((a, b) => {
       if (sort.key === "name") return dir * a.name.localeCompare(b.name);
       if (sort.key === "plan") return dir * a.plan.label.localeCompare(b.plan.label);
+      if (sort.key === "joined") return dir * String(a.joined_at ?? "").localeCompare(String(b.joined_at ?? ""));
       return dir * String(a.last_active_at ?? "").localeCompare(String(b.last_active_at ?? ""));
     });
-  }, [loaded, view, sort]);
+  }, [loaded, view, sort, search]);
   const pastRows = loaded && loaded.view === "past" ? loaded.past : [];
   const counts = summary?.counts ?? null;
   const data = summary;
-  const needYou = (counts?.on_hold ?? 0) + (counts?.cancelling ?? 0);
   const waiting = props.joinRequests.length;
-  const lead = waiting > 0
-    ? (waiting === 1 ? "One person is waiting to join." : `${waiting} people are waiting to join.`)
-    : !data ? (failed ? "Members couldn't load." : " ")
-      : needYou > 0 ? (needYou === 1 ? "One member needs you." : `${needYou} members need you.`)
-        : "Everyone is in good standing.";
-
-  const chip = (id: MembersView, label: string, count: number | null) => (
-    <button key={id} type="button" className={cx("chip", view === id && "sel")} aria-pressed={view === id} onClick={() => setView(id)}>
-      {label}{count !== null ? ` · ${count}` : ""}
-    </button>
-  );
-  const header = (key: SortKey, label: string) => (
-    <button type="button" className={cx("th-sort")} onClick={() => setSort((current) => ({ key, desc: current?.key === key ? !current.desc : key === "active" }))}>
-      {label}{sort?.key === key ? <Icon name="updown" /> : null}
-    </button>
-  );
+  // The status filter: the saved views, with their true counts.
+  const filters: MembersFilter[] = counts && data ? [
+    { id: "everyone", label: "Everyone", count: counts.everyone },
+    ...data.prices.map((price) => ({ id: `price:${price.price_point_id}`, label: price.label.replace(" · ", " "), count: price.count })),
+    ...(counts.on_hold ? [{ id: "on_hold", label: "On hold", count: counts.on_hold }] : []),
+    ...(counts.cancelling ? [{ id: "cancelling", label: "Cancelling", count: counts.cancelling }] : []),
+    ...(counts.comped ? [{ id: "comped", label: "Comped", count: counts.comped }] : []),
+    // A filter that would show everyone filters nothing, so it isn't offered.
+    ...(counts.know_little && (counts.know_little < counts.everyone || view === "know_little") ? [{ id: "know_little", label: "Know little", count: counts.know_little }] : []),
+    ...(counts.past ? [{ id: "past", label: "Past", count: counts.past }] : []),
+  ] : [{ id: "everyone", label: "Everyone", count: null }];
+  const lead = !data ? (failed ? "Members couldn't load." : " ")
+    : `Everyone in ${props.communityName}, what they pay and who needs you.`;
+  const chosen = loaded && loaded.view === view ? loaded.rows.filter((row) => selected.has(keyOf(row))) : [];
+  const download = (csv: string, suffix: string) => {
+    const url = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `${props.communityName.replace(/[^\w-]+/g, "-").toLowerCase() || "members"}-${suffix}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+  // Comp everyone ticked who is in for free, one at a time; whoever it
+  // didn't reach stays ticked.
+  const compSelected = async () => {
+    const who = compableMembers(chosen);
+    if (!scope || who.length === 0 || bulkBusy) return;
+    const yes = await askInApp({ message: who.length === 1 ? `Comp ${who[0].name}? They stay in without paying.` : `Comp ${who.length} members? They stay in without paying.`, yes: "Comp", no: "Cancel" });
+    if (!yes) return;
+    setBulkBusy("comp");
+    const done = new Set<string>();
+    try {
+      for (const row of who) {
+        await compCloudCommunityMember({ session: scope.session, communityId: scope.communityId, membershipId: row.membership_id! });
+        done.add(keyOf(row));
+      }
+    } catch { /* the rest stay ticked */ } finally {
+      setBulkBusy(null);
+      setSelected((last) => new Set([...last].filter((key) => !done.has(key))));
+      setTableVersion((version) => version + 1);
+      setRecordVersion((version) => version + 1);
+    }
+  };
   // Export is everyone in, every page, not just what is loaded.
   const [exporting, setExporting] = useState(false);
   const exportCsv = async () => {
@@ -234,13 +254,7 @@ export function KitMembersPage(props: {
         if (page.isDone) break;
         cursor = page.continueCursor;
       }
-      const blob = new Blob([csvFor(all)], { type: "text/csv" });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = `${props.communityName.replace(/[^\w-]+/g, "-").toLowerCase() || "members"}-members.csv`;
-      link.click();
-      URL.revokeObjectURL(url);
+      download(membersCsv(all), "members");
     } finally {
       setExporting(false);
     }
@@ -252,67 +266,25 @@ export function KitMembersPage(props: {
           {/* One header style everywhere: the title alone (the count is in the left column; On hold is a filter below). */}
           <Top title="Members" titleView={5} />
           <div className={cx("page")} style={{ overflowY: "auto" }}>
-            <p className={cx("lead")}><span className={cx("aura")}><Icon name="spark" /></span>{lead}</p>
-            {waiting > 0 ? (
-              <div className={cx("list")} style={{ marginTop: 14 }}>
-                {props.joinRequests.map((request) => (
-                  <div key={request.id} className={cx("mrow")}>
-                    <Face name={request.displayName ?? "Someone"} url={request.avatarUrl} seed={request.userId} getAvatarColor={props.getAvatarColor} getInitials={props.getInitials} />
-                    <div>
-                      <div className={cx("h")}><b>{request.displayName ?? "Someone"}</b><span>Asked {request.createdAtLabel}</span></div>
-                      {request.message ? <p>{request.message}</p> : null}
-                    </div>
-                    <span style={{ display: "flex", gap: 6 }}>
-                      <Btn small go onClick={() => props.onApprove(request.id)}>{props.decidingJoinRequestId === request.id ? "…" : "Approve"}</Btn>
-                      <button type="button" className={cx("btn sm no")} disabled={props.decidingJoinRequestId === request.id} onClick={() => props.onDecline(request.id)}>Decline</button>
-                    </span>
-                  </div>
-                ))}
-              </div>
-            ) : null}
-            {/* One line: who to show, and Export at its end. */}
-            <div className={cx("views")} role="group" aria-label="Show" style={{ marginTop: 22 }}>
-              {counts && data ? (
-                <>
-                  {chip("everyone", "Everyone", counts.everyone)}
-                  {data.prices.map((price) => chip(`price:${price.price_point_id}`, price.label.replace(" · ", " "), price.count))}
-                  {counts.on_hold ? chip("on_hold", "On hold", counts.on_hold) : null}
-                  {counts.cancelling ? chip("cancelling", "Cancelling", counts.cancelling) : null}
-                  {counts.comped ? chip("comped", "Comped", counts.comped) : null}
-                  {/* A filter that would show everyone filters nothing, so it isn't drawn. */}
-                  {counts.know_little && (counts.know_little < counts.everyone || view === "know_little") ? chip("know_little", "Know little", counts.know_little) : null}
-                  {counts.past ? chip("past", "Past", counts.past) : null}
-                </>
-              ) : null}
-              <button type="button" className={cx("chip")} style={{ marginLeft: "auto" }} onClick={() => void exportCsv()} disabled={!summary || exporting}>{exporting ? "Exporting…" : "Export"}</button>
-            </div>
+            <p className={cx("sub")} style={{ margin: 0 }}>{lead}</p>
+            <JoinRequestsLine count={waiting} open={side === "requests"} onOpen={() => setSide(side === "requests" ? null : "requests")} />
+            <MembersToolbar search={search} onSearch={setSearch} filters={filters} filter={view} onFilter={(id) => setView(id as MembersView)}
+              onExport={() => void exportCsv()} exporting={exporting} canExport={Boolean(summary)} />
             {loaded && view !== "past" ? (
-              <div className={cx("tbl")} role="table" aria-label="Members">
-                <div className={cx("trow th")} role="row">
-                  <span />{header("name", "Member")}<span>Working on</span>{header("plan", "Plan")}{header("active", "Last active")}
-                </div>
-                {rows.map((row) => (
-                  <button key={keyOf(row)} type="button" role="row" className={cx("trow", openKey === keyOf(row) && "sel")} onClick={() => { setOpenKey(keyOf(row)); setPicked(true); }}>
-                    <Face size="s" name={row.name} url={row.avatar_url} seed={row.user_id} getAvatarColor={props.getAvatarColor} getInitials={props.getInitials} />
-                    <span>
-                      <b>{row.name}</b>
-                      {roleTag(row.role) ? <span className={cx("tag")}>{roleTag(row.role)}</span> : null}
-                      {row.money ? <span className={cx("tag", row.money.kind === "on_hold" && "hold")}>{row.money.label}</span> : null}
-                    </span>
-                    <span>{row.working_on ?? ""}</span>
-                    <span>{row.plan.label}</span>
-                    <span>{memberTimeFor(row.last_active_at, now)}</span>
-                  </button>
-                ))}
-                {rows.length === 0 && !loading ? <p className={cx("none")} style={{ padding: "14px 12px" }}>No one here.</p> : null}
-              </div>
+              <MembersTable rows={rows} avatarOf={(row) => (row as CloudMemberRecordRow).avatar_url} now={now} timeFor={memberTimeFor} dayFor={shortDay}
+                sort={sort} onSort={(key) => setSort((current) => ({ key, desc: current?.key === key ? !current.desc : key === "active" || key === "joined" }))}
+                selected={selected} onToggle={(key) => setSelected((last) => { const next = new Set(last); if (next.has(key)) next.delete(key); else next.add(key); return next; })}
+                onToggleAll={() => setSelected((last) => toggleAllShown(last, rows.map(keyOf)))}
+                openKey={side === "record" ? openKey : null} onOpen={(key) => { setOpenKey(key); setSide("record"); }}
+                empty={loading ? "Loading…" : search.trim() ? `No one matches "${search.trim()}".` : "No one here."}
+                getAvatarColor={props.getAvatarColor} getInitials={props.getInitials} />
             ) : null}
             {loaded && view === "past" ? (
-              <div className={cx("tbl")} role="table" aria-label="Past members">
+              <div className={cx("tbl mpast")} role="table" aria-label="Past members">
                 <div className={cx("trow th")} role="row"><span /><span>Member</span><span>What happened</span><span>Was on</span><span>When</span></div>
-                {pastRows.map((row) => (
+                {(search.trim() ? pastRows.filter((row) => matchesMemberSearch({ name: row.name, handle: null }, search)) : pastRows).map((row) => (
                   <button key={`${row.user_id}:${row.reason}`} type="button" role="row" className={cx("trow", row.membership_id && openKey === row.membership_id && "sel")}
-                    onClick={() => { if (!row.membership_id) return; setOpenKey(row.membership_id); setPicked(true); }} disabled={!row.membership_id}>
+                    onClick={() => { if (!row.membership_id) return; setOpenKey(row.membership_id); setSide("record"); }} disabled={!row.membership_id}>
                     <Face size="s" name={row.name} url={row.avatar_url} seed={row.user_id} getAvatarColor={props.getAvatarColor} getInitials={props.getInitials} />
                     <span><b>{row.name}</b>{row.reason === "blocked" ? <span className={cx("tag hold")}>blocked</span> : null}{row.rejoined ? <span className={cx("tag")}>rejoined before</span> : null}</span>
                     <span>{row.reason_text}</span>
@@ -321,6 +293,10 @@ export function KitMembersPage(props: {
                   </button>
                 ))}
               </div>
+            ) : null}
+            {view !== "past" ? (
+              <MembersBulkBar count={chosen.length} compable={compableMembers(chosen).length} busy={bulkBusy}
+                onExport={() => download(membersCsv(chosen), "selected")} onComp={() => void compSelected()} onClear={() => setSelected(new Set())} />
             ) : null}
             <div ref={sentinelRef} aria-hidden="true" style={{ height: 1 }} />
             {loading ? <p className={cx("none")} style={{ marginTop: 14, fontSize: 13 }}>Loading more…</p> : null}
@@ -331,11 +307,20 @@ export function KitMembersPage(props: {
     </section>
   );
 
-  const recordRail: ReactNode = (
+  const recordRail: ReactNode = side === "requests" ? (
     <KitApp view="members" host part="rail">
-      <button type="button" className="members-record-back" onClick={() => setPicked(false)} aria-label="Back to Members">
+      <button type="button" className="members-record-back" onClick={() => setSide(null)} aria-label="Back to Members">
         <ArrowLeft size={14} strokeWidth={1.8} aria-hidden="true" />Members
       </button>
+      <JoinRequestsDrawer requests={props.joinRequests} decidingId={props.decidingJoinRequestId} onApprove={props.onApprove} onDecline={props.onDecline}
+        onClose={() => setSide(null)} getAvatarColor={props.getAvatarColor} getInitials={props.getInitials} />
+    </KitApp>
+  ) : (
+    <KitApp view="members" host part="rail">
+      <button type="button" className="members-record-back" onClick={() => setSide(null)} aria-label="Back to Members">
+        <ArrowLeft size={14} strokeWidth={1.8} aria-hidden="true" />Members
+      </button>
+      <button type="button" className="members-record-close" onClick={() => setSide(null)} aria-label="Close">×</button>
       <Rail index={5} label={record ? record.name : "Member"}>
         {record ? <MemberRecordView record={record} now={now} self={record.user_id === props.currentUserId}
           onMessage={props.onMessage} onManage={props.onManage} getAvatarColor={props.getAvatarColor} getInitials={props.getInitials}
@@ -360,7 +345,14 @@ export function KitMembersPage(props: {
     </KitApp>
   );
 
-  return <>{page}{props.recordContainer ? createPortal(recordRail, props.recordContainer) : null}</>;
+  // Escape puts down whoever is open.
+  useEffect(() => {
+    if (!side) return;
+    const onKey = (event: KeyboardEvent) => { if (event.key === "Escape" && !event.defaultPrevented) setSide(null); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [side]);
+  return <>{page}{props.recordContainer && side ? createPortal(recordRail, props.recordContainer) : null}</>;
 }
 
 function MemberRecordView(props: {
