@@ -26,7 +26,8 @@ const LINGER_MS = 30_000;
 export type LiveQueryName =
   | "communityBriefs:getPlaceBrief"
   | "communityBrain:getBrainMap"
-  | "communityEvents:listCommunityEvents";
+  | "communityEvents:listCommunityEvents"
+  | "communityPods:listCommunityPods";
 
 export type LiveResult<T> = { data: T | undefined; error: unknown };
 const NOTHING: LiveResult<never> = { data: undefined, error: null };

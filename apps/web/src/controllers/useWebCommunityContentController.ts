@@ -23,6 +23,8 @@ import {
   type CommunityEventsRange,
 } from "../../../../shared/useCommunityEventsController";
 import { useCommunityEventsTabLifecycle } from "../../../../shared/useCommunityEventsTabLifecycle";
+import { useLiveQuery } from "../../../../shared/liveQuery";
+import { coerceGatewayRows } from "../../../../shared/cloudGateway";
 import { useCommunityResourcesTabLifecycle } from "../../../../shared/useCommunityResourcesTabLifecycle";
 import { useWebCommunityResourceUiController } from "./useWebCommunityResourceUiController";
 
@@ -247,6 +249,34 @@ export function useWebCommunityContentController(
     loadCommunityResources: resourceUi.loadCommunityResources,
     requireCommunityPage: true,
   });
+  // Live (shared/liveQuery.ts): while Events is open, an event added, moved or
+  // cancelled anywhere shows at once, the same read the next-event card uses.
+  // The first answer still comes from the load below, with its loading and
+  // error states; this keeps it true afterwards.
+  const eventsSubject = resolveAuthSubject(session);
+  const liveEvents = useLiveQuery<unknown>(
+    session,
+    "communityEvents:listCommunityEvents",
+    activePage === "community" && communityTab === "events" && activeCommunityId && eventsSubject
+      ? {
+          authSubject: eventsSubject,
+          communityId: activeCommunityId,
+          startIso: eventsVisibleRange.startIso,
+          endIso: eventsVisibleRange.endIso,
+          includeCancelled: false,
+          overlap: true,
+          limit: 500,
+        }
+      : null,
+  );
+  useEffect(() => {
+    if (liveEvents.data === undefined) return;
+    setEvents(coerceGatewayRows<CloudCommunityEvent>(liveEvents.data));
+    // setEvents writes the open range's cache entry, so it is deliberately
+    // not a dependency: a new range waits for its own answer.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [liveEvents.data]);
+
   useCommunityEventsTabLifecycle<AuthSession>({
     activePage,
     communityTab,
