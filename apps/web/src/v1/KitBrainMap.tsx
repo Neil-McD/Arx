@@ -4,12 +4,14 @@
 // - panel: no words, the shape and its glow; under five learned things the
 //   caller shows a list instead.
 // - page: courses, subjects and pods named, and the few learned things that
-//   are new or most used; hover names a point, a click picks it.
+//   are new or most used; hover names a point, a click picks it. Scroll or
+//   pinch zooms, a drag pans, a double click zooms in there; zooming spreads
+//   things apart (dots and names keep their size) and names more of them.
 // Readings: community (everything), yours (your lessons and your things lit),
 // gaps (for builders: the biggest subjects, which no course teaches, lit).
-import { useId, useMemo } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import type { BrainMap } from "../../../../shared/communityBrain";
-import { chooseLabels, layoutBrain, type LayoutPoint } from "../../../../shared/communityBrainLayout";
+import { chooseLabels, fitView, layoutBrain, panBy, scaleLayout, viewWindow, zoomAt, type BrainView, type LayoutPoint } from "../../../../shared/communityBrainLayout";
 import { cx } from "./kit";
 
 export type BrainReading = "community" | "yours" | "gaps";
@@ -39,21 +41,105 @@ export function KitBrainMap(props: {
   const glow = `brain-glow-${uid}`;
   const mineGlow = `brain-mine-${uid}`;
   const page = props.size === "page";
-  const layout = useMemo(() => layoutBrain(props.map, props.now), [props.map, props.now]);
+  const base = useMemo(() => layoutBrain(props.map, props.now), [props.map, props.now]);
+  // The view (page only): how far in, and what is at its middle.
+  const [view, setView] = useState<BrainView>(() => fitView(base.bounds));
+  useEffect(() => { setView(fitView(base.bounds)); }, [props.map]); // eslint-disable-line react-hooks/exhaustive-deps
+  const k = page ? view.k : 1;
+  const layout = useMemo(() => scaleLayout(base, k), [base, k]);
   // The biggest subjects are where the community knows what no course teaches.
   const gapKeys = useMemo(() => new Set(props.map.subjects.filter((s) => s.size >= 3).sort((a, b) => b.size - a.size).slice(0, 3).map((s) => `subject:${s.name}`)), [props.map]);
-  const labels = useMemo(() => page ? chooseLabels(layout, { max: 9, charW: 7, lineH: 15 }) : [], [layout, page]);
+  // Closer in, more things have room for their name.
+  const labels = useMemo(() => page ? chooseLabels(layout, { max: Math.round(9 * k * k), charW: 7, lineH: 15 }) : [], [layout, page, k]);
   const labelled = new Map(labels.map((label) => [label.id, label]));
-  // Room for the names too, so none is cut at the edge.
-  let { minX, minY, maxX, maxY } = layout.bounds;
-  for (const { box } of labels) { minX = Math.min(minX, box.x - 8); maxX = Math.max(maxX, box.x + box.w + 8); }
+  // The whole map at rest, with room for its names so none is cut at the edge.
+  const rest = useMemo(() => {
+    let { minX, minY, maxX, maxY } = base.bounds;
+    for (const { box } of page ? chooseLabels(base, { max: 9, charW: 7, lineH: 15 }) : []) { minX = Math.min(minX, box.x - 8); maxX = Math.max(maxX, box.x + box.w + 8); }
+    return { minX, minY, maxX, maxY };
+  }, [base, page]);
+  const win = viewWindow(page ? view : fitView(rest), rest);
+
+  // Gestures (page only). Offsets from the middle of the drawing, in view units.
+  const svgRef = useRef<SVGSVGElement>(null);
+  const pointers = useRef(new Map<number, { x: number; y: number }>());
+  const gesture = useRef<{ moved: boolean; pinch: number | null }>({ moved: false, pinch: null });
+  const unitsPerPx = () => {
+    const box = svgRef.current?.getBoundingClientRect();
+    return box && box.width && box.height ? 1 / Math.min(box.width / win.w, box.height / win.h) : 1;
+  };
+  const fromMiddle = (clientX: number, clientY: number) => {
+    const box = svgRef.current!.getBoundingClientRect();
+    const u = unitsPerPx();
+    return { dx: (clientX - (box.left + box.width / 2)) * u, dy: (clientY - (box.top + box.height / 2)) * u };
+  };
+  const zoomBy = (factor: number, clientX?: number, clientY?: number) => setView((current) => {
+    const at = clientX === undefined || !svgRef.current ? { dx: 0, dy: 0 } : fromMiddle(clientX, clientY!);
+    return zoomAt(current, at.dx, at.dy, current.k * factor, rest);
+  });
+  // The wheel must be able to stop the page scrolling, so it is bound by hand.
+  useEffect(() => {
+    const svg = svgRef.current;
+    if (!svg || !page) return;
+    const onWheel = (event: WheelEvent) => {
+      event.preventDefault();
+      // A trackpad pinch arrives as a wheel with ctrl held, in small steps.
+      zoomBy(Math.exp(-event.deltaY * (event.ctrlKey ? 0.012 : 0.0016)), event.clientX, event.clientY);
+    };
+    svg.addEventListener("wheel", onWheel, { passive: false });
+    return () => svg.removeEventListener("wheel", onWheel);
+  }); // eslint-disable-line react-hooks/exhaustive-deps
+  const handlers = page ? {
+    onPointerDown: (event: any) => {
+      pointers.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
+      if (pointers.current.size === 1) gesture.current = { moved: false, pinch: null };
+      if (pointers.current.size === 2) {
+        const [a, b] = [...pointers.current.values()];
+        gesture.current = { moved: true, pinch: Math.hypot(a.x - b.x, a.y - b.y) };
+      }
+    },
+    onPointerMove: (event: any) => {
+      const last = pointers.current.get(event.pointerId);
+      if (!last) return;
+      pointers.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
+      if (pointers.current.size === 2 && gesture.current.pinch) {
+        const [a, b] = [...pointers.current.values()];
+        const spread = Math.hypot(a.x - b.x, a.y - b.y);
+        zoomBy(spread / gesture.current.pinch, (a.x + b.x) / 2, (a.y + b.y) / 2);
+        gesture.current.pinch = spread;
+        return;
+      }
+      const dx = event.clientX - last.x, dy = event.clientY - last.y;
+      // A click that wobbles a few pixels is still a click.
+      if (!gesture.current.moved && Math.hypot(dx, dy) < 4) { pointers.current.set(event.pointerId, last); return; }
+      if (!gesture.current.moved) { gesture.current.moved = true; svgRef.current?.setPointerCapture?.(event.pointerId); }
+      const u = unitsPerPx();
+      setView((current) => panBy(current, dx * u, dy * u, rest));
+    },
+    onPointerUp: (event: any) => { pointers.current.delete(event.pointerId); if (pointers.current.size < 2) gesture.current.pinch = null; },
+    onPointerCancel: (event: any) => { pointers.current.delete(event.pointerId); gesture.current.pinch = null; },
+    // A drag is not a pick.
+    onClickCapture: (event: any) => { if (gesture.current.moved) { event.stopPropagation(); gesture.current.moved = false; } },
+    onDoubleClick: (event: any) => zoomBy(2, event.clientX, event.clientY),
+  } : {};
+  // Picked from a list beside the map: bring it into view.
+  useEffect(() => {
+    if (!page || !props.selectedId) return;
+    const at = [...base.points, ...base.lessons, ...base.hubs.map((hub) => ({ ...hub, id: hub.key }))].find((entry) => entry.id === props.selectedId);
+    if (!at) return;
+    setView((current) => {
+      const halfW = (rest.maxX - rest.minX) / 2 / current.k, halfH = (rest.maxY - rest.minY) / 2 / current.k;
+      const seen = Math.abs(at.x - current.cx) < halfW * 0.9 && Math.abs(at.y - current.cy) < halfH * 0.9;
+      return seen ? current : panBy({ ...current, cx: at.x, cy: at.y }, 0, 0, rest);
+    });
+  }, [props.selectedId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const lit = (p: LayoutPoint) => reading === "yours" ? p.point.mine : reading === "gaps" ? p.point.at.kind === "subject" && gapKeys.has(`subject:${p.point.at.name}`) : true;
   const dimAll = reading !== "community";
   const pick = (id: string) => props.onSelect?.(id);
 
-  return (
-    <svg className={cx(page ? "brain brain-page" : "brain brain-panel")} viewBox={`${minX.toFixed(0)} ${minY.toFixed(0)} ${(maxX - minX).toFixed(0)} ${(maxY - minY).toFixed(0)}`}
+  const drawing = (
+    <svg ref={svgRef} {...handlers} className={cx(page ? "brain brain-page" : "brain brain-panel")} viewBox={`${win.x.toFixed(1)} ${win.y.toFixed(1)} ${win.w.toFixed(0)} ${win.h.toFixed(0)}`}
       role="img" aria-label={`A map of what ${props.map.center.name} knows: ${props.map.counts.courses} courses, ${props.map.counts.learned} things learned`}>
       <defs>
         <radialGradient id={glow} cx="50%" cy="50%" r="50%">
@@ -131,7 +217,7 @@ export function KitBrainMap(props: {
             {props.selectedId === hub.key ? <circle className={cx("brain-ring")} cx={hub.x} cy={hub.y} r={11} /> : null}
             {hub.kind === "pod" ? (
               <>
-                <circle className={cx("brain-membrane")} cx={hub.x} cy={hub.y} r={hub.inside ? 44 : 18} />
+                <circle className={cx("brain-membrane")} cx={hub.x} cy={hub.y} r={hub.inside ? 44 * k : 18} />
                 <circle className={cx(hub.inside ? "brain-cell" : "brain-cell closed")} cx={hub.x} cy={hub.y} r={hub.inside ? 5.2 : 3} />
               </>
             ) : hub.kind === "subject" || hub.kind === "other" ? (
@@ -142,7 +228,7 @@ export function KitBrainMap(props: {
             ) : null}
             {page ? (
               <text className={cx(gap ? "brain-hub gap" : dimAll ? "brain-hub dim" : hub.kind === "pod" && !hub.inside ? "brain-hub closed" : "brain-hub")}
-                x={hub.kind === "course" ? hub.x : hub.x} y={hub.kind === "course" ? hub.y + 4 : hub.kind === "pod" ? hub.y + (hub.inside ? 60 : 32) : hub.y - 13}
+                x={hub.x} y={hub.kind === "course" ? hub.y + 4 : hub.kind === "pod" ? hub.y + (hub.inside ? 44 * k + 16 : 32) : hub.y - 13}
                 textAnchor={hub.kind === "course" ? (right ? "start" : "end") : "middle"}>
                 {hub.kind === "pod" && !hub.inside ? `${hub.label} · ${hub.count}` : hub.label}
               </text>
@@ -174,6 +260,17 @@ export function KitBrainMap(props: {
       <circle className={cx("brain-core-ring")} cx={0} cy={0} r={13} />
       {page ? <text className={cx("brain-center")} x={0} y={33} textAnchor="middle">{props.map.center.name}</text> : null}
     </svg>
+  );
+  if (!page) return drawing;
+  return (
+    <div className={cx("brainwrap")}>
+      {drawing}
+      <div className={cx("brainzoom")} role="group" aria-label="Zoom">
+        <button type="button" aria-label="Zoom in" onClick={() => zoomBy(1.6)}>+</button>
+        <button type="button" aria-label="Zoom out" disabled={view.k <= 1} onClick={() => zoomBy(1 / 1.6)}>−</button>
+        <button type="button" disabled={view.k <= 1} onClick={() => setView(fitView(rest))}>Fit</button>
+      </div>
+    </div>
   );
 }
 

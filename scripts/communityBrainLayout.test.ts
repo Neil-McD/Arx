@@ -1,6 +1,6 @@
 import { expect, test } from "vitest";
 import type { BrainMap, BrainPoint } from "../shared/communityBrain";
-import { chooseLabels, layoutBrain, reachFor } from "../shared/communityBrainLayout";
+import { BRAIN_ZOOM_MAX, chooseLabels, fitView, layoutBrain, panBy, reachFor, scaleLayout, viewWindow, zoomAt } from "../shared/communityBrainLayout";
 
 const NOW = Date.UTC(2026, 10, 15);
 const DAY = 86_400_000;
@@ -99,4 +99,46 @@ test("a long course stays inside the core", () => {
   m.courses[0].lessons = Array.from({ length: 100 }, (_, l) => ({ id: `resource:long${l}`, title: `L${l}`, order: l + 1, done: false, use: 0 }));
   const layout = layoutBrain(m, NOW);
   for (const lesson of layout.lessons) expect(Math.hypot(lesson.x, lesson.y)).toBeLessThanOrEqual(305);
+});
+
+// Looking at the map: zoom and pan.
+const B = { minX: -400, minY: -300, maxX: 400, maxY: 300 };
+
+test("zooming keeps the point under the cursor where it is", () => {
+  const start = fitView(B);
+  // The cursor is 120 right and 60 down of the middle; the layout point there is (120, 60).
+  const zoomed = zoomAt(start, 120, 60, 3, B);
+  expect(zoomed.k).toBe(3);
+  expect(zoomed.cx + 120 / zoomed.k).toBeCloseTo(120);
+  expect(zoomed.cy + 60 / zoomed.k).toBeCloseTo(60);
+  // And again from there, at another spot.
+  const again = zoomAt(zoomed, -50, 20, 5, B);
+  expect(again.cx + -50 / again.k).toBeCloseTo(zoomed.cx + -50 / zoomed.k);
+});
+
+test("zoom has limits, panning stays on the map, and all the way out is the whole map again", () => {
+  expect(zoomAt(fitView(B), 0, 0, 99, B).k).toBe(BRAIN_ZOOM_MAX);
+  const out = zoomAt(panBy(zoomAt(fitView(B), 100, 0, 4, B), -9_999, 0, B), 0, 0, 0.2, B);
+  expect(out).toEqual(fitView(B));
+  const far = panBy(zoomAt(fitView(B), 0, 0, 2, B), -99_999, 99_999, B);
+  expect(far.cx).toBe(B.maxX);
+  expect(far.cy).toBe(B.minY);
+  // Dragging right moves the map right: the middle of the view moves left.
+  expect(panBy({ k: 2, cx: 0, cy: 0 }, 40, 0, B).cx).toBe(-20);
+});
+
+test("a zoomed map is the same layout spread apart, seen through a window the size of the whole", () => {
+  const layout = layoutBrain(map(), NOW);
+  const spread = scaleLayout(layout, 2);
+  expect(spread.points[0].x).toBeCloseTo(layout.points[0].x * 2);
+  expect(spread.points[0].r).toBe(layout.points[0].r);
+  expect(spread.lessons[0].r).toBe(layout.lessons[0].r);
+  expect(scaleLayout(layout, 1)).toBe(layout);
+  const whole = viewWindow(fitView(layout.bounds), layout.bounds);
+  const close = viewWindow({ k: 3, cx: 10, cy: -5 }, layout.bounds);
+  expect([close.w, close.h]).toEqual([whole.w, whole.h]);
+  expect(close.x + close.w / 2).toBeCloseTo(30);
+  // Closer in, more things can be named.
+  const many = layoutBrain(map({ points: Array.from({ length: 30 }, (_, i) => point(`n${i}`, { kind: "subject", name: "Subject 0" }, i % 5)) }), NOW);
+  expect(chooseLabels(scaleLayout(many, 4), { max: 30 }).length).toBeGreaterThan(chooseLabels(many, { max: 30 }).length);
 });
