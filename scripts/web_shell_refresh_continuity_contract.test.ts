@@ -97,9 +97,7 @@ describe("web shell refresh continuity contract", () => {
     const types = read("shared/communityTypes.ts");
 
     expect(types).toContain("online_user_ids?: string[] | null");
-    // Loading is not "nobody here": no summary until the live read answers.
-    expect(shell).toContain("livePresence.data === undefined ? null");
-    expect(shell).toContain("livePresence.data === undefined && !livePresence.error");
+    expect(shell).toContain('status: "pending" | "resolved" | "failed"');
   });
 
   it("keeps the session ensure callback stable across transport-session rotation", () => {
