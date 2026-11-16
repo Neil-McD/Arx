@@ -555,6 +555,10 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
             onRenameChannel={props.onRenameChannel}
             onDeleteChannel={props.onDeleteChannel}
           />
+        ) : isDesignV1Active() ? (
+          // Layout before data: the header's row is held until the channel's
+          // record arrives, so the feed under it doesn't move down.
+          <header className="community-channel-header" aria-hidden="true" />
         ) : null}
         {props.pinnedRoot ? (
           <CommunityPinnedRootSurface
@@ -607,7 +611,7 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
         >
           {kitFeed ? (
             // Design system v1 on desktop: the mock's feed, from the kit.
-            <KitApp view="wins" part="flow">
+            <KitApp view="wins" part="flow" className="kit-channel-feed-part">
               <KitChannelFeed
                 {...props}
                 editing={editing}

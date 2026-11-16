@@ -2125,6 +2125,36 @@
   padding: 8px 44px calc(var(--mobile-community-composer-height, 86px) + 18px);
 }
 
+/* Layout before data: the feed's box fills its place from the first frame
+   (posts still sit at the bottom of a short channel), so posts arriving fill
+   a box that is already there instead of a new one appearing. */
+:root[data-design="v1"] .community-interaction-feed-scroll > .kit-channel-feed-part {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  flex: 1 0 auto;
+  margin-top: 0;
+}
+
+/* The feed fills that box and grows with its posts (never squeezed into it:
+   a long channel scrolls, it does not spill out of the top). */
+:root[data-design="v1"] .community-interaction-feed-scroll > .kit-channel-feed-part > [class*="feed"] {
+  flex: 1 0 auto;
+}
+
+/* The left column's loading rows are the size of real channel rows (28px,
+   no gap), as many as the list had last time (shared/channelRowsMemory.ts). */
+:root[data-design="v1"] .community-channel-loading {
+  gap: 0;
+}
+
+:root[data-design="v1"] .community-channel-loading-row {
+  box-sizing: border-box;
+  height: 28px;
+  border-block: 5px solid transparent;
+  background-clip: padding-box;
+}
+
 :root[data-design="v1"]:where(:not([data-layout="phone"])) .community-chat .community-interaction-main-composer {
   padding: 0 56px 26px;
 }

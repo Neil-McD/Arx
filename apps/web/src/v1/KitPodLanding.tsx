@@ -7,8 +7,8 @@ import { useEffect, useState } from "react";
 import { fetchCloudPod, fetchCloudPodNotes, formatPodDate, type CloudPodDetail, type CloudPodNote } from "../../../../shared/cloudCommunityPodsGateway";
 import { formatMomentWhen } from "../../../../shared/communityHomeMoments";
 import { Btn, cx } from "./kit";
-import { BriefPart, usePlaceBrief } from "./KitBrief";
-import { PanelLearned, PanelNext, PanelPart, PanelPeople } from "./KitPanel";
+import { BriefPart, usePlaceBriefRead } from "./KitBrief";
+import { PanelLearned, PanelNext, PanelPart, PanelPeople, usePanelSettled } from "./KitPanel";
 
 const REPEATS: Record<string, string> = { daily: "every day", weekly: "every week", monthly: "every month" };
 const LEARNED_SHOWN = 3;
@@ -23,18 +23,25 @@ export function KitPodLanding(props: {
   const [notes, setNotes] = useState<CloudPodNote[]>([]);
   const [now] = useState(() => Date.now());
   const channelId = props.pod.channel_id;
-  const brief = usePlaceBrief(props.session, props.communityId, channelId);
+  const { brief, settled: briefSettled } = usePlaceBriefRead(props.session, props.communityId, channelId);
+  // How many of the pod's two reads (its detail, its notes) have answered.
+  const [answered, setAnswered] = useState(0);
   useEffect(() => {
     setDetail(null);
     setNotes([]);
+    setAnswered(0);
     if (!props.session) return;
     let live = true;
     const call = { session: props.session, communityId: props.communityId, channelId };
+    const done = () => { if (live) setAnswered((count) => count + 1); };
     // Each part is drawn from what loads; one that doesn't is simply absent.
-    fetchCloudPod(call).then((next) => { if (live) setDetail(next); }).catch(() => undefined);
-    fetchCloudPodNotes(call).then((next) => { if (live) setNotes(next.notes); }).catch(() => undefined);
+    fetchCloudPod(call).then((next) => { if (live) setDetail(next); }).catch(() => undefined).finally(done);
+    fetchCloudPodNotes(call).then((next) => { if (live) setNotes(next.notes); }).catch(() => undefined).finally(done);
     return () => { live = false; };
   }, [props.session, props.communityId, channelId]);
+  // Layout before data: the parts draw as one piece once they have all
+  // answered, so none is drawn and then pushed down by one above it.
+  const settled = usePanelSettled(briefSettled && answered >= 2);
 
   const call = detail?.next_call ?? null;
   const members = detail?.members ?? [];
@@ -45,6 +52,7 @@ export function KitPodLanding(props: {
         <h2>{props.pod.name}</h2>
         {props.pod.purpose ? <p className={cx("land-p")}>{props.pod.purpose}</p> : null}
       </header>
+      {settled ? <>
       {brief ? <BriefPart brief={brief} now={now} /> : null}
       {call ? (
         <PanelPart label="Next call" fact={REPEATS[call.recurrence_frequency] ?? null}>
@@ -61,9 +69,11 @@ export function KitPodLanding(props: {
           <PanelPeople names={members.map((member) => member.name)} />
         </PanelPart>
       ) : null}
+      {/* The way in sits under the parts on a phone, so it draws with them. */}
       <div className={cx("joinbar")}>
         <Btn go onClick={props.onOpen}>Open the pod</Btn>
       </div>
+      </> : null}
     </div>
   );
 }

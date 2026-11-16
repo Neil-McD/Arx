@@ -28,9 +28,9 @@ import type { CommunityResource, CommunityResourceModule } from "../components/c
 import { askGuide, openGuideFromSearch } from "../components/guideSearch";
 import { WebCommunityResourceViewerContent } from "../components/WebCommunityResourceViewerContent";
 import { PanelBrain, useBrainMap } from "./KitBrain";
-import { BriefPart, usePlaceBrief } from "./KitBrief";
+import { BriefPart, usePlaceBriefRead } from "./KitBrief";
 import { NoteForm, OpenNote } from "./KitKnowledgeNotes";
-import { PanelAction, PanelLine, PanelNext, PanelPart } from "./KitPanel";
+import { PanelAction, PanelLine, PanelNext, PanelPart, usePanelSettled } from "./KitPanel";
 import { KitLessonEditor, lessonLinkPlace, type LessonPatch } from "./KitLessonEditor";
 import { Btn, cx, Icon, KitApp, Rail, Sec, TextLink, useMinWidth } from "./kit";
 import { KitCourseEdit, type CourseEditPatch } from "./KitCourseEdit";
@@ -124,8 +124,10 @@ export function KitClassroom(props: {
   const [summary, setSummary] = useState<CourseProgressSummary[]>([]);
   const [notes, setNotes] = useState<CommunityNoteView[]>([]);
   // Live: it changes when a builder's notes do.
-  const { map: brain } = useBrainMap(props.session, props.communityId, null);
+  const { map: brain, settled: brainSettled } = useBrainMap(props.session, props.communityId, null);
   const [canWriteNotes, setCanWriteNotes] = useState(false);
+  // The notes read has answered (so it is known whether this person writes notes).
+  const [notesAnswered, setNotesAnswered] = useState(false);
   const [lessonId, setLessonId] = useState<string | null>(null);
   const [shelfPage, setShelfPage] = useState(0);
   // title: what a new note starts with (a question waiting on an answer).
@@ -176,7 +178,10 @@ export function KitClassroom(props: {
   };
   // Asking Knowledge is the guide's; a community without it doesn't offer it.
   const agentOn = useCommunityAgentOn();
-  const brief = usePlaceBrief(props.session, props.communityId, null, agentOn);
+  const { brief, settled: briefSettled } = usePlaceBriefRead(props.session, props.communityId, null, agentOn);
+  // Layout before data: the right column draws as one piece once its parts
+  // have answered, so no part is drawn and then pushed down by one above it.
+  const shelfSettled = usePanelSettled(briefSettled && brainSettled && progressLoaded);
 
   const [now] = useState(Date.now);
 
@@ -192,7 +197,7 @@ export function KitClassroom(props: {
       const view = await fetchCommunityNotes({ session: props.session, communityId: props.communityId, limit: 50 });
       setNotes(view.notes);
       setCanWriteNotes(view.can_manage && props.canManage);
-    } catch { /* The right column goes without notes. */ }
+    } catch { /* The right column goes without notes. */ } finally { setNotesAnswered(true); }
   }, [props.session, props.communityId, props.canManage]);
   useEffect(() => { void loadProgress(); void loadNotes(); }, [loadProgress, loadNotes]);
   // Started and finished depend on which lessons exist, so they're read again
@@ -349,7 +354,7 @@ export function KitClassroom(props: {
       </PanelPart>
     ) : null,
   ].filter(Boolean);
-  const shelfRail = shelfParts.length ? <>{shelfParts}</> : null;
+  const shelfRail = shelfSettled && shelfParts.length ? <>{shelfParts}</> : null;
 
   const moveCourse = async (index: number, by: -1 | 1) => {
     const ids = courseOrderAfterMove(courses.map((entry) => entry.course.id), index, by);
@@ -583,9 +588,11 @@ export function KitClassroom(props: {
 
         {/* Builders: the way into what the guide answers from, where notes,
             links and files are added. Shown at every width. */}
-        {canWriteNotes && props.onOpenGuideMemory ? (
+        {/* A builder's row holds its place from the first draw (the count
+            fills in), so the courses under it don't move when notes arrive. */}
+        {props.onOpenGuideMemory && (canWriteNotes || (props.canManage && !notesAnswered)) ? (
           <div className={cx("kbtns")}><div className={cx("kbtns-row")}>
-            <button type="button" className={cx("btn sm")} onClick={() => props.onOpenGuideMemory?.(true)}>What your guide knows · {notes.length + guideSources.length}</button>
+            <button type="button" className={cx("btn sm")} disabled={!canWriteNotes} onClick={() => props.onOpenGuideMemory?.(true)}>What your guide knows{canWriteNotes ? ` · ${notes.length + guideSources.length}` : ""}</button>
           </div></div>
         ) : null}
 

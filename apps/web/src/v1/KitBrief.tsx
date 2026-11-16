@@ -15,10 +15,16 @@ import { cx, Icon } from "./kit";
 // pages and updates when the guide writes a new one. null: nothing to show;
 // a panel never fails for want of a brief.
 export function usePlaceBrief(session: unknown, communityId: string | null, podChannelId?: string | null, enabled = true): BriefView | null {
+  return usePlaceBriefRead(session, communityId, podChannelId, enabled).brief;
+}
+
+// The same, with whether it has answered yet (settled: there is a brief, or
+// it is known there is none), for a panel that draws once its parts are in.
+export function usePlaceBriefRead(session: unknown, communityId: string | null, podChannelId?: string | null, enabled = true): { brief: BriefView | null; settled: boolean } {
   const subject = session ? resolveAuthSubject(session as AuthSessionLike) : null;
-  const { data } = useLiveQuery<PlaceBriefView>(session, "communityBriefs:getPlaceBrief",
+  const { data, error } = useLiveQuery<PlaceBriefView>(session, "communityBriefs:getPlaceBrief",
     subject && communityId && enabled ? { authSubject: subject, communityId, ...(podChannelId ? { podChannelId } : {}) } : null);
-  return enabled ? data?.brief ?? null : null;
+  return { brief: enabled ? data?.brief ?? null : null, settled: !enabled || data !== undefined || Boolean(error) };
 }
 
 export function BriefPart(props: {

@@ -25,6 +25,7 @@ import type { CommunityTab } from "./appShellNavigation";
 import { StableFramedMedia } from "./StableFramedMedia";
 import { usePointerSortableList } from "./usePointerSortableList";
 import { communityChannelCapacity, MAX_TOTAL_COMMUNITY_CHANNELS } from "./communityChannelCapacity";
+import { channelRowsToReserve, communitySlugInAddress, recallChannelRows, rememberChannelRows } from "./channelRowsMemory";
 
 type CommunityNavCommunityLike = {
   slug?: string | null;
@@ -256,6 +257,12 @@ export const CommunityNav = memo(function CommunityNav({
   const showChannelLoadingSkeleton =
     isLoadingAccess || (isLoadingChannels && channels.every((channel) => !channel.id));
   const canAddChannel = Boolean(!showChannelLoadingSkeleton && canManageMembersActiveCommunity && onCreateChannel);
+  const channelRowsSlug = activeCommunity?.slug?.trim()
+    || (typeof window === "undefined" || !window.location ? null : communitySlugInAddress(window.location.pathname));
+  const reservedChannelRows = channelRowsToReserve(recallChannelRows(channelRowsSlug));
+  useEffect(() => {
+    if (!showChannelLoadingSkeleton && channels.length > 0) rememberChannelRows(channelRowsSlug, channels.length);
+  }, [channelRowsSlug, channels.length, showChannelLoadingSkeleton]);
   const reorderableChannelIds = channels
     .filter((channel) => !channel.is_general && Boolean(channel.id))
     .map((channel) => channel.id);
@@ -525,8 +532,18 @@ export const CommunityNav = memo(function CommunityNav({
       >
         {showChannelLoadingSkeleton ? (
           <div className="community-channel-loading" aria-label="Loading channels">
-            <div className="community-channel-loading-row web-skeleton-row" />
-            <div className="community-channel-loading-row is-short web-skeleton-row" />
+            {isV1 ? (
+              // As many rows as the list had last time, each the size of a
+              // real row, so nothing under the list moves when it arrives.
+              Array.from({ length: reservedChannelRows }).map((_, index) => (
+                <div className="community-channel-loading-row web-skeleton-row" key={index} />
+              ))
+            ) : (
+              <>
+                <div className="community-channel-loading-row web-skeleton-row" />
+                <div className="community-channel-loading-row is-short web-skeleton-row" />
+              </>
+            )}
           </div>
         ) : channels.map((channel) => {
           const isSelected =

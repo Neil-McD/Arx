@@ -17,10 +17,10 @@ import {
   type CloudPodDetail,
 } from "../../../../shared/cloudCommunityPodsGateway";
 import { Btn, KitApp, Rail, Sec, cx } from "./kit";
-import { BriefPart, usePlaceBrief } from "./KitBrief";
+import { BriefPart, usePlaceBriefRead } from "./KitBrief";
 import { KitPodCall } from "./KitPodCall";
 import { KitPodKnowledge } from "./KitPodKnowledge";
-import { PanelAction, PanelLine, PanelPart, PanelPeople } from "./KitPanel";
+import { PanelAction, PanelLine, PanelPart, PanelPeople, usePanelSettled } from "./KitPanel";
 import { askForPodPagePreview, forgetPod, goToPodsPath, rememberPod } from "./podMemory";
 
 type Draft = { purpose: string; whatYouGet: string; listed: boolean; seats: string; price: string };
@@ -100,7 +100,10 @@ export function KitPodRail(props: { session: unknown; communityId: string; pod: 
     } finally { setBusy(null); }
   };
 
-  const brief = usePlaceBrief(props.session, props.communityId, pod.channel_id);
+  const { brief, settled: briefSettled } = usePlaceBriefRead(props.session, props.communityId, pod.channel_id);
+  // Layout before data: the parts draw once the brief above them has
+  // answered, so they aren't drawn and then pushed down by it.
+  const settled = usePanelSettled(briefSettled);
   const [now] = useState(() => Date.now());
   const mine = pod.my_membership;
   const paid = Boolean(mine && mine.state !== "added");
@@ -234,7 +237,7 @@ export function KitPodRail(props: { session: unknown; communityId: string; pod: 
   return (
     <KitApp view="wins" part="rail">
       <Rail index={1} label="About this pod">
-        {parts.map(([key, part]) => <Fragment key={key}>{part}</Fragment>)}
+        {settled ? parts.map(([key, part]) => <Fragment key={key}>{part}</Fragment>) : null}
         <div className={cx("railfoot")}>
           <button type="button" aria-expanded={foot === "about"} onClick={() => setFoot(foot === "about" ? null : "about")}>About this pod</button>
           {mine ? <button type="button" aria-expanded={foot === "membership"} onClick={() => setFoot(foot === "membership" ? null : "membership")}>Your membership</button> : null}

@@ -73,9 +73,11 @@ export function KitChannelFeed(props: CommunityInteractionFeedListProps) {
   const unreadDivider = <div className="community-interaction-unread-divider"><span>New</span></div>;
 
   // Loading, empty and error states keep the app's own wording and look.
+  // Each state is its own element (the keys): the posts are a new box that
+  // appears, never the loading line's box stretched into the feed's place.
   if (props.error && props.roots.length === 0 && props.activityEvents.length === 0) {
     return (
-      <div className="community-interaction-state" role="alert">
+      <div key="error" className="community-interaction-state" role="alert">
         <div>{props.error}</div>
         <button type="button" onClick={props.onRetryRoots}>{props.errorActionLabel ?? "Retry"}</button>
       </div>
@@ -83,7 +85,7 @@ export function KitChannelFeed(props: CommunityInteractionFeedListProps) {
   }
   if (props.isLoadingRoots && props.roots.length === 0 && props.activityEvents.length === 0) {
     return (
-      <div className="community-interaction-state" aria-live="polite">
+      <div key="loading" className="community-interaction-state" aria-live="polite">
         <div>Loading messages…</div>
         <div className="community-interaction-loading web-skeleton-pill" aria-hidden="true" />
       </div>
@@ -92,7 +94,7 @@ export function KitChannelFeed(props: CommunityInteractionFeedListProps) {
 
   if (props.roots.length === 0 && props.activityEvents.length === 0) {
     return (
-      <div className="community-interaction-empty">
+      <div key="empty" className="community-interaction-empty">
         <MessageSquare size={22} aria-hidden="true" />
         <div>No messages yet</div>
         <span>Say hello. The first message starts the conversation.</span>
@@ -101,7 +103,7 @@ export function KitChannelFeed(props: CommunityInteractionFeedListProps) {
   }
 
   return (
-    <div className={cx("feed")}>
+    <div key="feed" className={cx("feed")}>
       {props.error ? (
         <div className="community-interaction-refresh-warning" role="status">
           <span>{props.error}</span>
