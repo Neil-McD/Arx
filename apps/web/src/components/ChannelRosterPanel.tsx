@@ -19,7 +19,7 @@ import { formatRelativeTimeFromIso } from "../../../../shared/contentFormatting"
 import { CommunityChannelSessionContext } from "./CommunityChannelSessionContext";
 import { CommunityPresenceFacepile } from "./CommunityPresenceFacepile";
 import { WebCommunityNotes } from "./WebCommunityNotes";
-import { KitChannelRail } from "../v1/KitChannelRail";
+import { KitChannelRail, type ChannelPinned } from "../v1/KitChannelRail";
 import { KitPodRail, useCloudPod } from "../v1/KitPodRail";
 import { KitMembersDirectory } from "../v1/KitMembersDirectory";
 import { CommunityMembersBulkBar, type SelectedMember } from "./CommunityMembersBulkBar";
@@ -43,8 +43,10 @@ function trapTab(event: KeyboardEvent, container: HTMLElement | null) {
 
 type RosterProps = {
   memberDetailOpen?: boolean;
-  // Design system v1: the channel's pinned post, shown as one row that opens it.
-  pinned?: { label: string; onOpen: () => void } | null;
+  // Design system v1: the channel's pinned post (a card in the right column)
+  // and what the channel is for.
+  pinned?: (ChannelPinned & { label: string }) | null;
+  channelDescription?: string | null;
   narrowOpen?: boolean;
   onCloseNarrow?: () => void;
   joinReview?: ComponentProps<typeof CommunityJoinRequestReview>;
@@ -379,6 +381,7 @@ function RosterSurface(props: RosterProps & {
       <KitChannelRail
         communityId={scope?.communityId ?? null}
         session={scope?.session ?? null}
+        channelId={props.channelId ?? null} description={props.channelDescription ?? null}
         pinned={props.pinned ?? null}
         presenceSummary={props.presenceSummary ?? null}
         onOpenMembers={props.onOpenMembers}

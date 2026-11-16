@@ -11,6 +11,7 @@ import {
 import { ArrowLeft, ChevronDown, Ellipsis, Hash, LockKeyhole, Pencil, Trash2, X } from "lucide-react";
 import { isDesignV1Active } from "../../../../shared/designSystem";
 import { setCloudCommunityChannelDescription } from "../../../../shared/cloudCommunityChannelsGateway";
+import { announceChannelDescription } from "../v1/KitChannelRail";
 import { ChannelAccessSettings } from "./ChannelAccessSettings";
 import { CommunityChannelSessionContext } from "./CommunityChannelSessionContext";
 
@@ -207,6 +208,7 @@ export function WebCommunityChannelHeader({
           session: sessionScope.session, communityId: sessionScope.communityId, channelId: channel.id, description: nextDescription,
         });
         setSavedDescription({ channelId: channel.id, value: nextDescription });
+        announceChannelDescription(channel.id, nextDescription);
       } catch {
         setDescriptionError("The description didn't save. Try again.");
         return;

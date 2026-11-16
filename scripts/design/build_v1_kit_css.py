@@ -437,6 +437,16 @@ css += """
 /* Kit addition: the box a course's settings open in (KitCourseEdit), and a form's foot. */
 .app .kaddbox{margin-top:20px;padding:14px 12px 12px 16px;border-color:rgba(var(--au),.45);box-shadow:0 0 0 4px rgba(var(--au),.08)}
 .app .kaddbox textarea{font-size:15px;line-height:1.6;min-height:48px;max-height:260px;overflow-y:auto}
+/* The channel's panel (KitChannelRail): what it is for, and its pinned post as a card. */
+.app .chabout{margin:0;font-size:14px;line-height:1.5;color:var(--ink2);overflow-wrap:anywhere}
+.app .chpin{display:flex;flex-direction:column;gap:6px;width:100%;padding:12px 14px;border-radius:10px;border:1px solid var(--line2);background:var(--s1);text-align:left;cursor:pointer;transition:border-color .12s}
+.app .chpin:hover{border-color:rgba(var(--w),.22)}
+.app .chpin-by{display:flex;align-items:center;gap:7px;min-width:0;font-size:12.5px;color:var(--ink3)}
+.app .chpin-by svg{flex:none}
+.app .chpin-by b{font-weight:550;color:var(--ink2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.app .chpin-by em{margin-left:auto;font-style:normal;white-space:nowrap}
+.app .chpin strong{font-size:14px;font-weight:600;color:var(--ink);overflow-wrap:anywhere}
+.app .chpin-text{display:-webkit-box;-webkit-line-clamp:5;-webkit-box-orient:vertical;overflow:hidden;font-size:13.5px;line-height:1.5;color:var(--ink2);overflow-wrap:anywhere}
 /* Members for the host (KitMembersTable): a toolbar, a bordered table with a
    box to tick on each row, what can be done to everyone ticked, and the
    people waiting to join in a drawer. */

@@ -4312,3 +4312,10 @@
 :root[data-design="v1"] .members-record-close:hover { color: var(--text-ink-primary); background: var(--hover-overlay); }
 :root[data-design="v1"]:where([data-layout="phone"]) .members-record-close { display: none; }
 @media (max-width: 1023px) { :root[data-design="v1"] .members-record-close { display: none; } }
+
+/* A channel's pinned post lives in its right column on a wide window, so the
+   feed is only the conversation. Where that column isn't shown (a narrow
+   window, a phone, or a thread open in its place) the feed keeps the pin. */
+@media (min-width: 1024px) {
+  :root[data-design="v1"]:where(:not([data-layout="phone"])) .community-interaction-projection.has-channel-context:has(> .channel-roster-panel .kit-channel-rail.has-pinned) .community-channel-pinned-root { display: none; }
+}
