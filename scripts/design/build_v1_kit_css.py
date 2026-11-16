@@ -464,8 +464,8 @@ css += """
 /* The bulk bar floats at the foot of the page, so ticking someone never moves the rows. */
 .app .mbulk{position:sticky;z-index:4;bottom:16px;display:flex;align-items:center;flex-wrap:wrap;gap:8px;width:fit-content;max-width:100%;margin:14px auto 0;padding:8px 10px 8px 16px;border-radius:12px;border:1px solid rgba(var(--au),.45);background:var(--panel2,var(--bg));box-shadow:0 10px 30px rgba(0,0,0,.45)}
 .app .mbulk b{margin-right:6px;font-size:13.5px;font-weight:550;color:var(--ink)}
-.app .mtbl{margin-top:12px;border:1px solid var(--line2);border-radius:12px;overflow:hidden}
-.app .mrow2{display:grid;grid-template-columns:20px minmax(0,1.7fr) 116px minmax(0,.9fr) 92px 108px 16px;gap:0 16px;align-items:center;min-height:58px;padding:0 16px;font-size:13.5px;color:var(--ink2);cursor:pointer;outline:0}
+.app .mtbl{margin-top:12px;border:1px solid var(--line2);border-radius:12px;overflow:hidden;container-type:inline-size}
+.app .mrow2{display:grid;grid-template-columns:20px minmax(150px,1.7fr) 116px minmax(0,.9fr) 92px 108px 16px;gap:0 16px;align-items:center;min-height:58px;padding:0 16px;font-size:13.5px;color:var(--ink2);cursor:pointer;outline:0}
 .app .mrow2+.mrow2{border-top:1px solid var(--line)}
 .app .mrow2:not(.mhead):hover,.app .mrow2:focus-visible{background:var(--s1)}
 .app .mrow2.sel,.app .mrow2.tick{background:var(--s2)}
@@ -503,6 +503,11 @@ css += """
 .app .mreq small{font-size:12.5px;color:var(--ink3)}
 .app .mreq p{margin:6px 0 0;font-size:13.5px;line-height:1.5;color:var(--ink2);overflow-wrap:anywhere}
 .app .mreq-acts{display:flex;gap:6px;margin-top:10px}
+/* The table fits the room it has (a record open beside it narrows it): it
+   lets go of Joined, then Plan, then Last active, never the member. */
+@container (max-width:760px){.app .mrow2{grid-template-columns:20px minmax(150px,1.7fr) 116px minmax(0,.9fr) 108px 16px}.app .mrow2>:nth-child(5){display:none}}
+@container (max-width:620px){.app .mrow2{grid-template-columns:20px minmax(150px,1fr) 116px 108px 16px}.app .mrow2>:nth-child(4){display:none}}
+@container (max-width:480px){.app .mrow2{grid-template-columns:20px minmax(0,1fr) max-content 16px;gap:0 12px;padding:0 12px}.app .mrow2>:nth-child(6){display:none}}
 @media (max-width:820px){.app .mrow2{grid-template-columns:20px minmax(0,1fr) max-content 16px;gap:0 12px;padding:0 12px}.app .mrow2>:nth-child(4),.app .mrow2>:nth-child(5),.app .mrow2>:nth-child(6){display:none}.app .msearch{flex:1}}
 :where(:root[data-layout="phone"]) .app .mrow2{grid-template-columns:20px minmax(0,1fr) max-content 16px;gap:0 12px;padding:0 12px}
 :where(:root[data-layout="phone"]) .app .mrow2>:nth-child(4),:where(:root[data-layout="phone"]) .app .mrow2>:nth-child(5),:where(:root[data-layout="phone"]) .app .mrow2>:nth-child(6){display:none}
