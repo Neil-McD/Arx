@@ -41,6 +41,8 @@ export function eventSoonWord(startsAtIso: string, now: number): string {
 }
 
 const capital = (text: string) => text.charAt(0).toUpperCase() + text.slice(1);
+// The page says once that times are yours, so a time doesn't repeat it.
+const yours = (primary: string) => primary.replace(/\s*·\s*your time$/i, "");
 
 export function KitEventsList(props: {
   featured: CloudCommunityEvent | null;
@@ -99,7 +101,7 @@ export function KitEventsList(props: {
     <>
       {eventRepeatWord(event) ? <span className={cx("evtag")}><Repeat size={11} aria-hidden="true" />{capital(eventRepeatWord(event)!)}</span> : null}
       {event.pod_name ? <span className={cx("evtag pod")}>{event.pod_name}</span> : null}
-      {props.canManage && event.visibility === "public" && !event.pod_channel_id ? <span className={cx("evtag pub")}>On the public page</span> : null}
+      {props.canManage && event.visibility === "public" && !event.pod_channel_id && !isPast(event) ? <span className={cx("evtag pub")}>On the public page</span> : null}
     </>
   );
   const joinLabel = (event: CloudCommunityEvent) => featuredEventLabel(event, props.now).live ? "Join now" : "Join when it starts";
@@ -112,7 +114,7 @@ export function KitEventsList(props: {
       <header>
         <span className={cx("lab")}>{isPast(picked) ? "Past" : eventSoonWord(picked.starts_at, props.now)}</span>
         <h2>{picked.title}</h2>
-        <p className={cx("evp-when")}>{eventDayWord(picked.starts_at, props.now)} · {pickedTime.primary}</p>
+        <p className={cx("evp-when")}>{eventDayWord(picked.starts_at, props.now)} · {yours(pickedTime.primary)}</p>
         {pickedTime.secondary ? <p className={cx("evp-also")}>{pickedTime.secondary}</p> : null}
         <div className={cx("evp-tags")}>{tags(picked)}</div>
       </header>
@@ -204,7 +206,7 @@ export function KitEventsList(props: {
           <div className={cx("evtop")}>
             <div>
               <p className={cx("evlead")}>{upcoming.length ? `${upcoming.length} coming up.` : props.canManage ? "Nothing is planned yet." : "Nothing is planned right now."}</p>
-              <p className={cx("sub")} style={{ margin: "4px 0 0" }}>{upcoming.length ? "Times are shown in your time zone." : props.canManage ? "Add the first one and members get an email the day before." : "You'll get an email the day before the next one."}</p>
+              <p className={cx("sub")} style={{ margin: "4px 0 0" }}>{upcoming.length ? "Times are in your time zone." : props.canManage ? "Add the first one and members get an email the day before." : "You'll get an email the day before the next one."}</p>
             </div>
             {props.canManage ? <button type="button" className={cx(props.form ? "btn" : "btn go")} onClick={props.onNew}><Plus size={14} aria-hidden="true" />Add an event</button> : null}
           </div>
@@ -217,7 +219,7 @@ export function KitEventsList(props: {
                 <div>
                   {label.live ? <span className={cx("livepill")}><i />{label.text}</span> : <span className={cx("evsoon")}><i />{eventSoonWord(featured.starts_at, props.now)}</span>}
                   <h2>{featured.title}{tags(featured)}</h2>
-                  <p className={cx("evnext-when")} title={props.timeLabel(featured).secondary ?? undefined}>{eventDayWord(featured.starts_at, props.now)} · {props.timeLabel(featured).primary}</p>
+                  <p className={cx("evnext-when")} title={props.timeLabel(featured).secondary ?? undefined}>{eventDayWord(featured.starts_at, props.now)} · {yours(props.timeLabel(featured).primary)}</p>
                   {eventPlaceWord(featured) ? <p className={cx("evnext-where")}>{placeIcon(featured)}{eventPlaceWord(featured)}</p> : null}
                   {featured.description_md ? <p className={cx("evnext-say")}>{featured.description_md}</p> : null}
                   <div className={cx("evnext-acts")}>
