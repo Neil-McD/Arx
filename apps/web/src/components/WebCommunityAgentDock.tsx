@@ -1388,6 +1388,7 @@ function WebCommunityAgentDock(props, ref) {
               {...props.home}
               session={props.session}
               ensureSession={props.ensureSession}
+              open={isOpenSurface}
               refreshKey={homeRefreshKey}
               asideContainer={homeRailElement}
               agentOn={agentOn}
@@ -1538,6 +1539,7 @@ function WebCommunityAgentDock(props, ref) {
               {...props.home}
               session={props.session}
               ensureSession={props.ensureSession}
+              open={isOpenSurface}
               refreshKey={homeRefreshKey}
               asideContainer={homeRailElement}
             />
