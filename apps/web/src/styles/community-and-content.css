@@ -338,22 +338,6 @@
   min-width: 0;
 }
 
-.public-funnel-shell.public-funnel-shell-narrow {
-  width: min(100%, 760px);
-}
-
-.public-funnel-state-card {
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-lg);
-  background: color-mix(in srgb, var(--bg-card-alt) 85%, transparent);
-}
-
-.public-funnel-state-copy {
-  margin: 0;
-  font-size: 13px;
-  line-height: 1.55;
-  color: var(--text-secondary);
-}
 
 .public-funnel-primary,
 .public-funnel-secondary {
@@ -399,37 +383,6 @@
   font-size: 15px;
 }
 
-.public-funnel-state-card {
-  padding: 22px;
-}
-
-.public-funnel-state-title {
-  margin: 0;
-  color: var(--text-primary);
-}
-
-.public-funnel-state-title {
-  font-size: clamp(26px, 3.4vw, 38px);
-  line-height: 1.05;
-  letter-spacing: -0.04em;
-  font-weight: 520;
-}
-
-.public-funnel-state-card {
-  display: grid;
-  gap: 16px;
-}
-
-.public-funnel-state-actions {
-  display: flex;
-  gap: 10px;
-  flex-wrap: wrap;
-}
-
-.public-funnel-state-actions .public-funnel-primary,
-.public-funnel-state-actions .public-funnel-secondary {
-  width: auto;
-}
 
 @media (max-width: 820px) {
 
@@ -438,13 +391,9 @@
     gap: 14px;
   }
 
-  .public-funnel-state-card {
-    padding: 18px;
-  }
+  
 
-  .public-funnel-state-actions {
-    flex-direction: column;
-  }
+  
 
   .public-funnel-primary,
   .public-funnel-secondary {
