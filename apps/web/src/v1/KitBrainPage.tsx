@@ -200,7 +200,8 @@ export function KitBrainPageView(props: PageProps & { map: BrainMap }) {
         <KitBrainMap map={map} size="page" reading={reading} now={now} selectedId={picked} coverRight={picked && wide ? SIDE_WIDTH : 0}
           onSelect={(id) => setPicked(id === picked ? null : id)} onClear={() => setPicked(null)} />
       </div>
-      <div className={cx("brainbar")}>
+      {/* The readings stay in reach beside an open panel. */}
+      <div className={cx("brainbar")} style={picked && wide ? { paddingRight: SIDE_WIDTH + 24 } : undefined}>
         <span className={cx("sub")}>{counts}</span>
         <div className={cx("seg")} role="tablist" aria-label="Reading">
           {readings.map(([value, label]) => (
