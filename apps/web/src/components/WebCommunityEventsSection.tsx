@@ -575,12 +575,11 @@ export function WebCommunityEventsSection(props: WebCommunityEventsSectionProps)
       onChange={setDraft} onClose={closeDraft} onSubmit={() => void submitDraft()} />
   ) : null;
   const renderEventsList = () => {
-    // The right column stays mounted while events load: dropping it for a
-    // frame changes the page's layout and the title jumps (Nov 13).
+    // Nothing is beside the list until an event is picked, so there is no
+    // right column to hold while events load.
     if (showInitialEventsLoading) return (
       <>
         <div className="community-events-state" role="status">Loading events…</div>
-        <CommunityPageRail label="This event"><div /></CommunityPageRail>
       </>
     );
     return (
