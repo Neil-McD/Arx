@@ -68,6 +68,9 @@ test("mobile Agent routing stays in the existing shell controller", () => {
   const controller = readFileSync(new URL("../apps/web/src/controllers/useWebMobileShellController.ts", import.meta.url), "utf8");
   expect(app).not.toMatch(/\buseEffect\b/);
   expect(app).toContain('isCommunityAgentPage: activePage === "community" && communityTab === "agent"');
-  expect(controller).toContain('params.showMobileShell && params.isCommunityAgentPage');
-  expect(controller).toContain('params.setMobileRootPage("agent")');
+  // The Home tab follows Home's address both ways (Back from /home to /browse
+  // hands the tab back to the community).
+  expect(controller).toMatch(
+    /if \(params\.isCommunityAgentPage\) \{\s*params\.setMobileRootPage\("agent"\);\s*\} else if \(params\.mobileRootPage === "agent"\) \{\s*params\.setMobileRootPage\("community"\);/,
+  );
 });
