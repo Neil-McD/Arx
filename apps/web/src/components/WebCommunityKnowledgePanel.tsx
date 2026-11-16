@@ -1,6 +1,7 @@
 import { CommunityPageHeader, CommunityPageRail } from "./CommunityPageHeader";
 import { isDesignV1Active } from "../../../../shared/designSystem";
 import { KitClassroom } from "../v1/KitClassroom";
+import { KitBrainPage, takeOpenBrain } from "../v1/KitBrainPage";
 import { deleteCloudCommunityResourceModule, prepareCloudCommunityBrandingField, saveCloudCommunityResource, saveCloudCommunityResourceModule } from "../../../../shared/cloudCommunityAdminGateway";
 import { useEffect, useState, type ComponentProps } from "react";
 import { buildPlatformSwitcherStyle } from "../../../../shared/platformSwitcherUi";
@@ -67,14 +68,24 @@ function KnowledgeV1({ resources, context }: Props) {
   const [guideMemoryOpen, setGuideMemoryOpen] = useState(false);
   useEffect(() => { setGuideMemoryOpen(false); }, [context.communityId, canManage]);
   const inGuideMemory = guideMemoryOpen && canManage && !openCourse;
+  // The community brain: the map of what the community knows, one level in.
+  const [brainOpen, setBrainOpen] = useState(() => takeOpenBrain());
+  useEffect(() => { if (takeOpenBrain()) setBrainOpen(true); }, [context.communityId]);
+  const inBrain = brainOpen && !openCourse && !inGuideMemory;
   return (
     <section className="community-knowledge-page" aria-label="Knowledge">
-      <CommunityPageHeader title={openCourse ? openCourse.name : inGuideMemory ? "What your guide knows" : "Knowledge"}
+      <CommunityPageHeader title={openCourse ? openCourse.name : inGuideMemory ? "What your guide knows" : inBrain ? "The community brain" : "Knowledge"}
         back={openCourse ? { label: "Back to Knowledge", onBack: () => resources.actions.handleSelectModule(null) }
-          : inGuideMemory ? { label: "Back to Knowledge", onBack: () => setGuideMemoryOpen(false) } : null}>
+          : inGuideMemory ? { label: "Back to Knowledge", onBack: () => setGuideMemoryOpen(false) }
+            : inBrain ? { label: "Back to Knowledge", onBack: () => setBrainOpen(false) } : null}>
         <div className="community-knowledge-header"><h1>Knowledge</h1></div>
       </CommunityPageHeader>
-        <KitClassroom communityId={context.communityId!} communityName={context.communityName ?? "This community"} session={context.session}
+        {inBrain ? (
+          <KitBrainPage session={context.session} communityId={context.communityId!} canManage={canManage}
+            onOpenCourse={(courseId) => { setBrainOpen(false); resources.actions.handleSelectModule(courseId); }} />
+        ) : null}
+        {inBrain ? null : <KitClassroom communityId={context.communityId!}
+          onOpenBrain={() => setBrainOpen(true)} communityName={context.communityName ?? "This community"} session={context.session}
           modules={resources.state.modules} resources={resources.state.resources}
           loaded={resources.state.moduleRead.hasData && resources.state.resourceRead.hasData}
           // The app's own lens ("View as a member" turns it off); the server
@@ -178,7 +189,7 @@ function KnowledgeV1({ resources, context }: Props) {
               if (!(await resources.actions.handleMoveResourceToModule(resourceId, courseId, null))) throw new Error("move_failed");
             },
           } : null}
-          renderRail={(rail) => <CommunityPageRail label="Knowledge">{rail}</CommunityPageRail>} />
+          renderRail={(rail) => <CommunityPageRail label="Knowledge">{rail}</CommunityPageRail>} />}
     </section>
   );
 }

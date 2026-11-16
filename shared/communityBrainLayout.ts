@@ -14,13 +14,16 @@ import type { BrainAttach, BrainMap, BrainPoint } from "./communityBrain";
 
 export const GOLDEN_ANGLE = 137.50776405003785;
 const COURSE_INNER = 64;
-// Subjects and pods sit outside the longest fibre, so fibres never cross them.
-const SUBJECT_RING = 380;
-const POD_RING = 480;
+// Subjects sit this far outside the longest fibre (so no fibre crosses
+// them), and pods this far outside the subjects. A small community's map is
+// small; the rings only widen when its longest course does.
+const SUBJECT_GAP = 96;
+const SUBJECT_RING_MIN = 200;
+const POD_GAP = 104;
 const LESSON_STEP = 64;
 const FIBRE_MAX = 300;
 // A hub's name, roughly, so the map makes room for it.
-const HUB_CHAR_W = 7.4;
+const HUB_CHAR_W = 8.2;
 // A learned thing's reach from its anchor: newest, and settled.
 const REACH_NEW = 74;
 const REACH_OLD = 30;
@@ -89,6 +92,12 @@ export function layoutBrain(map: BrainMap, nowMs: number): BrainLayout {
   const lessons: LayoutLesson[] = [];
   const anchors = new Map<string, { at: Placed; out: number }>();
 
+  const fibreEnd = (lessonCount: number) => {
+    const n = Math.max(1, lessonCount);
+    return COURSE_INNER + (n - 1) * Math.min(LESSON_STEP, (FIBRE_MAX - COURSE_INNER) / n);
+  };
+  const subjectRing = Math.max(SUBJECT_RING_MIN, Math.max(0, ...map.courses.map((course) => fibreEnd(course.lessons.length))) + SUBJECT_GAP);
+  const podRing = subjectRing + POD_GAP;
   // Each kind keeps its own run of the golden angle, so a new hub of one kind
   // moves no hub of another (they sit on different rings).
   const seen: Record<string, number> = {};
@@ -116,8 +125,8 @@ export function layoutBrain(map: BrainMap, nowMs: number): BrainLayout {
       return;
     }
     // Subjects on their ring, pods outside them; with many, alternate rings so neighbours don't touch.
-    const base = hub.kind === "pod" ? POD_RING : SUBJECT_RING;
-    const r = base + (slot % 2 === 0 ? 0 : 44);
+    const base = hub.kind === "pod" ? podRing : subjectRing;
+    const r = base + (slot % 2 === 0 ? 0 : 40);
     const at = polar(angle, r);
     hubs.push({ ...hub, ...at, angle });
     const key = hub.kind === "subject" ? hub.key : hub.kind === "pod" ? `pod:${hub.key.replace(/^pod:/, "")}` : "other";
