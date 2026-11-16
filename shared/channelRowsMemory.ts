@@ -1,4 +1,4 @@
-// Layout before data (docs/specs/web-architecture-end-state.md): the left
+// Layout before data (docs/specs/web-architecture-end-state.md, rule 3): the left
 // column reserves its channel rows before the list arrives, so the pages
 // under it never move when it does. How many rows a community had last time
 // is remembered in this browser; a first visit reserves two (General and one
