@@ -6,12 +6,12 @@
 // than five learned things a list says more than a map, so the page is a list.
 import { useEffect, useState, type ReactNode } from "react";
 import type { BrainMap } from "../../../../shared/communityBrain";
-import { fetchBrainMap, fetchBrainNote, type BrainNoteView } from "../../../../shared/cloudCommunityBrainGateway";
+import { fetchBrainNote, type BrainNoteView } from "../../../../shared/cloudCommunityBrainGateway";
 import { fetchNoteSources, type NoteSourceView } from "../../../../shared/cloudCommunityNotesGateway";
 import { askGuide } from "../components/guideSearch";
 import { Btn, cx, KitApp, useMinWidth } from "./kit";
 import { BRAIN_MAP_MIN_POINTS, KitBrainMap, type BrainReading } from "./KitBrainMap";
-import { learnedWhen } from "./KitBrain";
+import { learnedWhen, useBrainMap } from "./KitBrain";
 import { PanelLine, PanelPart } from "./KitPanel";
 
 // Asking Knowledge to open the brain (from Home's panel). One use, this tab.
@@ -25,20 +25,6 @@ export function takeOpenBrain(): boolean {
     window.sessionStorage.removeItem(OPEN_KEY);
     return asked;
   } catch { return false; }
-}
-
-export function useBrainMap(session: unknown, communityId: string | null, podChannelId?: string | null): { map: BrainMap | null; failed: boolean } {
-  const [state, setState] = useState<{ map: BrainMap | null; failed: boolean }>({ map: null, failed: false });
-  useEffect(() => {
-    setState({ map: null, failed: false });
-    if (!session || !communityId) return;
-    let live = true;
-    fetchBrainMap({ session, communityId, podChannelId })
-      .then((map) => { if (live) setState({ map, failed: false }); })
-      .catch(() => { if (live) setState({ map: null, failed: true }); });
-    return () => { live = false; };
-  }, [session, communityId, podChannelId]);
-  return state;
 }
 
 // What a picked point is, from the map itself (lessons, subjects, pods) or

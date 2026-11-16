@@ -25,7 +25,7 @@ import { continueLesson, courseLessons, courseProgress, pageOf } from "../../../
 import type { CommunityResource, CommunityResourceModule } from "../components/communityResourcesContracts";
 import { askGuide, openGuideFromSearch } from "../components/guideSearch";
 import { WebCommunityResourceViewerContent } from "../components/WebCommunityResourceViewerContent";
-import { LearnedRows, useLearnedLately } from "./KitBrain";
+import { PanelBrain, useBrainMap } from "./KitBrain";
 import { BriefPart, usePlaceBrief } from "./KitBrief";
 import { NoteForm, OpenNote } from "./KitKnowledgeNotes";
 import { PanelAction, PanelLine, PanelNext, PanelPart } from "./KitPanel";
@@ -122,7 +122,7 @@ export function KitClassroom(props: {
   const [summary, setSummary] = useState<CourseProgressSummary[]>([]);
   const [notes, setNotes] = useState<CommunityNoteView[]>([]);
   // Read again whenever a builder's notes change.
-  const learned = useLearnedLately(props.session, props.communityId, notes.map((entry) => `${entry.slug}:${entry.updated_at}`).join("|"));
+  const { map: brain } = useBrainMap(props.session, props.communityId, null, notes.map((entry) => `${entry.slug}:${entry.updated_at}`).join("|"));
   const [canWriteNotes, setCanWriteNotes] = useState(false);
   const [lessonId, setLessonId] = useState<string | null>(null);
   const [shelfPage, setShelfPage] = useState(0);
@@ -309,20 +309,9 @@ export function KitClassroom(props: {
         ))}
       </PanelPart>
     ) : null,
-    courses.length || learned?.total ? (
-      <PanelPart key="brain" label="The community brain"
-        action={props.onOpenBrain ? <PanelAction onClick={props.onOpenBrain}>Open</PanelAction> : null}>
-        {courses.length ? <PanelLine fact={String(courses.length)}>Courses</PanelLine> : null}
-        {lessonCount ? <PanelLine fact={String(lessonCount)}>Lessons</PanelLine> : null}
-        {learned?.total ? <PanelLine fact={`${learned.total}${learned.more ? "+" : ""}`}>Learned from the community</PanelLine> : null}
-        {guideSources.some(sourceFailed) ? <PanelLine fact={String(guideSources.filter(sourceFailed).length)}>Files it couldn't read</PanelLine> : null}
-      </PanelPart>
-    ) : null,
-    learned?.latest.length ? (
-      <PanelPart key="learned" label="Learned lately" fact={learned.this_week ? `${learned.this_week} this week` : null}>
-        <LearnedRows view={learned} now={now} />
-      </PanelPart>
-    ) : null,
+    <PanelBrain key="brain" map={brain} now={now} onOpen={props.onOpenBrain}>
+      {guideSources.some(sourceFailed) ? <PanelLine fact={String(guideSources.filter(sourceFailed).length)}>Files it couldn't read</PanelLine> : null}
+    </PanelBrain>,
     props.canManage && liveCourses.length ? (
       <PanelPart key="learning" label="Learning">
         {liveCourses.slice(0, 5).map(({ course }) => {

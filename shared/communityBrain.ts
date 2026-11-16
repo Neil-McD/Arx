@@ -103,3 +103,19 @@ export function subjectsOf(notes: Array<Pick<BrainNoteInput, "at" | "createdAt">
   return [...found].map(([name, entry]) => ({ name, first_at: new Date(entry.first).toISOString(), size: entry.size }))
     .sort((a, b) => a.first_at.localeCompare(b.first_at) || a.name.localeCompare(b.name));
 }
+
+// What a panel says of a map in a few words: "11 learned · 4 new" (new: this
+// week). Short, to sit on one line in a narrow panel.
+export function brainFact(map: BrainMap): string | null {
+  if (!map.counts.learned) return null;
+  return [`${map.counts.learned} learned`, map.counts.this_week ? `${map.counts.this_week} new` : null].filter(Boolean).join(" · ");
+}
+
+// The latest things learned that this viewer may read by name (the map
+// already holds only the names they may read). On a community's map a pod's
+// things are the pod's, not the community's.
+export function latestLearned(map: BrainMap, max: number): Array<{ id: string; title: string; at: string }> {
+  return map.points.filter((point) => point.title && (map.center.kind === "pod" || point.at.kind !== "pod"))
+    .sort((a, b) => b.learned_at.localeCompare(a.learned_at) || a.id.localeCompare(b.id))
+    .slice(0, max).map((point) => ({ id: point.id, title: point.title!, at: point.learned_at }));
+}
