@@ -277,6 +277,12 @@ pages, mounted without the app.
 5. Do not add new public entity classes without defining their namespace first.
 6. Standard and `/m` shell variants must share the same access decision.
 7. Automatic redirects replace browser history rather than adding entries.
+8. A page someone chooses (the left column, Home's shortcuts, the palette, a
+   channel, a phone tab, Inbox) is a history step: it goes to the page's
+   address and the screen follows the address, so Back returns to where they
+   were. Choosing the page they are on, exactly as it is, adds nothing
+   (`communityPageStep` in `apps/web/src/controllers/useWebCommunityRouteController.ts`).
+   Corrections (a page they can't open, a community's real address) replace.
 
 ## Phone Shell Variant (`/m`)
 

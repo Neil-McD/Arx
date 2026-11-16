@@ -813,6 +813,7 @@ export default function App() {
     activeCommunityId: selectedActiveCommunityId,
     activeCommunitySlug: selectedActiveCommunitySlug,
     communityTab,
+    communityChannelSlug,
     communities,
     navigateTo,
     pushNavSnapshot,
@@ -2352,11 +2353,9 @@ export default function App() {
         }
       : undefined,
     // Design v1: Members is a page of the community (/c/:slug/members).
+    // A page you choose, like any other: a history step, nothing when already there.
     onOpenCommunityMembers: isDesignV1Active()
-      ? () => {
-          const path = buildCommunityTabPath(selectedActiveCommunitySlug, "members");
-          if (path) navigateTo(path);
-        }
+      ? () => handleSelectCommunityTab("members")
       : handleOpenCommunityMembers,
     onToggleDirectMessages: handleToggleDirectMessages,
     isDirectMessagesOpen,
