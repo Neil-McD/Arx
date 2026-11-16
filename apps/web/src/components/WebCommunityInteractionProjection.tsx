@@ -526,11 +526,14 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
   const [describedNow, setDescribedNow] = useState<{ channelId: string; description: string } | null>(null);
   useEffect(() => onChannelDescription(setDescribedNow), []);
   const channelDescription = (describedNow && describedNow.channelId === props.activeChannel?.id ? describedNow.description : props.activeChannel?.description ?? "").trim();
+  // An ordinary channel's pin is shown in its right column (a pod's column has
+  // no pin, so a pod's room keeps it in the feed).
+  const pinLivesInPanel = isDesignV1Active() && Boolean(props.pinnedRoot) && props.activeChannel?.access_mode !== "restricted";
   const openChannelNoColumn = isDesignV1Active() && props.activeChannel?.access_mode !== "restricted" && !props.pinnedRoot && !channelDescription;
 
   return (
     <>
-    <div className={`community-interaction-projection${hasDetailPanel ? " has-drawer" : hasChannelContext ? ` has-channel-context${openChannelNoColumn ? " is-open-channel" : ""}` : ""}${isMobileThreadPage ? " mobile-thread-page-open" : ""}${peopleOpen && !hasDetailPanel ? " people-panel-open" : ""}`}>
+    <div className={`community-interaction-projection${hasDetailPanel ? " has-drawer" : hasChannelContext ? ` has-channel-context${openChannelNoColumn ? " is-open-channel" : ""}` : ""}${isMobileThreadPage ? " mobile-thread-page-open" : ""}${peopleOpen && !hasDetailPanel ? " people-panel-open" : ""}${pinLivesInPanel ? " pin-in-panel" : ""}`}>
       <div className="community-interaction-main" ref={mainRef}>
         {props.activeChannel ? (
           <WebCommunityChannelHeader
