@@ -4346,8 +4346,9 @@
 @media (max-width: 1023px) { :root[data-design="v1"] .members-record-close { display: none; } }
 
 /* A channel's pinned post lives in its right column on a wide window, so the
-   feed is only the conversation. Where that column isn't shown (a narrow
-   window, a phone, or a thread open in its place) the feed keeps the pin. */
+   feed is only the conversation. Opening the pin (or any thread) there takes
+   the column, and the feed stays as it was: the pin does not come back to its
+   top. A narrow window or a phone has no such column and keeps the pin. */
 @media (min-width: 1024px) {
-  :root[data-design="v1"]:where(:not([data-layout="phone"])) .community-interaction-projection.has-channel-context:not(.is-open-channel):has(> .channel-roster-panel.is-kit .kit-channel-rail.has-pinned) .community-channel-pinned-root { display: none; }
+  :root[data-design="v1"]:where(:not([data-layout="phone"])) .community-interaction-projection.pin-in-panel .community-channel-pinned-root { display: none; }
 }
