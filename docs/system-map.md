@@ -225,7 +225,9 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
   into one map per viewer: courses and lessons, what was learned and where it
   is filed, the pods they can enter, and what is answered together, with the
   same naming rules; `shared/communityBrainLayout.ts` places it by fixed
-  rules so it keeps its shape as it grows, and `KitBrainMap` draws it),
+  rules so it keeps its shape as it grows, and `KitBrainMap` draws it;
+  `KitBrainPage` is the map as a page in Knowledge, and `getBrainNote` reads
+  one picked thing with the same rules: a member never gets a note's text),
   `communityEvidence*`,
   `communityCognitionLifecycle`, `communityWikiArchitect`; member knowledge stays in
   `memberOntology` and `memberOntologyCore` (`memberFacts`, `memberProfileSpines`, no
