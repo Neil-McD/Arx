@@ -1,6 +1,7 @@
 import {
   setCloudCommunityChannelPinnedRoot,
 } from "../../../../shared/cloudCommunityChannelsGateway";
+import { readPlaceParam, writePlaceParam } from "../../../../shared/placeParams";
 import {
   useCallback,
   useEffect,
@@ -307,6 +308,9 @@ export function useWebCommunityInteractionProjection<
   const [error, setError] = useState<string | null>(null);
   const [sidecar, setSidecar] = useState<CommunityInteractionSidecar>({ kind: "context" });
   const selectedRootId = sidecar.kind === "thread" ? sidecar.rootId : null;
+  // The open thread rides on the address (?thread=), so a refresh comes back
+  // to it. Read once; opened again when this channel's posts are showing.
+  const threadToReopenRef = useRef<string | null>(readPlaceParam("thread"));
   const [selectedRoot, setSelectedRoot] = useState<CommunityInteractionRootBundle | null>(null);
   const [repliesByRootId, setRepliesByRootId] = useState<
     Record<string, CommunityInteractionReplyBundle[]>
@@ -1108,6 +1112,21 @@ export function useWebCommunityInteractionProjection<
       : [];
   const presentedRepliesByRootId = isPresentationScopedToBoundary ? repliesByRootId : {};
   const presentedSelectedRootId = isPresentationScopedToBoundary ? selectedRootId : null;
+  useEffect(() => {
+    const wanted = threadToReopenRef.current;
+    if (!wanted) return;
+    // Another page since then: the tag is gone, and so is the wish.
+    if (readPlaceParam("thread") !== wanted) { threadToReopenRef.current = null; return; }
+    if (!isCommunityChatActive || !isPresentationScopedToBoundary || isLoadingRoots) return;
+    threadToReopenRef.current = null;
+    setSidecar({ kind: "thread", rootId: wanted });
+  }, [isCommunityChatActive, isLoadingRoots, isPresentationScopedToBoundary]);
+  useEffect(() => {
+    if (!isCommunityChatActive) return;
+    if (threadToReopenRef.current && readPlaceParam("thread") === threadToReopenRef.current) return;
+    threadToReopenRef.current = null;
+    writePlaceParam("thread", selectedRootId);
+  }, [isCommunityChatActive, selectedRootId]);
   const presentedSelectedRoot = isPresentationScopedToBoundary ? selectedRoot : null;
   const visibleRoots = useMemo(
     () => appendPendingRoots(

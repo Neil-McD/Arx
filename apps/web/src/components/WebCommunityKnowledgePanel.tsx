@@ -3,7 +3,8 @@ import { isDesignV1Active } from "../../../../shared/designSystem";
 import { KitClassroom } from "../v1/KitClassroom";
 import { KitBrainPage, takeOpenBrain } from "../v1/KitBrainPage";
 import { deleteCloudCommunityResourceModule, prepareCloudCommunityBrandingField, saveCloudCommunityResource, saveCloudCommunityResourceModule } from "../../../../shared/cloudCommunityAdminGateway";
-import { useEffect, useState, type ComponentProps } from "react";
+import { useEffect, useRef, useState, type ComponentProps } from "react";
+import { readPlaceParam, writePlaceParam } from "../../../../shared/placeParams";
 import { buildPlatformSwitcherStyle } from "../../../../shared/platformSwitcherUi";
 import { WebPlatformTabList, platformTabId, platformTabPanelId } from "./WebPlatformChoiceControls";
 import { CommunityResourcesPanel } from "./CommunityResourcesPanel";
@@ -65,13 +66,21 @@ function KnowledgeV1({ resources, context }: Props) {
     }
   };
   // "What your guide knows": the builders' list, one level in from Knowledge.
-  const [guideMemoryOpen, setGuideMemoryOpen] = useState(false);
-  useEffect(() => { setGuideMemoryOpen(false); }, [context.communityId, canManage]);
+  // Which view is open rides on the address (?view=), so a refresh keeps it.
+  const [guideMemoryOpen, setGuideMemoryOpen] = useState(() => readPlaceParam("view") === "guide");
+  const shownCommunityRef = useRef(context.communityId);
+  useEffect(() => {
+    if (shownCommunityRef.current === context.communityId) return;
+    shownCommunityRef.current = context.communityId;
+    setGuideMemoryOpen(false);
+  }, [context.communityId]);
   const inGuideMemory = guideMemoryOpen && canManage && !openCourse;
   // The community brain: the map of what the community knows, one level in.
-  const [brainOpen, setBrainOpen] = useState(() => takeOpenBrain());
+  const [brainOpen, setBrainOpen] = useState(() => takeOpenBrain() || readPlaceParam("view") === "brain");
   useEffect(() => { if (takeOpenBrain()) setBrainOpen(true); }, [context.communityId]);
   const inBrain = brainOpen && !openCourse && !inGuideMemory;
+  const viewTag = openCourse ? null : guideMemoryOpen ? "guide" : brainOpen ? "brain" : null;
+  useEffect(() => { writePlaceParam("view", viewTag); }, [viewTag]);
   return (
     <section className="community-knowledge-page" aria-label="Knowledge">
       <CommunityPageHeader title={openCourse ? openCourse.name : inGuideMemory ? "What your guide knows" : inBrain ? "The community brain" : "Knowledge"}
