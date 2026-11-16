@@ -52,8 +52,8 @@ the backend in production before any member sees new screens.
 - Added since this plan was first written (Nov 13, `release:verify` passed at
   `9ab0910d4`, nothing deployed):
   - Tables, all additive: `communityTiers`, `connectedApps`,
-    `connectedAppDeliveries`, `communityAppGrants`, `communityEventGoing`,
-    `communityMemberNotes` (12 new tables in all since `138ef7ce3`), and
+    `connectedAppDeliveries`, `communityAppGrants`,
+    `communityMemberNotes` (11 new tables in all since `138ef7ce3`), and
     `communityPricePoints.tierKey`, `communityMemberships.accessSource =
     "app_grant"`, `connectedApps.appUrl`.
   - Two public routes, `GET /apps/v1/access` and `POST /apps/v1/sales`, which

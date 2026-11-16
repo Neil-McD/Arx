@@ -180,9 +180,8 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
 ### 6. Events — Keep
 
 - **Code:** `communityEvents`, `eventReminders` (cron: 24-hour reminder emails),
-  no "I'll be there" (removed Nov 14; Neil: not needed yet). The `communityEventGoing`
-  table is still in the schema with its old rows; nothing reads or writes it.
-- **Tables:** `communityEvents`, `communityEventGoing`.
+  no "I'll be there" (removed Nov 14; its table and rows went Nov 16).
+- **Tables:** `communityEvents`.
 
 ### 7. Community notes — Keep (protected)
 
