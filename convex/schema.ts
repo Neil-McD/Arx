@@ -2672,22 +2672,6 @@ export default defineSchema({
     .index("by_pod_status_startsAt", ["podChannelId", "status", "startsAt"])
     .index("by_createdBy", ["createdByUserId"]),
 
-
-
-
-  // "Going" to one date of an event (a repeating event has many dates). One
-  // row per person per date; removing the row is "not going".
-  communityEventGoing: defineTable({
-    communityId: v.id("communities"),
-    eventId: v.id("communityEvents"),
-    occurrenceStartsAt: v.number(),
-    userId: v.id("users"),
-    createdAt: v.number(),
-  })
-    .index("by_event_occurrence", ["eventId", "occurrenceStartsAt"])
-    .index("by_event_occurrence_user", ["eventId", "occurrenceStartsAt", "userId"])
-    .index("by_community_user", ["communityId", "userId"]),
-
   communityEvidenceRetrievalLogs: defineTable({
     communityId: v.id("communities"),
     userId: v.id("users"),
