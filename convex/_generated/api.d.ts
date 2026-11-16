@@ -41,6 +41,7 @@ import type * as communityApps from "../communityApps.js";
 import type * as communityAttachmentDownloads from "../communityAttachmentDownloads.js";
 import type * as communityAttachmentUploads from "../communityAttachmentUploads.js";
 import type * as communityAttention from "../communityAttention.js";
+import type * as communityBrain from "../communityBrain.js";
 import type * as communityBriefs from "../communityBriefs.js";
 import type * as communityBuilderKnowledgeSetup from "../communityBuilderKnowledgeSetup.js";
 import type * as communityCapabilityContext from "../communityCapabilityContext.js";
@@ -267,6 +268,7 @@ declare const fullApi: ApiFromModules<{
   communityAttachmentDownloads: typeof communityAttachmentDownloads;
   communityAttachmentUploads: typeof communityAttachmentUploads;
   communityAttention: typeof communityAttention;
+  communityBrain: typeof communityBrain;
   communityBriefs: typeof communityBriefs;
   communityBuilderKnowledgeSetup: typeof communityBuilderKnowledgeSetup;
   communityCapabilityContext: typeof communityCapabilityContext;
