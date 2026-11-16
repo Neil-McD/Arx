@@ -4309,6 +4309,6 @@
   line-height: 1;
   cursor: pointer;
 }
-:root[data-design="v1"] .members-record-close:hover { color: var(--text-ink-primary); background: rgba(255, 255, 255, 0.07); }
+:root[data-design="v1"] .members-record-close:hover { color: var(--text-ink-primary); background: var(--hover-overlay); }
 :root[data-design="v1"]:where([data-layout="phone"]) .members-record-close { display: none; }
 @media (max-width: 1023px) { :root[data-design="v1"] .members-record-close { display: none; } }
