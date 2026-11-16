@@ -11,8 +11,12 @@
 // gaps (for builders: the biggest subjects, which no course teaches, lit).
 import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { BrainMap } from "../../../../shared/communityBrain";
-import { chooseLabels, fitStage, fitView, isFitView, layoutBrain, panBy, revealPoint, scaleLayout, stageWindow, zoomAt, type BrainView, type LabelBox, type LayoutPoint } from "../../../../shared/communityBrainLayout";
+import { chooseLabels, fitStage, fitView, isFitView, layoutBrain, lensLayout, panBy, revealPoint, scaleLayout, stageWindow, zoomAt, type BrainView, type LabelBox, type LayoutPoint } from "../../../../shared/communityBrainLayout";
 import { cx } from "./kit";
+
+// A panel's map is drawn in a box this size (pixels at about 240 wide; the
+// drawing scales a little with the panel).
+const PANEL_BOX = { w: 240, h: 200 };
 
 export type BrainReading = "community" | "yours" | "gaps";
 // The fewest learned things worth a map; fewer, and a list says more.
@@ -72,12 +76,34 @@ export function KitBrainMap(props: {
   useEffect(() => { setView(fitView(bounds)); }, [props.map]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { setView((current) => current.k === 1 ? fitView(bounds) : current); }, [bounds]); // eslint-disable-line react-hooks/exhaustive-deps
   const scale = page ? fit * view.k : 1;
-  const layout = useMemo(() => scaleLayout(base, scale), [base, scale]);
+  // The panel's map is the same layout through the small-size lens, in pixels.
+  const layout = useMemo(() => page ? scaleLayout(base, scale) : lensLayout(base, PANEL_BOX), [base, scale, page]);
   // On the page, dots are a little larger: they are read, not glanced at.
   const dot = page ? Math.min(1.5, Math.max(0.7, 0.45 + scale * 0.55)) : 1;
-  const lessonR = (r: number) => page ? Math.max(1.8, r * 1.3 * Math.min(1, scale)) : r;
+  // In a panel sizes are screen pixels: a dot that reads, smaller as there are more of them.
+  const smallDot = Math.max(2, Math.min(3.6, 3.8 - base.points.length / 55));
+  const pr = (p: LayoutPoint): number => page ? p.r * dot : smallDot * (0.85 + Math.min(1, p.point.use / 8) * 0.5);
+  // A panel's lesson ring never touches the next one along its course.
+  const lessonGap = useMemo(() => {
+    const gaps = new Map<string, number>();
+    if (page) return gaps;
+    const byCourse = new Map<string, typeof layout.lessons>();
+    for (const lesson of layout.lessons) byCourse.set(lesson.courseKey, [...(byCourse.get(lesson.courseKey) ?? []), lesson]);
+    for (const [key, lessons] of byCourse) {
+      let least = Infinity;
+      for (let i = 1; i < lessons.length; i++) least = Math.min(least, Math.hypot(lessons[i].x - lessons[i - 1].x, lessons[i].y - lessons[i - 1].y));
+      gaps.set(key, least);
+    }
+    return gaps;
+  }, [layout, page]);
+  const lessonR = (lesson: { r: number; courseKey: string }) => page ? Math.max(1.8, lesson.r * 1.3 * Math.min(1, scale))
+    : Math.max(1.2, Math.min(smallDot * 0.9, (lessonGap.get(lesson.courseKey) ?? Infinity) / 2.8));
   const podR = 44 * scale;
-  const win = page ? stageWindow(view, scale, stage) : { x: base.bounds.minX, y: base.bounds.minY, w: base.bounds.maxX - base.bounds.minX, h: base.bounds.maxY - base.bounds.minY };
+  // The marks' sizes: the page's, or a panel's in pixels.
+  const size = page ? { glow: 52, core: 8, coreRing: 13, fresh: 10, cell: 6, nucleus: 2, pod: 5.2, podClosed: 3 }
+    : { glow: 22, core: 3.8, coreRing: 7, fresh: Math.max(3.5, Math.min(6, 7 - base.points.length / 40)), cell: 2.3, nucleus: 0.8, pod: 2.3, podClosed: 1.6 };
+  const mid = layout.center;
+  const win = page ? stageWindow(view, scale, stage) : { x: 0, y: 0, w: PANEL_BOX.w, h: PANEL_BOX.h };
   // The biggest subjects are where the community knows what no course teaches.
   const gapKeys = useMemo(() => new Set(props.map.subjects.filter((s) => s.size >= 3).sort((a, b) => b.size - a.size).slice(0, 3).map((s) => `subject:${s.name}`)), [props.map]);
   // Names go where there is room on screen: only for what is in view, never
@@ -187,14 +213,14 @@ export function KitBrainMap(props: {
         return <path key={`s-${hub.key}`} className={cx(gap ? "brain-spoke gap" : dimAll ? "brain-spoke dim" : "brain-spoke")} d={curve(layout.center, hub, (hashBend(hub.key)))} />;
       })}
       {/* Branches: what was learned, off its lesson, subject or pod. */}
-      {layout.points.map((p) => <path key={`b-${p.id}`} className={cx(dimAll && !lit(p) ? "brain-branch dim" : "brain-branch")} d={curve(p.anchor, p, hashBend(p.id))} strokeWidth={0.7 + Math.min(1, p.point.use / 10) * 0.8} />)}
+      {layout.points.map((p) => <path key={`b-${p.id}`} className={cx(dimAll && !lit(p) ? "brain-branch dim" : "brain-branch")} d={curve(p.anchor, p, hashBend(p.id))} strokeWidth={page ? 0.7 + Math.min(1, p.point.use / 10) * 0.8 : 0.7} />)}
       {/* Synapses: what answers read together. */}
       {layout.arcs.map((arc) => {
         const hot = props.selectedId && arc.ids.includes(props.selectedId);
         return <path key={arc.ids.join("|")} className={cx(hot ? "brain-arc hot" : dimAll ? "brain-arc dim" : "brain-arc")} d={curve(arc.a, arc.b, 0.22)} />;
       })}
 
-      <circle cx={0} cy={0} r={52} fill={`url(#${glow})`} />
+      <circle cx={mid.x} cy={mid.y} r={size.glow} fill={`url(#${glow})`} />
 
       {/* Learned things. */}
       {layout.points.map((p) => {
@@ -207,12 +233,12 @@ export function KitBrainMap(props: {
           <g key={p.id} className={cx(page ? "brain-node pickable" : "brain-node")}
             {...(page ? { tabIndex: 0, role: "button", "aria-label": name, onClick: () => pick(p.id), onKeyDown: (e: any) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); pick(p.id); } } } : {})}>
             {page ? <title>{name}</title> : null}
-            {p.point.fresh && on && reading !== "yours" ? <circle cx={p.x} cy={p.y} r={p.r * dot + 10} fill={`url(#${glow})`} /> : null}
-            {reading === "yours" && p.point.mine ? <circle cx={p.x} cy={p.y} r={p.r * dot + 9} fill={`url(#${mineGlow})`} /> : null}
-            <circle className={cx(cls)} cx={p.x} cy={p.y} r={p.r * dot} />
-            {selected ? <circle className={cx("brain-ring")} cx={p.x} cy={p.y} r={p.r * dot + 5} /> : null}
+            {p.point.fresh && on && reading !== "yours" ? <circle cx={p.x} cy={p.y} r={pr(p) + size.fresh} fill={`url(#${glow})`} /> : null}
+            {reading === "yours" && p.point.mine ? <circle cx={p.x} cy={p.y} r={pr(p) + 9} fill={`url(#${mineGlow})`} /> : null}
+            <circle className={cx(cls)} cx={p.x} cy={p.y} r={pr(p)} />
+            {selected ? <circle className={cx("brain-ring")} cx={p.x} cy={p.y} r={pr(p) + 5} /> : null}
             {/* A wider target than the dot, for a finger. */}
-            {page ? <circle className={cx("brain-hit")} cx={p.x} cy={p.y} r={Math.max(11, p.r * dot + 6)} /> : null}
+            {page ? <circle className={cx("brain-hit")} cx={p.x} cy={p.y} r={Math.max(11, pr(p) + 6)} /> : null}
           </g>
         );
       })}
@@ -226,9 +252,9 @@ export function KitBrainMap(props: {
             {...(page ? { tabIndex: 0, role: "button", "aria-label": `Lesson ${lesson.order}: ${lesson.title}`, onClick: () => pick(lesson.id), onKeyDown: (e: any) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); pick(lesson.id); } } } : {})}>
             {page ? <title>{`${lesson.order}. ${lesson.title}`}</title> : null}
             {mine ? <circle cx={lesson.x} cy={lesson.y} r={15} fill={`url(#${mineGlow})`} /> : null}
-            <circle className={cx(cls)} cx={lesson.x} cy={lesson.y} r={lessonR(lesson.r)} />
-            {props.selectedId === lesson.id ? <circle className={cx("brain-ring")} cx={lesson.x} cy={lesson.y} r={lessonR(lesson.r) + 5} /> : null}
-            {page ? <text className={cx(dimAll && !mine ? "brain-num dim" : "brain-num")} x={lesson.x} y={lesson.y - lessonR(lesson.r) - 6} textAnchor="middle">{lesson.order}</text> : null}
+            <circle className={cx(cls)} cx={lesson.x} cy={lesson.y} r={lessonR(lesson)} />
+            {props.selectedId === lesson.id ? <circle className={cx("brain-ring")} cx={lesson.x} cy={lesson.y} r={lessonR(lesson) + 5} /> : null}
+            {page ? <text className={cx(dimAll && !mine ? "brain-num dim" : "brain-num")} x={lesson.x} y={lesson.y - lessonR(lesson) - 6} textAnchor="middle">{lesson.order}</text> : null}
             {page ? <circle className={cx("brain-hit")} cx={lesson.x} cy={lesson.y} r={12} /> : null}
           </g>
         );
@@ -246,13 +272,13 @@ export function KitBrainMap(props: {
             {props.selectedId === hub.key ? <circle className={cx("brain-ring")} cx={hub.x} cy={hub.y} r={11} /> : null}
             {hub.kind === "pod" ? (
               <>
-                <circle className={cx("brain-membrane")} cx={hub.x} cy={hub.y} r={hub.inside ? podR : 18} />
-                <circle className={cx(hub.inside ? "brain-cell" : "brain-cell closed")} cx={hub.x} cy={hub.y} r={hub.inside ? 5.2 : 3} />
+                {page ? <circle className={cx("brain-membrane")} cx={hub.x} cy={hub.y} r={hub.inside ? podR : 18} /> : null}
+                <circle className={cx(hub.inside ? "brain-cell" : "brain-cell closed")} cx={hub.x} cy={hub.y} r={hub.inside ? size.pod : size.podClosed} />
               </>
             ) : hub.kind === "subject" || hub.kind === "other" ? (
               <>
-                <circle className={cx(gap ? "brain-cell gap" : dimAll ? "brain-cell dim" : hub.kind === "other" ? "brain-cell other" : "brain-cell")} cx={hub.x} cy={hub.y} r={6} />
-                <circle className={cx(gap ? "brain-nucleus gap" : dimAll ? "brain-nucleus dim" : "brain-nucleus")} cx={hub.x} cy={hub.y} r={2} />
+                <circle className={cx(gap ? "brain-cell gap" : dimAll ? "brain-cell dim" : hub.kind === "other" ? "brain-cell other" : "brain-cell")} cx={hub.x} cy={hub.y} r={size.cell} />
+                <circle className={cx(gap ? "brain-nucleus gap" : dimAll ? "brain-nucleus dim" : "brain-nucleus")} cx={hub.x} cy={hub.y} r={size.nucleus} />
               </>
             ) : null}
             {page ? (
@@ -285,11 +311,11 @@ export function KitBrainMap(props: {
         // Its name goes on whichever side has room, clear of the panel.
         const room = stage.w - (props.coverRight ?? 0) - (p.x - win.x);
         const right = room < title.length * 7.4 + 24 ? false : p.x - win.x < title.length * 7.4 + 24 ? true : p.x >= p.anchor.x;
-        return <text className={cx("brain-name on")} x={p.x + (right ? p.r * dot + 7 : -p.r * dot - 7)} y={p.y + 4} textAnchor={right ? "start" : "end"}>{title}</text>;
+        return <text className={cx("brain-name on")} x={p.x + (right ? pr(p) + 7 : -pr(p) - 7)} y={p.y + 4} textAnchor={right ? "start" : "end"}>{title}</text>;
       })() : null}
 
-      <circle className={cx("brain-core")} cx={0} cy={0} r={8} />
-      <circle className={cx("brain-core-ring")} cx={0} cy={0} r={13} />
+      <circle className={cx("brain-core")} cx={mid.x} cy={mid.y} r={size.core} />
+      <circle className={cx("brain-core-ring")} cx={mid.x} cy={mid.y} r={size.coreRing} />
       {page ? <text className={cx("brain-center")} x={0} y={33} textAnchor="middle">{props.map.center.name}</text> : null}
     </svg>
   );

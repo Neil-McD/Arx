@@ -812,10 +812,22 @@
 /* The community brain (KitBrainMap): neurons and synapses. */
 .app svg.brain{display:block;width:100%;height:auto;overflow:visible}
 .app svg.brain-page{height:100%}
+/* A panel's map is drawn in pixels: one loud thing (what is new), the rest quiet. */
+.app svg.brain-panel .brain-fibre{stroke-width:1;stroke:rgba(var(--w),.26)}
+.app svg.brain-panel .brain-spoke{stroke-width:.7;stroke:rgba(var(--w),.1)}
+.app svg.brain-panel .brain-branch{stroke:rgba(var(--w),.13)}
+.app svg.brain-panel .brain-arc{stroke-width:.6;stroke:rgba(var(--au),.18)}
+.app svg.brain-panel .brain-lesson{stroke-width:1.1;stroke:rgba(var(--w),.55)}
+.app svg.brain-panel .brain-lesson.done{stroke:none}
+.app svg.brain-panel .brain-cell{stroke-width:.9;stroke:rgba(var(--w),.4)}
+.app svg.brain-panel .brain-nucleus{fill:rgba(var(--w),.4)}
+.app svg.brain-panel .brain-dot.taught{stroke-width:1}
+.app svg.brain-panel .brain-core-ring{stroke-width:.8}
 .app .brainmini{display:block;width:100%;padding:6px 0;margin:0 0 4px;border-radius:10px;text-align:center}
 .app button.brainmini{cursor:pointer;transition:background .12s}
 .app button.brainmini:hover{background:rgba(var(--w),.035)}
-.app .brainmini svg.brain-panel{max-height:210px;margin:0 auto}
+.app .brainmini svg.brain-panel{max-height:230px;margin:0 auto}
+.app .braincap{display:block;margin:-2px 0 6px;text-align:center;font-size:11.5px;color:var(--ink3)}
 .app .brain-glow-in{stop-color:rgb(var(--au));stop-opacity:.55}
 .app .brain-mine-in{stop-color:#8a91e3;stop-opacity:.55}
 .app .brain-glow-out{stop-color:rgb(var(--au));stop-opacity:0}

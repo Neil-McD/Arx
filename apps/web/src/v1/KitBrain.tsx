@@ -82,8 +82,10 @@ export function PanelBrain(props: { map: BrainMap | null; now: number; max?: num
   const { map } = props;
   if (!map || (!map.counts.learned && !props.children)) return null;
   return (
-    <PanelPart label="The community brain" fact={brainFact(map)} action={props.onOpen ? <PanelAction onClick={props.onOpen}>Open</PanelAction> : null}>
+    <PanelPart label="The community brain" action={props.onOpen ? <PanelAction onClick={props.onOpen}>Open</PanelAction> : null}>
       <PanelBrainMap map={map} now={props.now} onOpen={props.onOpen} />
+      {/* The count sits under the map, where it has room at any panel width. */}
+      {brainFact(map) ? <span className={cx("braincap")}>{brainFact(map)}</span> : null}
       {latestLearned(map, props.max ?? 3).map((note) => <PanelLearned key={note.id} title={note.title} when={learnedWhen(note.at, props.now)} />)}
       {props.children}
     </PanelPart>

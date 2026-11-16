@@ -340,3 +340,47 @@ export function scaleLayout(layout: BrainLayout, k: number): BrainLayout {
     extent: box(layout.extent),
   };
 }
+
+// ---------- the small map: one layout, another lens
+//
+// The page shows true distances: it has names to fit between things, and it
+// zooms. A panel's map is a couple of hundred pixels with no words, so the
+// room names need is waste there, and a few far hubs would squeeze the rest
+// to specks. The lens keeps every thing's direction from the centre and
+// pulls far things in more than near ones (distance to a power under one),
+// then fits what it drew to the box. Same shape, read at a glance.
+
+// How hard far things are pulled in: 1 = true distances, lower = tighter.
+export const BRAIN_LENS_POWER = 0.55;
+
+export function lensLayout(layout: BrainLayout, box: BrainStage, opts: { power?: number; pad?: number } = {}): BrainLayout {
+  const power = opts.power ?? BRAIN_LENS_POWER;
+  const pad = opts.pad ?? 14;
+  const c = layout.center;
+  const things: Placed[] = [...layout.hubs, ...layout.lessons, ...layout.points];
+  const far = Math.max(1, ...things.map((p) => Math.hypot(p.x - c.x, p.y - c.y)));
+  const pull = (p: Placed): Placed => {
+    const dx = p.x - c.x, dy = p.y - c.y;
+    const r = Math.hypot(dx, dy);
+    if (r === 0) return { x: 0, y: 0 };
+    const to = Math.pow(r / far, power) / r;
+    return { x: dx * to, y: dy * to };
+  };
+  // Fit what is drawn to the box, centred.
+  const pulled = [{ x: 0, y: 0 }, ...things.map(pull)];
+  const minX = Math.min(...pulled.map((p) => p.x)), maxX = Math.max(...pulled.map((p) => p.x));
+  const minY = Math.min(...pulled.map((p) => p.y)), maxY = Math.max(...pulled.map((p) => p.y));
+  const scale = Math.min((box.w - pad * 2) / Math.max(1e-6, maxX - minX), (box.h - pad * 2) / Math.max(1e-6, maxY - minY));
+  const ox = box.w / 2 - ((minX + maxX) / 2) * scale, oy = box.h / 2 - ((minY + maxY) / 2) * scale;
+  const at = <T extends Placed>(p: T): T => { const q = pull(p); return { ...p, x: q.x * scale + ox, y: q.y * scale + oy }; };
+  return {
+    center: at(c),
+    hubs: layout.hubs.map(at),
+    fibres: layout.fibres.map((fibre) => ({ key: fibre.key, path: fibre.path.map(at) })),
+    lessons: layout.lessons.map(at),
+    points: layout.points.map((p) => ({ ...at(p), anchor: at(p.anchor) })),
+    arcs: layout.arcs.map((arc) => ({ ...arc, a: at(arc.a), b: at(arc.b) })),
+    bounds: { minX: 0, minY: 0, maxX: box.w, maxY: box.h },
+    extent: { minX: minX * scale + ox, minY: minY * scale + oy, maxX: maxX * scale + ox, maxY: maxY * scale + oy },
+  };
+}
