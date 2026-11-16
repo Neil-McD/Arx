@@ -218,7 +218,13 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
   `getPlaceBrief`; the panels' "community brain" and "learned lately" read
   `communityMemory:getLearnedLately`: counts for everyone in the community,
   every title for a builder, and for a member only titles learned from posts
-  they can read), `communityEvidence*`,
+  they can read; `communityKnowledgeUse` keeps one row of counts per community
+  per day of the notes and lessons answers opened, added hours later at a
+  random time so nothing traces to a conversation, for how much each is used
+  and what is answered together; `communityBrain` (`getBrainMap`) reads it all
+  into one map per viewer: courses and lessons, what was learned and where it
+  is filed, the pods they can enter, and what is answered together, with the
+  same naming rules), `communityEvidence*`,
   `communityCognitionLifecycle`, `communityWikiArchitect`; member knowledge stays in
   `memberOntology` and `memberOntologyCore` (`memberFacts`, `memberProfileSpines`, no
   longer read; dropped in a later release); people facts, one view of a person

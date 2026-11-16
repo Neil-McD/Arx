@@ -1,0 +1,105 @@
+// The community brain (docs/specs/agent-system-end-state.md): what a place
+// knows, as one map. Courses are its fibres, each lesson along one in order;
+// what the community learned hangs off the lesson or subject it is filed
+// under; arcs join what the guide keeps answering with together. This file
+// holds the rules for what a viewer is shown, free of the database so they
+// can be tested on their own; convex/communityBrain.ts gathers the records.
+
+// The most learned things one map draws; the rest are counted on their place.
+export const BRAIN_POINTS_MAX = 150;
+export const BRAIN_ARCS_MAX = 12;
+export const BRAIN_FRESH_MS = 7 * 24 * 60 * 60_000;
+
+// Where a learned thing hangs: a lesson, a subject, a pod (on the
+// community's map), or nowhere yet.
+export type BrainAttach =
+  | { kind: "lesson"; id: string }
+  | { kind: "subject"; name: string }
+  | { kind: "pod"; id: string }
+  | { kind: "other" };
+
+export function attachKey(attach: BrainAttach): string {
+  return attach.kind === "lesson" ? `lesson:${attach.id}` : attach.kind === "subject" ? `subject:${attach.name}`
+    : attach.kind === "pod" ? `pod:${attach.id}` : "other";
+}
+
+export type BrainPoint = {
+  id: string; // note:<id>
+  // Null when this viewer may not read its name.
+  title: string | null;
+  kind: "learned" | "taught";
+  at: BrainAttach;
+  learned_at: string;
+  fresh: boolean;
+  use: number;
+  // Learned from the viewer's own posts.
+  mine: boolean;
+};
+
+export type BrainLesson = { id: string; title: string; order: number; done: boolean; use: number };
+export type BrainCourse = { id: string; name: string; order: number; lessons: BrainLesson[] };
+export type BrainSubject = { name: string; first_at: string; size: number };
+export type BrainPod = { id: string; name: string; inside: boolean; count: number };
+export type BrainArc = { a: string; b: string; count: number };
+
+export type BrainMap = {
+  center: { name: string; kind: "community" | "pod" };
+  counts: { courses: number; lessons: number; learned: number; this_week: number };
+  can_manage: boolean;
+  courses: BrainCourse[];
+  subjects: BrainSubject[];
+  points: BrainPoint[];
+  pods: BrainPod[];
+  arcs: BrainArc[];
+  // Learned things not drawn, by where they hang (attachKey).
+  hidden: Record<string, number>;
+};
+
+// A note as the map sees it, before this viewer's rules.
+export type BrainNoteInput = {
+  id: string;
+  title: string;
+  // A builder taught it, or the guide learned it from posts.
+  taught: boolean;
+  // Every post it came from is one this viewer can read now.
+  sourcesOpen: boolean;
+  mine: boolean;
+  createdAt: number;
+  at: BrainAttach;
+};
+
+// Whether this viewer may read a learned thing's name: a builder always; a
+// member only for what the guide learned from posts they can read
+// themselves, never what a host taught it (its name could say more than
+// they may see), and never once its posts are gone.
+export function brainTitleFor(note: Pick<BrainNoteInput, "title" | "taught" | "sourcesOpen">, viewer: { canManage: boolean; insidePod?: boolean }): string | null {
+  if (viewer.canManage || viewer.insidePod) return note.title;
+  return !note.taught && note.sourcesOpen ? note.title : null;
+}
+
+// Which learned things a map draws when there are too many: what is new this
+// week first, then what answers use most, then the newest.
+export function choosePoints<T extends { fresh: boolean; use: number; createdAt: number }>(notes: T[], max = BRAIN_POINTS_MAX): { kept: T[]; dropped: T[] } {
+  const ranked = [...notes].sort((a, b) => Number(b.fresh) - Number(a.fresh) || b.use - a.use || b.createdAt - a.createdAt);
+  return { kept: ranked.slice(0, max), dropped: ranked.slice(max) };
+}
+
+// The strongest "answered together" pairs between things this map draws.
+export function chooseArcs(together: BrainArc[], drawn: ReadonlySet<string>, max = BRAIN_ARCS_MAX): BrainArc[] {
+  return together.filter((pair) => drawn.has(pair.a) && drawn.has(pair.b))
+    .sort((x, y) => y.count - x.count || x.a.localeCompare(y.a) || x.b.localeCompare(y.b)).slice(0, max);
+}
+
+// A subject's place stays put: it is ordered by when it first appeared.
+export function subjectsOf(notes: Array<Pick<BrainNoteInput, "at" | "createdAt">>): BrainSubject[] {
+  const found = new Map<string, { first: number; size: number }>();
+  for (const note of notes) {
+    if (note.at.kind !== "subject") continue;
+    const entry = found.get(note.at.name) ?? { first: note.createdAt, size: 0 };
+    entry.first = Math.min(entry.first, note.createdAt);
+    entry.size += 1;
+    found.set(note.at.name, entry);
+  }
+  return [...found].map(([name, entry]) => ({ name, first_at: new Date(entry.first).toISOString(), size: entry.size }))
+    .sort((a, b) => a.first_at.localeCompare(b.first_at) || a.name.localeCompare(b.name));
+}

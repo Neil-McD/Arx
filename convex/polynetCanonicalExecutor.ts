@@ -1621,7 +1621,8 @@ async function executeCanonicalRead(args: {
     const note = await args.ctx.runQuery((internal as any).communityNotes.readCommunityNoteInternal,
       { communityId: target.communityId, podRoomId: pod.roomId, slug: (podFacts as any).note });
     if (!note) return canonicalError("semantic_not_found", "Repository path not found or not accessible.");
-    return { ok: true, value: { path, body: `# ${note.title}\n\n${note.bodyMd}`, writable: false } };
+    // ref names the note read, for the record of what an answer drew on.
+    return { ok: true, value: { ref: `note:${note.id}`, path, body: `# ${note.title}\n\n${note.bodyMd}`, writable: false } };
   }
 
   if (target.localPath === PERSONAL_MEMORY_PATH) {
@@ -1801,7 +1802,7 @@ async function executeCanonicalRead(args: {
       { communityId: target.communityId, slug: memoryMatch[1] },
     )) as (CommunityNote | null);
     if (!note) return canonicalError("semantic_not_found", "No note at that path. List memory/ for notes.");
-    return { ok: true, value: { path: mountedPath(target.communitySlug, target.localPath), body: renderCommunityNote(note), truncated: false } };
+    return { ok: true, value: { ref: `note:${(note as any).id}`, path: mountedPath(target.communitySlug, target.localPath), body: renderCommunityNote(note), truncated: false } };
   }
 
   const capabilityMatch = /^\/capabilities\/([a-z0-9][a-z0-9._-]*)\.json$/.exec(
