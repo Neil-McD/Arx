@@ -4,6 +4,7 @@
 // its lesson, Mark done and Next, with the outline in the right column. Under
 // the shelf, one list of notes, files and links (KitKnowledgeList); a note
 // opens in the right column.
+import { courseProgressWord } from "../../../../shared/communityMemberWords";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   fetchCourseProgressSummary,
@@ -625,7 +626,7 @@ export function KitClassroom(props: {
                 {props.canManage ? (
                   <span className={cx("kpct")}><i style={{ width: row && row.started ? `${Math.round((row.finished / row.started) * 100)}%` : "0%" }} /><em>{row ? `${row.started} started · ${row.finished} finished` : `${lessons.length} ${lessons.length === 1 ? "lesson" : "lessons"}`}</em></span>
                 ) : (
-                  <span className={cx("kpct")}><i style={{ width: `${progress.percent}%` }} /><em>{progress.percent}%</em></span>
+                  <span className={cx("kpct")}><i style={{ width: `${progress.percent}%` }} /><em>{courseProgressWord(progress.percent)}</em></span>
                 )}
               </button>
             );

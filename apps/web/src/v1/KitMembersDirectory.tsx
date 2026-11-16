@@ -2,6 +2,7 @@
 // hifi-mock, Members, member view). Who is here and what each person chose to
 // share; never plan, payment, notes or where a fact came from (the server
 // sends none of it: convex/communityMemberProfiles.ts).
+import { memberRoleLine, memberRoleTag } from "../../../../shared/communityMemberWords";
 import { ArrowLeft } from "lucide-react";
 import { Fragment, useContext, useEffect, useMemo, useState, type CSSProperties } from "react";
 import { createPortal } from "react-dom";
@@ -17,7 +18,7 @@ import { Btn, cx, Icon, KitApp, Rail, Sep, Sec, Top, View } from "./kit";
 
 type Filter = "everyone" | "here" | "hosts";
 const keyOf = (row: { membership_id: string | null }) => row.membership_id ?? "owner";
-const roleTag = (role: string) => (role === "owner" ? "host" : role === "admin" ? "admin" : role === "moderator" ? "moderator" : null);
+const roleTag = memberRoleTag;
 
 export function memberDirectoryRowsFor(rows: CloudMemberDirectoryRow[], filter: Filter, search: string): CloudMemberDirectoryRow[] {
   const q = search.trim().toLowerCase();
@@ -106,8 +107,8 @@ export function KitMembersDirectory(props: {
               {shown.map((row) => (
                 <button key={keyOf(row)} type="button" className={cx("p", openKey === keyOf(row) && "sel", row.you && "you")} onClick={() => { setOpenKey(keyOf(row)); setPicked(true); }}>
                   <Face name={row.name} url={row.avatar_url} seed={row.user_id} getAvatarColor={props.getAvatarColor} getInitials={props.getInitials} />
-                  <b>{row.name}{row.you ? <span className={cx("tag")}>you</span> : roleTag(row.role) ? <span className={cx("tag")}>{roleTag(row.role)}</span> : null}</b>
-                  <span>{row.you ? "What others see" : row.working_on ?? (row.here_now ? "Here now" : "")}</span>
+                  <b>{row.name}{row.you ? <span className={cx("tag")}>you</span> : null}{roleTag(row.role) ? <span className={cx("tag")}>{roleTag(row.role)}</span> : null}</b>
+                  <span>{row.working_on ?? (row.you ? "Add what you're working on" : row.here_now ? "Here now" : "")}</span>
                 </button>
               ))}
             </div>
@@ -133,14 +134,13 @@ export function KitMembersDirectory(props: {
 
 function MemberProfileView(props: { profile: CloudMemberProfile; onMessage?: (userId: string) => void; getAvatarColor: (id: string) => string; getInitials: (name: string) => string }) {
   const { profile } = props;
-  const role = profile.role === "owner" ? "host" : profile.role === "member" ? null : profile.role;
   return (
     <>
       <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
         <Face name={profile.name} url={profile.avatar_url} seed={profile.user_id} getAvatarColor={props.getAvatarColor} getInitials={props.getInitials} style={{ width: 56, height: 56, fontSize: 18 }} />
         <div>
-          <div style={{ fontSize: 20, fontWeight: 600, letterSpacing: "-.015em" }}>{profile.name} {role ? <span className={cx("tag")} style={{ verticalAlign: "middle" }}>{role}</span> : null}</div>
-          <div className={cx("sub")} style={{ marginTop: 2 }}>{profile.you ? "This is what other members see about you" : profile.here_now ? "Here now" : profile.role === "owner" ? "Runs this community" : "Member"}</div>
+          <div style={{ fontSize: 20, fontWeight: 600, letterSpacing: "-.015em" }}>{profile.name}</div>
+          <div className={cx("sub")} style={{ marginTop: 2 }}>{profile.you ? "This is what other members see about you" : memberRoleLine(profile.role, profile.here_now)}</div>
         </div>
         {!profile.you && props.onMessage ? <div style={{ display: "flex", gap: 8 }}><Btn small go onClick={() => props.onMessage?.(profile.user_id)}>Message</Btn></div> : null}
       </div>
