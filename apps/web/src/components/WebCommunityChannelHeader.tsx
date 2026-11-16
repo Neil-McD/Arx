@@ -22,6 +22,7 @@ export type WebCommunityChannelHeaderChannel = {
   is_general: boolean;
   access_mode?: "all_members" | "restricted";
   description?: string | null;
+  has_pinned_root?: boolean;
 };
 
 type WebCommunityChannelHeaderProps = {
