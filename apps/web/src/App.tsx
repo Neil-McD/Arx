@@ -44,6 +44,7 @@ import { useWebCommunityVoiceController } from "./controllers/useWebCommunityVoi
 import { useWebCommunityProfileHydrationController } from "./controllers/useWebCommunityProfileHydrationController";
 import { useWebCommunityDirectoryState } from "./controllers/useWebCommunityDirectoryState";
 import { useWebTelemetryLifecycle } from "./controllers/useWebTelemetryLifecycle";
+import { pageSession } from "../../../shared/pageSession";
 import { useWebAuthErrorToastLifecycle } from "./controllers/useWebAuthErrorToastLifecycle";
 import { useWebCommunityAgentSurfaceController } from "./controllers/useWebCommunityAgentSurfaceController";
 import { useWebDirectMessagesChromeController } from "./controllers/useWebDirectMessagesChromeController";
@@ -217,6 +218,9 @@ export default function App() {
     onAfterSignOut: accountGraphLifecycle.onAfterSignOut,
   });
   const authenticatedIdentity = useWebAuthenticatedIdentityController(session);
+  // What pages are given: one object per signed-in person, so a token renewal
+  // does not make every panel load again (shared/pageSession.ts).
+  const shownSession = pageSession(session);
   const { canonicalUserId: canonicalSessionUserId } = authenticatedIdentity;
   const profileStorageUserId = canonicalSessionUserId;
   const { upsertCommunityVisualIdentities } =
@@ -1657,7 +1661,7 @@ export default function App() {
       activePage,
       communityTab,
       activeCommunity,
-      session: session,
+      session: shownSession,
       ensureSession: ensureUsableAuthSession,
       selectedActiveCommunitySlug,
       isAuthBootstrapComplete,
@@ -1847,7 +1851,7 @@ export default function App() {
       resourceModuleModalProps,
       resourceModuleDeleteModalProps,
       podsProps: {
-        session,
+        session: shownSession,
         ensureSession: ensureUsableAuthSession,
         communityId: activeCommunity?.id ?? null,
         communityName: activeCommunity?.name ?? "this community",
@@ -2157,7 +2161,7 @@ export default function App() {
     activePage,
     isPublicCommunityFunnel,
     publicRoute: shellPublicRoute,
-    session,
+    session: shownSession,
     holdLandingForAuth: shouldHoldLandingForAuth,
     isSignedOut: !session,
     landingPageProps: {
@@ -2530,7 +2534,7 @@ export default function App() {
         onRequestOpen: () => showMobileShell ? setMobileRootPage("agent") : handleSelectCommunityTab("agent"),
         community: communityAgentDockCommunity,
         surfaceContext: communityAgentSurfaceContext,
-        session,
+        session: shownSession,
         ensureSession: ensureUsableAuthSession,
         fetchPublic: fetchWithPublic,
         fetchAuth: fetchWithAuth,
@@ -2552,7 +2556,7 @@ export default function App() {
           showMobileShell && mobileRootPage === "messages",
         openRequest: directMessageOpenRequest,
         openConversationRequest: directMessageOpenConversationRequest,
-        session,
+        session: shownSession,
         ensureSession: ensureUsableAuthSession,
         sessionUserId: canonicalSessionUserId,
         getInitials,
