@@ -6,7 +6,7 @@
 // opens in the right column.
 import { courseProgressWord } from "../../../../shared/communityMemberWords";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { readPlaceParam, writePlaceParam } from "../../../../shared/placeParams";
+import { useRouteDetail, writeRouteDetail } from "../../../../shared/routeDetails";
 import {
   fetchCourseProgressSummary,
   fetchMyLessonProgress,
@@ -220,30 +220,37 @@ export function KitClassroom(props: {
   // arrive after the course does: a lesson picked for the reader is picked
   // again then, but one the reader chose stays.
   const autoLessonRef = useRef<string | null>(null);
-  // The lesson you're on rides on the address (?lesson=), so a refresh comes
-  // back to it. Read once; used when its course is showing.
-  const lessonToReopenRef = useRef<string | null>(readPlaceParam("lesson"));
+  // The lesson you're on is part of the address (/resources/<course>/<lesson>):
+  // a refresh, the back button and a link open it.
+  const routeLesson = useRouteDetail("lesson");
   useEffect(() => {
-    if (!open) {
-      if (props.loaded) lessonToReopenRef.current = null;
-      setLessonId(null); autoLessonRef.current = null; return;
+    if (!open) { setLessonId(null); autoLessonRef.current = null; return; }
+    // The course can arrive before its lessons: wait for them before choosing.
+    if (routeLesson && !props.loaded) return;
+    // A lesson in the address that this page chose itself is not a request:
+    // when your progress arrives, the next unfinished lesson is chosen again.
+    if (routeLesson && routeLesson !== autoLessonRef.current && open.lessons.some((lesson) => lesson.id === routeLesson)) {
+      if (lessonId !== routeLesson) { autoLessonRef.current = null; setLessonId(routeLesson); }
+      return;
     }
-    const wanted = lessonToReopenRef.current;
-    // The course can arrive before its lessons: wait for them before giving up.
-    if (wanted && !props.loaded) return;
-    lessonToReopenRef.current = null;
-    if (wanted && open.lessons.some((lesson) => lesson.id === wanted)) { autoLessonRef.current = null; setLessonId(wanted); return; }
     if (lessonId && lessonId !== autoLessonRef.current && open.lessons.some((lesson) => lesson.id === lessonId)) return;
     const next = courseProgress(open.lessons, done).nextLessonId ?? open.lessons[0]?.id ?? null;
     autoLessonRef.current = next;
     setLessonId(next);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open?.course.id, open?.lessons.length, progressLoaded, props.loaded]);
+  }, [open?.course.id, open?.lessons.length, progressLoaded, props.loaded, routeLesson]);
 
+  // A lesson you choose is never "picked for you", so the back button can
+  // return to the one that was.
+  const chooseLesson = (id: string | null) => { autoLessonRef.current = null; setLessonId(id); };
+
+  // The lesson you chose goes in the address as a step you can go back from;
+  // one picked for you only fills it in.
   useEffect(() => {
-    if (lessonToReopenRef.current) return;
-    writePlaceParam("lesson", open ? lessonId : null);
-  }, [lessonId, open?.course.id]);
+    if (!open || !props.loaded || !lessonId || lessonId === routeLesson) return;
+    writeRouteDetail("lesson", lessonId, { replace: !routeLesson || lessonId === autoLessonRef.current });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lessonId, open?.course.id, props.loaded]);
 
   const mark = async (resourceId: string, value: boolean) => {
     if (saving) return;
@@ -318,7 +325,7 @@ export function KitClassroom(props: {
     resume ? (
       <PanelPart key="next" label="Continue" fact={`lesson ${resume.index + 1} of ${resume.total}`}>
         <PanelNext title={resume.lesson.title} sub={resume.course.name}
-          action={<Btn go onClick={() => { props.onOpenCourse(resume.course.id); setLessonId(resume.lesson.id); }}>Resume</Btn>} />
+          action={<Btn go onClick={() => { props.onOpenCourse(resume.course.id); chooseLesson(resume.lesson.id); }}>Resume</Btn>} />
       </PanelPart>
     ) : canWriteNotes && waiting.length ? (
       <PanelPart key="next" label="Waiting on an answer" fact={String(waiting.length)}>
@@ -399,7 +406,7 @@ export function KitClassroom(props: {
     <div className={cx("sec")}>
       {open.lessons.map((lesson, index) => (
         <div key={lesson.id} className={cx("kl-row")}>
-          <button type="button" className={cx("kl", lesson.id === lessonId && "on", done.has(lesson.id) && lesson.id !== lessonId && "d")} onClick={() => { setEditingLessonId(null); setLessonId(lesson.id); }}>
+          <button type="button" className={cx("kl", lesson.id === lessonId && "on", done.has(lesson.id) && lesson.id !== lessonId && "d")} onClick={() => { setEditingLessonId(null); chooseLesson(lesson.id); }}>
             {done.has(lesson.id) ? <Icon name="check" /> : <i />}{index + 1}. {lesson.title}
           </button>
           {editingTools ? (
@@ -415,7 +422,7 @@ export function KitClassroom(props: {
       {editingTools ? (
         <TextLink onClick={async () => {
           const id = await editingTools.addLesson(open.course.id);
-          if (id) { setLessonId(id); setEditingLessonId(id); }
+          if (id) { chooseLesson(id); setEditingLessonId(id); }
         }}>+ Add lesson</TextLink>
       ) : null}
     </div>
@@ -499,12 +506,12 @@ export function KitClassroom(props: {
             onMove={editingTools.move ? async (courseId) => {
               await editingTools.move!(lesson.id, courseId);
               setEditingLessonId(null);
-              setLessonId(open.lessons[index + 1]?.id ?? open.lessons[index - 1]?.id ?? null);
+              chooseLesson(open.lessons[index + 1]?.id ?? open.lessons[index - 1]?.id ?? null);
             } : undefined}
             onDelete={async () => {
               await editingTools.remove(lesson.id);
               setEditingLessonId(null);
-              setLessonId(open.lessons[index + 1]?.id ?? open.lessons[index - 1]?.id ?? null);
+              chooseLesson(open.lessons[index + 1]?.id ?? open.lessons[index - 1]?.id ?? null);
             }} />
         ) : lesson ? (
           <div className={cx("klesson")}>
@@ -529,11 +536,11 @@ export function KitClassroom(props: {
             ) : null}
             <div className={cx("acts")} style={{ marginTop: 22 }}>
               {!props.canManage && !done.has(lesson.id) ? (
-                <button type="button" className={cx("btn go")} disabled={saving} onClick={async () => { await mark(lesson.id, true); if (next) setLessonId(next.id); }}>
+                <button type="button" className={cx("btn go")} disabled={saving} onClick={async () => { await mark(lesson.id, true); if (next) chooseLesson(next.id); }}>
                   <Icon name="check" />{next ? "Mark done and continue" : "Mark done"}
                 </button>
               ) : null}
-              {next ? <button type="button" className={cx("btn")} onClick={() => setLessonId(next.id)}>Next: {next.title} <Icon name="arrow" /></button>
+              {next ? <button type="button" className={cx("btn")} onClick={() => chooseLesson(next.id)}>Next: {next.title} <Icon name="arrow" /></button>
                 : <button type="button" className={cx("btn")} onClick={() => props.onOpenCourse(null)}>Back to Knowledge</button>}
             </div>
           </div>
@@ -543,7 +550,7 @@ export function KitClassroom(props: {
             {editingTools ? (
               <button type="button" className={cx("btn go")} style={{ marginTop: 18 }} onClick={async () => {
                 const id = await editingTools.addLesson(open.course.id);
-                if (id) { setLessonId(id); setEditingLessonId(id); }
+                if (id) { chooseLesson(id); setEditingLessonId(id); }
               }}><Icon name="plus" />Write the first lesson</button>
             ) : null}
           </div>
@@ -583,7 +590,7 @@ export function KitClassroom(props: {
         ) : null}
 
         {resume ? (
-          <button type="button" className={cx("card kcont")} onClick={() => { props.onOpenCourse(resume.course.id); setLessonId(resume.lesson.id); }}>
+          <button type="button" className={cx("card kcont")} onClick={() => { props.onOpenCourse(resume.course.id); chooseLesson(resume.lesson.id); }}>
             <div className={cx("meta")}><span>Continue · {resume.course.name}</span><span>Lesson {resume.index + 1} of {resume.total}</span></div>
             <h2>{resume.lesson.title}</h2>
             <div className={cx("kprog")}><div className={cx("bar")}><i style={{ width: `${Math.round((resume.index / resume.total) * 100)}%` }} /></div></div>

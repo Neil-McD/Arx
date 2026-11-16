@@ -4,7 +4,7 @@ import { KitClassroom } from "../v1/KitClassroom";
 import { KitBrainPage, takeOpenBrain } from "../v1/KitBrainPage";
 import { deleteCloudCommunityResourceModule, prepareCloudCommunityBrandingField, saveCloudCommunityResource, saveCloudCommunityResourceModule } from "../../../../shared/cloudCommunityAdminGateway";
 import { useEffect, useRef, useState, type ComponentProps } from "react";
-import { readPlaceParam, writePlaceParam } from "../../../../shared/placeParams";
+import { useRouteDetail, writeRouteDetail } from "../../../../shared/routeDetails";
 import { buildPlatformSwitcherStyle } from "../../../../shared/platformSwitcherUi";
 import { WebPlatformTabList, platformTabId, platformTabPanelId } from "./WebPlatformChoiceControls";
 import { CommunityResourcesPanel } from "./CommunityResourcesPanel";
@@ -65,22 +65,18 @@ function KnowledgeV1({ resources, context }: Props) {
       }
     }
   };
-  // "What your guide knows": the builders' list, one level in from Knowledge.
-  // Which view is open rides on the address (?view=), so a refresh keeps it.
-  const [guideMemoryOpen, setGuideMemoryOpen] = useState(() => readPlaceParam("view") === "guide");
-  const shownCommunityRef = useRef(context.communityId);
-  useEffect(() => {
-    if (shownCommunityRef.current === context.communityId) return;
-    shownCommunityRef.current = context.communityId;
-    setGuideMemoryOpen(false);
-  }, [context.communityId]);
+  // One level in from Knowledge, in the address (/resources/guide,
+  // /resources/brain): "What your guide knows" (builders' list) and the
+  // community brain. Opening one is a step the back button returns from.
+  const routeView = useRouteDetail("view");
+  const guideMemoryOpen = routeView === "guide";
+  const brainOpen = routeView === "brain";
+  const setGuideMemoryOpen = (open: boolean) => writeRouteDetail("view", open ? "guide" : null);
+  const setBrainOpen = (open: boolean) => writeRouteDetail("view", open ? "brain" : null);
+  // Home's panel asks for the brain on its way here.
+  useEffect(() => { if (takeOpenBrain()) writeRouteDetail("view", "brain", { replace: true }); }, [context.communityId]);
   const inGuideMemory = guideMemoryOpen && canManage && !openCourse;
-  // The community brain: the map of what the community knows, one level in.
-  const [brainOpen, setBrainOpen] = useState(() => takeOpenBrain() || readPlaceParam("view") === "brain");
-  useEffect(() => { if (takeOpenBrain()) setBrainOpen(true); }, [context.communityId]);
   const inBrain = brainOpen && !openCourse && !inGuideMemory;
-  const viewTag = openCourse ? null : guideMemoryOpen ? "guide" : brainOpen ? "brain" : null;
-  useEffect(() => { writePlaceParam("view", viewTag); }, [viewTag]);
   return (
     <section className="community-knowledge-page" aria-label="Knowledge">
       <CommunityPageHeader title={openCourse ? openCourse.name : inGuideMemory ? "What your guide knows" : inBrain ? "The community brain" : "Knowledge"}
@@ -91,7 +87,7 @@ function KnowledgeV1({ resources, context }: Props) {
       </CommunityPageHeader>
         {inBrain ? (
           <KitBrainPage session={context.session} communityId={context.communityId!} canManage={canManage}
-            onOpenCourse={(courseId) => { setBrainOpen(false); resources.actions.handleSelectModule(courseId); }} />
+            onOpenCourse={(courseId) => { resources.actions.handleSelectModule(courseId); }} />
         ) : null}
         {inBrain ? null : <KitClassroom communityId={context.communityId!}
           onOpenBrain={() => setBrainOpen(true)} communityName={context.communityName ?? "This community"} session={context.session}

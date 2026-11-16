@@ -17,6 +17,7 @@ import {
 } from "../../../../shared/webAppRouteState";
 
 import { keepPlaceParams } from "../../../../shared/placeParams";
+import { carryRouteDetails } from "../../../../shared/routeDetails";
 
 function hasPendingRouteIntentParams(): boolean {
   try {
@@ -113,7 +114,11 @@ export function useWebPathRouteLifecycle(params: {
     });
     if (!nextPath) return;
     // The thread, lesson or view you have open stays on the same page's address.
-    nextPath = keepPlaceParams(nextPath, window.location.pathname, window.location.search);
+    nextPath = keepPlaceParams(
+      carryRouteDetails(nextPath, `${window.location.pathname}${window.location.search}`),
+      window.location.pathname,
+      window.location.search,
+    );
 
     const currentPath = `${window.location.pathname}${window.location.search}`;
     if (currentPath === nextPath) return;
