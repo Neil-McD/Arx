@@ -22,11 +22,15 @@ export function useCommunityAgentOnState(args: {
   session: unknown;
   ensureSession: (session: any) => Promise<any | null>;
   communityId: string | null;
+  // From the access record the app waits for (getMyCommunityAccess), which
+  // reloads when the window comes back. When it is known, nothing else is read.
+  known?: boolean | null;
 }): boolean {
   const [state, setState] = useState<{ communityId: string; on: boolean } | null>(null);
+  const known = typeof args.known === "boolean" ? args.known : null;
   useEffect(() => {
     const communityId = args.communityId;
-    if (!communityId) return;
+    if (!communityId || known !== null) return;
     let cancelled = false;
     const load = async () => {
       try {
@@ -41,6 +45,7 @@ export function useCommunityAgentOnState(args: {
     window.addEventListener("focus", onFocus);
     return () => { cancelled = true; window.removeEventListener("focus", onFocus); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [args.communityId, args.session]);
+  }, [args.communityId, args.session, known]);
+  if (known !== null) return known;
   return state && state.communityId === args.communityId ? state.on : true;
 }
