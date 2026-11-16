@@ -137,7 +137,9 @@ export function OpenNote(props: {
   );
 }
 
-export function NoteForm(props: { title: string; text: string; submitLabel: string; onSubmit: (title: string, text: string) => Promise<void>; onCancel: () => void }) {
+// isNew: a note being written (its title may already be filled in, from a
+// question waiting on an answer).
+export function NoteForm(props: { title: string; text: string; submitLabel: string; isNew?: boolean; onSubmit: (title: string, text: string) => Promise<void>; onCancel: () => void }) {
   const [title, setTitle] = useState(props.title);
   const [text, setText] = useState(props.text);
   const [saving, setSaving] = useState(false);
@@ -156,10 +158,10 @@ export function NoteForm(props: { title: string; text: string; submitLabel: stri
   };
   return (
     <form className={cx("kn-form")} onSubmit={(event) => { event.preventDefault(); void submit(); }}>
-      <span className={cx("lab")}>{props.title ? "Edit note" : "New note"}</span>
-      <input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Title" aria-label="Title" maxLength={120} autoFocus />
-      <textarea value={text} onChange={(event) => setText(event.target.value)} placeholder="What should members and the guide know?" aria-label="Note" rows={10} />
-      <p className={cx("sub")}>Every member and the guide can read it.</p>
+      <span className={cx("lab")}>{props.isNew || !props.title ? "New note" : "Edit note"}</span>
+      <input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Title" aria-label="Title" maxLength={120} autoFocus={!props.title} />
+      <textarea value={text} onChange={(event) => setText(event.target.value)} placeholder="What should members and the guide know?" aria-label="Note" rows={10} autoFocus={Boolean(props.title) && !props.text} />
+      <p className={cx("sub")}>Your guide answers from it. Members get it through its answers.</p>
       {error ? <p className={cx("bad")} role="alert">{error}</p> : null}
       <div style={{ display: "flex", gap: 8 }}>
         <Btn small go onClick={() => void submit()}>{saving ? "Saving…" : props.submitLabel}</Btn>
