@@ -1,3 +1,4 @@
+import { onChannelDescription } from "../v1/KitChannelRail";
 import { askInApp } from "../../../../shared/inAppConfirm";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
@@ -519,7 +520,13 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
   // every requirement). An ordinary channel has nothing picked, so the feed
   // takes the room; a thread still opens there, and a pod's room keeps its
   // column (its call, its people, its requests).
-  const openChannelNoColumn = isDesignV1Active() && props.activeChannel?.access_mode !== "restricted";
+  // Since Nov 15 a channel with something to show there (a pinned post, or
+  // what the channel is for) has the column too; one with neither still
+  // gives the feed the room.
+  const [describedNow, setDescribedNow] = useState<{ channelId: string; description: string } | null>(null);
+  useEffect(() => onChannelDescription(setDescribedNow), []);
+  const channelDescription = (describedNow && describedNow.channelId === props.activeChannel?.id ? describedNow.description : props.activeChannel?.description ?? "").trim();
+  const openChannelNoColumn = isDesignV1Active() && props.activeChannel?.access_mode !== "restricted" && !props.pinnedRoot && !channelDescription;
 
   return (
     <>
@@ -1005,7 +1012,7 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
           onOpen: () => props.onSelectRoot(props.pinnedRoot!.root.id),
           ...(props.canManagePinnedRoot && props.onSetPinnedRoot ? { onUnpin: () => void props.onSetPinnedRoot?.(null), unpinning: Boolean(props.isUpdatingPinnedRoot) } : {}),
         } : null}
-        channelDescription={props.activeChannel?.description ?? null}
+        channelDescription={channelDescription || null}
         joinReview={{
           canReviewJoinRequests: props.canReviewCommunityJoinRequests,
           joinReviewMode: props.communityJoinReviewMode,
