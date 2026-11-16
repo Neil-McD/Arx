@@ -289,16 +289,24 @@ css += """
 .app .brain-name{font-size:12.5px;fill:rgba(var(--w),.78)}
 .app .brain-name.dim{fill:rgba(var(--w),.28)}.app .brain-name.on{fill:#fff;font-weight:600}
 /* The brain as a page in Knowledge: its counts and readings, then the map filling the rest. */
-.app .brainpage{display:flex;flex-direction:column;gap:10px;min-height:calc(100vh - 160px)}
-.app .brainbar{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
-.app .seg{margin-left:auto;display:flex;padding:2px;border-radius:8px;border:1px solid var(--line2)}
+.app .brainpage{position:relative;height:100%;min-height:420px;overflow:hidden}
+.app .brainstage{position:absolute;inset:0;display:flex}
+.app .brainbar{position:absolute;left:0;right:0;top:0;display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:18px 56px 0;pointer-events:none}
+.app .brainbar>*{pointer-events:auto}
+.app .brainbar .sub{margin:0}
+.app .seg{margin-left:auto;display:flex;background:var(--bg);padding:2px;border-radius:8px;border:1px solid var(--line2)}
 .app .seg button{height:26px;padding:0 12px;border-radius:6px;font-size:12.5px;color:var(--ink2);cursor:pointer}
 .app .seg button.on{background:rgba(var(--w),.09);color:var(--ink)}
-.app .brainstage{flex:1;min-height:420px;display:flex}
-.app .brainwrap{position:relative;flex:1;min-width:0;display:flex}
-.app .brainwrap svg.brain-page{width:100%;height:auto;max-height:calc(100vh - 200px);touch-action:none;cursor:grab;user-select:none;overflow:hidden}
+.app .brainside{position:absolute;top:0;right:0;bottom:0;width:380px;max-width:100%;box-sizing:border-box;overflow-y:auto;overflow-x:hidden;padding:20px 24px 24px;background:var(--bg);border-left:1px solid var(--line2);display:flex;flex-direction:column;gap:14px;animation:brainside .18s ease-out}
+@keyframes brainside{from{transform:translateX(24px)}to{transform:none}}
+@media (prefers-reduced-motion:reduce){.app .brainside{animation:none}}
+.app .brainside-x{align-self:flex-end;min-width:28px;height:28px;padding:0 8px;border-radius:8px;color:var(--ink3);font-size:15px;line-height:1;cursor:pointer}
+.app .brainside-x:hover{color:var(--ink);background:rgba(var(--w),.07)}
+@media (max-width:1023px){.app .brainside{width:100%;border-left:0}.app .brainside-x{align-self:flex-start;font-size:13px;padding:0}.app .brainbar{padding:14px 16px 0}.app .brainzoom{left:16px}}
+.app .brainwrap{position:relative;flex:1;min-width:0;min-height:0;overflow:hidden}
+.app .brainwrap svg.brain-page{position:absolute;inset:0;width:100%;height:100%;touch-action:none;cursor:grab;user-select:none;overflow:hidden}
 .app .brainwrap svg.brain-page:active{cursor:grabbing}
-.app .brainzoom{position:absolute;right:8px;bottom:8px;display:flex;gap:4px}
+.app .brainzoom{position:absolute;left:56px;bottom:20px;display:flex;gap:4px}
 .app .brainzoom button{min-width:30px;height:30px;padding:0 9px;border-radius:8px;border:1px solid var(--line2);background:var(--bg);color:var(--ink2);font-size:13px;cursor:pointer}
 .app .brainzoom button:hover{color:var(--ink)}
 .app .brainzoom button:disabled{opacity:.4;cursor:default}
