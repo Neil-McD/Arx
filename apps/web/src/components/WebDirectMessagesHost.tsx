@@ -1213,6 +1213,9 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
     if (!isOpen || props.mobileRoot) return;
 
     const handlePointerDown = (event: PointerEvent) => {
+      // A page is left by going somewhere else (that page's address closes
+      // it), not by a click beside it; closing here would race that click.
+      if (inboxIsPage) return;
       const target = event.target;
       if (!(target instanceof Node)) return;
       const host = document.querySelector(".web-direct-messages-host");
@@ -1234,7 +1237,7 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
       document.removeEventListener("pointerdown", handlePointerDown, true);
       document.removeEventListener("keydown", handleKeyDown);
     };
-  }, [isOpen, onClose, props.mobileRoot]);
+  }, [inboxIsPage, isOpen, onClose, props.mobileRoot]);
 
   const openConversation = useCallback(
     (conversation: DirectMessageConversation, options?: { deferRead?: boolean }) => {
