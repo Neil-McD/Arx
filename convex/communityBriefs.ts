@@ -212,9 +212,7 @@ export const writeCommunityBriefInternal = internalMutation({
 });
 
 export const runCommunityBriefInternal = internalAction({
-  // asOfMs: operator runs only, to write the brief as of an earlier time
-  // (acceptance on seeded data whose posts are older than the window).
-  args: { workId: v.id("agentWork"), asOfMs: v.optional(v.number()) },
+  args: { workId: v.id("agentWork") },
   handler: async (ctx, args) => await runAgentWork(ctx, {
     workId: args.workId,
     kind: "brief",
@@ -224,9 +222,9 @@ export const runCommunityBriefInternal = internalAction({
     // A run that ends in words leaves the place's activity for the retry.
     mustWrite: "brief_not_written",
     done: "written",
-    window: (claim) => ({ start: (args.asOfMs ?? claim.windowEnd) - BRIEF_WINDOW_MS, end: args.asOfMs ?? claim.windowEnd }),
+    window: (claim) => ({ start: claim.windowEnd - BRIEF_WINDOW_MS, end: claim.windowEnd }),
     prepare: async (claim, runId) => {
-      const untilMs = args.asOfMs ?? claim.windowEnd;
+      const untilMs = claim.windowEnd;
       const [input, cardSource, handbook] = await Promise.all([
         ctx.runQuery(internalRefs.communityBriefs.readCommunityBriefInputInternal, {
           communityId: claim.communityId, untilMs, ...(claim.pod ? { podRoomId: claim.pod.roomId } : {}) }),
@@ -332,10 +330,9 @@ export const getPlaceBrief = query({
   },
 });
 
-// Operator tool: write a place's brief now, or as of an earlier time
-// (acceptance runs on staging). podRoomId: a pod's brief.
+// Operator tool: write a place's brief now. podRoomId: a pod's brief.
 export const requestCommunityBriefNowInternal = internalMutation({
-  args: { communityId: v.id("communities"), asOfMs: v.optional(v.number()), podRoomId: v.optional(v.id("communityChannels")) },
+  args: { communityId: v.id("communities"), podRoomId: v.optional(v.id("communityChannels")) },
   handler: async (ctx, args) => {
     const nowMs = Date.now();
     const scope = args.podRoomId ? podScopeKey(args.podRoomId) : communityScopeKey(args.communityId);
@@ -349,7 +346,7 @@ export const requestCommunityBriefNowInternal = internalMutation({
         reviewedThrough: 0, dueAt: nowMs, failures: 0, createdAt: nowMs, updatedAt: nowMs,
       });
     }
-    await ctx.scheduler.runAt(nowMs, internalRefs.communityBriefs.runCommunityBriefInternal, { workId, ...(args.asOfMs ? { asOfMs: args.asOfMs } : {}) });
+    await ctx.scheduler.runAt(nowMs, internalRefs.communityBriefs.runCommunityBriefInternal, { workId });
     return { workId };
   },
 });

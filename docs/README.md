@@ -34,14 +34,14 @@ not track status. Update the system map instead of adding status ledgers.
   [specs/proactive-community-agent-v0.md](specs/proactive-community-agent-v0.md)
 - **MCP and operations:** [polynet-workspace-mcp-contract-v0.md](polynet-workspace-mcp-contract-v0.md),
   [canonical-platform-operation-contract-v1.md](canonical-platform-operation-contract-v1.md)
-- **Community sites (removed Nov 13, 2026; history only):** [specs/community-site-rails-v0.md](specs/community-site-rails-v0.md),
+- **Community sites (removed Nov 13, 2026; history only):** [archive/community-site-rails-v0.md](archive/community-site-rails-v0.md),
   [research/community-frontend-hosting-20261016.md](research/community-frontend-hosting-20261016.md)
 - **Money and cost:** [platform-cost-safety-contract-v1.md](platform-cost-safety-contract-v1.md),
   [product/reference/billing-entitlements.md](product/reference/billing-entitlements.md),
   [legal/](legal/)
 - **Operations:** [platform-diagnostics-contract-v1.md](platform-diagnostics-contract-v1.md),
   [schema-data-migration-discipline.md](schema-data-migration-discipline.md),
-  [specs/cleanup-map-2026-10-28.md](specs/cleanup-map-2026-10-28.md)
+  [archive/cleanup-map-2026-10-28.md](archive/cleanup-map-2026-10-28.md)
 - **Being removed with their code:** [community-forms-v1.md](community-forms-v1.md),
   [community-member-workflows-foundation-v1.md](community-member-workflows-foundation-v1.md)
 
