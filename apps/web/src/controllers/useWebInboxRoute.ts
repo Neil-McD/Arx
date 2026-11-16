@@ -8,7 +8,8 @@ import type { useWebDirectMessagesController } from "./useWebDirectMessagesContr
 
 // Design v1: Inbox is a page of the community (/c/<slug>/inbox, with the open
 // conversation as /inbox/<conversation>). It is open exactly while the address
-// is Inbox's; opening it goes there; its own close button goes back.
+// is Inbox's; opening it goes there; its own close button returns to the page
+// it was opened from.
 export function useWebInboxRoute(params: {
   directMessages: ReturnType<typeof useWebDirectMessagesController>;
   activePage: AppPage;
@@ -23,22 +24,33 @@ export function useWebInboxRoute(params: {
   isInboxRouteRef.current = isInboxRoute;
   const latest = useRef(params);
   latest.current = params;
+  const shownConversationRef = useRef<string | null>(null);
 
-  useEffect(() => { directMessages.followRoute(isInboxRoute); }, [directMessages.followRoute, isInboxRoute]);
+  useEffect(() => {
+    directMessages.followRoute(isInboxRoute);
+    // Off Inbox nothing is shown, so nothing is remembered as shown.
+    if (!isInboxRoute) shownConversationRef.current = null;
+  }, [directMessages.followRoute, isInboxRoute]);
+  // The page Inbox was opened from, so closing it goes back there directly,
+  // however many conversations were opened in between.
+  const openedFromRef = useRef<string | null>(null);
 
   directMessages.navigatorRef.current = isDesignV1Active() ? {
     open: () => {
       if (isInboxRouteRef.current) return true;
       const path = buildCommunityTabPath(latest.current.communitySlug, "inbox");
       if (!path) return false;
-      latest.current.navigateTo(path, { state: { polynetInbox: true } });
+      openedFromRef.current = `${window.location.pathname}${window.location.search}`;
+      latest.current.navigateTo(path);
       return true;
     },
     leave: (byUser) => {
       if (!isInboxRouteRef.current) return;
-      // Opened from another page in this tab: back is where you came from.
-      if (byUser && (window.history.state as { polynetInbox?: boolean } | null)?.polynetInbox) {
-        window.history.back();
+      // Closed by its own button or Escape: to the page it was opened from.
+      const openedFrom = openedFromRef.current;
+      openedFromRef.current = null;
+      if (byUser && openedFrom) {
+        latest.current.navigateTo(openedFrom);
         return;
       }
       // Another page is opening. On a phone that is a bottom tab, which has
@@ -55,7 +67,6 @@ export function useWebInboxRoute(params: {
   // Arriving on Inbox with a conversation in the address (refresh, back, a
   // link): open that one, unless it is the one Inbox already shows.
   const conversationInAddress = useRouteDetail("conversation");
-  const shownConversationRef = useRef<string | null>(null);
   useEffect(() => {
     if (!isInboxRoute || !conversationInAddress) return;
     if (conversationInAddress === shownConversationRef.current) return;
