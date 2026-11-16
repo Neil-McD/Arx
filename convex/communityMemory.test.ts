@@ -247,7 +247,8 @@ test("what the community learned: a member sees only names learned from posts th
   const builder: any = await asOwner.query(api.communityBrain.getBrainMap, { communityId: w.communityId });
   expect(builder.can_manage).toBe(true);
   expect(latestLearned(builder, 3).map((note) => note.title).sort()).toEqual([learnedTitle, "VIP refund exceptions"].sort());
-  expect(brainFact(builder)).toMatch(/^2 learned/);
+  expect(brainFact(builder)).toBe("2 learned · 1 new this week");
+  expect(brainFact({ ...builder, counts: { ...builder.counts, this_week: 0 } })).toBe("2 learned");
 
   // The post it was learned from is taken down: a member no longer sees its name.
   await t.run((ctx: any) => ctx.db.patch(w.open, { status: "hidden" }));

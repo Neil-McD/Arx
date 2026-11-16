@@ -1,6 +1,6 @@
 import { expect, test } from "vitest";
 import type { BrainMap, BrainPoint } from "../shared/communityBrain";
-import { BRAIN_FIT_MAX, BRAIN_ZOOM_MAX, chooseLabels, fitScale, fitStage, fitView, isFitView, layoutBrain, panBy, reachFor, revealPoint, scaleLayout, stageWindow, zoomAt } from "../shared/communityBrainLayout";
+import { BRAIN_FIT_MAX, BRAIN_ZOOM_MAX, chooseLabels, fitScale, fitStage, fitView, isFitView, layoutBrain, lensLayout, panBy, reachFor, revealPoint, scaleLayout, stageWindow, zoomAt } from "../shared/communityBrainLayout";
 
 const NOW = Date.UTC(2026, 10, 15);
 const DAY = 86_400_000;
@@ -214,4 +214,35 @@ test("on a narrow stage the map is drawn smaller so its names stay on it", () =>
     expect(end).toBeGreaterThanOrEqual(15);
     expect(end).toBeLessThanOrEqual(415);
   }
+});
+
+test("the small map's lens keeps every direction and order, pulls far things in, and fills its box", () => {
+  const m = map({ courses: 3, subjects: 6, pods: 2, points: Array.from({ length: 40 }, (_, i) => point(`n${i}`, i % 2 ? { kind: "subject", name: `Subject ${i % 6}` } : { kind: "lesson", id: `resource:c${i % 3}l${i % 4}` }, i % 30)) });
+  const layout = layoutBrain(m, NOW);
+  const box = { w: 300, h: 210 };
+  const small = lensLayout(layout, box);
+  const angle = (p: { x: number; y: number }, c: { x: number; y: number }) => Math.atan2(p.y - c.y, p.x - c.x);
+  const dist = (p: { x: number; y: number }, c: { x: number; y: number }) => Math.hypot(p.x - c.x, p.y - c.y);
+  const before = [...layout.hubs, ...layout.lessons, ...layout.points];
+  const after = [...small.hubs, ...small.lessons, ...small.points];
+  // Same direction from the centre, and inside the box.
+  after.forEach((p, i) => {
+    expect(Math.cos(angle(p, small.center) - angle(before[i], layout.center))).toBeCloseTo(1, 6);
+    expect(p.x).toBeGreaterThanOrEqual(0); expect(p.x).toBeLessThanOrEqual(box.w);
+    expect(p.y).toBeGreaterThanOrEqual(0); expect(p.y).toBeLessThanOrEqual(box.h);
+  });
+  // Nearer stays nearer: a course's lessons keep their order.
+  for (const fibre of layout.fibres) {
+    const lessons = small.lessons.filter((l) => l.courseKey === fibre.key).sort((a, b) => a.order - b.order);
+    for (let i = 1; i < lessons.length; i++) expect(dist(lessons[i], small.center)).toBeGreaterThan(dist(lessons[i - 1], small.center));
+  }
+  // Far things are pulled in more than near ones: the nearest thing sits further out, relative to the furthest, than it did.
+  const ratio = (all: Array<{ x: number; y: number }>, c: { x: number; y: number }) => Math.min(...all.map((p) => dist(p, c))) / Math.max(...all.map((p) => dist(p, c)));
+  expect(ratio(after, small.center)).toBeGreaterThan(ratio(before, layout.center) * 1.5);
+  // It fills the box one way or the other, and sizes are left alone.
+  const w = small.extent.maxX - small.extent.minX, h = small.extent.maxY - small.extent.minY;
+  expect(Math.max(w / (box.w - 28), h / (box.h - 28))).toBeCloseTo(1, 3);
+  expect(small.points[0].r).toBe(layout.points[0].r);
+  // The same map always draws the same.
+  expect(lensLayout(layout, box)).toEqual(small);
 });
