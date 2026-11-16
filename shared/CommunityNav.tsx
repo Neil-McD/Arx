@@ -228,6 +228,11 @@ export const CommunityNav = memo(function CommunityNav({
   const [channelAccessMode, setChannelAccessMode] = useState<"all_members" | "restricted">("all_members");
   const { sharedFull, privateFull } = communityChannelCapacity(channels);
   const selectedCapacityFull = channelAccessMode === "all_members" ? sharedFull : privateFull;
+  const openAddChannel = () => {
+    clearCreateChannelError?.();
+    setChannelAccessMode(sharedFull ? "restricted" : "all_members");
+    setIsAddChannelOpen(true);
+  };
   const copyResetTimeoutRef = useRef<number | null>(null);
   const focusRestoreFrameRef = useRef<number | null>(null);
   const communityIdentityFrameRef = useRef<number | null>(null);
@@ -250,6 +255,7 @@ export const CommunityNav = memo(function CommunityNav({
   const inviteTitle = didCopyJoinLink ? "Copied invite link" : "Copy invite link";
   const showChannelLoadingSkeleton =
     isLoadingAccess || (isLoadingChannels && channels.every((channel) => !channel.id));
+  const canAddChannel = Boolean(!showChannelLoadingSkeleton && canManageMembersActiveCommunity && onCreateChannel);
   const reorderableChannelIds = channels
     .filter((channel) => !channel.is_general && Boolean(channel.id))
     .map((channel) => channel.id);
@@ -492,7 +498,26 @@ export const CommunityNav = memo(function CommunityNav({
           ) : null}
         </div>
       ) : null}
-      {isV1 ? <div className="community-nav-section-label">Channels</div> : null}
+      {isV1 ? (
+        // Adding a channel is a small + at the end of the heading, where a
+        // count sits on other rows, not a row of its own.
+        <div className="community-nav-section-label has-action">
+          <span>Channels</span>
+          {canAddChannel ? (
+            <button
+              ref={addChannelTriggerRef}
+              className="community-nav-section-add"
+              type="button"
+              disabled={isAtChannelLimit}
+              onClick={openAddChannel}
+              aria-label={isAtChannelLimit ? `Channel limit reached (${maxActiveChannels})` : "Add a channel"}
+              title={isAtChannelLimit ? `Channel limit reached (${maxActiveChannels})` : "Add a channel"}
+            >
+              <Plus size={15} strokeWidth={1.8} aria-hidden="true" />
+            </button>
+          ) : null}
+        </div>
+      ) : null}
       <div
         className="community-channel-list"
         aria-label="Channels"
@@ -597,17 +622,13 @@ export const CommunityNav = memo(function CommunityNav({
             {reorderChannelsError}
           </div>
         ) : null}
-        {!showChannelLoadingSkeleton && canManageMembersActiveCommunity && onCreateChannel ? (
+        {!isV1 && canAddChannel ? (
           <button
             ref={addChannelTriggerRef}
             className="nav-item community-channel-add"
             type="button"
             disabled={isAtChannelLimit}
-            onClick={() => {
-              clearCreateChannelError?.();
-              setChannelAccessMode(sharedFull ? "restricted" : "all_members");
-              setIsAddChannelOpen(true);
-            }}
+            onClick={openAddChannel}
             title={
               isAtChannelLimit
                 ? `Channel limit reached (${maxActiveChannels})`
@@ -618,7 +639,7 @@ export const CommunityNav = memo(function CommunityNav({
               <Plus size={17} strokeWidth={1.8} />
             </span>
             <span className="nav-item-label">
-              {isAtChannelLimit ? `${maxActiveChannels} channel limit` : isV1 ? "Add a channel" : "Add Channel"}
+              {isAtChannelLimit ? `${maxActiveChannels} channel limit` : "Add Channel"}
             </span>
           </button>
         ) : null}
