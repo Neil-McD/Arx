@@ -231,3 +231,31 @@ test("a big map reads each post and channel once, and a builder's map reads no c
     expect(builder.inputs.map((input) => input.mine)).toEqual(member.inputs.map((input) => input.mine));
   });
 });
+
+test("a builder moves a learned thing on the map; a member can't; the filing rules still hold", async () => {
+  const t = convexTest(schema, modules);
+  const w = await world(t);
+  const place = async () => (await as(t, "owner").query(api.communityBrain.getBrainMap, { communityId: w.communityId }) as any)
+    .points.find((entry: any) => entry.id === `note:${w.loose}`).at;
+  expect(await place()).toEqual({ kind: "other" });
+  // Under a lesson.
+  expect(await as(t, "owner").mutation(api.communityMemory.fileCommunityNote, { communityId: w.communityId, slug: "loose", about: `lesson:${w.warmup}` })).toEqual({ ok: true });
+  expect(await place()).toEqual({ kind: "lesson", id: `resource:${w.warmup}` });
+  // Under a subject: the lesson lets go.
+  expect(await as(t, "owner").mutation(api.communityMemory.fileCommunityNote, { communityId: w.communityId, slug: "loose", about: "gym logistics" })).toEqual({ ok: true });
+  expect(await place()).toEqual({ kind: "subject", name: "Gym logistics" });
+  // What it says and who wrote it are untouched.
+  const row: any = await t.run((ctx: any) => ctx.db.get(w.loose));
+  expect(row).toMatchObject({ title: "Unfiled thing", authorKind: "guide", bodyMd: "TEXT OF Unfiled thing" });
+  // Refusals come back, and nothing moves.
+  const refused = async (about: string) => (await as(t, "owner").mutation(api.communityMemory.fileCommunityNote, { communityId: w.communityId, slug: "loose", about }) as any).code;
+  expect(await refused("A subject that runs on far too long to be one")).toBe("about_invalid");
+  expect(await refused("Chalk day")).toBe("about_is_a_title");
+  expect(await refused("Unfiled thing")).toBe("about_is_a_title");
+  expect(await refused("lesson:nope")).toBe("about_lesson_missing");
+  expect(await place()).toEqual({ kind: "subject", name: "Gym logistics" });
+  // Only a builder; and only a note that exists.
+  await expect(as(t, "member").mutation(api.communityMemory.fileCommunityNote, { communityId: w.communityId, slug: "loose", about: "Gym logistics" })).rejects.toThrow();
+  await expect(as(t, "stranger").mutation(api.communityMemory.fileCommunityNote, { communityId: w.communityId, slug: "loose", about: "Gym logistics" })).rejects.toThrow();
+  await expect(as(t, "owner").mutation(api.communityMemory.fileCommunityNote, { communityId: w.communityId, slug: "nope", about: "Gym logistics" })).rejects.toThrow();
+});

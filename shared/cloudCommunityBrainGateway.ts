@@ -29,3 +29,11 @@ export async function fetchBrainNote(params: { session: unknown; communityId: st
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session as any);
   return await client.query("communityBrain:getBrainNote" as any, { authSubject, communityId: params.communityId, noteId: params.noteId });
 }
+
+// A builder moves a learned thing on the map (convex/communityMemory.ts
+// fileCommunityNote). about: "lesson:<id>" or a subject's name. A refusal
+// comes back as its code: about_invalid, about_is_a_title, about_lesson_missing.
+export async function moveBrainNote(params: { session: unknown; communityId: string; slug: string; about: string }): Promise<{ ok: true } | { ok: false; code: string }> {
+  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session as any);
+  return await client.mutation("communityMemory:fileCommunityNote" as any, { authSubject, communityId: params.communityId, slug: params.slug, about: params.about });
+}

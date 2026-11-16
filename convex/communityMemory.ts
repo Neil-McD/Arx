@@ -437,6 +437,24 @@ export const listNoteSources = query({
   },
 });
 
+// A builder moves a note on the community brain: under another lesson, or a
+// subject. The same rules as the guide's filing (resolveAbout), so a refusal
+// is returned, not thrown, for the page to say why. Where a note sits
+// changes; what it says and who wrote it do not.
+export const fileCommunityNote = mutation({
+  args: { ...viewerArgs, slug: v.string(), about: v.string() },
+  handler: async (ctx, args): Promise<{ ok: true } | Refused> => {
+    await manager(ctx, args);
+    const scope = communityScopeKey(args.communityId);
+    const note = await noteBySlug(ctx, scope, args.slug);
+    if (!note) throw new Error("semantic_not_found");
+    const filed = await resolveAbout(ctx, args.communityId, scope, args.about, String(note.title));
+    if ("error" in filed) return { ok: false, code: filed.error };
+    await ctx.db.patch(note._id, filed);
+    return { ok: true };
+  },
+});
+
 // Undo one guide note: its last change is put back; a note the guide added is
 // removed, and its posts won't bring it back.
 export const undoLearnedNote = mutation({

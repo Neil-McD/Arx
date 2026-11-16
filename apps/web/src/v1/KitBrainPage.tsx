@@ -6,13 +6,13 @@
 // than five learned things a list says more than a map, so the page is a list.
 import { useEffect, useState, type ReactNode } from "react";
 import type { BrainMap } from "../../../../shared/communityBrain";
-import { fetchBrainNote, type BrainNoteView } from "../../../../shared/cloudCommunityBrainGateway";
-import { fetchNoteSources, type NoteSourceView } from "../../../../shared/cloudCommunityNotesGateway";
+import { fetchBrainNote, moveBrainNote, type BrainNoteView } from "../../../../shared/cloudCommunityBrainGateway";
+import { deleteCommunityNote, fetchNoteSources, updateCommunityNote, type NoteSourceView } from "../../../../shared/cloudCommunityNotesGateway";
 import { askGuide } from "../components/guideSearch";
 import { Btn, cx, KitApp, useMinWidth } from "./kit";
 import { BRAIN_MAP_MIN_POINTS, KitBrainMap, type BrainReading } from "./KitBrainMap";
 import { learnedWhen, useBrainMap } from "./KitBrain";
-import { PanelLine, PanelPart } from "./KitPanel";
+import { PanelAction, PanelLine, PanelPart } from "./KitPanel";
 
 // Asking Knowledge to open the brain (from Home's panel). One use, this tab.
 const OPEN_KEY = "polynet_open_brain";
@@ -29,13 +29,15 @@ export function takeOpenBrain(): boolean {
 
 // What a picked point is, from the map itself (lessons, subjects, pods) or
 // from the server (a learned thing, read with this viewer's rules).
-function PickedDetail(props: { map: BrainMap; id: string; session: unknown; communityId: string; now: number; onOpenCourse: (courseId: string) => void }) {
+function PickedDetail(props: { map: BrainMap; id: string; session: unknown; communityId: string; now: number; version: number; onOpenCourse: (courseId: string) => void; onChanged: (removed: boolean) => void }) {
   const [note, setNote] = useState<BrainNoteView | null>(null);
   const [sources, setSources] = useState<NoteSourceView[] | null>(null);
   const [failed, setFailed] = useState(false);
   const isNote = props.id.startsWith("note:");
+  // Another point: start clean. The same one after a change: keep what is
+  // shown until the new read lands.
+  useEffect(() => { setNote(null); setSources(null); setFailed(false); }, [props.session, props.communityId, props.id]);
   useEffect(() => {
-    setNote(null); setSources(null); setFailed(false);
     if (!isNote) return;
     let live = true;
     fetchBrainNote({ session: props.session, communityId: props.communityId, noteId: props.id })
@@ -49,7 +51,7 @@ function PickedDetail(props: { map: BrainMap; id: string; session: unknown; comm
       })
       .catch(() => { if (live) setFailed(true); });
     return () => { live = false; };
-  }, [props.session, props.communityId, props.id, isNote]);
+  }, [props.session, props.communityId, props.id, isNote, props.version]);
 
   const course = props.map.courses.find((entry) => entry.lessons.some((lesson) => lesson.id === props.id));
   const lesson = course?.lessons.find((entry) => entry.id === props.id);
@@ -101,6 +103,10 @@ function PickedDetail(props: { map: BrainMap; id: string; session: unknown; comm
             ) : <PanelLine key={source.ref} dim>A post that's gone</PanelLine>)}
           </PanelPart>
         ) : null}
+        {/* A builder's own: put it right from here. A pod's things are changed in the pod. */}
+        {note.slug && props.map.points.find((point) => point.id === props.id)?.at.kind !== "pod" ? (
+          <NoteActions key={props.id} map={props.map} note={note} session={props.session} communityId={props.communityId} onChanged={props.onChanged} />
+        ) : null}
         {note.title ? (
           <div className={cx("joinbar")}><Btn go onClick={() => askGuide(`What do we know about "${note.title}"?`, props.communityId)}>Ask the guide about this</Btn></div>
         ) : null}
@@ -122,6 +128,97 @@ function PickedDetail(props: { map: BrainMap; id: string; session: unknown; comm
   return null;
 }
 
+// Why a move was refused, in words.
+const MOVE_REFUSALS: Record<string, string> = {
+  about_invalid: "A subject is a few words: three at most.",
+  about_is_a_title: "That's the name of a note. A subject groups several.",
+  about_lesson_missing: "That lesson isn't one members can take any more.",
+};
+
+// What a builder can do to a learned thing from the map: move it under
+// another lesson or subject, correct what it says, or remove it.
+export function NoteActions(props: { map: BrainMap; note: BrainNoteView; session: unknown; communityId: string; onChanged: (removed: boolean) => void }) {
+  const { note } = props;
+  const [mode, setMode] = useState<"move" | "correct" | "remove" | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const here = note.at.kind === "lesson" ? `lesson:${note.at.id.replace(/^resource:/, "")}` : note.at.kind === "subject" ? note.at.name : "";
+  const [where, setWhere] = useState(here);
+  const [subject, setSubject] = useState("");
+  const [title, setTitle] = useState(note.title ?? "");
+  const [text, setText] = useState(note.body_md ?? "");
+  const call = { session: props.session, communityId: props.communityId, slug: note.slug! };
+  const open = (next: "move" | "correct" | "remove") => { setMode(next); setError(null); setWhere(here); setSubject(""); setTitle(note.title ?? ""); setText(note.body_md ?? ""); };
+  const run = async (work: () => Promise<string | null>, removed = false) => {
+    if (busy) return;
+    setBusy(true); setError(null);
+    try {
+      const refusal = await work();
+      if (refusal) setError(refusal);
+      else { setMode(null); props.onChanged(removed); }
+    } catch { setError("That didn't go through. Try again."); } finally { setBusy(false); }
+  };
+  const about = where === "new" ? subject.trim() : where;
+
+  if (!mode) {
+    return (
+      <PanelPart label="Put it right">
+        <PanelLine action={<PanelAction onClick={() => open("move")}>Move</PanelAction>}>It's in the wrong place</PanelLine>
+        <PanelLine action={<PanelAction onClick={() => open("correct")}>Correct</PanelAction>}>It says something wrong</PanelLine>
+        <PanelLine action={<PanelAction onClick={() => open("remove")}>Remove</PanelAction>}>It shouldn't be here</PanelLine>
+      </PanelPart>
+    );
+  }
+  return (
+    <PanelPart label={mode === "move" ? "Move it under" : mode === "correct" ? "Correct it" : "Remove it"}>
+      <div className={cx("podform")} style={{ marginTop: 0 }}>
+        {mode === "move" ? (
+          <>
+            <select value={where} onChange={(event) => setWhere(event.target.value)} aria-label="Where it belongs">
+              {!here ? <option value="">Not filed yet</option> : null}
+              {props.map.courses.map((course) => (
+                <optgroup key={course.id} label={course.name}>
+                  {course.lessons.map((lesson) => <option key={lesson.id} value={`lesson:${lesson.id.replace(/^resource:/, "")}`}>{`${lesson.order}. ${lesson.title}`}</option>)}
+                </optgroup>
+              ))}
+              <optgroup label="Subjects">
+                {props.map.subjects.map((entry) => <option key={entry.name} value={entry.name}>{entry.name}</option>)}
+                <option value="new">A new subject…</option>
+              </optgroup>
+            </select>
+            {where === "new" ? <input value={subject} onChange={(event) => setSubject(event.target.value)} placeholder="A subject, in a few words" aria-label="New subject" maxLength={40} autoFocus /> : null}
+          </>
+        ) : mode === "correct" ? (
+          <>
+            <input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Title" aria-label="Title" maxLength={120} />
+            <textarea value={text} onChange={(event) => setText(event.target.value)} aria-label="What it says" rows={8} maxLength={4000} />
+            <span className={cx("sub2")}>Once you correct it, it's yours: the guide won't change it again.</span>
+          </>
+        ) : (
+          <span className={cx("sub2")}>The guide stops answering from it{note.kind === "learned" ? ", and the same posts won't teach it again" : ""}. This can't be undone here.</span>
+        )}
+        {error ? <p className={cx("bad")} role="alert">{error}</p> : null}
+        <div className={cx("acts")}>
+          {mode === "move" ? (
+            <Btn go small disabled={busy || !about || about === here} onClick={() => void run(async () => {
+              const result = await moveBrainNote({ ...call, about });
+              return result.ok ? null : MOVE_REFUSALS[result.code] ?? "It can't go there.";
+            })}>{busy ? "Moving…" : "Move"}</Btn>
+          ) : mode === "correct" ? (
+            <Btn go small disabled={busy || !title.trim() || !text.trim() || (title === (note.title ?? "") && text === (note.body_md ?? ""))} onClick={() => void run(async () => {
+              await updateCommunityNote({ ...call, title, text });
+              return null;
+            })}>{busy ? "Saving…" : "Save"}</Btn>
+          ) : (
+            <Btn go small disabled={busy} onClick={() => void run(async () => { await deleteCommunityNote(call); return null; }, true)}>{busy ? "Removing…" : "Remove"}</Btn>
+          )}
+          <Btn txt small onClick={() => { setMode(null); setError(null); }}>Cancel</Btn>
+        </div>
+      </div>
+    </PanelPart>
+  );
+}
+
 type PageProps = {
   session: unknown;
   communityId: string;
@@ -130,10 +227,12 @@ type PageProps = {
 };
 
 export function KitBrainPage(props: PageProps) {
-  const { map, failed } = useBrainMap(props.session, props.communityId);
+  // A builder's change on the page: read the map again.
+  const [version, setVersion] = useState(0);
+  const { map, failed } = useBrainMap(props.session, props.communityId, null, String(version));
   return (
     <KitBrainPageFrame canManage={props.canManage} fill={!!map && map.points.length >= BRAIN_MAP_MIN_POINTS}>
-      {failed ? <p className={cx("sub")}>The map couldn't load. Try again in a moment.</p> : map ? <KitBrainPageView {...props} map={map} /> : null}
+      {failed ? <p className={cx("sub")}>The map couldn't load. Try again in a moment.</p> : map ? <KitBrainPageView {...props} map={map} version={version} onChanged={() => setVersion((last) => last + 1)} /> : null}
     </KitBrainPageFrame>
   );
 }
@@ -147,7 +246,7 @@ export function KitBrainPageFrame(props: { canManage: boolean; fill?: boolean; c
 }
 
 // The page for a map already in hand (the design lab draws it from examples).
-export function KitBrainPageView(props: PageProps & { map: BrainMap }) {
+export function KitBrainPageView(props: PageProps & { map: BrainMap; version?: number; onChanged?: () => void }) {
   const { map } = props;
   const [reading, setReading] = useState<BrainReading>("community");
   const [picked, setPicked] = useState<string | null>(null);
@@ -157,7 +256,8 @@ export function KitBrainPageView(props: PageProps & { map: BrainMap }) {
 
   const readings: Array<[BrainReading, string]> = [["community", "Community"], ["yours", "Yours"], ...(props.canManage ? [["gaps", "Gaps"] as [BrainReading, string]] : [])];
   const counts = `${map.counts.courses} ${map.counts.courses === 1 ? "course" : "courses"} · ${map.counts.lessons} lessons · ${map.counts.learned} learned · ${map.counts.this_week} this week`;
-  const detail = picked ? <PickedDetail map={map} id={picked} session={props.session} communityId={props.communityId} now={now} onOpenCourse={props.onOpenCourse} /> : null;
+  const detail = picked ? <PickedDetail map={map} id={picked} session={props.session} communityId={props.communityId} now={now} onOpenCourse={props.onOpenCourse}
+    version={props.version ?? 0} onChanged={(removed) => { if (removed) setPicked(null); props.onChanged?.(); }} /> : null;
 
   // Too little for a map: the list.
   if (map.points.length < BRAIN_MAP_MIN_POINTS) {
