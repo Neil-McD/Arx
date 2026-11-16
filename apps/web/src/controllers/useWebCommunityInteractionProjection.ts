@@ -1123,15 +1123,19 @@ export function useWebCommunityInteractionProjection<
     if (routeThread) setSidecar({ kind: "thread", rootId: routeThread });
     else { setSidecar({ kind: "context" }); setSelectedRoot(null); }
   }, [routeThread, isCommunityChatActive, isLoadingRoots, isPresentationScopedToBoundary]);
-  // You opened or closed a thread: the address follows. Until a change of
-  // address has been applied, the address leads.
+  // You opened or closed a thread: the address follows. It runs only when the
+  // open thread changes, never on a change of address (a back press must not
+  // write the thread it is leaving), and until an address change has been
+  // applied, the address leads.
+  const routeThreadRef = useRef(routeThread);
+  routeThreadRef.current = routeThread;
   useEffect(() => {
     if (!isCommunityChatActive) return;
     if (selectedRootId === syncedThreadRef.current) return;
-    if (routeThread !== syncedThreadRef.current) return;
+    if (routeThreadRef.current !== syncedThreadRef.current) return;
     syncedThreadRef.current = selectedRootId;
     writeRouteDetail("thread", selectedRootId);
-  }, [isCommunityChatActive, selectedRootId, routeThread]);
+  }, [isCommunityChatActive, selectedRootId]);
   const presentedSelectedRoot = isPresentationScopedToBoundary ? selectedRoot : null;
   const visibleRoots = useMemo(
     () => appendPendingRoots(
