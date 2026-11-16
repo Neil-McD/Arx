@@ -161,7 +161,7 @@ approval capability below does not make the queue writable.
 - a member's own site only (`community_app`): `community.presence.heartbeat`,
   `community.typing.set`
 - human builder through external MCP only: `community.site.deploy` (see
-  [specs/community-site-rails-v0.md](specs/community-site-rails-v0.md))
+  [archive/community-site-rails-v0.md](archive/community-site-rails-v0.md))
 - a member's own tools (`external_mcp` / `community_app`):
   `community.lesson.set_done` (`ref`, `done`); lessons read for the member
   carry `done: true` once marked. Progress is private to the member.
