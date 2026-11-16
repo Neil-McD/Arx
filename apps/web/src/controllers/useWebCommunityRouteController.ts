@@ -4,6 +4,7 @@ import type { AppPage, AppView, CommunityTab } from "../../../../shared/appShell
 import { deriveOpenCommunityTabTransition } from "../../../../shared/appNavTransitions";
 import {
   buildCommunityHomePath,
+  buildCommunityTabPath,
 } from "../../../../shared/webAppRouteState";
 
 type NavigateFn = (path: string, opts?: { replace?: boolean }) => void;
@@ -13,12 +14,38 @@ type CommunityLike = {
   slug: string;
 };
 
+// Choosing a page of a community (the left column, Home's shortcuts, the
+// palette): the address to go to as a history step, or "here" when you are on
+// it already, exactly as it is, so Back needs no extra press.
+export function communityPageStep(input: {
+  communitySlug: string;
+  communityTab: CommunityTab;
+  sameCommunity: boolean;
+  channelSlug: string | null;
+  here: string;
+}): { kind: "go"; path: string } | { kind: "here" } | { kind: "none" } {
+  const path = buildCommunityTabPath(
+    input.communitySlug,
+    input.communityTab,
+    null,
+    null,
+    // Back to the channels keeps the channel you were in.
+    input.communityTab === "chat" && input.sameCommunity ? input.channelSlug : null,
+  );
+  if (!path) return { kind: "none" };
+  // The phone layout's addresses are the same pages under /m.
+  const herePath = input.here.replace(/^\/m(?=\/)/, "");
+  return herePath === path ? { kind: "here" } : { kind: "go", path };
+}
+
 export function useWebCommunityRouteController<TCommunity extends CommunityLike>(params: {
   activePage: AppPage;
   activeView: AppView;
   activeCommunityId: string | null;
   activeCommunitySlug: string | null;
   communityTab: CommunityTab;
+  // The channel open now, kept when you go back to the channels.
+  communityChannelSlug?: string | null;
   communities: TCommunity[];
   navigateTo: NavigateFn;
   pushNavSnapshot: () => void;
@@ -103,6 +130,18 @@ export function useWebCommunityRouteController<TCommunity extends CommunityLike>
         nextCommunityTab,
       );
       if ((opts?.pushSnapshot ?? true) && transition.shouldPushSnapshot) current.pushNavSnapshot();
+      // A page you choose is a step in history (Back returns to where you
+      // were); the screen follows the address. Corrections (a page you can't
+      // open, a community's real address) replace instead, elsewhere.
+      const step = communityPageStep({
+        communitySlug: matchedCommunity.slug,
+        communityTab: transition.nextCommunityTab,
+        sameCommunity: matchedCommunity.id === (current.activeCommunityId ?? null),
+        channelSlug: current.communityChannelSlug ?? null,
+        here: window.location.pathname,
+      });
+      if (step.kind === "go") current.navigateTo(step.path);
+      if (step.kind !== "none") return;
       current.setActiveView(transition.nextView);
       current.setActivePage(transition.nextPage);
       current.applyCommunityShellState({
