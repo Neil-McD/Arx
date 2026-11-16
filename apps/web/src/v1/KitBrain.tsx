@@ -14,12 +14,25 @@ import { BRAIN_MAP_MIN_POINTS, KitBrainMap } from "./KitBrainMap";
 import { PanelAction, PanelLearned, PanelPart } from "./KitPanel";
 
 // The last map read for each place, so a panel coming back draws at once
-// (and doesn't jump when the read lands) while it reads again.
-const lastMaps = new Map<string, BrainMap>();
+// (and doesn't jump when the read lands) while it reads again. A map is one
+// person's view (a builder's holds names a member's doesn't), so what is
+// kept is kept per signed-in session and never shown to another.
+const lastMaps = new WeakMap<object, Map<string, BrainMap>>();
+const LAB_SESSION = {};
+function kept(session: unknown, key: string): BrainMap | null {
+  return typeof session === "object" && session ? lastMaps.get(session)?.get(key) ?? null : null;
+}
+function keep(session: unknown, key: string, map: BrainMap): void {
+  if (typeof session !== "object" || !session) return;
+  if (!lastMaps.has(session)) lastMaps.set(session, new Map());
+  lastMaps.get(session)!.set(key, map);
+}
 
-// The design lab draws panels from examples: it puts one here to be found.
+// The design lab draws panels from examples: it puts one here to be found
+// (pass labSession as the session).
+export const labSession: unknown = LAB_SESSION;
 export function rememberBrainMap(communityId: string, podChannelId: string | null, map: BrainMap): void {
-  lastMaps.set(`${communityId}:${podChannelId ?? ""}`, map);
+  keep(LAB_SESSION, `${communityId}:${podChannelId ?? ""}`, map);
 }
 
 // The map of a community, or of one pod. map null: not read yet, or it could
@@ -28,18 +41,19 @@ export function rememberBrainMap(communityId: string, podChannelId: string | nul
 // correcting or removing a note), so it is read again.
 export function useBrainMap(session: unknown, communityId: string | null, podChannelId?: string | null, version?: string): { map: BrainMap | null; failed: boolean } {
   const key = `${communityId ?? ""}:${podChannelId ?? ""}`;
-  const [state, setState] = useState<{ key: string; map: BrainMap | null; failed: boolean }>(() => ({ key, map: lastMaps.get(key) ?? null, failed: false }));
+  const [state, setState] = useState<{ session: unknown; key: string; map: BrainMap | null; failed: boolean }>(() => ({ session, key, map: kept(session, key), failed: false }));
+  const same = (last: { session: unknown; key: string }) => last.session === session && last.key === key;
   useEffect(() => {
-    // Another place: what was shown belongs to the last one.
-    setState((last) => last.key === key ? last : { key, map: lastMaps.get(key) ?? null, failed: false });
-    if (!session || !communityId) return;
+    // Another place or another person: what was shown belongs to the last one.
+    setState((last) => same(last) ? last : { session, key, map: kept(session, key), failed: false });
+    if (!session || !communityId || session === LAB_SESSION) return;
     let live = true;
     fetchBrainMap({ session, communityId, podChannelId })
-      .then((map) => { lastMaps.set(key, map); if (live) setState({ key, map, failed: false }); })
-      .catch(() => { if (live) setState((last) => ({ key, map: last.key === key ? last.map : null, failed: true })); });
+      .then((map) => { keep(session, key, map); if (live) setState({ session, key, map, failed: false }); })
+      .catch(() => { if (live) setState((last) => ({ session, key, map: same(last) ? last.map : null, failed: true })); });
     return () => { live = false; };
-  }, [session, communityId, podChannelId, key, version]);
-  return state.key === key ? state : { map: lastMaps.get(key) ?? null, failed: false };
+  }, [session, communityId, podChannelId, key, version]); // eslint-disable-line react-hooks/exhaustive-deps
+  return same(state) ? state : { map: kept(session, key), failed: false };
 }
 
 // When something was learned, in a word: "today", "Tue", "Nov 3".
