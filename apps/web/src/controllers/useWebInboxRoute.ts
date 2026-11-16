@@ -2,7 +2,7 @@ import { useEffect, useRef } from "react";
 
 import { isDesignV1Active } from "../../../../shared/designSystem";
 import { readRouteDetail, useRouteDetail, writeRouteDetail } from "../../../../shared/routeDetails";
-import { buildCommunityTabPath } from "../../../../shared/webAppRouteState";
+import { buildCommunityHomePath, buildCommunityTabPath } from "../../../../shared/webAppRouteState";
 import type { AppPage, CommunityTab } from "../../../../shared/appShellNavigation";
 import type { useWebDirectMessagesController } from "./useWebDirectMessagesController";
 
@@ -41,7 +41,13 @@ export function useWebInboxRoute(params: {
         window.history.back();
         return;
       }
-      const path = buildCommunityTabPath(latest.current.communitySlug, "chat");
+      // Another page is opening. On a phone that is a bottom tab, which has
+      // no address of its own yet (slice B), so the community's list is
+      // where the address rests; on a wide window, its channels.
+      const onPhone = document.documentElement.dataset.layout === "phone";
+      const path = onPhone
+        ? buildCommunityHomePath(latest.current.communitySlug)
+        : buildCommunityTabPath(latest.current.communitySlug, "chat");
       if (path) latest.current.navigateTo(path, { replace: true });
     },
   } : null;
