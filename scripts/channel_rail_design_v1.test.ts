@@ -16,22 +16,32 @@ const props = {
   memberSettings: {} as any,
   getAvatarColor: () => "#000",
   getInitials: (name: string) => name.slice(0, 1),
-  pinned: { label: "How to post a win", onOpen: () => {} },
+  pinned: { label: "How to post a win", author: "Maya Chen", at: null, title: "How to post a win", excerpt: "Say what you sent, the grade, and one thing that made it go.", onOpen: () => {} },
 };
 
 // The kit's section labels (hashed CSS Module class names, the mock's .lab).
 function labels(html: string): string[] {
-  return [...html.matchAll(/<span class="_lab_[^"]*">([^<]+)<\/span>/g)].map((match) => match[1]);
+  return [...html.matchAll(/<span class="_lab_[^"]*">([^<]+)/g)].map((match) => match[1]);
 }
 
 // No notes here: they are the guide's memory, kept by builders in Knowledge
 // (Neil, Nov 14), not something a channel lists.
-test("design v1: the channel panel is pinned, then who is here; no notes", () => {
+test("design v1: the channel panel is what it is for, its pinned post, then who is here; no notes, no summary", () => {
   design.v1 = true;
-  const html = renderToStaticMarkup(React.createElement(ChannelRosterPanel, props));
-  expect(labels(html)).toEqual(["Pinned", "In this channel"]);
+  const html = renderToStaticMarkup(React.createElement(ChannelRosterPanel, { ...props, channelDescription: "Share what you sent this week." }));
+  expect(labels(html)).toEqual(["About", "Pinned", "Here"]);
+  expect(html).toContain("Share what you sent this week.");
   expect(html).not.toContain("Memory");
+  expect(html).not.toContain("Your guide");
+  // The pinned post is a card: who posted it, its title and how it starts.
+  expect(html).toContain('aria-label="Open the pinned post by Maya Chen"');
   expect(html).toContain("How to post a win");
+  expect(html).toContain("one thing that made it go");
+  // The feed drops its own pinned card only while this one is shown.
+  expect(html).toContain("kit-channel-rail has-pinned");
+  // Only the people who run the channel can take the pin off.
+  expect(html).not.toContain("Unpin");
+  expect(renderToStaticMarkup(React.createElement(ChannelRosterPanel, { ...props, pinned: { ...props.pinned, onUnpin: () => {} } }))).toContain("Unpin");
   expect(html).toContain("4 here now");
   expect(html).toContain("Everyone");
   // The long member list and the agents list are not in the short panel.
@@ -42,7 +52,9 @@ test("design v1: the channel panel is pinned, then who is here; no notes", () =>
 test("design v1: nothing pinned, no Pinned section", () => {
   design.v1 = true;
   const html = renderToStaticMarkup(React.createElement(ChannelRosterPanel, { ...props, pinned: null }));
-  expect(labels(html)).toEqual(["In this channel"]);
+  // No description either: the panel is just who is here.
+  expect(labels(html)).toEqual(["Here"]);
+  expect(html).not.toContain("has-pinned");
 });
 
 test("design v1: an open thread takes the panel's place", () => {

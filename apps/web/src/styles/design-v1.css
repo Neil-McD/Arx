@@ -1421,8 +1421,8 @@
   grid-template-columns: minmax(0, 1fr) var(--right-column-width);
 }
 
-/* An ordinary channel has no right column: nothing is picked, so the feed
-   takes the room. The short panel is not drawn; the people list (asked for
+/* A channel with nothing to show beside it (no pinned post, no description:
+   .is-open-channel) has no right column, so the feed takes the room. The short panel is not drawn; the people list (asked for
    from the header on a narrow window) still is. */
 /* (Members is drawn in this same frame with its own two columns: left alone.) */
 :root[data-design="v1"] .community-interaction-projection.has-channel-context.is-open-channel:not(:has(> .members-page)):not(:has(> .members-page-record)) {
@@ -4312,3 +4312,10 @@
 :root[data-design="v1"] .members-record-close:hover { color: var(--text-ink-primary); background: var(--hover-overlay); }
 :root[data-design="v1"]:where([data-layout="phone"]) .members-record-close { display: none; }
 @media (max-width: 1023px) { :root[data-design="v1"] .members-record-close { display: none; } }
+
+/* A channel's pinned post lives in its right column on a wide window, so the
+   feed is only the conversation. Where that column isn't shown (a narrow
+   window, a phone, or a thread open in its place) the feed keeps the pin. */
+@media (min-width: 1024px) {
+  :root[data-design="v1"]:where(:not([data-layout="phone"])) .community-interaction-projection.has-channel-context:not(.is-open-channel):has(> .channel-roster-panel.is-kit .kit-channel-rail.has-pinned) .community-channel-pinned-root { display: none; }
+}
