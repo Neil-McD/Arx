@@ -2578,6 +2578,7 @@ export default function App() {
         activeCommunityId: activeCommunity?.id ?? null,
         isOpen: isDirectMessagesOpen,
         onActiveConversationChange: inboxRoute.onActiveConversationChange,
+        addressConversationId: inboxRoute.addressConversationId,
         mobileRoot:
           showMobileShell && mobileRootPage === "messages",
         openRequest: directMessageOpenRequest,

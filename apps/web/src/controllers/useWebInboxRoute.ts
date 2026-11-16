@@ -73,6 +73,8 @@ export function useWebInboxRoute(params: {
   // Inbox's shown conversation goes in the address; one opened for you only
   // fills it in, picking another is a step back can return from.
   const onActiveConversationChange = (conversationId: string | null) => {
+    // Nothing shown yet is not a close: the address's conversation is on its way.
+    if (!conversationId && !shownConversationRef.current) return;
     shownConversationRef.current = conversationId;
     if (!isInboxRouteRef.current) return;
     const inAddress = readRouteDetail("conversation");
@@ -83,5 +85,10 @@ export function useWebInboxRoute(params: {
   // Open exactly while the address is Inbox's; in place only when there is no
   // address to use.
   const isOpen = isInboxRoute || directMessages.isOpenInPlace;
-  return { isInboxRoute, isOpen, onActiveConversationChange };
+  return {
+    isInboxRoute,
+    isOpen,
+    onActiveConversationChange,
+    addressConversationId: isInboxRoute ? conversationInAddress : null,
+  };
 }
