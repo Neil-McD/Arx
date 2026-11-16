@@ -495,6 +495,11 @@ css += """
 .app .chpin-by em{margin-left:auto;font-style:normal;white-space:nowrap}
 .app .chpin strong{font-size:14px;font-weight:600;color:var(--ink);overflow-wrap:anywhere}
 .app .chpin-text{display:-webkit-box;-webkit-line-clamp:5;-webkit-box-orient:vertical;overflow:hidden;font-size:13.5px;line-height:1.5;color:var(--ink2);overflow-wrap:anywhere}
+/* The members' directory fits the room it has: a profile open beside it
+   narrows it, so it shows fewer across, never cut names. */
+.app .page:has(>.ppl){container-type:inline-size}
+@container (max-width:760px){.app .ppl{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@container (max-width:480px){.app .ppl{grid-template-columns:minmax(0,1fr)}}
 /* Members for the host (KitMembersTable): a toolbar, a bordered table with a
    box to tick on each row, what can be done to everyone ticked, and the
    people waiting to join in a drawer. */

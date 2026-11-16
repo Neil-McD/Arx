@@ -1,3 +1,4 @@
+import { lessonBodyWithoutRepeatedTitle } from "../../../../shared/communityMemberWords";
 import {
   useEffect,
   useLayoutEffect,
@@ -98,7 +99,9 @@ export function WebCommunityResourceViewerContent(props: WebCommunityResourceVie
   const sourceUrl = normalizeExternalUrl(currentUrl);
   const hostLabel = getHostLabel(currentUrl);
   const persistedBody = resource.body_md?.trim() ?? "";
-  const trimmedBody = editor?.isEditing ? editor.bodyInput.trim() : persistedBody;
+  // Read (not while editing): a body that opens with the lesson's own title
+  // as a heading doesn't say it under the title again.
+  const trimmedBody = editor?.isEditing ? editor.bodyInput.trim() : lessonBodyWithoutRepeatedTitle(resource.title ?? "", persistedBody).trim();
   const titleText = editor?.isEditing ? editor.titleInput : resource.title;
   const bodyText = editor?.isEditing ? editor.bodyInput : persistedBody;
   const hasBody = trimmedBody.length > 0;
