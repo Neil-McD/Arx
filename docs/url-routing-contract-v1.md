@@ -35,16 +35,17 @@ Current canonical/pathname routes include:
 - `/c/:slug`
 - `/c/:slug/chat`, `/c/:slug/chat/:channel`
 - `/c/:slug/chat/:channel/:thread` (a thread open; General is `/chat/general/:thread`)
-- `/c/:slug/resources`, `/c/:slug/resources/:course`
-- `/c/:slug/resources/:course/:lesson` (a lesson in a course)
-- `/c/:slug/resources/guide`, `/c/:slug/resources/brain` (What your guide knows, the community brain)
+- `/c/:slug/knowledge`, `/c/:slug/knowledge/:course`
+- `/c/:slug/knowledge/:course/:lesson` (a lesson in a course)
+- `/c/:slug/knowledge/guide`, `/c/:slug/knowledge/brain` (What your guide knows, the community brain)
 - `/c/:slug/events`
 - `/c/:slug/members`, `/c/:slug/members/:membershipId`, `/c/:slug/members/requests`
 - `/c/:slug/inbox`, `/c/:slug/inbox/:conversationId`
 - `/c/:slug/pods` (the Pods page)
 - `/c/:slug/pods/:pod` (a pod's own address: its room for someone in it, its outside page for a member who may see it, not found otherwise; the room itself is `/c/:slug/chat/:pod`)
 - `/c/:slug/settings`
-- `/c/:slug/agent`
+- `/c/:slug/home` (Home, the community's guide page)
+- `/c/:slug/browse` (the community's list of channels and pages; the phone's middle tab)
 - `/c/:slug/workflows` (going with member workflows)
 - `/c/:slug/analytics`
 - `/claim`
@@ -176,6 +177,15 @@ So the contract direction is:
 - use `/u/:handle`
 - use `/app/:slug`
 
+### Names changed on Nov 17
+
+Home is `/c/:slug/home` (it was `/c/:slug/agent`); the community's list, the
+phone's middle tab, is `/c/:slug/browse` (it was `/c/:slug/home`); Knowledge is
+`/c/:slug/knowledge` (it was `/c/:slug/resources`). The old words still open
+the same pages and are rewritten. A bookmarked phone `/home` now opens Home
+rather than the list. Inside the app the tabs keep their names (`agent`,
+`resources`).
+
 ### Details inside a page
 
 Since Nov 17 2026 (#594), where you are inside a community page is part of its
@@ -214,10 +224,10 @@ Preferred direction:
 
 - `/c/:slug` = hand-off to the community's own site
 - `/c/:slug/chat`
-- `/c/:slug/resources`
+- `/c/:slug/knowledge`
 - `/c/:slug/events`
 - `/c/:slug/settings`
-- `/c/:slug/agent`
+- `/c/:slug/home`
 - `/c/:slug/analytics`
 
 This keeps object identity stable while making the active view explicit.

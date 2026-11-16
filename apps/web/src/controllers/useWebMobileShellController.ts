@@ -31,6 +31,8 @@ export function useWebMobileShellController(params: {
     opts?: { pushSnapshot?: boolean },
   ) => void;
   handleOpenDiscover: () => void;
+  // Home's own address (/c/:slug/home), so the Home tab survives a refresh.
+  openHomePage?: () => void;
   openDirectMessages: () => void;
   closeDirectMessages: () => void;
   closeThreadPage: () => void;
@@ -87,6 +89,7 @@ export function useWebMobileShellController(params: {
         params.closeDirectMessages();
         params.setMobileOverlay(null);
         params.setMobileRootPage("agent");
+        params.openHomePage?.();
         return;
       }
 
@@ -99,6 +102,7 @@ export function useWebMobileShellController(params: {
       params.closeThreadPage,
       params.isThreadPageOpen,
       params.openDirectMessages,
+      params.openHomePage,
       params.setMobileOverlay,
       params.setMobileRootPage,
       openMobileCommunitySurface,

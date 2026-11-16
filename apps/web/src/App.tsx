@@ -1591,6 +1591,10 @@ export default function App() {
       setMobileSettingsView,
       openCommunityHome,
       handleOpenDiscover,
+      openHomePage: () => {
+        const path = buildCommunityTabPath(selectedActiveCommunitySlug, "agent");
+        if (path) navigateTo(path);
+      },
       openDirectMessages: handleOpenDirectMessages,
       closeDirectMessages: handleCloseDirectMessages,
       closeThreadPage: handleCloseCommunityInteractionDrawer,
