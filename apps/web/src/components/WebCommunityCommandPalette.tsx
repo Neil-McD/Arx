@@ -1,6 +1,7 @@
 // Design system v1: the command palette's places and communities, taken from
 // the community's left column, so the palette goes exactly where the column
 // does and shows what the column shows (and nothing the lens hides).
+import { isDesignV1Active } from "../../../../shared/designSystem";
 import { useMemo } from "react";
 import type { PaletteCommunity, PalettePlace } from "../../../../shared/commandPalette";
 import { KitCommandPalette } from "../v1/KitCommandPalette";
@@ -54,7 +55,9 @@ export function WebCommunityCommandPalette({ communityShell }: { communityShell:
 
   const actions = useMemo(() => ({
     openPlace: (id: string) => {
-      const leaveInbox = () => { if (shell.isDirectMessagesOpen) shell.onToggleDirectMessages(); };
+      // Design v1: Inbox is a page with its own address, so going anywhere
+      // else leaves it; the classic layout closes it first.
+      const leaveInbox = () => { if (shell.isDirectMessagesOpen && !isDesignV1Active()) shell.onToggleDirectMessages(); };
       if (id === "inbox") { if (!shell.isDirectMessagesOpen) shell.onToggleDirectMessages(); return; }
       if (id.startsWith("channel:")) {
         const channel = shell.communityChannels.find((entry) => `channel:${entry.id}` === id);
@@ -71,7 +74,7 @@ export function WebCommunityCommandPalette({ communityShell }: { communityShell:
       if (!community) return;
       const changed = shell.onSelectActiveCommunity(community);
       const slug = String(community.slug ?? "").trim();
-      if (changed && shell.isDirectMessagesOpen) shell.onToggleDirectMessages();
+      if (changed && shell.isDirectMessagesOpen && !isDesignV1Active()) shell.onToggleDirectMessages();
       if (changed && slug) shell.onOpenCommunityHome(slug);
     },
   }), [shell]);

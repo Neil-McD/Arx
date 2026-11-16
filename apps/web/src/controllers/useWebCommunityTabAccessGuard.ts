@@ -34,7 +34,7 @@ export function useWebCommunityTabAccessGuard(params: {
     // Pods are a design v1 page: the classic app has no way in, so an
     // address that names them opens the community's chat instead.
     // Members as a page is design v1 too; the classic app opens it from chat.
-    const normalizedTab = (params.communityTab === "pods" || params.communityTab === "members") && !isDesignV1Active()
+    const normalizedTab = (params.communityTab === "pods" || params.communityTab === "members" || params.communityTab === "inbox") && !isDesignV1Active()
       ? "chat"
       : normalizeCommunityTabForAccess(
         params.communityTab,

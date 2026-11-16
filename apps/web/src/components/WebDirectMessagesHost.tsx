@@ -88,6 +88,8 @@ export type DirectMessageNotificationsUiState = "hidden" | "on" | "off" | "block
 
 export type WebDirectMessagesHostProps<SessionT> = {
   isOpen: boolean;
+  // The conversation shown changed (or closed), so the address can hold it.
+  onActiveConversationChange?: (conversationId: string | null) => void;
   mobileRoot?: boolean;
   openRequest: DirectMessageOpenRequest;
   openConversationRequest?: DirectMessageOpenConversationRequest;
@@ -384,6 +386,12 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
   );
 
   const activeConversationId = directMessagePanel?.conversation.id ?? null;
+  const onActiveConversationChangeRef = useRef(props.onActiveConversationChange);
+  onActiveConversationChangeRef.current = props.onActiveConversationChange;
+  useEffect(() => {
+    if (!isOpen) return;
+    onActiveConversationChangeRef.current?.(activeConversationId);
+  }, [activeConversationId, isOpen]);
 
   useEffect(() => {
     sessionRef.current = session;
