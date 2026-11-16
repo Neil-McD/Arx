@@ -50,7 +50,7 @@ export function KitPodKnowledge(props: { session: unknown; communityId: string; 
   };
 
   // The pod's own map: its things only, read again when its notes change.
-  const { map: brain } = useBrainMap(props.session, props.communityId, props.channelId, state ? state.notes.map((note) => `${note.slug}:${note.updated_at}`).join("|") : "");
+  const { map: brain } = useBrainMap(props.session, props.communityId, props.channelId);
   const [now] = useState(() => Date.now());
 
   if (!state) return null;

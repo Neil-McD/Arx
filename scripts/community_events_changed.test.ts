@@ -22,9 +22,10 @@ it("whoever changes an event tells whoever shows events", async () => {
 
 // Home stays mounted behind other pages. Without this its "Next up" showed a
 // cancelled event, or missed a new one, until the page was reloaded (Nov 14).
-it("the Events page, a pod's call and Home are wired to it", () => {
+// Since Nov 17 "Next up" reads the events live, so it follows any change.
+it("the Events page and a pod's call announce changes; Home's Next up is live", () => {
   const read = (path: string) => readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
-  expect(read("apps/web/src/v1/KitNextEvent.tsx")).toMatch(/onCommunityEventsChanged\(/);
+  expect(read("apps/web/src/v1/KitNextEvent.tsx")).toMatch(/useLiveQuery<[^>]*>\([^,]+, "communityEvents:listCommunityEvents"/);
   expect(read("apps/web/src/components/WebCommunityEventsSection.tsx").match(/announceCommunityEventsChanged\(\)/g)?.length).toBeGreaterThanOrEqual(3);
   expect(read("apps/web/src/v1/KitPodCall.tsx").match(/announceCommunityEventsChanged\(\)/g)?.length).toBe(2);
 });

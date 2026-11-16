@@ -6,23 +6,19 @@
 // own fallback.
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { briefAge, type BriefView } from "../../../../shared/communityBriefs";
-import { fetchPlaceBrief } from "../../../../shared/cloudCommunityBriefsGateway";
+import type { PlaceBriefView } from "../../../../shared/cloudCommunityBriefsGateway";
+import { resolveAuthSubject, type AuthSessionLike } from "../../../../shared/authSession";
+import { useLiveQuery } from "../../../../shared/liveQuery";
 import { cx, Icon } from "./kit";
 
-// The place's brief, loaded once per place. null: nothing to show.
+// The place's brief, live (shared/liveQuery.ts): it stays on screen across
+// pages and updates when the guide writes a new one. null: nothing to show;
+// a panel never fails for want of a brief.
 export function usePlaceBrief(session: unknown, communityId: string | null, podChannelId?: string | null, enabled = true): BriefView | null {
-  const [brief, setBrief] = useState<BriefView | null>(null);
-  useEffect(() => {
-    setBrief(null);
-    if (!session || !communityId || !enabled) return;
-    let live = true;
-    fetchPlaceBrief({ session, communityId, podChannelId })
-      .then((view) => { if (live) setBrief(view.brief); })
-      // A panel never fails for want of a brief.
-      .catch(() => undefined);
-    return () => { live = false; };
-  }, [session, communityId, podChannelId, enabled]);
-  return brief;
+  const subject = session ? resolveAuthSubject(session as AuthSessionLike) : null;
+  const { data } = useLiveQuery<PlaceBriefView>(session, "communityBriefs:getPlaceBrief",
+    subject && communityId && enabled ? { authSubject: subject, communityId, ...(podChannelId ? { podChannelId } : {}) } : null);
+  return enabled ? data?.brief ?? null : null;
 }
 
 export function BriefPart(props: {

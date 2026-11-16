@@ -123,8 +123,8 @@ export function KitClassroom(props: {
   const [progressLoaded, setProgressLoaded] = useState(false);
   const [summary, setSummary] = useState<CourseProgressSummary[]>([]);
   const [notes, setNotes] = useState<CommunityNoteView[]>([]);
-  // Read again whenever a builder's notes change.
-  const { map: brain } = useBrainMap(props.session, props.communityId, null, notes.map((entry) => `${entry.slug}:${entry.updated_at}`).join("|"));
+  // Live: it changes when a builder's notes do.
+  const { map: brain } = useBrainMap(props.session, props.communityId, null);
   const [canWriteNotes, setCanWriteNotes] = useState(false);
   const [lessonId, setLessonId] = useState<string | null>(null);
   const [shelfPage, setShelfPage] = useState(0);
