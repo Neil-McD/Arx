@@ -4235,7 +4235,18 @@
 }
 
 /* A phone's top bar has its own arrow; the header's steps aside there. */
-:root[data-design="v1"] .app-root.mobile-shell .community-page-header-back:not(.community-channel-header-back) {
+/* A pod's room too: the top bar's arrow goes back to Pods. */
+:root[data-design="v1"] .app-root.mobile-shell .community-page-header-back {
+  display: none;
+}
+
+/* Settings on a phone: the bar says "Settings" and goes back to the list; the
+   page's own title starts below the bar, not under it. */
+/* phone layout */
+:root[data-design="v1"]:where([data-layout="phone"]) .app-root.mobile-shell .community-settings-pane-content {
+  padding-top: var(--mobile-topbar-clearance);
+}
+:root[data-design="v1"] .app-root.mobile-shell .mobile-settings-detail-back {
   display: none;
 }
 
