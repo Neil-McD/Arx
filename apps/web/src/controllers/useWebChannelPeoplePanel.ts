@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { readPlaceParam, writeOpenPlace } from "../../../../shared/placeParams";
 
 type Scope = { userId?: string; communityId: string | null; channelSlug?: string | null };
 export function channelPeopleScopeKey(scope: Scope) {
@@ -17,6 +18,21 @@ export function useWebChannelPeoplePanel(params: Scope & {
   useEffect(() => {
     setOpenScope(scope => params.canViewMembers && scope === currentScope ? scope : null);
   }, [currentScope, params.canViewMembers]);
+  // Members rides on the address (?open=members), so a refresh comes back to
+  // it. Read once; opened when this channel and your rights are known.
+  const reopenRef = useRef(readPlaceParam("open") === "members");
+  useEffect(() => {
+    if (!reopenRef.current) return;
+    if (readPlaceParam("open") !== "members") { reopenRef.current = false; return; }
+    if (!params.canViewMembers || !currentScope) return;
+    reopenRef.current = false;
+    setOpenScope(currentScope);
+  }, [currentScope, params.canViewMembers]);
+  const peopleOpen = Boolean(params.canViewMembers && currentScope && openScope === currentScope);
+  useEffect(() => {
+    if (reopenRef.current && readPlaceParam("open") === "members") return;
+    writeOpenPlace("members", peopleOpen);
+  }, [peopleOpen]);
   const changeOpen = useCallback((open: boolean) => {
     if (open) {
       openerRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
@@ -38,6 +54,5 @@ export function useWebChannelPeoplePanel(params: Scope & {
       setOpenScope(channelPeopleScopeKey({ ...params, channelSlug: "general" }));
     }
   };
-  return { peopleOpen: Boolean(params.canViewMembers && currentScope && openScope === currentScope),
-    changeOpen, openMembers };
+  return { peopleOpen, changeOpen, openMembers };
 }
