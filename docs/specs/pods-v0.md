@@ -57,15 +57,19 @@ does). Nothing private is ever listed in the left column.
 ### A pod's own page
 
 One address per pod, `/c/:slug/pods/:pod`, for hosts to share anywhere. Who
-opens it decides what it shows: anyone who can enter (in the pod, its hosts,
-the builder) goes straight into its room; a member who can't sees its outside
-page (listed pods only); anyone else gets "not found", so a hidden pod never
-shows. The builder and hosts preview the outside page from the pod's right
-column ("See its page").
+opens it decides what it shows (Nov 17, design v1): anyone who can enter (in
+the pod, its hosts, the builder) sees its landing page, with "Open the pod" as
+the way into its room; a member who can't sees its outside page (listed pods
+only); anyone else gets "not found", so a hidden pod never shows. The page
+never redirects after loading. The builder and hosts preview the outside page
+from the pod's right column ("See its page").
 
-The pod someone is in is remembered (per community, in their browser): "Pods"
-in the left column goes back to it. The room's "← Pods" arrow forgets it and
-shows every pod. The outside page has fixed sections,
+The address is what is shown: picking a pod on the Pods page is a history
+step to its address. The pod someone was last in is remembered (per community,
+in their browser) and shown first when they open Pods on a wide screen; on a
+narrow screen Pods is the list. The room's "← Pods" arrow goes to that pod on
+the Pods page. Leaving a pod forgets it. The room itself keeps its channel
+address. The outside page has fixed sections,
 filled from the pod and hidden when empty: name and purpose, **What you get**
 (up to four short lines), hosts, price and seats, and one button (Join, Ask to
 join, Join the waitlist, Full, or what the viewer already did). No page builder.
