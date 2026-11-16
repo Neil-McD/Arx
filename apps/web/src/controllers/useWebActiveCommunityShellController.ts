@@ -16,12 +16,11 @@ import type {
 } from "../../../../shared/communityTypes";
 import { COMMUNITY_PRESENCE_HEARTBEAT_INTERVAL_MS } from "../../../../shared/communityPresenceContract";
 import { fetchCloudMyCommunityAccessById } from "../../../../shared/cloudCommunityAccessGateway";
-import { heartbeatCloudCommunityPresence } from "../../../../shared/cloudPublicFunnelGateway";
-import { firstGatewayRow } from "../../../../shared/cloudGateway";
-import { useLiveQuery } from "../../../../shared/liveQuery";
+import {
+  refreshCloudCommunityPresence,
+} from "../../../../shared/cloudPublicFunnelGateway";
 import {
   resolveAuthPresentationIdentity,
-  resolveAuthSubject,
   type AuthSessionLike,
 } from "../../../../shared/authSession";
 import { reuseEquivalentValue } from "../../../../shared/reuseEquivalentValue";
@@ -32,6 +31,13 @@ import {
   writeMemberPreview,
 } from "../../../../shared/communityMemberPreview";
 import { useResumeEpochEffect } from "../../../../shared/useResumeEpochEffect";
+
+type ScopedPresenceSummary = {
+  communityId: string;
+  sessionIdentity: string;
+  summary: CommunityPresenceSummary | null;
+  status: "pending" | "resolved" | "failed";
+};
 
 export function useWebActiveCommunityShellController<SessionT>(params: {
   activeCommunityId: string | null;
@@ -44,6 +50,8 @@ export function useWebActiveCommunityShellController<SessionT>(params: {
     undefined,
     createCommunityAccessResolutionState<CommunityAccess>,
   );
+  const [activeCommunityPresenceSummaryState, setActiveCommunityPresenceSummaryState] =
+    useState<ScopedPresenceSummary | null>(null);
   const accessRequestIdRef = useRef(0);
   const activeCommunityIdRef = useRef(params.activeCommunityId);
   const sessionRef = useRef(params.session);
@@ -121,26 +129,53 @@ export function useWebActiveCommunityShellController<SessionT>(params: {
     void reloadActiveCommunityAccess(communityId, currentSession);
   });
 
-  // Being here: a heartbeat every 30 seconds while the page is visible. Who
-  // else is here is read live below, so it changes as soon as anyone's
-  // heartbeat does.
   useEffect(() => {
     if (!sessionIdentity || !params.activeCommunityId) {
       refreshPresenceRef.current = () => {};
+      setActiveCommunityPresenceSummaryState(null);
       return;
     }
     let cancelled = false;
     let inFlight = false;
     const communityId = String(params.activeCommunityId ?? "").trim();
+    setActiveCommunityPresenceSummaryState({
+      communityId,
+      sessionIdentity,
+      summary: null,
+      status: "pending",
+    });
     const tick = async () => {
       if (cancelled || inFlight || document.visibilityState !== "visible") return;
       inFlight = true;
       try {
         const usableSession = await params.ensureSession(sessionRef.current);
-        if (!usableSession || cancelled) return;
-        await heartbeatCloudCommunityPresence<SessionT>({ session: usableSession, communityId });
+        if (!usableSession) return;
+        const summary = await refreshCloudCommunityPresence<SessionT, CommunityPresenceSummary>({
+          session: usableSession,
+          communityId,
+        });
+        if (!cancelled && activeCommunityIdRef.current === communityId) {
+          setActiveCommunityPresenceSummaryState((previous) => reuseEquivalentValue(previous, {
+            communityId,
+            sessionIdentity,
+            summary: summary ?? null,
+            status: "resolved",
+          }));
+        }
       } catch (error) {
-        if (!cancelled) console.warn("Failed to record community presence:", error);
+        if (!cancelled) {
+          console.warn("Failed to refresh community presence:", error);
+          setActiveCommunityPresenceSummaryState((previous) => {
+            if (
+              previous?.communityId !== communityId ||
+              previous.sessionIdentity !== sessionIdentity ||
+              previous.status === "resolved"
+            ) {
+              return previous;
+            }
+            return { communityId, sessionIdentity, summary: null, status: "failed" };
+          });
+        }
       } finally {
         inFlight = false;
       }
@@ -162,6 +197,10 @@ export function useWebActiveCommunityShellController<SessionT>(params: {
   useResumeEpochEffect(params.resumeEpoch, () => {
     refreshPresenceRef.current();
   });
+
+  useEffect(() => {
+    setActiveCommunityPresenceSummaryState(null);
+  }, [params.activeCommunityId]);
 
   const scopedCommunityAccessResolution = useMemo(
     () => scopeCommunityAccessResolution(
@@ -216,16 +255,21 @@ export function useWebActiveCommunityShellController<SessionT>(params: {
     reloadActiveCommunityAccess,
   ]);
 
-  const presenceSubject = params.session ? resolveAuthSubject(params.session as AuthSessionLike) : null;
-  const presenceCommunityId = String(params.activeCommunityId ?? "").trim() || null;
-  const livePresence = useLiveQuery<unknown>(params.session, "communityPublic:getCommunityPresenceSummary",
-    presenceSubject && presenceCommunityId ? { authSubject: presenceSubject, communityId: presenceCommunityId } : null);
-  const activeCommunityPresenceSummary = useMemo(
-    () => (livePresence.data === undefined ? null : firstGatewayRow<CommunityPresenceSummary>(livePresence.data)),
-    [livePresence.data],
-  );
+  const activeCommunityPresenceSummary = useMemo(() => {
+    const communityId = String(params.activeCommunityId ?? "").trim();
+    if (!communityId) return null;
+    if (activeCommunityPresenceSummaryState?.communityId !== communityId) return null;
+    if (activeCommunityPresenceSummaryState.sessionIdentity !== sessionIdentity) return null;
+    return activeCommunityPresenceSummaryState.summary;
+  }, [activeCommunityPresenceSummaryState, params.activeCommunityId, sessionIdentity]);
   const isLoadingActiveCommunityPresence = Boolean(
-    presenceSubject && presenceCommunityId && livePresence.data === undefined && !livePresence.error,
+    sessionIdentity &&
+    params.activeCommunityId &&
+    (
+      activeCommunityPresenceSummaryState?.communityId !== params.activeCommunityId ||
+      activeCommunityPresenceSummaryState.sessionIdentity !== sessionIdentity ||
+      activeCommunityPresenceSummaryState.status === "pending"
+    ),
   );
 
   const communityAccessCapabilities = useMemo(
