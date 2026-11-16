@@ -258,7 +258,7 @@ export const CommunityNav = memo(function CommunityNav({
     isLoadingAccess || (isLoadingChannels && channels.every((channel) => !channel.id));
   const canAddChannel = Boolean(!showChannelLoadingSkeleton && canManageMembersActiveCommunity && onCreateChannel);
   const channelRowsSlug = activeCommunity?.slug?.trim()
-    || (typeof window === "undefined" ? null : communitySlugInAddress(window.location.pathname));
+    || (typeof window === "undefined" || !window.location ? null : communitySlugInAddress(window.location.pathname));
   const reservedChannelRows = channelRowsToReserve(recallChannelRows(channelRowsSlug));
   useEffect(() => {
     if (!showChannelLoadingSkeleton && channels.length > 0) rememberChannelRows(channelRowsSlug, channels.length);
