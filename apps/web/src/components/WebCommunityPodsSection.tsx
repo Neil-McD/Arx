@@ -11,6 +11,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { CommunityPageHeader, CommunityPageRail } from "./CommunityPageHeader";
 import { isDesignV1Active } from "../../../../shared/designSystem";
+import { resolveAuthSubject, type AuthSessionLike } from "../../../../shared/authSession";
+import { useLiveQuery } from "../../../../shared/liveQuery";
 import {
   confirmCloudPodCheckout,
   fetchCloudCommunityPods,
@@ -305,6 +307,26 @@ function PodsList(props: WebCommunityPodsSectionProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [props.communityId, props.asMember]);
   useEffect(() => { void load(); }, [load]);
+  // Live (shared/liveQuery.ts): a pod started, joined, left or asked about
+  // anywhere shows on this page at once. The load above draws it first.
+  const podsSubject = props.session ? resolveAuthSubject(props.session as AuthSessionLike) : null;
+  const livePods = useLiveQuery<{ can_manage?: boolean; pods?: CloudCommunityPod[]; outside?: CloudOutsidePod[] }>(
+    props.session,
+    "communityPods:listCommunityPods",
+    props.communityId && podsSubject
+      ? { authSubject: podsSubject, communityId: props.communityId, ...(props.asMember ? { asMember: true } : {}) }
+      : null,
+  );
+  useEffect(() => {
+    const payload = livePods.data;
+    if (payload === undefined) return;
+    setState({
+      canManage: Boolean(payload?.can_manage),
+      pods: Array.isArray(payload?.pods) ? payload.pods : [],
+      outside: Array.isArray(payload?.outside) ? payload.outside : [],
+    });
+    setFailed(false);
+  }, [livePods.data]);
 
   usePodPaymentReturn(props, setNotice, load);
 
