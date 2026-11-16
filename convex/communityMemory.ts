@@ -146,10 +146,10 @@ export const openMemoryReviewRunInternal = internalMutation({
 // The lessons a note can be filed under: every lesson of a course members can
 // take, in the builder's order.
 const LESSONS_LISTED_MAX = 200;
-export async function liveLessons(ctx: any, communityId: any): Promise<Array<{ id: any; course: string; order: number; title: string }>> {
+export async function liveLessons(ctx: any, communityId: any): Promise<Array<{ id: any; course: string; courseId: any; courseOrder: number; order: number; title: string }>> {
   const modules: any[] = await ctx.db.query("communityResourceModules")
     .withIndex("by_community_sortOrder", (q: any) => q.eq("communityId", communityId)).take(60);
-  const lessons: Array<{ id: any; course: string; order: number; title: string }> = [];
+  const lessons: Array<{ id: any; course: string; courseId: any; courseOrder: number; order: number; title: string }> = [];
   for (const module of modules) {
     if (!communityResourceModuleIsMemberLive(module)) continue;
     const live = new Set([String(module._id)]);
@@ -160,7 +160,7 @@ export async function liveLessons(ctx: any, communityId: any): Promise<Array<{ i
       // The same rule as the lessons members are shown: a titled placeholder
       // with nothing in it isn't one.
       if (!communityResourceIsMemberVisiblePage(row, live)) continue;
-      lessons.push({ id: row._id, course: String(module.name ?? ""), order: ++order, title: String(row.title) });
+      lessons.push({ id: row._id, course: String(module.name ?? ""), courseId: module._id, courseOrder: Number(module.sortOrder ?? 0), order: ++order, title: String(row.title) });
       if (lessons.length >= LESSONS_LISTED_MAX) return lessons;
     }
   }
