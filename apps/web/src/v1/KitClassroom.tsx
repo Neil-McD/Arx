@@ -6,6 +6,7 @@
 // opens in the right column.
 import { courseProgressWord } from "../../../../shared/communityMemberWords";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { readPlaceParam, writePlaceParam } from "../../../../shared/placeParams";
 import {
   fetchCourseProgressSummary,
   fetchMyLessonProgress,
@@ -219,14 +220,30 @@ export function KitClassroom(props: {
   // arrive after the course does: a lesson picked for the reader is picked
   // again then, but one the reader chose stays.
   const autoLessonRef = useRef<string | null>(null);
+  // The lesson you're on rides on the address (?lesson=), so a refresh comes
+  // back to it. Read once; used when its course is showing.
+  const lessonToReopenRef = useRef<string | null>(readPlaceParam("lesson"));
   useEffect(() => {
-    if (!open) { setLessonId(null); autoLessonRef.current = null; return; }
+    if (!open) {
+      if (props.loaded) lessonToReopenRef.current = null;
+      setLessonId(null); autoLessonRef.current = null; return;
+    }
+    const wanted = lessonToReopenRef.current;
+    // The course can arrive before its lessons: wait for them before giving up.
+    if (wanted && !props.loaded) return;
+    lessonToReopenRef.current = null;
+    if (wanted && open.lessons.some((lesson) => lesson.id === wanted)) { autoLessonRef.current = null; setLessonId(wanted); return; }
     if (lessonId && lessonId !== autoLessonRef.current && open.lessons.some((lesson) => lesson.id === lessonId)) return;
     const next = courseProgress(open.lessons, done).nextLessonId ?? open.lessons[0]?.id ?? null;
     autoLessonRef.current = next;
     setLessonId(next);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open?.course.id, open?.lessons.length, progressLoaded]);
+  }, [open?.course.id, open?.lessons.length, progressLoaded, props.loaded]);
+
+  useEffect(() => {
+    if (lessonToReopenRef.current) return;
+    writePlaceParam("lesson", open ? lessonId : null);
+  }, [lessonId, open?.course.id]);
 
   const mark = async (resourceId: string, value: boolean) => {
     if (saving) return;
