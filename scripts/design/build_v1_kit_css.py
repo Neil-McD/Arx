@@ -437,6 +437,75 @@ css += """
 /* Kit addition: the box a course's settings open in (KitCourseEdit), and a form's foot. */
 .app .kaddbox{margin-top:20px;padding:14px 12px 12px 16px;border-color:rgba(var(--au),.45);box-shadow:0 0 0 4px rgba(var(--au),.08)}
 .app .kaddbox textarea{font-size:15px;line-height:1.6;min-height:48px;max-height:260px;overflow-y:auto}
+/* Members for the host (KitMembersTable): a toolbar, a bordered table with a
+   box to tick on each row, what can be done to everyone ticked, and the
+   people waiting to join in a drawer. */
+.app .mwait{display:flex;align-items:center;gap:10px;width:100%;margin-top:16px;padding:10px 14px;border-radius:10px;border:1px solid var(--line2);background:var(--s1);font-size:14px;color:var(--ink);text-align:left;cursor:pointer}
+.app .mwait:hover{border-color:rgba(var(--w),.2)}
+.app .mwait span{flex:1;min-width:0}
+.app .mwait em{font-style:normal;font-size:13px;color:var(--aurora-ink)}
+.app .mbar{display:flex;align-items:center;gap:8px;margin-top:18px}
+.app .msearch{display:flex;align-items:center;gap:8px;flex:0 1 320px;min-width:0;height:34px;padding:0 10px;border-radius:8px;border:1px solid var(--line2);background:var(--field);color:var(--ink3)}
+.app .msearch:focus-within{border-color:rgba(var(--w),.22)}
+.app .msearch input{flex:1;min-width:0;border:0;outline:0;background:transparent;color:var(--ink);font:inherit;font-size:14px}
+.app .msearch input::placeholder{color:var(--ink3)}
+.app .msearch button{display:flex;color:var(--ink3);cursor:pointer}
+.app .mbtn{display:inline-flex;align-items:center;gap:6px;height:34px;padding:0 11px;border-radius:8px;border:1px solid var(--line2);font-size:13.5px;color:var(--ink2);cursor:pointer;white-space:nowrap}
+.app .mbtn:hover{color:var(--ink);border-color:rgba(var(--w),.2)}
+.app .mbtn.on{color:var(--ink);background:var(--s2)}
+.app .mbtn:disabled{opacity:.5;cursor:default}
+.app .mbtn.mclear{padding:0 8px;margin-left:-4px}
+.app .mbtn.mexport{margin-left:auto}
+.app .mfilter{position:relative;display:flex;align-items:center;gap:6px}
+.app .mmenu{position:absolute;z-index:5;top:40px;left:0;min-width:220px;padding:5px;border-radius:10px;border:1px solid var(--line2);background:var(--panel2,var(--bg));box-shadow:0 12px 32px rgba(0,0,0,.35)}
+.app .mmenu button{display:flex;align-items:center;justify-content:space-between;gap:16px;width:100%;height:32px;padding:0 10px;border-radius:7px;font-size:13.5px;color:var(--ink2);text-align:left;cursor:pointer}
+.app .mmenu button:hover,.app .mmenu button[aria-selected="true"]{background:var(--s2);color:var(--ink)}
+.app .mmenu em{font-style:normal;font-size:12.5px;color:var(--ink3)}
+/* The bulk bar floats at the foot of the page, so ticking someone never moves the rows. */
+.app .mbulk{position:sticky;z-index:4;bottom:16px;display:flex;align-items:center;flex-wrap:wrap;gap:8px;width:fit-content;max-width:100%;margin:14px auto 0;padding:8px 10px 8px 16px;border-radius:12px;border:1px solid rgba(var(--au),.45);background:var(--panel2,var(--bg));box-shadow:0 10px 30px rgba(0,0,0,.45)}
+.app .mbulk b{margin-right:6px;font-size:13.5px;font-weight:550;color:var(--ink)}
+.app .mtbl{margin-top:12px;border:1px solid var(--line2);border-radius:12px;overflow:hidden}
+.app .mrow2{display:grid;grid-template-columns:20px minmax(0,1.7fr) 116px minmax(0,.9fr) 92px 108px 16px;gap:0 16px;align-items:center;min-height:58px;padding:0 16px;font-size:13.5px;color:var(--ink2);cursor:pointer;outline:0}
+.app .mrow2+.mrow2{border-top:1px solid var(--line)}
+.app .mrow2:not(.mhead):hover,.app .mrow2:focus-visible{background:var(--s1)}
+.app .mrow2.sel,.app .mrow2.tick{background:var(--s2)}
+.app .mrow2.mhead{min-height:40px;font-size:12.5px;font-weight:500;color:var(--ink3);background:var(--s1);cursor:default}
+.app .mrow2>span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.app .mth{display:inline-flex;align-items:center;gap:5px;font:inherit;color:inherit;text-align:left}
+.app button.mth{cursor:pointer}.app button.mth:hover{color:var(--ink)}
+.app .mth i{font-style:normal;font-size:11px}
+.app .mwho{display:flex;align-items:center;gap:11px}
+.app .mwho>span:last-child{display:flex;flex-direction:column;min-width:0}
+.app .mwho b{display:flex;align-items:center;gap:7px;font-size:14px;font-weight:550;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.app .mwho small{font-size:12.5px;color:var(--ink3);overflow:hidden;text-overflow:ellipsis}
+.app .mstat{display:inline-flex;align-items:center;gap:7px}
+.app .mstat i{width:6px;height:6px;border-radius:50%;background:var(--ink3);flex:none}
+.app .mstat.active{color:#5fd38d}.app .mstat.active i{background:#5fd38d}
+.app .mstat.on_hold{color:#e0a84f}.app .mstat.on_hold i{background:#e0a84f}
+.app .mstat.cancelling{color:var(--ink2)}
+.app .mstat.comped{color:var(--aurora-ink)}.app .mstat.comped i{background:var(--aurora-ink)}
+.app .mchev{color:var(--ink3)}
+.app .mtick{display:flex;align-items:center;justify-content:center;width:16px;height:16px;border-radius:4px;border:1.5px solid rgba(var(--w),.3);color:#fff;cursor:pointer}
+.app .mtick:hover{border-color:rgba(var(--w),.6)}
+.app .mtick.on{background:#6e79d6;border-color:#6e79d6}
+.app .mtick i{width:8px;height:2px;border-radius:1px;background:#fff}
+.app .mnone{margin:0;padding:18px 16px;font-size:13.5px;color:var(--ink3)}
+.app .tbl.mpast{margin:12px 0 0;border:1px solid var(--line2);border-radius:12px;overflow:hidden}
+.app .mdrawer{display:flex;flex-direction:column;gap:18px;padding:20px 24px 24px;min-width:0}
+.app .mdrawer header{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+.app .mdrawer h2{margin:4px 0 0;font-size:20px;font-weight:600;color:var(--ink)}
+.app .mdrawer .lab{font-size:11.5px;color:var(--ink3)}
+.app .mx{display:flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:8px;color:var(--ink3);cursor:pointer}
+.app .mx:hover{color:var(--ink);background:rgba(var(--w),.07)}
+.app .mreq{display:flex;gap:12px;padding-top:16px;border-top:1px solid var(--line)}
+.app .mreq>div{display:flex;flex-direction:column;gap:3px;min-width:0;flex:1}
+.app .mreq b{font-size:14px;font-weight:550;color:var(--ink)}
+.app .mreq small{font-size:12.5px;color:var(--ink3)}
+.app .mreq p{margin:6px 0 0;font-size:13.5px;line-height:1.5;color:var(--ink2);overflow-wrap:anywhere}
+.app .mreq-acts{display:flex;gap:6px;margin-top:10px}
+@media (max-width:820px){.app .mrow2{grid-template-columns:20px minmax(0,1fr) max-content 16px;gap:0 12px;padding:0 12px}.app .mrow2>:nth-child(4),.app .mrow2>:nth-child(5),.app .mrow2>:nth-child(6){display:none}.app .msearch{flex:1}}
+:where(:root[data-layout="phone"]) .app .mrow2{grid-template-columns:20px minmax(0,1fr) max-content 16px;gap:0 12px;padding:0 12px}
+:where(:root[data-layout="phone"]) .app .mrow2>:nth-child(4),:where(:root[data-layout="phone"]) .app .mrow2>:nth-child(5),:where(:root[data-layout="phone"]) .app .mrow2>:nth-child(6){display:none}
 /* Knowledge: adding by buttons, and the short forms they open (a link, a course's name). */
 .app .kbtns{margin-top:14px}
 .app .kbtns-row{display:flex;flex-wrap:wrap;gap:8px}
