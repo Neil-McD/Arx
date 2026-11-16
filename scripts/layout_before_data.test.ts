@@ -61,3 +61,8 @@ test("Knowledge holds its builder row and draws its right column as one piece", 
   expect(classroom).toMatch(/usePanelSettled\(briefSettled && brainSettled && progressLoaded\)/);
   expect(classroom).toMatch(/props\.onOpenGuideMemory && \(canWriteNotes \|\| \(props\.canManage && !notesAnswered\)\)/);
 });
+
+test("a pod's panel and landing page draw their parts once they have answered", () => {
+  expect(read("apps/web/src/v1/KitPodRail.tsx")).toMatch(/const settled = usePanelSettled\(briefSettled\);/);
+  expect(read("apps/web/src/v1/KitPodLanding.tsx")).toMatch(/const settled = usePanelSettled\(briefSettled && answered >= 2\);/);
+});
