@@ -4243,8 +4243,7 @@
 /* Settings on a phone: the bar says "Settings" and goes back to the list; the
    page's own title starts below the bar, not under it. */
 /* phone layout */
-:root[data-design="v1"]:where([data-layout="phone"]) .app-root.mobile-shell .community-settings-pane-content,
-:root[data-design="v1"]:where([data-layout="phone"]) .app-root.mobile-shell .mobile-settings-detail {
+:root[data-design="v1"]:where([data-layout="phone"]) .app-root.mobile-shell .community-settings-pane-content {
   padding-top: var(--mobile-topbar-clearance);
 }
 :root[data-design="v1"] .app-root.mobile-shell .mobile-settings-detail-back {
