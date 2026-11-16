@@ -442,6 +442,11 @@ export function useWebOnboardingProfileController(params: {
     ],
   );
 
+  // Once per signed-in person. loadProfileForOnboarding is a new function on
+  // most renders, so without this the write ran again on every render until
+  // the first answer came back (6 times on a page load).
+  const hydratingProfileForRef = useRef<string | null>(null);
+
   const resetSignedOutState = useCallback(() => {
     setCloudProfile(null);
     setAccountSetupStatus(null);
@@ -452,6 +457,7 @@ export function useWebOnboardingProfileController(params: {
     timezoneSyncKeyRef.current = null;
     onboardingRedirectUserIdRef.current = null;
     onboardingHydrationUserIdRef.current = null;
+    hydratingProfileForRef.current = null;
   }, []);
 
   useEffect(() => {
@@ -540,7 +546,13 @@ export function useWebOnboardingProfileController(params: {
     ) {
       return;
     }
-    void loadProfileForOnboarding(params.session).catch(() => undefined);
+    const subject = resolveAuthSubject(params.session);
+    if (!subject || hydratingProfileForRef.current === subject) return;
+    hydratingProfileForRef.current = subject;
+    void loadProfileForOnboarding(params.session).catch(() => {
+      // A failed read may be tried again on the next change.
+      if (hydratingProfileForRef.current === subject) hydratingProfileForRef.current = null;
+    });
   }, [
     cloudProfile,
     hasLoadedOnboardingProfile,
