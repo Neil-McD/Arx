@@ -194,3 +194,63 @@ export function chooseLabels(layout: BrainLayout, opts: { max?: number; charW?: 
   }
   return chosen;
 }
+
+// ---------- looking at the map: zoom and pan
+//
+// Zooming spreads things apart; it never makes a dot or a name bigger. So a
+// zoomed map is the same layout with every position multiplied (sizes left
+// alone), seen through a window the size of the whole map at rest.
+
+// k: how far in (1 = the whole map). cx, cy: the layout point at the middle of the view.
+export type BrainView = { k: number; cx: number; cy: number };
+export const BRAIN_ZOOM_MAX = 6;
+
+type Bounds = BrainLayout["bounds"];
+
+export function fitView(bounds: Bounds): BrainView {
+  return { k: 1, cx: (bounds.minX + bounds.maxX) / 2, cy: (bounds.minY + bounds.maxY) / 2 };
+}
+
+// The view kept inside its limits: no closer than the cap, no further out
+// than the whole map, and its middle never off the map.
+export function clampView(view: BrainView, bounds: Bounds): BrainView {
+  const k = Math.min(BRAIN_ZOOM_MAX, Math.max(1, view.k));
+  if (k === 1) return fitView(bounds);
+  return { k, cx: Math.min(bounds.maxX, Math.max(bounds.minX, view.cx)), cy: Math.min(bounds.maxY, Math.max(bounds.minY, view.cy)) };
+}
+
+// Zooms to k keeping fixed the point under the cursor. dx, dy: the cursor's
+// offset from the middle of the view, in view units (the window's own scale).
+export function zoomAt(view: BrainView, dx: number, dy: number, k: number, bounds: Bounds): BrainView {
+  const next = Math.min(BRAIN_ZOOM_MAX, Math.max(1, k));
+  const px = view.cx + dx / view.k;
+  const py = view.cy + dy / view.k;
+  return clampView({ k: next, cx: px - dx / next, cy: py - dy / next }, bounds);
+}
+
+// Drags the map by dx, dy view units.
+export function panBy(view: BrainView, dx: number, dy: number, bounds: Bounds): BrainView {
+  return clampView({ k: view.k, cx: view.cx - dx / view.k, cy: view.cy - dy / view.k }, bounds);
+}
+
+// The window onto the scaled layout: always the size of the whole map at rest.
+export function viewWindow(view: BrainView, bounds: Bounds): { x: number; y: number; w: number; h: number } {
+  const w = bounds.maxX - bounds.minX;
+  const h = bounds.maxY - bounds.minY;
+  return { x: view.cx * view.k - w / 2, y: view.cy * view.k - h / 2, w, h };
+}
+
+// The layout with every position multiplied by k; sizes stay as they are.
+export function scaleLayout(layout: BrainLayout, k: number): BrainLayout {
+  if (k === 1) return layout;
+  const at = <T extends Placed>(p: T): T => ({ ...p, x: p.x * k, y: p.y * k });
+  return {
+    center: at(layout.center),
+    hubs: layout.hubs.map(at),
+    fibres: layout.fibres.map((fibre) => ({ key: fibre.key, path: fibre.path.map(at) })),
+    lessons: layout.lessons.map(at),
+    points: layout.points.map((p) => ({ ...at(p), anchor: at(p.anchor) })),
+    arcs: layout.arcs.map((arc) => ({ ...arc, a: at(arc.a), b: at(arc.b) })),
+    bounds: { minX: layout.bounds.minX * k, minY: layout.bounds.minY * k, maxX: layout.bounds.maxX * k, maxY: layout.bounds.maxY * k },
+  };
+}
