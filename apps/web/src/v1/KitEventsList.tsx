@@ -208,7 +208,8 @@ export function KitEventsList(props: {
               <p className={cx("evlead")}>{upcoming.length ? `${upcoming.length} coming up.` : props.canManage ? "Nothing is planned yet." : "Nothing is planned right now."}</p>
               <p className={cx("sub")} style={{ margin: "4px 0 0" }}>{upcoming.length ? "Times are in your time zone." : props.canManage ? "Add the first one and members get an email the day before." : "You'll get an email the day before the next one."}</p>
             </div>
-            {props.canManage ? <button type="button" className={cx(props.form ? "btn" : "btn go")} onClick={props.onNew}><Plus size={14} aria-hidden="true" />Add an event</button> : null}
+            {/* One form at a time: a second would replace what is being saved. */}
+            {props.canManage ? <button type="button" className={cx(props.form ? "btn" : "btn go")} disabled={Boolean(props.form)} onClick={props.onNew}><Plus size={14} aria-hidden="true" />Add an event</button> : null}
           </div>
 
           {featured && label && featuredBlock ? (

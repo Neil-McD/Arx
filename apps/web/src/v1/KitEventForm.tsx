@@ -58,7 +58,8 @@ export function KitEventForm(props: {
           <label><span>Last date (leave empty to keep going)</span><input type="datetime-local" value={draft.recurrence_until} onChange={(event) => set("recurrence_until", event.target.value)} /></label>
         ) : null}
         <div className={cx("evfield")}><span>Where</span>
-          <Seg label="Where" value={draft.location_type} onChange={(value) => set("location_type", value)}
+          {/* Not decided: the place named before goes too, or members would still see it. */}
+          <Seg label="Where" value={draft.location_type} onChange={(value) => onChange({ ...draft, location_type: value, location_label: value === "tbd" ? "" : draft.location_label })}
             choices={[{ value: "online", label: "Online" }, { value: "physical", label: "A place" }, { value: "tbd", label: "To be decided" }]} />
         </div>
         {draft.location_type !== "tbd" ? (
