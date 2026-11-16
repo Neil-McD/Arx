@@ -1,4 +1,4 @@
-import { forgetPod, goToPodsPath } from "../v1/podMemory";
+import { goToPodsPath } from "../v1/podMemory";
 import {
   useEffect,
   useId,
@@ -279,7 +279,7 @@ export function WebCommunityChannelHeader({
       <header className="community-channel-header" aria-label={`Channel ${channel.name}`}>
         {isDesignV1Active() && channel.access_mode === "restricted" ? (
           <button type="button" className="community-channel-header-back community-page-header-back" aria-label="All pods" title="All pods"
-            onClick={() => { forgetPod(); goToPodsPath(); }}><ArrowLeft size={16} strokeWidth={1.8} aria-hidden="true" /></button>
+            onClick={() => goToPodsPath(channel.slug)}><ArrowLeft size={16} strokeWidth={1.8} aria-hidden="true" /></button>
         ) : null}
         {v1Title ? (
           <div className="community-channel-header-actions is-title" ref={menuRef}>
