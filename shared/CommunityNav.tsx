@@ -715,7 +715,7 @@ export const CommunityNav = memo(function CommunityNav({
             </a>
           ))}
           {isV1 && onOpenMembers && canViewMembersActiveCommunity ? (
-            <button className="nav-item nav-item-members" type="button" onClick={onOpenMembers} title="Members">
+            <button className={showActiveSelection && communityTab === "members" ? "nav-item nav-item-members active" : "nav-item nav-item-members"} type="button" onClick={onOpenMembers} title="Members" aria-current={showActiveSelection && communityTab === "members" ? "page" : undefined}>
               <span className="nav-icon" aria-hidden="true"><Users size={17} strokeWidth={1.7} /></span>
               <span className="nav-item-label">Members</span>
               {memberCount ? <span className="nav-item-hint">{memberCount}</span> : null}

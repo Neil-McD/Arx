@@ -30,6 +30,8 @@ export const COMMUNITY_TABS = [
   "resources",
   "events",
   "pods",
+  // Members is a page of the community (Nov 17): /c/:slug/members.
+  "members",
   "settings",
   "analytics",
 ] as const;
@@ -60,6 +62,8 @@ export type CommunityTabAccess = {
   canViewSettings: boolean;
   canManageMembers: boolean;
   canViewAnalytics: boolean;
+  // Who may open the Members page (the community's own rule); unknown is no.
+  canViewMembers?: boolean;
 };
 
 export function isCommunityTabAllowedForAccess(
@@ -71,6 +75,8 @@ export function isCommunityTabAllowedForAccess(
       return access.canViewSettings;
     case "analytics":
       return access.canViewAnalytics;
+    case "members":
+      return access.canViewMembers === true;
     case "chat":
     case "agent":
     case "resources":
@@ -107,6 +113,8 @@ export function parseCommunityTab(
       return "events";
     case "pods":
       return "pods";
+    case "members":
+      return "members";
     case "settings":
       return "settings";
     case "agent":

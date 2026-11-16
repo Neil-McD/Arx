@@ -16,6 +16,7 @@ export function useWebCommunityTabAccessGuard(params: {
   canViewSettings: boolean;
   canManageMembers: boolean;
   canViewAnalytics: boolean;
+  canViewMembers: boolean;
   setCommunityResourceModuleId: (value: null) => void;
   applyCommunityShellState: (value: {
     communityTab: CommunityTab;
@@ -32,7 +33,8 @@ export function useWebCommunityTabAccessGuard(params: {
     }
     // Pods are a design v1 page: the classic app has no way in, so an
     // address that names them opens the community's chat instead.
-    const normalizedTab = params.communityTab === "pods" && !isDesignV1Active()
+    // Members as a page is design v1 too; the classic app opens it from chat.
+    const normalizedTab = (params.communityTab === "pods" || params.communityTab === "members") && !isDesignV1Active()
       ? "chat"
       : normalizeCommunityTabForAccess(
         params.communityTab,
@@ -40,6 +42,7 @@ export function useWebCommunityTabAccessGuard(params: {
           canViewSettings: params.canViewSettings,
           canManageMembers: params.canManageMembers,
           canViewAnalytics: params.canViewAnalytics,
+          canViewMembers: params.canViewMembers,
         },
       );
     if (normalizedTab === params.communityTab) return;
@@ -51,6 +54,7 @@ export function useWebCommunityTabAccessGuard(params: {
     params.activePage,
     params.applyCommunityShellState,
     params.canViewAnalytics,
+    params.canViewMembers,
     params.canManageMembers,
     params.canViewSettings,
     params.communityTab,
