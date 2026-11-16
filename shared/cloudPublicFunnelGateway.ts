@@ -30,20 +30,17 @@ export async function resolveCloudPublicFunnel<SessionT, TPublicCommunity, TPubl
   };
 }
 
-export async function refreshCloudCommunityPresence<SessionT, TSummary = unknown>(
+// Being in a community: a heartbeat. Who else is here is read live
+// (communityPublic:getCommunityPresenceSummary, shared/liveQuery.ts).
+export async function heartbeatCloudCommunityPresence<SessionT>(
   params: CloudPublicFunnelAuthParams<SessionT> & {
     communityId: string;
   },
-): Promise<TSummary | null> {
+): Promise<void> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
   await client.mutation("communityPublic:heartbeatCommunityPresence" as any, {
     authSubject,
     communityId: params.communityId,
   });
-  const payload = await client.query("communityPublic:getCommunityPresenceSummary" as any, {
-    authSubject,
-    communityId: params.communityId,
-  });
-  return firstGatewayRow<TSummary>(payload);
 }
 
