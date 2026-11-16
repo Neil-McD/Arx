@@ -631,11 +631,51 @@ function remarkLessonCallouts() {
   return (tree: MdNode) => visit(tree);
 }
 
+// The pieces markdown is drawn with (paragraph, list, table…) are components.
+// Built fresh on every call they were new components each time, so React tore
+// down and rebuilt every paragraph of every message whenever the screen redrew
+// (each streamed word, each return to the tab). One set per combination of
+// options is kept, so the same text stays the same elements.
+const NO_COPY = {};
+const componentSets = new WeakMap<object, Map<string, Components>>();
+
+function markdownComponentsFor(headingLevelOffset: number, options?: MarkdownRenderOptions): Components {
+  const owner = options?.onCopyCode ?? NO_COPY;
+  let sets = componentSets.get(owner);
+  if (!sets) { sets = new Map(); componentSets.set(owner, sets); }
+  const key = `${headingLevelOffset}:${options?.embedStandaloneMedia ? 1 : 0}`;
+  let components = sets.get(key);
+  if (!components) {
+    components = buildMarkdownComponents(headingLevelOffset, {
+      embedStandaloneMedia: options?.embedStandaloneMedia,
+      onCopyCode: options?.onCopyCode,
+    });
+    sets.set(key, components);
+  }
+  return components;
+}
+
 export function renderMarkdown(text: string, options?: MarkdownRenderOptions): ReactNode {
   const requestedHeadingLevelOffset = options?.headingLevelOffset ?? 0;
   const headingLevelOffset = Number.isFinite(requestedHeadingLevelOffset)
     ? Math.max(0, Math.min(5, Math.floor(requestedHeadingLevelOffset)))
     : 0;
+  return (
+    <ReactMarkdown
+      components={markdownComponentsFor(headingLevelOffset, options)}
+      rehypePlugins={MARKDOWN_REHYPE_PLUGINS}
+      remarkPlugins={MARKDOWN_REMARK_PLUGINS}
+      skipHtml
+    >
+      {normalizeMathMarkdown(text)}
+    </ReactMarkdown>
+  );
+}
+
+const MARKDOWN_REHYPE_PLUGINS = [rehypeKatex];
+const MARKDOWN_REMARK_PLUGINS = [remarkGfm, remarkMath, remarkLessonCallouts];
+
+function buildMarkdownComponents(headingLevelOffset: number, options?: MarkdownRenderOptions): Components {
   const renderHeading = (level: number, children: ReactNode) => (
     <MarkdownHeading level={Math.min(6, level + headingLevelOffset)}>{children}</MarkdownHeading>
   );
@@ -768,15 +808,5 @@ export function renderMarkdown(text: string, options?: MarkdownRenderOptions): R
       return <ul className="md-list">{children}</ul>;
     },
   };
-
-  return (
-    <ReactMarkdown
-      components={components}
-      rehypePlugins={[rehypeKatex]}
-      remarkPlugins={[remarkGfm, remarkMath, remarkLessonCallouts]}
-      skipHtml
-    >
-      {normalizeMathMarkdown(text)}
-    </ReactMarkdown>
-  );
+  return components;
 }
