@@ -33,7 +33,7 @@ import { KitLessonEditor, lessonLinkPlace, type LessonPatch } from "./KitLessonE
 import { Btn, cx, Icon, KitApp, Rail, Sec, TextLink, useMinWidth } from "./kit";
 import { KitCourseEdit, type CourseEditPatch } from "./KitCourseEdit";
 import { askInApp } from "../../../../shared/inAppConfirm";
-import { KitKnowledgeAdd, KitKnowledgeList, type KnowledgeAddMode, type KnowledgeAddResult } from "./KitKnowledgeList";
+import { KitKnowledgeAddButtons, KitKnowledgeList, type KnowledgeAddResult } from "./KitKnowledgeList";
 import { useCommunityAgentOn } from "../controllers/communityAgentOn";
 
 const SHELF = 6;
@@ -126,7 +126,8 @@ export function KitClassroom(props: {
   const [canWriteNotes, setCanWriteNotes] = useState(false);
   const [lessonId, setLessonId] = useState<string | null>(null);
   const [shelfPage, setShelfPage] = useState(0);
-  const [note, setNote] = useState<{ slug: string | null; mode: "read" | "edit" | "new" } | null>(null);
+  // title: what a new note starts with (a question waiting on an answer).
+  const [note, setNote] = useState<{ slug: string | null; mode: "read" | "edit" | "new"; title?: string } | null>(null);
   const [saving, setSaving] = useState(false);
   const [editingLessonId, setEditingLessonId] = useState<string | null>(null);
   const [editingCourse, setEditingCourse] = useState(false);
@@ -141,9 +142,21 @@ export function KitClassroom(props: {
   // Questions members asked in channels that nobody answered (the owner's
   // brief already finds them): where Knowledge is thin.
   const [waiting, setWaiting] = useState<Array<{ author: string; channel: string; text: string; hoursAgo: number }>>([]);
-  const [seed, setSeed] = useState<{ text: string; mode?: KnowledgeAddMode; nonce: number } | null>(null);
-  // "New course" opens the box at the top of the page, switched to Course.
-  const newCourse = () => setSeed({ text: "", mode: "course", nonce: Date.now() });
+  // "New course": a name, then the draft opens for its lessons.
+  const [courseName, setCourseName] = useState<string | null>(null);
+  const [creatingCourse, setCreatingCourse] = useState(false);
+  const [newCourseError, setNewCourseError] = useState<string | null>(null);
+  const newCourse = () => { setCourseName(""); setNewCourseError(null); };
+  const createCourse = async () => {
+    const name = (courseName ?? "").trim();
+    if (!name || creatingCourse || !props.onCreateCourse) return;
+    setCreatingCourse(true);
+    setNewCourseError(null);
+    try {
+      const result = await props.onCreateCourse(name.slice(0, 80), []);
+      if (result.ok) setCourseName(null); else setNewCourseError(result.message);
+    } catch { setNewCourseError("The course couldn't be made. Try again."); } finally { setCreatingCourse(false); }
+  };
   useEffect(() => {
     if (!props.canManage) { setWaiting([]); return; }
     let cancelled = false;
@@ -239,22 +252,12 @@ export function KitClassroom(props: {
   const guideSources = props.canManage ? props.resources.filter((resource) => resource.resource_role === "source") : [];
   const sourceFailed = (source: CommunityResource) => (source as { source_ingestion_status?: string }).source_ingestion_status === "failed";
   const inGuideMemory = Boolean(props.guideMemoryOpen && canWriteNotes && !open);
-  const teach = canWriteNotes ? async (title: string, text: string): Promise<KnowledgeAddResult> => {
-    try {
-      await createCommunityNote({ session: props.session, communityId: props.communityId, title, text });
-      await loadNotes();
-      return { ok: true };
-    } catch (error) {
-      return { ok: false, message: error instanceof Error && error.message ? error.message : "That couldn't be saved. Try again." };
-    }
-  } : undefined;
-
   // ---------- the right column
   const noteRail = note ? (
     <>
       <button type="button" className={cx("kback")} onClick={() => setNote(null)}><Icon name="back" />Back</button>
       {note.mode === "new" && canWriteNotes ? (
-        <NoteForm title="" text="" submitLabel="Save note" onCancel={() => setNote(null)}
+        <NoteForm key={`new:${note.title ?? ""}`} isNew title={note.title ?? ""} text="" submitLabel="Save note" onCancel={() => setNote(null)}
           onSubmit={async (title, text) => {
             const created = await createCommunityNote({ session: props.session, communityId: props.communityId, title, text });
             await loadNotes();
@@ -303,7 +306,7 @@ export function KitClassroom(props: {
       <PanelPart key="next" label="Waiting on an answer" fact={String(waiting.length)}>
         {waiting.slice(0, 2).map((question, index) => (
           <PanelLine key={`${question.author}:${index}`}
-            action={<PanelAction onClick={() => { setNote(null); props.onOpenGuideMemory?.(false); setSeed({ text: `${question.text}\n`, nonce: Date.now() }); }}>Teach</PanelAction>}>
+            action={<PanelAction onClick={() => setNote({ slug: null, mode: "new", title: question.text.replace(/\s+/g, " ").trim().slice(0, 120) })}>Teach</PanelAction>}>
             <span title={`${question.author} in #${question.channel}`}>“{question.text}”</span>
           </PanelLine>
         ))}
@@ -447,11 +450,11 @@ export function KitClassroom(props: {
     page = (
       <div className={cx("page")} style={{ padding: 0, overflow: "visible" }}>
         <p className={cx("sub")} style={{ margin: 0 }}>Your guide answers from this. Members never see the list.</p>
-        <KitKnowledgeAdd seed={null} communityName={props.communityName} closedLabel="Teach your guide"
-          onAddNote={teach} onAddSources={props.canManage ? props.onAddSources : undefined} />
+        <KitKnowledgeAddButtons onNewNote={canWriteNotes ? () => setNote({ slug: null, mode: "new" }) : undefined}
+          onAddSources={props.canManage ? props.onAddSources : undefined} />
         <KitKnowledgeList notes={notes} now={now} sources={guideSources} onOpenNote={(slug) => setNote({ slug, mode: "read" })}
           onRetrySources={props.onRetrySources} onRemoveSource={props.onRemoveSource} />
-        {notes.length === 0 && guideSources.length === 0 ? <p className={cx("sub")} style={{ marginTop: 20 }}>Nothing yet. Teach it something above, and what gets answered in channels is saved here on its own.</p> : null}
+        {notes.length === 0 && guideSources.length === 0 ? <p className={cx("sub")} style={{ marginTop: 20 }}>Nothing yet. Add a note, a link or a file, and what gets answered in channels is saved here on its own.</p> : null}
       </div>
     );
   } else if (open) {
@@ -546,19 +549,12 @@ export function KitClassroom(props: {
             ? hostLead(courses.map((entry) => entry.course), learning)
             : resume ? "Pick up where you left off." : courses.length ? "Pick a course to start." : "Nothing to learn here yet."}
         </p>
-        {/* One bar: people who can add get the box that asks and adds;
-            everyone else gets the bar that asks. */}
-        {agentOn && !(canWriteNotes || props.canManage) ? (
+        {/* One bar, for everyone: it asks the guide. Nothing is added through it. */}
+        {agentOn ? (
           <button type="button" className={cx("ask kask kask-btn")} onClick={() => openGuideFromSearch()}>
             <Icon name="spark" extra="sp" /><span>Ask anything {props.communityName} knows</span>
           </button>
         ) : null}
-
-        <KitKnowledgeAdd seed={seed} communityName={props.communityName}
-          onAsk={agentOn ? (question) => askGuide(question, props.communityId) : undefined}
-          onAddNote={teach}
-          onAddSources={props.canManage ? props.onAddSources : undefined}
-          onCreateCourse={props.canManage ? props.onCreateCourse : undefined} />
 
         {resume ? (
           <button type="button" className={cx("card kcont")} onClick={() => { props.onOpenCourse(resume.course.id); setLessonId(resume.lesson.id); }}>
@@ -581,6 +577,17 @@ export function KitClassroom(props: {
             ) : null}
           </span>
         </div>
+        {courseName !== null && props.onCreateCourse ? (
+          <form className={cx("kbtns-link")} style={{ marginBottom: 14 }} aria-label="New course" onSubmit={(event) => { event.preventDefault(); void createCourse(); }}>
+            <input value={courseName} onChange={(event) => setCourseName(event.target.value)} placeholder="Name the course" aria-label="Course name" maxLength={80} autoFocus disabled={creatingCourse}
+              onKeyDown={(event) => { if (event.key === "Escape") setCourseName(null); }} />
+            <button type="submit" className={cx("btn sm go")} disabled={creatingCourse || !courseName.trim()}>{creatingCourse ? "Creating…" : "Create"}</button>
+            <button type="button" className={cx("btn sm txt")} onClick={() => setCourseName(null)}>Cancel</button>
+            <span className={cx("khint")} style={{ marginTop: 0, flexBasis: "100%" }} role={newCourseError ? "alert" : undefined}>
+              {newCourseError ?? "It starts as a draft only hosts see. You add its lessons next."}
+            </span>
+          </form>
+        ) : null}
         <div className={cx("kgrid")}>
           {(arranging ? courses : shelf.items).map(({ course, lessons }, position) => {
             const progress = courseProgress(lessons, done);
