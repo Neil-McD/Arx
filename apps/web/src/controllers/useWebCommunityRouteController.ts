@@ -44,7 +44,7 @@ export function useWebCommunityRouteController<TCommunity extends CommunityLike>
   activeCommunityId: string | null;
   activeCommunitySlug: string | null;
   communityTab: CommunityTab;
-  // The channel open now, kept when you go back to the channels.
+  // The channel open now; remembered per community for going back to the channels.
   communityChannelSlug?: string | null;
   communities: TCommunity[];
   navigateTo: NavigateFn;
@@ -60,6 +60,13 @@ export function useWebCommunityRouteController<TCommunity extends CommunityLike>
 }) {
   const paramsRef = useRef(params);
   paramsRef.current = params;
+  // The channel last open in each community, so going back to the channels
+  // from another page returns to it (the address drops it off the channels).
+  const lastChannelRef = useRef<Record<string, string>>({});
+  if (params.activePage === "community" && params.activeCommunityId && params.communityTab === "chat") {
+    // No channel in the address is General.
+    lastChannelRef.current[params.activeCommunityId] = params.communityChannelSlug || "general";
+  }
 
   const resolveCommunitySlugById = useCallback((communityId: string | null | undefined): string | null => {
     const id = String(communityId ?? "").trim();
@@ -137,7 +144,7 @@ export function useWebCommunityRouteController<TCommunity extends CommunityLike>
         communitySlug: matchedCommunity.slug,
         communityTab: transition.nextCommunityTab,
         sameCommunity: matchedCommunity.id === (current.activeCommunityId ?? null),
-        channelSlug: current.communityChannelSlug ?? null,
+        channelSlug: lastChannelRef.current[matchedCommunity.id] ?? null,
         here: window.location.pathname,
       });
       if (step.kind === "go") current.navigateTo(step.path);
