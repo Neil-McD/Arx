@@ -4,7 +4,7 @@
 // The pinned post lives here on a wide window, not at the top of the feed;
 // where there is no right column (a narrow window, a phone) the feed keeps it.
 // Notes are the guide's memory, kept by builders in Knowledge, not listed here.
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Pin } from "lucide-react";
 import type { CommunityPresenceSummary } from "../../../../shared/communityTypes";
 import { UserAvatar } from "../../../../shared/UserAvatar";
@@ -32,6 +32,13 @@ export function announceChannelDescription(channelId: string, description: strin
   if (typeof window !== "undefined") window.dispatchEvent(new CustomEvent(DESCRIPTION_EVENT, { detail: { channelId, description } }));
 }
 
+// Hears that change; returns how to stop listening.
+export function onChannelDescription(listener: (change: { channelId: string; description: string }) => void): () => void {
+  const onChange = (event: Event) => { const detail = (event as CustomEvent).detail; if (detail?.channelId) listener(detail); };
+  window.addEventListener(DESCRIPTION_EVENT, onChange);
+  return () => window.removeEventListener(DESCRIPTION_EVENT, onChange);
+}
+
 export function KitChannelRail(props: {
   communityId: string | null;
   session: unknown;
@@ -47,13 +54,8 @@ export function KitChannelRail(props: {
   const hereNow = summary?.online_count;
   const members = summary?.member_count;
   const [now] = useState(() => Date.now());
-  const [changed, setChanged] = useState<{ channelId: string; description: string } | null>(null);
-  useEffect(() => {
-    const onChange = (event: Event) => { const detail = (event as CustomEvent).detail; if (detail?.channelId) setChanged(detail); };
-    window.addEventListener(DESCRIPTION_EVENT, onChange);
-    return () => window.removeEventListener(DESCRIPTION_EVENT, onChange);
-  }, []);
-  const description = (changed && changed.channelId === props.channelId ? changed.description : props.description ?? "").trim();
+  // The page hands in the description as it stands (it hears a host's change too).
+  const description = (props.description ?? "").trim();
   const { pinned } = props;
 
   return (
