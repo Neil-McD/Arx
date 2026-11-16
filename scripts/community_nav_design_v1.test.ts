@@ -21,7 +21,7 @@ const baseProps = {
 };
 
 function labelsInOrder(html: string): string[] {
-  return [...html.matchAll(/<span class="nav-item-label">([^<]+)<\/span>|<div class="community-nav-section-label">([^<]+)<\/div>/g)]
+  return [...html.matchAll(/<span class="nav-item-label">([^<]+)<\/span>|<div class="community-nav-section-label(?: has-action)?">(?:<span>)?([^<]+)/g)]
     .map((match) => match[1] ?? match[2]);
 }
 
@@ -182,8 +182,10 @@ test("the switcher names the community, closed, with no stray dot", () => {
   expect(html).not.toContain("community-switcher-news");
 });
 
-test("design v1 words the add row 'Add a channel'; classic keeps 'Add Channel'", () => {
+test("design v1 puts adding a channel at the end of the Channels heading; classic keeps its 'Add Channel' row", () => {
   const host = { ...baseProps, canManageMembersActiveCommunity: true, onCreateChannel: async () => true };
-  expect(renderToStaticMarkup(React.createElement(CommunityNav, { ...host, layout: "v1" as const }))).toContain(">Add a channel<");
+  const v1 = renderToStaticMarkup(React.createElement(CommunityNav, { ...host, layout: "v1" as const }));
+  expect(v1).toMatch(/community-nav-section-label has-action"><span>Channels<\/span><button[^>]*aria-label="Add a channel"/);
+  expect(v1).not.toContain("community-channel-add");
   expect(renderToStaticMarkup(React.createElement(CommunityNav, host))).toContain(">Add Channel<");
 });
