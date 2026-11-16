@@ -529,7 +529,11 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
   // An ordinary channel's pin is shown in its right column (a pod's column has
   // no pin, so a pod's room keeps it in the feed).
   const pinLivesInPanel = isDesignV1Active() && Boolean(props.pinnedRoot) && props.activeChannel?.access_mode !== "restricted";
-  const openChannelNoColumn = isDesignV1Active() && props.activeChannel?.access_mode !== "restricted" && !props.pinnedRoot && !channelDescription;
+  // Decided from the channel's own record, which the page has before it draws,
+  // so the column is there from the first frame instead of appearing when the
+  // pinned post arrives and squeezing the feed.
+  const hasPin = Boolean(props.pinnedRoot || props.activeChannel?.has_pinned_root);
+  const openChannelNoColumn = isDesignV1Active() && props.activeChannel?.access_mode !== "restricted" && !hasPin && !channelDescription;
 
   return (
     <>
