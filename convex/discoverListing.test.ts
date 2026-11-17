@@ -35,8 +35,14 @@ test("Discover lists finished communities with their host, size and a sign of li
     const finished = await community("finished", { oneLiner: "Early climbers who train together.", bannerUrl: "https://x.test/b.webp" });
     await community("no-banner", { oneLiner: "No banner yet." });
     await community("no-line", { bannerUrl: "https://x.test/b.webp" });
+    const channel = (slug: string, accessMode: "all_members" | "restricted") => ctx.db.insert("communityChannels", {
+      communityId: finished, slug, name: slug, accessMode, postingPolicy: "members", status: "active", position: 0,
+      createdAt: nowMs, updatedAt: nowMs,
+    } as any);
+    const general = await channel("general", "all_members");
+    const pod = await channel("setters", "restricted");
     const post = (hoursAgo: number, extra: Record<string, unknown> = {}) => ctx.db.insert("communityInteractionRoots", {
-      communityId: finished, actorType: "human", actorUserId: ownerId, kind: "discussion", status: "live", visibilityScope: "community",
+      communityId: finished, channelId: general, actorType: "human", actorUserId: ownerId, kind: "discussion", status: "live", visibilityScope: "community",
       contentSummary: "A post", replyCount: 0, reactionSummary: [], idempotencyKey: `post-${hoursAgo}-${JSON.stringify(extra)}`,
       createdAt: nowMs - hoursAgo * 3_600_000, updatedAt: nowMs - hoursAgo * 3_600_000, ...extra,
     } as any);
@@ -47,6 +53,12 @@ test("Discover lists finished communities with their host, size and a sign of li
     await post(1, { actorType: "community_agent", actorUserId: undefined, actorAgentKey: "guide" });
     await post(1, { visibilityScope: "private" });
     await post(1, { status: "deleted" });
+    // Not counted: a pod's room, which only its members may see.
+    await post(0.5, { channelId: pod });
+    // Sixty of the guide's posts, newer than everything: they don't hide the two that count.
+    for (let index = 0; index < 60; index += 1) {
+      await post(0.1 + index / 1000, { actorType: "community_agent", actorUserId: undefined, actorAgentKey: "guide" });
+    }
   });
 
   const { communities } = await t.query(api.communityPublic.listPublicDiscoverCommunities, {});

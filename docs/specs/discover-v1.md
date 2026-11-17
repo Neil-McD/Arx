@@ -33,9 +33,10 @@ one-liner, banner, avatar, the plan's price, how you get in, and (Nov 16):
 
 - `host`: the owner's name and face.
 - `member_count`.
-- `last_active_at` and `posts_this_week`: posts by people that the community
-  can see, in the last seven days, counted up to 50. Never the guide's own
-  posts, a removed post, or a private talk with the guide.
+- `last_active_at` and `posts_this_week`: posts by people in channels open
+  to every member, in the last seven days, counted up to 50. Never the
+  guide's own posts, a removed post, a private talk with the guide, or a
+  pod's room.
 
 On the card: a post in the last 24 hours reads "Active today"; otherwise the
 week's count ("9 posts this week"); a quiet week shows nothing. Prices are
