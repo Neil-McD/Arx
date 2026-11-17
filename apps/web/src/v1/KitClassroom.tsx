@@ -23,7 +23,7 @@ import {
   type CommunityNoteView,
 } from "../../../../shared/cloudCommunityNotesGateway";
 import { getCloudCommunityHomeSnapshot } from "../../../../shared/cloudCommunityAdminGateway";
-import { continueLesson, courseLessons, courseProgress, pageOf, coursePath } from "../../../../shared/communityClassroom";
+import { courseLessons, courseProgress, pageOf, coursePath } from "../../../../shared/communityClassroom";
 import type { CommunityResource, CommunityResourceModule } from "../components/communityResourcesContracts";
 import { askGuide, openGuideFromSearch } from "../components/guideSearch";
 import { WebCommunityResourceViewerContent } from "../components/WebCommunityResourceViewerContent";
@@ -32,9 +32,9 @@ import { BriefPart, usePlaceBriefRead } from "./KitBrief";
 import { resolveAuthSubject, type AuthSessionLike } from "../../../../shared/authSession";
 import { useLiveAnswer } from "../../../../shared/liveQuery";
 import { NoteForm, OpenNote } from "./KitKnowledgeNotes";
-import { PanelAction, PanelLine, PanelNext, PanelPart, usePanelSettled } from "./KitPanel";
+import { PanelAction, PanelLine, PanelPart, usePanelSettled } from "./KitPanel";
 import { KitLessonEditor, lessonLinkPlace, type LessonPatch } from "./KitLessonEditor";
-import { Btn, cx, Icon, KitApp, Rail, Sec, TextLink, useMinWidth } from "./kit";
+import { cx, Icon, KitApp, Rail, TextLink, useMinWidth } from "./kit";
 import { KitCourseEdit, type CourseEditPatch } from "./KitCourseEdit";
 import { askInApp } from "../../../../shared/inAppConfirm";
 import { KitKnowledgeAddButtons, KitKnowledgeList, type KnowledgeAddResult } from "./KitKnowledgeList";
@@ -226,7 +226,6 @@ export function KitClassroom(props: {
     .map((course) => ({ course, lessons: courseLessons(props.resources, course.id) })), [props.modules, props.resources, props.canManage]);
   const done = useMemo(() => new Set(doneAt.keys()), [doneAt]);
   const open = courses.find((entry) => entry.course.id === props.openCourseId) ?? null;
-  const resume = useMemo(() => (props.canManage ? null : continueLesson(courses, doneAt)), [courses, doneAt, props.canManage]);
   const summaryBy = useMemo(() => new Map(summary.map((row) => [row.module_id, row])), [summary]);
 
   // Opening a course lands on its next lesson (or the first). Progress may
@@ -335,12 +334,9 @@ export function KitClassroom(props: {
   const lessonCount = courses.reduce((sum, entry) => sum + entry.lessons.length, 0);
   const shelfParts: ReactNode[] = [
     brief ? <BriefPart key="brief" brief={brief} now={now} /> : null,
-    resume ? (
-      <PanelPart key="next" label="Continue" fact={`lesson ${resume.index + 1} of ${resume.total}`}>
-        <PanelNext title={resume.lesson.title} sub={resume.course.name}
-          action={<Btn go onClick={() => { props.onOpenCourse(resume.course.id); chooseLesson(resume.lesson.id); }}>Resume</Btn>} />
-      </PanelPart>
-    ) : canWriteNotes && waiting.length ? (
+    // A member's next lesson is the open step on the page itself, so the
+    // panel does not say it a second time.
+    canWriteNotes && waiting.length ? (
       <PanelPart key="next" label="Waiting on an answer" fact={String(waiting.length)}>
         {waiting.slice(0, 2).map((question, index) => (
           <PanelLine key={`${question.author}:${index}`}
