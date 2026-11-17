@@ -1224,9 +1224,10 @@
 .app .msg.cont{padding-top:3px;padding-bottom:3px}
 .app .msg.cont>.gap{width:36px;flex:none}
 .app .msg.pending{opacity:.6}
-.app .msg.mention{background:rgba(29,155,240,.06)}
+.app .msg.mention{background:color-mix(in srgb,var(--accent) 7%,transparent)}
 .app .tools:focus-within,.app .tools:has([aria-expanded="true"]){opacity:1;transform:none;pointer-events:auto}
-.app .re.mine{border-color:rgba(29,155,240,.45);background:rgba(29,155,240,.10);color:var(--ink)}
+.app .re.mine{border-color:color-mix(in srgb,var(--accent) 50%,transparent);background:color-mix(in srgb,var(--accent) 14%,transparent);color:var(--ink)}
+.app .re.mine:hover{border-color:color-mix(in srgb,var(--accent) 70%,transparent);background:color-mix(in srgb,var(--accent) 20%,transparent)}
 /* Many reactions wrap onto more lines rather than run past the edge. */
 .app .msg .rx{flex-wrap:wrap;row-gap:6px}
 /* The app's own avatar (with its profile card) at the mock's 36px. */
