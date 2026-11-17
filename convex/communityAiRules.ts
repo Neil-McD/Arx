@@ -54,30 +54,50 @@ export const readCommunityAiRulesInternal = internalQuery({
   },
 });
 
-// Has this person's AI posted these words in this community in the last day?
-// Not counting the request that is asking: sent again after a crash, it is
-// the same post, and the composer answers it with the post it already made.
-export const hasRecentAiPostInternal = internalQuery({
-  args: { userId: v.id("users"), communityId: v.id("communities"), fingerprint: v.string(), key: v.string() },
+const sameWords = (ctx: any, args: { userId: any; communityId: any; fingerprint: string }) => ctx.db.query("aiPostFingerprints")
+  .withIndex("by_user_community_fingerprint", (q: any) => q.eq("userId", args.userId).eq("communityId", args.communityId).eq("fingerprint", args.fingerprint))
+  .collect();
+
+// Claims these words for one post, before it is made: refused if this
+// person's AI posted them in this community in the last day. Checking and
+// recording are one step, so two requests at once cannot both pass. Not
+// counted against itself: the same request sent again (`key`), or an edit of
+// the post that already says them (`ref`).
+export const claimAiPostWordsInternal = internalMutation({
+  args: {
+    userId: v.id("users"), communityId: v.id("communities"), fingerprint: v.string(),
+    key: v.string(), ref: v.optional(v.string()),
+  },
   handler: async (ctx, args) => {
-    const since = Date.now() - AI_DUPLICATE_WINDOW_MS;
-    const rows = await ctx.db.query("aiPostFingerprints")
-      .withIndex("by_user_community_fingerprint", (q) => q.eq("userId", args.userId).eq("communityId", args.communityId).eq("fingerprint", args.fingerprint))
-      .collect();
-    return rows.some((row) => row.createdAt >= since && row.key !== args.key);
+    const nowMs = Date.now();
+    const rows = await sameWords(ctx, args);
+    const mine = (row: any) => row.key === args.key || (args.ref !== undefined && row.ref === args.ref);
+    if (rows.some((row: any) => row.createdAt >= nowMs - AI_DUPLICATE_WINDOW_MS && !mine(row))) return { ok: false as const };
+    const kept = rows.find(mine);
+    // One row per person, community and wording: stale ones go.
+    for (const row of rows) if (row !== kept) await ctx.db.delete(row._id);
+    if (kept) await ctx.db.patch(kept._id, { key: args.key, ...(args.ref !== undefined ? { ref: args.ref } : {}), createdAt: nowMs });
+    else await ctx.db.insert("aiPostFingerprints", { userId: args.userId, communityId: args.communityId, fingerprint: args.fingerprint,
+      key: args.key, ...(args.ref !== undefined ? { ref: args.ref } : {}), createdAt: nowMs });
+    return { ok: true as const };
   },
 });
 
-// Kept once the post is made. Older rows for the same words are cleared, so
-// the table holds one row per person, community and wording.
-export const recordAiPostInternal = internalMutation({
+// The post was made: its claim remembers which post it is, so editing that
+// post without changing its words is not a repeat.
+export const attachAiPostRefInternal = internalMutation({
+  args: { userId: v.id("users"), communityId: v.id("communities"), fingerprint: v.string(), key: v.string(), ref: v.string() },
+  handler: async (ctx, args) => {
+    for (const row of await sameWords(ctx, args)) if (row.key === args.key) await ctx.db.patch(row._id, { ref: args.ref });
+    return null;
+  },
+});
+
+// The post was not made after all: its claim is given back.
+export const releaseAiPostWordsInternal = internalMutation({
   args: { userId: v.id("users"), communityId: v.id("communities"), fingerprint: v.string(), key: v.string() },
   handler: async (ctx, args) => {
-    const rows = await ctx.db.query("aiPostFingerprints")
-      .withIndex("by_user_community_fingerprint", (q) => q.eq("userId", args.userId).eq("communityId", args.communityId).eq("fingerprint", args.fingerprint))
-      .collect();
-    for (const row of rows) await ctx.db.delete(row._id);
-    await ctx.db.insert("aiPostFingerprints", { ...args, createdAt: Date.now() });
+    for (const row of await sameWords(ctx, args)) if (row.key === args.key && row.ref === undefined) await ctx.db.delete(row._id);
     return null;
   },
 });

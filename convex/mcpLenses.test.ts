@@ -279,6 +279,43 @@ test("the server refuses what guidance alone would not stop", async () => {
   expect((await write("third", { text: "A different update: the docs are live too, with screenshots." })).isError).toBe(false);
 });
 
+test("the same words cannot be reached by an edit, or by two requests at once", async () => {
+  const f = await fixture();
+  const general = "/communities/run-club/channels/general/";
+  const minute = () => f.t.run(async (ctx: any) => {
+    for (const row of await ctx.db.query("accessBudgetCounters").collect()) await ctx.db.patch(row._id, { minuteStartMs: row.minuteStartMs - 60_000 });
+  });
+  const words = "Join my new course, link in my profile, starts Monday.";
+  const first = await f.call("member", "polynet_write", { path: general, mode: "create", content: { text: words }, idempotency_key: "a" });
+  expect(first.isError, JSON.stringify(first)).toBe(false);
+  const firstRef = first.structuredContent.ref as string;
+  await minute();
+  const other = await f.call("member", "polynet_write", { path: general, mode: "create", content: { text: "Something else entirely, about the weekend run." }, idempotency_key: "b" });
+  expect(other.isError, JSON.stringify(other)).toBe(false);
+  // Editing the second post into the first one's words is a repeat.
+  const edited = await f.call("member", "polynet_write", { path: `${general}${other.structuredContent.ref}.md`, mode: "update", content: { text: words }, idempotency_key: "c" });
+  expect(edited.structuredContent).toMatchObject({ code: "ai_post_duplicate" });
+  // Editing the first post without changing its words is not.
+  const same = await f.call("member", "polynet_write", { path: `${general}${firstRef}.md`, mode: "update", content: { text: `${words} ` }, idempotency_key: "d" });
+  expect(same.isError, JSON.stringify(same)).toBe(false);
+  // Two requests at once for new words: one posts.
+  await minute();
+  const twice = "Two requests arrive together with these exact words.";
+  const [one, two] = await Promise.all(["e", "f"].map((key) => f.call("member", "polynet_write",
+    { path: `${general}${firstRef}/`, mode: "append", content: { text: twice }, idempotency_key: key })));
+  expect([one.isError, two.isError].filter(Boolean)).toHaveLength(1);
+  expect(await f.t.run((ctx: any) => ctx.db.query("communityInteractionReplies").collect())).toHaveLength(1);
+});
+
+test("words whose post failed can be posted again", async () => {
+  const f = await fixture();
+  const words = "This post goes to a channel that does not exist first.";
+  const missing = await f.call("member", "polynet_write", { path: "/communities/run-club/channels/nowhere/", mode: "create", content: { text: words }, idempotency_key: "x" });
+  expect(missing.isError).toBe(true);
+  expect(await f.t.run((ctx: any) => ctx.db.query("aiPostFingerprints").collect())).toHaveLength(0);
+  expect((await f.call("member", "polynet_write", { path: "/communities/run-club/channels/general/", mode: "create", content: { text: words }, idempotency_key: "y" })).isError).toBe(false);
+});
+
 test("the server tells a connecting AI how to behave", async () => {
   const res = await handleMcpPost({
     ctx: {} as any,
