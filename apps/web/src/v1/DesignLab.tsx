@@ -608,7 +608,7 @@ function DiscoverBody(props: { phone: boolean }) {
   const words = query.toLowerCase().split(/\s+/).filter(Boolean);
   const shown = LAB_COMMUNITIES.filter((c) => words.every((word) => `${c.name} ${c.line}`.toLowerCase().includes(word)));
   return (
-    <div style={{ padding: props.phone ? "4px 16px 24px" : "8px 44px 40px" }}>
+    <div style={{ padding: props.phone ? "4px 16px 24px" : "8px 44px 40px 53px" }}>
       <KitApp view="wins" part="flow">
         <p className={cx("lead")} style={{ marginTop: props.phone ? 12 : 0 }}>Find your people.</p>
         <label className={cx("find")} style={{ display: "flex", margin: "16px 0 0", width: props.phone ? "100%" : 320, height: 34, boxSizing: "border-box" }}>
