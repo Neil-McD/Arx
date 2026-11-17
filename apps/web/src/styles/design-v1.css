@@ -538,6 +538,34 @@
   background: var(--border-default);
 }
 
+/* The menu's header: who you are, and what you are here. */
+:root[data-design="v1"] .account-menu-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  padding: 6px 8px 4px;
+}
+
+:root[data-design="v1"] .account-menu-label,
+:root[data-design="v1"] .community-switcher-head {
+  padding: 6px 10px 2px;
+  color: var(--text-faint);
+  font-size: 11.5px;
+  font-weight: 500;
+}
+
+:root[data-design="v1"] .account-menu-item > span:first-of-type {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+:root[data-design="v1"] .account-menu-fact {
+  flex: 0 0 auto;
+  color: var(--text-faint);
+  font-size: 12px;
+}
+
 /* Narrow windows collapse the left column to icons: section labels go, and
    the account row shows only the avatar, its menu opening to the right. */
 /* phone layout */
@@ -889,7 +917,7 @@
   width: max(264px, calc(100% - 12px));
   display: flex;
   flex-direction: column;
-  max-height: min(70vh, 480px);
+  max-height: min(78vh, 620px);
   padding: 6px;
   overflow: hidden;
   border: 1px solid var(--border-strong);
@@ -932,12 +960,37 @@
   color: var(--text-ink-primary);
 }
 
+/* One line per name, so every row is the same height and the list scans
+   by its marks. */
 :root[data-design="v1"] .community-switcher-item-name {
   flex: 1 1 auto;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+:root[data-design="v1"] .community-switcher-list {
+  grid-auto-rows: max-content;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-strong) transparent;
+}
+:root[data-design="v1"] .community-switcher-list .community-switcher-item { min-height: 44px; }
+:root[data-design="v1"] .community-switcher-list .community-switcher-avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 7px;
+}
+/* Where you are is unmistakable: a stronger tint than a hovered row. */
+:root[data-design="v1"] .community-switcher-item[aria-checked="true"] {
+  background: color-mix(in srgb, var(--text-ink-primary) 11%, transparent);
+  font-weight: 500;
+}
+:root[data-design="v1"] .community-switcher-avatar .community-avatar-frame-fallback {
+  color: #fff;
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0;
 }
 
 :root[data-design="v1"] .community-switcher-avatar,

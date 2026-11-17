@@ -69,7 +69,7 @@ export function WebCommunityNavSurface({
       layout={useV1Layout ? "v1" : "classic"}
       identityIsCover={useV1Layout}
       accountSlot={useV1Layout && communityShell.account
-        ? (communityItems) => <WebAccountMenu {...communityShell.account!} communityItems={communityItems} />
+        ? (communityItems) => <WebAccountMenu {...communityShell.account!} communityName={communityShell.activeCommunity?.name ?? null} communityItems={communityItems} />
         : null}
       identitySlot={
         useV1Layout && communityShell.account && communityShell.activeCommunity ? (

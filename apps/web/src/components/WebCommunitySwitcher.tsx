@@ -5,6 +5,7 @@ import { CommunityAvatar } from "../../../../shared/CommunityAvatar";
 import type { CommunityLike } from "./webShellChromeShared";
 import { Icon, KitApp, cx } from "../v1/kit";
 import { isImeComposing } from "../controllers/communityComposerTextEditing";
+import { communityMarkTone, recallCommunitiesOpened, rememberCommunityOpened, SWITCHER_SEARCH_FROM, switcherGroups } from "../v1/switcherList";
 
 export type WebCommunitySwitcherProps = {
   activeCommunityName: string;
@@ -38,7 +39,11 @@ export function WebCommunitySwitcher(props: WebCommunitySwitcherProps) {
   const menuId = useId();
 
   // A long list gets a search box; it takes focus when the menu opens.
-  const searchable = props.communities.length > 6;
+  const searchable = props.communities.length >= SWITCHER_SEARCH_FROM;
+  // Being in a community is having opened it: "Recent" is built from this.
+  useEffect(() => {
+    if (props.selectedCommunitySlug) rememberCommunityOpened(props.selectedCommunitySlug, Date.now());
+  }, [props.selectedCommunitySlug]);
   useEffect(() => {
     if (!isOpen) { setAnchor(null); return; }
     const place = () => {
@@ -46,8 +51,9 @@ export function WebCommunitySwitcher(props: WebCommunitySwitcherProps) {
       if (!box) return;
       // A collapsed left column is only an icon wide: open beside it instead.
       setAnchor(box.width < 120
-        ? { top: box.top, left: box.right + 8, width: 264 }
-        : { top: box.bottom + 2, left: box.left + 6, width: box.width - 12 });
+        ? { top: box.top, left: box.right + 8, width: 300 }
+        // Under the banner card, its left edge on the card's left edge.
+        : { top: box.bottom + 2, left: triggerRef.current?.getBoundingClientRect().left ?? box.left, width: box.width - 12 });
     };
     place();
     window.addEventListener("resize", place);
@@ -64,14 +70,14 @@ export function WebCommunitySwitcher(props: WebCommunitySwitcherProps) {
     else popoverRef.current?.querySelector<HTMLButtonElement>(".community-switcher-item")?.focus();
   }, [isOpen, isShown]);
 
-  // The community you're in comes first; the rest keep their order.
-  const listed = useMemo(() => {
-    const current = props.communities.filter((community) => String(community.slug ?? "") === props.selectedCommunitySlug);
-    const others = props.communities.filter((community) => String(community.slug ?? "") !== props.selectedCommunitySlug);
-    const needle = query.trim().toLowerCase();
-    const ordered = [...current, ...others];
-    return needle ? ordered.filter((community) => String(community.name ?? "").toLowerCase().includes(needle)) : ordered;
-  }, [props.communities, props.selectedCommunitySlug, query]);
+  // Recent (where you are, then where you last were) and All; one list when
+  // there are few, or while searching.
+  const groups = useMemo(
+    () => switcherGroups(props.communities, props.selectedCommunitySlug, isOpen ? recallCommunitiesOpened() : {}, query),
+    [props.communities, props.selectedCommunitySlug, isOpen, query],
+  );
+  const listed = useMemo(() => [...groups.recent, ...groups.all], [groups]);
+  const grouped = groups.recent.length > 0 && groups.all.length > 0;
 
   // Arrow keys move through the search box and every item; Enter picks.
   const onMenuKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
@@ -122,6 +128,36 @@ export function WebCommunitySwitcher(props: WebCommunitySwitcherProps) {
     action();
   };
 
+  const item = (community: CommunityLike) => {
+    const isCurrent = String(community.slug ?? "") === props.selectedCommunitySlug;
+    return (
+      <button
+        key={community.id}
+        className="community-switcher-item"
+        type="button"
+        role="menuitemradio"
+        aria-checked={isCurrent}
+        title={community.name}
+        onClick={() => choose(() => props.onSelectCommunity(community))}
+      >
+        <CommunityAvatar
+          communityId={community.id}
+          visualIdentity={community.visual_identity}
+          className="community-switcher-avatar"
+          fallbackStyle={{ background: communityMarkTone(community.id) }}
+          imageUrl={community.avatar_url}
+          focusX={community.avatar_focus_x}
+          focusY={community.avatar_focus_y}
+          zoom={community.avatar_zoom}
+          name={community.name}
+        />
+        <span className="community-switcher-item-name">{community.name}</span>
+        {props.attentionById[community.id] && !isCurrent ? <span className="community-switcher-dot" aria-label="Something new" /> : null}
+        {isCurrent ? <Check size={15} aria-hidden="true" /> : null}
+      </button>
+    );
+  };
+
   const cover = props.cover ?? null;
   const percent = (value: number | null | undefined) => `${Math.round((Number.isFinite(value) ? Number(value) : 0.5) * 100)}%`;
   const trigger = cover ? (
@@ -143,7 +179,7 @@ export function WebCommunitySwitcher(props: WebCommunitySwitcherProps) {
 
   const menu = isOpen && anchor ? createPortal(
         <div className="community-switcher-popover is-floating" id={menuId} ref={popoverRef} onKeyDown={onMenuKeyDown}
-          style={{ top: anchor.top, left: anchor.left, width: Math.max(264, anchor.width) }}>
+          style={{ top: anchor.top, left: anchor.left, width: Math.max(300, anchor.width) }}>
           {searchable ? (
             <label className="community-switcher-search">
               <Search size={14} aria-hidden="true" />
@@ -152,37 +188,10 @@ export function WebCommunitySwitcher(props: WebCommunitySwitcherProps) {
             </label>
           ) : null}
           <div className="community-switcher-list" role="menu" aria-label="Your communities">
-            {listed.map((community) => {
-              const isCurrent = String(community.slug ?? "") === props.selectedCommunitySlug;
-              return (
-                <button
-                  key={community.id}
-                  className="community-switcher-item"
-                  type="button"
-                  role="menuitemradio"
-                  aria-checked={isCurrent}
-                  title={community.name}
-                  onClick={() => choose(() => props.onSelectCommunity(community))}
-                >
-                  <CommunityAvatar
-                    communityId={community.id}
-                    visualIdentity={community.visual_identity}
-                    className="community-switcher-avatar"
-                    imageUrl={community.avatar_url}
-                    focusX={community.avatar_focus_x}
-                    focusY={community.avatar_focus_y}
-                    zoom={community.avatar_zoom}
-                    name={community.name}
-                  />
-                  <span className="community-switcher-item-name">{community.name}</span>
-                  {isCurrent ? (
-                    <Check size={15} aria-hidden="true" />
-                  ) : props.attentionById[community.id] ? (
-                    <span className="community-switcher-dot" aria-label="Something new" />
-                  ) : null}
-                </button>
-              );
-            })}
+            {grouped ? <span className="community-switcher-head" role="presentation">Recent</span> : null}
+            {groups.recent.map(item)}
+            {grouped ? <span className="community-switcher-head" role="presentation">All</span> : null}
+            {groups.all.map(item)}
             {listed.length === 0 ? <p className="community-switcher-empty">No community matches “{query.trim()}”.</p> : null}
           </div>
           <div className="community-switcher-foot" role="menu" aria-label="More">
