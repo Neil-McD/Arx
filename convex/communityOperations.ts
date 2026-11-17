@@ -36,6 +36,8 @@ export const applyCommunityOperationInternal = internalMutation({
         ? await ctx.runMutation(refs.communityHandbook.saveCommunityHandbookDraftForTrustedUserInternal, { ...scope, text: input.text })
       : args.operation === "community.handbook.approve"
         ? await ctx.runMutation(refs.communityHandbook.approveCommunityHandbookForTrustedUserInternal, { ...scope, text: input.text })
+      : args.operation.startsWith("community.channel.")
+        ? await ctx.runMutation(refs.communityChannels.applyChannelOperationForTrustedUserInternal, { ...scope, operation: args.operation, input })
       : (() => { throw new Error("operation_not_found"); })();
     const value = { ...args.answer, result };
     const completed = await ctx.runMutation(refs.polynetCanonicalReceipts.completeCanonicalOperationReceiptInternal, {

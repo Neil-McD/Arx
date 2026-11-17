@@ -338,6 +338,10 @@ const CALL_OPERATION_INPUT_SCHEMA: PlatformOperationJsonSchema = {
     form_request_ref: { type: "string", pattern: "^form-request:[A-Za-z0-9]+$", maxLength: 180 },
     ref: { type: "string", pattern: "^(interaction:(root|reply)|resource):[A-Za-z0-9_-]+$", maxLength: 180 },
     channel: { type: "string", minLength: 1, maxLength: 64 },
+    // Channels (community.channel.*): a one-line description, and the slug
+    // of the channel to put one after (null puts it first).
+    description: { type: "string", maxLength: 400 },
+    after: { type: ["string", "null"], maxLength: 64 },
     through_at: { type: "integer", minimum: 0 },
     thread_ref: { type: "string", pattern: "^interaction:root:[A-Za-z0-9_-]+$", maxLength: 180 },
     files: { type: "object", additionalProperties: { type: "object" } },

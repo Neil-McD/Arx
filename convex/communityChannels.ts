@@ -1,4 +1,4 @@
-import { internalQuery, mutation, query } from "./_generated/server";
+import { internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { v } from "convex/values";
 import { paginationOptsValidator } from "convex/server";
@@ -373,5 +373,62 @@ export const resolveCommunityChannelBySlugInternal = internalQuery({
         !(args.podRoomId && String(args.podRoomId) === String(channel._id))) return null;
     const capabilities = await getCommunityChannelCapabilities({ ctx, channel, actor });
     return capabilities.canRead ? { ...mapCommunityChannelForRepository(channel), capabilities } : null;
+  },
+});
+
+// ---------------------------------------------------------------------------
+// Channels through a builder's own AI (the MCP; docs/specs/agent-access-v0.md,
+// slice 4). The executor has established who the person is; this is the app's
+// own rules for each change (owners and admins, a channel they may manage,
+// General left as it is), with a channel named by its slug. Deleting a
+// channel, changing who may see it and pinning are not here: they take
+// something from members and wait for the two-step confirm.
+export const applyChannelOperationForTrustedUserInternal = internalMutation({
+  args: { userId: v.id("users"), communityId: v.id("communities"), operation: v.string(), input: v.any() },
+  handler: async (ctx, args) => {
+    await requireCommunityManager({ ctx, communityId: args.communityId, userId: args.userId });
+    const input = (args.input ?? {}) as Record<string, unknown>;
+    const actor = await resolveCommunityChannelActor({ ctx, communityId: args.communityId, userId: args.userId });
+    const bySlug = async (raw: unknown) => {
+      const slug = String(raw ?? "").trim().toLowerCase();
+      const row = slug ? await ctx.db.query("communityChannels")
+        .withIndex("by_community_slug", (q) => q.eq("communityId", args.communityId).eq("slug", slug)).first() : null;
+      if (!row || row.status !== "active") throw new Error("community_channel_not_found");
+      return await resolveAuthorizedCommunityChannel({ ctx, communityId: args.communityId, channelId: row._id, actor, capability: "canManage" });
+    };
+    const view = (channel: CommunityChannelLike) => ({ channel: { slug: channel.slug, name: channel.name, description: channel.description ?? null,
+      is_general: channel.systemRole === GENERAL_CHANNEL_SYSTEM_ROLE, position: channel.position } });
+    const relabel = (channelId: any) => ctx.scheduler.runAfter(0, (internal as any).communitySearchDocs.relabelCommunitySearchChannelInternal, { channelId });
+
+    if (args.operation === "community.channel.create") {
+      // Open to every member: a private channel is made in the app.
+      return view(await createActiveCommunityChannel({ ctx, communityId: args.communityId, createdByUserId: args.userId, name: input.name }));
+    }
+    const channel = await bySlug(input.channel);
+    if (args.operation === "community.channel.rename") {
+      const renamed = await renameActiveCommunityChannel({ ctx, communityId: args.communityId, channelId: channel._id, name: input.name });
+      await relabel(channel._id);
+      return view(renamed);
+    }
+    if (args.operation === "community.channel.describe") {
+      const description = normalizeCommunityChannelDescription(String(input.description ?? ""));
+      await ctx.db.patch(channel._id, { description: description || undefined, updatedAt: Date.now() } as any);
+      return view({ ...(channel as any), description: description || undefined });
+    }
+    if (args.operation === "community.channel.move") {
+      // After the named channel, or first when none is named. The one that
+      // follows it now becomes the one after the moved channel.
+      // General is always first, so "after General" is first among the rest.
+      const named = input.after === null || input.after === undefined ? null : await bySlug(input.after);
+      const after = named && named.systemRole !== GENERAL_CHANNEL_SYSTEM_ROLE ? named : null;
+      const following = await ctx.db.query("communityChannels")
+        .withIndex("by_community_status_position", (q) => q.eq("communityId", args.communityId).eq("status", "active").gt("position", after?.position ?? 0))
+        .take(2);
+      const before = following.find((row) => String(row._id) !== String(channel._id)) ?? null;
+      if (after && String(after._id) === String(channel._id)) throw new Error("community_channel_order_duplicate_id");
+      return view(await moveActiveCommunityChannel({ ctx, communityId: args.communityId, channelId: channel._id,
+        afterChannelId: after?._id ?? null, beforeChannelId: before?._id ?? null, expectedPosition: channel.position }));
+    }
+    throw new Error("operation_not_found");
   },
 });

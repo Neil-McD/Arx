@@ -64,6 +64,12 @@ export const CALL_OPERATIONS = {
   "community.agent.instructions.set": entry("builder", "write", "builder_change"),
   "community.handbook.save_draft": entry("builder", "write", "builder_change"),
   "community.handbook.approve": entry("builder", "write", "builder_change"),
+  // Channels (slice 4). What takes something away from members (deleting a
+  // channel, opening a private one, pinning) waits for the two-step confirm.
+  "community.channel.create": entry("builder", "write", "builder_change"),
+  "community.channel.rename": entry("builder", "write", "builder_change"),
+  "community.channel.describe": entry("builder", "write", "builder_change"),
+  "community.channel.move": entry("builder", "write", "builder_change"),
   "community.members.set_role": entry("builder", "write", "builder_change"),
   "community.members.remove": entry("builder", "destroy", "builder_change"),
   "community.members.ban": entry("builder", "destroy", "builder_change"),
