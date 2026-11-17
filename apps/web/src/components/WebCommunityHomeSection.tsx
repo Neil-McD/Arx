@@ -48,7 +48,7 @@ export type WebCommunityHomeSectionProps = {
   // the dock supplies the conversation and whether it is open.
   // `hasConversation`: the one thread has something to read, so a quiet Home
   // still offers a way back into it.
-  kit?: { talking: boolean; talk: ReactNode; onTalkItOver: () => void; hasConversation?: boolean } | null;
+  kit?: { talking: boolean; talk: ReactNode; onTalkItOver: () => void; hasConversation?: boolean; onChangeDecided?: (changesetId: string) => void } | null;
   // Whether the community's agent is on (docs/specs/community-agent-gateway-v0.md).
   // Off: Home is plain (no guide, no next step, no upsell).
   agentOn?: boolean;
@@ -349,6 +349,7 @@ export function WebCommunityHomeSection(props: WebCommunityHomeSectionProps) {
         : await rejectCloudCommunityResourceBuilderChangeset({ session, communityId: props.communityId, changesetId });
       if (result && result.ok === false) throw new Error(String(result.error ?? ""));
       setChanges((current) => current.filter((change) => change.changesetId !== changesetId));
+      props.kit?.onChangeDecided?.(changesetId);
       if (apply) dispatchCommunityResourcesMutated({ communityId: props.communityId });
     } catch (error) {
       const said = error instanceof Error ? error.message.trim() : "";
