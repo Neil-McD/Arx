@@ -1340,8 +1340,12 @@ function WebCommunityAgentDock(props, ref) {
   // by itself, so nothing that needs you is hidden behind Home at rest.
   // Opening the guide's thread on arrival is not one of them: it loads behind
   // Home, so Home's layout is the same before and after (no top row moving).
+  // A course change that was already waiting when you arrived is not one
+  // either on the host's Home: its "Needs you" list holds it, so Home stays
+  // Home (the card is still in the conversation when you open it).
+  const waitingChangeIsOnHome = props.home?.audience === "host";
   const conversationNeedsYou =
-    turnIsActive || Boolean(dockError) || Boolean(memberLimitNotice) || persistentResourceChangesetCards.length > 0;
+    turnIsActive || Boolean(dockError) || Boolean(memberLimitNotice) || (persistentResourceChangesetCards.length > 0 && !waitingChangeIsOnHome);
   // Home on the kit: Home in design v1, the host's and a member's, on desktop
   // and as the phone's Home tab.
   const agentOn = useCommunityAgentOn();
@@ -1397,6 +1401,8 @@ function WebCommunityAgentDock(props, ref) {
               kit={{
                 talking: kitTalking || conversationNeedsYou,
                 hasConversation: visibleMessages.length > 0,
+                onChangeDecided: (changesetId: string) =>
+                  setRecoveredResourceChangesetCards((cards) => cards.filter((card) => card.changesetId !== changesetId)),
                 talk: <Talk>{conversation(true)}</Talk>,
                 onTalkItOver: () => {
                   openTalk();
