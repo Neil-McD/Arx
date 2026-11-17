@@ -229,7 +229,7 @@ export function KitMembersPage(props: {
     ...data.prices.map((price) => ({ id: `price:${price.price_point_id}`, label: price.label.replace(" · ", " "), count: price.count })),
     ...(counts.on_hold ? [{ id: "on_hold", label: "On hold", count: counts.on_hold }] : []),
     ...(counts.cancelling ? [{ id: "cancelling", label: "Cancelling", count: counts.cancelling }] : []),
-    ...(counts.comped ? [{ id: "comped", label: "Comped", count: counts.comped }] : []),
+    ...(counts.comped ? [{ id: "comped", label: "Free for good", count: counts.comped }] : []),
     // A filter that would show everyone filters nothing, so it isn't offered.
     ...(counts.know_little && (counts.know_little < counts.everyone || view === "know_little") ? [{ id: "know_little", label: "Know little", count: counts.know_little }] : []),
     ...(counts.past ? [{ id: "past", label: "Past", count: counts.past }] : []),
@@ -250,7 +250,7 @@ export function KitMembersPage(props: {
   const compSelected = async () => {
     const who = compableMembers(chosen);
     if (!scope || who.length === 0 || bulkBusy) return;
-    const yes = await askInApp({ message: who.length === 1 ? `Comp ${who[0].name}? They stay in without paying.` : `Comp ${who.length} members? They stay in without paying.`, yes: "Comp", no: "Cancel" });
+    const yes = await askInApp({ message: who.length === 1 ? `Keep ${who[0].name} free for good? They stay in without paying.` : `Keep ${who.length} members free for good? They stay in without paying.`, yes: "Keep free", no: "Cancel" });
     if (!yes) return;
     setBulkBusy("comp");
     const done = new Set<string>();
@@ -441,13 +441,13 @@ function MemberRecordView(props: {
           <div className={cx("plan")}>
             {record.money?.kind === "on_hold" ? <b className={cx("bad")}>Payment on hold{day(record.money.since_at) ? ` since ${day(record.money.since_at)}` : ""}.{record.money.ends_at ? ` Access ends ${day(record.money.ends_at)}.` : ""}</b> : null}
             {record.money?.kind === "cancelling" ? <b>Leaving{record.money.ends_at ? ` on ${day(record.money.ends_at)}` : " at the end of the period"}.</b> : null}
-            {record.plan.kind === "comped" ? <span>A host gave {first} access.</span> : null}
+            {record.plan.kind === "comped" ? <span>A host gave {first} free access for good.</span> : null}
           </div>
         ) : null}
         {!props.self && ((props.onMessage && !record.out) || canManage || props.onComp) ? (
           <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
             {props.onMessage && !record.out ? <Btn small go onClick={() => props.onMessage?.(record.user_id)}>Message</Btn> : null}
-            {props.onComp ? <Btn small onClick={async () => { setComping(true); try { await props.onComp?.(); } finally { setComping(false); } }}>{comping ? "Comping…" : "Comp"}</Btn> : null}
+            {props.onComp ? <Btn small onClick={async () => { setComping(true); try { await props.onComp?.(); } finally { setComping(false); } }}>{comping ? "Saving…" : "Keep free for good"}</Btn> : null}
             {/* One way into the one place a role is changed and someone is removed or blocked. */}
             {canManage ? (
               <button type="button" className={cx("btn sm")} style={{ marginLeft: "auto" }} aria-label={`Change ${first}'s role, remove or block`} title="Change role, remove or block" onClick={manage}>

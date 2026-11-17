@@ -41,7 +41,7 @@ test("the host's saved views narrow the table to the right people", () => {
     row("Jon", { plan: plan("paid", "Founding · $7", "f"), working_on: "Invites" }),
     row("Tanya", { plan: plan("paid", "Member · $27", "m"), money: { kind: "on_hold" } }),
     row("Rashid", { plan: plan("paid", "Member · $27", "m"), money: { kind: "cancelling" } }),
-    row("Tom", { plan: plan("comped", "Comped") }),
+    row("Tom", { plan: plan("comped", "Free for good") }),
   ];
   const names = (view: string) => rows.filter((r: any) => memberInView(view, r)).map((r: any) => r.name);
   expect(names("price:m")).toEqual(["Tanya", "Rashid"]);

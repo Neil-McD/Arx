@@ -1251,7 +1251,9 @@ export default function App() {
       void enterJoinedCommunity({
         communityId: community.id,
         communitySlug: community.slug,
-        communityTab: "resources",
+        // Where the launch step leaves them: Home in design v1 (it used to
+        // open Knowledge, for the knowledge step that was removed).
+        communityTab: launchTab,
       });
     },
     onCommunityCreateRecoveryRequired: (founderSubscriptionId) => {
@@ -2548,9 +2550,13 @@ export default function App() {
                 communityName: activeCommunity.name,
                 firstName: displayName(canonicalSessionUserId).trim().split(/\s+/)[0] || "there",
                 // On a phone, what Home opens is in the community tab.
+                // Straight to the people waiting (/members/requests), not the
+                // Members page with a line to find.
                 onOpenJoinRequests: () => {
                   leavePhoneHome();
-                  shellChromeHostProps.communityShell.onOpenMembers();
+                  const members = buildCommunityTabPath(selectedActiveCommunitySlug, "members");
+                  if (members) navigateTo(`${members}/requests`);
+                  else shellChromeHostProps.communityShell.onOpenMembers();
                 },
                 onOpenChannelByName: (channelName: string) => {
                   const channel = activeCommunityChannels.find((candidate) => candidate.name === channelName);

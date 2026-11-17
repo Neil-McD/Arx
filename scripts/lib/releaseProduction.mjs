@@ -24,12 +24,11 @@ export const REQUIRED_PRODUCTION_ENV = Object.freeze([
   "ARX_AUTH_BRIDGE_SECRET",
 ]);
 
-// Staging-only switches. Design system v1 is built only on polynet-staging
-// until Neil accepts it there (docs/specs/design-system-v1-implementation-plan.md);
-// the last slice of that plan removes this guard along with the switch.
-export const FORBIDDEN_PRODUCTION_ENV = Object.freeze([
-  "VITE_DESIGN_V1",
-]);
+// Staging-only switches: settings that must never reach production. Empty
+// since design system v1 was accepted for production (2026-11-17,
+// docs/specs/production-release-plan-2026-11.md, stage 2); the check stays
+// for the next switch that is tried on staging first.
+export const FORBIDDEN_PRODUCTION_ENV = Object.freeze([]);
 
 const LIVE_POLL_INTERVAL_MS = 15_000;
 const LIVE_POLL_ATTEMPTS_BEFORE_PROMOTE = 12;

@@ -158,7 +158,7 @@ export function MembersBulkBar(props: { count: number; compable: number; busy: s
       <b>{props.count} selected</b>
       <Btn small onClick={props.onExport}>Export selected</Btn>
       {props.compable > 0 ? (
-        <Btn small onClick={props.onComp}>{props.busy === "comp" ? "Comping…" : props.compable === props.count ? "Comp" : `Comp ${props.compable} in for free`}</Btn>
+        <Btn small onClick={props.onComp}>{props.busy === "comp" ? "Saving…" : props.compable === props.count ? "Keep free for good" : `Keep ${props.compable} free for good`}</Btn>
       ) : null}
       <Btn small txt onClick={props.onClear}>Clear</Btn>
     </div>

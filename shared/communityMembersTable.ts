@@ -26,7 +26,7 @@ export type MemberStatus = { kind: "active" | "on_hold" | "cancelling" | "comped
 export function memberStatus(row: Pick<MemberTableRow, "plan" | "money">): MemberStatus {
   if (row.money?.kind === "on_hold") return { kind: "on_hold", label: "On hold" };
   if (row.money?.kind === "cancelling") return { kind: "cancelling", label: "Cancelling" };
-  if (row.plan.kind === "comped") return { kind: "comped", label: "Comped" };
+  if (row.plan.kind === "comped") return { kind: "comped", label: "Free for good" };
   return { kind: "active", label: "Active" };
 }
 

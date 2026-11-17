@@ -30,7 +30,7 @@ export function planFor(args: {
   pricePoint: { id: string; name: string; amountBaseUnits: number; currency: string; currencyDecimals: number; billingPeriod: string } | null;
 }): MemberPlan {
   if (args.isOwner) return { kind: "owner", label: "Owner", price_point_id: null };
-  if (args.accessSource === "manual_grant") return { kind: "comped", label: "Comped", price_point_id: null };
+  if (args.accessSource === "manual_grant") return { kind: "comped", label: "Free for good", price_point_id: null };
   // Let in by a sale the builder's own app reported.
   if (args.accessSource === "app_grant") return { kind: "app", label: "Through your app", price_point_id: null };
   const point = args.pricePoint;

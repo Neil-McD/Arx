@@ -7,6 +7,7 @@ import {
   assertCleanWorktree,
   assertExactOriginMain,
   assertForbiddenProductionEnvAbsent,
+  FORBIDDEN_PRODUCTION_ENV,
   assertRequiredProductionEnv,
   lastDeploymentUrl,
   parseLiveBuildId,
@@ -152,7 +153,11 @@ describe("production release guards", () => {
     const required = [row("VITE_CONVEX_URL"), row("VITE_PUBLIC_APP_URL"), row("ARX_AUTH_BRIDGE_SECRET")];
     expect(() => assertForbiddenProductionEnvAbsent(null)).toThrow("production_release_environment_unreadable");
     expect(() => assertForbiddenProductionEnvAbsent({ envs: required })).not.toThrow();
-    expect(() => assertForbiddenProductionEnvAbsent({ envs: [...required, row("VITE_DESIGN_V1")] }))
+    // Design v1 is allowed in production now (stage 2 of the release plan).
+    expect(FORBIDDEN_PRODUCTION_ENV).not.toContain("VITE_DESIGN_V1");
+    expect(() => assertForbiddenProductionEnvAbsent({ envs: [...required, row("VITE_DESIGN_V1")] })).not.toThrow();
+    // The check itself still refuses whatever is named as staging-only.
+    expect(() => assertForbiddenProductionEnvAbsent({ envs: [...required, row("VITE_TRIED_ON_STAGING")] }, ["VITE_TRIED_ON_STAGING"]))
       .toThrow("production_release_environment_has_staging_only_setting");
   });
 
