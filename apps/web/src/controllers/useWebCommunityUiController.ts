@@ -72,6 +72,9 @@ type CommunityCreateModalHostProps = {
   onChangeOneLiner: (value: string) => void;
   onChangeSlug: (value: string) => void;
   onChangeSlugEdited: (value: boolean) => void;
+  // Design v1's preview card: who will host it (set where the profile is known).
+  hostName?: string | null;
+  hostAvatarUrl?: string | null;
 };
 
 export type WebCommunityModalHostPropsShape = {

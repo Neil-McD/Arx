@@ -4459,3 +4459,12 @@
 @media (min-width: 1024px) {
   :root[data-design="v1"]:where(:not([data-layout="phone"])) .community-interaction-projection.pin-in-panel .community-channel-pinned-root { display: none; }
 }
+
+/* Start a community (design v1): the kit draws the form and its preview; the
+   modal is only the frame around them. */
+:root[data-design="v1"] .create-community-modal.builder-create-modal.is-kit-start {
+  width: min(860px, calc(100vw - 32px));
+  padding: 0;
+  border-radius: 12px;
+  overflow-x: hidden;
+}
