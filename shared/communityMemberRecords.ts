@@ -2,7 +2,7 @@
 // membership reads on the row and in the record. Pure, so the page and the
 // server say the same thing, and so every case is tested.
 
-export type MemberPlanKind = "owner" | "paid" | "comped" | "free" | "app";
+export type MemberPlanKind = "owner" | "paid" | "free" | "app";
 export type MemberPlan = { kind: MemberPlanKind; label: string; price_point_id: string | null };
 export type MemberMoney = { kind: "on_hold" | "cancelling"; label: string; since_at: string | null; ends_at: string | null } | null;
 export type MemberOutReason = "left" | "removed" | "lapsed" | "blocked" | "refunded" | "disputed" | "declined";
@@ -30,7 +30,9 @@ export function planFor(args: {
   pricePoint: { id: string; name: string; amountBaseUnits: number; currency: string; currencyDecimals: number; billingPeriod: string } | null;
 }): MemberPlan {
   if (args.isOwner) return { kind: "owner", label: "Owner", price_point_id: null };
-  if (args.accessSource === "manual_grant") return { kind: "comped", label: "Comped", price_point_id: null };
+  // Access a host once gave by hand ("manual_grant") is free access like any
+  // other: both keep their place whatever the price becomes, so they read the same.
+  if (args.accessSource === "manual_grant") return { kind: "free", label: "Free", price_point_id: null };
   // Let in by a sale the builder's own app reported.
   if (args.accessSource === "app_grant") return { kind: "app", label: "Through your app", price_point_id: null };
   const point = args.pricePoint;
@@ -114,14 +116,13 @@ export function factVisibleToHost(fact: { consentState: string }): boolean {
   return fact.consentState === "approved";
 }
 
-export type MemberView = "everyone" | "on_hold" | "cancelling" | "comped" | "know_little" | "past" | `price:${string}`;
+export type MemberView = "everyone" | "on_hold" | "cancelling" | "know_little" | "past" | `price:${string}`;
 
 // Which view a person in the community belongs to.
 export function memberInView(view: string, row: { plan: MemberPlan; money: MemberMoney; working_on: string | null }): boolean {
   if (view === "everyone") return true;
   if (view === "on_hold") return row.money?.kind === "on_hold";
   if (view === "cancelling") return row.money?.kind === "cancelling";
-  if (view === "comped") return row.plan.kind === "comped";
   if (view === "know_little") return !row.working_on;
   if (view.startsWith("price:")) return row.plan.price_point_id === view.slice("price:".length);
   return false;

@@ -22,11 +22,10 @@ export const memberKey = (row: { membership_id: string | null }): string => row.
 
 // One word for where someone stands. Money trouble comes first: it is what
 // the host has to act on.
-export type MemberStatus = { kind: "active" | "on_hold" | "cancelling" | "comped"; label: string };
+export type MemberStatus = { kind: "active" | "on_hold" | "cancelling"; label: string };
 export function memberStatus(row: Pick<MemberTableRow, "plan" | "money">): MemberStatus {
   if (row.money?.kind === "on_hold") return { kind: "on_hold", label: "On hold" };
   if (row.money?.kind === "cancelling") return { kind: "cancelling", label: "Cancelling" };
-  if (row.plan.kind === "comped") return { kind: "comped", label: "Comped" };
   return { kind: "active", label: "Active" };
 }
 
@@ -46,11 +45,6 @@ export function toggleAllShown(selected: ReadonlySet<string>, shown: string[]): 
   const all = shown.length > 0 && shown.every((key) => next.has(key));
   for (const key of shown) { if (all) next.delete(key); else next.add(key); }
   return next;
-}
-
-// Who a bulk Comp applies to: people in for free, never the owner or anyone paying.
-export function compableMembers<T extends Pick<MemberTableRow, "membership_id" | "plan">>(rows: T[]): T[] {
-  return rows.filter((row) => row.membership_id && row.plan.kind === "free");
 }
 
 export function membersCsv(rows: MemberTableRow[]): string {

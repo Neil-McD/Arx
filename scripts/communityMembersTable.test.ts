@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { compableMembers, matchesMemberSearch, memberKey, memberStatus, membersCsv, toggleAllShown, type MemberTableRow } from "../shared/communityMembersTable";
+import { matchesMemberSearch, memberKey, memberStatus, membersCsv, toggleAllShown, type MemberTableRow } from "../shared/communityMembersTable";
 
 const row = (name: string, extra: Partial<MemberTableRow> = {}): MemberTableRow => ({
   membership_id: `m-${name}`, user_id: `u-${name}`, name, handle: name.toLowerCase().replace(/\s+/g, "-"), role: "member",
@@ -8,10 +8,11 @@ const row = (name: string, extra: Partial<MemberTableRow> = {}): MemberTableRow 
 
 test("status says what the host has to act on first", () => {
   expect(memberStatus(row("A"))).toEqual({ kind: "active", label: "Active" });
-  expect(memberStatus(row("A", { plan: { kind: "comped", label: "Comped", price_point_id: null } })).kind).toBe("comped");
+  // Someone a host let in for free is active like anyone else: there is no separate standing for it.
+  expect(memberStatus(row("A", { plan: { kind: "free", label: "Free", price_point_id: null } })).kind).toBe("active");
   const hold = { kind: "on_hold" as const, label: "on hold", since_at: null, ends_at: null };
-  // On hold beats comped, and cancelling beats active.
-  expect(memberStatus(row("A", { plan: { kind: "comped", label: "Comped", price_point_id: null }, money: hold })).kind).toBe("on_hold");
+  // On hold beats active, and so does cancelling.
+  expect(memberStatus(row("A", { plan: { kind: "free", label: "Free", price_point_id: null }, money: hold })).kind).toBe("on_hold");
   expect(memberStatus(row("A", { money: { kind: "cancelling", label: "cancelling", since_at: null, ends_at: null } })).label).toBe("Cancelling");
 });
 
@@ -35,12 +36,11 @@ test("the header checkbox ticks everyone shown, or unticks them, and leaves the 
   expect(toggleAllShown(new Set(), []).size).toBe(0);
 });
 
-test("a bulk comp is only for people in for free, never the owner or anyone paying", () => {
+test("the owner has no membership, so one fixed key stands for them", () => {
   const rows = [row("Free"), row("Paid", { plan: { kind: "paid", label: "$20 a month", price_point_id: "p" } }),
-    row("Owner", { membership_id: null, plan: { kind: "owner", label: "Owner", price_point_id: null } }),
-    row("Gift", { plan: { kind: "comped", label: "Comped", price_point_id: null } })];
-  expect(compableMembers(rows).map((entry) => entry.name)).toEqual(["Free"]);
+    row("Owner", { membership_id: null, plan: { kind: "owner", label: "Owner", price_point_id: null } })];
   expect(memberKey(rows[2])).toBe("owner");
+  expect(memberKey(rows[0])).not.toBe("owner");
 });
 
 test("the export keeps commas and quotes inside their cells", () => {

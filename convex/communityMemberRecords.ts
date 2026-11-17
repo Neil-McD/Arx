@@ -131,7 +131,7 @@ export const getCommunityMemberSummary = query({
       const key = String(row.userId);
       if (!newest.has(key) || newest.get(key).createdAt < row.createdAt) newest.set(key, row);
     }
-    const counts: Record<string, number> = { everyone: 1, on_hold: 0, cancelling: 0, comped: 0, know_little: goals.has(String(community.ownerId)) ? 0 : 1, past: 0 };
+    const counts: Record<string, number> = { everyone: 1, on_hold: 0, cancelling: 0, know_little: goals.has(String(community.ownerId)) ? 0 : 1, past: 0 };
     const prices = new Map<string, { price_point_id: string; label: string; count: number; current: boolean }>();
     for (const membership of newest.values()) {
       const sub = subsByMembership.get(String(membership._id)) ?? null;
@@ -140,7 +140,7 @@ export const getCommunityMemberSummary = query({
       if (outReasonFor(membership.state, blocked.has(String(membership.userId)), membership.revokedReason)) { counts.past += 1; continue; }
       const row = { plan, money: moneyFor({ membershipState: membership.state, subscription: sub }), working_on: goals.get(String(membership.userId)) ?? null };
       counts.everyone += 1;
-      for (const view of ["on_hold", "cancelling", "comped", "know_little"]) if (memberInView(view, row)) counts[view] += 1;
+      for (const view of ["on_hold", "cancelling", "know_little"]) if (memberInView(view, row)) counts[view] += 1;
       if (plan.kind === "paid" && plan.price_point_id) {
         const entry = prices.get(plan.price_point_id) ?? { price_point_id: plan.price_point_id, label: plan.label, count: 0, current: Boolean(point?.isCurrent && !point?.archivedAt) };
         entry.count += 1;
@@ -263,7 +263,7 @@ const ACTION_TEXT: Record<string, (metadata: any) => string> = {
   community_member_role_set: (metadata) => `Made ${roleWithArticle(String(metadata?.role ?? "member"))}`,
   community_member_removed: () => "Removed from the community",
   community_member_blocked: () => "Blocked",
-  community_member_comped: () => "Comped",
+  community_member_comped: () => "Given free access",
 };
 const roleWithArticle = (role: string) => `${/^[aeiou]/.test(role) ? "an" : "a"} ${role}`;
 const AUDIT_SCAN = 400;
@@ -417,33 +417,7 @@ export const deleteCommunityMemberNote = mutation({
   },
 });
 
-// Comp a member who is in for free (e.g. approved into a paid community): they
-// keep free access whatever the community's settings become. Never offered to
-// someone paying (Neil, Nov 11): that would mean cancelling their subscription.
-export const compCommunityMember = mutation({
-  args: {
-    userId: v.optional(v.id("users")),
-    authSubject: v.optional(v.string()),
-    communityId: v.id("communities"),
-    membershipId: v.id("communityMemberships"),
-  },
-  handler: async (ctx, args) => {
-    const { community, userId } = await context(ctx, args);
-    const membership = await ctx.db.get(args.membershipId);
-    if (!membership || String(membership.communityId) !== String(args.communityId)) throw new Error("community_membership_not_found");
-    if (String(membership.userId) === String(community.ownerId)) throw new Error("community_owner_role_fixed");
-    if (membership.state !== "active") throw new Error("community_member_not_active");
-    if (membership.accessSource === "manual_grant") return { ok: true };
-    const subscription = await latestSubscription(ctx, membership._id);
-    if (membership.accessSource === "paid_subscription" || (subscription && subscription.status !== "ended")) {
-      throw new Error("community_member_is_paying");
-    }
-    const nowMs = Date.now();
-    await ctx.db.patch(membership._id, { accessSource: "manual_grant", updatedAt: nowMs });
-    await recordCriticalAuditEvent(ctx, {
-      eventKey: `community_member_comped:${membership._id}:${nowMs}`, eventType: "community_member_comped", severity: "info", status: "succeeded",
-      actorUserId: userId, subjectUserId: membership.userId, communityId: args.communityId, provider: "polynet", providerObjectId: String(membership._id), createdAt: nowMs,
-    });
-    return { ok: true };
-  },
-});
+// There is no "comp" any more (removed Nov 17): someone in for free already
+// keeps their place whatever the price becomes, so marking them changed
+// nothing. Access a host once gave by hand ("manual_grant") reads as free, and
+// its line in a member's trail ("Given free access") stays for the record.

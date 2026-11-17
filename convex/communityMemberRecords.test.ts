@@ -78,7 +78,7 @@ test("the host sees every way someone is in, at which price, and who needs them"
   expect(by("Tanya")?.plan.label).toBe("Member · $27");
   expect(by("Tanya")?.money).toMatchObject({ kind: "on_hold" });
   expect(by("Rashid")?.money).toMatchObject({ kind: "cancelling" });
-  expect(by("Martin")).toMatchObject({ role: "moderator", plan: { kind: "comped", label: "Comped" } });
+  expect(by("Martin")).toMatchObject({ role: "moderator", plan: { kind: "free", label: "Free" } });
   expect(by("Tanya")?.working_on).toBe("Finding her first ten members");
   expect(list.rows.map((row: any) => row.name)).not.toContain("Ana");
 
@@ -93,9 +93,9 @@ test("the host sees every way someone is in, at which price, and who needs them"
   expect(past).toEqual({ Ana: "left", Lee: "blocked", Dana: "declined", Omar: "refunded", Kim: "disputed" });
   // Every view's count is true, and matches walking that view page by page.
   expect(summary.capped).toBe(false);
-  expect(summary.counts).toMatchObject({ everyone: 6, on_hold: 1, cancelling: 1, comped: 1, past: 5 });
+  expect(summary.counts).toMatchObject({ everyone: 6, on_hold: 1, cancelling: 1, past: 5 });
   expect(summary.with_access).toBe(5);
-  for (const view of ["everyone", "on_hold", "cancelling", "comped", "know_little", `price:${member}`]) {
+  for (const view of ["everyone", "on_hold", "cancelling", "know_little", `price:${member}`]) {
     const expected = view.startsWith("price:") ? summary.prices.find((p: any) => `price:${p.price_point_id}` === view)!.count : summary.counts[view];
     expect((await all(view)).rows.length, view).toBe(expected);
   }
@@ -167,14 +167,11 @@ test("members see who is in and what each person shared, never who is out or wha
   expect(JSON.stringify(profile)).not.toMatch(/Said to the guide|stated_interview/);
 });
 
-test("a host can comp a free member, never someone paying, and it shows in their trail", async () => {
+test("free access a host once gave by hand reads as free, like any other", async () => {
   const t = convexTest(schema, modules);
-  const { communityId, jon, freeby } = await seed(t);
+  const { communityId, freeby } = await seed(t);
   const asOwner = t.withIdentity({ subject: "owner" });
-  await expect(asOwner.mutation(api.communityMemberRecords.compCommunityMember, { communityId, membershipId: jon.membershipId })).rejects.toThrow(/community_member_is_paying/);
-  await expect(t.withIdentity({ subject: "jon" }).mutation(api.communityMemberRecords.compCommunityMember, { communityId, membershipId: freeby.membershipId })).rejects.toThrow(/community_forbidden/);
-  await asOwner.mutation(api.communityMemberRecords.compCommunityMember, { communityId, membershipId: freeby.membershipId });
+  await t.run(async (ctx) => { await ctx.db.patch(freeby.membershipId, { accessSource: "manual_grant" }); });
   const record = await asOwner.query(api.communityMemberRecords.getCommunityMemberRecord, { communityId, membershipId: freeby.membershipId });
-  expect(record?.plan).toMatchObject({ kind: "comped", label: "Comped" });
-  expect(record?.events.map((event: any) => event.text)).toContain("Comped by you");
+  expect(record?.plan).toMatchObject({ kind: "free", label: "Free" });
 });

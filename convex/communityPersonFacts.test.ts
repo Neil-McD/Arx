@@ -51,7 +51,7 @@ test("self lens adds when they joined; builder lens adds plan, state and notes",
   expect(self.joined_at).toBe(new Date(NOW - 1_000).toISOString());
   expect(self).not.toHaveProperty("notes");
   const builder: any = await t.run((ctx: any) => readPersonFacts(ctx, { communityId: w.communityId, subjectUserId: w.mayaId, lens: "builder" }));
-  expect(builder).toMatchObject({ plan: "Comped", state: "active", notes: [{ body: "Ask about setting Sundays." }] });
+  expect(builder).toMatchObject({ plan: "Free", state: "active", notes: [{ body: "Ask about setting Sundays." }] });
   expect(JSON.stringify(builder)).not.toMatch(/burnt out|slab/);
 });
 

@@ -3236,7 +3236,7 @@
   border-radius: 10px;
 }
 
-/* The left column, tighter: 28px rows, 13px type. */
+/* The left column, tighter: 28px rows. Its text is 14px on desktop (below). */
 :root[data-design="v1"] .community-nav .nav-item {
   min-height: 28px;
   padding: 4px 8px;
@@ -4464,4 +4464,14 @@
   padding: 0;
   border-radius: 12px;
   overflow-x: hidden;
+}
+
+/* The left column's text is 14px on desktop (Nov 17: 13px read as too small
+   to members). Rows stay 28px, so the loading rows still match real ones. */
+:root[data-design="v1"]:where(:not([data-layout="phone"])) .community-nav .nav-item,
+:root[data-design="v1"]:where(:not([data-layout="phone"])) .community-nav .nav-item-label,
+:root[data-design="v1"]:where(:not([data-layout="phone"])) .community-nav .community-channel-row button,
+:root[data-design="v1"]:where(:not([data-layout="phone"])) .community-nav .community-search-ask,
+:root[data-design="v1"]:where(:not([data-layout="phone"])) .community-nav .account-menu-name {
+  font-size: 14px;
 }

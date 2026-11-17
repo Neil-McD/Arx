@@ -18,7 +18,8 @@ test("prices, money states and plans read the way the checklist says", () => {
   const point = { id: "p", name: "Founding", amountBaseUnits: 700, currency: "usd", currencyDecimals: 2, billingPeriod: "monthly" };
   expect(planFor({ isOwner: false, accessSource: "paid_subscription", pricePoint: point }).label).toBe("Founding · $7");
   expect(planFor({ isOwner: false, accessSource: "paid_subscription", pricePoint: { ...point, billingPeriod: "annual" } }).label).toBe("Founding · $7 a year");
-  expect(planFor({ isOwner: false, accessSource: "manual_grant", pricePoint: point }).kind).toBe("comped");
+  // Access a host gave by hand reads as free, like any other free access.
+  expect(planFor({ isOwner: false, accessSource: "manual_grant", pricePoint: point })).toMatchObject({ kind: "free", label: "Free" });
   expect(planFor({ isOwner: true, accessSource: null, pricePoint: null }).label).toBe("Owner");
   expect(moneyFor({ membershipState: "payment_hold", subscription: null })?.kind).toBe("on_hold");
   expect(moneyFor({ membershipState: "active", subscription: { status: "cancel_at_period_end", cancelAtPeriodEnd: true, updatedAt: 1 } })?.kind).toBe("cancelling");
@@ -41,13 +42,14 @@ test("the host's saved views narrow the table to the right people", () => {
     row("Jon", { plan: plan("paid", "Founding · $7", "f"), working_on: "Invites" }),
     row("Tanya", { plan: plan("paid", "Member · $27", "m"), money: { kind: "on_hold" } }),
     row("Rashid", { plan: plan("paid", "Member · $27", "m"), money: { kind: "cancelling" } }),
-    row("Tom", { plan: plan("comped", "Comped") }),
+    row("Tom", { plan: plan("free", "Free") }),
   ];
   const names = (view: string) => rows.filter((r: any) => memberInView(view, r)).map((r: any) => r.name);
   expect(names("price:m")).toEqual(["Tanya", "Rashid"]);
   expect(names("on_hold")).toEqual(["Tanya"]);
   expect(names("cancelling")).toEqual(["Rashid"]);
-  expect(names("comped")).toEqual(["Tom"]);
+  // There is no view for people a host let in free: they are members like any other.
+  expect(names("comped")).toEqual([]);
   expect(names("know_little")).toEqual(["Tanya", "Rashid", "Tom"]);
   expect(names("past")).toEqual([]);
   const now = Date.parse("2026-11-11T20:00:00Z");
