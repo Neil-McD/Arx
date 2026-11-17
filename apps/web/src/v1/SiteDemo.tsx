@@ -60,14 +60,20 @@ const BEFORE: Line[] = [
   { id: "b1", who: "dana", minutesAgo: 190, text: "Cohort two is full: twelve seats at $400. The waitlist page from lesson 5 did most of the work.", extra: { reaction_summary: [{ emoji: "🎉", count: 6 }] } },
   { id: "b2", who: "sam", minutesAgo: 95, text: "First sales call booked off the new landing page. Nervous, but booked." },
 ];
+// The pace of a real channel: a beat of quiet, a post, people reacting one at
+// a time, someone typing for as long as their message takes, then the next.
 const SCENE: Array<Line & { at: number }> = [
-  { id: "s1", at: 1.4, who: "mira", minutesAgo: 0, text: "Hi all, I'm Mira. I'm launching a paid newsletter for indie designers. No audience yet, so I'm here to learn how to start." },
-  { id: "s2", at: 4.6, who: "guide", minutesAgo: 0, text: "Welcome, Mira. Start with lesson 1, “Your first ten readers”. And say hello to Dana: she launched her newsletter here in March with no list, and offered to share her numbers." },
-  { id: "s3", at: 8.2, who: "dana", minutesAgo: 0, text: "Happy to! Mira, send me your draft pricing page and I'll tell you what I'd change." },
+  { id: "s1", at: 1.6, who: "mira", minutesAgo: 0, text: "Hi all, I'm Mira. I'm launching a paid newsletter for indie designers. No audience yet, so I'm here to learn how to start." },
+  { id: "s2", at: 6.4, who: "guide", minutesAgo: 0, text: "Welcome, Mira. Start with lesson 1, “Your first ten readers”. And say hello to Dana: she launched her newsletter here in March with no list, and offered to share her numbers." },
+  { id: "s3", at: 11.2, who: "dana", minutesAgo: 0, text: "Happy to! Mira, send me your draft pricing page and I'll tell you what I'd change." },
 ];
-const TYPING = [{ from: 2.6, to: 4.6, who: "guide" }, { from: 6.4, to: 8.2, who: "dana" }];
-const WAVE_AT = 3.4;
-const SCENE_SECONDS = 12;
+const TYPING = [{ from: 3.2, to: 6.4, who: "guide" }, { from: 8.0, to: 11.2, who: "dana" }];
+// Hellos on Mira's post, one at a time; then her thanks on Dana's reply.
+const WAVES = [2.9, 4.1, 7.3, 9.4];
+const THANKS_AT = 12.8;
+// The scene, a hold on its last moment, then a short fade before it starts over.
+const SCENE_SECONDS = 16;
+const FADE_SECONDS = 0.6;
 
 const noop = () => {};
 const formatTime = (iso: string) => new Date(iso).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
@@ -76,18 +82,30 @@ const formatTime = (iso: string) => new Date(iso).toLocaleTimeString("en-US", { 
 // have asked for less motion get the scene's last moment, standing still.
 function useSceneClock(seconds: number): number {
   const still = typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
-  const [at, setAt] = useState(still ? seconds : 0);
+  // Standing still, it shows the moment just before the closing fade.
+  const [at, setAt] = useState(still ? seconds - 1 : 0);
   useEffect(() => {
     if (still) return;
     const started = performance.now();
-    const timer = window.setInterval(() => setAt(((performance.now() - started) / 1000) % (seconds + 2)), 100);
+    const timer = window.setInterval(() => setAt(((performance.now() - started) / 1000) % seconds), 100);
     return () => window.clearInterval(timer);
   }, [seconds, still]);
   return at;
 }
 
 // The app's frame at its own size, scaled to the width it is given.
-function AppFrame(props: { children: ReactNode }) {
+// New messages and the typing line ease in; the feed fades before a scene
+// starts over, so nothing vanishes in one frame.
+const DEMO_CSS = `
+.site-demo .kit-channel-feed-part [class*="_msg_"]{animation:site-demo-in .42s cubic-bezier(.2,.7,.2,1) both}
+.site-demo .community-interaction-typing{animation:site-demo-in .3s ease both}
+.site-demo .kit-channel-feed-part,.site-demo .community-interaction-typing{transition:opacity ${FADE_SECONDS}s ease}
+.site-demo.is-ending .kit-channel-feed-part,.site-demo.is-ending .community-interaction-typing{opacity:0}
+@keyframes site-demo-in{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+@media (prefers-reduced-motion:reduce){.site-demo *{animation:none!important;transition:none!important}}
+`;
+
+function AppFrame(props: { ending?: boolean; children: ReactNode }) {
   const boxRef = useRef<HTMLDivElement | null>(null);
   const [zoom, setZoom] = useState(1);
   useEffect(() => {
@@ -100,7 +118,8 @@ function AppFrame(props: { children: ReactNode }) {
     return () => watcher.disconnect();
   }, []);
   return (
-    <div ref={boxRef} className="site-demo" style={{ height: APP_HEIGHT * zoom }}>
+    <div ref={boxRef} className={`site-demo${props.ending ? " is-ending" : ""}`} style={{ height: APP_HEIGHT * zoom }}>
+      <style>{DEMO_CSS}</style>
       <div className="app-root" style={{ width: APP_WIDTH, height: APP_HEIGHT, zoom }}>
         <div className="app-shell framed-shell community-layout sessions-compact no-right" style={{ height: APP_HEIGHT }}>
           <div className="product-shell-surface product-shell-surface--community" style={{ height: APP_HEIGHT }}>
@@ -197,16 +216,19 @@ function WelcomesScene() {
   const at = useSceneClock(SCENE_SECONDS);
   const [now] = useState(Date.now);
   const shown = SCENE.filter((line) => at >= line.at);
+  const waves = WAVES.filter((moment) => at >= moment).length;
   const roots = [...BEFORE, ...shown].map((line) => {
-    const waved = line.id === "s1" && at >= WAVE_AT;
-    return root(waved ? { ...line, extra: { reaction_summary: [{ emoji: "👋", count: at >= 6 ? 4 : 2 }] } } : line, now);
+    if (line.id === "s1" && waves) return root({ ...line, extra: { reaction_summary: [{ emoji: "👋", count: waves }] } }, now);
+    if (line.id === "s3" && at >= THANKS_AT) return root({ ...line, extra: { reaction_summary: [{ emoji: "🙏", count: 1 }] } }, now);
+    return root(line, now);
   });
+  const ending = at >= SCENE_SECONDS - FADE_SECONDS;
   const typing = TYPING.find((span) => at >= span.from && at < span.to);
   const typingPresence = typing
-    ? { users: [{ user_id: typing.who === "guide" ? "guide" : typing.who, display_name: typing.who === "guide" ? COMMUNITY.name : PEOPLE[typing.who]!.name }], total_count: 1 }
+    ? { users: [{ user_id: typing.who, display_name: typing.who === "guide" ? COMMUNITY.name : PEOPLE[typing.who]!.name, avatar_url: null, display_until_ms: now + 60_000 }], total_count: 1 }
     : { users: [], total_count: 0 };
   return (
-    <AppFrame>
+    <AppFrame ending={ending}>
       <LeftColumn channelSlug="general" />
       {/* In the app this slot has no box of its own, so the page fills the frame. */}
       <div className="web-main-surface-slot" style={{ display: "contents" }}>
