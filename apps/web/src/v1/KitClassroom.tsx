@@ -505,7 +505,7 @@ export function KitClassroom(props: {
           <KitCourseEdit key={open.course.id} course={open.course} onClose={() => setEditingCourse(false)}
             onSave={(patch) => props.onSaveCourse!(open.course.id, patch)} />
         ) : null}
-        <div className={cx("kcols", listBeside && "two")}>
+        <div className={`knowledge-course-cols ${cx("kcols", listBeside && "two")}`}>
         {listBeside ? <aside className={cx("klist")} aria-label="Lessons">{courseProgressLine}{lessonList}</aside> : null}
         <div className={cx("kmainc")}>
         {lesson && editingTools && editingLessonId === lesson.id ? (
