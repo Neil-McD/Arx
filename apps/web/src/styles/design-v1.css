@@ -4595,3 +4595,13 @@
   width: 16px;
   height: 16px;
 }
+
+/* The row text itself, which the 14px desktop rule above sets on each label,
+   and the loading rows at the new 36px so the rail doesn't jump on load. */
+:root[data-design="v1"]:where(:not([data-layout="phone"])) .community-nav :is(.nav-item-label, .community-channel-row button, .account-menu-name, .community-search-ask) {
+  font-size: 15px;
+}
+:root[data-design="v1"] :is(.community-channel-loading-row, .community-nav-access-loading-row) {
+  height: 36px;
+  border-block-width: 9px;
+}
