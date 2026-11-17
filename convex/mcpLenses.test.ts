@@ -445,3 +445,51 @@ test("the host's switch: members' AIs read but do not post, and the rules say so
   await f.t.run(async (ctx: any) => { for (const row of await ctx.db.query("accessBudgetCounters").collect()) await ctx.db.delete(row._id); });
   expect((await post(f, "member", "back-on")).isError).toBe(false);
 });
+
+// ---- builder parity, part one: channels (docs/specs/agent-access-v0.md, slice 4)
+
+test("a builder's AI makes, renames, describes and orders channels; a member's cannot", async () => {
+  const f = await fixture();
+  const op = (who: string, operation: string, input: Record<string, unknown>, key: string) => f.call(who, "polynet_call", {
+    operation, version: 1, target: `/communities/run-club/capabilities/${operation}.json`, input, idempotency_key: key });
+  const slugs = async () => (await f.call("owner", "polynet_list", { path: "/communities/run-club/channels/" })).structuredContent.entries
+    .map((entry: any) => entry.path.split("/channels/")[1].replace(/\/$/, ""));
+  // The capabilities a builder's AI is shown include them; a member's do not.
+  const shown = async (who: string) => (await f.call(who, "polynet_list", { path: "/communities/run-club/capabilities/" })).structuredContent.entries
+    .map((entry: any) => String(entry.path)).filter((path: string) => path.includes("community.channel.") && !path.includes("mark_read"));
+  expect((await shown("owner")).map((path: string) => path.split("capabilities/")[1]).sort()).toEqual([
+    "community.channel.create.json", "community.channel.describe.json", "community.channel.move.json", "community.channel.rename.json"]);
+  expect(await shown("member")).toEqual([]);
+
+  const made = await op("owner", "community.channel.create", { name: "Race reports" }, "c1");
+  expect(made.isError, JSON.stringify(made)).toBe(false);
+  expect(made.structuredContent.result.channel).toMatchObject({ slug: "race-reports", name: "Race reports" });
+  await op("owner", "community.channel.create", { name: "Gear" }, "c2");
+  expect(await slugs()).toEqual(["general", "race-reports", "gear"]);
+  // The same call again is the same channel.
+  await op("owner", "community.channel.create", { name: "Race reports" }, "c1");
+  expect(await slugs()).toEqual(["general", "race-reports", "gear"]);
+
+  expect((await op("owner", "community.channel.rename", { channel: "gear", name: "Kit" }, "r1")).structuredContent.result.channel)
+    .toMatchObject({ slug: "gear", name: "Kit" });
+  expect((await op("owner", "community.channel.describe", { channel: "gear", description: "Shoes, watches, bottles." }, "d1")).structuredContent.result.channel)
+    .toMatchObject({ description: "Shoes, watches, bottles." });
+  // Kit first among the others, then back after race reports.
+  expect((await op("owner", "community.channel.move", { channel: "gear", after: "general" }, "m1")).isError).toBe(false);
+  expect(await slugs()).toEqual(["general", "gear", "race-reports"]);
+  expect((await op("owner", "community.channel.move", { channel: "gear", after: "race-reports" }, "m2")).isError).toBe(false);
+  expect(await slugs()).toEqual(["general", "race-reports", "gear"]);
+
+  // Clean refusals: a name in use, a channel that isn't there, General, and extra fields.
+  expect((await op("owner", "community.channel.create", { name: "Kit" }, "x1")).structuredContent).toMatchObject({ code: "channel_name_taken" });
+  expect((await op("owner", "community.channel.rename", { channel: "nowhere", name: "X" }, "x2")).structuredContent).toMatchObject({ code: "channel_not_found" });
+  expect((await op("owner", "community.channel.rename", { channel: "general", name: "Lobby" }, "x3")).isError).toBe(true);
+  expect((await op("owner", "community.channel.create", { name: "Secret", accessMode: "restricted" }, "x4")).structuredContent).toMatchObject({ code: "invalid_tool_args" });
+  // A member's AI, and anything that deletes, is not there at all.
+  expect((await op("member", "community.channel.create", { name: "Mine" }, "x5")).structuredContent).toMatchObject({ code: "operation_not_found" });
+  expect((await op("owner", "community.channel.delete", { channel: "gear" }, "x6")).structuredContent).toMatchObject({ code: "operation_not_found" });
+  expect(await slugs()).toEqual(["general", "race-reports", "gear"]);
+  // Counted as builder changes for this community.
+  const counted: any[] = await f.t.run((ctx: any) => ctx.db.query("accessBudgetCounters").collect());
+  expect(counted.find((row: any) => row.budget === "builder_change")).toMatchObject({ scope: "run-club" });
+});

@@ -89,8 +89,15 @@ const HANDBOOK_DRAFT_OPERATION = "community.handbook.save_draft";
 const HANDBOOK_APPROVE_OPERATION = "community.handbook.approve";
 // "Where members spend time" requests were retired with custom sites (Nov 13):
 // Settings no longer has the screen the owner approved them on.
+// Channels (docs/specs/agent-access-v0.md, slice 4): made, renamed, described
+// and put in order. Not deleted, opened or pinned: those wait for two steps.
+const CHANNEL_CREATE_OPERATION = "community.channel.create";
+const CHANNEL_RENAME_OPERATION = "community.channel.rename";
+const CHANNEL_DESCRIBE_OPERATION = "community.channel.describe";
+const CHANNEL_MOVE_OPERATION = "community.channel.move";
+const CHANNEL_OPERATIONS = [CHANNEL_CREATE_OPERATION, CHANNEL_RENAME_OPERATION, CHANNEL_DESCRIBE_OPERATION, CHANNEL_MOVE_OPERATION];
 const COMMUNITY_OPERATIONS = [SETTINGS_UPDATE_OPERATION, JOIN_MODE_OPERATION, AGENT_INSTRUCTIONS_OPERATION,
-  HANDBOOK_DRAFT_OPERATION, HANDBOOK_APPROVE_OPERATION];
+  HANDBOOK_DRAFT_OPERATION, HANDBOOK_APPROVE_OPERATION, ...CHANNEL_OPERATIONS];
 const BUILDER_COMMUNITY_PATH = POLYNET_BUILDER_COMMUNITY_PATH;
 // People: actions on a selection of members (owners and admins).
 const MEMBERS_ROLE_OPERATION = "community.members.set_role";
@@ -883,6 +890,21 @@ function capabilityDocument(args: {
       required: ["text"], text: "what the community agent is told about this community (up to 40,000 characters); empty clears it",
       result: "result: { instructions }", effects: ["set_community_agent_instructions"],
       forbidden_effects: ["platform_rules", "agent_permissions"] }
+    : args.operation === CHANNEL_CREATE_OPERATION ? {
+      required: ["name"], name: "the channel's name (up to 40 characters); its slug is made from it",
+      result: "result: { channel: { slug, name, description, position } }", effects: ["create_channel_open_to_members"],
+      forbidden_effects: ["private_channels", "pods"] }
+    : args.operation === CHANNEL_RENAME_OPERATION ? {
+      required: ["channel", "name"], channel: "a channel slug from the channels listing", name: "its new name (the slug stays)",
+      result: "result: { channel }", effects: ["rename_channel"], forbidden_effects: ["rename_general"] }
+    : args.operation === CHANNEL_DESCRIBE_OPERATION ? {
+      required: ["channel", "description"], channel: "a channel slug from the channels listing",
+      description: "one line on what it is for (up to 120 characters); empty clears it",
+      result: "result: { channel }", effects: ["set_channel_description"] }
+    : args.operation === CHANNEL_MOVE_OPERATION ? {
+      required: ["channel"], optional: ["after"], channel: "a channel slug from the channels listing",
+      after: "the slug of the channel it should follow; leave out or null to put it first",
+      result: "result: { channel }", effects: ["reorder_channels"], forbidden_effects: ["move_general"] }
     : args.operation === HANDBOOK_DRAFT_OPERATION ? {
       required: ["text"], text: `the handbook draft in markdown, up to ${COMMUNITY_HANDBOOK_MAX_CHARS} characters; members and the agent don't see it until approved`,
       result: "result: { approved_md, draft_md, ... }", effects: ["save_handbook_draft"] }
@@ -2725,6 +2747,15 @@ const COMMUNITY_REFUSALS: Record<string, [string, string]> = {
   community_free_access_mode_invalid: ["invalid_tool_args", "mode is open or approval."],
   community_member_experience_owner_only: ["owner_only", "Only the community's owner can ask to change where members spend time."],
   community_custom_site_required: ["community_custom_site_required", "Deploy the community's own site first; then members can use it."],
+  community_channel_not_found: ["channel_not_found", "No channel with that slug here. List channels/ for the slugs."],
+  community_channel_unavailable: ["channel_not_found", "No channel with that slug here. List channels/ for the slugs."],
+  community_channel_name_taken: ["channel_name_taken", "Another channel here already has that name."],
+  community_channel_slug_unavailable: ["channel_name_taken", "That name can't be used for a channel here. Try another."],
+  community_channel_name_required: ["invalid_tool_args", "Give the channel a name."],
+  community_channel_name_too_long: ["invalid_tool_args", "That name is too long for a channel."],
+  community_channel_limit: ["channel_limit", "This community has as many channels as it can hold."],
+  community_general_channel_immutable: ["general_channel_fixed", "General can't be renamed or moved."],
+  community_channel_order: ["channel_order_changed", "The channels changed order since you listed them. List channels/ again and retry."],
 };
 
 // The community itself: profile, how people join, the agent's instructions and
@@ -2748,6 +2779,11 @@ async function executeCommunityOperation(args: {
         (!("visibility" in rawInput) || rawInput.visibility === "published" || rawInput.visibility === "unlisted")
     : operation === JOIN_MODE_OPERATION ? only(["mode"]) && (rawInput.mode === "open" || rawInput.mode === "approval")
     : operation === AGENT_INSTRUCTIONS_OPERATION ? only(["text"]) && text("text", 40_000)
+    : operation === CHANNEL_CREATE_OPERATION ? only(["name"]) && text("name", 80) && String(rawInput.name).trim().length > 0
+    : operation === CHANNEL_RENAME_OPERATION ? only(["channel", "name"]) && text("channel", 64) && text("name", 80) && String(rawInput.name).trim().length > 0
+    : operation === CHANNEL_DESCRIBE_OPERATION ? only(["channel", "description"]) && text("channel", 64) && text("description", 400)
+    : operation === CHANNEL_MOVE_OPERATION ? only(["channel", "after"]) && text("channel", 64) &&
+      (rawInput.after === undefined || rawInput.after === null || text("after", 64))
     // The handbook is published exactly as given, so a longer one is refused, never cut.
     : only(["text"]) && text("text", COMMUNITY_HANDBOOK_MAX_CHARS));
   if (!valid) {
@@ -2755,6 +2791,10 @@ async function executeCommunityOperation(args: {
       ? "Give expected_revision and at least one of name, slug, one_liner, about or visibility (published or unlisted)."
       : operation === JOIN_MODE_OPERATION ? "mode is open or approval."
       : operation === AGENT_INSTRUCTIONS_OPERATION ? "Give text (up to 40,000 characters)."
+      : operation === CHANNEL_CREATE_OPERATION ? "Give name."
+      : operation === CHANNEL_RENAME_OPERATION ? "Give channel (its slug) and name."
+      : operation === CHANNEL_DESCRIBE_OPERATION ? "Give channel (its slug) and description."
+      : operation === CHANNEL_MOVE_OPERATION ? "Give channel (its slug) and, to put it after another, after (that channel's slug)."
       : `Give text (the handbook is at most ${COMMUNITY_HANDBOOK_MAX_CHARS.toLocaleString("en-US")} characters).`);
   }
   // The receipt is the community's (by id), not its address's: after a rename,

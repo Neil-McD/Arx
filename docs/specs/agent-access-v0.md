@@ -1,7 +1,7 @@
 # Agent access: MCP, lenses, limits, free and paid (v0 spec)
 
-Status: direction agreed 2026-11-17 (Neil). Slices 1 to 3 are built (see
-"Slices").
+Status: direction agreed 2026-11-17 (Neil). Slices 1 to 3 and the channels
+part of slice 4 are built (see "Slices").
 How the guide, memory and briefs work is owned by
 `agent-system-end-state.md`; this spec owns what a person's own AI may do
 through the MCP, how much of it, and where the paid line sits.
@@ -148,6 +148,28 @@ What a member's own AI reaches, beyond channels, people and courses:
   own post down stays allowed. Direct messages are between two people and
   are not the host's to switch off.
 
+## Builder parity
+
+A builder's own AI calls the same rules the app's screens use, one operation
+per thing a builder does, each declared in `shared/operationCatalog.ts`.
+
+**A personal agent acts; the guide proposes.** A builder's own AI changes
+things directly: its owner is present and asked for the change. The staged
+route (a change set a person applies in the app) stays for the guide, which
+nobody watches.
+
+**What takes something from members waits.** An operation whose effect is
+*destroy* or *broadcast* is not offered until the two-step confirm exists
+(slice 5). So far that holds back: deleting a channel, changing who may see
+one (opening a private channel shows its history to everyone), pinning a
+post, cancelling an event, and making or changing an event (members are
+emailed reminders).
+
+**Channels** (`community.channel.*`, `convex/communityChannels.ts`): `create`
+(open to every member; a private channel is made in the app), `rename` (the
+slug stays), `describe`, and `move` (after a named channel, or first). A
+channel is named by its slug. General is not renamed or moved.
+
 ## Slices
 
 1. **Limits, the free cap, the operations list.** *Built.* The list, the
@@ -159,8 +181,13 @@ What a member's own AI reaches, beyond channels, people and courses:
 3. **The member lens, finished.** *Built.* See "The member lens" below.
    Events are readable; RSVP does not exist in the product, so there is
    nothing to expose.
-4. **Builder parity, part one.** Channels, courses and lessons, events,
-   invites.
+4. **Builder parity, part one.** See "Builder parity" below.
+   - **4a, channels.** *Built.* Create, rename, describe, put in order.
+   - **4b, courses and lessons.** Not started.
+   - Events moved to slice 5: every member is emailed a reminder before an
+     event, so making one is a broadcast and waits for the two steps.
+   - Invites: there is no invite to make. "Copy invite link" copies the
+     community's address, which an AI already reads.
 5. **Builder parity, part two.** Members, pods, the community page and
    settings, analytics. Two steps for destroy and broadcast. Money stays in
    the app.
