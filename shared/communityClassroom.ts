@@ -39,6 +39,32 @@ export function continueLesson<C extends { id: string }, L extends { id: string 
   return best;
 }
 
+// The courses as one ordered path, in the host's order: the ones you've
+// finished, the one you're on (the first unfinished course that has lessons),
+// and what comes after it. Nothing is locked; this only says where you are.
+export type CoursePathStep<C, L> = {
+  course: C;
+  lessons: L[];
+  state: "done" | "now" | "later";
+  done: number;
+  total: number;
+  nextLesson: L | null;
+};
+export function coursePath<C extends { id: string }, L extends { id: string }>(
+  courses: Array<{ course: C; lessons: L[] }>,
+  done: ReadonlySet<string>,
+): Array<CoursePathStep<C, L>> {
+  let placed = false;
+  return courses.map(({ course, lessons }) => {
+    const progress = courseProgress(lessons, done);
+    const nextLesson = lessons.find((lesson) => lesson.id === progress.nextLessonId) ?? null;
+    let state: "done" | "now" | "later" = "later";
+    if (progress.finished) state = "done";
+    else if (!placed && lessons.length > 0) { state = "now"; placed = true; }
+    return { course, lessons, state, done: progress.done, total: progress.total, nextLesson };
+  });
+}
+
 // One page of the course shelf.
 export function pageOf<T>(items: T[], page: number, size: number): { items: T[]; page: number; pages: number; from: number; to: number } {
   const pages = Math.max(1, Math.ceil(items.length / size));

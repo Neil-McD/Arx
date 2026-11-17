@@ -1231,22 +1231,71 @@
 .app .th b{color:var(--v1-accent-ink,var(--accent));font-weight:500}
 .app:is(.light:not(.on-mode-dark),.on-mode-light) .re.mine{background:color-mix(in srgb,var(--accent) 14%,transparent);color:var(--v1-accent-ink,var(--ink))}
 .app:is(.light:not(.on-mode-dark),.on-mode-light) .re.mine:hover{background:color-mix(in srgb,var(--accent) 20%,transparent)}
-.app .kcols{display:flex;gap:48px;max-width:780px;margin:22px auto 0}
-.app .kcols.two{max-width:1076px}
+.app .klesson p{color:var(--ink1)}
+.app .kedit-title{font-family:inherit;font-weight:600;font-size:28px}
+.app .btn.lg{height:40px;padding:0 16px;border-radius:10px;font-size:14px}
+.app .tag.live::before{content:"";width:6px;height:6px;margin-right:6px;border-radius:50%;background:#3fb76b}
+.app .khero{display:grid;grid-template-columns:minmax(0,460px) minmax(0,1fr);gap:32px;align-items:center;width:100%;margin-top:18px;padding:20px;border-radius:14px;background:var(--panel2);border:1px solid var(--line);box-shadow:0 18px 40px -26px rgba(0,0,0,.5);text-align:left;cursor:pointer;transition:border-color .16s var(--ease)}
+.app .khero:hover{border-color:var(--line2)}
+.app .khero-cover{display:grid;place-items:center;aspect-ratio:16/9;height:auto;border-radius:10px;color:var(--ink3)}
+.app .khero-cover .ic{width:28px;height:28px}
+.app .khero-body{display:flex;flex-direction:column;min-width:0}
+.app .khero-eye{font-size:12.5px;font-weight:500;color:var(--v1-accent-ink,var(--accent))}
+.app .khero-body>b{margin-top:6px;font-size:30px;font-weight:600;letter-spacing:-.02em;line-height:1.12}
+.app .khero-body>.s{margin-top:8px;max-width:46ch;font-size:15px;line-height:1.5;color:var(--ink2)}
+.app .khero-next{display:flex;align-items:center;gap:12px;margin-top:18px;padding:10px 12px;border-radius:10px;background:var(--panel);border:1px solid var(--line)}
+.app .khero-next i{flex:none;display:grid;place-items:center;width:28px;height:28px;border-radius:50%;border:1.5px solid var(--accent);font-style:normal;font-size:12.5px;font-weight:600}
+.app .khero-next b{display:block;font-size:14.5px;font-weight:550}.app .khero-next em{font-style:normal;font-size:12.5px;color:var(--ink3)}
+.app .khero-prog{display:flex;align-items:center;gap:10px;margin-top:14px;font-size:12.5px;color:var(--ink3)}
+.app .khero-prog .kbar{flex:1;max-width:220px;margin-top:0}
+.app .khero .acts{margin-top:18px}
+.app .knum{margin-right:8px;font-style:normal;font-size:12.5px;font-weight:500;color:var(--ink3);font-variant-numeric:tabular-nums}
+@media (max-width:760px){.app .khero{grid-template-columns:minmax(0,1fr);gap:16px;padding:12px 12px 16px}.app .khero-body>b{font-size:24px}}
+.app .kcols{display:flex;gap:40px;max-width:860px;margin:22px auto 0;align-items:flex-start}
+.app .kcols.two{max-width:1216px}
 .app .kcols .kmainc{flex:1;min-width:0}
 .app .kcols .klesson,.app .kcols .kcrumb{max-width:none;margin:0}
-.app .klist{position:sticky;top:8px;align-self:flex-start;flex:none;width:248px;max-height:calc(100vh - 150px);overflow-y:auto;padding:0 10px}
-.app .klist .sec{margin-top:14px}
+.app .klist{position:sticky;top:8px;flex:none;width:304px;max-height:calc(100vh - 150px);overflow-y:auto;border-radius:14px;background:var(--panel2);border:1px solid var(--line);box-shadow:0 18px 40px -26px rgba(0,0,0,.5)}
+.app .klist-top{display:grid;grid-template-columns:72px minmax(0,1fr);gap:12px;align-items:center;padding:14px 14px 12px}
+.app .klist-cover{display:grid;place-items:center;height:auto;aspect-ratio:16/9;border-radius:6px;color:var(--ink3)}
+.app .klist-cover .ic{width:16px;height:16px}
+.app .klist-top b{display:block;font-size:14.5px;font-weight:600;line-height:1.25}.app .klist-top em{font-style:normal;font-size:12.5px;color:var(--ink3)}
+.app .klist>.kbar{margin:0 14px 10px}
 .app .kbar{margin-top:8px}.app .kbar i{background:var(--accent)}
-.app .kl{height:auto;min-height:32px;padding-top:6px;padding-bottom:6px;line-height:1.3;text-align:left}
-.app .kl.on i{border-color:var(--accent);background:transparent;box-shadow:none;border-width:1.5px}
-.app .kl.d .ic{color:var(--v1-accent-ink,var(--accent))}
-.app .ktools{display:flex;flex-wrap:wrap;align-items:center;gap:8px;max-width:1076px;margin:14px auto 0}
-.app .kfoot{display:flex;flex-wrap:wrap;align-items:center;gap:8px;row-gap:10px;margin-top:30px;padding-top:20px;border-top:1px solid var(--line)}
-.app .kfoot-gap{flex:1}
-.app .kisdone{display:inline-flex;align-items:center;gap:6px;height:32px;padding:0 10px;border-radius:8px;font-size:13px;color:var(--ink3);cursor:pointer}
-.app .kisdone .ic{width:14px;height:14px;color:var(--v1-accent-ink,var(--accent))}.app .kisdone:hover{background:var(--s2);color:var(--ink)}
-.app .klesson .kupnext{margin:10px 0 0;text-align:right;font-size:12.5px;line-height:1.4;color:var(--ink3)}
+.app .klrows{padding:4px 6px 6px;border-top:1px solid var(--line)}
+.app .kl{display:grid;grid-template-columns:20px minmax(0,1fr);gap:10px;align-items:center;height:auto;min-height:38px;margin:0;padding:8px;border-radius:9px;font-size:14px;line-height:1.3;color:var(--ink2);text-align:left;cursor:pointer}
+.app .kl:hover{background:var(--s2);color:var(--ink)}
+.app .kl.d{color:var(--ink2)}
+.app .kl.on{background:color-mix(in srgb,var(--accent) 16%,transparent);color:var(--ink);font-weight:550}
+.app .kdot{display:grid;place-items:center;width:18px;height:18px;border-radius:50%;border:1.5px solid var(--line2)}
+.app .kdot.now{border-color:var(--accent)}.app .kdot.now::after{content:"";width:6px;height:6px;border-radius:50%;background:var(--accent)}
+.app .kdot.done{border-color:transparent;background:color-mix(in srgb,var(--accent) 18%,transparent);color:var(--v1-accent-ink,var(--accent))}
+.app .kl .kdot .ic{width:11px;height:11px;stroke-width:2.4;color:inherit}
+.app .klist-foot{display:flex;align-items:center;gap:9px;width:100%;padding:12px 14px;border-top:1px solid var(--line);font-size:13.5px;color:var(--ink2);cursor:pointer}
+.app .klist-foot:hover{background:var(--s2);color:var(--ink)}
+.app .klist-foot .ic{width:15px;height:15px;color:var(--ink3)}.app .klist-foot.guide .ic{color:var(--aurora)}
+.app .kfold{margin-bottom:12px;border-radius:12px;background:var(--panel2);border:1px solid var(--line)}
+.app .kfold summary{display:flex;align-items:center;gap:10px;padding:12px 14px;font-weight:550;cursor:pointer;list-style:none}
+.app .kfold summary::-webkit-details-marker{display:none}
+.app .kfold summary em{margin-left:auto;font-style:normal;font-weight:400;font-size:12.5px;color:var(--ink3)}
+.app .ktools{display:flex;flex-wrap:wrap;align-items:center;gap:8px;max-width:1216px;margin:14px auto 0}
+.app .ktools.head{width:100%;max-width:1216px;margin:0 auto;justify-content:flex-end;flex-wrap:nowrap}
+.app .ktools .btn .ic{width:14px;height:14px}
+.app .kmore{position:relative}
+.app .kmore summary{list-style:none;cursor:pointer;width:32px;padding:0;justify-content:center}
+.app .kmore summary::-webkit-details-marker{display:none}
+.app .kmore-menu{position:absolute;right:0;top:calc(100% + 6px);z-index:30;min-width:240px;padding:6px;border-radius:10px;background:var(--pop);border:1px solid var(--line2);box-shadow:0 18px 40px -18px rgba(0,0,0,.6)}
+.app .kmore-menu button{display:block;width:100%;padding:8px 10px;border-radius:7px;font-size:13.5px;text-align:left;cursor:pointer}
+.app .kmore-menu button:hover{background:var(--s2)}
+.app .kmore-menu button.no{color:var(--bad)}
+.app .kmore-menu small{display:block;margin-top:2px;font-size:12px;line-height:1.35;color:var(--ink3)}
+.app .kfinish{display:flex;flex-wrap:wrap;align-items:center;gap:10px 14px;margin-top:34px;padding:16px 18px;border-radius:14px;background:var(--panel2);border:1px solid var(--line)}
+.app .kfinish-next{flex:1;min-width:180px}
+.app .kfinish.bare{padding:0;border:0;background:none}.app .kfinish.bare .kfinish-next{min-width:0}
+.app .kfinish-next span{display:block;font-size:12.5px;color:var(--ink3)}
+.app .kfinish-next b{display:block;margin-top:1px;font-size:15.5px;font-weight:600;line-height:1.3}
+.app .kisdone{display:inline-flex;align-items:center;gap:6px;height:32px;padding:0 10px;border-radius:8px;font-size:13px;color:var(--v1-accent-ink,var(--accent));cursor:pointer}
+.app .kisdone .ic{width:14px;height:14px}.app .kisdone:hover{background:var(--s2)}
 .app .kpct{height:auto;border-radius:0;background:none;overflow:visible}.app .kpct i{display:none}
 .app .kpct em{padding:0;font-size:12px;font-weight:400;line-height:1.4;color:var(--ink3)}
 .app .mine:not(.re){background:color-mix(in srgb,var(--accent) 26%,var(--panel2))}
