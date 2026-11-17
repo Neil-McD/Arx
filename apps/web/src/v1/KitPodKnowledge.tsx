@@ -15,7 +15,7 @@ import { Btn, Icon, cx } from "./kit";
 import { PanelAction, PanelLearned, PanelLine, PanelPart } from "./KitPanel";
 import { PanelBrainMap, useBrainMap } from "./KitBrain";
 import { resolveAuthSubject, type AuthSessionLike } from "../../../../shared/authSession";
-import { useLiveChange } from "../../../../shared/liveQuery";
+import { useLiveAnswer } from "../../../../shared/liveQuery";
 
 type Draft = { slug: string | null; title: string; text: string };
 
@@ -54,9 +54,9 @@ export function KitPodKnowledge(props: { session: unknown; communityId: string; 
   // Live (shared/liveQuery.ts): a note someone else adds or changes shows
   // without a reload.
   const subject = props.session ? resolveAuthSubject(props.session as AuthSessionLike) : null;
-  useLiveChange(props.session, "communityPodNotes:listPodNotes",
+  useLiveAnswer<CloudPodNotes>(props.session, "communityPodNotes:listPodNotes",
     subject ? { authSubject: subject, communityId: props.communityId, channelId: props.channelId } : null,
-    () => { void load(); });
+    (next) => setState(next));
 
   // The pod's own map: its things only, read again when its notes change.
   const { map: brain } = useBrainMap(props.session, props.communityId, props.channelId);
