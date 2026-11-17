@@ -460,7 +460,6 @@ export function SiteDemo() {
   const [index, setIndex] = useState(0);
   const [at, setAt] = useState(0);
   const [held, setHeld] = useState(false);
-  const [now] = useState(Date.now);
   const scene = SCENES[index]!;
   const moment = still ? scene.seconds - FADE_SECONDS - 0.1 : at;
   useEffect(() => {
@@ -473,14 +472,12 @@ export function SiteDemo() {
     setAt(0);
     setIndex((current) => (current + 1) % SCENES.length);
   }, [at, scene.seconds]);
-  const Scene = scene.Scene;
   return (
     <div>
       <div className="site-demo-window" onPointerEnter={() => setHeld(true)} onPointerLeave={() => setHeld(false)}>
-        <AppFrame ending={!still && at >= scene.seconds - FADE_SECONDS} left={<LeftColumn {...scene.left(moment)} />}>
-          <Scene key={scene.key} at={moment} now={now} />
-        </AppFrame>
+        <DemoWindow index={index} at={moment} ending={!still && at >= scene.seconds - FADE_SECONDS} />
       </div>
+      <style>{DEMO_CSS}</style>
       <div className="site-demo-dots" role="tablist" aria-label="What your client success manager does">
         {SCENES.map((item, position) => (
           <button key={item.key} type="button" role="tab" aria-selected={position === index} className={position === index ? "on" : undefined}
@@ -492,6 +489,69 @@ export function SiteDemo() {
       </div>
       <p className="site-demo-say">{scene.say}</p>
     </div>
+  );
+}
+
+// The app is drawn in a window of its own (a frame at the size of a laptop
+// screen), then scaled to the space the page gives it. Its own window is what
+// makes it the real app at any size: the app lays itself out by the width of
+// the window it is in, so drawn straight into a phone's page it would take
+// its phone-width rules while being drawn at desktop size.
+type StageState = { index: number; at: number; ending: boolean };
+const STAGE_MESSAGE = "polynet-site-demo";
+
+function DemoWindow(props: StageState) {
+  const boxRef = useRef<HTMLDivElement | null>(null);
+  const frameRef = useRef<HTMLIFrameElement | null>(null);
+  const [zoom, setZoom] = useState(1);
+  const [ready, setReady] = useState(false);
+  useEffect(() => {
+    const box = boxRef.current;
+    if (!box) return;
+    const fit = () => setZoom(Math.min(1, box.clientWidth / APP_WIDTH));
+    fit();
+    const watcher = new ResizeObserver(fit);
+    watcher.observe(box);
+    return () => watcher.disconnect();
+  }, []);
+  useEffect(() => {
+    const onMessage = (event: MessageEvent) => {
+      if (event.origin === window.location.origin && event.source === frameRef.current?.contentWindow && event.data?.type === `${STAGE_MESSAGE}:ready`) setReady(true);
+    };
+    window.addEventListener("message", onMessage);
+    return () => window.removeEventListener("message", onMessage);
+  }, []);
+  useEffect(() => {
+    if (!ready) return;
+    frameRef.current?.contentWindow?.postMessage({ type: STAGE_MESSAGE, index: props.index, at: props.at, ending: props.ending }, window.location.origin);
+  }, [ready, props.index, props.at, props.ending]);
+  return (
+    <div ref={boxRef} style={{ height: APP_HEIGHT * zoom, overflow: "hidden", background: "#0b0c0e" }}>
+      <iframe ref={frameRef} src="/design-lab?page=demo-frame" title="Polynet, playing" tabIndex={-1} aria-hidden="true"
+        style={{ display: "block", width: APP_WIDTH, height: APP_HEIGHT, border: 0, transform: `scale(${zoom})`, transformOrigin: "0 0", pointerEvents: "none" }} />
+    </div>
+  );
+}
+
+// What the frame shows: the scene and moment the page outside tells it.
+export function SiteDemoStage() {
+  const [state, setState] = useState<StageState>({ index: 0, at: 0, ending: false });
+  const [now] = useState(Date.now);
+  useEffect(() => {
+    const onMessage = (event: MessageEvent) => {
+      if (event.origin !== window.location.origin || event.data?.type !== STAGE_MESSAGE) return;
+      setState({ index: Number(event.data.index) || 0, at: Number(event.data.at) || 0, ending: Boolean(event.data.ending) });
+    };
+    window.addEventListener("message", onMessage);
+    window.parent?.postMessage({ type: `${STAGE_MESSAGE}:ready` }, window.location.origin);
+    return () => window.removeEventListener("message", onMessage);
+  }, []);
+  const scene = SCENES[state.index] ?? SCENES[0]!;
+  const Scene = scene.Scene;
+  return (
+    <AppFrame ending={state.ending} left={<LeftColumn {...scene.left(state.at)} />}>
+      <Scene key={scene.key} at={state.at} now={now} />
+    </AppFrame>
   );
 }
 
