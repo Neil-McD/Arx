@@ -240,11 +240,22 @@ export function KitClassroom(props: {
   // arrive after the course does: a lesson picked for the reader is picked
   // again then, but one the reader chose stays.
   const autoLessonRef = useRef<string | null>(null);
+  const wantedLessonRef = useRef<string | null>(null);
   // The lesson you're on is part of the address (/resources/<course>/<lesson>):
   // a refresh, the back button and a link open it.
   const routeLesson = useRouteDetail("lesson");
   useEffect(() => {
     if (!open) { setLessonId(null); autoLessonRef.current = null; return; }
+    // A lesson just added is where the host is going: it is opened as soon as
+    // it arrives in the list, and nothing else is chosen meanwhile.
+    const wanted = wantedLessonRef.current;
+    if (wanted) {
+      if (!open.lessons.some((lesson) => lesson.id === wanted)) return;
+      wantedLessonRef.current = null;
+      autoLessonRef.current = null;
+      if (lessonId !== wanted) setLessonId(wanted);
+      return;
+    }
     // The course can arrive before its lessons: wait for them before choosing.
     if (routeLesson && !props.loaded) return;
     // A lesson in the address that this page chose itself is not a request:
@@ -481,7 +492,7 @@ export function KitClassroom(props: {
   const lessonListFoot = open ? (editingTools ? (
     <button type="button" className={cx("klist-foot")} onClick={async () => {
       const id = await editingTools.addLesson(open.course.id);
-      if (id) { chooseLesson(id); setEditingLessonId(id); }
+      if (id) { wantedLessonRef.current = id; setEditingLessonId(id); chooseLesson(id); }
     }}><Icon name="plus" />Add a lesson</button>
   ) : agentOn ? (
     <button type="button" className={cx("klist-foot", "guide")} onClick={() => openGuideFromSearch()}><Icon name="spark" />Ask about this lesson</button>
@@ -629,7 +640,7 @@ export function KitClassroom(props: {
             {editingTools ? (
               <button type="button" className={cx("btn go")} style={{ marginTop: 18 }} onClick={async () => {
                 const id = await editingTools.addLesson(open.course.id);
-                if (id) { chooseLesson(id); setEditingLessonId(id); }
+                if (id) { wantedLessonRef.current = id; setEditingLessonId(id); chooseLesson(id); }
               }}><Icon name="plus" />Write the first lesson</button>
             ) : null}
           </div>
