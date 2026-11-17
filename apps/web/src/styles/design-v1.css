@@ -4475,3 +4475,54 @@
 :root[data-design="v1"]:where(:not([data-layout="phone"])) .community-nav .account-menu-name {
   font-size: 14px;
 }
+
+/* Chat colours (Nov 17). One rule: ink is for words, the accent means "yours
+   or clickable", purple is the guide's alone. Nothing here is solid ink. */
+:root[data-design="v1"] { --v1-accent: #6f78d8; --v1-accent-ink: #969df0; }
+:root[data-design="v1"][data-theme="light"] { --v1-accent: #5e6ad2; --v1-accent-ink: #4a55bd; }
+
+/* The replies count is a link. */
+:root[data-design="v1"] .community-interaction-reply-pill {
+  color: var(--v1-accent-ink);
+  font-weight: 500;
+}
+
+/* A person's tag is accent text; a tag addressed to you (your name, or
+   everybody) is a tinted chip; the guide's stays purple. */
+:root[data-design="v1"] .community-mention-chip:not(.is-agent) {
+  padding: 0;
+  background: none;
+  color: var(--v1-accent-ink);
+}
+:root[data-design="v1"] .community-mention-trigger:hover .community-mention-chip:not(.is-agent, .is-self, .is-role) {
+  background: none;
+  text-decoration: underline;
+}
+:root[data-design="v1"] .community-mention-chip:is(.is-self, .is-role) {
+  padding: 1px 5px;
+  background: color-mix(in srgb, var(--v1-accent) 16%, transparent);
+}
+:root[data-design="v1"] .community-mention-trigger:hover .community-mention-chip.is-self {
+  background: color-mix(in srgb, var(--v1-accent) 24%, transparent);
+}
+
+/* Direct messages: yours are tinted with the accent, theirs stay neutral. */
+:root[data-design="v1"]:where(:not([data-layout="phone"])) .web-direct-messages-host.is-page .community-dm-panel-message.is-own:not(.is-media-only) .community-dm-panel-message-bubble:not(:has(> .community-dm-media-grid:only-child)) {
+  background: color-mix(in srgb, var(--v1-accent) 26%, #141516);
+  color: var(--text-ink-primary);
+}
+:root[data-design="v1"]:where(:not([data-layout="phone"]))[data-theme="light"] .web-direct-messages-host.is-page .community-dm-panel-message.is-own:not(.is-media-only) .community-dm-panel-message-bubble:not(:has(> .community-dm-media-grid:only-child)) {
+  background: color-mix(in srgb, var(--v1-accent) 14%, #ffffff);
+  color: var(--text-ink-primary);
+}
+
+/* The reply box: a quiet accent border on focus, no halo, in both modes. */
+:root[data-design="v1"]:where(:not([data-layout="phone"])) .web-direct-messages-host.is-page .community-dm-panel-composer:focus-within {
+  border-color: color-mix(in srgb, var(--v1-accent) 60%, transparent);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+:root[data-design="v1"]:where(:not([data-layout="phone"])) .web-direct-messages-host.is-page .community-dm-panel-composer:focus-within .community-dm-panel-send:not(:disabled) {
+  --conversation-primary-action-surface: var(--v1-accent);
+  --conversation-primary-action-hover-surface: var(--v1-accent);
+  box-shadow: none;
+}
