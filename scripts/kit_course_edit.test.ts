@@ -22,11 +22,14 @@ describe("changing a course in the page", () => {
   it("the course page opens no pop-up for details or delete, and guards delete to drafts", () => {
     const page = readFileSync(new URL("../apps/web/src/v1/KitClassroom.tsx", import.meta.url), "utf8");
     expect(page).not.toMatch(/onEditCourseDetails|Course details/);
-    // Delete is offered for a draft only (now inside the course's menu); a
-    // published course's menu offers Unpublish, and says a draft can be deleted.
-    expect(page).toMatch(/onDeleteCourse && open\.course\.module_status === "draft" \? \(\s*<button[^>]*onClick=\{\(event\) => \{ closeMenu\(event\); void deleteCourse\(\); \}\}/);
+    // Delete is offered for a draft only (in the course's menu); a published
+    // course has one switch, which takes it back to a draft first.
+    expect(page).toMatch(/props\.onDeleteCourse && isDraft \? \(\s*<details[\s\S]{0,400}?onClick=\{\(event\) => \{ closeMenu\(event\); void deleteCourse\(\); \}\}/);
     expect(page.match(/void deleteCourse\(\)/g)).toHaveLength(1);
-    expect(page).toMatch(/A draft can be deleted\./);
+    expect(page).toMatch(/role="switch" aria-checked=\{!isDraft\}/);
+    expect(page).toMatch(/Unpublish: back to a draft only hosts see/);
+    // Nov 17: no edit mode and no form. A host's lesson is always the editor.
+    expect(page).not.toMatch(/Edit lesson<|Edit course<|KitCourseEdit\b/);
     const panel = readFileSync(new URL("../apps/web/src/components/WebCommunityKnowledgePanel.tsx", import.meta.url), "utf8");
     expect(panel).not.toMatch(/handleEditModule|openNewModuleModal|handleDeleteModule/);
     expect(panel).toMatch(/course\.module_status !== "draft"\) return \{ ok: false/);

@@ -3159,11 +3159,19 @@
 }
 
 :root[data-design="v1"] .kit-lesson-editor .lesson-editor-content {
-  min-height: 200px;
-  padding-bottom: 32px;
-  font-size: 16px;
-  line-height: 1.6;
+  min-height: 160px;
+  padding-bottom: 24px;
+  font-size: 17px;
+  line-height: 1.65;
 }
+
+/* For a host the lesson page is the editor: the bar of buttons above the
+   words is gone ("/" adds a block, and selecting words brings up formatting),
+   and the parts sit in the reader's order: video, title, words. */
+:root[data-design="v1"] .kit-lesson-editor .lesson-editor-toolbar { display: none; }
+:root[data-design="v1"] .kit-lesson .kit-lesson-video { order: 1; }
+:root[data-design="v1"] .kit-lesson .kit-lesson-title { order: 3; }
+:root[data-design="v1"] .kit-lesson .kit-lesson-editor { margin-top: 14px; }
 
 /* ---------- The finish: Linear-style (Neil, Nov 12) ----------
    The mock (docs/design/hifi-mock/style.css, "the finish") draws it and the
