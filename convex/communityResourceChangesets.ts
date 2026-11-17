@@ -8,6 +8,7 @@ import {
   communityResourceModuleIsLive,
   maybeDeleteStorageAsset,
   normalizeIdValue,
+  normalizeLessonLinks,
   normalizeName,
   normalizeOptionalText,
   normalizeOptionalUrl,
@@ -125,6 +126,12 @@ function normalizeChangesetModuleStatus(raw: unknown): "draft" | "live" {
   return requireResourceModuleStatusForWrite(raw);
 }
 
+// Changes that take something away from members for good. A batch holding
+// one is never applied on an AI's word alone: it waits for a person's click.
+export function communityResourceChangesetIsDestructive(operations: CommunityResourceBuilderChangesetOperation[]): boolean {
+  return operations.some((operation) => operation.op === "delete_page" || operation.op === "delete_category");
+}
+
 export function normalizeCommunityResourceBuilderChangesetOperations(
   rawOperations: unknown,
 ): CommunityResourceBuilderChangesetOperation[] {
@@ -193,7 +200,17 @@ export function normalizeCommunityResourceBuilderChangesetOperations(
           ? { resource_status: normalizeChangesetPageStatus(record.resource_status) }
           : null),
         ...(hasOwnField(record, "pinned") ? { pinned: Boolean(record.pinned) } : null),
+        ...(hasOwnField(record, "lesson_links") ? { lesson_links: normalizeLessonLinks(record.lesson_links) } : null),
       };
+    }
+    if (op === "reorder_pages" || op === "reorder_modules") {
+      const raw = op === "reorder_pages" ? record.resource_ids : record.module_ids;
+      if (!Array.isArray(raw) || raw.length < 1 || raw.length > 500) throw new Error("community_resource_changeset_order_required");
+      const ids = raw.map((id) => normalizeRequiredResourceRef(id, "community_resource_changeset_order_id"));
+      if (new Set(ids).size !== ids.length) throw new Error("community_resource_order_duplicate_id");
+      return op === "reorder_pages"
+        ? { op, module_id: normalizeRequiredResourceRef(record.module_id, "community_resource_changeset_module_id"), resource_ids: ids }
+        : { op, module_ids: ids };
     }
     if (op === "edit_page") {
       const next: CommunityResourceBuilderChangesetOperation = {
@@ -211,6 +228,7 @@ export function normalizeCommunityResourceBuilderChangesetOperations(
       if (hasOwnField(record, "url")) next.url = normalizeOptionalUrl(record.url) ?? null;
       if (hasOwnField(record, "resource_status")) next.resource_status = normalizeChangesetPageStatus(record.resource_status);
       if (hasOwnField(record, "pinned")) next.pinned = Boolean(record.pinned);
+      if (hasOwnField(record, "lesson_links")) next.lesson_links = normalizeLessonLinks(record.lesson_links);
       if (Object.keys(next).length <= 3) {
         throw new Error("community_resource_changeset_edit_page_empty");
       }
@@ -258,6 +276,8 @@ function communityResourceBuilderChangesetOperationSummary(
   if (operation.op === "create_page") return `Create page "${operation.title}"`;
   if (operation.op === "edit_page") return `Edit page ${operation.resource_id}`;
   if (operation.op === "move_resource") return `Move resource ${operation.resource_id}`;
+  if (operation.op === "reorder_pages") return `Reorder the ${operation.resource_ids.length} lessons of ${operation.module_id}`;
+  if (operation.op === "reorder_modules") return `Reorder the ${operation.module_ids.length} courses`;
   if (operation.op === "delete_page") return `Delete page ${operation.resource_id}`;
   if (operation.op === "delete_category") return `Delete empty category ${operation.module_id}`;
   return `Link source ${operation.source_resource_id} to page ${operation.page_resource_id}`;
@@ -338,6 +358,16 @@ function previewCommunityResourceBuilderChangesetOperation(
       marker: ">",
       title: trimChangesetPreviewTitle(operation.resource_id),
       preview: `Moves to ${changesetOperationModuleTarget(operation)}`,
+    };
+  }
+  if (operation.op === "reorder_pages" || operation.op === "reorder_modules") {
+    return {
+      op: operation.op,
+      marker: ">",
+      title: trimChangesetPreviewTitle(operation.op === "reorder_pages" ? operation.module_id : "Courses"),
+      preview: operation.op === "reorder_pages"
+        ? `Puts its ${operation.resource_ids.length} lessons in a new order.`
+        : `Puts the ${operation.module_ids.length} courses in a new order.`,
     };
   }
   if (operation.op === "delete_page") {
@@ -589,6 +619,21 @@ export async function buildCommunityResourceBuilderChangesetPreflight(args: {
       continue;
     }
 
+    if (operation.op === "reorder_pages" || operation.op === "reorder_modules") {
+      // Checked for real when it is applied (the batch's own earlier changes
+      // may add or move lessons); here, that what it names exists.
+      if (operation.op === "reorder_pages") {
+        await requireChangesetModuleRef({ ctx: args.ctx, communityId: args.communityId, moduleId: operation.module_id });
+      }
+      operationSummaries.push({
+        index,
+        op: operation.op,
+        target_id: operation.op === "reorder_pages" ? operation.module_id : "courses",
+        summary: communityResourceBuilderChangesetOperationSummary(operation),
+      });
+      continue;
+    }
+
     if (operation.op === "delete_page") {
       await requireChangesetResourceRef({
         ctx: args.ctx,
@@ -744,6 +789,7 @@ async function createPageFromChangesetOperation(args: {
     ...(sourceResourceId ? { sourceResourceId } : {}),
     title: args.operation.title,
     ...(args.operation.url ? { url: args.operation.url } : {}),
+    ...(args.operation.lesson_links?.length ? { lessonLinks: args.operation.lesson_links } : {}),
     sourceIngestionStatus: "not_required",
     sourceIngestionKind: "manual",
     pinned: Boolean(args.operation.pinned),
@@ -825,6 +871,9 @@ async function editPageFromChangesetOperation(args: {
     ...(hasOwnField(args.operation as any, "title") ? { title: normalizeName(args.operation.title) } : {}),
     ...(hasOwnField(args.operation as any, "url") ? { url: normalizeOptionalUrl(args.operation.url) } : {}),
     ...(hasOwnField(args.operation as any, "pinned") ? { pinned: Boolean(args.operation.pinned) } : {}),
+    ...(hasOwnField(args.operation as any, "lesson_links")
+      ? { lessonLinks: args.operation.lesson_links?.length ? args.operation.lesson_links : undefined }
+      : {}),
     ...(typeof nextSortOrder === "number" ? { sortOrder: nextSortOrder } : {}),
     updatedAt: args.nowMs,
   });
@@ -841,6 +890,38 @@ async function editPageFromChangesetOperation(args: {
   }
   const hydrated = await hydrateCommunityResourceBody(args.ctx, updated) ?? updated;
   return hydrated;
+}
+
+// A new order names every lesson of the course (or every course), each once:
+// the same rule as the app's own reordering, so nothing is left without a place.
+async function reorderFromChangesetOperation(args: {
+  ctx: any;
+  communityId: any;
+  operation: Extract<CommunityResourceBuilderChangesetOperation, { op: "reorder_pages" | "reorder_modules" }>;
+  nowMs: number;
+}): Promise<void> {
+  const { operation } = args;
+  let existing: string[];
+  if (operation.op === "reorder_pages") {
+    const moduleId = await requireResourceModuleForRole({ ctx: args.ctx, communityId: args.communityId,
+      moduleId: normalizeOptionalModuleId(operation.module_id), role: "page" });
+    const rows = (await args.ctx.db.query("communityResources" as any)
+      .withIndex("by_community", (q: any) => q.eq("communityId", args.communityId)).collect()) as CommunityResourceLike[];
+    existing = rows.filter((row) => resourceModuleIdentity(row.moduleId) === resourceModuleIdentity(moduleId) && normalizeResourceRole(row.role) === "page")
+      .map((row) => normalizeIdValue(row._id));
+  } else {
+    const rows = (await args.ctx.db.query("communityResourceModules" as any)
+      .withIndex("by_community", (q: any) => q.eq("communityId", args.communityId)).collect()) as CommunityResourceModuleLike[];
+    existing = rows.map((row) => normalizeIdValue(row._id));
+  }
+  const requested = operation.op === "reorder_pages" ? operation.resource_ids : operation.module_ids;
+  const known = new Set(existing);
+  if (requested.length !== existing.length || requested.some((id) => !known.has(id))) {
+    throw new Error(operation.op === "reorder_pages" ? "community_resource_order_stale" : "community_resource_module_order_stale");
+  }
+  // The order alone changes: updatedAt is left, so what else the batch names
+  // (and what the AI read before) still matches.
+  await Promise.all(requested.map((id, index) => args.ctx.db.patch(id as any, { sortOrder: (index + 1) * 1000 })));
 }
 
 export async function deletePageFromChangesetOperation(args: {
@@ -993,6 +1074,17 @@ export async function applyCommunityResourceBuilderChangesetOperations(args: {
         index,
         op: operation.op,
         resource_id: operation.resource_id,
+        summary: communityResourceBuilderChangesetOperationSummary(operation),
+      });
+      continue;
+    }
+
+    if (operation.op === "reorder_pages" || operation.op === "reorder_modules") {
+      await reorderFromChangesetOperation({ ctx: args.ctx, communityId: args.communityId, operation, nowMs: args.nowMs });
+      applied.push({
+        index,
+        op: operation.op,
+        ...(operation.op === "reorder_pages" ? { module_id: operation.module_id } : {}),
         summary: communityResourceBuilderChangesetOperationSummary(operation),
       });
       continue;
@@ -1168,6 +1260,9 @@ export async function stageCommunityResourceBuilderChangesetCore(args: {
   summary: string;
   operations: unknown[];
   idempotencyKey?: string | null;
+  // The batch will be applied at once by the caller, so it is not something
+  // waiting for a person and does not queue behind one that is.
+  applyingNow?: boolean;
 }) {
   await requireCommunityManager({
     ctx: args.ctx,
@@ -1258,7 +1353,7 @@ export async function stageCommunityResourceBuilderChangesetCore(args: {
     }
     liveActionableRows.push(changeset);
   }
-  if (liveActionableRows.length > 0) {
+  if (liveActionableRows.length > 0 && !args.applyingNow) {
     throw new Error("community_resource_changeset_already_pending");
   }
   const preflight = await buildCommunityResourceBuilderChangesetPreflight({

@@ -131,10 +131,12 @@ and marked "via AI" for everyone.
 
 Both lanes can list, read, and search the member repository. Both can write
 participation to an exact returned `channels/<slug>/` path. Only the builder lane
-can see `builder/` and stage resource changesets there. Terminal resource
-changeset decisions use authenticated product Apply/Reject controls; their agent
-capability paths and calls are unavailable. Builder capabilities are advertised
-individually under the mutation model below.
+can see `builder/` and send resource changesets there. A builder's own AI
+applies a changeset that takes nothing away as it sends it; one that deletes,
+and every changeset from the guide, is staged for the authenticated product
+Apply/Reject controls. There is no agent capability to apply, approve or
+reject a staged changeset. Builder capabilities are advertised individually
+under the mutation model below.
 
 The community-owned agent always uses the member lane, even when its
 operational sponsor is an owner or admin. It publishes with community-agent
@@ -162,8 +164,15 @@ approval capability below does not make the queue writable.
 `polynet_write` writes only through canonical domain owners:
 
 - `channels/<slug>/`: create a post or append a reply in that exact channel.
-- `builder/resources/`: stage a bounded changeset; it does not directly edit
-  live resources.
+- `builder/resources/`: a bounded changeset (up to 25 changes, all or
+  nothing): `create_module`, `edit_module` (including `module_status`),
+  `create_page`, `edit_page` (with `lesson_links`), `move_resource`,
+  `reorder_pages` (every lesson of a course, in order), `reorder_modules`
+  (every course, in order), `delete_page`, `delete_category`. Through a
+  builder's own AI (`external_mcp`) a changeset with no delete is applied at
+  once (`result.applied: true`); with a delete it is staged
+  (`result.needs_confirmation: true`) and a person applies or rejects it in
+  the app within 24 hours. From the guide every changeset is staged.
 
 `polynet_call` accepts only an exact operation and version returned by
 `capabilities/`. Current operations are:
@@ -279,8 +288,11 @@ owner; an uncertain receipt completion may recover its one committed outcome.
 An observed outcome creates one pending `attach_outcome` request and marks
 metabolism pending; it does not directly promote or validate accepted memory.
 
-Builder resource changesets are terminally decided only through the authenticated
-product Apply or Reject controls. They are not agent-callable capabilities.
+A staged builder resource changeset is terminally decided only through the
+authenticated product Apply or Reject controls; those are not agent-callable
+capabilities. A builder's own AI applying its own non-destructive changeset
+as it sends it is the one path that needs no click
+([specs/agent-access-v0.md](specs/agent-access-v0.md), "Builder parity").
 
 Unknown, undiscoverable, wrong-version, cross-community, and unauthorized
 operations fail closed.
