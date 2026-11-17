@@ -245,7 +245,16 @@ Every `polynet_call` answers in the published output shape:
 fails if any input they accept is missing from the published call schema, or
 an answer lacks a required output field.
 
-Writes a person makes through their own AI (`external_mcp`) share one budget of 60 a minute
-(`convex/memberWriteRateLimit.ts`). Over it, the call is `rate_limited`
-with `retry_after_ms`. Reads, presence, typing and read positions don't
+What a person does through their own AI (`external_mcp`) or a community's
+site comes out of budgets, a minute and a day: reads, searches, posts and
+replies, new posts in one channel, reactions, and builder changes
+([specs/agent-access-v0.md](specs/agent-access-v0.md) has the numbers;
+`shared/operationCatalog.ts` says which call spends which;
+`convex/accessBudgets.ts` counts). Over one, the call is `rate_limited` with
+`retry_after_ms`, `budget` and `window`, and spends nothing. A site is
+counted only for what it writes. Presence, typing and read positions don't
 count; the community agent is bounded by AI quota instead.
+
+Every operation is declared in `shared/operationCatalog.ts` with its lens,
+effect, budget and plan. The executor advertises and runs only what is
+listed there.

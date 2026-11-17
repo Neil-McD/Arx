@@ -16,7 +16,7 @@ import { selectRuntimePolynetSemanticMount } from "../shared/polynetSemanticRepo
 const modules = import.meta.glob([
   "./communityResources.ts",
   "./communityLessonProgress.ts",
-  "./memberWriteRateLimit.ts",
+  "./accessBudgets.ts",
   "./communityAdmin.ts",
   "./communityCapabilityContext.ts",
   "./communityResourceEvidence.ts",

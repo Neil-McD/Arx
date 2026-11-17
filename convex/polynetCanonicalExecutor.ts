@@ -3,6 +3,7 @@ import { DRAFT_ONLY_REFUSAL_MESSAGE } from "../shared/communityTurnContract";
 import { renderCommunityNote, type CommunityNote } from "../shared/communityNotes";
 import { renderBriefDocument } from "../shared/communityBriefs";
 import { internal } from "./_generated/api";
+import { budgetTakesFor, callOperation, CALL_OPERATION_NAMES } from "../shared/operationCatalog";
 import { renderCommunityHandbook } from "../shared/communityHandbook";
 import { buildCommunitySearchQuery } from "../shared/communitySearchText";
 import type { CommunityEvidenceSurface } from "../shared/communityEvidenceContract.ts";
@@ -1276,8 +1277,8 @@ async function executeCanonicalList(args: {
   }
   if (target.localPath === POLYNET_CAPABILITIES_DIRECTORY_PATH) {
     const operations = [
-      ...[REACT_OPERATION, LESSON_DONE_OPERATION, MARK_READ_OPERATION, PRESENCE_HEARTBEAT_OPERATION, TYPING_SET_OPERATION, PERSONAL_MEMORY_OPERATION,
-        ...ADMISSION_OPERATIONS, REMOVE_POSTS_OPERATION, ...COMMUNITY_OPERATIONS, ...MEMBERS_OPERATIONS].filter(operation => capabilityDocument({ target, operation,
+      // Only what the operations list declares, in its order (shared/operationCatalog.ts).
+      ...(CALL_OPERATION_NAMES as string[]).filter(operation => capabilityDocument({ target, operation,
         evidenceSurface: args.evidenceSurface, principalKind: args.principalKind })),
     ];
     return {
@@ -2450,6 +2451,7 @@ async function executeCanonicalCall(args: {
     );
   }
   if (
+    !callOperation(operation) ||
     !capabilityDocument({
       target,
       operation,
@@ -2767,18 +2769,35 @@ async function executeLiveMemberCall(args: {
   }
 }
 
-// Writes a person makes through their own AI or their site come out of a
-// per-minute budget. Keeping a site alive (presence, typing, read position)
-// doesn't count.
-const WRITE_BUDGET_EXEMPT_OPERATIONS = [PRESENCE_HEARTBEAT_OPERATION, TYPING_SET_OPERATION, MARK_READ_OPERATION];
-async function takeMemberWrite(args: { ctx: any; userId: string; principalKind: PolynetPrincipalKind; toolName: PolynetCanonicalToolName },
+// What a person does through their own AI or a community's site comes out of
+// budgets, per minute and per day (shared/operationCatalog.ts says which call
+// spends which; convex/accessBudgets.ts counts). The guide and the app's own
+// screens are not counted here. Counted before anything runs.
+const BUDGET_WORDS: Record<string, string> = {
+  read: "reads", search: "searches", post: "posts and replies", post_channel: "new posts in this channel",
+  light: "reactions", builder_change: "changes",
+};
+async function takeBudgets(args: { ctx: any; userId: string; principalKind: PolynetPrincipalKind; toolName: PolynetCanonicalToolName },
   input: Record<string, unknown>): Promise<PolynetCanonicalExecutionResult | null> {
   if (args.principalKind !== "external_mcp" && args.principalKind !== "community_app") return null;
-  if (args.toolName === "polynet_call" && WRITE_BUDGET_EXEMPT_OPERATIONS.includes(String(input.operation ?? ""))) return null;
-  const taken = await args.ctx.runMutation((internal as any).memberWriteRateLimit.takeMemberWriteInternal, { userId: args.userId });
-  return taken.ok ? null : canonicalError("rate_limited",
-    `Too many changes in a minute. Try again in ${Math.max(1, Math.ceil(taken.retryAfterMs / 1000))} seconds.`,
-    { retry_after_ms: taken.retryAfterMs });
+  const parsed = parsePolynetSemanticRepositoryPath(input.path ?? input.target);
+  const community = parsed.ok && parsed.kind === "community" ? parsed : null;
+  const takes = budgetTakesFor({
+    ownAi: args.principalKind === "external_mcp", toolName: args.toolName,
+    operation: typeof input.operation === "string" ? input.operation : null,
+    mode: typeof input.mode === "string" ? input.mode : null,
+    reply: Boolean(input.content && typeof input.content === "object" && (input.content as Record<string, unknown>).root_id),
+    communitySlug: community?.communitySlug ?? null, localPath: community?.localPath ?? null,
+  });
+  if (!takes.length) return null;
+  const key = typeof input.idempotencyKey === "string" && input.idempotencyKey ? input.idempotencyKey.slice(0, 200) : undefined;
+  const taken = await args.ctx.runMutation((internal as any).accessBudgets.takeInternal, { userId: args.userId, takes, ...(key ? { key } : {}) });
+  if (taken.ok) return null;
+  const seconds = Math.max(1, Math.ceil(taken.retryAfterMs / 1000));
+  const wait = taken.window === "day" ? `in about ${Math.max(1, Math.ceil(seconds / 3600))} hours` : `in ${seconds} seconds`;
+  return canonicalError("rate_limited",
+    `Too many ${BUDGET_WORDS[taken.budget] ?? "requests"} ${taken.window === "day" ? "today" : "in a minute"}. Try again ${wait}.`,
+    { retry_after_ms: taken.retryAfterMs, budget: taken.budget, window: taken.window });
 }
 
 export async function executePolynetCanonicalTool(args: {
@@ -2836,6 +2855,8 @@ export async function executePolynetCanonicalTool(args: {
     userId,
     input,
   };
+  const limited = await takeBudgets(args, input);
+  if (limited) return limited;
   if (args.toolName === "polynet_list" || args.toolName === "polynet_read") {
     const result = args.toolName === "polynet_list"
       ? await executeCanonicalList(common)
@@ -2845,8 +2866,6 @@ export async function executePolynetCanonicalTool(args: {
   }
   if (args.toolName === "polynet_search")
     return await executeCanonicalSearch(common);
-  const limited = await takeMemberWrite(args, input);
-  if (limited) return limited;
   if (args.toolName === "polynet_write")
     return await executeCanonicalWrite(common);
   return await executeCanonicalCall(common);

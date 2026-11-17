@@ -95,7 +95,7 @@ function mapCreateCommunityErrorMessage(error: unknown): string {
     return "Published communities need a name, one-liner, avatar, and banner.";
   }
   if (message.includes("community_owner_limit_reached")) {
-    return "You've reached the limit of live communities. Archive one to start another.";
+    return "Free accounts hold one community. Add the Agent plan to start another, or archive the one you have.";
   }
   if (message.includes("community_slug_invalid")) {
     return "Pick a different web address: 3-32 letters, numbers and dashes, and not a reserved word like admin or www.";
