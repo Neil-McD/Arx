@@ -65,6 +65,17 @@ export function coursePath<C extends { id: string }, L extends { id: string }>(
   });
 }
 
+// Dropping one thing in a list before another (or at the end, with null).
+// Null when nothing would move, so nothing is saved.
+export function orderAfterDrop(ids: string[], dragged: string, before: string | null): string[] | null {
+  if (!ids.includes(dragged) || dragged === before) return null;
+  const rest = ids.filter((id) => id !== dragged);
+  const at = before === null ? rest.length : rest.indexOf(before);
+  if (at < 0) return null;
+  const next = [...rest.slice(0, at), dragged, ...rest.slice(at)];
+  return next.every((id, index) => id === ids[index]) ? null : next;
+}
+
 // One page of the course shelf.
 export function pageOf<T>(items: T[], page: number, size: number): { items: T[]; page: number; pages: number; from: number; to: number } {
   const pages = Math.max(1, Math.ceil(items.length / size));

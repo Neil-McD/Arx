@@ -27,12 +27,14 @@ export function KitCourseInline(props: {
   coverClassName: string;
   coverStyle?: React.CSSProperties;
   stats: string;
+  // A course just made: its name is ready to type over.
+  startRenaming?: boolean;
   onSave: (patch: CourseEditPatch) => Promise<{ ok: true } | { ok: false; message: string }>;
 }) {
   const { course } = props;
   const about = (course.description_md ?? "").split("\n")[0].trim();
-  const [field, setField] = useState<"name" | "about" | null>(null);
-  const [value, setValue] = useState("");
+  const [field, setField] = useState<"name" | "about" | null>(props.startRenaming ? "name" : null);
+  const [value, setValue] = useState(props.startRenaming ? course.name : "");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const fileInput = useRef<HTMLInputElement | null>(null);
@@ -76,6 +78,7 @@ export function KitCourseInline(props: {
   const start = (which: "name" | "about") => { setValue(which === "name" ? course.name : about); setError(null); setField(which); };
   const input = (label: string, max: number) => (
     <input className={cx("kinline-input")} value={value} autoFocus maxLength={max} aria-label={label} disabled={busy}
+      onFocus={(event) => event.currentTarget.select()}
       onChange={(event) => setValue(event.target.value)} onBlur={commit}
       onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); commit(); } else if (event.key === "Escape") { event.stopPropagation(); setField(null); setError(null); } }} />
   );

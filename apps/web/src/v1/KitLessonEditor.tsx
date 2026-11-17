@@ -89,16 +89,19 @@ export function KitLessonEditor(props: {
   // The lesson's resources: links members can open under it.
   const [links, setLinks] = useState<LessonLink[]>(resource.lesson_links ?? []);
   const [linkAddress, setLinkAddress] = useState("");
-  const [linkName, setLinkName] = useState("");
+  const [addingLink, setAddingLink] = useState(false);
   const addLink = () => {
-    const link = readLessonLink(linkAddress, linkName);
+    const link = readLessonLink(linkAddress, "");
     if (!link) { setError("That doesn't look like a link. Paste the full address."); return; }
     if (links.some((entry) => entry.url === link.url)) { setError("That link is already on this lesson."); return; }
     setError(null);
     setLinks([...links, link]);
     setLinkAddress("");
-    setLinkName("");
+    setAddingLink(false);
   };
+  // A link's name is changed where it sits; emptied, it goes back to where the link goes.
+  const nameLink = (url: string, name: string) => setLinks(links.map((entry) => (entry.url === url ? { ...entry, title: name.slice(0, 120) } : entry)));
+  const settleLinkName = (url: string) => setLinks(links.map((entry) => (entry.url === url && !entry.title.trim() ? readLessonLink(url, "") ?? entry : entry.url === url ? { ...entry, title: entry.title.trim() } : entry)));
   const provider = videoLabel(video);
   const embed = provider ? parseEmbedUrl(video.trim()) : null;
   const draft = { title, video, body: bodyTouched ? bodyRef.current : resource.body_md ?? "", links };
@@ -116,7 +119,7 @@ export function KitLessonEditor(props: {
     setChangingVideo(false);
     setLinks(resource.lesson_links ?? []);
     setLinkAddress("");
-    setLinkName("");
+    setAddingLink(false);
     bodyRef.current = resource.body_md ?? "";
     setBodyTouched(false);
     setEditorKey((key) => key + 1);
@@ -189,20 +192,26 @@ export function KitLessonEditor(props: {
       <div className={`kit-lesson-after ${cx("kres")}`}>
         <span className={cx("lab")}>Resources for this lesson</span>
         {links.map((link) => (
-          <div key={link.url} className={cx("kresrow")}>
-            <Icon name="link" /><span><b>{link.title}</b><em>{lessonLinkPlace(link)}</em></span>
+          <div key={link.url} className={cx("kresrow", "edit")}>
+            <Icon name="link" />
+            <input className={cx("kresname")} value={link.title} aria-label="What to call this link" maxLength={120}
+              onChange={(event) => nameLink(link.url, event.target.value)} onBlur={() => settleLinkName(link.url)}
+              onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); }} />
+            <em>{lessonLinkPlace(link)}</em>
             <Btn small txt onClick={() => setLinks(links.filter((entry) => entry.url !== link.url))}>Remove</Btn>
           </div>
         ))}
-        {links.length < LESSON_LINKS_MAX ? (
-          <div className={cx("kresadd")}>
-            <input value={linkAddress} onChange={(event) => setLinkAddress(event.target.value)} placeholder="Paste a link" aria-label="A link for this lesson" inputMode="url"
-              onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); addLink(); } }} />
-            <input value={linkName} onChange={(event) => setLinkName(event.target.value)} placeholder="What to call it (optional)" aria-label="What to call the link" maxLength={120}
-              onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); addLink(); } }} />
-            <button type="button" className={cx("btn sm")} disabled={!linkAddress.trim()} onClick={addLink}>Add</button>
-          </div>
-        ) : null}
+        {/* One line: paste the address, press Enter. Its name is changed in the row it becomes. */}
+        {links.length >= LESSON_LINKS_MAX ? null : addingLink ? (
+          <label className={cx("kaddline")}>
+            <Icon name="link" />
+            <input value={linkAddress} autoFocus onChange={(event) => setLinkAddress(event.target.value)} placeholder="Paste a link, then press Enter" aria-label="A link for this lesson" inputMode="url"
+              onBlur={() => { if (!linkAddress.trim()) setAddingLink(false); }}
+              onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); addLink(); } else if (event.key === "Escape") { setLinkAddress(""); setAddingLink(false); } }} />
+          </label>
+        ) : (
+          <button type="button" className={cx("kaddres")} onClick={() => setAddingLink(true)}><Icon name="plus" />Add a link</button>
+        )}
         <span className={cx("sub")}>Members open these from the lesson, and your guide reads them too.</span>
       </div>
 
