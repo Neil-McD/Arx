@@ -51,7 +51,7 @@ export function WebCommunitySwitcher(props: WebCommunitySwitcherProps) {
       if (!box) return;
       // A collapsed left column is only an icon wide: open beside it instead.
       setAnchor(box.width < 120
-        ? { top: box.top, left: box.right + 8, width: 300 }
+        ? { top: box.top, left: box.right + 8, width: 320 }
         : { top: box.bottom + 2, left: box.left + 6, width: box.width - 12 });
     };
     place();
@@ -136,7 +136,6 @@ export function WebCommunitySwitcher(props: WebCommunitySwitcherProps) {
         type="button"
         role="menuitemradio"
         aria-checked={isCurrent}
-        title={community.name}
         onClick={() => choose(() => props.onSelectCommunity(community))}
       >
         <CommunityAvatar
@@ -178,7 +177,7 @@ export function WebCommunitySwitcher(props: WebCommunitySwitcherProps) {
 
   const menu = isOpen && anchor ? createPortal(
         <div className="community-switcher-popover is-floating" id={menuId} ref={popoverRef} onKeyDown={onMenuKeyDown}
-          style={{ top: anchor.top, left: anchor.left, width: Math.max(300, anchor.width) }}>
+          style={{ top: anchor.top, left: anchor.left, width: Math.max(320, anchor.width) }}>
           {searchable ? (
             <label className="community-switcher-search">
               <Search size={14} aria-hidden="true" />
