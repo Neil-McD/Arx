@@ -1273,7 +1273,7 @@
 .app .kl .kdot .ic{width:11px;height:11px;stroke-width:2.4;color:inherit}
 .app .klist-foot{display:flex;align-items:center;gap:9px;width:100%;padding:12px 14px;border-top:1px solid var(--line);font-size:13.5px;color:var(--ink2);cursor:pointer}
 .app .klist-foot:hover{background:var(--s2);color:var(--ink)}
-.app .klist-foot .ic{width:15px;height:15px;color:var(--ink3)}.app .klist-foot.ask .ic{color:var(--aurora)}
+.app .klist-foot .ic{width:15px;height:15px;color:var(--ink3)}.app .klist-foot.guide .ic{color:var(--aurora)}
 .app .kfold{margin-bottom:12px;border-radius:12px;background:var(--panel2);border:1px solid var(--line)}
 .app .kfold summary{display:flex;align-items:center;gap:10px;padding:12px 14px;font-weight:550;cursor:pointer;list-style:none}
 .app .kfold summary::-webkit-details-marker{display:none}
