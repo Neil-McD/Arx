@@ -747,7 +747,7 @@ export function KitClassroom(props: {
                 courseDrag.before === null && at === courses.length - 1 && "dropafter")} {...(canDrag ? courseDrag.item(course.id) : null)}>
               {/* Held by its grip and dropped where it should go; the arrow keys move it one place. */}
               {canDrag ? (
-                <button type="button" className={cx("kgrip", "card")} aria-label={`Move ${course.name}. Drag, or use the arrow keys.`} title="Drag to reorder" disabled={movingCourse}
+                <button type="button" className={cx("kgrip", "oncard")} aria-label={`Move ${course.name}. Drag, or use the arrow keys.`} title="Drag to reorder" disabled={movingCourse}
                   onKeyDown={(event) => { if (event.key === "ArrowLeft" || event.key === "ArrowUp") { event.preventDefault(); void moveCourse(at, -1); } else if (event.key === "ArrowRight" || event.key === "ArrowDown") { event.preventDefault(); void moveCourse(at, 1); } }}
                   {...courseDrag.grip(course.id)}><GripDots /></button>
               ) : null}

@@ -11,7 +11,17 @@ export function useDragOrder(ids: string[], onOrder: (ids: string[]) => void, ax
   const [before, setBefore] = useState<string | null | undefined>(undefined);
   const idsRef = useRef(ids);
   idsRef.current = ids;
-  const end = () => { setDragging(null); setBefore(undefined); };
+  // What is held, kept outside the render too: a drop can arrive before the
+  // next draw, and must not read what was true a moment earlier.
+  const heldRef = useRef<string | null>(null);
+  const end = () => { heldRef.current = null; setDragging(null); setBefore(undefined); };
+  // Where it would land: before this item, or past its middle, before the next.
+  const landing = (event: DragEvent<HTMLElement>, id: string): string | null => {
+    const box = event.currentTarget.getBoundingClientRect();
+    const past = axis === "y" ? event.clientY > box.top + box.height / 2 : event.clientX > box.left + box.width / 2;
+    const list = idsRef.current;
+    return past ? list[list.indexOf(id) + 1] ?? null : id;
+  };
   return {
     dragging,
     before: dragging ? before : undefined,
@@ -22,6 +32,7 @@ export function useDragOrder(ids: string[], onOrder: (ids: string[]) => void, ax
         event.dataTransfer.setData("text/plain", id);
         const whole = event.currentTarget.closest("[data-drag-item]");
         if (whole) event.dataTransfer.setDragImage(whole, 24, 18);
+        heldRef.current = id;
         setDragging(id);
       },
       onDragEnd: end,
@@ -29,19 +40,17 @@ export function useDragOrder(ids: string[], onOrder: (ids: string[]) => void, ax
     item: (id: string) => ({
       "data-drag-item": id,
       onDragOver: (event: DragEvent<HTMLElement>) => {
-        if (!dragging) return;
+        if (!heldRef.current) return;
         event.preventDefault();
         event.dataTransfer.dropEffect = "move";
-        const box = event.currentTarget.getBoundingClientRect();
-        const past = axis === "y" ? event.clientY > box.top + box.height / 2 : event.clientX > box.left + box.width / 2;
-        const list = idsRef.current;
-        const next = past ? list[list.indexOf(id) + 1] ?? null : id;
+        const next = landing(event, id);
         setBefore((current) => (current === next ? current : next));
       },
       onDrop: (event: DragEvent<HTMLElement>) => {
-        if (!dragging) return;
+        const held = heldRef.current;
+        if (!held) return;
         event.preventDefault();
-        const next = before === undefined ? null : orderAfterDrop(idsRef.current, dragging, before);
+        const next = orderAfterDrop(idsRef.current, held, landing(event, id));
         end();
         if (next) onOrder(next);
       },
