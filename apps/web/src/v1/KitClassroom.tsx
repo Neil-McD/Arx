@@ -166,6 +166,7 @@ export function KitClassroom(props: {
   const [creatingCourse, setCreatingCourse] = useState(false);
   const [newCourseError, setNewCourseError] = useState<string | null>(null);
   const renameNextCourseRef = useRef(false);
+  const [namingCourseId, setNamingCourseId] = useState<string | null>(null);
   const newCourse = async () => {
     if (creatingCourse || !props.onCreateCourse) return;
     setCreatingCourse(true);
@@ -245,6 +246,9 @@ export function KitClassroom(props: {
     if (!open) return;
     const fresh = renameNextCourseRef.current;
     renameNextCourseRef.current = false;
+    // Its name stays ready to type over until the host has named it, however
+    // the page is redrawn around it while the first lesson arrives.
+    setNamingCourseId(fresh ? open.course.id : null);
     const tools = props.canManage ? props.lessonEditing : null;
     if (!fresh || !tools || open.lessons.length > 0) return;
     void tools.addLesson(open.course.id).then((id) => { if (id) { wantedLessonRef.current = id; chooseLesson(id); } }).catch(() => undefined);
@@ -581,7 +585,7 @@ export function KitClassroom(props: {
   const lessonPanelTop = open && openProgress ? (
       <div className={cx("klist-top")}>
         {props.canManage && props.onSaveCourse ? (
-          <KitCourseInline key={open.course.id} course={open.course} stats={courseProgressWords} startRenaming={renameNextCourseRef.current}
+          <KitCourseInline key={open.course.id} course={open.course} stats={courseProgressWords} startRenaming={renameNextCourseRef.current || namingCourseId === open.course.id} onRenameEnd={() => setNamingCourseId(null)}
             coverClassName={cx("kcover", "klist-cover", open.course.banner_url ? "" : "knocover")} coverStyle={openCoverStyle}
             onSave={(patch) => props.onSaveCourse!(open.course.id, patch)} />
         ) : (

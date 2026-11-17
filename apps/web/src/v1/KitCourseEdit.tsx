@@ -29,6 +29,8 @@ export function KitCourseInline(props: {
   stats: string;
   // A course just made: its name is ready to type over.
   startRenaming?: boolean;
+  // Told once the name has been typed or left alone.
+  onRenameEnd?: () => void;
   onSave: (patch: CourseEditPatch) => Promise<{ ok: true } | { ok: false; message: string }>;
 }) {
   const { course } = props;
@@ -45,7 +47,7 @@ export function KitCourseInline(props: {
     setError(null);
     try {
       const result = await props.onSave(patch);
-      if (result.ok) setField(null); else setError(result.message);
+      if (result.ok) { setField(null); props.onRenameEnd?.(); } else setError(result.message);
     } finally {
       setBusy(false);
     }
@@ -53,7 +55,7 @@ export function KitCourseInline(props: {
   const commit = () => {
     if (!field || busy) return;
     const next = value.trim();
-    if (next === (field === "name" ? course.name : about)) { setField(null); return; }
+    if (next === (field === "name" ? course.name : about)) { setField(null); props.onRenameEnd?.(); return; }
     // Only the first line of the description is edited here; the rest is kept.
     const rest = (course.description_md ?? "").split("\n").slice(1).join("\n");
     void send(courseEditPatch({
@@ -80,7 +82,7 @@ export function KitCourseInline(props: {
     <input className={cx("kinline-input")} value={value} autoFocus maxLength={max} aria-label={label} disabled={busy}
       onFocus={(event) => event.currentTarget.select()}
       onChange={(event) => setValue(event.target.value)} onBlur={commit}
-      onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); commit(); } else if (event.key === "Escape") { event.stopPropagation(); setField(null); setError(null); } }} />
+      onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); commit(); } else if (event.key === "Escape") { event.stopPropagation(); setField(null); setError(null); props.onRenameEnd?.(); } }} />
   );
   return (
     <>
