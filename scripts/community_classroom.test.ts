@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { continueLesson, courseLessons, courseProgress, coursePath, pageOf } from "../shared/communityClassroom";
+import { continueLesson, courseLessons, courseProgress, coursePath, orderAfterDrop, pageOf } from "../shared/communityClassroom";
 
 const lesson = (id: string, module_id: string, sort_order: number | null, role = "page") =>
   ({ id, module_id, resource_role: role, title: id, sort_order, created_at: `2026-01-0${sort_order ?? 9}` });
@@ -58,4 +58,17 @@ test("the path puts you on the first unfinished course, in the host's order", ()
 test("a course with no lessons is never the step you are on", () => {
   const courses = [{ course: { id: "empty" }, lessons: [] as Array<{ id: string }> }, { course: { id: "real" }, lessons: [{ id: "a" }] }];
   expect(coursePath(courses, new Set()).map((step) => step.state)).toEqual(["later", "now"]);
+});
+
+test("dropping a lesson or a course moves only that one, and a drop that changes nothing saves nothing", () => {
+  const ids = ["a", "b", "c", "d"];
+  expect(orderAfterDrop(ids, "d", "b")).toEqual(["a", "d", "b", "c"]);
+  expect(orderAfterDrop(ids, "a", null)).toEqual(["b", "c", "d", "a"]);
+  expect(orderAfterDrop(ids, "a", "c")).toEqual(["b", "a", "c", "d"]);
+  // Onto itself, back where it was, or something that is not in the list.
+  expect(orderAfterDrop(ids, "b", "b")).toBeNull();
+  expect(orderAfterDrop(ids, "b", "c")).toBeNull();
+  expect(orderAfterDrop(ids, "d", null)).toBeNull();
+  expect(orderAfterDrop(ids, "x", "a")).toBeNull();
+  expect(orderAfterDrop(ids, "a", "x")).toBeNull();
 });

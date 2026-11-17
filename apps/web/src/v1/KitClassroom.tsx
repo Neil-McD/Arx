@@ -38,6 +38,7 @@ import { PanelAction, PanelLine, PanelPart, usePanelSettled } from "./KitPanel";
 import { KitLessonEditor, lessonLinkPlace, type LessonPatch } from "./KitLessonEditor";
 import { cx, Icon, KitApp, Rail, TextLink, useMinWidth } from "./kit";
 import { KitCourseInline, type CourseEditPatch } from "./KitCourseEdit";
+import { useDragOrder } from "./useDragOrder";
 import { askInApp } from "../../../../shared/inAppConfirm";
 import { KitKnowledgeAddButtons, KitKnowledgeList, type KnowledgeAddResult } from "./KitKnowledgeList";
 import { useCommunityAgentOn } from "../controllers/communityAgentOn";
@@ -76,6 +77,11 @@ function hostLead(courses: CommunityResourceModule[], learning: number): string 
   if (drafts.length > 1) return `${drafts.length} courses are drafts. Members can't see them yet.`;
   if (learning > 0) return `Members have started ${learning} ${learning === 1 ? "course" : "courses"} between them.`;
   return "Your courses are ready for members.";
+}
+
+// Six dots: something you can pick up.
+function GripDots() {
+  return <svg viewBox="0 0 10 16" width="10" height="16" aria-hidden="true"><circle cx="2.5" cy="3" r="1.3" /><circle cx="7.5" cy="3" r="1.3" /><circle cx="2.5" cy="8" r="1.3" /><circle cx="7.5" cy="8" r="1.3" /><circle cx="2.5" cy="13" r="1.3" /><circle cx="7.5" cy="13" r="1.3" /></svg>;
 }
 
 export function KitClassroom(props: {
@@ -145,10 +151,7 @@ export function KitClassroom(props: {
   const lessonDirtyRef = useRef(false);
   const { onLessonDirtyChange } = props;
   const noteLessonDirty = useCallback((dirty: boolean) => { lessonDirtyRef.current = dirty; onLessonDirtyChange?.(dirty); }, [onLessonDirtyChange]);
-  // Arrange: the shelf shows every course with two arrows, until Done.
-  const [arranging, setArranging] = useState(false);
   const [movingCourse, setMovingCourse] = useState(false);
-  useEffect(() => { if (!props.canManage) setArranging(false); }, [props.canManage]);
   const [deletingCourse, setDeletingCourse] = useState(false);
   const [courseError, setCourseError] = useState<string | null>(null);
   useEffect(() => { setCourseError(null); }, [props.openCourseId]);
@@ -157,19 +160,20 @@ export function KitClassroom(props: {
   // brief already finds them): where Knowledge is thin.
   const [waiting, setWaiting] = useState<Array<{ author: string; channel: string; text: string; hoursAgo: number }>>([]);
   // "New course": a name, then the draft opens for its lessons.
-  const [courseName, setCourseName] = useState<string | null>(null);
+  // A new course is made at once, as a draft, and opens with the cursor in
+  // its name (Nov 17: no form to fill in first).
   const [creatingCourse, setCreatingCourse] = useState(false);
   const [newCourseError, setNewCourseError] = useState<string | null>(null);
-  const newCourse = () => { setCourseName(""); setNewCourseError(null); };
-  const createCourse = async () => {
-    const name = (courseName ?? "").trim();
-    if (!name || creatingCourse || !props.onCreateCourse) return;
+  const renameNextCourseRef = useRef(false);
+  const newCourse = async () => {
+    if (creatingCourse || !props.onCreateCourse) return;
     setCreatingCourse(true);
     setNewCourseError(null);
+    renameNextCourseRef.current = true;
     try {
-      const result = await props.onCreateCourse(name.slice(0, 80), []);
-      if (result.ok) setCourseName(null); else setNewCourseError(result.message);
-    } catch { setNewCourseError("The course couldn't be made. Try again."); } finally { setCreatingCourse(false); }
+      const result = await props.onCreateCourse("Untitled course", []);
+      if (!result.ok) { renameNextCourseRef.current = false; setNewCourseError(result.message); }
+    } catch { renameNextCourseRef.current = false; setNewCourseError("The course couldn't be made. Try again."); } finally { setCreatingCourse(false); }
   };
   useEffect(() => {
     if (!props.canManage) { setWaiting([]); return; }
@@ -234,6 +238,8 @@ export function KitClassroom(props: {
     .map((course) => ({ course, lessons: courseLessons(props.resources, course.id) })), [props.modules, props.resources, props.canManage]);
   const done = useMemo(() => new Set(doneAt.keys()), [doneAt]);
   const open = courses.find((entry) => entry.course.id === props.openCourseId) ?? null;
+  // The new course has opened with its name ready to type over: once only.
+  useEffect(() => { if (open) renameNextCourseRef.current = false; }, [open?.course.id]); // eslint-disable-line react-hooks/exhaustive-deps
   const summaryBy = useMemo(() => new Map(summary.map((row) => [row.module_id, row])), [summary]);
 
   // Opening a course lands on its next lesson (or the first). Progress may
@@ -389,6 +395,12 @@ export function KitClassroom(props: {
   ].filter(Boolean);
   const shelfRail = shelfSettled && shelfParts.length ? <>{shelfParts}</> : null;
 
+  // Courses are put in order by dragging a card by its grip.
+  const courseDrag = useDragOrder(courses.map((entry) => entry.course.id), (ids) => {
+    if (!props.onReorderCourses || movingCourse) return;
+    setMovingCourse(true);
+    void Promise.resolve(props.onReorderCourses(ids)).finally(() => setMovingCourse(false));
+  }, "x");
   const moveCourse = async (index: number, by: -1 | 1) => {
     const ids = courseOrderAfterMove(courses.map((entry) => entry.course.id), index, by);
     if (!ids || !props.onReorderCourses || movingCourse) return;
@@ -442,6 +454,9 @@ export function KitClassroom(props: {
     </>
   ) : null;
   const openProgress = open ? courseProgress(open.lessons, done) : null;
+  // Lessons are put in order by dragging one by its grip (Move up and Move
+  // down stay in each row's menu, for the keyboard).
+  const lessonDrag = useDragOrder(open?.lessons.map((lesson) => lesson.id) ?? [], (ids) => { if (open && editingTools) void editingTools.reorder(open.course.id, ids); }, "y");
   // A lesson leaves this course (moved, or deleted after one question); the
   // page lands on its neighbour.
   const afterLessonLeft = (id: string) => {
@@ -463,7 +478,9 @@ export function KitClassroom(props: {
   const lessonList = open ? (
     <div className={cx("klrows")}>
       {open.lessons.map((lesson, index) => (
-        <div key={lesson.id} className={cx("kl-row")}>
+        <div key={lesson.id} className={cx("kl-row", editingTools && "host", lessonDrag.dragging === lesson.id && "dragging", lessonDrag.before === lesson.id && "dropbefore",
+          lessonDrag.before === null && index === open.lessons.length - 1 && "dropafter")} {...(editingTools ? lessonDrag.item(lesson.id) : null)}>
+          {editingTools ? <span className={cx("kgrip")} title="Drag to reorder" aria-hidden="true" {...lessonDrag.grip(lesson.id)}><GripDots /></span> : null}
           <button type="button" className={cx("kl", lesson.id === lessonId && "on", done.has(lesson.id) && "d")} aria-current={lesson.id === lessonId ? "true" : undefined}
             onClick={() => void pickLesson(lesson.id)}>
             <span className={cx("kdot", done.has(lesson.id) ? "done" : lesson.id === lessonId ? "now" : "")}>{done.has(lesson.id) ? <Icon name="check" /> : null}</span>
@@ -507,7 +524,7 @@ export function KitClassroom(props: {
   const lessonPanelTop = open && openProgress ? (
       <div className={cx("klist-top")}>
         {props.canManage && props.onSaveCourse ? (
-          <KitCourseInline key={open.course.id} course={open.course} stats={courseProgressWords}
+          <KitCourseInline key={open.course.id} course={open.course} stats={courseProgressWords} startRenaming={renameNextCourseRef.current}
             coverClassName={cx("kcover", "klist-cover", open.course.banner_url ? "" : coverTint(open.course.id))} coverStyle={openCoverStyle}
             onSave={(patch) => props.onSaveCourse!(open.course.id, patch)} />
         ) : (
@@ -716,48 +733,25 @@ export function KitClassroom(props: {
         <div className={cx("khead")}>
           <span className={cx("lab")}>{props.canManage ? "Courses" : "All courses"}</span>
           {props.canManage ? null : <span className={cx("lab")} style={{ marginLeft: 10, fontWeight: 400 }}>In the order your host suggests. Open any of them.</span>}
-          {arranging ? <span className={cx("sub")} style={{ marginLeft: 10 }}>Members see them in this order.</span> : null}
-          <span style={{ marginLeft: "auto", display: "flex", gap: 6 }}>
-            {props.onReorderCourses && props.canManage && courses.length > 1 ? (
-              <button type="button" className={cx("btn sm", !arranging && "txt")} aria-pressed={arranging} onClick={() => setArranging(!arranging)}>{arranging ? "Done" : "Arrange"}</button>
-            ) : null}
-            {props.onCreateCourse && courses.length > 0 && !arranging ? (
-              <button type="button" className={cx("btn sm")} onClick={newCourse}><Icon name="plus" />New course</button>
-            ) : null}
-          </span>
+          {props.canManage && props.onReorderCourses && courses.length > 1 ? <span className={cx("lab")} style={{ marginLeft: 10, fontWeight: 400 }}>Drag a course to change the order members see.</span> : null}
         </div>
-        {courseName !== null && props.onCreateCourse ? (
-          <form className={cx("kbtns-link")} style={{ marginBottom: 14 }} aria-label="New course" onSubmit={(event) => { event.preventDefault(); void createCourse(); }}>
-            <input value={courseName} onChange={(event) => setCourseName(event.target.value)} placeholder="Name the course" aria-label="Course name" maxLength={80} autoFocus disabled={creatingCourse}
-              onKeyDown={(event) => { if (event.key === "Escape") setCourseName(null); }} />
-            <button type="submit" className={cx("btn sm go")} disabled={creatingCourse || !courseName.trim()}>{creatingCourse ? "Creating…" : "Create"}</button>
-            <button type="button" className={cx("btn sm txt")} onClick={() => setCourseName(null)}>Cancel</button>
-            <span className={cx("khint")} style={{ marginTop: 0, flexBasis: "100%" }} role={newCourseError ? "alert" : undefined}>
-              {newCourseError ?? "It starts as a draft only hosts see. You add its lessons next."}
-            </span>
-          </form>
-        ) : null}
+        {newCourseError ? <p className={cx("sub")} role="alert" style={{ color: "var(--bad)", marginBottom: 10 }}>{newCourseError}</p> : null}
         <div className={cx("kgrid")}>
-          {(arranging ? courses : shelf.items).map(({ course, lessons }, position) => {
+          {shelf.items.map(({ course, lessons }, position) => {
             const progress = courseProgress(lessons, done);
             const row = summaryBy.get(course.id);
-            // Arranging: the book stays put and two arrows move it; it does
-            // not open, so a slip of the hand never leaves the shelf.
-            if (arranging) return (
-              <div key={course.id} className={cx("kcourse", "karr")}>
-                <span className={cx("kcover", course.banner_url ? "" : coverTint(course.id))} style={course.banner_url ? { backgroundImage: `url(${JSON.stringify(course.banner_url)})`, backgroundSize: "cover", backgroundPosition: `${(course.banner_focus_x ?? 0.5) * 100}% ${(course.banner_focus_y ?? 0.5) * 100}%` } : undefined}>
-                  {course.banner_url ? null : <Icon name="book" />}
-                </span>
-                <span className={cx("kmove")}>
-                  <button type="button" aria-label={`Move ${course.name} earlier`} disabled={movingCourse || position === 0} onClick={() => void moveCourse(position, -1)}><Icon name="back" /></button>
-                  <button type="button" aria-label={`Move ${course.name} later`} disabled={movingCourse || position === courses.length - 1} onClick={() => void moveCourse(position, 1)}><Icon name="arrow" /></button>
-                </span>
-                <b>{course.name}{course.module_status === "draft" ? <span className={cx("tag")} style={{ marginLeft: 8 }}>draft</span> : null}</b>
-                <span className={cx("s")}>{position + 1} of {courses.length}</span>
-              </div>
-            );
+            const canDrag = props.canManage && Boolean(props.onReorderCourses) && courses.length > 1;
+            const at = courses.findIndex((entry) => entry.course.id === course.id);
             return (
-              <button key={course.id} type="button" className={cx("kcourse")} onClick={() => props.onOpenCourse(course.id)}>
+              <div key={course.id} className={cx("kcard", courseDrag.dragging === course.id && "dragging", courseDrag.before === course.id && "dropbefore",
+                courseDrag.before === null && at === courses.length - 1 && "dropafter")} {...(canDrag ? courseDrag.item(course.id) : null)}>
+              {/* Held by its grip and dropped where it should go; the arrow keys move it one place. */}
+              {canDrag ? (
+                <button type="button" className={cx("kgrip", "card")} aria-label={`Move ${course.name}. Drag, or use the arrow keys.`} title="Drag to reorder" disabled={movingCourse}
+                  onKeyDown={(event) => { if (event.key === "ArrowLeft" || event.key === "ArrowUp") { event.preventDefault(); void moveCourse(at, -1); } else if (event.key === "ArrowRight" || event.key === "ArrowDown") { event.preventDefault(); void moveCourse(at, 1); } }}
+                  {...courseDrag.grip(course.id)}><GripDots /></button>
+              ) : null}
+              <button type="button" className={cx("kcourse")} onClick={() => props.onOpenCourse(course.id)}>
                 <span className={cx("kcover", course.banner_url ? "" : coverTint(course.id))} style={course.banner_url ? { backgroundImage: `url(${JSON.stringify(course.banner_url)})`, backgroundSize: "cover", backgroundPosition: `${(course.banner_focus_x ?? 0.5) * 100}% ${(course.banner_focus_y ?? 0.5) * 100}%` } : undefined}>
                   {course.banner_url ? null : <Icon name="book" />}
                 </span>
@@ -769,12 +763,13 @@ export function KitClassroom(props: {
                   <span className={cx("kpct")}><i style={{ width: `${progress.percent}%` }} /><em>{courseProgressWord(progress.percent)}</em></span>
                 )}
               </button>
+              </div>
             );
           })}
-          {/* The dashed card is the empty shelf's way in; with courses, the button beside "Courses" adds one. */}
-          {props.onCreateCourse && courses.length === 0 ? <button type="button" className={cx("kcourse knew")} onClick={newCourse}><Icon name="plus" />New course</button> : null}
+          {/* A new course is a card on the shelf: one click makes a draft and opens it. */}
+          {props.onCreateCourse ? <button type="button" className={cx("kcourse knew")} disabled={creatingCourse} onClick={() => void newCourse()}><Icon name="plus" />{creatingCourse ? "Making it…" : "New course"}</button> : null}
         </div>
-        {shelf.pages > 1 && !arranging ? (
+        {shelf.pages > 1 ? (
           <div className={cx("kpager")}>
             <span>{shelf.from}–{shelf.to} of {courses.length} courses</span>
             <button type="button" className={cx("btn sm")} disabled={shelf.page === 0} onClick={() => setShelfPage(shelf.page - 1)}>Previous</button>
