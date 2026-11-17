@@ -34,7 +34,7 @@ const CSS = `
 .site .shot{position:relative;margin:64px auto 0;width:min(1180px,100% - 48px);border-radius:14px;border:1px solid var(--line2);overflow:hidden;background:var(--panel);box-shadow:0 60px 140px -50px rgba(111,120,216,.35),0 40px 90px -40px #000}
 .site .shot img{display:block;width:100%;height:auto}
 /* The capture caught the pointer; this covers it (the area is flat). */
-.site .shot i{position:absolute;left:49.2%;top:54%;width:2.2%;height:4.2%;background:#0c0c0d}
+.site .shot i{position:absolute;left:49.2%;top:54%;width:2.2%;height:4.2%;background:#0f0f0f}
 .site .shot::after{content:"";position:absolute;inset:auto 0 0 0;height:120px;background:linear-gradient(180deg,transparent,var(--bg))}
 .site section{padding:112px 0 0}
 .site .kick{font-size:13px;font-weight:500;letter-spacing:.02em;color:var(--accent-hi)}
