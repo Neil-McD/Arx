@@ -2169,7 +2169,15 @@ export default function App() {
   });
 
   const globalOverlayHostProps = buildWebGlobalOverlayHostProps({
-    communityModalHostProps: communityUi.modalHostProps,
+    communityModalHostProps: {
+      ...communityUi.modalHostProps,
+      // The new form's preview card names who will host it.
+      createModal: {
+        ...communityUi.modalHostProps.createModal,
+        hostName: canonicalSessionUserId ? displayName(canonicalSessionUserId) : null,
+        hostAvatarUrl: canonicalSessionUserId ? savedProfilesByUserId[canonicalSessionUserId]?.avatar_url ?? null : null,
+      },
+    },
     builderOfferProps: {
       community: builderOffer.community,
       isSubmitting:

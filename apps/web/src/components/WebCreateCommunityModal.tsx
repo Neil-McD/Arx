@@ -4,6 +4,8 @@ import { CommunityAvatar } from "../../../../shared/CommunityAvatar";
 import { StableFramedMedia } from "../../../../shared/StableFramedMedia";
 import { isValidCommunitySlug, communityPageAddress } from "../../../../shared/communitySlug";
 import { WebBlockingSetupModal } from "./WebBlockingSetupModal";
+import { isDesignV1Active } from "../../../../shared/designSystem";
+import { KitStartCommunity } from "../v1/KitStartCommunity";
 
 type WebCreateCommunityModalProps = {
   isOpen: boolean;
@@ -35,10 +37,56 @@ type WebCreateCommunityModalProps = {
   onChangeOneLiner: (value: string) => void;
   onChangeSlug: (value: string) => void;
   onChangeSlugEdited: (value: boolean) => void;
+  // Design v1's preview card: who will host it.
+  hostName?: string | null;
+  hostAvatarUrl?: string | null;
 };
 
 export function WebCreateCommunityModal(props: WebCreateCommunityModalProps) {
   if (!props.isOpen) return null;
+
+  // Design v1: two things to type and a preview of the Discover card
+  // (apps/web/src/v1/KitStartCommunity.tsx). The classic form follows.
+  if (isDesignV1Active()) {
+    return (
+      <WebBlockingSetupModal
+        titleId="builder-create-title"
+        dismissible={props.isDismissible}
+        busy={props.isCreatingCommunity}
+        size="wide"
+        className="create-community-modal builder-create-modal is-kit-start"
+        onDismiss={props.onClose}
+      >
+        <KitStartCommunity
+          titleId="builder-create-title"
+          hostName={props.hostName ?? null}
+          hostAvatarUrl={props.hostAvatarUrl ?? null}
+          isPaidSetup={props.isPaidSetup}
+          hasSession={props.hasSession}
+          isDismissible={props.isDismissible}
+          name={props.createCommunityName}
+          oneLiner={props.createCommunityOneLiner}
+          slug={props.createCommunitySlug}
+          avatarUrl={props.createCommunityAvatarUrl}
+          bannerUrl={props.createCommunityBannerUrl}
+          error={props.createCommunityError}
+          isCreating={props.isCreatingCommunity}
+          isProcessingAvatar={props.isProcessingCreateAvatar}
+          isProcessingBanner={props.isProcessingCreateBanner}
+          onClose={props.onClose}
+          onCreate={props.onPrimaryAction}
+          onUploadAvatar={props.onUploadAvatar}
+          onUploadBanner={props.onUploadBanner}
+          onRemoveAvatar={props.onRemoveAvatar}
+          onRemoveBanner={props.onRemoveBanner}
+          onChangeName={props.onChangeName}
+          onChangeOneLiner={props.onChangeOneLiner}
+          onChangeSlug={props.onChangeSlug}
+          onChangeSlugEdited={props.onChangeSlugEdited}
+        />
+      </WebBlockingSetupModal>
+    );
+  }
 
   return (
     <WebBlockingSetupModal
