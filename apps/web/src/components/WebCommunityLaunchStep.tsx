@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { fetchCloudCommunitySettings, saveCloudCommunitySettings } from "../../../../shared/cloudCommunityAdminGateway";
 import { communityPageAddress } from "../../../../shared/communitySlug";
 import { KitStartLaunch } from "../v1/KitStartCommunity";
-import { startExtrasNeedSaving, takeStartExtras } from "../v1/startCommunityExtras";
+import { clearStartExtras, readStartExtras, startExtrasNeedSaving } from "../v1/startCommunityExtras";
 import { WebBlockingSetupModal } from "./WebBlockingSetupModal";
 
 type LaunchCommunity = {
@@ -24,8 +24,11 @@ export type WebCommunityLaunchStepProps = {
   onComplete: () => Promise<boolean>;
 };
 
-// A price can't be charged until the host's payouts are connected.
+// A price can't be charged until the host's payouts are connected, and a
+// community can't be listed until it looks finished. Either is left for
+// later; the rest of what was typed is still saved.
 const isPayoutsError = (message: string) => /community_payout_access_required|community_stripe_connect/.test(message);
+const isNotReadyToListError = (message: string) => /community_publish_ready_required/.test(message);
 
 // The last step of starting a community, shown for one that was just created
 // (and again after a refresh, until it is opened): it saves what step 2 asked
@@ -43,10 +46,14 @@ export function WebCommunityLaunchStep(props: WebCommunityLaunchStepProps) {
   const communityId = props.community.id;
   const slug = props.community.slug;
 
+  // Started once per community, even if the effect runs again (a remount in
+  // development): the run that started is the one that finishes.
+  const startedForRef = useRef<string | null>(null);
   useEffect(() => {
-    const extras = takeStartExtras(slug);
+    if (startedForRef.current === communityId) return;
+    const extras = readStartExtras(slug);
     if (!startExtrasNeedSaving(extras)) return;
-    let cancelled = false;
+    startedForRef.current = communityId;
     setSaving(true);
     void (async () => {
       try {
@@ -54,7 +61,7 @@ export function WebCommunityLaunchStep(props: WebCommunityLaunchStepProps) {
         if (!session) throw new Error("session");
         const now = await fetchCloudCommunitySettings({ session, communityId });
         if (!now) throw new Error("settings");
-        const save = (cents: number | null) => saveCloudCommunitySettings({
+        const save = (ask: { cents: number | null; listed: boolean }) => saveCloudCommunitySettings({
           session,
           communityId,
           expectedSettingsRevision: now.settings_revision,
@@ -72,32 +79,45 @@ export function WebCommunityLaunchStep(props: WebCommunityLaunchStepProps) {
           bannerFocusX: now.banner_focus_x,
           bannerFocusY: now.banner_focus_y,
           bannerZoom: now.banner_zoom,
-          visibility: extras.listed ? "published" : now.visibility,
-          monthlyAmountBaseUnits: cents,
+          visibility: ask.listed ? "published" : now.visibility,
+          monthlyAmountBaseUnits: ask.cents,
           annualAmountBaseUnits: null,
         });
-        let saved;
-        let payoutsMissing = false;
-        try {
-          saved = await save(extras.monthlyCents);
-        } catch (failure) {
-          if (!extras.monthlyCents || !isPayoutsError(failure instanceof Error ? failure.message : String(failure ?? ""))) throw failure;
-          // Everything else is still saved; the price waits for payouts.
-          payoutsMissing = true;
-          saved = await save(null);
+        // Asked for in full first; what can't be had yet is dropped and the
+        // rest saved (at most two retries: the price, the listing).
+        const ask = { cents: extras.monthlyCents, listed: extras.listed };
+        const notes: string[] = [];
+        let saved = null;
+        for (;;) {
+          try {
+            saved = await save(ask);
+            break;
+          } catch (failure) {
+            const message = failure instanceof Error ? failure.message : String(failure ?? "");
+            if (ask.cents && isPayoutsError(message)) {
+              ask.cents = null;
+              notes.push("It's free to join for now. Connect payouts in Settings to set your price.");
+            } else if (ask.listed && isNotReadyToListError(message)) {
+              ask.listed = false;
+              notes.push("It stays unlisted until it has a picture, a banner and a one-liner. Switch on listing in Settings once it does.");
+            } else {
+              throw failure;
+            }
+          }
         }
-        if (cancelled) return;
         if (!saved) throw new Error("save");
+        clearStartExtras(slug);
         setListed(saved.visibility === "published");
         setMonthlyCents(saved.pricing.monthly_amount_base_units);
-        if (payoutsMissing) setNote("It's free to join for now. Connect payouts in Settings to set your price.");
+        if (notes.length) setNote(notes.join(" "));
       } catch {
-        if (!cancelled) setError("What you wrote on the last step couldn't be saved. You can add it in Settings.");
+        // Kept in the tab: a refresh tries again.
+        startedForRef.current = null;
+        setError("What you wrote on the last step couldn't be saved. You can add it in Settings.");
       } finally {
-        if (!cancelled) setSaving(false);
+        setSaving(false);
       }
     })();
-    return () => { cancelled = true; };
   }, [communityId, slug]);
 
   const copy = () => {

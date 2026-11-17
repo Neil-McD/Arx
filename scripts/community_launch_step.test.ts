@@ -11,7 +11,7 @@ import { monthlyCentsFromText, startExtrasNeedSaving } from "../apps/web/src/v1/
 // the global overlay host, and one inference-free completion.
 const read = (path: string) => readFileSync(resolve(process.cwd(), path), "utf8");
 const step = read("apps/web/src/components/WebCommunityLaunchStep.tsx");
-const controller = read("apps/web/src/controllers/useWebCommunityLaunchController.ts");
+const controller = read("apps/web/src/controllers/useWebStartedCommunityController.ts");
 const appSource = read("apps/web/src/App.tsx");
 const overlayHostSource = read("apps/web/src/components/WebGlobalOverlayHost.tsx");
 
@@ -39,11 +39,14 @@ test("opening the community is the one completion, with no resource build", () =
 });
 
 test("a failure to save step 2's answers cannot trap the founder in setup", () => {
-  // Open community stays available: only saving or opening disables it.
-  expect(step).toMatch(/catch \{\s*if \(!cancelled\) setError\("What you wrote on the last step couldn't be saved\. You can add it in Settings\."\);/);
-  expect(step).toMatch(/finally \{\s*if \(!cancelled\) setSaving\(false\);/);
-  // A price with no payouts connected saves everything else, free for now.
-  expect(step).toMatch(/isPayoutsError\([\s\S]*?payoutsMissing = true;\s*saved = await save\(null\);/);
+  // Open community stays available: saving always ends, whatever happened.
+  expect(step).toMatch(/catch \{[\s\S]*?setError\("What you wrote on the last step couldn't be saved\. You can add it in Settings\."\);\s*\} finally \{\s*setSaving\(false\);/);
+  // A price with no payouts, or a listing that isn't ready, is dropped and the rest saved.
+  expect(step).toMatch(/if \(ask\.cents && isPayoutsError\(message\)\) \{\s*ask\.cents = null;/);
+  expect(step).toMatch(/else if \(ask\.listed && isNotReadyToListError\(message\)\) \{\s*ask\.listed = false;/);
+  // The save starts once, and what was typed is cleared only once it is saved.
+  expect(step).toContain("if (startedForRef.current === communityId) return;");
+  expect(step).toMatch(/if \(!saved\) throw new Error\("save"\);\s*clearStartExtras\(slug\);/);
 });
 
 test("the launch step is projected through the canonical global overlay host", () => {
