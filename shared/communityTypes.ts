@@ -126,6 +126,10 @@ export type DiscoverCommunitySnapshot = {
   member_count?: number | null;
   branding_revision?: number | null;
   visual_identity?: CommunityVisualIdentity | null;
+  // The card's host, and a sign of life (posts by people, this week).
+  host?: { name: string; avatar_url: string | null } | null;
+  last_active_at?: string | null;
+  posts_this_week?: number | null;
 };
 
 export type CommunityAvatarSummary = {

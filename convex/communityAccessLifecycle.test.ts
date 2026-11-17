@@ -97,6 +97,9 @@ async function createFixture(t: ReturnType<typeof convexTest>) {
         ownerId,
         slug,
         name: `Community ${slug}`,
+        // Listed in Discover: a banner and a one-liner.
+        oneLiner: "A community for the access lifecycle.",
+        bannerUrl: "https://polynet.test/banner.webp",
         visibility: "published",
         inferenceFundingPolicy: "managed_required",
         entryPolicy,
