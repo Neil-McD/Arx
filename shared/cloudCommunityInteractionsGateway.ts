@@ -100,6 +100,8 @@ export type CommunityInteractionRootRecord = {
   created_at: string;
   updated_at: string;
   edited_at: string | null;
+  // Written through the author's own AI, not typed by them.
+  via_ai?: boolean;
 };
 
 export type CommunityInteractionReplyRecord = {
@@ -123,6 +125,8 @@ export type CommunityInteractionReplyRecord = {
   created_at: string;
   updated_at: string;
   edited_at: string | null;
+  // Written through the author's own AI, not typed by them.
+  via_ai?: boolean;
 };
 
 export type CommunityInteractionPendingStatus = "sending" | "failed";

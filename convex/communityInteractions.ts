@@ -66,6 +66,7 @@ type WorkspaceRefKind = "thread" | "project" | "file" | "artifact" | "run" | "re
 type MentionKind = "user" | "community_agent" | "role";
 
 type InteractionRootRow = {
+  viaAi?: boolean;
   _id: any;
   communityId: any;
   channelId?: any;
@@ -91,6 +92,7 @@ type InteractionRootRow = {
 };
 
 type InteractionReplyRow = {
+  viaAi?: boolean;
   _id: any;
   communityId: any;
   channelId?: any;
@@ -699,6 +701,7 @@ async function mapRootBundle(
       created_at: toIsoString(root.createdAt),
       updated_at: toIsoString(root.updatedAt),
       edited_at: typeof root.editedAt === "number" ? toIsoString(root.editedAt) : null,
+      via_ai: root.viaAi === true,
     },
     content_blocks: blocks.map(mapContentBlock),
     embeds: [],
@@ -741,6 +744,7 @@ async function mapReplyBundle(
       created_at: toIsoString(reply.createdAt),
       updated_at: toIsoString(reply.updatedAt),
       edited_at: typeof reply.editedAt === "number" ? toIsoString(reply.editedAt) : null,
+      via_ai: reply.viaAi === true,
     },
     content_blocks: blocks.map(mapContentBlock),
     embeds: [],
@@ -1032,6 +1036,7 @@ async function createCommunityInteractionComposerMessageCore(
   ctx: any,
   args: any,
   trustedUserId?: any,
+  viaAi = false,
 ) {
     const userId = trustedUserId ?? await resolveUserIdForAuthenticatedRequest({
       ctx,
@@ -1136,6 +1141,7 @@ async function createCommunityInteractionComposerMessageCore(
           reactionSummary: [],
           idempotencyKey,
           composerPayloadHash,
+          ...(viaAi ? { viaAi: true } : {}),
           createdAt: nowMs,
           updatedAt: nowMs,
         });
@@ -1278,6 +1284,7 @@ async function createCommunityInteractionComposerMessageCore(
         reactionSummary: [],
         idempotencyKey,
         composerPayloadHash,
+        ...(viaAi ? { viaAi: true } : {}),
         createdAt: nowMs,
         updatedAt: nowMs,
       });
@@ -1358,9 +1365,11 @@ export const createCommunityInteractionComposerMessage = mutation({
 });
 
 export const createCommunityInteractionComposerMessageForTrustedUserInternal = internalMutation({
-  args: { ...communityInteractionComposerArgs, trustedUserId: v.id("users") },
-  handler: (ctx, { trustedUserId, ...args }) =>
-    createCommunityInteractionComposerMessageCore(ctx, args, trustedUserId),
+  // viaAi: written through the member's own AI (the MCP). Only this trusted
+  // door takes it, so a client cannot set or clear the mark.
+  args: { ...communityInteractionComposerArgs, trustedUserId: v.id("users"), viaAi: v.optional(v.boolean()) },
+  handler: (ctx, { trustedUserId, viaAi, ...args }) =>
+    createCommunityInteractionComposerMessageCore(ctx, args, trustedUserId, viaAi === true),
 });
 
 export const createCommunityAgentCanonicalInteractionInternal = internalMutation({

@@ -954,6 +954,9 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
                             {reply.edited_at ? (
                               <span className="community-interaction-edited">(edited)</span>
                             ) : null}
+                            {reply.via_ai ? (
+                              <span className="community-interaction-edited" title="Posted through their own AI">via AI</span>
+                            ) : null}
                           </>
                         )}
                         {bundle.pending === "sending" ? (

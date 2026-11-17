@@ -24,6 +24,7 @@ import { buildStripeConnectPresentation } from "../controllers/buildStripeConnec
 import { StripeConnectCountrySelect } from "./StripeConnectCountrySelect";
 import { StripeSetupButton } from "./StripeSetupButton";
 import { WebCommunityAiAgentSection } from "./WebCommunityAiAgentSection";
+import { WebCommunityAiRulesEditor } from "./WebCommunityAiRulesEditor";
 import {
   platformTabId,
   platformTabPanelId,
@@ -1326,6 +1327,14 @@ export function WebCommunitySettingsSection(props: WebCommunitySettingsSectionPr
               ) : null}
               {selectedSettingsPane === "agent" ? (
               <WebCommunityAiAgentSection {...aiAgentProps} embedded />
+              ) : null}
+              {/* House rules for members' own AIs: free or paid, whether or not the guide is on. */}
+              {selectedSettingsPane === "agent" ? (
+              <WebCommunityAiRulesEditor
+                communityId={resolvedActiveCommunity.id}
+                session={props.session}
+                ensureSession={props.ensureSession}
+              />
               ) : null}
               {selectedSettingsPane === "agent" && split && isOwnerSettingsLayer ? (
               <CommunityFounderBriefSection

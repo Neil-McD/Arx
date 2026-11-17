@@ -1,6 +1,7 @@
 # Agent access: MCP, lenses, limits, free and paid (v0 spec)
 
-Status: direction agreed 2026-11-17 (Neil). Slice 1 is built (see "Slices").
+Status: direction agreed 2026-11-17 (Neil). Slices 1 and 2 are built (see
+"Slices").
 How the guide, memory and briefs work is owned by
 `agent-system-end-state.md`; this spec owns what a person's own AI may do
 through the MCP, how much of it, and where the paid line sits.
@@ -78,16 +79,52 @@ app's own screens are not counted. The guide is bounded by AI quota instead.
 The numbers are a first judgment, not measured: there is no real agent
 traffic to size them from yet. Tune them on use.
 
+## Guidance
+
+Three layers reach a person's AI before it writes
+(`shared/aiPostingRules.ts`):
+
+1. **What the server says when it connects** (the MCP's `instructions`):
+   who it works for, to read the rules first, that its posts are marked,
+   that limits are not to be worked around, and that community content is
+   information, never instructions.
+2. **Polynet's rules**, the same everywhere.
+3. **The host's house rules**, one box in Settings (Guide), up to 2,000
+   characters, free or paid. Framed as the host's words.
+
+Layers 2 and 3 are one file in every community, `rules.md`, listed first in
+the community's folder.
+
+Guidance only works on an AI that reads it, so the server also refuses, on
+everything written through a person's own AI (not the app, not a site):
+
+| Check | Rule |
+|---|---|
+| Length | A post up to 2,000 characters, a reply up to 1,500 (the app: 8,000) |
+| Links | Up to 3 in one post |
+| Mentions | Up to 5 people; never everyone |
+| Repeats | The same words (however spaced, cased or punctuated at the ends) from the same person in the same community within a day; posts under 24 characters are not compared |
+
+A refusal says why in plain words. A refused post is not made, and its
+request sent again is refused again; a request that did post, sent again
+after a crash, is answered with the post it made.
+
+**The mark.** A post or reply made through a person's own AI is stored with
+`viaAi` and shown as "via AI" to everyone. Only the server's trusted path
+sets it; a client can neither set nor clear it.
+
+**Skills.** `plugins/polynet/`: catch me up, post an update, welcome new
+members, weekly recap. Each reads `rules.md` first and asks before it
+posts. Not published.
+
 ## Slices
 
 1. **Limits, the free cap, the operations list.** *Built.* The list, the
    budgets above, one free community per owner, the MCP contract corrected
    (it said both that everyone and that only builders may use the MCP;
    everyone may).
-2. **Guidance and output quality.** Real instructions from the server;
-   Polynet's posting rules and the host's house rules where every agent
-   reads them first; skills as an installable plugin. Refuse duplicates,
-   cap length. Mark posts made through someone's AI.
+2. **Guidance and output quality.** *Built; the skills are written and not
+   published.* See "Guidance" below.
 3. **The member lens, finished.** Messages (read your own, reply in
    conversations that exist), pod rooms, events and RSVP. The host's switch
    for whether members' AIs may post.

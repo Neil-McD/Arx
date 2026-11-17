@@ -4,6 +4,7 @@ import { renderCommunityNote, type CommunityNote } from "../shared/communityNote
 import { renderBriefDocument } from "../shared/communityBriefs";
 import { internal } from "./_generated/api";
 import { budgetTakesFor, callOperation, CALL_OPERATION_NAMES, requestFingerprint } from "../shared/operationCatalog";
+import { AI_DUPLICATE_MIN_CHARS, AI_DUPLICATE_REFUSAL, aiPostFingerprint, checkAiPost, renderAiRules } from "../shared/aiPostingRules";
 import { renderCommunityHandbook } from "../shared/communityHandbook";
 import { buildCommunitySearchQuery } from "../shared/communitySearchText";
 import type { CommunityEvidenceSurface } from "../shared/communityEvidenceContract.ts";
@@ -21,6 +22,7 @@ import {
   POLYNET_MEMBERS_DIRECTORY_PATH,
   MEMBER_TIMELINE_PATH,
   COMMUNITY_HANDBOOK_PATH,
+  COMMUNITY_AI_RULES_PATH,
   COMMUNITY_BRIEF_PATH,
   POLYNET_PRESENCE_DOCUMENT_PATH,
   POLYNET_RESOURCES_DIRECTORY_PATH,
@@ -1461,6 +1463,7 @@ async function executeCanonicalList(args: {
     value: {
       ...value,
       entries: [...rawEntries,
+        { path: mountedPath(target.communitySlug, COMMUNITY_AI_RULES_PATH), kind: "document", type: "rules", name: "Rules for AIs (read before writing)" },
         ...(reads(args, target, "brief") ? [{ path: mountedPath(target.communitySlug, COMMUNITY_BRIEF_PATH), kind: "document", type: "brief", name: "What's happening" }] : []),
         ...(reads(args, target, "pods") ? [{ path: mountedPath(target.communitySlug, POLYNET_PODS_DIRECTORY_PATH), kind: "directory", type: "pods", name: "Pods" }] : []),
         ...builderEntry],
@@ -1537,6 +1540,14 @@ async function executeCanonicalRead(args: {
   if (target.localPath === POLYNET_COMMUNITY_PROFILE_PATH) {
     const card = await readCommunityCard(args, target);
     if (card) return { ok: true, value: { path: mountedPath(target.communitySlug, target.localPath), body: card, truncated: false } };
+  }
+
+  // Rules for AIs: Polynet's, then the host's house rules. Anyone who may read
+  // the community may read them; an AI is told to, before it writes.
+  if (target.localPath === COMMUNITY_AI_RULES_PATH) {
+    const rules = await args.ctx.runQuery((internal as any).communityAiRules.readCommunityAiRulesInternal, { communityId: target.communityId });
+    if (!rules) return canonicalError("semantic_not_found", "Repository path not found or not accessible.");
+    return { ok: true, value: { path: mountedPath(target.communitySlug, target.localPath), body: renderAiRules(rules), truncated: false } };
   }
 
   // The founder-approved handbook (members only; the approved text only).
@@ -2143,6 +2154,10 @@ async function executeCanonicalWrite(args: {
     if (mode === "update" && !text.trim()) {
       return canonicalError("invalid_tool_args", "Provide content.text to edit a post.");
     }
+    if (mode === "update" && args.principalKind === "external_mcp") {
+      const refusal = checkAiPost({ text, reply: ref.objectType === "reply" });
+      if (refusal) return canonicalError(refusal.code, refusal.message);
+    }
     const channel = await resolveRepositoryChannel({
       ctx: args.ctx,
       userId: args.userId,
@@ -2240,6 +2255,22 @@ async function executeCanonicalWrite(args: {
       return { ok: true, value: reservation.completedValue };
     }
     try {
+      // Written through a person's own AI: checked whatever the AI was told
+      // (shared/aiPostingRules.ts), then marked as made through an AI.
+      const viaAi = args.principalKind === "external_mcp";
+      const aiText = String(content.text ?? content.body ?? "");
+      const aiFingerprint = viaAi && aiText.trim().length >= AI_DUPLICATE_MIN_CHARS ? aiPostFingerprint(aiText) : null;
+      if (viaAi) {
+        const refusal = checkAiPost({ text: aiText, reply: Boolean(rootId), mentions: Array.isArray(content.mentions) ? content.mentions as never : null })
+          ?? (aiFingerprint && await args.ctx.runQuery((internal as any).communityAiRules.hasRecentAiPostInternal,
+            { userId: args.userId, communityId: target.communityId, fingerprint: aiFingerprint, key: idempotencyKey }) ? AI_DUPLICATE_REFUSAL : null);
+        if (refusal) {
+          await failMutatingOperation({ ...args, target, toolName: "polynet_write", idempotencyKey,
+            requestFingerprint: reservation.requestFingerprint, attemptToken: reservation.attemptToken,
+            errorCode: refusal.code, errorMessage: refusal.message });
+          return canonicalError(refusal.code, refusal.message);
+        }
+      }
       const canonicalIdempotencyKey = `polynet:${args.principalKind}:${idempotencyKey}`;
       const mutationArgs = {
         userId: args.userId,
@@ -2270,8 +2301,12 @@ async function executeCanonicalWrite(args: {
               .createCommunityInteractionComposerMessageForTrustedUserInternal,
         args.principalKind === "community_agent"
           ? mutationArgs
-          : { ...mutationArgs, trustedUserId: args.userId },
+          : { ...mutationArgs, trustedUserId: args.userId, ...(viaAi ? { viaAi: true } : {}) },
       )) as Record<string, unknown>;
+      if (aiFingerprint) {
+        await args.ctx.runMutation((internal as any).communityAiRules.recordAiPostInternal,
+          { userId: args.userId, communityId: target.communityId, fingerprint: aiFingerprint, key: idempotencyKey }).catch(() => null);
+      }
       const interaction =
         value.interaction && typeof value.interaction === "object"
           ? (value.interaction as Record<string, unknown>)
