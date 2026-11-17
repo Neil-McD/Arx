@@ -146,3 +146,24 @@ test("you can only upload for someone you may message, and never for a conversat
   await as("bob").mutation(dm.blockDirectMessageUser, { targetUserId: "alice" });
   await expect(upload(f.aliceId, { conversationId: first.conversation.id })).rejects.toThrow("dm_conversation_access_required");
 });
+
+test("taking a file out of a draft frees its reservation, and only your own unsent one", async () => {
+  const { t, f, as, upload } = await setup();
+  const mine = await upload(f.aliceId, { targetUserId: "bob", communityId: f.communityId });
+  const rows = () => t.run(ctx => ctx.db.query("dmAttachments").collect());
+  // Bob cannot discard Alice's file.
+  await as("bob").mutation(dm.discardDirectMessageAttachment, { attachmentId: mine.attachmentId });
+  expect(await rows()).toHaveLength(1);
+  await as("alice").mutation(dm.discardDirectMessageAttachment, { attachmentId: mine.attachmentId });
+  expect(await rows()).toHaveLength(0);
+  expect(await t.run(ctx => ctx.storage.getUrl(mine.storageId))).toBeNull();
+  // A sent file is not touched.
+  const sentFile = await upload(f.aliceId, { targetUserId: "bob", communityId: f.communityId });
+  await as("alice").mutation(dm.sendDirectMessageToUser, { targetUserId: "bob", communityId: f.communityId, text: "", attachments: [{ attachment_id: sentFile.attachmentId }] });
+  await as("alice").mutation(dm.discardDirectMessageAttachment, { attachmentId: sentFile.attachmentId });
+  expect((await rows()).map(row => row.status)).toEqual(["sent"]);
+  // One still uploading is marked failed, so its late bytes are deleted by the upload handler and it stops counting as waiting.
+  const flying = await upload(f.aliceId, { targetUserId: "bob", communityId: f.communityId }, { finish: false });
+  await as("alice").mutation(dm.discardDirectMessageAttachment, { attachmentId: flying.attachmentId });
+  expect((await rows()).find(row => String(row._id) === flying.attachmentId)?.status).toBe("failed");
+});

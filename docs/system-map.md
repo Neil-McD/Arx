@@ -152,11 +152,24 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
 
 ### 4. Direct messages — Keep (Studio only)
 
-- **Code:** `directMessages`, `directMessageReadCore`, `directMessageEmails`.
-  Text only since Nov 5 (attachments removed; the two upload-URL mutations
-  stay as refusing stubs for one release, for cached Studio pages).
+- **Code:** `directMessages`, `directMessageReadCore`, `directMessageEmails`;
+  files in `directMessageAttachmentCore` (what a send may claim, what a read
+  returns), `directMessageAttachments` (internal only: reserve, finish, clean
+  up, resolve a download) and `httpDirectMessageAttachments` (the signed-in
+  upload and download routes).
+- **Files (Nov 17):** removed on Nov 5 because a send trusted a storage id from
+  the browser; back, the way channels do theirs. The server reserves a row for
+  the sender and the conversation (or, for a first message, the person),
+  stores the bytes itself, reads the type from the bytes and finishes the row
+  against what storage holds. A send names files by reservation id only and
+  may claim only the sender's own finished upload, once, for that
+  conversation. A message's files are read from their rows, never from its
+  JSON, and the bytes are streamed only to an active participant. An unsent
+  reservation is deleted after 30 minutes or when the sender removes it. Same
+  limits and types as channel attachments (`shared/communityAttachmentPolicy`).
+  Files from before Nov 5 have no row and are not served.
 - **Tables:** `dmConversations`, `dmParticipants`, `dmMessages`, `dmBlocks`,
-  `dmRateCounters`, `dmTypingPresence`.
+  `dmRateCounters`, `dmTypingPresence`, `dmAttachments`.
 
 ### 5. Courses and resources — Keep
 
