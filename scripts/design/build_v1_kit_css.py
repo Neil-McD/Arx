@@ -680,7 +680,8 @@ css += """
 .app .klesson p{color:var(--ink1)}
 .app .kedit-title{font-family:inherit;font-weight:600;font-size:30px;line-height:1.15;letter-spacing:-.02em}
 .app .kswitch{display:inline-flex;align-items:center;gap:9px;height:32px;padding:0 6px;border-radius:8px;border:0;font-size:13px;font-weight:500;cursor:pointer}
-.app .kswitch:hover:not(:disabled){background:var(--s2)}
+.app .kswitch,.app .kswitch.on{background:transparent}
+.app .kswitch:hover:not(:disabled),.app .kswitch.on:hover:not(:disabled){background:var(--s2)}
 .app .kswitch i{position:relative;flex:none;width:28px;height:16px;border-radius:8px;background:var(--line2)}
 .app .kswitch i::after{content:"";position:absolute;left:2px;top:2px;width:12px;height:12px;border-radius:50%;background:var(--ink2);transition:left .16s var(--ease)}
 .app .kswitch.on i{background:#3fb76b}.app .kswitch.on i::after{left:14px;background:#fff}
