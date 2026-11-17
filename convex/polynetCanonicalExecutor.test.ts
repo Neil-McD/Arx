@@ -1,6 +1,7 @@
 /// <reference types="vite/client" />
 
 import { buildCommunityNoteSearchText } from "../shared/communityNotes";
+import { BUDGET_LIMITS } from "../shared/operationCatalog";
 import { convexTest } from "convex-test";
 import { getFunctionName } from "convex/server";
 import { afterEach, expect, test, vi } from "vitest";
@@ -211,6 +212,14 @@ test("self-context query rechecks access after path resolution and refuses direc
   expect(queryCount).toBe(2);
 });
 
+// A minute passes for every budget (convex/accessBudgets.ts): tests that post
+// more than once in a channel say so.
+async function nextMinute(t: any) {
+  await t.run(async (ctx: any) => {
+    for (const row of await ctx.db.query("accessBudgetCounters").collect()) await ctx.db.patch(row._id, { minuteStartMs: row.minuteStartMs - 60_000 });
+  });
+}
+
 const modules = import.meta.glob([
   "./communityOwnerApprovals.ts",
   "./communityAppJoin.ts",
@@ -220,7 +229,7 @@ const modules = import.meta.glob([
   "./communityOntologyCards.ts",
   "./communitySearchDocs.ts",
   "./communityMemberTimeline.ts",
-  "./communityHandbook.ts", "./communityNotes.ts", "./communityMemory.ts", "./communityBriefs.ts", "./memberMemory.ts", "./communityPersonFacts.ts", "./communityPodFacts.ts", "./communityPods.ts", "./communityFounderBrief.ts", "./communityEvents.ts", "./communityPodPayments.ts", "./communityPlanChange.ts", "./communityLessonProgress.ts", "./memberWriteRateLimit.ts", "./communityLifecycle.ts", "./communityOperations.ts", "./communityPeople.ts", "./userProfileProjection.ts",
+  "./communityHandbook.ts", "./communityNotes.ts", "./communityMemory.ts", "./communityBriefs.ts", "./memberMemory.ts", "./communityPersonFacts.ts", "./communityPodFacts.ts", "./communityPods.ts", "./communityFounderBrief.ts", "./communityEvents.ts", "./communityPodPayments.ts", "./communityPlanChange.ts", "./communityLessonProgress.ts", "./accessBudgets.ts", "./communityLifecycle.ts", "./communityOperations.ts", "./communityPeople.ts", "./userProfileProjection.ts",
   "./communityAccessQueries.ts",
   "./communityAdmin.ts",
   "./email.ts",
@@ -1688,6 +1697,9 @@ test("canonical writes are attributed, retry safe, and reject conflicting idempo
       receipt: { deduped: true },
     },
   });
+  // The same key with other words is a new request to the budgets; a minute
+  // on, it reaches the receipt, which refuses the conflict.
+  await nextMinute(t);
   await expect(
     executePolynetCanonicalTool({
       ctx: memberCtx,
@@ -2732,7 +2744,7 @@ test.each(["approve", "deny"])("admission first response can be discarded after 
   // The admission commits but its answer is lost (the write budget is taken first, as usual).
   expect(await f.call(f.input, undefined, "external_mcp", { ...ctx, runMutation: async (ref: any, args: any) => {
     const value = await ctx.runMutation(ref, args);
-    if (getFunctionName(ref).startsWith("memberWriteRateLimit:")) return value;
+    if (getFunctionName(ref).startsWith("accessBudgets:")) return value;
     throw new Error("discarded_committed_response");
   } })).toMatchObject({ ok: false });
   const committed = await f.snapshot(); expect(committed.receipts[0].status).toBe("completed");
@@ -3088,6 +3100,7 @@ test("moderators remove a selection of posts through their own AI; members and t
   const member = as(f.memberSubject, f.memberId);
   const refs: string[] = [];
   for (const [i, text] of ["one", "two", "three"].entries()) {
+    await nextMinute(t);
     const posted = await owner("polynet_write", { path: "/communities/canonical-community/channels/general/", mode: "create", content: { text }, idempotency_key: `post-${i}` });
     expect(posted.ok, JSON.stringify(posted)).toBe(true);
     refs.push((posted as any).value.ref);
@@ -3135,22 +3148,22 @@ test("a person's own AI and site share a budget of writes a minute; keeping a si
   const markRead = () => as(f.memberSubject, f.memberId, "external_mcp")("polynet_call", {
     operation: "community.channel.mark_read", version: 1, target: "/communities/canonical-community/capabilities/community.channel.mark_read.json",
     input: { channel: "general" }, idempotency_key: "read" });
-  // The site and the MCP draw on one budget.
-  for (let i = 0; i < 60; i++) expect(await react(i % 2 ? "community_app" : "external_mcp", i), `write ${i}`).toMatchObject({ ok: true });
-  const refused = await react("external_mcp", 60);
-  expect(refused).toMatchObject({ ok: false, code: "rate_limited", value: { retry_after_ms: expect.any(Number) } });
+  // The site and the MCP draw on one budget of reactions.
+  for (let i = 0; i < BUDGET_LIMITS.light.perMinute; i++) expect(await react(i % 2 ? "community_app" : "external_mcp", i), `write ${i}`).toMatchObject({ ok: true });
+  const refused = await react("external_mcp", BUDGET_LIMITS.light.perMinute);
+  expect(refused).toMatchObject({ ok: false, code: "rate_limited", value: { retry_after_ms: expect.any(Number), budget: "light", window: "minute" } });
   expect((refused as any).value.retry_after_ms).toBeLessThanOrEqual(60_000);
+  // The same call sent again is not a second one.
+  expect(await react("external_mcp", BUDGET_LIMITS.light.perMinute - 1)).toMatchObject({ ok: true });
   // Reads and read positions still work.
   expect(await markRead()).toMatchObject({ ok: true });
   expect(await as(f.memberSubject, f.memberId, "external_mcp")("polynet_list", { path: "/communities/canonical-community/channels/" })).toMatchObject({ ok: true });
-  // Someone else's budget is their own.
-  expect(await as(f.ownerSubject, f.ownerId, "external_mcp")("polynet_write", {
-    path: "/communities/canonical-community/channels/general/", mode: "create", content: { text: "still here" }, idempotency_key: "owner-post-2" })).toMatchObject({ ok: true });
+  // Posts are a different budget: out of reactions, the member can still post.
+  expect(await as(f.memberSubject, f.memberId, "external_mcp")("polynet_write", {
+    path: "/communities/canonical-community/channels/general/", mode: "create", content: { text: "still here" }, idempotency_key: "member-post" })).toMatchObject({ ok: true });
   // A minute on, the budget is back.
-  await t.run(async ctx => {
-    for (const row of await ctx.db.query("memberWriteRateCounters").collect()) await ctx.db.patch(row._id, { windowStartMs: row.windowStartMs - 60_000 });
-  });
-  expect(await react("external_mcp", 61)).toMatchObject({ ok: true });
+  await nextMinute(t);
+  expect(await react("external_mcp", BUDGET_LIMITS.light.perMinute + 1)).toMatchObject({ ok: true });
 });
 
 test("the published polynet_call schema covers every input any role's actions accept, and calls answer in its output shape", async () => {

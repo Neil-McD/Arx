@@ -411,8 +411,11 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
   (a change to the community itself and its receipt in one transaction),
   `polynetCanonicalReceipts`; Vercel `api/mcp/*` (OAuth metadata, proxy).
 - **Reached by:** `/runtime/mcp`, `/.well-known/oauth-*`.
-- **Tables:** `polynetCanonicalOperationReceipts`, `memberWriteRateCounters`
-  (`memberWriteRateLimit`: a person's writes per minute through their own AI).
+- **Tables:** `polynetCanonicalOperationReceipts`, `accessBudgetCounters`
+  (`accessBudgets`: what a person's own AI reads and writes, a minute and a
+  day; the operations and budgets are in `shared/operationCatalog.ts`,
+  [spec](specs/agent-access-v0.md)). `memberWriteRateCounters` is no longer
+  written.
 - **Contracts:** [polynet-workspace-mcp-contract-v0.md](polynet-workspace-mcp-contract-v0.md),
   [canonical-platform-operation-contract-v1.md](canonical-platform-operation-contract-v1.md).
 
