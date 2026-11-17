@@ -405,3 +405,11 @@ export async function downloadCloudDirectMessageAttachment<SessionT>(params: {
   if (!response.ok) throw new Error("This file is unavailable.");
   return response.blob();
 }
+
+// A file taken back out of a draft: its reservation is freed on the server.
+export async function discardCloudDirectMessageAttachment<SessionT>(
+  params: CloudDirectMessagesGatewayParams<SessionT> & { attachmentId: string },
+): Promise<void> {
+  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
+  await client.mutation("directMessages:discardDirectMessageAttachment" as any, { authSubject, attachmentId: params.attachmentId });
+}

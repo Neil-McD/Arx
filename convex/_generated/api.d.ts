@@ -137,6 +137,8 @@ import type * as connectedApps from "../connectedApps.js";
 import type * as creatorCommerce from "../creatorCommerce.js";
 import type * as criticalAudit from "../criticalAudit.js";
 import type * as crons from "../crons.js";
+import type * as directMessageAttachmentCore from "../directMessageAttachmentCore.js";
+import type * as directMessageAttachments from "../directMessageAttachments.js";
 import type * as directMessageEmails from "../directMessageEmails.js";
 import type * as directMessageReadCore from "../directMessageReadCore.js";
 import type * as directMessages from "../directMessages.js";
@@ -169,6 +171,7 @@ import type * as httpCommunityAgentAttachments from "../httpCommunityAgentAttach
 import type * as httpCommunityAttachments from "../httpCommunityAttachments.js";
 import type * as httpCommunityLanding from "../httpCommunityLanding.js";
 import type * as httpConnectedApps from "../httpConnectedApps.js";
+import type * as httpDirectMessageAttachments from "../httpDirectMessageAttachments.js";
 import type * as httpEmail from "../httpEmail.js";
 import type * as httpInferenceConfig from "../httpInferenceConfig.js";
 import type * as httpMcp from "../httpMcp.js";
@@ -364,6 +367,8 @@ declare const fullApi: ApiFromModules<{
   creatorCommerce: typeof creatorCommerce;
   criticalAudit: typeof criticalAudit;
   crons: typeof crons;
+  directMessageAttachmentCore: typeof directMessageAttachmentCore;
+  directMessageAttachments: typeof directMessageAttachments;
   directMessageEmails: typeof directMessageEmails;
   directMessageReadCore: typeof directMessageReadCore;
   directMessages: typeof directMessages;
@@ -396,6 +401,7 @@ declare const fullApi: ApiFromModules<{
   httpCommunityAttachments: typeof httpCommunityAttachments;
   httpCommunityLanding: typeof httpCommunityLanding;
   httpConnectedApps: typeof httpConnectedApps;
+  httpDirectMessageAttachments: typeof httpDirectMessageAttachments;
   httpEmail: typeof httpEmail;
   httpInferenceConfig: typeof httpInferenceConfig;
   httpMcp: typeof httpMcp;

@@ -65,6 +65,22 @@ export async function attachDirectMessageAttachments(ctx: any, args: { rows: Att
   }
 }
 
+// The sender took a file back out of their draft: free the reservation now,
+// so it stops counting against how many they may have waiting. An upload still
+// in flight is marked failed instead; the HTTP handler then deletes its bytes.
+export async function discardUnsentDirectMessageAttachment(ctx: any, args: { ownerId: any; attachmentId: string }) {
+  const rowId = ctx.db.normalizeId("dmAttachments", args.attachmentId);
+  const row = rowId ? ((await ctx.db.get(rowId)) as AttachmentRow | null) : null;
+  if (!row || String(row.uploaderUserId) !== String(args.ownerId) || row.status === "sent" || row.messageId) return;
+  if (!row.storageId) {
+    if (row.status === "pending") await ctx.db.patch(row._id, { status: "failed", updatedAt: Date.now() });
+    return;
+  }
+  const claims = await ctx.db.query("dmAttachments").withIndex("by_storage", (q: any) => q.eq("storageId", row.storageId)).take(2);
+  if (claims.length === 1) await ctx.storage.delete(row.storageId);
+  await ctx.db.delete(row._id);
+}
+
 export function directMessageAttachmentEntries(rows: AttachmentRow[]): DirectMessageAttachmentEntry[] {
   return rows.map(entryOf);
 }

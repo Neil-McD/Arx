@@ -1,5 +1,5 @@
 import { internalMutation, internalQuery, mutation, query } from "./_generated/server";
-import { attachDirectMessageAttachments, directMessageAttachmentEntries, parseDirectMessageAttachmentIds, readDirectMessageAttachments, requireSendableDirectMessageAttachments } from "./directMessageAttachmentCore";
+import { discardUnsentDirectMessageAttachment, attachDirectMessageAttachments, directMessageAttachmentEntries, parseDirectMessageAttachmentIds, readDirectMessageAttachments, requireSendableDirectMessageAttachments } from "./directMessageAttachmentCore";
 import { internal } from "./_generated/api";
 import { v } from "convex/values";
 import {
@@ -1518,6 +1518,17 @@ async function sendDirectMessageForUser(
   }
   return await mapDirectMessage(ctx, message);
 }
+
+// Taking a file back out of a draft frees its reservation. Only the uploader's
+// own unsent file is touched; anything else is a quiet no-op.
+export const discardDirectMessageAttachment = mutation({
+  args: { authSubject: v.optional(v.string()), attachmentId: v.string() },
+  handler: async (ctx, args) => {
+    const viewerUserId = await resolveUserIdForAuthenticatedRequest({ ctx, authSubject: args.authSubject ?? null });
+    await discardUnsentDirectMessageAttachment(ctx, { ownerId: viewerUserId, attachmentId: args.attachmentId });
+    return null;
+  },
+});
 
 export const sendDirectMessage = mutation({
   args: {

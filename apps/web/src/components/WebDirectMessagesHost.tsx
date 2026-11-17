@@ -20,6 +20,7 @@ import {
   sendCloudDirectMessage,
   sendCloudDirectMessageToUser,
   subscribeCloudDirectMessages,
+  discardCloudDirectMessageAttachment,
   downloadCloudDirectMessageAttachment,
   uploadCloudDirectMessageAttachmentFile,
 } from "../../../../shared/cloudDirectMessagesGateway";
@@ -1539,6 +1540,17 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
     if (draft) draftsByConversationRef.current[conversationId] = { ...draft, attachments: change(draft.attachments) };
   }, []);
 
+  // Drafts taken out while still uploading: their reservation is freed when the upload lands.
+  const removedAttachmentDraftsRef = useRef<Set<string>>(new Set());
+  const discardDirectAttachmentReservation = useCallback(async (attachmentId: string) => {
+    try {
+      const usableSession = await resolveDirectMessageSession(session, ensureSession, "direct_messages_send");
+      if (usableSession) await discardCloudDirectMessageAttachment({ session: usableSession, attachmentId });
+    } catch {
+      // The server clears an unsent upload after 30 minutes anyway.
+    }
+  }, [ensureSession, session]);
+
   const uploadDirectAttachmentDraft = useCallback(async (conversation: DirectMessageConversation, draft: DirectMessageAttachmentDraft) => {
     const conversationId = conversation.id;
     const file = draft.file;
@@ -1557,6 +1569,10 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
         messageKey: `dm:${conversationId}`.slice(0, 150),
         file,
       });
+      if (removedAttachmentDraftsRef.current.delete(draft.id)) {
+        void discardDirectAttachmentReservation(uploaded.attachmentId);
+        return;
+      }
       patchConversationAttachments(conversationId, (list) => list.map((item) => item.id === draft.id
         ? { ...item, attachment_id: uploaded.attachmentId, mime: uploaded.mime, size: uploaded.size, type: uploaded.type === "image" ? "image" as const : "file" as const, uploadStatus: "ready" as const, uploadError: null }
         : item));
@@ -1564,7 +1580,7 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
       const message = error instanceof Error && error.message ? error.message : "That file couldn't be attached.";
       patchConversationAttachments(conversationId, (list) => list.map((item) => item.id === draft.id ? { ...item, uploadStatus: "failed" as const, uploadError: message } : item), message);
     }
-  }, [ensureSession, patchConversationAttachments, session]);
+  }, [discardDirectAttachmentReservation, ensureSession, patchConversationAttachments, session]);
 
   const addDirectAttachmentFiles = useCallback((files: FileList | readonly File[]) => {
     const current = directMessagePanel;
@@ -1599,9 +1615,12 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
     if (!current) return;
     const draft = current.attachments.find((item) => item.id === attachmentId);
     if (draft?.data_url?.startsWith("blob:")) URL.revokeObjectURL(draft.data_url);
-    // The server clears an upload nobody sends.
+    // Free the server's reservation, so a replacement can be attached.
+    const reservationId = String(draft?.attachment_id ?? "").trim();
+    if (reservationId) void discardDirectAttachmentReservation(reservationId);
+    else if (draft && getDirectAttachmentUploadStatus(draft) === "uploading") removedAttachmentDraftsRef.current.add(draft.id);
     patchConversationAttachments(current.conversation.id, (list) => list.filter((item) => item.id !== attachmentId), null);
-  }, [directMessagePanel, patchConversationAttachments]);
+  }, [directMessagePanel, discardDirectAttachmentReservation, patchConversationAttachments]);
 
   const loadDirectAttachment = useCallback(async (attachmentId: string) => {
     const usableSession = await resolveDirectMessageSession(session, ensureSession, "direct_messages_read");
