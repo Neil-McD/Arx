@@ -16,6 +16,8 @@ import { CommunityNav } from "../../../../shared/CommunityNav";
 import type { BrainAttach, BrainMap } from "../../../../shared/communityBrain";
 import { CommunityComposerControls } from "../components/CommunityComposerControls";
 import { CommunityPageFrame } from "../components/CommunityPageHeader";
+// Home's page frame is styled by the dock's own stylesheet.
+import "../components/WebCommunityAgentDock.css";
 import { WebAccountMenu } from "../components/WebAccountMenu";
 import { WebCommunityInteractionProjection } from "../components/WebCommunityInteractionProjection";
 import { WebCommunitySwitcher } from "../components/WebCommunitySwitcher";
@@ -139,7 +141,7 @@ function AppFrame(props: { ending?: boolean; left: ReactNode; children: ReactNod
   return (
     <div ref={boxRef} className={`site-demo${props.ending ? " is-ending" : ""}`} style={{ height: APP_HEIGHT * zoom }}>
       <style>{DEMO_CSS}</style>
-      <div className="app-root" style={{ width: APP_WIDTH, height: APP_HEIGHT, zoom }}>
+      <div className="app-root" style={{ width: APP_WIDTH, height: APP_HEIGHT, zoom, ["--right-column-width" as string]: `${Math.round(APP_WIDTH * 0.23)}px` }}>
         <div className="app-shell framed-shell community-layout sessions-compact no-right" style={{ height: APP_HEIGHT }}>
           <div className="product-shell-surface product-shell-surface--community" style={{ height: APP_HEIGHT }}>
             {props.left}
