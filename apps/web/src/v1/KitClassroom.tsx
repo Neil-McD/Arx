@@ -423,7 +423,7 @@ export function KitClassroom(props: {
     <>
       {/* One switch publishes the course or takes it back to a draft. */}
       {props.onSetCourseStatus ? (
-        <button type="button" role="switch" aria-checked={!isDraft} className={cx("kswitch", isDraft ? "" : "on")}
+        <button type="button" role="switch" aria-checked={!isDraft} aria-label="Published" className={cx("kswitch", isDraft ? "" : "on")}
           disabled={publishing || (isDraft && open.lessons.length === 0)}
           title={isDraft ? (open.lessons.length === 0 ? "Write a lesson first" : "Publish: members will see this course") : "Unpublish: back to a draft only hosts see"}
           onClick={() => void setCourseStatus(open.course.id, isDraft ? "live" : "draft")}>
