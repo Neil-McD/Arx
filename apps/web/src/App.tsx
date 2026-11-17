@@ -1180,7 +1180,8 @@ export default function App() {
     communities,
     canReviewJoinRequests: canReviewJoinRequestsActiveCommunity,
     activeCommunityMembersJoinReviewMode,
-    shouldLoad: shouldHydrateCommunityContextPanel,
+    // Home's "Needs you" list (design v1) shows the people waiting too.
+    shouldLoad: shouldHydrateCommunityContextPanel || (activePage === "community" && communityTab === "agent" && isDesignV1Active()),
     loadCommunityJoinRequests,
     resetCommunityJoinRequests,
   });
