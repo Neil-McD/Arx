@@ -101,6 +101,7 @@ export type CommunityResourceBuilderChangesetOperation =
       url?: string | null;
       resource_status?: string;
       pinned?: boolean;
+      lesson_links?: Array<{ title: string; url: string }>;
     }
   | {
       op: "edit_page";
@@ -114,6 +115,19 @@ export type CommunityResourceBuilderChangesetOperation =
       url?: string | null;
       resource_status?: string;
       pinned?: boolean;
+      lesson_links?: Array<{ title: string; url: string }>;
+    }
+  | {
+      // The lessons of one course, in the order members follow them: every
+      // lesson of that course, each once.
+      op: "reorder_pages";
+      module_id: string;
+      resource_ids: string[];
+    }
+  | {
+      // The courses, in the order members see them: every course, each once.
+      op: "reorder_modules";
+      module_ids: string[];
     }
   | {
       op: "move_resource";

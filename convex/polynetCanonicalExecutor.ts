@@ -2441,9 +2441,13 @@ async function executeCanonicalWrite(args: {
       return { ok: true, value: reservation.completedValue };
     }
     try {
+      // A builder's own AI acts: a batch that takes nothing away is applied
+      // at once; one that deletes waits for a person's click, like every
+      // batch from the guide (docs/specs/agent-access-v0.md, slice 4b).
       const value = (await args.ctx.runMutation(
-        (internal as any).communityResources
-          .stageCommunityResourceBuilderChangesetInternal,
+        args.principalKind === "external_mcp"
+          ? (internal as any).communityResources.stageAndApplyCommunityResourceBuilderChangesetInternal
+          : (internal as any).communityResources.stageCommunityResourceBuilderChangesetInternal,
         {
           userId: args.userId,
           communityId: target.communityId,

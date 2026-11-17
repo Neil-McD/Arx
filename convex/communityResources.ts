@@ -68,6 +68,7 @@ import {
   buildCommunityResourceBuilderExpiredResult,
   communityResourceBuilderChangesetExpiresAt,
   communityResourceBuilderChangesetIsExpired,
+  communityResourceChangesetIsDestructive,
   expireCommunityResourceBuilderChangesetIfNeeded,
   getCommunityResourceBuilderPreflightIssueCount,
   normalizeCommunityResourceBuilderChangesetOperations,
@@ -535,6 +536,99 @@ export const rejectCommunityResourceBuilderChangeset = mutation({
   },
 });
 
+// Applies a staged batch for someone already known to be an owner or admin:
+// the person clicking Apply in the app, or a builder's own AI applying a batch
+// that takes nothing away (stageAndApply... below).
+async function applyCommunityResourceBuilderChangesetForUser(ctx: any, userId: any, args: { communityId: any; changesetId: any }) {
+  const changeset = (await ctx.db.get(args.changesetId as any)) as CommunityResourceBuilderChangesetRow | null;
+  if (!changeset || String(changeset.communityId) !== String(args.communityId)) {
+    throw new Error("community_resource_changeset_not_found");
+  }
+  if (changeset.status === "applied") {
+    const operations = normalizeCommunityResourceBuilderChangesetOperations(
+      changeset.operations,
+    );
+    const preview = buildCommunityResourceBuilderChangesetPreview(operations);
+    return {
+      ok: true,
+      kind: "community_resource_builder_changeset_applied",
+      changeset_id: normalizeIdValue(args.changesetId),
+      community_id: normalizeIdValue(args.communityId),
+      status: "applied",
+      summary: changeset.summary,
+      operation_count: operations.length,
+      preview_items: preview.preview_items,
+      preview_total_count: preview.total_count,
+      preview_limit: preview.preview_limit,
+      result: changeset.result ?? null,
+      deduped: true,
+    };
+  }
+  const nowMs = Date.now();
+  if (changeset.status === "expired") {
+    return buildCommunityResourceBuilderExpiredResult({
+      changeset,
+      changesetId: args.changesetId,
+      communityId: args.communityId,
+      deduped: true,
+    });
+  }
+  if (
+    await expireCommunityResourceBuilderChangesetIfNeeded({
+      ctx,
+      changeset,
+      nowMs,
+    })
+  ) {
+    return buildCommunityResourceBuilderExpiredResult({
+      changeset,
+      changesetId: args.changesetId,
+      communityId: args.communityId,
+      deduped: false,
+    });
+  }
+  if (changeset.status !== "staged" && changeset.status !== "approved") {
+    throw new Error("community_resource_changeset_not_applicable");
+  }
+  const operations = normalizeCommunityResourceBuilderChangesetOperations(changeset.operations);
+  const preflight = await buildCommunityResourceBuilderChangesetPreflight({
+    ctx,
+    communityId: args.communityId,
+    operations,
+    nowMs,
+  });
+  const preview = buildCommunityResourceBuilderChangesetPreview(operations);
+  const result = await applyCommunityResourceBuilderChangesetOperations({
+    ctx,
+    communityId: args.communityId,
+    userId,
+    operations,
+    nowMs,
+  });
+  await ctx.db.patch(args.changesetId as any, {
+    status: "applied",
+    preflight,
+    result,
+    updatedAt: nowMs,
+    appliedAt: nowMs,
+    appliedByUserId: userId,
+  });
+  return {
+    ok: true,
+    kind: "community_resource_builder_changeset_applied",
+    changeset_id: normalizeIdValue(args.changesetId),
+    community_id: normalizeIdValue(args.communityId),
+    status: "applied",
+    summary: changeset.summary,
+    operation_count: operations.length,
+    preview_items: preview.preview_items,
+    preview_total_count: preview.total_count,
+    preview_limit: preview.preview_limit,
+    result,
+    deduped: false,
+  };
+}
+
 export const applyCommunityResourceBuilderChangeset = mutation({
   args: {
     userId: v.optional(v.id("users")),
@@ -553,93 +647,37 @@ export const applyCommunityResourceBuilderChangeset = mutation({
       communityId: args.communityId,
       userId,
     });
-    const changeset = (await ctx.db.get(args.changesetId as any)) as CommunityResourceBuilderChangesetRow | null;
-    if (!changeset || String(changeset.communityId) !== String(args.communityId)) {
-      throw new Error("community_resource_changeset_not_found");
+    return await applyCommunityResourceBuilderChangesetForUser(ctx, userId, args);
+  },
+});
+
+// A batch from a builder's own AI (the MCP; docs/specs/agent-access-v0.md,
+// slice 4b). Its owner is present and asked for it, so a batch that takes
+// nothing away is applied at once. A batch that deletes a lesson or a course
+// is only staged: a person applies or rejects it in the app, as for the guide.
+export const stageAndApplyCommunityResourceBuilderChangesetInternal = internalMutation({
+  args: {
+    userId: v.id("users"),
+    communityId: v.id("communities"),
+    summary: v.string(),
+    operations: v.array(v.any()),
+    idempotencyKey: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const destructive = communityResourceChangesetIsDestructive(normalizeCommunityResourceBuilderChangesetOperations(args.operations));
+    const staged = await stageCommunityResourceBuilderChangesetCore({
+      ctx, userId: args.userId, communityId: args.communityId, summary: args.summary, operations: args.operations,
+      idempotencyKey: args.idempotencyKey ?? null, applyingNow: !destructive,
+    }) as Record<string, any>;
+    if (destructive) {
+      return { ...staged, applied: false, needs_confirmation: true,
+        confirm: "This batch deletes something, so it was not applied. The host applies or rejects it in the app (their guide shows it), within 24 hours." };
     }
-    if (changeset.status === "applied") {
-      const operations = normalizeCommunityResourceBuilderChangesetOperations(
-        changeset.operations,
-      );
-      const preview = buildCommunityResourceBuilderChangesetPreview(operations);
-      return {
-        ok: true,
-        kind: "community_resource_builder_changeset_applied",
-        changeset_id: normalizeIdValue(args.changesetId),
-        community_id: normalizeIdValue(args.communityId),
-        status: "applied",
-        summary: changeset.summary,
-        operation_count: operations.length,
-        preview_items: preview.preview_items,
-        preview_total_count: preview.total_count,
-        preview_limit: preview.preview_limit,
-        result: changeset.result ?? null,
-        deduped: true,
-      };
-    }
-    const nowMs = Date.now();
-    if (changeset.status === "expired") {
-      return buildCommunityResourceBuilderExpiredResult({
-        changeset,
-        changesetId: args.changesetId,
-        communityId: args.communityId,
-        deduped: true,
-      });
-    }
-    if (
-      await expireCommunityResourceBuilderChangesetIfNeeded({
-        ctx,
-        changeset,
-        nowMs,
-      })
-    ) {
-      return buildCommunityResourceBuilderExpiredResult({
-        changeset,
-        changesetId: args.changesetId,
-        communityId: args.communityId,
-        deduped: false,
-      });
-    }
-    if (changeset.status !== "staged" && changeset.status !== "approved") {
-      throw new Error("community_resource_changeset_not_applicable");
-    }
-    const operations = normalizeCommunityResourceBuilderChangesetOperations(changeset.operations);
-    const preflight = await buildCommunityResourceBuilderChangesetPreflight({
-      ctx,
-      communityId: args.communityId,
-      operations,
-      nowMs,
-    });
-    const preview = buildCommunityResourceBuilderChangesetPreview(operations);
-    const result = await applyCommunityResourceBuilderChangesetOperations({
-      ctx,
-      communityId: args.communityId,
-      userId,
-      operations,
-      nowMs,
-    });
-    await ctx.db.patch(args.changesetId as any, {
-      status: "applied",
-      preflight,
-      result,
-      updatedAt: nowMs,
-      appliedAt: nowMs,
-      appliedByUserId: userId,
-    });
-    return {
-      ok: true,
-      kind: "community_resource_builder_changeset_applied",
-      changeset_id: normalizeIdValue(args.changesetId),
-      community_id: normalizeIdValue(args.communityId),
-      status: "applied",
-      summary: changeset.summary,
-      operation_count: operations.length,
-      preview_items: preview.preview_items,
-      preview_total_count: preview.total_count,
-      preview_limit: preview.preview_limit,
-      result,
-      deduped: false,
-    };
+    // Sent again after it was applied, or expired meanwhile: the answer it already has.
+    if (staged.status !== "staged" && staged.status !== "approved") return { ...staged, applied: staged.status === "applied" };
+    const applied = await applyCommunityResourceBuilderChangesetForUser(ctx, args.userId,
+      { communityId: args.communityId, changesetId: ctx.db.normalizeId("communityResourceBuilderChangesets", String(staged.changeset_id)) });
+    return { ...applied, applied: true };
   },
 });
 
