@@ -1023,30 +1023,6 @@ export async function completeCloudBuilderKnowledgeSetup<SessionT>(
   ) as CloudBuilderKnowledgeSetupCompletion;
 }
 
-export type CloudBuilderKnowledgeBuildResult = {
-  ok: boolean;
-  kind: "builder_knowledge_build";
-  code?: string | null;
-  message?: string | null;
-  community_id?: string;
-  builder_knowledge_setup_pending?: false;
-};
-
-export async function buildCloudBuilderKnowledgeResources<SessionT>(
-  params: CloudCommunityAdminGatewayParams<SessionT> & {
-    communityId: string;
-  },
-): Promise<CloudBuilderKnowledgeBuildResult> {
-  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
-  return await client.action(
-    "communityBuilderKnowledgeSetup:buildBuilderKnowledgeResources" as any,
-    {
-      authSubject,
-      communityId: params.communityId,
-    },
-  ) as CloudBuilderKnowledgeBuildResult;
-}
-
 export type CloudCommunityArchiveResult = {
   ok: boolean;
   changed: boolean;

@@ -157,9 +157,9 @@ import {
 } from "./webAppRuntime";
 import { useWebCommunityVisualIdentityRegistryLifecycle } from "./controllers/useWebCommunityVisualIdentityRegistryLifecycle";
 import {
-  useWebBuilderKnowledgeCompletionController,
-  useWebBuilderKnowledgeHydrationController,
-} from "./controllers/useWebBuilderKnowledgeSetupController";
+  useWebCommunityLaunchCompletionController,
+  useWebPendingCommunityController,
+} from "./controllers/useWebCommunityLaunchController";
 import {
   useWebBuilderPurchaseFlowController,
   useWebBuilderSetupSubscriptionController,
@@ -628,16 +628,13 @@ export default function App() {
     handleSaveCommunityEvent,
     handleCancelCommunityEvent,
   } = communityContent;
-  const {
-    pendingBuilderKnowledgeCommunity,
-    hydratedBuilderKnowledgeCommunityId,
-  } = useWebBuilderKnowledgeHydrationController({
+  // A community just created opens on Home (design v1), behind its last step.
+  const launchTab = isDesignV1Active() ? "agent" as const : "chat" as const;
+  const { pendingCommunity: pendingLaunchCommunity } = useWebPendingCommunityController({
     communities,
     activeCommunityId,
-    resumeEpoch: appActivity.resumeEpoch,
-    getSession: () => sessionRef.current ?? session,
+    tab: launchTab,
     applyCommunityShellState,
-    loadCommunityResources,
   });
   const communityAdministration = useWebCommunityAdministrationState({
     activeCommunityId,
@@ -851,9 +848,10 @@ export default function App() {
     applyAppRouteState,
     loadCommunities,
   });
-  const completePendingBuilderKnowledgeSetup =
-    useWebBuilderKnowledgeCompletionController({
-      pendingCommunity: pendingBuilderKnowledgeCommunity,
+  const completePendingCommunityLaunch =
+    useWebCommunityLaunchCompletionController({
+      pendingCommunity: pendingLaunchCommunity,
+      tab: launchTab,
       ensureSession: ensureUsableAuthSession,
       setCommunities,
       enterCommunity: enterJoinedCommunity,
@@ -2187,20 +2185,13 @@ export default function App() {
       onClose: builderOffer.close,
       onConfirm: builderOffer.confirm,
     },
-    builderKnowledgeSetupProps: pendingBuilderKnowledgeCommunity && session
+    communityLaunchProps: pendingLaunchCommunity && session
       ? {
-          community: pendingBuilderKnowledgeCommunity,
-          isHydrating:
-            activeCommunityId !== pendingBuilderKnowledgeCommunity.id
-            || hydratedBuilderKnowledgeCommunityId !== pendingBuilderKnowledgeCommunity.id
-            || isLoadingResources,
-          resources:
-            activeCommunityId === pendingBuilderKnowledgeCommunity.id
-            && hydratedBuilderKnowledgeCommunityId === pendingBuilderKnowledgeCommunity.id
-              ? communityResources
-              : [],
-          onAddSources: handleAddCommunitySources,
-          onComplete: completePendingBuilderKnowledgeSetup,
+          community: pendingLaunchCommunity,
+          hostName: canonicalSessionUserId ? displayName(canonicalSessionUserId) : null,
+          hostAvatarUrl: canonicalSessionUserId ? savedProfilesByUserId[canonicalSessionUserId]?.avatar_url ?? null : null,
+          ensureSession: ensureUsableAuthSession,
+          onComplete: completePendingCommunityLaunch,
         }
       : null,
     appToast,

@@ -19,7 +19,7 @@ const sourceUrlPolicy = read("convex/communitySourceUrlPolicy.ts");
 const http = read("convex/http.ts");
 const gateway = read("shared/cloudCommunityAdminGateway.ts");
 const resourceController = read("shared/useCommunityResourceController.ts");
-const sourceIntake = read("apps/web/src/components/WebCommunityKnowledgeSourceIntake.tsx");
+const knowledgePanel = read("apps/web/src/components/WebCommunityKnowledgePanel.tsx");
 const sourceCrawlerServicePath = join(root, "services/community-source-crawler/app.py");
 const app = read("apps/web/src/App.tsx");
 
@@ -298,11 +298,14 @@ assert.match(
   /ingestCloudCommunitySources\(\{[\s\S]*retryFailed: input\.retryExisting === true/,
   "only the explicit retry UI path should retry historical failed sources",
 );
+// Sources are added from the Knowledge page (the setup-time intake screen
+// was removed, Nov 16): it goes through the same canonical handler.
 assert.match(
-  sourceIntake,
-  /const failedCount = result\.ingestion\?\.failed_sources \?\? 0/,
-  "source intake feedback should use persisted failed-source truth",
+  knowledgePanel,
+  /resources\.actions\.handleAddCommunitySources\(/,
+  "the Knowledge page adds sources through the canonical handler",
 );
+assert.equal(existsSync(join(root, "apps/web/src/components/WebCommunityKnowledgeSourceIntake.tsx")), false, "the setup-time source intake stays deleted");
 assert.equal(existsSync(join(root, "shared/communitySourceCrawler.ts")), false, "the crawl pipeline stays deleted");
 assert.doesNotMatch(resources, /crawlWebRoot|crawlCommunitySourceRoot|CommunitySourceCrawlJob|saveCommunitySourceUnitsForPage/, "the crawl pipeline stays deleted");
 console.log("community_source_ingestion_contract_proof: ok");

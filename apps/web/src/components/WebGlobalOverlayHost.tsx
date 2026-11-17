@@ -1,12 +1,12 @@
 import type { ComponentProps } from "react";
 import { WebCommunityModalHost } from "./WebCommunityModalHost";
 import { WebBuilderOfferModal } from "./WebBuilderOfferModal";
-import { WebBuilderKnowledgeSetup } from "./WebBuilderKnowledgeSetup";
+import { WebCommunityLaunchStep } from "./WebCommunityLaunchStep";
 
 export type WebGlobalOverlayHostProps = {
   communityModalHostProps: ComponentProps<typeof WebCommunityModalHost>["modalHostProps"];
   builderOfferProps: ComponentProps<typeof WebBuilderOfferModal>;
-  builderKnowledgeSetupProps: ComponentProps<typeof WebBuilderKnowledgeSetup> | null;
+  communityLaunchProps: ComponentProps<typeof WebCommunityLaunchStep> | null;
   appToast: string | null;
 };
 
@@ -18,8 +18,8 @@ export function WebGlobalOverlayHost(props: WebGlobalOverlayHostProps) {
       <WebBuilderOfferModal {...props.builderOfferProps} />
 
 
-      {props.builderKnowledgeSetupProps ? (
-        <WebBuilderKnowledgeSetup {...props.builderKnowledgeSetupProps} />
+      {props.communityLaunchProps ? (
+        <WebCommunityLaunchStep key={props.communityLaunchProps.community.id} {...props.communityLaunchProps} />
       ) : null}
 
       {props.appToast ? (

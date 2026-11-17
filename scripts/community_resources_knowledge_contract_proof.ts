@@ -24,9 +24,8 @@ const resourceCourseCatalog = read("apps/web/src/components/ResourceCourseCatalo
 const resourceViewer = read("apps/web/src/components/WebCommunityResourceViewerContent.tsx");
 const resourcesPanel = read("apps/web/src/components/CommunityResourcesPanel.tsx");
 const webCss = read("apps/web/src/index.css");
-const knowledgeSourceIntake = read("apps/web/src/components/WebCommunityKnowledgeSourceIntake.tsx");
-const builderKnowledgeSetup = read("apps/web/src/components/WebBuilderKnowledgeSetup.tsx");
-const builderKnowledgeSetupController = read("apps/web/src/controllers/useWebBuilderKnowledgeSetupController.ts");
+const knowledgePanel = read("apps/web/src/components/WebCommunityKnowledgePanel.tsx");
+const communityLaunchController = read("apps/web/src/controllers/useWebCommunityLaunchController.ts");
 const builderKnowledgeSetupBackend = read("convex/communityBuilderKnowledgeSetup.ts");
 const baseCss = [read("apps/web/src/base.css"), read("apps/web/src/styles/shell-and-onboarding.css"), read("apps/web/src/styles/community-and-content.css"), read("apps/web/src/styles/settings-runtime-and-theme-overrides.css")].join("\n");
 const resourceContracts = read("apps/web/src/components/communityResourcesContracts.ts");
@@ -593,25 +592,15 @@ assert.doesNotMatch(
   /WebCommunityKnowledgeSourceIntake|showSourceIntake|resources-source-intake-action/,
   "the course presentation must not expose source intake as a primary Resources action",
 );
+// Starting a community no longer has a knowledge step (Nov 16): sources are
+// added from the Knowledge page, through the same canonical handler.
+for (const gone of ["apps/web/src/components/WebBuilderKnowledgeSetup.tsx", "apps/web/src/components/WebCommunityKnowledgeSourceIntake.tsx"]) {
+  assert.equal(existsSync(new URL("../" + gone, import.meta.url)), false, `${gone} stays deleted`);
+}
 assert.match(
-  builderKnowledgeSetup,
-  /WebCommunityKnowledgeSourceIntake[\s\S]*onAddSources=\{props\.onAddSources\}/,
-  "builder onboarding must retain the canonical source intake path",
-);
-assert.match(
-  knowledgeSourceIntake,
-  /Seed your knowledge[\s\S]*Add and read sources/,
-  "builder onboarding source intake must support canonical links and files",
-);
-assert.doesNotMatch(
-  knowledgeSourceIntake,
-  /Build my resources|onBuildResources|isBuildingResources/,
-  "source intake must not retain the retired agent-prompt resource launcher",
-);
-assert.doesNotMatch(
-  builderKnowledgeSetup,
-  /later from Resources/,
-  "builder onboarding must not promise a source intake action removed from Resources",
+  knowledgePanel,
+  /resources\.actions\.handleAddCommunitySources\(/,
+  "the Knowledge page adds sources through the canonical handler",
 );
 assert.doesNotMatch(
   resourceContracts,
@@ -619,9 +608,14 @@ assert.doesNotMatch(
   "resource contracts must expose no parallel onboarding build path",
 );
 assert.match(
-  builderKnowledgeSetupController,
-  /mode === "build"[\s\S]*buildCloudBuilderKnowledgeResources[\s\S]*completeCloudBuilderKnowledgeSetup/,
-  "Builder Next must use the canonical server build while Skip remains inference-free",
+  communityLaunchController,
+  /completeCloudBuilderKnowledgeSetup\(/,
+  "opening a new community finishes setup through the canonical, inference-free completion",
+);
+assert.doesNotMatch(
+  communityLaunchController,
+  /buildCloudBuilderKnowledgeResources/,
+  "starting a community runs no resource build",
 );
 assert.match(
   builderKnowledgeSetupBackend,

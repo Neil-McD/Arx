@@ -13,14 +13,14 @@ const account = read("apps/web/src/components/WebPlatformBridgePage.tsx");
 const profile = read("apps/web/src/components/WebOnboardingPage.tsx");
 const accountForm = read("apps/web/src/components/WebAccountSetupForm.tsx");
 const communityBridge = read("apps/web/src/components/WebCommunityBridgeCard.tsx");
-const knowledge = read("apps/web/src/components/WebBuilderKnowledgeSetup.tsx");
+const launch = read("apps/web/src/components/WebCommunityLaunchStep.tsx");
 const mainSurface = read("apps/web/src/components/WebAppMainSurfaceHost.tsx");
 const shellProjection = read(
   "apps/web/src/controllers/buildWebShellProjection.ts",
 );
 
 test("required setup surfaces share one accessible blocking shell", () => {
-  for (const surface of [create, account, profile, knowledge]) {
+  for (const surface of [create, account, profile, launch]) {
     expect(surface).toContain("<WebBlockingSetupModal");
   }
   expect(shell).toContain('role="dialog"');
@@ -41,7 +41,7 @@ test("all account entry contexts share one field renderer", () => {
   expect(communityBridge).not.toContain("Terms of Service");
 });
 
-test("account setup and knowledge setup keep the live product behind the blocker", () => {
+test("account setup and the launch step keep the live product behind the blocker", () => {
   expect(mainSurface).toMatch(
     /activePage === "onboarding"[\s\S]*<WebDiscoverPanel[\s\S]*<WebPlatformBridgePage/,
   );
@@ -51,14 +51,14 @@ test("account setup and knowledge setup keep the live product behind the blocker
   );
   expect(account).not.toContain("polynet-platform-bridge-page");
   expect(account).not.toContain("landing-auth-hold");
-  expect(knowledge).not.toContain("<main");
+  expect(launch).not.toContain("<main");
 });
 
 test("only an explicitly dismissible setup can close from backdrop or Escape", () => {
   expect(shell).toMatch(/!props\.dismissible[\s\S]*\|\|[\s\S]*props\.busy/);
   expect(shell).toMatch(/!dismissibleRef\.current \|\| busyRef\.current/);
   expect(create).toContain("dismissible={props.isDismissible}");
-  expect(knowledge).not.toMatch(/dismissible=/);
+  expect(launch).not.toMatch(/dismissible=/);
   expect(account).not.toMatch(/dismissible=/);
 });
 
