@@ -752,6 +752,23 @@ css += """
 .app .startc-acts{display:flex;align-items:center;gap:12px;margin-top:6px}
 .app .startc-acts .btn{height:36px;padding:0 14px;font-size:14px}
 .app .startc-err{margin:0;font-size:13px;color:var(--bad)}
+.app .startc-field textarea{display:block;width:100%;min-height:92px;padding:10px 12px;border-radius:9px;border:1px solid var(--line2);background:var(--s1);color:var(--ink);font:inherit;font-size:14px;line-height:1.45;outline:0;resize:vertical;transition:border-color .16s var(--ease)}
+.app .startc-field textarea:focus{border-color:rgba(var(--w),.3)}
+.app .startc-pick{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+.app .startc-pick>button{height:34px;padding:0 14px;border-radius:9px;border:1px solid var(--line2);font-size:13.5px;color:var(--ink2);cursor:pointer}
+.app .startc-pick>button.on{border-color:rgba(var(--w),.34);background:var(--s2);color:var(--ink)}
+.app .startc-price{display:flex;align-items:center;gap:6px;font-size:13.5px;color:var(--ink2)}
+.app .startc-field .startc-price input[type=text]{width:84px;height:34px}
+.app .startc-check{display:flex;align-items:center;gap:9px;font-size:13.5px;color:var(--ink1);cursor:pointer}
+.app .startc-check input{width:15px;height:15px;accent-color:var(--ink)}
+.app .startc-link{display:flex;align-items:center;gap:8px}
+.app .startc-link input[type=text]{flex:1;min-width:0}
+.app .startc-link .btn{height:38px;flex:none}
+/* Every step is as tall as the tallest, so the window holds still between them. */
+.app .startc-form{min-height:432px}
+.app .startc-dots{display:flex;justify-content:center;gap:7px;margin-top:auto;padding-top:10px}
+.app .startc-dots i{width:6px;height:6px;border-radius:999px;background:var(--line2);transition:background .2s var(--ease)}
+.app .startc-dots i.on{background:var(--ink)}
 .app .startc-side{display:flex;flex-direction:column;gap:12px;padding:28px 24px 24px;border-left:1px solid var(--line);background:var(--s1);min-width:0}
 .app .startc-side p{margin:0;font-size:12px;line-height:1.5;color:var(--ink3)}
 .app .startc-side .disccard{cursor:default;pointer-events:none}
