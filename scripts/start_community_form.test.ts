@@ -28,3 +28,8 @@ test("design v1 draws the new form in the same blocking modal; the classic form 
   expect(modal).toMatch(/if \(isDesignV1Active\(\)\) \{[\s\S]*?<KitStartCommunity/);
   expect(modal).toContain("Set up your community");
 });
+
+test("the dialog's Tab stops leave out anything inside an inert part", () => {
+  const modal = readFileSync(new URL("../apps/web/src/components/WebBlockingSetupModal.tsx", import.meta.url), "utf8");
+  expect(modal).toContain('.filter((element) => !element.closest("[inert]"))');
+});

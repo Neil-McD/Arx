@@ -101,7 +101,8 @@ export function KitStartCommunity(props: KitStartCommunityProps) {
           </div>
         </div>
         {/* What you are making: the card Discover shows, as you type. */}
-        <div className={cx("startc-side")} aria-hidden="true">
+        {/* A picture of the card, not a link: out of the tab order. */}
+        <div className={cx("startc-side")} aria-hidden="true" {...({ inert: "" } as Record<string, string>)}>
           <span className={cx("lab")}>How it looks in Discover</span>
           <DiscoverCard now={Date.now()} community={{
             slug: props.slug || "your-community",

@@ -75,7 +75,8 @@ export function WebBlockingSetupModal(props: WebBlockingSetupModalProps) {
 
       const focusable = Array.from(
         dialog.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR),
-      );
+        // Anything inside an inert part can't take focus, so it is not a stop.
+      ).filter((element) => !element.closest("[inert]"));
       if (focusable.length === 0) {
         event.preventDefault();
         dialog.focus();

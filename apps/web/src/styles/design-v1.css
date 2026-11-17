@@ -970,7 +970,15 @@
   -webkit-line-clamp: 2;
   line-height: 1.3;
 }
-:root[data-design="v1"] .community-switcher-item { padding-block: 6px; }
+/* A row is as tall as its name: the list's rows never squeeze a two-line
+   name into one line's height. */
+:root[data-design="v1"] .community-switcher-item { padding-block: 7px; }
+:root[data-design="v1"] .community-switcher-list {
+  grid-auto-rows: max-content;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-strong) transparent;
+}
+:root[data-design="v1"] .community-switcher-item-name { overflow-wrap: anywhere; text-wrap: pretty; }
 :root[data-design="v1"] .community-switcher-avatar .community-avatar-frame-fallback {
   color: #fff;
   font-family: inherit;
