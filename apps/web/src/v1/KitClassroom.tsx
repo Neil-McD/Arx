@@ -6,6 +6,8 @@
 // opens in the right column.
 import { courseProgressWord } from "../../../../shared/communityMemberWords";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
+import { usePageHeaderToolbar } from "../components/CommunityPageHeader";
 import { useRouteDetail, writeRouteDetail } from "../../../../shared/routeDetails";
 import {
   fetchCourseProgressSummary,
@@ -388,37 +390,48 @@ export function KitClassroom(props: {
     }
   };
 
-  // A host's tools for the open course, above the lesson.
-  const courseTools = open && props.canManage ? (
+  // A host's tools for the open course: in the page's header (above the
+  // lesson where there is no header). What is rarely used sits in one menu.
+  const headerToolbar = usePageHeaderToolbar();
+  const closeMenu = (event: { currentTarget: HTMLElement }) => { const menu = event.currentTarget.closest("details"); if (menu) menu.open = false; };
+  const courseToolsFor = (lessonToEdit: string | null) => open && props.canManage ? (
     <>
-            {open.course.module_status === "draft" ? <span className={cx("tag")}>Draft · only hosts see it</span> : null}
-            {props.onSetCourseStatus ? (open.course.module_status === "draft" ? (
-              <button type="button" className={cx("btn sm go")} disabled={publishing || open.lessons.length === 0}
-                title={open.lessons.length === 0 ? "Write a lesson first" : "Members will see this course"}
-                onClick={() => void setCourseStatus(open.course.id, "live")}>Publish course</button>
-            ) : (
-              <button type="button" className={cx("btn sm txt")} disabled={publishing} title="Back to a draft only hosts see"
-                onClick={() => void setCourseStatus(open.course.id, "draft")}>Unpublish</button>
-            )) : null}
-            {props.onSaveCourse ? <button type="button" className={cx("btn sm")} aria-pressed={editingCourse} onClick={() => setEditingCourse(true)}>Edit course</button> : null}
-            {/* Only a draft can be deleted: taking a live course away from
-                members is Unpublish, on purpose, first. */}
-            {props.onDeleteCourse ? (open.course.module_status === "draft" ? (
-              <button type="button" className={cx("btn sm txt no")} disabled={deletingCourse} onClick={() => void deleteCourse()}>{deletingCourse ? "Deleting" : "Delete course"}</button>
-            ) : <span className={cx("sub")} style={{ flexBasis: "100%" }}>To delete this course, unpublish it first.</span>) : null}
-            {courseError ? <span className={cx("sub")} role="alert" style={{ flexBasis: "100%", color: "var(--bad)" }}>{courseError}</span> : null}
+      <span className={cx("tag", open.course.module_status === "draft" ? "" : "live")}>{open.course.module_status === "draft" ? "Draft · only hosts see it" : "Published"}</span>
+      {props.onSetCourseStatus && open.course.module_status === "draft" ? (
+        <button type="button" className={cx("btn sm go")} disabled={publishing || open.lessons.length === 0}
+          title={open.lessons.length === 0 ? "Write a lesson first" : "Members will see this course"}
+          onClick={() => void setCourseStatus(open.course.id, "live")}>Publish course</button>
+      ) : null}
+      {lessonToEdit && editingTools ? <button type="button" className={cx("btn sm")} onClick={() => setEditingLessonId(lessonToEdit)}><Icon name="pen" />Edit lesson</button> : null}
+      {props.onSaveCourse ? <button type="button" className={cx("btn sm")} aria-pressed={editingCourse} onClick={() => setEditingCourse(true)}>Edit course</button> : null}
+      {(props.onSetCourseStatus && open.course.module_status !== "draft") || (props.onDeleteCourse && open.course.module_status === "draft") ? (
+        <details className={cx("kmore")}>
+          <summary className={cx("btn sm")} aria-label="More course actions"><Icon name="more" /></summary>
+          <div className={cx("kmore-menu")} role="menu">
+            {/* Only a draft can be deleted: taking a live course away from members is Unpublish, on purpose, first. */}
+            {props.onSetCourseStatus && open.course.module_status !== "draft" ? (
+              <button type="button" role="menuitem" disabled={publishing} onClick={(event) => { closeMenu(event); void setCourseStatus(open.course.id, "draft"); }}>
+                Unpublish<small>Back to a draft only hosts see. A draft can be deleted.</small>
+              </button>
+            ) : null}
+            {props.onDeleteCourse && open.course.module_status === "draft" ? (
+              <button type="button" role="menuitem" className={cx("no")} disabled={deletingCourse} onClick={(event) => { closeMenu(event); void deleteCourse(); }}>{deletingCourse ? "Deleting" : "Delete course"}</button>
+            ) : null}
+          </div>
+        </details>
+      ) : null}
     </>
   ) : null;
   const openProgress = open ? courseProgress(open.lessons, done) : null;
-  // The course's lessons: pick one, and for a host put them in order or add
-  // one. In the right column; in the page, under the lesson, where there is
-  // no column (below 1024px).
+  // The course's lessons: pick one, and for a host put them in order.
   const lessonList = open ? (
-    <div className={cx("sec")}>
+    <div className={cx("klrows")}>
       {open.lessons.map((lesson, index) => (
         <div key={lesson.id} className={cx("kl-row")}>
-          <button type="button" className={cx("kl", lesson.id === lessonId && "on", done.has(lesson.id) && lesson.id !== lessonId && "d")} onClick={() => { setEditingLessonId(null); chooseLesson(lesson.id); }}>
-            {done.has(lesson.id) ? <Icon name="check" /> : <i />}{index + 1}. {lesson.title}
+          <button type="button" className={cx("kl", lesson.id === lessonId && "on", done.has(lesson.id) && "d")} aria-current={lesson.id === lessonId ? "true" : undefined}
+            onClick={() => { setEditingLessonId(null); chooseLesson(lesson.id); }}>
+            <span className={cx("kdot", done.has(lesson.id) ? "done" : lesson.id === lessonId ? "now" : "")}>{done.has(lesson.id) ? <Icon name="check" /> : null}</span>
+            <span className={cx("kl-t")}>{lesson.title}</span>
           </button>
           {editingTools ? (
             <span className={cx("kl-move")}>
@@ -430,23 +443,34 @@ export function KitClassroom(props: {
           ) : null}
         </div>
       ))}
-      {editingTools ? (
-        <TextLink onClick={async () => {
-          const id = await editingTools.addLesson(open.course.id);
-          if (id) { chooseLesson(id); setEditingLessonId(id); }
-        }}>+ Add lesson</TextLink>
-      ) : null}
     </div>
   ) : null;
-  // Over the list: a member's own progress; for a host, who is learning.
-  const courseProgressLine = open && openProgress ? (props.canManage ? (
-    <div className={cx("kline")}><span>{summaryBy.get(open.course.id)?.started ?? 0} started</span><em>{summaryBy.get(open.course.id)?.finished ?? 0} finished</em></div>
-  ) : (
+  // Under the list: a host adds a lesson; a member asks the guide about this one.
+  const lessonListFoot = open ? (editingTools ? (
+    <button type="button" className={cx("klist-foot")} onClick={async () => {
+      const id = await editingTools.addLesson(open.course.id);
+      if (id) { chooseLesson(id); setEditingLessonId(id); }
+    }}><Icon name="plus" />Add a lesson</button>
+  ) : agentOn ? (
+    <button type="button" className={cx("klist-foot", "ask")} onClick={() => openGuideFromSearch()}><Icon name="spark" />Ask about this lesson</button>
+  ) : null) : null;
+  const courseProgressWords = open && openProgress ? (props.canManage
+    ? `${summaryBy.get(open.course.id)?.started ?? 0} started · ${summaryBy.get(open.course.id)?.finished ?? 0} finished`
+    : `${openProgress.done} of ${openProgress.total} done`) : "";
+  // The floating lesson panel: the course, how far along, its lessons.
+  const lessonPanel = open && openProgress ? (
     <>
-      <div className={cx("kline")}><span>{openProgress.done} of {openProgress.total} done</span><em>{openProgress.percent}%</em></div>
-      <div className={cx("bar", "kbar")}><i style={{ width: `${openProgress.percent}%` }} /></div>
+      <div className={cx("klist-top")}>
+        <span className={cx("kcover", "klist-cover", open.course.banner_url ? "" : coverTint(open.course.id))} style={open.course.banner_url ? { backgroundImage: `url(${JSON.stringify(open.course.banner_url)})`, backgroundSize: "cover", backgroundPosition: `${(open.course.banner_focus_x ?? 0.5) * 100}% ${(open.course.banner_focus_y ?? 0.5) * 100}%` } : undefined}>
+          {open.course.banner_url ? null : <Icon name="book" />}
+        </span>
+        <span><b>{open.course.name}</b><em>{courseProgressWords}</em></span>
+      </div>
+      {props.canManage ? null : <div className={cx("bar", "kbar")}><i style={{ width: `${openProgress.percent}%` }} /></div>}
+      {lessonList}
+      {lessonListFoot}
     </>
-  )) : null;
+  ) : null;
 
   // The right column is a note you picked or, on the shelf, the fast read of
   // Knowledge: the brief, what's next, what the community knows and what it
@@ -489,6 +513,8 @@ export function KitClassroom(props: {
     // A list of one lesson is noise; a host still needs it, to add the second.
     const listWorthShowing = open.lessons.length > 1 || (Boolean(editingTools) && open.lessons.length > 0);
     const listBeside = roomForList && listWorthShowing;
+    const editingThis = Boolean(lesson && editingLessonId === lesson.id);
+    const courseTools = courseToolsFor(lesson && !editingThis ? lesson.id : null);
     page = (
       <div className={cx("page")} style={{ padding: 0, overflow: "visible" }}>
         {/* On a phone the top bar's arrow leaves the community page, so the course keeps its own way back here; on desktop it is the header's arrow. */}
@@ -496,14 +522,24 @@ export function KitClassroom(props: {
           <button type="button" className={cx("kback")} onClick={() => props.onOpenCourse(null)} aria-label="Back to Knowledge"><Icon name="back" />Knowledge</button>
           <span>›</span><span>{open.course.name}</span>
         </div>
-        {courseTools ? <div className={`knowledge-course-tools-inline ${cx("ktools")}`}>{courseTools}</div> : null}
+        {courseTools && headerToolbar ? createPortal(<KitApp view="know" host part="flow" className="kit-header-tools"><div className={cx("ktools", "head")}>{courseTools}</div></KitApp>, headerToolbar) : null}
+        {courseTools && !headerToolbar ? <div className={`knowledge-course-tools-inline ${cx("ktools")}`}>{courseTools}</div> : null}
+        {courseError ? <p className={cx("sub")} role="alert" style={{ color: "var(--bad)", maxWidth: 1216, margin: "12px auto 0" }}>{courseError}</p> : null}
         {editingCourse && props.onSaveCourse && props.canManage ? (
           <KitCourseEdit key={open.course.id} course={open.course} onClose={() => setEditingCourse(false)}
             onSave={(patch) => props.onSaveCourse!(open.course.id, patch)} />
         ) : null}
         <div className={`knowledge-course-cols ${cx("kcols", listBeside && "two")}`}>
-        {listBeside ? <aside className={cx("klist")} aria-label="Lessons">{courseProgressLine}{lessonList}</aside> : null}
+        {listBeside ? <aside className={cx("klist")} aria-label="Lessons">{lessonPanel}</aside> : null}
         <div className={cx("kmainc")}>
+        {/* No room beside the lesson (a phone, a narrow window): the same panel folds above it. */}
+        {!listBeside && listWorthShowing ? (
+          <details className={cx("kfold")}>
+            <summary>Lessons<em>{courseProgressWords}</em></summary>
+            {lessonList}
+            {lessonListFoot}
+          </details>
+        ) : null}
         {lesson && editingTools && editingLessonId === lesson.id ? (
           <KitLessonEditor key={lesson.id} resource={lesson} index={index} total={open.lessons.length} courseLive={open.course.module_status !== "draft"}
             onCancel={() => setEditingLessonId(null)}
@@ -520,15 +556,12 @@ export function KitClassroom(props: {
               chooseLesson(open.lessons[index + 1]?.id ?? open.lessons[index - 1]?.id ?? null);
             }} />
         ) : lesson ? (
-          <div className={cx("klesson")}>
-            <div className={cx("ktitle")}>
-              {/* "Lesson 1 of 1" says nothing. */}
-              <span className={cx("lab")} style={{ flex: 1 }}>{open.lessons.length > 1 ? `Lesson ${index + 1} of ${open.lessons.length}` : ""}{open.course.module_status === "draft" ? `${open.lessons.length > 1 ? " · " : ""}Draft course` : ""}</span>
-              {editingTools ? <button type="button" className={cx("btn sm")} onClick={() => setEditingLessonId(lesson.id)}>Edit lesson</button> : null}
-            </div>
+          <div className={`kit-lesson ${cx("klesson")}`}>
+            {/* Drawn after the video (design-v1.css orders the lesson's parts). "Lesson 1 of 1" says nothing. */}
+            <div className={`kit-lesson-facts ${cx("lab")}`}>{open.lessons.length > 1 ? `Lesson ${index + 1} of ${open.lessons.length}` : ""}{open.course.module_status === "draft" ? `${open.lessons.length > 1 ? " · " : ""}Draft course` : ""}</div>
             <div className="kit-lesson-body"><WebCommunityResourceViewerContent resource={lesson} /></div>
             {lesson.lesson_links?.length ? (
-              <div className={cx("kres")}>
+              <div className={`kit-lesson-after ${cx("kres")}`}>
                 <span className={cx("lab")}>Resources for this lesson</span>
                 {lesson.lesson_links.map((link) => (
                   <a key={link.url} className={cx("kresrow", "klink")} href={link.url} target="_blank" rel="noreferrer noopener">
@@ -537,25 +570,27 @@ export function KitClassroom(props: {
                 ))}
               </div>
             ) : null}
-            {/* One way forward. Back to the shelf is the header's arrow. */}
-            <div className={cx("kfoot")}>
+            {/* One way forward, with what it leads to. Back to the shelf is the header's arrow. */}
+            <div className={`kit-lesson-after ${cx("kfinish")}`}>
+              <div className={cx("kfinish-next")}>
+                <span>{next ? "Up next" : open.lessons.length > 1 ? "Last lesson in this course" : open.course.name}</span>
+                <b>{next ? next.title : open.lessons.length > 1 ? `You're at the end of ${open.course.name}` : lesson.title}</b>
+              </div>
               {previous ? <button type="button" className={cx("btn", "txt")} onClick={() => chooseLesson(previous.id)}><Icon name="back" />Previous</button> : null}
-              {agentOn ? <button type="button" className={cx("btn", "txt")} onClick={() => openGuideFromSearch()}><Icon name="spark" />Ask about this lesson</button> : null}
-              <span className={cx("kfoot-gap")} />
+              {agentOn && !listBeside && !editingTools ? <button type="button" className={cx("btn", "txt")} onClick={() => openGuideFromSearch()}><Icon name="spark" />Ask about this lesson</button> : null}
               {props.canManage ? (
-                next ? <button type="button" className={cx("btn")} onClick={() => chooseLesson(next.id)}>Next lesson <Icon name="arrow" /></button> : null
+                next ? <button type="button" className={cx("btn", "lg")} onClick={() => chooseLesson(next.id)}>Next lesson <Icon name="arrow" /></button> : null
               ) : done.has(lesson.id) ? (
                 <>
                   <button type="button" className={cx("kisdone")} aria-pressed title="Done. Click to undo." disabled={saving} onClick={() => void mark(lesson.id, false)}><Icon name="check" />Done</button>
-                  {next ? <button type="button" className={cx("btn go")} onClick={() => chooseLesson(next.id)}>Next lesson <Icon name="arrow" /></button> : null}
+                  {next ? <button type="button" className={cx("btn go", "lg")} onClick={() => chooseLesson(next.id)}>Next lesson <Icon name="arrow" /></button> : null}
                 </>
               ) : (
-                <button type="button" className={cx("btn go")} disabled={saving} onClick={async () => { await mark(lesson.id, true); if (next) chooseLesson(next.id); }}>
+                <button type="button" className={cx("btn go", "lg")} disabled={saving} onClick={async () => { await mark(lesson.id, true); if (next) chooseLesson(next.id); }}>
                   <Icon name="check" />{next ? "Mark done and continue" : "Mark done"}
                 </button>
               )}
             </div>
-            {next && (props.canManage || !done.has(lesson.id)) ? <p className={cx("kupnext")}>Up next: {next.title}</p> : null}
           </div>
         ) : (
           <div style={{ marginTop: 24 }}>
@@ -568,13 +603,6 @@ export function KitClassroom(props: {
             ) : null}
           </div>
         )}
-        {!listBeside && listWorthShowing && lessonList ? (
-          <div style={{ marginTop: 34 }}>
-            <span className={cx("lab")} style={{ display: "block", marginBottom: 8 }}>Lessons</span>
-            {courseProgressLine}
-            {lessonList}
-          </div>
-        ) : null}
         </div>
         </div>
       </div>
@@ -583,18 +611,18 @@ export function KitClassroom(props: {
     // Adding a course is a button beside "Courses", so hosts' pages hold six too.
     const shelf = pageOf(courses, shelfPage, SHELF);
     const learning = summary.reduce((total, row) => total + row.started, 0);
-    // A member sees the courses as one path, in the host's order; a host
-    // sees the shelf they arrange.
+    // A member is shown where they are first (the first unfinished course,
+    // in the host's order), then every course. Nothing is locked.
     const path = props.canManage ? [] : coursePath(courses, done);
+    const here = path.find((step) => step.state === "now") ?? path.find((step) => step.total > 0) ?? null;
+    const hereAt = here ? path.indexOf(here) : -1;
     page = (
       <div className={cx("page")} style={{ padding: 0, overflow: "visible" }}>
-        <p className={cx("lead")} style={{ marginTop: 0 }}>{agentOn ? <span className={cx("aura")}><Icon name="spark" /></span> : null}
-          {!props.loaded ? " " : props.canManage
-            ? hostLead(courses.map((entry) => entry.course), learning)
-            : !courses.length ? "Nothing to learn here yet."
-              : path.every((step) => step.state === "done" || step.total === 0) ? "You've finished everything here."
-              : path.some((step) => step.done > 0) ? "Pick up where you left off." : "Start here."}
-        </p>
+        {props.canManage || !courses.length ? (
+          <p className={cx("lead")} style={{ marginTop: 0 }}>{agentOn ? <span className={cx("aura")}><Icon name="spark" /></span> : null}
+            {!props.loaded ? " " : props.canManage ? hostLead(courses.map((entry) => entry.course), learning) : "Nothing to learn here yet."}
+          </p>
+        ) : null}
         {/* One bar, for everyone: it asks the guide. Nothing is added through it. */}
         {agentOn ? (
           <button type="button" className={cx("ask kask kask-btn")} onClick={() => openGuideFromSearch()}>
@@ -612,42 +640,32 @@ export function KitClassroom(props: {
           </div></div>
         ) : null}
 
-        {!props.canManage && courses.length ? (
-          <ol className={cx("kpath")} aria-label="Courses, in order">
-            {path.map((step, position) => {
-              const { course } = step;
-              const open = () => { props.onOpenCourse(course.id); if (step.state === "now" && step.nextLesson) chooseLesson(step.nextLesson.id); };
-              const count = `${step.total} ${step.total === 1 ? "lesson" : "lessons"}`;
-              return (
-                <li key={course.id}>
-                  <button type="button" className={cx("kstep", step.state)} onClick={open} aria-current={step.state === "now" ? "step" : undefined}>
-                    <span className={cx("kstep-n")} aria-hidden="true">{step.state === "done" ? <Icon name="check" /> : position + 1}</span>
-                    <span className={cx("kstep-body")}>
-                      <b>{course.name}</b>
-                      {firstLine(course.description_md) ? <span className={cx("s")}>{firstLine(course.description_md)}</span> : null}
-                      {step.state === "now" ? (
-                        <>
-                          {step.nextLesson ? <span className={cx("knext")}>{step.done > 0 ? "Next" : "First"}: {step.nextLesson.title}</span> : null}
-                          {step.done > 0 ? <span className={cx("bar", "kbar")}><i style={{ width: `${Math.round((step.done / step.total) * 100)}%` }} /></span> : null}
-                          <span className={cx("acts")}><span className={cx("btn go")}><Icon name="play" />{step.done > 0 ? "Continue" : "Start"}</span></span>
-                        </>
-                      ) : null}
-                    </span>
-                    {step.state === "now" && course.banner_url ? (
-                      <span className={cx("kstep-cover")} style={{ backgroundImage: `url(${JSON.stringify(course.banner_url)})`, backgroundPosition: `${(course.banner_focus_x ?? 0.5) * 100}% ${(course.banner_focus_y ?? 0.5) * 100}%` }} />
-                    ) : (
-                      <em>{step.state === "done" ? "Done" : step.state === "now" && step.done > 0 ? `${step.done} of ${step.total} done` : count}</em>
-                    )}
-                  </button>
-                </li>
-              );
-            })}
-          </ol>
+        {here ? (
+          <button type="button" className={cx("khero")} onClick={() => { props.onOpenCourse(here.course.id); if (here.state === "now" && here.nextLesson) chooseLesson(here.nextLesson.id); }}>
+            <span className={cx("kcover", "khero-cover", here.course.banner_url ? "" : coverTint(here.course.id))} style={here.course.banner_url ? { backgroundImage: `url(${JSON.stringify(here.course.banner_url)})`, backgroundSize: "cover", backgroundPosition: `${(here.course.banner_focus_x ?? 0.5) * 100}% ${(here.course.banner_focus_y ?? 0.5) * 100}%` } : undefined}>
+              {here.course.banner_url ? null : <Icon name="book" />}
+            </span>
+            <span className={cx("khero-body")}>
+              <span className={cx("khero-eye")}>{here.state === "done" ? "Finished" : here.done > 0 ? "Continue" : "Start here"}{courses.length > 1 ? ` · Course ${hereAt + 1} of ${courses.length}` : ""}</span>
+              <b>{here.course.name}</b>
+              {firstLine(here.course.description_md) ? <span className={cx("s")}>{firstLine(here.course.description_md)}</span> : null}
+              {here.state === "now" && here.nextLesson ? (
+                <span className={cx("khero-next")}>
+                  <i>{here.lessons.indexOf(here.nextLesson) + 1}</i>
+                  <span><b>{here.nextLesson.title}</b><em>{here.done > 0 ? "Your next lesson" : "The first lesson"}</em></span>
+                </span>
+              ) : null}
+              <span className={cx("khero-prog")}><span className={cx("bar", "kbar")}><i style={{ width: `${here.total ? Math.round((here.done / here.total) * 100) : 0}%` }} /></span>{here.done} of {here.total} {here.total === 1 ? "lesson" : "lessons"} done</span>
+              <span className={cx("acts")}><span className={cx("btn go", "lg")}><Icon name="play" />{here.state === "done" ? "Open" : here.done > 0 ? "Continue" : "Start"}</span></span>
+            </span>
+          </button>
         ) : null}
 
-        {props.canManage ? (<>
+        {/* One course: the block above is the whole shelf. */}
+        {props.canManage || courses.length > 1 ? (<>
         <div className={cx("khead")}>
-          <span className={cx("lab")}>Courses</span>
+          <span className={cx("lab")}>{props.canManage ? "Courses" : "All courses"}</span>
+          {props.canManage ? null : <span className={cx("sub")} style={{ marginLeft: 10 }}>In the order your host suggests. Open any of them.</span>}
           {arranging ? <span className={cx("sub")} style={{ marginLeft: 10 }}>Members see them in this order.</span> : null}
           <span style={{ marginLeft: "auto", display: "flex", gap: 6 }}>
             {props.onReorderCourses && props.canManage && courses.length > 1 ? (
@@ -693,7 +711,7 @@ export function KitClassroom(props: {
                 <span className={cx("kcover", course.banner_url ? "" : coverTint(course.id))} style={course.banner_url ? { backgroundImage: `url(${JSON.stringify(course.banner_url)})`, backgroundSize: "cover", backgroundPosition: `${(course.banner_focus_x ?? 0.5) * 100}% ${(course.banner_focus_y ?? 0.5) * 100}%` } : undefined}>
                   {course.banner_url ? null : <Icon name="book" />}
                 </span>
-                <b>{course.name}{course.module_status === "draft" ? <span className={cx("tag")} style={{ marginLeft: 8 }}>draft</span> : null}</b>
+                <b>{props.canManage ? null : <i className={cx("knum")}>{position + 1}</i>}{course.name}{course.module_status === "draft" ? <span className={cx("tag")} style={{ marginLeft: 8 }}>draft</span> : null}</b>
                 <span className={cx("s")}>{firstLine(course.description_md) || `${lessons.length} ${lessons.length === 1 ? "lesson" : "lessons"}`}</span>
                 {props.canManage ? (
                   <span className={cx("kpct")}><i style={{ width: row && row.started ? `${Math.round((row.finished / row.started) * 100)}%` : "0%" }} /><em>{row ? `${row.started} started · ${row.finished} finished` : `${lessons.length} ${lessons.length === 1 ? "lesson" : "lessons"}`}</em></span>
