@@ -152,18 +152,18 @@ export function KitLessonEditor(props: {
     <div className={`kit-lesson ${cx("klesson kedit")}`}>
       {/* The video, where members will see it. A link plays here as soon as it is pasted. */}
       {embed && !changingVideo ? (
-        <>
+        <div className={`kit-lesson-video ${cx("kedit-played")}`}>
           <div className="resource-viewer-embed" data-resource-media="true">
             {embed.provider === "youtube"
               ? <DeferredYouTubeEmbed key={embed.id} embed={embed} title={`${title} video`} />
               : <StableMediaEmbedFrame src={embed.src} title={`${title} embed`} />}
           </div>
-          <div className={`kit-lesson-facts ${cx("kedit-videorow")}`}>
-            <span className={cx("lab")}>{provider} video</span>
-            <Btn small txt onClick={() => setChangingVideo(true)}>Change</Btn>
-            <Btn small txt onClick={() => setVideo("")}>Remove</Btn>
+          {/* Nothing sits under the video; these show when it is pointed at. */}
+          <div className={cx("kedit-videotools")}>
+            <button type="button" onClick={() => setChangingVideo(true)}>Change video</button>
+            <button type="button" onClick={() => setVideo("")}>Remove</button>
           </div>
-        </>
+        </div>
       ) : (
         <label className={`kit-lesson-video ${cx("kedit-video", "zone")}`}>
           <span className={cx("kplay")}><Icon name="play" /></span>

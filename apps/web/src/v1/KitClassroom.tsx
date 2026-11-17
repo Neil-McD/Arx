@@ -7,7 +7,7 @@
 import { courseProgressWord } from "../../../../shared/communityMemberWords";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { usePageHeaderToolbar } from "../components/CommunityPageHeader";
+import { usePageHeaderEnd } from "../components/CommunityPageHeader";
 import { useRouteDetail, writeRouteDetail } from "../../../../shared/routeDetails";
 import {
   fetchCourseProgressSummary,
@@ -153,6 +153,7 @@ export function KitClassroom(props: {
   const noteLessonDirty = useCallback((dirty: boolean) => { lessonDirtyRef.current = dirty; onLessonDirtyChange?.(dirty); }, [onLessonDirtyChange]);
   const [movingCourse, setMovingCourse] = useState(false);
   const [deletingCourse, setDeletingCourse] = useState(false);
+  const [renamingLesson, setRenamingLesson] = useState<{ id: string; title: string } | null>(null);
   const [courseError, setCourseError] = useState<string | null>(null);
   useEffect(() => { setCourseError(null); }, [props.openCourseId]);
   const editingTools = props.canManage ? props.lessonEditing : null;
@@ -239,7 +240,15 @@ export function KitClassroom(props: {
   const done = useMemo(() => new Set(doneAt.keys()), [doneAt]);
   const open = courses.find((entry) => entry.course.id === props.openCourseId) ?? null;
   // The new course has opened with its name ready to type over: once only.
-  useEffect(() => { if (open) renameNextCourseRef.current = false; }, [open?.course.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  // It also opens with its first lesson already there, ready to write.
+  useEffect(() => {
+    if (!open) return;
+    const fresh = renameNextCourseRef.current;
+    renameNextCourseRef.current = false;
+    const tools = props.canManage ? props.lessonEditing : null;
+    if (!fresh || !tools || open.lessons.length > 0) return;
+    void tools.addLesson(open.course.id).then((id) => { if (id) { wantedLessonRef.current = id; chooseLesson(id); } }).catch(() => undefined);
+  }, [open?.course.id]); // eslint-disable-line react-hooks/exhaustive-deps
   const summaryBy = useMemo(() => new Map(summary.map((row) => [row.module_id, row])), [summary]);
 
   // Opening a course lands on its next lesson (or the first). Progress may
@@ -428,7 +437,20 @@ export function KitClassroom(props: {
 
   // A host's tools for the open course: in the page's header (above the
   // lesson where there is no header). What is rarely used sits in one menu.
-  const headerToolbar = usePageHeaderToolbar();
+  const headerToolbar = usePageHeaderEnd();
+  // A menu closes when anything else is clicked, and on Escape.
+  const closeWhenLeft = (event: { currentTarget: HTMLDetailsElement }) => {
+    const menu = event.currentTarget;
+    if (!menu.open) return;
+    const close = (leaving: Event) => {
+      if (leaving instanceof KeyboardEvent ? leaving.key !== "Escape" : menu.contains(leaving.target as Node)) return;
+      menu.open = false;
+      document.removeEventListener("pointerdown", close, true);
+      document.removeEventListener("keydown", close, true);
+    };
+    document.addEventListener("pointerdown", close, true);
+    document.addEventListener("keydown", close, true);
+  };
   const closeMenu = (event: { currentTarget: HTMLElement }) => { const menu = event.currentTarget.closest("details"); if (menu) menu.open = false; };
   const isDraft = open?.course.module_status === "draft";
   const courseTools = open && props.canManage ? (
@@ -444,7 +466,7 @@ export function KitClassroom(props: {
       ) : <span className={cx("tag", isDraft ? "" : "live")}>{isDraft ? "Draft · only hosts see it" : "Published"}</span>}
       {/* Only a draft can be deleted: taking a live course away from members is Unpublish, on purpose, first. */}
       {props.onDeleteCourse && isDraft ? (
-        <details className={cx("kmore")}>
+        <details className={cx("kmore")} onToggle={closeWhenLeft}>
           <summary className={cx("btn sm")} aria-label="More course actions"><Icon name="more" /></summary>
           <div className={cx("kmore-menu")} role="menu">
             <button type="button" role="menuitem" className={cx("no")} disabled={deletingCourse} onClick={(event) => { closeMenu(event); void deleteCourse(); }}>{deletingCourse ? "Deleting" : "Delete course"}</button>
@@ -474,29 +496,65 @@ export function KitClassroom(props: {
     if (!(await askInApp({ message: `Delete "${title}"? This can't be undone.`, yes: "Delete lesson", no: "Keep", danger: true }))) return;
     try { await editingTools.remove(id); afterLessonLeft(id); } catch { setCourseError("The lesson couldn't be deleted. Try again."); }
   };
+  // Rename, from a lesson's menu: the open lesson's title is on the page, so
+  // the cursor goes there; any other is renamed in its row.
+  const startRenamingLesson = (lesson: CommunityResource) => {
+    if (lesson.id === lessonId) {
+      const title = document.querySelector<HTMLInputElement>("input.kit-lesson-title");
+      if (title) { title.focus(); title.select(); return; }
+    }
+    setRenamingLesson({ id: lesson.id, title: lesson.title });
+  };
+  const renameLesson = async (lesson: CommunityResource) => {
+    const next = renamingLesson?.id === lesson.id ? renamingLesson.title.trim() : "";
+    setRenamingLesson(null);
+    if (!editingTools || !next || next === lesson.title) return;
+    try { await editingTools.save(lesson.id, { title: next.slice(0, 160), url: lesson.url ?? null, body_md: lesson.body_md ?? "" }); } catch { setCourseError("The lesson couldn't be renamed. Try again."); }
+  };
   // The course's lessons: pick one, and for a host put them in order.
   const lessonList = open ? (
     <div className={cx("klrows")}>
       {lessonDrag.order.map((id) => open.lessons.find((entry) => entry.id === id)).filter((entry): entry is NonNullable<typeof entry> => Boolean(entry)).map((lesson, index) => (
-        <div key={lesson.id} className={cx("kl-row", editingTools && "host", lessonDrag.held === lesson.id && "gap")} {...(editingTools ? lessonDrag.item(lesson.id) : null)}>
-          {editingTools ? <span className={cx("kgrip")} title="Drag to reorder" aria-hidden="true" {...lessonDrag.grip(lesson.id)}><GripDots /></span> : null}
+        <div key={lesson.id} className={cx("kl-row", editingTools && "host", lesson.id === lessonId && "on", lessonDrag.held === lesson.id && "gap")} {...(editingTools ? lessonDrag.item(lesson.id) : null)}>
+          {/* Held by its grip and dropped where it should go; the arrow keys move it one place. */}
+          {editingTools ? (
+            <button type="button" className={cx("kgrip")} title="Drag to reorder" aria-label={`Move ${lesson.title}. Drag, or use the arrow keys.`}
+              onKeyDown={(event) => {
+                const by = event.key === "ArrowUp" ? -1 : event.key === "ArrowDown" ? 1 : 0;
+                const ids = open.lessons.map((entry) => entry.id);
+                const at = ids.indexOf(lesson.id);
+                if (!by || at + by < 0 || at + by >= ids.length) return;
+                event.preventDefault();
+                [ids[at + by], ids[at]] = [ids[at], ids[at + by]];
+                void editingTools.reorder(open.course.id, ids);
+              }}
+              {...lessonDrag.grip(lesson.id)}><GripDots /></button>
+          ) : null}
+          {renamingLesson?.id === lesson.id ? (
+            <span className={cx("kl")}>
+              <span className={cx("kdot", done.has(lesson.id) ? "done" : "")}>{done.has(lesson.id) ? <Icon name="check" /> : null}</span>
+              <input className={cx("kinline-input")} value={renamingLesson.title} autoFocus maxLength={160} aria-label="Lesson title"
+                onFocus={(event) => event.currentTarget.select()}
+                onChange={(event) => setRenamingLesson({ id: lesson.id, title: event.target.value })}
+                onBlur={() => void renameLesson(lesson)}
+                onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); event.currentTarget.blur(); } else if (event.key === "Escape") { event.stopPropagation(); setRenamingLesson(null); } }} />
+            </span>
+          ) : (
           <button type="button" className={cx("kl", lesson.id === lessonId && "on", done.has(lesson.id) && "d")} aria-current={lesson.id === lessonId ? "true" : undefined}
             onClick={() => void pickLesson(lesson.id)}>
             <span className={cx("kdot", done.has(lesson.id) ? "done" : lesson.id === lessonId ? "now" : "")}>{done.has(lesson.id) ? <Icon name="check" /> : null}</span>
             <span className={cx("kl-t")}>{lesson.title}</span>
           </button>
+          )}
           {editingTools ? (
-            <details className={cx("kl-menu")}>
+            <details className={cx("kl-menu")} onToggle={closeWhenLeft}>
               <summary aria-label={`More for ${lesson.title}`}><Icon name="more" /></summary>
               <div role="menu">
-                <button type="button" role="menuitem" disabled={index === 0}
-                  onClick={(event) => { closeMenu(event); const ids = open.lessons.map((entry) => entry.id); [ids[index - 1], ids[index]] = [ids[index], ids[index - 1]]; void editingTools.reorder(open.course.id, ids); }}>Move up</button>
-                <button type="button" role="menuitem" disabled={index === open.lessons.length - 1}
-                  onClick={(event) => { closeMenu(event); const ids = open.lessons.map((entry) => entry.id); [ids[index + 1], ids[index]] = [ids[index], ids[index + 1]]; void editingTools.reorder(open.course.id, ids); }}>Move down</button>
+                <button type="button" role="menuitem" onClick={(event) => { closeMenu(event); startRenamingLesson(lesson); }}><Icon name="pen" />Rename</button>
                 {editingTools.move ? courses.filter((entry) => entry.course.id !== open.course.id).map((entry) => (
-                  <button key={entry.course.id} type="button" role="menuitem" onClick={(event) => { closeMenu(event); void moveLesson(lesson.id, entry.course.id); }}>Move to {entry.course.name}</button>
+                  <button key={entry.course.id} type="button" role="menuitem" onClick={(event) => { closeMenu(event); void moveLesson(lesson.id, entry.course.id); }}><Icon name="arrow" /><span>Move to {entry.course.name}</span></button>
                 )) : null}
-                <button type="button" role="menuitem" className={cx("no")} onClick={(event) => { closeMenu(event); void removeLesson(lesson.id, lesson.title); }}>Delete lesson</button>
+                <button type="button" role="menuitem" className={cx("no")} onClick={(event) => { closeMenu(event); void removeLesson(lesson.id, lesson.title); }}><Icon name="trash" />Delete lesson</button>
               </div>
             </details>
           ) : null}
@@ -524,7 +582,7 @@ export function KitClassroom(props: {
       <div className={cx("klist-top")}>
         {props.canManage && props.onSaveCourse ? (
           <KitCourseInline key={open.course.id} course={open.course} stats={courseProgressWords} startRenaming={renameNextCourseRef.current}
-            coverClassName={cx("kcover", "klist-cover", open.course.banner_url ? "" : coverTint(open.course.id))} coverStyle={openCoverStyle}
+            coverClassName={cx("kcover", "klist-cover", open.course.banner_url ? "" : "knocover")} coverStyle={openCoverStyle}
             onSave={(patch) => props.onSaveCourse!(open.course.id, patch)} />
         ) : (
           <>
@@ -594,7 +652,7 @@ export function KitClassroom(props: {
           <button type="button" className={cx("kback")} onClick={() => props.onOpenCourse(null)} aria-label="Back to Knowledge"><Icon name="back" />Knowledge</button>
           <span>›</span><span>{open.course.name}</span>
         </div>
-        {courseTools && headerToolbar ? createPortal(<KitApp view="know" host part="flow" className="kit-header-tools"><div className={cx("ktools", "head")}>{courseTools}</div></KitApp>, headerToolbar) : null}
+        {courseTools && headerToolbar ? createPortal(<KitApp view="know" host part="flow" className="kit-header-end"><div className={cx("ktools", "head")}>{courseTools}</div></KitApp>, headerToolbar) : null}
         {courseTools && !headerToolbar ? <div className={`knowledge-course-tools-inline ${cx("ktools")}`}>{courseTools}</div> : null}
         {courseError ? <p className={cx("sub")} role="alert" style={{ color: "var(--bad)", maxWidth: 1216, margin: "12px auto 0" }}>{courseError}</p> : null}
         <div className={`knowledge-course-cols ${cx("kcols", listBeside && "two")}`}>

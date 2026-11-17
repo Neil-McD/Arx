@@ -87,7 +87,7 @@ export function KitCourseInline(props: {
       <input ref={fileInput} type="file" accept="image/*" hidden onChange={(event) => { void choose(event.target.files?.[0] ?? null); event.target.value = ""; }} />
       <button type="button" className={`${props.coverClassName} ${cx("kinline-cover")}`} style={props.coverStyle} disabled={busy}
         onClick={() => fileInput.current?.click()} aria-label={course.banner_url ? "Change the cover" : "Add a cover"} title={course.banner_url ? "Change the cover" : "Add a cover"}>
-        {course.banner_url ? null : <Icon name="book" />}
+        {course.banner_url ? null : <Icon name="image" />}
       </button>
       <span className={cx("kinline")} aria-busy={busy}>
         {field === "name" ? input("Course name", 80) : <button type="button" className={cx("kinline-name")} onClick={() => start("name")} title="Rename the course">{course.name}</button>}
