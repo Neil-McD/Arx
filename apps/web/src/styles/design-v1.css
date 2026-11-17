@@ -4600,3 +4600,25 @@
 :root[data-design="v1"] .community-dm-sent-file {
   cursor: pointer;
 }
+
+/* A picture in a direct message stands alone: no bubble behind it. */
+:root[data-design="v1"] .community-dm-standalone-media {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  max-width: 300px;
+}
+:root[data-design="v1"] .community-dm-standalone-media.is-own {
+  align-self: flex-end;
+  align-items: flex-end;
+}
+:root[data-design="v1"] .community-dm-standalone-media.is-sending {
+  opacity: 0.6;
+}
+:root[data-design="v1"] .community-dm-standalone-media .community-dm-sent-files {
+  align-items: inherit;
+}
+:root[data-design="v1"] .community-dm-standalone-media .community-dm-sent-image img {
+  border-radius: 14px;
+}
