@@ -1531,3 +1531,4 @@
 .app .kresacts button{opacity:0;transition:opacity .15s var(--ease)}
 .app .kresrow:hover .kresacts button,.app .kresacts button:focus-visible{opacity:1}
 @media (hover:none){.app .kedit-videotools{opacity:1}}
+:where(:root[data-layout="phone"]) .app .ktools.head .kswitch small{display:none}
