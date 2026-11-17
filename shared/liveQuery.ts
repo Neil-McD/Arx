@@ -157,11 +157,24 @@ export function useLiveQuery<T>(session: unknown, name: LiveQueryName, args: Rec
   return useSyncExternalStore(subscribe, getSnapshot, () => NOTHING);
 }
 
-// For a page that still loads its own data (with its own loading, errors and
-// paging): watch the same read live and load again when its answer changes,
-// so the page shows what someone else just changed without a reload. The
-// first answer is skipped (the page has just loaded it), and an answer equal
-// to the last one is not a change.
+// For a page that keeps the read's answer in its own state: hand it every
+// live answer, the first included, so what it shows is the live answer itself
+// (nothing can be missed between a load of its own and the subscription).
+export function useLiveAnswer<T>(session: unknown, name: LiveQueryName, args: Record<string, unknown> | null, onAnswer: (data: T) => void): void {
+  const { data } = useLiveQuery<T>(session, name, args);
+  const onAnswerRef = useRef(onAnswer);
+  onAnswerRef.current = onAnswer;
+  useEffect(() => {
+    if (data !== undefined) onAnswerRef.current(data);
+  }, [data]);
+}
+
+// For a page whose own load does more than keep the answer (paging, several
+// reads, its own errors): watch the same read live and load again when its
+// answer changes. An answer equal to the last one is not a change. The first
+// answer only sets what "changed" is measured from, so an edit landing in the
+// moment between the page's load and that first answer waits for the next
+// change; useLiveAnswer has no such moment.
 export function useLiveChange(session: unknown, name: LiveQueryName, args: Record<string, unknown> | null, onChange: () => void): void {
   const { data } = useLiveQuery<unknown>(session, name, args);
   const onChangeRef = useRef(onChange);

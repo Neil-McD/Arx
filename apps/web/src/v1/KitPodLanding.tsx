@@ -9,7 +9,7 @@ import { formatMomentWhen } from "../../../../shared/communityHomeMoments";
 import { Btn, cx } from "./kit";
 import { BriefPart, usePlaceBriefRead } from "./KitBrief";
 import { resolveAuthSubject, type AuthSessionLike } from "../../../../shared/authSession";
-import { useLiveChange } from "../../../../shared/liveQuery";
+import { useLiveAnswer } from "../../../../shared/liveQuery";
 import { PanelLearned, PanelNext, PanelPart, PanelPeople, usePanelSettled } from "./KitPanel";
 
 const REPEATS: Record<string, string> = { daily: "every day", weekly: "every week", monthly: "every month" };
@@ -28,14 +28,7 @@ export function KitPodLanding(props: {
   const { brief, settled: briefSettled } = usePlaceBriefRead(props.session, props.communityId, channelId);
   // How many of the pod's two reads (its detail, its notes) have answered.
   const [answered, setAnswered] = useState(0);
-  // Bumped when the pod or its notes change for anyone (shared/liveQuery.ts).
-  const [changed, setChanged] = useState(0);
-  const subject = props.session ? resolveAuthSubject(props.session as AuthSessionLike) : null;
-  const liveArgs = subject ? { authSubject: subject, communityId: props.communityId, channelId } : null;
-  useLiveChange(props.session, "communityPods:getPod", liveArgs, () => setChanged((count) => count + 1));
-  useLiveChange(props.session, "communityPodNotes:listPodNotes", liveArgs, () => setChanged((count) => count + 1));
-  // Another pod starts empty; a change to this one keeps what is shown until
-  // the new answer is in.
+  // Another pod starts empty.
   useEffect(() => { setDetail(null); setNotes([]); setAnswered(0); }, [props.communityId, channelId]);
   useEffect(() => {
     if (!props.session) return;
@@ -46,7 +39,13 @@ export function KitPodLanding(props: {
     fetchCloudPod(call).then((next) => { if (live) setDetail(next); }).catch(() => undefined).finally(done);
     fetchCloudPodNotes(call).then((next) => { if (live) setNotes(next.notes); }).catch(() => undefined).finally(done);
     return () => { live = false; };
-  }, [props.session, props.communityId, channelId, changed]);
+  }, [props.session, props.communityId, channelId]);
+  // Live (shared/liveQuery.ts): the pod and its notes are shown from the
+  // live answer too, so a change by anyone shows without a reload.
+  const subject = props.session ? resolveAuthSubject(props.session as AuthSessionLike) : null;
+  const liveArgs = subject ? { authSubject: subject, communityId: props.communityId, channelId } : null;
+  useLiveAnswer<CloudPodDetail>(props.session, "communityPods:getPod", liveArgs, (next) => setDetail(next));
+  useLiveAnswer<{ notes: CloudPodNote[] }>(props.session, "communityPodNotes:listPodNotes", liveArgs, (next) => setNotes(next.notes));
   // Layout before data: the parts draw as one piece once they have all
   // answered, so none is drawn and then pushed down by one above it.
   const settled = usePanelSettled(briefSettled && answered >= 2);
