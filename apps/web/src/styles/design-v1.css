@@ -4397,20 +4397,16 @@
   :root[data-design="v1"] .community-page-body > .community-page-rail { display: none; }
 }
 
-/* A host's course tools live in the right column; where that column is hidden
-   (below 1024px) they sit above the lesson instead. */
-:root[data-design="v1"] .knowledge-course-tools-inline {
-  display: none;
+/* The lesson's words and video share the title's left edge and its width. */
+:root[data-design="v1"] .kit-lesson-body .resource-viewer-column {
+  max-width: none;
 }
 
-@media (max-width: 1023px) {
-  :root[data-design="v1"] .knowledge-course-tools-inline {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 8px;
-    margin-bottom: 14px;
-  }
+/* A course is the one page that centres: its lessons and the lesson are one
+   block in the middle of the room, with no right column to sit beside. */
+:root[data-design="v1"]:where(:not([data-layout="phone"])) .community-page-body > .community-tab-scroll > .web-community-centered-pane:has(.knowledge-course-cols) {
+  max-width: 1188px;
+  margin-inline: auto;
 }
 
 /* The community brain fills its page to the edges: no reading column, no

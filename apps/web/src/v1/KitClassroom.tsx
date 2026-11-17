@@ -350,9 +350,12 @@ export function KitClassroom(props: {
         ))}
       </PanelPart>
     ) : null,
-    <PanelBrain key="brain" map={brain} now={now} onOpen={props.onOpenBrain}>
-      {guideSources.some(sourceFailed) ? <PanelLine fact={String(guideSources.filter(sourceFailed).length)}>Files it couldn't read</PanelLine> : null}
-    </PanelBrain>,
+    // Nothing learned and no unread files: no part, so an empty panel closes.
+    brain && (brain.counts.learned || guideSources.some(sourceFailed)) ? (
+      <PanelBrain key="brain" map={brain} now={now} onOpen={props.onOpenBrain}>
+        {guideSources.some(sourceFailed) ? <PanelLine fact={String(guideSources.filter(sourceFailed).length)}>Files it couldn't read</PanelLine> : null}
+      </PanelBrain>
+    ) : null,
     props.canManage && liveCourses.length ? (
       <PanelPart key="learning" label="Learning">
         {liveCourses.slice(0, 5).map(({ course }) => {
@@ -389,8 +392,7 @@ export function KitClassroom(props: {
     }
   };
 
-  // A host's tools for the open course: in the right column, and in the page
-  // on the widths where that column is hidden.
+  // A host's tools for the open course, above the lesson.
   const courseTools = open && props.canManage ? (
     <>
             {open.course.module_status === "draft" ? <span className={cx("tag")}>Draft · only hosts see it</span> : null}
@@ -440,34 +442,21 @@ export function KitClassroom(props: {
       ) : null}
     </div>
   ) : null;
-  const courseRail = open && openProgress ? (
+  // Over the list: a member's own progress; for a host, who is learning.
+  const courseProgressLine = open && openProgress ? (props.canManage ? (
+    <div className={cx("kline")}><span>{summaryBy.get(open.course.id)?.started ?? 0} started</span><em>{summaryBy.get(open.course.id)?.finished ?? 0} finished</em></div>
+  ) : (
     <>
-      <Sec label={open.course.name}>
-        {courseTools ? <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8 }}>{courseTools}</div> : null}
-        {props.canManage ? (
-          <div className={cx("kline")}><span>{summaryBy.get(open.course.id)?.started ?? 0} started</span><em>{summaryBy.get(open.course.id)?.finished ?? 0} finished</em></div>
-        ) : (
-          <>
-            <div className={cx("kline")}><span>{openProgress.done} of {openProgress.total} lessons</span><em>{openProgress.percent}%</em></div>
-            <div className={cx("bar")}><i style={{ width: `${openProgress.percent}%` }} /></div>
-          </>
-        )}
-      </Sec>
-      {lessonList}
-      {agentOn ? (
-        <div style={{ marginTop: "auto" }}>
-          <button type="button" className={cx("ask kask-btn")} style={{ height: 46 }} onClick={() => openGuideFromSearch()}>
-            <Icon name="spark" extra="sp" /><span>Ask about this lesson</span>
-          </button>
-        </div>
-      ) : null}
+      <div className={cx("kline")}><span>{openProgress.done} of {openProgress.total} done</span><em>{openProgress.percent}%</em></div>
+      <div className={cx("bar", "kbar")}><i style={{ width: `${openProgress.percent}%` }} /></div>
     </>
-  ) : null;
+  )) : null;
 
-  // The right column is what you picked (a note, a course) or, on the shelf,
-  // the fast read of Knowledge: the brief, what's next, what the community
-  // knows and what it learned lately.
-  const railBody = noteRail ?? courseRail ?? (inGuideMemory ? null : shelfRail);
+  // The right column is a note you picked or, on the shelf, the fast read of
+  // Knowledge: the brief, what's next, what the community knows and what it
+  // learned lately. A course has no right column: its lessons sit beside the
+  // lesson, on its left.
+  const railBody = noteRail ?? (open || inGuideMemory ? null : shelfRail);
   const rail = railBody ? (
     <KitApp view="know" host={props.canManage} part="rail" className="kit-page-rail">
       <Rail index={2} label="Knowledge">{railBody}</Rail>
@@ -475,10 +464,11 @@ export function KitClassroom(props: {
   ) : null;
 
   // ---------- the page
-  // Below 1024px there is no right column (design-v1.css), so what it holds
-  // is drawn in the page instead: a picked note takes the page's place, and a
-  // course's lessons sit under the lesson.
+  // Below 1024px there is no right column (design-v1.css), so a picked note
+  // takes the page's place. A course's lessons sit beside the lesson where
+  // there is room for both (1200px), and under it where there is not.
   const wide = useMinWidth(1024);
+  const roomForList = useMinWidth(1200);
   let page: ReactNode;
   if (!wide && noteRail) {
     page = <div className={cx("page")} style={{ padding: 0, overflow: "visible" }}><div className={cx("evlayer")} style={{ marginTop: 0 }}>{noteRail}</div></div>;
@@ -499,6 +489,10 @@ export function KitClassroom(props: {
     const index = open.lessons.findIndex((entry) => entry.id === lessonId);
     const lesson = index >= 0 ? open.lessons[index] : null;
     const next = index >= 0 ? open.lessons[index + 1] ?? null : null;
+    const previous = index > 0 ? open.lessons[index - 1] : null;
+    // A list of one lesson is noise; a host still needs it, to add the second.
+    const listWorthShowing = open.lessons.length > 1 || (Boolean(editingTools) && open.lessons.length > 0);
+    const listBeside = roomForList && listWorthShowing;
     page = (
       <div className={cx("page")} style={{ padding: 0, overflow: "visible" }}>
         {/* On a phone the top bar's arrow leaves the community page, so the course keeps its own way back here; on desktop it is the header's arrow. */}
@@ -506,11 +500,14 @@ export function KitClassroom(props: {
           <button type="button" className={cx("kback")} onClick={() => props.onOpenCourse(null)} aria-label="Back to Knowledge"><Icon name="back" />Knowledge</button>
           <span>›</span><span>{open.course.name}</span>
         </div>
-        {courseTools ? <div className="knowledge-course-tools-inline">{courseTools}</div> : null}
+        {courseTools ? <div className={`knowledge-course-tools-inline ${cx("ktools")}`}>{courseTools}</div> : null}
         {editingCourse && props.onSaveCourse && props.canManage ? (
           <KitCourseEdit key={open.course.id} course={open.course} onClose={() => setEditingCourse(false)}
             onSave={(patch) => props.onSaveCourse!(open.course.id, patch)} />
         ) : null}
+        <div className={`knowledge-course-cols ${cx("kcols", listBeside && "two")}`}>
+        {listBeside ? <aside className={cx("klist")} aria-label="Lessons">{courseProgressLine}{lessonList}</aside> : null}
+        <div className={cx("kmainc")}>
         {lesson && editingTools && editingLessonId === lesson.id ? (
           <KitLessonEditor key={lesson.id} resource={lesson} index={index} total={open.lessons.length} courseLive={open.course.module_status !== "draft"}
             onCancel={() => setEditingLessonId(null)}
@@ -529,12 +526,9 @@ export function KitClassroom(props: {
         ) : lesson ? (
           <div className={cx("klesson")}>
             <div className={cx("ktitle")}>
-              <span className={cx("lab")} style={{ flex: 1 }}>Lesson {index + 1} of {open.lessons.length}{open.course.module_status === "draft" ? " · draft course" : ""}</span>
+              {/* "Lesson 1 of 1" says nothing. */}
+              <span className={cx("lab")} style={{ flex: 1 }}>{open.lessons.length > 1 ? `Lesson ${index + 1} of ${open.lessons.length}` : ""}{open.course.module_status === "draft" ? `${open.lessons.length > 1 ? " · " : ""}Draft course` : ""}</span>
               {editingTools ? <button type="button" className={cx("btn sm")} onClick={() => setEditingLessonId(lesson.id)}>Edit lesson</button> : null}
-              {!props.canManage ? (
-                <button type="button" className={cx("kdone", done.has(lesson.id) && "is")} aria-pressed={done.has(lesson.id)} title={done.has(lesson.id) ? "Done. Click to undo." : "Mark done"}
-                  disabled={saving} onClick={() => void mark(lesson.id, !done.has(lesson.id))}><Icon name="check" /></button>
-              ) : null}
             </div>
             <div className="kit-lesson-body"><WebCommunityResourceViewerContent resource={lesson} /></div>
             {lesson.lesson_links?.length ? (
@@ -547,15 +541,25 @@ export function KitClassroom(props: {
                 ))}
               </div>
             ) : null}
-            <div className={cx("acts")} style={{ marginTop: 22 }}>
-              {!props.canManage && !done.has(lesson.id) ? (
+            {/* One way forward. Back to the shelf is the header's arrow. */}
+            <div className={cx("kfoot")}>
+              {previous ? <button type="button" className={cx("btn", "txt")} onClick={() => chooseLesson(previous.id)}><Icon name="back" />Previous</button> : null}
+              {agentOn ? <button type="button" className={cx("btn", "txt")} onClick={() => openGuideFromSearch()}><Icon name="spark" />Ask about this lesson</button> : null}
+              <span className={cx("kfoot-gap")} />
+              {props.canManage ? (
+                next ? <button type="button" className={cx("btn")} onClick={() => chooseLesson(next.id)}>Next lesson <Icon name="arrow" /></button> : null
+              ) : done.has(lesson.id) ? (
+                <>
+                  <button type="button" className={cx("kisdone")} aria-pressed title="Done. Click to undo." disabled={saving} onClick={() => void mark(lesson.id, false)}><Icon name="check" />Done</button>
+                  {next ? <button type="button" className={cx("btn go")} onClick={() => chooseLesson(next.id)}>Next lesson <Icon name="arrow" /></button> : null}
+                </>
+              ) : (
                 <button type="button" className={cx("btn go")} disabled={saving} onClick={async () => { await mark(lesson.id, true); if (next) chooseLesson(next.id); }}>
                   <Icon name="check" />{next ? "Mark done and continue" : "Mark done"}
                 </button>
-              ) : null}
-              {next ? <button type="button" className={cx("btn")} onClick={() => chooseLesson(next.id)}>Next: {next.title} <Icon name="arrow" /></button>
-                : <button type="button" className={cx("btn")} onClick={() => props.onOpenCourse(null)}>Back to Knowledge</button>}
+              )}
             </div>
+            {next && (props.canManage || !done.has(lesson.id)) ? <p className={cx("kupnext")}>Up next: {next.title}</p> : null}
           </div>
         ) : (
           <div style={{ marginTop: 24 }}>
@@ -568,12 +572,15 @@ export function KitClassroom(props: {
             ) : null}
           </div>
         )}
-        {!wide && lessonList && open.lessons.length ? (
+        {!listBeside && listWorthShowing && lessonList ? (
           <div style={{ marginTop: 34 }}>
             <span className={cx("lab")} style={{ display: "block", marginBottom: 8 }}>Lessons</span>
+            {courseProgressLine}
             {lessonList}
           </div>
         ) : null}
+        </div>
+        </div>
       </div>
     );
   } else {
