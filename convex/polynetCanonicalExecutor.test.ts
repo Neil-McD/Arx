@@ -1697,6 +1697,9 @@ test("canonical writes are attributed, retry safe, and reject conflicting idempo
       receipt: { deduped: true },
     },
   });
+  // The same key with other words is a new request to the budgets; a minute
+  // on, it reaches the receipt, which refuses the conflict.
+  await nextMinute(t);
   await expect(
     executePolynetCanonicalTool({
       ctx: memberCtx,

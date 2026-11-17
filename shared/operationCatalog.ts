@@ -102,6 +102,21 @@ export const BUDGET_LIMITS = {
 
 export type BudgetName = keyof typeof BUDGET_LIMITS;
 
+// Names one exact request: its idempotency key and everything it asks for.
+// The same request sent again is not counted twice; the same key with
+// anything changed is a different request.
+export function requestFingerprint(key: string, toolName: string, input: unknown): string {
+  const text = `${toolName}\n${JSON.stringify(input) ?? ""}`;
+  let a = 0x811c9dc5;
+  let b = 0x01000193;
+  for (let index = 0; index < text.length; index += 1) {
+    const code = text.charCodeAt(index);
+    a = Math.imul(a ^ code, 0x01000193) >>> 0;
+    b = Math.imul(b ^ ((code << 5) | (code >>> 3)), 0x85ebca6b) >>> 0;
+  }
+  return `${key.slice(0, 120)}:${text.length.toString(36)}:${a.toString(36)}${b.toString(36)}`;
+}
+
 // One thing to count: which budget, and for a per-place budget, which place.
 export type BudgetTake = { budget: Exclude<OperationBudget, "none"> | "post_channel"; scope: string };
 
@@ -114,8 +129,6 @@ export function budgetTakesFor(args: {
   toolName: string;
   operation?: string | null;
   mode?: string | null;
-  // Set when the write names the post it answers (content.root_id).
-  reply?: boolean;
   communitySlug?: string | null;
   localPath?: string | null;
 }): BudgetTake[] {
@@ -128,11 +141,13 @@ export function budgetTakesFor(args: {
   if (args.toolName !== "polynet_write") return [];
   const path = String(args.localPath ?? "");
   if (path.startsWith("/builder/")) return [{ budget: "builder_change", scope: String(args.communitySlug ?? "") }];
-  // A new post is a create at the channel itself. A reply is written inside a
-  // thread, or at the channel naming the post it answers.
+  // A new post is a create at the channel itself, whatever else the call
+  // says: the executor refuses a create that names a post to answer, so
+  // nothing in the content can turn a new post into something cheaper. A
+  // reply is an append, at the channel or inside a thread.
   const channel = /^\/channels\/([a-z0-9-]+)\/$/.exec(path);
   const takes: BudgetTake[] = [{ budget: "post", scope: "" }];
-  if (channel && args.mode === "create" && !args.reply) {
+  if (channel && args.mode === "create") {
     takes.push({ budget: "post_channel", scope: `${String(args.communitySlug ?? "")}/${channel[1]}` });
   }
   return takes;

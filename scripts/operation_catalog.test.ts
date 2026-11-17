@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { BUDGET_LIMITS, budgetTakesFor, CALL_OPERATIONS, CALL_OPERATION_NAMES, callOperation, TOOL_OPERATIONS, WORKER_OPERATIONS } from "../shared/operationCatalog";
+import { BUDGET_LIMITS, budgetTakesFor, requestFingerprint, CALL_OPERATIONS, CALL_OPERATION_NAMES, callOperation, TOOL_OPERATIONS, WORKER_OPERATIONS } from "../shared/operationCatalog";
 
 const executor = readFileSync("convex/polynetCanonicalExecutor.ts", "utf8");
 
@@ -45,9 +45,7 @@ describe("what a call spends", () => {
     expect(own({ localPath: "/channels/general/", mode: "create" })).toEqual([{ budget: "post", scope: "" }, { budget: "post_channel", scope: "run-club/general" }]);
     expect(own({ localPath: "/channels/general/interaction:root:abc/", mode: "append" })).toEqual([{ budget: "post", scope: "" }]);
     // A reply written at the channel, naming the post it answers.
-    expect(own({ localPath: "/channels/general/", mode: "append", reply: true })).toEqual([{ budget: "post", scope: "" }]);
-    expect(own({ localPath: "/channels/general/", mode: "create", reply: true })).toEqual([{ budget: "post", scope: "" }]);
-    expect(own({ localPath: "/channels/general/interaction:root:abc.md", mode: "update" })).toEqual([{ budget: "post", scope: "" }]);
+    expect(own({ localPath: "/channels/general/", mode: "append" })).toEqual([{ budget: "post", scope: "" }]);
   });
 
   it("builder changes are counted per community; keeping a session alive is free", () => {
@@ -58,6 +56,15 @@ describe("what a call spends", () => {
     expect(call("community.presence.heartbeat")).toEqual([]);
     // Something nobody declared is counted as the strictest kind, never waved through.
     expect(call("community.made_up")).toEqual([{ budget: "builder_change", scope: "run-club" }]);
+  });
+
+  it("a retry is the same key with the same request, to the letter", () => {
+    const input = { operation: "community.interaction.react", input: { ref: "interaction:root:a", emoji: "x", on: true } };
+    const first = requestFingerprint("k1", "polynet_call", input);
+    expect(requestFingerprint("k1", "polynet_call", { ...input })).toBe(first);
+    expect(requestFingerprint("k1", "polynet_call", { ...input, input: { ...input.input, ref: "interaction:root:b" } })).not.toBe(first);
+    expect(requestFingerprint("k2", "polynet_call", input)).not.toBe(first);
+    expect(requestFingerprint("k1", "polynet_write", input)).not.toBe(first);
   });
 
   it("the paid plan raises a builder's budget, and a day is never smaller than a minute", () => {
