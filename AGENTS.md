@@ -208,7 +208,7 @@ Polynet is built by the software factory. Shared playbooks live in [Neil-McD/fac
 - Linear team: `POL`. Every change starts from a Linear issue.
 - Branch: `<agent>/<issue>-<slug>`, e.g. `codex/POL-12-fix-edge-test`. Agents push only to `codex/` or `claude/` branches.
 - PR title: `<issue>: <user-visible outcome>`. Fill every section of `.github/pull_request_template.md`. Commit trailers: `Linear-Issue: <issue>` and `Built-By: <codex|claude>`.
-- Verify command: `npm run release:gate` (CI check `Release Gate`). Run it and paste the output in the PR.
+- Verify command: `npm run release:gate`, run once per PR by the CI check `Release Gate` (Neil, 2026-11-17: do not also run the full gate locally for every PR; run the quick checks that cover the change, such as `tsc` and its tests, then let CI run the gate). The gate does not re-run on merges to `main`; `npm run release:prod` runs it before production.
 - Review: the model family that did not write the PR reviews it. Codex reviews `claude/` PRs; Claude reviews `codex/` PRs.
 - Risk-high areas (spec and human approval required): auth and sessions, billing and `checkout_finalize`, builder payouts, entitlements and membership gates, official Polynet MCP access, data migrations.
 - Merging (Neil, 2026-10-26): the orchestrator session merges a PR to `main` when CI is green, the other model's review has no open P0/P1 findings, and every review thread is resolved. Risk-high PRs also need Neil's explicit approval. Worker sessions never merge; `main` is not prod.
