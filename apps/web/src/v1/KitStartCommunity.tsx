@@ -171,7 +171,8 @@ export function KitStartCommunity(props: KitStartCommunityProps) {
             <h2 id={props.titleId}>What you're offering</h2>
             <p className={cx("startc-sub")}>What someone reads before they join. You can change all of this later.</p>
           </div>
-          <label className={cx("startc-field")}>
+          {/* Its own key: a new field, so it takes focus when the step opens. */}
+          <label key="one-liner" className={cx("startc-field")}>
             <span>Who it's for, in one line</span>
             <input type="text" autoFocus maxLength={180} value={props.oneLiner} placeholder="Early-morning climbers who train together." onChange={(event) => props.onChangeOneLiner(event.target.value)} />
           </label>
