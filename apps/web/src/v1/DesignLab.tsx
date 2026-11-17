@@ -572,20 +572,20 @@ function EventsLab() {
 // and a one-liner. Search appears only once there are more than eight
 // (?many=1). ?phone=1 draws it at phone width. The banners here are drawn in
 // CSS to stand in for the photos hosts upload.
-type LabCommunity = { name: string; line: string; price: string; host: string; members: number; banner: string; joined?: boolean };
+type LabCommunity = { name: string; line: string; price: string; host: string; members: number; banner: string; joined?: boolean; active?: string; ask?: boolean; mark?: string };
 const SEARCH_FROM = 8;
 const LAB_COMMUNITIES: LabCommunity[] = [
-  { name: "Distribution Engineering", line: "Operators who turn content into pipeline, one system at a time.", price: "$47/mo", host: "Neil McDevitt", members: 96,
+  { active: "Active today", mark: "linear-gradient(135deg,#7c5cff,#3b2a8a)", name: "Distribution Engineering", line: "Operators who turn content into pipeline, one system at a time.", price: "$47/mo", host: "Neil McDevitt", members: 96,
     banner: "radial-gradient(120% 90% at 85% 10%, #7c5cff 0%, transparent 55%), radial-gradient(90% 120% at 10% 100%, #1f3b8a 0%, transparent 60%), linear-gradient(135deg, #0d1026, #1a1040)" },
-  { name: "Dawn Patrol Run Club", line: "Six a.m. miles, a plan for every week, and people who show up.", price: "$12/mo", host: "Ana Okafor", members: 431,
+  { active: "Active today", mark: "linear-gradient(135deg,#f0667a,#3b3a6b)", name: "Dawn Patrol Run Club", line: "Six a.m. miles, a plan for every week, and people who show up.", price: "$12/mo", host: "Ana Okafor", members: 431,
     banner: "radial-gradient(70% 120% at 50% 110%, #ffb36b 0%, #f0667a 28%, transparent 62%), linear-gradient(180deg, #14213d 0%, #3b3a6b 55%, #b5546e 100%)" },
-  { name: "Quiet Hands Ceramics", line: "Throwing, glazing and firing notes from a working studio.", price: "Free", host: "Jules Marsh", members: 58,
+  { active: "9 posts this week", ask: true, mark: "linear-gradient(135deg,#b89b78,#5b4636)", name: "Quiet Hands Ceramics", line: "Throwing, glazing and firing notes from a working studio.", price: "Free", host: "Jules Marsh", members: 58,
     banner: "radial-gradient(60% 90% at 22% 35%, #e8d5b5 0%, transparent 60%), radial-gradient(70% 100% at 80% 80%, #8b5e3c 0%, transparent 62%), linear-gradient(135deg, #b89b78, #5b4636)" },
-  { name: "Indie Founders Table", line: "Ten-person tables for founders past their first customer.", price: "$197/mo", host: "Priya Raman", members: 40,
+  { active: "Active today", ask: true, mark: "linear-gradient(135deg,#c98a4a,#3a1f1a)", name: "Indie Founders Table", line: "Ten-person tables for founders past their first customer.", price: "$197/mo", host: "Priya Raman", members: 40,
     banner: "radial-gradient(50% 80% at 70% 40%, #ffcf8a 0%, transparent 55%), radial-gradient(90% 120% at 20% 90%, #7a2e2e 0%, transparent 60%), linear-gradient(135deg, #1b1210, #3a1f1a)" },
-  { name: "Night Sky Field Notes", line: "Backyard astronomers trading targets, gear and clear-sky dates.", price: "Free", host: "Theo Brennan", members: 172,
+  { active: "23 posts this week", mark: "linear-gradient(135deg,#2a4a8a,#0b1020)", name: "Night Sky Field Notes", line: "Backyard astronomers trading targets, gear and clear-sky dates.", price: "Free", host: "Theo Brennan", members: 172,
     banner: `center / cover no-repeat url(${BANNER})` },
-  { name: "Slow Bread Kitchen", line: "Sourdough, schedules that fit a job, and what went wrong this week.", price: "$8/mo", host: "Maya Chen", members: 265,
+  { active: "Active today", mark: "linear-gradient(135deg,#d9b98a,#7a4f2a)", name: "Slow Bread Kitchen", line: "Sourdough, schedules that fit a job, and what went wrong this week.", price: "$8/mo", host: "Maya Chen", members: 265,
     banner: "radial-gradient(80% 110% at 30% 20%, #f3dfb8 0%, transparent 58%), radial-gradient(70% 90% at 85% 85%, #c4803e 0%, transparent 60%), linear-gradient(135deg, #d9b98a, #7a4f2a)" },
   { name: "Polynet", line: "Build a community that thinks. Founders sharing what works.", price: "Free", host: "Neil McDevitt", members: 1280, joined: true,
     banner: "linear-gradient(135deg, #5b6cf0, #8e6bd9)" },
@@ -594,20 +594,36 @@ const LAB_COMMUNITIES: LabCommunity[] = [
 ];
 const initialsOf = (name: string) => name.split(/\s+/).slice(0, 2).map((word) => word[0]).join("").toUpperCase();
 
+// The card (third pass): a shorter banner with the community's own mark on
+// its edge, the price (and "ask to join") beside the name, the host's face,
+// and one sign of life. Prices stay neutral.
 function DiscoverCard(props: { community: LabCommunity }) {
   const c = props.community;
+  const [hover, setHover] = useStateLab(false);
+  const hostInitials = initialsOf(c.host);
   return (
-    <button type="button" style={{ display: "flex", flexDirection: "column", textAlign: "left", padding: 0, overflow: "hidden", cursor: "pointer",
-      borderRadius: 10, border: "1px solid var(--line2)", background: "var(--s1)", color: "var(--ink)" }}>
-      <span style={{ display: "block", width: "100%", aspectRatio: "16 / 8", background: c.banner, borderBottom: "1px solid var(--line)" }} />
-      <span style={{ display: "flex", flexDirection: "column", gap: 6, padding: "14px 16px 16px", width: "100%", boxSizing: "border-box" }}>
-        {/* The price sits beside the name, where it is read at a glance. */}
+    <button type="button" onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
+      style={{ display: "flex", flexDirection: "column", textAlign: "left", padding: 0, overflow: "hidden", cursor: "pointer",
+        borderRadius: 10, border: `1px solid ${hover ? "rgba(var(--w),.22)" : "var(--line2)"}`, background: hover ? "var(--s2)" : "var(--s1)", color: "var(--ink)",
+        transition: "border-color .16s ease, background .16s ease" }}>
+      <span style={{ position: "relative", display: "block", width: "100%", aspectRatio: "16 / 6.4", borderBottom: "1px solid var(--line)" }}>
+        <span style={{ position: "absolute", inset: 0, background: c.banner, transform: hover ? "scale(1.03)" : "none", transition: "transform .3s ease" }} />
+      </span>
+      <span style={{ position: "relative", display: "flex", flexDirection: "column", gap: 6, padding: "30px 16px 16px", width: "100%", boxSizing: "border-box" }}>
+        {/* The community's mark sits on the banner's edge. */}
+        <span style={{ position: "absolute", top: -20, left: 16, width: 40, height: 40, borderRadius: 10, background: c.mark ?? c.banner,
+          border: "2px solid var(--bg)", boxShadow: "0 0 0 1px var(--line2)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, fontWeight: 700, color: "#fff" }}>{initialsOf(c.name)}</span>
         <span style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <span style={{ flex: 1, minWidth: 0, fontSize: 15, fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{c.name}</span>
-          <span className={cx("tag")} style={{ flex: "none", transform: "none", color: "var(--ink2)" }}>{c.price}</span>
+          <span className={cx("tag")} style={{ flex: "none", transform: "none", color: "var(--ink2)" }}>{c.price}{c.ask ? " · ask to join" : ""}</span>
         </span>
         <span style={{ fontSize: 13, lineHeight: 1.45, color: "var(--ink2)", minHeight: 38, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{c.line}</span>
-        <span style={{ fontSize: 12, color: "var(--ink3)", marginTop: 2 }}>Hosted by {c.host} · {c.members.toLocaleString("en-US")} members</span>
+        <span style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 6, fontSize: 12, color: "var(--ink3)", whiteSpace: "nowrap" }}>
+          <span style={{ width: 18, height: 18, borderRadius: 999, background: "var(--s3)", border: "1px solid var(--line2)", flex: "none", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 8, fontWeight: 700, color: "var(--ink2)" }}>{hostInitials}</span>
+          <span style={{ color: "var(--ink2)", overflow: "hidden", textOverflow: "ellipsis" }}>{c.host}</span>
+          <span>· {c.members.toLocaleString("en-US")} members</span>
+          {c.active ? <span style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 6, flex: "none" }}><i style={{ width: 6, height: 6, borderRadius: 999, background: "#3DAE8C" }} />{c.active}</span> : null}
+        </span>
       </span>
     </button>
   );
