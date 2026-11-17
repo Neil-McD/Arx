@@ -1,5 +1,6 @@
 import { CommunityPageHeader, CommunityPageRail } from "./CommunityPageHeader";
 import { isDesignV1Active } from "../../../../shared/designSystem";
+import { askInApp } from "../../../../shared/inAppConfirm";
 import { KitClassroom } from "../v1/KitClassroom";
 import { KitBrainPage, takeOpenBrain } from "../v1/KitBrainPage";
 import { deleteCloudCommunityResourceModule, prepareCloudCommunityBrandingField, saveCloudCommunityResource, saveCloudCommunityResourceModule } from "../../../../shared/cloudCommunityAdminGateway";
@@ -69,6 +70,8 @@ function KnowledgeV1({ resources, context }: Props) {
   // /resources/brain): "What your guide knows" (builders' list) and the
   // community brain. Opening one is a step the back button returns from.
   const routeView = useRouteDetail("view");
+  // Whether the open lesson has unsaved words (a host edits it in the page).
+  const lessonDirtyRef = useRef(false);
   const guideMemoryOpen = routeView === "guide";
   const brainOpen = routeView === "brain";
   const setGuideMemoryOpen = (open: boolean) => writeRouteDetail("view", open ? "guide" : null);
@@ -80,7 +83,13 @@ function KnowledgeV1({ resources, context }: Props) {
   return (
     <section className="community-knowledge-page" aria-label="Knowledge">
       <CommunityPageHeader title={openCourse ? openCourse.name : inGuideMemory ? "What your guide knows" : inBrain ? "The community brain" : "Knowledge"}
-        back={openCourse ? { label: "Back to Knowledge", onBack: () => resources.actions.handleSelectModule(null) }
+        back={openCourse ? { label: "Back to Knowledge", onBack: () => {
+          // A host's lesson is edited in the page: leaving asks before dropping unsaved words.
+          void (async () => {
+            if (lessonDirtyRef.current && !(await askInApp({ message: "Leave this lesson without saving your changes?", yes: "Discard changes", no: "Keep editing", danger: true }))) return;
+            resources.actions.handleSelectModule(null);
+          })();
+        } }
           : inGuideMemory ? { label: "Back to Knowledge", onBack: () => setGuideMemoryOpen(false) }
             : inBrain ? { label: "Back to Knowledge", onBack: () => setBrainOpen(false) } : null}>
         <div className="community-knowledge-header"><h1>Knowledge</h1></div>
@@ -96,6 +105,7 @@ function KnowledgeV1({ resources, context }: Props) {
           // The app's own lens ("View as a member" turns it off); the server
           // still decides who may write.
           canManage={canManage}
+          onLessonDirtyChange={(dirty) => { lessonDirtyRef.current = dirty; }}
           openCourseId={moduleId} onOpenCourse={resources.actions.handleSelectModule}
           guideMemoryOpen={inGuideMemory} onOpenGuideMemory={canManage ? setGuideMemoryOpen : undefined}
           onCreateCourse={canManage ? async (name, lessons) => {

@@ -90,6 +90,10 @@ export type LessonEditorProps = {
   /** Blocks the page around the editor adds, offered in the "/" menu after the
    * editor's own (the welcome page's Choice, Form, Lesson and Next page). */
   pageBlocks?: { label: string; items: LessonEditorPageBlock[] };
+  /** The short editor (Polynet's lesson page, Nov 17): "/" opens with the few
+   * blocks a lesson is made of, and selected words get five buttons. Typing
+   * after "/" still finds every other block. */
+  short?: boolean;
 };
 
 export type LessonEditorPageBlock = { key: string; title: string; hint: string; keywords?: string; icon: ReactNode; onPick: () => void };
@@ -212,8 +216,14 @@ const FOLLOW_ALONG_KEYS = new Set(["button", "checklist", "quiz", "form"]);
 const NOT_OFFERED_YET = new Set(["embed", "slides"]);
 const OFFERED_SLASH_ITEMS = SLASH_ITEMS.filter((item) => !NOT_OFFERED_YET.has(item.key));
 
-function filterSlashItems(query: string, followAlong: boolean, page: LessonEditorProps["pageBlocks"]): SlashItem[] {
+// What "/" opens with in the short editor, in the mock's words.
+const SHORT_GROUP = "Add to the lesson";
+const SHORT_SLASH: Array<[key: string, title: string, hint: string]> = [["h1", "Heading", ""], ["bullets", "List", ""], ["video", "Video", "paste a link"], ["image", "Picture", ""]];
+const SHORT_SLASH_ITEMS: SlashItem[] = SHORT_SLASH.map(([key, title, hint]) => ({ ...SLASH_ITEMS.find((item) => item.key === key)!, title, hint, group: SHORT_GROUP }));
+
+function filterSlashItems(query: string, followAlong: boolean, page: LessonEditorProps["pageBlocks"], short = false): SlashItem[] {
   const q = query.trim().toLowerCase();
+  if (short && !q) return SHORT_SLASH_ITEMS;
   const own = followAlong ? OFFERED_SLASH_ITEMS : OFFERED_SLASH_ITEMS.filter((item) => !FOLLOW_ALONG_KEYS.has(item.key));
   const offered = page ? [...own, ...page.items.map((block): SlashItem => ({
     key: `page:${block.key}`, group: page.label, title: block.title, hint: block.hint, keywords: block.keywords ?? "", icon: block.icon,
@@ -232,6 +242,7 @@ type SlashBridge = {
   set: (state: SlashState | null) => void;
   followAlong: boolean;
   pageBlocks?: LessonEditorProps["pageBlocks"];
+  short?: boolean;
 };
 
 // "### In Cowork" (and Claude Code, Codex…) starts a platform's steps; members
@@ -277,7 +288,7 @@ function slashExtension(bridge: SlashBridge) {
             const $from = state.doc.resolve(range.from);
             return $from.parent.type.name === "paragraph" || $from.parent.type.name === "heading";
           },
-          items: ({ query }) => filterSlashItems(query, bridge.followAlong, bridge.pageBlocks),
+          items: ({ query }) => filterSlashItems(query, bridge.followAlong, bridge.pageBlocks, bridge.short),
           command: ({ editor, range, props }) => props.run(editor, range),
           render: () => ({
             onStart: (props) => {
@@ -335,7 +346,7 @@ function SlashMenu({ state, onPick, host }: { state: SlashState; onPick: (index:
   };
   let lastGroup = "";
   return createPortal(
-    <div ref={listRef} className="lesson-editor-menu lesson-editor-slash" style={style} role="listbox" aria-label="Add a block">
+    <div ref={listRef} className={`lesson-editor-menu lesson-editor-slash${state.items[0]?.group === SHORT_GROUP ? " is-short" : ""}`} style={style} role="listbox" aria-label="Add a block">
       {state.items.length ? state.items.map((item, index) => {
         const header = item.group !== lastGroup ? <div className="lesson-editor-menu-group" key={`g-${item.group}`}>{item.group === "Lesson" ? "Lesson blocks" : item.group}</div> : null;
         lastGroup = item.group;
@@ -355,7 +366,7 @@ function SlashMenu({ state, onPick, host }: { state: SlashState; onPick: (index:
             <span className="lesson-editor-menu-icon" aria-hidden="true">{item.icon}</span>
             <span className="lesson-editor-menu-text">
               <strong>{item.title}</strong>
-              <small>{item.hint}</small>
+              {item.hint ? <small>{item.hint}</small> : null}
             </span>
           </button>,
         ];
@@ -382,7 +393,7 @@ const TURN_INTO: { key: string; label: string; icon: ReactNode; isActive: (e: Ed
     run: (e) => (e.isActive("blockquote") ? e.chain().focus().updateAttributes("blockquote", { callout: null }).run() : e.chain().focus().toggleBlockquote().run()) },
 ];
 
-function FormatBar({ editor, openLinkRef }: { editor: Editor; openLinkRef: { current: (() => void) | null } }) {
+function FormatBar({ editor, openLinkRef, short }: { editor: Editor; openLinkRef: { current: (() => void) | null }; short?: boolean }) {
   const [linkOpen, setLinkOpen] = useState(false);
   const [turnOpen, setTurnOpen] = useState(false);
   const [href, setHref] = useState("");
@@ -470,6 +481,14 @@ function FormatBar({ editor, openLinkRef }: { editor: Editor; openLinkRef: { cur
           />
           <button type="submit" className="lesson-editor-button is-primary">{href.trim() ? "Link" : "Remove"}</button>
         </form>
+      ) : short ? (
+        <>
+          {mark("bold", "Bold", <Bold />, () => editor.chain().focus().toggleBold().run(), "Ctrl+B")}
+          {mark("italic", "Italic", <Italic />, () => editor.chain().focus().toggleItalic().run(), "Ctrl+I")}
+          {mark("link", "Link", <Link2 />, openLink, "Ctrl+K")}
+          {mark("heading", "Heading", <Heading2 />, () => editor.chain().focus().toggleHeading({ level: 2 }).run(), "Ctrl+Alt+2")}
+          {mark("bulletList", "List", <List />, () => editor.chain().focus().toggleBulletList().run(), "Ctrl+Shift+8")}
+        </>
       ) : (
         <>
           <div className="lesson-editor-turn">
@@ -795,6 +814,7 @@ export default function LessonEditor(props: LessonEditorProps) {
   bridge.current.set = setSlash;
   bridge.current.followAlong = props.followAlong ?? true;
   bridge.current.pageBlocks = props.pageBlocks;
+  bridge.current.short = props.short;
   const editorRef = useRef<Editor | null>(null);
   const openLinkRef = useRef<(() => void) | null>(null);
 
@@ -859,7 +879,7 @@ export default function LessonEditor(props: LessonEditorProps) {
     Placeholder.configure({
       placeholder: ({ editor, node }) => {
         if (node.type.name === "heading") return "Heading";
-        return editor.state.doc.childCount <= 1 ? (propsRef.current.followAlong === false ? "Write your lesson, or press / for headings, lists, callouts and more" : "Write your lesson, or press / for headings, images, quizzes and more") : "Press / for blocks";
+        return editor.state.doc.childCount <= 1 ? (propsRef.current.short ? "Write the lesson, or press / for a heading, a list, a video or a picture." : propsRef.current.followAlong === false ? "Write your lesson, or press / for headings, lists, callouts and more" : "Write your lesson, or press / for headings, images, quizzes and more") : "Press / for blocks";
       },
       showOnlyCurrent: true,
     }),
@@ -1010,7 +1030,7 @@ export default function LessonEditor(props: LessonEditorProps) {
         <Toolbar editor={editor} followAlong={props.followAlong ?? true} openLinkRef={openLinkRef} />
         {hover ? <BlockHandle editor={editor} hover={hover} onClose={() => setHover(null)} /> : null}
         <EditorContent editor={editor} />
-        <FormatBar editor={editor} openLinkRef={openLinkRef} />
+        <FormatBar editor={editor} openLinkRef={openLinkRef} short={props.short} />
         {slash ? (
           <SlashMenu
             state={slash}

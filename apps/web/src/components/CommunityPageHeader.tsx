@@ -79,6 +79,14 @@ export function usePageHeaderToolbar(): HTMLElement | null {
   return isDesignV1Active() && toolbar ? toolbar : null;
 }
 
+// The header's own right end, for the one thing a page keeps there: a
+// course's publish switch and its menu (Neil's host mock, Nov 17). Null where
+// there is no header (phone, classic).
+export function usePageHeaderEnd(): HTMLElement | null {
+  const slot = useContext(HeaderSlotContext);
+  return isDesignV1Active() && slot ? slot : null;
+}
+
 // `children` is the page's classic title row, shown when v1 is off (and where
 // a page is used outside the frame, as on mobile).
 // One level in (a course inside Knowledge, a pod's room): the header is an

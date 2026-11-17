@@ -611,14 +611,24 @@ css += """
 .app .kedit-pub{white-space:nowrap}
 :where(:root[data-layout="phone"]) .app .kresadd{grid-template-columns:minmax(0,1fr)}
 
-/* Kit addition: arranging the shelf (two arrows on each book) and moving a
-   lesson to another course from its editor. */
-.app .kcourse.karr{position:relative;cursor:default}
-.app .kcourse.karr:hover{border-color:var(--line);background:var(--s1)}
-.app .kmove{position:absolute;top:8px;right:8px;display:flex;gap:4px}
-.app .kmove button{width:28px;height:28px;border-radius:7px;display:grid;place-items:center;border:1px solid var(--line2);background:var(--pop);color:var(--ink)}
-.app .kmove button:disabled{opacity:.35}
-.app .kmove button .ic{width:14px;height:14px}
+/* Kit addition: holding a lesson or a course by its grip and dropping it
+   where it should go (useDragOrder). The line is where it will land. */
+.app .kgrip{display:grid;place-items:center;flex:none;width:16px;height:26px;border-radius:5px;color:var(--ink3);cursor:grab;touch-action:none}
+.app .kgrip svg{width:10px;height:16px;fill:currentColor;stroke:none}
+.app .kgrip:hover{color:var(--ink)}.app .kgrip:active{cursor:grabbing}
+.app .kl-row.host{gap:2px}
+.app .kl-row.gap>*,.app .kcard.gap>*{visibility:hidden}
+.app .kcard.gap{border-radius:12px;outline:2px dashed var(--accent);outline-offset:-2px}
+.app .klift{rotate:0deg;scale:1;transition:rotate .16s var(--ease),scale .16s var(--ease),box-shadow .16s var(--ease)}
+.app .kl-row.klift{border-radius:9px;background:var(--pop);box-shadow:0 14px 30px -12px rgba(0,0,0,.7),inset 0 0 0 1px var(--line2);rotate:-1.2deg;scale:1.02}
+.app .kcard{position:relative;display:flex;min-width:0}
+.app .kcard>.kcourse{flex:1;min-width:0}
+.app .kgrip.oncard{padding:0;position:absolute;right:12px;top:12px;z-index:1;width:26px;height:26px;border-radius:7px;background:rgba(12,13,16,.78);color:#fff}
+.app .kgrip.oncard:hover{color:#fff;background:rgba(12,13,16,.92)}
+.app .kgrip.oncard:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.app .kcourse.knew{display:grid;place-items:center;align-content:center;justify-items:center;gap:8px;min-height:180px;padding:14px;border-style:dashed;border-color:var(--line2);background:transparent;color:var(--ink2);font-size:14px;text-align:center}
+.app .kcourse.knew:hover:not(:disabled){background:var(--s1);color:var(--ink)}
+.app .kcourse.knew .ic{width:18px;height:18px}
 .app .kmoveto{height:28px;max-width:220px;padding:0 8px;border-radius:6px;border:1px solid var(--line2);background:transparent;color:var(--ink2);font:inherit;font-size:12.5px}
 
 /* Kit addition: changing a course in the page (KitCourseEdit): the cover on
@@ -668,7 +678,51 @@ css += """
 .app:is(.light:not(.on-mode-dark),.on-mode-light) .re.mine{background:color-mix(in srgb,var(--accent) 14%,transparent);color:var(--v1-accent-ink,var(--ink))}
 .app:is(.light:not(.on-mode-dark),.on-mode-light) .re.mine:hover{background:color-mix(in srgb,var(--accent) 20%,transparent)}
 .app .klesson p{color:var(--ink1)}
-.app .kedit-title{font-family:inherit;font-weight:600;font-size:28px}
+.app .kedit-title{font-family:inherit;font-weight:600;font-size:30px;line-height:1.15;letter-spacing:-.02em}
+.app .kswitch{display:inline-flex;align-items:center;gap:9px;height:32px;padding:0 12px 0 10px;border-radius:8px;border:1px solid var(--line2);font-size:13px;font-weight:500;cursor:pointer}
+.app .kswitch i{position:relative;flex:none;width:28px;height:16px;border-radius:8px;background:var(--line2)}
+.app .kswitch i::after{content:"";position:absolute;left:2px;top:2px;width:12px;height:12px;border-radius:50%;background:var(--ink2);transition:left .16s var(--ease)}
+.app .kswitch.on i{background:#3fb76b}.app .kswitch.on i::after{left:14px;background:#fff}
+.app .kswitch small{font-size:12px;font-weight:400;color:var(--ink3)}
+.app .kswitch:disabled{opacity:.5;cursor:default}
+.app .kl-row{position:relative}
+.app .kl-menu summary{display:grid;place-items:center;width:26px;height:26px;border-radius:6px;color:var(--ink3);cursor:pointer;list-style:none;opacity:.6;transition:opacity .15s var(--ease)}
+.app .kl-menu summary::-webkit-details-marker{display:none}
+.app .kl-menu summary .ic{width:15px;height:15px}
+.app .kl-row:hover .kl-menu summary,.app .kl-menu[open] summary,.app .kl-menu summary:focus-visible{opacity:1}
+.app .kl-menu summary:hover{background:var(--s2);color:var(--ink)}
+.app .kl-menu>div{position:absolute;right:4px;top:calc(100% - 2px);z-index:30;min-width:220px;padding:6px;border-radius:10px;background:var(--pop);border:1px solid var(--line2);box-shadow:0 18px 40px -18px rgba(0,0,0,.6)}
+.app .kl-menu>div button{display:block;width:100%;padding:8px 10px;border-radius:7px;font-size:13.5px;text-align:left;cursor:pointer}
+.app .kl-menu>div button:hover:not(:disabled){background:var(--s2)}
+.app .kl-menu>div button:disabled{opacity:.4;cursor:default}
+.app .kl-menu>div button.no{color:var(--bad)}
+.app .klist:has(.kl-menu[open]){overflow:visible}
+.app .kinline{display:flex;flex-direction:column;align-items:flex-start;gap:1px;min-width:0}
+.app .kinline-name,.app .kinline-about{max-width:100%;padding:1px 4px;margin:-1px -4px;border-radius:5px;text-align:left;cursor:text;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.app .kinline-name{font-size:14.5px;font-weight:600;line-height:1.25}
+.app .kinline-about{font-size:12.5px;color:var(--ink2)}.app .kinline-about.empty{color:var(--ink3)}
+.app .kinline-name:hover,.app .kinline-about:hover{background:var(--s2)}
+.app .kinline em{font-style:normal;font-size:12px;color:var(--ink3)}
+.app .kinline-input{width:100%;padding:1px 4px;margin:-1px -4px;border:0;border-radius:5px;outline:0;box-shadow:inset 0 0 0 1.5px var(--accent);background:transparent;color:var(--ink);font:inherit;font-size:13.5px}
+.app .kinline-cover{padding:0;border:0;cursor:pointer;transition:filter .16s var(--ease)}.app .kinline-cover:hover{filter:brightness(1.2)}
+.app .kedit-video.zone{flex-direction:column;justify-content:center;gap:12px;margin-top:0;aspect-ratio:16/5;min-height:150px;padding:20px;cursor:text;transition:border-color .16s var(--ease),background .16s var(--ease)}
+.app .kedit-video.zone:hover,.app .kedit-video.zone:focus-within{border-color:var(--ink3)}
+.app .kedit-video.zone input{flex:none;width:100%;max-width:460px;text-align:center;font-size:14.5px}
+.app .kresname{min-width:0;width:100%;padding:2px 4px;margin:-2px -4px;border:0;border-radius:5px;outline:0;background:transparent;color:var(--ink);font:inherit;font-size:13.5px;font-weight:550;text-overflow:ellipsis}
+.app .kresname:hover{background:var(--s2)}.app .kresname:focus{box-shadow:inset 0 0 0 1.5px var(--accent);background:transparent}
+.app .kresrow.edit{grid-template-columns:18px minmax(0,1fr) minmax(0,auto) auto}
+.app .kresrow.edit em{max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.app .kaddres{display:inline-flex;align-items:center;gap:8px;align-self:flex-start;margin-top:10px;padding:4px 8px 4px 4px;margin-left:-4px;border-radius:7px;font-size:13.5px;color:var(--ink2);cursor:pointer}
+.app .kaddres:hover{background:var(--s2);color:var(--ink)}.app .kaddres .ic{width:16px;height:16px}
+.app .kaddline{display:flex;align-items:center;gap:10px;min-height:44px;border-top:1px solid var(--line)}
+.app .kaddline .ic{width:16px;height:16px;color:var(--ink3);flex:none}
+.app .kaddline input{flex:1;min-width:0;padding:0;border:0;outline:0;background:transparent;color:var(--ink);font:inherit;font-size:13.5px}
+.app .kaddline input::placeholder{color:var(--ink3)}
+.app .kedit-videorow{display:flex;align-items:center;gap:6px}
+.app .kunsaved{position:sticky;bottom:16px;z-index:5;align-self:center;display:flex;align-items:center;gap:10px;margin-top:24px;padding:8px 8px 8px 16px;border-radius:14px;background:var(--pop);border:1px solid var(--line2);box-shadow:0 24px 50px -18px rgba(0,0,0,.7);font-size:13.5px}
+.app .kunsaved i{width:7px;height:7px;border-radius:50%;background:var(--accent)}
+.app .kunsaved span{margin-right:8px}
+.app .kunsaved .btn:disabled{opacity:.4;cursor:default}
 .app .btn.lg{height:40px;padding:0 16px;border-radius:10px;font-size:14px}
 .app .tag.live::before{content:"";width:6px;height:6px;margin-right:6px;border-radius:50%;background:#3fb76b}
 .app .khero{display:grid;grid-template-columns:minmax(0,460px) minmax(0,1fr);gap:32px;align-items:center;width:100%;margin-top:18px;padding:20px;border-radius:14px;background:var(--panel2);border:1px solid var(--line);box-shadow:0 18px 40px -26px rgba(0,0,0,.5);text-align:left;cursor:pointer;transition:border-color .16s var(--ease)}
@@ -692,6 +746,7 @@ css += """
 .app .kcols .kmainc{flex:1;min-width:0}
 .app .kcols .klesson,.app .kcols .kcrumb{max-width:none;margin:0}
 .app .klist{position:sticky;top:8px;flex:none;width:304px;max-height:calc(100vh - 150px);overflow-y:auto;border-radius:14px;background:var(--panel2);border:1px solid var(--line);box-shadow:0 18px 40px -26px rgba(0,0,0,.5)}
+.app .klist.solo{position:static;width:auto;max-width:420px;max-height:none;margin-bottom:14px;box-shadow:none}
 .app .klist-top{display:grid;grid-template-columns:72px minmax(0,1fr);gap:12px;align-items:center;padding:14px 14px 12px}
 .app .klist-cover{display:grid;place-items:center;height:auto;aspect-ratio:16/9;border-radius:6px;color:var(--ink3)}
 .app .klist-cover .ic{width:16px;height:16px}
@@ -857,6 +912,62 @@ css += """
 @media (max-width:760px){.app .startc{grid-template-columns:1fr}.app .startc-side{border-left:0;border-top:1px solid var(--line)}}
 :where(:root[data-layout="phone"]) .app .startc{grid-template-columns:1fr}
 :where(:root[data-layout="phone"]) .app .startc-side{border-left:0;border-top:1px solid var(--line)}
+
+/* Kit addition: the shelf as the mock draws it (Nov 17). A course is not a
+   box: a cover, its name and one line, sitting in the page. It only gets a
+   body when it is pointed at, and a deeper one when it is picked up. */
+.app .kgrid{grid-template-columns:repeat(auto-fill,minmax(max(190px,calc((100% - 32px) / 3)),1fr));gap:16px}
+.app .kcourse{gap:10px;padding:8px 8px 12px;border-radius:12px;border:1px solid transparent;background:transparent;overflow:visible;transition:background .14s var(--ease),border-color .14s var(--ease)}
+.app .kcourse:hover{background:var(--s1);border-color:var(--line)}
+.app .kcourse>.kcover{width:100%;height:auto;aspect-ratio:16/9;padding:0;border-radius:8px;align-items:center;justify-content:center}
+.app .kcourse>b{display:flex;align-items:baseline;gap:8px;margin:0;padding:0 4px;font-size:14.5px;font-weight:550;line-height:1.3;letter-spacing:0;overflow:visible}
+.app .kcourse>b>span{min-width:0;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden}
+.app .kcourse>b .knum{flex:none;margin:0}
+.app .kmeta{display:flex;align-items:center;gap:8px;margin:0;padding:0 4px;font-size:12.5px;color:var(--ink3);white-space:nowrap}
+.app .kmeta>span:first-child{min-width:0;overflow:hidden;text-overflow:ellipsis}
+.app .kmeta .kbar{flex:none;width:54px}
+.app .kmeta .right{margin-left:auto;flex:none}
+.app .kdraft{position:absolute;left:21px;top:21px;z-index:1;height:22px;padding:0 8px;border-radius:6px;background:rgba(12,13,16,.78);color:#fff;font-size:12px;font-weight:500;line-height:22px;pointer-events:none}
+.app .kgrip.oncard{right:21px;top:21px}
+.app .kcard.gap{outline:0}
+.app .kcard.gap::after{content:"";position:absolute;inset:0;border-radius:12px;border:2px dashed var(--accent);opacity:.7}
+.app .kcard.klift{rotate:-1.6deg;scale:1.02}
+.app .kcard.klift>.kcourse{background:var(--pop);border-color:var(--line2);box-shadow:0 30px 60px -22px rgba(0,0,0,.85)}
+.app .kcourse.knew{display:flex;flex-direction:row;align-items:center;justify-content:center;gap:8px;min-height:150px;margin:0;border:1px dashed var(--line2)}
+.app .kcourse.knew .ic{width:16px;height:16px}
+
+/* Kit addition: the course page as the mock draws it (Nov 17). A lesson's
+   row is one piece: grip, dot, title and menu inside one highlight. */
+.app .kl-row.host{gap:6px;padding:0 4px 0 8px;border-radius:9px;transition:background .14s var(--ease)}
+.app .kl-row.host:hover{background:var(--s2)}
+.app .kl-row.host.on{background:color-mix(in srgb,var(--accent) 16%,transparent)}
+.app .kl-row.host.gap,.app .kl-row.host.gap:hover{background:transparent}
+.app .kl-row.host>.kl,.app .kl-row.host>.kl:hover,.app .kl-row.host>.kl.on{background:transparent;padding-left:2px;padding-right:2px}
+.app .kl-row.host .kgrip{width:14px;padding:0}
+.app .kl-row.host .kgrip:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.app .kl-row .kinline-input{margin:0;font-size:14px}
+.app .kl-menu summary{width:24px;height:24px}
+.app .kl-menu>div button{display:flex;align-items:center;gap:10px;min-height:34px;padding:0 10px;border-radius:8px}
+.app .kl-menu>div button .ic{flex:none;width:16px;height:16px;color:var(--ink3)}
+.app .kl-menu>div button.no .ic{color:inherit}
+.app .kl-menu>div button span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.app .kl-menu>div{width:232px;min-width:0;border-radius:12px;box-shadow:0 24px 50px -18px rgba(0,0,0,.75)}
+.app .kinline-name{white-space:normal;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2}
+.app .klist-cover.knocover{border:1px dashed var(--line2);background:transparent;color:var(--ink3)}
+.app .kedit-played{position:relative}
+.app .kedit-videotools{position:absolute;right:12px;top:12px;z-index:2;display:flex;gap:6px;opacity:0;transition:opacity .15s var(--ease)}
+.app .kedit-played:hover .kedit-videotools,.app .kedit-videotools:focus-within{opacity:1}
+.app .kedit-videotools button{height:28px;padding:0 10px;border-radius:7px;background:rgba(12,13,16,.78);color:#fff;font-size:12.5px;font-weight:500;cursor:pointer}
+.app .kedit-videotools button:hover{background:rgba(12,13,16,.94)}
+.app .ktools.head{width:auto;max-width:none;margin:0 0 0 auto}
+.app .kresacts{display:flex;align-items:center;gap:2px}
+.app .kresacts a,.app .kresacts button{display:grid;place-items:center;width:28px;height:28px;border-radius:7px;color:var(--ink3);cursor:pointer}
+.app .kresacts a:hover,.app .kresacts button:hover{background:var(--s2);color:var(--ink)}
+.app .kresacts .ic{width:15px;height:15px}
+.app .kresacts button{opacity:0;transition:opacity .15s var(--ease)}
+.app .kresrow:hover .kresacts button,.app .kresacts button:focus-visible{opacity:1}
+@media (hover:none){.app .kedit-videotools{opacity:1}}
+:where(:root[data-layout="phone"]) .app .ktools.head .kswitch small{display:none}
 """
 header = "/* Generated by scripts/design/build_v1_kit_css.py from docs/design/hifi-mock/style.css.\n   Do not edit by hand: change the mock, then run the script. */\n"
 if "--stdout" in sys.argv:
