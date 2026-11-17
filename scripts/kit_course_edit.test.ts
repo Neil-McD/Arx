@@ -22,8 +22,11 @@ describe("changing a course in the page", () => {
   it("the course page opens no pop-up for details or delete, and guards delete to drafts", () => {
     const page = readFileSync(new URL("../apps/web/src/v1/KitClassroom.tsx", import.meta.url), "utf8");
     expect(page).not.toMatch(/onEditCourseDetails|Course details/);
-    expect(page).toMatch(/module_status === "draft" \? \(\s*<button[^>]*onClick=\{\(\) => void deleteCourse\(\)\}/);
-    expect(page).toMatch(/To delete this course, unpublish it first\./);
+    // Delete is offered for a draft only (now inside the course's menu); a
+    // published course's menu offers Unpublish, and says a draft can be deleted.
+    expect(page).toMatch(/onDeleteCourse && open\.course\.module_status === "draft" \? \(\s*<button[^>]*onClick=\{\(event\) => \{ closeMenu\(event\); void deleteCourse\(\); \}\}/);
+    expect(page.match(/void deleteCourse\(\)/g)).toHaveLength(1);
+    expect(page).toMatch(/A draft can be deleted\./);
     const panel = readFileSync(new URL("../apps/web/src/components/WebCommunityKnowledgePanel.tsx", import.meta.url), "utf8");
     expect(panel).not.toMatch(/handleEditModule|openNewModuleModal|handleDeleteModule/);
     expect(panel).toMatch(/course\.module_status !== "draft"\) return \{ ok: false/);
