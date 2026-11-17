@@ -23,6 +23,7 @@ import {
   type CommunityInteractionFeedListProps,
 } from "../components/communityInteractionFeed";
 import { groupInteractionFeed } from "../components/groupInteractionFeed";
+import { EmojiPickerButton } from "../components/communityInteractionRowParts";
 import { MemberAvatarStack, type MemberAvatarStackFace } from "../components/MemberAvatarStack";
 import { interactionMentionsViewer } from "../controllers/communityMentionAttention";
 import { Icon, cx } from "./kit";
@@ -273,6 +274,10 @@ export function KitChannelFeed(props: CommunityInteractionFeedListProps) {
                     {showFooter ? (
                       <div className={cx("rx")}>
                         <KitReactions rows={root.reaction_summary} viewerEmojis={root.viewer_emojis} onToggle={(emoji) => props.onToggleReaction?.("root", root.id, emoji)} />
+                        {/* Once a post has reactions, adding yours is one click, without the hover bar. */}
+                        {root.reaction_summary.length > 0 && props.onToggleReaction ? (
+                          <EmojiPickerButton className={cx("re", "readd")} label="Add reaction" onPick={(emoji) => props.onToggleReaction?.("root", root.id, emoji)} />
+                        ) : null}
                         {threadTypers.length > 0 ? (
                           <button type="button" className={cx("th")} onClick={() => props.onSelectRoot(root.id)}>
                             <b>typing…</b>

@@ -4526,3 +4526,32 @@
   --conversation-primary-action-hover-surface: var(--v1-accent);
   box-shadow: none;
 }
+
+/* Reactions in the feed: everyone's are a quiet outline; yours take the
+   accent tint. Never a solid ink fill. */
+:root[data-design="v1"] .community-interaction-reaction {
+  min-height: 22px;
+  padding: 0 7px;
+  border: 1px solid var(--border-default);
+  border-radius: 6px;
+  background: transparent;
+  box-shadow: none;
+  color: var(--text-secondary);
+}
+:root[data-design="v1"] .community-interaction-reaction:hover:not(:disabled) {
+  border-color: var(--border-strong);
+  background: var(--hover-overlay, rgba(127, 127, 127, 0.08));
+}
+:root[data-design="v1"] .community-interaction-reaction.is-mine {
+  border-color: color-mix(in srgb, var(--v1-accent) 50%, transparent);
+  background: color-mix(in srgb, var(--v1-accent) 14%, transparent);
+  box-shadow: none;
+  color: var(--v1-accent-ink);
+}
+:root[data-design="v1"] .community-interaction-reaction.is-mine:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--v1-accent) 70%, transparent);
+  background: color-mix(in srgb, var(--v1-accent) 20%, transparent);
+}
+:root[data-design="v1"] .community-interaction-reaction:focus-visible {
+  outline-color: color-mix(in srgb, var(--v1-accent) 72%, transparent);
+}
