@@ -660,9 +660,17 @@ css += """
 .app .msg.cont{padding-top:3px;padding-bottom:3px}
 .app .msg.cont>.gap{width:36px;flex:none}
 .app .msg.pending{opacity:.6}
-.app .msg.mention{background:rgba(29,155,240,.06)}
+.app .msg.mention{background:color-mix(in srgb,var(--accent) 7%,transparent)}
 .app .tools:focus-within,.app .tools:has([aria-expanded="true"]){opacity:1;transform:none;pointer-events:auto}
-.app .re.mine{border-color:rgba(29,155,240,.45);background:rgba(29,155,240,.10);color:var(--ink)}
+.app .re.mine{border-color:color-mix(in srgb,var(--accent) 50%,transparent);background:color-mix(in srgb,var(--accent) 14%,transparent);color:var(--v1-accent-ink,var(--ink))}
+.app .re.mine:hover{border-color:color-mix(in srgb,var(--accent) 70%,transparent);background:color-mix(in srgb,var(--accent) 20%,transparent)}
+.app .th b{color:var(--v1-accent-ink,var(--accent));font-weight:500}
+.app:is(.light:not(.on-mode-dark),.on-mode-light) .re.mine{background:color-mix(in srgb,var(--accent) 14%,transparent);color:var(--v1-accent-ink,var(--ink))}
+.app:is(.light:not(.on-mode-dark),.on-mode-light) .re.mine:hover{background:color-mix(in srgb,var(--accent) 20%,transparent)}
+.app .mine:not(.re){background:color-mix(in srgb,var(--accent) 26%,var(--panel2))}
+.app:is(.light:not(.on-mode-dark),.on-mode-light) .mine:not(.re){background:color-mix(in srgb,var(--accent) 14%,#fff);color:var(--ink)}
+.app .re.readd{padding:0 6px;color:var(--ink3);cursor:pointer}.app .re.readd:hover{color:var(--ink)}
+.app .rx :global(.community-interaction-emoji-popover){right:auto;left:0}
 /* Many reactions wrap onto more lines rather than run past the edge. */
 .app .msg .rx{flex-wrap:wrap;row-gap:6px}
 /* The app's own avatar (with its profile card) at the mock's 36px. */
