@@ -6,6 +6,7 @@ import { handleMcpPost } from "./httpMcp";
 import { api, internal } from "./_generated/api";
 import { PLATFORM_LEGAL_DOCUMENTS } from "../shared/legalDocuments";
 import { BUDGET_LIMITS } from "../shared/operationCatalog";
+import { POLYNET_CANONICAL_TOOL_DEFINITIONS } from "../shared/polynetCanonicalToolContract";
 
 const modules = import.meta.glob("./**/*.*s");
 
@@ -366,6 +367,23 @@ test("a person's AI reads their own conversations and replies in one that exists
   const seen = await f.t.withIdentity({ subject: "owner-subject" }).query((api as any).directMessages.listDirectMessages,
     { authSubject: "owner-subject", conversationId: c.id });
   expect(seen.map((message: any) => message.via_ai)).toEqual([false, true]);
+});
+
+test("message answers are in the tools' published shapes, and two people's AIs can use the same key", async () => {
+  const f = await fixture();
+  const c = await conversation(f);
+  for (const path of ["/messages/", c.path]) {
+    const listed = await f.call("member", "polynet_list", { path });
+    for (const field of (POLYNET_CANONICAL_TOOL_DEFINITIONS.polynet_list.outputSchema as any).required as string[]) expect(listed.structuredContent, `${path} ${field}`).toHaveProperty(field);
+  }
+  expect((await f.call("member", "polynet_read", { path: c.path })).isError).toBe(true);
+  const mine = await f.call("member", "polynet_write", { path: c.path, mode: "append", content: { text: "From the member." }, idempotency_key: "r1" });
+  for (const field of (POLYNET_CANONICAL_TOOL_DEFINITIONS.polynet_write.outputSchema as any).required as string[]) expect(mine.structuredContent).toHaveProperty(field);
+  // The owner's AI, with the same key, sends its own message.
+  const theirs = await f.call("owner", "polynet_write", { path: c.path, mode: "append", content: { text: "From the owner." }, idempotency_key: "r1" });
+  expect(theirs.structuredContent.message).toMatchObject({ from_me: true, text: "From the owner." });
+  const stored: any[] = await f.t.run((ctx: any) => ctx.db.query("dmMessages").collect());
+  expect(stored.filter((row) => row.viaAi).map((row) => String(row.senderUserId)).sort()).toEqual([String(f.users.member), String(f.users.owner)].sort());
 });
 
 test("an AI cannot start a conversation, read someone else's, or get round a block", async () => {
