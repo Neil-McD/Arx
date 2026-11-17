@@ -17,6 +17,7 @@ export function buildWebAppMainSurfaceHostProps(params: {
 
   communityHostProps: WebAppMainSurfaceHostProps["communityHostProps"];
   discoverPanelProps: WebAppMainSurfaceHostProps["discoverPanelProps"];
+  discoverPageProps: WebAppMainSurfaceHostProps["discoverPageProps"];
   productDocsPanelProps: WebAppMainSurfaceHostProps["productDocsPanelProps"];
 }): WebAppMainSurfaceHostProps {
   return {
@@ -41,6 +42,7 @@ export function buildWebAppMainSurfaceHostProps(params: {
     publicCommunitySession: params.session,
     communityHostProps: params.communityHostProps,
     discoverPanelProps: params.discoverPanelProps,
+    discoverPageProps: params.discoverPageProps,
     productDocsPanelProps: params.productDocsPanelProps,
   };
 }
