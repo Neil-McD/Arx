@@ -1481,7 +1481,7 @@
 /* Kit addition: the shelf as the mock draws it (Nov 17). A course is not a
    box: a cover, its name and one line, sitting in the page. It only gets a
    body when it is pointed at, and a deeper one when it is picked up. */
-.app .kgrid{grid-template-columns:repeat(auto-fill,minmax(max(190px,calc((100% - 32px) / 3)),1fr));gap:16px}
+.app .kgrid{grid-template-columns:repeat(auto-fill,minmax(max(190px,min(calc((100% - 32px) / 3),280px)),1fr));gap:16px}
 .app .kcourse{gap:10px;padding:8px 8px 12px;border-radius:12px;border:1px solid transparent;background:transparent;overflow:visible;transition:background .14s var(--ease),border-color .14s var(--ease)}
 .app .kcourse:hover{background:var(--s1);border-color:var(--line)}
 .app .kcourse>.kcover{width:100%;height:auto;aspect-ratio:16/9;padding:0;border-radius:8px;align-items:center;justify-content:center}
