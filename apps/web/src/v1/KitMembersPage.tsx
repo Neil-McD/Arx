@@ -12,7 +12,6 @@ import { UserAvatar } from "../../../../shared/UserAvatar";
 import {
   addCloudCommunityMemberNote,
   deleteCloudCommunityMemberNote,
-  compCloudCommunityMember,
   getCloudCommunityMemberRecord,
   getCloudCommunityMemberSummary,
   listCloudCommunityMemberRecordsPage,
@@ -25,12 +24,11 @@ import { fetchCloudCommunityMemberBillingHistory, type CloudCommunityMemberBilli
 import { formatPrice } from "../../../../shared/communityMemberRecords";
 import { CommunityChannelSessionContext } from "../components/CommunityChannelSessionContext";
 import type { CommunityAdmissionJoinRequest } from "../components/CommunityJoinRequestReview";
-import { askInApp } from "../../../../shared/inAppConfirm";
-import { compableMembers, matchesMemberSearch, memberKey, membersCsv, toggleAllShown } from "../../../../shared/communityMembersTable";
+import { matchesMemberSearch, memberKey, membersCsv, toggleAllShown } from "../../../../shared/communityMembersTable";
 import { Btn, cx, Icon, KitApp, Rail, Sep, Sec, Top, View } from "./kit";
 import { Face, JoinRequestsDrawer, JoinRequestsLine, MembersBulkBar, MembersTable, MembersToolbar, type MembersFilter, type MembersSortKey } from "./KitMembersTable";
 
-type MembersView = "everyone" | `price:${string}` | "on_hold" | "cancelling" | "comped" | "know_little" | "past";
+type MembersView = "everyone" | `price:${string}` | "on_hold" | "cancelling" | "know_little" | "past";
 
 const OWNER_KEY = "owner";
 const keyOf = memberKey;
@@ -95,7 +93,6 @@ export function KitMembersPage(props: {
   const picked = side !== null;
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
-  const [bulkBusy, setBulkBusy] = useState<string | null>(null);
   // Another view or community: what was ticked there is let go.
   useEffect(() => { setSelected(new Set()); }, [scope?.communityId, view]);
   useEffect(() => { setSearch(""); }, [scope?.communityId]);
@@ -229,7 +226,6 @@ export function KitMembersPage(props: {
     ...data.prices.map((price) => ({ id: `price:${price.price_point_id}`, label: price.label.replace(" · ", " "), count: price.count })),
     ...(counts.on_hold ? [{ id: "on_hold", label: "On hold", count: counts.on_hold }] : []),
     ...(counts.cancelling ? [{ id: "cancelling", label: "Cancelling", count: counts.cancelling }] : []),
-    ...(counts.comped ? [{ id: "comped", label: "Free for good", count: counts.comped }] : []),
     // A filter that would show everyone filters nothing, so it isn't offered.
     ...(counts.know_little && (counts.know_little < counts.everyone || view === "know_little") ? [{ id: "know_little", label: "Know little", count: counts.know_little }] : []),
     ...(counts.past ? [{ id: "past", label: "Past", count: counts.past }] : []),
@@ -244,27 +240,6 @@ export function KitMembersPage(props: {
     link.download = `${props.communityName.replace(/[^\w-]+/g, "-").toLowerCase() || "members"}-${suffix}.csv`;
     link.click();
     URL.revokeObjectURL(url);
-  };
-  // Comp everyone ticked who is in for free, one at a time; whoever it
-  // didn't reach stays ticked.
-  const compSelected = async () => {
-    const who = compableMembers(chosen);
-    if (!scope || who.length === 0 || bulkBusy) return;
-    const yes = await askInApp({ message: who.length === 1 ? `Keep ${who[0].name} free for good? They stay in without paying.` : `Keep ${who.length} members free for good? They stay in without paying.`, yes: "Keep free", no: "Cancel" });
-    if (!yes) return;
-    setBulkBusy("comp");
-    const done = new Set<string>();
-    try {
-      for (const row of who) {
-        await compCloudCommunityMember({ session: scope.session, communityId: scope.communityId, membershipId: row.membership_id! });
-        done.add(keyOf(row));
-      }
-    } catch { /* the rest stay ticked */ } finally {
-      setBulkBusy(null);
-      setSelected((last) => new Set([...last].filter((key) => !done.has(key))));
-      setTableVersion((version) => version + 1);
-      setRecordVersion((version) => version + 1);
-    }
   };
   // Export is everyone in, every page, not just what is loaded.
   const [exporting, setExporting] = useState(false);
@@ -321,8 +296,7 @@ export function KitMembersPage(props: {
               </div>
             ) : null}
             {view !== "past" ? (
-              <MembersBulkBar count={chosen.length} compable={compableMembers(chosen).length} busy={bulkBusy}
-                onExport={() => download(membersCsv(chosen), "selected")} onComp={() => void compSelected()} onClear={() => setSelected(new Set())} />
+              <MembersBulkBar count={chosen.length} onExport={() => download(membersCsv(chosen), "selected")} onClear={() => setSelected(new Set())} />
             ) : null}
             <div ref={sentinelRef} aria-hidden="true" style={{ height: 1 }} />
             {loading ? <p className={cx("none")} style={{ marginTop: 14, fontSize: 13 }}>Loading more…</p> : null}
@@ -356,12 +330,6 @@ export function KitMembersPage(props: {
             setRecordVersion((version) => version + 1);
           }}
           payments={payments && payments.membershipId === record.membership_id ? payments.history : null}
-          onComp={record.membership_id && record.plan.kind === "free" && !record.out ? async () => {
-            if (!scope) return;
-            await compCloudCommunityMember({ session: scope.session, communityId: scope.communityId, membershipId: record.membership_id! });
-            setRecordVersion((version) => version + 1);
-            setTableVersion((version) => version + 1);
-          } : undefined}
           onDeleteNote={async (noteId) => {
             if (!scope) return;
             await deleteCloudCommunityMemberNote({ session: scope.session, communityId: scope.communityId, noteId });
@@ -392,10 +360,7 @@ function MemberRecordView(props: {
   onAddNote: (body: string) => Promise<void>;
   onDeleteNote: (noteId: string) => Promise<void>;
   payments: CloudCommunityMemberBillingHistory | null;
-  // Only for someone in for free: comping a paying member is never offered.
-  onComp?: () => Promise<void>;
 }) {
-  const [comping, setComping] = useState(false);
   const { record } = props;
   const manage = () => record.membership_id && props.onManage?.({ id: record.membership_id, user_id: record.user_id, display_name: record.name,
     avatar_url: record.avatar_url, role: record.role, created_at: record.joined_at });
@@ -437,17 +402,15 @@ function MemberRecordView(props: {
           </div>
         </div>
         {/* Only when something about their access needs the host. */}
-        {record.money || record.plan.kind === "comped" ? (
+        {record.money ? (
           <div className={cx("plan")}>
             {record.money?.kind === "on_hold" ? <b className={cx("bad")}>Payment on hold{day(record.money.since_at) ? ` since ${day(record.money.since_at)}` : ""}.{record.money.ends_at ? ` Access ends ${day(record.money.ends_at)}.` : ""}</b> : null}
             {record.money?.kind === "cancelling" ? <b>Leaving{record.money.ends_at ? ` on ${day(record.money.ends_at)}` : " at the end of the period"}.</b> : null}
-            {record.plan.kind === "comped" ? <span>A host gave {first} free access for good.</span> : null}
           </div>
         ) : null}
-        {!props.self && ((props.onMessage && !record.out) || canManage || props.onComp) ? (
+        {!props.self && ((props.onMessage && !record.out) || canManage) ? (
           <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
             {props.onMessage && !record.out ? <Btn small go onClick={() => props.onMessage?.(record.user_id)}>Message</Btn> : null}
-            {props.onComp ? <Btn small onClick={async () => { setComping(true); try { await props.onComp?.(); } finally { setComping(false); } }}>{comping ? "Saving…" : "Keep free for good"}</Btn> : null}
             {/* One way into the one place a role is changed and someone is removed or blocked. */}
             {canManage ? (
               <button type="button" className={cx("btn sm")} style={{ marginLeft: "auto" }} aria-label={`Change ${first}'s role, remove or block`} title="Change role, remove or block" onClick={manage}>

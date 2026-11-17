@@ -16,11 +16,15 @@ test("Home's review button opens the people waiting, not the Members page", () =
   expect(app).not.toMatch(/\buseEffect\b/);
 });
 
-test("a member a host keeps in for free is called that, not jargon", () => {
-  for (const path of ["shared/communityMembersTable.ts", "shared/communityMemberRecords.ts", "convex/communityMemberRecords.ts", "apps/web/src/v1/KitMembersPage.tsx", "apps/web/src/v1/KitMembersTable.tsx"]) {
-    expect(read(path)).not.toMatch(/"Comped"|"Comp"|"Comping…"/);
+test("there is no button, filter or standing for free access a host gave", () => {
+  // Someone in for free already keeps their place whatever the price becomes
+  // (convex/communityCore.ts treats both kinds of free access the same), so
+  // marking them changed nothing. A member is paying, in for free, or the owner.
+  for (const path of ["shared/communityMembersTable.ts", "shared/communityMemberRecords.ts", "shared/cloudCommunityMemberRecordsGateway.ts", "apps/web/src/v1/KitMembersPage.tsx", "apps/web/src/v1/KitMembersTable.tsx"]) {
+    expect(read(path)).not.toMatch(/comped|Comped|onComp|compable|compCloudCommunityMember/);
   }
-  expect(read("shared/communityMembersTable.ts")).toContain('label: "Free for good"');
+  const core = read("convex/communityCore.ts");
+  expect(core).toMatch(/function communityAccessSourceIsDurable\([\s\S]{0,200}source === "free_grant" \|\|\s*source === "manual_grant"/);
 });
 
 test("the left column's text is 14px on desktop, and its rows stay 28px", () => {

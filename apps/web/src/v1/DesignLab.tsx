@@ -41,7 +41,7 @@ import { KitEventsList, eventClock } from "./KitEventsList";
 import { KitEventForm } from "./KitEventForm";
 import { JoinRequestsDrawer, JoinRequestsLine, MembersBulkBar, MembersTable, MembersToolbar, type MembersSortKey } from "./KitMembersTable";
 import { memberTimeFor, shortDay } from "./KitMembersPage";
-import { compableMembers, matchesMemberSearch, memberKey, toggleAllShown } from "../../../../shared/communityMembersTable";
+import { matchesMemberSearch, memberKey, toggleAllShown } from "../../../../shared/communityMembersTable";
 import { fullExample, middlingExample, sunriseExample } from "./brainExamples";
 import { CommunityPageFrame, CommunityPageRail } from "../components/CommunityPageHeader";
 import { KitHomeRail } from "./KitHomeRail";
@@ -476,7 +476,7 @@ function MembersLab() {
   const all = names.map((name, i) => ({
     membership_id: i === 0 ? null : `m${i}`, user_id: `u${i}`, name, handle: name.toLowerCase().replace(/\s+/g, "-"), avatar_url: null,
     role: i === 0 ? "owner" : i === 3 ? "admin" : "member",
-    plan: i === 0 ? { kind: "owner" as const, label: "Owner", price_point_id: null } : i % 5 === 2 ? { kind: "comped" as const, label: "Comped", price_point_id: null }
+    plan: i === 0 ? { kind: "owner" as const, label: "Owner", price_point_id: null } : i % 5 === 2 ? { kind: "free" as const, label: "Free", price_point_id: null }
       : i % 3 === 0 ? { kind: "free" as const, label: "Free", price_point_id: null } : { kind: "paid" as const, label: i % 2 ? "$20 a month" : "$180 a year", price_point_id: "p" },
     money: i === 4 ? { kind: "on_hold" as const, label: "on hold", since_at: null, ends_at: null } : i === 9 ? { kind: "cancelling" as const, label: "cancelling", since_at: null, ends_at: null } : null,
     joined_at: new Date(now - (i + 2) * 9 * 86_400_000).toISOString(), last_active_at: new Date(now - i * 7 * 3_600_000).toISOString(), working_on: null,
@@ -492,7 +492,7 @@ function MembersLab() {
   const [open, setOpen] = useStateLab<string | null>(null);
   const [drawer, setDrawer] = useStateLab(false);
   const [sort, setSort] = useStateLab<{ key: MembersSortKey; desc: boolean } | null>(null);
-  const inFilter = (row: typeof all[number]) => filter === "everyone" ? true : filter === "on_hold" ? row.money?.kind === "on_hold" : filter === "comped" ? row.plan.kind === "comped" : row.plan.kind === "paid";
+  const inFilter = (row: typeof all[number]) => filter === "everyone" ? true : filter === "on_hold" ? row.money?.kind === "on_hold" : row.plan.kind === "paid";
   const rows = all.filter((row) => inFilter(row) && matchesMemberSearch(row, search));
   const chosen = all.filter((row) => selected.has(memberKey(row)));
   const colour = (id: string) => `hsl(${(id.charCodeAt(1) * 47) % 360} 35% 38%)`;
@@ -507,14 +507,14 @@ function MembersLab() {
             <JoinRequestsLine count={requests.length} open={drawer} onOpen={() => { setDrawer(!drawer); setOpen(null); }} />
             <MembersToolbar search={search} onSearch={setSearch} filter={filter} onFilter={setFilter} onExport={() => undefined} exporting={false} canExport
               filters={[{ id: "everyone", label: "Everyone", count: all.length }, { id: "paid", label: "$20 a month", count: all.filter((r) => r.plan.kind === "paid").length },
-                { id: "on_hold", label: "On hold", count: 1 }, { id: "comped", label: "Comped", count: all.filter((r) => r.plan.kind === "comped").length }]} />
+                { id: "on_hold", label: "On hold", count: 1 }]} />
             <MembersTable rows={sort ? [...rows].sort((a, b) => (sort.desc ? -1 : 1) * a.name.localeCompare(b.name)) : rows} avatarOf={() => null} now={now} timeFor={memberTimeFor} dayFor={shortDay}
               sort={sort} onSort={(key) => setSort((current) => ({ key, desc: current?.key === key ? !current.desc : false }))}
               selected={selected} onToggle={(key) => setSelected((last) => { const next = new Set(last); if (next.has(key)) next.delete(key); else next.add(key); return next; })}
               onToggleAll={() => setSelected((last) => toggleAllShown(last, rows.map(memberKey)))}
               openKey={open} onOpen={(key) => { setOpen(key); setDrawer(false); }} empty={search ? `No one matches "${search}".` : "No one here."}
               getAvatarColor={colour} getInitials={initials} />
-            <MembersBulkBar count={chosen.length} compable={compableMembers(chosen).length} busy={null} onExport={() => undefined} onComp={() => undefined} onClear={() => setSelected(new Set())} />
+            <MembersBulkBar count={chosen.length} onExport={() => undefined} onClear={() => setSelected(new Set())} />
           </div>
         </View>
       </KitApp>
