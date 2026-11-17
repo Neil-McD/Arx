@@ -400,7 +400,7 @@ export function KitClassroom(props: {
     if (!props.onReorderCourses || movingCourse) return;
     setMovingCourse(true);
     void Promise.resolve(props.onReorderCourses(ids)).finally(() => setMovingCourse(false));
-  }, "x");
+  }, cx("klift"));
   const moveCourse = async (index: number, by: -1 | 1) => {
     const ids = courseOrderAfterMove(courses.map((entry) => entry.course.id), index, by);
     if (!ids || !props.onReorderCourses || movingCourse) return;
@@ -456,7 +456,7 @@ export function KitClassroom(props: {
   const openProgress = open ? courseProgress(open.lessons, done) : null;
   // Lessons are put in order by dragging one by its grip (Move up and Move
   // down stay in each row's menu, for the keyboard).
-  const lessonDrag = useDragOrder(open?.lessons.map((lesson) => lesson.id) ?? [], (ids) => { if (open && editingTools) void editingTools.reorder(open.course.id, ids); }, "y");
+  const lessonDrag = useDragOrder(open?.lessons.map((lesson) => lesson.id) ?? [], (ids) => { if (open && editingTools) void editingTools.reorder(open.course.id, ids); }, cx("klift"));
   // A lesson leaves this course (moved, or deleted after one question); the
   // page lands on its neighbour.
   const afterLessonLeft = (id: string) => {
@@ -477,9 +477,8 @@ export function KitClassroom(props: {
   // The course's lessons: pick one, and for a host put them in order.
   const lessonList = open ? (
     <div className={cx("klrows")}>
-      {open.lessons.map((lesson, index) => (
-        <div key={lesson.id} className={cx("kl-row", editingTools && "host", lessonDrag.dragging === lesson.id && "dragging", lessonDrag.before === lesson.id && "dropbefore",
-          lessonDrag.before === null && index === open.lessons.length - 1 && "dropafter")} {...(editingTools ? lessonDrag.item(lesson.id) : null)}>
+      {lessonDrag.order.map((id) => open.lessons.find((entry) => entry.id === id)).filter((entry): entry is NonNullable<typeof entry> => Boolean(entry)).map((lesson, index) => (
+        <div key={lesson.id} className={cx("kl-row", editingTools && "host", lessonDrag.held === lesson.id && "gap")} {...(editingTools ? lessonDrag.item(lesson.id) : null)}>
           {editingTools ? <span className={cx("kgrip")} title="Drag to reorder" aria-hidden="true" {...lessonDrag.grip(lesson.id)}><GripDots /></span> : null}
           <button type="button" className={cx("kl", lesson.id === lessonId && "on", done.has(lesson.id) && "d")} aria-current={lesson.id === lessonId ? "true" : undefined}
             onClick={() => void pickLesson(lesson.id)}>
@@ -676,7 +675,8 @@ export function KitClassroom(props: {
     );
   } else {
     // Adding a course is a button beside "Courses", so hosts' pages hold six too.
-    const shelf = pageOf(courses, shelfPage, SHELF);
+    // While a card is in the air the shelf is drawn in the order it would be left in.
+    const shelf = pageOf(courseDrag.order.map((id) => courses.find((entry) => entry.course.id === id)).filter((entry): entry is NonNullable<typeof entry> => Boolean(entry)), shelfPage, SHELF);
     const learning = summary.reduce((total, row) => total + row.started, 0);
     // A member is shown where they are first (the first unfinished course,
     // in the host's order), then every course. Nothing is locked.
@@ -743,8 +743,7 @@ export function KitClassroom(props: {
             const canDrag = props.canManage && Boolean(props.onReorderCourses) && courses.length > 1;
             const at = courses.findIndex((entry) => entry.course.id === course.id);
             return (
-              <div key={course.id} className={cx("kcard", courseDrag.dragging === course.id && "dragging", courseDrag.before === course.id && "dropbefore",
-                courseDrag.before === null && at === courses.length - 1 && "dropafter")} {...(canDrag ? courseDrag.item(course.id) : null)}>
+              <div key={course.id} className={cx("kcard", courseDrag.held === course.id && "gap")} {...(canDrag ? courseDrag.item(course.id) : null)}>
               {/* Held by its grip and dropped where it should go; the arrow keys move it one place. */}
               {canDrag ? (
                 <button type="button" className={cx("kgrip", "oncard")} aria-label={`Move ${course.name}. Drag, or use the arrow keys.`} title="Drag to reorder" disabled={movingCourse}
