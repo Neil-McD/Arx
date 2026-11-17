@@ -4559,3 +4559,39 @@
 :where(:root[data-design="v1"]) :where(button, input, select, textarea, optgroup) {
   font-family: inherit;
 }
+
+/* A readable left rail: 15px rows on a 36px grid, and solid text instead of
+   see-through grey (contrast about 13.5:1 dark and 12:1 light, was about
+   7.7:1 and 5:1). Layout and accent are unchanged. */
+:root[data-design="v1"] .community-nav :is(.nav-item, button.nav-item, a.nav-item) {
+  min-height: 36px;
+  padding: 6px 10px;
+  font-size: 15px;
+  font-weight: 500;
+}
+:root[data-design="v1"] .community-nav .nav-item .nav-icon svg {
+  width: 16px;
+  height: 16px;
+}
+:root[data-design="v1"] .community-nav :is(.nav-item-count, .nav-item-hint) {
+  font-size: 13px;
+}
+:root[data-design="v1"] .community-nav-section-label {
+  font-size: 12.5px;
+}
+:root[data-design="v1"]:not([data-theme="light"]) { --nav-ink: #d2d5da; }
+:root[data-design="v1"][data-theme="light"] { --nav-ink: #2a2f36; }
+
+/* "Search or ask" on the rows' grid, so its icon and text line up with the
+   rows below it. */
+:root[data-design="v1"] .community-nav-tools .community-search-ask {
+  height: 36px;
+  padding-inline: 10px;
+  gap: 10px;
+  font-size: 15px;
+  color: var(--nav-ink);
+}
+:root[data-design="v1"] .community-nav-tools .community-search-ask svg:first-child {
+  width: 16px;
+  height: 16px;
+}
