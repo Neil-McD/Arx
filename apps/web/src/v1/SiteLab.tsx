@@ -1,149 +1,146 @@
 // Design lab only (/design-lab?page=site): a mock of Polynet's own website.
-// The offer: a free community, live in a minute, with an AI client success
-// manager you switch on when you want it. Not wired to anything; the words
-// and the order are what is being judged.
-import type { ReactNode } from "react";
+// The offer: a community with an AI client success manager that learns from
+// every conversation, so the community gets smarter the more it is used.
+// The picture is the community's brain: a constellation that grows. Not wired
+// to anything; the words, the order and the picture are what is being judged.
+import { useMemo } from "react";
 import type { DiscoverCommunitySnapshot } from "../../../../shared/communityTypes";
 import { KitApp } from "./kit";
 import { DiscoverCard } from "./KitDiscover";
 
 const CSS = `
-.site{--bg:#07080a;--panel:#0d0f12;--panel2:#12151a;--ink:#f3f4f6;--ink2:rgba(243,244,246,.68);--ink3:rgba(243,244,246,.46);--line:rgba(255,255,255,.08);--line2:rgba(255,255,255,.14);--accent:#6f78d8;--accent-hi:#8b93ea;--ok:#5fcf9a;
+.site{--bg:#06070a;--panel:#0c0e12;--ink:#f3f4f6;--ink2:rgba(243,244,246,.68);--ink3:rgba(243,244,246,.44);--line:rgba(255,255,255,.08);--line2:rgba(255,255,255,.14);--accent:#6f78d8;--accent-hi:#9aa2f5;--star:#cfc8ff;
   height:100vh;height:100dvh;overflow-y:auto;-webkit-overflow-scrolling:touch;background:var(--bg);color:var(--ink);font-family:var(--font-sans,"Geist Variable","Geist",system-ui,sans-serif);font-size:16px;line-height:1.5;-webkit-font-smoothing:antialiased;overflow-x:hidden}
 .site *{box-sizing:border-box}
 .site .wrap{width:min(1120px,100% - 48px);margin:0 auto}
 .site a{color:inherit;text-decoration:none}
-.site .nav{position:sticky;top:0;z-index:20;backdrop-filter:blur(14px);background:rgba(7,8,10,.72);border-bottom:1px solid var(--line)}
+.site .nav{position:sticky;top:0;z-index:20;backdrop-filter:blur(14px);background:rgba(6,7,10,.7);border-bottom:1px solid var(--line)}
 .site .nav .wrap{display:flex;align-items:center;gap:28px;height:60px}
 .site .brand{display:flex;align-items:center;gap:9px;font-weight:600;font-size:16px;letter-spacing:-.01em}
 .site .nav .links{display:flex;gap:24px;margin-left:12px;font-size:14px;color:var(--ink2)}
 .site .nav .right{margin-left:auto;display:flex;align-items:center;gap:16px;font-size:14px;color:var(--ink2)}
-.site .btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;height:44px;padding:0 20px;border-radius:10px;border:1px solid var(--line2);background:transparent;color:var(--ink);font:inherit;font-size:15px;font-weight:500;cursor:pointer;white-space:nowrap}
+.site .btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;height:46px;padding:0 22px;border-radius:10px;border:1px solid var(--line2);background:transparent;color:var(--ink);font:inherit;font-size:15px;font-weight:500;cursor:pointer;white-space:nowrap}
 .site .btn.go{border-color:transparent;background:var(--accent);box-shadow:inset 0 1px 0 rgba(255,255,255,.18),0 10px 30px -12px rgba(111,120,216,.8)}
-.site .btn.go:hover{background:var(--accent-hi)}
 .site .btn.sm{height:34px;padding:0 14px;font-size:14px;border-radius:8px}
 .site .btn svg{width:16px;height:16px}
-.site .hero{padding:88px 0 0;text-align:center}
-.site .pill{display:inline-flex;align-items:center;gap:8px;height:30px;padding:0 12px;border-radius:999px;border:1px solid var(--line2);font-size:13px;color:var(--ink2)}
-.site .pill i{width:6px;height:6px;border-radius:999px;background:var(--ok)}
-.site h1{margin:22px auto 0;max-width:15ch;font-size:clamp(40px,6.2vw,72px);line-height:1.02;font-weight:600;letter-spacing:-.04em;text-wrap:balance}
-.site h1 em{font-style:normal;color:var(--accent-hi)}
-.site .lede{margin:22px auto 0;max-width:56ch;font-size:19px;line-height:1.5;color:var(--ink2);text-wrap:pretty}
-.site .cta{display:flex;justify-content:center;gap:12px;margin-top:32px;flex-wrap:wrap}
+
+/* Hero: the words over the community's brain, a year in. */
+.site .hero{position:relative;padding:96px 0 0;text-align:center}
+.site .hero .sky{position:absolute;inset:-40px 0 auto 0;height:760px;z-index:0;pointer-events:none;-webkit-mask-image:radial-gradient(ellipse 62% 60% at 50% 46%,#000 30%,transparent 78%);mask-image:radial-gradient(ellipse 62% 60% at 50% 46%,#000 30%,transparent 78%);opacity:.9}
+.site .hero .sky svg{width:100%;height:100%}
+.site .hero .in{position:relative;z-index:1}
+.site .pill{display:inline-flex;align-items:center;gap:8px;height:30px;padding:0 12px;border-radius:999px;border:1px solid var(--line2);background:rgba(6,7,10,.6);font-size:13px;color:var(--ink2)}
+.site .pill i{width:6px;height:6px;border-radius:999px;background:var(--star);box-shadow:0 0 10px var(--star)}
+.site h1{margin:24px auto 0;max-width:13ch;font-size:clamp(42px,6.6vw,80px);line-height:1;font-weight:600;letter-spacing:-.045em;text-wrap:balance}
+.site h1 em{font-style:normal;background:linear-gradient(180deg,#fff 10%,var(--accent-hi));-webkit-background-clip:text;background-clip:text;color:transparent}
+.site .lede{margin:24px auto 0;max-width:50ch;font-size:20px;line-height:1.45;color:var(--ink2);text-wrap:pretty}
+.site .cta{display:flex;justify-content:center;gap:12px;margin-top:34px;flex-wrap:wrap}
 .site .fine{margin-top:14px;font-size:13.5px;color:var(--ink3)}
-.site .loopwrap{margin-top:72px}
-.site .loop{display:grid;grid-template-columns:minmax(0,1fr) 220px minmax(0,1fr);grid-template-areas:"a ab b" "da core bc" "d cd c";gap:14px;align-items:center}
-.site .loop .a{grid-area:a}.site .loop .b{grid-area:b}.site .loop .c{grid-area:c}.site .loop .d{grid-area:d}
-.site .loop .ab{grid-area:ab}.site .loop .bc{grid-area:bc;justify-self:center}.site .loop .cd{grid-area:cd}.site .loop .da{grid-area:da;justify-self:center}
-.site .loop .bc{grid-column:3}.site .loop .da{grid-column:1}
-.site .step{text-align:left;padding:26px 26px 24px;border:1px solid var(--line2);border-radius:16px;background:linear-gradient(180deg,var(--panel2),var(--panel))}
-.site .step .n{display:inline-grid;place-items:center;width:26px;height:26px;border-radius:999px;background:rgba(111,120,216,.2);color:var(--accent-hi);font-size:13px;font-weight:600}
-.site .step h3{margin:12px 0 0;font-size:22px;font-weight:600;letter-spacing:-.02em}
-.site .step .said{margin:12px 0 0;font-size:17px;line-height:1.4;color:var(--ink)}
-.site .step .said b{font-weight:600;color:var(--accent-hi);margin-right:4px}
-.site .step .note{margin:10px 0 0;font-size:14.5px;color:var(--ink2)}
-.site .arrow{text-align:center;font-size:28px;line-height:1;color:var(--accent-hi)}
-.site .core{grid-area:core;display:grid;justify-items:center;text-align:center;padding:10px 0}
-.site .core b{font-size:76px;line-height:1;font-weight:600;letter-spacing:-.04em;background:linear-gradient(180deg,#fff,var(--accent-hi));-webkit-background-clip:text;background-clip:text;color:transparent}
-.site .core span{margin-top:8px;font-size:15px;color:var(--ink)}
-.site .core em{margin-top:4px;font-style:normal;font-size:13px;color:var(--ink3)}
-.site .shot{position:relative;margin:64px auto 0;width:min(1180px,100% - 48px);border-radius:14px;border:1px solid var(--line2);overflow:hidden;background:var(--panel);box-shadow:0 60px 140px -50px rgba(111,120,216,.35),0 40px 90px -40px #000}
-.site .shot img{display:block;width:100%;height:auto}
-/* The capture caught the pointer; this covers it (the area is flat). */
-.site .shot i{position:absolute;left:49.2%;top:54%;width:2.2%;height:4.2%;background:#0f0f0f}
-.site .shot::after{content:"";position:absolute;inset:auto 0 0 0;height:120px;background:linear-gradient(180deg,transparent,var(--bg))}
-.site section{padding:112px 0 0}
+.site .knows{margin:74px auto 0;display:grid;justify-items:center;gap:4px;padding-bottom:96px}
+.site .knows b{font-size:clamp(56px,8vw,104px);line-height:1;font-weight:600;letter-spacing:-.05em;font-variant-numeric:tabular-nums;background:linear-gradient(180deg,#fff,var(--accent-hi));-webkit-background-clip:text;background-clip:text;color:transparent}
+.site .knows span{font-size:16px;color:var(--ink)}
+.site .knows em{font-style:normal;font-size:14px;color:var(--ink3)}
+
+.site section{padding:120px 0 0}
 .site .kick{font-size:13px;font-weight:500;letter-spacing:.02em;color:var(--accent-hi)}
-.site h2{margin:10px 0 0;max-width:22ch;font-size:clamp(28px,3.6vw,42px);line-height:1.08;font-weight:600;letter-spacing:-.03em;text-wrap:balance}
-.site .sub{margin:14px 0 0;max-width:58ch;font-size:17px;color:var(--ink2);text-wrap:pretty}
-.site .quiet{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;margin-top:40px;border:1px solid var(--line);border-radius:14px;overflow:hidden;background:var(--line)}
-.site .quiet div{padding:26px 24px;background:var(--bg)}
-.site .quiet b{display:block;font-size:17px;font-weight:600;letter-spacing:-.01em}
-.site .quiet span{display:block;margin-top:6px;font-size:14.5px;color:var(--ink2)}
-.site .jobs{display:grid;gap:20px;margin-top:44px}
-.site .job{display:grid;grid-template-columns:minmax(0,5fr) minmax(0,6fr);gap:40px;align-items:center;padding:36px;border:1px solid var(--line);border-radius:16px;background:linear-gradient(180deg,var(--panel),var(--bg))}
-.site .job:nth-child(even) .job-words{order:2}
-.site .job h3{margin:8px 0 0;font-size:25px;line-height:1.15;font-weight:600;letter-spacing:-.02em}
-.site .job p{margin:12px 0 0;font-size:16px;color:var(--ink2)}
-.site .job .num{font-size:13px;color:var(--ink3);font-variant-numeric:tabular-nums}
-.site .vig{border:1px solid var(--line2);border-radius:12px;background:var(--panel2);padding:18px;font-size:14px;box-shadow:0 30px 60px -40px #000}
-.site .msg{display:flex;gap:11px}
-.site .msg+.msg{margin-top:16px}
-.site .face{flex:none;width:30px;height:30px;border-radius:999px;display:grid;place-items:center;font-size:11px;font-weight:600;color:#3b2f24;background:#f3d9b8}
-.site .face.b{background:#cfc4f2;color:#2e2850}
-.site .face.g{background:transparent;color:#b9a5ff;font-size:17px}
-.site .msg b{font-weight:600}
-.site .msg time{margin-left:8px;font-size:12px;color:var(--ink3)}
-.site .msg p{margin:3px 0 0;font-size:14px;line-height:1.5;color:var(--ink2)}
-.site .src{display:inline-flex;align-items:center;gap:6px;margin-top:9px;padding:4px 9px;border-radius:7px;border:1px solid var(--line2);font-size:12.5px;color:var(--ink2)}
-.site .tag{display:inline-block;padding:0 6px;border-radius:5px;border:1px solid var(--line2);color:var(--ink2);font-size:11px;line-height:17px;margin-left:8px;vertical-align:1px}
-.site .vig.pic{padding:0;overflow:hidden;justify-self:center;max-width:390px}
-.site .vig.pic img{display:block;width:100%;height:auto}
-.site .needs{display:grid;gap:10px}
-.site .need{display:flex;align-items:center;gap:12px;padding:13px 14px;border:1px solid var(--line);border-radius:10px;background:var(--panel)}
-.site .need i{flex:none;width:7px;height:7px;border-radius:999px;background:var(--accent-hi)}
-.site .need b{display:block;font-size:14px;font-weight:500}
-.site .need span{display:block;font-size:13px;color:var(--ink3)}
-.site .need em{margin-left:auto;font-style:normal;font-size:12.5px;color:var(--ink2);white-space:nowrap}
-.site .minute{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:56px;align-items:center;margin-top:44px}
-.site .steps{display:grid;gap:0;counter-reset:s}
-.site .steps li{list-style:none;position:relative;padding:0 0 30px 52px}
-.site .steps li::before{counter-increment:s;content:counter(s);position:absolute;left:0;top:0;width:32px;height:32px;border-radius:999px;border:1px solid var(--line2);display:grid;place-items:center;font-size:13px;color:var(--ink2)}
-.site .steps li:not(:last-child)::after{content:"";position:absolute;left:16px;top:38px;bottom:6px;width:1px;background:var(--line2)}
-.site .steps b{display:block;font-size:18px;font-weight:600;letter-spacing:-.01em}
-.site .steps span{display:block;margin-top:4px;font-size:15px;color:var(--ink2)}
-.site .steps ol{margin:0;padding:0}
-.site .cardbox{padding:20px;border:1px solid var(--line);border-radius:16px;background:var(--panel)}
-.site .cardbox small{display:block;margin-bottom:10px;font-size:12px;color:var(--ink3)}
-.site .cardbox .foot{display:flex;justify-content:center;gap:7px;margin-top:16px}
-.site .cardbox .foot i{width:6px;height:6px;border-radius:999px;background:var(--line2)}
-.site .cardbox .foot i.on{width:18px;background:var(--ink)}
-.site .has{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;margin-top:40px;border:1px solid var(--line);border-radius:14px;overflow:hidden;background:var(--line)}
-.site .has div{padding:22px 24px;background:var(--bg)}
-.site .has b{display:block;font-size:15.5px;font-weight:600}
-.site .has span{display:block;margin-top:4px;font-size:14px;color:var(--ink2)}
-.site .proof{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px;margin-top:40px}
+.site h2{margin:10px 0 0;max-width:20ch;font-size:clamp(30px,4vw,46px);line-height:1.06;font-weight:600;letter-spacing:-.035em;text-wrap:balance}
+.site .sub{margin:16px 0 0;max-width:56ch;font-size:18px;color:var(--ink2);text-wrap:pretty}
+
+/* What is lost: three plain lines, no boxes. */
+.site .lost{display:grid;grid-template-columns:repeat(3,1fr);gap:40px;margin-top:48px}
+.site .lost div{padding-top:18px;border-top:1px solid var(--line2)}
+.site .lost b{display:block;font-size:19px;font-weight:600;letter-spacing:-.015em}
+.site .lost span{display:block;margin-top:8px;font-size:15.5px;color:var(--ink2)}
+
+/* How it gets smarter: one thread of light, four stars on it, and it keeps going. */
+.site .thread{position:relative;display:grid;grid-template-columns:repeat(4,1fr);gap:36px;margin-top:64px;padding-top:44px}
+.site .thread::before{content:"";position:absolute;left:0;right:-24px;top:7px;height:2px;background:linear-gradient(90deg,rgba(154,162,245,.15),var(--accent-hi) 30%,var(--accent-hi) 70%,transparent)}
+.site .beat{position:relative}
+.site .beat::before{content:"";position:absolute;left:0;top:-44px;width:16px;height:16px;border-radius:999px;background:#fff;box-shadow:0 0 0 5px rgba(154,162,245,.22),0 0 26px 6px rgba(154,162,245,.7)}
+.site .beat small{display:block;font-size:12.5px;letter-spacing:.04em;text-transform:uppercase;color:var(--ink3)}
+.site .beat h3{margin:8px 0 0;font-size:23px;line-height:1.12;font-weight:600;letter-spacing:-.025em}
+.site .beat q{display:block;margin-top:14px;font-size:16.5px;line-height:1.4;color:var(--ink);quotes:"“" "”"}
+.site .beat q b{display:block;margin-bottom:2px;font-size:13px;font-weight:500;color:var(--accent-hi)}
+.site .beat p{margin:12px 0 0;font-size:14.5px;color:var(--ink2)}
+
+/* It compounds: the same community's brain at three moments. */
+.site .grow{display:grid;grid-template-columns:repeat(3,1fr);gap:0;margin-top:56px;border-top:1px solid var(--line)}
+.site .moment{padding:28px 28px 0 0}
+.site .moment+.moment{padding-left:28px;border-left:1px solid var(--line)}
+.site .moment svg{display:block;width:100%;height:auto;aspect-ratio:1/0.82}
+.site .moment .when{font-size:13px;letter-spacing:.04em;text-transform:uppercase;color:var(--ink3)}
+.site .moment .n{display:block;margin-top:14px;font-size:44px;line-height:1;font-weight:600;letter-spacing:-.04em;font-variant-numeric:tabular-nums}
+.site .moment .n small{margin-left:8px;font-size:15px;font-weight:400;letter-spacing:0;color:var(--ink3)}
+.site .moment p{margin:10px 0 0;font-size:15.5px;color:var(--ink2)}
+
+/* Two sides of the same thing. */
+.site .sides{display:grid;grid-template-columns:1fr 1fr;gap:64px;margin-top:52px}
+.site .sides h3{margin:0;font-size:15px;font-weight:500;color:var(--accent-hi)}
+.site .sides ul{margin:16px 0 0;padding:0;display:grid;gap:0}
+.site .sides li{list-style:none;padding:16px 0;border-top:1px solid var(--line);font-size:17px;color:var(--ink)}
+.site .sides li span{display:block;margin-top:3px;font-size:14.5px;color:var(--ink2)}
+
+.site .proof{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px;margin-top:44px}
 .site .proof a{pointer-events:none}
 .site .live{display:flex;align-items:center;justify-content:space-between;gap:24px;margin-top:22px;padding:22px 26px;border:1px solid var(--line2);border-radius:14px;background:linear-gradient(90deg,rgba(111,120,216,.14),transparent 70%)}
 .site .live b{display:block;font-size:17px;font-weight:600}
 .site .live span{display:block;margin-top:3px;font-size:14.5px;color:var(--ink2)}
-.site .prices{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-top:44px}
-.site .price{padding:32px;border:1px solid var(--line);border-radius:16px;background:var(--panel)}
+
+.site .prices{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-top:48px}
+.site .price{padding:34px;border:1px solid var(--line);border-radius:16px;background:var(--panel)}
 .site .price.hi{border-color:rgba(111,120,216,.55);background:linear-gradient(180deg,rgba(111,120,216,.12),var(--panel) 60%)}
 .site .price h3{margin:0;font-size:15px;font-weight:500;color:var(--ink2)}
-.site .price .amt{margin-top:10px;font-size:44px;line-height:1;font-weight:600;letter-spacing:-.035em}
+.site .price .amt{margin-top:10px;font-size:46px;line-height:1;font-weight:600;letter-spacing:-.04em}
 .site .price .amt small{font-size:16px;font-weight:400;letter-spacing:0;color:var(--ink3)}
 .site .price .note{margin-top:8px;font-size:14px;color:var(--ink2)}
-.site .price ul{margin:22px 0 26px;padding:0;display:grid;gap:10px}
+.site .price ul{margin:22px 0 28px;padding:0;display:grid;gap:10px}
 .site .price li{list-style:none;display:flex;gap:10px;font-size:15px;color:var(--ink2)}
-.site .price li::before{content:"";flex:none;width:16px;height:16px;margin-top:3px;border-radius:999px;background:radial-gradient(circle,var(--accent-hi) 0 3px,transparent 4px),rgba(111,120,216,.16)}
+.site .price li::before{content:"";flex:none;width:7px;height:7px;margin-top:8px;border-radius:999px;background:var(--star);box-shadow:0 0 8px var(--accent-hi)}
 .site .price .btn{width:100%}
 .site .fee{margin-top:18px;font-size:14px;color:var(--ink3);text-align:center}
-.site .end{padding:120px 0 96px;text-align:center}
-.site .end h2{margin:0 auto;max-width:18ch}
-.site .name{display:flex;gap:10px;justify-content:center;margin:30px auto 0;max-width:520px}
-.site .name input{flex:1;min-width:0;height:48px;padding:0 16px;border-radius:10px;border:1px solid var(--line2);background:var(--panel);color:var(--ink);font:inherit;font-size:16px;outline:0}
+
+.site .asked{margin-top:44px;border-top:1px solid var(--line)}
+.site .asked div{display:grid;grid-template-columns:minmax(0,5fr) minmax(0,7fr);gap:40px;padding:22px 0;border-bottom:1px solid var(--line)}
+.site .asked b{font-size:17px;font-weight:600;letter-spacing:-.01em}
+.site .asked span{font-size:16px;color:var(--ink2)}
+
+.site .end{position:relative;padding:140px 0 110px;text-align:center}
+.site .end h2{margin:0 auto;max-width:16ch}
+.site .name{display:flex;gap:10px;justify-content:center;margin:32px auto 0;max-width:520px}
+.site .name input{flex:1;min-width:0;height:50px;padding:0 16px;border-radius:10px;border:1px solid var(--line2);background:var(--panel);color:var(--ink);font:inherit;font-size:16px;outline:0}
 .site .name input::placeholder{color:var(--ink3)}
-.site .name .btn{height:48px}
+.site .name .btn{height:50px}
 .site footer{border-top:1px solid var(--line);padding:26px 0 40px;font-size:13.5px;color:var(--ink3)}
 .site footer .wrap{display:flex;gap:22px;align-items:center}
 .site footer .wrap span:first-child{margin-right:auto}
+
+/* The stars breathe, slowly; still for anyone who asked for less motion. */
+.site .tw{animation:site-twinkle 5s ease-in-out infinite}
+.site .tw.b{animation-duration:7s;animation-delay:-2s}
+.site .tw.c{animation-duration:9s;animation-delay:-5s}
+@keyframes site-twinkle{0%,100%{opacity:1}50%{opacity:.35}}
+@media (prefers-reduced-motion:reduce){.site .tw{animation:none}}
+
 @media (max-width:860px){
   .site .nav .links{display:none}
-  .site .quiet,.site .has,.site .proof,.site .prices{grid-template-columns:1fr}
-  .site .loop{grid-template-columns:1fr;grid-template-areas:"a" "ab" "b" "bc" "c" "cd" "d" "da" "core";gap:8px}
-  .site .loop .bc,.site .loop .da{grid-column:1}
-  .site .loop .arrow{font-size:0;height:22px}
-  .site .loop .arrow::before{content:"↓";font-size:22px}
-  .site .loop .da::before{content:"↺"}
-  .site .step{padding:20px}
-  .site .core b{font-size:60px}
-  .site .job,.site .minute{grid-template-columns:1fr;gap:24px;padding:24px}
-  .site .minute{padding:0}
-  .site .job:nth-child(even) .job-words{order:0}
-  .site section{padding-top:80px}
+  .site section{padding-top:84px}
+  .site .hero{padding-top:64px}
+  .site .hero .sky{height:640px}
+  .site .lede{font-size:18px}
+  .site .knows{margin-top:56px;padding-bottom:64px}
+  .site .lost,.site .proof,.site .prices,.site .sides{grid-template-columns:1fr;gap:28px}
+  .site .sides{gap:44px}
+  .site .thread{grid-template-columns:1fr;gap:40px;padding-top:0;padding-left:40px}
+  .site .thread::before{left:7px;right:auto;top:6px;bottom:-30px;width:2px;height:auto;background:linear-gradient(180deg,rgba(154,162,245,.15),var(--accent-hi) 20%,var(--accent-hi) 80%,transparent)}
+  .site .beat::before{left:-40px;top:4px}
+  .site .grow{grid-template-columns:1fr}
+  .site .moment,.site .moment+.moment{padding:26px 0 30px;border-left:0}
+  .site .moment+.moment{border-top:1px solid var(--line)}
+  .site .moment svg{max-width:300px;margin:0 auto}
+  .site .asked div{grid-template-columns:1fr;gap:8px}
   .site .live{flex-direction:column;align-items:flex-start}
   .site .name{flex-direction:column}
+  .site .end{padding:96px 0 80px}
 }
 `;
 
@@ -162,36 +159,67 @@ const Arrow = () => (
   <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 8h10M9 4l4 4-4 4" /></svg>
 );
 
+// The community's brain as a picture: a hub, and everything it has learned as
+// stars around it, each joined to the nearest thing it grew from. More
+// learned, more stars: the same drawing at 8 points and at 260 is the whole
+// argument. Always the same for the same numbers (no chance in it).
+function Brain(props: { stars: number; width: number; height: number; seed: number; labels?: string[]; idPrefix: string }) {
+  const { stars, width, height } = props;
+  const drawing = useMemo(() => {
+    let state = props.seed >>> 0;
+    const random = () => { state = (state + 0x6d2b79f5) >>> 0; let t = state; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+    const cx = width / 2;
+    const cy = height / 2;
+    const reach = Math.min(width * 0.47, height * 0.86);
+    const points: Array<{ x: number; y: number; r: number; bright: boolean; from: number }> = [{ x: cx, y: cy, r: 0, bright: true, from: -1 }];
+    for (let index = 1; index <= stars; index += 1) {
+      const angle = index * 2.39996323 + (random() - 0.5) * 0.9;
+      const distance = reach * Math.sqrt(index / stars) * (0.72 + random() * 0.36) + 14;
+      const x = cx + Math.cos(angle) * distance;
+      const y = cy + Math.sin(angle) * distance * (height / width) * 1.15;
+      // Joined to the nearest thing already known, so it grows like a mind, not a wheel.
+      let from = 0;
+      let nearest = Infinity;
+      for (let earlier = 0; earlier < points.length; earlier += 1) {
+        const dx = points[earlier]!.x - x;
+        const dy = points[earlier]!.y - y;
+        const gap = dx * dx + dy * dy;
+        if (gap < nearest) { nearest = gap; from = earlier; }
+      }
+      points.push({ x, y, r: 1 + random() * 1.7, bright: random() < 0.14, from });
+    }
+    return points;
+  }, [stars, width, height, props.seed]);
+  const glow = `${props.idPrefix}-glow`;
+  const labelled = props.labels ? drawing.filter((point, index) => index > 0 && point.bright).slice(0, props.labels.length) : [];
+  return (
+    <svg viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="xMidYMid meet" role="img" aria-label={`A community's brain with ${stars} things learned`}>
+      <defs>
+        <radialGradient id={glow}><stop offset="0" stopColor="#b9b0ff" stopOpacity=".9" /><stop offset="1" stopColor="#6f78d8" stopOpacity="0" /></radialGradient>
+      </defs>
+      {drawing.slice(1).map((point, index) => {
+        const from = drawing[point.from]!;
+        return <line key={`l${index}`} x1={from.x} y1={from.y} x2={point.x} y2={point.y} stroke="#9aa2f5" strokeOpacity={point.from === 0 ? 0.3 : 0.2} strokeWidth={0.8} />;
+      })}
+      <circle cx={drawing[0]!.x} cy={drawing[0]!.y} r={Math.max(26, width * 0.05)} fill={`url(#${glow})`} />
+      <circle cx={drawing[0]!.x} cy={drawing[0]!.y} r={Math.max(4, width * 0.006)} fill="#fff" />
+      {drawing.slice(1).map((point, index) => (
+        <g key={`p${index}`} className={point.bright ? `tw${index % 3 === 1 ? " b" : index % 3 === 2 ? " c" : ""}` : undefined}>
+          {point.bright ? <circle cx={point.x} cy={point.y} r={point.r * 6} fill={`url(#${glow})`} /> : null}
+          <circle cx={point.x} cy={point.y} r={point.bright ? point.r + 0.8 : point.r} fill={point.bright ? "#fff" : "#cfc8ff"} fillOpacity={point.bright ? 1 : 0.75} />
+        </g>
+      ))}
+      {labelled.map((point, index) => (
+        <text key={`t${index}`} x={point.x + (point.x > width / 2 ? 12 : -12)} y={point.y + 4} textAnchor={point.x > width / 2 ? "start" : "end"} fontSize={13} fill="#f3f4f6" fillOpacity={0.78}>{props.labels![index]}</text>
+      ))}
+    </svg>
+  );
+}
+
 const card = (over: Partial<DiscoverCommunitySnapshot> & Pick<DiscoverCommunitySnapshot, "slug" | "name" | "one_liner">): DiscoverCommunitySnapshot => ({
   avatar_url: null, banner_url: null, visibility: "published", created_at: "", updated_at: "", ...over,
 });
 
-function LoopStep(props: { at: string; n: string; title: string; who: string; line: string; note: string }) {
-  return (
-    <div className={`step ${props.at}`}>
-      <span className="n">{props.n}</span>
-      <h3>{props.title}</h3>
-      <p className="said"><b>{props.who}</b> “{props.line}”</p>
-      <p className="note">{props.note}</p>
-    </div>
-  );
-}
-
-function Job(props: { num: string; title: string; words: string; children: ReactNode }) {
-  return (
-    <div className="job">
-      <div className="job-words">
-        <span className="num">{props.num}</span>
-        <h3>{props.title}</h3>
-        <p>{props.words}</p>
-      </div>
-      <div className="vig">{props.children}</div>
-    </div>
-  );
-}
-
-// The product pictures are captures of the real app on staging
-// (public/design-lab/site-*.{jpg,png}), not drawings of it.
 export function SiteLab() {
   const now = Date.now();
   return (
@@ -200,99 +228,140 @@ export function SiteLab() {
       <header className="nav">
         <div className="wrap">
           <a className="brand" href="#top"><Mark /> polynet</a>
-          <nav className="links"><a href="#does">What it does</a><a href="#minute">How it starts</a><a href="#price">Pricing</a><a href="#proof">Communities</a></nav>
+          <nav className="links"><a href="#how">How it learns</a><a href="#grow">Over time</a><a href="#price">Pricing</a><a href="#proof">Communities</a></nav>
           <div className="right"><a href="#top">Sign in</a><button type="button" className="btn go sm">Start free</button></div>
         </div>
       </header>
 
-      <div className="hero wrap" id="top">
-        <span className="pill"><i /> Free to start · live in a minute</span>
-        <h1>A community with its own <em>AI client success manager.</em></h1>
-        <p className="lede">It learns from every conversation, so your community gets smarter the more people use it.</p>
-        <div className="cta">
-          <button type="button" className="btn go">Start your community <Arrow /></button>
-          <button type="button" className="btn">See it working</button>
+      <div className="hero" id="top">
+        <div className="sky" aria-hidden="true">
+          <Brain idPrefix="hero" stars={260} width={1400} height={760} seed={7} />
         </div>
-        <p className="fine">No card. The community is free for good. The manager is $79 a month, with the first 14 days free.</p>
-      </div>
-      {/* The idea as one picture: a loop. Each step feeds the next, and it comes back round. */}
-      <div className="loopwrap wrap" id="does">
-        <div className="loop">
-          <LoopStep at="a" n="1" title="Someone asks" who="Mira" line="How do I find my first ten subscribers?" note="It doesn't know yet, so it brings in Dana, who has done it." />
-          <span className="arrow ab" aria-hidden="true">→</span>
-          <LoopStep at="b" n="2" title="It learns" who="Dana" line="Direct messages to people you know. Six yeses from fifteen." note="Her answer is saved as something the whole community knows." />
-          <span className="arrow bc" aria-hidden="true">↓</span>
-          <LoopStep at="c" n="3" title="It compounds" who="Sam" line="Any advice on getting my first subscribers?" note="A week later, the same question. This time it answers by itself." />
-          <span className="arrow cd" aria-hidden="true">←</span>
-          <LoopStep at="d" n="4" title="It pays off" who="Sam" line="Eight subscribers. My first $240." note="How he did it is saved too, for the next person who asks." />
-          <span className="arrow da" aria-hidden="true">↑</span>
-          <div className="core">
-            <b>13</b>
-            <span>things your community knows</span>
+        <div className="in wrap">
+          <span className="pill"><i /> Free to start · live in a minute</span>
+          <h1>A community that gets <em>smarter every day.</em></h1>
+          <p className="lede">Polynet gives your community an AI client success manager. It learns from every conversation, never forgets, and answers the next person better than the last.</p>
+          <div className="cta">
+            <button type="button" className="btn go">Start your community <Arrow /></button>
+            <button type="button" className="btn">See one that's running</button>
+          </div>
+          <p className="fine">No card. The community is free for good.</p>
+          <div className="knows">
+            <b>1,204</b>
+            <span>things this community has learned from its own members</span>
             <em>and one more with every conversation</em>
           </div>
         </div>
       </div>
 
       <section className="wrap">
-        <span className="kick">Why communities go quiet</span>
-        <h2>Nobody leaves over the content. They leave because nobody answered.</h2>
-        <div className="quiet">
-          <div><b>A question waits a day.</b><span>You were on a call. By the time you see it, they've stopped checking.</span></div>
-          <div><b>A new member says nothing.</b><span>Nobody said hello, so they never post, and never come back.</span></div>
-          <div><b>You find out when they cancel.</b><span>The signs were there for weeks. You were busy running the thing.</span></div>
+        <span className="kick">The problem nobody names</span>
+        <h2>What your community knows is lost every day.</h2>
+        <div className="lost">
+          <div><b>The best answer is gone by tomorrow.</b><span>It scrolled away. The next person never sees it.</span></div>
+          <div><b>You answer the same question again.</b><span>And again next month, because nothing remembered the first time.</span></div>
+          <div><b>When a great member leaves, so does what they knew.</b><span>Years of hard-won answers, gone with them.</span></div>
         </div>
       </section>
 
-      <section className="wrap" id="minute">
-        <span className="kick">How it starts</span>
-        <h2>From a name to a live community in about a minute.</h2>
-        <div className="minute">
-          <div className="steps">
-            <ol>
-              <li><b>Name it</b><span>Your address is made from the name. Add a picture and banner now or later.</span></li>
-              <li><b>Say who it's for</b><span>One line, what members get, and a price if you want one. Free is the default.</span></li>
-              <li><b>Share your link</b><span>Your community is live. Send the link to the first people you want in.</span></li>
-            </ol>
+      <section className="wrap" id="how">
+        <span className="kick">How it gets smarter</span>
+        <h2>Every conversation teaches it.</h2>
+        <p className="sub">Nothing to set up and nothing to feed it. It learns from your people talking to each other.</p>
+        <div className="thread">
+          <div className="beat">
+            <small>Someone asks</small>
+            <h3>It doesn't know yet, and says so.</h3>
+            <q><b>Mira</b>How do I find my first ten subscribers?</q>
+            <p>It brings in Dana, who has done exactly that.</p>
           </div>
-          <div className="cardbox">
-            <small>What people see, filling in as you type</small>
-            <KitApp view="home" part="flow" light={false}><DiscoverCard now={now} community={card({ slug: "dawn-patrol", name: "Dawn Patrol Run Club", one_liner: "Runners who meet before sunrise.", banner_url: "/design-lab/polynet-earth.webp", member_count: 1, host: { name: "You", avatar_url: null } })} /></KitApp>
-            <div className="foot"><i /><i className="on" /><i /></div>
+          <div className="beat">
+            <small>It learns</small>
+            <h3>Dana's answer is kept.</h3>
+            <q><b>Dana</b>Direct messages to people you know. Six yeses from fifteen.</q>
+            <p>Not in a thread nobody will find. In what your community knows.</p>
+          </div>
+          <div className="beat">
+            <small>It compounds</small>
+            <h3>Next time, it just answers.</h3>
+            <q><b>Sam, a week later</b>Any advice on my first subscribers?</q>
+            <p>Straight away, with Dana's numbers, and credit to Dana.</p>
+          </div>
+          <div className="beat">
+            <small>It pays off</small>
+            <h3>Sam gets a result.</h3>
+            <q><b>Sam</b>Eight subscribers. My first $240.</q>
+            <p>And how he did it is kept too, for whoever asks next.</p>
+          </div>
+        </div>
+      </section>
+
+      <section className="wrap" id="grow">
+        <span className="kick">Over time</span>
+        <h2>The same community, a year apart.</h2>
+        <p className="sub">A hired client success manager is as good as their memory, and leaves with it. This one is better on day 365 than on day one, and it stays.</p>
+        <div className="grow">
+          <div className="moment">
+            <span className="when">Day one</span>
+            <Brain idPrefix="d1" stars={8} width={420} height={344} seed={3} />
+            <span className="n">12<small>things known</small></span>
+            <p>What you taught it: your lessons and your first few answers.</p>
+          </div>
+          <div className="moment">
+            <span className="when">Day thirty</span>
+            <Brain idPrefix="d30" stars={64} width={420} height={344} seed={3} />
+            <span className="n">140<small>things known</small></span>
+            <p>What your first members worked out together. Most questions get answered without you.</p>
+          </div>
+          <div className="moment">
+            <span className="when">Day 365</span>
+            <Brain idPrefix="d365" stars={230} width={420} height={344} seed={3} />
+            <span className="n">1,204<small>things known</small></span>
+            <p>A year of answers, wins and hard lessons from everyone who has been through. Yours to keep.</p>
           </div>
         </div>
       </section>
 
       <section className="wrap">
-        <span className="kick">Everything a community needs</span>
-        <h2>One place, already put together.</h2>
-        <div className="has">
-          <div><b>Channels and messages</b><span>Posts, threads and direct messages, on the web and on phones.</span></div>
-          <div><b>Courses</b><span>Lessons your members work through, and the manager teaches from.</span></div>
-          <div><b>Events</b><span>Calls on the calendar, with who is coming.</span></div>
-          <div><b>Pods</b><span>Smaller paid groups inside your community.</span></div>
-          <div><b>Payments</b><span>Free, monthly or yearly. Paid out to you through Stripe.</span></div>
-          <div><b>Your own page</b><span>A public page that explains the offer and takes the join.</span></div>
+        <span className="kick">What it means</span>
+        <h2>Members get results. You get your time back.</h2>
+        <div className="sides">
+          <div>
+            <h3>For your members</h3>
+            <ul>
+              <li>An answer in seconds, at any hour<span>From what you taught and what members before them worked out.</span></li>
+              <li>A welcome, and an introduction<span>To the one person here who has done what they're trying to do.</span></li>
+              <li>A next step, not a feed to scroll<span>So they keep moving and get the result they joined for.</span></li>
+            </ul>
+          </div>
+          <div>
+            <h3>For you</h3>
+            <ul>
+              <li>You stop answering the same question<span>It's answered once, then it's known.</span></li>
+              <li>You see who needs you today<span>A short brief, not an hour of catching up.</span></li>
+              <li>You see what to teach next<span>The things people keep asking that nothing covers yet.</span></li>
+            </ul>
+          </div>
         </div>
       </section>
 
       <section className="wrap" id="proof">
         <span className="kick">See it working</span>
-        <h2>Real communities, running on Polynet.</h2>
+        <h2>Communities running on Polynet.</h2>
         <KitApp view="home" part="flow" light={false}><div className="proof">
           <DiscoverCard now={now} community={card({ slug: "polynet", name: "Polynet", one_liner: "Hosts building their first hundred members.", banner_url: "/design-lab/polynet-earth.webp", member_count: 214, host: { name: "Neil McDevitt", avatar_url: null }, last_active_at: new Date(now - 3_600_000).toISOString() })} />
           <DiscoverCard now={now} community={card({ slug: "de", name: "Distribution Engineering", one_liner: "Founders who own their own distribution.", member_count: 86, host: { name: "Neil McDevitt", avatar_url: null }, posts_this_week: 31 })} />
           <DiscoverCard now={now} community={card({ slug: "sunrise", name: "Sunrise Climbing Club", one_liner: "Early-morning climbers who train together.", member_count: 42, host: { name: "Maya Chen", avatar_url: null }, posts_this_week: 12 })} />
         </div></KitApp>
         <div className="live">
-          <div><b>Ask our client success manager anything.</b><span>Join the Polynet community free and watch it answer. It's the same one you'd switch on in yours.</span></div>
+          <div><b>Ask ours anything.</b><span>Join the Polynet community free and watch it answer, from what hosts before you worked out.</span></div>
           <button type="button" className="btn">Join the Polynet community <Arrow /></button>
         </div>
       </section>
 
       <section className="wrap" id="price">
         <span className="kick">Pricing</span>
-        <h2>Free to run. Pay when you want the help.</h2>
+        <h2>Free to run. Pay when you want it working for you.</h2>
         <div className="prices">
           <div className="price">
             <h3>Your community</h3>
@@ -310,9 +379,9 @@ export function SiteLab() {
             <div className="amt">$79 <small>a month</small></div>
             <div className="note">First 14 days free. Per community, AI included.</div>
             <ul>
-              <li>Answers members from what you've taught</li>
-              <li>Welcomes and introduces every new person</li>
-              <li>A daily brief of who needs you</li>
+              <li>Learns from every conversation, and keeps it</li>
+              <li>Answers and welcomes members, at any hour</li>
+              <li>Tells you who needs you, and what to teach next</li>
             </ul>
             <button type="button" className="btn go">Start free, add it later</button>
           </div>
@@ -320,8 +389,19 @@ export function SiteLab() {
         <p className="fee">When you charge members: 2.9% plus Stripe's fees. Nothing when it's free.</p>
       </section>
 
+      <section className="wrap">
+        <span className="kick">Fair questions</span>
+        <h2>Before you trust it with your people.</h2>
+        <div className="asked">
+          <div><b>What if it's wrong?</b><span>It says when it doesn't know and asks someone who does. You can correct or remove anything it has learned.</span></div>
+          <div><b>Who owns what it learns?</b><span>You do. It's your community's, and it stays with your community.</span></div>
+          <div><b>Does it read private conversations?</b><span>It learns from what members can already see. A pod's knowledge stays in that pod.</span></div>
+          <div><b>How long until it's useful?</b><span>The first day, from your lessons. It gets better from there without you doing anything.</span></div>
+        </div>
+      </section>
+
       <div className="end wrap">
-        <h2>Your community is one name away.</h2>
+        <h2>Start it learning today.</h2>
         <div className="name">
           <input type="text" placeholder="Name your community" aria-label="Name your community" />
           <button type="button" className="btn go">Start free <Arrow /></button>
