@@ -46,6 +46,8 @@ export type AppRouteState = {
   communityMemberKey?: string | null;
   // In Inbox: the conversation open.
   communityConversationId?: string | null;
+  // On Events: the event picked (eventAddressKey of its id).
+  communityEventKey?: string | null;
   docsSlug?: string | null;
 };
 
@@ -70,6 +72,7 @@ export type AppRoutePathState = {
   communityMemberKey?: string | null;
   // In Inbox: the conversation open.
   communityConversationId?: string | null;
+  communityEventKey?: string | null;
   docsSlug?: string | null;
 };
 
@@ -541,6 +544,7 @@ export function parseAppRouteFromPathname(pathname: string): AppRoutePathState |
     const communityThreadId = communityTab === "chat" && communityChannelSlug ? readRouteId(segments[4]) : null;
     const communityMemberKey = communityTab === "members" ? readRouteId(segments[3]) : null;
     const communityConversationId = communityTab === "inbox" ? readRouteId(segments[3]) : null;
+    const communityEventKey = communityTab === "events" ? readRouteId(segments[3]) : null;
     const communityPodSlug =
       communityTab === "pods" ? String(segments[3] ?? "").trim().toLowerCase() || null : null;
     const communitySettingsPane =
@@ -562,6 +566,7 @@ export function parseAppRouteFromPathname(pathname: string): AppRoutePathState |
       ...(knowledgeView ? { communityKnowledgeView: knowledgeView } : {}),
       ...(communityMemberKey ? { communityMemberKey } : {}),
       ...(communityConversationId ? { communityConversationId } : {}),
+      ...(communityEventKey ? { communityEventKey } : {}),
     };
   }
 
@@ -766,6 +771,7 @@ export function readAppRouteFromLocation(): AppRouteState {
       ...(fromPath.communityKnowledgeView ? { communityKnowledgeView: fromPath.communityKnowledgeView } : {}),
       ...(fromPath.communityMemberKey ? { communityMemberKey: fromPath.communityMemberKey } : {}),
       ...(fromPath.communityConversationId ? { communityConversationId: fromPath.communityConversationId } : {}),
+      ...(fromPath.communityEventKey ? { communityEventKey: fromPath.communityEventKey } : {}),
       docsSlug: fromPath.docsSlug ?? null,
     };
   }
@@ -798,6 +804,10 @@ function appendCommunityRouteDetails(base: string, state: AppRoutePathState): st
     const conversation = readRouteId(state.communityConversationId);
     return conversation ? `${base}/${encodeURIComponent(conversation)}` : base;
   }
+  if (state.communityTab === "events") {
+    const event = readRouteId(state.communityEventKey);
+    return event ? `${base}/${encodeURIComponent(event)}` : base;
+  }
   if (state.communityTab === "resources") {
     const moduleId = String(state.communityResourceModuleId ?? "").trim();
     if (moduleId) {
@@ -811,7 +821,7 @@ function appendCommunityRouteDetails(base: string, state: AppRoutePathState): st
 }
 
 export function withoutCommunityRouteDetails(state: AppRoutePathState): AppRoutePathState {
-  const { communityThreadId: _t, communityLessonId: _l, communityKnowledgeView: _v, communityMemberKey: _m, communityConversationId: _c, ...base } = state;
+  const { communityThreadId: _t, communityLessonId: _l, communityKnowledgeView: _v, communityMemberKey: _m, communityConversationId: _c, communityEventKey: _e, ...base } = state;
   return base;
 }
 
@@ -855,4 +865,16 @@ export function buildAppRoutePath(state: AppRoutePathState): string | null {
 
   const exhaustivePage: never = state.page;
   return exhaustivePage;
+}
+
+// An event's id in an address. One time of a repeating event is
+// "<event>:<start>" and an address segment holds no colon, so it is written
+// "<event>_<start>".
+export function eventAddressKey(eventId: string): string {
+  return String(eventId ?? "").replace(":", "_");
+}
+
+export function eventIdFromAddressKey(key: string | null | undefined): string | null {
+  const value = readRouteId(key);
+  return value ? value.replace("_", ":") : null;
 }

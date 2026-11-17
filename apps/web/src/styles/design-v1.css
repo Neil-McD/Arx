@@ -2155,6 +2155,18 @@
   background-clip: padding-box;
 }
 
+/* The page rows and the foot, the same: loading rows the size of real ones. */
+:root[data-design="v1"] .community-nav-access-loading {
+  gap: 0;
+}
+
+:root[data-design="v1"] .community-nav-access-loading-row {
+  box-sizing: border-box;
+  height: 28px;
+  border-block: 5px solid transparent;
+  background-clip: padding-box;
+}
+
 :root[data-design="v1"]:where(:not([data-layout="phone"])) .community-chat .community-interaction-main-composer {
   padding: 0 56px 26px;
 }
