@@ -44,7 +44,8 @@ test("every file that patches a post's text, status, channel or visibility keeps
 
 test("channel access changes, renames and deletion relabel the channel's rows", () => {
   const text = readFileSync(join(CONVEX, "communityChannels.ts"), "utf8");
-  expect(text.match(/relabelCommunitySearchChannelInternal/g)?.length).toBe(3);
+  // Three in the app's own mutations, and one for a rename through a builder's AI.
+  expect(text.match(/relabelCommunitySearchChannelInternal/g)?.length).toBe(4);
 });
 
 test("every file that hard-deletes posts or replies clears their search rows", () => {
