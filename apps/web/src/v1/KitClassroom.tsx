@@ -670,7 +670,7 @@ export function KitClassroom(props: {
         {props.canManage || courses.length > 1 ? (<>
         <div className={cx("khead")}>
           <span className={cx("lab")}>{props.canManage ? "Courses" : "All courses"}</span>
-          {props.canManage ? null : <span className={cx("sub")} style={{ marginLeft: 10 }}>In the order your host suggests. Open any of them.</span>}
+          {props.canManage ? null : <span className={cx("lab")} style={{ marginLeft: 10, fontWeight: 400 }}>In the order your host suggests. Open any of them.</span>}
           {arranging ? <span className={cx("sub")} style={{ marginLeft: 10 }}>Members see them in this order.</span> : null}
           <span style={{ marginLeft: "auto", display: "flex", gap: 6 }}>
             {props.onReorderCourses && props.canManage && courses.length > 1 ? (
