@@ -2168,6 +2168,13 @@ async function executeCanonicalWrite(args: {
     if (!channel) {
       return canonicalError("semantic_not_found", "Channel path not found or not accessible.");
     }
+    // An edit through an AI may not turn a post into words already posted
+    // elsewhere here today. The post's own words, unchanged, are not a repeat.
+    if (mode === "update" && args.principalKind === "external_mcp" && text.trim().length >= AI_DUPLICATE_MIN_CHARS) {
+      const claimed = await args.ctx.runMutation((internal as any).communityAiRules.claimAiPostWordsInternal,
+        { userId: args.userId, communityId: target.communityId, fingerprint: aiPostFingerprint(text), key: idempotencyKey, ref: writableChannelPath.ref });
+      if (!claimed.ok) return canonicalError(AI_DUPLICATE_REFUSAL.code, AI_DUPLICATE_REFUSAL.message);
+    }
     const reservation = await reserveMutatingOperation({ ...args, target, toolName: "polynet_write", idempotencyKey });
     if (!reservation.ok) return reservation.result;
     if (reservation.status === "completed") return { ok: true, value: reservation.completedValue };
@@ -2254,6 +2261,8 @@ async function executeCanonicalWrite(args: {
     if (reservation.status === "completed") {
       return { ok: true, value: reservation.completedValue };
     }
+    // Words claimed for this post and not yet posted (given back if it fails).
+    let pendingWords: string | null = null;
     try {
       // Written through a person's own AI: checked whatever the AI was told
       // (shared/aiPostingRules.ts), then marked as made through an AI.
@@ -2261,15 +2270,18 @@ async function executeCanonicalWrite(args: {
       const aiText = String(content.text ?? content.body ?? "");
       const aiFingerprint = viaAi && aiText.trim().length >= AI_DUPLICATE_MIN_CHARS ? aiPostFingerprint(aiText) : null;
       if (viaAi) {
+        // The words are claimed before the post is made (one step, so two
+        // requests at once cannot both pass) and given back if it fails.
         const refusal = checkAiPost({ text: aiText, reply: Boolean(rootId), mentions: Array.isArray(content.mentions) ? content.mentions as never : null })
-          ?? (aiFingerprint && await args.ctx.runQuery((internal as any).communityAiRules.hasRecentAiPostInternal,
-            { userId: args.userId, communityId: target.communityId, fingerprint: aiFingerprint, key: idempotencyKey }) ? AI_DUPLICATE_REFUSAL : null);
+          ?? (aiFingerprint && !(await args.ctx.runMutation((internal as any).communityAiRules.claimAiPostWordsInternal,
+            { userId: args.userId, communityId: target.communityId, fingerprint: aiFingerprint, key: idempotencyKey })).ok ? AI_DUPLICATE_REFUSAL : null);
         if (refusal) {
           await failMutatingOperation({ ...args, target, toolName: "polynet_write", idempotencyKey,
             requestFingerprint: reservation.requestFingerprint, attemptToken: reservation.attemptToken,
             errorCode: refusal.code, errorMessage: refusal.message });
           return canonicalError(refusal.code, refusal.message);
         }
+        pendingWords = aiFingerprint;
       }
       const canonicalIdempotencyKey = `polynet:${args.principalKind}:${idempotencyKey}`;
       const mutationArgs = {
@@ -2303,10 +2315,7 @@ async function executeCanonicalWrite(args: {
           ? mutationArgs
           : { ...mutationArgs, trustedUserId: args.userId, ...(viaAi ? { viaAi: true } : {}) },
       )) as Record<string, unknown>;
-      if (aiFingerprint) {
-        await args.ctx.runMutation((internal as any).communityAiRules.recordAiPostInternal,
-          { userId: args.userId, communityId: target.communityId, fingerprint: aiFingerprint, key: idempotencyKey }).catch(() => null);
-      }
+      pendingWords = null;
       const interaction =
         value.interaction && typeof value.interaction === "object"
           ? (value.interaction as Record<string, unknown>)
@@ -2315,6 +2324,10 @@ async function executeCanonicalWrite(args: {
         interaction.kind === "reply"
           ? `interaction:reply:${String(interaction.reply_id ?? "")}`
           : `interaction:root:${String(interaction.root_id ?? "")}`;
+      if (aiFingerprint) {
+        await args.ctx.runMutation((internal as any).communityAiRules.attachAiPostRefInternal,
+          { userId: args.userId, communityId: target.communityId, fingerprint: aiFingerprint, key: idempotencyKey, ref }).catch(() => null);
+      }
       const responseValue = {
         ok: true,
         path: evidencePath({
@@ -2349,6 +2362,11 @@ async function executeCanonicalWrite(args: {
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : "Community chat write failed.";
+      // The post was not made: its words are free to be posted again.
+      if (pendingWords) {
+        await args.ctx.runMutation((internal as any).communityAiRules.releaseAiPostWordsInternal,
+          { userId: args.userId, communityId: target.communityId, fingerprint: pendingWords, key: idempotencyKey }).catch(() => null);
+      }
       await failMutatingOperation({
         ...args,
         target,

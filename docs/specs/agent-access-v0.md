@@ -109,6 +109,13 @@ A refusal says why in plain words. A refused post is not made, and its
 request sent again is refused again; a request that did post, sent again
 after a crash, is answered with the post it made.
 
+Repeats are held by a claim (`convex/communityAiRules.ts`): the words are
+claimed in one step before the post is made, so two requests at once cannot
+both pass; the claim is given back if the post fails, and it remembers the
+post it became, so editing that post without changing its words is not a
+repeat. An edit through an AI is checked the same way: a post cannot be
+edited into words already posted here that day.
+
 **The mark.** A post or reply made through a person's own AI is stored with
 `viaAi` and shown as "via AI" to everyone. Only the server's trusted path
 sets it; a client can neither set nor clear it.

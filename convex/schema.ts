@@ -2225,6 +2225,9 @@ export default defineSchema({
     // The request that posted them, so that request sent again (a retry
     // after a crash) is not taken for a second post of the same words.
     key: v.optional(v.string()),
+    // The post that says them (interaction:root:<id> or interaction:reply:<id>),
+    // once it exists: editing it without changing its words is not a repeat.
+    ref: v.optional(v.string()),
     createdAt: v.number(),
   }).index("by_user_community_fingerprint", ["userId", "communityId", "fingerprint"]),
 
