@@ -2208,8 +2208,25 @@ export default defineSchema({
     .index("by_blocker_blocked", ["blockerUserId", "blockedUserId"])
     .index("by_blocked_blocker", ["blockedUserId", "blockerUserId"]),
 
-  // Writes a person makes through their own AI (the MCP) or their site, per
-  // minute (convex/memberWriteRateLimit.ts).
+  // What a person does through their own AI (the MCP) or a community's site:
+  // one row per person, budget and place, counted per minute and per day
+  // (convex/accessBudgets.ts; the budgets are in shared/operationCatalog.ts).
+  accessBudgetCounters: defineTable({
+    userId: v.id("users"),
+    budget: v.string(),
+    scope: v.string(),
+    minuteStartMs: v.number(),
+    minuteCount: v.number(),
+    dayStartMs: v.number(),
+    dayCount: v.number(),
+    // The idempotency key of the last call counted, so the same call sent
+    // again (a retry) is not counted, or refused, a second time.
+    lastKey: v.optional(v.string()),
+    updatedAt: v.number(),
+  }).index("by_user_budget_scope", ["userId", "budget", "scope"]),
+
+  // No longer written (replaced by accessBudgetCounters, Nov 17 2026); kept
+  // declared until its rows are cleared.
   memberWriteRateCounters: defineTable({
     userId: v.id("users"),
     windowStartMs: v.number(),

@@ -4,6 +4,7 @@ import { ensureGeneralChannel } from "./communityChannelCore";
 import schema from "./schema";
 import { handleMcpPost } from "./httpMcp";
 import { PLATFORM_LEGAL_DOCUMENTS } from "../shared/legalDocuments";
+import { BUDGET_LIMITS } from "../shared/operationCatalog";
 
 const modules = import.meta.glob("./**/*.*s");
 
@@ -113,17 +114,58 @@ test("every member reaches the MCP in their own lens; outsiders find nothing", a
   expect(member.structuredContent.entries.map((entry: any) => [entry.path, entry.role])).toEqual([["/communities/run-club/", "member"]]);
 });
 
-test("past the write budget, the MCP answers rate_limited with a machine-readable retry time", async () => {
+// What a person's own AI spends in this minute or this day, set directly.
+const spent = (f: any, userId: any, budget: string, scope: string, minuteCount: number, dayCount = minuteCount) => f.t.run((ctx: any) =>
+  ctx.db.insert("accessBudgetCounters", { userId, budget, scope, minuteStartMs: Date.now(), minuteCount, dayStartMs: Date.now(), dayCount, updatedAt: Date.now() }));
+const post = (f: any, who: string, key: string, path = "/communities/run-club/channels/general/") =>
+  f.call(who, "polynet_write", { path, mode: "create", content: { text: `post ${key}` }, idempotency_key: key });
+
+test("past the post budget, the MCP answers rate_limited with a machine-readable retry time", async () => {
   const f = await fixture();
-  // The member has used this minute's budget.
-  await f.t.run(ctx => ctx.db.insert("memberWriteRateCounters", { userId: f.users.member, windowStartMs: Date.now(), count: 60, updatedAt: Date.now() }));
-  const refused = await f.call("member", "polynet_write", { path: "/communities/run-club/channels/general/", mode: "create",
-    content: { text: "one too many" }, idempotency_key: "over" });
+  // The member has used this minute's posts.
+  await spent(f, f.users.member, "post", "", BUDGET_LIMITS.post.perMinute);
+  const refused = await post(f, "member", "over");
   expect(refused.isError).toBe(true);
-  expect(refused.structuredContent).toMatchObject({ code: "rate_limited", retry_after_ms: expect.any(Number) });
+  expect(refused.structuredContent).toMatchObject({ code: "rate_limited", retry_after_ms: expect.any(Number), budget: "post", window: "minute" });
   expect(refused.structuredContent.error).toContain("rate_limited");
   // Reads still work.
   expect((await f.call("member", "polynet_list", { path: "/communities/run-club/" })).isError).toBe(false);
+});
+
+test("one new post a minute in a channel; a refused post spends nothing", async () => {
+  const f = await fixture();
+  expect((await post(f, "member", "first")).isError).toBe(false);
+  const second = await post(f, "member", "second");
+  expect(second.isError).toBe(true);
+  expect(second.structuredContent).toMatchObject({ code: "rate_limited", budget: "post_channel", window: "minute" });
+  // The refused post did not come out of the day's posts.
+  const rows: any[] = await f.t.run((ctx: any) => ctx.db.query("accessBudgetCounters").collect());
+  expect(rows.find((row: any) => row.budget === "post")).toMatchObject({ minuteCount: 1, dayCount: 1 });
+  expect(rows.find((row: any) => row.budget === "post_channel")).toMatchObject({ scope: "run-club/general", minuteCount: 1 });
+});
+
+test("the day's posts run out even when the minute has room", async () => {
+  const f = await fixture();
+  await spent(f, f.users.member, "post", "", 0, BUDGET_LIMITS.post.perDay);
+  const refused = await post(f, "member", "day");
+  expect(refused.structuredContent).toMatchObject({ code: "rate_limited", budget: "post", window: "day" });
+  expect(refused.structuredContent.retry_after_ms).toBeGreaterThan(60_000);
+});
+
+test("reads and searches through a person's own AI are counted too", async () => {
+  const f = await fixture();
+  expect((await f.call("member", "polynet_list", { path: "/communities/run-club/" })).isError).toBe(false);
+  const counted: any[] = await f.t.run((ctx: any) => ctx.db.query("accessBudgetCounters").collect());
+  expect(counted.find((row: any) => row.budget === "read")).toMatchObject({ minuteCount: 1, dayCount: 1 });
+  await f.t.run(async (ctx: any) => { for (const row of await ctx.db.query("accessBudgetCounters").collect()) await ctx.db.delete(row._id); });
+  await spent(f, f.users.member, "read", "", BUDGET_LIMITS.read.perMinute);
+  const refused = await f.call("member", "polynet_list", { path: "/communities/run-club/" });
+  expect(refused.structuredContent).toMatchObject({ code: "rate_limited", budget: "read", window: "minute" });
+  await spent(f, f.users.member, "search", "", BUDGET_LIMITS.search.perMinute);
+  const search = await f.call("member", "polynet_search", { path: "/communities/run-club/channels/", query: "run" });
+  expect(search.structuredContent).toMatchObject({ code: "rate_limited", budget: "search" });
+  // Another person's budget is their own.
+  expect((await f.call("owner", "polynet_list", { path: "/communities/run-club/" })).isError).toBe(false);
 });
 
 test("a builder works on its own community in the builder lens and on others as a member", async () => {

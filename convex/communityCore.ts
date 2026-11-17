@@ -1168,8 +1168,10 @@ export async function resolveCommunityMembershipEntitlementState(args: {
 }
 
 // Live communities an owner may have before the next one needs its own Agent
-// plan. Callers exempt the platform owner and a community with its own plan.
-export const FREE_COMMUNITIES_PER_OWNER = 10;
+// plan: one (Neil, Nov 17 2026; it was ten). Callers exempt the platform
+// owner and a community with its own plan. Communities someone already has
+// are never taken away: the rule only stops the next free one.
+export const FREE_COMMUNITIES_PER_OWNER = 1;
 
 // Counts every live community the owner has (archived ones don't count), never
 // a truncated page of their history; stops at the limit.

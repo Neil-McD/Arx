@@ -112,9 +112,13 @@ There are two human authority lanes:
 - `member`: every other currently entitled community relation, including
   moderators and members.
 
-Through the MCP only the builder lane gets past the entrance (see First
-principle); the member lane below applies to the same executor when the
-community agent acts for a member or a community site calls it.
+Both lanes come through the MCP: everyone signed in may use it, in the lens
+of their role (see First principle). The same executor serves the community
+agent acting for a member and a community's site.
+
+What a person's own AI may do in a minute and in a day is limited, reads
+included ([specs/agent-access-v0.md](specs/agent-access-v0.md)). A call over
+a limit answers `rate_limited` with `retry_after_ms`.
 
 Both lanes can list, read, and search the member repository. Both can write
 participation to an exact returned `channels/<slug>/` path. Only the builder lane
