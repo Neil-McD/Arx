@@ -1296,3 +1296,29 @@
 @media (max-width:700px){.app .discgrid{grid-template-columns:1fr;gap:14px}}
 :where(:root[data-layout="phone"]) .app .discgrid{grid-template-columns:1fr;gap:14px}
 :where(:root[data-layout="phone"]) .app .discfind{width:100%;margin-bottom:14px}
+.app .startc{display:grid;grid-template-columns:minmax(0,1fr) 320px;color:var(--ink)}
+.app .startc-form{display:flex;flex-direction:column;gap:18px;padding:28px 28px 24px;min-width:0}
+.app .startc-form h2{margin:0;font-size:20px;font-weight:600;letter-spacing:-.01em}
+.app .startc-form .startc-sub{margin:6px 0 0;font-size:13px;color:var(--ink2)}
+.app .startc-field{display:block}
+.app .startc-field>span:first-child{display:block;margin-bottom:6px;font-size:12px;font-weight:500;color:var(--ink3)}
+.app .startc-field>span:first-child em{font-style:normal;color:var(--ink4)}
+.app .startc-field input[type=text]{width:100%;height:38px;padding:0 12px;border-radius:9px;border:1px solid var(--line2);background:var(--s1);color:var(--ink);font:inherit;font-size:14px;outline:0;transition:border-color .16s var(--ease)}
+.app .startc-field input[type=text]:focus{border-color:rgba(var(--w),.3)}
+.app .startc-field input[aria-invalid=true]{border-color:var(--bad-line)}
+.app .startc-addr{display:block;margin-top:6px;font-size:12px;color:var(--ink3);overflow-wrap:anywhere}
+.app .startc-addr b{font-weight:500;color:var(--ink2)}
+.app .startc-addr button{padding:0;font-size:12px;color:var(--ink3);text-decoration:underline;cursor:pointer}
+.app .startc-files{display:flex;flex-wrap:wrap;gap:8px}
+.app .startc-files label{cursor:pointer}
+.app .startc-files label[aria-disabled=true]{opacity:.5;pointer-events:none}
+.app .startc-files input{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none}
+.app .startc-acts{display:flex;align-items:center;gap:12px;margin-top:6px}
+.app .startc-acts .btn{height:36px;padding:0 14px;font-size:14px}
+.app .startc-err{margin:0;font-size:13px;color:var(--bad)}
+.app .startc-side{display:flex;flex-direction:column;gap:12px;padding:28px 24px 24px;border-left:1px solid var(--line);background:var(--s1);min-width:0}
+.app .startc-side p{margin:0;font-size:12px;line-height:1.5;color:var(--ink3)}
+.app .startc-side .disccard{cursor:default;pointer-events:none}
+@media (max-width:760px){.app .startc{grid-template-columns:1fr}.app .startc-side{border-left:0;border-top:1px solid var(--line)}}
+:where(:root[data-layout="phone"]) .app .startc{grid-template-columns:1fr}
+:where(:root[data-layout="phone"]) .app .startc-side{border-left:0;border-top:1px solid var(--line)}
