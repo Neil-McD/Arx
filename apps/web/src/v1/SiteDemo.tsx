@@ -102,8 +102,12 @@ const TYPING = [{ from: 3.2, to: 6.4, who: "guide" }, { from: 8.0, to: 11.2, who
 const WAVES = [2.9, 4.1, 7.3, 9.4];
 const THANKS_AT = 12.8;
 // The scene, a hold on its last moment, then a short fade before it starts over.
-const SCENE_SECONDS = 16;
-const FADE_SECONDS = 0.6;
+const SCENE_SECONDS = 14.5;
+const FADE_SECONDS = 1;
+
+// How fast the script runs: its seconds are written at a reading pace, and
+// played quicker, so a scene takes about six seconds and the whole loop half a minute.
+const PACE = 2.2;
 
 const noop = () => {};
 const formatTime = (iso: string) => new Date(iso).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
@@ -117,7 +121,7 @@ const DEMO_CSS = `
 /* The app is scaled as a picture is: phones must not resize its text on their own. */
 .site-demo{-webkit-text-size-adjust:100%;text-size-adjust:100%}
 .site-demo-window{width:min(1180px,100%);margin:0 auto;border-radius:14px;border:1px solid rgba(255,255,255,.14);overflow:hidden;box-shadow:0 60px 140px -50px rgba(111,120,216,.35),0 40px 90px -40px #000}
-.site-demo .site-demo-page{transition:opacity ${FADE_SECONDS}s ease}
+.site-demo .site-demo-page{transition:opacity .4s ease}
 .site-demo.is-ending .site-demo-page{opacity:0}
 .site-demo-dots{display:flex;justify-content:center;gap:8px;margin-top:22px;flex-wrap:wrap}
 .site-demo-dots button{position:relative;overflow:hidden;height:34px;padding:0 16px;border-radius:999px;border:1px solid rgba(255,255,255,.12);background:transparent;color:rgba(243,244,246,.6);font:inherit;font-size:14px;cursor:pointer}
@@ -474,47 +478,25 @@ function BriefsScene({ at, now }: SceneProps) {
   );
 }
 
-// 5. Gets results: the member's side, two weeks on. Mira's Home gives her
-// one next step; then her win lands in #wins.
-const STEP_AT = 1.6;
-const DONE_AT = [4.0, 5.2];
-const WINS_AT = 7.4;
+// 5. Gets results: the member's side, two weeks on. Mira's win lands in
+// #wins, and the community answers.
 const WINS_BEFORE: Line[] = [
+  { id: "w0", who: "sam", minutesAgo: 900, text: "Second client signed at the new price. The one-page offer did the selling.", extra: { reaction_summary: [{ emoji: "🔥", count: 4 }] } },
   { id: "w1", who: "dana", minutesAgo: 400, text: "Cohort two wrapped: eleven of twelve finished. Opening cohort three next month.", extra: { reaction_summary: [{ emoji: "👏", count: 8 }] } },
 ];
 const WIN: Array<Line & { at: number }> = [
-  { id: "w2", at: WINS_AT + 1.4, who: "mira", minutesAgo: 0, text: "First five paying subscribers at $300 each. Two weeks ago I didn't have a price. Thank you all." },
-  { id: "w3", at: WINS_AT + 6.2, who: "dana", minutesAgo: 0, text: "Five in two weeks! Told you that page was close." },
-  { id: "w4", at: WINS_AT + 9.4, who: "guide", minutesAgo: 0, text: "That's Mira's first $1,500. I've added it to this week's wins for Ana, and saved how she got there to Knowledge." },
+  { id: "w2", at: 1.4, who: "mira", minutesAgo: 0, text: "First five paying subscribers at $300 each. Two weeks ago I didn't have a price. Thank you all." },
+  { id: "w3", at: 6.2, who: "dana", minutesAgo: 0, text: "Five in two weeks! Told you that page was close." },
+  { id: "w4", at: 9.4, who: "guide", minutesAgo: 0, text: "That's Mira's first $1,500. I've added it to this week's wins for Ana, and saved how she got there to Knowledge." },
 ];
-const WIN_TYPING = [{ from: WINS_AT + 3.4, to: WINS_AT + 6.2, who: "dana" }, { from: WINS_AT + 7.0, to: WINS_AT + 9.4, who: "guide" }];
-const CHEERS = [2.4, 3.2, 4.0, 4.9, 5.8, 7.4, 8.6].map((after) => WINS_AT + after);
-const RESULTS_SECONDS = WINS_AT + 13;
+const WIN_TYPING = [{ from: 3.4, to: 6.2, who: "dana" }, { from: 7.0, to: 9.4, who: "guide" }];
+const CHEERS = [2.4, 3.2, 4.0, 4.9, 5.8, 7.4, 8.6, 10.2, 11.0];
+const RESULTS_SECONDS = 13.5;
 
 function ResultsScene({ at, now }: SceneProps) {
-  if (at < WINS_AT) {
-    const done = DONE_AT.filter((moment) => at >= moment).length;
-    return (
-      <HomePage host={false} time="7:45 am" greeting="Good morning, Mira." line="You're two lessons from your first cohort."
-        chips={["What did I miss?", "Who should I meet?", "Draft my intro"]} now={now} here="Ana and 5 others are here">
-        {at >= STEP_AT ? (
-          <Card label="Your next step" title="Lesson 4: The one-page offer" say="You set your price at $300. This is the page that sells it, and Dana offered to read your draft.">
-            <Btn go>Open the lesson</Btn>
-            <Btn txt>Talk it over</Btn>
-          </Card>
-        ) : null}
-        {done ? (
-          <Since label="Since you were last here">
-            {done >= 1 ? <SinceItem kind="Done" title="You finished lesson 3, Pricing your first offer" detail="3 of 5 lessons · your price is set" still /> : null}
-            {done >= 2 ? <SinceItem kind="For you" learned title="Dana replied to your pricing page" detail="“Lead with the result, not the schedule.”" still /> : null}
-          </Since>
-        ) : null}
-      </HomePage>
-    );
-  }
   const cheers = CHEERS.filter((moment) => at >= moment).length;
   const roots = [...WINS_BEFORE, ...WIN.filter((line) => at >= line.at)].map((line) => (
-    line.id === "w2" && cheers ? root({ ...line, extra: { reaction_summary: [{ emoji: "🎉", count: cheers }] } }, now) : root(line, now)
+    line.id === "w2" && cheers ? root({ ...line, extra: { reaction_summary: [{ emoji: "🎉", count: cheers }, ...(cheers > 3 ? [{ emoji: "🔥", count: cheers - 3 }] : [])] } }, now) : root(line, now)
   ));
   return (
     <ChannelPage>
@@ -527,10 +509,10 @@ function ResultsScene({ at, now }: SceneProps) {
 
 const SCENES: Array<{ key: string; label: string; seconds: number; say: string; left: (at: number) => Left; Scene: (props: SceneProps) => ReactNode }> = [
   { key: "welcomes", label: "Welcomes", seconds: SCENE_SECONDS, left: () => ({ tab: "chat", channelSlug: "general" }), say: "Someone new says hello. Your client success manager greets them by name and introduces them to the right person.", Scene: WelcomesScene },
-  { key: "answers", label: "Answers", seconds: 16, left: () => ({ tab: "chat", channelSlug: "pricing" }), say: "A question at 2 am gets your answer, from the lesson you taught it in.", Scene: AnswersScene },
-  { key: "remembers", label: "Remembers", seconds: 9, left: () => ({ tab: "resources" }), say: "That answer becomes something your community knows, for the next person who asks.", Scene: RemembersScene },
-  { key: "briefs", label: "Briefs you", seconds: 12, left: () => ({ tab: "agent" }), say: "You open the app to what was handled, and the one person who needs you.", Scene: BriefsScene },
-  { key: "results", label: "Gets results", seconds: RESULTS_SECONDS, left: (at) => (at < WINS_AT ? { tab: "agent", viewer: "mira" } : { tab: "chat", channelSlug: "wins", viewer: "mira" }), say: "Each member gets one next step. Two weeks later, Mira has her first five paying subscribers.", Scene: ResultsScene },
+  { key: "answers", label: "Answers", seconds: 15, left: () => ({ tab: "chat", channelSlug: "pricing" }), say: "A question at 2 am gets your answer, from the lesson you taught it in.", Scene: AnswersScene },
+  { key: "remembers", label: "Remembers", seconds: 8, left: () => ({ tab: "resources" }), say: "That answer becomes something your community knows, for the next person who asks.", Scene: RemembersScene },
+  { key: "briefs", label: "Briefs you", seconds: 10.5, left: () => ({ tab: "agent" }), say: "You open the app to what was handled, and the one person who needs you.", Scene: BriefsScene },
+  { key: "results", label: "Gets results", seconds: RESULTS_SECONDS, left: () => ({ tab: "chat", channelSlug: "wins", viewer: "mira" }), say: "Two weeks later, Mira posts her first five paying subscribers. Members who get results stay.", Scene: ResultsScene },
 ];
 
 // The demo: one scene at a time, moving on by itself. A dot picks a scene;
@@ -546,7 +528,7 @@ export function SiteDemo() {
   const moment = still ? scene.seconds - FADE_SECONDS - 0.1 : at;
   useEffect(() => {
     if (still || held) return;
-    const timer = window.setInterval(() => setAt((current) => current + 0.1), 100);
+    const timer = window.setInterval(() => setAt((current) => current + 0.1 * PACE), 100);
     return () => window.clearInterval(timer);
   }, [still, held]);
   useEffect(() => {
