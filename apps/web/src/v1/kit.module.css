@@ -1231,6 +1231,24 @@
 .app .th b{color:var(--v1-accent-ink,var(--accent));font-weight:500}
 .app:is(.light:not(.on-mode-dark),.on-mode-light) .re.mine{background:color-mix(in srgb,var(--accent) 14%,transparent);color:var(--v1-accent-ink,var(--ink))}
 .app:is(.light:not(.on-mode-dark),.on-mode-light) .re.mine:hover{background:color-mix(in srgb,var(--accent) 20%,transparent)}
+.app .kcols{display:flex;gap:48px;max-width:780px;margin:22px auto 0}
+.app .kcols.two{max-width:1076px}
+.app .kcols .kmainc{flex:1;min-width:0}
+.app .kcols .klesson,.app .kcols .kcrumb{max-width:none;margin:0}
+.app .klist{position:sticky;top:8px;align-self:flex-start;flex:none;width:248px;max-height:calc(100vh - 150px);overflow-y:auto;padding:0 10px}
+.app .klist .sec{margin-top:14px}
+.app .kbar{margin-top:8px}.app .kbar i{background:var(--accent)}
+.app .kl{height:auto;min-height:32px;padding-top:6px;padding-bottom:6px;line-height:1.3;text-align:left}
+.app .kl.on i{border-color:var(--accent);background:transparent;box-shadow:none;border-width:1.5px}
+.app .kl.d .ic{color:var(--v1-accent-ink,var(--accent))}
+.app .ktools{display:flex;flex-wrap:wrap;align-items:center;gap:8px;max-width:1076px;margin:14px auto 0}
+.app .kfoot{display:flex;align-items:center;gap:8px;margin-top:30px;padding-top:20px;border-top:1px solid var(--line)}
+.app .kfoot-gap{flex:1}
+.app .kisdone{display:inline-flex;align-items:center;gap:6px;height:32px;padding:0 10px;border-radius:8px;font-size:13px;color:var(--ink3);cursor:pointer}
+.app .kisdone .ic{width:14px;height:14px;color:var(--v1-accent-ink,var(--accent))}.app .kisdone:hover{background:var(--s2);color:var(--ink)}
+.app .klesson .kupnext{margin:10px 0 0;text-align:right;font-size:12.5px;line-height:1.4;color:var(--ink3)}
+.app .kpct{height:auto;border-radius:0;background:none;overflow:visible}.app .kpct i{display:none}
+.app .kpct em{padding:0;font-size:12px;font-weight:400;line-height:1.4;color:var(--ink3)}
 .app .mine:not(.re){background:color-mix(in srgb,var(--accent) 26%,var(--panel2))}
 .app:is(.light:not(.on-mode-dark),.on-mode-light) .mine:not(.re){background:color-mix(in srgb,var(--accent) 14%,#fff);color:var(--ink)}
 .app .re.readd{padding:0 6px;color:var(--ink3);cursor:pointer}.app .re.readd:hover{color:var(--ink)}
