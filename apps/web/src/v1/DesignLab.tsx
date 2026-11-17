@@ -565,6 +565,115 @@ function EventsLab() {
   );
 }
 
+// Discover (mock, Nov 16): a page inside the community you were in. The left
+// column is the community's own, with nothing picked; the page is a grid of
+// communities with a search box. No right panel. ?phone=1 draws the page at
+// phone width; ?empty=1 a search that finds nothing.
+type LabCommunity = { name: string; line: string; price: string; members: number; hue: number; banner?: string; joined?: boolean };
+const LAB_COMMUNITIES: LabCommunity[] = [
+  { name: "Polynet", line: "Build a community that thinks. Founders sharing what works.", price: "Free", members: 1280, hue: 232, banner: BANNER, joined: true },
+  { name: "Sunrise Climbing Club", line: "Early-morning climbers who train, travel and send together.", price: "Free", members: 214, hue: 24, joined: true },
+  { name: "Distribution Engineering", line: "Operators who turn content into pipeline, one system at a time.", price: "$47/month", members: 96, hue: 262 },
+  { name: "Dawn Patrol Run Club", line: "Six a.m. miles, a plan for every week, and people who show up.", price: "$12/month", members: 431, hue: 196 },
+  { name: "Quiet Hands Ceramics", line: "Throwing, glazing and firing notes from a working studio.", price: "Free", members: 58, hue: 142 },
+  { name: "Indie Founders Table", line: "Ten-person tables for founders past their first customer.", price: "$197/month", members: 40, hue: 338 },
+];
+const initialsOf = (name: string) => name.split(/\s+/).slice(0, 2).map((word) => word[0]).join("").toUpperCase();
+
+function DiscoverCard(props: { community: LabCommunity }) {
+  const c = props.community;
+  const tint = (alpha: number, light = 60) => `hsla(${c.hue}, 60%, ${light}%, ${alpha})`;
+  return (
+    <button type="button" style={{ display: "flex", flexDirection: "column", textAlign: "left", padding: 0, overflow: "hidden", cursor: "pointer",
+      borderRadius: 10, border: "1px solid var(--line2)", background: "var(--s1)", color: "var(--ink)" }}>
+      {/* A community with no banner gets its own colour and initials, never an empty box. */}
+      <span style={{ position: "relative", display: "flex", alignItems: "center", justifyContent: "center", width: "100%", aspectRatio: "16 / 7",
+        background: c.banner ? `center / cover no-repeat url(${c.banner})` : `linear-gradient(135deg, ${tint(0.34, 52)}, ${tint(0.1, 40)} 70%)`,
+        borderBottom: "1px solid var(--line)", fontSize: 26, fontWeight: 600, letterSpacing: "-.01em", color: tint(0.9, 82) }}>
+        {c.banner ? null : initialsOf(c.name)}
+        {c.joined ? <span className={cx("tag")} style={{ position: "absolute", top: 10, right: 10, transform: "none", background: "rgba(0,0,0,.45)", color: "#fff", borderColor: "rgba(255,255,255,.24)" }}>Joined</span> : null}
+      </span>
+      <span style={{ display: "flex", flexDirection: "column", gap: 6, padding: "14px 16px 16px", width: "100%", boxSizing: "border-box" }}>
+        <span style={{ fontSize: 15, fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{c.name}</span>
+        <span style={{ fontSize: 13, lineHeight: 1.45, color: "var(--ink2)", minHeight: 38, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{c.line}</span>
+        <span style={{ fontSize: 12, color: "var(--ink3)", marginTop: 2 }}>{c.price} · {c.members.toLocaleString("en-US")} members</span>
+      </span>
+    </button>
+  );
+}
+
+function DiscoverBody(props: { phone: boolean }) {
+  const params = new URLSearchParams(window.location.search);
+  const [query, setQuery] = useStateLab(params.get("empty") ? "pottery in lisbon" : "");
+  const words = query.toLowerCase().split(/\s+/).filter(Boolean);
+  const shown = LAB_COMMUNITIES.filter((c) => words.every((word) => `${c.name} ${c.line}`.toLowerCase().includes(word)));
+  return (
+    <div style={{ padding: props.phone ? "4px 16px 24px" : "8px 44px 40px" }}>
+      <KitApp view="wins" part="flow">
+        <p className={cx("lead")} style={{ marginTop: props.phone ? 12 : 0 }}>Find your people.</p>
+        <label className={cx("find")} style={{ display: "flex", margin: "16px 0 0", width: props.phone ? "100%" : 320, height: 34, boxSizing: "border-box" }}>
+          <Icon name="search" />
+          <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search communities" aria-label="Search communities" />
+        </label>
+        {shown.length ? (
+          <div style={{ display: "grid", gridTemplateColumns: props.phone ? "1fr" : "repeat(auto-fill, minmax(280px, 1fr))", gap: 16, marginTop: 24 }}>
+            {shown.map((community) => <DiscoverCard key={community.name} community={community} />)}
+          </div>
+        ) : (
+          <p className={cx("none")} style={{ marginTop: 24 }}>No communities match “{query.trim()}”.</p>
+        )}
+        <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", marginTop: 40, paddingTop: 20, borderTop: "1px solid var(--line)" }}>
+          <span style={{ fontSize: 13, color: "var(--ink2)" }}>Don't see yours?</span>
+          <Btn small>Start a community</Btn>
+        </div>
+      </KitApp>
+    </div>
+  );
+}
+
+function DiscoverLab() {
+  const params = new URLSearchParams(window.location.search);
+  if (params.get("phone")) {
+    return (
+      <div style={{ width: 390, height: "100vh", margin: "0 auto", borderInline: "1px solid rgba(128,128,128,.25)" }}>
+        <KitApp view="wins" host fillWindow scale={labScale()}>
+          <Main>
+            <Top title="Discover" titleView={1} />
+            <View index={1}><DiscoverBody phone /></View>
+          </Main>
+        </KitApp>
+      </div>
+    );
+  }
+  return (
+    <KitApp view="wins" host fillWindow scale={labScale()}>
+      {/* The community's own left column, unchanged, with nothing picked:
+          Discover is reached from the switcher at its top. */}
+      <Side>
+        <Cover name="Sunrise Climbing Club" mark={<span>SC</span>} bare />
+        <Spacer height={10} />
+        <NavRow icon="home" label="Home" />
+        <NavRow icon="inbox" label="Inbox" />
+        <Group action={<span className={cx("grp-add", "h-only")} aria-label="Add a channel"><Icon name="plus" /></span>}>Channels</Group>
+        <NavRow icon="hash" label="General" />
+        <NavRow icon="hash" label="Beta" />
+        <Group>Community</Group>
+        <NavRow icon="lock" label="Pods" />
+        <NavRow icon="stars" label="Knowledge" />
+        <NavRow icon="cal" label="Events" />
+        <NavRow icon="users" label="Members" hint="5" />
+        <Foot>
+          <Me name="Neil McDevitt" role="Host" avatar="N" tone="a2" />
+        </Foot>
+      </Side>
+      <Main>
+        <Top title="Discover" titleView={1} />
+        <View index={1}><DiscoverBody phone={false} /></View>
+      </Main>
+    </KitApp>
+  );
+}
+
 // ?scale=1.25 draws the lab larger, to try a size for big monitors.
 function labScale(): number {
   if (typeof window === "undefined") return 1;
@@ -574,5 +683,6 @@ function labScale(): number {
 
 export function DesignLab() {
   const page = typeof window === "undefined" ? "" : new URLSearchParams(window.location.search).get("page");
+  if (page === "discover") return <DiscoverLab />;
   return page === "channel" ? <HostChannel /> : page === "brief" ? <BriefPanels /> : page === "brain" ? <BrainLab /> : page === "events" ? <EventsLab /> : page === "members" ? <MembersLab /> : page === "brain-actions" ? <BrainActionsLab /> : page === "brain-page" ? <BrainPageLab /> : page === "pods-shell" ? <PodsShell /> : page === "know-panel" ? <KnowShell builder={false} /> : page === "know-panel-builder" ? <KnowShell builder /> : page === "pods" ? <PodsPage join={false} /> : page === "home-panel" ? <RealPanels pod={false} /> : page === "pod-panel" ? <RealPanels pod /> : page === "pods-join" ? <PodsPage join /> : <HostHomeQuiet />;
 }
