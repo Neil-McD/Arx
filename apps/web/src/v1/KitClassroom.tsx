@@ -502,8 +502,9 @@ export function KitClassroom(props: {
     : `${openProgress.done} of ${openProgress.total} done`) : "";
   const openCoverStyle = open?.course.banner_url ? { backgroundImage: `url(${JSON.stringify(open.course.banner_url)})`, backgroundSize: "cover", backgroundPosition: `${(open.course.banner_focus_x ?? 0.5) * 100}% ${(open.course.banner_focus_y ?? 0.5) * 100}%` } : undefined;
   // The floating lesson panel: the course, how far along, its lessons.
-  const lessonPanel = open && openProgress ? (
-    <>
+  // The top of the lesson panel: the course's cover, name and where things
+  // stand. A host changes them here, in place.
+  const lessonPanelTop = open && openProgress ? (
       <div className={cx("klist-top")}>
         {props.canManage && props.onSaveCourse ? (
           <KitCourseInline key={open.course.id} course={open.course} stats={courseProgressWords}
@@ -518,6 +519,10 @@ export function KitClassroom(props: {
           </>
         )}
       </div>
+  ) : null;
+  const lessonPanel = open && openProgress ? (
+    <>
+      {lessonPanelTop}
       {props.canManage ? null : <div className={cx("bar", "kbar")}><i style={{ width: `${openProgress.percent}%` }} /></div>}
       {lessonList}
       {lessonListFoot}
@@ -579,6 +584,9 @@ export function KitClassroom(props: {
         <div className={`knowledge-course-cols ${cx("kcols", listBeside && "two")}`}>
         {listBeside ? <aside className={cx("klist")} aria-label="Lessons">{lessonPanel}</aside> : null}
         <div className={cx("kmainc")}>
+        {/* Where the panel is not beside the lesson (a narrow window, a phone, a
+            course with no lessons yet), a host still changes the course here. */}
+        {props.canManage && !listBeside && lessonPanelTop ? <div className={cx("klist", "solo")}>{lessonPanelTop}</div> : null}
         {/* No room beside the lesson (a phone, a narrow window): the same panel folds above it. */}
         {!listBeside && listWorthShowing ? (
           <details className={cx("kfold")}>
