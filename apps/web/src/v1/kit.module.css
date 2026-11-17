@@ -1182,7 +1182,6 @@
 .app .kgrip:hover{color:var(--ink)}.app .kgrip:active{cursor:grabbing}
 .app .kl-row.host{gap:2px}
 .app .kl-row.gap>*,.app .kcard.gap>*{visibility:hidden}
-.app .kl-row.gap::after{content:"";position:absolute;left:8px;right:8px;top:50%;height:3px;margin-top:-1.5px;border-radius:2px;background:var(--accent)}
 .app .kcard.gap{border-radius:12px;outline:2px dashed var(--accent);outline-offset:-2px}
 .app .klift{rotate:0deg;scale:1;transition:rotate .16s var(--ease),scale .16s var(--ease),box-shadow .16s var(--ease)}
 .app .kl-row.klift{border-radius:9px;background:var(--pop);box-shadow:0 14px 30px -12px rgba(0,0,0,.7),inset 0 0 0 1px var(--line2);rotate:-1.2deg;scale:1.02}
@@ -1506,6 +1505,7 @@
 .app .kl-row.host{gap:6px;padding:0 4px 0 8px;border-radius:9px;transition:background .14s var(--ease)}
 .app .kl-row.host:hover{background:var(--s2)}
 .app .kl-row.host.on{background:color-mix(in srgb,var(--accent) 16%,transparent)}
+.app .kl-row.host.gap,.app .kl-row.host.gap:hover{background:transparent}
 .app .kl-row.host>.kl,.app .kl-row.host>.kl:hover,.app .kl-row.host>.kl.on{background:transparent;padding-left:2px;padding-right:2px}
 .app .kl-row.host .kgrip{width:14px;padding:0}
 .app .kl-row.host .kgrip:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
