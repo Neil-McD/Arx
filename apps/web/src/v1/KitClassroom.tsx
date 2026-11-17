@@ -251,7 +251,8 @@ export function KitClassroom(props: {
     setNamingCourseId(fresh ? open.course.id : null);
     const tools = props.canManage ? props.lessonEditing : null;
     if (!fresh || !tools || open.lessons.length > 0) return;
-    void tools.addLesson(open.course.id).then((id) => { if (id) { wantedLessonRef.current = id; chooseLesson(id); } }).catch(() => undefined);
+    const courseId = open.course.id;
+    void tools.addLesson(courseId).then((id) => { if (id && wantLesson(courseId, id)) chooseLesson(id); }).catch(() => undefined);
   }, [open?.course.id]); // eslint-disable-line react-hooks/exhaustive-deps
   const summaryBy = useMemo(() => new Map(summary.map((row) => [row.module_id, row])), [summary]);
 
@@ -260,6 +261,17 @@ export function KitClassroom(props: {
   // again then, but one the reader chose stays.
   const autoLessonRef = useRef<string | null>(null);
   const wantedLessonRef = useRef<string | null>(null);
+  // A lesson being added belongs to the course it was added to: if the host
+  // has gone to another course by the time it arrives, it is not followed.
+  const wantedCourseRef = useRef<string | null>(null);
+  const openCourseIdRef = useRef<string | null>(null);
+  openCourseIdRef.current = props.openCourseId ?? null;
+  const wantLesson = (courseId: string, id: string) => {
+    if (openCourseIdRef.current !== courseId) return false;
+    wantedLessonRef.current = id;
+    wantedCourseRef.current = courseId;
+    return true;
+  };
   // The lesson you're on is part of the address (/resources/<course>/<lesson>):
   // a refresh, the back button and a link open it.
   const routeLesson = useRouteDetail("lesson");
@@ -267,6 +279,7 @@ export function KitClassroom(props: {
     if (!open) { setLessonId(null); autoLessonRef.current = null; return; }
     // A lesson just added is where the host is going: it is opened as soon as
     // it arrives in the list, and nothing else is chosen meanwhile.
+    if (wantedLessonRef.current && wantedCourseRef.current !== open.course.id) wantedLessonRef.current = null;
     const wanted = wantedLessonRef.current;
     if (wanted) {
       if (!open.lessons.some((lesson) => lesson.id === wanted)) return;
@@ -569,8 +582,9 @@ export function KitClassroom(props: {
   // Under the list: a host adds a lesson; a member asks the guide about this one.
   const lessonListFoot = open ? (editingTools ? (
     <button type="button" className={cx("klist-foot")} onClick={async () => {
-      const id = await editingTools.addLesson(open.course.id);
-      if (id) { wantedLessonRef.current = id; setEditingLessonId(id); chooseLesson(id); }
+      const courseId = open.course.id;
+      const id = await editingTools.addLesson(courseId);
+      if (id && wantLesson(courseId, id)) { setEditingLessonId(id); chooseLesson(id); }
     }}><Icon name="plus" />Add a lesson</button>
   ) : agentOn ? (
     <button type="button" className={cx("klist-foot", "guide")} onClick={() => openGuideFromSearch()}><Icon name="spark" />Ask about this lesson</button>
@@ -725,8 +739,9 @@ export function KitClassroom(props: {
             <p className={cx("lead")} style={{ marginTop: 0 }}>{agentOn ? <span className={cx("aura")}><Icon name="spark" /></span> : null}{props.canManage ? "This course has no lessons yet." : "This course is being written."}</p>
             {editingTools ? (
               <button type="button" className={cx("btn go")} style={{ marginTop: 18 }} onClick={async () => {
-                const id = await editingTools.addLesson(open.course.id);
-                if (id) { wantedLessonRef.current = id; setEditingLessonId(id); chooseLesson(id); }
+                const courseId = open.course.id;
+                const id = await editingTools.addLesson(courseId);
+                if (id && wantLesson(courseId, id)) { setEditingLessonId(id); chooseLesson(id); }
               }}><Icon name="plus" />Write the first lesson</button>
             ) : null}
           </div>
