@@ -132,9 +132,9 @@ export function KitDiscover(props: {
           <p className={cx("sub")} role="alert">Communities couldn't load. <button type="button" className={cx("link")} onClick={() => setAttempt((count) => count + 1)}>Try again</button></p>
         ) : !communities ? (
           // Placeholders the size of real cards, so nothing moves when they arrive.
-          <div className={cx("discgrid")} aria-busy="true">{[0, 1, 2].map((index) => <span key={index} className={cx("discskel")} />)}</div>
+          <div key="loading" className={cx("discgrid")} aria-busy="true">{[0, 1, 2].map((index) => <span key={index} className={cx("discskel")} />)}</div>
         ) : shown.length ? (
-          <div className={cx("discgrid")}>
+          <div key="cards" className={cx("discgrid")}>
             {shown.map((community) => <DiscoverCard key={community.slug} community={community} now={now} onOpen={props.onOpenCommunity} />)}
           </div>
         ) : query.trim() ? (
@@ -142,7 +142,9 @@ export function KitDiscover(props: {
         ) : (
           <p className={cx("none")}>{props.joined.length ? "You're in every community listed here." : "No communities are listed yet."}</p>
         )}
-        {joined.length ? (
+        {/* What sits under the grid draws once the grid's size is known, so
+            it is never drawn and then moved. */}
+        {(communities || failed) && joined.length ? (
           <>
             <span className={cx("lab")} style={{ display: "block", marginTop: 36 }}>You're in</span>
             <div className={cx("discin")}>
@@ -155,10 +157,12 @@ export function KitDiscover(props: {
             </div>
           </>
         ) : null}
-        <div className={cx("discfoot")}>
-          <span>Don't see yours?</span>
-          <Btn small onClick={props.onStartCommunity}>Start a community</Btn>
-        </div>
+        {communities || failed ? (
+          <div className={cx("discfoot")}>
+            <span>Don't see yours?</span>
+            <Btn small onClick={props.onStartCommunity}>Start a community</Btn>
+          </div>
+        ) : null}
       </div>
     </KitApp>
   );
