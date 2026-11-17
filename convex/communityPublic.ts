@@ -196,6 +196,7 @@ export const listPublicDiscoverCommunities = query({
   },
   handler: async (ctx, args) => {
     const limit = Math.max(1, Math.min(200, Math.floor(args.limit ?? 60)));
+    const nowMs = Date.now();
     const communities = await Promise.all(
       (await listDiscoverableCommunities(ctx, limit)).map(async (community) => {
         const mappedPlans = await listCurrentCommunitySellablePlans(ctx, community._id);
@@ -222,6 +223,11 @@ export const listPublicDiscoverCommunities = query({
           branding_revision: community.brandingRevision ?? community.updatedAt,
           visual_identity: buildCommunityVisualIdentity(community, branding),
           active_plan: pickPreferredActivePlan(mappedPlans),
+          // For the card (Nov 16): who hosts it, how many are in it, and
+          // whether anyone has been there lately.
+          host: await discoverHost(ctx, community),
+          member_count: Math.max(0, Math.floor(Number((community as any).activeMemberCount) || 0)),
+          ...(await discoverActivity(ctx, community._id, nowMs)),
         };
       }),
     );
@@ -233,9 +239,57 @@ export const listPublicDiscoverCommunities = query({
   },
 });
 
-// The communities Discover lists, newest activity first: published, active and
-// operational only (never unlisted). Studio's Discover and every community
-// site's /discover read this one list.
+// The host on a card: the owner's name and face, nothing else.
+async function discoverHost(ctx: QueryCtx, community: CommunityLike): Promise<{ name: string; avatar_url: string | null } | null> {
+  const ownerId = (community as any).ownerId;
+  const face = ownerId ? await resolveUserProfileDisplayProjection(ctx, ownerId) : null;
+  const name = String((face as any)?.display_name ?? "").trim();
+  return name ? { name, avatar_url: (face as any)?.avatar_url ?? null } : null;
+}
+
+const DISCOVER_WEEK_MS = 7 * 86_400_000;
+const DISCOVER_POSTS_CAP = 50;
+const DISCOVER_POSTS_SCAN = 200;
+
+// A sign of life: when someone last posted, and how many posts this week
+// (counted up to a cap; a card says "50+" past it). Only what any member can
+// see: posts by people, in channels open to all members. Never the guide's
+// own posts, a removed post, a private talk with the guide, or a pod's room.
+// The newest DISCOVER_POSTS_SCAN posts of the week are looked through, so a
+// run of posts that don't count can't hide the ones that do.
+async function discoverActivity(ctx: QueryCtx, communityId: any, nowMs: number): Promise<{ last_active_at: string | null; posts_this_week: number }> {
+  const recent = await ctx.db
+    .query("communityInteractionRoots")
+    .withIndex("by_community_createdAt", (q: any) => q.eq("communityId", communityId).gte("createdAt", nowMs - DISCOVER_WEEK_MS))
+    .order("desc")
+    .take(DISCOVER_POSTS_SCAN);
+  const openChannel = new Map<string, boolean>();
+  const inOpenChannel = async (channelId: any): Promise<boolean> => {
+    if (!channelId) return false;
+    const key = String(channelId);
+    if (!openChannel.has(key)) {
+      const channel = (await ctx.db.get(channelId)) as { accessMode?: string; status?: string } | null;
+      openChannel.set(key, Boolean(channel) && channel!.accessMode === "all_members" && channel!.status === "active");
+    }
+    return openChannel.get(key)!;
+  };
+  const posts: any[] = [];
+  for (const row of recent as any[]) {
+    if (posts.length >= DISCOVER_POSTS_CAP) break;
+    if (row.status !== "live" || row.actorType !== "human") continue;
+    if (row.visibilityScope !== "community" && row.visibilityScope !== "public") continue;
+    if (!(await inOpenChannel(row.channelId))) continue;
+    posts.push(row);
+  }
+  return {
+    last_active_at: posts.length ? toIsoString(Number(posts[0].createdAt)) : null,
+    posts_this_week: posts.length,
+  };
+}
+
+// The communities Discover lists, newest activity first: published, active,
+// operational (never unlisted) and finished-looking. Studio's Discover and
+// every community site's /discover read this one list.
 async function listDiscoverableCommunities(ctx: QueryCtx, limit: number): Promise<CommunityLike[]> {
   const published = (await ctx.db
     .query("communities")
@@ -243,9 +297,16 @@ async function listDiscoverableCommunities(ctx: QueryCtx, limit: number): Promis
     .order("desc")
     .take(200)) as CommunityLike[];
   const listed = await Promise.all(published.map(async (community) => {
-    return community.visibility === "published" && communityIsActive(community) ? community : null;
+    return community.visibility === "published" && communityIsActive(community) && communityLooksFinished(community as any) ? community : null;
   }));
   return listed.filter((community): community is CommunityLike => community !== null).slice(0, limit);
+}
+
+// A community is listed once it looks finished: it has a banner and a
+// one-liner (Neil, Nov 16). The host is told so in the community's settings.
+export function communityLooksFinished(community: { oneLiner?: string | null; bannerStorageId?: unknown; bannerUrl?: string | null }): boolean {
+  const hasBanner = Boolean(community.bannerStorageId) || Boolean(String(community.bannerUrl ?? "").trim());
+  return hasBanner && Boolean(String(community.oneLiner ?? "").trim());
 }
 
 
