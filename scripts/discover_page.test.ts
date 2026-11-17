@@ -59,3 +59,12 @@ test("the switcher opens Discover inside the community; a signed-in visit to /di
 test("one set of cards: the public page draws the app's Discover cards", () => {
   expect(read("apps/web/src/components/polynetLanding/PublicFindPage.tsx")).toContain("<DiscoverCard community={community} now={now}");
 });
+
+test("a listed community that isn't showing yet is told what Discover still needs", async () => {
+  const { discoverListingGap } = await import("../shared/communityDiscoverListing");
+  expect(discoverListingGap({ listed: true, hasBanner: false, oneLiner: "" })).toBe("Add a banner and a one-liner to appear in Discover.");
+  expect(discoverListingGap({ listed: true, hasBanner: false, oneLiner: "Early climbers." })).toBe("Add a banner to appear in Discover.");
+  expect(discoverListingGap({ listed: true, hasBanner: true, oneLiner: "  " })).toBe("Add a one-liner to appear in Discover.");
+  expect(discoverListingGap({ listed: true, hasBanner: true, oneLiner: "Early climbers." })).toBeNull();
+  expect(discoverListingGap({ listed: false, hasBanner: false, oneLiner: "" })).toBeNull();
+});

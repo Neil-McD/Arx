@@ -1,5 +1,6 @@
 import type { DiscoverCommunitySnapshot } from "../../../../shared/communityTypes";
 import { KitDiscover, type DiscoverJoined } from "../v1/KitDiscover";
+import { KitApp } from "../v1/kit";
 import { CommunityPageHeader } from "./CommunityPageHeader";
 
 export type WebCommunityDiscoverPageProps = {
@@ -19,7 +20,9 @@ export function WebCommunityDiscoverPage(props: WebCommunityDiscoverPageProps) {
       <KitDiscover
         {...props}
         renderHeader={(search) => (
-          <CommunityPageHeader title="Discover" actions={search}>
+          // The header is outside the page's kit scope, so the search box
+          // brings its own (its styles live under the kit's root).
+          <CommunityPageHeader title="Discover" actions={search ? <KitApp view="home" part="flow">{search}</KitApp> : null}>
             <div className="resources-header">Discover</div>
           </CommunityPageHeader>
         )}
