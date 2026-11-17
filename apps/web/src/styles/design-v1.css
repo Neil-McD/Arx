@@ -4583,3 +4583,66 @@
 :where(:root[data-design="v1"]) :where(button, input, select, textarea, optgroup) {
   font-family: inherit;
 }
+
+/* Files in a direct message: a picture shows in the thread, any other file is
+   a row you click to download. */
+:root[data-design="v1"] .community-dm-sent-files {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+}
+:root[data-design="v1"] .community-dm-panel-message.is-own .community-dm-sent-files {
+  align-items: flex-end;
+}
+:root[data-design="v1"] .community-dm-sent-image {
+  display: block;
+  max-width: 280px;
+  padding: 0;
+  border: 0;
+  border-radius: 10px;
+  background: none;
+  overflow: hidden;
+  cursor: zoom-in;
+}
+:root[data-design="v1"] .community-dm-sent-image img {
+  display: block;
+  max-width: 100%;
+  max-height: 320px;
+  border-radius: 10px;
+}
+:root[data-design="v1"] .community-dm-sent-image.is-waiting {
+  display: grid;
+  place-items: center;
+  width: 220px;
+  height: 140px;
+  background: var(--hover-overlay);
+  color: var(--text-faint);
+  font-size: 12px;
+  cursor: default;
+}
+:root[data-design="v1"] .community-dm-sent-file {
+  cursor: pointer;
+}
+
+/* A picture in a direct message stands alone: no bubble behind it. */
+:root[data-design="v1"] .community-dm-standalone-media {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  max-width: 300px;
+}
+:root[data-design="v1"] .community-dm-standalone-media.is-own {
+  align-self: flex-end;
+  align-items: flex-end;
+}
+:root[data-design="v1"] .community-dm-standalone-media.is-sending {
+  opacity: 0.6;
+}
+:root[data-design="v1"] .community-dm-standalone-media .community-dm-sent-files {
+  align-items: inherit;
+}
+:root[data-design="v1"] .community-dm-standalone-media .community-dm-sent-image img {
+  border-radius: 14px;
+}

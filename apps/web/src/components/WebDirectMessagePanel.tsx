@@ -64,6 +64,8 @@ type WebDirectMessagePanelProps = {
   onInputChange: (value: string) => void;
   onSend: () => void | Promise<void>;
   onAttachmentFilesSelected?: (files: DirectMessageAttachmentFileInput) => void | Promise<void>;
+  // Fetches a sent file's bytes; the server gives them only to the two people in the conversation.
+  onLoadAttachment?: (attachmentId: string) => Promise<Blob>;
   onRetryAttachment?: (id: string) => void;
   onRemoveAttachment?: (id: string) => void;
   onRetryLocalMessage?: (localId: string) => void;
@@ -141,6 +143,64 @@ function getMessageAttachments(message: DirectMessage): DirectMessageAttachment[
   }));
 }
 
+// A file in a sent message. The message carries only its name and kind; the
+// bytes come through the server, which checks you are in the conversation.
+// A picture loads by itself; any other file downloads when clicked.
+function SentAttachment(props: { attachment: DirectMessageAttachment; onLoad?: (attachmentId: string) => Promise<Blob> }) {
+  const { attachment, onLoad } = props;
+  const isImage = attachment.type === "image" && /^image\//.test(attachment.mime ?? "");
+  const [url, setUrl] = useState<string | null>(null);
+  const [failed, setFailed] = useState(false);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    if (!isImage || !onLoad) return;
+    let live = true;
+    let made: string | null = null;
+    setUrl(null); setFailed(false);
+    onLoad(attachment.id).then((bytes) => {
+      if (!live) return;
+      made = URL.createObjectURL(new Blob([bytes], { type: attachment.mime ?? "application/octet-stream" }));
+      setUrl(made);
+    }).catch(() => { if (live) setFailed(true); });
+    return () => { live = false; if (made) URL.revokeObjectURL(made); };
+  }, [attachment.id, attachment.mime, isImage, onLoad]);
+  if (isImage) {
+    return url
+      ? <button type="button" className="community-dm-sent-image" onClick={() => window.open(url, "_blank", "noopener,noreferrer")} aria-label={`Open ${attachment.name}`}><img src={url} alt={attachment.name} /></button>
+      : <div className={`community-dm-sent-image is-waiting${failed ? " is-failed" : ""}`} role={failed ? "alert" : undefined}>{failed ? "This picture is unavailable." : ""}</div>;
+  }
+  const save = async () => {
+    if (!onLoad || busy) return;
+    setBusy(true); setFailed(false);
+    try {
+      const bytes = await onLoad(attachment.id);
+      const saveUrl = URL.createObjectURL(new Blob([bytes], { type: "application/octet-stream" }));
+      const link = document.createElement("a");
+      link.href = saveUrl; link.download = attachment.name; link.click();
+      URL.revokeObjectURL(saveUrl);
+    } catch { setFailed(true); } finally { setBusy(false); }
+  };
+  return (
+    <button type="button" className="attachment-item community-dm-attachment-item community-dm-sent-file" onClick={() => void save()} disabled={busy || !onLoad} title={failed ? "This file is unavailable." : `Download ${attachment.name}`}>
+      <span className="attachment-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><path d="M14 2v6h6" /></svg></span>
+      <span className="attachment-name">{failed ? "Unavailable" : busy ? "Opening…" : attachment.name}</span>
+    </button>
+  );
+}
+
+// A message's files: one still on its way shows the picture the sender picked;
+// a sent one is fetched from the server.
+function MessageAttachments(props: { attachments: DirectMessageAttachment[]; onLoad?: (attachmentId: string) => Promise<Blob> }) {
+  const local = props.attachments.filter((attachment) => attachment.url);
+  const sent = props.attachments.filter((attachment) => !attachment.url);
+  return (
+    <>
+      {local.length ? <DirectMessageAttachmentViews attachments={local} /> : null}
+      {sent.length ? <div className="community-dm-sent-files">{sent.map((attachment) => <SentAttachment key={attachment.id} attachment={attachment} onLoad={props.onLoad} />)}</div> : null}
+    </>
+  );
+}
+
 function openAttachmentUrl(url: string | null | undefined) {
   const normalizedUrl = String(url ?? "").trim();
   if (!normalizedUrl) return;
@@ -169,7 +229,7 @@ function getDragFiles(event: DragEvent<HTMLElement>): File[] {
 function getComposerAttachmentUploadStatus(
   attachment: DirectMessageComposerAttachment,
 ): "queued" | "uploading" | "ready" | "failed" {
-  if (String(attachment.storage_id ?? "").trim()) return "ready";
+  if (String(attachment.attachment_id ?? "").trim()) return "ready";
   if (attachment.uploadStatus) return attachment.uploadStatus;
   return "failed";
 }
@@ -744,16 +804,26 @@ export function WebDirectMessagePanel(props: WebDirectMessagePanelProps) {
                   const isOwn = message.sender_user_id === props.sessionUserId;
                   const text = getMessageText(message);
                   const attachments = getMessageAttachments(message);
+                  const pictures = attachments.filter((attachment) => attachment.type === "image");
+                  const otherFiles = attachments.filter((attachment) => attachment.type !== "image");
                   const isFailedEcho = message.local_status === "failed";
                   const echoLocalId = String(message.local_id ?? "").trim();
                   return (
                     <Fragment key={message.id}>
                       {isNewDay ? <div className={cx("day")} style={{ margin: "0 0 4px" }}>{formatDirectMessageDayLabel(message.created_at)}</div> : null}
-                      <div className={`${cx(isOwn ? "mine" : "bub")}${message.local_status === "sending" ? " is-sending" : ""}`}>
-                        {text ? renderChatInlineMarkdown(text, { renderTextRun: props.renderTextWithLinks }) : null}
-                        {text ? <MessageLinkMedia text={text} /> : null}
-                        {attachments.length ? <DirectMessageAttachmentViews attachments={attachments} /> : null}
-                      </div>
+                      {/* A picture stands on its own, outside any bubble (as in a channel); words and other files keep the bubble. */}
+                      {pictures.length ? (
+                        <div className={`community-dm-standalone-media${isOwn ? " is-own" : ""}${message.local_status === "sending" ? " is-sending" : ""}`}>
+                          <MessageAttachments attachments={pictures} onLoad={props.onLoadAttachment} />
+                        </div>
+                      ) : null}
+                      {text || otherFiles.length ? (
+                        <div className={`${cx(isOwn ? "mine" : "bub")}${message.local_status === "sending" ? " is-sending" : ""}`}>
+                          {text ? renderChatInlineMarkdown(text, { renderTextRun: props.renderTextWithLinks }) : null}
+                          {text ? <MessageLinkMedia text={text} /> : null}
+                          {otherFiles.length ? <MessageAttachments attachments={otherFiles} onLoad={props.onLoadAttachment} /> : null}
+                        </div>
+                      ) : null}
                       {isFailedEcho ? (
                         <div className="community-dm-panel-message-send-failed" role="alert">
                           <span>{String(message.local_error ?? "").trim() || "Not sent."}</span>
@@ -953,7 +1023,7 @@ export function WebDirectMessagePanel(props: WebDirectMessagePanelProps) {
               >
                 {isMediaOnly ? (
                   <div className="community-dm-panel-media-only">
-                    <DirectMessageAttachmentViews attachments={attachments} />
+                    <MessageAttachments attachments={attachments} onLoad={props.onLoadAttachment} />
                   </div>
                 ) : shouldSeparateAttachments ? (
                   <div className="community-dm-panel-message-stack">
@@ -964,7 +1034,7 @@ export function WebDirectMessagePanel(props: WebDirectMessagePanelProps) {
                       <MessageLinkMedia text={text} />
                     </div>
                     <div className="community-dm-panel-media-only">
-                      <DirectMessageAttachmentViews attachments={attachments} />
+                      <MessageAttachments attachments={attachments} onLoad={props.onLoadAttachment} />
                     </div>
                   </div>
                 ) : (
@@ -975,7 +1045,7 @@ export function WebDirectMessagePanel(props: WebDirectMessagePanelProps) {
                       </div>
                     ) : null}
                     <MessageLinkMedia text={text} />
-                    <DirectMessageAttachmentViews attachments={attachments} />
+                    <MessageAttachments attachments={attachments} onLoad={props.onLoadAttachment} />
                   </div>
                 )}
                 {isFailedEcho ? (

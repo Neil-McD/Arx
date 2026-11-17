@@ -30,10 +30,12 @@ export const setCloudDirectTyping = forbidden;
 export const ensureCloudDirectConversationFromCommunity = forbidden;
 export const sendCloudDirectMessage = forbidden;
 export const sendCloudDirectMessageToUser = forbidden;
+export const uploadCloudDirectMessageAttachmentFile = forbidden;
+export const downloadCloudDirectMessageAttachment = forbidden;
+export const discardCloudDirectMessageAttachment = forbidden;
 export const blockCloudDirectMessageUser = forbidden;
 export const unblockCloudDirectMessageUser = forbidden;
 export const setCloudDirectConversationMuted = forbidden;
-export const uploadCloudDirectMessageAttachmentFile = forbidden;
 export const uploadCloudDirectMessageAttachmentFileForUser = forbidden;
 `;
 const server = await createServer({ configFile: join(root, "apps/web/vite.config.ts"), root: join(root, "apps/web"), server: { port: process.argv.includes("--serve") ? 5186 : 0, host: "127.0.0.1", strictPort: process.argv.includes("--serve") }, plugins: [{ name: "media-review-fixture", enforce: "pre", load(id) {

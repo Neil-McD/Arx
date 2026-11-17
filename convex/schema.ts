@@ -2173,6 +2173,32 @@ export default defineSchema({
     .index("by_conversation_clientMessageId", ["conversationId", "clientMessageId"])
     .index("by_senderUser", ["senderUserId"]),
 
+  // A file sent in a direct message. The sender reserves a row, the server
+  // stores the bytes itself, and one send claims the row for one message.
+  // Nothing here is trusted from the browser: not the storage id, the size
+  // or the type.
+  dmAttachments: defineTable({
+    uploaderUserId: v.id("users"),
+    conversationId: v.optional(v.id("dmConversations")),
+    // A first message to someone: the conversation does not exist yet.
+    targetUserId: v.optional(v.id("users")),
+    messageId: v.optional(v.id("dmMessages")),
+    uploadMessageKey: v.string(),
+    uploadExpiresAt: v.number(),
+    status: v.union(v.literal("pending"), v.literal("sent"), v.literal("failed")),
+    attachmentKind: v.union(v.literal("image"), v.literal("video"), v.literal("file")),
+    name: v.string(),
+    mimeType: v.string(),
+    sizeBytes: v.number(),
+    storageId: v.optional(v.id("_storage")),
+    contentHash: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_uploader_status", ["uploaderUserId", "status"])
+    .index("by_storage", ["storageId"])
+    .index("by_message", ["messageId"]),
+
   dmBlocks: defineTable({
     blockerUserId: v.id("users"),
     blockedUserId: v.id("users"),

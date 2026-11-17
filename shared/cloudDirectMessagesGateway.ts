@@ -1,5 +1,8 @@
 import type { ConvexReactClient } from "convex/react";
 import { bootstrapConvexAuthenticatedClient, requireConvexUrl } from "./convexAuthenticatedClient";
+import { resolveConvexRuntimeToken, type AuthSessionLike } from "./authSession";
+import { readConvexRuntimeUrl } from "./convexRuntime";
+import { DIRECT_MESSAGE_ATTACHMENT_DOWNLOAD_PATH, DIRECT_MESSAGE_ATTACHMENT_UPLOAD_PATH } from "./communityAttachmentPolicy";
 import {
   acquireAuthenticatedConvexRealtimeClient,
   type ConvexRealtimeEnsureSession,
@@ -347,4 +350,66 @@ export async function clearCloudDirectTyping<SessionT>(
     authSubject,
     conversationId: params.conversationId,
   });
+}
+
+// A file for a direct message goes to the server, which stores it itself and
+// answers with a reservation id. A send names that id; nothing else about the
+// file is taken from the browser. For a first message there is no
+// conversation yet: name the person instead.
+export async function uploadCloudDirectMessageAttachmentFile<SessionT>(
+  params: CloudDirectMessagesGatewayParams<SessionT> & {
+    conversationId?: string | null;
+    targetUserId?: string | null;
+    communityId?: string | null;
+    messageKey: string;
+    file: File;
+  },
+): Promise<{ attachmentId: string; name: string; mime: string; size: number; type: "image" | "video" | "file" }> {
+  await bootstrapConvexAuthenticatedClient(params.session);
+  const token = resolveConvexRuntimeToken(params.session as AuthSessionLike);
+  const baseUrl = String(readConvexRuntimeUrl() ?? "").replace(/\/+$/, "");
+  if (!token || !baseUrl) throw new Error("Sign in to attach files.");
+  const response = await fetch(`${baseUrl}${DIRECT_MESSAGE_ATTACHMENT_UPLOAD_PATH}`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": params.file.type || "application/octet-stream",
+      ...(params.conversationId ? { "X-Polynet-Conversation-Id": params.conversationId } : {}),
+      ...(params.targetUserId ? { "X-Polynet-Target-User-Id": params.targetUserId } : {}),
+      ...(params.communityId ? { "X-Polynet-Community-Id": params.communityId } : {}),
+      "X-Polynet-Message-Key": params.messageKey,
+      "X-Polynet-File-Name": encodeURIComponent(params.file.name || "attachment"),
+    },
+    body: params.file,
+  });
+  if (response.status === 413) throw new Error("That file is too large.");
+  if (response.status === 429) throw new Error("Too many files waiting to send. Send or remove some first.");
+  if (!response.ok) throw new Error("That file couldn't be attached.");
+  const payload = await response.json();
+  if (!payload?.attachment?.attachmentId) throw new Error("That file couldn't be attached.");
+  return payload.attachment;
+}
+
+// Only someone in the conversation is given the file.
+export async function downloadCloudDirectMessageAttachment<SessionT>(params: {
+  session: SessionT; attachmentId: string; signal?: AbortSignal;
+}): Promise<Blob> {
+  await bootstrapConvexAuthenticatedClient(params.session);
+  const token = resolveConvexRuntimeToken(params.session as AuthSessionLike);
+  const baseUrl = String(readConvexRuntimeUrl() ?? "").replace(/\/+$/, "");
+  if (!token || !baseUrl) throw new Error("Sign in to open this file.");
+  const response = await fetch(`${baseUrl}${DIRECT_MESSAGE_ATTACHMENT_DOWNLOAD_PATH}`, {
+    method: "POST", headers: { Authorization: `Bearer ${token}`, "X-Polynet-Attachment-Id": params.attachmentId },
+    signal: params.signal,
+  });
+  if (!response.ok) throw new Error("This file is unavailable.");
+  return response.blob();
+}
+
+// A file taken back out of a draft: its reservation is freed on the server.
+export async function discardCloudDirectMessageAttachment<SessionT>(
+  params: CloudDirectMessagesGatewayParams<SessionT> & { attachmentId: string },
+): Promise<void> {
+  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
+  await client.mutation("directMessages:discardDirectMessageAttachment" as any, { authSubject, attachmentId: params.attachmentId });
 }

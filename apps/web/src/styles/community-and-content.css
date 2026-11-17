@@ -8064,3 +8064,9 @@
   display: grid;
   gap: 2px;
 }
+
+/* A sent file in a direct message keeps to the panel's width in every look. */
+.community-dm-sent-files { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
+.community-dm-sent-image { display: block; max-width: min(280px, 100%); padding: 0; border: 0; background: none; border-radius: 10px; overflow: hidden; cursor: zoom-in; }
+.community-dm-sent-image img { display: block; max-width: 100%; max-height: 320px; border-radius: 10px; }
+.community-dm-sent-image.is-waiting { width: 220px; max-width: 100%; height: 140px; cursor: default; }
