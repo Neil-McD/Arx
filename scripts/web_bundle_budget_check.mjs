@@ -17,7 +17,9 @@ const limits = {
   // and drawing a sent file), which went 2 KiB over.
   // Nov 17: +15 KB for editing a course in the page (the lesson editor as the
   // page, drag to reorder), which went 0.2 KiB over.
-  maxTotalJsBytes: readLimit("WEB_BUNDLE_MAX_TOTAL_JS_BYTES", 3_465_000),
+  // Nov 17: +15 KB for the host's "Needs you" list on Home (join requests
+  // and waiting course changes decided in place), which went 5.3 KiB over.
+  maxTotalJsBytes: readLimit("WEB_BUNDLE_MAX_TOTAL_JS_BYTES", 3_480_000),
   maxHostOnlyJsBytes: readLimit("WEB_BUNDLE_MAX_HOST_ONLY_JS_BYTES", 800_000),
 };
 

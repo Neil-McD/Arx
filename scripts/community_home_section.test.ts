@@ -183,3 +183,18 @@ test("a quiet Home on the kit still offers the way back into the conversation", 
   expect(render(false, false)).not.toContain("Continue your conversation");
   expect(render(true, true)).not.toContain("Continue your conversation");
 });
+
+test("the host's sentence counts everything in the Needs you list", async () => {
+  const { needsYouCount, joinRowTitle, joinRowNames } = await import("../apps/web/src/v1/KitNeedsYou");
+  // People waiting are one row however many they are; each waiting course change and the question are one each.
+  expect(needsYouCount({ joinRequests: 6, changes: 1, question: true })).toBe(3);
+  expect(needsYouCount({ joinRequests: 0, changes: 0, question: false })).toBe(0);
+  expect(homeSentenceFor(busy, null, "host", 3)).toBe("3 people joined since yesterday, and 3 things need you.");
+  expect(homeSentenceFor(quiet, null, "host", 1)).toBe("1 thing needs you today.");
+  expect(homeSentenceFor(quiet, null, "host", 0)).toBe("Nothing needs you today.");
+  expect(joinRowTitle(1)).toBe("1 person asked to join");
+  expect(joinRowTitle(6)).toBe("6 people asked to join");
+  expect(joinRowNames(["Lena", "Marcus", "Priya", "Sam"], 6)).toBe("Lena, Marcus, Priya and 3 more.");
+  expect(joinRowNames(["Lena", null], 2)).toBe("Lena and Someone.");
+  expect(joinRowNames([], 2)).toBe("Nobody joins until you say yes.");
+});
