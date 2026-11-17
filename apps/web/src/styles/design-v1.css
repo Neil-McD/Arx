@@ -917,7 +917,7 @@
   width: max(264px, calc(100% - 12px));
   display: flex;
   flex-direction: column;
-  max-height: min(70vh, 480px);
+  max-height: min(78vh, 620px);
   padding: 6px;
   overflow: hidden;
   border: 1px solid var(--border-strong);
