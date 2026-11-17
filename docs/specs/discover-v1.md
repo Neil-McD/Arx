@@ -1,7 +1,7 @@
 # Discover (v1)
 
-Status on 2026-11-16: the list (this document's "What is listed" and "What a
-card carries") is built; the page is next. Mock:
+Status on 2026-11-16: the list and the page are built (design v1). The
+classic layout keeps its old Discover panel until it is deleted. Mock:
 `/design-lab?page=discover` on staging (`&phone=1`, `&many=1`).
 
 ## What it is

@@ -43,6 +43,7 @@ Current canonical/pathname routes include:
 - `/c/:slug/inbox`, `/c/:slug/inbox/:conversationId`
 - `/c/:slug/events/:event` (the event picked on Events; one time of a
   repeating event is `<event>_<start>`)
+- `/c/:slug/discover` (Discover, as a page of the community you are in; `/discover` is the public address, and a signed-in member who opens it is moved here by a history replace)
 - `/c/:slug/pods` (the Pods page)
 - `/c/:slug/pods/:pod` (a pod's own address: its room for someone in it, its outside page for a member who may see it, not found otherwise; the room itself is `/c/:slug/chat/:pod`)
 - `/c/:slug/settings`
