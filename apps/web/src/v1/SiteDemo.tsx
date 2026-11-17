@@ -8,8 +8,8 @@
 //   Welcomes and answers   someone new asks; the guide greets, answers from a lesson, and introduces them.
 //   Remembers   that answer becomes something the community knows.
 //   Briefs you  the host opens Home to what was handled and who needs them.
-import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Search } from "lucide-react";
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { ArrowLeft, Hash, Lock, Search } from "lucide-react";
 import { CommunityAvatar } from "../../../../shared/CommunityAvatar";
 import { CommunityNav } from "../../../../shared/CommunityNav";
 import type { BrainAttach, BrainMap } from "../../../../shared/communityBrain";
@@ -30,6 +30,10 @@ import { PanelLine, PanelPart } from "./KitPanel";
 // The window the app is drawn at; the frame scales it to the space it has.
 const APP_WIDTH = 1440;
 const APP_HEIGHT = 810;
+// On a phone the demo is the app's own phone layout, at a phone's size.
+const PHONE_WIDTH = 390;
+const PHONE_HEIGHT = 720;
+const PHONE_BELOW = 640;
 
 const COMMUNITY = { id: "demo", slug: "launch-lab", name: "Launch Lab", avatar_url: null, banner_url: null } as const;
 const HOST = "ana";
@@ -91,6 +95,8 @@ const FADE_SECONDS = 1;
 // played quicker, so a scene takes about six seconds and the whole loop half a minute.
 const PACE = 2.2;
 
+const POD_NAME = "Offer Sprint";
+
 const noop = () => {};
 const formatTime = (iso: string) => new Date(iso).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
 
@@ -105,6 +111,7 @@ const DEMO_CSS = `
 .site-demo-window{width:min(1180px,100%);margin:0 auto;border-radius:14px;border:1px solid rgba(255,255,255,.14);overflow:hidden;box-shadow:0 60px 140px -50px rgba(111,120,216,.35),0 40px 90px -40px #000}
 .site-demo .site-demo-page{transition:opacity .4s ease}
 .site-demo.is-ending .site-demo-page{opacity:0}
+@media (max-width:639px){.site-demo-window{width:min(390px,100%);border-radius:22px}}
 .site-demo-dots{display:flex;justify-content:center;gap:8px;margin-top:22px;flex-wrap:wrap}
 .site-demo-dots button{position:relative;overflow:hidden;height:34px;padding:0 16px;border-radius:999px;border:1px solid rgba(255,255,255,.12);background:transparent;color:rgba(243,244,246,.6);font:inherit;font-size:14px;cursor:pointer}
 .site-demo-dots button.on{color:#f3f4f6;border-color:rgba(255,255,255,.22)}
@@ -114,6 +121,32 @@ const DEMO_CSS = `
 @keyframes site-demo-in{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
 @media (prefers-reduced-motion:reduce){.site-demo *{animation:none!important;transition:none!important}}
 `;
+
+// The app's phone frame: its top bar and the page, with no left column.
+function PhoneFrame(props: { ending?: boolean; where: Left; children: ReactNode }) {
+  const channel = props.where.inPod ? POD_NAME : CHANNELS.find((candidate) => candidate.slug === props.where.channelSlug)?.name;
+  const label = props.where.tab === "agent" ? "Home" : props.where.tab === "resources" ? "Knowledge" : channel ?? "";
+  return (
+    <div className={`site-demo${props.ending ? " is-ending" : ""}`} style={{ height: PHONE_HEIGHT }}>
+      <style>{DEMO_CSS}</style>
+      <div className="app-root mobile-shell mobile-chrome-auto-hide" style={{ height: PHONE_HEIGHT }}>
+        <header className="mobile-topbar">
+          <div className="mobile-topbar-left"><button type="button" className="mobile-topbar-icon mobile-topbar-back" aria-label="Back"><ArrowLeft size={20} aria-hidden="true" /></button></div>
+          <div className="mobile-topbar-center">
+            <span className="mobile-topbar-context-label mobile-topbar-channel-label">
+              {props.where.tab === "chat" ? (props.where.inPod ? <Lock size={16} aria-hidden="true" /> : <Hash size={16} aria-hidden="true" />) : null}
+              <span>{label}</span>
+            </span>
+          </div>
+          <div className="mobile-topbar-right" />
+        </header>
+        <div className="app-shell no-left no-right" style={{ height: PHONE_HEIGHT }}>
+          <div className="web-main-surface-slot site-demo-page" style={{ display: "contents" }}>{props.children}</div>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function AppFrame(props: { ending?: boolean; left: ReactNode; children: ReactNode }) {
   const boxRef = useRef<HTMLDivElement | null>(null);
@@ -431,7 +464,7 @@ const ASK: Array<{ at: number; mine: boolean; text: string }> = [
   { at: 7.0, mine: false, text: "Done. I messaged Sam and invited him to Offer Sprint. I'll tell you when he replies." },
 ];
 const POD_AT = 9.4;
-const POD = { id: "c-pod", slug: "offer-sprint", name: "Offer Sprint" };
+const POD = { id: "c-pod", slug: "offer-sprint", name: POD_NAME };
 const POD_BEFORE: Line[] = [
   { id: "o1", who: "priya", minutesAgo: 240, text: "Draft two of my one-page offer is up. Cut it by half since Tuesday." },
 ];
@@ -539,17 +572,22 @@ const STAGE_MESSAGE = "polynet-site-demo";
 function DemoWindow(props: StageState) {
   const boxRef = useRef<HTMLDivElement | null>(null);
   const frameRef = useRef<HTMLIFrameElement | null>(null);
-  const [zoom, setZoom] = useState(1);
+  // Unknown until measured, so the frame is opened once, at the right size.
+  const [space, setSpace] = useState<number | null>(null);
   const [ready, setReady] = useState(false);
-  useEffect(() => {
+  useLayoutEffect(() => {
     const box = boxRef.current;
     if (!box) return;
-    const fit = () => setZoom(Math.min(1, box.clientWidth / APP_WIDTH));
+    const fit = () => setSpace(box.clientWidth);
     fit();
     const watcher = new ResizeObserver(fit);
     watcher.observe(box);
     return () => watcher.disconnect();
   }, []);
+  const phone = space !== null && space < PHONE_BELOW;
+  const width = phone ? PHONE_WIDTH : APP_WIDTH;
+  const height = phone ? PHONE_HEIGHT : APP_HEIGHT;
+  const zoom = space === null ? 1 : Math.min(1, space / width);
   useEffect(() => {
     const onMessage = (event: MessageEvent) => {
       if (event.origin === window.location.origin && event.source === frameRef.current?.contentWindow && event.data?.type === `${STAGE_MESSAGE}:ready`) setReady(true);
@@ -557,14 +595,18 @@ function DemoWindow(props: StageState) {
     window.addEventListener("message", onMessage);
     return () => window.removeEventListener("message", onMessage);
   }, []);
+  // A different frame (phone or laptop) has to say it is ready again.
+  useEffect(() => { setReady(false); }, [phone]);
   useEffect(() => {
     if (!ready) return;
     frameRef.current?.contentWindow?.postMessage({ type: STAGE_MESSAGE, index: props.index, at: props.at, ending: props.ending }, window.location.origin);
   }, [ready, props.index, props.at, props.ending]);
   return (
-    <div ref={boxRef} style={{ height: APP_HEIGHT * zoom, overflow: "hidden", background: "#0b0c0e" }}>
-      <iframe ref={frameRef} src="/design-lab?page=demo-frame" title="Polynet, playing" tabIndex={-1} aria-hidden="true"
-        style={{ display: "block", width: APP_WIDTH, height: APP_HEIGHT, border: 0, transform: `scale(${zoom})`, transformOrigin: "0 0", pointerEvents: "none" }} />
+    <div ref={boxRef} style={{ height: height * zoom, overflow: "hidden", background: "#0b0c0e" }}>
+      {space === null ? null : (
+        <iframe key={phone ? "phone" : "laptop"} ref={frameRef} src={`/design-lab?page=demo-frame${phone ? "&layout=phone" : ""}`} title="Polynet, playing" tabIndex={-1} aria-hidden="true"
+          style={{ display: "block", width, height, border: 0, transform: `scale(${zoom})`, transformOrigin: "0 0", pointerEvents: "none" }} />
+      )}
     </div>
   );
 }
@@ -582,8 +624,24 @@ export function SiteDemoStage() {
     window.parent?.postMessage({ type: `${STAGE_MESSAGE}:ready` }, window.location.origin);
     return () => window.removeEventListener("message", onMessage);
   }, []);
+  // The app takes its phone layout from the page's root, as it does for real.
+  const phone = new URLSearchParams(window.location.search).get("layout") === "phone";
+  const [laidOut, setLaidOut] = useState(!phone);
+  useLayoutEffect(() => {
+    if (!phone) return;
+    document.documentElement.dataset.layout = "phone";
+    setLaidOut(true);
+  }, [phone]);
   const scene = SCENES[state.index] ?? SCENES[0]!;
   const Scene = scene.Scene;
+  if (!laidOut) return null;
+  if (phone) {
+    return (
+      <PhoneFrame ending={state.ending} where={scene.left(state.at)}>
+        <Scene key={scene.key} at={state.at} now={now} />
+      </PhoneFrame>
+    );
+  }
   return (
     <AppFrame ending={state.ending} left={<LeftColumn {...scene.left(state.at)} />}>
       <Scene key={scene.key} at={state.at} now={now} />
