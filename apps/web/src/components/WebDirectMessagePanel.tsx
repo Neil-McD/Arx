@@ -804,16 +804,26 @@ export function WebDirectMessagePanel(props: WebDirectMessagePanelProps) {
                   const isOwn = message.sender_user_id === props.sessionUserId;
                   const text = getMessageText(message);
                   const attachments = getMessageAttachments(message);
+                  const pictures = attachments.filter((attachment) => attachment.type === "image");
+                  const otherFiles = attachments.filter((attachment) => attachment.type !== "image");
                   const isFailedEcho = message.local_status === "failed";
                   const echoLocalId = String(message.local_id ?? "").trim();
                   return (
                     <Fragment key={message.id}>
                       {isNewDay ? <div className={cx("day")} style={{ margin: "0 0 4px" }}>{formatDirectMessageDayLabel(message.created_at)}</div> : null}
-                      <div className={`${cx(isOwn ? "mine" : "bub")}${message.local_status === "sending" ? " is-sending" : ""}`}>
-                        {text ? renderChatInlineMarkdown(text, { renderTextRun: props.renderTextWithLinks }) : null}
-                        {text ? <MessageLinkMedia text={text} /> : null}
-                        {attachments.length ? <MessageAttachments attachments={attachments} onLoad={props.onLoadAttachment} /> : null}
-                      </div>
+                      {/* A picture stands on its own, outside any bubble (as in a channel); words and other files keep the bubble. */}
+                      {pictures.length ? (
+                        <div className={`community-dm-standalone-media${isOwn ? " is-own" : ""}${message.local_status === "sending" ? " is-sending" : ""}`}>
+                          <MessageAttachments attachments={pictures} onLoad={props.onLoadAttachment} />
+                        </div>
+                      ) : null}
+                      {text || otherFiles.length ? (
+                        <div className={`${cx(isOwn ? "mine" : "bub")}${message.local_status === "sending" ? " is-sending" : ""}`}>
+                          {text ? renderChatInlineMarkdown(text, { renderTextRun: props.renderTextWithLinks }) : null}
+                          {text ? <MessageLinkMedia text={text} /> : null}
+                          {otherFiles.length ? <MessageAttachments attachments={otherFiles} onLoad={props.onLoadAttachment} /> : null}
+                        </div>
+                      ) : null}
                       {isFailedEcho ? (
                         <div className="community-dm-panel-message-send-failed" role="alert">
                           <span>{String(message.local_error ?? "").trim() || "Not sent."}</span>
