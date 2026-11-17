@@ -1231,6 +1231,8 @@
 .app .th b{color:var(--v1-accent-ink,var(--accent));font-weight:500}
 .app:is(.light:not(.on-mode-dark),.on-mode-light) .re.mine{background:color-mix(in srgb,var(--accent) 14%,transparent);color:var(--v1-accent-ink,var(--ink))}
 .app:is(.light:not(.on-mode-dark),.on-mode-light) .re.mine:hover{background:color-mix(in srgb,var(--accent) 20%,transparent)}
+.app .mine:not(.re){background:color-mix(in srgb,var(--accent) 26%,var(--panel2))}
+.app:is(.light:not(.on-mode-dark),.on-mode-light) .mine:not(.re){background:color-mix(in srgb,var(--accent) 14%,#fff);color:var(--ink)}
 .app .re.readd{padding:0 6px;color:var(--ink3);cursor:pointer}.app .re.readd:hover{color:var(--ink)}
 .app .rx :global(.community-interaction-emoji-popover){right:auto;left:0}
 /* Many reactions wrap onto more lines rather than run past the edge. */
