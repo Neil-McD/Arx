@@ -1,6 +1,6 @@
 # Web app architecture: the rules, what is built, what is left
 
-Status on 2026-11-16, `main` at #607. Staging only; production is unchanged
+Status on 2026-11-16, `main` at #609. Staging only; production is unchanged
 and is Neil's call. This replaces the proposal written the same day at #591:
 the parts that were built are described as built, the parts that were not
 are listed with why.
@@ -51,7 +51,7 @@ Addresses under `/c/<slug>` (the phone adds `/m` in front):
 | `/pods`, `/pods/<pod>` | Pods; a pod's landing page or pitch |
 | `/chat/<pod>` | A pod's room (it is a channel) |
 | `/knowledge`, `/knowledge/<course>/<lesson>`, `/knowledge/guide`, `/knowledge/brain` | Knowledge |
-| `/events` | Events |
+| `/events`, `/events/<event>` | Events, an event picked |
 | `/members`, `/members/<membership>`, `/members/requests` | Members |
 | `/inbox`, `/inbox/<conversation>` | Inbox |
 | `/settings/<section>`, `/analytics` | Settings, Analytics |
@@ -72,14 +72,23 @@ reload.
   check proves each is a public query.
 - A subscription runs only while what it feeds is on screen. The channel feed
   connects on a channel and disconnects elsewhere.
+- Three ways to use it, in order of preference: `useLiveQuery` (the page
+  draws the live answer); `useLiveAnswer` (the page keeps the answer in its
+  own state and is handed every live answer); `useLiveChange` (the page's
+  own load pages or combines reads, so it loads again when the watched
+  answer changes). Never watch a read that includes fast-changing data: the
+  Members table's rows carry each person's last-seen time, written every 30
+  seconds, so the table follows the counts instead.
 - Nothing is keyed on the session object (`shared/pageSession.ts`), so a
   token renewal redraws nothing.
 
 Live today: the channel feed, pinned post and replies; the channel list;
 Members' roster; unread dots; Inbox and typing; the guide's brief; the brain
-map; the next event; the Events page; the Pods list.
+map; the next event; the Events page; the Pods list; a pod's detail and
+notes; join requests; the host's Members table (by its counts); Knowledge's
+courses, lessons and notes.
 
-Read once when the page opens, on purpose or not yet moved: see "Parked".
+Read once, on purpose: see "Parked".
 
 ### 3. Nothing moves after it draws
 
@@ -116,8 +125,9 @@ first draw wins the race shows on some loads and not others. For the phone,
 load `/m/c/<slug>/...` in a 390px same-origin iframe and use the iframe
 window's `PerformanceObserver`.
 
-Measured at #607: every desktop page 0.003 or less; phone channels, Home,
-Knowledge, Events, Pods and Inbox 0.001 or less.
+Measured at #609: every desktop page 0.003 or less; on the phone, channels,
+Home, Knowledge, Events, Members, Pods and Inbox 0.001 or less, and the
+community list 0.007.
 
 ## What was built
 
@@ -135,6 +145,8 @@ Knowledge, Events, Pods and Inbox 0.001 or less.
 | Pod addresses; no redirect into a pod after loading | #605 |
 | The feed connects only while shown; Events and Pods live | #606 |
 | Layout before data, measured on every page | #607 |
+| A picked event and a directory card in the address; the left column holds its rows | #608 |
+| Join requests, Members, Knowledge and pods follow changes | #609 |
 
 Checked by hand on staging as host: every page, with refresh, Back and
 Forward, on desktop and at phone width. In "View as a member": Home,
@@ -157,20 +169,29 @@ Knowledge, Events, Pods and Members show what a member should see.
 
 ## Parked: nice to have, none blocks
 
-- **Read once, could be live:** join requests and the Members table; the
-  Knowledge lists and course progress; a pod's detail and notes; Home's
-  moments.
-- **Not in the address:** a picked event (reminder emails link to the Events
-  page, which shows it); a member's card in the members' directory;
-  Knowledge's Resources/Notes tab; the Members filter; an open note.
-- **Small shifts left on the phone:** the community list, 0.013 (footer rows
-  arriving); Members, 0.005.
+- **Not in the address:** Knowledge's Resources/Notes tab; the Members
+  filter; an open note. Nobody links to these.
+- **A watched read runs twice on page load** where the page still loads its
+  own data and watches the same read (`useLiveChange`): once for the load,
+  once for the watch. For those pages an edit landing in the moment between
+  the two waits for the next change. Drawing the live answer itself removes
+  both; that is the later simplification.
+- **A role changed by another host** does not move the Members table until
+  its counts change.
+- **The phone's community list** still moves 0.007 (the account row, when
+  the bottom tab bar arrives). Under the budget.
 - **Unread dots** hold one live read per community a person is in, times two.
   For a member of one to three communities that is small; it is 42 for an
   account in 21.
+- **The bundle budget** was raised twice (Nov 13, Nov 16) because both
+  layouts ship. Lower it when the classic layout is deleted.
 
-Left as they are on purpose: settings, billing, profile and analytics load
-once. Only the person looking changes them.
+Left as they are on purpose:
+- Settings, billing, profile, analytics and a person's own course progress
+  load once. Only the person looking changes them.
+- Home's "since you were last here" is a snapshot taken on arrival. Live, it
+  would change under the reader.
+- "Who's here" refreshes every 30 seconds (see the table above).
 
 ## Before a production release
 
