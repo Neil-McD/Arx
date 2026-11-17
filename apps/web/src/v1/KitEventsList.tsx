@@ -12,6 +12,8 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { CalendarPlus, ChevronDown, ChevronRight, MapPin, Plus, Repeat, Video, X } from "lucide-react";
 import type { CloudCommunityEvent } from "../../../../shared/cloudCommunityEventsGateway";
+import { useRouteDetail, writeRouteDetail } from "../../../../shared/routeDetails";
+import { eventAddressKey, eventIdFromAddressKey } from "../../../../shared/webAppRouteState";
 import { eventDateBlock, eventDayWord, eventRepeatWord, featuredEventLabel } from "../components/communityEventsList";
 import { Btn, cx, Icon, KitApp, Rail, useMinWidth } from "./kit";
 import { PanelPart } from "./KitPanel";
@@ -64,7 +66,10 @@ export function KitEventsList(props: {
   // Where the right column's content goes (the page's rail).
   renderRail: (rail: ReactNode) => ReactNode;
 }) {
-  const [pickedId, setPickedId] = useState<string | null>(null);
+  // The event picked is part of the address (/events/<event>): a refresh,
+  // Back and a link keep it; picking one is a step back can return from.
+  const pickedId = eventIdFromAddressKey(useRouteDetail("event"));
+  const setPickedId = (id: string | null) => writeRouteDetail("event", id ? eventAddressKey(id) : null);
   const [asking, setAsking] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [pastOpen, setPastOpen] = useState(false);
@@ -76,8 +81,8 @@ export function KitEventsList(props: {
   const picked = all.find((event) => event.id === pickedId) ?? null;
   const isPast = (event: CloudCommunityEvent) => props.past.some((row) => row.id === event.id);
   const isSeries = (event: CloudCommunityEvent) => event.recurrence_frequency !== "none";
-  // An event that is gone (cancelled, or the list changed) is put down.
-  useEffect(() => { if (pickedId && !picked) setPickedId(null); }, [pickedId, picked]);
+  // An event that is gone (cancelled, or not in the months shown) is simply
+  // not shown; the address is left alone, since the list may still be loading.
   useEffect(() => { setAsking(false); }, [pickedId]);
   // Escape puts down what was picked (the form has its own).
   useEffect(() => {

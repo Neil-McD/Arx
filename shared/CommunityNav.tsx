@@ -25,7 +25,7 @@ import type { CommunityTab } from "./appShellNavigation";
 import { StableFramedMedia } from "./StableFramedMedia";
 import { usePointerSortableList } from "./usePointerSortableList";
 import { communityChannelCapacity, MAX_TOTAL_COMMUNITY_CHANNELS } from "./communityChannelCapacity";
-import { channelRowsToReserve, communitySlugInAddress, recallChannelRows, rememberChannelRows } from "./channelRowsMemory";
+import { channelRowsToReserve, communitySlugInAddress, navRowsToReserve, recallChannelRows, recallNavRows, rememberChannelRows, rememberNavRows } from "./channelRowsMemory";
 
 type CommunityNavCommunityLike = {
   slug?: string | null;
@@ -263,6 +263,17 @@ export const CommunityNav = memo(function CommunityNav({
   useEffect(() => {
     if (!showChannelLoadingSkeleton && channels.length > 0) rememberChannelRows(channelRowsSlug, channels.length);
   }, [channelRowsSlug, channels.length, showChannelLoadingSkeleton]);
+  // Design v1: the page rows and the foot hold their place too. How many a
+  // person sees depends on their role, which arrives with the access record.
+  const pageRows = (onOpenPods ? 1 : 0) + 2 + (appLinks?.length ?? 0) + (isV1 && onOpenMembers && canViewMembersActiveCommunity ? 1 : 0);
+  const footRows = (canViewActiveCommunityAnalytics ? 1 : 0) + (canCopyJoinLink ? 1 : 0);
+  const reservedPageRows = navRowsToReserve("pages", recallNavRows(channelRowsSlug, "pages"));
+  const reservedFootRows = navRowsToReserve("foot", recallNavRows(channelRowsSlug, "foot"));
+  useEffect(() => {
+    if (!isV1 || isLoadingAccess) return;
+    rememberNavRows(channelRowsSlug, "pages", pageRows);
+    rememberNavRows(channelRowsSlug, "foot", footRows);
+  }, [channelRowsSlug, footRows, isLoadingAccess, isV1, pageRows]);
   const reorderableChannelIds = channels
     .filter((channel) => !channel.is_general && Boolean(channel.id))
     .map((channel) => channel.id);
@@ -662,7 +673,18 @@ export const CommunityNav = memo(function CommunityNav({
         ) : null}
       </div>
       {isV1 ? null : <div className="community-nav-divider" aria-hidden="true" />}
-      {isLoadingAccess ? (
+      {isLoadingAccess && isV1 ? (
+        // The heading is always the same, and the rows hold the place of the
+        // ones this person saw last time, so nothing under them moves.
+        <>
+          <div className="community-nav-section-label">Community</div>
+          <div className="community-nav-access-loading community-nav-utility-loading" aria-label="Loading community navigation">
+            {Array.from({ length: reservedPageRows }).map((_, index) => (
+              <div className="community-nav-access-loading-row web-skeleton-block" key={index} />
+            ))}
+          </div>
+        </>
+      ) : isLoadingAccess ? (
         <div className="community-nav-access-loading community-nav-utility-loading" aria-label="Loading community navigation">
           {Array.from({ length: 3 }).map((_, index) => (
             <div className="community-nav-access-loading-row web-skeleton-block" key={index} />
@@ -740,7 +762,7 @@ export const CommunityNav = memo(function CommunityNav({
           ) : null}
         </>
       ) : null}
-      {isLoadingAccess ? (
+      {isLoadingAccess && isV1 ? null : isLoadingAccess ? (
         <>
           <div className="community-nav-divider" />
           <div className="community-nav-access-loading" aria-label="Loading navigation">
@@ -773,7 +795,15 @@ export const CommunityNav = memo(function CommunityNav({
           )}
         </>
       ) : null}
-      {isLoadingAccess ? (
+      {isLoadingAccess && isV1 ? (
+        reservedFootRows ? (
+          <div className="community-nav-footer" aria-hidden="true">
+            {Array.from({ length: reservedFootRows }).map((_, index) => (
+              <div className="community-nav-access-loading-row web-skeleton-block" key={index} />
+            ))}
+          </div>
+        ) : null
+      ) : isLoadingAccess ? (
         <div className="community-nav-footer" aria-hidden="true">
           <div className="community-nav-invite-loading web-skeleton-block" />
         </div>
