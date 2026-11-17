@@ -15,7 +15,9 @@ const limits = {
   // added about 2 KiB. This is 20 KiB of room, not a new target.
   // Nov 17: +10 KB for files in direct messages (upload, progress, retry,
   // and drawing a sent file), which went 2 KiB over.
-  maxTotalJsBytes: readLimit("WEB_BUNDLE_MAX_TOTAL_JS_BYTES", 3_450_000),
+  // Nov 17: +15 KB for editing a course in the page (the lesson editor as the
+  // page, drag to reorder), which went 0.2 KiB over.
+  maxTotalJsBytes: readLimit("WEB_BUNDLE_MAX_TOTAL_JS_BYTES", 3_465_000),
   maxHostOnlyJsBytes: readLimit("WEB_BUNDLE_MAX_HOST_ONLY_JS_BYTES", 800_000),
 };
 
