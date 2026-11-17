@@ -39,6 +39,9 @@ export function useDragOrder(ids: string[], onOrder: (ids: string[]) => void, ax
     }),
     item: (id: string) => ({
       "data-drag-item": id,
+      // Entering counts as "you may drop here" too: a drop is only allowed
+      // where the last enter or over said so.
+      onDragEnter: (event: DragEvent<HTMLElement>) => { if (heldRef.current) event.preventDefault(); },
       onDragOver: (event: DragEvent<HTMLElement>) => {
         if (!heldRef.current) return;
         event.preventDefault();
