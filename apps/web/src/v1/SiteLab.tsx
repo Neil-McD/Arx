@@ -6,6 +6,7 @@ import type { ReactNode } from "react";
 import type { DiscoverCommunitySnapshot } from "../../../../shared/communityTypes";
 import { KitApp } from "./kit";
 import { DiscoverCard } from "./KitDiscover";
+import { SiteDemo } from "./SiteDemo";
 
 const CSS = `
 .site{--bg:#07080a;--panel:#0d0f12;--panel2:#12151a;--ink:#f3f4f6;--ink2:rgba(243,244,246,.68);--ink3:rgba(243,244,246,.46);--line:rgba(255,255,255,.08);--line2:rgba(255,255,255,.14);--accent:#6f78d8;--accent-hi:#8b93ea;--ok:#5fcf9a;
@@ -31,6 +32,7 @@ const CSS = `
 .site .lede{margin:22px auto 0;max-width:56ch;font-size:19px;line-height:1.5;color:var(--ink2);text-wrap:pretty}
 .site .cta{display:flex;justify-content:center;gap:12px;margin-top:32px;flex-wrap:wrap}
 .site .fine{margin-top:14px;font-size:13.5px;color:var(--ink3)}
+.site .demo{margin:64px auto 0;width:min(1228px,100%);padding:0 24px}
 .site .shot{position:relative;margin:64px auto 0;width:min(1180px,100% - 48px);border-radius:14px;border:1px solid var(--line2);overflow:hidden;background:var(--panel);box-shadow:0 60px 140px -50px rgba(111,120,216,.35),0 40px 90px -40px #000}
 .site .shot img{display:block;width:100%;height:auto}
 /* The capture caught the pointer; this covers it (the area is flat). */
@@ -181,9 +183,9 @@ export function SiteLab() {
         </div>
         <p className="fine">No card. The community is free for good. The manager is $79 a month, with the first 14 days free.</p>
       </div>
-      <div className="shot">
-        <img src="/design-lab/site-home.jpg" alt="Home, as the host of a community sees it: the guide's greeting, its brief, and what the community has learned" />
-        <i aria-hidden="true" />
+      {/* The product, playing: five scenes of what the client success manager does. */}
+      <div className="demo" id="does">
+        <SiteDemo />
       </div>
 
       <section className="wrap">
@@ -193,30 +195,6 @@ export function SiteLab() {
           <div><b>A question waits a day.</b><span>You were on a call. By the time you see it, they've stopped checking.</span></div>
           <div><b>A new member says nothing.</b><span>Nobody said hello, so they never post, and never come back.</span></div>
           <div><b>You find out when they cancel.</b><span>The signs were there for weeks. You were busy running the thing.</span></div>
-        </div>
-      </section>
-
-      <section className="wrap" id="does">
-        <span className="kick">What your client success manager does</span>
-        <h2>The job you'd hire for, done all day.</h2>
-        <p className="sub">It works from what you've taught: your lessons, your posts, your answers. It says so when it doesn't know.</p>
-        <div className="jobs">
-          <Job num="01" title="Answers members from what you've taught" words="A question at 2 am gets your answer, with the lesson it came from. If it isn't sure, it asks the member who knows, or leaves it for you.">
-            <div className="msg"><span className="face">MO</span><div><b>Mira Okafor</b><span className="tag">Question</span><time>2:14 am</time><p>What should I charge for the first cohort? I have no audience yet.</p></div></div>
-            <div className="msg"><span className="face g">✦</span><div><b>Polynet, your guide</b><time>2:14 am</time><p>Neil's rule from lesson 3: price the first cohort at what five people will pay this week, not what it's worth. Most founding cohorts here landed between $200 and $500.</p><span className="src">From Pricing your first offer · lesson 3</span></div></div>
-          </Job>
-          <Job num="02" title="Welcomes every new person" words="Each newcomer gets a hello by name, the one thing to do first, and an introduction to someone they should know. The first two weeks decide whether people stay.">
-            <div className="msg"><span className="face g">✦</span><div><b>Polynet, your guide</b><time>9:02 am</time><p>Welcome, Jon. You said you're launching a paid newsletter. Start with lesson 1, then say hello to Dana: she launched hers here in March and offered to share her numbers.</p></div></div>
-            <div className="msg"><span className="face b">DR</span><div><b>Dana Ruiz</b><time>9:20 am</time><p>Happy to! Jon, send me your draft pricing page.</p></div></div>
-          </Job>
-          <div className="job">
-            <div className="job-words">
-              <span className="num">03</span>
-              <h3>Tells you who needs you</h3>
-              <p>When you open the app it says what needs you today, often nothing. Beside it is a short brief of what people are working on, and everything the community has learned so far.</p>
-            </div>
-            <div className="vig pic"><img src="/design-lab/site-panel.png" alt="The guide's brief and the community brain, from a real community" /></div>
-          </div>
         </div>
       </section>
 
