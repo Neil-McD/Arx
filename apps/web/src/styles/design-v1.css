@@ -4646,16 +4646,3 @@
 :root[data-design="v1"] .community-dm-standalone-media .community-dm-sent-image img {
   border-radius: 14px;
 }
-
-/* A readable left rail (Rashid, #630): solid text instead of see-through grey
-   (contrast about 13.5:1 dark and 12:1 light, was about 7.7:1 and 5:1), a
-   notch heavier. His 15px text and 36px rows were tried and were too big
-   (Neil, Nov 17): the size stays 14px on 28px rows. */
-:root[data-design="v1"] .community-nav :is(.nav-item, button.nav-item, a.nav-item) {
-  font-weight: 500;
-}
-:root[data-design="v1"]:not([data-theme="light"]) { --nav-ink: #d2d5da; }
-:root[data-design="v1"][data-theme="light"] { --nav-ink: #2a2f36; }
-:root[data-design="v1"] .community-nav-tools .community-search-ask {
-  color: var(--nav-ink);
-}
