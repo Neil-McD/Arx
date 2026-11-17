@@ -211,7 +211,8 @@ export function KitLessonEditor(props: {
         <div className={`kit-lesson-after ${cx("kunsaved")}`} role="status">
           <i aria-hidden="true" />
           <span>{error ?? "Unsaved changes"}</span>
-          <Btn small txt onClick={discard}>Discard</Btn>
+          {/* Not while a save is on its way: what was just sent cannot be taken back here. */}
+          <button type="button" className={cx("btn sm txt")} disabled={saving} onClick={discard}>Discard</button>
           <button type="button" className={cx("btn sm go")} disabled={saving || !dirty} onClick={() => void save()}>{saving ? "Saving…" : "Save"}</button>
         </div>
       ) : null}
