@@ -172,7 +172,9 @@ export function KitLessonEditor(props: {
         </label>
       )}
 
+      {/* A new lesson's stand-in title is selected, so typing replaces it. */}
       <input className={`kit-lesson-title ${cx("kedit-title")}`} value={title} autoFocus={props.focusTitle} onChange={(event) => setTitle(event.target.value)}
+        onFocus={(event) => { if (props.focusTitle && title === resource.title) event.currentTarget.select(); }}
         placeholder="Lesson title" aria-label="Lesson title" maxLength={160} />
 
       <div className="kit-lesson-editor kit-lesson-after" onInputCapture={() => setBodyTouched(true)} onPasteCapture={() => setBodyTouched(true)} onDropCapture={() => setBodyTouched(true)}
