@@ -4397,22 +4397,6 @@
   :root[data-design="v1"] .community-page-body > .community-page-rail { display: none; }
 }
 
-/* A host's course tools live in the right column; where that column is hidden
-   (below 1024px) they sit above the lesson instead. */
-:root[data-design="v1"] .knowledge-course-tools-inline {
-  display: none;
-}
-
-@media (max-width: 1023px) {
-  :root[data-design="v1"] .knowledge-course-tools-inline {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 8px;
-    margin-bottom: 14px;
-  }
-}
-
 /* The community brain fills its page to the edges: no reading column, no
    margins. On a window too short for the map's least height the page still
    scrolls, so the controls under the map stay in reach. */
