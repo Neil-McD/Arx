@@ -59,7 +59,9 @@ const CSS = `
 .site .beat::before{content:"";position:absolute;left:0;top:-44px;width:16px;height:16px;border-radius:999px;background:#fff;box-shadow:0 0 0 5px rgba(154,162,245,.22),0 0 26px 6px rgba(154,162,245,.7)}
 .site .beat small{display:block;font-size:12.5px;letter-spacing:.04em;text-transform:uppercase;color:var(--ink3)}
 .site .beat h3{margin:8px 0 0;font-size:23px;line-height:1.12;font-weight:600;letter-spacing:-.025em}
-.site .beat q{display:block;margin-top:14px;font-size:16.5px;line-height:1.4;color:var(--ink);quotes:"“" "”"}
+.site .beat q{display:block;margin-top:14px;font-size:16.5px;line-height:1.4;color:var(--ink);quotes:none}
+.site .beat q span::before{content:"“"}
+.site .beat q span::after{content:"”"}
 .site .beat q b{display:block;margin-bottom:2px;font-size:13px;font-weight:500;color:var(--accent-hi)}
 .site .beat p{margin:12px 0 0;font-size:14.5px;color:var(--ink2)}
 
@@ -163,7 +165,8 @@ const Arrow = () => (
 // stars around it, each joined to the nearest thing it grew from. More
 // learned, more stars: the same drawing at 8 points and at 260 is the whole
 // argument. Always the same for the same numbers (no chance in it).
-function Brain(props: { stars: number; width: number; height: number; seed: number; labels?: string[]; idPrefix: string }) {
+// `hub`: off where words sit over the middle (the hero), so nothing glows behind them.
+function Brain(props: { stars: number; width: number; height: number; seed: number; labels?: string[]; idPrefix: string; hub?: boolean }) {
   const { stars, width, height } = props;
   const drawing = useMemo(() => {
     let state = props.seed >>> 0;
@@ -201,8 +204,12 @@ function Brain(props: { stars: number; width: number; height: number; seed: numb
         const from = drawing[point.from]!;
         return <line key={`l${index}`} x1={from.x} y1={from.y} x2={point.x} y2={point.y} stroke="#9aa2f5" strokeOpacity={point.from === 0 ? 0.3 : 0.2} strokeWidth={0.8} />;
       })}
-      <circle cx={drawing[0]!.x} cy={drawing[0]!.y} r={Math.max(26, width * 0.05)} fill={`url(#${glow})`} />
-      <circle cx={drawing[0]!.x} cy={drawing[0]!.y} r={Math.max(4, width * 0.006)} fill="#fff" />
+      {props.hub === false ? null : (
+        <>
+          <circle cx={drawing[0]!.x} cy={drawing[0]!.y} r={Math.max(26, width * 0.05)} fill={`url(#${glow})`} />
+          <circle cx={drawing[0]!.x} cy={drawing[0]!.y} r={Math.max(4, width * 0.006)} fill="#fff" />
+        </>
+      )}
       {drawing.slice(1).map((point, index) => (
         <g key={`p${index}`} className={point.bright ? `tw${index % 3 === 1 ? " b" : index % 3 === 2 ? " c" : ""}` : undefined}>
           {point.bright ? <circle cx={point.x} cy={point.y} r={point.r * 6} fill={`url(#${glow})`} /> : null}
@@ -235,7 +242,7 @@ export function SiteLab() {
 
       <div className="hero" id="top">
         <div className="sky" aria-hidden="true">
-          <Brain idPrefix="hero" stars={260} width={1400} height={760} seed={7} />
+          <Brain idPrefix="hero" stars={260} width={1400} height={760} seed={7} hub={false} />
         </div>
         <div className="in wrap">
           <span className="pill"><i /> Free to start · live in a minute</span>
@@ -272,25 +279,25 @@ export function SiteLab() {
           <div className="beat">
             <small>Someone asks</small>
             <h3>It doesn't know yet, and says so.</h3>
-            <q><b>Mira</b>How do I find my first ten subscribers?</q>
+            <q><b>Mira</b><span>How do I find my first ten subscribers?</span></q>
             <p>It brings in Dana, who has done exactly that.</p>
           </div>
           <div className="beat">
             <small>It learns</small>
             <h3>Dana's answer is kept.</h3>
-            <q><b>Dana</b>Direct messages to people you know. Six yeses from fifteen.</q>
+            <q><b>Dana</b><span>Direct messages to people you know. Six yeses from fifteen.</span></q>
             <p>Not in a thread nobody will find. In what your community knows.</p>
           </div>
           <div className="beat">
             <small>It compounds</small>
             <h3>Next time, it just answers.</h3>
-            <q><b>Sam, a week later</b>Any advice on my first subscribers?</q>
+            <q><b>Sam, a week later</b><span>Any advice on my first subscribers?</span></q>
             <p>Straight away, with Dana's numbers, and credit to Dana.</p>
           </div>
           <div className="beat">
             <small>It pays off</small>
             <h3>Sam gets a result.</h3>
-            <q><b>Sam</b>Eight subscribers. My first $240.</q>
+            <q><b>Sam</b><span>Eight subscribers. My first $240.</span></q>
             <p>And how he did it is kept too, for whoever asks next.</p>
           </div>
         </div>
