@@ -17,14 +17,35 @@ concurrency:
 jobs:
   release-gate:
     name: Release Gate
-    # Pinned: ubuntu-latest moved to 26.04 (Nov 14), which the gate's Playwright Chromium does not support yet.
-    runs-on: ubuntu-24.04
+    # Where the gate runs is a repository variable, so it can move without a
+    # code change: set CI_RUNS_ON to another runner label that is Ubuntu 24.04
+    # (for example ubicloud-standard-2-ubuntu-2404) and delete it to come back.
+    # Pinned to 24.04: ubuntu-latest moved to 26.04 (Nov 14), which the gate's
+    # Playwright Chromium does not support yet.
+    runs-on: ${{ vars.CI_RUNS_ON || 'ubuntu-24.04' }}
     timeout-minutes: 30
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
+
+      # The same scan as secret-scan.yml, so that workflow can be deleted
+      # once `Secret Scan` is no longer a required check.
+      - name: Scan the commits this change adds for secrets
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_REF: ${{ github.base_ref }}
+          GITLEAKS_VERSION: 8.30.1
+          GITLEAKS_SHA256: 551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb
+        run: |
+          cd "$RUNNER_TEMP"
+          curl -sSfLo gitleaks.tar.gz "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          echo "${GITLEAKS_SHA256}  gitleaks.tar.gz" | sha256sum -c -
+          tar -xzf gitleaks.tar.gz gitleaks
+          cd "$GITHUB_WORKSPACE"
+          echo "Scanning origin/${BASE_REF}..HEAD"
+          "$RUNNER_TEMP/gitleaks" git . --config .gitleaks.toml --log-opts="origin/${BASE_REF}..HEAD" --redact --no-banner --exit-code 1
 
       - name: Setup Node.js
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
