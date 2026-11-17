@@ -978,7 +978,7 @@
   scrollbar-width: thin;
   scrollbar-color: var(--border-strong) transparent;
 }
-:root[data-design="v1"] .community-switcher-item-name { overflow-wrap: anywhere; text-wrap: pretty; }
+:root[data-design="v1"] .community-switcher-item-name { overflow-wrap: anywhere; text-wrap: balance; }
 :root[data-design="v1"] .community-switcher-avatar .community-avatar-frame-fallback {
   color: #fff;
   font-family: inherit;
