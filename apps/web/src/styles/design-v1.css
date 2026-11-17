@@ -4645,6 +4645,7 @@
 }
 :root[data-design="v1"] .community-dm-standalone-media .community-dm-sent-image img {
   border-radius: 14px;
+}
 
 /* A readable left rail: 15px rows on a 36px grid, and solid text instead of
    see-through grey (contrast about 13.5:1 dark and 12:1 light, was about
