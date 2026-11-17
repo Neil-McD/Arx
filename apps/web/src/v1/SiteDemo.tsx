@@ -21,7 +21,7 @@ import { WebAccountMenu } from "../components/WebAccountMenu";
 import { WebCommunityInteractionProjection } from "../components/WebCommunityInteractionProjection";
 import { WebCommunitySwitcher } from "../components/WebCommunitySwitcher";
 import { base, finish, pt } from "./brainExamples";
-import { Ask, Btn, Card, Chips, Dock, Eyebrow, Hello, HomeBody, KitApp, Rail, Scroll, Since, SinceItem, Top, View, cx } from "./kit";
+import { Ask, Btn, Card, Chips, Dock, Eyebrow, Hello, HomeBody, KitApp, Mine, Rail, Scroll, Since, SinceItem, Talk, Theirs, Top, View, cx } from "./kit";
 import { PanelBrain } from "./KitBrain";
 import { KitBrainPageFrame, KitBrainPageView } from "./KitBrainPage";
 import { BriefPart } from "./KitBrief";
@@ -143,7 +143,7 @@ function AppFrame(props: { ending?: boolean; left: ReactNode; children: ReactNod
   );
 }
 
-type Left = { tab: "chat" | "agent" | "resources"; channelSlug?: string; viewer?: string };
+type Left = { tab: "chat" | "agent" | "resources"; channelSlug?: string; viewer?: string; inPod?: boolean };
 
 // `viewer`: whose app it is. The host's by default; a member's has no
 // Analytics, no adding channels, and their own name at the foot.
@@ -155,7 +155,7 @@ function LeftColumn(props: Left) {
       {...({
         activeCommunity: COMMUNITY,
         communityTab: props.tab,
-        activeSelectionMode: "route",
+        activeSelectionMode: props.inPod ? "none" : "route",
         channels: CHANNELS,
         selectedChannelSlug: props.channelSlug ?? null,
         canViewMembersActiveCommunity: true,
@@ -171,6 +171,7 @@ function LeftColumn(props: Left) {
         onOpenInbox: noop,
         onOpenMembers: noop,
         onOpenPods: noop,
+        podsActive: props.inPod === true,
         memberCount: 48,
         toolsSlot: (
           <button type="button" className="community-search-ask" title="Search or ask your guide (⌘K)">
@@ -351,23 +352,27 @@ const SINCE_AT = [4.2, 5.6, 7.0];
 
 // Home's page: the greeting and what follows it, the guide's box, and the
 // right column.
-function HomePage(props: { host: boolean; time: string; greeting: string; line: string; chips: string[]; now: number; here: string; joined?: string; children: ReactNode }) {
+// `talk`: the conversation with the guide, once it is open.
+function HomePage(props: { host: boolean; time: string; greeting: string; line: string; chips: string[]; now: number; here: string; joined?: string; talk?: ReactNode; children: ReactNode }) {
+  const talking = Boolean(props.talk);
   return (
     <main className="workspace community-mode community-agent-workspace">
       <aside className="community-agent-dock community-agent-page is-open">
         <section className="community-agent-dock-panel has-home-rail is-kit-home" aria-label="Home">
-          <KitApp view="home" host={props.host} part="main">
+          <KitApp view="home" host={props.host} part="main" talking={talking}>
             <View index={0}>
+              {talking ? <Top titleView={0} title={<button type="button" className="kit-home-back" aria-label="Back to Home">← Home</button>} /> : null}
               <Scroll>
-                <Top title="Home" titleView={0} />
+                {talking ? null : <Top title="Home" titleView={0} />}
                 <HomeBody>
                   <Eyebrow community={COMMUNITY.name} time={props.time} />
                   <Hello greeting={props.greeting} line={props.line} />
                   {props.children}
+                  {props.talk ? <Talk>{props.talk}</Talk> : null}
                 </HomeBody>
               </Scroll>
               <Dock>
-                <Chips chips={props.chips} />
+                {talking ? null : <Chips chips={props.chips} />}
                 <Ask guide placeholder="Ask your guide anything" />
               </Dock>
             </View>
@@ -416,30 +421,61 @@ function BriefsScene({ at, now }: SceneProps) {
   );
 }
 
-// 5. Gets results: the member's side, two weeks on. Mira's win lands in
-// #wins, and the community answers.
+// 4. Gets results: the guide acts, and it pays off. Ana asks who is slipping
+// away; the guide answers, offers to bring Sam back, and does it. Sam shows
+// up in his pod, gets notes on his page, and posts his first client in #wins.
+const ASK: Array<{ at: number; mine: boolean; text: string }> = [
+  { at: 1.4, mine: true, text: "Who is at risk of leaving?" },
+  { at: 3.2, mine: false, text: "Sam. He stopped after lesson 4, and was here every day before that. I can check in with him and invite him to the Offer Sprint pod, where three people are working on the same lesson. Want me to?" },
+  { at: 5.6, mine: true, text: "Do it." },
+  { at: 7.0, mine: false, text: "Done. I messaged Sam and invited him to Offer Sprint. I'll tell you when he replies." },
+];
+const POD_AT = 9.4;
+const POD = { id: "c-pod", slug: "offer-sprint", name: "Offer Sprint" };
+const POD_BEFORE: Line[] = [
+  { id: "o1", who: "priya", minutesAgo: 240, text: "Draft two of my one-page offer is up. Cut it by half since Tuesday." },
+];
+const POD_LINES: Array<Line & { at: number }> = [
+  { id: "o2", at: POD_AT + 1.0, who: "sam", minutesAgo: 0, text: "Back at it. Here's my one-page offer for the coaching package. Be honest." },
+  { id: "o3", at: POD_AT + 2.8, who: "priya", minutesAgo: 0, text: "Lead with the result and cut the second paragraph. The price is right." },
+  { id: "o4", at: POD_AT + 4.4, who: "dana", minutesAgo: 0, text: "Add the start date and send it today. This is ready." },
+];
+const WIN_AT = POD_AT + 6.4;
 const WINS_BEFORE: Line[] = [
-  { id: "w0", who: "sam", minutesAgo: 900, text: "Second client signed at the new price. The one-page offer did the selling.", extra: { reaction_summary: [{ emoji: "🔥", count: 4 }] } },
-  { id: "w1", who: "dana", minutesAgo: 400, text: "Cohort two wrapped: eleven of twelve finished. Opening cohort three next month.", extra: { reaction_summary: [{ emoji: "👏", count: 8 }] } },
+  { id: "w0", who: "mira", minutesAgo: 600, text: "First five paying subscribers at $300 each. Two weeks ago I didn't have a price.", extra: { reaction_summary: [{ emoji: "🎉", count: 9 }] } },
 ];
-const WIN: Array<Line & { at: number }> = [
-  { id: "w2", at: 1.4, who: "mira", minutesAgo: 0, text: "First five paying subscribers at $300 each. Two weeks ago I didn't have a price. Thank you all." },
-  { id: "w3", at: 6.2, who: "dana", minutesAgo: 0, text: "Five in two weeks! Told you that page was close." },
-  { id: "w4", at: 9.4, who: "guide", minutesAgo: 0, text: "That's Mira's first $1,500. I've added it to this week's wins for Ana, and saved how she got there to Knowledge." },
+const WIN_LINES: Array<Line & { at: number }> = [
+  { id: "w2", at: WIN_AT + 1.0, who: "sam", minutesAgo: 0, text: "Signed my first client off the new page. $250 a month. Thank you, Offer Sprint." },
+  { id: "w4", at: WIN_AT + 4.0, who: "guide", minutesAgo: 0, text: "That's Sam back and paid, eight days after he went quiet. I've added it to this week's wins for Ana." },
 ];
-const WIN_TYPING = [{ from: 3.4, to: 6.2, who: "dana" }, { from: 7.0, to: 9.4, who: "guide" }];
-const CHEERS = [2.4, 3.2, 4.0, 4.9, 5.8, 7.4, 8.6, 10.2, 11.0];
-const RESULTS_SECONDS = 13.5;
+const CHEERS = [1.8, 2.3, 2.8, 3.3, 3.8, 4.6, 5.2].map((after) => WIN_AT + after);
+const RESULTS_SECONDS = WIN_AT + 6.6;
 
 function ResultsScene({ at, now }: SceneProps) {
+  if (at < POD_AT) {
+    const said = ASK.filter((line) => at >= line.at);
+    return (
+      <HomePage host time="8:04 am" greeting="Good morning, Ana." line="1 person joined since yesterday, and 1 thing needs you."
+        chips={["How was this week?", "Who is at risk of leaving?", "Who should I welcome?"]} now={now} here="Dana and 3 others are here" joined="2 joined this week"
+        talk={said.length ? said.map((line) => (line.mine ? <Mine key={line.at}>{line.text}</Mine> : <Theirs key={line.at}><p>{line.text}</p></Theirs>)) : undefined}>
+        {said.length ? null : (
+          <Card label="Worth a look" title="Sam hasn't been back in two weeks" say="He stopped after lesson 4, and was here every day before that. Your guide can check in with him, or you can.">
+            <Btn go>Talk it over</Btn>
+            <Btn txt>Not now</Btn>
+          </Card>
+        )}
+      </HomePage>
+    );
+  }
+  const inPod = at < WIN_AT;
   const cheers = CHEERS.filter((moment) => at >= moment).length;
-  const roots = [...WINS_BEFORE, ...WIN.filter((line) => at >= line.at)].map((line) => (
-    line.id === "w2" && cheers ? root({ ...line, extra: { reaction_summary: [{ emoji: "🎉", count: cheers }, ...(cheers > 3 ? [{ emoji: "🔥", count: cheers - 3 }] : [])] } }, now) : root(line, now)
-  ));
+  const lines = inPod ? [...POD_BEFORE, ...POD_LINES.filter((line) => at >= line.at)] : [...WINS_BEFORE, ...WIN_LINES.filter((line) => at >= line.at)];
+  const roots = lines.map((line) => (line.id === "w2" && cheers ? root({ ...line, extra: { reaction_summary: [{ emoji: "🎉", count: cheers }] } }, now) : root(line, now)));
   return (
     <ChannelPage>
-      <WebCommunityInteractionProjection
-        {...({ ...channelProps(CHANNELS[1]!, "mira"), roots, selectedRootId: null, replies: [], typingPresence: typingFor(WIN_TYPING, at, now), mainComposer: <Composer placeholder="Message #wins" /> } as any)}
+      <WebCommunityInteractionProjection key={inPod ? "pod" : "wins"}
+        {...({ ...channelProps(inPod ? POD : CHANNELS[1]!), ...(inPod ? { activeChannel: { ...POD, is_general: false, access_mode: "restricted" } } : {}), roots, selectedRootId: null, replies: [],
+          typingPresence: { users: [], total_count: 0 }, mainComposer: <Composer placeholder={inPod ? "Message Offer Sprint" : "Message #wins"} /> } as any)}
       />
     </ChannelPage>
   );
@@ -449,7 +485,7 @@ const SCENES: Array<{ key: string; label: string; seconds: number; say: string; 
   { key: "answers", label: "Welcomes and answers", seconds: SCENE_SECONDS, left: () => ({ tab: "chat", channelSlug: "general" }), say: "Someone new asks their first question. Your client success manager welcomes them, answers from the lesson you taught it in, and introduces the right person.", Scene: WelcomesScene },
   { key: "remembers", label: "Remembers", seconds: 8, left: () => ({ tab: "resources" }), say: "That answer becomes something your community knows, for the next person who asks.", Scene: RemembersScene },
   { key: "briefs", label: "Briefs you", seconds: 10.5, left: () => ({ tab: "agent" }), say: "You open the app to what was handled, and the one person who needs you.", Scene: BriefsScene },
-  { key: "results", label: "Gets results", seconds: RESULTS_SECONDS, left: () => ({ tab: "chat", channelSlug: "wins", viewer: "mira" }), say: "Two weeks later, Mira posts her first five paying subscribers. Members who get results stay.", Scene: ResultsScene },
+  { key: "results", label: "Gets results", seconds: RESULTS_SECONDS, left: (at) => (at < POD_AT ? { tab: "agent" } : at < WIN_AT ? { tab: "chat", inPod: true } : { tab: "chat", channelSlug: "wins" }), say: "Ask who's slipping away, and it brings them back: a message, an invite to the right pod, and a first client a week later.", Scene: ResultsScene },
 ];
 
 // The demo: one scene at a time, moving on by itself. A dot picks a scene;
