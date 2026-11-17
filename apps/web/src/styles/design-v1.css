@@ -4397,6 +4397,13 @@
   :root[data-design="v1"] .community-page-body > .community-page-rail { display: none; }
 }
 
+/* A course is the one page that centres: its lessons and the lesson are one
+   block in the middle of the room, with no right column to sit beside. */
+:root[data-design="v1"]:where(:not([data-layout="phone"])) .community-page-body > .community-tab-scroll > .web-community-centered-pane:has(.knowledge-course-cols) {
+  max-width: 1188px;
+  margin-inline: auto;
+}
+
 /* The community brain fills its page to the edges: no reading column, no
    margins. On a window too short for the map's least height the page still
    scrolls, so the controls under the map stay in reach. */
