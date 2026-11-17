@@ -29,7 +29,7 @@ function LessonList(props: { lessons: Lesson[]; current: string; done: Set<strin
   const percent = Math.round((props.done.size / props.lessons.length) * 100);
   const groups = [...new Set(props.lessons.map((lesson) => lesson.group))];
   return (
-    <aside aria-label="Lessons" style={{ width: 272, flex: "none", borderRight: "1px solid var(--line)", padding: "20px 14px 20px 20px", overflowY: "auto" }}>
+    <aside aria-label="Lessons" style={{ position: "sticky", top: 34, alignSelf: "flex-start", width: 248, flex: "none", maxHeight: "calc(100vh - 140px)", overflowY: "auto" }}>
       <div className={cx("kline")}><span>{props.done.size} of {props.lessons.length} done</span><em>{percent}%</em></div>
       <div className={cx("bar")} style={{ marginTop: 8 }}><i style={{ width: `${percent}%`, background: ACCENT }} /></div>
       {groups.map((group) => (
@@ -116,10 +116,12 @@ export function LessonLab() {
       <LabSide />
       <Main>
         <Header course={single ? "AI Employees Masterclass" : "Start Here"} />
-        <div style={{ flex: 1, minHeight: 0, display: "flex" }}>
-          {single ? null : <LessonList lessons={lessons} current={current} done={done} onPick={setCurrent} />}
-          <div style={{ flex: 1, minWidth: 0, overflowY: "auto", padding: "34px 40px 56px" }}>
-            <article style={{ maxWidth: 780, margin: "0 auto" }}>
+        {/* One scrolling area. The list sits beside the lesson, not against the
+            app's left column, and stays in view while the lesson scrolls. */}
+        <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "34px 40px 56px" }}>
+          <div style={{ display: "flex", gap: 56, maxWidth: single ? 780 : 1084, margin: "0 auto" }}>
+            {single ? null : <LessonList lessons={lessons} current={current} done={done} onPick={setCurrent} />}
+            <article style={{ flex: 1, minWidth: 0, maxWidth: 780 }}>
               {single ? null : <span className={cx("lab")}>Lesson {index + 1} of {lessons.length} · {lesson.minutes} min</span>}
               <h2 style={{ margin: single ? 0 : "8px 0 0", fontSize: 28, fontWeight: 600, letterSpacing: "-.018em", lineHeight: 1.18 }}>{lesson.title}</h2>
               <p style={{ margin: "12px 0 0", fontSize: 16, lineHeight: 1.6, color: "var(--ink2)" }}>
