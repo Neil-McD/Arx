@@ -37,3 +37,32 @@ export function communitySlugInAddress(pathname: string): string | null {
   const at = segments.indexOf("c");
   return at >= 0 && at <= 1 ? segments[at + 1] ?? null : null;
 }
+
+// The same for the rest of the left column: its page rows (Pods, Knowledge,
+// Events, a connected app, Members) and its foot (Analytics, Invite people).
+// What a person sees there depends on their role, which arrives with the
+// access record, so the count they saw last time holds the place.
+export type NavRowsPart = "pages" | "foot";
+const NAV_DEFAULT_ROWS: Record<NavRowsPart, number> = { pages: 3, foot: 1 };
+const navKey = (part: NavRowsPart, communitySlug: string) => `polynet_nav_rows:${part}:${communitySlug}`;
+
+export function navRowsToReserve(part: NavRowsPart, remembered: number | null): number {
+  if (remembered === null || !Number.isFinite(remembered)) return NAV_DEFAULT_ROWS[part];
+  return Math.max(0, Math.min(MAX_ROWS, Math.floor(remembered)));
+}
+
+export function rememberNavRows(communitySlug: string | null | undefined, part: NavRowsPart, rows: number): void {
+  const slug = String(communitySlug ?? "").trim();
+  if (!slug || rows < 0) return;
+  try { window.localStorage.setItem(navKey(part, slug), String(rows)); } catch { /* not remembered */ }
+}
+
+export function recallNavRows(communitySlug: string | null | undefined, part: NavRowsPart): number | null {
+  const slug = String(communitySlug ?? "").trim();
+  if (!slug) return null;
+  try {
+    const raw = window.localStorage.getItem(navKey(part, slug));
+    const rows = raw === null ? NaN : Number(raw);
+    return Number.isFinite(rows) && rows >= 0 ? rows : null;
+  } catch { return null; }
+}

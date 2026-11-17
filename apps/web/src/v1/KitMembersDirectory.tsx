@@ -7,6 +7,7 @@ import { ArrowLeft } from "lucide-react";
 import { Fragment, useContext, useEffect, useMemo, useState, type CSSProperties } from "react";
 import { createPortal } from "react-dom";
 import { UserAvatar } from "../../../../shared/UserAvatar";
+import { useRouteDetail, writeRouteDetail } from "../../../../shared/routeDetails";
 import {
   getCloudCommunityMemberProfile,
   listCloudCommunityMemberDirectory,
@@ -48,10 +49,15 @@ export function KitMembersDirectory(props: {
   const [failed, setFailed] = useState(false);
   const [filter, setFilter] = useState<Filter>("everyone");
   const [search, setSearch] = useState("");
-  const [openKey, setOpenKey] = useState<string | null>(null);
+  // The person picked is part of the address (/members/<membership>): a
+  // refresh, Back and a link keep them. With nobody picked the host is shown.
+  const routeMember = useRouteDetail("member");
+  const pickedKey = routeMember && routeMember !== "requests" ? routeMember : null;
+  const [firstKey, setFirstKey] = useState<string | null>(null);
+  const openKey = pickedKey ?? firstKey;
   // Below 1024px there is no right column: picking someone shows them in the
   // list's place, with a way back (the same layers the host's Members has).
-  const [picked, setPicked] = useState(false);
+  const picked = Boolean(pickedKey);
   const [profile, setProfile] = useState<CloudMemberProfile | null>(null);
 
   useEffect(() => {
@@ -65,10 +71,10 @@ export function KitMembersDirectory(props: {
 
   // The host opens first: the person a newcomer most wants to know.
   useEffect(() => {
-    if (!rows || openKey) return;
+    if (!rows || firstKey) return;
     const first = rows.find((row) => row.role === "owner") ?? rows[0];
-    if (first) setOpenKey(keyOf(first));
-  }, [rows, openKey]);
+    if (first) setFirstKey(keyOf(first));
+  }, [rows, firstKey]);
 
   useEffect(() => {
     if (!scope || !openKey) return;
@@ -105,7 +111,7 @@ export function KitMembersDirectory(props: {
             </div>
             <div className={cx("ppl")}>
               {shown.map((row) => (
-                <button key={keyOf(row)} type="button" className={cx("p", openKey === keyOf(row) && "sel", row.you && "you")} onClick={() => { setOpenKey(keyOf(row)); setPicked(true); }}>
+                <button key={keyOf(row)} type="button" className={cx("p", openKey === keyOf(row) && "sel", row.you && "you")} onClick={() => writeRouteDetail("member", keyOf(row))}>
                   <Face name={row.name} url={row.avatar_url} seed={row.user_id} getAvatarColor={props.getAvatarColor} getInitials={props.getInitials} />
                   <b>{row.name}{row.you ? <span className={cx("tag")}>you</span> : null}{roleTag(row.role) ? <span className={cx("tag")}>{roleTag(row.role)}</span> : null}</b>
                   <span>{row.working_on ?? (row.you ? "Add what you're working on" : row.here_now ? "Here now" : "")}</span>
@@ -121,7 +127,7 @@ export function KitMembersDirectory(props: {
 
   const rail = (
     <KitApp view="members" part="rail">
-      <button type="button" className="members-record-back" onClick={() => setPicked(false)} aria-label="Back to Members">
+      <button type="button" className="members-record-back" onClick={() => writeRouteDetail("member", null)} aria-label="Back to Members">
         <ArrowLeft size={14} strokeWidth={1.8} aria-hidden="true" />Members
       </button>
       <Rail index={5} label={profile ? profile.name : "Member"}>

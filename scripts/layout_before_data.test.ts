@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { expect, test } from "vitest";
 
-import { channelRowsToReserve, communitySlugInAddress } from "../shared/channelRowsMemory";
+import { channelRowsToReserve, communitySlugInAddress, navRowsToReserve } from "../shared/channelRowsMemory";
 
 // Layout before data: a page has its shape before its data arrives, so
 // nothing that is drawn moves afterwards. The staging measurements in the
@@ -69,4 +69,15 @@ test("Knowledge holds its builder row and draws its right column as one piece", 
 test("a pod's panel and landing page draw their parts once they have answered", () => {
   expect(read("apps/web/src/v1/KitPodRail.tsx")).toMatch(/const settled = usePanelSettled\(briefSettled\);/);
   expect(read("apps/web/src/v1/KitPodLanding.tsx")).toMatch(/const settled = usePanelSettled\(briefSettled && answered >= 2\);/);
+});
+
+test("the left column's page rows and foot hold the place of what this person saw last time", () => {
+  expect(navRowsToReserve("pages", null)).toBe(3);
+  expect(navRowsToReserve("foot", null)).toBe(1);
+  // A member with nothing in the foot: no rows held.
+  expect(navRowsToReserve("foot", 0)).toBe(0);
+  expect(navRowsToReserve("pages", 5)).toBe(5);
+  const nav = read("shared/CommunityNav.tsx");
+  expect(nav).toMatch(/isLoadingAccess && isV1 \? \([\s\S]{0,260}<div className="community-nav-section-label">Community<\/div>/);
+  expect(read("apps/web/src/styles/design-v1.css")).toMatch(/:root\[data-design="v1"\] \.community-nav-access-loading-row \{[^}]*height: 28px;/);
 });

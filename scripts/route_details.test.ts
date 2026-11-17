@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildAppRoutePath, parseAppRouteFromPathname } from "../shared/webAppRouteState";
+import { buildAppRoutePath, eventAddressKey, eventIdFromAddressKey, parseAppRouteFromPathname } from "../shared/webAppRouteState";
 import { carryRouteDetails, pathWithRouteDetail, readRouteDetailAt } from "../shared/routeDetails";
 
 const roundTrip = (path: string) => buildAppRoutePath(parseAppRouteFromPathname(path)!);
@@ -23,6 +23,9 @@ describe("every community address survives a refresh", () => {
     "/c/a/browse",
     "/c/a/settings/community",
     "/c/a/analytics",
+    "/c/a/events",
+    "/c/a/events/e1",
+    "/c/a/events/e1_1794000000000",
     "/c/a/members",
     "/c/a/members/m1",
     "/c/a/members/requests",
@@ -71,5 +74,26 @@ describe("details inside a page", () => {
   it("turn an old tag link into the path", () => {
     expect(carryRouteDetails("/c/a/chat/beta", "/c/a/chat/beta?thread=t1")).toBe("/c/a/chat/beta/t1");
     expect(carryRouteDetails("/c/a/resources/c1", "/c/a/resources/c1?lesson=l2")).toBe("/c/a/knowledge/c1/l2");
+  });
+});
+
+describe("a picked event is part of the Events address", () => {
+  it("reads and writes the event on Events only", () => {
+    expect(readRouteDetailAt("/c/a/events/e1", "event")).toBe("e1");
+    expect(pathWithRouteDetail("/c/a/events", "event", "e1")).toBe("/c/a/events/e1");
+    expect(pathWithRouteDetail("/m/c/a/events/e1", "event", null)).toBe("/m/c/a/events");
+    expect(readRouteDetailAt("/c/a/members/e1", "event")).toBeNull();
+  });
+
+  it("keeps the picked event when the app rewrites the same page's address", () => {
+    expect(carryRouteDetails("/c/a/events", "/c/a/events/e1")).toBe("/c/a/events/e1");
+    expect(carryRouteDetails("/c/a/knowledge", "/c/a/events/e1")).toBe("/c/a/knowledge");
+  });
+
+  it("writes one time of a repeating event without a colon, and reads it back", () => {
+    expect(eventAddressKey("e1:1794000000000")).toBe("e1_1794000000000");
+    expect(eventIdFromAddressKey("e1_1794000000000")).toBe("e1:1794000000000");
+    expect(eventIdFromAddressKey("e1")).toBe("e1");
+    expect(eventIdFromAddressKey("../x")).toBeNull();
   });
 });
