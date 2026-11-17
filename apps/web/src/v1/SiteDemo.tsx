@@ -125,7 +125,8 @@ const DEMO_CSS = `
 // The app's phone frame: its top bar and the page, with no left column.
 function PhoneFrame(props: { ending?: boolean; where: Left; children: ReactNode }) {
   const channel = props.where.inPod ? POD_NAME : CHANNELS.find((candidate) => candidate.slug === props.where.channelSlug)?.name;
-  const label = props.where.tab === "agent" ? "Home" : props.where.tab === "resources" ? "Knowledge" : channel ?? "";
+  // Home names itself on its own page; the bar only carries the way back.
+  const label = props.where.tab === "agent" ? "" : props.where.tab === "resources" ? "Knowledge" : channel ?? "";
   return (
     <div className={`site-demo${props.ending ? " is-ending" : ""}`} style={{ height: PHONE_HEIGHT }}>
       <style>{DEMO_CSS}</style>
@@ -368,7 +369,8 @@ function RemembersScene({ at, now }: SceneProps) {
   const learned = at >= LEARNED_AT;
   return (
     <main className="workspace community-mode">
-      <div className="community-body">
+      {/* On a phone the map is given the page's height, so it fills the screen under the bar. */}
+      <div className="community-body" style={document.documentElement.dataset.layout === "phone" ? { height: PHONE_HEIGHT - 54, display: "grid" } : undefined}>
         <CommunityPageFrame>
           <KitBrainPageFrame canManage fill>
             <KitBrainPageView key={learned ? "after" : "before"} session={null} communityId="demo" canManage onOpenCourse={noop} map={launchLabMap(now, learned)} />
