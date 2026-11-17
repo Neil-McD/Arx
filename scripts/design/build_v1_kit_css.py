@@ -678,7 +678,7 @@ css += """
 .app .kl.on i{border-color:var(--accent);background:transparent;box-shadow:none;border-width:1.5px}
 .app .kl.d .ic{color:var(--v1-accent-ink,var(--accent))}
 .app .ktools{display:flex;flex-wrap:wrap;align-items:center;gap:8px;max-width:1076px;margin:14px auto 0}
-.app .kfoot{display:flex;align-items:center;gap:8px;margin-top:30px;padding-top:20px;border-top:1px solid var(--line)}
+.app .kfoot{display:flex;flex-wrap:wrap;align-items:center;gap:8px;row-gap:10px;margin-top:30px;padding-top:20px;border-top:1px solid var(--line)}
 .app .kfoot-gap{flex:1}
 .app .kisdone{display:inline-flex;align-items:center;gap:6px;height:32px;padding:0 10px;border-radius:8px;font-size:13px;color:var(--ink3);cursor:pointer}
 .app .kisdone .ic{width:14px;height:14px;color:var(--v1-accent-ink,var(--accent))}.app .kisdone:hover{background:var(--s2);color:var(--ink)}
