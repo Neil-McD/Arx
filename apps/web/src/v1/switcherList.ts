@@ -1,9 +1,11 @@
-// The community switcher's list. With a few communities it is one list, the
-// one you're in first. Past SWITCHER_GROUPS_FROM it is "Recent" (where you
+// The community switcher's list. Up to ten communities are one list, the
+// one you're in first. From SWITCHER_GROUPS_FROM it is "Recent" (where you
 // are, then the two you last opened) and "All". When each was last opened is
 // remembered in this browser; a convenience only, the list works without it.
 
-export const SWITCHER_GROUPS_FROM = 7;
+// A list long enough to search gets a search box.
+export const SWITCHER_SEARCH_FROM = 7;
+export const SWITCHER_GROUPS_FROM = 11;
 const RECENT_SHOWN = 3;
 const KEY = "polynet_community_opened";
 
