@@ -119,7 +119,8 @@ assert.match(schema, /dmParticipants: defineTable\(\{[\s\S]*participantType: v\.
 assert.match(schema, /dmParticipants: defineTable\(\{[\s\S]*lastReadSeq: v\.number\(\)/, "DM participants must store per-user read position");
 assert.match(schema, /dmParticipants: defineTable\(\{[\s\S]*lastActivityAt: v\.optional\(v\.number\(\)\)/, "DM participants must store optional inbox activity ordering");
 assert.match(schema, /dmMessages: defineTable\(\{[\s\S]*conversationId: v\.id\("dmConversations"\)[\s\S]*senderType: v\.union\(v\.literal\("user"\), v\.literal\("agent"\), v\.literal\("system"\)\)/, "DM messages must be conversation-scoped and agent-native");
-assert.doesNotMatch(schema, /dmAttachments:/, "first DM attachment slice must not introduce a separate attachment table");
+// Nov 17: a DM file has its own row, which is what makes it sendable once, by its uploader only.
+assert.match(schema, /dmAttachments: defineTable\(\{[\s\S]*?uploaderUserId: v\.id\("users"\)[\s\S]*?\.index\("by_storage", \["storageId"\]\)[\s\S]*?\.index\("by_message", \["messageId"\]\)/, "DM files must be tracked in their own rows, by uploader, storage and message");
 assert.match(schema, /dmTypingPresence: defineTable\(\{[\s\S]*conversationId: v\.id\("dmConversations"\)[\s\S]*userId: v\.id\("users"\)[\s\S]*displayUntil: v\.number\(\)/, "DM typing presence must be conversation-scoped ephemeral presence");
 assert.match(schema, /\.index\("by_canonicalKey", \["canonicalKey"\]\)/, "direct conversations must have a canonical pair key");
 assert.match(schema, /\.index\("by_user_status", \["userId", "status"\]\)/, "participants must support a current-user inbox query");
@@ -382,8 +383,8 @@ assert.match(dmHost, /typingPresence=\{directTypingPresence\}/, "global DM host 
 assert.match(dmHost, /uploadStatus\?: "queued" \| "uploading" \| "ready" \| "failed"/, "global DM host must model attachment upload lifecycle state");
 assert.match(dmHost, /uploadStatus: "queued"/, "new DM attachment drafts must start queued");
 assert.match(dmHost, /hasUnreadyDirectAttachments/, "global DM host must block sends while attachments are queued, uploading, or failed");
-assert.match(dmHostSerializeAttachments, /getDirectAttachmentUploadStatus\(attachment\) !== "ready"[\s\S]*continue/, "global DM host must serialize only ready uploaded attachments");
-assert.match(dmHostSerializeAttachments, /storageId/, "global DM host must serialize uploaded storage ids for DM attachment sends");
+assert.match(dmHostSerializeAttachments, /attachment_id: attachmentId/, "global DM host must name each sent file by the server's reservation id");
+assert.doesNotMatch(dmHostSerializeAttachments, /storage|size|mime|name:/, "global DM host must send nothing about a file except its reservation id");
 assert.doesNotMatch(dmHostSerializeAttachments, /data_url|text:/, "global DM host must not serialize inline attachment payloads for DMs");
 assert.doesNotMatch(dmHost, /prepareDirectAttachmentsForSend/, "DM send path must not upload implicitly during send");
 assert.match(dmHost, /attachments=\{directMessagePanel\.attachments\}/, "global DM host must pass composer attachments into the DM panel");
@@ -479,9 +480,20 @@ assert.match(packageJson, /check:direct-messages-contract-proof/, "package scrip
 
 console.log("PASS: direct messages are community-origin, participant-based, and follow-free.");
 
-// Nov 5: direct messages are text only. Nothing uploads a DM file, and any
-// attachment a send carries (an older page) is refused.
-assert.match(dmAppendMessageHelper, /dm_attachments_not_supported/, "DM send must refuse any attachment");
-assert.doesNotMatch(directMessages, /ctx\.storage\.generateUploadUrl/, "DM backend must not hand out upload URLs");
-assert.doesNotMatch(gateway, /AttachmentUploadUrl|uploadCloudDirectMessageAttachmentFile/, "web gateway must not upload DM files");
-assert.doesNotMatch(dmHost, /onAttachmentFilesSelected=/, "Studio's DM host must not offer file selection");
+// Nov 5: DM files were removed because a send trusted a storage id from the
+// browser. Nov 17: they are back, the way channels do theirs. The rule that
+// stays: nothing about a file is taken from the browser.
+const dmAttachmentCore = read("convex/directMessageAttachmentCore.ts");
+const dmAttachmentServer = read("convex/directMessageAttachments.ts");
+const dmAttachmentHttp = read("convex/httpDirectMessageAttachments.ts");
+assert.match(dmAppendMessageHelper, /requireSendableDirectMessageAttachments[\s\S]*parseDirectMessageAttachmentIds\(args\.attachments\)/, "DM send must accept only the sender's own finished uploads, named by reservation id");
+assert.match(dmAttachmentCore, /keys\.length !== 1 \|\| keys\[0\] !== "attachment_id"[\s\S]*dm_attachments_not_supported/, "a send that names a storage id, a URL or a size must be refused");
+assert.match(dmAttachmentCore, /String\(row\.uploaderUserId\) !== String\(args\.senderUserId\) \|\| row\.status !== "pending" \|\| row\.messageId/, "a file must be sendable only by its uploader, and only once");
+assert.doesNotMatch(directMessages, /ctx\.storage\.generateUploadUrl|ctx\.storage\.getUrl/, "the DM functions a browser can call must not hand out upload or storage URLs");
+assert.match(dmAttachmentServer, /export const prepareInternal = internalMutation/, "the upload URL must be issued by an internal function only");
+assert.doesNotMatch(dmAttachmentServer, /= (mutation|query|action)\(/, "nothing in the DM upload module may be callable from a browser");
+assert.match(dmAttachmentServer, /requireActiveUserParticipant\(\{ ctx, conversationId: message\.conversationId, userId: args\.userId \}\)/, "a DM file must be served only to someone in its conversation");
+assert.match(dmAttachmentHttp, /requireAuthenticatedActor[\s\S]*storeDirectMessageAttachmentUpload/, "the DM upload route must be signed in and store the bytes itself");
+assert.match(gateway, /DIRECT_MESSAGE_ATTACHMENT_UPLOAD_PATH/, "the web gateway must upload DM files through the server's route");
+assert.doesNotMatch(gateway, /AttachmentUploadUrl|storageId|storage_id/, "the web gateway must never handle an upload URL or a storage id");
+assert.match(dmHost, /onAttachmentFilesSelected=\{addDirectAttachmentFiles\}/, "the DM host must offer file selection, drop and paste");

@@ -20,7 +20,10 @@ import {
   sendCloudDirectMessage,
   sendCloudDirectMessageToUser,
   subscribeCloudDirectMessages,
+  downloadCloudDirectMessageAttachment,
+  uploadCloudDirectMessageAttachmentFile,
 } from "../../../../shared/cloudDirectMessagesGateway";
+import { COMMUNITY_ATTACHMENT_MAX_COUNT, communityAttachmentByteLimit } from "../../../../shared/communityAttachmentPolicy";
 import { useDirectMessageTypingPresence } from "../../../../shared/useDirectMessageTypingPresence";
 import { useWebVoiceInputController } from "../../../../shared/useWebVoiceInputController";
 import { mergeVoiceTranscript } from "../../../../shared/voiceCapture";
@@ -296,14 +299,14 @@ function buildLocalEchoContentJson(
       type: attachment.type,
       mime: attachment.mime ?? null,
       size: attachment.size,
-      storage_id: String(attachment.storage_id ?? "").trim(),
+      // The picture the sender picked, shown until the sent message replaces this one.
       url: attachment.data_url ?? null,
     })),
   };
 }
 
 function getDirectAttachmentUploadStatus(attachment: DirectMessageAttachmentDraft): "queued" | "uploading" | "ready" | "failed" {
-  if (String(attachment.storage_id ?? "").trim()) return "ready";
+  if (String(attachment.attachment_id ?? "").trim()) return "ready";
   if (attachment.uploadStatus) return attachment.uploadStatus;
   if (attachment.file instanceof File) return "queued";
   return "failed";
@@ -313,20 +316,13 @@ function hasUnreadyDirectAttachments(attachments: DirectMessageAttachmentDraft[]
   return attachments.some((attachment) => getDirectAttachmentUploadStatus(attachment) !== "ready");
 }
 
+// A send names each file by the server's reservation id and nothing else: the
+// server refuses a storage id, a URL or a size from the browser.
 function serializeDirectAttachmentsForWrite(attachments: DirectMessageAttachmentDraft[]): unknown[] {
   const out: unknown[] = [];
   for (const attachment of attachments) {
-    if (getDirectAttachmentUploadStatus(attachment) !== "ready") continue;
-    const storageId = String(attachment.storage_id ?? "").trim();
-    if (!storageId) continue;
-    out.push({
-      id: attachment.id,
-      name: attachment.name,
-      type: attachment.type,
-      mime: attachment.mime ?? null,
-      size: attachment.size,
-      storageId,
-    });
+    const attachmentId = String(attachment.attachment_id ?? "").trim();
+    if (attachmentId) out.push({ attachment_id: attachmentId });
   }
   return out;
 }
@@ -1529,6 +1525,90 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
     updateConversationEchoes,
   ]);
 
+  // ---- files: picked, dropped or pasted into the reply box
+  const patchConversationAttachments = useCallback((
+    conversationId: string,
+    change: (list: DirectMessageAttachmentDraft[]) => DirectMessageAttachmentDraft[],
+    error?: string | null,
+  ) => {
+    setDirectMessagePanel((previous) => previous?.conversation.id === conversationId
+      ? { ...previous, attachments: change(previous.attachments), ...(error !== undefined ? { error } : null) }
+      : previous);
+    // Uploads finish after you move to another conversation too.
+    const draft = draftsByConversationRef.current[conversationId];
+    if (draft) draftsByConversationRef.current[conversationId] = { ...draft, attachments: change(draft.attachments) };
+  }, []);
+
+  const uploadDirectAttachmentDraft = useCallback(async (conversation: DirectMessageConversation, draft: DirectMessageAttachmentDraft) => {
+    const conversationId = conversation.id;
+    const file = draft.file;
+    if (!(file instanceof File)) return;
+    patchConversationAttachments(conversationId, (list) => list.map((item) => item.id === draft.id ? { ...item, uploadStatus: "uploading" as const, uploadError: null } : item));
+    try {
+      const usableSession = await resolveDirectMessageSession(session, ensureSession, "direct_messages_send");
+      if (!usableSession) throw new Error("Sign in to attach files.");
+      // A first message has no conversation yet: the file is reserved for the person.
+      const virtual = isVirtualDirectConversationId(conversationId);
+      const uploaded = await uploadCloudDirectMessageAttachmentFile({
+        session: usableSession,
+        conversationId: virtual ? null : conversationId,
+        targetUserId: virtual ? virtualPeerUserIdFromConversationId(conversationId) : null,
+        communityId: virtual ? conversation.created_from_community?.id ?? null : null,
+        messageKey: `dm:${conversationId}`.slice(0, 150),
+        file,
+      });
+      patchConversationAttachments(conversationId, (list) => list.map((item) => item.id === draft.id
+        ? { ...item, attachment_id: uploaded.attachmentId, mime: uploaded.mime, size: uploaded.size, type: uploaded.type === "image" ? "image" as const : "file" as const, uploadStatus: "ready" as const, uploadError: null }
+        : item));
+    } catch (error) {
+      const message = error instanceof Error && error.message ? error.message : "That file couldn't be attached.";
+      patchConversationAttachments(conversationId, (list) => list.map((item) => item.id === draft.id ? { ...item, uploadStatus: "failed" as const, uploadError: message } : item), message);
+    }
+  }, [ensureSession, patchConversationAttachments, session]);
+
+  const addDirectAttachmentFiles = useCallback((files: FileList | readonly File[]) => {
+    const current = directMessagePanel;
+    if (!current) return;
+    // Read the list now: a drop's or a paste's files are gone once its event ends.
+    const picked = Array.from(files).filter((file): file is File => file instanceof File);
+    const room = Math.max(0, COMMUNITY_ATTACHMENT_MAX_COUNT - current.attachments.length);
+    let error: string | null = picked.length > room ? `You can attach up to ${COMMUNITY_ATTACHMENT_MAX_COUNT} files to a message.` : null;
+    const drafts: DirectMessageAttachmentDraft[] = [];
+    for (const file of picked.slice(0, room)) {
+      const isImage = /^image\/(png|jpeg|gif|webp)$/.test(file.type);
+      const name = file.name || (isImage ? "Pasted image" : "Attachment");
+      if (file.size > communityAttachmentByteLimit(file.type || "")) { error = `${name} is too large.`; continue; }
+      drafts.push({
+        id: createLocalDirectMessageId(), name, type: isImage ? "image" : "file", mime: file.type || null, size: file.size, file,
+        data_url: isImage ? URL.createObjectURL(file) : null, uploadStatus: "queued", uploadError: null,
+      });
+    }
+    if (drafts.length === 0 && !error) return;
+    patchConversationAttachments(current.conversation.id, (list) => [...list, ...drafts], error);
+    for (const draft of drafts) void uploadDirectAttachmentDraft(current.conversation, draft);
+  }, [directMessagePanel, patchConversationAttachments, uploadDirectAttachmentDraft]);
+
+  const retryDirectAttachment = useCallback((attachmentId: string) => {
+    const current = directMessagePanel;
+    const draft = current?.attachments.find((item) => item.id === attachmentId);
+    if (current && draft) void uploadDirectAttachmentDraft(current.conversation, draft);
+  }, [directMessagePanel, uploadDirectAttachmentDraft]);
+
+  const removeDirectAttachment = useCallback((attachmentId: string) => {
+    const current = directMessagePanel;
+    if (!current) return;
+    const draft = current.attachments.find((item) => item.id === attachmentId);
+    if (draft?.data_url?.startsWith("blob:")) URL.revokeObjectURL(draft.data_url);
+    // The server clears an upload nobody sends.
+    patchConversationAttachments(current.conversation.id, (list) => list.filter((item) => item.id !== attachmentId), null);
+  }, [directMessagePanel, patchConversationAttachments]);
+
+  const loadDirectAttachment = useCallback(async (attachmentId: string) => {
+    const usableSession = await resolveDirectMessageSession(session, ensureSession, "direct_messages_read");
+    if (!usableSession) throw new Error("Sign in to open this file.");
+    return downloadCloudDirectMessageAttachment({ session: usableSession, attachmentId });
+  }, [ensureSession, session]);
+
   const retryDirectMessageEcho = useCallback(
     (localId: string) => {
       const current = directMessagePanel;
@@ -1755,6 +1835,10 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
             );
           }}
           onSend={sendDirectMessage}
+          onAttachmentFilesSelected={addDirectAttachmentFiles}
+          onRetryAttachment={retryDirectAttachment}
+          onRemoveAttachment={removeDirectAttachment}
+          onLoadAttachment={loadDirectAttachment}
           onRetryLocalMessage={retryDirectMessageEcho}
           onDiscardLocalMessage={discardDirectMessageEcho}
           onComposerBlur={() => {
