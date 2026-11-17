@@ -71,6 +71,7 @@ An authorized community is mounted at:
 ```text
 /communities/<slug>/
 ├── community.md
+├── rules.md          # rules for AIs: Polynet's, then the host's house rules
 ├── members/
 ├── resources/
 ├── channels/
@@ -119,6 +120,12 @@ agent acting for a member and a community's site.
 What a person's own AI may do in a minute and in a day is limited, reads
 included ([specs/agent-access-v0.md](specs/agent-access-v0.md)). A call over
 a limit answers `rate_limited` with `retry_after_ms`.
+
+On connecting, the server tells the AI to read `rules.md` in a community
+before writing there. What it writes is checked whatever it was told (length,
+links, mentions, repeated words: `ai_post_too_long`, `ai_post_too_many_links`,
+`ai_post_mentions_everyone`, `ai_post_too_many_mentions`, `ai_post_duplicate`)
+and marked "via AI" for everyone.
 
 Both lanes can list, read, and search the member repository. Both can write
 participation to an exact returned `channels/<slug>/` path. Only the builder lane

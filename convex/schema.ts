@@ -839,6 +839,8 @@ export default defineSchema({
     memoryMetabolismRevision: v.optional(v.number()),
     memoryMetabolismSettledRevision: v.optional(v.number()),
     memoryMetabolismRequestedAt: v.optional(v.number()),
+    // The host's house rules for members' own AIs (rules.md; convex/communityAiRules.ts).
+    aiHouseRules: v.optional(v.string()),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
@@ -1437,6 +1439,9 @@ export default defineSchema({
     idempotencyKey: v.string(),
     lastReplyAt: v.optional(v.number()),
     composerPayloadHash: v.optional(v.string()),
+    // Written through the author's own AI (the MCP), not typed by them: shown
+    // as "via AI" to everyone.
+    viaAi: v.optional(v.boolean()),
     lockedAt: v.optional(v.number()),
     hiddenAt: v.optional(v.number()),
     deletedAt: v.optional(v.number()),
@@ -1498,6 +1503,9 @@ export default defineSchema({
     })),
     idempotencyKey: v.string(),
     composerPayloadHash: v.optional(v.string()),
+    // Written through the author's own AI (the MCP), not typed by them: shown
+    // as "via AI" to everyone.
+    viaAi: v.optional(v.boolean()),
     hiddenAt: v.optional(v.number()),
     deletedAt: v.optional(v.number()),
     editedAt: v.optional(v.number()),
@@ -2207,6 +2215,18 @@ export default defineSchema({
   })
     .index("by_blocker_blocked", ["blockerUserId", "blockedUserId"])
     .index("by_blocked_blocker", ["blockedUserId", "blockerUserId"]),
+
+  // What a person's own AI posted lately, by its words, so the same words
+  // are not posted twice in a community in a day (shared/aiPostingRules.ts).
+  aiPostFingerprints: defineTable({
+    userId: v.id("users"),
+    communityId: v.id("communities"),
+    fingerprint: v.string(),
+    // The request that posted them, so that request sent again (a retry
+    // after a crash) is not taken for a second post of the same words.
+    key: v.optional(v.string()),
+    createdAt: v.number(),
+  }).index("by_user_community_fingerprint", ["userId", "communityId", "fingerprint"]),
 
   // What a person does through their own AI (the MCP) or a community's site:
   // one row per person, budget and place, counted per minute and per day

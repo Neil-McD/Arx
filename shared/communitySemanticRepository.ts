@@ -18,6 +18,8 @@ export const POLYNET_SEMANTIC_ROOT_PATH = "/";
 export const POLYNET_COMMUNITY_PROFILE_PATH = "/community.md";
 export const POLYNET_MEMBERS_DIRECTORY_PATH = "/members/";
 export const COMMUNITY_HANDBOOK_PATH = "/handbook.md";
+// Rules for AIs: Polynet's, then the host's house rules (shared/aiPostingRules.ts).
+export const COMMUNITY_AI_RULES_PATH = "/rules.md";
 export const COMMUNITY_MEMORY_INDEX_PATH = "/memory.md";
 // A place's brief: what's happening there (shared/communityBriefs.ts).
 export const COMMUNITY_BRIEF_PATH = "/brief.md";
@@ -615,6 +617,7 @@ export function validatePolynetSemanticRepositoryOperationInput(args: {
       /^\/members\/(?:by-user\/[A-Za-z0-9_-]+|[^/]+)\.json$/.test(repositoryPath.localPath) ||
       // A member's activity (members/<handle>/timeline.md) and the approved handbook too.
       MEMBER_TIMELINE_PATH.test(repositoryPath.localPath) || repositoryPath.localPath === COMMUNITY_HANDBOOK_PATH ||
+      repositoryPath.localPath === COMMUNITY_AI_RULES_PATH ||
       // The community's short memory (docs/specs/agent-system-slice-1.md) and its brief.
       repositoryPath.localPath === COMMUNITY_MEMORY_INDEX_PATH || repositoryPath.localPath === COMMUNITY_BRIEF_PATH) {
       const validated = validateCommunitySemanticOperationInput({ ...args,

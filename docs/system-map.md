@@ -415,7 +415,9 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
   (`accessBudgets`: what a person's own AI reads and writes, a minute and a
   day; the operations and budgets are in `shared/operationCatalog.ts`,
   [spec](specs/agent-access-v0.md)). `memberWriteRateCounters` is no longer
-  written.
+  written. `aiPostFingerprints` (`communityAiRules`: the words a person's AI
+  posted lately, so they are not posted twice; the same file serves
+  `rules.md` and the host's house rules, `communities.aiHouseRules`).
 - **Contracts:** [polynet-workspace-mcp-contract-v0.md](polynet-workspace-mcp-contract-v0.md),
   [canonical-platform-operation-contract-v1.md](canonical-platform-operation-contract-v1.md).
 
