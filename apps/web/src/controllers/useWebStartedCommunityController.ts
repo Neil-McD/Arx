@@ -49,7 +49,7 @@ export function useWebPendingCommunityController<CommunityT extends PendingCommu
   return { pendingCommunity };
 }
 
-export function useWebCommunityLaunchCompletionController<
+export function useWebStartedCommunityCompletionController<
   SessionT,
   CommunityT extends PendingCommunity,
 >(params: {

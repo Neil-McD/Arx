@@ -157,9 +157,9 @@ import {
 } from "./webAppRuntime";
 import { useWebCommunityVisualIdentityRegistryLifecycle } from "./controllers/useWebCommunityVisualIdentityRegistryLifecycle";
 import {
-  useWebCommunityLaunchCompletionController,
+  useWebStartedCommunityCompletionController,
   useWebPendingCommunityController,
-} from "./controllers/useWebCommunityLaunchController";
+} from "./controllers/useWebStartedCommunityController";
 import {
   useWebBuilderPurchaseFlowController,
   useWebBuilderSetupSubscriptionController,
@@ -849,7 +849,7 @@ export default function App() {
     loadCommunities,
   });
   const completePendingCommunityLaunch =
-    useWebCommunityLaunchCompletionController({
+    useWebStartedCommunityCompletionController({
       pendingCommunity: pendingLaunchCommunity,
       tab: launchTab,
       ensureSession: ensureUsableAuthSession,

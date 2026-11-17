@@ -10,12 +10,12 @@ export function stashStartExtras(slug: string, extras: StartCommunityExtras): vo
   try { window.sessionStorage.setItem(key(slug), JSON.stringify(extras)); } catch { /* saved as typed in Settings instead */ }
 }
 
-// Read once: taking it clears it, so a refresh never saves it twice.
-export function takeStartExtras(slug: string): StartCommunityExtras | null {
+// Read, not removed: the save may be started twice (a remount), and a
+// failed save should not lose it. Cleared once it is saved.
+export function readStartExtras(slug: string): StartCommunityExtras | null {
   try {
     const stored = window.sessionStorage.getItem(key(slug));
     if (!stored) return null;
-    window.sessionStorage.removeItem(key(slug));
     const parsed = JSON.parse(stored) as Partial<StartCommunityExtras> | null;
     if (!parsed || typeof parsed !== "object") return null;
     const cents = Number(parsed.monthlyCents);
@@ -25,6 +25,10 @@ export function takeStartExtras(slug: string): StartCommunityExtras | null {
       monthlyCents: Number.isSafeInteger(cents) && cents > 0 ? cents : null,
     };
   } catch { return null; }
+}
+
+export function clearStartExtras(slug: string): void {
+  try { window.sessionStorage.removeItem(key(slug)); } catch { /* nothing kept */ }
 }
 
 // "29" or "29.50" a month, in cents; null when it is not a price.

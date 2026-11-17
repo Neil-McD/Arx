@@ -6,7 +6,6 @@
 // The community is created on step 2's Next; step 3 is shown for it after.
 import { useState, type ReactNode } from "react";
 import { communityPageAddress, isValidCommunitySlug } from "../../../../shared/communitySlug";
-import { discoverListingGap } from "../../../../shared/communityDiscoverListing";
 import type { DiscoverCommunitySnapshot } from "../../../../shared/communityTypes";
 import { Btn, cx, KitApp } from "./kit";
 import { DiscoverCard } from "./KitDiscover";
@@ -41,11 +40,14 @@ export type KitStartCommunityProps = {
 };
 
 // What the preview says under the card. Unlisted: only people with the link.
-// Listed: ready, or what Discover still needs.
-export function startCommunityListingLine(input: { listed: boolean; hasBanner: boolean; oneLiner: string }): string {
+// Listed: ready, or what listing still needs (a picture, a banner and a
+// one-liner: the server's rule, shared/communityPublishReadiness.ts).
+export function startCommunityListingLine(input: { listed: boolean; hasPicture: boolean; hasBanner: boolean; oneLiner: string }): string {
   if (!input.listed) return "Unlisted: only people with your link can find it.";
-  const gap = discoverListingGap({ listed: true, hasBanner: input.hasBanner, oneLiner: input.oneLiner });
-  return gap ? `${gap.replace(/\.$/, "")}. Until then it stays out of Discover.` : "It will show in Discover like this.";
+  const needs = [!input.hasPicture && "a picture", !input.hasBanner && "a banner", !input.oneLiner.trim() && "a one-liner"].filter(Boolean) as string[];
+  if (!needs.length) return "It will show in Discover like this.";
+  const list = needs.length === 1 ? needs[0] : `${needs.slice(0, -1).join(", ")} and ${needs[needs.length - 1]}`;
+  return `Add ${list} to be listed. Until then it stays unlisted.`;
 }
 
 export type StartCardFacts = {
@@ -125,7 +127,7 @@ export function KitStartCommunity(props: KitStartCommunityProps) {
   };
   const cardLine = step === 1
     ? "This is the card people see. It fills in as you go."
-    : startCommunityListingLine({ listed, hasBanner: Boolean(props.bannerUrl), oneLiner: props.oneLiner });
+    : startCommunityListingLine({ listed, hasPicture: Boolean(props.avatarUrl), hasBanner: Boolean(props.bannerUrl), oneLiner: props.oneLiner });
 
   return (
     <StartStepFrame step={step} card={card} cardLine={cardLine}>
@@ -230,7 +232,7 @@ export function KitStartLaunch(props: {
   const link = `https://${communityPageAddress(props.card.slug)}`;
   return (
     <StartStepFrame step={3} card={props.card}
-      cardLine={startCommunityListingLine({ listed: props.listed, hasBanner: Boolean(props.card.bannerUrl), oneLiner: props.card.oneLiner })}>
+      cardLine={startCommunityListingLine({ listed: props.listed, hasPicture: Boolean(props.card.avatarUrl), hasBanner: Boolean(props.card.bannerUrl), oneLiner: props.card.oneLiner })}>
       <div>
         <h2 id={props.titleId}>{props.card.name.trim() || "Your community"} is ready</h2>
         <p className={cx("startc-sub")}>{props.saving ? "Saving what you wrote…" : "Send this link to the first people you want in."}</p>

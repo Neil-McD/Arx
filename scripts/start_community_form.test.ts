@@ -9,10 +9,11 @@ import { startCardCommunity, startCommunityListingLine } from "../apps/web/src/v
 const read = (path: string) => readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
 
 test("the preview says who can find it: unlisted, listed, or what listing still needs", () => {
-  expect(startCommunityListingLine({ listed: false, hasBanner: true, oneLiner: "Early climbers." })).toBe("Unlisted: only people with your link can find it.");
-  expect(startCommunityListingLine({ listed: true, hasBanner: true, oneLiner: "Early climbers." })).toBe("It will show in Discover like this.");
-  expect(startCommunityListingLine({ listed: true, hasBanner: false, oneLiner: "Early climbers." })).toBe("Add a banner to appear in Discover. Until then it stays out of Discover.");
-  expect(startCommunityListingLine({ listed: true, hasBanner: false, oneLiner: " " })).toBe("Add a banner and a one-liner to appear in Discover. Until then it stays out of Discover.");
+  const full = { hasPicture: true, hasBanner: true, oneLiner: "Early climbers." };
+  expect(startCommunityListingLine({ ...full, listed: false })).toBe("Unlisted: only people with your link can find it.");
+  expect(startCommunityListingLine({ ...full, listed: true })).toBe("It will show in Discover like this.");
+  expect(startCommunityListingLine({ ...full, listed: true, hasBanner: false })).toBe("Add a banner to be listed. Until then it stays unlisted.");
+  expect(startCommunityListingLine({ listed: true, hasPicture: false, hasBanner: false, oneLiner: " " })).toBe("Add a picture, a banner and a one-liner to be listed. Until then it stays unlisted.");
 });
 
 test("the card shows the price once one is typed, and Free until then", () => {
