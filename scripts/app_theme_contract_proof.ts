@@ -806,7 +806,9 @@ for (const selector of designV1Css.replace(/\/\*[\s\S]*?\*\//g, "").matchAll(/([
   // Media queries only wrap rules; the rules inside are checked themselves.
   if (selector[1].trim().startsWith("@media")) continue;
   for (const part of topLevelSelectors(selector[1])) {
-    assert.match(part.trim(), /^:root\[data-design="v1"\]/, `v1 rule must be scoped: ${part.trim()}`);
+    // Scoped either directly or inside :where(), which scopes just the same
+    // while adding no weight (for defaults that any other rule may override).
+    assert.match(part.trim(), /^(:root\[data-design="v1"\]|:where\(:root\[data-design="v1"\]\) )/, `v1 rule must be scoped: ${part.trim()}`);
   }
 }
 
