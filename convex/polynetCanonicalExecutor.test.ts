@@ -229,7 +229,7 @@ const modules = import.meta.glob([
   "./communityOntologyCards.ts",
   "./communitySearchDocs.ts",
   "./communityMemberTimeline.ts",
-  "./communityHandbook.ts", "./communityNotes.ts", "./communityMemory.ts", "./communityBriefs.ts", "./memberMemory.ts", "./communityPersonFacts.ts", "./communityPodFacts.ts", "./communityPods.ts", "./communityFounderBrief.ts", "./communityEvents.ts", "./communityPodPayments.ts", "./communityPlanChange.ts", "./communityLessonProgress.ts", "./accessBudgets.ts", "./communityLifecycle.ts", "./communityOperations.ts", "./communityPeople.ts", "./userProfileProjection.ts",
+  "./communityHandbook.ts", "./communityNotes.ts", "./communityMemory.ts", "./communityBriefs.ts", "./memberMemory.ts", "./communityPersonFacts.ts", "./communityPodFacts.ts", "./communityPods.ts", "./communityFounderBrief.ts", "./communityEvents.ts", "./communityPodPayments.ts", "./communityPlanChange.ts", "./communityLessonProgress.ts", "./accessBudgets.ts", "./communityAiRules.ts", "./communityLifecycle.ts", "./communityOperations.ts", "./communityPeople.ts", "./userProfileProjection.ts",
   "./communityAccessQueries.ts",
   "./communityAdmin.ts",
   "./email.ts",

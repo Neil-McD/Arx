@@ -1,0 +1,6 @@
+{
+  "name": "polynet",
+  "description": "Work in your Polynet communities from Claude: catch up, post an update, welcome new members, write the week's recap.",
+  "version": "0.1.0",
+  "author": { "name": "Polynet" }
+}

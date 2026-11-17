@@ -230,6 +230,8 @@ export function KitChannelFeed(props: CommunityInteractionFeedListProps) {
                         {badge ? <span className={cx("tag", isGuide && "g")}>{badge}</span> : null}
                         {hostBadgeLabel(first.root, props.communityOwnerId) ? <span className={cx("tag")}>host</span> : null}
                         {chip ? <span className={cx("tag")}>{chip}</span> : null}
+                        {/* Written through the author's own AI, not typed by them. */}
+                        {root.via_ai ? <span className={cx("tag")} title="Posted through their own AI">via AI</span> : null}
                         <time dateTime={root.created_at}>{props.formatChatTime(root.created_at)}</time>
                       </div>
                     ) : null}
@@ -260,6 +262,8 @@ export function KitChannelFeed(props: CommunityInteractionFeedListProps) {
                           <button type="button" className="community-interaction-root-expand" aria-expanded={false} onClick={expansion.onToggle}>Show more</button>
                         ) : null}
                         {root.edited_at ? <span className="community-interaction-edited">(edited)</span> : null}
+                        {/* A later post in the same run has no header line to carry the mark. */}
+                        {root.via_ai && index > 0 ? <span className="community-interaction-edited" title="Posted through their own AI">via AI</span> : null}
                       </>
                     )}
                     {bundle.pending === "sending" ? (
