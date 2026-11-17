@@ -23,7 +23,7 @@ import {
   type CommunityNoteView,
 } from "../../../../shared/cloudCommunityNotesGateway";
 import { getCloudCommunityHomeSnapshot } from "../../../../shared/cloudCommunityAdminGateway";
-import { continueLesson, courseLessons, courseProgress, pageOf } from "../../../../shared/communityClassroom";
+import { continueLesson, courseLessons, courseProgress, pageOf, coursePath } from "../../../../shared/communityClassroom";
 import type { CommunityResource, CommunityResourceModule } from "../components/communityResourcesContracts";
 import { askGuide, openGuideFromSearch } from "../components/guideSearch";
 import { WebCommunityResourceViewerContent } from "../components/WebCommunityResourceViewerContent";
@@ -587,12 +587,17 @@ export function KitClassroom(props: {
     // Adding a course is a button beside "Courses", so hosts' pages hold six too.
     const shelf = pageOf(courses, shelfPage, SHELF);
     const learning = summary.reduce((total, row) => total + row.started, 0);
+    // A member sees the courses as one path, in the host's order; a host
+    // sees the shelf they arrange.
+    const path = props.canManage ? [] : coursePath(courses, done);
     page = (
       <div className={cx("page")} style={{ padding: 0, overflow: "visible" }}>
         <p className={cx("lead")} style={{ marginTop: 0 }}>{agentOn ? <span className={cx("aura")}><Icon name="spark" /></span> : null}
           {!props.loaded ? " " : props.canManage
             ? hostLead(courses.map((entry) => entry.course), learning)
-            : resume ? "Pick up where you left off." : courses.length ? "Pick a course to start." : "Nothing to learn here yet."}
+            : !courses.length ? "Nothing to learn here yet."
+              : path.every((step) => step.state === "done" || step.total === 0) ? "You've finished everything here."
+              : path.some((step) => step.done > 0) ? "Pick up where you left off." : "Start here."}
         </p>
         {/* One bar, for everyone: it asks the guide. Nothing is added through it. */}
         {agentOn ? (
@@ -611,15 +616,40 @@ export function KitClassroom(props: {
           </div></div>
         ) : null}
 
-        {resume ? (
-          <button type="button" className={cx("card kcont")} onClick={() => { props.onOpenCourse(resume.course.id); chooseLesson(resume.lesson.id); }}>
-            <div className={cx("meta")}><span>Continue · {resume.course.name}</span><span>Lesson {resume.index + 1} of {resume.total}</span></div>
-            <h2>{resume.lesson.title}</h2>
-            <div className={cx("kprog")}><div className={cx("bar")}><i style={{ width: `${Math.round((resume.index / resume.total) * 100)}%` }} /></div></div>
-            <div className={cx("acts")}><span className={cx("btn go")}><Icon name="play" />Continue</span></div>
-          </button>
+        {!props.canManage && courses.length ? (
+          <ol className={cx("kpath")} aria-label="Courses, in order">
+            {path.map((step, position) => {
+              const { course } = step;
+              const open = () => { props.onOpenCourse(course.id); if (step.state === "now" && step.nextLesson) chooseLesson(step.nextLesson.id); };
+              const count = `${step.total} ${step.total === 1 ? "lesson" : "lessons"}`;
+              return (
+                <li key={course.id}>
+                  <button type="button" className={cx("kstep", step.state)} onClick={open} aria-current={step.state === "now" ? "step" : undefined}>
+                    <span className={cx("kstep-n")} aria-hidden="true">{step.state === "done" ? <Icon name="check" /> : position + 1}</span>
+                    <span className={cx("kstep-body")}>
+                      <b>{course.name}</b>
+                      {firstLine(course.description_md) ? <span className={cx("s")}>{firstLine(course.description_md)}</span> : null}
+                      {step.state === "now" ? (
+                        <>
+                          {step.nextLesson ? <span className={cx("knext")}>{step.done > 0 ? "Next" : "First"}: {step.nextLesson.title}</span> : null}
+                          {step.done > 0 ? <span className={cx("bar", "kbar")}><i style={{ width: `${Math.round((step.done / step.total) * 100)}%` }} /></span> : null}
+                          <span className={cx("acts")}><span className={cx("btn go")}><Icon name="play" />{step.done > 0 ? "Continue" : "Start"}</span></span>
+                        </>
+                      ) : null}
+                    </span>
+                    {step.state === "now" && course.banner_url ? (
+                      <span className={cx("kstep-cover")} style={{ backgroundImage: `url(${JSON.stringify(course.banner_url)})`, backgroundPosition: `${(course.banner_focus_x ?? 0.5) * 100}% ${(course.banner_focus_y ?? 0.5) * 100}%` }} />
+                    ) : (
+                      <em>{step.state === "done" ? "Done" : step.state === "now" && step.done > 0 ? `${step.done} of ${step.total} done` : count}</em>
+                    )}
+                  </button>
+                </li>
+              );
+            })}
+          </ol>
         ) : null}
 
+        {props.canManage ? (<>
         <div className={cx("khead")}>
           <span className={cx("lab")}>Courses</span>
           {arranging ? <span className={cx("sub")} style={{ marginLeft: 10 }}>Members see them in this order.</span> : null}
@@ -687,6 +717,7 @@ export function KitClassroom(props: {
             <button type="button" className={cx("btn sm")} disabled={shelf.page >= shelf.pages - 1} onClick={() => setShelfPage(shelf.page + 1)}>Next</button>
           </div>
         ) : null}
+        </>) : null}
       </div>
     );
   }
