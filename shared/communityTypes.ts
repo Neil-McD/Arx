@@ -237,6 +237,8 @@ export type DirectMessageAttachment = {
   size: number;
   url?: string | null;
   storage_id?: string | null;
+  // The server's reservation for an uploaded file; a send names it.
+  attachment_id?: string | null;
 };
 
 export type DirectMessageTypingPresenceUser = {
