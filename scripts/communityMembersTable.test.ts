@@ -8,10 +8,10 @@ const row = (name: string, extra: Partial<MemberTableRow> = {}): MemberTableRow 
 
 test("status says what the host has to act on first", () => {
   expect(memberStatus(row("A"))).toEqual({ kind: "active", label: "Active" });
-  expect(memberStatus(row("A", { plan: { kind: "comped", label: "Comped", price_point_id: null } })).kind).toBe("comped");
+  expect(memberStatus(row("A", { plan: { kind: "comped", label: "Free for good", price_point_id: null } })).kind).toBe("comped");
   const hold = { kind: "on_hold" as const, label: "on hold", since_at: null, ends_at: null };
   // On hold beats comped, and cancelling beats active.
-  expect(memberStatus(row("A", { plan: { kind: "comped", label: "Comped", price_point_id: null }, money: hold })).kind).toBe("on_hold");
+  expect(memberStatus(row("A", { plan: { kind: "comped", label: "Free for good", price_point_id: null }, money: hold })).kind).toBe("on_hold");
   expect(memberStatus(row("A", { money: { kind: "cancelling", label: "cancelling", since_at: null, ends_at: null } })).label).toBe("Cancelling");
 });
 
@@ -38,7 +38,7 @@ test("the header checkbox ticks everyone shown, or unticks them, and leaves the 
 test("a bulk comp is only for people in for free, never the owner or anyone paying", () => {
   const rows = [row("Free"), row("Paid", { plan: { kind: "paid", label: "$20 a month", price_point_id: "p" } }),
     row("Owner", { membership_id: null, plan: { kind: "owner", label: "Owner", price_point_id: null } }),
-    row("Gift", { plan: { kind: "comped", label: "Comped", price_point_id: null } })];
+    row("Gift", { plan: { kind: "comped", label: "Free for good", price_point_id: null } })];
   expect(compableMembers(rows).map((entry) => entry.name)).toEqual(["Free"]);
   expect(memberKey(rows[2])).toBe("owner");
 });

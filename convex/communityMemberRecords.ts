@@ -263,7 +263,7 @@ const ACTION_TEXT: Record<string, (metadata: any) => string> = {
   community_member_role_set: (metadata) => `Made ${roleWithArticle(String(metadata?.role ?? "member"))}`,
   community_member_removed: () => "Removed from the community",
   community_member_blocked: () => "Blocked",
-  community_member_comped: () => "Comped",
+  community_member_comped: () => "Given free access",
 };
 const roleWithArticle = (role: string) => `${/^[aeiou]/.test(role) ? "an" : "a"} ${role}`;
 const AUDIT_SCAN = 400;

@@ -1,6 +1,6 @@
 import { ArrowLeft, Ban, Bell, BellOff, MessageCircle, MoreHorizontal, Paperclip, Plus, RotateCcw } from "lucide-react";
 import { enterSendsMessage, isImeComposing } from "../controllers/communityComposerTextEditing";
-import type { ChangeEvent, ComponentProps, DragEvent, FormEvent, MutableRefObject, ReactNode } from "react";
+import type { ChangeEvent, ClipboardEvent, ComponentProps, DragEvent, FormEvent, MutableRefObject, ReactNode } from "react";
 import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type {
   DirectMessage,
@@ -540,6 +540,15 @@ export function WebDirectMessagePanel(props: WebDirectMessagePanelProps) {
   const canAcceptAttachmentDrop =
     Boolean(props.onAttachmentFilesSelected) && !props.isSending && !isPeerBlocked;
 
+  // A pasted screenshot or file is attached, as a dropped one is. Pasted
+  // text has no files and is left to the box.
+  const onAttachmentPaste = (event: ClipboardEvent<HTMLTextAreaElement>) => {
+    const files = event.clipboardData?.files;
+    if (!canAcceptAttachmentDrop || !files || files.length === 0) return;
+    event.preventDefault();
+    void props.onAttachmentFilesSelected?.(files);
+  };
+
   const onAttachmentDragEnter = (event: DragEvent<HTMLElement>) => {
     if (!canAcceptAttachmentDrop || !hasDragFiles(event)) return;
     event.preventDefault();
@@ -793,6 +802,7 @@ export function WebDirectMessagePanel(props: WebDirectMessagePanelProps) {
                   value={props.input}
                   onChange={(event) => props.onInputChange(event.target.value)}
                   onBlur={() => { void props.onComposerBlur?.(); }}
+                  onPaste={onAttachmentPaste}
                   onKeyDown={(event) => {
                     if (isImeComposing(event)) return;
                     if (enterSendsMessage(event)) {
@@ -1060,6 +1070,7 @@ export function WebDirectMessagePanel(props: WebDirectMessagePanelProps) {
             onBlur={() => {
               void props.onComposerBlur?.();
             }}
+            onPaste={onAttachmentPaste}
             onKeyDown={(event) => {
               if (isImeComposing(event)) return;
               if (enterSendsMessage(event)) {

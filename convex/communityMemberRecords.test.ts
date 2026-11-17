@@ -78,7 +78,7 @@ test("the host sees every way someone is in, at which price, and who needs them"
   expect(by("Tanya")?.plan.label).toBe("Member · $27");
   expect(by("Tanya")?.money).toMatchObject({ kind: "on_hold" });
   expect(by("Rashid")?.money).toMatchObject({ kind: "cancelling" });
-  expect(by("Martin")).toMatchObject({ role: "moderator", plan: { kind: "comped", label: "Comped" } });
+  expect(by("Martin")).toMatchObject({ role: "moderator", plan: { kind: "comped", label: "Free for good" } });
   expect(by("Tanya")?.working_on).toBe("Finding her first ten members");
   expect(list.rows.map((row: any) => row.name)).not.toContain("Ana");
 
@@ -175,6 +175,6 @@ test("a host can comp a free member, never someone paying, and it shows in their
   await expect(t.withIdentity({ subject: "jon" }).mutation(api.communityMemberRecords.compCommunityMember, { communityId, membershipId: freeby.membershipId })).rejects.toThrow(/community_forbidden/);
   await asOwner.mutation(api.communityMemberRecords.compCommunityMember, { communityId, membershipId: freeby.membershipId });
   const record = await asOwner.query(api.communityMemberRecords.getCommunityMemberRecord, { communityId, membershipId: freeby.membershipId });
-  expect(record?.plan).toMatchObject({ kind: "comped", label: "Comped" });
-  expect(record?.events.map((event: any) => event.text)).toContain("Comped by you");
+  expect(record?.plan).toMatchObject({ kind: "comped", label: "Free for good" });
+  expect(record?.events.map((event: any) => event.text)).toContain("Given free access by you");
 });
