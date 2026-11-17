@@ -208,7 +208,8 @@ function WelcomesScene() {
   return (
     <AppFrame>
       <LeftColumn channelSlug="general" />
-      <div className="web-main-surface-slot">
+      {/* In the app this slot has no box of its own, so the page fills the frame. */}
+      <div className="web-main-surface-slot" style={{ display: "contents" }}>
         <main className="workspace community-mode">
           <div className="community-body">
             <div className="community-chat community-member-chat community-attachment-drop-surface">
