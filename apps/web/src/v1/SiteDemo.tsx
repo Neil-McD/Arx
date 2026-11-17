@@ -4,9 +4,8 @@
 // community and a short script instead of a server. Nothing here is a
 // picture, so it looks like the product because it is the product.
 //
-// Four scenes, one made-up community, one day:
-//   Welcomes    someone new says hello; the guide greets and introduces them.
-//   Answers     she asks a question at night; the guide answers from a lesson.
+// The scenes, in one made-up community:
+//   Welcomes and answers   someone new asks; the guide greets, answers from a lesson, and introduces them.
 //   Remembers   that answer becomes something the community knows.
 //   Briefs you  the host opens Home to what was handled and who needs them.
 import { useEffect, useRef, useState, type ReactNode } from "react";
@@ -49,23 +48,6 @@ const CHANNELS = [
 
 type Line = { id: string; who: string; minutesAgo: number; text: string; extra?: Record<string, unknown> };
 
-function reply(line: Line & { rootId: string; seq: number }, now: number) {
-  const at = new Date(now - line.minutesAgo * 60_000).toISOString();
-  const guide = line.who === "guide";
-  return {
-    deduped: false,
-    reply: {
-      id: line.id, community_id: COMMUNITY.id, channel_id: null, root_id: line.rootId, seq: line.seq,
-      actor_type: guide ? "community_agent" : "human", actor_user_id: guide ? null : line.who, actor_agent_key: guide ? "community_agent" : null,
-      target_reply_id: null, status: "active", visibility_scope: "community", content_summary: line.text,
-      reaction_summary: [], viewer_emojis: [], idempotency_key: line.id, created_at: at, updated_at: at, edited_at: null,
-      ...line.extra,
-    },
-    content_blocks: [{ kind: "text", position: 0, text: line.text }],
-    embeds: [], mentions: [], attachments: [],
-  };
-}
-
 function root(line: Line, now: number) {
   const at = new Date(now - line.minutesAgo * 60_000).toISOString();
   const guide = line.who === "guide";
@@ -93,9 +75,9 @@ const BEFORE: Line[] = [
 // The pace of a real channel: a beat of quiet, a post, people reacting one at
 // a time, someone typing for as long as their message takes, then the next.
 const SCENE: Array<Line & { at: number }> = [
-  { id: "s1", at: 1.6, who: "mira", minutesAgo: 0, text: "Hi all, I'm Mira. I'm launching a paid newsletter for indie designers. No audience yet, so I'm here to learn how to start." },
-  { id: "s2", at: 6.4, who: "guide", minutesAgo: 0, text: "Welcome, Mira. Start with lesson 1, “Your first ten readers”. And say hello to Dana: she launched her newsletter here in March with no list, and offered to share her numbers." },
-  { id: "s3", at: 11.2, who: "dana", minutesAgo: 0, text: "Happy to! Mira, send me your draft pricing page and I'll tell you what I'd change." },
+  { id: "s1", at: 1.6, who: "mira", minutesAgo: 0, text: "Hi all, I'm Mira. I'm launching a paid newsletter for indie designers, with no audience yet. What should I charge for the first cohort?", extra: { kind: "question" } },
+  { id: "s2", at: 6.4, who: "guide", minutesAgo: 0, text: "Welcome, Mira. Ana's rule from lesson 3, “Pricing your first offer”: charge what five people would pay this week, not what it's worth. First cohorts here have landed between $200 and $500. Say hello to Dana, too: she launched her newsletter here in March with no list." },
+  { id: "s3", at: 11.2, who: "dana", minutesAgo: 0, text: "Happy to help! Mine was $400 with twelve seats. Send me your draft page, Mira." },
 ];
 const TYPING = [{ from: 3.2, to: 6.4, who: "guide" }, { from: 8.0, to: 11.2, who: "dana" }];
 // Hellos on Mira's post, one at a time; then her thanks on Dana's reply.
@@ -315,50 +297,6 @@ function WelcomesScene({ at, now }: SceneProps) {
   );
 }
 
-// 2. Answers: #pricing, late at night. Mira asks; the thread opens; the guide
-// answers from a lesson, and she decides.
-const QUESTION: Line = { id: "q1", who: "mira", minutesAgo: 0, text: "What should I charge for the first cohort? I have no audience yet and I keep changing the number." };
-const PRICING_BEFORE: Line[] = [
-  { id: "p1", who: "sam", minutesAgo: 300, text: "Raised my coaching offer from $150 to $250 after the call on Friday. Two people said yes the same day.", extra: { reaction_summary: [{ emoji: "🔥", count: 5 }] } },
-  { id: "p2", who: "priya", minutesAgo: 170, text: "Reminder that the pricing worksheet from lesson 3 is pinned in Knowledge." },
-];
-const ASKED_AT = 1.6;
-const THREAD_AT = 3.4;
-const THREAD: Array<Line & { at: number }> = [
-  { id: "a1", at: 7.6, who: "guide", minutesAgo: 0, text: "Ana's rule from lesson 3, “Pricing your first offer”: charge what five people would pay this week, not what it's worth. Founding cohorts here have landed between $200 and $500. Dana's first was $400 with twelve seats." },
-  { id: "a2", at: 12.2, who: "mira", minutesAgo: 0, text: "That's exactly what I needed. $300 it is." },
-];
-const THREAD_TYPING = [{ from: 4.2, to: 7.6, who: "guide", rootId: "q1" }, { from: 9.8, to: 12.2, who: "mira", rootId: "q1" }];
-const HELPED_AT = 13.4;
-
-function AnswersScene({ at, now }: SceneProps) {
-  const asked = at >= ASKED_AT;
-  const replies = THREAD.filter((line) => at >= line.at).map((line, index) => reply({
-    ...line, rootId: QUESTION.id, seq: index + 1,
-    extra: line.id === "a1" && at >= HELPED_AT ? { reaction_summary: [{ emoji: "🙏", count: 1 }] } : undefined,
-  }, now));
-  const last = replies[replies.length - 1];
-  const question = root({ ...QUESTION, extra: {
-    kind: "question", reply_count: replies.length,
-    last_reply_at: last ? last.reply.created_at : null, last_reply_actor_user_id: last ? last.reply.actor_user_id : null,
-  } }, now);
-  const roots = [...PRICING_BEFORE.map((line) => root(line, now)), ...(asked ? [question] : [])];
-  const open = at >= THREAD_AT;
-  return (
-    <ChannelPage>
-      <WebCommunityInteractionProjection
-        {...({
-          ...channelProps(CHANNELS[2]!), roots, replies,
-          selectedRootId: open ? QUESTION.id : null, selectedRoot: open ? question : null,
-          typingPresence: typingFor(THREAD_TYPING, at, now),
-          mainComposer: <Composer placeholder="Message #pricing" />,
-          drawerComposer: <div className="community-interaction-reply-composer-panel"><Composer placeholder="Reply to Mira Okafor..." reply /></div>,
-        } as any)}
-      />
-    </ChannelPage>
-  );
-}
-
 // What Launch Lab knows. `learned`: the answer in scene 2 has become a point.
 function launchLabMap(now: number, learned: boolean): BrainMap {
   const map = base(COMMUNITY.name);
@@ -470,7 +408,7 @@ function BriefsScene({ at, now }: SceneProps) {
       {since ? (
         <Since label="Since you were last here">
           {since >= 1 ? <SinceItem kind="Joined" title="Mira Okafor joined" detail="I welcomed her and introduced her to Dana, who replied" still /> : null}
-          {since >= 2 ? <SinceItem kind="Answered" learned title="I answered Mira's pricing question at 2:14 am" detail="From lesson 3 · she set her price at $300" still /> : null}
+          {since >= 2 ? <SinceItem kind="Answered" learned title="I answered Mira's pricing question" detail="From lesson 3 · she set her price at $300" still /> : null}
           {since >= 3 ? <SinceItem kind="Learned" learned title="First cohorts here land between $200 and $500" detail="Saved to Knowledge, under Pricing your first offer" still /> : null}
         </Since>
       ) : null}
@@ -508,8 +446,7 @@ function ResultsScene({ at, now }: SceneProps) {
 }
 
 const SCENES: Array<{ key: string; label: string; seconds: number; say: string; left: (at: number) => Left; Scene: (props: SceneProps) => ReactNode }> = [
-  { key: "welcomes", label: "Welcomes", seconds: SCENE_SECONDS, left: () => ({ tab: "chat", channelSlug: "general" }), say: "Someone new says hello. Your client success manager greets them by name and introduces them to the right person.", Scene: WelcomesScene },
-  { key: "answers", label: "Answers", seconds: 15, left: () => ({ tab: "chat", channelSlug: "pricing" }), say: "A question at 2 am gets your answer, from the lesson you taught it in.", Scene: AnswersScene },
+  { key: "answers", label: "Welcomes and answers", seconds: SCENE_SECONDS, left: () => ({ tab: "chat", channelSlug: "general" }), say: "Someone new asks their first question. Your client success manager welcomes them, answers from the lesson you taught it in, and introduces the right person.", Scene: WelcomesScene },
   { key: "remembers", label: "Remembers", seconds: 8, left: () => ({ tab: "resources" }), say: "That answer becomes something your community knows, for the next person who asks.", Scene: RemembersScene },
   { key: "briefs", label: "Briefs you", seconds: 10.5, left: () => ({ tab: "agent" }), say: "You open the app to what was handled, and the one person who needs you.", Scene: BriefsScene },
   { key: "results", label: "Gets results", seconds: RESULTS_SECONDS, left: () => ({ tab: "chat", channelSlug: "wins", viewer: "mira" }), say: "Two weeks later, Mira posts her first five paying subscribers. Members who get results stay.", Scene: ResultsScene },
