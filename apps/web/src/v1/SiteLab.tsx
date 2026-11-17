@@ -32,8 +32,9 @@ const CSS = `
 .site .cta{display:flex;justify-content:center;gap:12px;margin-top:32px;flex-wrap:wrap}
 .site .fine{margin-top:14px;font-size:13.5px;color:var(--ink3)}
 .site .shot{position:relative;margin:64px auto 0;width:min(1180px,100% - 48px);border-radius:14px;border:1px solid var(--line2);overflow:hidden;background:var(--panel);box-shadow:0 60px 140px -50px rgba(111,120,216,.35),0 40px 90px -40px #000}
-.site .shot-in{width:1475px;height:820px;zoom:.8;pointer-events:none;user-select:none}
-.site .shot-in>div{height:820px!important}
+.site .shot img{display:block;width:100%;height:auto}
+/* The capture caught the pointer; this covers it (the area is flat). */
+.site .shot i{position:absolute;left:49.2%;top:54%;width:2.2%;height:4.2%;background:#0c0c0d}
 .site .shot::after{content:"";position:absolute;inset:auto 0 0 0;height:120px;background:linear-gradient(180deg,transparent,var(--bg))}
 .site section{padding:112px 0 0}
 .site .kick{font-size:13px;font-weight:500;letter-spacing:.02em;color:var(--accent-hi)}
@@ -52,13 +53,16 @@ const CSS = `
 .site .vig{border:1px solid var(--line2);border-radius:12px;background:var(--panel2);padding:18px;font-size:14px;box-shadow:0 30px 60px -40px #000}
 .site .msg{display:flex;gap:11px}
 .site .msg+.msg{margin-top:16px}
-.site .face{flex:none;width:30px;height:30px;border-radius:8px;display:grid;place-items:center;font-size:11px;font-weight:700;color:#fff}
-.site .face.g{background:linear-gradient(135deg,#7c5cff,#3b2a8a)}
+.site .face{flex:none;width:30px;height:30px;border-radius:999px;display:grid;place-items:center;font-size:11px;font-weight:600;color:#3b2f24;background:#f3d9b8}
+.site .face.b{background:#cfc4f2;color:#2e2850}
+.site .face.g{background:transparent;color:#b9a5ff;font-size:17px}
 .site .msg b{font-weight:600}
 .site .msg time{margin-left:8px;font-size:12px;color:var(--ink3)}
 .site .msg p{margin:3px 0 0;font-size:14px;line-height:1.5;color:var(--ink2)}
 .site .src{display:inline-flex;align-items:center;gap:6px;margin-top:9px;padding:4px 9px;border-radius:7px;border:1px solid var(--line2);font-size:12.5px;color:var(--ink2)}
-.site .tag{display:inline-block;padding:1px 7px;border-radius:6px;background:rgba(111,120,216,.18);color:var(--accent-hi);font-size:11.5px;font-weight:500;margin-left:8px}
+.site .tag{display:inline-block;padding:0 6px;border-radius:5px;border:1px solid var(--line2);color:var(--ink2);font-size:11px;line-height:17px;margin-left:8px;vertical-align:1px}
+.site .vig.pic{padding:0;overflow:hidden;justify-self:center;max-width:390px}
+.site .vig.pic img{display:block;width:100%;height:auto}
 .site .needs{display:grid;gap:10px}
 .site .need{display:flex;align-items:center;gap:12px;padding:13px 14px;border:1px solid var(--line);border-radius:10px;background:var(--panel)}
 .site .need i{flex:none;width:7px;height:7px;border-radius:999px;background:var(--accent-hi)}
@@ -117,7 +121,6 @@ const CSS = `
   .site section{padding-top:80px}
   .site .live{flex-direction:column;align-items:flex-start}
   .site .name{flex-direction:column}
-  .site .shot-in{zoom:.42}
 }
 `;
 
@@ -153,8 +156,9 @@ function Job(props: { num: string; title: string; words: string; children: React
   );
 }
 
-// `home` is the product picture: the lab's own Home, drawn by the real kit.
-export function SiteLab(props: { home: ReactNode }) {
+// The product pictures are captures of the real app on staging
+// (public/design-lab/site-*.{jpg,png}), not drawings of it.
+export function SiteLab() {
   const now = Date.now();
   return (
     <div className="site">
@@ -177,8 +181,9 @@ export function SiteLab(props: { home: ReactNode }) {
         </div>
         <p className="fine">No card. The community is free for good. The manager is $79 a month, with the first 14 days free.</p>
       </div>
-      <div className="shot" aria-label="Polynet's Home page, as a host sees it">
-        <div className="shot-in">{props.home}</div>
+      <div className="shot">
+        <img src="/design-lab/site-home.jpg" alt="Home, as the host of a community sees it: the guide's greeting, its brief, and what the community has learned" />
+        <i aria-hidden="true" />
       </div>
 
       <section className="wrap">
@@ -197,20 +202,21 @@ export function SiteLab(props: { home: ReactNode }) {
         <p className="sub">It works from what you've taught: your lessons, your posts, your answers. It says so when it doesn't know.</p>
         <div className="jobs">
           <Job num="01" title="Answers members from what you've taught" words="A question at 2 am gets your answer, with the lesson it came from. If it isn't sure, it asks the member who knows, or leaves it for you.">
-            <div className="msg"><span className="face" style={{ background: "linear-gradient(135deg,#f08a4b,#d9596b)" }}>MO</span><div><b>Mira Okafor</b><time>2:14 am</time><p>What should I charge for the first cohort? I have no audience yet.</p></div></div>
-            <div className="msg"><span className="face g">✦</span><div><b>Polynet</b><span className="tag">Client success</span><time>2:14 am</time><p>Neil's rule from lesson 3: price the first cohort at what five people will pay this week, not what it's worth. Most founding cohorts here landed between $200 and $500.</p><span className="src">From Pricing your first offer · lesson 3</span></div></div>
+            <div className="msg"><span className="face">MO</span><div><b>Mira Okafor</b><span className="tag">Question</span><time>2:14 am</time><p>What should I charge for the first cohort? I have no audience yet.</p></div></div>
+            <div className="msg"><span className="face g">✦</span><div><b>Polynet, your guide</b><time>2:14 am</time><p>Neil's rule from lesson 3: price the first cohort at what five people will pay this week, not what it's worth. Most founding cohorts here landed between $200 and $500.</p><span className="src">From Pricing your first offer · lesson 3</span></div></div>
           </Job>
           <Job num="02" title="Welcomes every new person" words="Each newcomer gets a hello by name, the one thing to do first, and an introduction to someone they should know. The first two weeks decide whether people stay.">
-            <div className="msg"><span className="face g">✦</span><div><b>Polynet</b><span className="tag">Client success</span><time>9:02 am</time><p>Welcome, Jon. You said you're launching a paid newsletter. Start with lesson 1, then say hello to Dana: she launched hers here in March and offered to share her numbers.</p></div></div>
-            <div className="msg"><span className="face" style={{ background: "linear-gradient(135deg,#3d8fd6,#1f3b8a)" }}>DR</span><div><b>Dana Ruiz</b><time>9:20 am</time><p>Happy to! Jon, send me your draft pricing page.</p></div></div>
+            <div className="msg"><span className="face g">✦</span><div><b>Polynet, your guide</b><time>9:02 am</time><p>Welcome, Jon. You said you're launching a paid newsletter. Start with lesson 1, then say hello to Dana: she launched hers here in March and offered to share her numbers.</p></div></div>
+            <div className="msg"><span className="face b">DR</span><div><b>Dana Ruiz</b><time>9:20 am</time><p>Happy to! Jon, send me your draft pricing page.</p></div></div>
           </Job>
-          <Job num="03" title="Tells you who needs you" words="One short brief when you open the app: what was handled, and the few things only you can do. You spend ten minutes where it matters instead of an hour reading everything.">
-            <div className="needs">
-              <div className="need"><i /><div><b>Sam hasn't been back in two weeks</b><span>Stopped after lesson 4 · was active daily before</span></div><em>Message Sam</em></div>
-              <div className="need"><i /><div><b>A question only you can answer</b><span>Priya, in #wins: “Would you take this client?”</span></div><em>Reply</em></div>
-              <div className="need" style={{ opacity: .6 }}><i style={{ background: "var(--ok)" }} /><div><b>Handled: 6 questions, 1 welcome</b><span>All six marked helpful</span></div><em>See them</em></div>
+          <div className="job">
+            <div className="job-words">
+              <span className="num">03</span>
+              <h3>Tells you who needs you</h3>
+              <p>When you open the app it says what needs you today, often nothing. Beside it is a short brief of what people are working on, and everything the community has learned so far.</p>
             </div>
-          </Job>
+            <div className="vig pic"><img src="/design-lab/site-panel.png" alt="The guide's brief and the community brain, from a real community" /></div>
+          </div>
         </div>
       </section>
 
