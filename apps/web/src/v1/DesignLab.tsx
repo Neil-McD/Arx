@@ -47,6 +47,7 @@ import { CommunityPageFrame, CommunityPageRail } from "../components/CommunityPa
 import { KitHomeRail } from "./KitHomeRail";
 import { KitPodRail } from "./KitPodRail";
 import { SiteLab } from "./SiteLab";
+import { SiteDemoLab } from "./SiteDemo";
 
 const BANNER = "/design-lab/polynet-earth.webp";
 const SMALL_BUTTON = { height: 32, fontSize: 13 } as const;
@@ -576,5 +577,6 @@ function labScale(): number {
 export function DesignLab() {
   const page = typeof window === "undefined" ? "" : new URLSearchParams(window.location.search).get("page");
   if (page === "site") return <SiteLab />;
+  if (page === "demo") return <SiteDemoLab />;
   return page === "channel" ? <HostChannel /> : page === "brief" ? <BriefPanels /> : page === "brain" ? <BrainLab /> : page === "events" ? <EventsLab /> : page === "members" ? <MembersLab /> : page === "brain-actions" ? <BrainActionsLab /> : page === "brain-page" ? <BrainPageLab /> : page === "pods-shell" ? <PodsShell /> : page === "know-panel" ? <KnowShell builder={false} /> : page === "know-panel-builder" ? <KnowShell builder /> : page === "pods" ? <PodsPage join={false} /> : page === "home-panel" ? <RealPanels pod={false} /> : page === "pod-panel" ? <RealPanels pod /> : page === "pods-join" ? <PodsPage join /> : <HostHomeQuiet />;
 }
