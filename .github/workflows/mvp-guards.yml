@@ -1,11 +1,11 @@
 name: Release Gate
 
+# Runs on pull requests only. A merge to main is not gated again: the pull
+# request already passed, and `npm run release:prod` runs the same gate before
+# anything reaches production. Run it by hand on any ref with workflow_dispatch.
 on:
   workflow_dispatch:
   pull_request:
-  push:
-    branches:
-      - main
 
 permissions:
   contents: read
