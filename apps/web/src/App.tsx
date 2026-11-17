@@ -2549,6 +2549,10 @@ export default function App() {
                 communityId: activeCommunity.id,
                 communityName: activeCommunity.name,
                 firstName: displayName(canonicalSessionUserId).trim().split(/\s+/)[0] || "there",
+                // The host decides on the people waiting from Home itself.
+                joinReview: activeCommunityAccess.is_owner === true && canReviewJoinRequestsActiveCommunity
+                  ? { requests: communityContextJoinRequests, decidingId: decidingCommunityJoinRequestId, onApprove: (id: string) => void handleApproveCommunityJoinRequest(id), onDecline: (id: string) => void handleDenyCommunityJoinRequest(id) }
+                  : null,
                 // On a phone, what Home opens is in the community tab.
                 // Straight to the people waiting (/members/requests), not the
                 // Members page with a line to find.
