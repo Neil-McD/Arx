@@ -750,17 +750,22 @@ export function KitClassroom(props: {
                   onKeyDown={(event) => { if (event.key === "ArrowLeft" || event.key === "ArrowUp") { event.preventDefault(); void moveCourse(at, -1); } else if (event.key === "ArrowRight" || event.key === "ArrowDown") { event.preventDefault(); void moveCourse(at, 1); } }}
                   {...courseDrag.grip(course.id)}><GripDots /></button>
               ) : null}
+              {props.canManage && course.module_status === "draft" ? <span className={cx("kdraft")}>Draft</span> : null}
               <button type="button" className={cx("kcourse")} onClick={() => props.onOpenCourse(course.id)}>
                 <span className={cx("kcover", course.banner_url ? "" : coverTint(course.id))} style={course.banner_url ? { backgroundImage: `url(${JSON.stringify(course.banner_url)})`, backgroundSize: "cover", backgroundPosition: `${(course.banner_focus_x ?? 0.5) * 100}% ${(course.banner_focus_y ?? 0.5) * 100}%` } : undefined}>
                   {course.banner_url ? null : <Icon name="book" />}
                 </span>
-                <b>{props.canManage ? null : <i className={cx("knum")}>{position + 1}</i>}{course.name}{course.module_status === "draft" ? <span className={cx("tag")} style={{ marginLeft: 8 }}>draft</span> : null}</b>
-                <span className={cx("s")}>{firstLine(course.description_md) || `${lessons.length} ${lessons.length === 1 ? "lesson" : "lessons"}`}</span>
-                {props.canManage ? (
-                  <span className={cx("kpct")}><i style={{ width: row && row.started ? `${Math.round((row.finished / row.started) * 100)}%` : "0%" }} /><em>{row ? `${row.started} started · ${row.finished} finished` : `${lessons.length} ${lessons.length === 1 ? "lesson" : "lessons"}`}</em></span>
-                ) : (
-                  <span className={cx("kpct")}><i style={{ width: `${progress.percent}%` }} /><em>{courseProgressWord(progress.percent)}</em></span>
-                )}
+                <b><i className={cx("knum")}>{shelf.from + position}</i><span>{course.name}</span></b>
+                {/* One line: where it stands on the left, how long it is on the right. */}
+                <span className={cx("kmeta")}>
+                  {props.canManage ? (
+                    <span>{course.module_status === "draft" ? "Draft" : row ? `${row.started} started · ${row.finished} finished` : "Nobody has started"}</span>
+                  ) : (<>
+                    {progress.percent > 0 && progress.percent < 100 ? <span className={cx("bar", "kbar")}><i style={{ width: `${progress.percent}%` }} /></span> : null}
+                    <span>{courseProgressWord(progress.percent)}</span>
+                  </>)}
+                  <span className={cx("right")}>{lessons.length} {lessons.length === 1 ? "lesson" : "lessons"}</span>
+                </span>
               </button>
               </div>
             );
