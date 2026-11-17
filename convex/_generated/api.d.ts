@@ -8,6 +8,7 @@
  * @module
  */
 
+import type * as accessBudgets from "../accessBudgets.js";
 import type * as account from "../account.js";
 import type * as accountSetupCore from "../accountSetupCore.js";
 import type * as agentTools from "../agentTools.js";
@@ -185,7 +186,6 @@ import type * as memberEntryDestination from "../memberEntryDestination.js";
 import type * as memberMemory from "../memberMemory.js";
 import type * as memberOntology from "../memberOntology.js";
 import type * as memberOntologyCore from "../memberOntologyCore.js";
-import type * as memberWriteRateLimit from "../memberWriteRateLimit.js";
 import type * as openAiNativeToolCompletion from "../openAiNativeToolCompletion.js";
 import type * as openAiWebSearchTransport from "../openAiWebSearchTransport.js";
 import type * as operatorAccess from "../operatorAccess.js";
@@ -238,6 +238,7 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  accessBudgets: typeof accessBudgets;
   account: typeof account;
   accountSetupCore: typeof accountSetupCore;
   agentTools: typeof agentTools;
@@ -415,7 +416,6 @@ declare const fullApi: ApiFromModules<{
   memberMemory: typeof memberMemory;
   memberOntology: typeof memberOntology;
   memberOntologyCore: typeof memberOntologyCore;
-  memberWriteRateLimit: typeof memberWriteRateLimit;
   openAiNativeToolCompletion: typeof openAiNativeToolCompletion;
   openAiWebSearchTransport: typeof openAiWebSearchTransport;
   operatorAccess: typeof operatorAccess;
