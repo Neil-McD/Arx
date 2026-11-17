@@ -4445,6 +4445,13 @@
 /* A course's tools, in the header. */
 :root[data-design="v1"] .community-page-header-actions .kit-header-tools { display: contents; }
 
+/* The Knowledge shelf with nothing in its right column (a member, before
+   the guide has learned anything) takes the whole room, not the reading
+   width beside an empty space (Neil, Nov 17). */
+:root[data-design="v1"]:where(:not([data-layout="phone"])) .community-page-body:not(:has(.community-page-rail-content)) > .community-tab-scroll > .web-community-centered-pane:has(.knowledge-shelf) {
+  max-width: none;
+}
+
 /* A course is the one page that centres: its lessons and the lesson are one
    block in the middle of the room, with no right column to sit beside. */
 :root[data-design="v1"]:where(:not([data-layout="phone"])) .community-page-body > .community-tab-scroll > .web-community-centered-pane:has(.knowledge-course-cols) {
