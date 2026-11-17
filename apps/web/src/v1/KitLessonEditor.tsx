@@ -1,12 +1,15 @@
-// Design system v1: editing a lesson where it is read (Skool's classroom,
-// Notion's editing). The lesson's video at the top (a YouTube, Loom, Vimeo or
-// Wistia link), then the lesson itself in the block editor ("/" for blocks),
-// then Cancel and Save. Members see a lesson when its course is live and the
+// Design system v1: for a host the lesson page is the editor (Nov 17). There
+// is no edit mode: the video, the title and the words are changed where they
+// sit ("/" adds a block; select words to format them), and one quiet bar
+// appears once something changed: Unsaved changes, Discard, Save. Nothing
+// reaches members until Save. Members see a lesson when its course is live and the
 // lesson has something in it; a lesson has no publish switch of its own (the
 // server refuses one: publication belongs to the course). The block editor and its Markdown layer
 // are Rashid's (PR #290, apps/web/src/components/lessonEditor), trimmed to
 // writing and media blocks.
-import { lazy, Suspense, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
+import { StableMediaEmbedFrame } from "../../../../shared/linkEmbedUi";
+import { DeferredYouTubeEmbed } from "../components/DeferredYouTubeEmbed";
 import { parseEmbedUrl } from "../../../../shared/linkEmbedUi";
 // The block editor loads only when a host edits, so members never download it.
 const LessonEditor = lazy(() => import("../components/lessonEditor/LessonEditor"));
@@ -64,25 +67,25 @@ export function videoLabel(url: string): string | null {
 
 export function KitLessonEditor(props: {
   resource: CommunityResource;
-  index: number;
-  total: number;
-  courseLive: boolean;
   onSave: (patch: LessonPatch) => Promise<void>;
-  onCancel: () => void;
-  onDelete: () => Promise<void>;
-  // The other courses this lesson could move to, and the move itself.
-  moveTargets?: Array<{ id: string; name: string }>;
-  onMove?: (courseId: string) => Promise<void>;
+  // A lesson just added: the cursor starts in its title.
+  focusTitle?: boolean;
+  // Told when there is something unsaved, so leaving can ask first.
+  onDirtyChange?: (dirty: boolean) => void;
 }) {
   const { resource } = props;
   const [title, setTitle] = useState(resource.title);
   const [video, setVideo] = useState(resource.url ?? "");
+  const [changingVideo, setChangingVideo] = useState(false);
   const bodyRef = useRef(resource.body_md ?? "");
+  // The block editor re-writes Markdown its own way as it opens; only what the
+  // host does counts as a change.
+  const [bodyTouched, setBodyTouched] = useState(false);
   const [bodyVersion, setBodyVersion] = useState(0);
+  // Discard re-opens the block editor on the saved words.
+  const [editorKey, setEditorKey] = useState(0);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [confirmDelete, setConfirmDelete] = useState(false);
-  const [moving, setMoving] = useState(false);
   // The lesson's resources: links members can open under it.
   const [links, setLinks] = useState<LessonLink[]>(resource.lesson_links ?? []);
   const [linkAddress, setLinkAddress] = useState("");
@@ -97,12 +100,28 @@ export function KitLessonEditor(props: {
     setLinkName("");
   };
   const provider = videoLabel(video);
-  const thumb = useMemo(() => {
-    const embed = video.trim() ? parseEmbedUrl(video.trim()) : null;
-    return embed && embed.provider === "youtube" ? embed.thumbnailUrl : null;
-  }, [video]);
-  const patch = lessonPatchFor(resource, { title, video, body: bodyRef.current, links });
+  const embed = provider ? parseEmbedUrl(video.trim()) : null;
+  const draft = { title, video, body: bodyTouched ? bodyRef.current : resource.body_md ?? "", links };
+  const patch = lessonPatchFor(resource, draft);
+  // An empty title is a change too (it cannot be saved, and says so).
+  const dirty = Boolean(patch) || title.trim() !== resource.title.trim();
   void bodyVersion;
+  const { onDirtyChange } = props;
+  useEffect(() => { onDirtyChange?.(dirty); }, [dirty, onDirtyChange]);
+  useEffect(() => () => { onDirtyChange?.(false); }, [onDirtyChange]);
+
+  const discard = () => {
+    setTitle(resource.title);
+    setVideo(resource.url ?? "");
+    setChangingVideo(false);
+    setLinks(resource.lesson_links ?? []);
+    setLinkAddress("");
+    setLinkName("");
+    bodyRef.current = resource.body_md ?? "";
+    setBodyTouched(false);
+    setEditorKey((key) => key + 1);
+    setError(null);
+  };
 
   const save = async () => {
     if (saving) return;
@@ -111,12 +130,13 @@ export function KitLessonEditor(props: {
     const unchangedLink = video.trim() === (resource.url ?? "").trim();
     if (video.trim() && !provider && !unchangedLink) { setError("That link isn't a video we can play. Use YouTube, Loom, Vimeo or Wistia."); return; }
     if (linkAddress.trim()) { setError("Add the link you pasted, or clear it, before saving."); return; }
-    const next = lessonPatchFor(resource, { title, video, body: bodyRef.current, links });
-    if (!next) { props.onCancel(); return; }
+    const next = lessonPatchFor(resource, draft);
+    if (!next) return;
     setSaving(true);
     setError(null);
     try {
       await props.onSave(next);
+      setChangingVideo(false);
     } catch (cause) {
       console.error("lesson save failed", cause);
       setError("The lesson couldn't be saved. Try again.");
@@ -126,28 +146,45 @@ export function KitLessonEditor(props: {
   };
 
   return (
-    <div className={cx("klesson kedit")}>
-      <span className={cx("lab")}>Editing lesson {props.index + 1} of {props.total}</span>
-      <input className={cx("kedit-title")} value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Lesson title" aria-label="Lesson title" maxLength={160} />
+    <div className={`kit-lesson ${cx("klesson kedit")}`}>
+      {/* The video, where members will see it. A link plays here as soon as it is pasted. */}
+      {embed && !changingVideo ? (
+        <>
+          <div className="resource-viewer-embed" data-resource-media="true">
+            {embed.provider === "youtube"
+              ? <DeferredYouTubeEmbed key={embed.id} embed={embed} title={`${title} video`} />
+              : <StableMediaEmbedFrame src={embed.src} title={`${title} embed`} />}
+          </div>
+          <div className={`kit-lesson-facts ${cx("kedit-videorow")}`}>
+            <span className={cx("lab")}>{provider} video</span>
+            <Btn small txt onClick={() => setChangingVideo(true)}>Change</Btn>
+            <Btn small txt onClick={() => setVideo("")}>Remove</Btn>
+          </div>
+        </>
+      ) : (
+        <label className={`kit-lesson-video ${cx("kedit-video", "zone")}`}>
+          <span className={cx("kplay")}><Icon name="play" /></span>
+          <input value={video} autoFocus={changingVideo} onChange={(event) => setVideo(event.target.value)}
+            placeholder="Paste a YouTube, Loom, Vimeo or Wistia link" aria-label="Lesson video link"
+            onKeyDown={(event) => { if (event.key === "Enter" || event.key === "Escape") { event.preventDefault(); setChangingVideo(false); } }} />
+          {video.trim() && !provider ? <span className={cx("lab")}>{video.trim() === (resource.url ?? "").trim() ? "Link" : "Not a video we can play"}</span> : null}
+          {video ? <Btn small txt onClick={() => { setVideo(""); setChangingVideo(false); }}>Remove</Btn> : null}
+        </label>
+      )}
 
-      <div className={cx("kedit-video", provider && "has")}>
-        {thumb ? <span className={cx("kedit-thumb")} style={{ backgroundImage: `url(${JSON.stringify(thumb)})` }} /> : <span className={cx("kplay")}><Icon name="play" /></span>}
-        <div>
-          <span className={cx("lab")}>{provider ? `${provider} video` : video.trim() ? "Link" : "Lesson video"}</span>
-          <input value={video} onChange={(event) => setVideo(event.target.value)} placeholder="Paste a YouTube, Loom, Vimeo or Wistia link" aria-label="Lesson video link" />
-        </div>
-        {video ? <Btn small txt onClick={() => setVideo("")}>Remove</Btn> : null}
-      </div>
+      <input className={`kit-lesson-title ${cx("kedit-title")}`} value={title} autoFocus={props.focusTitle} onChange={(event) => setTitle(event.target.value)}
+        placeholder="Lesson title" aria-label="Lesson title" maxLength={160} />
 
-      <div className="kit-lesson-editor">
-        <Suspense fallback={<p className={cx("sub")}>Opening the editor…</p>}>
-        <LessonEditor initialMarkdown={resource.body_md ?? ""} onUploadImage={null} followAlong={false}
-          onChange={(markdown) => { bodyRef.current = markdown; setBodyVersion((n) => n + 1); }}
-          onDone={() => void save()} onSaveNow={() => void save()} />
+      <div className="kit-lesson-editor kit-lesson-after" onInputCapture={() => setBodyTouched(true)} onPasteCapture={() => setBodyTouched(true)} onDropCapture={() => setBodyTouched(true)}
+        onKeyDownCapture={() => setBodyTouched(true)} onClickCapture={(event) => { if ((event.target as HTMLElement).closest("button, [role='menuitem'], [role='option']")) setBodyTouched(true); }}>
+        <Suspense fallback={<p className={cx("sub")}>Opening the lesson…</p>}>
+          <LessonEditor key={editorKey} initialMarkdown={resource.body_md ?? ""} onUploadImage={null} followAlong={false}
+            onChange={(markdown) => { bodyRef.current = markdown; setBodyVersion((n) => n + 1); }}
+            onDone={() => void save()} onSaveNow={() => void save()} />
         </Suspense>
       </div>
 
-      <div className={cx("kres")}>
+      <div className={`kit-lesson-after ${cx("kres")}`}>
         <span className={cx("lab")}>Resources for this lesson</span>
         {links.map((link) => (
           <div key={link.url} className={cx("kresrow")}>
@@ -167,35 +204,15 @@ export function KitLessonEditor(props: {
         <span className={cx("sub")}>Members open these from the lesson, and your guide reads them too.</span>
       </div>
 
-      {error ? <p className={cx("bad")} role="alert" style={{ marginTop: 12 }}>{error}</p> : null}
-      <div className={cx("kedit-bar")}>
-        <span className={cx("kedit-pub")}>{props.courseLive ? "Members can see this course" : "Draft course · only hosts see it"}</span>
-        {confirmDelete ? (
-          <>
-            <button type="button" className={cx("btn sm no")} onClick={() => void props.onDelete()}>Delete lesson for good</button>
-            <Btn small txt onClick={() => setConfirmDelete(false)}>Keep it</Btn>
-          </>
-        ) : <Btn small txt onClick={() => setConfirmDelete(true)}>Delete</Btn>}
-        {props.onMove && props.moveTargets?.length && !confirmDelete ? (
-          // A lesson moves as it was last saved, so unsaved words are saved or
-          // dropped first.
-          <select className={cx("kmoveto")} aria-label="Move this lesson to another course" value="" disabled={moving || Boolean(patch)}
-            title={patch ? "Save or cancel your changes first" : undefined}
-            onChange={(event) => {
-              const courseId = event.target.value;
-              if (!courseId) return;
-              setMoving(true);
-              void props.onMove!(courseId).catch(() => setError("The lesson couldn't be moved. Try again.")).finally(() => setMoving(false));
-            }}>
-            <option value="">{moving ? "Moving…" : "Move to another course"}</option>
-            {props.moveTargets.map((course) => <option key={course.id} value={course.id}>{course.name}</option>)}
-          </select>
-        ) : null}
-        <span style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
-          <Btn small txt onClick={props.onCancel}>Cancel</Btn>
-          <button type="button" className={cx("btn sm go")} disabled={saving || !patch} onClick={() => void save()}>{saving ? "Saving…" : "Save"}</button>
-        </span>
-      </div>
+      {/* Drawn only once something changed. Nothing reaches members until Save. */}
+      {dirty || error ? (
+        <div className={`kit-lesson-after ${cx("kunsaved")}`} role="status">
+          <i aria-hidden="true" />
+          <span>{error ?? "Unsaved changes"}</span>
+          <Btn small txt onClick={discard}>Discard</Btn>
+          <button type="button" className={cx("btn sm go")} disabled={saving || !dirty} onClick={() => void save()}>{saving ? "Saving…" : "Save"}</button>
+        </div>
+      ) : null}
     </div>
   );
 }
