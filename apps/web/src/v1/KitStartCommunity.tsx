@@ -7,7 +7,7 @@
 import { useState, type ReactNode } from "react";
 import { communityPageAddress, isValidCommunitySlug } from "../../../../shared/communitySlug";
 import type { DiscoverCommunitySnapshot } from "../../../../shared/communityTypes";
-import { Btn, cx, KitApp } from "./kit";
+import { Btn, cx, Icon, KitApp } from "./kit";
 import { DiscoverCard } from "./KitDiscover";
 import { monthlyCentsFromText, stashStartExtras } from "./startCommunityExtras";
 
@@ -74,16 +74,22 @@ export function startCardCommunity(facts: StartCardFacts): DiscoverCommunitySnap
   };
 }
 
-// One step's frame: the form on the left with the step dots under it, the
-// card on the right. A picture of the card, not a link: out of the tab order.
-export function StartStepFrame(props: { step: 1 | 2 | 3; card: StartCardFacts; cardLine: string; children: ReactNode }) {
+// One step's frame: the form on the left, the card on the right (a picture
+// of the card, not a link: out of the tab order). Under the form, one bar that
+// is the same on every step: the way back on the left, the step dots in the
+// middle, the way forward on the right.
+export function StartStepFrame(props: { step: 1 | 2 | 3; card: StartCardFacts; cardLine: string; back?: ReactNode; forward: ReactNode; children: ReactNode }) {
   return (
     <KitApp view="home" part="flow">
       <div className={cx("startc")}>
         <div className={cx("startc-form")}>
           {props.children}
-          <div className={cx("startc-dots")} role="img" aria-label={`Step ${props.step} of 3`}>
-            {[1, 2, 3].map((dot) => <i key={dot} className={cx(dot === props.step && "on")} />)}
+          <div className={cx("startc-foot")}>
+            <div className={cx("startc-foot-back")}>{props.back}</div>
+            <div className={cx("startc-dots")} role="img" aria-label={`Step ${props.step} of 3`}>
+              {[1, 2, 3].map((dot) => <i key={dot} className={cx(dot === props.step && "on")} />)}
+            </div>
+            <div className={cx("startc-foot-go")}>{props.forward}</div>
           </div>
         </div>
         <div className={cx("startc-side")} aria-hidden="true" {...({ inert: "" } as Record<string, string>)}>
@@ -130,7 +136,17 @@ export function KitStartCommunity(props: KitStartCommunityProps) {
     : startCommunityListingLine({ listed, hasPicture: Boolean(props.avatarUrl), hasBanner: Boolean(props.bannerUrl), oneLiner: props.oneLiner });
 
   return (
-    <StartStepFrame step={step} card={card} cardLine={cardLine}>
+    <StartStepFrame step={step} card={card} cardLine={cardLine}
+      back={step === 1
+        ? (props.isDismissible ? <Btn onClick={props.onClose}>Cancel</Btn> : null)
+        : <Btn disabled={props.isCreating} onClick={() => setStep(1)}><Icon name="back" /> Back</Btn>}
+      forward={step === 1
+        ? <Btn go disabled={!canGoOn} onClick={() => setStep(2)}>Next <Icon name="arrow" /></Btn>
+        : (
+          <Btn go disabled={!canGoOn || !priceOk} onClick={create}>
+            {props.isCreating ? "Creating community…" : props.hasSession ? <>Create community <Icon name="arrow" /></> : "Sign in to continue"}
+          </Btn>
+        )}>
       {step === 1 ? (
         <>
           <div>
@@ -162,10 +178,6 @@ export function KitStartCommunity(props: KitStartCommunityProps) {
             </div>
           </div>
           {props.error ? <p className={cx("startc-err")} role="alert">{props.error}</p> : null}
-          <div className={cx("startc-acts")}>
-            <Btn go disabled={!canGoOn} onClick={() => setStep(2)}>Next</Btn>
-            {props.isDismissible ? <Btn txt onClick={props.onClose}>Cancel</Btn> : null}
-          </div>
         </>
       ) : (
         <>
@@ -203,12 +215,6 @@ export function KitStartCommunity(props: KitStartCommunityProps) {
             <span>List it in Discover</span>
           </label>
           {props.error ? <p className={cx("startc-err")} role="alert">{props.error}</p> : null}
-          <div className={cx("startc-acts")}>
-            <Btn go disabled={!canGoOn || !priceOk} onClick={create}>
-              {props.isCreating ? "Creating community…" : props.hasSession ? "Create community" : "Sign in to continue"}
-            </Btn>
-            <Btn txt disabled={props.isCreating} onClick={() => setStep(1)}>Back</Btn>
-          </div>
         </>
       )}
     </StartStepFrame>
@@ -232,6 +238,7 @@ export function KitStartLaunch(props: {
   const link = `https://${communityPageAddress(props.card.slug)}`;
   return (
     <StartStepFrame step={3} card={props.card}
+      forward={<Btn go disabled={props.saving || props.opening} onClick={props.onOpen}>{props.opening ? "Opening…" : <>Open community <Icon name="arrow" /></>}</Btn>}
       cardLine={startCommunityListingLine({ listed: props.listed, hasPicture: Boolean(props.card.avatarUrl), hasBanner: Boolean(props.card.bannerUrl), oneLiner: props.card.oneLiner })}>
       <div>
         <h2 id={props.titleId}>{props.card.name.trim() || "Your community"} is ready</h2>
@@ -246,9 +253,6 @@ export function KitStartLaunch(props: {
       </div>
       {props.note ? <p className={cx("startc-sub")} role="status">{props.note}</p> : null}
       {props.error ? <p className={cx("startc-err")} role="alert">{props.error}</p> : null}
-      <div className={cx("startc-acts")}>
-        <Btn go disabled={props.saving || props.opening} onClick={props.onOpen}>{props.opening ? "Opening…" : "Open community"}</Btn>
-      </div>
     </StartStepFrame>
   );
 }
