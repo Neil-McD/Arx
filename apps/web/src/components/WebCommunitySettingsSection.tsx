@@ -32,6 +32,7 @@ import {
 } from "./WebPlatformChoiceControls";
 import { CommunityFounderBriefSection } from "./CommunityFounderBriefSection";
 import { communityPageAddress } from "../../../../shared/communitySlug";
+import { discoverListingGap } from "../../../../shared/communityDiscoverListing";
 
 type CommunityPricingMode = "free" | "monthly" | "annual";
 
@@ -480,6 +481,12 @@ function CommunityGeneralSettingsV1({
   state,
   actions,
 }: SharedSettingsProps & { activeCommunity: ActiveCommunity; isOwner: boolean }) {
+  // Listed but not showing yet: what Discover still needs (shown under the switch).
+  const discoverGap = discoverListingGap({
+    listed: state.communitySettingsVisibility === "published",
+    hasBanner: Boolean(state.communitySettingsBannerUrl),
+    oneLiner: state.communitySettingsOneLiner,
+  });
   const [confirmArchive, setConfirmArchive] = useState(false);
   useEffect(() => { setConfirmArchive(false); }, [activeCommunity.id]);
   const name = state.communitySettingsName || activeCommunity?.name || "Community";
@@ -579,7 +586,9 @@ function CommunityGeneralSettingsV1({
       </SettingsGroup>
       {isOwner ? (
         <SettingsGroup label="Visibility">
-          <SettingsRow label="Listed in Discover" help="Anyone can find it. Joining still goes through your plans or approval.">
+          <SettingsRow label="Listed in Discover" help={discoverGap
+            ? <>Anyone can find it. Joining still goes through your plans or approval. <span style={{ display: "block", marginTop: 4, color: "var(--text-ink)" }}>{discoverGap}</span></>
+            : "Anyone can find it. Joining still goes through your plans or approval."}>
             <SettingsSwitch
               label="Listed in Discover"
               checked={state.communitySettingsVisibility === "published"}
