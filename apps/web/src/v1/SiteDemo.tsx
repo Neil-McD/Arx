@@ -114,6 +114,9 @@ const DEMO_CSS = `
 .site-demo .kit-channel-feed-part [class*="_msg_"]{animation:site-demo-in .42s cubic-bezier(.2,.7,.2,1) both}
 .site-demo .community-interaction-typing{animation:site-demo-in .3s ease both}
 .site-demo [class*="_card_"],.site-demo [class*="_since_"]>*{animation:site-demo-in .5s cubic-bezier(.2,.7,.2,1) both}
+/* The app is scaled as a picture is: phones must not resize its text on their own. */
+.site-demo{-webkit-text-size-adjust:100%;text-size-adjust:100%}
+.site-demo-window{width:min(1180px,100%);margin:0 auto;border-radius:14px;border:1px solid rgba(255,255,255,.14);overflow:hidden;box-shadow:0 60px 140px -50px rgba(111,120,216,.35),0 40px 90px -40px #000}
 .site-demo .site-demo-page{transition:opacity ${FADE_SECONDS}s ease}
 .site-demo.is-ending .site-demo-page{opacity:0}
 .site-demo-dots{display:flex;justify-content:center;gap:8px;margin-top:22px;flex-wrap:wrap}
@@ -139,9 +142,9 @@ function AppFrame(props: { ending?: boolean; left: ReactNode; children: ReactNod
     return () => watcher.disconnect();
   }, []);
   return (
-    <div ref={boxRef} className={`site-demo${props.ending ? " is-ending" : ""}`} style={{ height: APP_HEIGHT * zoom }}>
+    <div ref={boxRef} className={`site-demo${props.ending ? " is-ending" : ""}`} style={{ height: APP_HEIGHT * zoom, overflow: "hidden" }}>
       <style>{DEMO_CSS}</style>
-      <div className="app-root" style={{ width: APP_WIDTH, height: APP_HEIGHT, zoom, ["--right-column-width" as string]: `${Math.round(APP_WIDTH * 0.23)}px` }}>
+      <div className="app-root" style={{ width: APP_WIDTH, height: APP_HEIGHT, transform: `scale(${zoom})`, transformOrigin: "0 0", ["--right-column-width" as string]: `${Math.round(APP_WIDTH * 0.23)}px` }}>
         <div className="app-shell framed-shell community-layout sessions-compact no-right" style={{ height: APP_HEIGHT }}>
           <div className="product-shell-surface product-shell-surface--community" style={{ height: APP_HEIGHT }}>
             {props.left}
@@ -578,7 +581,6 @@ export function SiteDemo() {
 export function SiteDemoLab() {
   return (
     <div style={{ height: "100dvh", overflowY: "auto", background: "#07080a", padding: "48px 24px", fontFamily: 'var(--font-sans, "Geist Variable", "Geist", system-ui, sans-serif)' }}>
-      <style>{`.site-demo-window{width:min(1180px,100%);margin:0 auto;border-radius:14px;border:1px solid rgba(255,255,255,.14);overflow:hidden;box-shadow:0 60px 140px -50px rgba(111,120,216,.35),0 40px 90px -40px #000}`}</style>
       <SiteDemo />
     </div>
   );
