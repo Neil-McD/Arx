@@ -31,7 +31,7 @@ export type CloudPastMemberRow = {
 };
 
 export type CloudMemberSummary = {
-  counts: { everyone: number; on_hold: number; cancelling: number; comped: number; know_little: number; past: number };
+  counts: { everyone: number; on_hold: number; cancelling: number; know_little: number; past: number };
   // Everyone in, less those whose card is on hold (the left column's number).
   with_access: number;
   prices: Array<{ price_point_id: string; label: string; count: number; current: boolean }>;
@@ -73,11 +73,6 @@ export async function listCloudCommunityMemberRecordsPage<SessionT>(params: { se
     authSubject, communityId: params.communityId, view: params.view,
     paginationOpts: { numItems: params.numItems ?? 100, cursor: params.cursor },
   }) as CloudMemberRecordsPage;
-}
-
-export async function compCloudCommunityMember<SessionT>(params: { session: SessionT; communityId: string; membershipId: string }): Promise<void> {
-  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
-  await client.mutation("communityMemberRecords:compCommunityMember" as any, { authSubject, communityId: params.communityId, membershipId: params.membershipId });
 }
 
 export async function getCloudCommunityMemberRecord<SessionT>(params: { session: SessionT; communityId: string; membershipId: string | null }): Promise<CloudMemberRecord | null> {

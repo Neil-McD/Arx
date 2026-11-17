@@ -151,15 +151,12 @@ export function MembersTable(props: Avatars & {
 }
 
 // What can be done to everyone ticked.
-export function MembersBulkBar(props: { count: number; compable: number; busy: string | null; onExport: () => void; onComp: () => void; onClear: () => void }) {
+export function MembersBulkBar(props: { count: number; onExport: () => void; onClear: () => void }) {
   if (props.count === 0) return null;
   return (
     <div className={cx("mbulk")} role="region" aria-label="Selected members">
       <b>{props.count} selected</b>
       <Btn small onClick={props.onExport}>Export selected</Btn>
-      {props.compable > 0 ? (
-        <Btn small onClick={props.onComp}>{props.busy === "comp" ? "Saving…" : props.compable === props.count ? "Keep free for good" : `Keep ${props.compable} free for good`}</Btn>
-      ) : null}
       <Btn small txt onClick={props.onClear}>Clear</Btn>
     </div>
   );
