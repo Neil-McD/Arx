@@ -8,6 +8,8 @@ import { fetchCloudPod, fetchCloudPodNotes, formatPodDate, type CloudPodDetail, 
 import { formatMomentWhen } from "../../../../shared/communityHomeMoments";
 import { Btn, cx } from "./kit";
 import { BriefPart, usePlaceBriefRead } from "./KitBrief";
+import { resolveAuthSubject, type AuthSessionLike } from "../../../../shared/authSession";
+import { useLiveChange } from "../../../../shared/liveQuery";
 import { PanelLearned, PanelNext, PanelPart, PanelPeople, usePanelSettled } from "./KitPanel";
 
 const REPEATS: Record<string, string> = { daily: "every day", weekly: "every week", monthly: "every month" };
@@ -26,10 +28,16 @@ export function KitPodLanding(props: {
   const { brief, settled: briefSettled } = usePlaceBriefRead(props.session, props.communityId, channelId);
   // How many of the pod's two reads (its detail, its notes) have answered.
   const [answered, setAnswered] = useState(0);
+  // Bumped when the pod or its notes change for anyone (shared/liveQuery.ts).
+  const [changed, setChanged] = useState(0);
+  const subject = props.session ? resolveAuthSubject(props.session as AuthSessionLike) : null;
+  const liveArgs = subject ? { authSubject: subject, communityId: props.communityId, channelId } : null;
+  useLiveChange(props.session, "communityPods:getPod", liveArgs, () => setChanged((count) => count + 1));
+  useLiveChange(props.session, "communityPodNotes:listPodNotes", liveArgs, () => setChanged((count) => count + 1));
+  // Another pod starts empty; a change to this one keeps what is shown until
+  // the new answer is in.
+  useEffect(() => { setDetail(null); setNotes([]); setAnswered(0); }, [props.communityId, channelId]);
   useEffect(() => {
-    setDetail(null);
-    setNotes([]);
-    setAnswered(0);
     if (!props.session) return;
     let live = true;
     const call = { session: props.session, communityId: props.communityId, channelId };
@@ -38,7 +46,7 @@ export function KitPodLanding(props: {
     fetchCloudPod(call).then((next) => { if (live) setDetail(next); }).catch(() => undefined).finally(done);
     fetchCloudPodNotes(call).then((next) => { if (live) setNotes(next.notes); }).catch(() => undefined).finally(done);
     return () => { live = false; };
-  }, [props.session, props.communityId, channelId]);
+  }, [props.session, props.communityId, channelId, changed]);
   // Layout before data: the parts draw as one piece once they have all
   // answered, so none is drawn and then pushed down by one above it.
   const settled = usePanelSettled(briefSettled && answered >= 2);

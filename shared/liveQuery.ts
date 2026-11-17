@@ -1,4 +1,4 @@
-import { useCallback, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useRef, useSyncExternalStore } from "react";
 import { resolveAuthSubject, type AuthSessionLike } from "./authSession";
 import {
   acquireAuthenticatedConvexRealtimeClient,
@@ -27,7 +27,14 @@ export type LiveQueryName =
   | "communityBriefs:getPlaceBrief"
   | "communityBrain:getBrainMap"
   | "communityEvents:listCommunityEvents"
-  | "communityPods:listCommunityPods";
+  | "communityPods:listCommunityPods"
+  | "communityPods:getPod"
+  | "communityPodNotes:listPodNotes"
+  | "communityAdmin:listCommunityJoinRequests"
+  | "communityMemberRecords:getCommunityMemberSummary"
+  | "communityResources:listCommunityResources"
+  | "communityResources:listCommunityResourceModules"
+  | "communityNotes:listCommunityNotes";
 
 export type LiveResult<T> = { data: T | undefined; error: unknown };
 const NOTHING: LiveResult<never> = { data: undefined, error: null };
@@ -148,4 +155,32 @@ export function useLiveQuery<T>(session: unknown, name: LiveQueryName, args: Rec
     [key],
   );
   return useSyncExternalStore(subscribe, getSnapshot, () => NOTHING);
+}
+
+// For a page that still loads its own data (with its own loading, errors and
+// paging): watch the same read live and load again when its answer changes,
+// so the page shows what someone else just changed without a reload. The
+// first answer is skipped (the page has just loaded it), and an answer equal
+// to the last one is not a change.
+export function useLiveChange(session: unknown, name: LiveQueryName, args: Record<string, unknown> | null, onChange: () => void): void {
+  const { data } = useLiveQuery<unknown>(session, name, args);
+  const onChangeRef = useRef(onChange);
+  onChangeRef.current = onChange;
+  const key = args ? `${name}\u0000${stable(args)}` : null;
+  const seen = useRef<LiveChangeSeen>({ key: null, answer: null });
+  useEffect(() => {
+    const step = liveChangeStep(seen.current, key, data);
+    seen.current = step.seen;
+    if (step.changed) onChangeRef.current();
+  }, [data, key]);
+}
+
+// What useLiveChange remembers, and whether a new answer is a change: not
+// the first answer for a read, and not one equal to the last.
+export type LiveChangeSeen = { key: string | null; answer: string | null };
+export function liveChangeStep(seen: LiveChangeSeen, key: string | null, data: unknown): { seen: LiveChangeSeen; changed: boolean } {
+  const current = seen.key === key ? seen : { key, answer: null };
+  if (data === undefined) return { seen: current, changed: false };
+  const answer = stable(data);
+  return { seen: { key, answer }, changed: current.answer !== null && current.answer !== answer };
 }

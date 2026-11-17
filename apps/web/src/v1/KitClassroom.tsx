@@ -29,6 +29,8 @@ import { askGuide, openGuideFromSearch } from "../components/guideSearch";
 import { WebCommunityResourceViewerContent } from "../components/WebCommunityResourceViewerContent";
 import { PanelBrain, useBrainMap } from "./KitBrain";
 import { BriefPart, usePlaceBriefRead } from "./KitBrief";
+import { resolveAuthSubject, type AuthSessionLike } from "../../../../shared/authSession";
+import { useLiveChange } from "../../../../shared/liveQuery";
 import { NoteForm, OpenNote } from "./KitKnowledgeNotes";
 import { PanelAction, PanelLine, PanelNext, PanelPart, usePanelSettled } from "./KitPanel";
 import { KitLessonEditor, lessonLinkPlace, type LessonPatch } from "./KitLessonEditor";
@@ -200,6 +202,12 @@ export function KitClassroom(props: {
     } catch { /* The right column goes without notes. */ } finally { setNotesAnswered(true); }
   }, [props.session, props.communityId, props.canManage]);
   useEffect(() => { void loadProgress(); void loadNotes(); }, [loadProgress, loadNotes]);
+  // Live (shared/liveQuery.ts): a note a builder adds or changes elsewhere
+  // shows without a reload.
+  const notesSubject = props.session ? resolveAuthSubject(props.session as AuthSessionLike) : null;
+  useLiveChange(props.session, "communityNotes:listCommunityNotes",
+    notesSubject ? { authSubject: notesSubject, communityId: props.communityId, limit: 50 } : null,
+    () => { void loadNotes(); });
   // Started and finished depend on which lessons exist, so they're read again
   // when a host adds or deletes one.
   const lessonSetKey = props.resources.map((resource) => resource.id).join(",");

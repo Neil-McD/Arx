@@ -18,6 +18,8 @@ import {
 } from "../../../../shared/cloudCommunityPodsGateway";
 import { Btn, KitApp, Rail, Sec, cx } from "./kit";
 import { BriefPart, usePlaceBriefRead } from "./KitBrief";
+import { resolveAuthSubject, type AuthSessionLike } from "../../../../shared/authSession";
+import { useLiveChange } from "../../../../shared/liveQuery";
 import { KitPodCall } from "./KitPodCall";
 import { KitPodKnowledge } from "./KitPodKnowledge";
 import { PanelAction, PanelLine, PanelPart, PanelPeople, usePanelSettled } from "./KitPanel";
@@ -261,5 +263,11 @@ export function useCloudPod(session: unknown, communityId: string | null, channe
     } catch { setPod(null); }
   }, [session, communityId, channelId]);
   useEffect(() => { void load(); }, [load]);
+  // Live (shared/liveQuery.ts): someone joining, leaving or asking, or a
+  // call being planned, shows without a reload.
+  const subject = session ? resolveAuthSubject(session as AuthSessionLike) : null;
+  useLiveChange(session, "communityPods:getPod",
+    subject && communityId && channelId ? { authSubject: subject, communityId, channelId } : null,
+    () => { void load(); });
   return { pod, reload: load };
 }
