@@ -571,11 +571,15 @@ export function KitClassroom(props: {
               </div>
             ) : null}
             {/* One way forward, with what it leads to. Back to the shelf is the header's arrow. */}
-            <div className={`kit-lesson-after ${cx("kfinish")}`}>
-              <div className={cx("kfinish-next")}>
-                <span>{next ? "Up next" : open.lessons.length > 1 ? "Last lesson in this course" : open.course.name}</span>
-                <b>{next ? next.title : open.lessons.length > 1 ? `You're at the end of ${open.course.name}` : lesson.title}</b>
-              </div>
+            {/* A host on the last (or only) lesson has nothing to do here: no bar. */}
+            {props.canManage && !next && !previous ? null : (
+            <div className={`kit-lesson-after ${cx("kfinish", open.lessons.length > 1 ? "" : "bare")}`}>
+              {open.lessons.length > 1 ? (
+                <div className={cx("kfinish-next")}>
+                  <span>{next ? "Up next" : "Last lesson in this course"}</span>
+                  <b>{next ? next.title : `You're at the end of ${open.course.name}`}</b>
+                </div>
+              ) : <span className={cx("kfinish-next")} />}
               {previous ? <button type="button" className={cx("btn", "txt")} onClick={() => chooseLesson(previous.id)}><Icon name="back" />Previous</button> : null}
               {agentOn && !listBeside && !editingTools ? <button type="button" className={cx("btn", "txt")} onClick={() => openGuideFromSearch()}><Icon name="spark" />Ask about this lesson</button> : null}
               {props.canManage ? (
@@ -591,6 +595,7 @@ export function KitClassroom(props: {
                 </button>
               )}
             </div>
+            )}
           </div>
         ) : (
           <div style={{ marginTop: 24 }}>

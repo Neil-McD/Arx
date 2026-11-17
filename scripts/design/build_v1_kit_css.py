@@ -715,7 +715,7 @@ css += """
 .app .kfold summary::-webkit-details-marker{display:none}
 .app .kfold summary em{margin-left:auto;font-style:normal;font-weight:400;font-size:12.5px;color:var(--ink3)}
 .app .ktools{display:flex;flex-wrap:wrap;align-items:center;gap:8px;max-width:1216px;margin:14px auto 0}
-.app .ktools.head{margin:0;flex-wrap:nowrap}
+.app .ktools.head{width:100%;max-width:1216px;margin:0 auto;justify-content:flex-end;flex-wrap:nowrap}
 .app .ktools .btn .ic{width:14px;height:14px}
 .app .kmore{position:relative}
 .app .kmore summary{list-style:none;cursor:pointer;width:32px;padding:0;justify-content:center}
@@ -727,6 +727,7 @@ css += """
 .app .kmore-menu small{display:block;margin-top:2px;font-size:12px;line-height:1.35;color:var(--ink3)}
 .app .kfinish{display:flex;flex-wrap:wrap;align-items:center;gap:10px 14px;margin-top:34px;padding:16px 18px;border-radius:14px;background:var(--panel2);border:1px solid var(--line)}
 .app .kfinish-next{flex:1;min-width:180px}
+.app .kfinish.bare{padding:0;border:0;background:none}.app .kfinish.bare .kfinish-next{min-width:0}
 .app .kfinish-next span{display:block;font-size:12.5px;color:var(--ink3)}
 .app .kfinish-next b{display:block;margin-top:1px;font-size:15.5px;font-weight:600;line-height:1.3}
 .app .kisdone{display:inline-flex;align-items:center;gap:6px;height:32px;padding:0 10px;border-radius:8px;font-size:13px;color:var(--v1-accent-ink,var(--accent));cursor:pointer}
