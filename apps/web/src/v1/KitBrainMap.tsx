@@ -58,7 +58,9 @@ export function KitBrainMap(props: {
     const wrap = wrapRef.current;
     if (!wrap || !page || typeof ResizeObserver === "undefined") return;
     const measure = () => {
-      const box = wrap.getBoundingClientRect();
+      // Its laid-out size, not its size on screen: drawn inside something
+      // scaled (the website's demo), the map still lays out for its own box.
+      const box = { width: wrap.clientWidth, height: wrap.clientHeight };
       if (box.width > 0 && box.height > 0) setStage((last) => Math.abs(last.w - box.width) < 1 && Math.abs(last.h - box.height) < 1 ? last : { w: Math.round(box.width), h: Math.round(box.height) });
     };
     measure();
