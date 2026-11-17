@@ -6,7 +6,6 @@ import type { ReactNode } from "react";
 import type { DiscoverCommunitySnapshot } from "../../../../shared/communityTypes";
 import { KitApp } from "./kit";
 import { DiscoverCard } from "./KitDiscover";
-import { SiteDemo } from "./SiteDemo";
 
 const CSS = `
 .site{--bg:#07080a;--panel:#0d0f12;--panel2:#12151a;--ink:#f3f4f6;--ink2:rgba(243,244,246,.68);--ink3:rgba(243,244,246,.46);--line:rgba(255,255,255,.08);--line2:rgba(255,255,255,.14);--accent:#6f78d8;--accent-hi:#8b93ea;--ok:#5fcf9a;
@@ -32,7 +31,22 @@ const CSS = `
 .site .lede{margin:22px auto 0;max-width:56ch;font-size:19px;line-height:1.5;color:var(--ink2);text-wrap:pretty}
 .site .cta{display:flex;justify-content:center;gap:12px;margin-top:32px;flex-wrap:wrap}
 .site .fine{margin-top:14px;font-size:13.5px;color:var(--ink3)}
-.site .demo{margin:64px auto 0;width:min(1228px,100%);padding:0 24px}
+.site .loopwrap{margin-top:72px}
+.site .loop{display:grid;grid-template-columns:minmax(0,1fr) 220px minmax(0,1fr);grid-template-areas:"a ab b" "da core bc" "d cd c";gap:14px;align-items:center}
+.site .loop .a{grid-area:a}.site .loop .b{grid-area:b}.site .loop .c{grid-area:c}.site .loop .d{grid-area:d}
+.site .loop .ab{grid-area:ab}.site .loop .bc{grid-area:bc;justify-self:center}.site .loop .cd{grid-area:cd}.site .loop .da{grid-area:da;justify-self:center}
+.site .loop .bc{grid-column:3}.site .loop .da{grid-column:1}
+.site .step{text-align:left;padding:26px 26px 24px;border:1px solid var(--line2);border-radius:16px;background:linear-gradient(180deg,var(--panel2),var(--panel))}
+.site .step .n{display:inline-grid;place-items:center;width:26px;height:26px;border-radius:999px;background:rgba(111,120,216,.2);color:var(--accent-hi);font-size:13px;font-weight:600}
+.site .step h3{margin:12px 0 0;font-size:22px;font-weight:600;letter-spacing:-.02em}
+.site .step .said{margin:12px 0 0;font-size:17px;line-height:1.4;color:var(--ink)}
+.site .step .said b{font-weight:600;color:var(--accent-hi);margin-right:4px}
+.site .step .note{margin:10px 0 0;font-size:14.5px;color:var(--ink2)}
+.site .arrow{text-align:center;font-size:28px;line-height:1;color:var(--accent-hi)}
+.site .core{grid-area:core;display:grid;justify-items:center;text-align:center;padding:10px 0}
+.site .core b{font-size:76px;line-height:1;font-weight:600;letter-spacing:-.04em;background:linear-gradient(180deg,#fff,var(--accent-hi));-webkit-background-clip:text;background-clip:text;color:transparent}
+.site .core span{margin-top:8px;font-size:15px;color:var(--ink)}
+.site .core em{margin-top:4px;font-style:normal;font-size:13px;color:var(--ink3)}
 .site .shot{position:relative;margin:64px auto 0;width:min(1180px,100% - 48px);border-radius:14px;border:1px solid var(--line2);overflow:hidden;background:var(--panel);box-shadow:0 60px 140px -50px rgba(111,120,216,.35),0 40px 90px -40px #000}
 .site .shot img{display:block;width:100%;height:auto}
 /* The capture caught the pointer; this covers it (the area is flat). */
@@ -117,6 +131,13 @@ const CSS = `
 @media (max-width:860px){
   .site .nav .links{display:none}
   .site .quiet,.site .has,.site .proof,.site .prices{grid-template-columns:1fr}
+  .site .loop{grid-template-columns:1fr;grid-template-areas:"a" "ab" "b" "bc" "c" "cd" "d" "da" "core";gap:8px}
+  .site .loop .bc,.site .loop .da{grid-column:1}
+  .site .loop .arrow{font-size:0;height:22px}
+  .site .loop .arrow::before{content:"↓";font-size:22px}
+  .site .loop .da::before{content:"↺"}
+  .site .step{padding:20px}
+  .site .core b{font-size:60px}
   .site .job,.site .minute{grid-template-columns:1fr;gap:24px;padding:24px}
   .site .minute{padding:0}
   .site .job:nth-child(even) .job-words{order:0}
@@ -144,6 +165,17 @@ const Arrow = () => (
 const card = (over: Partial<DiscoverCommunitySnapshot> & Pick<DiscoverCommunitySnapshot, "slug" | "name" | "one_liner">): DiscoverCommunitySnapshot => ({
   avatar_url: null, banner_url: null, visibility: "published", created_at: "", updated_at: "", ...over,
 });
+
+function LoopStep(props: { at: string; n: string; title: string; who: string; line: string; note: string }) {
+  return (
+    <div className={`step ${props.at}`}>
+      <span className="n">{props.n}</span>
+      <h3>{props.title}</h3>
+      <p className="said"><b>{props.who}</b> “{props.line}”</p>
+      <p className="note">{props.note}</p>
+    </div>
+  );
+}
 
 function Job(props: { num: string; title: string; words: string; children: ReactNode }) {
   return (
@@ -176,16 +208,30 @@ export function SiteLab() {
       <div className="hero wrap" id="top">
         <span className="pill"><i /> Free to start · live in a minute</span>
         <h1>A community with its own <em>AI client success manager.</em></h1>
-        <p className="lede">It answers your members, welcomes every new person and tells you who needs you. Your community keeps running when you can't be there.</p>
+        <p className="lede">It learns from every conversation, so your community gets smarter the more people use it.</p>
         <div className="cta">
           <button type="button" className="btn go">Start your community <Arrow /></button>
           <button type="button" className="btn">See it working</button>
         </div>
         <p className="fine">No card. The community is free for good. The manager is $79 a month, with the first 14 days free.</p>
       </div>
-      {/* The product, playing: five scenes of what the client success manager does. */}
-      <div className="demo" id="does">
-        <SiteDemo />
+      {/* The idea as one picture: a loop. Each step feeds the next, and it comes back round. */}
+      <div className="loopwrap wrap" id="does">
+        <div className="loop">
+          <LoopStep at="a" n="1" title="Someone asks" who="Mira" line="How do I find my first ten subscribers?" note="It doesn't know yet, so it brings in Dana, who has done it." />
+          <span className="arrow ab" aria-hidden="true">→</span>
+          <LoopStep at="b" n="2" title="It learns" who="Dana" line="Direct messages to people you know. Six yeses from fifteen." note="Her answer is saved as something the whole community knows." />
+          <span className="arrow bc" aria-hidden="true">↓</span>
+          <LoopStep at="c" n="3" title="It compounds" who="Sam" line="Any advice on getting my first subscribers?" note="A week later, the same question. This time it answers by itself." />
+          <span className="arrow cd" aria-hidden="true">←</span>
+          <LoopStep at="d" n="4" title="It pays off" who="Sam" line="Eight subscribers. My first $240." note="How he did it is saved too, for the next person who asks." />
+          <span className="arrow da" aria-hidden="true">↑</span>
+          <div className="core">
+            <b>13</b>
+            <span>things your community knows</span>
+            <em>and one more with every conversation</em>
+          </div>
+        </div>
       </div>
 
       <section className="wrap">
