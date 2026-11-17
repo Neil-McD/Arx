@@ -5,7 +5,7 @@ import { CommunityAvatar } from "../../../../shared/CommunityAvatar";
 import type { CommunityLike } from "./webShellChromeShared";
 import { Icon, KitApp, cx } from "../v1/kit";
 import { isImeComposing } from "../controllers/communityComposerTextEditing";
-import { communityMarkTone, recallCommunitiesOpened, rememberCommunityOpened, SWITCHER_GROUPS_FROM, switcherGroups } from "../v1/switcherList";
+import { communityMarkTone, recallCommunitiesOpened, rememberCommunityOpened, SWITCHER_SEARCH_FROM, switcherGroups } from "../v1/switcherList";
 
 export type WebCommunitySwitcherProps = {
   activeCommunityName: string;
@@ -39,7 +39,7 @@ export function WebCommunitySwitcher(props: WebCommunitySwitcherProps) {
   const menuId = useId();
 
   // A long list gets a search box; it takes focus when the menu opens.
-  const searchable = props.communities.length >= SWITCHER_GROUPS_FROM;
+  const searchable = props.communities.length >= SWITCHER_SEARCH_FROM;
   // Being in a community is having opened it: "Recent" is built from this.
   useEffect(() => {
     if (props.selectedCommunitySlug) rememberCommunityOpened(props.selectedCommunitySlug, Date.now());
@@ -136,6 +136,7 @@ export function WebCommunitySwitcher(props: WebCommunitySwitcherProps) {
         type="button"
         role="menuitemradio"
         aria-checked={isCurrent}
+        title={community.name}
         onClick={() => choose(() => props.onSelectCommunity(community))}
       >
         <CommunityAvatar

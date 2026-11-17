@@ -4,11 +4,12 @@ import { accountMenuRoleLine } from "../apps/web/src/components/WebAccountMenu";
 import { communityMarkTone, SWITCHER_GROUPS_FROM, switcherGroups } from "../apps/web/src/v1/switcherList";
 
 const read = (path: string) => readFileSync(new URL("../" + path, import.meta.url), "utf8");
-const many = ["a", "b", "c", "d", "e", "f", "g", "h"].map((slug) => ({ id: slug, slug, name: `Community ${slug.toUpperCase()}` }));
+const many = ["a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k"].map((slug) => ({ id: slug, slug, name: `Community ${slug.toUpperCase()}` }));
 const slugs = (list: Array<{ slug: string }>) => list.map((community) => community.slug);
 
 test("a few communities are one list, the one you're in first", () => {
-  const few = many.slice(0, SWITCHER_GROUPS_FROM - 1);
+  const few = many.slice(0, 6);
+  expect(SWITCHER_GROUPS_FROM).toBe(11);
   const groups = switcherGroups(few, "c", { e: 5 }, "");
   expect(groups.recent).toEqual([]);
   expect(slugs(groups.all)).toEqual(["c", "a", "b", "d", "e", "f"]);
@@ -17,7 +18,7 @@ test("a few communities are one list, the one you're in first", () => {
 test("many communities are Recent (here, then the two last opened) and All (the rest, in order)", () => {
   const groups = switcherGroups(many, "c", { c: 9, g: 7, a: 3, e: 8 }, "");
   expect(slugs(groups.recent)).toEqual(["c", "e", "g"]);
-  expect(slugs(groups.all)).toEqual(["a", "b", "d", "f", "h"]);
+  expect(slugs(groups.all)).toEqual(["a", "b", "d", "f", "h", "i", "j", "k"]);
   // Nothing remembered yet: only where you are is recent.
   expect(slugs(switcherGroups(many, "c", {}, "").recent)).toEqual(["c"]);
 });
