@@ -9,6 +9,7 @@ import { WebCommunityAvatarEditorModal } from "./WebCommunityAvatarEditorModal";
 import { WebCommunityBannerEditorModal } from "./WebCommunityBannerEditorModal";
 import { WebCommunityEventsSection } from "./WebCommunityEventsSection";
 import { WebCommunityPodsSection, type WebCommunityPodsSectionProps } from "./WebCommunityPodsSection";
+import { WebCommunityDiscoverPage, type WebCommunityDiscoverPageProps } from "./WebCommunityDiscoverPage";
 import { WebDeleteResourceModuleModal } from "./WebDeleteResourceModuleModal";
 import { WebCommunityResourceModuleModal } from "./WebCommunityResourceModuleModal";
 import { CommunityResourcesPanel } from "./CommunityResourcesPanel";
@@ -52,6 +53,7 @@ export type WebCommunitySecondaryPanelsProps = {
   knowledge: ComponentProps<typeof WebCommunityKnowledgePanel>["context"];
   events: ComponentProps<typeof WebCommunityEventsSection>;
   pods: WebCommunityPodsSectionProps;
+  discover: WebCommunityDiscoverPageProps;
   resourceModuleModal: ComponentProps<typeof WebCommunityResourceModuleModal>;
   resourceModuleDeleteModal: ComponentProps<typeof WebDeleteResourceModuleModal>;
 };
@@ -115,6 +117,9 @@ export function WebCommunitySecondaryPanels(props: WebCommunitySecondaryPanelsPr
 
       {props.communityTab === "pods" &&
         renderCenteredPane(<WebCommunityPodsSection {...props.pods} />)}
+
+      {props.communityTab === "discover" &&
+        renderCenteredPane(<WebCommunityDiscoverPage {...props.discover} />)}
 
     </>
   );

@@ -2,6 +2,9 @@ import type { ComponentProps } from "react";
 import type { AppPage } from "../../../../shared/appShellNavigation";
 import { WebCommunityHost } from "./WebCommunityHost";
 import { WebDiscoverPanel } from "./WebDiscoverPanel";
+import { WebCommunityDiscoverPage, type WebCommunityDiscoverPageProps } from "./WebCommunityDiscoverPage";
+import { CommunityPageFrame } from "./CommunityPageHeader";
+import { isDesignV1Active } from "../../../../shared/designSystem";
 import { WebProductDocsPanel } from "./WebProductDocsPanel";
 import { WebCommunityLandingPage } from "./WebCommunityLandingPage";
 import { WebSettingsSurfaceHost } from "./WebSettingsSurfaceHost";
@@ -30,6 +33,7 @@ export type WebAppMainSurfaceHostProps = {
   publicCommunitySession: unknown | null;
   communityHostProps: ComponentProps<typeof WebCommunityHost>;
   discoverPanelProps: ComponentProps<typeof WebDiscoverPanel>;
+  discoverPageProps: WebCommunityDiscoverPageProps;
   productDocsPanelProps: ComponentProps<typeof WebProductDocsPanel>;
 };
 
@@ -66,7 +70,11 @@ export function WebAppMainSurfaceHost(props: WebAppMainSurfaceHostProps) {
         <WebCommunityHost {...props.communityHostProps} />
       ) : (
         <div className="community-body">
-          {props.showDiscoverPanel ? (
+          {props.showDiscoverPanel && isDesignV1Active() ? (
+            // Design v1: someone in no community yet gets the same Discover
+            // page a community shows (docs/specs/discover-v1.md).
+            <CommunityPageFrame><WebCommunityDiscoverPage {...props.discoverPageProps} /></CommunityPageFrame>
+          ) : props.showDiscoverPanel ? (
             <WebDiscoverPanel {...props.discoverPanelProps} />
           ) : props.showProductDocsPanel ? (
             <WebProductDocsPanel {...props.productDocsPanelProps} />

@@ -124,6 +124,8 @@ import {
 import { useWebAccountCommerceActions } from "./controllers/useWebAccountCommerceActions";
 import { useWebAccountCommerceStatus } from "./controllers/useWebAccountCommerceStatus";
 import { useWebDiscoverPreloadLifecycle } from "./controllers/useWebDiscoverPreloadLifecycle";
+import { useWebDiscoverAddress } from "./controllers/useWebDiscoverAddress";
+import type { WebCommunityDiscoverPageProps } from "./components/WebCommunityDiscoverPage";
 import { useWebBillingUiController } from "./controllers/useWebBillingUiController";
 import { useWebBuilderOfferController } from "./controllers/useWebBuilderOfferController";
 import { useWebMobileShellController } from "./controllers/useWebMobileShellController";
@@ -1519,6 +1521,12 @@ export default function App() {
     mobileChromeScrollTrackingEnabled
     && mobileChromeReadingMode
   );
+  useWebDiscoverAddress({
+    activePage,
+    isSignedIn: Boolean(session),
+    communitySlug: selectedActiveCommunitySlug ?? (String(railCommunities[0]?.slug ?? "").trim() || null),
+    navigateTo,
+  });
   const canReorderCommunities = railCommunities.length > 1;
   const hasCommunityRailMiddleContent = railCommunities.length > 0;
   const communityRailIds = useMemo(() => railCommunities.map((community) => community.id), [railCommunities]);
@@ -1674,6 +1682,18 @@ export default function App() {
         }),
     [activeCommunityId, communityJoinRequests, displayName, savedProfilesByUserId],
   );
+
+  // Discover (docs/specs/discover-v1.md): the page inside a community, and
+  // the same page for someone in no community yet.
+  const discoverPageProps: WebCommunityDiscoverPageProps = {
+    joined: railCommunities.flatMap((community) => {
+      const slug = String(community.slug ?? "").trim();
+      return slug ? [{ slug, name: community.name, avatarUrl: community.avatar_url ?? null }] : [];
+    }),
+    onOpenCommunity: (community) => activateDiscoverCommunityCard({ canActivate: Boolean(community.slug), community }),
+    onOpenJoined: (slug) => openCommunityChat(slug),
+    onStartCommunity: openNewCommunityPurchaseFlow,
+  };
 
   const { communityChatPanelProps, communitySecondarySurfaceProps } =
     buildWebCommunitySurfaceProjection({
@@ -1885,6 +1905,7 @@ export default function App() {
         },
         createRoom: handleCreateCommunityChannel,
       },
+      discoverProps: discoverPageProps,
       canPostMessagesActiveCommunity: canPostMessagesActiveChannel,
       isProfileSetupComplete: isProfileSetupCompleteForPublicActions,
       onCommunityTypingSignal: signalCommunityTyping,
@@ -2244,6 +2265,7 @@ export default function App() {
         onChange: handleSetCommunityContextFreeAccessMode,
       },
     },
+    discoverPageProps,
     discoverPanelProps: {
       isLoadingDiscover,
       discoverCommunitiesCount: discoverCommunities.length,
@@ -2438,7 +2460,11 @@ export default function App() {
     onCopyCommunityJoinLink: copyTextToClipboard,
     canOpenDirectMessages: Boolean(session),
     directMessagesUnreadCount,
-    handleOpenDiscover,
+    // Design v1: Discover is a page of the community you are in.
+    handleOpenDiscover: () => {
+      if (isDesignV1Active() && selectedActiveCommunitySlug) handleSelectCommunityTab("discover");
+      else handleOpenDiscover();
+    },
     openMobileCreateCommunity,
     openCommunityCreateFlow: openNewCommunityPurchaseFlow,
     communities,

@@ -85,6 +85,7 @@ type BuildWebCommunitySurfaceProjectionParams = {
   resourceModuleModalProps: WebCommunitySecondaryPanelsProps["resourceModuleModal"];
   resourceModuleDeleteModalProps: WebCommunitySecondaryPanelsProps["resourceModuleDeleteModal"];
   podsProps: WebCommunitySecondaryPanelsProps["pods"];
+  discoverProps: WebCommunitySecondaryPanelsProps["discover"];
   canPostMessagesActiveCommunity: WebCommunityChatPanelProps["canPostMessages"];
   isProfileSetupComplete: WebCommunityChatPanelProps["isProfileSetupComplete"];
   onCommunityTypingSignal: WebCommunityChatPanelProps["onCommunityTypingSignal"];
@@ -244,6 +245,7 @@ export function buildWebCommunitySurfaceProjection(
     resourceModuleModal: params.resourceModuleModalProps,
     resourceModuleDeleteModal: params.resourceModuleDeleteModalProps,
     pods: params.podsProps,
+    discover: params.discoverProps,
   };
 
   const communityChatPanelProps: WebCommunityChatPanelProps = {

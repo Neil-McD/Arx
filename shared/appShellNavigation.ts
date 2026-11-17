@@ -35,6 +35,9 @@ export const COMMUNITY_TABS = [
   // Inbox, your direct messages across communities (Nov 17): /c/:slug/inbox.
   // The community in the address is the one whose left column you see.
   "inbox",
+  // Discover, other communities to join (Nov 17): /c/:slug/discover. A page
+  // of the community you are in, so its left column stays.
+  "discover",
   "settings",
   "analytics",
 ] as const;
@@ -81,6 +84,7 @@ export function isCommunityTabAllowedForAccess(
     case "members":
       return access.canViewMembers === true;
     case "inbox":
+    case "discover":
     case "chat":
     case "agent":
     case "resources":
@@ -121,6 +125,8 @@ export function parseCommunityTab(
       return "members";
     case "inbox":
       return "inbox";
+    case "discover":
+      return "discover";
     case "settings":
       return "settings";
     case "agent":

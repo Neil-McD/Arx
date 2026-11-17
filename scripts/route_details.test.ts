@@ -17,6 +17,7 @@ describe("every community address survives a refresh", () => {
     "/c/a/knowledge/guide",
     "/c/a/knowledge/brain",
     "/c/a/events",
+    "/c/a/discover",
     "/c/a/pods",
     "/c/a/pods/setters",
     "/c/a/home",
