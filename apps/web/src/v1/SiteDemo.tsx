@@ -154,7 +154,13 @@ function AppFrame(props: { ending?: boolean; left: ReactNode; children: ReactNod
   );
 }
 
-function LeftColumn(props: { tab: "chat" | "agent" | "resources"; channelSlug?: string }) {
+type Left = { tab: "chat" | "agent" | "resources"; channelSlug?: string; viewer?: string };
+
+// `viewer`: whose app it is. The host's by default; a member's has no
+// Analytics, no adding channels, and their own name at the foot.
+function LeftColumn(props: Left) {
+  const viewer = props.viewer ?? HOST;
+  const hosting = viewer === HOST;
   return (
     <CommunityNav
       {...({
@@ -164,12 +170,12 @@ function LeftColumn(props: { tab: "chat" | "agent" | "resources"; channelSlug?: 
         channels: CHANNELS,
         selectedChannelSlug: props.channelSlug ?? null,
         canViewMembersActiveCommunity: true,
-        canViewActiveCommunitySettings: true,
-        canManageMembersActiveCommunity: true,
-        canViewActiveCommunityAnalytics: true,
+        canViewActiveCommunitySettings: hosting,
+        canManageMembersActiveCommunity: hosting,
+        canViewActiveCommunityAnalytics: hosting,
         onSelectTab: noop,
         onSelectChannel: noop,
-        onCreateChannel: async () => true,
+        onCreateChannel: hosting ? async () => true : undefined,
         onCopyCommunityJoinLink: noop,
         layout: "v1",
         identityIsCover: true,
@@ -185,7 +191,7 @@ function LeftColumn(props: { tab: "chat" | "agent" | "resources"; channelSlug?: 
           </button>
         ),
         accountSlot: (
-          <WebAccountMenu name={PEOPLE[HOST]!.name} avatarUrl={null} roleLabel="Host" appTheme="dark" onSetAppTheme={noop} onOpenSettings={noop} onSignOut={async () => {}} />
+          <WebAccountMenu name={PEOPLE[viewer]!.name} avatarUrl={null} roleLabel={hosting ? "Host" : "Member"} appTheme="dark" onSetAppTheme={noop} onOpenSettings={noop} onSignOut={async () => {}} />
         ),
         identitySlot: (
           <WebCommunitySwitcher
@@ -235,13 +241,13 @@ function Composer(props: { placeholder: string; reply?: boolean }) {
 }
 
 // What a channel page needs besides its messages.
-function channelProps(channel: { id: string; slug: string; name: string }) {
+function channelProps(channel: { id: string; slug: string; name: string }, viewer: string = HOST) {
   return {
     activeCommunityName: COMMUNITY.name,
     activeChannel: { ...channel, is_general: channel.slug === "general" },
     communityId: COMMUNITY.id,
     communityOwnerId: HOST,
-    currentUserId: HOST,
+    currentUserId: viewer,
     activityEvents: [],
     isLoadingRoots: false,
     isLoadingReplies: false,
@@ -370,7 +376,7 @@ function launchLabMap(now: number, learned: boolean): BrainMap {
     pt("hot", "Bring one page for a hot seat", subject("Friday calls"), 12, now),
     pt("stripe", "Connecting payouts takes a day", subject("Getting paid"), 15, now, { use: 1 }),
     pt("refund", "Offer a refund in week one", subject("Getting paid"), 6, now, { use: 1 }),
-    ...(learned ? [pt("cohort", "First cohorts here land between $200 and $500", lesson("pricing"), 0, now, { use: 1, mine: true })] : []),
+    ...(learned ? [pt("cohort", "First cohorts here land between $200 and $500", lesson("pricing"), 0, now, { use: 8, mine: true })] : []),
   ];
   map.arcs = [{ a: "note:five", b: "note:raise", count: 3 }, { a: "note:page", b: "note:wait", count: 2 }, ...(learned ? [{ a: "note:cohort", b: "note:five", count: 2 }] : [])];
   return finish(map, now);
@@ -398,52 +404,41 @@ function RemembersScene({ at, now }: SceneProps) {
 const CARD_AT = 1.8;
 const SINCE_AT = [4.2, 5.6, 7.0];
 
-function BriefsScene({ at, now }: SceneProps) {
-  const since = SINCE_AT.filter((moment) => at >= moment).length;
+// Home's page: the greeting and what follows it, the guide's box, and the
+// right column.
+function HomePage(props: { host: boolean; time: string; greeting: string; line: string; chips: string[]; now: number; here: string; joined?: string; children: ReactNode }) {
   return (
     <main className="workspace community-mode community-agent-workspace">
       <aside className="community-agent-dock community-agent-page is-open">
         <section className="community-agent-dock-panel has-home-rail is-kit-home" aria-label="Home">
-          <KitApp view="home" host part="main">
+          <KitApp view="home" host={props.host} part="main">
             <View index={0}>
               <Scroll>
                 <Top title="Home" titleView={0} />
                 <HomeBody>
-                  <Eyebrow community={COMMUNITY.name} time="8:02 am" />
-                  <Hello greeting="Good morning, Ana." line="1 person joined since yesterday, and 1 thing needs you." />
-                  {at >= CARD_AT ? (
-                    <Card label="Worth a look" title="Sam hasn't been back in two weeks" say="He stopped after lesson 4, and was here every day before that. Your guide can check in with him, or you can.">
-                      <Btn go>Talk it over</Btn>
-                      <Btn txt>Not now</Btn>
-                    </Card>
-                  ) : null}
-                  {since ? (
-                    <Since label="Since you were last here">
-                      {since >= 1 ? <SinceItem kind="Joined" title="Mira Okafor joined" detail="I welcomed her and introduced her to Dana, who replied" still /> : null}
-                      {since >= 2 ? <SinceItem kind="Answered" learned title="I answered Mira's pricing question at 2:14 am" detail="From lesson 3 · she set her price at $300" still /> : null}
-                      {since >= 3 ? <SinceItem kind="Learned" learned title="First cohorts here land between $200 and $500" detail="Saved to Knowledge, under Pricing your first offer" still /> : null}
-                    </Since>
-                  ) : null}
+                  <Eyebrow community={COMMUNITY.name} time={props.time} />
+                  <Hello greeting={props.greeting} line={props.line} />
+                  {props.children}
                 </HomeBody>
               </Scroll>
               <Dock>
-                <Chips chips={["How was this week?", "Who is at risk of leaving?", "Who should I welcome?"]} />
+                <Chips chips={props.chips} />
                 <Ask guide placeholder="Ask your guide anything" />
               </Dock>
             </View>
           </KitApp>
           <div className="community-home-rail">
-            <KitApp view="home" host part="rail">
+            <KitApp view="home" host={props.host} part="rail">
               <Rail index={0} label="The community today">
-                <BriefPart now={now} onOpenChannel={noop} brief={{
+                <BriefPart now={props.now} onOpenChannel={noop} brief={{
                   summary: "Pricing is the talk of the week: Sam raised his coaching offer and Mira settled on $300 for her first cohort. Dana's second cohort filled from the waitlist page, and Friday's call is a hot seat on one-page offers.",
                   channels: [{ slug: "pricing", name: "Pricing" }, { slug: "general", name: "General" }],
-                  updated_at: new Date(now - 2 * 3_600_000).toISOString(),
+                  updated_at: new Date(props.now - 2 * 3_600_000).toISOString(),
                 } as any} />
-                <PanelBrain map={launchLabMap(now, true)} now={now} max={2} onOpen={noop} />
+                <PanelBrain map={{ ...launchLabMap(props.now, true), can_manage: props.host }} now={props.now} max={2} onOpen={noop} />
                 <PanelPart label="Here" fact="49 members">
-                  <div className={cx("ln")}><span className={cx("t")}>Dana and 3 others are here</span></div>
-                  <PanelLine>2 joined this week</PanelLine>
+                  <div className={cx("ln")}><span className={cx("t")}>{props.here}</span></div>
+                  {props.joined ? <PanelLine>{props.joined}</PanelLine> : null}
                 </PanelPart>
               </Rail>
             </KitApp>
@@ -454,12 +449,86 @@ function BriefsScene({ at, now }: SceneProps) {
   );
 }
 
-const SCENES = [
-  { key: "welcomes", label: "Welcomes", seconds: SCENE_SECONDS, tab: "chat", channel: "general", say: "Someone new says hello. Your client success manager greets them by name and introduces them to the right person.", Scene: WelcomesScene },
-  { key: "answers", label: "Answers", seconds: 16, tab: "chat", channel: "pricing", say: "A question at 2 am gets your answer, from the lesson you taught it in.", Scene: AnswersScene },
-  { key: "remembers", label: "Remembers", seconds: 9, tab: "resources", channel: undefined, say: "That answer becomes something your community knows, for the next person who asks.", Scene: RemembersScene },
-  { key: "briefs", label: "Briefs you", seconds: 12, tab: "agent", channel: undefined, say: "You open the app to what was handled, and the one person who needs you.", Scene: BriefsScene },
-] as const;
+function BriefsScene({ at, now }: SceneProps) {
+  const since = SINCE_AT.filter((moment) => at >= moment).length;
+  return (
+    <HomePage host time="8:02 am" greeting="Good morning, Ana." line="1 person joined since yesterday, and 1 thing needs you."
+      chips={["How was this week?", "Who is at risk of leaving?", "Who should I welcome?"]} now={now} here="Dana and 3 others are here" joined="2 joined this week">
+      {at >= CARD_AT ? (
+        <Card label="Worth a look" title="Sam hasn't been back in two weeks" say="He stopped after lesson 4, and was here every day before that. Your guide can check in with him, or you can.">
+          <Btn go>Talk it over</Btn>
+          <Btn txt>Not now</Btn>
+        </Card>
+      ) : null}
+      {since ? (
+        <Since label="Since you were last here">
+          {since >= 1 ? <SinceItem kind="Joined" title="Mira Okafor joined" detail="I welcomed her and introduced her to Dana, who replied" still /> : null}
+          {since >= 2 ? <SinceItem kind="Answered" learned title="I answered Mira's pricing question at 2:14 am" detail="From lesson 3 · she set her price at $300" still /> : null}
+          {since >= 3 ? <SinceItem kind="Learned" learned title="First cohorts here land between $200 and $500" detail="Saved to Knowledge, under Pricing your first offer" still /> : null}
+        </Since>
+      ) : null}
+    </HomePage>
+  );
+}
+
+// 5. Gets results: the member's side, two weeks on. Mira's Home gives her
+// one next step; then her win lands in #wins.
+const STEP_AT = 1.6;
+const DONE_AT = [4.0, 5.2];
+const WINS_AT = 7.4;
+const WINS_BEFORE: Line[] = [
+  { id: "w1", who: "dana", minutesAgo: 400, text: "Cohort two wrapped: eleven of twelve finished. Opening cohort three next month.", extra: { reaction_summary: [{ emoji: "👏", count: 8 }] } },
+];
+const WIN: Array<Line & { at: number }> = [
+  { id: "w2", at: WINS_AT + 1.4, who: "mira", minutesAgo: 0, text: "First five paying subscribers at $300 each. Two weeks ago I didn't have a price. Thank you all." },
+  { id: "w3", at: WINS_AT + 6.2, who: "dana", minutesAgo: 0, text: "Five in two weeks! Told you that page was close." },
+  { id: "w4", at: WINS_AT + 9.4, who: "guide", minutesAgo: 0, text: "That's Mira's first $1,500. I've added it to this week's wins for Ana, and saved how she got there to Knowledge." },
+];
+const WIN_TYPING = [{ from: WINS_AT + 3.4, to: WINS_AT + 6.2, who: "dana" }, { from: WINS_AT + 7.0, to: WINS_AT + 9.4, who: "guide" }];
+const CHEERS = [2.4, 3.2, 4.0, 4.9, 5.8, 7.4, 8.6].map((after) => WINS_AT + after);
+const RESULTS_SECONDS = WINS_AT + 13;
+
+function ResultsScene({ at, now }: SceneProps) {
+  if (at < WINS_AT) {
+    const done = DONE_AT.filter((moment) => at >= moment).length;
+    return (
+      <HomePage host={false} time="7:45 am" greeting="Good morning, Mira." line="You're two lessons from your first cohort."
+        chips={["What did I miss?", "Who should I meet?", "Draft my intro"]} now={now} here="Ana and 5 others are here">
+        {at >= STEP_AT ? (
+          <Card label="Your next step" title="Lesson 4: The one-page offer" say="You set your price at $300. This is the page that sells it, and Dana offered to read your draft.">
+            <Btn go>Open the lesson</Btn>
+            <Btn txt>Talk it over</Btn>
+          </Card>
+        ) : null}
+        {done ? (
+          <Since label="Since you were last here">
+            {done >= 1 ? <SinceItem kind="Done" title="You finished lesson 3, Pricing your first offer" detail="3 of 5 lessons · your price is set" still /> : null}
+            {done >= 2 ? <SinceItem kind="For you" learned title="Dana replied to your pricing page" detail="“Lead with the result, not the schedule.”" still /> : null}
+          </Since>
+        ) : null}
+      </HomePage>
+    );
+  }
+  const cheers = CHEERS.filter((moment) => at >= moment).length;
+  const roots = [...WINS_BEFORE, ...WIN.filter((line) => at >= line.at)].map((line) => (
+    line.id === "w2" && cheers ? root({ ...line, extra: { reaction_summary: [{ emoji: "🎉", count: cheers }] } }, now) : root(line, now)
+  ));
+  return (
+    <ChannelPage>
+      <WebCommunityInteractionProjection
+        {...({ ...channelProps(CHANNELS[1]!, "mira"), roots, selectedRootId: null, replies: [], typingPresence: typingFor(WIN_TYPING, at, now), mainComposer: <Composer placeholder="Message #wins" /> } as any)}
+      />
+    </ChannelPage>
+  );
+}
+
+const SCENES: Array<{ key: string; label: string; seconds: number; say: string; left: (at: number) => Left; Scene: (props: SceneProps) => ReactNode }> = [
+  { key: "welcomes", label: "Welcomes", seconds: SCENE_SECONDS, left: () => ({ tab: "chat", channelSlug: "general" }), say: "Someone new says hello. Your client success manager greets them by name and introduces them to the right person.", Scene: WelcomesScene },
+  { key: "answers", label: "Answers", seconds: 16, left: () => ({ tab: "chat", channelSlug: "pricing" }), say: "A question at 2 am gets your answer, from the lesson you taught it in.", Scene: AnswersScene },
+  { key: "remembers", label: "Remembers", seconds: 9, left: () => ({ tab: "resources" }), say: "That answer becomes something your community knows, for the next person who asks.", Scene: RemembersScene },
+  { key: "briefs", label: "Briefs you", seconds: 12, left: () => ({ tab: "agent" }), say: "You open the app to what was handled, and the one person who needs you.", Scene: BriefsScene },
+  { key: "results", label: "Gets results", seconds: RESULTS_SECONDS, left: (at) => (at < WINS_AT ? { tab: "agent", viewer: "mira" } : { tab: "chat", channelSlug: "wins", viewer: "mira" }), say: "Each member gets one next step. Two weeks later, Mira has her first five paying subscribers.", Scene: ResultsScene },
+];
 
 // The demo: one scene at a time, moving on by itself. A dot picks a scene;
 // resting the pointer on the app holds it. People who have asked for less
@@ -471,6 +540,7 @@ export function SiteDemo() {
   const [held, setHeld] = useState(false);
   const [now] = useState(Date.now);
   const scene = SCENES[index]!;
+  const moment = still ? scene.seconds - FADE_SECONDS - 0.1 : at;
   useEffect(() => {
     if (still || held) return;
     const timer = window.setInterval(() => setAt((current) => current + 0.1), 100);
@@ -481,12 +551,11 @@ export function SiteDemo() {
     setAt(0);
     setIndex((current) => (current + 1) % SCENES.length);
   }, [at, scene.seconds]);
-  const moment = still ? scene.seconds - FADE_SECONDS - 0.1 : at;
   const Scene = scene.Scene;
   return (
     <div>
       <div className="site-demo-window" onPointerEnter={() => setHeld(true)} onPointerLeave={() => setHeld(false)}>
-        <AppFrame ending={!still && at >= scene.seconds - FADE_SECONDS} left={<LeftColumn tab={scene.tab} channelSlug={scene.channel} />}>
+        <AppFrame ending={!still && at >= scene.seconds - FADE_SECONDS} left={<LeftColumn {...scene.left(moment)} />}>
           <Scene key={scene.key} at={moment} now={now} />
         </AppFrame>
       </div>
