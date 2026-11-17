@@ -4556,9 +4556,10 @@
   outline-color: color-mix(in srgb, var(--v1-accent) 72%, transparent);
 }
 
-/* The left column's buttons are <button>s, which do not inherit a font: they
-   were falling back to the browser's Arial while the rest of the app is Geist. */
-:root[data-design="v1"] .community-nav button,
-:root[data-design="v1"] .community-nav button * {
+/* Form controls do not inherit a font: any button, input or text box without
+   its own font rule was falling back to the browser's Arial (the whole left
+   column did). :where() keeps this at zero weight, so any rule that names a
+   font still wins. */
+:where(:root[data-design="v1"]) :where(button, input, select, textarea, optgroup) {
   font-family: inherit;
 }
