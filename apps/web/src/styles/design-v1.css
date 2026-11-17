@@ -3170,8 +3170,17 @@
    and the parts sit in the reader's order: video, title, words. */
 :root[data-design="v1"] .kit-lesson-editor .lesson-editor-toolbar { display: none; }
 :root[data-design="v1"] .kit-lesson .kit-lesson-video { order: 1; }
+/* The short "/" menu: one line each, as the mock draws it. */
+:root[data-design="v1"] .lesson-editor-slash.is-short { width: 232px; padding: 6px; border-radius: 12px; }
+:root[data-design="v1"] .lesson-editor-slash.is-short .lesson-editor-menu-group { padding: 6px 10px 4px; font-size: 12px; font-weight: 400; letter-spacing: 0; text-transform: none; }
+:root[data-design="v1"] .lesson-editor-slash.is-short .lesson-editor-menu-item { min-height: 34px; padding: 0 10px; border-radius: 8px; align-items: center; }
+:root[data-design="v1"] .lesson-editor-slash.is-short .lesson-editor-menu-icon { width: 16px; height: 16px; border: 0; background: transparent; }
+:root[data-design="v1"] .lesson-editor-slash.is-short .lesson-editor-menu-text { display: flex; flex: 1; align-items: baseline; gap: 8px; }
+:root[data-design="v1"] .lesson-editor-slash.is-short .lesson-editor-menu-text strong { font-size: 13.5px; font-weight: 400; }
+:root[data-design="v1"] .lesson-editor-slash.is-short .lesson-editor-menu-text small { margin-left: auto; font-size: 12px; }
 /* A course's publish switch and menu sit at the right end of the header. */
-:root[data-design="v1"] .community-page-header > .kit-header-end { margin-left: auto; display: flex; align-items: center; flex: none; }
+:root[data-design="v1"] .community-page-header > .kit-header-end { display: flex; align-items: center; align-self: center; flex: 0 0 auto; width: auto; min-width: 0; height: auto; min-height: 0; margin: 0 0 0 auto; padding: 0; }
+:root[data-design="v1"] .community-page-header:has(> .kit-header-end) > .community-channel-header-identity { flex: 1 1 auto; min-width: 0; }
 :root[data-design="v1"] .kit-lesson .kit-lesson-title { order: 3; margin-top: 22px; }
 :root[data-design="v1"] .kit-lesson .kit-lesson-editor { margin-top: 14px; }
 
