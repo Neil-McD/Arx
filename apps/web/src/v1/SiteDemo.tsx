@@ -4,35 +4,31 @@
 // community and a short script instead of a server. Nothing here is a
 // picture, so it looks like the product because it is the product.
 //
-// The scenes, in one made-up community:
-//   Welcomes and answers   someone new asks; the guide greets, answers from a lesson, and introduces them.
-//   Remembers   that answer becomes something the community knows.
-//   Briefs you  the host opens Home to what was handled and who needs them.
-import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
-import { ArrowLeft, Hash, Lock, Search } from "lucide-react";
+// What it sells is one idea, compounding intelligence: every conversation
+// teaches it, so every answer after is better. Four scenes, one loop:
+//   Asks       a member asks something it doesn't know; it says so, and brings in the member who does.
+//   Learns     that answer becomes something the community knows (the map grows a point).
+//   Compounds  the next person asks the same thing, and now it answers by itself.
+//   Pays off   that person gets a result, and how they did it is learned too.
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { ArrowLeft, Hash, Search } from "lucide-react";
 import { CommunityAvatar } from "../../../../shared/CommunityAvatar";
 import { CommunityNav } from "../../../../shared/CommunityNav";
 import type { BrainAttach, BrainMap } from "../../../../shared/communityBrain";
 import { CommunityComposerControls } from "../components/CommunityComposerControls";
 import { CommunityPageFrame } from "../components/CommunityPageHeader";
-// Home's page frame is styled by the dock's own stylesheet.
-import "../components/WebCommunityAgentDock.css";
 import { WebAccountMenu } from "../components/WebAccountMenu";
 import { WebCommunityInteractionProjection } from "../components/WebCommunityInteractionProjection";
 import { WebCommunitySwitcher } from "../components/WebCommunitySwitcher";
 import { base, finish, pt } from "./brainExamples";
-import { Ask, Btn, Card, Chips, Dock, Eyebrow, Hello, HomeBody, KitApp, Mine, Rail, Scroll, Since, SinceItem, Talk, Theirs, Top, View, cx } from "./kit";
-import { PanelBrain } from "./KitBrain";
 import { KitBrainPageFrame, KitBrainPageView } from "./KitBrainPage";
-import { BriefPart } from "./KitBrief";
-import { PanelLine, PanelPart } from "./KitPanel";
 
 // The window the app is drawn at; the frame scales it to the space it has.
 const APP_WIDTH = 1440;
 const APP_HEIGHT = 810;
 // On a phone the demo is the app's own phone layout, at a phone's size.
 const PHONE_WIDTH = 390;
-const PHONE_HEIGHT = 720;
+const PHONE_HEIGHT = 480;
 const PHONE_BELOW = 640;
 
 const COMMUNITY = { id: "demo", slug: "launch-lab", name: "Launch Lab", avatar_url: null, banner_url: null } as const;
@@ -70,32 +66,12 @@ function root(line: Line, now: number) {
   };
 }
 
-// What was already in #general, then what happens while you watch. `at` is
-// seconds into the scene; `wave` is when the hellos land on Mira's post.
-const BEFORE: Line[] = [
-  { id: "b1", who: "dana", minutesAgo: 190, text: "Cohort two is full: twelve seats at $400. The waitlist page from lesson 5 did most of the work.", extra: { reaction_summary: [{ emoji: "🎉", count: 6 }] } },
-  { id: "b2", who: "sam", minutesAgo: 95, text: "First sales call booked off the new landing page. Nervous, but booked." },
-];
-// The pace of a real channel: a beat of quiet, a post, people reacting one at
-// a time, someone typing for as long as their message takes, then the next.
-const SCENE: Array<Line & { at: number }> = [
-  { id: "s1", at: 1.6, who: "mira", minutesAgo: 0, text: "Hi all, I'm Mira. I'm launching a paid newsletter for indie designers, with no audience yet. What should I charge for the first cohort?", extra: { kind: "question" } },
-  { id: "s2", at: 6.4, who: "guide", minutesAgo: 0, text: "Welcome, Mira. Ana's rule from lesson 3, “Pricing your first offer”: charge what five people would pay this week, not what it's worth. First cohorts here have landed between $200 and $500. Say hello to Dana, too: she launched her newsletter here in March with no list." },
-  { id: "s3", at: 11.2, who: "dana", minutesAgo: 0, text: "Happy to help! Mine was $400 with twelve seats. Send me your draft page, Mira." },
-];
-const TYPING = [{ from: 3.2, to: 6.4, who: "guide" }, { from: 8.0, to: 11.2, who: "dana" }];
-// Hellos on Mira's post, one at a time; then her thanks on Dana's reply.
-const WAVES = [2.9, 4.1, 7.3, 9.4];
-const THANKS_AT = 12.8;
-// The scene, a hold on its last moment, then a short fade before it starts over.
-const SCENE_SECONDS = 14.5;
+// The closing fade before the next scene.
 const FADE_SECONDS = 1;
 
 // How fast the script runs: its seconds are written at a reading pace, and
 // played quicker, so a scene takes about six seconds and the whole loop half a minute.
 const PACE = 2.2;
-
-const POD_NAME = "Offer Sprint";
 
 const noop = () => {};
 const formatTime = (iso: string) => new Date(iso).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
@@ -105,14 +81,23 @@ const formatTime = (iso: string) => new Date(iso).toLocaleTimeString("en-US", { 
 const DEMO_CSS = `
 .site-demo .kit-channel-feed-part [class*="_msg_"]{animation:site-demo-in .42s cubic-bezier(.2,.7,.2,1) both}
 .site-demo .community-interaction-typing{animation:site-demo-in .3s ease both}
-.site-demo [class*="_card_"],.site-demo [class*="_since_"]>*{animation:site-demo-in .5s cubic-bezier(.2,.7,.2,1) both}
+/* Learning, made visible: the newest point grows in with one ring, and its branch draws itself. */
+.site-demo g[data-point^="note:new"]{transform-box:fill-box;transform-origin:center;animation:site-demo-grow .9s cubic-bezier(.2,.9,.2,1) both}
+.site-demo g[data-point^="note:new"] circle:first-of-type{transform-box:fill-box;transform-origin:center;animation:site-demo-ring 1.6s ease-out .2s both}
+.site-demo path[data-point^="note:new"]{stroke-dasharray:600;animation:site-demo-draw .8s ease-out both}
+@keyframes site-demo-grow{0%{opacity:0;transform:scale(.1)}60%{opacity:1;transform:scale(1.5)}100%{opacity:1;transform:scale(1)}}
+@keyframes site-demo-ring{0%{transform:scale(.4);opacity:1}100%{transform:scale(3.2);opacity:.35}}
+@keyframes site-demo-draw{from{stroke-dashoffset:600}to{stroke-dashoffset:0}}
+.site-demo-known{display:flex;justify-content:center;align-items:baseline;gap:8px;margin-top:20px;font-size:15px;color:rgba(243,244,246,.6)}
+.site-demo-known b{display:inline-block;min-width:1.4em;text-align:center;font-size:22px;font-weight:600;color:#f3f4f6;font-variant-numeric:tabular-nums;animation:site-demo-tick .5s cubic-bezier(.2,.8,.2,1) both}
+@keyframes site-demo-tick{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
 /* The app is scaled as a picture is: phones must not resize its text on their own. */
 .site-demo{-webkit-text-size-adjust:100%;text-size-adjust:100%}
 .site-demo-window{width:min(1180px,100%);margin:0 auto;border-radius:14px;border:1px solid rgba(255,255,255,.14);overflow:hidden;box-shadow:0 60px 140px -50px rgba(111,120,216,.35),0 40px 90px -40px #000}
 .site-demo .site-demo-page{transition:opacity .4s ease}
 .site-demo.is-ending .site-demo-page{opacity:0}
 @media (max-width:639px){.site-demo-window{width:min(390px,100%);border-radius:22px}}
-.site-demo-dots{display:flex;justify-content:center;gap:8px;margin-top:22px;flex-wrap:wrap}
+.site-demo-dots{display:flex;justify-content:center;gap:8px;margin-top:14px;flex-wrap:wrap}
 .site-demo-dots button{position:relative;overflow:hidden;height:34px;padding:0 16px;border-radius:999px;border:1px solid rgba(255,255,255,.12);background:transparent;color:rgba(243,244,246,.6);font:inherit;font-size:14px;cursor:pointer}
 .site-demo-dots button.on{color:#f3f4f6;border-color:rgba(255,255,255,.22)}
 .site-demo-dots button i{position:absolute;inset:0 auto 0 0;background:rgba(111,120,216,.28);pointer-events:none}
@@ -124,7 +109,7 @@ const DEMO_CSS = `
 
 // The app's phone frame: its top bar and the page, with no left column.
 function PhoneFrame(props: { ending?: boolean; where: Left; children: ReactNode }) {
-  const channel = props.where.inPod ? POD_NAME : CHANNELS.find((candidate) => candidate.slug === props.where.channelSlug)?.name;
+  const channel = CHANNELS.find((candidate) => candidate.slug === props.where.channelSlug)?.name;
   // Home names itself on its own page; the bar only carries the way back.
   const label = props.where.tab === "agent" ? "" : props.where.tab === "resources" ? "Knowledge" : channel ?? "";
   return (
@@ -135,7 +120,7 @@ function PhoneFrame(props: { ending?: boolean; where: Left; children: ReactNode 
           <div className="mobile-topbar-left"><button type="button" className="mobile-topbar-icon mobile-topbar-back" aria-label="Back"><ArrowLeft size={20} aria-hidden="true" /></button></div>
           <div className="mobile-topbar-center">
             <span className="mobile-topbar-context-label mobile-topbar-channel-label">
-              {props.where.tab === "chat" ? (props.where.inPod ? <Lock size={16} aria-hidden="true" /> : <Hash size={16} aria-hidden="true" />) : null}
+              {props.where.tab === "chat" ? <Hash size={16} aria-hidden="true" /> : null}
               <span>{label}</span>
             </span>
           </div>
@@ -314,26 +299,45 @@ function typingFor(spans: Array<{ from: number; to: number; who: string; rootId?
 }
 
 type SceneProps = { at: number; now: number };
+const WEEK = 7 * 24 * 60;
 
-// 1. Welcomes: #general.
-function WelcomesScene({ at, now }: SceneProps) {
-  const waves = WAVES.filter((moment) => at >= moment).length;
-  const roots = [...BEFORE, ...SCENE.filter((line) => at >= line.at)].map((line) => {
-    if (line.id === "s1" && waves) return root({ ...line, extra: { reaction_summary: [{ emoji: "👋", count: waves }] } }, now);
-    if (line.id === "s3" && at >= THANKS_AT) return root({ ...line, extra: { reaction_summary: [{ emoji: "🙏", count: 1 }] } }, now);
-    return root(line, now);
-  });
+function Channel(props: { channel: (typeof CHANNELS)[number]; lines: Line[]; typing: ReturnType<typeof typingFor>; now: number }) {
   return (
     <ChannelPage>
       <WebCommunityInteractionProjection
-        {...({ ...channelProps(CHANNELS[0]!), roots, selectedRootId: null, replies: [], typingPresence: typingFor(TYPING, at, now), mainComposer: <Composer placeholder="Message #general" /> } as any)}
+        {...({ ...channelProps(props.channel), roots: props.lines.map((line) => root(line, props.now)), selectedRootId: null, replies: [], typingPresence: props.typing,
+          mainComposer: <Composer placeholder={`Message #${props.channel.slug}`} /> } as any)}
       />
     </ChannelPage>
   );
 }
+const react = (line: Line, emoji: string, count: number): Line => (count > 0 ? { ...line, extra: { ...line.extra, reaction_summary: [{ emoji, count }] } } : line);
 
-// What Launch Lab knows. `learned`: the answer in scene 2 has become a point.
-function launchLabMap(now: number, learned: boolean): BrainMap {
+// The exchange it learns from: asked once, answered by the member who knew.
+const QUESTION = "How do I find my first ten subscribers? I'm starting with no audience.";
+const DONT_KNOW = "I don't know that one yet, Mira. Dana did exactly this in March. Dana, can you help?";
+const DANA_KNOWS = "Start with direct messages to people you already know. I sent fifteen and got six yeses. Don't post, ask.";
+
+// 1. Asks: #general. It doesn't know, says so, and brings in the member who does.
+const ASKS_BEFORE: Line[] = [
+  { id: "g1", who: "priya", minutesAgo: 200, text: "Friday's call is a hot seat on one-page offers. Bring a draft.", extra: { reaction_summary: [{ emoji: "👍", count: 5 }] } },
+];
+const ASKS: Array<Line & { at: number }> = [
+  { id: "a1", at: 1.4, who: "mira", minutesAgo: 0, text: QUESTION, extra: { kind: "question" } },
+  { id: "a2", at: 4.8, who: "guide", minutesAgo: 0, text: DONT_KNOW },
+  { id: "a3", at: 8.8, who: "dana", minutesAgo: 0, text: DANA_KNOWS },
+];
+const ASKS_TYPING = [{ from: 2.6, to: 4.8, who: "guide" }, { from: 6.0, to: 8.8, who: "dana" }];
+const ASKS_SECONDS = 13;
+
+function AsksScene({ at, now }: SceneProps) {
+  const lines = [...ASKS_BEFORE, ...ASKS.filter((line) => at >= line.at)].map((line) => (line.id === "a3" ? react(line, "🙏", at >= 10.4 ? (at >= 11.4 ? 3 : 1) : 0) : line));
+  return <Channel channel={CHANNELS[0]!} lines={lines} typing={typingFor(ASKS_TYPING, at, now)} now={now} />;
+}
+
+// What Launch Lab knows. `learned`: how many new things it has picked up
+// while you watch (Dana's answer, then how Sam used it).
+function launchLabMap(now: number, learned: number): BrainMap {
   const map = base(COMMUNITY.name);
   map.courses = [{ id: "course:offer", name: "Launch your first paid offer", order: 0, lessons: [
     { id: "resource:readers", title: "Your first ten readers", order: 1, done: true, use: 7 },
@@ -345,35 +349,39 @@ function launchLabMap(now: number, learned: boolean): BrainMap {
   const lesson = (id: string): BrainAttach => ({ kind: "lesson", id: `resource:${id}` });
   const subject = (name: string): BrainAttach => ({ kind: "subject", name });
   map.points = [
-    pt("list", "Start with ten names you already know", lesson("readers"), 34, now, { use: 4 }),
-    pt("dm", "A direct message beats a post", lesson("readers"), 20, now, { use: 2 }),
+    pt("issue", "Write the first issue before you announce", lesson("readers"), 34, now, { use: 2 }),
+    pt("ask", "Ask each reader one question", lesson("readers"), 20, now, { use: 1 }),
     pt("narrow", "Narrow beats broad for a first offer", lesson("problem"), 30, now, { use: 3 }),
     pt("five", "Charge what five people would pay this week", lesson("pricing"), 28, now, { use: 6 }),
     pt("raise", "Raise the price after the first cohort", lesson("pricing"), 9, now, { use: 2 }),
     pt("page", "One page: the result, who it's for, one link", lesson("page"), 18, now, { use: 5 }),
-    pt("wait", "A waitlist page filled Dana's second cohort", lesson("waitlist"), 2, now, { use: 3 }),
+    pt("wait", "A waitlist page filled Dana's second cohort", lesson("waitlist"), 12, now, { use: 3 }),
     pt("calls", "How the Friday call runs", subject("Friday calls"), 40, now, { use: 2 }),
     pt("hot", "Bring one page for a hot seat", subject("Friday calls"), 12, now),
     pt("stripe", "Connecting payouts takes a day", subject("Getting paid"), 15, now, { use: 1 }),
-    pt("refund", "Offer a refund in week one", subject("Getting paid"), 6, now, { use: 1 }),
-    ...(learned ? [pt("cohort", "First cohorts here land between $200 and $500", lesson("pricing"), 0, now, { use: 8, mine: true })] : []),
+    pt("refund", "Offer a refund in week one", subject("Getting paid"), 10, now, { use: 1 }),
+    ...(learned >= 1 ? [pt("new1", "Start with direct messages to people you know", lesson("readers"), 0, now, { use: 9 })] : []),
+    ...(learned >= 2 ? [pt("new2", "Twenty messages got Sam eight subscribers", lesson("readers"), 0, now, { use: 8 })] : []),
   ];
-  map.arcs = [{ a: "note:five", b: "note:raise", count: 3 }, { a: "note:page", b: "note:wait", count: 2 }, ...(learned ? [{ a: "note:cohort", b: "note:five", count: 2 }] : [])];
+  map.arcs = [{ a: "note:five", b: "note:raise", count: 3 }, { a: "note:page", b: "note:wait", count: 2 }, ...(learned >= 2 ? [{ a: "note:new1", b: "note:new2", count: 2 }] : [])];
   return finish(map, now);
 }
+const KNOWN_AT_START = 11;
 
-// 3. Remembers: Knowledge, the community brain.
-const LEARNED_AT = 3.2;
+// 2. Learns: the community brain. Dana's answer grows in as a new point.
+const LEARNED_AT = 2.2;
+const LEARNS_SECONDS = 9.5;
 
-function RemembersScene({ at, now }: SceneProps) {
-  const learned = at >= LEARNED_AT;
+function LearnsScene({ at, now }: SceneProps) {
+  const before = useMemo(() => launchLabMap(now, 0), [now]);
+  const after = useMemo(() => launchLabMap(now, 1), [now]);
   return (
     <main className="workspace community-mode">
       {/* On a phone the map is given the page's height, so it fills the screen under the bar. */}
       <div className="community-body" style={document.documentElement.dataset.layout === "phone" ? { height: PHONE_HEIGHT - 54, display: "grid" } : undefined}>
         <CommunityPageFrame>
           <KitBrainPageFrame canManage fill>
-            <KitBrainPageView key={learned ? "after" : "before"} session={null} communityId="demo" canManage onOpenCourse={noop} map={launchLabMap(now, learned)} />
+            <KitBrainPageView session={null} communityId="demo" canManage onOpenCourse={noop} map={at >= LEARNED_AT ? after : before} />
           </KitBrainPageFrame>
         </CommunityPageFrame>
       </div>
@@ -381,147 +389,57 @@ function RemembersScene({ at, now }: SceneProps) {
   );
 }
 
-// 4. Briefs you: the host's Home, the next morning.
-const CARD_AT = 1.8;
-const SINCE_AT = [4.2, 5.6, 7.0];
+// 3. Compounds: #general, a week later. The same question, and now it answers by itself.
+const COMPOUNDS_BEFORE: Line[] = [
+  { id: "c1", who: "mira", minutesAgo: WEEK, text: QUESTION, extra: { kind: "question" } },
+  { id: "c2", who: "guide", minutesAgo: WEEK - 1, text: DONT_KNOW },
+  { id: "c3", who: "dana", minutesAgo: WEEK - 2, text: DANA_KNOWS, extra: { reaction_summary: [{ emoji: "🙏", count: 3 }] } },
+];
+const COMPOUNDS: Array<Line & { at: number }> = [
+  { id: "c4", at: 1.4, who: "sam", minutesAgo: 0, text: "Any advice on getting my first few subscribers? Starting from zero here.", extra: { kind: "question" } },
+  { id: "c5", at: 3.4, who: "guide", minutesAgo: 0, text: "Start with direct messages to people you already know, and ask, don't post. Dana sent fifteen and got six yeses that way.\n\nLearned from Dana, last week." },
+  { id: "c6", at: 7.4, who: "sam", minutesAgo: 0, text: "Doing that tonight." },
+];
+const COMPOUNDS_TYPING = [{ from: 2.2, to: 3.4, who: "guide" }, { from: 5.8, to: 7.4, who: "sam" }];
+const COMPOUNDS_SECONDS = 11;
 
-// Home's page: the greeting and what follows it, the guide's box, and the
-// right column.
-// `talk`: the conversation with the guide, once it is open.
-function HomePage(props: { host: boolean; time: string; greeting: string; line: string; chips: string[]; now: number; here: string; joined?: string; talk?: ReactNode; children: ReactNode }) {
-  const talking = Boolean(props.talk);
-  return (
-    <main className="workspace community-mode community-agent-workspace">
-      <aside className="community-agent-dock community-agent-page is-open">
-        <section className="community-agent-dock-panel has-home-rail is-kit-home" aria-label="Home">
-          <KitApp view="home" host={props.host} part="main" talking={talking}>
-            <View index={0}>
-              {talking ? <Top titleView={0} title={<button type="button" className="kit-home-back" aria-label="Back to Home">← Home</button>} /> : null}
-              <Scroll>
-                {talking ? null : <Top title="Home" titleView={0} />}
-                <HomeBody>
-                  <Eyebrow community={COMMUNITY.name} time={props.time} />
-                  <Hello greeting={props.greeting} line={props.line} />
-                  {props.children}
-                  {props.talk ? <Talk>{props.talk}</Talk> : null}
-                </HomeBody>
-              </Scroll>
-              <Dock>
-                {talking ? null : <Chips chips={props.chips} />}
-                <Ask guide placeholder="Ask your guide anything" />
-              </Dock>
-            </View>
-          </KitApp>
-          <div className="community-home-rail">
-            <KitApp view="home" host={props.host} part="rail">
-              <Rail index={0} label="The community today">
-                <BriefPart now={props.now} onOpenChannel={noop} brief={{
-                  summary: "Pricing is the talk of the week: Sam raised his coaching offer and Mira settled on $300 for her first cohort. Dana's second cohort filled from the waitlist page, and Friday's call is a hot seat on one-page offers.",
-                  channels: [{ slug: "pricing", name: "Pricing" }, { slug: "general", name: "General" }],
-                  updated_at: new Date(props.now - 2 * 3_600_000).toISOString(),
-                } as any} />
-                <PanelBrain map={{ ...launchLabMap(props.now, true), can_manage: props.host }} now={props.now} max={2} onOpen={noop} />
-                <PanelPart label="Here" fact="49 members">
-                  <div className={cx("ln")}><span className={cx("t")}>{props.here}</span></div>
-                  {props.joined ? <PanelLine>{props.joined}</PanelLine> : null}
-                </PanelPart>
-              </Rail>
-            </KitApp>
-          </div>
-        </section>
-      </aside>
-    </main>
-  );
+function CompoundsScene({ at, now }: SceneProps) {
+  const lines = [...COMPOUNDS_BEFORE, ...COMPOUNDS.filter((line) => at >= line.at)].map((line) => (line.id === "c5" ? react(line, "🔥", at >= 8.6 ? 2 : 0) : line));
+  return <Channel channel={CHANNELS[0]!} lines={lines} typing={typingFor(COMPOUNDS_TYPING, at, now)} now={now} />;
 }
 
-function BriefsScene({ at, now }: SceneProps) {
-  const since = SINCE_AT.filter((moment) => at >= moment).length;
-  return (
-    <HomePage host time="8:02 am" greeting="Good morning, Ana." line="1 person joined since yesterday, and 1 thing needs you."
-      chips={["How was this week?", "Who is at risk of leaving?", "Who should I welcome?"]} now={now} here="Dana and 3 others are here" joined="2 joined this week">
-      {at >= CARD_AT ? (
-        <Card label="Worth a look" title="Sam hasn't been back in two weeks" say="He stopped after lesson 4, and was here every day before that. Your guide can check in with him, or you can.">
-          <Btn go>Talk it over</Btn>
-          <Btn txt>Not now</Btn>
-        </Card>
-      ) : null}
-      {since ? (
-        <Since label="Since you were last here">
-          {since >= 1 ? <SinceItem kind="Joined" title="Mira Okafor joined" detail="I welcomed her and introduced her to Dana, who replied" still /> : null}
-          {since >= 2 ? <SinceItem kind="Answered" learned title="I answered Mira's pricing question" detail="From lesson 3 · she set her price at $300" still /> : null}
-          {since >= 3 ? <SinceItem kind="Learned" learned title="First cohorts here land between $200 and $500" detail="Saved to Knowledge, under Pricing your first offer" still /> : null}
-        </Since>
-      ) : null}
-    </HomePage>
-  );
-}
-
-// 4. Gets results: the guide acts, and it pays off. Ana asks who is slipping
-// away; the guide answers, offers to bring Sam back, and does it. Sam shows
-// up in his pod, gets notes on his page, and posts his first client in #wins.
-const ASK: Array<{ at: number; mine: boolean; text: string }> = [
-  { at: 1.4, mine: true, text: "Who is at risk of leaving?" },
-  { at: 3.2, mine: false, text: "Sam. He stopped after lesson 4, and was here every day before that. I can check in with him and invite him to the Offer Sprint pod, where three people are working on the same lesson. Want me to?" },
-  { at: 5.6, mine: true, text: "Do it." },
-  { at: 7.0, mine: false, text: "Done. I messaged Sam and invited him to Offer Sprint. I'll tell you when he replies." },
-];
-const POD_AT = 9.4;
-const POD = { id: "c-pod", slug: "offer-sprint", name: POD_NAME };
-const POD_BEFORE: Line[] = [
-  { id: "o1", who: "priya", minutesAgo: 240, text: "Draft two of my one-page offer is up. Cut it by half since Tuesday." },
-];
-const POD_LINES: Array<Line & { at: number }> = [
-  { id: "o2", at: POD_AT + 1.0, who: "sam", minutesAgo: 0, text: "Back at it. Here's my one-page offer for the coaching package. Be honest." },
-  { id: "o3", at: POD_AT + 2.8, who: "priya", minutesAgo: 0, text: "Lead with the result and cut the second paragraph. The price is right." },
-  { id: "o4", at: POD_AT + 4.4, who: "dana", minutesAgo: 0, text: "Add the start date and send it today. This is ready." },
-];
-const WIN_AT = POD_AT + 6.4;
+// 4. Pays off: #wins. The result, and how he got it is learned too.
 const WINS_BEFORE: Line[] = [
-  { id: "w0", who: "mira", minutesAgo: 600, text: "First five paying subscribers at $300 each. Two weeks ago I didn't have a price.", extra: { reaction_summary: [{ emoji: "🎉", count: 9 }] } },
+  { id: "w1", who: "dana", minutesAgo: 400, text: "Cohort two wrapped: eleven of twelve finished. Opening cohort three next month.", extra: { reaction_summary: [{ emoji: "👏", count: 8 }] } },
 ];
-const WIN_LINES: Array<Line & { at: number }> = [
-  { id: "w2", at: WIN_AT + 1.0, who: "sam", minutesAgo: 0, text: "Signed my first client off the new page. $250 a month. Thank you, Offer Sprint." },
-  { id: "w4", at: WIN_AT + 4.0, who: "guide", minutesAgo: 0, text: "That's Sam back and paid, eight days after he went quiet. I've added it to this week's wins for Ana." },
+const WINS: Array<Line & { at: number }> = [
+  { id: "w2", at: 1.2, who: "sam", minutesAgo: 0, text: "Eight subscribers from twenty messages. My first $240. Thanks, Dana." },
+  { id: "w3", at: 5.0, who: "dana", minutesAgo: 0, text: "Told you. Ask, don't post." },
+  { id: "w4", at: 7.4, who: "guide", minutesAgo: 0, text: "Saved how Sam did it: twenty messages, eight subscribers. The next person who asks gets both." },
 ];
-const CHEERS = [1.8, 2.3, 2.8, 3.3, 3.8, 4.6, 5.2].map((after) => WIN_AT + after);
-const RESULTS_SECONDS = WIN_AT + 6.6;
+const WINS_TYPING = [{ from: 3.4, to: 5.0, who: "dana" }, { from: 5.8, to: 7.4, who: "guide" }];
+const CHEERS = [1.9, 2.4, 2.9, 3.4, 4.2, 5.4, 6.2];
+const SAVED_AT = 7.4;
+const WINS_SECONDS = 11;
 
-function ResultsScene({ at, now }: SceneProps) {
-  if (at < POD_AT) {
-    const said = ASK.filter((line) => at >= line.at);
-    return (
-      <HomePage host time="8:04 am" greeting="Good morning, Ana." line="1 person joined since yesterday, and 1 thing needs you."
-        chips={["How was this week?", "Who is at risk of leaving?", "Who should I welcome?"]} now={now} here="Dana and 3 others are here" joined="2 joined this week"
-        talk={said.length ? said.map((line) => (line.mine ? <Mine key={line.at}>{line.text}</Mine> : <Theirs key={line.at}><p>{line.text}</p></Theirs>)) : undefined}>
-        {said.length ? null : (
-          <Card label="Worth a look" title="Sam hasn't been back in two weeks" say="He stopped after lesson 4, and was here every day before that. Your guide can check in with him, or you can.">
-            <Btn go>Talk it over</Btn>
-            <Btn txt>Not now</Btn>
-          </Card>
-        )}
-      </HomePage>
-    );
-  }
-  const inPod = at < WIN_AT;
-  const cheers = CHEERS.filter((moment) => at >= moment).length;
-  const lines = inPod ? [...POD_BEFORE, ...POD_LINES.filter((line) => at >= line.at)] : [...WINS_BEFORE, ...WIN_LINES.filter((line) => at >= line.at)];
-  const roots = lines.map((line) => (line.id === "w2" && cheers ? root({ ...line, extra: { reaction_summary: [{ emoji: "🎉", count: cheers }] } }, now) : root(line, now)));
-  return (
-    <ChannelPage>
-      <WebCommunityInteractionProjection key={inPod ? "pod" : "wins"}
-        {...({ ...channelProps(inPod ? POD : CHANNELS[1]!), ...(inPod ? { activeChannel: { ...POD, is_general: false, access_mode: "restricted" } } : {}), roots, selectedRootId: null, replies: [],
-          typingPresence: { users: [], total_count: 0 }, mainComposer: <Composer placeholder={inPod ? "Message Offer Sprint" : "Message #wins"} /> } as any)}
-      />
-    </ChannelPage>
-  );
+function PaysOffScene({ at, now }: SceneProps) {
+  const lines = [...WINS_BEFORE, ...WINS.filter((line) => at >= line.at)].map((line) => (line.id === "w2" ? react(line, "🎉", CHEERS.filter((moment) => at >= moment).length) : line));
+  return <Channel channel={CHANNELS[1]!} lines={lines} typing={typingFor(WINS_TYPING, at, now)} now={now} />;
 }
 
 const SCENES: Array<{ key: string; label: string; seconds: number; say: string; left: (at: number) => Left; Scene: (props: SceneProps) => ReactNode }> = [
-  { key: "answers", label: "Welcomes and answers", seconds: SCENE_SECONDS, left: () => ({ tab: "chat", channelSlug: "general" }), say: "Someone new asks their first question. Your client success manager welcomes them, answers from the lesson you taught it in, and introduces the right person.", Scene: WelcomesScene },
-  { key: "remembers", label: "Remembers", seconds: 8, left: () => ({ tab: "resources" }), say: "That answer becomes something your community knows, for the next person who asks.", Scene: RemembersScene },
-  { key: "briefs", label: "Briefs you", seconds: 10.5, left: () => ({ tab: "agent" }), say: "You open the app to what was handled, and the one person who needs you.", Scene: BriefsScene },
-  { key: "results", label: "Gets results", seconds: RESULTS_SECONDS, left: (at) => (at < POD_AT ? { tab: "agent" } : at < WIN_AT ? { tab: "chat", inPod: true } : { tab: "chat", channelSlug: "wins" }), say: "Ask who's slipping away, and it brings them back: a message, an invite to the right pod, and a first client a week later.", Scene: ResultsScene },
+  { key: "asks", label: "Asks", seconds: ASKS_SECONDS, left: () => ({ tab: "chat", channelSlug: "general" }), say: "Mira asks something it doesn't know yet. It says so, and brings in the member who does.", Scene: AsksScene },
+  { key: "learns", label: "Learns", seconds: LEARNS_SECONDS, left: () => ({ tab: "resources" }), say: "Dana's answer becomes something the whole community knows.", Scene: LearnsScene },
+  { key: "compounds", label: "Compounds", seconds: COMPOUNDS_SECONDS, left: () => ({ tab: "chat", channelSlug: "general" }), say: "A week later Sam asks the same thing. This time it answers by itself, straight away.", Scene: CompoundsScene },
+  { key: "pays", label: "Pays off", seconds: WINS_SECONDS, left: () => ({ tab: "chat", channelSlug: "wins" }), say: "Sam gets his first subscribers, and how he did it is learned too. Every conversation makes the next answer better.", Scene: PaysOffScene },
 ];
+
+// How many things the community knows at a moment in the loop.
+function knownAt(index: number, at: number): number {
+  const learned = index > 1 || (index === 1 && at >= LEARNED_AT) ? 1 : 0;
+  const saved = index === 3 && at >= SAVED_AT ? 1 : 0;
+  return KNOWN_AT_START + learned + saved;
+}
 
 // The demo: one scene at a time, moving on by itself. A dot picks a scene;
 // resting the pointer on the app holds it. People who have asked for less
@@ -533,6 +451,7 @@ export function SiteDemo() {
   const [held, setHeld] = useState(false);
   const scene = SCENES[index]!;
   const moment = still ? scene.seconds - FADE_SECONDS - 0.1 : at;
+  const known = knownAt(index, moment);
   useEffect(() => {
     if (still || held) return;
     const timer = window.setInterval(() => setAt((current) => current + 0.1 * PACE), 100);
@@ -559,6 +478,7 @@ export function SiteDemo() {
         ))}
       </div>
       <p className="site-demo-say">{scene.say}</p>
+      <p className="site-demo-known" aria-live="off">{COMMUNITY.name} knows <b key={known}>{known}</b> things</p>
     </div>
   );
 }
