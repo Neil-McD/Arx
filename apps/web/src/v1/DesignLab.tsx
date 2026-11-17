@@ -77,10 +77,9 @@ function HostSide() {
   );
 }
 
-// `shot`: drawn as a picture inside another page (the site mock), not filling the window.
-function HostHomeQuiet(props: { shot?: boolean }) {
+function HostHomeQuiet() {
   return (
-    <KitApp view="home" host fillWindow={!props.shot} scale={props.shot ? 1 : labScale()} banner={BANNER} bannerPosition="72% 38%" aura={0.08}>
+    <KitApp view="home" host fillWindow scale={labScale()} banner={BANNER} bannerPosition="72% 38%" aura={0.08}>
       <HostSide />
       <Main>
         <Top />
@@ -576,6 +575,6 @@ function labScale(): number {
 
 export function DesignLab() {
   const page = typeof window === "undefined" ? "" : new URLSearchParams(window.location.search).get("page");
-  if (page === "site") return <SiteLab home={<HostHomeQuiet shot />} />;
+  if (page === "site") return <SiteLab />;
   return page === "channel" ? <HostChannel /> : page === "brief" ? <BriefPanels /> : page === "brain" ? <BrainLab /> : page === "events" ? <EventsLab /> : page === "members" ? <MembersLab /> : page === "brain-actions" ? <BrainActionsLab /> : page === "brain-page" ? <BrainPageLab /> : page === "pods-shell" ? <PodsShell /> : page === "know-panel" ? <KnowShell builder={false} /> : page === "know-panel-builder" ? <KnowShell builder /> : page === "pods" ? <PodsPage join={false} /> : page === "home-panel" ? <RealPanels pod={false} /> : page === "pod-panel" ? <RealPanels pod /> : page === "pods-join" ? <PodsPage join /> : <HostHomeQuiet />;
 }
