@@ -841,6 +841,9 @@ export default defineSchema({
     memoryMetabolismRequestedAt: v.optional(v.number()),
     // The host's house rules for members' own AIs (rules.md; convex/communityAiRules.ts).
     aiHouseRules: v.optional(v.string()),
+    // Set when the host has turned off posting through members' own AIs.
+    // They still read. Unset means allowed.
+    aiPostingOff: v.optional(v.boolean()),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
@@ -2173,6 +2176,9 @@ export default defineSchema({
     // original message instead of inserting a duplicate.
     clientMessageId: v.optional(v.string()),
     contentJson: v.any(),
+    // Sent through the sender's own AI (the MCP), not typed by them: shown as
+    // "via AI" to both people.
+    viaAi: v.optional(v.boolean()),
     createdAt: v.number(),
     updatedAt: v.number(),
   })

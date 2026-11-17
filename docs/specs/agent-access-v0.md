@@ -1,6 +1,6 @@
 # Agent access: MCP, lenses, limits, free and paid (v0 spec)
 
-Status: direction agreed 2026-11-17 (Neil). Slices 1 and 2 are built (see
+Status: direction agreed 2026-11-17 (Neil). Slices 1 to 3 are built (see
 "Slices").
 How the guide, memory and briefs work is owned by
 `agent-system-end-state.md`; this spec owns what a person's own AI may do
@@ -63,6 +63,7 @@ app's own screens are not counted. The guide is bounded by AI quota instead.
 | Searches | 30 | 1,000 |
 | Posts and replies | 10 | 100 |
 | New posts in one channel | 1 | |
+| Replies in direct messages | 5 | 50 |
 | Reactions, marking a lesson done | 30 | 500 |
 | Builder and moderator changes, free community | 30 | 300 |
 | Builder and moderator changes, paid community | 60 | 2,000 |
@@ -124,6 +125,29 @@ sets it; a client can neither set nor clear it.
 members, weekly recap. Each reads `rules.md` first and asks before it
 posts. Not published.
 
+## The member lens
+
+What a member's own AI reaches, beyond channels, people and courses:
+
+- **Direct messages** (`/messages/`, at the top of the repository, for a
+  person's own AI only). It lists the conversations the person is in and
+  reads one. It replies in a conversation that exists
+  (`polynet_write`, mode `append`). **It cannot start one:** a path names a
+  conversation, never a person. Blocks and the relationship check are the
+  app's own (`convex/directMessages.ts`), as are its message limits; replies
+  through an AI also have their own smaller budget and the content checks
+  of a reply. People are named by display name and handle, never an id. A
+  reply is stored with `viaAi` and shown as "via AI" to both people.
+- **Pod rooms.** A pod's room is a channel; someone inside the pod reads and
+  posts in it through their AI like any channel. A pod they are not in is
+  not there for them.
+- **The host's switch** (Settings, Guide: "Let members' AIs post here"). On
+  unless the host turns it off. Off, AIs read but cannot post, reply or edit
+  in the community's channels and pod rooms (`ai_posting_off`), `rules.md`
+  says so, and it applies to everyone's AI, the host's included. Taking your
+  own post down stays allowed. Direct messages are between two people and
+  are not the host's to switch off.
+
 ## Slices
 
 1. **Limits, the free cap, the operations list.** *Built.* The list, the
@@ -132,9 +156,9 @@ posts. Not published.
    everyone may).
 2. **Guidance and output quality.** *Built; the skills are written and not
    published.* See "Guidance" below.
-3. **The member lens, finished.** Messages (read your own, reply in
-   conversations that exist), pod rooms, events and RSVP. The host's switch
-   for whether members' AIs may post.
+3. **The member lens, finished.** *Built.* See "The member lens" below.
+   Events are readable; RSVP does not exist in the product, so there is
+   nothing to expose.
 4. **Builder parity, part one.** Channels, courses and lessons, events,
    invites.
 5. **Builder parity, part two.** Members, pods, the community page and

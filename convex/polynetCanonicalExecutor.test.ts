@@ -3655,6 +3655,20 @@ test("pods: inside for people in it, builders and the guide working there; outsi
   expect(outside).not.toContain("In it");
   expect(await member("polynet_read", `${base}/pods/founders/pod.md`)).toMatchObject({ ok: false });
 
+  // A pod's room through the member's own AI: read and posted in by someone
+  // inside it, marked; the hidden pod's room is not there for them at all.
+  const ownAi = (toolName: any, input: Record<string, unknown>) => executePolynetCanonicalTool({ ctx: executionContext(t.withIdentity({ subject: f.memberSubject })),
+    authSubject: f.memberSubject, userId: f.memberId, principalKind: "external_mcp", evidenceSurface: "external_mcp", toolName, input });
+  expect(await ownAi("polynet_list", { path: `${base}/channels/climbers/` })).toMatchObject({ ok: true });
+  const inRoom = await ownAi("polynet_write", { path: `${base}/channels/climbers/`, mode: "create", content: { text: "Week 3 done: 4 sessions logged." }, idempotency_key: "pod-post" });
+  expect(inRoom, JSON.stringify(inRoom)).toMatchObject({ ok: true });
+  const podPost = (await t.run((ctx: any) => ctx.db.query("communityInteractionRoots").collect()) as any[]).find((row) => row.idempotencyKey?.includes("pod-post"));
+  expect(podPost).toMatchObject({ viaAi: true, actorUserId: f.memberId });
+  expect(String(podPost.channelId)).toBe(String(climbersId));
+  expect(await ownAi("polynet_list", { path: `${base}/channels/founders/` })).toMatchObject({ ok: false });
+  expect(await ownAi("polynet_write", { path: `${base}/channels/founders/`, mode: "create", content: { text: "Let me in to the founders room." }, idempotency_key: "pod-out" }))
+    .toMatchObject({ ok: false });
+
   // Its memory, inside only.
   expect(body(await member("polynet_read", `${base}/pods/climbers/memory.md`))).toContain("Session log");
   expect(body(await member("polynet_read", `${base}/pods/climbers/memory/session-log.md`))).toContain("Log every session");

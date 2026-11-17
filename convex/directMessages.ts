@@ -68,6 +68,7 @@ type DirectMessageLike = {
   senderAgentParticipantId?: any;
   clientMessageId?: string;
   contentJson: unknown;
+  viaAi?: boolean;
   createdAt: number;
   updatedAt: number;
 };
@@ -620,6 +621,7 @@ async function mapDirectMessage(ctx: any, row: DirectMessageLike) {
     sender_user_id: row.senderUserId ? await resolvePublicUserId(ctx, row.senderUserId) : null,
     client_message_id: normalizeClientMessageId(row.clientMessageId),
     content_json: await mapDirectMessageContentJsonForRead(ctx, row._id, row.contentJson),
+    via_ai: row.viaAi === true,
     created_at: toIsoString(row.createdAt),
     updated_at: toIsoString(row.updatedAt),
   };
@@ -833,6 +835,8 @@ async function appendDirectMessageFromUser(args: {
   // The other person, for files reserved before the conversation existed.
   recipientUserId?: any | null;
   clientMessageId?: string | null;
+  // Sent through the sender's own AI: set by the server's own path only.
+  viaAi?: boolean;
 }): Promise<DirectMessageLike> {
   const nowMs = Date.now();
   const clientMessageId = normalizeClientMessageId(args.clientMessageId);
@@ -863,6 +867,7 @@ async function appendDirectMessageFromUser(args: {
     senderUserId: args.senderUserId,
     ...(clientMessageId ? { clientMessageId } : null),
     contentJson,
+    ...(args.viaAi ? { viaAi: true } : null),
     createdAt: nowMs,
     updatedAt: nowMs,
   });
@@ -1475,7 +1480,7 @@ export const listDirectMessages = query({
 async function sendDirectMessageForUser(
   ctx: any,
   viewerUserId: any,
-  args: { conversationId: any; text: string; attachments?: unknown; clientMessageId?: string | null },
+  args: { conversationId: any; text: string; attachments?: unknown; clientMessageId?: string | null; viaAi?: boolean },
 ) {
   const { conversation, participant } = await requireActiveUserParticipant({
     ctx,
@@ -1506,6 +1511,7 @@ async function sendDirectMessageForUser(
     attachments: args.attachments,
     recipientUserId: peerParticipant?.userId ?? null,
     clientMessageId: args.clientMessageId ?? null,
+    ...(args.viaAi ? { viaAi: true } : {}),
   });
   if (peerParticipant?.userId) {
     await scheduleDirectMessageEmailNotification({
@@ -1780,3 +1786,55 @@ export async function readDirectMessageLiveSignalForUser(ctx: any, viewerUserId:
     typing: typing.total_count > 0 ? { lease_until: until, expires_in_ms: Math.max(0, until - nowMs) } : null,
   };
 }
+
+// ---------------------------------------------------------------------------
+// Messages through a person's own AI (the MCP; docs/specs/agent-access-v0.md,
+// slice 3). The executor has already established who the person is. Their AI
+// reads the conversations they are in and replies in one that exists; it
+// never starts one (there is no way here to name a person, only a
+// conversation). Blocks, the relationship check and the message limits are
+// Studio's own, run by the helpers above. People are named by display name
+// and handle, never by an id.
+
+function aiDirectMessage(row: any, viewer: string | null) {
+  const message = siteDirectMessage(row, viewer);
+  return { seq: message.seq, from_me: message.from_me, text: message.text, via_ai: row?.via_ai === true,
+    created_at: message.created_at, attachments: message.attachments.map((file) => ({ name: file.name, kind: file.kind })) };
+}
+
+export const listAiDirectConversationsInternal = internalQuery({
+  args: { userId: v.id("users") },
+  handler: async (ctx, args) => {
+    const viewer = await resolvePublicUserId(ctx, args.userId);
+    const rows = await listMyDirectConversationsForUser(ctx, args.userId, SITE_DM_PAGE_SIZE);
+    return (rows as any[]).map((row) => siteDirectConversation(row, viewer));
+  },
+});
+
+export const listAiDirectMessagesInternal = internalQuery({
+  args: { userId: v.id("users"), conversationId: v.string(), beforeSeq: v.optional(v.number()) },
+  handler: async (ctx, args) => {
+    const viewer = await resolvePublicUserId(ctx, args.userId);
+    const conversationId = ctx.db.normalizeId("dmConversations", args.conversationId);
+    if (!conversationId) return null;
+    try {
+      const rows = await listDirectMessagesForUser(ctx, args.userId, { conversationId, beforeSeq: args.beforeSeq ?? null, limit: SITE_DM_PAGE_SIZE });
+      return { messages: (rows as any[]).map((row) => aiDirectMessage(row, viewer)), more: rows.length === SITE_DM_PAGE_SIZE };
+    } catch {
+      // Not theirs, or gone: the same answer.
+      return null;
+    }
+  },
+});
+
+export const sendAiDirectReplyInternal = internalMutation({
+  args: { userId: v.id("users"), conversationId: v.string(), text: v.string(), clientMessageId: v.string() },
+  handler: async (ctx, args) => {
+    const viewer = await resolvePublicUserId(ctx, args.userId);
+    const conversationId = ctx.db.normalizeId("dmConversations", args.conversationId);
+    if (!conversationId) throw new Error("dm_conversation_not_found");
+    const message = await sendDirectMessageForUser(ctx, args.userId,
+      { conversationId, text: args.text, clientMessageId: args.clientMessageId, viaAi: true });
+    return aiDirectMessage(message, viewer);
+  },
+});
