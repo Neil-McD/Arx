@@ -1,17 +1,19 @@
 # Production release plan (November 2026)
 
-Status: updated 2026-11-17 for `main` at #617. Nothing here has been run.
-Production is `138ef7ce3`; `main` is 191 commits ahead (663 files). The
+Status: updated 2026-11-17. **Stage 1 was released that day** at `f7995ec96`
+(receipt: `docs/receipts/2026-11-17-production-f7995ec96.md`); production
+runs the new backend under the classic look. Stage 2 has not been run.
+Before stage 1, production was `138ef7ce3`, 191 commits behind (663 files). The
 first version of this plan (Nov 12) was written at 45 commits. The runbook
 is `docs/alpha-release-workflow.md`; this plan is what to release, in what
 order, what Neil has to do himself, and how to step back.
 
 ## The shape: two stages
 
-The release script refuses to ship `VITE_DESIGN_V1` to production
-(`FORBIDDEN_PRODUCTION_ENV` in `scripts/lib/releaseProduction.mjs`), on
-purpose, until Neil accepts the design on staging. So going live is two
-separate decisions:
+Design v1 is on only where the build has `VITE_DESIGN_V1` set, which is the
+staging project alone. The release script used to refuse that setting in
+production; that guard was lifted on Nov 17 to prepare stage 2, so the
+setting itself is now the switch. Going live is two separate decisions:
 
 1. **Backend and classic app** (`npm run release:prod` at `origin/main`,
    switch off). Members see the app they see today. The new backend goes
@@ -147,8 +149,10 @@ The rules they follow are in `docs/specs/web-architecture-end-state.md`.
 
 **Steps**
 
-1. Remove `VITE_DESIGN_V1` from `FORBIDDEN_PRODUCTION_ENV` and set it for the
-   production build, in one reviewed change.
+1. `VITE_DESIGN_V1` is no longer in `FORBIDDEN_PRODUCTION_ENV` (done Nov 17,
+   on Neil's go to prepare stage 2). What remains is setting it for the
+   production build on the `polynet` Vercel project: a lasting setting,
+   changed only on Neil's word.
 2. `npm run release:verify`, then on Neil's word `npm run release:prod`.
 3. Acceptance clicks in production: Home, Inbox, a channel, a thread,
    Knowledge, Events, Members, Pods (list, a pod's page, a pod's room),

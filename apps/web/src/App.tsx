@@ -1251,7 +1251,9 @@ export default function App() {
       void enterJoinedCommunity({
         communityId: community.id,
         communitySlug: community.slug,
-        communityTab: "resources",
+        // Where the launch step leaves them: Home in design v1 (it used to
+        // open Knowledge, for the knowledge step that was removed).
+        communityTab: launchTab,
       });
     },
     onCommunityCreateRecoveryRequired: (founderSubscriptionId) => {
