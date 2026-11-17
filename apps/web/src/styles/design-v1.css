@@ -4397,6 +4397,18 @@
   :root[data-design="v1"] .community-page-body > .community-page-rail { display: none; }
 }
 
+/* Reading type: a semibold title, and lines of words short enough to read
+   (about 70 characters); video and pictures keep the column's full width. */
+:root[data-design="v1"] .kit-lesson-body .resource-viewer-title {
+  font-family: inherit;
+  font-size: 28px;
+  font-weight: 600;
+  line-height: 1.2;
+}
+:root[data-design="v1"] .kit-lesson-body .resource-viewer-prose :where(p, ul, ol, blockquote, h1, h2, h3, h4) {
+  max-width: 680px;
+}
+
 /* The lesson's words and video share the title's left edge and its width. */
 :root[data-design="v1"] .kit-lesson-body .resource-viewer-column {
   max-width: none;

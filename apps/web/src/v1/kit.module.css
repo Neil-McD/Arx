@@ -1231,6 +1231,32 @@
 .app .th b{color:var(--v1-accent-ink,var(--accent));font-weight:500}
 .app:is(.light:not(.on-mode-dark),.on-mode-light) .re.mine{background:color-mix(in srgb,var(--accent) 14%,transparent);color:var(--v1-accent-ink,var(--ink))}
 .app:is(.light:not(.on-mode-dark),.on-mode-light) .re.mine:hover{background:color-mix(in srgb,var(--accent) 20%,transparent)}
+.app .klesson p{color:var(--ink1)}
+.app .kedit-title{font-family:inherit;font-weight:600;font-size:28px}
+.app .kpath{list-style:none;margin:26px 0 0;padding:0;max-width:720px}
+.app .kpath li{position:relative}
+.app .kpath li:not(:last-child)::before{content:"";position:absolute;left:24px;top:40px;bottom:-12px;width:1px;background:var(--line2)}
+.app .kstep{position:relative;display:grid;grid-template-columns:26px minmax(0,1fr) auto;gap:0 14px;align-items:start;width:100%;padding:12px;border-radius:10px;text-align:left;cursor:pointer;transition:background .16s var(--ease)}
+.app .kstep:hover{background:var(--s1)}
+.app .kstep-n{display:grid;place-items:center;width:24px;height:24px;border-radius:50%;border:1.5px solid var(--line2);font-size:12px;font-weight:500;color:var(--ink3);background:var(--bg)}
+.app .kstep-n .ic{width:13px;height:13px}
+.app .kstep-body{min-width:0;padding-top:2px}
+.app .kstep b{display:block;font-size:14.5px;font-weight:500;line-height:1.35}
+.app .kstep .s{display:block;margin-top:2px;font-size:13px;line-height:1.45;color:var(--ink3)}
+.app .kstep em{padding-top:5px;font-style:normal;font-size:12px;color:var(--ink3);white-space:nowrap}
+.app .kstep.done .kstep-n{border-color:transparent;background:color-mix(in srgb,var(--accent) 22%,var(--bg));color:var(--v1-accent-ink,var(--accent))}
+.app .kstep.done b{color:var(--ink2)}
+.app .kstep.later b{color:var(--ink2)}
+.app .kstep.now{margin:6px 0;padding:18px 12px;background:var(--s1);box-shadow:inset 0 0 0 1px var(--line)}
+.app .kstep.now:hover{background:var(--s2)}
+.app .kstep.now .kstep-n{border-color:var(--accent);color:var(--ink)}
+.app .kstep.now b{font-size:18px;font-weight:600;letter-spacing:-.01em}
+.app .kstep.now .s{font-size:14px}
+.app .kstep .knext{display:block;margin-top:12px;font-size:13.5px;color:var(--ink2)}
+.app .kstep .kbar{display:block;max-width:260px}
+.app .kstep .acts{margin-top:14px}
+.app .kstep-cover{width:168px;aspect-ratio:16/9;border-radius:8px;background-size:cover;border:1px solid var(--line)}
+@media (max-width:640px){.app .kstep-cover{display:none}}
 .app .kcols{display:flex;gap:48px;max-width:780px;margin:22px auto 0}
 .app .kcols.two{max-width:1076px}
 .app .kcols .kmainc{flex:1;min-width:0}
