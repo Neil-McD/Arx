@@ -23,7 +23,7 @@ import {
   type CommunityEventsRange,
 } from "../../../../shared/useCommunityEventsController";
 import { useCommunityEventsTabLifecycle } from "../../../../shared/useCommunityEventsTabLifecycle";
-import { useLiveQuery } from "../../../../shared/liveQuery";
+import { useLiveChange, useLiveQuery } from "../../../../shared/liveQuery";
 import { coerceGatewayRows } from "../../../../shared/cloudGateway";
 import { useCommunityResourcesTabLifecycle } from "../../../../shared/useCommunityResourcesTabLifecycle";
 import { useWebCommunityResourceUiController } from "./useWebCommunityResourceUiController";
@@ -276,6 +276,20 @@ export function useWebCommunityContentController(
     // not a dependency: a new range waits for its own answer.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [liveEvents.data]);
+
+  // Live: while Knowledge is open, a course or lesson someone else adds,
+  // changes or publishes shows without a reload (the same refresh an edit
+  // of your own makes).
+  const knowledgeLiveArgs = activePage === "community" && communityTab === "resources" && activeCommunityId && eventsSubject
+    ? { authSubject: eventsSubject, communityId: activeCommunityId }
+    : null;
+  const reloadKnowledge = () => {
+    const activeSession = getSessionRef.current();
+    if (!activeCommunityId || !activeSession) return;
+    void resourceUi.loadCommunityResources(activeCommunityId, activeSession).catch(() => undefined);
+  };
+  useLiveChange(session, "communityResources:listCommunityResources", knowledgeLiveArgs, reloadKnowledge);
+  useLiveChange(session, "communityResources:listCommunityResourceModules", knowledgeLiveArgs, reloadKnowledge);
 
   useCommunityEventsTabLifecycle<AuthSession>({
     activePage,

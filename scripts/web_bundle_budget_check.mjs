@@ -10,7 +10,10 @@ const limits = {
   // Raised from 3_400_000 on Nov 13 2026: design v1 and the classic layout
   // both ship until the classic layout is deleted (cleanup wave 2), which
   // should take the total well under the old limit; lower it again then.
-  maxTotalJsBytes: readLimit("WEB_BUNDLE_MAX_TOTAL_JS_BYTES", 3_420_000),
+  // Raised again from 3_420_000 on Nov 16 2026, for the same reason: main sat
+  // 0.4 KiB under it and each slice of the address, live-data and layout work
+  // added about 2 KiB. This is 20 KiB of room, not a new target.
+  maxTotalJsBytes: readLimit("WEB_BUNDLE_MAX_TOTAL_JS_BYTES", 3_440_000),
   maxHostOnlyJsBytes: readLimit("WEB_BUNDLE_MAX_HOST_ONLY_JS_BYTES", 800_000),
 };
 

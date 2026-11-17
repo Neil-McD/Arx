@@ -8,6 +8,8 @@ import { fetchCloudPod, fetchCloudPodNotes, formatPodDate, type CloudPodDetail, 
 import { formatMomentWhen } from "../../../../shared/communityHomeMoments";
 import { Btn, cx } from "./kit";
 import { BriefPart, usePlaceBriefRead } from "./KitBrief";
+import { resolveAuthSubject, type AuthSessionLike } from "../../../../shared/authSession";
+import { useLiveAnswer } from "../../../../shared/liveQuery";
 import { PanelLearned, PanelNext, PanelPart, PanelPeople, usePanelSettled } from "./KitPanel";
 
 const REPEATS: Record<string, string> = { daily: "every day", weekly: "every week", monthly: "every month" };
@@ -26,10 +28,9 @@ export function KitPodLanding(props: {
   const { brief, settled: briefSettled } = usePlaceBriefRead(props.session, props.communityId, channelId);
   // How many of the pod's two reads (its detail, its notes) have answered.
   const [answered, setAnswered] = useState(0);
+  // Another pod starts empty.
+  useEffect(() => { setDetail(null); setNotes([]); setAnswered(0); }, [props.communityId, channelId]);
   useEffect(() => {
-    setDetail(null);
-    setNotes([]);
-    setAnswered(0);
     if (!props.session) return;
     let live = true;
     const call = { session: props.session, communityId: props.communityId, channelId };
@@ -39,6 +40,12 @@ export function KitPodLanding(props: {
     fetchCloudPodNotes(call).then((next) => { if (live) setNotes(next.notes); }).catch(() => undefined).finally(done);
     return () => { live = false; };
   }, [props.session, props.communityId, channelId]);
+  // Live (shared/liveQuery.ts): the pod and its notes are shown from the
+  // live answer too, so a change by anyone shows without a reload.
+  const subject = props.session ? resolveAuthSubject(props.session as AuthSessionLike) : null;
+  const liveArgs = subject ? { authSubject: subject, communityId: props.communityId, channelId } : null;
+  useLiveAnswer<CloudPodDetail>(props.session, "communityPods:getPod", liveArgs, (next) => setDetail(next));
+  useLiveAnswer<{ notes: CloudPodNote[] }>(props.session, "communityPodNotes:listPodNotes", liveArgs, (next) => setNotes(next.notes));
   // Layout before data: the parts draw as one piece once they have all
   // answered, so none is drawn and then pushed down by one above it.
   const settled = usePanelSettled(briefSettled && answered >= 2);

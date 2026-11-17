@@ -1,4 +1,4 @@
-import { useCallback, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useRef, useSyncExternalStore } from "react";
 import { resolveAuthSubject, type AuthSessionLike } from "./authSession";
 import {
   acquireAuthenticatedConvexRealtimeClient,
@@ -27,7 +27,14 @@ export type LiveQueryName =
   | "communityBriefs:getPlaceBrief"
   | "communityBrain:getBrainMap"
   | "communityEvents:listCommunityEvents"
-  | "communityPods:listCommunityPods";
+  | "communityPods:listCommunityPods"
+  | "communityPods:getPod"
+  | "communityPodNotes:listPodNotes"
+  | "communityAdmin:listCommunityJoinRequests"
+  | "communityMemberRecords:getCommunityMemberSummary"
+  | "communityResources:listCommunityResources"
+  | "communityResources:listCommunityResourceModules"
+  | "communityNotes:listCommunityNotes";
 
 export type LiveResult<T> = { data: T | undefined; error: unknown };
 const NOTHING: LiveResult<never> = { data: undefined, error: null };
@@ -148,4 +155,45 @@ export function useLiveQuery<T>(session: unknown, name: LiveQueryName, args: Rec
     [key],
   );
   return useSyncExternalStore(subscribe, getSnapshot, () => NOTHING);
+}
+
+// For a page that keeps the read's answer in its own state: hand it every
+// live answer, the first included, so what it shows is the live answer itself
+// (nothing can be missed between a load of its own and the subscription).
+export function useLiveAnswer<T>(session: unknown, name: LiveQueryName, args: Record<string, unknown> | null, onAnswer: (data: T) => void): void {
+  const { data } = useLiveQuery<T>(session, name, args);
+  const onAnswerRef = useRef(onAnswer);
+  onAnswerRef.current = onAnswer;
+  useEffect(() => {
+    if (data !== undefined) onAnswerRef.current(data);
+  }, [data]);
+}
+
+// For a page whose own load does more than keep the answer (paging, several
+// reads, its own errors): watch the same read live and load again when its
+// answer changes. An answer equal to the last one is not a change. The first
+// answer only sets what "changed" is measured from, so an edit landing in the
+// moment between the page's load and that first answer waits for the next
+// change; useLiveAnswer has no such moment.
+export function useLiveChange(session: unknown, name: LiveQueryName, args: Record<string, unknown> | null, onChange: () => void): void {
+  const { data } = useLiveQuery<unknown>(session, name, args);
+  const onChangeRef = useRef(onChange);
+  onChangeRef.current = onChange;
+  const key = args ? `${name}\u0000${stable(args)}` : null;
+  const seen = useRef<LiveChangeSeen>({ key: null, answer: null });
+  useEffect(() => {
+    const step = liveChangeStep(seen.current, key, data);
+    seen.current = step.seen;
+    if (step.changed) onChangeRef.current();
+  }, [data, key]);
+}
+
+// What useLiveChange remembers, and whether a new answer is a change: not
+// the first answer for a read, and not one equal to the last.
+export type LiveChangeSeen = { key: string | null; answer: string | null };
+export function liveChangeStep(seen: LiveChangeSeen, key: string | null, data: unknown): { seen: LiveChangeSeen; changed: boolean } {
+  const current = seen.key === key ? seen : { key, answer: null };
+  if (data === undefined) return { seen: current, changed: false };
+  const answer = stable(data);
+  return { seen: { key, answer }, changed: current.answer !== null && current.answer !== answer };
 }

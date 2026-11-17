@@ -3,6 +3,8 @@
 // docs/design/members-invariants.md: every way someone is in and at which
 // price, who needs the host, who is out and why, and one member's record.
 import { useRouteDetail, writeRouteDetail } from "../../../../shared/routeDetails";
+import { resolveAuthSubject, type AuthSessionLike } from "../../../../shared/authSession";
+import { useLiveChange } from "../../../../shared/liveQuery";
 import { useCallback, useContext, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { ArrowLeft } from "lucide-react";
 import { createPortal } from "react-dom";
@@ -150,7 +152,24 @@ export function KitMembersPage(props: {
     setLoaded(null);
     void loadMore(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [scope?.session, scope?.communityId, view, props.joinRequests.length, props.refreshKey, tableVersion]);
+  }, [scope?.session, scope?.communityId, view]);
+  // A change (yours, another host's, someone asking to join) loads the table
+  // again in place: the rows stay on screen until the new ones arrive.
+  const changeSeen = useRef(false);
+  useEffect(() => {
+    if (!changeSeen.current) { changeSeen.current = true; return; }
+    loadingRef.current = false;
+    void loadMore(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [props.joinRequests.length, props.refreshKey, tableVersion]);
+  // Live (shared/liveQuery.ts): the counts change when someone joins, leaves
+  // or changes plan, and the table follows. (The table's own read includes
+  // each person's last-seen time, which changes every 30 seconds, so it is
+  // the counts that are watched.)
+  const subject = scope?.session ? resolveAuthSubject(scope.session as AuthSessionLike) : null;
+  useLiveChange(scope?.session ?? null, "communityMemberRecords:getCommunityMemberSummary",
+    subject && scope ? { authSubject: subject, communityId: scope.communityId } : null,
+    () => setTableVersion((version) => version + 1));
 
   // More as you reach the end of the table.
   useEffect(() => {
