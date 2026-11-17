@@ -463,23 +463,27 @@ async function main() {
       () => runCommand("npm", ["run", "check:dependency-security-interlock"]),
     );
 
+    // What ships has no known advisory; build and test tools have none
+    // either, except the ones scripts/dependency_audit_check.mjs names.
     for (const audit of [
       {
         id: "root_dependency_audit",
         label: "Root dependency audit",
-        args: ["audit", "--audit-level=low"],
+        command: "node",
+        args: ["scripts/dependency_audit_check.mjs"],
       },
       {
         id: "web_dependency_audit",
         label: "Web dependency audit",
-        args: ["--prefix", "apps/web", "audit", "--audit-level=low"],
+        command: "node",
+        args: ["scripts/dependency_audit_check.mjs", "--prefix", "apps/web"],
       },
     ]) {
       await runStep(
         audit.id,
         audit.label,
-        displayCommand("npm", audit.args),
-        () => runCommand("npm", audit.args),
+        displayCommand(audit.command, audit.args),
+        () => runCommand(audit.command, audit.args),
       );
     }
 
