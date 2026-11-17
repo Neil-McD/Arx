@@ -43,7 +43,11 @@ export function useDragOrder(ids: string[], onOrder: (ids: string[]) => void, li
 
   const itemsOf = (container: HTMLElement) => Array.from(container.querySelectorAll<HTMLElement>(":scope > [data-drag-item]"));
 
+  // The order that is actually on the page: a change asked for is not judged
+  // against again until it has been drawn.
+  const drawnRef = useRef(orderKey);
   useLayoutEffect(() => {
+    drawnRef.current = orderKey;
     const was = wasRef.current;
     wasRef.current = null;
     const container = containerRef.current;
@@ -92,6 +96,7 @@ export function useDragOrder(ids: string[], onOrder: (ids: string[]) => void, li
   };
   // Over another item: take its place, and it slides into ours.
   function retarget(state: Held) {
+    if (state.order.join("|") !== drawnRef.current) return;
     const over = itemsOf(state.container).find((element) => {
       if (element.dataset.dragItem === state.id) return false;
       const box = element.getBoundingClientRect();
