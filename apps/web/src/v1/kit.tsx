@@ -39,6 +39,7 @@ const ICON_PATHS: Record<string, string> = {
   book: '<path d="M4 5a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2z"/><path d="M4 21a2 2 0 0 1 2-2h13v2H6"/>',
   close: '<path d="M6 6l12 12M18 6 6 18"/>',
   more: '<circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/>',
+  pen: '<path d="M4 20h4L19 9l-4-4L4 16z"/>',
 };
 
 export type IconName = keyof typeof ICON_PATHS;

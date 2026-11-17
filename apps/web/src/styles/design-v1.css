@@ -4397,27 +4397,39 @@
   :root[data-design="v1"] .community-page-body > .community-page-rail { display: none; }
 }
 
-/* Reading type: a semibold title, and lines of words short enough to read
-   (about 70 characters); video and pictures keep the column's full width. */
-:root[data-design="v1"] .kit-lesson-body .resource-viewer-title {
+/* A lesson reads: video, one line of facts, the title, the words. The viewer
+   draws title-then-video, so its wrappers are flattened and the parts ordered. */
+:root[data-design="v1"] .kit-lesson { display: flex; flex-direction: column; }
+:root[data-design="v1"] .kit-lesson :where(.kit-lesson-body, .resource-viewer-content, .resource-viewer-body, .resource-viewer-column) { display: contents; }
+:root[data-design="v1"] .kit-lesson .resource-viewer-column > * { order: 4; }
+:root[data-design="v1"] .kit-lesson .resource-viewer-embed { order: 1; margin: 0; border-radius: 14px; overflow: hidden; }
+:root[data-design="v1"] .kit-lesson .kit-lesson-facts { order: 2; min-height: 18px; margin-top: 20px; }
+:root[data-design="v1"] .kit-lesson .resource-viewer-verification-link { order: 2; align-self: flex-end; margin: -18px 0 0; font-size: 12.5px; }
+:root[data-design="v1"] .kit-lesson .resource-viewer-header { order: 3; margin: 6px 0 0; padding: 0; }
+:root[data-design="v1"] .kit-lesson .kit-lesson-after { order: 5; }
+:root[data-design="v1"] .kit-lesson .resource-viewer-title {
   font-family: inherit;
-  font-size: 28px;
+  font-size: 30px;
   font-weight: 600;
-  line-height: 1.2;
+  line-height: 1.15;
+  letter-spacing: -0.02em;
 }
-:root[data-design="v1"] .kit-lesson-body .resource-viewer-prose :where(p, ul, ol, blockquote, h1, h2, h3, h4) {
+:root[data-design="v1"] .kit-lesson .resource-viewer-prose {
+  margin-top: 14px;
+  font-size: 17px;
+  line-height: 1.65;
+}
+/* Lines of words stop at about 70 characters; video and pictures keep the column. */
+:root[data-design="v1"] .kit-lesson .resource-viewer-prose :where(p, ul, ol, blockquote, h1, h2, h3, h4) {
   max-width: 680px;
 }
-
-/* The lesson's words and video share the title's left edge and its width. */
-:root[data-design="v1"] .kit-lesson-body .resource-viewer-column {
-  max-width: none;
-}
+/* A course's tools, in the header. */
+:root[data-design="v1"] .community-page-header-actions .kit-header-tools { display: contents; }
 
 /* A course is the one page that centres: its lessons and the lesson are one
    block in the middle of the room, with no right column to sit beside. */
 :root[data-design="v1"]:where(:not([data-layout="phone"])) .community-page-body > .community-tab-scroll > .web-community-centered-pane:has(.knowledge-course-cols) {
-  max-width: 1188px;
+  max-width: 1328px;
   margin-inline: auto;
 }
 
