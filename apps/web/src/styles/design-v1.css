@@ -3170,6 +3170,8 @@
    and the parts sit in the reader's order: video, title, words. */
 :root[data-design="v1"] .kit-lesson-editor .lesson-editor-toolbar { display: none; }
 :root[data-design="v1"] .kit-lesson .kit-lesson-video { order: 1; }
+/* A course's publish switch and menu sit at the right end of the header. */
+:root[data-design="v1"] .community-page-header > .kit-header-end { margin-left: auto; display: flex; align-items: center; flex: none; }
 :root[data-design="v1"] .kit-lesson .kit-lesson-title { order: 3; margin-top: 22px; }
 :root[data-design="v1"] .kit-lesson .kit-lesson-editor { margin-top: 14px; }
 
