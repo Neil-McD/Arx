@@ -28,8 +28,9 @@ export const takeInternal = internalMutation({
   args: {
     userId: v.id("users"),
     takes: v.array(v.object({ budget: v.string(), scope: v.string() })),
-    // The call's idempotency key, when it has one: a retry of the call last
-    // counted spends nothing and is never refused for having been sent twice.
+    // What names this exact request (its idempotency key and everything it
+    // asks for), when it has a key: the request last counted, sent again,
+    // spends nothing and is never refused for having been sent twice.
     key: v.optional(v.string()),
   },
   handler: async (ctx, args) => {

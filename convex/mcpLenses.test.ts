@@ -144,6 +144,23 @@ test("one new post a minute in a channel; a refused post spends nothing", async 
   expect(rows.find((row: any) => row.budget === "post_channel")).toMatchObject({ scope: "run-club/general", minuteCount: 1 });
 });
 
+test("nothing in a call makes it cheaper: a reused key or a blank root_id is still counted", async () => {
+  const f = await fixture();
+  expect((await post(f, "member", "first")).isError).toBe(false);
+  // A second new post dressed as a reply to nothing is still a new post.
+  const dressed = await f.call("member", "polynet_write", { path: "/communities/run-club/channels/general/", mode: "create",
+    content: { text: "another", root_id: " " }, idempotency_key: "dressed" });
+  expect(dressed.structuredContent).toMatchObject({ code: "rate_limited", budget: "post_channel" });
+  // The same key with different words is a different request, and is counted.
+  const reused = await f.call("member", "polynet_write", { path: "/communities/run-club/channels/general/", mode: "create",
+    content: { text: "different words" }, idempotency_key: "first" });
+  expect(reused.structuredContent).toMatchObject({ code: "rate_limited", budget: "post_channel" });
+  // The same request, to the letter, is a retry: not refused, not counted again.
+  expect((await post(f, "member", "first")).isError).toBe(false);
+  const rows: any[] = await f.t.run((ctx: any) => ctx.db.query("accessBudgetCounters").collect());
+  expect(rows.find((row: any) => row.budget === "post")).toMatchObject({ minuteCount: 1 });
+});
+
 test("the day's posts run out even when the minute has room", async () => {
   const f = await fixture();
   await spent(f, f.users.member, "post", "", 0, BUDGET_LIMITS.post.perDay);

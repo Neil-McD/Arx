@@ -3,7 +3,7 @@ import { DRAFT_ONLY_REFUSAL_MESSAGE } from "../shared/communityTurnContract";
 import { renderCommunityNote, type CommunityNote } from "../shared/communityNotes";
 import { renderBriefDocument } from "../shared/communityBriefs";
 import { internal } from "./_generated/api";
-import { budgetTakesFor, callOperation, CALL_OPERATION_NAMES } from "../shared/operationCatalog";
+import { budgetTakesFor, callOperation, CALL_OPERATION_NAMES, requestFingerprint } from "../shared/operationCatalog";
 import { renderCommunityHandbook } from "../shared/communityHandbook";
 import { buildCommunitySearchQuery } from "../shared/communitySearchText";
 import type { CommunityEvidenceSurface } from "../shared/communityEvidenceContract.ts";
@@ -2786,11 +2786,12 @@ async function takeBudgets(args: { ctx: any; userId: string; principalKind: Poly
     ownAi: args.principalKind === "external_mcp", toolName: args.toolName,
     operation: typeof input.operation === "string" ? input.operation : null,
     mode: typeof input.mode === "string" ? input.mode : null,
-    reply: Boolean(input.content && typeof input.content === "object" && (input.content as Record<string, unknown>).root_id),
     communitySlug: community?.communitySlug ?? null, localPath: community?.localPath ?? null,
   });
   if (!takes.length) return null;
-  const key = typeof input.idempotencyKey === "string" && input.idempotencyKey ? input.idempotencyKey.slice(0, 200) : undefined;
+  // A retry is the same key with the same request, to the letter.
+  const key = typeof input.idempotencyKey === "string" && input.idempotencyKey
+    ? requestFingerprint(input.idempotencyKey, args.toolName, input) : undefined;
   const taken = await args.ctx.runMutation((internal as any).accessBudgets.takeInternal, { userId: args.userId, takes, ...(key ? { key } : {}) });
   if (taken.ok) return null;
   const seconds = Math.max(1, Math.ceil(taken.retryAfterMs / 1000));

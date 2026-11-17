@@ -2219,8 +2219,9 @@ export default defineSchema({
     minuteCount: v.number(),
     dayStartMs: v.number(),
     dayCount: v.number(),
-    // The idempotency key of the last call counted, so the same call sent
-    // again (a retry) is not counted, or refused, a second time.
+    // What names the last request counted (its idempotency key and its
+    // whole content), so the same request sent again (a retry) is not
+    // counted, or refused, a second time.
     lastKey: v.optional(v.string()),
     updatedAt: v.number(),
   }).index("by_user_budget_scope", ["userId", "budget", "scope"]),
