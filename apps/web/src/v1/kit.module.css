@@ -1186,9 +1186,9 @@
 .app .kl-row.dropbefore::before{top:-2px}.app .kl-row.dropafter::after{bottom:-2px}
 .app .kcard{position:relative;display:flex;min-width:0}
 .app .kcard>.kcourse{flex:1;min-width:0}
-.app .kgrip.card{position:absolute;right:12px;top:12px;z-index:1;width:26px;height:26px;border-radius:7px;background:rgba(12,13,16,.78);color:#fff}
-.app .kgrip.card:hover{color:#fff;background:rgba(12,13,16,.92)}
-.app .kgrip.card:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.app .kgrip.oncard{padding:0;position:absolute;right:12px;top:12px;z-index:1;width:26px;height:26px;border-radius:7px;background:rgba(12,13,16,.78);color:#fff}
+.app .kgrip.oncard:hover{color:#fff;background:rgba(12,13,16,.92)}
+.app .kgrip.oncard:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .app .kcard.dropbefore::before,.app .kcard.dropafter::after{content:"";position:absolute;top:0;bottom:0;width:3px;border-radius:2px;background:var(--accent);pointer-events:none}
 .app .kcard.dropbefore::before{left:-8px}.app .kcard.dropafter::after{right:-8px}
 .app .kcourse.knew{display:grid;place-items:center;align-content:center;justify-items:center;gap:8px;min-height:180px;padding:14px;border-style:dashed;border-color:var(--line2);background:transparent;color:var(--ink2);font-size:14px;text-align:center}
