@@ -1524,3 +1524,9 @@
 .app .kedit-videotools button{height:28px;padding:0 10px;border-radius:7px;background:rgba(12,13,16,.78);color:#fff;font-size:12.5px;font-weight:500;cursor:pointer}
 .app .kedit-videotools button:hover{background:rgba(12,13,16,.94)}
 .app .ktools.head{width:auto;max-width:none;margin:0 0 0 auto}
+.app .kresacts{display:flex;align-items:center;gap:2px}
+.app .kresacts a,.app .kresacts button{display:grid;place-items:center;width:28px;height:28px;border-radius:7px;color:var(--ink3);cursor:pointer}
+.app .kresacts a:hover,.app .kresacts button:hover{background:var(--s2);color:var(--ink)}
+.app .kresacts .ic{width:15px;height:15px}
+.app .kresacts button{opacity:0;transition:opacity .15s var(--ease)}
+.app .kresrow:hover .kresacts button,.app .kresacts button:focus-visible{opacity:1}

@@ -183,7 +183,7 @@ export function KitLessonEditor(props: {
       <div className="kit-lesson-editor kit-lesson-after" onInputCapture={() => setBodyTouched(true)} onPasteCapture={() => setBodyTouched(true)} onDropCapture={() => setBodyTouched(true)}
         onKeyDownCapture={() => setBodyTouched(true)} onClickCapture={(event) => { if ((event.target as HTMLElement).closest("button, [role='menuitem'], [role='option']")) setBodyTouched(true); }}>
         <Suspense fallback={<p className={cx("sub")}>Opening the lesson…</p>}>
-          <LessonEditor key={editorKey} initialMarkdown={resource.body_md ?? ""} onUploadImage={null} followAlong={false}
+          <LessonEditor key={editorKey} initialMarkdown={resource.body_md ?? ""} onUploadImage={null} followAlong={false} short
             onChange={(markdown) => { bodyRef.current = markdown; setBodyVersion((n) => n + 1); }}
             onDone={() => void save()} onSaveNow={() => void save()} />
         </Suspense>
@@ -198,7 +198,10 @@ export function KitLessonEditor(props: {
               onChange={(event) => nameLink(link.url, event.target.value)} onBlur={() => settleLinkName(link.url)}
               onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); }} />
             <em>{lessonLinkPlace(link)}</em>
-            <Btn small txt onClick={() => setLinks(links.filter((entry) => entry.url !== link.url))}>Remove</Btn>
+            <span className={cx("kresacts")}>
+              <a href={link.url} target="_blank" rel="noreferrer noopener" aria-label={`Open ${link.title}`} title="Open"><Icon name="arrow" /></a>
+              <button type="button" aria-label={`Remove ${link.title}`} title="Remove" onClick={() => setLinks(links.filter((entry) => entry.url !== link.url))}><Icon name="close" /></button>
+            </span>
           </div>
         ))}
         {/* One line: paste the address, press Enter. Its name is changed in the row it becomes. */}
@@ -212,7 +215,6 @@ export function KitLessonEditor(props: {
         ) : (
           <button type="button" className={cx("kaddres")} onClick={() => setAddingLink(true)}><Icon name="plus" />Add a link</button>
         )}
-        <span className={cx("sub")}>Members open these from the lesson, and your guide reads them too.</span>
       </div>
 
       {/* Drawn only once something changed. Nothing reaches members until Save. */}
