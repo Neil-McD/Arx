@@ -4647,48 +4647,15 @@
   border-radius: 14px;
 }
 
-/* A readable left rail: 15px rows on a 36px grid, and solid text instead of
-   see-through grey (contrast about 13.5:1 dark and 12:1 light, was about
-   7.7:1 and 5:1). Layout and accent are unchanged. */
+/* A readable left rail (Rashid, #630): solid text instead of see-through grey
+   (contrast about 13.5:1 dark and 12:1 light, was about 7.7:1 and 5:1), a
+   notch heavier. His 15px text and 36px rows were tried and were too big
+   (Neil, Nov 17): the size stays 14px on 28px rows. */
 :root[data-design="v1"] .community-nav :is(.nav-item, button.nav-item, a.nav-item) {
-  min-height: 36px;
-  padding: 6px 10px;
-  font-size: 15px;
   font-weight: 500;
-}
-:root[data-design="v1"] .community-nav .nav-item .nav-icon svg {
-  width: 16px;
-  height: 16px;
-}
-:root[data-design="v1"] .community-nav :is(.nav-item-count, .nav-item-hint) {
-  font-size: 13px;
-}
-:root[data-design="v1"] .community-nav-section-label {
-  font-size: 12.5px;
 }
 :root[data-design="v1"]:not([data-theme="light"]) { --nav-ink: #d2d5da; }
 :root[data-design="v1"][data-theme="light"] { --nav-ink: #2a2f36; }
-
-/* "Search or ask" on the rows' grid, so its icon and text line up with the
-   rows below it. */
 :root[data-design="v1"] .community-nav-tools .community-search-ask {
-  height: 36px;
-  padding-inline: 10px;
-  gap: 10px;
-  font-size: 15px;
   color: var(--nav-ink);
-}
-:root[data-design="v1"] .community-nav-tools .community-search-ask svg:first-child {
-  width: 16px;
-  height: 16px;
-}
-
-/* The row text itself, which the 14px desktop rule above sets on each label,
-   and the loading rows at the new 36px so the rail doesn't jump on load. */
-:root[data-design="v1"]:where(:not([data-layout="phone"])) .community-nav :is(.nav-item-label, .community-channel-row button, .account-menu-name, .community-search-ask) {
-  font-size: 15px;
-}
-:root[data-design="v1"] :is(.community-channel-loading-row, .community-nav-access-loading-row) {
-  height: 36px;
-  border-block-width: 9px;
 }
