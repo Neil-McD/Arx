@@ -526,7 +526,8 @@ export function KitClassroom(props: {
         ) : lesson ? (
           <div className={cx("klesson")}>
             <div className={cx("ktitle")}>
-              <span className={cx("lab")} style={{ flex: 1 }}>Lesson {index + 1} of {open.lessons.length}{open.course.module_status === "draft" ? " · draft course" : ""}</span>
+              {/* "Lesson 1 of 1" says nothing. */}
+              <span className={cx("lab")} style={{ flex: 1 }}>{open.lessons.length > 1 ? `Lesson ${index + 1} of ${open.lessons.length}` : ""}{open.course.module_status === "draft" ? `${open.lessons.length > 1 ? " · " : ""}Draft course` : ""}</span>
               {editingTools ? <button type="button" className={cx("btn sm")} onClick={() => setEditingLessonId(lesson.id)}>Edit lesson</button> : null}
             </div>
             <div className="kit-lesson-body"><WebCommunityResourceViewerContent resource={lesson} /></div>
