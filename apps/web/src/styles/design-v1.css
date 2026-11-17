@@ -201,17 +201,12 @@
 
 /* Primary buttons that were written as white-on-dark take the primary action
    colour. Third-party marks (Google sign-in) keep their own colours. */
-:root[data-design="v1"] .knowledge-source-intake-primary,
-:root[data-design="v1"] .builder-knowledge-setup-next,
 :root[data-design="v1"] .web-social-profile-modal-primary,
 :root[data-design="v1"] .platform-save-button:not(.is-saved):not(.synced) {
   border-color: transparent;
   background: var(--bg-button);
   color: var(--bg-button-text);
 }
-
-:root[data-design="v1"] .knowledge-source-intake-primary:hover:not(:disabled),
-:root[data-design="v1"] .builder-knowledge-setup-next:hover:not(:disabled),
 :root[data-design="v1"] .web-social-profile-modal-primary:hover:not(:disabled),
 :root[data-design="v1"] .platform-save-button:not(.is-saved):not(.synced):hover:not(:disabled) {
   background: var(--bg-button-hover);
@@ -319,8 +314,6 @@
   .resources-header,
   .resource-delete-label,
   .resource-field-label,
-  .knowledge-source-intake-eyebrow,
-  .builder-knowledge-setup-step,
   .resources-preview-mode-label,
   .resource-course-card-status,
   .resource-course-outline-header,
@@ -1165,7 +1158,6 @@
   padding: 0;
 }
 
-
 :root[data-design="v1"]:where([data-layout="phone"]) .app-shell.community-layout.sessions-compact.no-right .community-nav .nav-item {
   justify-content: center;
   gap: 0;
@@ -1378,7 +1370,6 @@
 :root[data-design="v1"] .community-home-rail {
   display: none;
 }
-
 
 :root[data-design="v1"] .community-home-aside.is-rail {
   border-top: 0;

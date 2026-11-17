@@ -3,13 +3,13 @@ import type { WebGlobalOverlayHostProps } from "../components/WebGlobalOverlayHo
 export function buildWebGlobalOverlayHostProps(params: {
   communityModalHostProps: WebGlobalOverlayHostProps["communityModalHostProps"];
   builderOfferProps: WebGlobalOverlayHostProps["builderOfferProps"];
-  builderKnowledgeSetupProps: WebGlobalOverlayHostProps["builderKnowledgeSetupProps"];
+  communityLaunchProps: WebGlobalOverlayHostProps["communityLaunchProps"];
   appToast: string | null;
 }): WebGlobalOverlayHostProps {
   return {
     communityModalHostProps: params.communityModalHostProps,
     builderOfferProps: params.builderOfferProps,
-    builderKnowledgeSetupProps: params.builderKnowledgeSetupProps,
+    communityLaunchProps: params.communityLaunchProps,
     appToast: params.appToast,
   };
 }
