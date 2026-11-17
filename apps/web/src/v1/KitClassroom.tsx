@@ -762,7 +762,7 @@ export function KitClassroom(props: {
     const here = path.find((step) => step.state === "now") ?? path.find((step) => step.total > 0) ?? null;
     const hereAt = here ? path.indexOf(here) : -1;
     page = (
-      <div className={cx("page")} style={{ padding: 0, overflow: "visible" }}>
+      <div className={`knowledge-shelf ${cx("page")}`} style={{ padding: 0, overflow: "visible" }}>
         {props.canManage || !courses.length ? (
           <p className={cx("lead")} style={{ marginTop: 0 }}>{agentOn ? <span className={cx("aura")}><Icon name="spark" /></span> : null}
             {!props.loaded ? " " : props.canManage ? hostLead(courses.map((entry) => entry.course), learning) : "Nothing to learn here yet."}
