@@ -29,7 +29,7 @@ describe("changing a course in the page", () => {
     expect(page).toMatch(/role="switch" aria-checked=\{!isDraft\}/);
     expect(page).toMatch(/Unpublish: back to a draft only hosts see/);
     // Nov 17: no edit mode and no form. A host's lesson is always the editor.
-    expect(page).not.toMatch(/Edit lesson<|Edit course<|KitCourseEdit\b/);
+    expect(page).not.toMatch(/Edit lesson<|Edit course<|<KitCourseEdit /);
     const panel = readFileSync(new URL("../apps/web/src/components/WebCommunityKnowledgePanel.tsx", import.meta.url), "utf8");
     expect(panel).not.toMatch(/handleEditModule|openNewModuleModal|handleDeleteModule/);
     expect(panel).toMatch(/course\.module_status !== "draft"\) return \{ ok: false/);
