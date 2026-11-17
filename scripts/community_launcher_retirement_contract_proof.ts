@@ -118,8 +118,8 @@ assert.match(
 );
 assert.match(
   app,
-  /const communityUi = useWebCommunityUiController<[\s\S]*onCommunityCreated: \(community, context\) => \{[\s\S]*suppressBuilderSetupSubscription\([\s\S]*context\.founderSubscriptionId[\s\S]*"attached"[\s\S]*setCommunities[\s\S]*founderBilling\.refresh[\s\S]*enterJoinedCommunity\(\{[\s\S]*communityTab: "resources"/,
-  "App should project a created community into the directory and enter canonical Resources onboarding",
+  /const communityUi = useWebCommunityUiController<[\s\S]*onCommunityCreated: \(community, context\) => \{[\s\S]*suppressBuilderSetupSubscription\([\s\S]*context\.founderSubscriptionId[\s\S]*"attached"[\s\S]*setCommunities[\s\S]*founderBilling\.refresh[\s\S]*enterJoinedCommunity\(\{[\s\S]*communityTab: launchTab/,
+  "App should project a created community into the directory and open it where the launch step leaves them (Home in design v1; the knowledge step it used to open was removed)",
 );
 assert.match(
   pendingAuthIntent,
