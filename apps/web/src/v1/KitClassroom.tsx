@@ -472,13 +472,14 @@ export function KitClassroom(props: {
   const isDraft = open?.course.module_status === "draft";
   const courseTools = open && props.canManage ? (
     <>
-      {/* One switch publishes the course or takes it back to a draft. */}
+      {/* One switch publishes the course or takes it back to a draft. Just the
+          switch and the word (Neil, Nov 17): what each state means is in its tooltip. */}
       {props.onSetCourseStatus ? (
         <button type="button" role="switch" aria-checked={!isDraft} aria-label="Published" className={cx("kswitch", isDraft ? "" : "on")}
           disabled={publishing || (isDraft && open.lessons.length === 0)}
           title={isDraft ? (open.lessons.length === 0 ? "Write a lesson first" : "Publish: members will see this course") : "Unpublish: back to a draft only hosts see"}
           onClick={() => void setCourseStatus(open.course.id, isDraft ? "live" : "draft")}>
-          <i aria-hidden="true" />{isDraft ? "Draft" : "Published"}<small>{isDraft ? "Only hosts see it" : "Members can see it"}</small>
+          <i aria-hidden="true" />{isDraft ? "Unpublished" : "Published"}
         </button>
       ) : <span className={cx("tag", isDraft ? "" : "live")}>{isDraft ? "Draft · only hosts see it" : "Published"}</span>}
       {/* Only a draft can be deleted: taking a live course away from members is Unpublish, on purpose, first. */}
