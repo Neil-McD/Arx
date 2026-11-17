@@ -1,6 +1,8 @@
 import { useEffect, useRef } from "react";
 import { toCanonicalCommunityVisibility } from "./communityVisibility";
 import { deriveCommunityMembersJoinReviewMode, type CommunityMembersJoinReviewMode } from "./communityJoinPolicy";
+import { resolveAuthSubject, type AuthSessionLike } from "./authSession";
+import { useLiveChange } from "./liveQuery";
 
 type CommunityLike = {
   id: string;
@@ -38,55 +40,59 @@ export function useCommunityMembersReviewLifecycle<
     params.resetCommunityJoinRequests();
   }, [params.activeCommunityId, params.resetCommunityJoinRequests]);
 
+  // The community whose join requests this person may review here, or null.
+  const reviewCommunityId = joinRequestsCommunityToLoad(params);
+
   useEffect(() => {
-    const shouldLoadForSurface = params.shouldLoad === true;
-    if (!shouldLoadForSurface) {
-      params.resetCommunityJoinRequests();
-      return;
-    }
     const session = params.session;
-    const communityId = params.activeCommunityId;
-    if (!session || !communityId) {
+    if (!session || !reviewCommunityId) {
       params.resetCommunityJoinRequests();
       return;
     }
-    if (!params.canReviewJoinRequests) {
-      params.resetCommunityJoinRequests();
-      return;
-    }
-
-    const activeCommunityRecord = params.communities.find((community) => community.id === communityId) ?? null;
-    const rawVisibility = String(activeCommunityRecord?.visibility ?? "")
-      .trim()
-      .toLowerCase();
-    if (rawVisibility && !["published", "unlisted", "public", "private"].includes(rawVisibility)) {
-      params.resetCommunityJoinRequests();
-      return;
-    }
-    const visibility = toCanonicalCommunityVisibility(rawVisibility || "unlisted", "unlisted");
-
-    if (visibility !== "published" && visibility !== "unlisted") {
-      params.resetCommunityJoinRequests();
-      return;
-    }
-
-    const joinReviewMode =
-      params.activeCommunityMembersJoinReviewMode ??
-      deriveCommunityMembersJoinReviewMode({ entry_policy: activeCommunityRecord?.entry_policy });
-
-    if (joinReviewMode !== "free_approval") {
-      params.resetCommunityJoinRequests();
-      return;
-    }
+    const communityId = reviewCommunityId;
 
     void loadCommunityJoinRequestsRef.current(communityId, session);
   }, [
     params.session,
-    params.activeCommunityId,
-    params.canReviewJoinRequests,
-    params.activeCommunityMembersJoinReviewMode,
-    params.shouldLoad,
-    params.communities,
+    reviewCommunityId,
     params.resetCommunityJoinRequests,
   ]);
+
+  // Live (shared/liveQuery.ts): someone asking to join, or another host
+  // answering, shows without a reload. The same read the load makes.
+  const subject = params.session ? resolveAuthSubject(params.session as AuthSessionLike) : null;
+  useLiveChange(
+    params.session,
+    "communityAdmin:listCommunityJoinRequests",
+    subject && reviewCommunityId
+      ? { authSubject: subject, communityId: reviewCommunityId, limit: 201, includeStatuses: ["pending"] }
+      : null,
+    () => {
+      if (params.session && reviewCommunityId) void loadCommunityJoinRequestsRef.current(reviewCommunityId, params.session);
+    },
+  );
+}
+
+// Join requests are loaded only where they can be reviewed: on a surface
+// that shows them, by someone who may, in a community that asks for approval.
+export function joinRequestsCommunityToLoad<CommunityT extends CommunityLike>(params: {
+  session: unknown | null;
+  activeCommunityId: string | null;
+  communities: CommunityT[];
+  canReviewJoinRequests: boolean;
+  activeCommunityMembersJoinReviewMode: CommunityMembersJoinReviewMode | null;
+  shouldLoad?: boolean;
+}): string | null {
+  if (params.shouldLoad !== true) return null;
+  const communityId = params.activeCommunityId;
+  if (!params.session || !communityId || !params.canReviewJoinRequests) return null;
+  const activeCommunityRecord = params.communities.find((community) => community.id === communityId) ?? null;
+  const rawVisibility = String(activeCommunityRecord?.visibility ?? "").trim().toLowerCase();
+  if (rawVisibility && !["published", "unlisted", "public", "private"].includes(rawVisibility)) return null;
+  const visibility = toCanonicalCommunityVisibility(rawVisibility || "unlisted", "unlisted");
+  if (visibility !== "published" && visibility !== "unlisted") return null;
+  const joinReviewMode =
+    params.activeCommunityMembersJoinReviewMode ??
+    deriveCommunityMembersJoinReviewMode({ entry_policy: activeCommunityRecord?.entry_policy });
+  return joinReviewMode === "free_approval" ? communityId : null;
 }
