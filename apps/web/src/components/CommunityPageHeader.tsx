@@ -72,6 +72,13 @@ export function CommunityPageRail(props: { label: string; children: ReactNode })
   return createPortal(<div className="community-page-rail-content" aria-label={props.label}>{props.children}</div>, rail);
 }
 
+// The header's right side, for a page that fills it from deeper in the tree
+// (a course's tools). Null where there is no header to fill (phone, classic).
+export function usePageHeaderToolbar(): HTMLElement | null {
+  const toolbar = useContext(ToolbarSlotContext);
+  return isDesignV1Active() && toolbar ? toolbar : null;
+}
+
 // `children` is the page's classic title row, shown when v1 is off (and where
 // a page is used outside the frame, as on mobile).
 // One level in (a course inside Knowledge, a pod's room): the header is an
