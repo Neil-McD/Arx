@@ -63,7 +63,9 @@ External MCP begins at:
 ```text
 /
 ├── communities/
-└── users/
+├── users/
+└── messages/         # a person's own AI only: their direct messages
+    └── <conversation>/   # list its messages; append a reply. Never starts one.
 ```
 
 An authorized community is mounted at:

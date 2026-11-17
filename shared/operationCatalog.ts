@@ -17,7 +17,7 @@ export type OperationEffect = "read" | "write" | "destroy" | "broadcast" | "mone
 // Which budget it spends (BUDGET_LIMITS). "none": keeping a session alive
 // (presence, typing, read position) or work bounded another way (the guide's
 // AI quota).
-export type OperationBudget = "read" | "search" | "post" | "light" | "builder_change" | "none";
+export type OperationBudget = "read" | "search" | "post" | "message_reply" | "light" | "builder_change" | "none";
 
 export type OperationPlan = "free" | "paid";
 
@@ -40,6 +40,10 @@ export const TOOL_OPERATIONS = {
   "polynet_write:channels": entry("member", "write", "post"),
   // polynet_write under builder/: staging a change to the community's courses.
   "polynet_write:builder": entry("builder", "write", "builder_change"),
+  // A person's own direct messages (/messages/): reading the conversations
+  // they are in, and replying in one that exists. Never starting one.
+  "polynet_list:messages": entry("member", "read", "read"),
+  "polynet_write:messages": entry("member", "write", "message_reply"),
 } satisfies Record<string, OperationEntry>;
 
 // polynet_call operations, in the order the capabilities directory lists them.
@@ -93,6 +97,9 @@ export const BUDGET_LIMITS = {
   post: { perMinute: 10, perDay: 100 },
   // New posts (not replies) in one channel.
   post_channel: { perMinute: 1, perDay: null },
+  // Replies in direct messages: fewer than posts, because each one lands in
+  // one person's inbox.
+  message_reply: { perMinute: 5, perDay: 50 },
   // Reactions, marking a lesson done.
   light: { perMinute: 30, perDay: 500 },
   // A builder's or moderator's changes, by whether the community has the plan.
@@ -117,6 +124,18 @@ export function requestFingerprint(key: string, toolName: string, input: unknown
   return `${key.slice(0, 120)}:${text.length.toString(36)}:${a.toString(36)}${b.toString(36)}`;
 }
 
+// A person's own direct messages, at the top of the repository.
+export const MESSAGES_DIRECTORY_PATH = "/messages/";
+export function isMessagesPath(path: unknown): path is string {
+  return typeof path === "string" && path.startsWith(MESSAGES_DIRECTORY_PATH);
+}
+// /messages/<conversation>/ names one conversation.
+export function messagesConversationId(path: unknown): string | null {
+  // An id as the database writes it; the database itself decides whether it is one.
+  const match = typeof path === "string" ? /^\/messages\/([A-Za-z0-9_;-]{4,80})\/$/.exec(path) : null;
+  return match ? match[1] : null;
+}
+
 // One thing to count: which budget, and for a per-place budget, which place.
 export type BudgetTake = { budget: Exclude<OperationBudget, "none"> | "post_channel"; scope: string };
 
@@ -131,7 +150,11 @@ export function budgetTakesFor(args: {
   mode?: string | null;
   communitySlug?: string | null;
   localPath?: string | null;
+  // The path as the caller named it, for what is not inside a community.
+  path?: string | null;
 }): BudgetTake[] {
+  // A person's own messages: reading is a read, a reply is a message reply.
+  if (isMessagesPath(args.path) && args.toolName === "polynet_write") return [{ budget: "message_reply", scope: "" }];
   if (args.toolName === "polynet_list" || args.toolName === "polynet_read") return args.ownAi ? [{ budget: "read", scope: "" }] : [];
   if (args.toolName === "polynet_search") return args.ownAi ? [{ budget: "search", scope: "" }] : [];
   if (args.toolName === "polynet_call") {

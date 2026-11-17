@@ -18,11 +18,13 @@ async function managerCommunity(ctx: any, args: { userId?: any; authSubject?: st
   await requireCommunityManager({ ctx, communityId: args.communityId, userId });
   const community = await ctx.db.get(args.communityId);
   if (!community || !communityIsActive(community as any)) throw new Error("community_not_found");
-  return community as { _id: any; name?: string; aiHouseRules?: string };
+  return community as { _id: any; name?: string; aiHouseRules?: string; aiPostingOff?: boolean };
 }
 
-const managerView = (community: { aiHouseRules?: string }) => ({
+const managerView = (community: { aiHouseRules?: string; aiPostingOff?: boolean }) => ({
   house_rules: community.aiHouseRules ?? "",
+  // Whether members' own AIs may post here (they always read).
+  posting_allowed: community.aiPostingOff !== true,
   max_chars: HOUSE_RULES_MAX_CHARS,
   polynet_rules: POLYNET_AI_RULES,
   empty_words: DEFAULT_HOUSE_RULES,
@@ -40,7 +42,18 @@ export const saveCommunityAiRules = mutation({
     const community = await managerCommunity(ctx, args);
     const aiHouseRules = normalizeHouseRules(args.text);
     await ctx.db.patch(community._id, { aiHouseRules: aiHouseRules || undefined, updatedAt: Date.now() });
-    return managerView({ aiHouseRules });
+    return managerView({ ...community, aiHouseRules });
+  },
+});
+
+// The host's switch: whether members' own AIs may post here. On unless the
+// host turns it off; off, they still read.
+export const setCommunityAiPosting = mutation({
+  args: { ...managerArgs, allowed: v.boolean() },
+  handler: async (ctx, args) => {
+    const community = await managerCommunity(ctx, args);
+    await ctx.db.patch(community._id, { aiPostingOff: args.allowed ? undefined : true, updatedAt: Date.now() });
+    return managerView({ ...community, aiPostingOff: !args.allowed });
   },
 });
 
@@ -50,7 +63,8 @@ export const readCommunityAiRulesInternal = internalQuery({
   handler: async (ctx, args) => {
     const community = await ctx.db.get(args.communityId);
     if (!community || !communityIsActive(community as any)) return null;
-    return { communityName: String(community.name ?? "Community"), houseRules: (community as any).aiHouseRules ?? null };
+    return { communityName: String(community.name ?? "Community"), houseRules: (community as any).aiHouseRules ?? null,
+      postingAllowed: (community as any).aiPostingOff !== true };
   },
 });
 
