@@ -20,6 +20,8 @@ type Held = {
   from: string[];
   baseKey: string;
   quietUntil: number;
+  x: number;
+  y: number;
 };
 
 export function useDragOrder(ids: string[], onOrder: (ids: string[]) => void, liftedClass: string) {
@@ -84,12 +86,16 @@ export function useDragOrder(ids: string[], onOrder: (ids: string[]) => void, li
       lift(state);
     }
     state.clone!.style.translate = `${dx}px ${dy}px`;
-    if (performance.now() < state.quietUntil) return;
-    // Over another item: take its place, and it slides into ours.
+    state.x = event.clientX;
+    state.y = event.clientY;
+    if (performance.now() >= state.quietUntil) retarget(state);
+  };
+  // Over another item: take its place, and it slides into ours.
+  function retarget(state: Held) {
     const over = itemsOf(state.container).find((element) => {
       if (element.dataset.dragItem === state.id) return false;
       const box = element.getBoundingClientRect();
-      return event.clientX >= box.left && event.clientX <= box.right && event.clientY >= box.top && event.clientY <= box.bottom;
+      return state.x >= box.left && state.x <= box.right && state.y >= box.top && state.y <= box.bottom;
     });
     const target = over?.dataset.dragItem;
     if (!target) return;
@@ -100,9 +106,12 @@ export function useDragOrder(ids: string[], onOrder: (ids: string[]) => void, li
     if (!next) return;
     wasRef.current = new Map(itemsOf(state.container).map((element) => [element.dataset.dragItem ?? "", element.getBoundingClientRect()]));
     state.order = next;
+    // Nothing is judged while things are sliding; where the pointer ended up
+    // is looked at again once they have stopped.
     state.quietUntil = performance.now() + SLIDE_MS + 40;
+    window.setTimeout(() => { if (heldRef.current === state) retarget(state); }, SLIDE_MS + 50);
     setPreview({ order: next, baseKey: state.baseKey });
-  };
+  }
 
   const stop = () => {
     window.removeEventListener("pointermove", move);
@@ -134,7 +143,12 @@ export function useDragOrder(ids: string[], onOrder: (ids: string[]) => void, li
   function drop() {
     const state = stop();
     if (!state || !state.clone) return;
-    settle(state);
+    // A quick flick can let go mid-slide: stop the slide and look once more.
+    for (const element of itemsOf(state.container)) for (const animation of element.getAnimations()) animation.finish();
+    retarget(state);
+    wasRef.current = null;
+    // Once the last change is drawn, the copy settles into the gap.
+    requestAnimationFrame(() => requestAnimationFrame(() => settle(state)));
     const changed = state.order.some((id, index) => id !== state.from[index]);
     if (!changed) { setPreview(null); return; }
     const shown = { order: state.order, baseKey: state.baseKey };
@@ -174,7 +188,7 @@ export function useDragOrder(ids: string[], onOrder: (ids: string[]) => void, li
         if (!item || !container) return;
         event.preventDefault();
         containerRef.current = container;
-        heldRef.current = { id, startX: event.clientX, startY: event.clientY, item, container, clone: null, order: orderRef.current, from: orderRef.current, baseKey: idsKey, quietUntil: 0 };
+        heldRef.current = { id, startX: event.clientX, startY: event.clientY, item, container, clone: null, order: orderRef.current, from: orderRef.current, baseKey: idsKey, quietUntil: 0, x: event.clientX, y: event.clientY };
         window.addEventListener("pointermove", move);
         window.addEventListener("pointerup", drop);
         window.addEventListener("pointercancel", cancel);

@@ -623,6 +623,7 @@ css += """
 .app .klift{rotate:0deg;scale:1;transition:rotate .16s var(--ease),scale .16s var(--ease),box-shadow .16s var(--ease)}
 .app .kl-row.klift{border-radius:9px;background:var(--pop);box-shadow:0 14px 30px -12px rgba(0,0,0,.7),inset 0 0 0 1px var(--line2);rotate:-1.2deg;scale:1.02}
 .app .kcard.klift{border-radius:12px;box-shadow:0 30px 60px -22px rgba(0,0,0,.85);rotate:-1.6deg;scale:1.03}
+.app .kcard.klift{background:var(--panel)}
 .app .kcard.klift>.kcourse{border-color:var(--line2);background:var(--s2)}
 .app .kcard{position:relative;display:flex;min-width:0}
 .app .kcard>.kcourse{flex:1;min-width:0}
