@@ -9,7 +9,7 @@ import { DiscoverCard } from "./KitDiscover";
 
 const CSS = `
 .site{--bg:#07080a;--panel:#0d0f12;--panel2:#12151a;--ink:#f3f4f6;--ink2:rgba(243,244,246,.68);--ink3:rgba(243,244,246,.46);--line:rgba(255,255,255,.08);--line2:rgba(255,255,255,.14);--accent:#6f78d8;--accent-hi:#8b93ea;--ok:#5fcf9a;
-  height:100vh;overflow-y:auto;background:var(--bg);color:var(--ink);font-family:var(--font-sans,"Geist Variable","Geist",system-ui,sans-serif);font-size:16px;line-height:1.5;-webkit-font-smoothing:antialiased;overflow-x:hidden}
+  height:100vh;height:100dvh;overflow-y:auto;-webkit-overflow-scrolling:touch;background:var(--bg);color:var(--ink);font-family:var(--font-sans,"Geist Variable","Geist",system-ui,sans-serif);font-size:16px;line-height:1.5;-webkit-font-smoothing:antialiased;overflow-x:hidden}
 .site *{box-sizing:border-box}
 .site .wrap{width:min(1120px,100% - 48px);margin:0 auto}
 .site a{color:inherit;text-decoration:none}
