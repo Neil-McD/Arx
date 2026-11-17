@@ -1,4 +1,5 @@
 import { internalMutation, internalQuery, mutation, query } from "./_generated/server";
+import { attachDirectMessageAttachments, directMessageAttachmentEntries, parseDirectMessageAttachmentIds, readDirectMessageAttachments, requireSendableDirectMessageAttachments } from "./directMessageAttachmentCore";
 import { internal } from "./_generated/api";
 import { v } from "convex/values";
 import {
@@ -121,7 +122,7 @@ type DirectMessageRateCounterLike = {
   count: number;
 };
 
-function normalizePublicUserId(raw: unknown): string {
+export function normalizePublicUserId(raw: unknown): string {
   return String(raw ?? "").trim();
 }
 
@@ -130,12 +131,16 @@ function normalizeDirectMessageText(raw: unknown): string {
   return text.slice(0, MAX_DM_TEXT_CHARS);
 }
 
-// Messages are text only (Nov 5: DM attachments removed; none were ever sent in
-// production). An older stored message's attachments are never served.
-async function mapDirectMessageContentJsonForRead(_ctx: any, contentJson: unknown): Promise<unknown> {
+// A message's files are read from their own rows (dmAttachments), never from
+// what the stored JSON says: a row exists only for a file the sender uploaded
+// through the server and this message claimed. Files from before Nov 5 have no
+// row and are never served.
+async function mapDirectMessageContentJsonForRead(ctx: any, messageId: any, contentJson: unknown): Promise<unknown> {
   if (!contentJson || typeof contentJson !== "object" || Array.isArray(contentJson)) return contentJson;
   const record = contentJson as Record<string, unknown>;
-  return "attachments" in record ? { ...record, attachments: [] } : contentJson;
+  if (!("attachments" in record)) return contentJson;
+  const stored = Array.isArray(record.attachments) ? record.attachments.length : 0;
+  return { ...record, attachments: stored > 0 ? await readDirectMessageAttachments(ctx, messageId) : [] };
 }
 
 function readDirectMessageTextPreview(contentJson: unknown): string | null {
@@ -146,6 +151,11 @@ function readDirectMessageTextPreview(contentJson: unknown): string | null {
         ? (contentJson as Record<string, unknown>).text
         : null;
   const normalized = stripChatInlineMarkdown(rawText).replace(/\s+/g, " ").trim();
+  // A message that is only files still says something in the inbox.
+  if (!normalized && contentJson && typeof contentJson === "object" && !Array.isArray(contentJson)) {
+    const files = (contentJson as Record<string, unknown>).attachments;
+    if (Array.isArray(files) && files.length > 0) return files.length === 1 ? "Sent a file" : `Sent ${files.length} files`;
+  }
   if (!normalized) return null;
   if (normalized.length <= MAX_DM_PREVIEW_CHARS) return normalized;
   return `${normalized.slice(0, MAX_DM_PREVIEW_CHARS - 3).trimEnd()}...`;
@@ -251,7 +261,7 @@ async function enforceDirectMessageRateLimit(args: {
   });
 }
 
-async function requireDirectMessageRelationshipAccess(args: {
+export async function requireDirectMessageRelationshipAccess(args: {
   ctx: any;
   viewerUserId: any;
   targetUserId: any;
@@ -291,7 +301,7 @@ function normalizeRecipientSearch(raw: unknown): string {
     .slice(0, 80);
 }
 
-async function findUserByPublicId(ctx: any, publicUserId: string): Promise<UserRow | null> {
+export async function findUserByPublicId(ctx: any, publicUserId: string): Promise<UserRow | null> {
   const normalized = normalizePublicUserId(publicUserId);
   if (!normalized) return null;
   return (await ctx.db
@@ -306,7 +316,7 @@ async function findUserByNormalizedHandle(ctx: any, normalizedHandle: string): P
   return await getUniqueUserByNormalizedHandle<UserRow>(ctx, normalized);
 }
 
-async function findDirectConversationByUsers(
+export async function findDirectConversationByUsers(
   ctx: any,
   leftUserId: any,
   rightUserId: any,
@@ -420,7 +430,7 @@ async function touchActiveConversationParticipantsActivity(args: {
   );
 }
 
-async function requireActiveUserParticipant(args: {
+export async function requireActiveUserParticipant(args: {
   ctx: any;
   conversationId: any;
   userId: any;
@@ -440,7 +450,7 @@ async function requireActiveUserParticipant(args: {
   return { conversation, participant };
 }
 
-async function requireDirectConversationSendAccess(args: {
+export async function requireDirectConversationSendAccess(args: {
   ctx: any;
   conversation: DirectMessageConversationLike;
   viewerUserId: any;
@@ -609,7 +619,7 @@ async function mapDirectMessage(ctx: any, row: DirectMessageLike) {
     sender_type: row.senderType,
     sender_user_id: row.senderUserId ? await resolvePublicUserId(ctx, row.senderUserId) : null,
     client_message_id: normalizeClientMessageId(row.clientMessageId),
-    content_json: await mapDirectMessageContentJsonForRead(ctx, row.contentJson),
+    content_json: await mapDirectMessageContentJsonForRead(ctx, row._id, row.contentJson),
     created_at: toIsoString(row.createdAt),
     updated_at: toIsoString(row.updatedAt),
   };
@@ -820,6 +830,8 @@ async function appendDirectMessageFromUser(args: {
   senderParticipantId: any;
   text: string;
   attachments?: unknown;
+  // The other person, for files reserved before the conversation existed.
+  recipientUserId?: any | null;
   clientMessageId?: string | null;
 }): Promise<DirectMessageLike> {
   const nowMs = Date.now();
@@ -835,10 +847,15 @@ async function appendDirectMessageFromUser(args: {
   }
   const seq = Math.max(0, Math.floor(args.conversation.lastSeq ?? 0)) + 1;
   const text = normalizeDirectMessageText(args.text);
-  // Text only. Older Studio pages may still send an attachments array.
-  if (Array.isArray(args.attachments) && args.attachments.length > 0) throw new Error("dm_attachments_not_supported");
-  if (!text) throw new Error("dm_message_payload_required");
-  const contentJson = { text };
+  // Files are named by reservation id only; anything else (an older page's
+  // storage ids) is refused. Each must be the sender's own finished upload,
+  // reserved for this conversation and not sent before.
+  const attachmentRows = await requireSendableDirectMessageAttachments(args.ctx, {
+    ids: parseDirectMessageAttachmentIds(args.attachments), senderUserId: args.senderUserId,
+    conversationId: args.conversation._id, recipientUserId: args.recipientUserId ?? null, nowMs,
+  });
+  if (!text && attachmentRows.length === 0) throw new Error("dm_message_payload_required");
+  const contentJson = attachmentRows.length ? { text, attachments: directMessageAttachmentEntries(attachmentRows) } : { text };
   const messageId = await args.ctx.db.insert("dmMessages" as any, {
     conversationId: args.conversation._id,
     seq,
@@ -849,6 +866,7 @@ async function appendDirectMessageFromUser(args: {
     createdAt: nowMs,
     updatedAt: nowMs,
   });
+  await attachDirectMessageAttachments(args.ctx, { rows: attachmentRows, messageId, conversationId: args.conversation._id, nowMs });
   await args.ctx.db.patch(args.conversation._id, {
     lastSeq: seq,
     lastMessageAt: nowMs,
@@ -1471,15 +1489,6 @@ async function sendDirectMessageForUser(
   });
   await enforceDirectMessageRateLimit({ ctx, userId: viewerUserId, kind: "message" });
 
-  const message = await appendDirectMessageFromUser({
-    ctx,
-    conversation,
-    senderUserId: viewerUserId,
-    senderParticipantId: participant._id,
-    text: args.text,
-    attachments: args.attachments,
-    clientMessageId: args.clientMessageId ?? null,
-  });
   const viewerUserKey = normalizeIdValue(viewerUserId);
   const peerParticipant = (await listConversationParticipants(ctx, conversation._id)).find(
     (row) =>
@@ -1488,6 +1497,16 @@ async function sendDirectMessageForUser(
       normalizeIdValue(row.userId) &&
       normalizeIdValue(row.userId) !== viewerUserKey,
   );
+  const message = await appendDirectMessageFromUser({
+    ctx,
+    conversation,
+    senderUserId: viewerUserId,
+    senderParticipantId: participant._id,
+    text: args.text,
+    attachments: args.attachments,
+    recipientUserId: peerParticipant?.userId ?? null,
+    clientMessageId: args.clientMessageId ?? null,
+  });
   if (peerParticipant?.userId) {
     await scheduleDirectMessageEmailNotification({
       ctx,
@@ -1579,6 +1598,7 @@ async function sendDirectMessageToTargetForUser(
     senderParticipantId: participant._id,
     text: args.text,
     attachments: args.attachments,
+    recipientUserId: targetUser._id,
     clientMessageId: args.clientMessageId ?? null,
   });
   await scheduleDirectMessageEmailNotification({
