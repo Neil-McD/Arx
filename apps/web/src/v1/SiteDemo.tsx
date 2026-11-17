@@ -225,7 +225,7 @@ function WelcomesScene() {
   const ending = at >= SCENE_SECONDS - FADE_SECONDS;
   const typing = TYPING.find((span) => at >= span.from && at < span.to);
   const typingPresence = typing
-    ? { users: [{ user_id: typing.who, display_name: typing.who === "guide" ? COMMUNITY.name : PEOPLE[typing.who]!.name, avatar_url: null, display_until_ms: now + 60_000 }], total_count: 1 }
+    ? { users: [{ user_id: typing.who, display_name: typing.who === "guide" ? COMMUNITY.name.replace(/ /g, "\u00a0") : PEOPLE[typing.who]!.name, avatar_url: null, display_until_ms: now + 60_000 }], total_count: 1 }
     : { users: [], total_count: 0 };
   return (
     <AppFrame ending={ending}>
