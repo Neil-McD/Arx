@@ -7,6 +7,8 @@ export type WebAccountMenuProps = {
   name: string;
   avatarUrl: string | null;
   roleLabel: string;
+  // The community this menu is opened in, for "Host of <name>".
+  communityName?: string | null;
   appTheme: AppTheme;
   onSetAppTheme: (theme: AppTheme) => void;
   onOpenSettings: () => void;
@@ -20,8 +22,15 @@ export type WebAccountMenuProps = {
 
 export type AccountMenuCommunityItem = { key: string; label: string; icon: ReactNode; onSelect: () => void };
 
-// Design system v1: the account row at the bottom of the left column. Its menu
-// holds what used to need a trip to settings: light or dark, settings, sign out.
+// What the menu's header says under the name: the role, and where it holds.
+export function accountMenuRoleLine(roleLabel: string, communityName?: string | null): string {
+  const name = String(communityName ?? "").trim();
+  return name && (roleLabel === "Host" || roleLabel === "Member") ? `${roleLabel} of ${name}` : roleLabel;
+}
+
+// Design system v1: the account row at the bottom of the left column. Its
+// menu says who you are, then this community's things, then your own
+// (settings, light or dark), and sign out last.
 export function WebAccountMenu(props: WebAccountMenuProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [isSignOutConfirmOpen, setIsSignOutConfirmOpen] = useState(false);
@@ -31,7 +40,9 @@ export function WebAccountMenu(props: WebAccountMenuProps) {
   const triggerRef = useRef<HTMLButtonElement | null>(null);
   const menuId = useId();
   const initial = props.name.trim().charAt(0).toUpperCase() || "?";
-  const nextTheme: AppTheme = props.appTheme === "light" ? "dark" : "light";
+  const isLight = props.appTheme === "light";
+  const nextTheme: AppTheme = isLight ? "dark" : "light";
+  const roleLine = accountMenuRoleLine(props.roleLabel, props.communityName);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -69,9 +80,20 @@ export function WebAccountMenu(props: WebAccountMenuProps) {
     <div className="account-menu" ref={rootRef}>
       {isOpen ? (
         <div className="account-menu-popover" id={menuId} role="menu" aria-label="Account">
-          {props.communityItems?.length ? (
+          <div className="account-menu-head" role="presentation">
+            <span className="account-menu-avatar" aria-hidden="true">
+              {props.avatarUrl ? <img src={props.avatarUrl} alt="" /> : initial}
+            </span>
+            <span className="account-menu-identity">
+              <span className="account-menu-name">{props.name}</span>
+              {roleLine ? <span className="account-menu-role">{roleLine}</span> : null}
+            </span>
+          </div>
+          {props.communityItems?.length || props.memberView ? (
             <>
-              {props.communityItems.map((item) => (
+              <div className="account-menu-separator" role="separator" />
+              <span className="account-menu-label" role="presentation">This community</span>
+              {props.communityItems?.map((item) => (
                 <button
                   key={item.key}
                   className="account-menu-item"
@@ -83,38 +105,27 @@ export function WebAccountMenu(props: WebAccountMenuProps) {
                   }}
                 >
                   {item.icon}
-                  {item.label}
+                  <span>{item.label}</span>
                 </button>
               ))}
-              <div className="account-menu-separator" role="separator" />
+              {props.memberView ? (
+                <button
+                  className="account-menu-item"
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    setIsOpen(false);
+                    props.memberView?.onToggle();
+                  }}
+                >
+                  <Eye size={16} aria-hidden="true" />
+                  <span>{props.memberView.active ? "Host view" : "View as a member"}</span>
+                </button>
+              ) : null}
             </>
           ) : null}
-          <button
-            className="account-menu-item"
-            type="button"
-            role="menuitem"
-            onClick={() => {
-              props.onSetAppTheme(nextTheme);
-              setIsOpen(false);
-            }}
-          >
-            {nextTheme === "light" ? <Sun size={16} aria-hidden="true" /> : <Moon size={16} aria-hidden="true" />}
-            {nextTheme === "light" ? "Light mode" : "Dark mode"}
-          </button>
-          {props.memberView ? (
-            <button
-              className="account-menu-item"
-              type="button"
-              role="menuitem"
-              onClick={() => {
-                setIsOpen(false);
-                props.memberView?.onToggle();
-              }}
-            >
-              <Eye size={16} aria-hidden="true" />
-              {props.memberView.active ? "Host view" : "View as a member"}
-            </button>
-          ) : null}
+          <div className="account-menu-separator" role="separator" />
+          <span className="account-menu-label" role="presentation">You</span>
           <button
             className="account-menu-item"
             type="button"
@@ -125,7 +136,22 @@ export function WebAccountMenu(props: WebAccountMenuProps) {
             }}
           >
             <Settings size={16} aria-hidden="true" />
-            Settings
+            <span>Settings</span>
+          </button>
+          {/* Says the mode you're in; choosing it switches to the other. */}
+          <button
+            className="account-menu-item"
+            type="button"
+            role="menuitem"
+            aria-label={`Appearance: ${isLight ? "Light" : "Dark"}. Switch to ${isLight ? "dark" : "light"}`}
+            onClick={() => {
+              props.onSetAppTheme(nextTheme);
+              setIsOpen(false);
+            }}
+          >
+            {isLight ? <Sun size={16} aria-hidden="true" /> : <Moon size={16} aria-hidden="true" />}
+            <span>Appearance</span>
+            <span className="account-menu-fact">{isLight ? "Light" : "Dark"}</span>
           </button>
           <div className="account-menu-separator" role="separator" />
           <button
@@ -138,7 +164,7 @@ export function WebAccountMenu(props: WebAccountMenuProps) {
             }}
           >
             <LogOut size={16} aria-hidden="true" />
-            Sign out
+            <span>Sign out</span>
           </button>
         </div>
       ) : null}
