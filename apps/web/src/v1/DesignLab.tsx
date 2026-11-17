@@ -46,6 +46,7 @@ import { fullExample, middlingExample, sunriseExample } from "./brainExamples";
 import { CommunityPageFrame, CommunityPageRail } from "../components/CommunityPageHeader";
 import { KitHomeRail } from "./KitHomeRail";
 import { KitPodRail } from "./KitPodRail";
+import { DiscoverCard } from "./KitDiscover";
 
 const BANNER = "/design-lab/polynet-earth.webp";
 const SMALL_BUTTON = { height: 32, fontSize: 13 } as const;
@@ -565,6 +566,147 @@ function EventsLab() {
   );
 }
 
+// Start a community (mock, Nov 16): two things to type, the handle made from
+// the name, a banner and an avatar when you have them, and beside it the card
+// Discover will show, filling in as you type. ?page=start
+function labSlug(name: string): string {
+  return name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 32);
+}
+
+function StartLab() {
+  const [name, setName] = useStateLab("Sunrise Climbing Club");
+  const [line, setLine] = useStateLab("Early-morning climbers who train, travel and send together.");
+  const [banner, setBanner] = useStateLab(true);
+  const label = { fontSize: 12, fontWeight: 500, color: "var(--ink3)", marginBottom: 6, display: "block" } as const;
+  const input = { width: "100%", boxSizing: "border-box", height: 38, padding: "0 12px", borderRadius: 9, border: "1px solid var(--line2)", background: "var(--s1)", color: "var(--ink)", font: "inherit", fontSize: 14, outline: "none" } as const;
+  const slug = labSlug(name) || "your-community";
+  const ready = Boolean(name.trim());
+  return (
+    <KitApp view="wins" host fillWindow scale={labScale()}>
+      <Main>
+        <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(0,0,0,.5)" }}>
+          <KitApp view="wins" part="flow">
+            <div style={{ width: 860, maxWidth: "calc(100vw - 48px)", display: "grid", gridTemplateColumns: "minmax(0,1fr) 320px", borderRadius: 12, border: "1px solid var(--line2)", background: "var(--bg)", overflow: "hidden", boxShadow: "0 24px 80px -24px rgba(0,0,0,.6)" }}>
+              <div style={{ padding: "28px 28px 24px", display: "flex", flexDirection: "column", gap: 18 }}>
+                <div>
+                  <h2 style={{ margin: 0, fontSize: 20, fontWeight: 600, letterSpacing: "-.01em" }}>Start a community</h2>
+                  <p style={{ margin: "6px 0 0", fontSize: 13, color: "var(--ink2)" }}>Free to build. You can change all of this later.</p>
+                </div>
+                <label>
+                  <span style={label}>Name</span>
+                  <input style={input} value={name} onChange={(event) => setName(event.target.value)} placeholder="Sunrise Climbing Club" autoFocus />
+                  <span style={{ display: "block", marginTop: 6, fontSize: 12, color: "var(--ink3)" }}>polynet.ai/c/<b style={{ fontWeight: 500, color: "var(--ink2)" }}>{slug}</b> · <span style={{ textDecoration: "underline", cursor: "pointer" }}>Change</span></span>
+                </label>
+                <label>
+                  <span style={label}>Who it's for, in one line</span>
+                  <input style={input} value={line} onChange={(event) => setLine(event.target.value)} placeholder="Early-morning climbers who train together." />
+                </label>
+                <div>
+                  <span style={label}>Banner and avatar <span style={{ color: "var(--ink4)" }}>· optional</span></span>
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <Btn small onClick={() => setBanner(!banner)}>{banner ? "Change banner" : "Add a banner"}</Btn>
+                    <Btn small>Add an avatar</Btn>
+                  </div>
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 6 }}>
+                  <Btn go disabled={!ready}>Create community</Btn>
+                  <Btn txt>Cancel</Btn>
+                </div>
+              </div>
+              {/* What you are making: the card Discover shows, as you type. */}
+              <div style={{ padding: "28px 24px 24px", borderLeft: "1px solid var(--line)", background: "var(--s1)", display: "flex", flexDirection: "column", gap: 12 }}>
+                <span className={cx("lab")}>How it looks in Discover</span>
+                <DiscoverCard now={Date.now()} community={{
+                  slug, name: name.trim() || "Your community", one_liner: line.trim() || "Who it's for, in one line.", avatar_url: null,
+                  banner_url: banner ? BANNER : null, visibility: "published", created_at: "", updated_at: "",
+                  host: { name: "Neil McDevitt", avatar_url: null }, member_count: 1, entry_policy: "open",
+                } as any} />
+                <p style={{ margin: 0, fontSize: 12, lineHeight: 1.5, color: "var(--ink3)" }}>
+                  {banner && line.trim() ? "Ready to be listed once you publish it." : "Add a banner and a one-liner to be listed in Discover. You can do that later."}
+                </p>
+              </div>
+            </div>
+          </KitApp>
+        </div>
+      </Main>
+    </KitApp>
+  );
+}
+
+// The two menus (mock, Nov 16): the community switcher and the account menu,
+// drawn open, as one family. ?page=menus
+function MenusLab() {
+  const menu = { position: "absolute", left: 12, width: 300, borderRadius: 10, border: "1px solid var(--line2)", background: "var(--bg)", boxShadow: "0 18px 50px -18px rgba(0,0,0,.7)", padding: 6, zIndex: 5 } as const;
+  const row = { display: "flex", alignItems: "center", gap: 10, width: "100%", minHeight: 34, padding: "6px 8px", borderRadius: 7, fontSize: 13.5, color: "var(--ink1)", textAlign: "left", cursor: "pointer" } as const;
+  const sep = <div style={{ height: 1, margin: "6px 2px", background: "var(--line)" }} />;
+  const head = (text: string) => <div style={{ padding: "8px 8px 4px", fontSize: 11.5, fontWeight: 500, color: "var(--ink3)" }}>{text}</div>;
+  const tile = (text: string, background: string) => (
+    <span style={{ width: 22, height: 22, flex: "none", borderRadius: 6, background, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 9.5, fontWeight: 700, color: "#fff" }}>{text}</span>
+  );
+  const community = (text: string, name: string, background: string, extra: { on?: boolean; dot?: boolean } = {}) => (
+    <div style={{ ...row, background: extra.on ? "var(--s2)" : undefined }}>
+      {tile(text, background)}
+      <span style={{ flex: 1, minWidth: 0, lineHeight: 1.3 }}>{name}</span>
+      {extra.dot ? <i style={{ width: 6, height: 6, borderRadius: 999, background: "var(--go)", flex: "none" }} /> : null}
+      {extra.on ? <Icon name="check" /> : null}
+    </div>
+  );
+  const item = (icon: Parameters<typeof Icon>[0]["name"], text: string, fact?: string) => (
+    <div style={row}><Icon name={icon} /><span style={{ flex: 1 }}>{text}</span>{fact ? <span style={{ fontSize: 12, color: "var(--ink3)" }}>{fact}</span> : null}</div>
+  );
+  return (
+    <KitApp view="wins" host fillWindow scale={labScale()}>
+      <Side>
+        <Cover name="Polynet" bare />
+        <Spacer height={10} />
+        <NavRow icon="home" label="Home" />
+        <NavRow icon="inbox" label="Inbox" />
+        <Foot>
+          <Me name="Neil McDevitt" role="Host" avatar="N" tone="a2" />
+        </Foot>
+        {/* The switcher: recent first, each community's own mark, names in
+            full, a dot where something is new. */}
+        <div style={{ ...menu, top: 58 }}>
+          <label className={cx("find")} style={{ display: "flex", margin: "2px 2px 6px", width: "auto", height: 32 }}>
+            <Icon name="search" /><input placeholder="Find a community" aria-label="Find a community" />
+          </label>
+          {head("Recent")}
+          {community("P", "Polynet", "linear-gradient(135deg,#5b6cf0,#8e6bd9)", { on: true })}
+          {community("SC", "Sunrise Climbing Club", "linear-gradient(135deg,#f08a4b,#d9596b)", { dot: true })}
+          {community("DE", "Distribution Engineering", "linear-gradient(135deg,#7c5cff,#3b2a8a)")}
+          {head("All")}
+          {community("BC", "Builder Canary Aug 6 2026 v3", "linear-gradient(135deg,#3d8fd6,#1f3b8a)")}
+          {community("CW", "Concierge Welcome Canary 2026-08-20", "linear-gradient(135deg,#3dae8c,#1d5c4a)", { dot: true })}
+          {community("DP", "Dawn Patrol Run Club", "linear-gradient(135deg,#f0667a,#3b3a6b)")}
+          {sep}
+          {item("search", "Discover communities")}
+          {item("plus", "Start a community")}
+        </div>
+        {/* The account menu: who you are, this community's things, then yours. */}
+        <div style={{ ...menu, bottom: 64 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 8px 10px" }}>
+            {tile("N", "linear-gradient(135deg,#5b6cf0,#8e6bd9)")}
+            <span style={{ minWidth: 0 }}><b style={{ display: "block", fontSize: 13.5, fontWeight: 600 }}>Neil McDevitt</b><span style={{ fontSize: 12, color: "var(--ink3)" }}>Host of Polynet</span></span>
+          </div>
+          {sep}
+          {head("This community")}
+          {item("spark", "Your guide")}
+          {item("users", "View as a member")}
+          {sep}
+          {head("You")}
+          {item("sliders", "Settings")}
+          {item("stars", "Appearance", "Dark")}
+          {sep}
+          {item("back", "Sign out")}
+        </div>
+      </Side>
+      <Main>
+        <Top title="Inbox" titleView={1} />
+      </Main>
+    </KitApp>
+  );
+}
+
 // ?scale=1.25 draws the lab larger, to try a size for big monitors.
 function labScale(): number {
   if (typeof window === "undefined") return 1;
@@ -574,5 +716,7 @@ function labScale(): number {
 
 export function DesignLab() {
   const page = typeof window === "undefined" ? "" : new URLSearchParams(window.location.search).get("page");
+  if (page === "start") return <StartLab />;
+  if (page === "menus") return <MenusLab />;
   return page === "channel" ? <HostChannel /> : page === "brief" ? <BriefPanels /> : page === "brain" ? <BrainLab /> : page === "events" ? <EventsLab /> : page === "members" ? <MembersLab /> : page === "brain-actions" ? <BrainActionsLab /> : page === "brain-page" ? <BrainPageLab /> : page === "pods-shell" ? <PodsShell /> : page === "know-panel" ? <KnowShell builder={false} /> : page === "know-panel-builder" ? <KnowShell builder /> : page === "pods" ? <PodsPage join={false} /> : page === "home-panel" ? <RealPanels pod={false} /> : page === "pod-panel" ? <RealPanels pod /> : page === "pods-join" ? <PodsPage join /> : <HostHomeQuiet />;
 }
