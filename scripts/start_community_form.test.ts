@@ -28,12 +28,14 @@ test("step 1 is the name, address and pictures; step 2 is the offer; the communi
   const [first, second] = form.split("<h2 id={props.titleId}>What you're offering</h2>");
   expect(first).toContain("<span>Name</span>");
   expect(first).toContain("<span>Picture and banner <em>· optional</em></span>");
-  expect(first).toContain("<Btn go disabled={!canGoOn} onClick={() => setStep(2)}>Next</Btn>");
+  // One bar on every step: back on the left, dots in the middle, forward on the right.
+  expect(form).toContain('<Btn go disabled={!canGoOn} onClick={() => setStep(2)}>Next <Icon name="arrow" /></Btn>');
+  expect(form).toContain('onClick={() => setStep(1)}><Icon name="back" /> Back</Btn>');
+  expect(form).toContain("<Btn go disabled={!canGoOn || !priceOk} onClick={create}>");
+  expect(form).toMatch(/startc-foot-back[\s\S]*?startc-dots[\s\S]*?startc-foot-go/);
   expect(first).not.toContain("Who it's for, in one line</span>");
   expect(first).toMatch(/editingAddress \|\| \(props\.slug\.length > 0 && !slugOk\)/);
   for (const field of ["<span>Who it's for, in one line</span>", "<span>What members get <em>· optional</em></span>", "<span>Price</span>", "<span>List it in Discover</span>"]) expect(second).toContain(field);
-  expect(second).toContain("<Btn go disabled={!canGoOn || !priceOk} onClick={create}>");
-  expect(second).toContain("onClick={() => setStep(1)}>Back</Btn>");
   // What step 2 asks for beyond the one-liner is saved once the community exists.
   expect(form).toMatch(/stashStartExtras\(props\.slug, \{ about: about\.trim\(\), listed, monthlyCents \}\);\s*void props\.onCreate\(\);/);
   // Every step: three dots, and the same card Discover draws.
@@ -45,7 +47,7 @@ test("step 3 gives the invite link and the way in", () => {
   const form = read("apps/web/src/v1/KitStartCommunity.tsx");
   expect(form).toContain("<StartStepFrame step={3}");
   expect(form).toContain("const link = `https://${communityPageAddress(props.card.slug)}`;");
-  expect(form).toMatch(/<Btn go disabled=\{props\.saving \|\| props\.opening\} onClick=\{props\.onOpen\}>/);
+  expect(form).toMatch(/forward=\{<Btn go disabled=\{props\.saving \|\| props\.opening\} onClick=\{props\.onOpen\}>/);
 });
 
 test("design v1 draws the new form in the same blocking modal; the classic form stays", () => {
