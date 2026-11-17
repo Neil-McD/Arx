@@ -1879,8 +1879,10 @@ test("builder resource agents may stage changes but cannot make terminal decisio
     ctx: ownerCtx,
     authSubject: fixture.ownerSubject,
     userId: fixture.ownerId,
-    principalKind: "external_mcp",
-    evidenceSurface: "external_mcp",
+    // Staged the way the guide stages for a builder: a person applies it.
+    // (A builder's own AI applies a safe batch itself; see the test below.)
+    principalKind: "community_agent_for_member",
+    evidenceSurface: "member_agent_dock",
     toolName: "polynet_write",
     input: {
       path: "/communities/canonical-community/builder/resources/",
@@ -1985,8 +1987,10 @@ test("builder resource agents may stage changes but cannot make terminal decisio
     ctx: ownerCtx,
     authSubject: fixture.ownerSubject,
     userId: fixture.ownerId,
-    principalKind: "external_mcp",
-    evidenceSurface: "external_mcp",
+    // Staged the way the guide stages for a builder: a person applies it.
+    // (A builder's own AI applies a safe batch itself; see the test below.)
+    principalKind: "community_agent_for_member",
+    evidenceSurface: "member_agent_dock",
     toolName: "polynet_write",
     input: {
       path: "/communities/canonical-community/builder/resources/",
@@ -2027,8 +2031,10 @@ test("builder resource agents may stage changes but cannot make terminal decisio
     ctx: ownerCtx,
     authSubject: fixture.ownerSubject,
     userId: fixture.ownerId,
-    principalKind: "external_mcp",
-    evidenceSurface: "external_mcp",
+    // Staged the way the guide stages for a builder: a person applies it.
+    // (A builder's own AI applies a safe batch itself; see the test below.)
+    principalKind: "community_agent_for_member",
+    evidenceSurface: "member_agent_dock",
     toolName: "polynet_write",
     input: {
       path: "/communities/canonical-community/builder/resources/",
@@ -2416,8 +2422,10 @@ test("builder resource effects survive receipt-completion crashes without duplic
     healthyCtx: ownerCtx,
     authSubject: fixture.ownerSubject,
     userId: fixture.ownerId,
-    principalKind: "external_mcp",
-    evidenceSurface: "external_mcp",
+    // Staged the way the guide stages for a builder: a person applies it.
+    // (A builder's own AI applies a safe batch itself; see the test below.)
+    principalKind: "community_agent_for_member",
+    evidenceSurface: "member_agent_dock",
     toolName: "polynet_write",
     input: stageInput,
     idempotencyKey: "builder-stage-crash-1",

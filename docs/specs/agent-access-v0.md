@@ -1,7 +1,7 @@
 # Agent access: MCP, lenses, limits, free and paid (v0 spec)
 
-Status: direction agreed 2026-11-17 (Neil). Slices 1 to 3 and the channels
-part of slice 4 are built (see "Slices").
+Status: direction agreed 2026-11-17 (Neil). Slices 1 to 4 are built (see
+"Slices").
 How the guide, memory and briefs work is owned by
 `agent-system-end-state.md`; this spec owns what a person's own AI may do
 through the MCP, how much of it, and where the paid line sits.
@@ -170,6 +170,25 @@ emailed reminders).
 slug stays), `describe`, and `move` (after a named channel, or first). A
 channel is named by its slug. General is not renamed or moved.
 
+**Courses and lessons** (`builder/resources/`,
+`convex/communityResourceChangesets.ts`). The engine for an AI's course
+changes already existed: a batch of up to 25 changes, checked against what
+changed since the AI read it, previewed, applied all or nothing, expiring in
+24 hours. Until slice 4b every batch was only staged for a click. Now:
+
+- A builder's own AI **applies a batch that takes nothing away** as it sends
+  it: creating and editing courses and lessons, publishing, moving, ordering.
+- **A batch that deletes** a lesson or a course is staged. The host applies
+  or rejects it in the app (their guide shows the card). This is the two
+  steps for courses, and the same staging is what slice 5 reuses.
+- **The guide stages everything**, as before.
+- Added to the engine: `reorder_pages` and `reorder_modules` (each names
+  every lesson, or every course, once), and `lesson_links` on a lesson.
+- A safe batch does not queue behind a staged one; a staged one still blocks
+  another staged one.
+- One batch is one builder change against the budget, whatever it holds.
+- Covers are not here: they need file upload.
+
 ## Slices
 
 1. **Limits, the free cap, the operations list.** *Built.* The list, the
@@ -183,7 +202,8 @@ channel is named by its slug. General is not renamed or moved.
    nothing to expose.
 4. **Builder parity, part one.** See "Builder parity" below.
    - **4a, channels.** *Built.* Create, rename, describe, put in order.
-   - **4b, courses and lessons.** Not started.
+   - **4b, courses and lessons.** *Built.* On the changeset engine that
+     already existed, not as new operations.
    - Events moved to slice 5: every member is emailed a reminder before an
      event, so making one is a broadcast and waits for the two steps.
    - Invites: there is no invite to make. "Copy invite link" copies the

@@ -38,8 +38,12 @@ export const TOOL_OPERATIONS = {
   "polynet_search": entry("member", "read", "search"),
   // polynet_write on a channel: a post or a reply, or a change to your own.
   "polynet_write:channels": entry("member", "write", "post"),
-  // polynet_write under builder/: staging a change to the community's courses.
+  // polynet_write under builder/: a batch of changes to courses and lessons.
+  // A builder's own AI applies it at once unless it deletes something; then,
+  // and always from the guide, it is staged for a person's click
+  // (convex/communityResourceChangesets.ts).
   "polynet_write:builder": entry("builder", "write", "builder_change"),
+  "polynet_write:builder:delete": entry("builder", "destroy", "builder_change"),
   // A person's own direct messages (/messages/): reading the conversations
   // they are in, and replying in one that exists. Never starting one.
   "polynet_list:messages": entry("member", "read", "read"),

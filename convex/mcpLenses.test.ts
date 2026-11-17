@@ -493,3 +493,80 @@ test("a builder's AI makes, renames, describes and orders channels; a member's c
   const counted: any[] = await f.t.run((ctx: any) => ctx.db.query("accessBudgetCounters").collect());
   expect(counted.find((row: any) => row.budget === "builder_change")).toMatchObject({ scope: "run-club" });
 });
+
+// ---- builder parity, part one: courses and lessons (docs/specs/agent-access-v0.md, slice 4b)
+
+test("a builder's AI changes courses directly; a batch that deletes waits for a person", async () => {
+  const f = await fixture();
+  const communityId = await f.t.run(async (ctx: any) => (await ctx.db.query("communities").withIndex("by_slug", (q: any) => q.eq("slug", "run-club")).first())._id);
+  const batch = (who: string, key: string, summary: string, operations: unknown[]) => f.call(who, "polynet_write", {
+    path: "/communities/run-club/builder/resources/", mode: "create", content: { summary, operations }, idempotency_key: key });
+  const courses = () => f.t.run(async (ctx: any) => (await ctx.db.query("communityResourceModules").collect())
+    .sort((a: any, b: any) => a.sortOrder - b.sortOrder).map((row: any) => ({ id: String(row._id), name: row.name, status: row.status, updatedAt: row.updatedAt })));
+  const lessons = () => f.t.run(async (ctx: any) => (await ctx.db.query("communityResources").collect())
+    .sort((a: any, b: any) => a.sortOrder - b.sortOrder).map((row: any) => ({ id: String(row._id), title: row.title, moduleId: String(row.moduleId), links: row.lessonLinks ?? [], updatedAt: row.updatedAt })));
+
+  // One batch: a course and two lessons, one with a link. Applied at once.
+  const made = await batch("owner", "b1", "Start a course on the first 5k.", [
+    { op: "create_module", module_key: "5k", name: "Your first 5k", description_md: "Eight weeks, three runs a week." },
+    { op: "create_page", module_key: "5k", title: "Week 1: walk and run", body_md: "Alternate one minute of each.",
+      lesson_links: [{ title: "The plan", url: "https://example.com/plan" }] },
+    { op: "create_page", module_key: "5k", title: "Week 2: longer runs", url: "https://www.youtube.com/watch?v=dQw4w9WgXcQ" },
+  ]);
+  expect(made.isError, JSON.stringify(made)).toBe(false);
+  expect(made.structuredContent.result).toMatchObject({ status: "applied", applied: true, operation_count: 3 });
+  expect((await courses()).map((course: any) => [course.name, course.status])).toEqual([["Your first 5k", "draft"]]);
+  const [week1, week2] = await lessons();
+  expect([week1.title, week2.title]).toEqual(["Week 1: walk and run", "Week 2: longer runs"]);
+  expect(week1.links).toEqual([{ title: "The plan", url: "https://example.com/plan" }]);
+  // Sent again, it is the same batch: nothing is made twice.
+  expect((await batch("owner", "b1", "Start a course on the first 5k.", [
+    { op: "create_module", module_key: "5k", name: "Your first 5k", description_md: "Eight weeks, three runs a week." },
+    { op: "create_page", module_key: "5k", title: "Week 1: walk and run", body_md: "Alternate one minute of each.",
+      lesson_links: [{ title: "The plan", url: "https://example.com/plan" }] },
+    { op: "create_page", module_key: "5k", title: "Week 2: longer runs", url: "https://www.youtube.com/watch?v=dQw4w9WgXcQ" },
+  ])).isError).toBe(false);
+  expect(await lessons()).toHaveLength(2);
+
+  // Edit, reorder and publish in one batch.
+  const [course] = await courses();
+  const second = await batch("owner", "b2", "Fix the title, put week 2 first, publish.", [
+    { op: "edit_page", resource_id: week1.id, expected_updated_at: week1.updatedAt, title: "Week 1: walk, then run", lesson_links: [] },
+    { op: "reorder_pages", module_id: course.id, resource_ids: [week2.id, week1.id] },
+    { op: "edit_module", module_id: course.id, expected_updated_at: course.updatedAt, module_status: "live" },
+  ]);
+  expect(second.isError, JSON.stringify(second)).toBe(false);
+  expect(second.structuredContent.result).toMatchObject({ applied: true });
+  expect((await lessons()).map((lesson: any) => [lesson.title, lesson.links.length])).toEqual([["Week 2: longer runs", 0], ["Week 1: walk, then run", 0]]);
+  expect((await courses())[0].status).toBe("live");
+
+  // An order that leaves a lesson out is refused, and nothing in its batch is applied.
+  const stale = await batch("owner", "b3", "Reorder.", [
+    { op: "create_page", module_id: course.id, title: "Week 3" },
+    { op: "reorder_pages", module_id: course.id, resource_ids: [week1.id, week2.id] },
+  ]);
+  expect(stale.isError).toBe(true);
+  expect(await lessons()).toHaveLength(2);
+
+  // A batch that deletes is not applied: it waits for a person.
+  const now = await lessons();
+  const doomed = now.find((lesson: any) => lesson.title.startsWith("Week 2"));
+  const deleting = await batch("owner", "b4", "Drop week 2.", [{ op: "delete_page", resource_id: doomed.id, expected_updated_at: doomed.updatedAt }]);
+  expect(deleting.isError, JSON.stringify(deleting)).toBe(false);
+  expect(deleting.structuredContent.result).toMatchObject({ status: "staged", applied: false, needs_confirmation: true });
+  expect(await lessons()).toHaveLength(2);
+  // While it waits, a safe batch still goes through.
+  const meanwhile = await batch("owner", "b5", "Add a second course.", [{ op: "create_module", name: "Race day" }]);
+  expect(meanwhile.structuredContent.result).toMatchObject({ applied: true });
+  await f.call("owner", "polynet_write", { path: "/communities/run-club/builder/resources/", mode: "create",
+    content: { summary: "Race day first.", operations: [{ op: "reorder_modules", module_ids: (await courses()).map((row: any) => row.id).reverse() }] }, idempotency_key: "b6" });
+  expect((await courses()).map((row: any) => row.name)).toEqual(["Race day", "Your first 5k"]);
+  // The person applies the delete in the app.
+  await f.t.withIdentity({ subject: "owner-subject" }).mutation((api as any).communityResources.applyCommunityResourceBuilderChangeset,
+    { authSubject: "owner-subject", communityId, changesetId: deleting.structuredContent.ref });
+  expect((await lessons()).map((lesson: any) => lesson.title)).toEqual(["Week 1: walk, then run"]);
+
+  // A member's AI has no builder folder at all.
+  expect((await batch("member", "m1", "Mine.", [{ op: "create_module", name: "Mine" }])).isError).toBe(true);
+  expect(await courses()).toHaveLength(2);
+});

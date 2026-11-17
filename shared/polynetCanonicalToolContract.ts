@@ -221,6 +221,8 @@ const RESOURCE_CHANGESET_OPERATION_SCHEMA: PlatformOperationJsonSchema = {
         "create_page",
         "edit_page",
         "move_resource",
+        "reorder_pages",
+        "reorder_modules",
         "delete_page",
         "delete_category",
         "link_source_to_page",
@@ -247,6 +249,21 @@ const RESOURCE_CHANGESET_OPERATION_SCHEMA: PlatformOperationJsonSchema = {
     type: { type: "string", minLength: 1, maxLength: 64 },
     url: { type: ["string", "null"], maxLength: 2_048 },
     pinned: { type: "boolean" },
+    // A lesson's "Resources for this lesson": links members open from it.
+    lesson_links: {
+      type: "array",
+      maxItems: 12,
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["title", "url"],
+        properties: { title: { type: "string", minLength: 1, maxLength: 120 }, url: { type: "string", minLength: 1, maxLength: 2_048 } },
+      },
+    },
+    // reorder_pages: every lesson of module_id, in the order members follow.
+    resource_ids: { type: "array", minItems: 1, maxItems: 500, items: { type: "string", minLength: 1, maxLength: 180 } },
+    // reorder_modules: every course, in the order members see them.
+    module_ids: { type: "array", minItems: 1, maxItems: 500, items: { type: "string", minLength: 1, maxLength: 180 } },
   },
 };
 
