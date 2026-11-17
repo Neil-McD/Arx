@@ -4555,3 +4555,10 @@
 :root[data-design="v1"] .community-interaction-reaction:focus-visible {
   outline-color: color-mix(in srgb, var(--v1-accent) 72%, transparent);
 }
+
+/* The left column's buttons are <button>s, which do not inherit a font: they
+   were falling back to the browser's Arial while the rest of the app is Geist. */
+:root[data-design="v1"] .community-nav button,
+:root[data-design="v1"] .community-nav button * {
+  font-family: inherit;
+}
