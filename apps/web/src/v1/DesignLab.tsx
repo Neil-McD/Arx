@@ -565,66 +565,100 @@ function EventsLab() {
   );
 }
 
-// Discover (mock, Nov 16): a page inside the community you were in. The left
-// column is the community's own, with nothing picked; the page is a grid of
-// communities with a search box. No right panel. ?phone=1 draws the page at
-// phone width; ?empty=1 a search that finds nothing.
-type LabCommunity = { name: string; line: string; price: string; members: number; hue: number; banner?: string; joined?: boolean };
+// Discover (mock, second pass, Nov 16): a page inside the community you were
+// in. The left column is the community's own, with nothing picked; the page
+// is a grid of communities you are not in yet, three across, then a quiet row
+// of the ones you are in. No right panel. Listed communities have a banner
+// and a one-liner. Search appears only once there are more than eight
+// (?many=1). ?phone=1 draws it at phone width. The banners here are drawn in
+// CSS to stand in for the photos hosts upload.
+type LabCommunity = { name: string; line: string; price: string; host: string; members: number; banner: string; joined?: boolean };
+const SEARCH_FROM = 8;
 const LAB_COMMUNITIES: LabCommunity[] = [
-  { name: "Polynet", line: "Build a community that thinks. Founders sharing what works.", price: "Free", members: 1280, hue: 232, banner: BANNER, joined: true },
-  { name: "Sunrise Climbing Club", line: "Early-morning climbers who train, travel and send together.", price: "Free", members: 214, hue: 24, joined: true },
-  { name: "Distribution Engineering", line: "Operators who turn content into pipeline, one system at a time.", price: "$47/month", members: 96, hue: 262 },
-  { name: "Dawn Patrol Run Club", line: "Six a.m. miles, a plan for every week, and people who show up.", price: "$12/month", members: 431, hue: 196 },
-  { name: "Quiet Hands Ceramics", line: "Throwing, glazing and firing notes from a working studio.", price: "Free", members: 58, hue: 142 },
-  { name: "Indie Founders Table", line: "Ten-person tables for founders past their first customer.", price: "$197/month", members: 40, hue: 338 },
+  { name: "Distribution Engineering", line: "Operators who turn content into pipeline, one system at a time.", price: "$47/mo", host: "Neil McDevitt", members: 96,
+    banner: "radial-gradient(120% 90% at 85% 10%, #7c5cff 0%, transparent 55%), radial-gradient(90% 120% at 10% 100%, #1f3b8a 0%, transparent 60%), linear-gradient(135deg, #0d1026, #1a1040)" },
+  { name: "Dawn Patrol Run Club", line: "Six a.m. miles, a plan for every week, and people who show up.", price: "$12/mo", host: "Ana Okafor", members: 431,
+    banner: "radial-gradient(70% 120% at 50% 110%, #ffb36b 0%, #f0667a 28%, transparent 62%), linear-gradient(180deg, #14213d 0%, #3b3a6b 55%, #b5546e 100%)" },
+  { name: "Quiet Hands Ceramics", line: "Throwing, glazing and firing notes from a working studio.", price: "Free", host: "Jules Marsh", members: 58,
+    banner: "radial-gradient(60% 90% at 22% 35%, #e8d5b5 0%, transparent 60%), radial-gradient(70% 100% at 80% 80%, #8b5e3c 0%, transparent 62%), linear-gradient(135deg, #b89b78, #5b4636)" },
+  { name: "Indie Founders Table", line: "Ten-person tables for founders past their first customer.", price: "$197/mo", host: "Priya Raman", members: 40,
+    banner: "radial-gradient(50% 80% at 70% 40%, #ffcf8a 0%, transparent 55%), radial-gradient(90% 120% at 20% 90%, #7a2e2e 0%, transparent 60%), linear-gradient(135deg, #1b1210, #3a1f1a)" },
+  { name: "Night Sky Field Notes", line: "Backyard astronomers trading targets, gear and clear-sky dates.", price: "Free", host: "Theo Brennan", members: 172,
+    banner: `center / cover no-repeat url(${BANNER})` },
+  { name: "Slow Bread Kitchen", line: "Sourdough, schedules that fit a job, and what went wrong this week.", price: "$8/mo", host: "Maya Chen", members: 265,
+    banner: "radial-gradient(80% 110% at 30% 20%, #f3dfb8 0%, transparent 58%), radial-gradient(70% 90% at 85% 85%, #c4803e 0%, transparent 60%), linear-gradient(135deg, #d9b98a, #7a4f2a)" },
+  { name: "Polynet", line: "Build a community that thinks. Founders sharing what works.", price: "Free", host: "Neil McDevitt", members: 1280, joined: true,
+    banner: "linear-gradient(135deg, #5b6cf0, #8e6bd9)" },
+  { name: "Sunrise Climbing Club", line: "Early-morning climbers who train, travel and send together.", price: "Free", host: "Neil McDevitt", members: 214, joined: true,
+    banner: "linear-gradient(135deg, #f08a4b, #d9596b)" },
 ];
 const initialsOf = (name: string) => name.split(/\s+/).slice(0, 2).map((word) => word[0]).join("").toUpperCase();
 
 function DiscoverCard(props: { community: LabCommunity }) {
   const c = props.community;
-  const tint = (alpha: number, light = 60) => `hsla(${c.hue}, 60%, ${light}%, ${alpha})`;
   return (
     <button type="button" style={{ display: "flex", flexDirection: "column", textAlign: "left", padding: 0, overflow: "hidden", cursor: "pointer",
       borderRadius: 10, border: "1px solid var(--line2)", background: "var(--s1)", color: "var(--ink)" }}>
-      {/* A community with no banner gets its own colour and initials, never an empty box. */}
-      <span style={{ position: "relative", display: "flex", alignItems: "center", justifyContent: "center", width: "100%", aspectRatio: "16 / 7",
-        background: c.banner ? `center / cover no-repeat url(${c.banner})` : `linear-gradient(135deg, ${tint(0.34, 52)}, ${tint(0.1, 40)} 70%)`,
-        borderBottom: "1px solid var(--line)", fontSize: 26, fontWeight: 600, letterSpacing: "-.01em", color: tint(0.9, 82) }}>
-        {c.banner ? null : initialsOf(c.name)}
-        {c.joined ? <span className={cx("tag")} style={{ position: "absolute", top: 10, right: 10, transform: "none", background: "rgba(0,0,0,.45)", color: "#fff", borderColor: "rgba(255,255,255,.24)" }}>Joined</span> : null}
-      </span>
+      <span style={{ display: "block", width: "100%", aspectRatio: "16 / 8", background: c.banner, borderBottom: "1px solid var(--line)" }} />
       <span style={{ display: "flex", flexDirection: "column", gap: 6, padding: "14px 16px 16px", width: "100%", boxSizing: "border-box" }}>
-        <span style={{ fontSize: 15, fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{c.name}</span>
+        {/* The price sits beside the name, where it is read at a glance. */}
+        <span style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <span style={{ flex: 1, minWidth: 0, fontSize: 15, fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{c.name}</span>
+          <span className={cx("tag")} style={{ flex: "none", transform: "none", color: "var(--ink2)" }}>{c.price}</span>
+        </span>
         <span style={{ fontSize: 13, lineHeight: 1.45, color: "var(--ink2)", minHeight: 38, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{c.line}</span>
-        <span style={{ fontSize: 12, color: "var(--ink3)", marginTop: 2 }}>{c.price} · {c.members.toLocaleString("en-US")} members</span>
+        <span style={{ fontSize: 12, color: "var(--ink3)", marginTop: 2 }}>Hosted by {c.host} · {c.members.toLocaleString("en-US")} members</span>
       </span>
     </button>
   );
 }
 
-function DiscoverBody(props: { phone: boolean }) {
-  const params = new URLSearchParams(window.location.search);
-  const [query, setQuery] = useStateLab(params.get("empty") ? "pottery in lisbon" : "");
-  const words = query.toLowerCase().split(/\s+/).filter(Boolean);
-  const shown = LAB_COMMUNITIES.filter((c) => words.every((word) => `${c.name} ${c.line}`.toLowerCase().includes(word)));
+function labDiscoverList(): LabCommunity[] {
+  const many = Boolean(new URLSearchParams(window.location.search).get("many"));
+  const fresh = LAB_COMMUNITIES.filter((c) => !c.joined);
+  return many ? [...fresh, ...fresh.map((c) => ({ ...c, name: `${c.name} II` }))] : fresh;
+}
+
+function DiscoverSearch(props: { query: string; onQuery: (next: string) => void; wide?: boolean }) {
   return (
-    <div style={{ padding: props.phone ? "4px 16px 24px" : "8px 44px 40px 53px" }}>
+    <label className={cx("find")} style={{ display: "flex", margin: 0, width: props.wide ? "100%" : 264, height: 32, boxSizing: "border-box" }}>
+      <Icon name="search" />
+      <input value={props.query} onChange={(event) => props.onQuery(event.target.value)} placeholder="Search communities" aria-label="Search communities" />
+    </label>
+  );
+}
+
+function DiscoverBody(props: { phone: boolean; query: string; onQuery: (next: string) => void }) {
+  const all = labDiscoverList();
+  const words = props.query.toLowerCase().split(/\s+/).filter(Boolean);
+  const shown = all.filter((c) => words.every((word) => `${c.name} ${c.line} ${c.host}`.toLowerCase().includes(word)));
+  const joined = LAB_COMMUNITIES.filter((c) => c.joined);
+  return (
+    <div style={{ padding: props.phone ? "12px 16px 24px" : "8px 44px 40px 56px" }}>
       <KitApp view="wins" part="flow">
-        <p className={cx("lead")} style={{ marginTop: props.phone ? 12 : 0 }}>Find your people.</p>
-        <label className={cx("find")} style={{ display: "flex", margin: "16px 0 0", width: props.phone ? "100%" : 320, height: 34, boxSizing: "border-box" }}>
-          <Icon name="search" />
-          <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search communities" aria-label="Search communities" />
-        </label>
-        {shown.length ? (
-          <div style={{ display: "grid", gridTemplateColumns: props.phone ? "1fr" : "repeat(auto-fill, minmax(280px, 1fr))", gap: 16, marginTop: 24 }}>
-            {shown.map((community) => <DiscoverCard key={community.name} community={community} />)}
+        <div style={{ maxWidth: 1120 }}>
+          {props.phone && all.length > SEARCH_FROM ? <div style={{ marginBottom: 14 }}><DiscoverSearch query={props.query} onQuery={props.onQuery} wide /></div> : null}
+          {shown.length ? (
+            <div style={{ display: "grid", gridTemplateColumns: props.phone ? "1fr" : "repeat(3, minmax(0, 1fr))", gap: props.phone ? 14 : 20, marginTop: props.phone ? 0 : 12 }}>
+              {shown.map((community) => <DiscoverCard key={community.name} community={community} />)}
+            </div>
+          ) : (
+            <p className={cx("none")} style={{ marginTop: 12 }}>No communities match “{props.query.trim()}”.</p>
+          )}
+          {/* The ones you are in: quiet, last, one click to open. */}
+          <span className={cx("lab")} style={{ display: "block", marginTop: 36 }}>You're in</span>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 10 }}>
+            {joined.map((c) => (
+              <button key={c.name} type="button" className={cx("chip")} style={{ gap: 8, height: 32, cursor: "pointer", background: "none" }}>
+                <span style={{ width: 18, height: 18, borderRadius: 5, background: c.banner, flex: "none", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 9, fontWeight: 700, color: "#fff" }}>{initialsOf(c.name)}</span>
+                {c.name}
+              </button>
+            ))}
           </div>
-        ) : (
-          <p className={cx("none")} style={{ marginTop: 24 }}>No communities match “{query.trim()}”.</p>
-        )}
-        <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", marginTop: 40, paddingTop: 20, borderTop: "1px solid var(--line)" }}>
-          <span style={{ fontSize: 13, color: "var(--ink2)" }}>Don't see yours?</span>
-          <Btn small>Start a community</Btn>
+          <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", marginTop: 36, paddingTop: 20, borderTop: "1px solid var(--line)" }}>
+            <span style={{ fontSize: 13, color: "var(--ink2)" }}>Don't see yours?</span>
+            <Btn small>Start a community</Btn>
+          </div>
         </div>
       </KitApp>
     </div>
@@ -633,14 +667,28 @@ function DiscoverBody(props: { phone: boolean }) {
 
 function DiscoverLab() {
   const params = new URLSearchParams(window.location.search);
+  const [query, setQuery] = useStateLab(params.get("empty") ? "pottery in lisbon" : "");
+  const searchable = labDiscoverList().length > SEARCH_FROM;
   if (params.get("phone")) {
+    // The phone frame, drawn by hand around the same page: one header, the
+    // page, the three tabs.
+    const tab = (label: string, on = false) => (
+      <span style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 4, fontSize: 11, fontWeight: on ? 600 : 500, color: on ? "var(--ink)" : "var(--ink3)" }}>
+        <span style={{ width: 20, height: 20, borderRadius: 6, border: "1.5px solid currentColor", opacity: on ? 1 : 0.7 }} />{label}
+      </span>
+    );
     return (
-      <div style={{ width: 390, height: "100vh", margin: "0 auto", borderInline: "1px solid rgba(128,128,128,.25)" }}>
-        <KitApp view="wins" host fillWindow scale={labScale()}>
-          <Main>
-            <Top title="Discover" titleView={1} />
-            <View index={1}><DiscoverBody phone /></View>
-          </Main>
+      <div style={{ minHeight: "100vh", display: "flex", justifyContent: "center", background: "#000" }}>
+        <KitApp view="wins" part="flow" className="kit-lab-phone">
+          <div style={{ width: 390, height: 844, display: "flex", flexDirection: "column", background: "var(--bg)", color: "var(--ink)", border: "1px solid var(--line2)", borderRadius: 28, overflow: "hidden", margin: "16px 0" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, height: 52, padding: "0 16px", borderBottom: "1px solid var(--line)", flex: "none" }}>
+              <Icon name="back" /><b style={{ fontSize: 15, fontWeight: 600 }}>Discover</b>
+            </div>
+            <div style={{ flex: 1, overflowY: "auto" }}><DiscoverBody phone query={query} onQuery={setQuery} /></div>
+            <div style={{ display: "flex", padding: "10px 8px 14px", borderTop: "1px solid var(--line)", flex: "none" }}>
+              {tab("Home")}{tab("Sunrise Climbing Club", true)}{tab("Inbox")}
+            </div>
+          </div>
         </KitApp>
       </div>
     );
@@ -667,8 +715,9 @@ function DiscoverLab() {
         </Foot>
       </Side>
       <Main>
-        <Top title="Discover" titleView={1} />
-        <View index={1}><DiscoverBody phone={false} /></View>
+        {/* Search sits in the header, and only once there is enough to search. */}
+        <Top title="Discover" titleView={1} actions={searchable ? <DiscoverSearch query={query} onQuery={setQuery} /> : undefined} />
+        <View index={1}><DiscoverBody phone={false} query={query} onQuery={setQuery} /></View>
       </Main>
     </KitApp>
   );
