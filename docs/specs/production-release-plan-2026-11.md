@@ -1,8 +1,12 @@
 # Production release plan (November 2026)
 
-Status: updated 2026-11-17. **Stage 1 was released that day** at `f7995ec96`
-(receipt: `docs/receipts/2026-11-17-production-f7995ec96.md`); production
-runs the new backend under the classic look. Stage 2 has not been run.
+Status: **both stages were released on 2026-11-17.** Stage 1 at `f7995ec96`
+(new backend, classic look) and stage 2 at `350ff4485` (design v1 on), each
+on Neil's word; receipts are in `docs/receipts/`. Production now equals
+`main` with design v1 on. Neil dropped the pod payment proof and the
+automated browser check as conditions ("reasonably safe, not extremely
+careful"); what was left unverified is listed in the stage 2 receipt. The
+rest of this document is kept as the record of the plan.
 Before stage 1, production was `138ef7ce3`, 191 commits behind (663 files). The
 first version of this plan (Nov 12) was written at 45 commits. The runbook
 is `docs/alpha-release-workflow.md`; this plan is what to release, in what
