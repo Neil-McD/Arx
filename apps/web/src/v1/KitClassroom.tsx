@@ -452,7 +452,7 @@ export function KitClassroom(props: {
       if (id) { chooseLesson(id); setEditingLessonId(id); }
     }}><Icon name="plus" />Add a lesson</button>
   ) : agentOn ? (
-    <button type="button" className={cx("klist-foot", "ask")} onClick={() => openGuideFromSearch()}><Icon name="spark" />Ask about this lesson</button>
+    <button type="button" className={cx("klist-foot", "guide")} onClick={() => openGuideFromSearch()}><Icon name="spark" />Ask about this lesson</button>
   ) : null) : null;
   const courseProgressWords = open && openProgress ? (props.canManage
     ? `${summaryBy.get(open.course.id)?.started ?? 0} started · ${summaryBy.get(open.course.id)?.finished ?? 0} finished`
