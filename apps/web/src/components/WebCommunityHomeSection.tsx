@@ -384,7 +384,7 @@ export function WebCommunityHomeSection(props: WebCommunityHomeSectionProps) {
   useEffect(() => {
     if (!ownerMoment?.isNew || !snapshot || !props.kit) return;
     const urgentNow = homeCardFor(snapshot, props, props.audience);
-    if (changes.length > 0 || (props.joinReview?.requests.length ?? 0) > 0) return;
+    if (changes.length > 0) return;
     if (urgentNow && (props.agentOn !== false || urgentNow.label === "Needs your decision")) return;
     const shown = ownerMoment;
     setOwnerMoment({ ...shown, isNew: false });
@@ -393,7 +393,7 @@ export function WebCommunityHomeSection(props: WebCommunityHomeSectionProps) {
       if (session) await markOwnerMomentShown({ session, communityId: props.communityId, key: shown.moment.key }).catch(() => undefined);
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ownerMoment, snapshot, props.agentOn, changes.length, props.joinReview?.requests.length]);
+  }, [ownerMoment, snapshot, props.agentOn, changes.length]);
 
   // Home is extra; if its facts can't load, the conversation below still works.
   if (failed && !props.kit) return null;
@@ -414,7 +414,10 @@ export function WebCommunityHomeSection(props: WebCommunityHomeSectionProps) {
     const isHost = props.audience === "host";
     // The host's list of decisions: people waiting, course changes an AI
     // asked for, and (with the guide on) the oldest unanswered question.
-    const joinCount = props.joinReview ? props.joinReview.requests.length : snapshot?.joinRequestsPending ?? 0;
+    // Until the people themselves have loaded, the snapshot's count stands in
+    // and the row links to Members.
+    const joinReview = props.joinReview && props.joinReview.requests.length > 0 ? props.joinReview : null;
+    const joinCount = joinReview ? joinReview.requests.length : props.joinReview && !snapshot ? 0 : snapshot?.joinRequestsPending ?? 0;
     const asked = isHost && agentOn && snapshot ? homeCardFor({ ...snapshot, joinRequestsPending: 0 }, props, "host") : null;
     const needs = isHost ? needsYouCount({ joinRequests: joinCount, changes: changes.length, question: Boolean(asked) }) : 0;
     // The right column: Today, who is online, and the community's memory.
@@ -442,7 +445,7 @@ export function WebCommunityHomeSection(props: WebCommunityHomeSectionProps) {
             </Card>
           ) : null}
           {isHost && snapshot ? (
-            <NeedsYou join={props.joinReview ?? null} joinCount={joinCount} onShowAllJoinRequests={props.onOpenJoinRequests}
+            <NeedsYou join={joinReview} joinCount={joinCount} onShowAllJoinRequests={props.onOpenJoinRequests}
               changes={changes} busyChangeId={busyChangeId} changeError={changeError}
               onApplyChange={(id) => void decideChange(id, true)} onRejectChange={(id) => void decideChange(id, false)}
               question={asked ? { title: asked.title, detail: asked.detail, action: asked.action, onAction: asked.onAction } : null} />
