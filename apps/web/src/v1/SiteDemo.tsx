@@ -577,7 +577,7 @@ export function SiteDemo() {
 // against the real app.
 export function SiteDemoLab() {
   return (
-    <div style={{ height: "100vh", overflowY: "auto", background: "#07080a", padding: "48px 24px", fontFamily: 'var(--font-sans, "Geist Variable", "Geist", system-ui, sans-serif)' }}>
+    <div style={{ height: "100dvh", overflowY: "auto", background: "#07080a", padding: "48px 24px", fontFamily: 'var(--font-sans, "Geist Variable", "Geist", system-ui, sans-serif)' }}>
       <style>{`.site-demo-window{width:min(1180px,100%);margin:0 auto;border-radius:14px;border:1px solid rgba(255,255,255,.14);overflow:hidden;box-shadow:0 60px 140px -50px rgba(111,120,216,.35),0 40px 90px -40px #000}`}</style>
       <SiteDemo />
     </div>
