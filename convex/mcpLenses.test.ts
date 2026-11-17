@@ -3,7 +3,7 @@ import { afterEach, expect, test, vi } from "vitest";
 import { ensureGeneralChannel } from "./communityChannelCore";
 import schema from "./schema";
 import { handleMcpPost } from "./httpMcp";
-import { api } from "./_generated/api";
+import { api, internal } from "./_generated/api";
 import { PLATFORM_LEGAL_DOCUMENTS } from "../shared/legalDocuments";
 import { BUDGET_LIMITS } from "../shared/operationCatalog";
 
@@ -327,4 +327,103 @@ test("the server tells a connecting AI how to behave", async () => {
   const instructions = (await res.json() as any).result.instructions as string;
   expect(instructions).toContain("rules.md");
   expect(instructions).toContain("marked as made through an AI");
+});
+
+// ---- the member lens, finished (docs/specs/agent-access-v0.md, slice 3)
+
+// A conversation between the owner and the member, started by the owner in the app.
+async function conversation(f: any, text = "Are you coming to the Sunday run?") {
+  const communityId = await f.t.run(async (ctx: any) => (await ctx.db.query("communities").withIndex("by_slug", (q: any) => q.eq("slug", "run-club")).first())._id);
+  const sent = await f.t.mutation((internal as any).directMessages.sendSiteDirectMessageForTrustedUserInternal,
+    { userId: f.users.owner, communityId, handle: "member", text });
+  return { id: sent.conversation_id as string, path: `/messages/${sent.conversation_id}/`, communityId };
+}
+
+test("a person's AI reads their own conversations and replies in one that exists, marked", async () => {
+  const f = await fixture();
+  const c = await conversation(f);
+  // The top of the repository shows messages to a person's own AI.
+  const root = await f.call("member", "polynet_list", { path: "/" });
+  expect(root.structuredContent.entries.map((entry: any) => entry.path)).toContain("/messages/");
+  const inbox = await f.call("member", "polynet_list", { path: "/messages/" });
+  expect(inbox.isError, JSON.stringify(inbox)).toBe(false);
+  expect(inbox.structuredContent.entries).toHaveLength(1);
+  expect(inbox.structuredContent.entries[0]).toMatchObject({ path: c.path, with: "owner", handle: "owner", unread: 1 });
+  // No ids of people anywhere in it.
+  expect(JSON.stringify(inbox.structuredContent)).not.toContain(String(f.users.owner));
+  const read = await f.call("member", "polynet_list", { path: c.path });
+  expect(read.structuredContent.entries).toMatchObject([{ from_me: false, text: "Are you coming to the Sunday run?", via_ai: false }]);
+  // A reply through the AI: sent as the member, marked for both people.
+  const reply = await f.call("member", "polynet_write", { path: c.path, mode: "append", content: { text: "Yes, see you at 7." }, idempotency_key: "r1" });
+  expect(reply.isError, JSON.stringify(reply)).toBe(false);
+  expect(reply.structuredContent.message).toMatchObject({ from_me: true, text: "Yes, see you at 7.", via_ai: true });
+  const stored: any[] = await f.t.run((ctx: any) => ctx.db.query("dmMessages").collect());
+  expect(stored.map((row) => [row.viaAi === true, String(row.senderUserId) === String(f.users.member)])).toEqual([[false, false], [true, true]]);
+  // The same reply sent again is the same message.
+  await f.call("member", "polynet_write", { path: c.path, mode: "append", content: { text: "Yes, see you at 7." }, idempotency_key: "r1" });
+  expect(await f.t.run((ctx: any) => ctx.db.query("dmMessages").collect())).toHaveLength(2);
+  // The owner, in the app, sees the mark on it.
+  const seen = await f.t.withIdentity({ subject: "owner-subject" }).query((api as any).directMessages.listDirectMessages,
+    { authSubject: "owner-subject", conversationId: c.id });
+  expect(seen.map((message: any) => message.via_ai)).toEqual([false, true]);
+});
+
+test("an AI cannot start a conversation, read someone else's, or get round a block", async () => {
+  const f = await fixture();
+  const c = await conversation(f);
+  // Someone who is not in the conversation finds nothing at its path.
+  expect((await f.call("outsider", "polynet_list", { path: c.path })).isError).toBe(true);
+  expect((await f.call("outsider", "polynet_write", { path: c.path, mode: "append", content: { text: "hello there" }, idempotency_key: "o1" })).isError).toBe(true);
+  expect((await f.call("outsider", "polynet_list", { path: "/messages/" })).structuredContent.entries).toEqual([]);
+  // There is no path that names a person: nothing starts a conversation.
+  for (const path of ["/messages/", "/messages/owner/", "/messages/new/"]) {
+    expect((await f.call("member", "polynet_write", { path, mode: "append", content: { text: "hello there" }, idempotency_key: `n${path.length}` })).isError, path).toBe(true);
+  }
+  expect((await f.call("member", "polynet_write", { path: c.path, mode: "create", content: { text: "hello there" }, idempotency_key: "n0" })).isError).toBe(true);
+  expect(await f.t.run((ctx: any) => ctx.db.query("dmConversations").collect())).toHaveLength(1);
+  // The owner blocks the member: the member's AI can no longer reply.
+  const memberPublic = await f.t.run(async (ctx: any) => (await ctx.db.get(f.users.member)).publicUserId ?? null);
+  if (memberPublic) {
+    await f.t.withIdentity({ subject: "owner-subject" }).mutation((api as any).directMessages.blockDirectMessageUser, { authSubject: "owner-subject", targetUserId: memberPublic });
+    const blocked = await f.call("member", "polynet_write", { path: c.path, mode: "append", content: { text: "Still coming?" }, idempotency_key: "b1" });
+    expect(blocked.isError).toBe(true);
+  }
+});
+
+test("message replies through an AI have their own, smaller budget, and the same content checks", async () => {
+  const f = await fixture();
+  const c = await conversation(f);
+  expect((await f.call("member", "polynet_write", { path: c.path, mode: "append", content: { text: "x".repeat(1_600) }, idempotency_key: "long" })).structuredContent)
+    .toMatchObject({ code: "ai_post_too_long" });
+  await f.t.run(async (ctx: any) => { for (const row of await ctx.db.query("accessBudgetCounters").collect()) await ctx.db.delete(row._id); });
+  await spent(f, f.users.member, "message_reply", "", BUDGET_LIMITS.message_reply.perMinute);
+  const refused = await f.call("member", "polynet_write", { path: c.path, mode: "append", content: { text: "One more." }, idempotency_key: "over" });
+  expect(refused.structuredContent).toMatchObject({ code: "rate_limited", budget: "message_reply", window: "minute" });
+  // Posting in a channel is a different budget.
+  expect((await post(f, "member", "still-posts")).isError).toBe(false);
+});
+
+test("the host's switch: members' AIs read but do not post, and the rules say so", async () => {
+  const f = await fixture();
+  const c = await conversation(f);
+  const owner = f.t.withIdentity({ subject: "owner-subject" });
+  expect((await post(f, "member", "before")).isError).toBe(false);
+  // A member cannot flip it; the host can.
+  await expect(f.t.withIdentity({ subject: "member-subject" }).mutation((api as any).communityAiRules.setCommunityAiPosting,
+    { authSubject: "member-subject", communityId: c.communityId, allowed: false })).rejects.toThrow();
+  expect(await owner.mutation((api as any).communityAiRules.setCommunityAiPosting, { authSubject: "owner-subject", communityId: c.communityId, allowed: false }))
+    .toMatchObject({ posting_allowed: false });
+  await f.t.run(async (ctx: any) => { for (const row of await ctx.db.query("accessBudgetCounters").collect()) await ctx.db.delete(row._id); });
+  const refused = await post(f, "member", "after");
+  expect(refused.structuredContent).toMatchObject({ code: "ai_posting_off" });
+  // Reading still works, the rules say why, and messages are not the host's to switch off.
+  expect((await f.call("member", "polynet_list", { path: "/communities/run-club/channels/general/" })).isError).toBe(false);
+  expect((await f.call("member", "polynet_read", { path: "/communities/run-club/rules.md" })).structuredContent.body).toContain("turned off in this community");
+  expect((await f.call("member", "polynet_write", { path: c.path, mode: "append", content: { text: "Yes, see you at 7." }, idempotency_key: "dm" })).isError).toBe(false);
+  // The host's own AI is refused too: the switch is about AIs, not about who.
+  expect((await post(f, "owner", "host-ai")).structuredContent).toMatchObject({ code: "ai_posting_off" });
+  // Back on.
+  await owner.mutation((api as any).communityAiRules.setCommunityAiPosting, { authSubject: "owner-subject", communityId: c.communityId, allowed: true });
+  await f.t.run(async (ctx: any) => { for (const row of await ctx.db.query("accessBudgetCounters").collect()) await ctx.db.delete(row._id); });
+  expect((await post(f, "member", "back-on")).isError).toBe(false);
 });

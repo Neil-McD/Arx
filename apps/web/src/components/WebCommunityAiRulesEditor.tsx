@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 
-import { fetchCommunityAiRules, saveCommunityAiRules, type CommunityAiRulesView } from "../../../../shared/cloudCommunityAiRulesGateway";
+import { fetchCommunityAiRules, saveCommunityAiRules, setCommunityAiPosting, type CommunityAiRulesView } from "../../../../shared/cloudCommunityAiRulesGateway";
 import { resolveUsableSession, type EnsureSessionFn } from "../../../../shared/ensureUsableSession";
-import { SettingsButton, SettingsGroup, SettingsRow } from "./SettingsRows";
+import { SettingsButton, SettingsGroup, SettingsRow, SettingsSwitch } from "./SettingsRows";
 
 // House rules for members' own AIs. Anyone can connect their AI to Polynet
 // and it posts as them; before it writes here it reads Polynet's rules and
@@ -15,7 +15,7 @@ export function WebCommunityAiRulesEditor<SessionT>(props: {
 }) {
   const [view, setView] = useState<CommunityAiRulesView | null>(null);
   const [text, setText] = useState("");
-  const [busy, setBusy] = useState<null | "loading" | "saving">(null);
+  const [busy, setBusy] = useState<null | "loading" | "saving" | "switching">(null);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
   const { communityId, session, ensureSession } = props;
@@ -65,6 +65,23 @@ export function WebCommunityAiRulesEditor<SessionT>(props: {
     }
   };
 
+  // The switch saves on its own: it is one decision, not part of the draft.
+  const setPosting = async (allowed: boolean) => {
+    if (!communityId || busy || !view) return;
+    setBusy("switching");
+    setError(null);
+    try {
+      const usable = await resolveUsableSession(session, ensureSession);
+      if (!usable) throw new Error("no_session");
+      const next = await setCommunityAiPosting({ session: usable, communityId, allowed });
+      setView({ ...view, posting_allowed: next.posting_allowed });
+    } catch {
+      setError("That didn't save. Try again.");
+    } finally {
+      setBusy(null);
+    }
+  };
+
   const max = view?.max_chars ?? 2000;
   const status = error ? <span className="settings-v1-error">{error}</span>
     : <span role="status">{busy === "loading" ? "Loading…" : saved && !dirty ? "Saved. AIs read these the next time they write here."
@@ -72,6 +89,13 @@ export function WebCommunityAiRulesEditor<SessionT>(props: {
 
   return (
     <SettingsGroup label="Members' own AIs">
+      <SettingsRow label="Let members' AIs post here"
+        help={view && !view.posting_allowed
+          ? "Off: members' AIs can read here but can't post, reply or edit. Members post for themselves."
+          : "On: a member's AI can post and reply as them, marked “via AI”, within the limits and your rules below. Off, it can still read."}>
+        <SettingsSwitch label="Let members' AIs post here" checked={view ? view.posting_allowed : true}
+          disabled={view === null || busy !== null} onChange={(next) => void setPosting(next)} />
+      </SettingsRow>
       <SettingsRow label="House rules for AIs" htmlFor="community-ai-rules" stacked
         help="Members can connect their own AI to Polynet. It posts as them, marked “via AI”. Before it writes here it reads Polynet's rules, then yours. Say what you want and don't want: which channels, what tone, what never to post.">
         <textarea id="community-ai-rules" className="settings-v1-input" rows={8} maxLength={max}

@@ -835,8 +835,11 @@ export function WebDirectMessagePanel(props: WebDirectMessagePanelProps) {
                           {isOwn ? "You" : peerLabel.split(/\s+/)[0]} · {(() => {
                             const when = inboxTimeFor(message.created_at);
                             return when === "now" ? "just now" : /(min| h)$/.test(when) ? `${when} ago` : when;
-                          })()}
+                          })()}{message.via_ai ? " · via AI" : ""}
                         </span>
+                      ) : message.via_ai ? (
+                        // Sent through their own AI: both people see it on the message.
+                        <span className={cx("sub")} style={{ fontSize: 12, alignSelf: isOwn ? "flex-end" : undefined }}>via AI</span>
                       ) : null}
                     </Fragment>
                   );

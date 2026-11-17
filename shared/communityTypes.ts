@@ -225,6 +225,8 @@ export type DirectMessage = {
   sender_user_id: string | null;
   client_message_id?: string | null;
   content_json: unknown;
+  // Sent through the sender's own AI, not typed by them.
+  via_ai?: boolean;
   created_at: string;
   updated_at: string;
 };
