@@ -64,7 +64,7 @@ External MCP begins at:
 /
 ├── communities/
 ├── users/
-└── messages/         # a person's own AI only: their direct messages
+└── messages/         # a person's own AI, or the guide in their private talk: their direct messages
     └── <conversation>/   # list its messages; append a reply. Never starts one.
 ```
 
@@ -224,8 +224,9 @@ MCP (`external_mcp`), where the person operates the harness directly. Admission
 takes a selection of up to 50 items, each decided on its own with its own
 receipt. `community.interaction.remove` removes nothing for an AI: a removed
 post can't be brought back, so it answers `person_only` with where a person
-removes it (as do removing or banning a member and opening a closed
-community). The native community agent cannot discover
+removes it through a person's own AI (as do removing or banning a member and
+opening a closed community); the guide in a private talk removes posts and
+members, and bans, only after the person's yes, every time. The native community agent cannot discover
 or execute them, even on an owner's Agent page: it reads member-authored evidence and has no per-call human
 confirmation, so a prompt in that evidence must not be able to grant access or
 advance a member. Mutation validators also reject any other principal.

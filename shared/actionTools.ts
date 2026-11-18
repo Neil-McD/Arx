@@ -9,10 +9,11 @@
 // checks, limits and receipts (convex/polynetCanonicalExecutor.ts).
 //
 // The guide in a private talk gets the same tools (shared/lens.ts,
-// talkToolNames), so both doors do the same things by construction. Two
-// differences are marked on the tool itself (`door`): a person's messages are
-// their own AI's only; remembering, and removing posts after the person's
-// yes, are the guide's only.
+// talkToolNames), so both doors do the same things by construction. The
+// differences are marked on the tool itself (`door`): remembering, and
+// removing posts or members and banning members after the person's yes, are
+// the guide's only (a person's own AI is handed the place in the app for
+// what can't be taken back).
 //
 // The table below is the whole presentation. `catalog` names the entry each
 // tool stands for; its labels (who may do it, how the person is asked) come
@@ -125,10 +126,10 @@ export const ACTION_TOOLS: ActionTool[] = [
     { community: COMMUNITY, channel: CHANNEL }, ["community", "channel"],
     (a) => call("community.channel.mark_read", a, { channel: a.channel })),
   tool("polynet_reply_message", "polynet_write:messages", "Reply in a direct message",
-    "Reply in a direct-message conversation the person is already in. List /messages/ for their conversations and read one before replying. You can't start a new conversation.",
+    "Reply in a direct-message conversation the person is already in. List /messages/ for their conversations and read one before replying. You can't start a new conversation. In the person's private talk they are shown who it goes to and the exact words and asked first, every time.",
     { conversation: { type: "string", minLength: 4, maxLength: 80, description: "The conversation's id: the <id> in /messages/<id>/ from polynet_list." },
       text: TEXT("The reply, as it will appear.", 4_000) }, ["conversation", "text"],
-    (a) => write(`/messages/${a.conversation}/`, "append", { text: a.text }), "own_ai"),
+    (a) => write(`/messages/${a.conversation}/`, "append", { text: a.text })),
   tool("polynet_remember", "member.memory.remember", "Remember something about this person",
     "Keep, change or drop what you remember about the person you are talking with, for next time. Only for what they told you about themselves and would expect you to keep. Their memory is short: when it is full the call fails with what is there, so merge or remove in the same batch.",
     { community: COMMUNITY, operations: { type: "array", minItems: 1, maxItems: 10,
@@ -210,6 +211,15 @@ export const ACTION_TOOLS: ActionTool[] = [
     "Make people admins, moderators or plain members. This changes who runs the community: name the people and the role to the person and get their yes first.",
     { community: COMMUNITY, members: MEMBERS, role: { type: "string", enum: ["member", "moderator", "admin"], description: "The role to give them." } }, ["community", "members", "role"],
     (a) => call("community.members.set_role", a, { members: a.members, role: a.role })),
+  tool("polynet_remove_members", "community.members.remove", "Remove people from the community",
+    "Remove people from the community: they lose access, anyone paying loses their subscription, and they can ask to join again later. The person is shown who and asked first, every time; say one line and stop.",
+    { community: COMMUNITY, members: MEMBERS }, ["community", "members"],
+    (a) => call("community.members.remove", a, { members: a.members }), "guide"),
+  tool("polynet_ban_members", "community.members.ban", "Ban people",
+    "Ban people: they are removed, anyone paying loses their subscription, and they can't rejoin unless unbanned. The person is shown who and asked first, every time; say one line and stop.",
+    { community: COMMUNITY, members: MEMBERS, reason: { type: "string", maxLength: 1_000, description: "Optional. Why, for the record; the person sees it in the question." } },
+    ["community", "members"],
+    (a) => call("community.members.ban", a, { members: a.members, ...only(a, ["reason"]) }), "guide"),
   tool("polynet_unban_members", "community.members.unban", "Lift a ban",
     "Lift the ban on people so they can ask to join again.",
     { community: COMMUNITY, members: MEMBERS }, ["community", "members"],
@@ -231,8 +241,6 @@ export const NOT_PUBLISHED: Record<string, string> = {
   "polynet_write:builder:delete": "part of polynet_change_courses; deleting what members see is refused there",
   "community.presence.heartbeat": "that a person is here right now: only their own open site says so",
   "community.typing.set": "that a person is typing: only their own open site says so",
-  "community.members.remove": "only a person, in the app",
-  "community.members.ban": "only a person, in the app",
   "community.join_mode.set:open": "only a person, in the app",
 };
 

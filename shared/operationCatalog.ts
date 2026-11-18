@@ -59,9 +59,11 @@ export const TOOL_OPERATIONS = {
   "polynet_write:builder": entry("builder", "write", "builder_change"),
   "polynet_write:builder:delete": entry("builder", "destroy", "builder_change"),
   // A person's own direct messages (/messages/): reading the conversations
-  // they are in, and replying in one that exists. Never starting one.
+  // they are in, and replying in one that exists. Never starting one. A reply
+  // lands in one person's inbox, so through the guide it is asked about every
+  // time, never "always allowed" like posts.
   "polynet_list:messages": entry("member", "read", "read"),
-  "polynet_write:messages": entry("member", "write", "message_reply", { ask: "words" }),
+  "polynet_write:messages": entry("member", "write", "message_reply", { ask: "every_time" }),
 } satisfies Record<string, OperationEntry>;
 
 // polynet_call operations, in the order the capabilities directory lists them.
@@ -97,8 +99,9 @@ export const CALL_OPERATIONS = {
   "community.event.update": entry("builder", "write", "builder_change"),
   "community.event.cancel": entry("builder", "write", "builder_change"),
   "community.members.set_role": entry("builder", "write", "builder_change", { ask: "every_time" }),
-  "community.members.remove": entry("builder", "destroy", "builder_change", { ask: "person_only" }),
-  "community.members.ban": entry("builder", "destroy", "builder_change", { ask: "person_only" }),
+  // Removing or banning someone always waits for the person's yes.
+  "community.members.remove": entry("builder", "destroy", "builder_change", { ask: "every_time" }),
+  "community.members.ban": entry("builder", "destroy", "builder_change", { ask: "every_time" }),
   "community.members.unban": entry("builder", "write", "builder_change"),
 } satisfies Record<string, OperationEntry>;
 
@@ -128,6 +131,7 @@ export function operationFor(args: {
     return callOperation(name);
   }
   if (args.toolName !== "polynet_write") return null;
+  if (isMessagesPath(args.localPath)) return TOOL_OPERATIONS["polynet_write:messages"];
   const path = String(args.localPath ?? "");
   if (/^\/channels\//.test(path)) return TOOL_OPERATIONS[args.mode === "delete" ? "polynet_write:channels:delete" : "polynet_write:channels"];
   if (path.startsWith("/builder/")) return TOOL_OPERATIONS["polynet_write:builder"];
@@ -136,12 +140,15 @@ export function operationFor(args: {
 
 // The question the guide puts to the person in their private talk, by kind:
 // "post" (the words, with "always allow" offered), "remove" (can't be taken
-// back) and "change" (who runs the place, what every member is told).
-export type GuideAsk = "post" | "remove" | "change";
-export const GUIDE_ASK_ALWAYS_ALLOWABLE: Record<GuideAsk, boolean> = { post: true, remove: false, change: false };
+// back: posts, or a member removed or banned), "change" (who runs the place,
+// what every member is told) and "message" (a reply in their direct messages,
+// with the words and who it goes to). Only posts can be always allowed.
+export type GuideAsk = "post" | "remove" | "change" | "message";
+export const GUIDE_ASK_ALWAYS_ALLOWABLE: Record<GuideAsk, boolean> = { post: true, remove: false, change: false, message: false };
 
 export function guideAskFor(args: Parameters<typeof operationFor>[0]): GuideAsk | null {
   const found = operationFor(args);
+  if (found && found === TOOL_OPERATIONS["polynet_write:messages"]) return "message";
   if (found?.ask === "words") return "post";
   if (found?.ask === "every_time") return found.effect === "destroy" || args.toolName === "polynet_write" ? "remove" : "change";
   return null;

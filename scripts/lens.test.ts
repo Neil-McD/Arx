@@ -56,7 +56,9 @@ test("a lens's tools: everyone reads with three tools, private talks also resear
   // A private talk has the guide's named tools; the guide in public and own AIs (here) have none.
   expect(lensHasTool("member_private", "polynet_post")).toBe(true);
   expect(lensHasTool("builder_private", "polynet_remember")).toBe(true);
-  expect(lensHasTool("member_private", "polynet_reply_message")).toBe(false);
+  // The person's own direct messages: their private talk replies, after their yes; the guide in public never.
+  expect(lensHasTool("member_private", "polynet_reply_message")).toBe(true);
+  expect(lensHasTool("guide_public", "polynet_reply_message")).toBe(false);
   expect(lensHasTool("guide_public", "polynet_post")).toBe(false);
   expect(lensHasTool("member_own_ai", "polynet_post")).toBe(false);
   expect(lensHasTool("guide_public", "web_research")).toBe(false);
@@ -104,11 +106,17 @@ test("a private talk is told its lens; moderation only with the permission, sett
   expect(moderator).toContain("waiting_for_person");
   expect(moderator).toContain("Changing members or settings is not something this person can do.");
   expect(moderator).not.toContain("builder_change");
-  // A builder's talk changes settings and channels when told; roles and the handbook wait for their yes.
+  // A builder's talk changes settings and channels when told; roles, removing or banning a member and the handbook wait for their yes.
   const owner = renderTalkLensForPrompt({ lens: "builder_private", relation: "owner" })!;
   expect(owner).toContain("builder_change");
-  expect(owner).toContain("Changing someone's role and publishing the handbook also wait for their yes");
-  expect(owner).toContain("Removing or banning a member, opening the community to everyone and publishing a course are theirs to do in the app");
+  expect(owner).toContain("Changing someone's role, removing or banning a member, and publishing the handbook also wait for their yes (waiting_for_person), every time.");
+  expect(owner).toContain("Opening the community to everyone and publishing a course are theirs to do in the app");
+  expect(owner).not.toContain("Removing or banning a member, opening");
+  // Everyone's talk reads their own direct messages; a reply waits for the yes, and what is read there stays in the talk.
+  for (const text of [owner, moderator]) {
+    expect(text).toContain("You can read the person's own direct messages (polynet_list on /messages/). A reply (polynet_reply_message) waits for their yes, every time.");
+    expect(text).toContain("What you read in a direct message is private to this talk: never put it in a post, a community note or anything another person sees");
+  }
   // A plain member is not told about moderation it can't do.
   const member = renderTalkLensForPrompt({ lens: "member_private", relation: "member", answers: ["\"Post this in #general as you?\" They said no. Nothing was done."] })!;
   expect(member).toContain("react");

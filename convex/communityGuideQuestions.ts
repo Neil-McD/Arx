@@ -9,13 +9,15 @@ import { internal } from "./_generated/api";
 import { action, internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import { resolveUserIdForAuthenticatedRequest } from "./authActor";
 import { resolveCommunityChannelActor } from "./communityChannelAccess";
+import { communityMembershipRowIsActive } from "./communityCore";
 import { resolveAuthorizedCommunityChannel } from "./communityChannelCore";
 import { executePolynetCanonicalTool } from "./polynetCanonicalExecutor";
 import { GUIDE_ASK_ALWAYS_ALLOWABLE, type GuideAsk } from "../shared/operationCatalog";
 import {
   GUIDE_QUESTION_ITEM_TEXT_MAX, GUIDE_QUESTION_ITEMS_SHOWN, GUIDE_QUESTION_TEXT_MAX, GUIDE_QUESTION_WAIT_MS,
-  changeResultLine, NOT_A_MEMBER_HERE, postResultLine, removeResultLine, type GuideAnswerResult, type GuideQuestionView,
+  changeResultLine, messageResultLine, NOT_A_MEMBER_HERE, postResultLine, removeResultLine, type GuideAnswerResult, type GuideQuestionView,
 } from "../shared/guideQuestions";
+import { messagesConversationId } from "../shared/operationCatalog";
 import { buildCommunityTabPath } from "../shared/webAppRouteState";
 
 const internalRefs = internal as any;
@@ -66,7 +68,9 @@ export const describePostsInternal = internalQuery({
   },
 });
 
-// Each person's name and the role they hold now, for a question about roles.
+// Each person's name and the role they hold now, for a question about their
+// role or about removing or banning them. Someone who was removed or left is
+// not a member here.
 export const describeMembersInternal = internalQuery({
   args: { communityId: v.id("communities"), userIds: v.array(v.string()) },
   handler: async (ctx, args) => {
@@ -75,10 +79,12 @@ export const describeMembersInternal = internalQuery({
     for (const raw of args.userIds.slice(0, GUIDE_QUESTION_ITEMS_SHOWN)) {
       const userId = ctx.db.normalizeId("users", raw);
       const user: any = userId ? await ctx.db.get(userId) : null;
-      const membership = userId ? await ctx.db.query("communityMemberships")
-        .withIndex("by_community_user", (q) => q.eq("communityId", args.communityId).eq("userId", userId)).first() : null;
-      if (!user || !membership) { people.push({ who: "Someone", text: NOT_A_MEMBER_HERE }); continue; }
-      const now = String(community?.ownerId) === String(userId) ? "owner" : membership.role;
+      const membership = userId ? (await ctx.db.query("communityMemberships")
+        .withIndex("by_community_user", (q) => q.eq("communityId", args.communityId).eq("userId", userId)).collect())
+        .find((row: any) => communityMembershipRowIsActive(row)) : null;
+      const owner = String(community?.ownerId) === String(userId);
+      if (!user || (!membership && !owner)) { people.push({ who: "Someone", text: NOT_A_MEMBER_HERE }); continue; }
+      const now = owner ? "owner" : membership!.role;
       people.push({ who: String(user.displayName ?? user.handle ?? "A member"), text: `Now: ${now}` });
     }
     return people;
@@ -102,7 +108,8 @@ function withoutKey(inputJson: string): string {
 // keeps its key, so a yes runs it under that one key, once.
 export const askInternal = internalMutation({
   args: {
-    communityId: v.id("communities"), userId: v.id("users"), kind: v.union(v.literal("post"), v.literal("remove"), v.literal("change")),
+    communityId: v.id("communities"), userId: v.id("users"),
+    kind: v.union(v.literal("post"), v.literal("remove"), v.literal("change"), v.literal("message")),
     toolName: v.string(), inputJson: v.string(), question: v.string(), place: v.optional(v.string()), text: v.optional(v.string()),
     items: v.optional(v.array(v.object({ who: v.string(), text: v.string() }))), runId: v.optional(v.string()),
   },
@@ -197,11 +204,13 @@ export const answerGuideQuestion = action({
         mountedCommunityId: String(args.communityId), evidenceSurface: "member_agent_dock", toolName: claimed.toolName, input,
         personSaidYes: true,
       });
+      // Changing, removing or banning members: done for each person on its own.
+      const members = String(input.operation ?? "").startsWith("community.members.");
       if (!execution.ok) result = { status: "failed", line: execution.message, path: null };
-      else if (claimed.kind === "change") {
+      else if (claimed.kind === "change" || (claimed.kind === "remove" && members)) {
         const outcome = (execution.value as any)?.result ?? {};
         const asked = Number(outcome.succeeded ?? 0) + Number(outcome.failed ?? 0);
-        const failedAll = String(input.operation) === "community.members.set_role" && Number(outcome.succeeded ?? 0) === 0;
+        const failedAll = members && Number(outcome.succeeded ?? 0) === 0;
         result = { status: failedAll ? "failed" : "done", path: null,
           line: failedAll && outcome.results?.[0]?.message ? String(outcome.results[0].message)
             : changeResultLine({ operation: String(input.operation), succeeded: Number(outcome.succeeded ?? 0), asked }) };
@@ -210,6 +219,11 @@ export const answerGuideQuestion = action({
         const asked = Number(outcome.succeeded ?? 0) + Number(outcome.failed ?? 0);
         const removed = Number(outcome.succeeded ?? 0);
         result = { status: removed > 0 ? "done" : "failed", line: removeResultLine({ removed, asked }), path: null };
+      } else if (claimed.kind === "message") {
+        const conversation = messagesConversationId(input.path);
+        const inbox = buildCommunityTabPath(claimed.communitySlug, "inbox");
+        result = { status: "done", line: messageResultLine(claimed.place ?? "them"),
+          path: inbox && conversation ? `${inbox}/${encodeURIComponent(conversation)}` : inbox };
       } else {
         const slug = channelSlugOf(input.path);
         const mode = String(input.mode ?? "create");

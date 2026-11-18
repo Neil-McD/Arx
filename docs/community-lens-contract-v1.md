@@ -72,7 +72,9 @@ of the slices that follow.
 - Owner: as admin, including admins.
 - MCP now: reads; moderator join review on a selection; owners and admins
   change role (`community.members.set_role`), remove, ban and unban
-  (`community.members.remove`, `.ban`, `.unban`) a selection of up to 50. Through an AI,
+  (`community.members.remove`, `.ban`, `.unban`) a selection of up to 50.
+  Removing and banning wait for the person's yes to the guide, every time;
+  a person's own AI is handed the place in the app. Through an AI,
   removing or banning a paying member is refused (`paid_member_use_studio`:
   it cancels their subscription, so a person does it in Studio). Planned: own
   profile; invite.

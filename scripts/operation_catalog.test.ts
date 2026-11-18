@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { BUDGET_LIMITS, budgetTakesFor, requestFingerprint, CALL_OPERATIONS, CALL_OPERATION_NAMES, CALL_OPERATION_VARIANTS, callOperation, guideAskFor, handedBackToPerson, operationFor, TOOL_OPERATIONS, WORKER_OPERATIONS } from "../shared/operationCatalog";
+import { BUDGET_LIMITS, budgetTakesFor, requestFingerprint, CALL_OPERATIONS, CALL_OPERATION_NAMES, CALL_OPERATION_VARIANTS, callOperation, GUIDE_ASK_ALWAYS_ALLOWABLE, guideAskFor, handedBackToPerson, operationFor, TOOL_OPERATIONS, WORKER_OPERATIONS } from "../shared/operationCatalog";
 
 const executor = readFileSync("convex/polynetCanonicalExecutor.ts", "utf8");
 
@@ -37,12 +37,12 @@ describe("the operations list", () => {
     expect(asks({ ...TOOL_OPERATIONS, ...CALL_OPERATIONS, ...CALL_OPERATION_VARIANTS })).toEqual({
       "polynet_write:channels": "words",
       "polynet_write:channels:delete": "every_time",
-      "polynet_write:messages": "words",
+      "polynet_write:messages": "every_time",
       "community.interaction.remove": "every_time",
       "community.handbook.approve": "every_time",
       "community.members.set_role": "every_time",
-      "community.members.remove": "person_only",
-      "community.members.ban": "person_only",
+      "community.members.remove": "every_time",
+      "community.members.ban": "every_time",
       "community.join_mode.set:open": "person_only",
     });
     // The worker is nobody's AI: it drafts, and a person decides on Home.
@@ -57,7 +57,10 @@ describe("the operations list", () => {
     expect(guideAskFor(call("community.interaction.remove"))).toBe("remove");
     expect(guideAskFor(call("community.members.set_role"))).toBe("change");
     expect(guideAskFor(call("community.handbook.approve"))).toBe("change");
-    for (const operation of ["community.interaction.react", "community.admission.approve", "community.settings.update", "community.channel.create", "community.members.ban"]) {
+    expect(guideAskFor(call("community.members.remove"))).toBe("remove");
+    expect(guideAskFor(call("community.members.ban"))).toBe("remove");
+    expect(guideAskFor({ toolName: "polynet_write", mode: "append", localPath: "/messages/abcd1234/" })).toBe("message");
+    for (const operation of ["community.interaction.react", "community.admission.approve", "community.settings.update", "community.channel.create", "community.members.unban"]) {
       expect(guideAskFor(call(operation)), operation).toBeNull();
     }
     expect(guideAskFor(call("community.join_mode.set", { mode: "open" }))).toBeNull();
@@ -66,7 +69,6 @@ describe("the operations list", () => {
     const back = (operation: string, door: { guide: boolean; personSaidYes: boolean }, input?: Record<string, unknown>) => handedBackToPerson(operationFor(call(operation, input)), door);
     // Only a person: every door, even after a yes.
     for (const door of [guide(false), guide(true), ownAi]) {
-      expect(back("community.members.ban", door)).toBe(true);
       expect(back("community.join_mode.set", door, { mode: "open" })).toBe(true);
       expect(back("community.join_mode.set", door, { mode: "approval" })).toBe(false);
       expect(back("community.settings.update", door)).toBe(false);
@@ -76,10 +78,34 @@ describe("the operations list", () => {
     expect(back("community.interaction.remove", guide(true))).toBe(false);
     expect(back("community.members.set_role", guide(false))).toBe(true);
     expect(back("community.members.set_role", guide(true))).toBe(false);
+    for (const operation of ["community.members.remove", "community.members.ban"]) {
+      expect(back(operation, guide(false)), operation).toBe(true);
+      expect(back(operation, guide(true)), operation).toBe(false);
+      expect(back(operation, ownAi), operation).toBe(true);
+    }
     // A person's own AI can't be asked yet: what can't be taken back is theirs to do; the rest it does.
     expect(back("community.interaction.remove", ownAi)).toBe(true);
     expect(back("community.members.set_role", ownAi)).toBe(false);
     expect(back("community.handbook.approve", ownAi)).toBe(false);
+    // A reply in the person's direct messages: the guide only after the yes; their own AI sends it.
+    const message = operationFor({ toolName: "polynet_write", mode: "append", localPath: "/messages/abcd1234/" });
+    expect(handedBackToPerson(message, guide(false))).toBe(true);
+    expect(handedBackToPerson(message, guide(true))).toBe(false);
+    expect(handedBackToPerson(message, ownAi)).toBe(false);
+  });
+
+  it("no member action, role change or direct message can ever be always-allowed: only posts can", () => {
+    expect(Object.entries(GUIDE_ASK_ALWAYS_ALLOWABLE).filter(([, allowable]) => allowable).map(([kind]) => kind)).toEqual(["post"]);
+    const members = CALL_OPERATION_NAMES.filter((name) => name.startsWith("community.members."));
+    expect(members).toEqual(["community.members.set_role", "community.members.remove", "community.members.ban", "community.members.unban"]);
+    for (const operation of members) {
+      const kind = guideAskFor({ toolName: "polynet_call", operation });
+      // Lifting a ban is done when told; everything else about members asks, and never always.
+      if (operation === "community.members.unban") expect(kind).toBeNull();
+      else expect(kind && GUIDE_ASK_ALWAYS_ALLOWABLE[kind], operation).toBe(false);
+    }
+    const message = guideAskFor({ toolName: "polynet_write", mode: "append", localPath: "/messages/abcd1234/" });
+    expect(message && GUIDE_ASK_ALWAYS_ALLOWABLE[message]).toBe(false);
   });
 });
 

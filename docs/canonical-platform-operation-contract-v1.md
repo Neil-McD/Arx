@@ -237,13 +237,20 @@ People (builder lens): `community.members.set_role` (`members`, `role`) and
 `.unban` take a selection of `user:<id>` refs and run Studio's own functions
 per person (`communityPeople.applyPersonActionForTrustedUserInternal`): only
 the owner makes or unmakes admins; the owner can't change. Each is a state,
-so a retried item changes nothing. `.remove` and `.ban` are a person's click:
-they answer `person_only` with the address of the member's record in the app
-(several people: the Members page) and touch nobody.
+so a retried item changes nothing. `.remove` and `.ban` (`reason` optional)
+always wait for a person: through the guide in their private talk they are
+asked every time, naming each person (never "always allowed"), and a yes
+runs the Members page's own `communityAdmin.removeCommunityMember` /
+`banCommunityMember` per person, with its checks (the owner can't be removed
+or banned: `owner_fixed`; only the owner removes an admin: `owner_only`).
+Through a person's own AI they answer `person_only` with the address of the
+member's record in the app (several people: the Members page) and touch nobody.
 
-**What can't be taken back is a person's click.** Removing a post, removing
-or banning a member and opening a closed community are never carried out for
-an AI, and nothing is queued. The answer is the error `person_only`: one
+**What can't be taken back waits for a person.** Removing a post, removing
+or banning a member are carried out only after the person's yes to the
+guide's question, every time; through a person's own AI, and for opening a
+closed community through either, nothing is carried out and nothing is
+queued. The answer is the error `person_only`: one
 sentence and the address in Polynet where the person does it
 ([specs/agent-access-v0.md](specs/agent-access-v0.md)). Community content is
 untrusted, and no text in it can make an AI do one of these.
