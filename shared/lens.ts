@@ -152,7 +152,10 @@ export const LENS_CALLS: Record<LensAction, LensName[]> = {
   // refused with a link, because Polynet can't show its question there.
   review_joins: PERSON_LENSES,
   remove_posts: PERSON_LENSES,
-  builder_change: ["builder_own_ai"],
+  // The community's settings, channels and roles: a builder through their
+  // own AI or the guide. A role change and publishing the handbook wait for
+  // their yes through the guide (guideAskFor).
+  builder_change: ["builder_private", "builder_own_ai"],
 };
 
 export function lensReads(lens: Lens, view: LensView): boolean {
@@ -239,7 +242,9 @@ export function renderTalkLensForPrompt(talk: TalkLens | null | undefined): stri
     `You can act for them on: ${does.length > 0 ? does.join(", ") : "nothing"}.`,
     "When they tell you to do one of these, do it and say what you did. Posting or replying under their name, and removing posts, wait for their yes: call the tool as usual, and when it answers waiting_for_person the person is shown your exact words (or the posts) with Yes and No above the box where they type. Then say one short line and stop; never ask for the yes in words, and never say it is done before it is.",
     ...(moderates ? ["For people asking to join, read builder/ first, say what stands out about each, and approve or decline the ones they name (or all of them, if they say so)."] : []),
-    "Changing members or settings is done by the person in the app or through their own AI, never in this talk.",
+    builder
+      ? "Settings and channels: change them when they tell you to, and say what changed, before and after. Changing someone's role and publishing the handbook also wait for their yes (waiting_for_person). Removing or banning a member, opening the community to everyone and publishing a course are theirs to do in the app: you are answered with the place, so give it to them."
+      : "Changing members or settings is not something this person can do.",
     ...(talk.answers?.length ? ["Since you last spoke, the person answered your questions:", ...talk.answers.map((line) => `- ${line}`)] : []),
     "This is orientation only. Backend checks and your tools remain authoritative.",
   ].join("\n");

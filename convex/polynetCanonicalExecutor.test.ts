@@ -1789,10 +1789,10 @@ test("the community agent asks the member before it posts, replies, edits or del
     principalKind: "community_agent_for_member", evidenceSurface: "member_agent_dock", toolName: "polynet_write", input,
   });
   const asked = [
-    { input: { path: channel, mode: "create", content: { text: "Who's in for Saturday dawn?" }, idempotency_key: "ask-create" }, question: "Post this in #general as you?" },
-    { input: { path: channel, mode: "append", content: { text: "Me!", root_id: rootId }, idempotency_key: "ask-append" }, question: "Reply with this in #general as you?" },
-    { input: { path: `${channel}interaction:root:${rootId}.md`, mode: "update", content: { text: "Edited" }, idempotency_key: "ask-update" }, question: "Change your post in #general to this?" },
-    { input: { path: `${channel}interaction:root:${rootId}.md`, mode: "delete", content: {}, idempotency_key: "ask-delete" }, question: "Delete your post in #general?" },
+    { input: { path: channel, mode: "create", content: { text: "Who's in for Saturday dawn?" }, idempotency_key: "ask-create" }, question: "Post this in #General as you?" },
+    { input: { path: channel, mode: "append", content: { text: "Me!", root_id: rootId }, idempotency_key: "ask-append" }, question: "Reply with this in #General as you?" },
+    { input: { path: `${channel}interaction:root:${rootId}.md`, mode: "update", content: { text: "Edited" }, idempotency_key: "ask-update" }, question: "Change your post in #General to this?" },
+    { input: { path: `${channel}interaction:root:${rootId}.md`, mode: "delete", content: {}, idempotency_key: "ask-delete" }, question: "Delete your post in #General?" },
   ];
   for (const { input, question } of asked) {
     const answer = await guide(input);

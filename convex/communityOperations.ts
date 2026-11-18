@@ -18,6 +18,8 @@ export const applyCommunityOperationInternal = internalMutation({
     attemptToken: v.string(),
     // The answer without its result: { ok, operation, receipt }.
     answer: v.any(),
+    // Whose receipt this is: a person's own AI, or the guide in their private talk.
+    principalKind: v.optional(v.union(v.literal("external_mcp"), v.literal("community_agent_for_member"))),
   },
   handler: async (ctx, args) => {
     const scope = { userId: args.userId, communityId: args.communityId };
@@ -41,7 +43,7 @@ export const applyCommunityOperationInternal = internalMutation({
       : (() => { throw new Error("operation_not_found"); })();
     const value = { ...args.answer, result };
     const completed = await ctx.runMutation(refs.polynetCanonicalReceipts.completeCanonicalOperationReceiptInternal, {
-      ...scope, principalKind: "external_mcp", toolName: "polynet_call", idempotencyKey: args.idempotencyKey,
+      ...scope, principalKind: args.principalKind ?? "external_mcp", toolName: "polynet_call", idempotencyKey: args.idempotencyKey,
       requestFingerprint: args.requestFingerprint, attemptToken: args.attemptToken, result: value,
     });
     return completed.deduped === true ? { replayed: completed.result } : { value };

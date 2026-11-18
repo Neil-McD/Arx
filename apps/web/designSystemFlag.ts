@@ -1,7 +1,7 @@
-// Design system v1 ships behind one build-time switch while it is checked on
-// staging (docs/specs/design-system-v1-implementation-plan.md). Only the
-// `polynet-staging` Vercel project sets VITE_DESIGN_V1; production releases
-// refuse to run while the `polynet` project has it.
+// Design system v1 is switched on by one build-time setting, VITE_DESIGN_V1
+// (docs/specs/design-system-v1-implementation-plan.md). Staging and, since
+// 2026-11-17, production both set it; unsetting it and releasing steps back
+// to the previous design.
 
 export const DESIGN_V1_ENV_KEY = "VITE_DESIGN_V1";
 
