@@ -100,7 +100,7 @@ for (const item of CASES.filter((c) => only.length === 0 || only.includes(c.id))
   if (item.resets && dirty) reset();
   dirty = Boolean(item.resets);
   let r;
-  try { r = convex("stagingGuideEval:runGuideRequest", { communityId, text: item.text }, SUBJECTS[item.as]); }
+  try { r = convex("stagingGuideEval:runGuideRequest", { communityId, text: item.text, ...(item.section ? { section: item.section } : {}) }, SUBJECTS[item.as]); }
   catch (error) { r = { ok: false, answer: `runner_failed: ${String(error?.stderr ?? error?.message ?? error).slice(-300)}`, tools: [], questions: [], usage: null, ms: 0 }; }
   let pass = false;
   try { pass = r.ok === true && item.check(r) === true; } catch { pass = false; }
