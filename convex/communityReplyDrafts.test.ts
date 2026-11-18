@@ -208,6 +208,51 @@ test("Skip drops a draft for good; a draft whose question someone answered is no
   expect(await run(t, w)).toMatchObject({ status: "empty" });
 });
 
+test("a draft whose lesson members can no longer read is withdrawn", async () => {
+  stubProvider();
+  const t = convexTest(schema, modules);
+  const w = await world(t);
+  await ask(t, w);
+  fakeModel([writeCall("c1", { text: "Price on hours saved.", source: `lesson:${String(w.pricing)}` })]);
+  await run(t, w);
+  const asOwner = t.withIdentity({ subject: "owner" });
+  const [view] = await asOwner.query(api.communityReplyDrafts.listReplyDrafts, { communityId: w.communityId });
+  expect(view).toBeTruthy();
+  // The course goes back to draft.
+  const lesson: any = await t.run((ctx: any) => ctx.db.get(w.pricing));
+  await t.run((ctx: any) => ctx.db.patch(lesson.moduleId, { status: "draft" }));
+  expect(await asOwner.query(api.communityReplyDrafts.listReplyDrafts, { communityId: w.communityId })).toEqual([]);
+  await expect(asOwner.mutation(api.communityReplyDrafts.postReplyDraft, { communityId: w.communityId, draftId: view.id as any }))
+    .rejects.toThrow("community_reply_draft_no_longer_needed");
+  expect(await t.run((ctx: any) => ctx.db.query("communityInteractionReplies").collect())).toHaveLength(0);
+});
+
+test("an older question isn't hidden by a busy day, and questions no lesson answers don't use up the day's three", async () => {
+  stubProvider();
+  const t = convexTest(schema, modules);
+  const w = await world(t);
+  await ask(t, w);
+  await t.run(async (ctx: any) => {
+    // A hundred newer posts that aren't questions.
+    for (let i = 0; i < 100; i++) {
+      await ctx.db.insert("communityInteractionRoots", { communityId: w.communityId, channelId: w.general, actorType: "human", actorUserId: w.mayaId,
+        kind: "discussion", status: "live", visibilityScope: "community", contentSummary: `Ran ${i} km today.`, replyCount: 0, reactionSummary: [],
+        idempotencyKey: `busy${i}`, createdAt: NOW - HOUR - i, updatedAt: NOW });
+    }
+    // Sixty questions today that no lesson could answer.
+    for (let i = 0; i < 60; i++) {
+      const rootId = await ctx.db.insert("communityInteractionRoots", { communityId: w.communityId, channelId: w.general, actorType: "human", actorUserId: w.mayaId,
+        kind: "discussion", status: "live", visibilityScope: "community", contentSummary: "Mic?", replyCount: 1, reactionSummary: [], idempotencyKey: `ns${i}`,
+        createdAt: NOW - 3 * DAY, updatedAt: NOW });
+      await ctx.db.insert("communityReplyDrafts", { communityId: w.communityId, rootId, channelId: w.general, status: "no_source", createdAt: NOW - HOUR, updatedAt: NOW });
+    }
+  });
+  const bodies = fakeModel([writeCall("c1", { text: "Price on hours saved.", source: `lesson:${String(w.pricing)}` })]);
+  expect(await run(t, w)).toMatchObject({ status: "drafted" });
+  expect(bodies).toHaveLength(1);
+  expect((await drafts(t)).filter((row: any) => row.status === "waiting")).toHaveLength(1);
+});
+
 test("lessons are picked by the question's words, the title counting double; the post names its lesson", () => {
   const lessons = [
     { title: "Your first workflow", text: "Pick one task and automate it." },
