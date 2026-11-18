@@ -8,7 +8,7 @@
 import { getFunctionName } from "convex/server";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
-import { action, internalQuery } from "./_generated/server";
+import { action, internalMutation, internalQuery } from "./_generated/server";
 import { settleCommunityInferenceFundingSession } from "./founderInferenceRuntime";
 import { founderProviderRequests } from "./founderInferenceUsage";
 import { executeChatToolsAgentLoop } from "./runtimeAgentLoop";
@@ -27,6 +27,43 @@ export const readForEvalInternal = internalQuery({
       questions: questions.filter((row) => row.createdAt >= args.sinceMs)
         .map((row) => ({ kind: row.kind, question: row.question, text: row.text ?? null, items: row.items ?? [] })),
     };
+  },
+});
+
+// Before a run: the community as it stands, to put back afterwards.
+export const snapshotForEvalInternal = internalQuery({
+  args: { communityId: v.id("communities") },
+  handler: async (ctx, args) => {
+    if (process.env.POLYNET_ALLOW_SEED !== "1") throw new Error("guide_eval_not_allowed_on_this_deployment");
+    const { _id, _creationTime, ...community } = (await ctx.db.get(args.communityId)) as any;
+    return community;
+  },
+});
+
+// After a run: what the guide made since it began is removed (events,
+// channels, courses and lessons), questions it left waiting are declined, and
+// the community's own settings are put back. Posts need a yes the run never
+// gives, so there are none to remove. The seed puts the rest back.
+export const cleanUpAfterEvalInternal = internalMutation({
+  args: { communityId: v.id("communities"), sinceMs: v.number(), community: v.any() },
+  handler: async (ctx, args) => {
+    if (process.env.POLYNET_ALLOW_SEED !== "1") throw new Error("guide_eval_not_allowed_on_this_deployment");
+    const removed: Record<string, number> = {};
+    const fresh = (row: any) => Number(row.createdAt ?? row._creationTime) >= args.sinceMs;
+    const events = await ctx.db.query("communityEvents").withIndex("by_community", (q) => q.eq("communityId", args.communityId)).collect();
+    const channels = await ctx.db.query("communityChannels").withIndex("by_community_slug", (q) => q.eq("communityId", args.communityId)).collect();
+    const lessons = await ctx.db.query("communityResources").withIndex("by_community", (q) => q.eq("communityId", args.communityId)).collect();
+    const courses = await ctx.db.query("communityResourceModules").withIndex("by_community", (q) => q.eq("communityId", args.communityId)).collect();
+    for (const [name, rows] of Object.entries({ events, channels: channels.filter((row: any) => !row.systemRole), lessons, courses })) {
+      for (const row of (rows as any[]).filter(fresh)) { await ctx.db.delete(row._id); removed[name] = (removed[name] ?? 0) + 1; }
+    }
+    // A staging table small enough to read whole; no index runs by community alone.
+    const waiting = (await ctx.db.query("communityGuideQuestions").collect())
+      .filter((row) => row.communityId === args.communityId && row.status === "waiting" && row.createdAt >= args.sinceMs);
+    for (const row of waiting) await ctx.db.patch(row._id, { status: "declined", answeredAt: Date.now() } as any);
+    removed.questions = waiting.length;
+    if (args.community && typeof args.community === "object") await ctx.db.replace(args.communityId, args.community);
+    return removed;
   },
 });
 
