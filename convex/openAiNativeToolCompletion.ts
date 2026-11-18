@@ -364,7 +364,9 @@ export async function runOpenAiNativeToolCompletion(params: {
     if (params.onTextDelta) requestBody.stream = true;
     if (params.modelId === "gpt-6-luna") {
       requestBody.service_tier = "default";
-      requestBody.reasoning = { effort: "low" };
+      // Medium: on low the guide skipped steps (acting on a person it had not
+      // looked up). Neil, Nov 18 2026.
+      requestBody.reasoning = { effort: "medium" };
     }
     if (normalized.instructions) requestBody.instructions = normalized.instructions;
     // Explicit breakpoints plus the implicit one at the latest message, so both
