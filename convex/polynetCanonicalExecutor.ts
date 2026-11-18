@@ -174,6 +174,7 @@ const TYPING_SET_OPERATION = "community.typing.set";
 
 // Plain words for the domain refusals a caller is most likely to meet.
 const DOMAIN_REFUSAL_MESSAGES: Record<string, string> = {
+  community_resource_changeset_operation_unsupported: "That isn't one of the changes a batch can make. Each operation's op is one of: create_module, create_page (a lesson), edit_module, edit_page, move_resource, reorder_pages, reorder_modules, delete_page, delete_category, link_source_to_page.",
   interaction_edit_forbidden: "You can only edit your own posts.",
   interaction_delete_forbidden: "You can only delete your own posts (moderators can remove others').",
   interaction_not_editable: "That post can't be edited any more.",

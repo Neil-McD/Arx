@@ -22,6 +22,7 @@
 
 import { CALL_OPERATION_VARIANTS, CALL_OPERATIONS, requestFingerprint, TOOL_OPERATIONS, type OperationEntry } from "./operationCatalog.ts";
 import type { PlatformOperationJsonSchema } from "./platformOperationContract.ts";
+import { RESOURCE_CHANGESET_OPERATION_SCHEMA } from "./polynetCanonicalToolContract.ts";
 
 export type ActionToolRole = "member" | "moderator" | "builder";
 export type ActionToolDoor = "own_ai" | "guide";
@@ -232,10 +233,19 @@ export const ACTION_TOOLS: ActionTool[] = [
     "Lift the ban on people so they can ask to join again.",
     { community: COMMUNITY, members: MEMBERS }, ["community", "members"],
     (a) => call("community.members.unban", a, { members: a.members })),
+  // The operations are spelled out here: left to "as builder/resources/
+  // describes", the guide guessed at names (create_lesson) and was refused.
   tool("polynet_change_courses", "polynet_write:builder", "Change courses and lessons",
-    "Make, edit, move and order courses and lessons, as one batch that is applied whole or not at all. A new course is a draft; publishing is done by a person in the app. Read the community's builder/resources/ first: it lists the courses and says how each operation is written.",
+    "Make, edit, move and order courses and lessons, as one batch that is applied whole or not at all. A new course is a draft; publishing is done by a person in the app. List builder/resources/ first for each course's and lesson's id and updated_at. Each operation is one of: " +
+    "create_module (a course: name, description_md, and a module_key you make up if lessons in this batch go in it); " +
+    "create_page (a lesson: title, body_md, and module_id of an existing course or module_key of one made in this batch); " +
+    "edit_page (resource_id, expected_updated_at, then what changes: title, body_md, module_id, lesson_links); " +
+    "edit_module (module_id, expected_updated_at, then name or description_md); " +
+    "move_resource (resource_id, expected_updated_at, module_id); " +
+    "reorder_pages (module_id, resource_ids: every lesson of that course in order); reorder_modules (module_ids: every course in order); " +
+    "delete_page (resource_id, expected_updated_at) and delete_category (module_id, expected_updated_at), drafts only.",
     { community: COMMUNITY, summary: { type: "string", maxLength: 1_000, description: "One line on what this batch does." },
-      operations: { type: "array", minItems: 1, maxItems: 25, description: "The changes, in order, each as builder/resources/ describes.", items: { type: "object" } } },
+      operations: { type: "array", minItems: 1, maxItems: 25, description: "The changes, in order.", items: RESOURCE_CHANGESET_OPERATION_SCHEMA } },
     ["community", "operations"],
     (a) => write(`${root(a.community)}builder/resources/`, "create", { summary: a.summary ?? "", operations: a.operations })),
 ];
