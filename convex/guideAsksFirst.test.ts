@@ -352,3 +352,41 @@ test("removing or banning a member and opening the community stay the person's, 
   }
   expect((await w.rows()).questions).toEqual([]);
 });
+
+test("a builder makes, changes and cancels an event through the guide and through their own AI, with no question; a member is not offered it", async () => {
+  const w = await world();
+  const events = async () => (await w.t.run((ctx) => ctx.db.query("communityEvents").collect()))
+    .map((row: any) => ({ id: String(row._id), title: row.title, status: row.status, location: row.locationLabel ?? null }));
+  const before = await events();
+  // Made through the guide, when told.
+  const made: any = await w.guide("owner")("polynet_call", call("community.event.create",
+    { title: "Hill repeats", starts_at: "2027-01-09T07:00:00-05:00", timezone: "America/New_York", location_type: "physical", location_label: "Reservoir gate" }, "ev-1"));
+  expect(made).toMatchObject({ ok: true, value: { result: { event: { title: "Hill repeats", status: "live", location_label: "Reservoir gate", timezone: "America/New_York" } } } });
+  expect(await w.questions("owner")).toEqual([]);
+  const eventId = made.value.result.event.parent_event_id;
+  // It is in the listing every member reads.
+  const listed: any = await w.door("member", "external_mcp")("polynet_list", { path: `${ROOT}events/` });
+  expect(JSON.stringify(listed.value)).toContain("Hill repeats");
+  // Changed through their own AI: only the field given.
+  const changed: any = await w.door("owner", "external_mcp")("polynet_call", call("community.event.update", { event: eventId, location_label: "Boathouse" }, "ev-2"));
+  expect(changed).toMatchObject({ ok: true, value: { result: { event: { title: "Hill repeats", location_label: "Boathouse" } } } });
+  // The same call again replays; it doesn't make or change anything twice.
+  await w.guide("owner")("polynet_call", call("community.event.create",
+    { title: "Hill repeats", starts_at: "2027-01-09T07:00:00-05:00", timezone: "America/New_York", location_type: "physical", location_label: "Reservoir gate" }, "ev-1"));
+  expect(await events()).toHaveLength(before.length + 1);
+  // Refused in plain words: a time that isn't one, an event that isn't here.
+  expect(await w.guide("owner")("polynet_call", call("community.event.create", { title: "Bad", starts_at: "next Saturday", timezone: "America/New_York" }, "ev-3")))
+    .toMatchObject({ ok: false, code: "invalid_tool_args", message: expect.stringContaining("ISO") });
+  expect(await w.guide("owner")("polynet_call", call("community.event.update", { event: "nope", title: "X" }, "ev-4"))).toMatchObject({ ok: false, code: "event_not_found" });
+  expect(await w.guide("owner")("polynet_call", call("community.event.create", { title: "Extra", starts_at: "2027-01-09T07:00:00-05:00", timezone: "America/New_York", status: "cancelled" }, "ev-5")))
+    .toMatchObject({ ok: false, code: "invalid_tool_args" });
+  // A member is offered none of it, through either door.
+  for (const door of [w.guide("member"), w.door("member", "external_mcp")]) {
+    expect(await door("polynet_call", call("community.event.cancel", { event: eventId }, "ev-6"))).toMatchObject({ ok: false, code: "operation_not_found" });
+  }
+  // Cancelled through the guide: it stays, marked cancelled.
+  expect(await w.guide("owner")("polynet_call", call("community.event.cancel", { event: eventId }, "ev-7")))
+    .toMatchObject({ ok: true, value: { result: { event: { status: "cancelled" } } } });
+  expect((await events()).find((row) => row.id === eventId)).toMatchObject({ title: "Hill repeats", status: "cancelled", location: "Boathouse" });
+  expect((await w.rows()).questions).toEqual([]);
+});
