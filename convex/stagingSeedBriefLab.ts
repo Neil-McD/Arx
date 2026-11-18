@@ -126,6 +126,15 @@ export const seedBriefLabInternal = internalMutation({
       } as any);
     }
 
+    // Leftover members from other tests would be this community's "newest
+    // members" forever; the seed's own members are the only ones it keeps.
+    const keep = new Set([String(community.ownerId), ...Object.values(ids).map(String)]);
+    for (const membership of await ctx.db.query("communityMemberships").withIndex("by_community_user", (q: any) => q.eq("communityId", args.communityId)).collect()) {
+      if (keep.has(String(membership.userId))) continue;
+      const other = await ctx.db.get(membership.userId) as any;
+      if (/^POL-\d+ test applicant/.test(String(other?.displayName ?? ""))) await ctx.db.delete(membership._id);
+    }
+
     const requesterId = await user("felix", "Felix Grant");
     // Someone asking to join is not a member yet: an earlier approval in a
     // test is undone here, or the request could never be answered again.
@@ -141,10 +150,14 @@ export const seedBriefLabInternal = internalMutation({
     if (request) await ctx.db.patch(request._id, { status: "pending", message: undefined, deniedAt: undefined, reapplyAt: undefined, createdAt: ago(5), updatedAt: ago(5) });
     else await ctx.db.insert("communityJoinRequests", { communityId: args.communityId, userId: requesterId, status: "pending", createdAt: ago(5), updatedAt: ago(5) });
 
+    // The coming Saturday at 12:00 UTC (early morning in New York), at least a
+    // day away, so the event's name and its day agree.
+    let saturdayRunAt = Math.floor(nowMs / (24 * HOUR_MS)) * 24 * HOUR_MS + 12 * HOUR_MS;
+    while (new Date(saturdayRunAt).getUTCDay() !== 6 || saturdayRunAt < nowMs + 24 * HOUR_MS) saturdayRunAt += 24 * HOUR_MS;
     await ctx.db.insert("communityEvents", {
       communityId: args.communityId, createdByUserId: community.ownerId, title: "Saturday Long Run: River Loop",
-      descriptionMd: `${PREFIX}14k at conversational pace, coffee after.`, startsAt: nowMs + 26 * HOUR_MS,
-      endsAt: nowMs + 28 * HOUR_MS, timezone: "America/New_York", locationType: "physical", locationLabel: "Riverside boathouse",
+      descriptionMd: `${PREFIX}14k at conversational pace, coffee after.`, startsAt: saturdayRunAt,
+      endsAt: saturdayRunAt + 2 * HOUR_MS, timezone: "America/New_York", locationType: "physical", locationLabel: "Riverside boathouse",
       visibility: "members", status: "live", recurrenceFrequency: "none", createdAt: nowMs, updatedAt: nowMs,
     } as any);
     return { members: MEMBERS.length, posts: POSTS.length };
