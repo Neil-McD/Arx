@@ -3,7 +3,8 @@
 // next event, when one is planned; the community brain (how much the guide
 // knows and the latest things it learned; a member is sent only the names
 // they may read); and who is here: how many members, who is online now, who
-// joined this week and, for a host, who is waiting to join.
+// joined this week. People waiting to join are in Home's "Needs you" list,
+// where the host answers them, not repeated here.
 import type { CloudCommunityHomeSnapshot } from "../../../../shared/cloudCommunityAdminGateway";
 import type { CommunityPresenceSummary } from "../../../../shared/communityTypes";
 import { UserAvatar } from "../../../../shared/UserAvatar";
@@ -12,7 +13,7 @@ import { PanelBrain, useBrainMap } from "./KitBrain";
 import { askToOpenBrain } from "./KitBrainPage";
 import { BriefPart, usePlaceBriefRead } from "./KitBrief";
 import { KitNextEvent, useNextEventRead } from "./KitNextEvent";
-import { PanelAction, PanelLine, PanelPart, usePanelSettled } from "./KitPanel";
+import { PanelLine, PanelPart, usePanelSettled } from "./KitPanel";
 
 function hereLine(presence: CommunityPresenceSummary | null | undefined): string {
   const faces = presence?.online_faces ?? [];
@@ -49,7 +50,6 @@ export function KitHomeRail(props: {
   const faces = props.presence?.online_faces ?? [];
   const { snapshot } = props;
   const members = snapshot.memberCount;
-  const waiting = props.audience === "host" ? snapshot.joinRequestsPending : 0;
 
   if (!settled) return null;
   return (
@@ -75,12 +75,6 @@ export function KitHomeRail(props: {
           <span className={cx("t")}>{hereLine(props.presence)}</span>
         </div>
         {snapshot.week.joined ? <PanelLine>{snapshot.week.joined} joined this week</PanelLine> : null}
-        {waiting ? (
-          <div className={cx("ln")}>
-            <i className={cx("dot amber")} /><span className={cx("t")}>{waiting} waiting to join</span>
-            <PanelAction onClick={props.onOpenMembers}>Review</PanelAction>
-          </div>
-        ) : null}
       </PanelPart>
     </>
   );
