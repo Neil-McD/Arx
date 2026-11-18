@@ -381,9 +381,22 @@ const CALL_OPERATION_INPUT_SCHEMA: PlatformOperationJsonSchema = {
       },
     },
     refs: {
-      type: "array", minItems: 1, maxItems: 50,
+      type: "array", minItems: 1, maxItems: 100,
       items: { type: "string", pattern: "^interaction:(root|reply):[A-Za-z0-9_-]+$", maxLength: 180 },
     },
+    // Events members see (owners and admins).
+    event: { type: "string", minLength: 1, maxLength: 64 },
+    title: { type: "string", minLength: 1, maxLength: 200 },
+    description_md: { type: ["string", "null"], maxLength: 10_000 },
+    starts_at: { type: "string", maxLength: 40 },
+    ends_at: { type: ["string", "null"], maxLength: 40 },
+    timezone: { type: "string", maxLength: 64 },
+    location_type: { type: "string", enum: ["online", "physical", "tbd"] },
+    location_label: { type: ["string", "null"], maxLength: 500 },
+    url: { type: ["string", "null"], maxLength: 2_000 },
+    recurrence_frequency: { type: "string", enum: ["none", "daily", "weekly", "monthly"] },
+    recurrence_interval: { type: "integer", minimum: 1, maximum: 52 },
+    recurrence_until: { type: ["string", "null"], maxLength: 40 },
     done: { type: "boolean" },
     // The community itself (owners and admins).
     name: { type: "string", minLength: 1, maxLength: 120 },

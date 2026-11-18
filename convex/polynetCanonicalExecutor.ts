@@ -100,8 +100,16 @@ const CHANNEL_RENAME_OPERATION = "community.channel.rename";
 const CHANNEL_DESCRIBE_OPERATION = "community.channel.describe";
 const CHANNEL_MOVE_OPERATION = "community.channel.move";
 const CHANNEL_OPERATIONS = [CHANNEL_CREATE_OPERATION, CHANNEL_RENAME_OPERATION, CHANNEL_DESCRIBE_OPERATION, CHANNEL_MOVE_OPERATION];
+// Events members see: made, changed and cancelled (convex/communityEvents.ts).
+const EVENT_CREATE_OPERATION = "community.event.create";
+const EVENT_UPDATE_OPERATION = "community.event.update";
+const EVENT_CANCEL_OPERATION = "community.event.cancel";
+const EVENT_OPERATIONS = [EVENT_CREATE_OPERATION, EVENT_UPDATE_OPERATION, EVENT_CANCEL_OPERATION];
+// An event made through an AI is for members; making one public is the app's.
+const EVENT_FIELDS = ["title", "description_md", "starts_at", "ends_at", "timezone", "location_type", "location_label", "url",
+  "recurrence_frequency", "recurrence_interval", "recurrence_until"];
 const COMMUNITY_OPERATIONS = [SETTINGS_UPDATE_OPERATION, JOIN_MODE_OPERATION, AGENT_INSTRUCTIONS_OPERATION,
-  HANDBOOK_DRAFT_OPERATION, HANDBOOK_APPROVE_OPERATION, ...CHANNEL_OPERATIONS];
+  HANDBOOK_DRAFT_OPERATION, HANDBOOK_APPROVE_OPERATION, ...CHANNEL_OPERATIONS, ...EVENT_OPERATIONS];
 const BUILDER_COMMUNITY_PATH = POLYNET_BUILDER_COMMUNITY_PATH;
 // People: actions on a selection of members (owners and admins).
 const MEMBERS_ROLE_OPERATION = "community.members.set_role";
@@ -896,6 +904,21 @@ function capabilityDocument(args: {
       required: ["text"], text: "what the community agent is told about this community (up to 40,000 characters); empty clears it",
       result: "result: { instructions }", effects: ["set_community_agent_instructions"],
       forbidden_effects: ["platform_rules", "agent_permissions"] }
+    : args.operation === EVENT_CREATE_OPERATION || args.operation === EVENT_UPDATE_OPERATION ? {
+      required: args.operation === EVENT_CREATE_OPERATION ? ["title", "starts_at", "timezone"] : ["event"],
+      optional: args.operation === EVENT_CREATE_OPERATION ? EVENT_FIELDS.filter(key => !["title", "starts_at", "timezone"].includes(key)) : EVENT_FIELDS,
+      ...(args.operation === EVENT_UPDATE_OPERATION ? { event: "parent_event_id from the events listing; only the fields you give are changed" } : {}),
+      title: "what the event is called", starts_at: "when it starts, as an ISO time with its offset (2026-11-21T07:00:00-05:00)",
+      ends_at: "when it ends (ISO), or null", timezone: "an IANA zone, such as America/New_York: the zone members read the time in",
+      location_type: "online, physical or tbd", location_label: "the place, in words", url: "a link to join or read more (https)",
+      description_md: "what to expect, in markdown",
+      recurrence_frequency: "none, daily, weekly or monthly", recurrence_interval: "every how many (1 by default)", recurrence_until: "the last day it repeats (ISO), or null",
+      result: "result: { event }, as the events listing shows it", effects: [args.operation === EVENT_CREATE_OPERATION ? "create_event_members_see" : "change_event"],
+      forbidden_effects: ["pod_calls", "public_events", "notify_members"] }
+    : args.operation === EVENT_CANCEL_OPERATION ? {
+      required: ["event"], event: "parent_event_id from the events listing; a repeating event is cancelled whole",
+      result: "result: { event } with status cancelled. A person can put it back in the app.", effects: ["cancel_event"],
+      forbidden_effects: ["delete_event", "pod_calls", "notify_members"] }
     : args.operation === CHANNEL_CREATE_OPERATION ? {
       required: ["name"], name: "the channel's name (up to 40 characters); its slug is made from it",
       result: "result: { channel: { slug, name, description, position } }", effects: ["create_channel_open_to_members"],
@@ -2893,6 +2916,13 @@ const COMMUNITY_REFUSALS: Record<string, [string, string]> = {
   community_channel_name_too_long: ["invalid_tool_args", "That name is too long for a channel."],
   community_channel_limit: ["channel_limit", "This community has as many channels as it can hold."],
   community_general_channel_immutable: ["general_channel_fixed", "General can't be renamed or moved."],
+  community_event_not_found: ["event_not_found", "No event with that id here. List events/ and use its parent_event_id."],
+  community_event_pod_call: ["event_is_pod_call", "That is a pod's call. It is changed in its pod, in the app."],
+  community_event_starts_at_invalid: ["invalid_tool_args", "starts_at isn't a time. Use an ISO time with its offset, such as 2026-11-21T07:00:00-05:00."],
+  community_event_ends_at_invalid: ["invalid_tool_args", "ends_at must be a time after starts_at."],
+  community_event_timezone_invalid: ["invalid_tool_args", "timezone must be an IANA zone, such as America/New_York."],
+  community_event_recurrence_until_invalid: ["invalid_tool_args", "recurrence_until must be a time on or after starts_at."],
+  community_name_required: ["invalid_tool_args", "Give it a name."],
   community_channel_order: ["channel_order_changed", "The channels changed order since you listed them. List channels/ again and retry."],
 };
 
@@ -2918,6 +2948,10 @@ async function executeCommunityOperation(args: {
         (!("visibility" in rawInput) || rawInput.visibility === "published" || rawInput.visibility === "unlisted")
     : operation === JOIN_MODE_OPERATION ? only(["mode"]) && (rawInput.mode === "open" || rawInput.mode === "approval")
     : operation === AGENT_INSTRUCTIONS_OPERATION ? only(["text"]) && text("text", 40_000)
+    : operation === EVENT_CREATE_OPERATION ? only(EVENT_FIELDS) && text("title", 200) && String(rawInput.title).trim().length > 0 &&
+      text("starts_at", 40) && text("timezone", 64)
+    : operation === EVENT_UPDATE_OPERATION ? only(["event", ...EVENT_FIELDS]) && text("event", 64) && EVENT_FIELDS.some(key => key in rawInput)
+    : operation === EVENT_CANCEL_OPERATION ? only(["event"]) && text("event", 64)
     : operation === CHANNEL_CREATE_OPERATION ? only(["name"]) && text("name", 80) && String(rawInput.name).trim().length > 0
     : operation === CHANNEL_RENAME_OPERATION ? only(["channel", "name"]) && text("channel", 64) && text("name", 80) && String(rawInput.name).trim().length > 0
     : operation === CHANNEL_DESCRIBE_OPERATION ? only(["channel", "description"]) && text("channel", 64) && text("description", 400)
@@ -2930,6 +2964,9 @@ async function executeCommunityOperation(args: {
       ? "Give expected_revision and at least one of name, slug, one_liner, about or visibility (published or unlisted)."
       : operation === JOIN_MODE_OPERATION ? "mode is open or approval."
       : operation === AGENT_INSTRUCTIONS_OPERATION ? "Give text (up to 40,000 characters)."
+      : operation === EVENT_CREATE_OPERATION ? "Give title, starts_at (an ISO time) and timezone (an IANA zone), and only the fields the capability lists."
+      : operation === EVENT_UPDATE_OPERATION ? "Give event (its parent_event_id) and at least one field to change."
+      : operation === EVENT_CANCEL_OPERATION ? "Give event (its parent_event_id)."
       : operation === CHANNEL_CREATE_OPERATION ? "Give name."
       : operation === CHANNEL_RENAME_OPERATION ? "Give channel (its slug) and name."
       : operation === CHANNEL_DESCRIBE_OPERATION ? "Give channel (its slug) and description."
