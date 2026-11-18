@@ -45,7 +45,7 @@ Addresses under `/c/<slug>` (the phone adds `/m` in front):
 
 | Address | Page |
 |---|---|
-| `/home` | Home |
+| `/home`, `/home/talk` | Home, the conversation with the guide open |
 | `/browse` | The community's list (the phone's middle tab) |
 | `/chat/<channel>`, `/chat/<channel>/<thread>` | Channel, thread open |
 | `/pods`, `/pods/<pod>` | Pods; a pod's landing page or pitch |

@@ -21,6 +21,7 @@ describe("every community address survives a refresh", () => {
     "/c/a/pods",
     "/c/a/pods/setters",
     "/c/a/home",
+    "/c/a/home/talk",
     "/c/a/browse",
     "/c/a/settings/community",
     "/c/a/analytics",
@@ -96,5 +97,23 @@ describe("a picked event is part of the Events address", () => {
     expect(eventIdFromAddressKey("e1_1794000000000")).toBe("e1:1794000000000");
     expect(eventIdFromAddressKey("e1")).toBe("e1");
     expect(eventIdFromAddressKey("../x")).toBeNull();
+  });
+});
+
+describe("the conversation with the guide is part of Home's address", () => {
+  it("reads and writes it on Home only, on the phone too", () => {
+    expect(readRouteDetailAt("/c/a/home/talk", "homeView")).toBe("talk");
+    expect(readRouteDetailAt("/m/c/a/home/talk", "homeView")).toBe("talk");
+    expect(readRouteDetailAt("/c/a/home", "homeView")).toBeNull();
+    expect(readRouteDetailAt("/c/a/home/other", "homeView")).toBeNull();
+    expect(pathWithRouteDetail("/c/a/home", "homeView", "talk")).toBe("/c/a/home/talk");
+    expect(pathWithRouteDetail("/m/c/a/home/talk", "homeView", null)).toBe("/m/c/a/home");
+    expect(pathWithRouteDetail("/c/a/events", "homeView", "talk")).toBe("/c/a/events");
+  });
+
+  it("is kept when the app rewrites Home's address, and dropped on another page", () => {
+    expect(carryRouteDetails("/c/a/home", "/c/a/home/talk")).toBe("/c/a/home/talk");
+    expect(carryRouteDetails("/m/c/a/home", "/m/c/a/home/talk")).toBe("/m/c/a/home/talk");
+    expect(carryRouteDetails("/c/a/chat", "/c/a/home/talk")).toBe("/c/a/chat");
   });
 });
