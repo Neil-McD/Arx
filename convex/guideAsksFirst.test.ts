@@ -451,3 +451,18 @@ test("the named tools a person's own AI is shown do the real thing, end to end, 
   // Nothing here was held for a yes: that is the guide's way of asking, not a person's own AI's.
   expect((await w.rows()).questions).toEqual([]);
 });
+
+test("through a person's own AI, an action's file points at its named tool, and what only a person does gives the link instead", async () => {
+  const w = await world();
+  const file = async (who: "owner", door: "external_mcp" | "community_agent_for_member", operation: string) =>
+    JSON.parse(((await w.door(who, door)("polynet_read", { path: `${ROOT}capabilities/${operation}.json` })) as any).value.body);
+  const react = await file("owner", "external_mcp", "community.interaction.react");
+  expect(react).toMatchObject({ tool: "polynet_react", call: expect.stringContaining("polynet_react") });
+  const ban = await file("owner", "external_mcp", "community.members.ban");
+  expect(ban).toMatchObject({ tool: null, done_by: expect.stringContaining("a person"), give_the_person_this_link: expect.stringContaining("/c/run-club/members") });
+  expect(ban.call).toBeUndefined();
+  const remove = await file("owner", "external_mcp", "community.interaction.remove");
+  expect(remove).toMatchObject({ tool: null, give_the_person_this_link: expect.stringContaining("/c/run-club/chat") });
+  // The guide still makes the general call, so its file is unchanged.
+  expect(await file("owner", "community_agent_for_member", "community.interaction.react")).toMatchObject({ tool: "polynet_call", call: { operation: "community.interaction.react" } });
+});

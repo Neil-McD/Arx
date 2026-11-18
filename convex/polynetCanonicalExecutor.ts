@@ -887,6 +887,27 @@ function capabilityDocument(args: {
     // Through a person's own AI this action is also its own tool.
     ...(args.principalKind === "external_mcp" && namedToolFor(args.operation) ? { named_tool: namedToolFor(args.operation) } : {}),
   };
+  // Through a person's own AI an action is its own named tool, so its file
+  // points there and not at the general call. What only a person does has no
+  // tool: its file gives the place in the app, so the AI can hand it over
+  // without asking for a refusal first.
+  if (args.principalKind === "external_mcp") {
+    const named = namedToolFor(args.operation);
+    const listed = callOperation(args.operation);
+    if (named) {
+      operationDefinition.tool = named;
+      operationDefinition.call = `Use the ${named} tool: its inputs are plain, and it needs no version, target or key.`;
+    } else if (listed?.ask === "person_only" || (listed?.ask === "every_time" && listed.effect === "destroy")) {
+      const page = args.operation === REMOVE_POSTS_OPERATION ? "chat" : "members";
+      delete operationDefinition.call;
+      operationDefinition.tool = null;
+      operationDefinition.done_by = "a person, in Polynet. There is no tool for this.";
+      const path = buildCommunityTabPath(args.target.communitySlug, page);
+      let link = path;
+      try { link = `${readCanonicalPublicAppOrigin()}${path}`; } catch { /* the path alone still says where */ }
+      operationDefinition.give_the_person_this_link = link;
+    }
+  }
   const members = `a selection of 1 to ${SELECTION_MAX} members, as user:<id> refs from members/`;
   if (isMembersCapability) {
     operationDefinition.input = args.operation === MEMBERS_ROLE_OPERATION ? {
