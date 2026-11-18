@@ -35,7 +35,7 @@ import {
 } from "../shared/communitySemanticRepository.ts";
 import { PERSONAL_MEMORY_OPERATION, PERSONAL_MEMORY_PATH } from "../shared/personalMemory.ts";
 import { lensCalls, lensReads, resolveLens, type Lens, type LensView } from "../shared/lens.ts";
-import { guideAskFor } from "../shared/operationCatalog.ts";
+import { guideAskFor, handedBackToPerson, operationFor } from "../shared/operationCatalog.ts";
 import { handbookQuestion, postQuestion, removeQuestion, roleQuestion, waitingToolAnswer } from "../shared/guideQuestions.ts";
 import {
   COMMUNITY_MEMBER_SELF_DIRECTORY,
@@ -2679,7 +2679,7 @@ async function executeCanonicalCall(args: {
     // A removed post can't be brought back. Through the guide the person was
     // shown these posts and said yes (askPersonFirst); a person's own AI is
     // handed the place in Polynet where they remove it themselves.
-    if (args.principalKind !== "community_agent_for_member" || args.personSaidYes !== true) {
+    if (handsBack(args, operation, rawInput)) {
       return personOnly({ what: refs!.length === 1 ? "Removing a post" : `Removing ${refs!.length} posts`,
         where: "open the post in its channel, then Remove in its menu", path: buildCommunityTabPath(target.communitySlug, "chat") });
     }
@@ -2790,6 +2790,13 @@ async function askPersonFirst(args: {
   return { ok: true, value: waitingToolAnswer(question) };
 }
 
+// Whether this call is handed back to the person instead of run: the one
+// list says so (shared/operationCatalog.ts, handedBackToPerson).
+function handsBack(args: { principalKind: PolynetPrincipalKind; personSaidYes?: boolean }, operation: string, rawInput: Record<string, unknown>): boolean {
+  return handedBackToPerson(operationFor({ toolName: "polynet_call", operation, input: rawInput }),
+    { guide: args.principalKind === "community_agent_for_member", personSaidYes: args.personSaidYes === true });
+}
+
 // Agents prepare; a person makes the change that can't be taken back, with
 // the app's own button (docs/specs/agent-access-v0.md). An AI that asks for
 // one of these is not refused silently and nothing is queued: it is told so
@@ -2817,6 +2824,7 @@ const PERSON_REFUSALS: Record<string, [string, string]> = {
 // item changes nothing. Removing and banning answer with where a person does
 // them (personOnly, above).
 async function executeMembersOperation(args: {
+  personSaidYes?: boolean;
   ctx: any; authSubject: string; userId: string; principalKind: PolynetPrincipalKind; input: Record<string, unknown>;
   target: ResolvedCommunityTarget; operation: string; rawInput: Record<string, unknown>; idempotencyKey: string;
 }): Promise<PolynetCanonicalExecutionResult> {
@@ -2835,16 +2843,16 @@ async function executeMembersOperation(args: {
       `Give members: 1 to ${SELECTION_MAX} different user:<id> refs, with the inputs the capability lists.`);
   }
   const scope = { userId: args.userId, communityId: target.communityId };
-  if (operation === MEMBERS_REMOVE_OPERATION || operation === MEMBERS_BAN_OPERATION) {
+  if (handsBack(args, operation, rawInput)) {
     // One person: their own record. Several: the Members page, where they are ticked together.
     const key = userIds.length === 1
       ? await args.ctx.runQuery((internal as any).communityPeople.memberRecordKeyInternal, { ...scope, targetUserId: userIds[0]! }).catch(() => null)
       : null;
     const membersPath = buildCommunityTabPath(target.communitySlug, "members");
-    const verb = operation === MEMBERS_BAN_OPERATION ? "Banning" : "Removing";
+    const [verb, button] = operation === MEMBERS_BAN_OPERATION ? ["Banning", "Ban"]
+      : operation === MEMBERS_REMOVE_OPERATION ? ["Removing", "Remove"] : ["Changing the role of", "their role"];
     return personOnly({ what: userIds.length === 1 ? `${verb} a member` : `${verb} ${userIds.length} members`,
-      where: key ? `their record: Manage, then ${operation === MEMBERS_BAN_OPERATION ? "Ban" : "Remove"}`
-        : `Members: open each person, Manage, then ${operation === MEMBERS_BAN_OPERATION ? "Ban" : "Remove"}`,
+      where: key ? `their record: Manage, then ${button}` : `Members: open each person, Manage, then ${button}`,
       path: membersPath && key ? `${membersPath}/${key}` : membersPath });
   }
   return await runSelection({ ...args, lane: "builder", items: (members as string[]).map((ref, i) => ({ ref, userId: userIds[i]! })),
@@ -2892,6 +2900,7 @@ const COMMUNITY_REFUSALS: Record<string, [string, string]> = {
 // the handbook, through Studio's own domain functions (owners and admins, with
 // owner-only fields checked there). One receipt per call.
 async function executeCommunityOperation(args: {
+  personSaidYes?: boolean;
   ctx: any; userId: string; principalKind: PolynetPrincipalKind; input: Record<string, unknown>;
   target: ResolvedCommunityTarget; operation: string; rawInput: Record<string, unknown>; idempotencyKey: string;
 }): Promise<PolynetCanonicalExecutionResult> {
@@ -2928,9 +2937,13 @@ async function executeCommunityOperation(args: {
       : `Give text (the handbook is at most ${COMMUNITY_HANDBOOK_MAX_CHARS.toLocaleString("en-US")} characters).`);
   }
   // Opening lets in everyone who is waiting, and that can't be taken back.
-  if (operation === JOIN_MODE_OPERATION && rawInput.mode === "open") {
-    return personOnly({ what: "Opening the community to everyone", where: "Members: Who can join, then Change",
-      path: buildCommunityTabPath(target.communitySlug, "members") });
+  // Publishing the handbook through the guide waits for the person's yes.
+  if (handsBack(args, operation, rawInput)) {
+    return operation === JOIN_MODE_OPERATION
+      ? personOnly({ what: "Opening the community to everyone", where: "Members: Who can join, then Change",
+        path: buildCommunityTabPath(target.communitySlug, "members") })
+      : personOnly({ what: "Publishing the handbook", where: "Settings: Guide, then the handbook",
+        path: buildCommunityTabPath(target.communitySlug, "settings", null, "agent") });
   }
   // The receipt is the community's (by id), not its address's: after a rename,
   // the same call at the new address replays the answer.

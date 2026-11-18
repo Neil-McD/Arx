@@ -46,9 +46,15 @@ community from outside the app's own screens. Each entry says:
 | **Effect** | read, write, destroy, broadcast, money |
 | **Budget** | which limit it spends |
 | **Plan** | free, or needs the paid plan |
+| **Ask** | how the person is asked before an AI does it: `none` (done when they say so), `words` (shown the words first; "always allow" offered), `every_time`, `person_only` (handed the place in the app) |
+
+Ask is read in one place for every door (`operationFor`, `guideAskFor`,
+`handedBackToPerson`): the guide's question, and what any AI is handed back.
+A person's own AI can't be asked by Polynet yet, so what is `every_time` and
+can't be taken back is handed back to them; the rest of `every_time` it does.
 
 The executor advertises and runs only what is listed, so an operation
-cannot be added without saying these four things (held by
+cannot be added without saying these five things (held by
 `scripts/operation_catalog.test.ts`). Later slices add entries; the app's
 screens and the MCP then share one definition of each thing.
 
