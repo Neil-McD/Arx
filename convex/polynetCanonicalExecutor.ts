@@ -884,8 +884,6 @@ function capabilityDocument(args: {
     call: { tool: "polynet_call", operation: args.operation, version: 1,
       target: `/communities/${args.target.communitySlug}/capabilities/${args.operation}.json`,
       input: "the fields listed under input", idempotency_key: "a new key for each action" },
-    // Through a person's own AI this action is also its own tool.
-    ...(args.principalKind === "external_mcp" && namedToolFor(args.operation) ? { named_tool: namedToolFor(args.operation) } : {}),
   };
   // Through a person's own AI an action is its own named tool, so its file
   // points there and not at the general call. What only a person does has no
