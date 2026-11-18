@@ -527,7 +527,7 @@ export function validateCommunitySemanticOperationInput(args: {
     if (!listable) {
       return semanticError(
         "invalid_selector",
-        "polynet_list path must be an exact returned directory path.",
+        "That path can not be listed. If it is one document, read it with polynet_read; polynet_list takes a folder a listing returned (a path ending in /).",
       );
     }
     const cursor = optionalSemanticCursor(args.cursor);
