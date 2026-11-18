@@ -38,6 +38,8 @@ export type WebCommunityHomeSectionProps = {
   session: unknown;
   ensureSession: (session: any) => Promise<any | null>;
   onOpenJoinRequests: () => void;
+  // The Members page itself (the people who have joined), not the requests.
+  onOpenMembers?: () => void;
   onOpenChannelByName: (channelName: string) => void;
   onOpenEvents: () => void;
   onOpenKnowledge?: () => void;
@@ -106,14 +108,15 @@ export function homeClockFor(now: Date): string {
   return now.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }).replace(/\s+/g, " ").toLowerCase();
 }
 
-type HomeTargets = Pick<WebCommunityHomeSectionProps, "onOpenJoinRequests" | "onOpenChannelByName" | "onOpenEvents" | "onOpenKnowledge">;
+type HomeTargets = Pick<WebCommunityHomeSectionProps, "onOpenJoinRequests" | "onOpenMembers" | "onOpenChannelByName" | "onOpenEvents" | "onOpenKnowledge">;
 
 function opener(target: OwnerNoticed["target"] | MemberNextStep["target"], actions: HomeTargets): () => void {
   return () => {
     if (target.kind === "channel") actions.onOpenChannelByName(target.name);
     else if (target.kind === "knowledge") actions.onOpenKnowledge?.();
     else if (target.kind === "events") actions.onOpenEvents();
-    else actions.onOpenJoinRequests();
+    // People who have joined are on the Members page; only requests are in its drawer.
+    else (actions.onOpenMembers ?? actions.onOpenJoinRequests)();
   };
 }
 
