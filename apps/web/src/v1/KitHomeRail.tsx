@@ -1,17 +1,16 @@
-// Design system v1: Home's right column (mock: "Every right panel"), in
-// this order: the guide's brief (what's happening, from recent posts); the
-// next event, when one is planned; the community brain (how much the guide
-// knows and the latest things it learned; a member is sent only the names
-// they may read); and who is here: how many members, who is online now, who
-// joined this week. People waiting to join are in Home's "Needs you" list,
-// where the host answers them, not repeated here.
+// Design system v1: Home's right column, what is glanceable, in this order:
+// the next event, when one is planned; the community brain (how much the
+// guide knows and the latest things it learned; a member is sent only the
+// names they may read); and who is here: how many members, who is online
+// now, who joined this week. The guide's brief is the first thing in Home's
+// middle column, and people waiting to join are in its list, so neither is
+// repeated here.
 import type { CloudCommunityHomeSnapshot } from "../../../../shared/cloudCommunityAdminGateway";
 import type { CommunityPresenceSummary } from "../../../../shared/communityTypes";
 import { UserAvatar } from "../../../../shared/UserAvatar";
 import { cx } from "./kit";
 import { PanelBrain, useBrainMap } from "./KitBrain";
 import { askToOpenBrain } from "./KitBrainPage";
-import { BriefPart, usePlaceBriefRead } from "./KitBrief";
 import { KitNextEvent, useNextEventRead } from "./KitNextEvent";
 import { PanelLine, PanelPart, usePanelSettled } from "./KitPanel";
 
@@ -30,23 +29,17 @@ function hereLine(presence: CommunityPresenceSummary | null | undefined): string
 export function KitHomeRail(props: {
   session: unknown;
   communityId: string;
-  audience: "host" | "member";
   snapshot: CloudCommunityHomeSnapshot;
-  // Off: no brief; the guide writes one only for paid communities.
-  agentOn?: boolean;
   presence?: CommunityPresenceSummary | null;
   now: number;
   onOpenEvents: () => void;
-  onOpenChannelByName: (name: string) => void;
-  onOpenMembers: () => void;
   onOpenKnowledge?: () => void;
 }) {
   const { map: brain, settled: brainSettled } = useBrainMap(props.session, props.communityId);
-  const { brief, settled: briefSettled } = usePlaceBriefRead(props.session, props.communityId, null, props.agentOn !== false);
   const { settled: nextSettled } = useNextEventRead(props.session, props.communityId, props.now);
   // The column draws as one piece once its parts have answered, so "Here"
-  // is never drawn at the top and then pushed down by the brief and the map.
-  const settled = usePanelSettled(briefSettled && nextSettled && brainSettled);
+  // is never drawn at the top and then pushed down by the event and the map.
+  const settled = usePanelSettled(nextSettled && brainSettled);
   const faces = props.presence?.online_faces ?? [];
   const { snapshot } = props;
   const members = snapshot.memberCount;
@@ -54,7 +47,6 @@ export function KitHomeRail(props: {
   if (!settled) return null;
   return (
     <>
-      {brief ? <BriefPart brief={brief} now={props.now} onOpenChannel={(channel) => props.onOpenChannelByName(channel.name)} /> : null}
       <KitNextEvent session={props.session} communityId={props.communityId} now={props.now} onOpenEvents={props.onOpenEvents} />
       {/* What the community knows: everyone sees how much and what is new;
           the server sends a member only the names they may read. */}

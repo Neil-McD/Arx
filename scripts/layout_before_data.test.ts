@@ -36,7 +36,7 @@ test("Home's layout is the same while the guide's thread opens (no top row movin
 
 test("Home's right column draws as one piece once its parts have answered", () => {
   const rail = read("apps/web/src/v1/KitHomeRail.tsx");
-  expect(rail).toMatch(/usePanelSettled\(briefSettled && nextSettled && brainSettled\)/);
+  expect(rail).toMatch(/usePanelSettled\(nextSettled && brainSettled\)/);
   expect(rail).toMatch(/if \(!settled\) return null;/);
 });
 

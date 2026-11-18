@@ -1414,16 +1414,6 @@ function WebCommunityAgentDock(props, ref) {
         </header>
 
         <div className="community-agent-dock-transcript" ref={scrollRef}>
-          {props.pageMode && props.home ? (
-            <WebCommunityHomeSection
-              {...props.home}
-              session={props.session}
-              ensureSession={props.ensureSession}
-              open={isOpenSurface}
-              refreshKey={homeRefreshKey}
-              asideContainer={homeRailElement}
-            />
-          ) : null}
           {!(props.pageMode && props.home) &&
           visibleMessages.length === 0 &&
           !composerIsBusy &&

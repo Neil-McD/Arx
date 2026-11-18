@@ -16,7 +16,7 @@ import {
   requireCommunityChatAccess,
 } from "./communityCore";
 import { displayName } from "./communityFounderBrief";
-import { homeMoments, homeRecent, memberNextStep, type HomePost } from "../shared/communityHomeMoments";
+import { homeMoments, homeRecent, memberNextStep, memberNextSteps, type HomePost } from "../shared/communityHomeMoments";
 
 const MINUTE_MS = 60_000;
 const DAY_MS = 86_400_000;
@@ -40,6 +40,13 @@ async function visitRow(ctx: any, communityId: any, userId: any) {
     .withIndex("by_community_user", (q: any) => q.eq("communityId", communityId).eq("userId", userId)).first();
 }
 
+// ---- Kept for web apps still open on the previous production build ----
+// Home no longer has a "since you were last here" list, so it no longer
+// records visits or reads moments (recordHomeVisit, getHomeMoments). A tab
+// opened before the release still calls both, so they stay, unchanged, for
+// one release. Delete them, the visits table and the ranking in
+// shared/communityHomeMoments.ts after the next production release.
+//
 // Opening Home: a new visit begins after half an hour away, and the one
 // before it becomes "since you were last here".
 export const recordHomeVisit = mutation({
@@ -56,6 +63,39 @@ export const recordHomeVisit = mutation({
       await ctx.db.patch(row._id, { currentVisitAt: nowMs, updatedAt: nowMs });
     }
     return null;
+  },
+});
+
+// The next event this person may see in the coming three days (their own
+// pod's call counts).
+async function nextEventFor(ctx: any, communityId: any, userId: any, nowMs: number) {
+  const event = (await visibleEvents(await ctx.db.query("communityEvents")
+    .withIndex("by_community_status_startsAt", (q: any) => q.eq("communityId", communityId).eq("status", "live").gte("startsAt", nowMs).lt("startsAt", nowMs + 3 * DAY_MS))
+    .take(10), eventViewer(ctx, communityId, userId)))[0] as any;
+  return event ? { title: String(event.title ?? "").slice(0, 120), startsAt: new Date(Number(event.startsAt)).toISOString() } : null;
+}
+
+// Home's "For you" (a member's list): everything that is for them now, most
+// useful first. No model; only what this person may already see.
+export const getMemberHomeSteps = query({
+  args: { authSubject: v.optional(v.string()), communityId: v.id("communities") },
+  handler: async (ctx, args) => {
+    const { userId } = await viewer(ctx, args.authSubject, args.communityId);
+    const nowMs = Date.now();
+    const [roots, replies, membership, general] = await Promise.all([
+      listSharedChannelReadableRows<any>({ ctx, tableName: "communityInteractionRoots", communityId: args.communityId, limit: SCAN_LIMIT }),
+      listSharedChannelReadableRows<any>({ ctx, tableName: "communityInteractionReplies", communityId: args.communityId, limit: SCAN_LIMIT }),
+      ctx.db.query("communityMemberships").withIndex("by_community_user", (q: any) => q.eq("communityId", args.communityId).eq("userId", userId)).first(),
+      ctx.db.query("communityChannels").withIndex("by_community_systemRole", (q: any) => q.eq("communityId", args.communityId).eq("systemRole", "general")).first(),
+    ]);
+    const mine = (row: any) => String(row.actorUserId ?? "") === String(userId);
+    return memberNextSteps({
+      courseInProgress: await courseInProgress(ctx, args.communityId, userId),
+      hasPosted: roots.some(mine) || replies.some(mine),
+      joinedRecently: Boolean(membership && nowMs - Number(membership.createdAt) < 14 * DAY_MS),
+      generalChannel: general?.name ? String(general.name) : null,
+      nextEvent: await nextEventFor(ctx, args.communityId, userId, nowMs),
+    });
   },
 });
 
@@ -115,11 +155,7 @@ export const getHomeMoments = query({
     const joinNames: string[] = [];
     if (audience === "host") for (const row of joinedRows.slice(0, 3)) joinNames.push(await displayName(ctx, row.userId, names));
 
-    // The next event this person may see (their own pod's call counts).
-    const event = (await visibleEvents(await ctx.db.query("communityEvents")
-      .withIndex("by_community_status_startsAt", (q: any) => q.eq("communityId", args.communityId).eq("status", "live").gte("startsAt", nowMs).lt("startsAt", nowMs + 3 * DAY_MS))
-      .take(10), eventViewer(ctx, args.communityId, userId)))[0] as any;
-    const nextEvent = event ? { title: String(event.title ?? "").slice(0, 120), startsAt: new Date(Number(event.startsAt)).toISOString() } : null;
+    const nextEvent = await nextEventFor(ctx, args.communityId, userId, nowMs);
 
     const input = { audience, since, posts, notes, joins: { count: joinedRows.length, names: joinNames }, nextEvent };
 

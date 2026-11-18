@@ -1,23 +1,34 @@
-// Home (design system v1, docs/specs/design-system-v1.md section 5): a greeting
-// in the guide's voice, the one thing worth your attention, what happened
-// across the community in the last day, and a quiet panel of where things
-// stand. The owner sees the daily brief's facts read live; a member sees only
-// what any member can already see (convex/communityFounderBrief.ts).
-import { KitHomeRail } from "../v1/KitHomeRail";
-import { dismissOwnerMoment, fetchOwnerMoment, markOwnerMomentShown } from "../../../../shared/cloudCommunityOwnerMomentsGateway";
-import type { OwnerMoment } from "../../../../shared/communityOwnerMoments";
-import { fetchCloudHomeMoments, recordCloudHomeVisit, type CloudHomeMoments } from "../../../../shared/cloudCommunityHomeMomentsGateway";
-import { formatMomentWhen, type HomeMoment, type MemberNextStep } from "../../../../shared/communityHomeMoments";
-import type { CommunityPresenceSummary } from "../../../../shared/communityTypes";
+// Home (design system v1): the guide briefs you, then the few things that
+// need you, then the box to ask it anything. One column and nothing else.
+//
+// - The brief: what's happening here, in one to three sentences the guide
+//   wrote (shared/communityBriefs.ts). Without a guide, or before it has
+//   written one, a plain sentence of facts stands in.
+// - The list (KitNeedsYou): for a host, people asking to join and what was
+//   noticed; for a member, what is for them. The three most important show
+//   and the rest stack. Only what came forward on its own is here; work done
+//   through an agent is approved where the agent is being worked with.
+// - The right column (KitHomeRail) keeps what is glanceable: the next event,
+//   what the community knows, who is here.
+//
+// A member sees only what any member can already see
+// (convex/communityFounderBrief.ts, convex/communityHomeMoments.ts).
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { ArrowRight, Sparkles } from "lucide-react";
+import { KitHomeRail } from "../v1/KitHomeRail";
+import { usePlaceBriefRead } from "../v1/KitBrief";
+import { dismissOwnerMoment, fetchOwnerNoticed } from "../../../../shared/cloudCommunityOwnerMomentsGateway";
+import type { OwnerNoticed } from "../../../../shared/communityOwnerMoments";
+import { fetchMemberHomeSteps } from "../../../../shared/cloudCommunityHomeMomentsGateway";
+import { formatMomentWhen, type MemberNextStep } from "../../../../shared/communityHomeMoments";
+import { briefAge } from "../../../../shared/communityBriefs";
+import type { CommunityPresenceSummary } from "../../../../shared/communityTypes";
 import {
   getCloudCommunityHomeSnapshot,
   type CloudCommunityHomeSnapshot,
 } from "../../../../shared/cloudCommunityAdminGateway";
-import { NeedsYou, needsYouCount, type NeedsYouJoinReview } from "../v1/KitNeedsYou";
-import { Btn, Card, Eyebrow, Hello, HomeBody, KitApp, Rail, Since, SinceItem, TextLink } from "../v1/kit";
+import { NeedsYou, homeThingsCount, type HomeThing, type NeedsYouJoinReview } from "../v1/KitNeedsYou";
+import { Eyebrow, Hello, HomeBody, KitApp, Rail, TextLink, cx } from "../v1/kit";
 
 export type WebCommunityHomeSectionProps = {
   communityId: string;
@@ -33,43 +44,31 @@ export type WebCommunityHomeSectionProps = {
   // Changes each time Home is opened, so the facts are read again.
   refreshKey?: number;
   // Home stays mounted, hidden, while you are on another page. Its facts are
-  // read, and the visit recorded, only while it is the page you are on;
-  // refreshKey changes when it opens, so they are read then.
+  // read only while it is the page you are on; refreshKey changes when it
+  // opens, so they are read then.
   open?: boolean;
   // Where the right-hand column goes on wide windows (the page's own rail).
   // The rail stays open, narrowing with the window, and hides only below 1024px.
   asideContainer?: HTMLElement | null;
   now?: Date;
-  // Design system v1, the host's Home on the kit (docs/design/hifi-mock):
-  // the dock supplies the conversation and whether it is open.
+  // The dock supplies the conversation and whether it is open.
   // `hasConversation`: the one thread has something to read, so a quiet Home
   // still offers a way back into it.
   kit?: { talking: boolean; talk: ReactNode; onTalkItOver: () => void; hasConversation?: boolean } | null;
   // Whether the community's agent is on (docs/specs/community-agent-gateway-v0.md).
-  // Off: Home is plain (no guide, no next step, no upsell).
+  // Off: no brief and nothing "for you"; a host's noticed rows say what a
+  // guide would do, and the first offers to turn it on.
   agentOn?: boolean;
-  // The owner's problem cards turn the agent on in Billing.
   onTurnOnAgent?: () => void;
   // The people waiting to join, with approve and decline, so the host decides
   // on Home. Absent, the row shows the count and links to Members.
   joinReview?: NeedsYouJoinReview | null;
-  // Who is here now (a member's "Right now" shows the faces).
+  // Who is here now.
   presence?: CommunityPresenceSummary | null;
 };
 
-type HomeCard = { label: string; title: string; detail: string; action: string; onAction: () => void };
-type HomeRow = { kind: string; title: string; detail: string; onOpen?: () => void };
-
 function plural(count: number, one: string, many: string): string {
   return `${count} ${count === 1 ? one : many}`;
-}
-
-function listNames(names: string[], total: number): string {
-  const shown = names.slice(0, 2);
-  const rest = total - shown.length;
-  if (shown.length === 0) return "";
-  if (rest <= 0) return shown.join(" and ");
-  return `${shown.join(", ")} and ${rest} more`;
 }
 
 export function greetingFor(date: Date): string {
@@ -79,42 +78,12 @@ export function greetingFor(date: Date): string {
   return "Good evening";
 }
 
-export function homeCardFor(
-  snapshot: CloudCommunityHomeSnapshot,
-  actions: Pick<WebCommunityHomeSectionProps, "onOpenJoinRequests" | "onOpenChannelByName">,
-  audience: "host" | "member" = "host",
-): HomeCard | null {
-  // Nothing "needs" a member; their Home has rows, not a card.
-  if (audience === "member") return null;
-  if (snapshot.joinRequestsPending > 0) {
-    const waiting = snapshot.joinRequestsPending;
-    return {
-      label: "Needs your decision",
-      title: `${plural(waiting, "person is", "people are")} waiting to join`,
-      detail: "Nobody joins until you or a moderator says yes.",
-      action: waiting === 1 ? "Review the request" : "Review the requests",
-      onAction: actions.onOpenJoinRequests,
-    };
-  }
-  const oldest = snapshot.unanswered[0];
-  if (oldest) {
-    const age = oldest.hoursAgo >= 48 ? plural(Math.floor(oldest.hoursAgo / 24), "day", "days") : plural(oldest.hoursAgo, "hour", "hours");
-    return {
-      label: "Waiting for an answer",
-      title: `${oldest.author}'s question has had no answer for ${age}`,
-      detail: `“${oldest.text}” in #${oldest.channel}`,
-      action: `Open #${oldest.channel}`,
-      onAction: () => actions.onOpenChannelByName(oldest.channel),
-    };
-  }
-  return null;
-}
-
+// The plain sentence under the greeting when there is no brief: who joined,
+// and for a host how many things need them.
 export function homeSentenceFor(
   snapshot: CloudCommunityHomeSnapshot,
-  card: HomeCard | null,
   audience: "host" | "member" = "host",
-  needsCount?: number,
+  needs = 0,
 ): string {
   const joined = snapshot.newMembers.count;
   const joinedPart = joined > 0 ? `${plural(joined, "person", "people")} joined since yesterday` : "";
@@ -125,8 +94,6 @@ export function homeSentenceFor(
     if (said > 0) return `${plural(said, "new message", "new messages")} since yesterday.`;
     return "It's quiet today.";
   }
-  // The host's "Needs you" list can hold more than the one card.
-  const needs = needsCount ?? (card ? 1 : 0);
   const needsPart = needs === 1 ? "1 thing needs you" : `${needs} things need you`;
   if (needs > 0 && joinedPart) return `${joinedPart}, and ${needsPart}.`;
   if (needs > 0) return `${needsPart} today.`;
@@ -134,114 +101,63 @@ export function homeSentenceFor(
   return "Nothing needs you today.";
 }
 
-export function homeRowsFor(
-  snapshot: CloudCommunityHomeSnapshot,
-  actions: Pick<WebCommunityHomeSectionProps, "onOpenEvents" | "onOpenChannelByName">,
-  audience: "host" | "member" = "host",
-): HomeRow[] {
-  const rows: HomeRow[] = [];
-  if (snapshot.newMembers.count > 0) {
-    rows.push({
-      kind: "Joined",
-      title: `${plural(snapshot.newMembers.count, "new member", "new members")}`,
-      detail: listNames(snapshot.newMembers.names, snapshot.newMembers.count),
-    });
-  }
-  // The oldest question is skipped only when it is the card (no join requests).
-  const firstQuestion = audience === "member" || snapshot.joinRequestsPending > 0 ? 0 : 1;
-  for (const question of snapshot.unanswered.slice(firstQuestion, firstQuestion + 2)) {
-    rows.push({
-      kind: audience === "member" ? "Can you help?" : "Waiting",
-      title: `${question.author} asked in #${question.channel}`,
-      detail: question.text,
-      onOpen: () => actions.onOpenChannelByName(question.channel),
-    });
-  }
-  if (snapshot.quietNewcomers.count > 0) {
-    rows.push({
-      kind: "Quiet",
-      title: `${plural(snapshot.quietNewcomers.count, "newcomer hasn't", "newcomers haven't")} said hello yet`,
-      detail: listNames(snapshot.quietNewcomers.names, snapshot.quietNewcomers.count),
-    });
-  }
-  for (const event of snapshot.upcomingEvents.slice(0, 2)) {
-    const startsAt = new Date(event.startsAt);
-    rows.push({
-      kind: "Coming up",
-      title: event.title,
-      detail: Number.isNaN(startsAt.getTime())
-        ? ""
-        : startsAt.toLocaleString(undefined, { weekday: "long", hour: "numeric", minute: "2-digit" }),
-      onOpen: actions.onOpenEvents,
-    });
-  }
-  const { posts, replies, activePeople } = snapshot.activity;
-  rows.push({
-    kind: "Activity",
-    title: posts + replies > 0
-      ? `${plural(posts, "post", "posts")} and ${plural(replies, "reply", "replies")} from ${plural(activePeople, "person", "people")}`
-      : "No new posts or replies in the last day",
-    detail: `${plural(snapshot.memberCount, "member", "members")} in all`,
-  });
-  return rows;
-}
-
-type HomeFigure = { label: string; value: string; note: string };
-
-// Where things stand, in numbers the page already has. Money joins these when
-// the payments slice lands; nothing here is estimated.
-export function homeFiguresFor(snapshot: CloudCommunityHomeSnapshot, audience: "host" | "member" = "host"): HomeFigure[] {
-  const figures: HomeFigure[] = [
-    {
-      label: "Members",
-      value: String(snapshot.memberCount),
-      note: snapshot.newMembers.count > 0 ? `${snapshot.newMembers.count} joined since yesterday` : "No one new since yesterday",
-    },
-    {
-      label: "Active today",
-      value: String(snapshot.activity.activePeople),
-      note: `${plural(snapshot.activity.posts, "post", "posts")}, ${plural(snapshot.activity.replies, "reply", "replies")}`,
-    },
-  ];
-  if (audience === "host") {
-    figures.push({
-      label: "Waiting to join",
-      value: String(snapshot.joinRequestsPending),
-      note: snapshot.joinRequestsPending === 1 ? "request" : "requests",
-    });
-    figures.push({
-      label: "Unanswered",
-      // The list is capped at 5 (it feeds the brief), so 5 means "5 or more".
-      value: snapshot.unanswered.length >= 5 ? "5+" : String(snapshot.unanswered.length),
-      note: snapshot.unanswered.length === 1 ? "question" : "questions",
-    });
-  }
-  return figures;
-}
-
 // "8:40 pm", as the mock's eyebrow has it.
 export function homeClockFor(now: Date): string {
   return now.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }).replace(/\s+/g, " ").toLowerCase();
 }
 
-export function homeEventTimeFor(startsAtIso: string, now: Date): string {
-  const startsAt = new Date(startsAtIso);
-  if (Number.isNaN(startsAt.getTime())) return "";
-  const minutes = Math.round((startsAt.getTime() - now.getTime()) / 60000);
-  if (minutes >= 0 && minutes < 60) return minutes <= 1 ? "Starting now" : `In ${minutes} minutes`;
-  if (minutes >= 60 && minutes < 6 * 60) return `In ${plural(Math.round(minutes / 60), "hour", "hours")}`;
-  return startsAt.toLocaleString(undefined, { weekday: "long", hour: "numeric", minute: "2-digit" });
+type HomeTargets = Pick<WebCommunityHomeSectionProps, "onOpenJoinRequests" | "onOpenChannelByName" | "onOpenEvents" | "onOpenKnowledge">;
+
+function opener(target: OwnerNoticed["target"] | MemberNextStep["target"], actions: HomeTargets): () => void {
+  return () => {
+    if (target.kind === "channel") actions.onOpenChannelByName(target.name);
+    else if (target.kind === "knowledge") actions.onOpenKnowledge?.();
+    else if (target.kind === "events") actions.onOpenEvents();
+    else actions.onOpenJoinRequests();
+  };
+}
+
+const NOTICED_ICON = { questions_waiting: "question", quiet_newcomers: "people", course_stall: "lesson" } as const;
+
+// A host's rows from what was noticed. Without a guide, each says what a
+// guide would do about it.
+export function hostThingsFor(noticed: OwnerNoticed[], args: { agentOn: boolean; actions: HomeTargets; onNotNow: (key: string) => void }): HomeThing[] {
+  return noticed.map((entry) => ({
+    key: entry.key,
+    icon: NOTICED_ICON[entry.key],
+    title: entry.title,
+    detail: args.agentOn ? entry.detail : `${entry.detail} With a guide, it ${entry.guide}.`,
+    action: entry.action,
+    onAction: opener(entry.target, args.actions),
+    onNotNow: () => args.onNotNow(entry.key),
+  }));
+}
+
+const STEP_ICON = { say_hello: "hello", continue_lesson: "lesson", next_event: "event" } as const;
+
+// A member's rows: the first is the one to do now.
+export function memberThingsFor(steps: MemberNextStep[], actions: HomeTargets): HomeThing[] {
+  return steps.map((step, index) => ({
+    key: step.kind,
+    icon: STEP_ICON[step.kind],
+    title: step.title,
+    detail: [step.when ? formatMomentWhen(step.when) : "", step.detail].filter(Boolean).join(". "),
+    action: step.action,
+    strong: index === 0,
+    onAction: opener(step.target, actions),
+  }));
 }
 
 export function WebCommunityHomeSection(props: WebCommunityHomeSectionProps) {
   const [snapshot, setSnapshot] = useState<CloudCommunityHomeSnapshot | null>(null);
   const [failed, setFailed] = useState(false);
-  // The owner's moment card (a detected problem), when nothing
-  // urgent holds the next-step spot.
-  const [ownerMoment, setOwnerMoment] = useState<{ moment: OwnerMoment; isNew: boolean } | null>(null);
-  // What happened since this person's last visit, and a member's next step.
-  const [homeMoments, setHomeMoments] = useState<CloudHomeMoments | null>(null);
+  // What was noticed (a host) or what is for them (a member). null: not read yet.
+  const [noticed, setNoticed] = useState<OwnerNoticed[] | null>(null);
+  const [steps, setSteps] = useState<MemberNextStep[] | null>(null);
   const loadedCommunityIdRef = useRef<string | null>(null);
+  const isHost = props.audience === "host";
+  const agentOn = props.agentOn !== false;
+  const { brief, settled: briefSettled } = usePlaceBriefRead(props.session, props.communityId, null, agentOn);
 
   useEffect(() => {
     if (props.open === false) return;
@@ -251,253 +167,103 @@ export function WebCommunityHomeSection(props: WebCommunityHomeSectionProps) {
     if (loadedCommunityIdRef.current !== props.communityId) {
       loadedCommunityIdRef.current = props.communityId;
       setSnapshot(null);
+      setNoticed(null);
+      setSteps(null);
     }
     setFailed(false);
     void (async () => {
+      const session = await props.ensureSession(props.session).catch(() => null);
+      if (!session || cancelled) { if (!cancelled) setFailed(true); return; }
+      // The list is extra: if it can't be read, Home shows without it.
+      const list = isHost
+        ? fetchOwnerNoticed({ session, communityId: props.communityId }).then((rows) => { if (!cancelled) setNoticed(rows); })
+          .catch(() => { if (!cancelled) setNoticed([]); })
+        : agentOn
+          ? fetchMemberHomeSteps({ session, communityId: props.communityId }).then((rows) => { if (!cancelled) setSteps(rows); })
+            .catch(() => { if (!cancelled) setSteps([]); })
+          : Promise.resolve().then(() => { if (!cancelled) setSteps([]); });
       try {
-        const session = await props.ensureSession(props.session);
-        const loaded = session
-          ? await getCloudCommunityHomeSnapshot({ session, communityId: props.communityId, audience: props.audience })
-          : null;
+        const loaded = await getCloudCommunityHomeSnapshot({ session, communityId: props.communityId, audience: props.audience });
         if (!cancelled) setSnapshot(loaded);
       } catch {
         if (!cancelled) setFailed(true);
       }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [props.communityId, props.refreshKey, props.audience]);
-
-  useEffect(() => {
-    if (props.open === false) return;
-    if (props.audience !== "host" || !props.kit) { setOwnerMoment(null); return; }
-    let cancelled = false;
-    void (async () => {
-      try {
-        const session = await props.ensureSession(props.session);
-        if (!session) return;
-        const picked = await fetchOwnerMoment({ session, communityId: props.communityId });
-        if (cancelled) return;
-        setOwnerMoment(picked);
-      } catch { if (!cancelled) setOwnerMoment(null); }
+      await list;
     })();
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [props.communityId, props.refreshKey, props.audience]);
+  }, [props.communityId, props.refreshKey, props.audience, agentOn]);
 
-  useEffect(() => {
-    if (props.open === false) return;
-    if (!props.kit) return;
-    let cancelled = false;
-    void (async () => {
-      try {
-        const session = await props.ensureSession(props.session);
-        if (!session) return;
-        // Record this visit first, so "since" is the visit before it.
-        await recordCloudHomeVisit({ session, communityId: props.communityId }).catch(() => undefined);
-        const loaded = await fetchCloudHomeMoments({ session, communityId: props.communityId, asMember: props.audience === "member" });
-        if (!cancelled) setHomeMoments(loaded);
-      } catch { if (!cancelled) setHomeMoments(null); }
-    })();
-    return () => { cancelled = true; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [props.communityId, props.refreshKey, props.audience]);
-
-  const openTarget = (target: HomeMoment["target"] | MemberNextStep["target"] | null) => {
-    if (!target) return undefined;
-    return () => {
-      if (target.kind === "channel") props.onOpenChannelByName(target.name);
-      else if (target.kind === "knowledge") props.onOpenKnowledge?.();
-      else if (target.kind === "events") props.onOpenEvents();
-      else if (target.kind === "members") props.onOpenJoinRequests();
-    };
-  };
-
-  const dismissMoment = async () => {
-    const current = ownerMoment;
-    setOwnerMoment(null);
-    if (!current) return;
-    try {
-      const session = await props.ensureSession(props.session);
-      if (session) await dismissOwnerMoment({ session, communityId: props.communityId, key: current.moment.key });
-    } catch { /* It shows again next time; nothing is lost. */ }
-  };
-
-  // A new owner moment counts as shown only once its card is on screen (an
-  // urgent card holds the spot first), so a hidden card never uses its week.
-  useEffect(() => {
-    if (!ownerMoment?.isNew || !snapshot || !props.kit) return;
-    const urgentNow = homeCardFor(snapshot, props, props.audience);
-    if (urgentNow && (props.agentOn !== false || urgentNow.label === "Needs your decision")) return;
-    const shown = ownerMoment;
-    setOwnerMoment({ ...shown, isNew: false });
+  const notNow = (key: string) => {
+    setNoticed((current) => (current ?? []).filter((entry) => entry.key !== key));
     void (async () => {
       const session = await props.ensureSession(props.session).catch(() => null);
-      if (session) await markOwnerMomentShown({ session, communityId: props.communityId, key: shown.moment.key }).catch(() => undefined);
+      // If it isn't saved it shows again next time; nothing is lost.
+      if (session) await dismissOwnerMoment({ session, communityId: props.communityId, key }).catch(() => undefined);
     })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ownerMoment, snapshot, props.agentOn]);
+  };
 
-  // Home is extra; if its facts can't load, the conversation below still works.
-  if (failed && !props.kit) return null;
-
+  if (!props.kit) return null;
+  const kit = props.kit;
   const now = props.now ?? new Date();
   const greeting = `${greetingFor(now)}, ${props.firstName}.`;
-  const agentOn = props.agentOn !== false;
-  // Without the agent, only the decision that needs a person stays (people
-  // waiting to join); a waiting question is the guide's to bring up.
-  const urgent = snapshot ? homeCardFor(snapshot, props, props.audience) : null;
-  const card = urgent && (agentOn || urgent.label === "Needs your decision") ? urgent : null;
-  const rows = snapshot ? homeRowsFor(snapshot, props, props.audience) : [];
-  const figures = snapshot ? homeFiguresFor(snapshot, props.audience) : [];
-  const nextEvent = snapshot?.upcomingEvents[0] ?? null;
 
-  if (props.kit) {
-    const kit = props.kit;
-    const isHost = props.audience === "host";
-    // The host's list of what came forward on its own and needs a decision:
-    // people waiting to join and (with the guide on) the oldest unanswered
-    // question. Work done through an agent is never here: it is approved
-    // where the agent is being worked with.
-    // Until the people themselves have loaded, the snapshot's count stands in
-    // and the row links to Members.
-    const joinReview = props.joinReview && props.joinReview.requests.length > 0 ? props.joinReview : null;
-    const joinCount = joinReview ? joinReview.requests.length : props.joinReview && !snapshot ? 0 : snapshot?.joinRequestsPending ?? 0;
-    const asked = isHost && agentOn && snapshot ? homeCardFor({ ...snapshot, joinRequestsPending: 0 }, props, "host") : null;
-    const needs = isHost ? needsYouCount({ joinRequests: joinCount, question: Boolean(asked) }) : 0;
-    // The right column: Today, who is online, and the community's memory.
-    const panel = snapshot ? (
-      <KitHomeRail session={props.session} communityId={props.communityId} audience={props.audience} snapshot={snapshot} agentOn={agentOn}
-        presence={props.presence} now={now.getTime()} onOpenEvents={props.onOpenEvents}
-        onOpenChannelByName={props.onOpenChannelByName} onOpenMembers={props.onOpenJoinRequests} onOpenKnowledge={props.onOpenKnowledge} />
-    ) : null;
-    const rail = panel ? (
-      <KitApp view="home" host={isHost} part="rail">
-        <Rail index={0} label="The community today">{panel}</Rail>
-      </KitApp>
-    ) : null;
-    return (
-      <>
-        <HomeBody>
-          <Eyebrow community={props.communityName} time={homeClockFor(now)} plain={!agentOn} />
-          <Hello greeting={greeting} line={snapshot ? homeSentenceFor(snapshot, card, props.audience, isHost ? needs : undefined) : failed ? "" : " "} />
-          {needs === 0 && !card && ownerMoment ? (
-            <Card label="Worth a look" title={ownerMoment.moment.title}
-              say={[ownerMoment.moment.detail, ownerMoment.moment.guide ? (agentOn ? `Your guide ${ownerMoment.moment.guide}.` : `With your community's agent, your guide ${ownerMoment.moment.guide}.`) : ""].filter(Boolean).join(" ")}>
-              {ownerMoment.moment.guide && !agentOn && props.onTurnOnAgent ? <Btn go onClick={props.onTurnOnAgent}>Turn on your community's agent</Btn> : null}
-              {ownerMoment.moment.guide && agentOn ? <Btn go onClick={kit.onTalkItOver}>Talk it over</Btn> : null}
-              <Btn txt onClick={() => void dismissMoment()}>{ownerMoment.moment.guide ? "Not now" : "Thanks"}</Btn>
-            </Card>
-          ) : null}
-          {isHost && snapshot ? (
-            <NeedsYou join={joinReview} joinCount={joinCount} onShowAllJoinRequests={props.onOpenJoinRequests}
-              question={asked ? { title: asked.title, detail: asked.detail, action: asked.action, onAction: asked.onAction } : null} />
-          ) : null}
-          {!isHost && agentOn && homeMoments?.nextStep ? (
-            <Card label="Your next step" title={homeMoments.nextStep.title} say={[homeMoments.nextStep.when ? formatMomentWhen(homeMoments.nextStep.when) : "", homeMoments.nextStep.detail].filter(Boolean).join(". ")}>
-              <Btn go onClick={openTarget(homeMoments.nextStep.target)}>{homeMoments.nextStep.action}</Btn>
-              <Btn txt onClick={kit.onTalkItOver}>Talk it over</Btn>
-            </Card>
-          ) : null}
-          {(() => {
-            // Paid: chosen for you since your last visit. Free: a plain list of what's new.
-            const list = homeMoments ? (agentOn ? homeMoments.moments : homeMoments.recent) : [];
-            if (!list.length) return null;
-            const label = agentOn ? (homeMoments?.firstVisit ? "This week" : "Since you were last here") : "Recent";
-            const hasCard = Boolean(needs > 0 || ownerMoment || (!isHost && agentOn && homeMoments?.nextStep));
-            return (
-              <Since label={label} style={hasCard ? undefined : { marginTop: 44 }}>
-                {list.map((moment, index) => (
-                  <SinceItem key={index} kind={moment.label} learned={moment.kind === "learned"} title={moment.title} detail={[moment.when ? formatMomentWhen(moment.when) : "", moment.detail].filter(Boolean).join(" · ")} onOpen={openTarget(moment.target)} still={!moment.target} />
-                ))}
-              </Since>
-            );
-          })()}
-          {agentOn && !kit.talking && kit.hasConversation && needs === 0 ? (
-            <TextLink style={{ marginTop: 20 }} onClick={kit.onTalkItOver}>Continue your conversation</TextLink>
-          ) : null}
-          {kit.talk}
-        </HomeBody>
-        {props.asideContainer && rail ? createPortal(rail, props.asideContainer) : null}
-      </>
-    );
-  }
+  // Until the people themselves have loaded, the snapshot's count stands in
+  // and the row links to Members.
+  const joinReview = isHost && props.joinReview && props.joinReview.requests.length > 0 ? props.joinReview : null;
+  const joinCount = !isHost ? 0 : joinReview ? joinReview.requests.length : snapshot?.joinRequestsPending ?? 0;
+  const things = isHost
+    ? hostThingsFor(noticed ?? [], { agentOn, actions: props, onNotNow: notNow })
+    : memberThingsFor(steps ?? [], props);
+  const needs = homeThingsCount({ joinRequests: joinCount, things: things.length });
+  // The page draws as one piece once its parts have answered, so the list is
+  // never drawn and then pushed down by the brief (docs/specs/web-architecture
+  // -end-state.md: nothing moves after it is drawn).
+  const ready = Boolean(snapshot) && briefSettled && (isHost ? noticed !== null : steps !== null);
 
-  const aside = (placement: "inline" | "rail") => snapshot ? (
-        <aside className={`community-home-aside${placement === "rail" ? " is-rail" : " is-inline"}`} aria-label="The community right now">
-          <div className="community-home-figures">
-            {figures.map((figure) => (
-              <div className="community-home-figure" key={figure.label}>
-                <span>{figure.label}</span>
-                <b>{figure.value}</b>
-                <em>{figure.note}</em>
-              </div>
-            ))}
-          </div>
-          <div className="community-home-aside-section">
-            <span className="community-home-rows-label">Coming up</span>
-            {nextEvent ? (
-              <>
-                <h3>{nextEvent.title}</h3>
-                <p>{homeEventTimeFor(nextEvent.startsAt, now)}</p>
-              </>
-            ) : (
-              <p>Nothing in the next 2 days.</p>
-            )}
-            <button type="button" className="community-home-aside-link" onClick={props.onOpenEvents}>
-              All events <ArrowRight size={14} aria-hidden="true" />
-            </button>
-          </div>
-        </aside>
+  const panel = snapshot ? (
+    <KitHomeRail session={props.session} communityId={props.communityId} snapshot={snapshot}
+      presence={props.presence} now={now.getTime()} onOpenEvents={props.onOpenEvents}
+      onOpenKnowledge={props.onOpenKnowledge} />
   ) : null;
-
+  const rail = panel ? (
+    <KitApp view="home" host={isHost} part="rail">
+      <Rail index={0} label="The community today">{panel}</Rail>
+    </KitApp>
+  ) : null;
+  const age = brief ? briefAge(brief.updated_at, now.getTime()) : "";
   return (
-    <section className="community-home" aria-label={`${props.communityName} home`}>
-      <div className="community-home-main">
-      <div className="community-home-eyebrow">
-        <Sparkles size={14} aria-hidden="true" />
-        <span>{props.communityName}, your guide</span>
-      </div>
-      <p className="community-home-hello">
-        {greeting}
-        <span>{snapshot ? homeSentenceFor(snapshot, card, props.audience) : " "}</span>
-      </p>
-      {card ? (
-        <div className="community-home-card">
-          <span className="community-home-card-label">{card.label}</span>
-          <h2>{card.title}</h2>
-          <p>{card.detail}</p>
-          <button type="button" className="community-home-card-action" onClick={card.onAction}>
-            {card.action}
-          </button>
-        </div>
-      ) : null}
-      {rows.length ? (
-        <div className="community-home-rows">
-          <span className="community-home-rows-label">Across the community</span>
-          {rows.map((row, index) => {
-            const body = (
-              <>
-                <span className="community-home-row-kind">{row.kind}</span>
-                <span className="community-home-row-text">
-                  <b>{row.title}</b>
-                  {row.detail ? <span>{row.detail}</span> : null}
-                </span>
-                {row.onOpen ? <ArrowRight size={15} aria-hidden="true" /> : <span aria-hidden="true" />}
-              </>
-            );
-            return row.onOpen ? (
-              <button type="button" className="community-home-row" key={index} onClick={row.onOpen}>{body}</button>
-            ) : (
-              <div className="community-home-row" key={index}>{body}</div>
-            );
-          })}
-        </div>
-      ) : null}
-      </div>
-      {aside("inline")}
-      {props.asideContainer ? createPortal(aside("rail"), props.asideContainer) : null}
-    </section>
+    <>
+      <HomeBody>
+        <Eyebrow community={props.communityName} time={homeClockFor(now)} plain={!agentOn} />
+        <Hello greeting={greeting} line={!ready ? (failed ? "" : " ") : brief ? "" : homeSentenceFor(snapshot!, props.audience, needs)} />
+        {ready && brief ? (
+          <div className={cx("hbrief")}>
+            <p>{brief.summary}</p>
+            {age || brief.channels.length ? (
+              <span>
+                {age ? <em>Written {age}</em> : null}
+                {brief.channels.map((channel) => (
+                  <button key={channel.slug} type="button" title={`Open #${channel.name}`} onClick={() => props.onOpenChannelByName(channel.name)}>#{channel.name}</button>
+                ))}
+              </span>
+            ) : null}
+          </div>
+        ) : null}
+        {ready && brief && isHost && needs === 0 ? <p className={cx("hnone")}>Nothing needs you today.</p> : null}
+        {ready ? (
+          <NeedsYou label={isHost ? "Needs you" : "For you"} join={joinReview} joinCount={joinCount}
+            onShowAllJoinRequests={props.onOpenJoinRequests} things={things} />
+        ) : null}
+        {ready && isHost && !agentOn && things.length > 0 && props.onTurnOnAgent ? (
+          <TextLink style={{ marginTop: 14 }} onClick={props.onTurnOnAgent}>Turn on your guide</TextLink>
+        ) : null}
+        {agentOn && !kit.talking && kit.hasConversation && needs === 0 ? (
+          <TextLink style={{ marginTop: 20 }} onClick={kit.onTalkItOver}>Continue your conversation</TextLink>
+        ) : null}
+        {kit.talk}
+      </HomeBody>
+      {props.asideContainer && rail ? createPortal(rail, props.asideContainer) : null}
+    </>
   );
 }

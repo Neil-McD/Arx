@@ -113,34 +113,44 @@ export type MemberNextStep = {
   when?: string;
 };
 
-export function memberNextStep(args: {
+// Everything that is for this member now, most useful first: say hello when
+// new, the lesson they are on, the event that is near. Home shows them as its
+// "For you" list.
+export function memberNextSteps(args: {
   courseInProgress: { course: string; lessonNumber: number; total: number; lessonTitle: string } | null;
   hasPosted: boolean;
   joinedRecently: boolean;
   generalChannel: string | null;
   nextEvent: { title: string; startsAt: string } | null;
-}): MemberNextStep | null {
+}): MemberNextStep[] {
+  const steps: MemberNextStep[] = [];
   if (args.joinedRecently && !args.hasPosted && args.generalChannel) {
-    return {
+    steps.push({
       kind: "say_hello", title: `Say hello in #${args.generalChannel}`,
       detail: "Tell people what you're working on. It's the fastest way to meet the right people here.",
       action: "Say hello", target: { kind: "channel", name: args.generalChannel },
-    };
+    });
   }
   if (args.courseInProgress) {
     const course = args.courseInProgress;
-    return {
+    steps.push({
       kind: "continue_lesson", title: `Continue ${course.course}`,
       detail: `Lesson ${course.lessonNumber} of ${course.total}: ${course.lessonTitle}.`,
       action: "Continue", target: { kind: "knowledge" },
-    };
+    });
   }
   if (args.nextEvent) {
-    return {
+    steps.push({
       kind: "next_event", title: `${args.nextEvent.title} is coming up`,
       detail: "Put it in your calendar so it doesn't slip by.", when: args.nextEvent.startsAt,
       action: "See the event", target: { kind: "events" },
-    };
+    });
   }
-  return null;
+  return steps;
+}
+
+// The first of them (the older one-card Home, still read by web apps open on
+// the previous build).
+export function memberNextStep(args: Parameters<typeof memberNextSteps>[0]): MemberNextStep | null {
+  return memberNextSteps(args)[0] ?? null;
 }
