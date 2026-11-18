@@ -16,6 +16,8 @@ import {
 import { derivePolynetHumanAuthority } from "../shared/polynetAuthority";
 import { resolveLens, TALK_LENS_ANSWERS_MAX, type TalkLens } from "../shared/lens";
 import { answerLineForGuide } from "../shared/guideQuestions";
+import { resolveCommunitySettingsRevision } from "./communityLifecycle";
+import { communityWideEvents } from "./communityEventAudience";
 
 function normalizeCommunitySystemPrompt(raw: unknown): string {
   const prompt = String(raw ?? "").trim();
@@ -93,7 +95,14 @@ async function resolveRuntimeCommunityPromptContextForUser(args: {
     .filter((row: any) => !row.dropped && (row.status === "done" || row.status === "declined" || row.status === "failed"))
     .slice(0, TALK_LENS_ANSWERS_MAX).reverse()
     .map((row: any) => answerLineForGuide({ question: row.question, status: row.status, resultLine: row.resultLine ?? null }));
-  const communityLens: TalkLens = { lens: lens.name, relation: authority.relation, ...(answers.length > 0 ? { answers } : {}) };
+  // The community stores no time zone of its own, so it is the zone its most
+  // recent event was set in (not a pod's call): the guide reads "7am Saturday"
+  // in it. None yet: no zone, and the guide works in UTC as before.
+  const recentEvents = await args.ctx.db.query("communityEvents")
+    .withIndex("by_community", (q: any) => q.eq("communityId", args.communityId)).order("desc").take(10);
+  const timeZone: string | undefined = communityWideEvents<any>(recentEvents).find((event) => validTimeZone(event.timezone))?.timezone;
+  const communityLens: TalkLens = { lens: lens.name, relation: authority.relation, ...(answers.length > 0 ? { answers } : {}),
+    ...(timeZone ? { timeZone } : {}) };
   const config = selectPrimaryCommunityAgentConfigRow(
     await listCommunityAgentConfigRows(args.ctx, args.communityId),
   );
@@ -124,8 +133,21 @@ async function resolveRuntimeCommunityPromptContextForUser(args: {
     community_channels: communityChannels,
     community_system_prompt: config?.systemPrompt ?? null,
     community_lens: communityLens,
+    // For a settings change the guide makes: the revision as it is now
+    // (convex/agentTools.ts), so the guide never has to find it.
+    community_settings_revision: resolveCommunitySettingsRevision(community),
     system_prompt: config?.systemPrompt ?? null,
   };
+}
+
+function validTimeZone(value: unknown): boolean {
+  if (typeof value !== "string" || !value.trim() || value.length > 64) return false;
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone: value }).format(0);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 // Whether this community's agent is on (docs/specs/community-agent-gateway-v0.md,

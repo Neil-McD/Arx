@@ -46,3 +46,26 @@ describe("resources architect instructions", () => {
     expect(manifest.prompts.find((prompt) => prompt.id === "resources_architect")?.authority).toBe("platform_policy");
   });
 });
+
+describe("the date line", () => {
+  const params = {
+    loopBudget: { maxToolSteps: 2, maxRepeatedIdenticalCalls: 1, maxConsecutiveFailures: 1, maxNoProgressSteps: 1 },
+    allowedToolNames: CANONICAL_TOOLS,
+    harnessName: "chat_tools" as const,
+    invocationSurface: "member_agent_dock" as const,
+    runtimeTurnContext: buildRuntimeTurnContextPacket({}),
+    currentDateTimeIso: "2026-11-18T20:00:00.000Z",
+    currentDateLabel: "Wednesday, November 18, 2026 at 3:00:00 PM EST",
+    currentTimeZone: "America/New_York",
+  };
+
+  test("in the community's zone, it says times a person gives are in that zone; only the date section changes", () => {
+    const plain = buildPlatformHarnessRuntimePromptBundle(params);
+    const zoned = buildPlatformHarnessRuntimePromptBundle({ ...params, currentTimeZoneIsCommunity: true });
+    expect(zoned.text).toContain("Current datetime: Wednesday, November 18, 2026 at 3:00:00 PM EST.");
+    expect(zoned.text).toContain("This community's time zone is America/New_York: times a person gives are in it unless they say otherwise.");
+    expect(plain.text).not.toContain("This community's time zone");
+    const others = (bundle: typeof plain) => bundle.sections.filter((section: any) => section.id !== "temporal_context").map((section: any) => section.text);
+    expect(others(zoned)).toEqual(others(plain));
+  });
+});

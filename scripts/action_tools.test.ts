@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ACTION_TOOLS, ACTION_TOOL_RETRY_WINDOW_MS, NOT_PUBLISHED, actionTool, actionToolDefinition, actionToolEntry, actionToolsFor, guideToolDefinition, translateActionTool } from "../shared/actionTools";
+import { ACTION_TOOLS, ACTION_TOOL_RETRY_WINDOW_MS, NOT_PUBLISHED, actionTool, actionToolDefinition, actionToolEntry, actionToolsFor, guideActionKey, guideToolDefinition, translateActionTool } from "../shared/actionTools";
 import { talkToolNames } from "../shared/lens";
 import { CALL_OPERATIONS, CALL_OPERATION_VARIANTS, TOOL_OPERATIONS } from "../shared/operationCatalog";
 
@@ -78,7 +78,7 @@ describe("one named tool per action", () => {
     expect(names("builder", "guide")).toEqual(ACTION_TOOLS.filter((tool) => tool.door !== "own_ai").map((tool) => tool.name));
   });
 
-  it("the guide's version of a tool has no community input, and otherwise the very inputs the MCP version has", () => {
+  it("the guide's version of a tool has no community, retry key or revision input (the server fills them), and otherwise the very inputs the MCP version has", () => {
     for (const tool of ACTION_TOOLS) {
       const mcp = actionToolDefinition(tool).inputSchema as { properties: Record<string, unknown>; required: string[] };
       const guide = guideToolDefinition(tool);
@@ -87,13 +87,21 @@ describe("one named tool per action", () => {
       expect(guide.description).toBe(tool.description);
       expect(schema.type).toBe("object");
       expect(schema.additionalProperties).toBe(false);
-      expect(Object.keys(schema.properties)).not.toContain("community");
-      expect(schema.required).not.toContain("community");
-      const { community: _community, ...rest } = mcp.properties;
+      for (const filled of ["community", "idempotency_key", "revision"]) {
+        expect(Object.keys(schema.properties)).not.toContain(filled);
+        expect(schema.required).not.toContain(filled);
+      }
+      const { community: _community, idempotency_key: _key, revision: _revision, ...rest } = mcp.properties;
       expect(schema.properties, tool.name).toEqual(rest);
-      expect(schema.required, tool.name).toEqual(mcp.required.filter((key) => key !== "community"));
+      expect(schema.required, tool.name).toEqual(mcp.required.filter((key) => !["community", "revision"].includes(key)));
+      // A person's own AI still names its action and gives the revision it read.
+      expect(Object.keys(mcp.properties)).toContain("idempotency_key");
     }
     expect(guideToolDefinition(actionTool("polynet_remember")!).inputSchema).toMatchObject({ required: ["operations"] });
+    const update = actionTool("polynet_update_community")!;
+    expect((actionToolDefinition(update).inputSchema as any).required).toEqual(["community", "revision"]);
+    expect((guideToolDefinition(update).inputSchema as any).required).toEqual([]);
+    expect(Object.keys((guideToolDefinition(update).inputSchema as any).properties)).not.toContain("revision");
   });
 
   it("labels come from the list: what asks every time is marked as needing care, so the person's own AI app asks them", () => {
@@ -174,5 +182,24 @@ describe("a named tool is the call the executor already runs", () => {
     expect(run("polynet_post", post, now + ACTION_TOOL_RETRY_WINDOW_MS).input.idempotency_key).not.toBe(first);
     expect(run("polynet_post", { ...post, text: "Hi again" }).input.idempotency_key).not.toBe(first);
     expect(run("polynet_reply", { ...post, post: "interaction:root:a1" }).input.idempotency_key).not.toBe(first);
+  });
+
+  it("in the guide's talk the key is the server's, one per tool call; a key the guide sends is ignored", () => {
+    const post = { community: "run-club", channel: "general", text: "Hi" };
+    const guide = (callId: string, args: Record<string, unknown> = post, runId = "run1") =>
+      translateActionTool(actionTool("polynet_post")!, args, now, { key: guideActionKey(runId, callId) }).input.idempotency_key;
+    expect(guide("call_a")).toBe(guide("call_a"));
+    expect(guide("call_a")).not.toBe(guide("call_b"));
+    expect(guide("call_a")).not.toBe(guide("call_a", post, "run2"));
+    expect(guide("call_a", { ...post, idempotency_key: "make-sam-moderator-20261118" })).toBe(guide("call_a"));
+    expect(String(guide("call_a", post, "r".repeat(300))).length).toBeLessThanOrEqual(200);
+  });
+
+  it("in the guide's talk a settings change carries the revision the server read, not one the guide guessed", () => {
+    const update = actionTool("polynet_update_community")!;
+    const out = translateActionTool(update, { community: "run-club", revision: 0, one_liner: "We run." }, now, { key: "k", settingsRevision: 7 });
+    expect(out.input).toMatchObject({ idempotency_key: "k", input: { expected_revision: 7, one_liner: "We run." } });
+    // A person's own AI still sends its own.
+    expect(translateActionTool(update, { community: "run-club", revision: 3, one_liner: "x" }, now).input).toMatchObject({ input: { expected_revision: 3 } });
   });
 });

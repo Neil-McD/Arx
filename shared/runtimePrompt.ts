@@ -70,6 +70,8 @@ export type RuntimeTemporalContextPromptFields = {
   currentDateTimeIso?: string | null;
   currentDateLabel?: string | null;
   currentTimeZone?: string | null;
+  // The zone is the community's: times people give are read in it.
+  currentTimeZoneIsCommunity?: boolean;
 };
 
 export type RuntimePromptSectionLayer = "stable" | "scoped" | "volatile";
@@ -128,6 +130,7 @@ export type RuntimePlatformHarnessPromptParams =
     currentDateTimeIso?: string | null;
     currentDateLabel?: string | null;
     currentTimeZone?: string | null;
+    currentTimeZoneIsCommunity?: boolean;
     invocationSurface: RuntimeInvocationSurface;
     communityAgentSurfaceContext?: CommunityAgentSurfaceContextV1 | null;
     memberIdentityContextMd?: string | null;
@@ -279,6 +282,7 @@ function buildRuntimeTemporalContextPrompt(
     "TEMPORAL_CONTEXT",
     `Current datetime: ${label ?? iso}.`,
     `Reference timezone: ${timeZone}.`,
+    ...(params.currentTimeZoneIsCommunity ? [`This community's time zone is ${timeZone}: times a person gives are in it unless they say otherwise.`] : []),
     "For latest, current, recent, today, yesterday, tomorrow, or time-sensitive requests, use this as your temporal anchor.",
     "For time-sensitive web research, prefer recently published sources, compare publish dates when available, and mention exact dates in the answer when they materially improve clarity.",
   ].join("\n");
@@ -798,6 +802,7 @@ export function buildPlatformHarnessRuntimePromptBundle(
         currentDateTimeIso: params.currentDateTimeIso,
         currentDateLabel: params.currentDateLabel,
         currentTimeZone: params.currentTimeZone,
+        currentTimeZoneIsCommunity: params.currentTimeZoneIsCommunity,
       }),
     }),
   ];

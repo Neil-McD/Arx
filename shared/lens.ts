@@ -233,6 +233,9 @@ export type TalkLens = {
   // What the person answered to the guide's questions since it last spoke
   // (convex/communityGuideQuestions.ts), one plain line each.
   answers?: string[];
+  // The community's time zone (its most recent event's), for the guide's
+  // date line: convex/communityAgent.ts. Not part of the lens's authority.
+  timeZone?: string;
 };
 
 export const TALK_LENS_ANSWERS_MAX = 5;
@@ -246,7 +249,8 @@ export function parseTalkLens(value: unknown): TalkLens | null {
   const answers = (Array.isArray(record.answers) ? record.answers : [])
     .filter((line): line is string => typeof line === "string" && line.trim().length > 0)
     .slice(0, TALK_LENS_ANSWERS_MAX).map((line) => line.trim().slice(0, 300));
-  return lens && relation ? { lens, relation, ...(answers.length > 0 ? { answers } : {}) } : null;
+  const timeZone = typeof record.timeZone === "string" && /^[A-Za-z][A-Za-z0-9_+\-/]{0,63}$/.test(record.timeZone) ? record.timeZone : null;
+  return lens && relation ? { lens, relation, ...(answers.length > 0 ? { answers } : {}), ...(timeZone ? { timeZone } : {}) } : null;
 }
 
 // What the guide is told about the lens it is working in. Orientation only:

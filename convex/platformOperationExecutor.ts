@@ -363,6 +363,7 @@ export async function executePlatformOperation(args: {
                 validated.operation === "list" && validated.limit !== null
                   ? validated.limit
                   : undefined,
+              ...(args.input.sort === "newest" ? { sort: "newest" } : null),
             },
           )
         : args.ctx.runAction(
