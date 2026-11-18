@@ -13,6 +13,7 @@ const USES_RULE = /from "\.\/communityEventAudience"/;
 // Files that touch events without showing them to anyone, each with the reason.
 const NOT_READERS: Record<string, string> = {
   "communityEventAudience.ts": "the rule itself",
+  "stagingGuideEval.ts": "staging measurement: deletes the events its own run made",
   "stagingSeedBriefLab.ts": "staging seed: deletes and recreates its own events",
   "stagingSeedSunrise.ts": "staging seed: deletes and recreates its own events",
   "stagingSeedPolynetDemo.ts": "staging seed: deletes and recreates its own events",
