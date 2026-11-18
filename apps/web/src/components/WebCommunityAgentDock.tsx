@@ -25,6 +25,7 @@ import {
   ArrowLeft,
 } from "lucide-react";
 import { isDesignV1Active } from "../../../../shared/designSystem";
+import { useRouteDetail, writeRouteDetail } from "../../../../shared/routeDetails";
 import { Chips, Dock, Icon, KitApp, Mine, Scroll, Talk, Theirs, Top, View, cx } from "../v1/kit";
 import { getAuthUrl, type AuthSession } from "../auth";
 import { CommunityComposerControls } from "./CommunityComposerControls";
@@ -754,18 +755,23 @@ function WebCommunityAgentDock(props, ref) {
   const followConversationRef = useRef(false);
   const [homeRefreshKey, setHomeRefreshKey] = useState(0);
   // Home on the kit (design v1, the host): the conversation opens when you
-  // talk, as the mock's "Talk it over" does, and Home is at rest again each
-  // time you come back to it. It is always the same one thread.
-  const [kitTalking, setKitTalking] = useState(false);
+  // talk, as the mock's "Talk it over" does. It is always the same one thread.
+  // Open is part of Home's address (/home/talk), so a refresh or a link lands
+  // in it and Back returns to the front of Home. Leaving Home drops it from
+  // the address, so Home is at rest again each time you come back to it.
+  const kitTalking = useRouteDetail("homeView") === "talk";
   useEffect(() => {
     if (!isOpenSurface) {
       followConversationRef.current = false;
-      setKitTalking(false);
       return;
     }
     setHomeRefreshKey((key) => key + 1);
   }, [isOpenSurface]);
   if (streamedText || runtimeEvents.length > 0) followConversationRef.current = true;
+  // The address says where you are: in the conversation (a tap, a refresh or
+  // a link straight to it) you read from its latest message; on the front of
+  // Home (the browser's Back included) from the top.
+  else followConversationRef.current = kitTalking;
 
   useEffect(() => {
     if (!isOpenSurface) return;
@@ -1233,13 +1239,14 @@ function WebCommunityAgentDock(props, ref) {
   // The palette's question waits for Home's own box and an idle guide.
   askReadyRef.current = Boolean(kitHome) && !(composerIsBusy || isPreparing || isStartingNewChat);
   const kitHomeIsHost = props.home?.audience === "host";
+  // Opening the conversation is a step Back returns from.
   const openTalk = () => {
     followConversationRef.current = true;
-    setKitTalking(true);
+    writeRouteDetail("homeView", "talk");
   };
   const closeTalk = () => {
     followConversationRef.current = false;
-    setKitTalking(false);
+    writeRouteDetail("homeView", null);
     scrollRef.current?.scrollTo({ top: 0 });
   };
   const kitSubmit = (event: FormEvent) => {
