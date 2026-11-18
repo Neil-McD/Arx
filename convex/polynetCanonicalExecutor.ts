@@ -1472,7 +1472,11 @@ async function executeCanonicalList(args: {
     ] } };
   }
   if (target.localPath !== "/") return { ok: true, value };
-  const rawEntries = Array.isArray(value.entries) ? value.entries : [];
+  // The root never lists a folder this lens can't open: the guide's notes are
+  // listed only where they can be read.
+  const notesPath = mountedPath(target.communitySlug, POLYNET_MEMORY_DIRECTORY_PATH);
+  const rawEntries = (Array.isArray(value.entries) ? value.entries as Array<Record<string, unknown>> : [])
+    .filter((entry) => entry.path !== notesPath || notesReadable(args, target));
   const builderEntry = reads(args, target, "builder_directory")
     ? [
         {
