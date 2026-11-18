@@ -2693,18 +2693,16 @@ function personOnly(args: { what: string; where: string; path: string | null }):
 
 // What a refused action on one person means, by the domain's code.
 const PERSON_REFUSALS: Record<string, [string, string]> = {
-  paid_member_use_studio: ["paid_member_use_studio", "They pay for their membership. Removing them cancels it, so do this in Studio."],
   community_member_not_found: ["member_not_found", "They aren't a member of this community."],
-  community_owner_required_for_admin_role: ["owner_only", "Only the owner makes, unmakes or removes admins."],
-  community_owner_required: ["owner_only", "Only the owner makes, unmakes or removes admins."],
+  community_owner_required_for_admin_role: ["owner_only", "Only the owner makes or unmakes admins."],
+  community_owner_required: ["owner_only", "Only the owner makes or unmakes admins."],
   community_owner_role_fixed: ["owner_fixed", "The owner's role can't change."],
-  community_owner_remove_forbidden: ["owner_fixed", "The owner can't be removed."],
-  community_owner_ban_forbidden: ["owner_fixed", "The owner can't be banned."],
 };
 
-// Change the role of, remove, ban or unban a selection of members (owners and
-// admins). Each person is decided on its own; every action is a state (a role,
-// gone, banned), so a retried item changes nothing.
+// Change the role of, or lift the ban on, a selection of members (owners and
+// admins). Each person is decided on its own; both are states, so a retried
+// item changes nothing. Removing and banning answer with where a person does
+// them (personOnly, above).
 async function executeMembersOperation(args: {
   ctx: any; authSubject: string; userId: string; principalKind: PolynetPrincipalKind; input: Record<string, unknown>;
   target: ResolvedCommunityTarget; operation: string; rawInput: Record<string, unknown>; idempotencyKey: string;
@@ -2738,12 +2736,8 @@ async function executeMembersOperation(args: {
   return await runSelection({ ...args, lane: "builder", items: (members as string[]).map((ref, i) => ({ ref, userId: userIds[i]! })),
     decide: async ({ ref, userId }) => {
       try {
-        const action = operation === MEMBERS_ROLE_OPERATION ? "set_role"
-          : operation === MEMBERS_REMOVE_OPERATION ? "remove" : operation === MEMBERS_BAN_OPERATION ? "ban" : "unban";
-        const details = {
-          ...(operation === MEMBERS_ROLE_OPERATION ? { role: rawInput.role } : {}),
-          ...(typeof rawInput.reason === "string" ? { reason: rawInput.reason } : {}),
-        };
+        const action = operation === MEMBERS_ROLE_OPERATION ? "set_role" : "unban";
+        const details = operation === MEMBERS_ROLE_OPERATION ? { role: rawInput.role } : {};
         // Each person has their own receipt, committed with their change.
         const value = await args.ctx.runMutation((internal as any).communityPeople.applyMemberSelectionItemInternal, {
           ...scope, authSubject: args.authSubject, targetUserId: userId, action, ...details,
