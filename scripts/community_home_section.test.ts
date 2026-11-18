@@ -147,8 +147,14 @@ test("a host's rows open the right place; without a guide each says what a guide
   expect(rows.map((row) => row.icon)).toEqual(["question", "people", "lesson"]);
   rows[0].onAction(); rows[1].onAction(); rows[2].onAction();
   expect(actions.onOpenChannelByName).toHaveBeenCalledWith("general");
+  // Without a way to the Members page, the row falls back to the requests.
   expect(actions.onOpenJoinRequests).toHaveBeenCalledOnce();
   expect(actions.onOpenKnowledge).toHaveBeenCalledOnce();
+  // "See them" opens the people who joined, not the join requests.
+  const withMembers = { ...actions, onOpenMembers: vi.fn(), onOpenJoinRequests: vi.fn() };
+  hostThingsFor(noticed, { agentOn: true, actions: withMembers, onNotNow })[1].onAction();
+  expect(withMembers.onOpenMembers).toHaveBeenCalledOnce();
+  expect(withMembers.onOpenJoinRequests).not.toHaveBeenCalled();
   rows[1].onNotNow!();
   expect(onNotNow).toHaveBeenCalledWith("quiet_newcomers");
   expect(rows[1].detail).toBe("They joined in the last two weeks.");

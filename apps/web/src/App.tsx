@@ -2563,6 +2563,10 @@ export default function App() {
                   if (members) navigateTo(`${members}/requests`);
                   else shellChromeHostProps.communityShell.onOpenMembers();
                 },
+                onOpenMembers: () => {
+                  leavePhoneHome();
+                  shellChromeHostProps.communityShell.onOpenMembers();
+                },
                 onOpenChannelByName: (channelName: string) => {
                   const channel = activeCommunityChannels.find((candidate) => candidate.name === channelName);
                   if (!channel) return;
