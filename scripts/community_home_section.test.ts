@@ -198,3 +198,13 @@ test("the host's sentence counts everything in the Needs you list", async () => 
   expect(joinRowNames(["Lena", null], 2)).toBe("Lena and Someone.");
   expect(joinRowNames([], 2)).toBe("Nobody joins until you say yes.");
 });
+
+test("the Members page says who can join and what changing it does, in plain words", async () => {
+  const { whoCanJoinLine, whoCanJoinAsk } = await import("../apps/web/src/v1/KitMembersTable");
+  expect(whoCanJoinLine("approval")).toBe("People ask to join, and you say yes or no.");
+  expect(whoCanJoinLine("open")).toBe("Anyone can join.");
+  expect(whoCanJoinAsk("open", 0)).toBe("Let anyone join? If you switch back later, people who joined stay members.");
+  expect(whoCanJoinAsk("open", 1)).toBe("Let anyone join? The 1 person waiting is let in now. If you switch back later, people who joined stay members.");
+  expect(whoCanJoinAsk("open", 4)).toContain("The 4 people waiting are let in now.");
+  expect(whoCanJoinAsk("approval", 3)).toBe("Ask people to join first? New people then wait for your yes.");
+});

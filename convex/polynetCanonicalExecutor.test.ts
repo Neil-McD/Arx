@@ -2812,7 +2812,7 @@ test("owners and admins run the community itself through their own AI; owner-onl
   const opening = await adminAi.call("community.join_mode.set", { mode: "open" }, "j-open");
   expect(opening, JSON.stringify(opening)).toMatchObject({ ok: false, code: "person_only" });
   expect((opening as any).message).toContain("Opening the community to everyone is done by a person in Polynet");
-  expect((opening as any).message).toContain("/c/");
+  expect((opening as any).message).toContain("(Members: Who can join, then Change)");
   expect(await t.run(async ctx => (await ctx.db.get(f.communityId) as any).entryPolicy)).toBe("approval");
   expect(await owner.call("community.agent.instructions.set", { text: "Keep answers short. Point new runners to the Tuesday easy run." }, "i1"))
     .toMatchObject({ ok: true, value: { result: { instructions: "Keep answers short. Point new runners to the Tuesday easy run." } } });
@@ -2924,17 +2924,17 @@ test("people: an owner's or admin's AI re-roles and unbans; removing and banning
   const active = (id: any) => t.run(async ctx => (await ctx.db.query("communityMemberships").collect()).some(m => String(m.userId) === String(id) && m.state === "active"));
   const one = await adminAi.call("community.members.remove", { members: [ref(extra.quiet.userId)] }, "rm1");
   expect(one, JSON.stringify(one)).toMatchObject({ ok: false, code: "person_only" });
-  expect((one as any).message).toBe(`Removing a member is done by a person in Polynet, not by an AI. Nothing was changed. Give the person this link: https://polynet.test/c/canonical-community/members/${extra.quiet.membershipId} (their record, then Remove).`);
+  expect((one as any).message).toBe(`Removing a member is done by a person in Polynet, not by an AI. Nothing was changed. Give the person this link: https://polynet.test/c/canonical-community/members/${extra.quiet.membershipId} (their record: Manage, then Remove).`);
   const several = await adminAi.call("community.members.remove", { members: [ref(extra.payer.userId), ref(extra.quiet.userId)] }, "rm2");
   expect((several as any).message).toContain("Removing 2 members is done by a person");
-  expect((several as any).message).toContain("https://polynet.test/c/canonical-community/members (Members: tick them, then Remove)");
+  expect((several as any).message).toContain("https://polynet.test/c/canonical-community/members (Members: open each person, Manage, then Remove)");
   const banned = await owner.call("community.members.ban", { members: [ref(f.memberId)], reason: "Spam" }, "b1");
   expect(banned, JSON.stringify(banned)).toMatchObject({ ok: false, code: "person_only" });
   expect((banned as any).message).toContain("Banning a member is done by a person");
-  expect((banned as any).message).toContain("(their record, then Ban)");
+  expect((banned as any).message).toContain("(their record: Manage, then Ban)");
   // Someone who isn't a member has no record to point at: the Members page.
   expect(((await owner.call("community.members.ban", { members: [ref(extra.outsider)] }, "b2")) as any).message)
-    .toContain("https://polynet.test/c/canonical-community/members (Members: tick them, then Ban)");
+    .toContain("https://polynet.test/c/canonical-community/members (Members: open each person, Manage, then Ban)");
   for (const id of [extra.quiet.userId, extra.payer.userId, f.memberId]) expect(await active(id)).toBe(true);
   expect(await t.run(async ctx => (await ctx.db.query("communityBlocks" as any).collect()).length)).toBe(0);
   // A moderator's AI can't ask at all.

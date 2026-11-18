@@ -1069,6 +1069,10 @@
    people waiting to join in a drawer. */
 .app .mwait{display:flex;align-items:center;gap:10px;width:100%;margin-top:16px;padding:10px 14px;border-radius:10px;border:1px solid var(--line2);background:var(--s1);font-size:14px;color:var(--ink);text-align:left;cursor:pointer}
 .app .mwait:hover{border-color:rgba(var(--w),.2)}
+.app .mjoin{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:14px;font-size:13.5px;color:var(--ink2)}
+.app .mjoin span{flex:1;min-width:220px}
+.app .mjoin b{font-weight:550;color:var(--ink);margin-right:8px}
+.app .mjoin i{font-style:normal;color:var(--bad)}
 .app .mwait span{flex:1;min-width:0}
 .app .mwait em{font-style:normal;font-size:13px;color:var(--aurora-ink)}
 .app .mbar{display:flex;align-items:center;gap:8px;margin-top:18px}

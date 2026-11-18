@@ -2731,8 +2731,8 @@ async function executeMembersOperation(args: {
     const membersPath = buildCommunityTabPath(target.communitySlug, "members");
     const verb = operation === MEMBERS_BAN_OPERATION ? "Banning" : "Removing";
     return personOnly({ what: userIds.length === 1 ? `${verb} a member` : `${verb} ${userIds.length} members`,
-      where: key ? `their record, then ${operation === MEMBERS_BAN_OPERATION ? "Ban" : "Remove"}`
-        : `Members: tick them, then ${operation === MEMBERS_BAN_OPERATION ? "Ban" : "Remove"}`,
+      where: key ? `their record: Manage, then ${operation === MEMBERS_BAN_OPERATION ? "Ban" : "Remove"}`
+        : `Members: open each person, Manage, then ${operation === MEMBERS_BAN_OPERATION ? "Ban" : "Remove"}`,
       path: membersPath && key ? `${membersPath}/${key}` : membersPath });
   }
   return await runSelection({ ...args, lane: "builder", items: (members as string[]).map((ref, i) => ({ ref, userId: userIds[i]! })),
@@ -2820,7 +2820,7 @@ async function executeCommunityOperation(args: {
   }
   // Opening lets in everyone who is waiting, and that can't be taken back.
   if (operation === JOIN_MODE_OPERATION && rawInput.mode === "open") {
-    return personOnly({ what: "Opening the community to everyone", where: "Members, then who can join",
+    return personOnly({ what: "Opening the community to everyone", where: "Members: Who can join, then Change",
       path: buildCommunityTabPath(target.communitySlug, "members") });
   }
   // The receipt is the community's (by id), not its address's: after a rename,

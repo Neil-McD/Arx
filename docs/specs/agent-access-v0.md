@@ -167,7 +167,7 @@ does it. So a planted post can never talk an AI into it.
 | Asked for | What the AI gets |
 |---|---|
 | Remove a member, ban a member | The member's record (several: the Members page) |
-| Open a closed community | The Members page, where "who can join" is |
+| Open a closed community | The Members page, where "Who can join" is (added with this rule: the current design had no place for a host to change it) |
 | Remove a post | The community's channels; the AI names the channel and post |
 | Delete a channel, change who may see one, pin a post | Not offered |
 | Publish or unpublish a course, delete what members see | Refused with where the switch is (above) |
