@@ -111,6 +111,7 @@ import type * as communityPublic from "../communityPublic.js";
 import type * as communityPublicPage from "../communityPublicPage.js";
 import type * as communityReadCursorCore from "../communityReadCursorCore.js";
 import type * as communityRecipientCore from "../communityRecipientCore.js";
+import type * as communityReplyDrafts from "../communityReplyDrafts.js";
 import type * as communityRepositorySearch from "../communityRepositorySearch.js";
 import type * as communityResourceChangesets from "../communityResourceChangesets.js";
 import type * as communityResourceConstants from "../communityResourceConstants.js";
@@ -342,6 +343,7 @@ declare const fullApi: ApiFromModules<{
   communityPublicPage: typeof communityPublicPage;
   communityReadCursorCore: typeof communityReadCursorCore;
   communityRecipientCore: typeof communityRecipientCore;
+  communityReplyDrafts: typeof communityReplyDrafts;
   communityRepositorySearch: typeof communityRepositorySearch;
   communityResourceChangesets: typeof communityResourceChangesets;
   communityResourceConstants: typeof communityResourceConstants;

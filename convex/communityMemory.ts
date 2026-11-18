@@ -139,7 +139,7 @@ export const openMemoryReviewRunInternal = internalMutation({
     // A pod's review: its room. Missing: the community's.
     podRoomId: v.optional(v.string()),
     // The review (by default), or a place's brief.
-    kind: v.optional(v.union(v.literal("memory_review"), v.literal("brief"))) },
+    kind: v.optional(v.union(v.literal("memory_review"), v.literal("brief"), v.literal("reply_draft"))) },
   handler: async (ctx, args) => {
     const scope = await scopeFor(ctx, args.communityId, args.podRoomId);
     if (!scope) throw new Error("community_pod_not_found");
@@ -713,7 +713,9 @@ export async function scheduleAgentWork(ctx: any, workId: any, atMs: number) {
   const work = await ctx.db.get(workId);
   const job = work?.kind === "brief"
     ? (internal as any).communityBriefs.runCommunityBriefInternal
-    : (internal as any).communityMemoryReview.runMemoryReviewInternal;
+    : work?.kind === "reply_draft"
+      ? (internal as any).communityReplyDrafts.runReplyDraftInternal
+      : (internal as any).communityMemoryReview.runMemoryReviewInternal;
   await ctx.scheduler.runAt(atMs, job, { workId });
 }
 

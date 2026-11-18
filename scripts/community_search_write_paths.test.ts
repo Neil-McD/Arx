@@ -18,6 +18,7 @@ const NOT_POST_WRITES: Record<string, string> = {
   "communityMemberWorkflows.ts": "patches workflow runs' status, not posts",
   "communityPods.ts": "patches pod join requests' status, not posts; reads posts only for last activity",
   "communityMemory.ts": "patches the guide's review runs' status, not posts; reads posts only to check a note's evidence",
+  "communityReplyDrafts.ts": "patches its own draft rows' status, not posts; a posted draft goes into the thread through communityInteractions, which keeps search in step",
 };
 
 function sources(): string[] {

@@ -13,6 +13,7 @@ import { internalMutation, internalQuery } from "./_generated/server";
 import { communityIsActive } from "../shared/communityLifecycle";
 import { nextMemoryReviewAtMs } from "../shared/communityMemory";
 import { nextBriefAtMs } from "../shared/communityBriefs";
+import { REPLY_DRAFT_WAIT_MS } from "../shared/communityReplyDrafts";
 import { communityScopeKey, dueWork, parseScopeKey, type AgentWorkKind, type ScopeKey } from "./communityNotesStore";
 import { communityTimeZone, guideSeatedInPod, scheduleAgentWork } from "./communityMemory";
 import { runFundedCommunityAgent, type CommunityAgentRunEvent } from "./communityAgentRun";
@@ -83,11 +84,21 @@ export const completeAgentWorkInternal = internalMutation({
     // Posts past windowEnd were left for the next review (a busy window).
     backlog: v.optional(v.boolean()),
     errorCode: v.optional(v.string()),
+    // The kind knows when it next has something to look at (a question
+    // reaching a day old): due then, whatever else arrived meanwhile.
+    nextDueAt: v.optional(v.number()),
     nowMs: v.number(),
   },
   handler: async (ctx, args) => {
     const work = await ctx.db.get(args.workId);
     if (!work) return null;
+    if (args.outcome === "reviewed" && args.nextDueAt && !args.backlog) {
+      const dueAt = Math.max(args.nextDueAt, args.nowMs + 60_000);
+      await ctx.db.patch(work._id, { reviewedThrough: args.windowEnd, pending: Math.max(1, work.pending - args.claimedPending), dueAt,
+        leaseUntil: undefined, failures: 0, lastErrorCode: undefined, updatedAt: args.nowMs });
+      await scheduleAgentWork(ctx, work._id, dueAt);
+      return { dueAt };
+    }
     if (args.outcome === "reviewed") {
       // Posts written while the review ran, or left over from a busy window,
       // wait for the next one: a backlog soon, new posts at the quiet hour.
@@ -96,6 +107,8 @@ export const completeAgentWorkInternal = internalMutation({
       const dueAt = args.backlog ? args.nowMs + BACKLOG_NEXT_MS
         : pending <= 0 ? undefined
           : work.kind === "brief" ? nextBriefAtMs(args.nowMs, args.nowMs)
+            // Posts written while a draft was made: look again when they are a day old.
+            : work.kind === "reply_draft" ? args.nowMs + REPLY_DRAFT_WAIT_MS
             : nextMemoryReviewAtMs(args.nowMs, await communityTimeZone(ctx, work.communityId));
       await ctx.db.patch(work._id, { reviewedThrough: args.windowEnd, pending, dueAt, leaseUntil: undefined, failures: 0, lastErrorCode: undefined, updatedAt: args.nowMs });
       if (dueAt) await scheduleAgentWork(ctx, work._id, dueAt);
@@ -158,6 +171,8 @@ export type AgentWorkJob = {
   // The work read up to here; with backlog, the rest is due again soon.
   readThrough?: number;
   backlog?: boolean;
+  // When this kind next has something to look at, if it knows.
+  nextDueAt?: number;
   write: (rawArguments: Record<string, unknown>) => Promise<AgentWorkWrite>;
 };
 
@@ -187,10 +202,12 @@ export async function runAgentWork(ctx: any, def: {
   if ("skipped" in claim) return { status: "skipped" };
   let readThrough = claim.windowEnd;
   let backlog = false;
+  let nextDueAt: number | undefined;
   const complete = (outcome: "reviewed" | "failed" | "skipped", errorCode?: string) =>
     ctx.runMutation(internalRefs.agentWork.completeAgentWorkInternal, {
       workId: def.workId, outcome, windowEnd: readThrough, claimedPending: claim.claimedPending, nowMs: Date.now(),
       ...(backlog ? { backlog: true } : {}),
+      ...(nextDueAt ? { nextDueAt } : {}),
       ...(errorCode ? { errorCode } : {}),
     });
   const admission = await ctx.runQuery(internalRefs.agentWork.readAgentWorkAdmissionInternal, { communityId: claim.communityId });
@@ -210,6 +227,7 @@ export async function runAgentWork(ctx: any, def: {
   // A busy window is read in parts: through the last post shown; the rest waits.
   if (job.readThrough !== undefined) readThrough = job.readThrough;
   backlog = job.backlog === true;
+  nextDueAt = job.nextDueAt;
   if (job.empty) {
     await finish({});
     await complete("reviewed");
