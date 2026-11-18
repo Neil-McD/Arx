@@ -2859,6 +2859,9 @@ test("owners and admins run the community itself through their own AI; owner-onl
 
   // How people join, the agent's instructions and the handbook.
   expect(await adminAi.call("community.join_mode.set", { mode: "approval" }, "j1")).toMatchObject({ ok: true, value: { result: { entry_policy: "approval" } } });
+  // Asked again when it already needs approval: nothing changes, and it says so with where opening is done.
+  expect(await adminAi.call("community.join_mode.set", { mode: "approval" }, "j2")).toMatchObject({ ok: false, code: "nothing_to_change",
+    message: expect.stringContaining("Joining already needs approval, so nothing changed.") });
   // Opening lets in everyone who is waiting and can't be taken back: a person does it.
   const opening = await adminAi.call("community.join_mode.set", { mode: "open" }, "j-open");
   expect(opening, JSON.stringify(opening)).toMatchObject({ ok: false, code: "person_only" });
