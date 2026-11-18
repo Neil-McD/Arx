@@ -18,22 +18,17 @@ async function membershipOf(ctx: any, communityId: any, userId: any) {
   return rows.find((row: any) => communityMembershipRowIsActive(row)) ?? rows.sort((a: any, b: any) => b.updatedAt - a.updatedAt)[0] ?? null;
 }
 
-async function isPaying(ctx: any, membershipId: any) {
-  const rows = await ctx.db.query("communitySubscriptions")
-    .withIndex("by_membership", (q: any) => q.eq("membershipId", membershipId)).collect();
-  return rows.some((row: any) => String(row.providerSubscriptionId ?? "").trim() && !row.endedAt &&
-    ["active", "past_due", "cancel_at_period_end"].includes(row.status));
-}
-
 export const applyPersonActionForTrustedUserInternal = internalMutation({
   args: {
     userId: v.id("users"),
     authSubject: v.string(),
     communityId: v.id("communities"),
     targetUserId: v.id("users"),
-    action: v.union(v.literal("set_role"), v.literal("remove"), v.literal("ban"), v.literal("unban")),
+    // Changing a role and lifting a ban take nothing from anyone, so an AI may
+    // do them. Removing and banning are a person's click in the app
+    // (docs/specs/agent-access-v0.md) and are not here.
+    action: v.union(v.literal("set_role"), v.literal("unban")),
     role: v.optional(v.union(v.literal("admin"), v.literal("moderator"), v.literal("member"))),
-    reason: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     await requireCommunityManager({ ctx, communityId: args.communityId, userId: args.userId });
@@ -43,29 +38,10 @@ export const applyPersonActionForTrustedUserInternal = internalMutation({
       return { unbanned: true };
     }
     const membership = await membershipOf(ctx, args.communityId, args.targetUserId);
-    if (args.action === "set_role") {
-      if (!membership || !communityMembershipRowIsActive(membership)) throw new Error("community_member_not_found");
-      await ctx.runMutation(refs.api.communityAdmin.setCommunityMemberRole, {
-        ...actor, targetMembershipId: membership._id, role: args.role ?? "member" });
-      return { role: args.role ?? "member" };
-    }
-    // Remove or ban someone who is or was a member. Someone already gone is
-    // still gone; a ban still bans them.
-    if (!membership) throw new Error("community_member_not_found");
-    if (communityMembershipRowIsActive(membership)) {
-      if (await isPaying(ctx, membership._id)) throw new Error("paid_member_use_studio");
-      await ctx.runMutation(refs.internal.communityAdmin.revokeCommunityMemberInternal, {
-        ...actor, targetMembershipId: membership._id, revokedReason: args.action === "ban" ? "banned_by_manager" : "removed_by_manager",
-      });
-    } else if (args.action === "remove") {
-      return { removed: true, already_gone: true };
-    }
-    if (args.action === "ban") {
-      await ctx.runMutation(refs.internal.communityAdmin.blockCommunityUserInternal, {
-        ...actor, targetUserId: args.targetUserId, ...(args.reason ? { reason: args.reason } : {}) });
-      return { banned: true };
-    }
-    return { removed: true };
+    if (!membership || !communityMembershipRowIsActive(membership)) throw new Error("community_member_not_found");
+    await ctx.runMutation(refs.api.communityAdmin.setCommunityMemberRole, {
+      ...actor, targetMembershipId: membership._id, role: args.role ?? "member" });
+    return { role: args.role ?? "member" };
   },
 });
 
@@ -88,7 +64,7 @@ export const memberRecordKeyInternal = internalQuery({
 // One person in a selection, with their own receipt, all in one transaction:
 // the receipt is reserved, the change made and the receipt completed together,
 // so a retried selection replays what was done for them instead of doing it
-// again (someone removed and since rejoined isn't removed twice).
+// again.
 export const applyMemberSelectionItemInternal = internalMutation({
   args: {
     userId: v.id("users"),
@@ -97,9 +73,8 @@ export const applyMemberSelectionItemInternal = internalMutation({
     itemKey: v.string(),
     requestFingerprint: v.string(),
     targetUserId: v.id("users"),
-    action: v.union(v.literal("set_role"), v.literal("remove"), v.literal("ban"), v.literal("unban")),
+    action: v.union(v.literal("set_role"), v.literal("unban")),
     role: v.optional(v.union(v.literal("admin"), v.literal("moderator"), v.literal("member"))),
-    reason: v.optional(v.string()),
   },
   handler: async (ctx, args): Promise<Record<string, unknown>> => {
     const receipt = { communityId: args.communityId, userId: args.userId, principalKind: "external_mcp", toolName: "polynet_call",
@@ -110,7 +85,7 @@ export const applyMemberSelectionItemInternal = internalMutation({
     const scope = { userId: args.userId, communityId: args.communityId };
     const result: Record<string, unknown> = await ctx.runMutation(refs.internal.communityPeople.applyPersonActionForTrustedUserInternal, {
         ...scope, authSubject: args.authSubject, targetUserId: args.targetUserId, action: args.action,
-        ...(args.role ? { role: args.role } : {}), ...(args.reason ? { reason: args.reason } : {}) });
+        ...(args.role ? { role: args.role } : {}) });
     await ctx.runMutation(refs.internal.polynetCanonicalReceipts.completeCanonicalOperationReceiptInternal,
       { ...receipt, attemptToken: reservation.attemptToken, result });
     return result;
