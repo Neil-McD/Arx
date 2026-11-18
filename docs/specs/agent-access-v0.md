@@ -157,7 +157,10 @@ changes.
   action, and no label could be true.
 - **The guide gets the same tools** (`shared/lens.ts`, `talkToolNames`): in
   a private talk it is given reading, the web, and the named tools for what
-  this person may do in this community. The community is filled in for it.
+  this person may do in this community. The community is filled in for it,
+  and so are the key that stops a repeat (one per tool call in the run, so a
+  key it made up can never collide with an earlier action) and the settings
+  revision for a settings change (read just before the change).
   So the two doors do the same things by construction, with three marked
   differences (`door` on the tool): a person's direct messages are their own
   AI's only; remembering about a member, and removing posts after their yes,

@@ -92,6 +92,9 @@ test("a private talk is told its lens; moderation only with the permission, sett
   const parsed = parseTalkLens({ lens: "member_private", relation: "member", answers: [" said yes ", "", 3, ...Array(10).fill("x")] })!;
   expect(parsed.answers?.[0]).toBe("said yes");
   expect(parsed.answers).toHaveLength(5);
+  // The community's time zone rides along when it is a zone name; anything else is dropped.
+  expect(parseTalkLens({ lens: "member_private", relation: "member", timeZone: "America/New_York" })?.timeZone).toBe("America/New_York");
+  expect(parseTalkLens({ lens: "member_private", relation: "member", timeZone: "<b>now</b>" })).not.toHaveProperty("timeZone");
   const moderator = renderTalkLensForPrompt({ lens: "member_private", relation: "moderator" })!;
   expect(moderator).toContain("Lens: member_private");
   expect(moderator).toContain("the community's moderator");

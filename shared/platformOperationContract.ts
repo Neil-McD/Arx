@@ -118,6 +118,11 @@ const COMMUNITY_SEMANTIC_LIST_NATIVE_INPUT_SCHEMA: PlatformOperationJsonSchema =
       minimum: 2,
       maximum: 50,
     },
+    sort: {
+      type: "string",
+      enum: ["newest"],
+      description: "On members/, newest puts whoever joined most recently first.",
+    },
   },
 };
 
@@ -192,6 +197,10 @@ const COMMUNITY_SEMANTIC_LIST_OUTPUT_SCHEMA: PlatformOperationJsonSchema = {
           },
           online: {
             type: "boolean",
+          },
+          joined_at: {
+            type: ["string", "null"],
+            maxLength: 40,
           },
         },
       },

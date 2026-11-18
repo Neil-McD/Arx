@@ -2,6 +2,8 @@ import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import { internalMutation, internalQuery } from "./_generated/server";
 import { buildCommunitySearchText } from "../shared/communitySearchText";
+import { communityMembershipRowIsActive, requireCommunityChatAccess } from "./communityCore";
+import { getUniqueUserProfileDetailByUserId } from "./profileCore";
 
 // Search rows for posts and replies (schema: communitySearchDocs). One row per
 // live, community-visible post or reply, rebuilt from its source in the same
@@ -249,12 +251,46 @@ export const backfillAllCommunitySearchDocsInternal = internalMutation({
 
 // A search's author filter, by handle. Results are still re-checked, so a
 // handle outside the community simply matches nothing.
+// How many of a community's memberships a name is looked for in.
+const AUTHOR_NAME_SCAN_MAX = 2_000;
+
+// The author filter's person. A handle is exact, as before. Otherwise a
+// first name or a full name, any case, when exactly one member here has it:
+// people say "Priya", not "priya-shah". Only members anyone in the community
+// sees in members/ (an active member who can still read the chat, or the
+// owner) are matched; two or more give their handles back, never a guess.
 export const resolveSearchAuthorInternal = internalQuery({
-  args: { handle: v.string() },
-  handler: async (ctx, args) => {
+  args: { handle: v.string(), communityId: v.optional(v.id("communities")) },
+  handler: async (ctx, args): Promise<{ userId: any } | { handles: string[] } | null> => {
     const handle = args.handle.trim().replace(/^@/, "").toLowerCase();
     if (!handle) return null;
     const user = await ctx.db.query("users").withIndex("by_normalizedHandle", (q) => q.eq("normalizedHandle", handle)).first();
-    return user?._id ?? null;
+    if (user) return { userId: user._id };
+    if (!args.communityId) return null;
+    const community = await ctx.db.get(args.communityId);
+    if (!community) return null;
+    const name = handle.replace(/\s+/g, " ");
+    const rows = await ctx.db.query("communityMemberships")
+      .withIndex("by_community", (q) => q.eq("communityId", args.communityId!)).take(AUTHOR_NAME_SCAN_MAX);
+    const userIds = [community.ownerId, ...rows.filter((row) => communityMembershipRowIsActive(row as any)).map((row) => row.userId)];
+    const matches = new Map<string, { userId: any; handle: string | null }>();
+    for (const userId of userIds) {
+      if (matches.has(String(userId))) continue;
+      const person: any = await ctx.db.get(userId);
+      if (!person) continue;
+      const detail: any = await getUniqueUserProfileDetailByUserId(ctx, userId).catch(() => null);
+      const full = String(detail?.displayName ?? person.displayName ?? "").trim().toLowerCase().replace(/\s+/g, " ");
+      if (!full || (full !== name && full.split(" ")[0] !== name)) continue;
+      try {
+        await requireCommunityChatAccess({ ctx, communityId: args.communityId, userId });
+      } catch {
+        continue;
+      }
+      matches.set(String(userId), { userId, handle: person.normalizedHandle ?? person.handle ?? null });
+    }
+    const found = [...matches.values()];
+    if (found.length === 1) return { userId: found[0].userId };
+    if (found.length > 1) return { handles: found.map((match) => match.handle ?? `user:${String(match.userId)}`).slice(0, 10) };
+    return null;
   },
 });

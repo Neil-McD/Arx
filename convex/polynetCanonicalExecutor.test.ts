@@ -3389,3 +3389,46 @@ test("brief.md: the community's for everyone in it; a pod's inside only; a remov
   await t.run((ctx: any) => ctx.db.delete(made.operator));
   expect(body(await member("polynet_read", `${base}/brief.md`))).toContain("No brief yet.");
 });
+
+test("members/ says when each person joined and lists newest first on ask; search takes a name for author and says where to go when it can't search", async () => {
+  vi.stubEnv("ARX_PUBLIC_APP_URL", "https://polynet-staging.vercel.app");
+  const t = convexTest(schema, modules);
+  const f = await createFixture(t);
+  const joined = { "priya-shah": 1_760_000_100_000, "priya-nair": 1_760_000_200_000, "sam-lee": 1_760_000_300_000 } as const;
+  await t.run(async (ctx) => {
+    for (const [handle, at] of Object.entries(joined)) {
+      const name = handle.split("-").map((part) => part[0].toUpperCase() + part.slice(1)).join(" ");
+      const userId = await ctx.db.insert("users", { authSubject: `${handle}-subject`, displayName: name, handle, normalizedHandle: handle, createdAt: at, updatedAt: at });
+      await ctx.db.insert("userProfileDetails", { userId, displayName: name, createdAt: at, updatedAt: at });
+      await ctx.db.insert("communityMemberships", { communityId: f.communityId, userId, role: "member", accessSource: "free_grant", state: "active",
+        activationSequence: 1, activatedAt: at, createdAt: at, updatedAt: at });
+    }
+  });
+  const execute = (toolName: "polynet_list" | "polynet_search", input: Record<string, unknown>) => executePolynetCanonicalTool({
+    ctx: executionContext(t.withIdentity({ subject: f.memberSubject })), authSubject: f.memberSubject, userId: f.memberId,
+    principalKind: "community_agent_for_member", evidenceSurface: "member_agent_dock", toolName, input });
+  const people = (value: any) => (value.entries as any[]).filter((entry) => entry.handle).map((entry) => [entry.handle, entry.joined_at]);
+  const iso = (ms: number) => new Date(ms).toISOString();
+
+  const oldest = await execute("polynet_list", { path: "/communities/canonical-community/members/" });
+  if (!oldest.ok) throw new Error(JSON.stringify(oldest));
+  expect(people(oldest.value)).toEqual([["canonical-owner", iso(1_760_000_000_000)], ["canonical-member", iso(1_760_000_000_000)],
+    ["priya-shah", iso(joined["priya-shah"])], ["priya-nair", iso(joined["priya-nair"])], ["sam-lee", iso(joined["sam-lee"])]]);
+  const newest = await execute("polynet_list", { path: "/communities/canonical-community/members/", sort: "newest" });
+  if (!newest.ok) throw new Error(JSON.stringify(newest));
+  expect(people(newest.value).map(([handle]) => handle)).toEqual(["sam-lee", "priya-nair", "priya-shah", "canonical-member", "canonical-owner"]);
+
+  // A first name or a full name, any case, when only one member has it.
+  const search = (author: string) => execute("polynet_search", { path: "/communities/canonical-community/channels/", query: "marker", author });
+  for (const author of ["sam", "Sam Lee", "SAM", "sam-lee"]) expect(await search(author), author).toMatchObject({ ok: true });
+  expect(await search("priya")).toMatchObject({ ok: false, code: "invalid_tool_args",
+    message: expect.stringMatching(/priya-shah, priya-nair|priya-nair, priya-shah/) });
+  expect(await search("Priya Shah")).toMatchObject({ ok: true });
+  expect(await search("nobody")).toMatchObject({ ok: false, code: "invalid_tool_args", message: expect.stringContaining('No member has the handle "nobody"') });
+
+  // A folder search can't serve says to list it, and where search does work.
+  expect(await execute("polynet_search", { path: "/communities/canonical-community/members/", query: "joined" })).toMatchObject({ ok: false, code: "semantic_not_found",
+    message: expect.stringContaining("List it instead: polynet_list /communities/canonical-community/members/.") });
+  expect(await execute("polynet_search", { path: "/communities/canonical-community/members/", query: "joined" })).toMatchObject({
+    message: expect.stringContaining("/communities/canonical-community/channels/") });
+});

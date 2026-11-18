@@ -120,7 +120,7 @@ async function mapCommunityRecord(ctx: any, row: CommunityLike): Promise<{
   };
 }
 
-function resolveCommunitySettingsRevision(community: CommunityLike): number {
+export function resolveCommunitySettingsRevision(community: CommunityLike): number {
   const revision = Number(community.settingsRevision ?? 0);
   return Number.isFinite(revision) && revision >= 0
     ? Math.floor(revision)
