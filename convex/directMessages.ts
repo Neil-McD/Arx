@@ -1827,6 +1827,29 @@ export const listAiDirectMessagesInternal = internalQuery({
   },
 });
 
+// Who a reply through the guide would go to, for the question the person is
+// shown, and whether it would be refused (not their conversation, a block,
+// no community in common). The send checks all of it again, and the rate
+// limit, which is known only then.
+export const describeAiDirectReplyInternal = internalQuery({
+  args: { userId: v.id("users"), conversationId: v.string() },
+  handler: async (ctx, args): Promise<{ ok: true; name: string } | { ok: false; code: string }> => {
+    const conversationId = ctx.db.normalizeId("dmConversations", args.conversationId);
+    if (!conversationId) return { ok: false, code: "dm_conversation_not_found" };
+    try {
+      const { conversation } = await requireActiveUserParticipant({ ctx, conversationId, userId: args.userId });
+      await requireDirectConversationSendAccess({ ctx, conversation, viewerUserId: args.userId });
+      const peer = (await listConversationParticipants(ctx, conversation._id)).find((row) => row.status === "active" &&
+        row.participantType === "user" && normalizeIdValue(row.userId) && normalizeIdValue(row.userId) !== normalizeIdValue(args.userId));
+      const user = peer?.userId ? ((await ctx.db.get(peer.userId)) as UserRow | null) : null;
+      const profile = user ? await resolveUserProfileDisplayProjectionForUser(ctx, user) : null;
+      return { ok: true, name: String(profile?.display_name ?? (user as any)?.handle ?? "them") };
+    } catch (error) {
+      return { ok: false, code: error instanceof Error ? error.message : "dm_conversation_access_required" };
+    }
+  },
+});
+
 export const sendAiDirectReplyInternal = internalMutation({
   args: { userId: v.id("users"), conversationId: v.string(), text: v.string(), clientMessageId: v.string() },
   handler: async (ctx, args) => {

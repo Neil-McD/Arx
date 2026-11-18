@@ -161,10 +161,10 @@ changes.
   and so are the key that stops a repeat (one per tool call in the run, so a
   key it made up can never collide with an earlier action) and the settings
   revision for a settings change (read just before the change).
-  So the two doors do the same things by construction, with three marked
-  differences (`door` on the tool): a person's direct messages are their own
-  AI's only; remembering about a member, and removing posts after their yes,
-  are the guide's only. Tagged in a channel the guide only reads.
+  So the two doors do the same things by construction, with the differences
+  marked (`door` on the tool): remembering about a member, and removing
+  posts, removing a member and banning a member after their yes, are the
+  guide's only. Tagged in a channel the guide only reads.
 - `polynet_write` and `polynet_call` are given to no AI. They are what a
   named tool is translated into, and still run for an outside AI that
   connected before the named tools existed. `scripts/action_tools.test.ts` holds that every action has
@@ -175,8 +175,10 @@ changes.
 What a member's own AI reaches, beyond channels, people and courses:
 
 - **Direct messages** (`/messages/`, at the top of the repository, for a
-  person's own AI only). It lists the conversations the person is in and
-  reads one. It replies in a conversation that exists
+  person's own AI, and for the guide in their private talk: never the
+  community's own agent, tagged in a channel). It lists the conversations
+  the person is in and reads one: only theirs, so a host never reads a
+  conversation between two other people. It replies in a conversation that exists
   (`polynet_write`, mode `append`). **It cannot start one:** a path names a
   conversation, never a person. Blocks and the relationship check are the
   app's own (`convex/directMessages.ts`), as are its message limits; replies
@@ -204,10 +206,12 @@ don't already know (`shared/operationCatalog.ts`, `guideAskFor`):
 |---|---|
 | React, mark a lesson done, approve or decline people asking to join (one, some or all) | It does it and says so. Their sentence is the approval. |
 | Post, reply or edit a post under their name | It shows the exact words above the box where they type: **Yes**, **No**, **Always allow posts**. |
+| Reply in one of their direct-message conversations | It shows who it goes to and the exact words ("Send this to Sam as you?") and asks **Yes** or **No**, every time. There is no "always": "Always allow posts" does not cover messages. |
 | Remove posts (one, or up to 100 at once), delete their own post | It shows the posts and asks **Yes** or **No**, every time. There is no "always". |
 | Change the community's settings, the guide's instructions, the handbook draft, channels, events (a builder) | It does it and says what changed. |
 | Change someone's role, publish the handbook (a builder) | It shows the person and their role now, or the exact handbook text, and asks **Yes** or **No**, every time. |
-| Remove or ban a member, open the community to everyone, publish a course | Not done by any AI: it is answered with the place in the app (below). |
+| Remove or ban a member (a builder) | It names each person and their role now, says what happens (removed: they lose access and can ask to join again later; banned: they can't rejoin unless unbanned; anyone paying loses their subscription) and a ban's reason, and asks **Yes** or **No**, every time (Neil, Nov 18: "always requires approval, no matter what"). Yes runs the Members page's own Remove or Ban. The owner is never removed or banned; only the owner removes an admin. |
+| Open the community to everyone, publish a course | Not done by any AI: it is answered with the place in the app (below). |
 
 How it works (`convex/communityGuideQuestions.ts`): the guide's call is
 saved as it was made and answered `waiting_for_person`; nothing runs. Yes
@@ -220,14 +224,20 @@ follow the same rules as posts through anyone's AI: the host's switch, the
 content checks, the "via AI" mark.
 
 A person's own AI is not asked by Polynet (it has its own person watching
-it, and Polynet can't show a question there), so removing posts through it
-is still refused with a link (below). That is the one place the two doors
-differ.
+it, and Polynet can't show a question there), so removing posts, and
+removing or banning a member, through it are still refused with a link
+(below). That is where the two doors differ.
 
-Not through the guide: direct messages. A community's guide runs on its
-host's instructions, and a person's messages include people they met in
-other communities, so reading them is left to the person's own AI until
-that is decided.
+Direct messages through the guide (Neil, Nov 18): for hosts and members
+alike, only the conversations the person is in. The question is kept with
+the talk's community, where the person sees it. A reply that would be
+refused (not their conversation, a block, the words) is refused before
+asking; a yes that is then refused (a block since, the rate limit) says so
+and nothing is sent. Nothing starts a conversation, and a call answers one
+conversation. The guide is told that what it reads in a direct message is
+private to the talk: never put in a post, a note or anything another person
+sees unless the person tells it to say those words. The night review and
+the briefs read no direct message.
 
 ## Builder parity
 
@@ -247,7 +257,7 @@ does it. So a planted post can never talk an AI into it.
 
 | Asked for | What the AI gets |
 |---|---|
-| Remove a member, ban a member | The member's record (several: the Members page) |
+| Remove a member, ban a member | Through the guide: asked, then done (above). Through a person's own AI: the member's record (several: the Members page) |
 | Open a closed community | The Members page, where "Who can join" is (added with this rule: the current design had no place for a host to change it) |
 | Remove a post | Through the guide: asked, then done (above). Through a person's own AI: the community's channels; the AI names the channel and post |
 | Delete a channel, change who may see one, pin a post | Not offered |
@@ -304,7 +314,8 @@ Four ways things happen, and where each is approved (Neil, Nov 17):
 2. **The guide, in the composer**, and 3. **your own AI, through the MCP**:
    you are working through an agent. It builds and prepares; what can't be
    taken back it hands to you as a link to the app's own button (above).
-   The guide's questions (words under your name, removing posts) are asked
+   The guide's questions (words under your name, messages, removing posts,
+   roles, removing or banning members) are asked
    just above the composer, where you are working.
 4. **On its own**: the guide's scheduled work, for the community and per
    person, and what arrives by itself (someone asks to join, an event is

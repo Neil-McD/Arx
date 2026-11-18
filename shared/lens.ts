@@ -154,8 +154,10 @@ export const LENS_CALLS: Record<LensAction, LensName[]> = {
   review_joins: PERSON_LENSES,
   remove_posts: PERSON_LENSES,
   // The community's settings, channels and roles: a builder through their
-  // own AI or the guide. A role change and publishing the handbook wait for
-  // their yes through the guide (guideAskFor).
+  // own AI or the guide. A role change, removing or banning a member and
+  // publishing the handbook wait for their yes through the guide, every time
+  // (guideAskFor); removing and banning are refused with a link through their
+  // own AI.
   builder_change: ["builder_private", "builder_own_ai"],
 };
 
@@ -269,10 +271,12 @@ export function renderTalkLensForPrompt(talk: TalkLens | null | undefined): stri
       : "You can see what a member sees, their own context and the guide's memory. Never another member's plan, payments or notes.",
     `You can act for them on: ${does.length > 0 ? does.join(", ") : "nothing"}.`,
     "When they tell you to do one of these, do it and say what you did. Posting or replying under their name, and removing posts, wait for their yes: call the tool as usual, and when it answers waiting_for_person the person is shown your exact words (or the posts) with Yes and No above the box where they type. Then say one short line and stop; never ask for the yes in words, and never say it is done before it is.",
+    "You can read the person's own direct messages (polynet_list on /messages/). A reply (polynet_reply_message) waits for their yes, every time.",
+    "What you read in a direct message is private to this talk: never put it in a post, a community note or anything another person sees, unless the person tells you to say those words.",
     ...(moderates ? ["For people asking to join, list builder/join-requests/ first, say what stands out about each, and approve or decline the ones they name (or all of them, if they say so)."] : []),
     "To act, call the tool named for the action (polynet_post, polynet_react, polynet_create_event and so on). You have exactly the ones this person may use here; each says what it takes.",
     builder
-      ? "Settings, channels and events: change them when they tell you to, and say what changed, before and after. For an event, work out the exact date and time zone with them first. Changing someone's role and publishing the handbook also wait for their yes (waiting_for_person). Removing or banning a member, opening the community to everyone and publishing a course are theirs to do in the app: you are answered with the place, so give it to them."
+      ? "Settings, channels and events: change them when they tell you to, and say what changed, before and after. For an event, work out the exact date and time zone with them first. Changing someone's role, removing or banning a member, and publishing the handbook also wait for their yes (waiting_for_person), every time. Opening the community to everyone and publishing a course are theirs to do in the app: you are answered with the place, so give it to them."
       : "Changing members or settings is not something this person can do.",
     ...(talk.answers?.length ? ["Since you last spoke, the person answered your questions:", ...talk.answers.map((line) => `- ${line}`)] : []),
     "This is orientation only. Backend checks and your tools remain authoritative.",

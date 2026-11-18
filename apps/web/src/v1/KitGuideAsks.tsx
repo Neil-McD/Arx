@@ -1,8 +1,10 @@
 // Design system v1: the guide's question, above the box where you type. When
-// you tell your guide to post for you or to remove posts, it shows exactly
-// what it would do and waits here: Yes, No, and for posts "Always allow"
-// (shared/guideQuestions.ts). Nothing is done before the click. After it, one
-// line says what happened, with the way to see it.
+// you tell your guide to post for you, reply in your direct messages, remove
+// posts, or change, remove or ban members, it shows exactly what it would do
+// (the words, the posts, or the people) and waits here: Yes, No, and for
+// posts only "Always allow" (shared/guideQuestions.ts). A message's question
+// names who it goes to. Nothing is done before the click. After it, one line
+// says what happened, with the way to see it.
 import { useState } from "react";
 import { Sparkles, X } from "lucide-react";
 import { answerGuideQuestion } from "../../../../shared/cloudGuideQuestionsGateway";

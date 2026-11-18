@@ -104,7 +104,7 @@ test("a private talk streams its answer and is offered its lens's tools, web res
   const talkBodies = stubModel([{ output_text: "Done." }]);
   await run(t, w, { tools: ["polynet_list", "polynet_read", "polynet_search", "web_research", "polynet_post", "polynet_remember", "polynet_write", "polynet_reply_message"] });
   expect(talkBodies[0].tools.map((tool: any) => tool.name)).toEqual(
-    ["polynet_list", "polynet_read", "polynet_search", "web_research", "polynet_post", "polynet_remember"]);
+    ["polynet_list", "polynet_read", "polynet_search", "web_research", "polynet_post", "polynet_remember", "polynet_reply_message"]);
 });
 
 test("a private talk's model may call only the tools it was offered", async () => {

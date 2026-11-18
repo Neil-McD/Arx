@@ -1793,12 +1793,12 @@ export default defineSchema({
   communityGuideQuestions: defineTable({
     communityId: v.id("communities"),
     userId: v.id("users"),
-    kind: v.union(v.literal("post"), v.literal("remove"), v.literal("change")),
+    kind: v.union(v.literal("post"), v.literal("remove"), v.literal("change"), v.literal("message")),
     toolName: v.string(),
     // The call as the guide made it, run unchanged on yes.
     inputJson: v.string(),
     question: v.string(),
-    // The channel it is about, by name.
+    // The channel it is about, by name, or for a message who it goes to.
     place: v.optional(v.string()),
     // What the person is shown: the words, or the posts.
     text: v.optional(v.string()),

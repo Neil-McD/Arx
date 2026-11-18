@@ -197,11 +197,12 @@ test("the tools a member's private talk is offered today", async () => {
   await (await turn(member, conversation.thread_key)).text();
   // Reading, web research (web_crawl was deleted), then one named tool per
   // thing a member may do here, in the order shared/actionTools.ts lists them.
-  // Never the general action tools, and never a person's own messages.
+  // Never the general action tools. Replying in the member's own direct
+  // messages is offered, and waits for their yes every time.
   expect((requests[0].tools ?? []).map((tool: any) => tool.name))
     .toEqual(["polynet_list", "polynet_read", "polynet_search", "web_research",
       "polynet_post", "polynet_reply", "polynet_edit_post", "polynet_delete_post", "polynet_react",
-      "polynet_mark_lesson_done", "polynet_mark_channel_read", "polynet_remember"]);
+      "polynet_mark_lesson_done", "polynet_mark_channel_read", "polynet_reply_message", "polynet_remember"]);
   // The guide's tools never ask for the community: the talk is in one.
   for (const tool of requests[0].tools ?? []) {
     if (String(tool.name).startsWith("polynet_") && !["polynet_list", "polynet_read", "polynet_search"].includes(tool.name)) {
