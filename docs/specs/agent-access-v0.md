@@ -153,14 +153,13 @@ What a member's own AI reaches, beyond channels, people and courses:
 A builder's own AI calls the same rules the app's screens use, one operation
 per thing a builder does, each declared in `shared/operationCatalog.ts`.
 
-**A personal agent acts; the guide proposes.** A builder's own AI changes
-things directly: its owner is present and asked for the change. The staged
-route (a change set a person applies in the app) stays for the guide, which
-nobody watches.
+**An agent you are working with acts.** A builder's own AI, and the guide
+in the composer, change things directly: the builder is present and asked
+for the change.
 
-**What takes something from members waits.** An operation whose effect is
-*destroy* or *broadcast* is not offered until the two-step confirm exists
-(slice 5). So far that holds back: deleting a channel, changing who may see
+**What takes something from members asks first.** An operation whose effect
+is *destroy* or *broadcast* is not offered until it can ask for the
+builder's yes just above the composer (slice 5). So far that holds back: deleting a channel, changing who may see
 one (opening a private channel shows its history to everyone), pinning a
 post, cancelling an event, and making or changing an event (members are
 emailed reminders).
@@ -173,38 +172,57 @@ channel is named by its slug. General is not renamed or moved.
 **Courses and lessons** (`builder/resources/`,
 `convex/communityResourceChangesets.ts`). The engine for an AI's course
 changes already existed: a batch of up to 25 changes, checked against what
-changed since the AI read it, previewed, applied all or nothing, expiring in
-24 hours. Until slice 4b every batch was only staged for a click. Now:
+changed since the AI read it and applied all or nothing.
 
-- A builder's own AI **applies a batch that takes nothing away** as it sends
-  it: creating and editing courses and lessons, publishing, moving, ordering.
-- **A batch that deletes** a lesson or a course is staged. The host applies
-  or rejects it in the app: on Home, in the host's "Needs you" list, on
-  every community whether or not the guide is on (the guide's card still
-  shows it too). This is the two steps for courses, and the same staging is
-  what slice 5 reuses.
-- **The guide stages everything**, as before.
+**Agents build in draft; people decide what members see** (Neil, Nov 17).
+Knowledge is never added by a background job. A builder directs the agent
+and is present, so there is no waiting step and no approval card:
+
+- A batch from the guide or from a builder's own AI is **applied as it is
+  sent**: creating, editing, moving and ordering courses and lessons.
+- A new course is always a **draft**. Members see nothing of a draft course.
+- **The Published switch is the approval.** An agent can't publish or
+  unpublish a course; a person does, in the app.
+- An agent can **delete drafts** (a lesson in a draft course, an empty draft
+  course). It can't delete a course or lesson in a published course; it is
+  told to do that in the app.
+- An agent **can edit a published lesson and add a lesson to a published
+  course**. Publication belongs to the course, so that shows to members at
+  once (the same as a host doing it by hand). The guide says so first.
+- A refused step refuses the whole batch, with a sentence saying where the
+  control is.
 - Added to the engine: `reorder_pages` and `reorder_modules` (each names
   every lesson, or every course, once), and `lesson_links` on a lesson.
-- A safe batch does not queue behind a staged one; a staged one still blocks
-  another staged one.
 - One batch is one builder change against the budget, whatever it holds.
 - Covers are not here: they need file upload.
 
+### Where a decision is made
+
+Four ways things happen, and where each is approved (Neil, Nov 17):
+
+1. **The app**: a host or member clicking. Nothing new.
+2. **The guide, in the composer**, and 3. **your own AI, through the MCP**:
+   you are working through an agent. Anything that needs your yes is asked
+   just above the composer, where you are working. Courses need no ask at
+   all (above). The one-way actions that will (remove a post, remove or ban
+   a member, open a closed community, delete a channel) are slice 5.
+4. **On its own**: the guide's scheduled work, for the community and per
+   person, and what arrives by itself (someone asks to join, an event is
+   near, a payment fails). This comes forward on **Home**.
+
 ### Needs you (the host's Home)
 
-Home holds one list of everything waiting on the host's decision
-(`apps/web/src/v1/KitNeedsYou.tsx`). It is the place every held action and,
-later, every guide proposal and report lands. A row opens in place.
+Home holds one list of what came forward on its own and waits on the host
+(`apps/web/src/v1/KitNeedsYou.tsx`). A row opens in place.
 
 - **People asking to join**: one row; opened, the first three with Approve
   and Decline, then a link to all of them in Members.
-- **Course changes an AI asked for**: the staged batch, with what changes,
-  Apply and Reject.
 - **The oldest unanswered question**, with the guide on.
-- Empty, the list is not drawn. News (posts, new members) is not in it.
-- Not yet: other held actions (slice 5), the daily report, guide proposals,
-  money problems, and a count on the Home item in the left column.
+- Empty, the list is not drawn. News (posts, new members) is not in it, and
+  neither is work done through an agent.
+- Not yet: the daily report, guide proposals, money problems, a member's
+  Home rows (an event that is near), and a count on the Home item in the
+  left column.
 
 ## Slices
 

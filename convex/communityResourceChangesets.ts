@@ -126,10 +126,20 @@ function normalizeChangesetModuleStatus(raw: unknown): "draft" | "live" {
   return requireResourceModuleStatusForWrite(raw);
 }
 
-// Changes that take something away from members for good. A batch holding
-// one is never applied on an AI's word alone: it waits for a person's click.
-export function communityResourceChangesetIsDestructive(operations: CommunityResourceBuilderChangesetOperation[]): boolean {
-  return operations.some((operation) => operation.op === "delete_page" || operation.op === "delete_category");
+// Agents build in draft; people decide what members see. A batch (every
+// batch is sent by an agent: the guide or a builder's own AI) is applied as
+// it arrives, and it may not publish or unpublish a course, or delete a
+// course or lesson members can see. Those are a person's click in the app.
+// A refused step refuses the whole batch, so nothing is half done.
+export const AGENT_PUBLISH_REFUSAL =
+  "Publishing and unpublishing a course is done by a person in Polynet: open the course and use the Published switch. Nothing in this batch was applied.";
+export const AGENT_DELETE_LIVE_REFUSAL =
+  "This is in a published course, so members can see it. Deleting it is done by a person in Polynet (or unpublish the course there first). Nothing in this batch was applied.";
+
+async function refuseIfModuleIsLive(ctx: any, moduleId: unknown): Promise<void> {
+  if (!moduleId) return;
+  const module = (await ctx.db.get(moduleId as any)) as CommunityResourceModuleLike | null;
+  if (module && communityResourceModuleIsLive(module)) throw new Error(AGENT_DELETE_LIVE_REFUSAL);
 }
 
 export function normalizeCommunityResourceBuilderChangesetOperations(
@@ -721,6 +731,7 @@ async function createModuleFromChangesetOperation(args: {
   operation: Extract<CommunityResourceBuilderChangesetOperation, { op: "create_module" }>;
   nowMs: number;
 }): Promise<CommunityResourceModuleLike> {
+  if (args.operation.module_status === "live") throw new Error(AGENT_PUBLISH_REFUSAL);
   const rows = (await args.ctx.db
     .query("communityResourceModules" as any)
     .withIndex("by_community", (q: any) => q.eq("communityId", args.communityId))
@@ -729,7 +740,7 @@ async function createModuleFromChangesetOperation(args: {
   const id = await args.ctx.db.insert("communityResourceModules" as any, {
     communityId: args.communityId,
     createdByUserId: args.userId,
-    status: args.operation.module_status ?? "draft",
+    status: "draft",
     name: args.operation.name,
     descriptionMd: args.operation.description_md ?? undefined,
     sortOrder: nextSortOrder,
@@ -936,6 +947,7 @@ export async function deletePageFromChangesetOperation(args: {
     role: "page",
     expectedUpdatedAt: args.operation.expected_updated_at,
   });
+  await refuseIfModuleIsLive(args.ctx, existing.moduleId);
   await deleteCommunityResourceBodyContent(args.ctx, existing._id);
   await args.ctx.db.delete(existing._id as any);
   return existing;
@@ -952,6 +964,7 @@ export async function deleteCategoryFromChangesetOperation(args: {
     moduleId: args.operation.module_id,
     expectedUpdatedAt: args.operation.expected_updated_at,
   });
+  if (communityResourceModuleIsLive(module)) throw new Error(AGENT_DELETE_LIVE_REFUSAL);
   if (module.bannerStorageId) {
     await maybeDeleteStorageAsset(args.ctx, module.bannerStorageId);
   }
@@ -997,10 +1010,12 @@ export async function applyCommunityResourceBuilderChangesetOperations(args: {
         expectedUpdatedAt: operation.expected_updated_at,
         actualUpdatedAt: module.updatedAt,
       });
+      if (hasOwnField(operation as any, "module_status") && operation.module_status !== (communityResourceModuleIsLive(module) ? "live" : "draft")) {
+        throw new Error(AGENT_PUBLISH_REFUSAL);
+      }
       await args.ctx.db.patch(module._id as any, {
         ...(hasOwnField(operation as any, "name") ? { name: operation.name } : {}),
         ...(hasOwnField(operation as any, "description_md") ? { descriptionMd: operation.description_md ?? undefined } : {}),
-        ...(hasOwnField(operation as any, "module_status") ? { status: operation.module_status } : {}),
         updatedAt: args.nowMs,
       });
       applied.push({
@@ -1234,25 +1249,6 @@ export async function expireCommunityResourceBuilderChangesetIfNeeded(args: {
   return true;
 }
 
-export async function readLatestCommunityResourceBuilderActionableRows(args: {
-  ctx: any;
-  communityId: any;
-}): Promise<CommunityResourceBuilderChangesetRow[]> {
-  return (
-    await Promise.all(
-      COMMUNITY_RESOURCE_BUILDER_ACTIONABLE_STATUSES.map(async (status) =>
-        await args.ctx.db
-          .query("communityResourceBuilderChangesets" as any)
-          .withIndex("by_community_status_createdAt", (q: any) =>
-            q.eq("communityId", args.communityId).eq("status", status),
-          )
-          .order("desc")
-          .first(),
-      ),
-    )
-  ).filter(Boolean) as CommunityResourceBuilderChangesetRow[];
-}
-
 export async function stageCommunityResourceBuilderChangesetCore(args: {
   ctx: any;
   userId: any;
@@ -1260,9 +1256,6 @@ export async function stageCommunityResourceBuilderChangesetCore(args: {
   summary: string;
   operations: unknown[];
   idempotencyKey?: string | null;
-  // The batch will be applied at once by the caller, so it is not something
-  // waiting for a person and does not queue behind one that is.
-  applyingNow?: boolean;
 }) {
   await requireCommunityManager({
     ctx: args.ctx,
@@ -1336,26 +1329,6 @@ export async function stageCommunityResourceBuilderChangesetCore(args: {
       };
     }
   }
-  const recentActionableRows = await readLatestCommunityResourceBuilderActionableRows({
-    ctx: args.ctx,
-    communityId: args.communityId,
-  });
-  const liveActionableRows: CommunityResourceBuilderChangesetRow[] = [];
-  for (const changeset of recentActionableRows) {
-    if (
-      await expireCommunityResourceBuilderChangesetIfNeeded({
-        ctx: args.ctx,
-        changeset,
-        nowMs,
-      })
-    ) {
-      continue;
-    }
-    liveActionableRows.push(changeset);
-  }
-  if (liveActionableRows.length > 0 && !args.applyingNow) {
-    throw new Error("community_resource_changeset_already_pending");
-  }
   const preflight = await buildCommunityResourceBuilderChangesetPreflight({
     ctx: args.ctx,
     communityId: args.communityId,
@@ -1374,12 +1347,6 @@ export async function stageCommunityResourceBuilderChangesetCore(args: {
     createdAt: nowMs,
     updatedAt: nowMs,
   });
-  await args.ctx.scheduler.runAt(
-    nowMs + COMMUNITY_RESOURCE_BUILDER_CHANGESET_TTL_MS,
-    (internal as any).communityResources
-      .expireCommunityResourceBuilderChangesetInternal,
-    { changesetId: id },
-  );
   return {
     ok: true,
     kind: "community_resource_builder_changeset_staged",

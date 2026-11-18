@@ -5,10 +5,6 @@ import {
   type RuntimeTimelineToolGroup,
 } from "../../../../shared/runtimeTimelineUi";
 import type { AuthSessionLike } from "../../../../shared/authSession";
-import {
-  extractRuntimeResourceChangesetCards,
-  RuntimeResourceChangesetApprovalCards,
-} from "./RuntimeResourceChangesetApprovalCards";
 import type { ThreadStreamingRuntimeEvent } from "../../../../shared/webTurnRunnerCore";
 
 function parseEventTimeMs(value: string | null | undefined): number | null {
@@ -116,10 +112,6 @@ export function RuntimeLiveTimeline(props: {
     () => buildRuntimeLiveTimeline(props.events),
     [props.events],
   );
-  const changesetCards = useMemo(
-    () => extractRuntimeResourceChangesetCards(props.events),
-    [props.events],
-  );
   const elapsedMs =
     runTiming.startedAtMs === null
       ? null
@@ -147,16 +139,8 @@ export function RuntimeLiveTimeline(props: {
     };
   }, [runTiming.finishedAtMs, showActiveIndicators]);
 
-  const approvalCards =
-    props.session && changesetCards.length > 0 ? (
-      <RuntimeResourceChangesetApprovalCards
-        cards={changesetCards}
-        session={props.session}
-      />
-    ) : null;
-
   if (!showActiveIndicators) {
-    return timerLabel || approvalCards ? (
+    return timerLabel ? (
       <div className="runtime-live-timeline runtime-live-timeline-compact">
         {timerLabel ? (
           <span className="runtime-turn-timer">
@@ -166,7 +150,6 @@ export function RuntimeLiveTimeline(props: {
             </span>
           </span>
         ) : null}
-        {approvalCards}
       </div>
     ) : null;
   }
@@ -210,7 +193,6 @@ export function RuntimeLiveTimeline(props: {
           Thinking
         </span>
       ) : null}
-      {approvalCards}
     </div>
   );
 }

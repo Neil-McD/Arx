@@ -106,7 +106,7 @@ for (const required of [
   "readCommunityResourceDirectoryInternal",
   "listCommunityResourceBuilderDirectoryInternal",
   "readCommunityResourceBuilderResourceInternal",
-  "stageCommunityResourceBuilderChangesetInternal",
+  "runCommunityResourceBuilderBatchInternal",
 ]) {
   assert.match(resources, new RegExp(required));
 }
@@ -132,8 +132,8 @@ assert.match(
 );
 assert.match(
   executor,
-  /POLYNET_BUILDER_RESOURCES_DIRECTORY_PATH[\s\S]*stageCommunityResourceBuilderChangesetInternal/,
-  "builder writes must stage changesets instead of directly mutating resources",
+  /POLYNET_BUILDER_RESOURCES_DIRECTORY_PATH[\s\S]*runCommunityResourceBuilderBatchInternal/,
+  "builder writes must go through the one checked batch, applied as it is sent",
 );
 for (const forbiddenOperation of [
   "community.resources.changeset.status",

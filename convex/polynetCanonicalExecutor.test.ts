@@ -1869,18 +1869,16 @@ test("chat roots and replies survive receipt-completion crashes without duplicat
   });
 });
 
-test("builder resource agents may stage changes but cannot make terminal decisions", async () => {
+test("an agent's course batch is applied as it is sent, and agents have no approve, reject or apply operation", async () => {
   const t = convexTest(schema, modules);
   const fixture = await createFixture(t);
   const asOwner = t.withIdentity({ subject: fixture.ownerSubject });
   const ownerCtx = executionContext(asOwner);
-
-  const stage = await executePolynetCanonicalTool({
+  const send = (key: string) => executePolynetCanonicalTool({
     ctx: ownerCtx,
     authSubject: fixture.ownerSubject,
     userId: fixture.ownerId,
-    // Staged the way the guide stages for a builder: a person applies it.
-    // (A builder's own AI applies a safe batch itself; see the test below.)
+    // The guide, working for a builder in the composer.
     principalKind: "community_agent_for_member",
     evidenceSurface: "member_agent_dock",
     toolName: "polynet_write",
@@ -1888,43 +1886,35 @@ test("builder resource agents may stage changes but cannot make terminal decisio
       path: "/communities/canonical-community/builder/resources/",
       mode: "create",
       content: {
-        summary: "Stage one bounded resource category.",
-        operations: [
-          {
-            op: "create_module",
-            module_key: "canonical-test",
-            name: "Canonical test",
-            module_status: "draft",
-          },
-        ],
+        summary: "Add one draft course.",
+        operations: [{ op: "create_module", module_key: "canonical-test", name: "Canonical test" }],
       },
-      idempotency_key: "builder-stage-1",
+      idempotency_key: key,
     },
   });
-  expect(stage).toMatchObject({
+
+  const sent = await send("builder-batch-1");
+  expect(sent).toMatchObject({
     ok: true,
-    value: {
-      deduped: false,
-      receipt: { authority_lane: "builder" },
-    },
+    value: { deduped: false, receipt: { authority_lane: "builder" }, result: { status: "applied", applied: true } },
   });
-  const changesetId = String(stage.ok ? (stage.value.ref ?? "") : "");
+  const changesetId = String(sent.ok ? (sent.value.ref ?? "") : "");
   expect(changesetId).not.toBe("");
+  // The course exists at once, as a draft: members see nothing until a person publishes it.
+  await t.run(async (ctx) => {
+    const courses = await ctx.db.query("communityResourceModules").collect();
+    expect(courses.map((course) => [course.name, course.status])).toEqual([["Canonical test", "draft"]]);
+  });
+  // Sent again with the same key, it is the same answer and one course.
+  await expect(send("builder-batch-1")).resolves.toMatchObject({ ok: true });
+  await t.run(async (ctx) => {
+    expect(await ctx.db.query("communityResourceModules").collect()).toHaveLength(1);
+  });
 
   const agentPrincipals = [
-    {
-      principalKind: "community_agent_for_member" as const,
-      evidenceSurface: "member_agent_dock" as const,
-    },
-    {
-      principalKind: "external_mcp" as const,
-      evidenceSurface: "external_mcp" as const,
-    },
-    {
-      principalKind: "community_agent" as const,
-      evidenceSurface: "community_concierge" as const,
-      mountedCommunityId: fixture.communityId,
-    },
+    { principalKind: "community_agent_for_member" as const, evidenceSurface: "member_agent_dock" as const },
+    { principalKind: "external_mcp" as const, evidenceSurface: "external_mcp" as const },
+    { principalKind: "community_agent" as const, evidenceSurface: "community_concierge" as const, mountedCommunityId: fixture.communityId },
   ];
   for (const principal of agentPrincipals) {
     for (const operation of ["approve", "reject", "apply"] as const) {
@@ -1935,9 +1925,7 @@ test("builder resource agents may stage changes but cannot make terminal decisio
           userId: fixture.ownerId,
           principalKind: principal.principalKind,
           evidenceSurface: principal.evidenceSurface,
-          ...(principal.mountedCommunityId
-            ? { mountedCommunityId: principal.mountedCommunityId }
-            : {}),
+          ...(principal.mountedCommunityId ? { mountedCommunityId: principal.mountedCommunityId } : {}),
           toolName: "polynet_call",
           input: {
             operation: `community.resources.changeset.${operation}`,
@@ -1947,453 +1935,9 @@ test("builder resource agents may stage changes but cannot make terminal decisio
             idempotency_key: `${principal.principalKind}-${operation}-denied`,
           },
         }),
-      ).resolves.toMatchObject({
-        ok: false,
-        code: "operation_not_found",
-      });
+      ).resolves.toMatchObject({ ok: false, code: "operation_not_found" });
     }
   }
-
-  const applied = await asOwner.mutation(
-    api.communityResources.applyCommunityResourceBuilderChangeset,
-    {
-      communityId: fixture.communityId,
-      changesetId: changesetId as any,
-    },
-  );
-  expect(applied).toMatchObject({
-    ok: true,
-    status: "applied",
-    deduped: false,
-  });
-
-  const admin = await createAdminFixture(t, fixture);
-  const asAdmin = t.withIdentity({ subject: admin.authSubject });
-  await expect(
-    asAdmin.mutation(
-      api.communityResources.applyCommunityResourceBuilderChangeset,
-      {
-        communityId: fixture.communityId,
-        changesetId: changesetId as any,
-      },
-    ),
-  ).resolves.toMatchObject({
-    ok: true,
-    status: "applied",
-    deduped: true,
-  });
-
-  const legacyStage = await executePolynetCanonicalTool({
-    ctx: ownerCtx,
-    authSubject: fixture.ownerSubject,
-    userId: fixture.ownerId,
-    // Staged the way the guide stages for a builder: a person applies it.
-    // (A builder's own AI applies a safe batch itself; see the test below.)
-    principalKind: "community_agent_for_member",
-    evidenceSurface: "member_agent_dock",
-    toolName: "polynet_write",
-    input: {
-      path: "/communities/canonical-community/builder/resources/",
-      mode: "create",
-      content: {
-        summary: "Stage one legacy-approved resource category.",
-        operations: [
-          {
-            op: "create_module",
-            module_key: "legacy-approved-test",
-            name: "Legacy approved test",
-            module_status: "draft",
-          },
-        ],
-      },
-      idempotency_key: "builder-stage-legacy-approved-1",
-    },
-  });
-  const legacyChangesetId = String(
-    legacyStage.ok ? (legacyStage.value.ref ?? "") : "",
-  );
-  expect(legacyChangesetId).not.toBe("");
-  await expect(
-    asAdmin.mutation(
-      api.communityResources.applyCommunityResourceBuilderChangeset,
-      {
-        communityId: fixture.communityId,
-        changesetId: legacyChangesetId as any,
-      },
-    ),
-  ).resolves.toMatchObject({
-    ok: true,
-    status: "applied",
-    deduped: false,
-  });
-
-  const rejectedStage = await executePolynetCanonicalTool({
-    ctx: ownerCtx,
-    authSubject: fixture.ownerSubject,
-    userId: fixture.ownerId,
-    // Staged the way the guide stages for a builder: a person applies it.
-    // (A builder's own AI applies a safe batch itself; see the test below.)
-    principalKind: "community_agent_for_member",
-    evidenceSurface: "member_agent_dock",
-    toolName: "polynet_write",
-    input: {
-      path: "/communities/canonical-community/builder/resources/",
-      mode: "create",
-      content: {
-        summary: "Stage one rejected resource category.",
-        operations: [
-          {
-            op: "create_module",
-            module_key: "rejected-test",
-            name: "Rejected test",
-            module_status: "draft",
-          },
-        ],
-      },
-      idempotency_key: "builder-stage-rejected-1",
-    },
-  });
-  const rejectedChangesetId = String(
-    rejectedStage.ok ? (rejectedStage.value.ref ?? "") : "",
-  );
-  await asOwner.mutation(
-    api.communityResources.rejectCommunityResourceBuilderChangeset,
-    {
-      communityId: fixture.communityId,
-      changesetId: rejectedChangesetId as any,
-      reason: "Rejected in lifecycle proof.",
-    },
-  );
-  await expect(
-    asOwner.mutation(
-      api.communityResources.applyCommunityResourceBuilderChangeset,
-      {
-        communityId: fixture.communityId,
-        changesetId: rejectedChangesetId as any,
-      },
-    ),
-  ).rejects.toThrow("community_resource_changeset_not_applicable");
-
-  await t.run(async (ctx) => {
-    const modules = await ctx.db.query("communityResourceModules").collect();
-    expect(modules.map((module) => module.name).sort()).toEqual([
-      "Canonical test",
-      "Legacy approved test",
-    ]);
-  });
-});
-
-test("resource changeset staging permits only one live proposal per community", async () => {
-  const t = convexTest(schema, modules);
-  const fixture = await createFixture(t);
-  const asOwner = t.withIdentity({ subject: fixture.ownerSubject });
-  const stage = (idempotencyKey: string, name: string) =>
-    t.mutation(
-      internal.communityResources
-        .stageCommunityResourceBuilderChangesetInternal,
-      {
-        userId: fixture.ownerId,
-        communityId: fixture.communityId,
-        summary: `Stage ${name}.`,
-        operations: [
-          {
-            op: "create_module",
-            module_key: idempotencyKey,
-            name,
-            module_status: "draft",
-          },
-        ],
-        idempotencyKey,
-      },
-    );
-
-  await expect(
-    t.mutation(
-      internal.communityResources
-        .stageCommunityResourceBuilderChangesetInternal,
-      {
-        userId: fixture.memberId,
-        communityId: fixture.communityId,
-        summary: "Unauthorized proposal.",
-        operations: [
-          {
-            op: "create_module",
-            module_key: "unauthorized",
-            name: "Unauthorized",
-            module_status: "draft",
-          },
-        ],
-        idempotencyKey: "unauthorized",
-      },
-    ),
-  ).rejects.toThrow();
-
-  const first = await stage("single-active-1", "Single active one");
-  expect(first).toMatchObject({ status: "staged", deduped: false });
-  await expect(
-    stage("single-active-1", "Single active one"),
-  ).resolves.toMatchObject({
-    changeset_id: first.changeset_id,
-    status: "staged",
-    deduped: true,
-  });
-  await expect(stage("single-active-2", "Single active two")).rejects.toThrow(
-    "community_resource_changeset_already_pending",
-  );
-  await expect(
-    asOwner.query(
-      api.communityResources.listPendingCommunityResourceBuilderChangesets,
-      { communityId: fixture.communityId, limit: 5 },
-    ),
-  ).resolves.toHaveLength(1);
-  await expect(
-    t.mutation(
-      internal.communityResources
-        .stageCommunityResourceBuilderChangesetInternal,
-      {
-        userId: fixture.ownerId,
-        communityId: fixture.otherCommunityId,
-        summary: "Independent community proposal.",
-        operations: [
-          {
-            op: "create_module",
-            module_key: "other-community",
-            name: "Other community",
-            module_status: "draft",
-          },
-        ],
-        idempotencyKey: "other-community",
-      },
-    ),
-  ).resolves.toMatchObject({ status: "staged", deduped: false });
-
-  await asOwner.mutation(
-    api.communityResources.rejectCommunityResourceBuilderChangeset,
-    {
-      communityId: fixture.communityId,
-      changesetId: first.changeset_id as any,
-      reason: "Release the active slot.",
-    },
-  );
-  const second = await stage("single-active-2", "Single active two");
-  await t.run(async (ctx) => {
-    await ctx.db.patch(second.changeset_id as any, {
-      createdAt: Date.now() - 25 * 60 * 60 * 1000,
-      updatedAt: Date.now() - 25 * 60 * 60 * 1000,
-    });
-  });
-  const third = await stage("single-active-3", "Single active three");
-  await t.run(async (ctx) => {
-    expect(await ctx.db.get(second.changeset_id as any)).toMatchObject({
-      status: "expired",
-    });
-  });
-
-  await expect(stage("single-active-4", "Single active four")).rejects.toThrow(
-    "community_resource_changeset_already_pending",
-  );
-  await asOwner.mutation(
-    api.communityResources.applyCommunityResourceBuilderChangeset,
-    {
-      communityId: fixture.communityId,
-      changesetId: third.changeset_id as any,
-    },
-  );
-  await expect(
-    stage("single-active-4", "Single active four"),
-  ).resolves.toMatchObject({
-    status: "staged",
-    deduped: false,
-  });
-});
-
-test("expired resource changesets commit one terminal state across every decision path", async () => {
-  const t = convexTest(schema, modules);
-  const fixture = await createFixture(t);
-  const asOwner = t.withIdentity({ subject: fixture.ownerSubject });
-  const stage = (suffix: string) =>
-    t.mutation(
-      internal.communityResources
-        .stageCommunityResourceBuilderChangesetInternal,
-      {
-        userId: fixture.ownerId,
-        communityId: fixture.communityId,
-        summary: `Expiring proposal ${suffix}.`,
-        operations: [
-          {
-            op: "create_module",
-            module_key: `expired-${suffix}`,
-            name: `Expired ${suffix}`,
-            module_status: "draft",
-          },
-        ],
-        idempotencyKey: `expired-${suffix}`,
-      },
-    );
-  const makeExpired = async (changesetId: string) => {
-    await t.run(async (ctx) => {
-      const expiredAt = Date.now() - 25 * 60 * 60 * 1000;
-      await ctx.db.patch(changesetId as any, {
-        createdAt: expiredAt,
-        updatedAt: expiredAt,
-      });
-    });
-  };
-
-  const applyCandidate = await stage("apply");
-  await makeExpired(applyCandidate.changeset_id);
-  await expect(
-    asOwner.mutation(
-      api.communityResources.applyCommunityResourceBuilderChangeset,
-      {
-        communityId: fixture.communityId,
-        changesetId: applyCandidate.changeset_id as any,
-      },
-    ),
-  ).resolves.toMatchObject({
-    ok: false,
-    code: "community_resource_changeset_expired",
-    status: "expired",
-    deduped: false,
-  });
-  await expect(
-    asOwner.mutation(
-      api.communityResources.applyCommunityResourceBuilderChangeset,
-      {
-        communityId: fixture.communityId,
-        changesetId: applyCandidate.changeset_id as any,
-      },
-    ),
-  ).resolves.toMatchObject({ status: "expired", deduped: true });
-
-  const rejectCandidate = await stage("reject");
-  await makeExpired(rejectCandidate.changeset_id);
-  await expect(
-    asOwner.mutation(
-      api.communityResources.rejectCommunityResourceBuilderChangeset,
-      {
-        communityId: fixture.communityId,
-        changesetId: rejectCandidate.changeset_id as any,
-      },
-    ),
-  ).resolves.toMatchObject({
-    ok: false,
-    code: "community_resource_changeset_expired",
-    status: "expired",
-    deduped: false,
-  });
-
-  const approvedCandidate = await stage("legacy-approved");
-  await makeExpired(approvedCandidate.changeset_id);
-  await expect(
-    asOwner.mutation(
-      api.communityResources.applyCommunityResourceBuilderChangeset,
-      {
-        communityId: fixture.communityId,
-        changesetId: approvedCandidate.changeset_id as any,
-      },
-    ),
-  ).resolves.toMatchObject({ status: "expired", deduped: false });
-
-  const idempotentCandidate = await stage("idempotent");
-  await makeExpired(idempotentCandidate.changeset_id);
-  await expect(stage("idempotent")).resolves.toMatchObject({
-    ok: false,
-    changeset_id: idempotentCandidate.changeset_id,
-    status: "expired",
-    deduped: true,
-  });
-
-  await t.run(async (ctx) => {
-    const rows = await ctx.db
-      .query("communityResourceBuilderChangesets")
-      .collect();
-    expect(rows).toHaveLength(4);
-    expect(rows.every((row) => row.status === "expired")).toBe(true);
-    expect(
-      await ctx.db.query("communityResourceModules").collect(),
-    ).toHaveLength(0);
-  });
-});
-
-test("scheduled resource changeset expiry commits without customer action", async () => {
-  vi.useFakeTimers();
-  try {
-    vi.setSystemTime(new Date("2026-08-08T12:00:00.000Z"));
-    const t = convexTest(schema, modules);
-    const fixture = await createFixture(t);
-    const staged = await t.mutation(
-      internal.communityResources
-        .stageCommunityResourceBuilderChangesetInternal,
-      {
-        userId: fixture.ownerId,
-        communityId: fixture.communityId,
-        summary: "Expire this proposal on schedule.",
-        operations: [
-          {
-            op: "create_module",
-            module_key: "scheduled-expiry",
-            name: "Scheduled expiry",
-            module_status: "draft",
-          },
-        ],
-        idempotencyKey: "scheduled-expiry",
-      },
-    );
-
-    await t.finishAllScheduledFunctions(() => vi.runAllTimers());
-
-    await t.run(async (ctx) => {
-      expect(await ctx.db.get(staged.changeset_id as any)).toMatchObject({
-        status: "expired",
-        error: "This resource proposal expired after 24 hours.",
-      });
-      expect(
-        await ctx.db.query("communityResourceModules").collect(),
-      ).toHaveLength(0);
-    });
-  } finally {
-    vi.useRealTimers();
-  }
-});
-
-test("concurrent resource changeset staging leaves one live proposal", async () => {
-  const t = convexTest(schema, modules);
-  const fixture = await createFixture(t);
-  const asOwner = t.withIdentity({ subject: fixture.ownerSubject });
-  const stage = (suffix: string) =>
-    t.mutation(
-      internal.communityResources
-        .stageCommunityResourceBuilderChangesetInternal,
-      {
-        userId: fixture.ownerId,
-        communityId: fixture.communityId,
-        summary: `Concurrent proposal ${suffix}.`,
-        operations: [
-          {
-            op: "create_module",
-            module_key: `concurrent-${suffix}`,
-            name: `Concurrent ${suffix}`,
-            module_status: "draft",
-          },
-        ],
-        idempotencyKey: `concurrent-${suffix}`,
-      },
-    );
-  const results = await Promise.allSettled([stage("a"), stage("b")]);
-  expect(
-    results.filter((result) => result.status === "fulfilled"),
-  ).toHaveLength(1);
-  const rejected = results.find((result) => result.status === "rejected");
-  expect(
-    String(rejected && rejected.status === "rejected" ? rejected.reason : ""),
-  ).toContain("community_resource_changeset_already_pending");
-  await expect(
-    asOwner.query(
-      api.communityResources.listPendingCommunityResourceBuilderChangesets,
-      { communityId: fixture.communityId, limit: 5 },
-    ),
-  ).resolves.toHaveLength(1);
 });
 
 test("builder resource effects survive receipt-completion crashes without duplication", async () => {
@@ -2422,8 +1966,7 @@ test("builder resource effects survive receipt-completion crashes without duplic
     healthyCtx: ownerCtx,
     authSubject: fixture.ownerSubject,
     userId: fixture.ownerId,
-    // Staged the way the guide stages for a builder: a person applies it.
-    // (A builder's own AI applies a safe batch itself; see the test below.)
+    // Sent the way the guide sends for a builder.
     principalKind: "community_agent_for_member",
     evidenceSurface: "member_agent_dock",
     toolName: "polynet_write",
@@ -2436,7 +1979,7 @@ test("builder resource effects survive receipt-completion crashes without duplic
           .query("communityResourceBuilderChangesets")
           .collect();
         expect(changesets).toHaveLength(1);
-        expect(changesets[0]).toMatchObject({ status: "staged" });
+        expect(changesets[0]).toMatchObject({ status: "applied" });
       });
     },
   });
@@ -2445,10 +1988,11 @@ test("builder resource effects survive receipt-completion crashes without duplic
       .query("communityResourceBuilderChangesets")
       .collect();
     expect(changesets).toHaveLength(1);
-    expect(changesets[0]).toMatchObject({ status: "staged" });
+    expect(changesets[0]).toMatchObject({ status: "applied" });
+    // Applied once: the retry after the crash did not make a second course.
     expect(
       await ctx.db.query("communityResourceModules").collect(),
-    ).toHaveLength(0);
+    ).toHaveLength(1);
   });
 });
 

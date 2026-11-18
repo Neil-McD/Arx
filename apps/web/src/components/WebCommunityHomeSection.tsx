@@ -13,14 +13,10 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { ArrowRight, Sparkles } from "lucide-react";
 import {
-  applyCloudCommunityResourceBuilderChangeset,
   getCloudCommunityHomeSnapshot,
-  listCloudPendingCommunityResourceBuilderChangesets,
-  rejectCloudCommunityResourceBuilderChangeset,
   type CloudCommunityHomeSnapshot,
 } from "../../../../shared/cloudCommunityAdminGateway";
-import { dispatchCommunityResourcesMutated } from "../../../../shared/communityResourceMutationEvents";
-import { NeedsYou, needsYouCount, type NeedsYouChange, type NeedsYouJoinReview } from "../v1/KitNeedsYou";
+import { NeedsYou, needsYouCount, type NeedsYouJoinReview } from "../v1/KitNeedsYou";
 import { Btn, Card, Eyebrow, Hello, HomeBody, KitApp, Rail, Since, SinceItem, TextLink } from "../v1/kit";
 
 export type WebCommunityHomeSectionProps = {
@@ -48,7 +44,7 @@ export type WebCommunityHomeSectionProps = {
   // the dock supplies the conversation and whether it is open.
   // `hasConversation`: the one thread has something to read, so a quiet Home
   // still offers a way back into it.
-  kit?: { talking: boolean; talk: ReactNode; onTalkItOver: () => void; hasConversation?: boolean; onChangeDecided?: (changesetId: string) => void } | null;
+  kit?: { talking: boolean; talk: ReactNode; onTalkItOver: () => void; hasConversation?: boolean } | null;
   // Whether the community's agent is on (docs/specs/community-agent-gateway-v0.md).
   // Off: Home is plain (no guide, no next step, no upsell).
   agentOn?: boolean;
@@ -308,57 +304,6 @@ export function WebCommunityHomeSection(props: WebCommunityHomeSectionProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [props.communityId, props.refreshKey, props.audience]);
 
-  // Course changes an AI asked for that wait for the host (a batch that
-  // deletes is only staged). Read with Home's facts; applied or rejected here.
-  const [changes, setChanges] = useState<NeedsYouChange[]>([]);
-  const [busyChangeId, setBusyChangeId] = useState<string | null>(null);
-  const [changeError, setChangeError] = useState<string | null>(null);
-  useEffect(() => {
-    if (props.open === false) return;
-    if (props.audience !== "host" || !props.kit) { setChanges([]); return; }
-    let cancelled = false;
-    void (async () => {
-      try {
-        const session = await props.ensureSession(props.session);
-        if (!session) return;
-        const rows = (await listCloudPendingCommunityResourceBuilderChangesets({ session, communityId: props.communityId, limit: 5 })) as any[];
-        if (cancelled) return;
-        setChanges(rows.map((row) => ({
-          changesetId: String(row.changeset_id ?? ""),
-          summary: String(row.summary ?? "").trim(),
-          operationCount: Number(row.operation_count ?? 0) || 0,
-          previewItems: (Array.isArray(row.preview_items) ? row.preview_items : []).map((item: any) => ({
-            marker: String(item?.marker ?? "+"), title: String(item?.title ?? ""), preview: item?.preview ? String(item.preview) : null,
-          })),
-        })).filter((change) => change.changesetId));
-      } catch { if (!cancelled) setChanges([]); }
-    })();
-    return () => { cancelled = true; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [props.communityId, props.refreshKey, props.audience]);
-
-  const decideChange = async (changesetId: string, apply: boolean) => {
-    if (busyChangeId) return;
-    setBusyChangeId(changesetId);
-    setChangeError(null);
-    try {
-      const session = await props.ensureSession(props.session);
-      if (!session) throw new Error("signed out");
-      const result: any = apply
-        ? await applyCloudCommunityResourceBuilderChangeset({ session, communityId: props.communityId, changesetId })
-        : await rejectCloudCommunityResourceBuilderChangeset({ session, communityId: props.communityId, changesetId });
-      if (result && result.ok === false) throw new Error(String(result.error ?? ""));
-      setChanges((current) => current.filter((change) => change.changesetId !== changesetId));
-      props.kit?.onChangeDecided?.(changesetId);
-      if (apply) dispatchCommunityResourcesMutated({ communityId: props.communityId });
-    } catch (error) {
-      const said = error instanceof Error ? error.message.trim() : "";
-      setChangeError(said && said.length < 160 && said !== "signed out" ? said : apply ? "That didn't apply. Try again." : "That didn't go through. Try again.");
-    } finally {
-      setBusyChangeId(null);
-    }
-  };
-
   const openTarget = (target: HomeMoment["target"] | MemberNextStep["target"] | null) => {
     if (!target) return undefined;
     return () => {
@@ -384,7 +329,6 @@ export function WebCommunityHomeSection(props: WebCommunityHomeSectionProps) {
   useEffect(() => {
     if (!ownerMoment?.isNew || !snapshot || !props.kit) return;
     const urgentNow = homeCardFor(snapshot, props, props.audience);
-    if (changes.length > 0) return;
     if (urgentNow && (props.agentOn !== false || urgentNow.label === "Needs your decision")) return;
     const shown = ownerMoment;
     setOwnerMoment({ ...shown, isNew: false });
@@ -393,7 +337,7 @@ export function WebCommunityHomeSection(props: WebCommunityHomeSectionProps) {
       if (session) await markOwnerMomentShown({ session, communityId: props.communityId, key: shown.moment.key }).catch(() => undefined);
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ownerMoment, snapshot, props.agentOn, changes.length]);
+  }, [ownerMoment, snapshot, props.agentOn]);
 
   // Home is extra; if its facts can't load, the conversation below still works.
   if (failed && !props.kit) return null;
@@ -412,14 +356,16 @@ export function WebCommunityHomeSection(props: WebCommunityHomeSectionProps) {
   if (props.kit) {
     const kit = props.kit;
     const isHost = props.audience === "host";
-    // The host's list of decisions: people waiting, course changes an AI
-    // asked for, and (with the guide on) the oldest unanswered question.
+    // The host's list of what came forward on its own and needs a decision:
+    // people waiting to join and (with the guide on) the oldest unanswered
+    // question. Work done through an agent is never here: it is approved
+    // where the agent is being worked with.
     // Until the people themselves have loaded, the snapshot's count stands in
     // and the row links to Members.
     const joinReview = props.joinReview && props.joinReview.requests.length > 0 ? props.joinReview : null;
     const joinCount = joinReview ? joinReview.requests.length : props.joinReview && !snapshot ? 0 : snapshot?.joinRequestsPending ?? 0;
     const asked = isHost && agentOn && snapshot ? homeCardFor({ ...snapshot, joinRequestsPending: 0 }, props, "host") : null;
-    const needs = isHost ? needsYouCount({ joinRequests: joinCount, changes: changes.length, question: Boolean(asked) }) : 0;
+    const needs = isHost ? needsYouCount({ joinRequests: joinCount, question: Boolean(asked) }) : 0;
     // The right column: Today, who is online, and the community's memory.
     const panel = snapshot ? (
       <KitHomeRail session={props.session} communityId={props.communityId} audience={props.audience} snapshot={snapshot} agentOn={agentOn}
@@ -446,8 +392,6 @@ export function WebCommunityHomeSection(props: WebCommunityHomeSectionProps) {
           ) : null}
           {isHost && snapshot ? (
             <NeedsYou join={joinReview} joinCount={joinCount} onShowAllJoinRequests={props.onOpenJoinRequests}
-              changes={changes} busyChangeId={busyChangeId} changeError={changeError}
-              onApplyChange={(id) => void decideChange(id, true)} onRejectChange={(id) => void decideChange(id, false)}
               question={asked ? { title: asked.title, detail: asked.detail, action: asked.action, onAction: asked.onAction } : null} />
           ) : null}
           {!isHost && agentOn && homeMoments?.nextStep ? (

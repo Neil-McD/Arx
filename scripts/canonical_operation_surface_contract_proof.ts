@@ -176,7 +176,7 @@ assert.doesNotMatch(
   /communityAiFeed|source_type:\s*"ai_feed"|\/ai-feed\//,
   "canonical repository search must not expose the retired AI Feed domain",
 );
-assert.match(executor, /stageCommunityResourceBuilderChangesetInternal/);
+assert.match(executor, /runCommunityResourceBuilderBatchInternal/);
 assert.doesNotMatch(
   executor,
   /approveCommunityResourceBuilderChangeset|rejectCommunityResourceBuilderChangeset|applyCommunityResourceBuilderChangeset/,

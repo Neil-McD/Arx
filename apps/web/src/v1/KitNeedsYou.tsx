@@ -1,10 +1,10 @@
-// Design system v1, the host's Home: "Needs you". One list of everything
-// waiting on the host's decision: people asking to join, course changes an
-// AI asked for (a batch that deletes waits for a person; docs/specs/
-// agent-access-v0.md), and the oldest question nobody has answered. A row
-// opens in place; nothing here is news, only decisions. Empty, it isn't drawn.
+// Design system v1, the host's Home: "Needs you". One list of what came
+// forward on its own and waits on the host: people asking to join, and the
+// oldest question nobody has answered. Work done through an agent (the guide
+// in the composer, your own AI) is never here; it is approved where you are
+// working. A row opens in place. Empty, the list isn't drawn.
 import { useState, type ReactNode } from "react";
-import { BookOpen, ChevronDown, MessageCircleQuestion, UserPlus } from "lucide-react";
+import { ChevronDown, MessageCircleQuestion, UserPlus } from "lucide-react";
 import type { CommunityAdmissionJoinRequest } from "../components/CommunityJoinRequestReview";
 import { Btn, cx } from "./kit";
 
@@ -18,17 +18,10 @@ export type NeedsYouJoinReview = {
   onDecline: (id: string) => void;
 };
 
-export type NeedsYouChange = {
-  changesetId: string;
-  summary: string;
-  operationCount: number;
-  previewItems: Array<{ marker: string; title: string; preview: string | null }>;
-};
-
 export type NeedsYouQuestion = { title: string; detail: string; action: string; onAction: () => void };
 
-export function needsYouCount(args: { joinRequests: number; changes: number; question: boolean }): number {
-  return (args.joinRequests > 0 ? 1 : 0) + args.changes + (args.question ? 1 : 0);
+export function needsYouCount(args: { joinRequests: number; question: boolean }): number {
+  return (args.joinRequests > 0 ? 1 : 0) + (args.question ? 1 : 0);
 }
 
 export function joinRowTitle(count: number): string {
@@ -68,18 +61,13 @@ export function NeedsYou(props: {
   // The count when the people themselves aren't loaded (the row then links out).
   joinCount: number;
   onShowAllJoinRequests: () => void;
-  changes: NeedsYouChange[];
-  busyChangeId: string | null;
-  changeError: string | null;
-  onApplyChange: (id: string) => void;
-  onRejectChange: (id: string) => void;
   question: NeedsYouQuestion | null;
 }) {
   const [open, setOpen] = useState<string | null>(null);
   const toggle = (key: string) => () => setOpen((current) => (current === key ? null : key));
   const requests = props.join?.requests ?? [];
   const waiting = props.join ? requests.length : props.joinCount;
-  const total = needsYouCount({ joinRequests: waiting, changes: props.changes.length, question: Boolean(props.question) });
+  const total = needsYouCount({ joinRequests: waiting, question: Boolean(props.question) });
   if (total === 0) return null;
   return (
     <section className={cx("nyou")} aria-label="Needs you">
@@ -119,37 +107,6 @@ export function NeedsYou(props: {
             ) : null}
           </Row>
         ) : null}
-        {props.changes.map((change) => {
-          const key = `change:${change.changesetId}`;
-          const busy = props.busyChangeId === change.changesetId;
-          return (
-            <Row key={key} icon={<BookOpen size={16} strokeWidth={1.7} />} title={change.summary || "Course changes"}
-              detail={change.operationCount === 1 ? "1 change to your courses." : `${change.operationCount} changes to your courses.`}
-              note="Asked through an AI · waits a day, then is dropped"
-              open={open === key} onToggle={toggle(key)}>
-              {open === key ? (
-                <div className={cx("nopen")}>
-                  <h4>What changes</h4>
-                  <ul>
-                    {change.previewItems.map((item, index) => (
-                      <li key={index} className={cx(item.marker === "-" && "gone")}>
-                        <em aria-hidden="true">{item.marker}</em><span><b>{item.title}</b>{item.preview ? <span>{item.preview}</span> : null}</span>
-                      </li>
-                    ))}
-                  </ul>
-                  {change.operationCount > change.previewItems.length ? (
-                    <p className={cx("nnote")}>And {change.operationCount - change.previewItems.length} more.</p>
-                  ) : null}
-                  {props.changeError && !busy ? <p className={cx("nnote", "bad")}>{props.changeError}</p> : null}
-                  <div className={cx("nacts")}>
-                    <Btn small go disabled={busy} onClick={() => props.onApplyChange(change.changesetId)}>{busy ? "…" : "Apply"}</Btn>
-                    <Btn small disabled={busy} onClick={() => props.onRejectChange(change.changesetId)}>Reject</Btn>
-                  </div>
-                </div>
-              ) : null}
-            </Row>
-          );
-        })}
         {props.question ? (
           <Row icon={<MessageCircleQuestion size={16} strokeWidth={1.7} />} title={props.question.title} detail={props.question.detail}>
             <div className={cx("nacts")}><Btn small onClick={props.question.onAction}>{props.question.action}</Btn></div>

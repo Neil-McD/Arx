@@ -1,6 +1,7 @@
 /// <reference types="vite/client" />
 // The builder lens on a community's resources: the directory owners and admins
-// read, and the changesets an AI stages and a person applies or rejects.
+// read, and the batches of course changes an agent sends, applied as they
+// arrive: agents build in draft and never publish or delete what members see.
 import { convexTest } from "convex-test";
 import { expect, test } from "vitest";
 
@@ -43,10 +44,13 @@ async function createFixture(t: ReturnType<typeof convexTest>) {
   });
 }
 
-const stage = (t: ReturnType<typeof convexTest>, f: Awaited<ReturnType<typeof createFixture>>, key: string, operations: unknown[]) =>
-  t.mutation(internal.communityResources.stageCommunityResourceBuilderChangesetInternal, {
-    userId: f.ownerId, communityId: f.communityId, summary: `Stage ${key}.`, operations, idempotencyKey: key,
+// Every batch is sent by an agent and applied as it arrives.
+const send = (t: ReturnType<typeof convexTest>, f: Awaited<ReturnType<typeof createFixture>>, key: string, operations: unknown[]) =>
+  t.mutation(internal.communityResources.runCommunityResourceBuilderBatchInternal, {
+    userId: f.ownerId, communityId: f.communityId, summary: `Send ${key}.`, operations, idempotencyKey: key,
   });
+const courseNames = (t: ReturnType<typeof convexTest>) =>
+  t.run(async (ctx) => (await ctx.db.query("communityResourceModules").collect()).map((row: any) => row.name));
 
 test("the builder directory and resource reads are for owners and admins only, and the list never carries page bodies", async () => {
   const t = convexTest(schema, modules);
@@ -64,44 +68,72 @@ test("the builder directory and resource reads are for owners and admins only, a
     .resolves.toMatchObject({ ok: true });
 });
 
-test("only owners and admins decide a staged changeset; a rejected one can no longer be applied", async () => {
+test("an owner's or admin's agent builds a draft course at once; a member's can't", async () => {
   const t = convexTest(schema, modules);
   const f = await createFixture(t);
-  const staged: any = await stage(t, f, "decide", [{ op: "create_module", module_key: "new", name: "New section" }]);
-  expect(staged).toMatchObject({ status: "staged" });
-  await expect(stage(t, { ...f, ownerId: f.memberId }, "member-stage", [{ op: "create_module", name: "Nope" }])).rejects.toThrow();
-
-  const decide = (subject: string, fn: "applyCommunityResourceBuilderChangeset" | "rejectCommunityResourceBuilderChangeset") =>
-    t.withIdentity({ subject }).mutation(api.communityResources[fn] as any, { communityId: f.communityId, changesetId: staged.changeset_id });
-  await expect(decide("builder-member", "applyCommunityResourceBuilderChangeset")).rejects.toThrow();
-  await expect(decide("builder-member", "rejectCommunityResourceBuilderChangeset")).rejects.toThrow();
-  await expect(decide("builder-admin", "rejectCommunityResourceBuilderChangeset")).resolves.toMatchObject({ status: "rejected" });
-  await expect(decide("builder-owner", "applyCommunityResourceBuilderChangeset")).rejects.toThrow();
-  const sections = await t.run((ctx) => ctx.db.query("communityResourceModules").collect());
-  expect(sections.map((row: any) => row.name)).not.toContain("New section");
+  await expect(send(t, f, "build", [{ op: "create_module", module_key: "new", name: "New section" }]))
+    .resolves.toMatchObject({ status: "applied", applied: true });
+  await expect(send(t, { ...f, ownerId: f.adminId }, "admin-build", [{ op: "create_module", name: "From an admin" }]))
+    .resolves.toMatchObject({ status: "applied" });
+  await expect(send(t, { ...f, ownerId: f.memberId }, "member-build", [{ op: "create_module", name: "Nope" }])).rejects.toThrow();
+  const courses: any[] = await t.run((ctx) => ctx.db.query("communityResourceModules").collect());
+  expect(courses.filter((row) => row.name === "New section" || row.name === "From an admin").map((row) => row.status)).toEqual(["draft", "draft"]);
+  expect(courses.map((row) => row.name)).not.toContain("Nope");
 });
 
-test("a changeset made against an older version of a page is refused when applied", async () => {
+test("a batch made against an older version of a page is refused, and nothing is changed", async () => {
   const t = convexTest(schema, modules);
   const f = await createFixture(t);
-  const staged: any = await stage(t, f, "stale", [{ op: "edit_page", resource_id: f.pageId, expected_updated_at: NOW, title: "Welcome, everyone" }]);
   await t.run((ctx) => ctx.db.patch(f.pageId, { title: "Edited by hand", updatedAt: NOW + 1 }));
-  await expect(t.withIdentity({ subject: "builder-owner" }).mutation(api.communityResources.applyCommunityResourceBuilderChangeset, {
-    communityId: f.communityId, changesetId: staged.changeset_id,
-  })).rejects.toThrow("community_resource_edit_conflict");
+  await expect(send(t, f, "stale", [
+    { op: "create_module", name: "Would be made first" },
+    { op: "edit_page", resource_id: f.pageId, expected_updated_at: NOW, title: "Welcome, everyone" },
+  ])).rejects.toThrow("community_resource_edit_conflict");
   const page: any = await t.run((ctx) => ctx.db.get(f.pageId));
   expect(page.title).toBe("Edited by hand");
+  // All or nothing: the course named before the refused step was not made.
+  expect(await courseNames(t)).not.toContain("Would be made first");
 });
 
-test("a changeset can't publish a page, and can't delete a section that still has pages", async () => {
+test("an agent can't publish or unpublish a course, or delete what members can see", async () => {
   const t = convexTest(schema, modules);
   const f = await createFixture(t);
-  await expect(stage(t, f, "publish", [{ op: "create_page", module_id: f.moduleId, title: "Launch", body_md: "Hi", resource_status: "published" }]))
+  const publish = "Publishing and unpublishing a course is done by a person";
+  const live = "This is in a published course, so members can see it";
+  await expect(send(t, f, "publish-page", [{ op: "create_page", module_id: f.moduleId, title: "Launch", body_md: "Hi", resource_status: "published" }]))
     .rejects.toThrow("community_resource_changeset_publish_deferred");
-  await expect(stage(t, f, "delete-full", [{ op: "delete_category", module_id: f.moduleId, expected_updated_at: NOW }]))
-    .rejects.toThrow("community_resource_changeset_category_not_empty");
-  await expect(stage(t, f, "delete-empty", [{ op: "delete_category", module_id: f.emptyModuleId, expected_updated_at: NOW }]))
-    .resolves.toMatchObject({ status: "staged" });
+  await expect(send(t, f, "new-live", [{ op: "create_module", name: "Live from the start", module_status: "live" }])).rejects.toThrow(publish);
+  await expect(send(t, f, "publish", [{ op: "edit_module", module_id: f.emptyModuleId, expected_updated_at: NOW, module_status: "live" }])).rejects.toThrow(publish);
+  await expect(send(t, f, "unpublish", [{ op: "edit_module", module_id: f.moduleId, expected_updated_at: NOW, module_status: "draft" }])).rejects.toThrow(publish);
+  // A lesson in a published course stays, and so does everything else the batch named.
+  await expect(send(t, f, "delete-live-lesson", [
+    { op: "create_module", name: "Made before the refusal" },
+    { op: "delete_page", resource_id: f.secondPageId, expected_updated_at: NOW },
+  ])).rejects.toThrow(live);
+  expect(await t.run((ctx) => ctx.db.get(f.secondPageId))).not.toBeNull();
+  expect(await courseNames(t)).toEqual(["Start here", "Later"]);
+  const statuses: any[] = await t.run((ctx) => ctx.db.query("communityResourceModules").collect());
+  expect(statuses.map((row) => row.status)).toEqual(["live", "draft"]);
+  await expect(send(t, f, "delete-full", [{ op: "delete_category", module_id: f.moduleId, expected_updated_at: NOW }])).rejects.toThrow();
+});
+
+test("an agent edits a published lesson, and deletes drafts", async () => {
+  const t = convexTest(schema, modules);
+  const f = await createFixture(t);
+  await expect(send(t, f, "edit-live", [{ op: "edit_page", resource_id: f.secondPageId, expected_updated_at: NOW, title: "Our rhythm" }]))
+    .resolves.toMatchObject({ status: "applied" });
+  expect(((await t.run((ctx) => ctx.db.get(f.secondPageId))) as any).title).toBe("Our rhythm");
+  // A lesson in a draft course, and then the empty draft course itself.
+  const draftLessonId = await t.run((ctx) => ctx.db.insert("communityResources", {
+    communityId: f.communityId, createdByUserId: f.ownerId, moduleId: f.emptyModuleId, type: "post", role: "page", status: "draft",
+    title: "Not ready", bodyMd: "Soon.", pinned: false, createdAt: NOW, updatedAt: NOW,
+  }));
+  await expect(send(t, f, "delete-draft-lesson", [{ op: "delete_page", resource_id: draftLessonId, expected_updated_at: NOW }]))
+    .resolves.toMatchObject({ status: "applied" });
+  expect(await t.run((ctx) => ctx.db.get(draftLessonId))).toBeNull();
+  await expect(send(t, f, "delete-draft-course", [{ op: "delete_category", module_id: f.emptyModuleId, expected_updated_at: NOW }]))
+    .resolves.toMatchObject({ status: "applied" });
+  expect(await courseNames(t)).toEqual(["Start here"]);
 });
 
 test("the health report counts every issue even when it shows only a sample", async () => {
