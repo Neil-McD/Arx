@@ -2289,10 +2289,12 @@ async function executeCanonicalWrite(args: {
       return canonicalError("invalid_tool_args", "root_id doesn't match the post this path names; leave it out when replying on the post's own path.");
     }
     const rootId = pathRootId ?? contentRootId;
+    // Only create (a new post) and append (a reply) write here: any other
+    // mode on a channel or thread path is refused, never taken as a post.
     if (
+      (mode !== "create" && mode !== "append") ||
       (mode === "create" && rootId) ||
-      (mode === "append" && !rootId) ||
-      mode === "update"
+      (mode === "append" && !rootId)
     ) {
       return canonicalError(
         "invalid_tool_args",
@@ -2736,7 +2738,7 @@ async function askPersonFirst(args: {
     const callInput = args.input.input && typeof args.input.input === "object" ? args.input.input as Record<string, unknown> : {};
     const refs = operation === REMOVE_POSTS_OPERATION ? removePostsRefs(target, operation, callInput) : null;
     if (!refs || !capabilityDocument({ target, operation, evidenceSurface: args.evidenceSurface, principalKind: args.principalKind })) return null;
-    items = await args.ctx.runQuery((internal as any).communityGuideQuestions.describePostsInternal, { communityId: target.communityId, refs });
+    items = await args.ctx.runQuery((internal as any).communityGuideQuestions.describePostsInternal, { communityId: target.communityId, userId: args.userId, refs });
     question = removeQuestion({ count: refs.length });
   } else {
     const path = parseCommunityChannelSemanticPath(target.localPath);
@@ -2756,7 +2758,7 @@ async function askPersonFirst(args: {
       text = words;
     } else {
       if (path.kind !== "document") return null;
-      items = await args.ctx.runQuery((internal as any).communityGuideQuestions.describePostsInternal, { communityId: target.communityId, refs: [path.ref] });
+      items = await args.ctx.runQuery((internal as any).communityGuideQuestions.describePostsInternal, { communityId: target.communityId, userId: args.userId, refs: [path.ref] });
       question = removeQuestion({ count: 1, own: { channelName: channel.slug } });
     }
   }
