@@ -11,7 +11,7 @@ test("Responses adapter preserves per-request usage and explicitly requests Stan
   vi.stubGlobal("fetch", fetch);
   const result = await runOpenAiNativeToolCompletion({ modelId: "gpt-6-luna", apiKeyOverride: "test-key",
     messages: [{ role: "user", content: "Synthetic test" }], maxTokens: 200, tools: [] });
-  expect(JSON.parse(fetch.mock.calls[0]![1].body)).toMatchObject({ model: "gpt-6-luna", service_tier: "default", reasoning: { effort: "low" } });
+  expect(JSON.parse(fetch.mock.calls[0]![1].body)).toMatchObject({ model: "gpt-6-luna", service_tier: "default", reasoning: { effort: "medium" } });
   expect(result).toMatchObject({ ok: true, providerRequestUsage: { requestId: "resp_luna6", modelId: "gpt-6-luna", serviceTier: "default",
     promptTokens: 1500, completionTokens: 100, cachedInputTokens: 500, cacheWriteTokens: 200 } });
 });
