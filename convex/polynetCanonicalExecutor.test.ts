@@ -136,7 +136,9 @@ test("community agent cannot discover or read sponsor self context; owner self h
   const actor = t.withIdentity({ subject: f.ownerSubject });
   const owner = await actor.query(internal.communityCapabilityContext.resolveCommunityMemberSelfContextInternal,
     { authSubject: f.ownerSubject, userId: f.ownerId, communityId: f.communityId });
-  expect(owner).toMatchObject({ ok: true, context: { role: "owner", membership_id: null, joined_at: null } });
+  // No membership row is made up for the owner; they have been here since they made the community.
+  const made = await t.run(async (ctx) => (await ctx.db.get(f.communityId as any) as any).createdAt);
+  expect(owner).toMatchObject({ ok: true, context: { role: "owner", membership_id: null, joined_at: new Date(made).toISOString() } });
   for (const [toolName, path] of [
     ["polynet_list", "/communities/canonical-community/members/"],
     ["polynet_list", "/communities/canonical-community/members/me/"],
