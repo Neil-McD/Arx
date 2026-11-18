@@ -71,7 +71,8 @@ export const cleanUpAfterEvalInternal = internalMutation({
 // guide's tools check the person's own sign-in, exactly as on Home. It only
 // ever acts as whoever is signed in, never as someone named in the arguments.
 export const runGuideRequest = action({
-  args: { communityId: v.id("communities"), text: v.string() },
+  // section: the page the person is on (home, knowledge, ...), as the app sends it.
+  args: { communityId: v.id("communities"), text: v.string(), section: v.optional(v.string()) },
   handler: async (ctx, args): Promise<any> => {
     if (process.env.POLYNET_ALLOW_SEED !== "1") throw new Error("guide_eval_not_allowed_on_this_deployment");
     const authSubject = String((await ctx.auth.getUserIdentity())?.subject ?? "").trim();
@@ -121,6 +122,7 @@ export const runGuideRequest = action({
       communityChannels: context.community_channels,
       communitySystemPrompt: context.community_system_prompt,
       communityLens: talk,
+      communityAgentSurfaceContext: { version: 1, kind: "community", community_slug: context.community_slug, community_conversation: true, section: args.section ?? "home" },
       communityInferenceAdmission: admission,
       measurementWithoutReceipt: true,
       appendRunEvent: async (event: { eventType: string; payload: Record<string, unknown> }) => { events.push({ eventType: event.eventType, payload: event.payload }); },
