@@ -4,12 +4,12 @@ import type { BrainAttach, BrainMap, BrainPoint } from "../../../../shared/commu
 
 const DAY = 86_400_000;
 
-function base(name: string): BrainMap {
+export function base(name: string): BrainMap {
   return { center: { name, kind: "community" }, counts: { courses: 0, lessons: 0, learned: 0, this_week: 0 }, can_manage: true,
     courses: [], subjects: [], points: [], pods: [], arcs: [], hidden: {} };
 }
 
-function finish(map: BrainMap, now: number): BrainMap {
+export function finish(map: BrainMap, now: number): BrainMap {
   const sizes = new Map<string, { first: number; size: number }>();
   for (const p of map.points) {
     if (p.at.kind !== "subject") continue;
@@ -25,7 +25,7 @@ function finish(map: BrainMap, now: number): BrainMap {
   return map;
 }
 
-function pt(id: string, title: string | null, at: BrainAttach, daysAgo: number, now: number, extra: Partial<BrainPoint> = {}): BrainPoint {
+export function pt(id: string, title: string | null, at: BrainAttach, daysAgo: number, now: number, extra: Partial<BrainPoint> = {}): BrainPoint {
   return { id: `note:${id}`, title, kind: "learned", at, learned_at: new Date(now - daysAgo * DAY).toISOString(), fresh: daysAgo <= 7, use: 0, mine: false, ...extra };
 }
 

@@ -58,7 +58,9 @@ export function KitBrainMap(props: {
     const wrap = wrapRef.current;
     if (!wrap || !page || typeof ResizeObserver === "undefined") return;
     const measure = () => {
-      const box = wrap.getBoundingClientRect();
+      // Its laid-out size, not its size on screen: drawn inside something
+      // scaled (the website's demo), the map still lays out for its own box.
+      const box = { width: wrap.clientWidth, height: wrap.clientHeight };
       if (box.width > 0 && box.height > 0) setStage((last) => Math.abs(last.w - box.width) < 1 && Math.abs(last.h - box.height) < 1 ? last : { w: Math.round(box.width), h: Math.round(box.height) });
     };
     measure();
@@ -213,7 +215,7 @@ export function KitBrainMap(props: {
         return <path key={`s-${hub.key}`} className={cx(gap ? "brain-spoke gap" : dimAll ? "brain-spoke dim" : "brain-spoke")} d={curve(layout.center, hub, (hashBend(hub.key)))} />;
       })}
       {/* Branches: what was learned, off its lesson, subject or pod. */}
-      {layout.points.map((p) => <path key={`b-${p.id}`} className={cx(dimAll && !lit(p) ? "brain-branch dim" : "brain-branch")} d={curve(p.anchor, p, hashBend(p.id))} strokeWidth={page ? 0.7 + Math.min(1, p.point.use / 10) * 0.8 : 0.7} />)}
+      {layout.points.map((p) => <path key={`b-${p.id}`} data-point={p.id} className={cx(dimAll && !lit(p) ? "brain-branch dim" : "brain-branch")} d={curve(p.anchor, p, hashBend(p.id))} strokeWidth={page ? 0.7 + Math.min(1, p.point.use / 10) * 0.8 : 0.7} />)}
       {/* Synapses: what answers read together. */}
       {layout.arcs.map((arc) => {
         const hot = props.selectedId && arc.ids.includes(props.selectedId);
@@ -230,7 +232,7 @@ export function KitBrainMap(props: {
         const selected = props.selectedId === p.id;
         const name = p.point.title ?? (p.point.kind === "taught" ? "Taught by a host" : "Something the community learned");
         return (
-          <g key={p.id} className={cx(page ? "brain-node pickable" : "brain-node")}
+          <g key={p.id} data-point={p.id} className={cx(page ? "brain-node pickable" : "brain-node")}
             {...(page ? { tabIndex: 0, role: "button", "aria-label": name, onClick: () => pick(p.id), onKeyDown: (e: any) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); pick(p.id); } } } : {})}>
             {page ? <title>{name}</title> : null}
             {p.point.fresh && on && reading !== "yours" ? <circle cx={p.x} cy={p.y} r={pr(p) + size.fresh} fill={`url(#${glow})`} /> : null}
