@@ -284,3 +284,14 @@ test("with the host's switch off, the guide's post is refused like the person's 
   expect(after.roots).toEqual(before.roots);
   expect(after.questions.find((row: any) => String(row._id) === question.id)).toMatchObject({ status: "failed", resultLine: (ownAi as any).message });
 });
+
+test("a channel path with any mode but create or append is refused through both doors, never taken as a post", async () => {
+  const w = await world();
+  const before = await w.rows();
+  const sneaky = { path: "/communities/run-club/channels/general/", mode: "delete", content: { text: "Posted without a yes." }, idempotency_key: "sneaky" };
+  expect(await w.guide("member")("polynet_write", sneaky)).toMatchObject({ ok: false, code: "invalid_tool_args" });
+  expect(await w.door("member", "external_mcp")("polynet_write", sneaky)).toMatchObject({ ok: false, code: "invalid_tool_args" });
+  const after = await w.rows();
+  expect(after.roots).toEqual(before.roots);
+  expect(await w.questions("member")).toEqual([]);
+});

@@ -8,6 +8,8 @@ import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import { action, internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import { resolveUserIdForAuthenticatedRequest } from "./authActor";
+import { resolveCommunityChannelActor } from "./communityChannelAccess";
+import { resolveAuthorizedCommunityChannel } from "./communityChannelCore";
 import { executePolynetCanonicalTool } from "./polynetCanonicalExecutor";
 import { GUIDE_ASK_ALWAYS_ALLOWABLE } from "../shared/operationCatalog";
 import {
@@ -39,15 +41,23 @@ export const isAlwaysAllowedInternal = internalQuery({
 });
 
 // Who wrote each post and how it starts, for a question about removing them.
+// A post in a channel this person can't read is never described to them.
 export const describePostsInternal = internalQuery({
-  args: { communityId: v.id("communities"), refs: v.array(v.string()) },
+  args: { communityId: v.id("communities"), userId: v.id("users"), refs: v.array(v.string()) },
   handler: async (ctx, args) => {
     const items: Array<{ who: string; text: string }> = [];
+    const hidden = { who: "A post", text: "It isn't there, or isn't one you can see." };
+    let actor: any = null;
     for (const ref of args.refs.slice(0, GUIDE_QUESTION_ITEMS_SHOWN)) {
       const match = /^interaction:(root|reply):([A-Za-z0-9_-]{1,64})$/.exec(ref);
       const id = match ? ctx.db.normalizeId(match[1] === "root" ? "communityInteractionRoots" : "communityInteractionReplies", match[2]) : null;
       const row: any = id ? await ctx.db.get(id) : null;
-      if (!row || String(row.communityId) !== String(args.communityId)) { items.push({ who: "A post", text: "It is no longer there." }); continue; }
+      const root: any = row && "rootId" in row ? await ctx.db.get(row.rootId) : row;
+      if (!row || !root || String(row.communityId) !== String(args.communityId) || String(root.communityId) !== String(args.communityId)) { items.push(hidden); continue; }
+      try {
+        actor = actor ?? await resolveCommunityChannelActor({ ctx, communityId: args.communityId, userId: args.userId });
+        await resolveAuthorizedCommunityChannel({ ctx, communityId: args.communityId, channelId: root.channelId, actor, capability: "canRead" });
+      } catch { items.push(hidden); continue; }
       const author: any = row.actorUserId ? await ctx.db.get(row.actorUserId) : null;
       items.push({ who: String(author?.displayName ?? author?.handle ?? "The guide"),
         text: String(row.contentSummary ?? "").replace(/\s+/g, " ").trim().slice(0, GUIDE_QUESTION_ITEM_TEXT_MAX) || "(no words)" });
