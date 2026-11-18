@@ -36,7 +36,7 @@ require "$HANDLERS" 'executeChatToolsAgentLoop\(' "one governed agent loop handl
 require "$HANDLERS" 'executionMode: "agentic"' "runtime persists one canonical execution mode"
 require "$LOOP" 'runFundedCommunityAgent\(\{' "a private talk runs on the one run entry"
 forbid "$LOOP" 'runPiRuntimeKernel|runOpenAiNativeToolCompletion|claimCommunityInferenceFundingSession' "a private talk has no Pi loop, model call or funding claim of its own"
-require "$PROMPT" 'Use native tool calls\. Do not describe tool calls in JSON or markdown\.' "prompt requires native tool calls"
+require "$PROMPT" 'When they tell you to do something, do it with the tool made for it\.' "prompt has the guide act through its tools"
 forbid "$HANDLERS" 'runtimeExecutionMode|capability_composed_chat_v1|legacy_project_workspace' "legacy runtime branches stay deleted"
 forbid "$LOOP" 'runtimeExecutionSession|workspaceRuntime|workspaceTerminals|daytonaCodexRuntime|executeTerminalTool|executeComputerTool' "agent loop cannot reach Workspace execution"
 forbid "$PROMPT" 'workspace_harness_context|PLATFORM_HARNESS_CONTEXT|terminal_start|computer_screenshot' "prompt cannot advertise Workspace capabilities"

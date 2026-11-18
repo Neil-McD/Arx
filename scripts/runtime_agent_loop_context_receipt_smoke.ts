@@ -210,21 +210,21 @@ const promptPayload = promptReceipt.payload as {
   base_prompt_chars?: unknown;
   system_prompt_chars?: unknown;
 };
-assert.equal(promptPayload.version, 3);
+assert.equal(promptPayload.version, 4);
 assert.ok(Number(promptPayload.base_prompt_chars) > 0, "prompt receipt should report rendered prompt chars");
 assert.ok(Number(promptPayload.system_prompt_chars) > 0, "prompt receipt should report full system prompt chars");
 const sectionIds = new Set((promptPayload.sections ?? []).map((section) => String(section.id ?? "")));
 for (const sectionId of [
-  "platform_doctrine",
-  "explanation_contract",
-  "harness_operating_policy",
-  "community_lens",
-  "community_lens_authority",
+  "guide_identity",
+  "community_map",
+  "how_to_work",
+  "what_you_may_do",
+  "how_to_speak",
+  "skill",
   "community_system_prompt",
-  "community_resource_lane",
+  "recent_answers",
   "runtime_turn_context",
-  "temporal_context",
-  "resources_architect",
+  "right_now",
 ]) {
   assert.ok(sectionIds.has(sectionId), `prompt receipt should include ${sectionId}`);
 }

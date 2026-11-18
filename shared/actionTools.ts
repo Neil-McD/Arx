@@ -22,6 +22,7 @@
 
 import { CALL_OPERATION_VARIANTS, CALL_OPERATIONS, requestFingerprint, TOOL_OPERATIONS, type OperationEntry } from "./operationCatalog.ts";
 import type { PlatformOperationJsonSchema } from "./platformOperationContract.ts";
+import { RESOURCE_CHANGESET_OPERATION_SCHEMA } from "./polynetCanonicalToolContract.ts";
 
 export type ActionToolRole = "member" | "moderator" | "builder";
 export type ActionToolDoor = "own_ai" | "guide";
@@ -31,8 +32,13 @@ type Translated = { toolName: "polynet_write" | "polynet_call"; input: Record<st
 
 export type ActionTool = {
   name: string;
+  // Also how the guide's instructions name it in a sentence ("After their
+  // yes: post in a channel, ..."), so it reads as what the person gets done.
   title: string;
   description: string;
+  // The guide's own words, where the shared ones would tell it to ask in
+  // words: in a private talk the person's yes is a button the tool puts up.
+  guideDescription?: string;
   // The entry in the one list this tool stands for.
   catalog: string;
   // Missing: both doors. "own_ai": only a person's own AI. "guide": only the
@@ -87,8 +93,9 @@ const call = (operation: string, args: Args, input: Record<string, unknown>): Tr
 const write = (path: string, mode: string, content: Record<string, unknown>): Translated => ({ toolName: "polynet_write", input: { path, mode, content } });
 
 function tool(name: string, catalog: string, title: string, description: string, properties: Record<string, PlatformOperationJsonSchema>,
-  required: string[], translate: ActionTool["translate"], door?: ActionToolDoor): ActionTool {
-  return { name, catalog, title, description, properties: { ...properties, idempotency_key: KEY }, required, translate, ...(door ? { door } : {}) };
+  required: string[], translate: ActionTool["translate"], door?: ActionToolDoor, guideDescription?: string): ActionTool {
+  return { name, catalog, title, description, properties: { ...properties, idempotency_key: KEY }, required, translate,
+    ...(door ? { door } : {}), ...(guideDescription ? { guideDescription } : {}) };
 }
 
 // ---- the tools
@@ -103,11 +110,11 @@ export const ACTION_TOOLS: ActionTool[] = [
     "Reply in a post's thread, as the person you act for.",
     { community: COMMUNITY, channel: CHANNEL, post: ROOT_POST, text: TEXT("The reply, as it will appear.", 8_000) }, ["community", "channel", "post", "text"],
     (a) => write(`${root(a.community)}channels/${a.channel}/${a.post}/`, "append", { text: a.text })),
-  tool("polynet_edit_post", "polynet_write:channels", "Edit your own post",
+  tool("polynet_edit_post", "polynet_write:channels", "Edit their own post",
     "Change the words of a post or reply the person you act for wrote. Not for anyone else's.",
     { community: COMMUNITY, channel: CHANNEL, post: POST, text: TEXT("The new words, in full.", 8_000) }, ["community", "channel", "post", "text"],
     (a) => write(`${root(a.community)}channels/${a.channel}/${a.post}.md`, "update", { text: a.text })),
-  tool("polynet_delete_post", "polynet_write:channels:delete", "Delete your own post",
+  tool("polynet_delete_post", "polynet_write:channels:delete", "Delete their own post",
     "Delete a post or reply the person you act for wrote. It can't be brought back. Not for anyone else's.",
     { community: COMMUNITY, channel: CHANNEL, post: POST }, ["community", "channel", "post"],
     (a) => write(`${root(a.community)}channels/${a.channel}/${a.post}.md`, "delete", {})),
@@ -149,7 +156,7 @@ export const ACTION_TOOLS: ActionTool[] = [
       request_ref: request?.ref, expected_created_at: request?.created_at, expected_updated_at: request?.updated_at })) }))),
 
   tool("polynet_remove_posts", "community.interaction.remove", "Remove posts",
-    "Remove other people's posts or replies (spam, abuse). They can't be brought back. The person is shown the posts and asked first, every time; say one line and stop.",
+    "Remove other people's posts or replies (spam, abuse). They can't be brought back. The person is shown the posts and asked first, every time.",
     { community: COMMUNITY, posts: { type: "array", minItems: 1, maxItems: 100, items: POST, description: "The posts' refs from channel or thread listings." } },
     ["community", "posts"],
     (a) => call("community.interaction.remove", a, { refs: a.posts }), "guide"),
@@ -178,7 +185,8 @@ export const ACTION_TOOLS: ActionTool[] = [
   tool("polynet_publish_handbook", "community.handbook.approve", "Publish the handbook to members",
     "Publish exactly this text as the handbook every member and the guide reads. Show the person the text and get their yes first. Empty text takes the handbook away.",
     { community: COMMUNITY, text: { type: "string", maxLength: 6_000, description: "The handbook, in markdown, exactly as members will read it." } }, ["community", "text"],
-    (a) => call("community.handbook.approve", a, { text: a.text })),
+    (a) => call("community.handbook.approve", a, { text: a.text }), undefined,
+    "Publish exactly this text as the handbook every member and the guide reads. The person is shown the text and asked first, every time. Empty text takes the handbook away."),
   tool("polynet_create_channel", "community.channel.create", "Make a channel",
     "Make a new channel open to every member. A private channel is made in the app.",
     { community: COMMUNITY, name: TEXT("The channel's name.", 40) }, ["community", "name"],
@@ -196,11 +204,11 @@ export const ACTION_TOOLS: ActionTool[] = [
     { community: COMMUNITY, channel: CHANNEL, after: { type: ["string", "null"], maxLength: 64, description: "The slug of the channel it should follow; leave out or null to put it first." } }, ["community", "channel"],
     (a) => call("community.channel.move", a, { channel: a.channel, after: a.after ?? null })),
   tool("polynet_create_event", "community.event.create", "Make an event",
-    "Make an event members see. Work out the exact date, time and time zone with the person first. Nothing is sent to members.",
+    "Make an event members see. Its times are in the community's time zone unless the person says otherwise. Nothing is sent to members.",
     { community: COMMUNITY, ...EVENT_FIELDS }, ["community", "title", "starts_at", "timezone"],
     (a) => call("community.event.create", a, only(a, Object.keys(EVENT_FIELDS)))),
   tool("polynet_update_event", "community.event.update", "Change an event",
-    "Change an event. Only the fields you give are changed.",
+    "Change an event. Only the fields you give are changed. Times are in the community's time zone unless the person says otherwise.",
     { community: COMMUNITY, event: EVENT, ...EVENT_FIELDS }, ["community", "event"],
     (a) => call("community.event.update", a, { event: a.event, ...only(a, Object.keys(EVENT_FIELDS)) })),
   tool("polynet_cancel_event", "community.event.cancel", "Cancel an event",
@@ -210,13 +218,14 @@ export const ACTION_TOOLS: ActionTool[] = [
   tool("polynet_set_member_role", "community.members.set_role", "Change people's role",
     "Make people admins, moderators or plain members. This changes who runs the community: name the people and the role to the person and get their yes first.",
     { community: COMMUNITY, members: MEMBERS, role: { type: "string", enum: ["member", "moderator", "admin"], description: "The role to give them." } }, ["community", "members", "role"],
-    (a) => call("community.members.set_role", a, { members: a.members, role: a.role })),
+    (a) => call("community.members.set_role", a, { members: a.members, role: a.role }), undefined,
+    "Make people admins, moderators or plain members. This changes who runs the community. The person is shown who and the role and asked first, every time."),
   tool("polynet_remove_members", "community.members.remove", "Remove people from the community",
-    "Remove people from the community: they lose access, anyone paying loses their subscription, and they can ask to join again later. The person is shown who and asked first, every time; say one line and stop.",
+    "Remove people from the community: they lose access, anyone paying loses their subscription, and they can ask to join again later. The person is shown who and asked first, every time.",
     { community: COMMUNITY, members: MEMBERS }, ["community", "members"],
     (a) => call("community.members.remove", a, { members: a.members }), "guide"),
   tool("polynet_ban_members", "community.members.ban", "Ban people",
-    "Ban people: they are removed, anyone paying loses their subscription, and they can't rejoin unless unbanned. The person is shown who and asked first, every time; say one line and stop.",
+    "Ban people: they are removed, anyone paying loses their subscription, and they can't rejoin unless unbanned. The person is shown who and asked first, every time.",
     { community: COMMUNITY, members: MEMBERS, reason: { type: "string", maxLength: 1_000, description: "Optional. Why, for the record; the person sees it in the question." } },
     ["community", "members"],
     (a) => call("community.members.ban", a, { members: a.members, ...only(a, ["reason"]) }), "guide"),
@@ -224,10 +233,19 @@ export const ACTION_TOOLS: ActionTool[] = [
     "Lift the ban on people so they can ask to join again.",
     { community: COMMUNITY, members: MEMBERS }, ["community", "members"],
     (a) => call("community.members.unban", a, { members: a.members })),
+  // The operations are spelled out here: left to "as builder/resources/
+  // describes", the guide guessed at names (create_lesson) and was refused.
   tool("polynet_change_courses", "polynet_write:builder", "Change courses and lessons",
-    "Make, edit, move and order courses and lessons, as one batch that is applied whole or not at all. A new course is a draft; publishing is done by a person in the app. Read the community's builder/resources/ first: it lists the courses and says how each operation is written.",
+    "Make, edit, move and order courses and lessons, as one batch that is applied whole or not at all. A new course is a draft; publishing is done by a person in the app. List builder/resources/ first for each course's and lesson's id and updated_at. Each operation is one of: " +
+    "create_module (a course: name, description_md, and a module_key you make up if lessons in this batch go in it); " +
+    "create_page (a lesson: title, body_md, and module_id of an existing course or module_key of one made in this batch); " +
+    "edit_page (resource_id, expected_updated_at, then what changes: title, body_md, module_id, lesson_links); " +
+    "edit_module (module_id, expected_updated_at, then name or description_md); " +
+    "move_resource (resource_id, expected_updated_at, module_id); " +
+    "reorder_pages (module_id, resource_ids: every lesson of that course in order); reorder_modules (module_ids: every course in order); " +
+    "delete_page (resource_id, expected_updated_at) and delete_category (module_id, expected_updated_at), drafts only.",
     { community: COMMUNITY, summary: { type: "string", maxLength: 1_000, description: "One line on what this batch does." },
-      operations: { type: "array", minItems: 1, maxItems: 25, description: "The changes, in order, each as builder/resources/ describes.", items: { type: "object" } } },
+      operations: { type: "array", minItems: 1, maxItems: 25, description: "The changes, in order.", items: RESOURCE_CHANGESET_OPERATION_SCHEMA } },
     ["community", "operations"],
     (a) => write(`${root(a.community)}builder/resources/`, "create", { summary: a.summary ?? "", operations: a.operations })),
 ];
@@ -276,7 +294,7 @@ export function guideToolDefinition(entry: ActionTool) {
   const properties = Object.fromEntries(Object.entries(entry.properties).filter(([key]) => !GUIDE_FILLS.has(key)));
   return {
     name: entry.name,
-    description: entry.description,
+    description: entry.guideDescription ?? entry.description,
     inputSchema: { type: "object", additionalProperties: false, required: entry.required.filter((key) => !GUIDE_FILLS.has(key)), properties } as PlatformOperationJsonSchema,
   };
 }

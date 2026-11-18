@@ -124,23 +124,36 @@ The dimensions are independent:
 10. Section IDs use canonical lower snake case and are unique within a bundle;
     compilation fails before provider execution if an ID is invalid or a base
     or extension section would duplicate an ID.
-11. The Agent page's invocation-surface section (`member_agent_dock`) owns the
-    agent's fixed identity: this community's agent in a private conversation
-    with the member, acting within the member's current permissions. Hidden
-    user name or soul settings do not enter prompt compilation.
+11. The `guide_identity` section owns the guide's fixed identity in a private
+    talk (`member_agent_dock`): this community's guide, talking privately with
+    the person, acting with their permissions only. Hidden user name or soul
+    settings do not enter prompt compilation.
 
-## 5. Harness overlay sections
+## 5. The private talk's sections (Nov 18 2026)
 
-Skills are gone (Oct 28, POL-21). The harness adds one section:
+The guide's instructions were rewritten (`shared/runtimePrompt.ts`). In cache
+order, what every talk in the community shares for one role first, the moment
+last:
 
-| Section               | Owner    | Slot        | Authority       |
-| --------------------- | -------- | ----------- | --------------- |
-| `resources_architect` | platform | instruction | platform policy |
+1. `guide_identity`, `community_map`, `how_to_work`, `what_you_may_do`
+   (generated from `shared/actionTools.ts` and `shared/operationCatalog.ts`,
+   authority `role_policy`), `how_to_speak`.
+2. `skill`: a skill's text (`shared/guideSkills.ts`), drawn only for a person
+   offered its tools on the page where its job is done (course-building: a
+   host on Knowledge); everywhere else only the pointer in `community_map`.
+   The same text is the document `/communities/<slug>/skills/course-building.md`.
+3. The community's material, each framed as information, never instructions:
+   `community_identity` (only without the card), `community_card`,
+   `community_handbook`, `community_system_prompt` (the host's instructions:
+   tone, goals and focus, under everything above), `community_memory`,
+   `personal_memory`.
+4. After the conversation: `member_identity_context`, `recent_answers` (the
+   person's answers to the guide's questions), `runtime_turn_context`,
+   `right_now` (date, zone and page).
 
-It renders only on builder-lane turns (the builder can manage resources) and is
-empty otherwise; a community site always runs in the member lane. Prompt
-receipts carry `version: 3` and require this section; version 2 receipts
-(with the four former skill sections) still verify against the old list.
+There are no extension sections any more. Prompt receipts carry `version: 4`
+and require the sections in `REQUIRED_PROMPT_SECTION_IDS_V4`; version 2 and 3
+receipts still verify against their own lists.
 
 ## 6. Manifest v2
 
@@ -212,7 +225,8 @@ Slice 1 is complete when:
 2. `systemPrompt === runtimePromptBundle.text` in the real runtime.
 3. No `buildPromptSuffix()` call or manual `harness_prompt_suffix` receipt
    remains in the runtime loop.
-4. `community_lens_authority` is receipted whenever the compiler renders it.
+4. What the role may do (`what_you_may_do`, formerly `community_lens_authority`)
+   is receipted whenever the compiler renders it.
 5. The rendered prompt-section ID set equals the manifest prompt ID set.
 6. Harness overlays have explicit owner, authority, source, and reason.
 7. Skill activation provenance remains auditable in resolution events.

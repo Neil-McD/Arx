@@ -327,6 +327,35 @@ const v3MissingArchitect = await buildRuntimeContextIntegrityCheck({
 assert.equal(v3MissingArchitect.ok, false);
 assert.ok(v3MissingArchitect.failures.includes("missing_prompt_section:resources_architect"));
 
+// Version 4 receipts (the guide's rewritten instructions, shared/runtimePrompt.ts):
+// the new sections are required, the old ones are not, and a receipt that
+// leaves one out (the moment, here) fails.
+const v4SectionIds = ["guide_identity", "community_map", "how_to_work", "what_you_may_do", "how_to_speak", "skill",
+  "community_system_prompt", "recent_answers", "runtime_turn_context", "right_now"];
+const v4RenderedIds = v4SectionIds.filter((id) => !["skill", "community_system_prompt", "recent_answers", "runtime_turn_context"].includes(id));
+const v4EventsFor = (sectionIds: string[]) => v2Events.map((event) => {
+  if (event.eventType === "runtime_prompt_bundle_resolved") {
+    return { ...event, payload: { ...event.payload, version: 4,
+      sections: sectionIds.map((id) => ({ id, rendered: v4RenderedIds.includes(id) })) } };
+  }
+  if (event.eventType === "runtime_context_manifest_resolved") {
+    return { ...event, payload: { ...event.payload, manifest: {
+      ...(event.payload as any).manifest,
+      prompts: v4RenderedIds.map((id) => ({ id })),
+      summary: { ...(event.payload as any).manifest.summary, promptCount: v4RenderedIds.length },
+    } } };
+  }
+  return event;
+});
+const v4Verdict = await buildRuntimeContextIntegrityCheck({ run, events: v4EventsFor(v4SectionIds) });
+assert.equal(v4Verdict.ok, true, JSON.stringify(v4Verdict.failures));
+const v4MissingMoment = await buildRuntimeContextIntegrityCheck({
+  run,
+  events: v4EventsFor(v4SectionIds.filter((id) => id !== "right_now")),
+});
+assert.equal(v4MissingMoment.ok, false);
+assert.ok(v4MissingMoment.failures.includes("missing_prompt_section:right_now"));
+
 const handlerSource = readFileSync("convex/runtimeTurnHandlers.ts", "utf8");
 assert.match(
   handlerSource,

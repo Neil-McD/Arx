@@ -114,6 +114,22 @@ const REQUIRED_PROMPT_SECTION_IDS_V3 = [
   "resources_architect",
 ];
 
+// Version 4 (Nov 18 2026): the guide's rewritten instructions
+// (shared/runtimePrompt.ts). Every one of these is listed in a receipt,
+// drawn or not; the skill only on the page its job is done on.
+const REQUIRED_PROMPT_SECTION_IDS_V4 = [
+  "guide_identity",
+  "community_map",
+  "how_to_work",
+  "what_you_may_do",
+  "how_to_speak",
+  "skill",
+  "community_system_prompt",
+  "recent_answers",
+  "runtime_turn_context",
+  "right_now",
+];
+
 function asRecord(value: unknown): Record<string, unknown> | null {
   return value && typeof value === "object" && !Array.isArray(value)
     ? (value as Record<string, unknown>)
@@ -332,9 +348,11 @@ export async function buildRuntimeContextIntegrityCheck(params: {
   const sectionIds = promptSectionIds(promptReceipt);
   const requiredSectionIds = !usesCanonicalPromptProjection
     ? REQUIRED_PROMPT_SECTION_IDS_V1
-    : promptReceiptVersion >= 3
-      ? REQUIRED_PROMPT_SECTION_IDS_V3
-      : REQUIRED_PROMPT_SECTION_IDS_V2;
+    : promptReceiptVersion >= 4
+      ? REQUIRED_PROMPT_SECTION_IDS_V4
+      : promptReceiptVersion >= 3
+        ? REQUIRED_PROMPT_SECTION_IDS_V3
+        : REQUIRED_PROMPT_SECTION_IDS_V2;
   const missingSections = requiredSectionIds.filter((id) => !sectionIds.has(id));
   const promptSectionsPresent = Boolean(promptReceipt) && missingSections.length === 0;
   for (const sectionId of missingSections) failures.push(`missing_prompt_section:${sectionId}`);

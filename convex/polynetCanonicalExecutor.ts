@@ -37,6 +37,7 @@ import { PERSONAL_MEMORY_OPERATION, PERSONAL_MEMORY_PATH } from "../shared/perso
 import { lensCalls, lensReads, resolveLens, type Lens, type LensView } from "../shared/lens.ts";
 import { guideAskFor, handedBackToPerson, operationFor } from "../shared/operationCatalog.ts";
 import { ACTION_TOOLS } from "../shared/actionTools.ts";
+import { GUIDE_SKILLS, GUIDE_SKILLS_DIRECTORY_PATH, guideSkillAt, guideSkillPath } from "../shared/guideSkills.ts";
 import {
   handbookQuestion, memberRemovalQuestion, messageQuestion, NOT_A_MEMBER_HERE, postQuestion, removeQuestion, roleQuestion, waitingToolAnswer,
 } from "../shared/guideQuestions.ts";
@@ -173,6 +174,7 @@ const TYPING_SET_OPERATION = "community.typing.set";
 
 // Plain words for the domain refusals a caller is most likely to meet.
 const DOMAIN_REFUSAL_MESSAGES: Record<string, string> = {
+  community_resource_changeset_operation_unsupported: "That isn't one of the changes a batch can make. Each operation's op is one of: create_module, create_page (a lesson), edit_module, edit_page, move_resource, reorder_pages, reorder_modules, delete_page, delete_category, link_source_to_page.",
   interaction_edit_forbidden: "You can only edit your own posts.",
   interaction_delete_forbidden: "You can only delete your own posts (moderators can remove others').",
   interaction_not_editable: "That post can't be edited any more.",
@@ -1138,6 +1140,15 @@ async function executeCanonicalList(args: {
     ] }) };
   }
 
+  // skills/: how to do a longer job well, for whoever is offered its tools
+  // (shared/guideSkills.ts): the course builder's, for builders.
+  if (target.localPath === GUIDE_SKILLS_DIRECTORY_PATH) {
+    if (!reads(args, target, "builder_records")) return canonicalError("semantic_not_found", "Repository path not found or not accessible.");
+    return { ok: true, value: virtualDirectory({ path: absolutePath, entries: GUIDE_SKILLS.map((skill) => ({
+      path: mountedPath(target.communitySlug, guideSkillPath(skill)), kind: "document", type: "skill", name: skill.about })),
+      searchable: false, writable: false }) };
+  }
+
   if (target.localPath.startsWith(COMMUNITY_MEMBER_SELF_DIRECTORY)) {
     if (!reads(args, target, "members_self") || target.localPath !== COMMUNITY_MEMBER_SELF_DIRECTORY) {
       return canonicalError("semantic_not_found", "Repository path not found or not accessible.");
@@ -1591,7 +1602,8 @@ async function executeCanonicalList(args: {
         { path: mountedPath(target.communitySlug, COMMUNITY_AI_RULES_PATH), kind: "document", type: "rules", name: "Rules for AIs (read before writing)" },
         ...(reads(args, target, "brief") ? [{ path: mountedPath(target.communitySlug, COMMUNITY_BRIEF_PATH), kind: "document", type: "brief", name: "What's happening" }] : []),
         ...(reads(args, target, "pods") ? [{ path: mountedPath(target.communitySlug, POLYNET_PODS_DIRECTORY_PATH), kind: "directory", type: "pods", name: "Pods" }] : []),
-        ...builderEntry],
+        ...builderEntry,
+        ...(reads(args, target, "builder_records") ? [{ path: mountedPath(target.communitySlug, GUIDE_SKILLS_DIRECTORY_PATH), kind: "directory", type: "skills", name: "How to do longer jobs well" }] : [])],
       // Who this is: a front end's title, and the community agent's @mention token.
       ...(identity ? { community } : {}),
       // Who is asking: a front end's "signed in as".
@@ -1673,6 +1685,13 @@ async function executeCanonicalRead(args: {
     const rules = await args.ctx.runQuery((internal as any).communityAiRules.readCommunityAiRulesInternal, { communityId: target.communityId });
     if (!rules) return canonicalError("semantic_not_found", "Repository path not found or not accessible.");
     return { ok: true, value: { path: mountedPath(target.communitySlug, target.localPath), body: renderAiRules(rules), truncated: false } };
+  }
+
+  // A skill (shared/guideSkills.ts): fixed text, for whoever is offered its tools.
+  const skill = guideSkillAt(target.localPath);
+  if (skill) {
+    if (!reads(args, target, "builder_records")) return canonicalError("semantic_not_found", "Repository path not found or not accessible.");
+    return { ok: true, value: { path: mountedPath(target.communitySlug, target.localPath), body: skill.text, truncated: false } };
   }
 
   // The founder-approved handbook (members only; the approved text only).

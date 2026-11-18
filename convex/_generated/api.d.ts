@@ -212,7 +212,6 @@ import type * as publicAppUrl from "../publicAppUrl.js";
 import type * as runtimeAgentLoop from "../runtimeAgentLoop.js";
 import type * as runtimeCancellation from "../runtimeCancellation.js";
 import type * as runtimeContextIntegrity from "../runtimeContextIntegrity.js";
-import type * as runtimeHarnessComposition from "../runtimeHarnessComposition.js";
 import type * as runtimeHarnessShaping from "../runtimeHarnessShaping.js";
 import type * as runtimeToolCallEvents from "../runtimeToolCallEvents.js";
 import type * as runtimeTurnContext from "../runtimeTurnContext.js";
@@ -447,7 +446,6 @@ declare const fullApi: ApiFromModules<{
   runtimeAgentLoop: typeof runtimeAgentLoop;
   runtimeCancellation: typeof runtimeCancellation;
   runtimeContextIntegrity: typeof runtimeContextIntegrity;
-  runtimeHarnessComposition: typeof runtimeHarnessComposition;
   runtimeHarnessShaping: typeof runtimeHarnessShaping;
   runtimeToolCallEvents: typeof runtimeToolCallEvents;
   runtimeTurnContext: typeof runtimeTurnContext;

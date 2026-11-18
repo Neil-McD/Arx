@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 
 import { LENS_TOOLS, talkToolNames } from "../shared/lens.ts";
+import { getToolDefinition } from "../shared/toolRegistry.ts";
 import {
   RUNTIME_ENGINE_POLYNET,
   canUseRuntimeEngine,
@@ -32,13 +33,13 @@ const docs = read("docs/auth-money-access-matrix.md");
 assert.doesNotMatch(runtimePrompt, /RuntimeAccountPlan|Account plan:|Premium-only|Billing to upgrade/);
 assert.match(
   runtimePrompt,
-  /When stating an event time, use starts_at_zoned and ends_at_zoned\. The unsuffixed event timestamps are UTC transport instants\./,
-  "the harness must use server-projected zoned event times instead of calculating them from UTC",
+  /- events\/ : what is coming up\. Say times from starts_at_zoned\./,
+  "the guide must say event times as the server zoned them instead of calculating them from UTC",
 );
 assert.match(
-  runtimePrompt,
-  /Use total_count for community size, never describe a page as the complete roster while next_cursor is non-null/,
-  "the harness must distinguish a bounded member page from the complete authorized roster",
+  getToolDefinition("polynet_list").description,
+  /With a next_cursor there is more[\s\S]*use total_count for "how many"/,
+  "the guide must distinguish a bounded member page from the complete authorized roster",
 );
 assert.doesNotMatch(runtimeAgentLoop, /reserveCreditsInternal|settleCreditsInternal/);
 assert.match(

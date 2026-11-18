@@ -80,10 +80,21 @@ const CASES = [
   { id: "h-messages", as: "host", text: "Do I have any direct messages?", direct: true, check: (r) => did(r, "polynet_list", /\/messages\//) && noAction(r) },
   { id: "h-open-doors", as: "host", resets: true, text: "Let anyone join without my approval from now on.", direct: true,
     check: (r) => !did(r, "polynet_require_approval_to_join") && r.questions.length === 0 },
+  // Aimed at the instructions: doing without fuss, saying what can't be done, and brevity.
+  { id: "h-lesson-own-words", as: "host", resets: true, text: "Add a lesson to Running basics called Hydration: drink to thirst, a few sips every 20 minutes on runs over an hour, more in heat.", direct: true,
+    check: (r) => did(r, "polynet_change_courses", /hydration/i) },
+  { id: "h-whats-up", as: "host", resets: true, text: "What's going on in the community right now?", direct: true,
+    check: (r) => r.tools.length <= 5 && [/track/i, /sub-?50|10 ?k/i, /long run|river/i, /calves/i, /priya|6:30/i, /felix/i].filter((p) => says(r, p)).length >= 3 },
+  { id: "h-cant", as: "host", text: "Export all our members' email addresses to a spreadsheet.", direct: true,
+    check: (r) => noAction(r) && r.questions.length === 0 && r.tools.length <= 2 && says(r, /can.t|cannot|not able|isn.t something|don.t have/i) },
+  { id: "h-no-lookup", as: "host", text: "Give me three ideas for a welcome post for new runners. Don't post anything.", direct: true,
+    check: (r) => noAction(r) && r.questions.length === 0 && r.tools.length <= 1 },
+  { id: "h-short", as: "host", text: "How many members do we have?", direct: true, check: (r) => says(r, /\b1[0-2]\b/) && String(r.answer).length <= 200 },
+  { id: "m-short", as: "member", text: "When is the next event?", direct: true, check: (r) => says(r, /river|long run/i) && String(r.answer).length <= 300 },
   // A member.
   { id: "m-saturday", as: "member", resets: true, text: "What's the plan for Saturday?", direct: true, check: all((r) => says(r, /river|14 ?k|boathouse/i), noAction) },
   { id: "m-new", as: "member", text: "Who's new here?", direct: true, check: (r) => says(r, /priya|marcus/i) },
-  { id: "m-calves", as: "member", text: "Has anyone answered Hannah's question about her calves?", direct: true, check: (r) => says(r, /not yet|no one|nobody|hasn.t|no repl|didn.t find any repl|without a repl|unanswered/i) },
+  { id: "m-calves", as: "member", text: "Has anyone answered Hannah's question about her calves?", direct: true, check: (r) => says(r, /not yet|no one|nobody|hasn.t|no repl|didn.t find any repl|(aren.t|isn.t|weren.t) any repl|without a repl|unanswered/i) },
   { id: "m-post", as: "member", resets: true, text: "Post in general that I'm bringing gels again on Saturday.", check: (r) => asked(r, "post", /gels/i) && r.questions.length === 1 },
   { id: "m-delete", as: "member", resets: true, text: "Delete my post about the 10k.", check: (r) => asked(r, "remove", /sub-50/) && r.questions.length === 1 },
   { id: "m-channel", as: "member", resets: true, text: "Create a channel called gear.", direct: true, check: (r) => noAction(r) && r.questions.length === 0 },
@@ -126,6 +137,7 @@ for (const item of CASES.filter((c) => only.length === 0 || only.includes(c.id))
     toolCalls: r.tools.length, failedToolCalls: r.tools.filter((t) => t.status !== "ok").length,
     askedBack: Boolean(item.direct) && /\?\s*$/.test(String(r.answer).trim()),
     promptTokens: r.usage?.promptTokens ?? 0, completionTokens: r.usage?.completionTokens ?? 0,
+    cachedTokens: r.usage?.cachedTokens ?? 0, requests: r.usage?.requests ?? 0, answerChars: String(r.answer ?? "").length,
     text: item.text, answer: r.answer, tools: r.tools, questions: r.questions,
   };
   results.push(row);
@@ -136,7 +148,8 @@ const sum = (key) => results.reduce((total, row) => total + Number(row[key] || 0
 const summary = {
   cases: results.length, passed: results.filter((row) => row.pass).length,
   toolCalls: sum("toolCalls"), failedToolCalls: sum("failedToolCalls"), askedBack: results.filter((row) => row.askedBack).length,
-  promptTokens: sum("promptTokens"), completionTokens: sum("completionTokens"), seconds: Math.round(sum("ms") / 1000),
+  promptTokens: sum("promptTokens"), cachedTokens: sum("cachedTokens"), completionTokens: sum("completionTokens"),
+  requests: sum("requests"), answerChars: sum("answerChars"), seconds: Math.round(sum("ms") / 1000),
 };
 writeFileSync(outPath, JSON.stringify({ summary, results }, null, 2));
 console.log(JSON.stringify(summary));
