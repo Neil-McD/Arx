@@ -91,6 +91,11 @@ export const CALL_OPERATIONS = {
   "community.channel.describe": entry("builder", "write", "builder_change"),
   "community.channel.move": entry("builder", "write", "builder_change"),
   // Who runs the community.
+  // Events members see (not a pod's calls: those are changed in the pod).
+  // A cancelled event can be put back in the app.
+  "community.event.create": entry("builder", "write", "builder_change"),
+  "community.event.update": entry("builder", "write", "builder_change"),
+  "community.event.cancel": entry("builder", "write", "builder_change"),
   "community.members.set_role": entry("builder", "write", "builder_change", { ask: "every_time" }),
   "community.members.remove": entry("builder", "destroy", "builder_change", { ask: "person_only" }),
   "community.members.ban": entry("builder", "destroy", "builder_change", { ask: "person_only" }),

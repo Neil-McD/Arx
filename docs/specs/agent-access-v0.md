@@ -166,7 +166,7 @@ don't already know (`shared/operationCatalog.ts`, `guideAskFor`):
 | React, mark a lesson done, approve or decline people asking to join (one, some or all) | It does it and says so. Their sentence is the approval. |
 | Post, reply or edit a post under their name | It shows the exact words above the box where they type: **Yes**, **No**, **Always allow posts**. |
 | Remove posts (one, or up to 100 at once), delete their own post | It shows the posts and asks **Yes** or **No**, every time. There is no "always". |
-| Change the community's settings, the guide's instructions, the handbook draft, channels (a builder) | It does it and says what changed. |
+| Change the community's settings, the guide's instructions, the handbook draft, channels, events (a builder) | It does it and says what changed. |
 | Change someone's role, publish the handbook (a builder) | It shows the person and their role now, or the exact handbook text, and asks **Yes** or **No**, every time. |
 | Remove or ban a member, open the community to everyone, publish a course | Not done by any AI: it is answered with the place in the app (below). |
 
@@ -222,6 +222,13 @@ after which an AI could hide posts (nothing would be lost).
 (open to every member; a private channel is made in the app), `rename` (the
 slug stays), `describe`, and `move` (after a named channel, or first). A
 channel is named by its slug. General is not renamed or moved.
+
+**Events** (`community.event.*`, `convex/communityEvents.ts`): `create`,
+`update` (only the fields given) and `cancel`, through the same code as the
+app's event form. An event is named by its `parent_event_id` from the events
+listing. Made this way it is for members; making one public is done in the
+app. A pod's calls are changed in the pod. Nothing is sent to members.
+RSVP does not exist yet anywhere in Polynet; it is its own piece of work.
 
 **Courses and lessons** (`builder/resources/`,
 `convex/communityResourceChangesets.ts`). The engine for an AI's course

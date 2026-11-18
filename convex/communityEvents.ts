@@ -1,4 +1,4 @@
-import { internalQuery, mutation, query } from "./_generated/server";
+import { internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import { eventViewer, requirePodEventManager, visibleEvents } from "./communityEventAudience";
 import { v } from "convex/values";
 import { DEFAULT_COMMUNITY_EVENT_DURATION_MS } from "../shared/communityEventLifecycle";
@@ -419,6 +419,14 @@ export const saveCommunityEvent = mutation({
       userId: args.userId,
       authSubject: args.authSubject ?? null,
     });
+    return await saveCommunityEventCore(ctx, userId, args);
+  },
+});
+
+// Saving an event: the app's own form and an AI acting for a builder
+// (applyEventOperationForTrustedUserInternal) share this.
+async function saveCommunityEventCore(ctx: any, userId: any, args: { eventId?: string | null; payload: unknown }) {
+  {
     const payload =
       args.payload && typeof args.payload === "object" && !Array.isArray(args.payload)
         ? (args.payload as Record<string, unknown>)
@@ -553,6 +561,37 @@ export const saveCommunityEvent = mutation({
     const created = (await ctx.db.get(id as any)) as CommunityEventLike | null;
     if (!created) throw new Error("community_event_create_failed");
     return mapCommunityEventRow(created);
+  }
+}
+
+// What an AI may set on an event; everything else about it is the app's.
+export const EVENT_OPERATION_FIELDS = ["title", "description_md", "starts_at", "ends_at", "timezone", "location_type", "location_label", "url",
+  "recurrence_frequency", "recurrence_interval", "recurrence_until"] as const;
+
+// Events through an AI acting for a builder (their own AI, or the guide in
+// their private talk): make one, change one, cancel one. The same rules as
+// the app's form. A pod's call is changed in its pod, not here.
+export const applyEventOperationForTrustedUserInternal = internalMutation({
+  args: { userId: v.id("users"), communityId: v.id("communities"), operation: v.string(), input: v.any() },
+  handler: async (ctx, args) => {
+    await requireCommunityManager({ ctx, communityId: args.communityId, userId: args.userId });
+    const input = (args.input ?? {}) as Record<string, unknown>;
+    const fields = Object.fromEntries(EVENT_OPERATION_FIELDS.filter((key) => key in input).map((key) => [key, input[key]]));
+    if (args.operation === "community.event.create") {
+      return { event: await saveCommunityEventCore(ctx, args.userId, { payload: { ...fields, community_id: args.communityId } }) };
+    }
+    const eventId = ctx.db.normalizeId("communityEvents", String(input.event ?? "").trim());
+    const existing = eventId ? (await ctx.db.get(eventId)) as CommunityEventLike | null : null;
+    if (!existing || normalizeIdValue(existing.communityId) !== normalizeIdValue(args.communityId)) throw new Error("community_event_not_found");
+    if (existing.podChannelId) throw new Error("community_event_pod_call");
+    if (args.operation === "community.event.update") {
+      return { event: await saveCommunityEventCore(ctx, args.userId, { eventId: String(existing._id), payload: fields }) };
+    }
+    if (args.operation === "community.event.cancel") {
+      await ctx.db.patch(existing._id as any, { status: "cancelled", updatedAt: Date.now() });
+      return { event: mapCommunityEventRow({ ...existing, status: "cancelled" }) };
+    }
+    throw new Error("operation_not_found");
   },
 });
 
