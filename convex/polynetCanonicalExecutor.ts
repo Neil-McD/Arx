@@ -37,7 +37,7 @@ import { PERSONAL_MEMORY_OPERATION, PERSONAL_MEMORY_PATH } from "../shared/perso
 import { lensCalls, lensReads, resolveLens, type Lens, type LensView } from "../shared/lens.ts";
 import { guideAskFor, handedBackToPerson, operationFor } from "../shared/operationCatalog.ts";
 import { ACTION_TOOLS } from "../shared/actionTools.ts";
-import { handbookQuestion, postQuestion, removeQuestion, roleQuestion, waitingToolAnswer } from "../shared/guideQuestions.ts";
+import { handbookQuestion, NOT_A_MEMBER_HERE, postQuestion, removeQuestion, roleQuestion, waitingToolAnswer } from "../shared/guideQuestions.ts";
 import {
   COMMUNITY_MEMBER_SELF_DIRECTORY,
   COMMUNITY_MEMBER_SELF_CONTEXT_PATH,
@@ -2817,6 +2817,10 @@ async function askPersonFirst(args: {
       const role = String(callInput.role);
       if (!userIds.length || userIds.length > SELECTION_MAX || userIds.some(id => !id) || !["member", "moderator", "admin"].includes(role)) return null;
       items = await args.ctx.runQuery((internal as any).communityGuideQuestions.describeMembersInternal, { communityId: target.communityId, userIds });
+      // The person is never asked about someone who isn't a member here.
+      if (items!.some(item => item.text === NOT_A_MEMBER_HERE)) {
+        return canonicalError("member_not_found", "One of those people isn't a member of this community. List members/ and name each person by their handle.");
+      }
       question = roleQuestion({ names: items!.map(item => item.who), role });
     } else if (operation === HANDBOOK_APPROVE_OPERATION) {
       if (typeof callInput.text !== "string" || callInput.text.length > COMMUNITY_HANDBOOK_MAX_CHARS) return null;
@@ -3303,9 +3307,31 @@ export async function executePolynetCanonicalTool(args: {
     userId,
     input,
   };
+  // An AI names a person by their handle; a member action takes user:<id>.
+  // Resolved once, here, so the question the person sees and the call that
+  // runs name the same people. Nobody is guessed at.
+  let rawInput = args.input;
+  if (args.toolName === "polynet_call" && MEMBERS_OPERATIONS.includes(String(input.operation ?? ""))) {
+    const callInput = input.input && typeof input.input === "object" ? input.input as Record<string, unknown> : null;
+    const named = callInput && Array.isArray(callInput.members) ? callInput.members : null;
+    const scope = named && named.length <= SELECTION_MAX && named.every(ref => typeof ref === "string")
+      ? await resolveCommunityTarget({ ...common, path: input.target }) : null;
+    if (named && scope?.ok) {
+      const found = await args.ctx.runQuery((internal as any).communityPeople.resolveMemberRefsInternal,
+        { communityId: scope.target.communityId, refs: named }) as { refs: string[]; missing: string[] };
+      if (found.missing.length) {
+        return canonicalError("member_not_found",
+          `Nobody in this community matches ${found.missing.map(name => `"${name}"`).join(", ")}. List members/ and name each person by their handle (the name in members/<handle>.json).`);
+      }
+      input = { ...input, input: { ...callInput, members: found.refs } };
+      common.input = input;
+      const rawCall = args.input?.input && typeof args.input.input === "object" ? args.input.input as Record<string, unknown> : {};
+      rawInput = { ...args.input, input: { ...rawCall, members: found.refs } };
+    }
+  }
   // Asking the person costs nothing; what runs is counted.
   if (args.principalKind === "community_agent_for_member" && args.personSaidYes !== true) {
-    const asked = await askPersonFirst({ ...common, toolName: args.toolName, rawInput: args.input });
+    const asked = await askPersonFirst({ ...common, toolName: args.toolName, rawInput });
     if (asked) return asked;
   }
   const limited = await takeBudgets(args, input);
