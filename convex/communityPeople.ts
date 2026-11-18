@@ -75,9 +75,11 @@ export const applyMemberSelectionItemInternal = internalMutation({
     targetUserId: v.id("users"),
     action: v.union(v.literal("set_role"), v.literal("unban")),
     role: v.optional(v.union(v.literal("admin"), v.literal("moderator"), v.literal("member"))),
+    // Whose receipt this is: a person's own AI, or the guide in their private talk.
+    principalKind: v.optional(v.union(v.literal("external_mcp"), v.literal("community_agent_for_member"))),
   },
-  handler: async (ctx, args): Promise<Record<string, unknown>> => {
-    const receipt = { communityId: args.communityId, userId: args.userId, principalKind: "external_mcp", toolName: "polynet_call",
+  handler: async (ctx, { principalKind, ...args }): Promise<Record<string, unknown>> => {
+    const receipt = { communityId: args.communityId, userId: args.userId, principalKind: principalKind ?? "external_mcp", toolName: "polynet_call",
       idempotencyKey: args.itemKey, requestFingerprint: args.requestFingerprint };
     const reservation: any = await ctx.runMutation(refs.internal.polynetCanonicalReceipts.reserveCanonicalOperationReceiptInternal, receipt);
     if (!reservation.ok) throw new Error(String(reservation.code ?? "member_action_refused"));

@@ -36,7 +36,7 @@ import {
 import { PERSONAL_MEMORY_OPERATION, PERSONAL_MEMORY_PATH } from "../shared/personalMemory.ts";
 import { lensCalls, lensReads, resolveLens, type Lens, type LensView } from "../shared/lens.ts";
 import { guideAskFor } from "../shared/operationCatalog.ts";
-import { postQuestion, removeQuestion, waitingToolAnswer } from "../shared/guideQuestions.ts";
+import { handbookQuestion, postQuestion, removeQuestion, roleQuestion, waitingToolAnswer } from "../shared/guideQuestions.ts";
 import {
   COMMUNITY_MEMBER_SELF_DIRECTORY,
   COMMUNITY_MEMBER_SELF_CONTEXT_PATH,
@@ -76,6 +76,7 @@ type ResolvedCommunityTarget = {
 type ResolvedRepositoryChannel = {
   id: string | null;
   slug: string;
+  name: string;
 };
 
 type PolynetMutatingToolName = "polynet_write" | "polynet_call";
@@ -706,6 +707,7 @@ async function resolveRepositoryChannel(args: {
   return {
     id,
     slug,
+    name,
   };
 }
 
@@ -2732,19 +2734,37 @@ async function askPersonFirst(args: {
   const kind = guideAskFor({ toolName: args.toolName, operation, mode, localPath: target.localPath });
   if (!kind) return null;
   let question: string;
+  // The channel's name, for the line that says what was done.
+  let place: string | undefined;
   let text: string | undefined;
   let items: Array<{ who: string; text: string }> | undefined;
   if (args.toolName === "polynet_call") {
     const callInput = args.input.input && typeof args.input.input === "object" ? args.input.input as Record<string, unknown> : {};
-    const refs = operation === REMOVE_POSTS_OPERATION ? removePostsRefs(target, operation, callInput) : null;
-    if (!refs || !capabilityDocument({ target, operation, evidenceSurface: args.evidenceSurface, principalKind: args.principalKind })) return null;
-    items = await args.ctx.runQuery((internal as any).communityGuideQuestions.describePostsInternal, { communityId: target.communityId, userId: args.userId, refs });
-    question = removeQuestion({ count: refs.length });
+    if (target.localPath !== `${POLYNET_CAPABILITIES_DIRECTORY_PATH}${operation}.json` ||
+        !capabilityDocument({ target, operation, evidenceSurface: args.evidenceSurface, principalKind: args.principalKind })) return null;
+    if (operation === MEMBERS_ROLE_OPERATION) {
+      const members = Array.isArray(callInput.members) ? callInput.members : [];
+      const userIds = members.map(ref => typeof ref === "string" ? /^user:([A-Za-z0-9]+)$/.exec(ref)?.[1] ?? null : null);
+      const role = String(callInput.role);
+      if (!userIds.length || userIds.length > SELECTION_MAX || userIds.some(id => !id) || !["member", "moderator", "admin"].includes(role)) return null;
+      items = await args.ctx.runQuery((internal as any).communityGuideQuestions.describeMembersInternal, { communityId: target.communityId, userIds });
+      question = roleQuestion({ names: items!.map(item => item.who), role });
+    } else if (operation === HANDBOOK_APPROVE_OPERATION) {
+      if (typeof callInput.text !== "string" || callInput.text.length > COMMUNITY_HANDBOOK_MAX_CHARS) return null;
+      question = handbookQuestion(callInput.text);
+      text = callInput.text.trim() || undefined;
+    } else {
+      const refs = operation === REMOVE_POSTS_OPERATION ? removePostsRefs(target, operation, callInput) : null;
+      if (!refs) return null;
+      items = await args.ctx.runQuery((internal as any).communityGuideQuestions.describePostsInternal, { communityId: target.communityId, userId: args.userId, refs });
+      question = removeQuestion({ count: refs.length });
+    }
   } else {
     const path = parseCommunityChannelSemanticPath(target.localPath);
     if (!path || !target.authority.canWriteParticipation) return null;
     const channel = await resolveRepositoryChannel({ ctx: args.ctx, userId: args.userId, principalKind: args.principalKind, target, slug: path.slug });
     if (!channel) return null;
+    place = channel.name;
     const content = omitNullishObjectFields(args.input.content);
     const words = String(content.text ?? content.body ?? "").trim();
     if (kind === "post") {
@@ -2754,17 +2774,17 @@ async function askPersonFirst(args: {
       if (rules && rules.postingAllowed === false) return null;
       if (await args.ctx.runQuery((internal as any).communityGuideQuestions.isAlwaysAllowedInternal,
         { communityId: target.communityId, userId: args.userId, kind: "post" })) return null;
-      question = postQuestion({ mode, channelName: channel.slug });
+      question = postQuestion({ mode, channelName: channel.name });
       text = words;
     } else {
       if (path.kind !== "document") return null;
       items = await args.ctx.runQuery((internal as any).communityGuideQuestions.describePostsInternal, { communityId: target.communityId, userId: args.userId, refs: [path.ref] });
-      question = removeQuestion({ count: 1, own: { channelName: channel.slug } });
+      question = removeQuestion({ count: 1, own: { channelName: channel.name } });
     }
   }
   const asked = await args.ctx.runMutation((internal as any).communityGuideQuestions.askInternal, {
     communityId: target.communityId, userId: args.userId, kind, toolName: args.toolName, inputJson: JSON.stringify(args.rawInput),
-    question, ...(text ? { text } : {}), ...(items ? { items } : {}), ...(args.runId ? { runId: args.runId } : {}),
+    question, ...(place ? { place } : {}), ...(text ? { text } : {}), ...(items ? { items } : {}), ...(args.runId ? { runId: args.runId } : {}),
   });
   if (!asked.ok) return canonicalError("invalid_tool_args", "That is too long to ask the person about. Make it shorter.");
   return { ok: true, value: waitingToolAnswer(question) };
@@ -2805,7 +2825,8 @@ async function executeMembersOperation(args: {
     : operation === MEMBERS_BAN_OPERATION ? ["members", "reason"] : ["members"];
   const members = Array.isArray(rawInput.members) ? rawInput.members : null;
   const userIds = members?.map(ref => typeof ref === "string" ? /^user:([A-Za-z0-9]+)$/.exec(ref)?.[1] ?? null : null) ?? [];
-  if (args.principalKind !== "external_mcp" || target.localPath !== `${POLYNET_CAPABILITIES_DIRECTORY_PATH}${operation}.json` ||
+  if ((args.principalKind !== "external_mcp" && args.principalKind !== "community_agent_for_member") ||
+      target.localPath !== `${POLYNET_CAPABILITIES_DIRECTORY_PATH}${operation}.json` ||
       Object.keys(rawInput).some(key => !allowed.includes(key)) || !members || !members.length || members.length > SELECTION_MAX ||
       userIds.some(id => !id) || new Set(userIds).size !== userIds.length || args.idempotencyKey.length > SELECTION_KEY_MAX ||
       (operation === MEMBERS_ROLE_OPERATION && !["member", "moderator", "admin"].includes(String(rawInput.role))) ||
@@ -2834,6 +2855,7 @@ async function executeMembersOperation(args: {
         // Each person has their own receipt, committed with their change.
         const value = await args.ctx.runMutation((internal as any).communityPeople.applyMemberSelectionItemInternal, {
           ...scope, authSubject: args.authSubject, targetUserId: userId, action, ...details,
+          ...(args.principalKind === "community_agent_for_member" ? { principalKind: args.principalKind } : {}),
           itemKey: selectionItemKey(args.idempotencyKey, userId),
           requestFingerprint: JSON.stringify([operation, userId, details]),
         });
@@ -2921,6 +2943,7 @@ async function executeCommunityOperation(args: {
     // The change and its receipt commit together (communityOperations).
     const applied = await args.ctx.runMutation((internal as any).communityOperations.applyCommunityOperationInternal, {
       userId: args.userId, communityId: target.communityId, operation, input: rawInput, idempotencyKey: args.idempotencyKey,
+      ...(args.principalKind === "community_agent_for_member" ? { principalKind: args.principalKind } : {}),
       requestFingerprint: reservation.requestFingerprint, attemptToken: reservation.attemptToken,
       answer: callAnswer({ operation, principalKind: args.principalKind, target, idempotencyKey: args.idempotencyKey, result: {} }),
     });

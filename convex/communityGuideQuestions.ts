@@ -11,10 +11,10 @@ import { resolveUserIdForAuthenticatedRequest } from "./authActor";
 import { resolveCommunityChannelActor } from "./communityChannelAccess";
 import { resolveAuthorizedCommunityChannel } from "./communityChannelCore";
 import { executePolynetCanonicalTool } from "./polynetCanonicalExecutor";
-import { GUIDE_ASK_ALWAYS_ALLOWABLE } from "../shared/operationCatalog";
+import { GUIDE_ASK_ALWAYS_ALLOWABLE, type GuideAsk } from "../shared/operationCatalog";
 import {
   GUIDE_QUESTION_ITEM_TEXT_MAX, GUIDE_QUESTION_ITEMS_SHOWN, GUIDE_QUESTION_TEXT_MAX, GUIDE_QUESTION_WAIT_MS,
-  postResultLine, removeResultLine, type GuideAnswerResult, type GuideQuestionView,
+  changeResultLine, postResultLine, removeResultLine, type GuideAnswerResult, type GuideQuestionView,
 } from "../shared/guideQuestions";
 import { buildCommunityTabPath } from "../shared/webAppRouteState";
 
@@ -29,7 +29,7 @@ function waitingRows(ctx: any, communityId: any, userId: any) {
 
 function view(row: any): GuideQuestionView {
   return { id: String(row._id), kind: row.kind, question: row.question, text: row.text ?? null, items: row.items ?? [],
-    canAlways: GUIDE_ASK_ALWAYS_ALLOWABLE[row.kind as "post" | "remove"] === true };
+    canAlways: GUIDE_ASK_ALWAYS_ALLOWABLE[row.kind as GuideAsk] === true };
 }
 
 // ---- the executor's side
@@ -66,12 +66,31 @@ export const describePostsInternal = internalQuery({
   },
 });
 
+// Each person's name and the role they hold now, for a question about roles.
+export const describeMembersInternal = internalQuery({
+  args: { communityId: v.id("communities"), userIds: v.array(v.string()) },
+  handler: async (ctx, args) => {
+    const community = await ctx.db.get(args.communityId);
+    const people: Array<{ who: string; text: string }> = [];
+    for (const raw of args.userIds.slice(0, GUIDE_QUESTION_ITEMS_SHOWN)) {
+      const userId = ctx.db.normalizeId("users", raw);
+      const user: any = userId ? await ctx.db.get(userId) : null;
+      const membership = userId ? await ctx.db.query("communityMemberships")
+        .withIndex("by_community_user", (q) => q.eq("communityId", args.communityId).eq("userId", userId)).first() : null;
+      if (!user || !membership) { people.push({ who: "Someone", text: "Not a member here." }); continue; }
+      const now = String(community?.ownerId) === String(userId) ? "owner" : membership.role;
+      people.push({ who: String(user.displayName ?? user.handle ?? "A member"), text: `Now: ${now}` });
+    }
+    return people;
+  },
+});
+
 // Saves the question. A question still waiting from an earlier turn is
 // dropped: the person moved on, so nothing from it is done.
 export const askInternal = internalMutation({
   args: {
-    communityId: v.id("communities"), userId: v.id("users"), kind: v.union(v.literal("post"), v.literal("remove")),
-    toolName: v.string(), inputJson: v.string(), question: v.string(), text: v.optional(v.string()),
+    communityId: v.id("communities"), userId: v.id("users"), kind: v.union(v.literal("post"), v.literal("remove"), v.literal("change")),
+    toolName: v.string(), inputJson: v.string(), question: v.string(), place: v.optional(v.string()), text: v.optional(v.string()),
     items: v.optional(v.array(v.object({ who: v.string(), text: v.string() }))), runId: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
@@ -85,6 +104,7 @@ export const askInternal = internalMutation({
     const questionId = await ctx.db.insert("communityGuideQuestions", {
       communityId: args.communityId, userId: args.userId, kind: args.kind, toolName: args.toolName, inputJson: args.inputJson,
       question: args.question.slice(0, 300),
+      ...(args.place ? { place: args.place.slice(0, 120) } : {}),
       ...(args.text ? { text: args.text.slice(0, GUIDE_QUESTION_TEXT_MAX) } : {}),
       ...(args.items ? { items: args.items } : {}),
       status: "waiting", ...(args.runId ? { runId: args.runId } : {}), createdAt: nowMs,
@@ -127,7 +147,7 @@ export const claimInternal = internalMutation({
     const user: any = await ctx.db.get(userId);
     const community: any = await ctx.db.get(row.communityId);
     return { run: true as const, userId: String(userId), authSubject: String(user?.authSubject ?? ""), communitySlug: String(community?.slug ?? ""),
-      toolName: row.toolName, inputJson: row.inputJson, kind: row.kind };
+      toolName: row.toolName, inputJson: row.inputJson, kind: row.kind, place: row.place ?? null };
   },
 });
 
@@ -165,7 +185,14 @@ export const answerGuideQuestion = action({
         personSaidYes: true,
       });
       if (!execution.ok) result = { status: "failed", line: execution.message, path: null };
-      else if (claimed.kind === "remove" && claimed.toolName === "polynet_call") {
+      else if (claimed.kind === "change") {
+        const outcome = (execution.value as any)?.result ?? {};
+        const asked = Number(outcome.succeeded ?? 0) + Number(outcome.failed ?? 0);
+        const failedAll = String(input.operation) === "community.members.set_role" && Number(outcome.succeeded ?? 0) === 0;
+        result = { status: failedAll ? "failed" : "done", path: null,
+          line: failedAll && outcome.results?.[0]?.message ? String(outcome.results[0].message)
+            : changeResultLine({ operation: String(input.operation), succeeded: Number(outcome.succeeded ?? 0), asked }) };
+      } else if (claimed.kind === "remove" && claimed.toolName === "polynet_call") {
         const outcome = (execution.value as any)?.result ?? {};
         const asked = Number(outcome.succeeded ?? 0) + Number(outcome.failed ?? 0);
         const removed = Number(outcome.succeeded ?? 0);
@@ -173,7 +200,7 @@ export const answerGuideQuestion = action({
       } else {
         const slug = channelSlugOf(input.path);
         const mode = String(input.mode ?? "create");
-        result = { status: "done", line: postResultLine({ mode, channelName: slug ?? "the channel" }),
+        result = { status: "done", line: postResultLine({ mode, channelName: claimed.place ?? slug ?? "the channel" }),
           path: buildCommunityTabPath(claimed.communitySlug, "chat", null, null, slug) };
       }
     } catch {

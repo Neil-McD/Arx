@@ -82,27 +82,27 @@ test("a member's post through the guide waits for their yes, then goes out under
   const words = "Saturday at 7, the boathouse. Who is in?";
   const before = await w.rows();
   const asked = await w.guide("member")("polynet_write", post(words, "post-1"));
-  expect(asked).toEqual({ ok: true, value: { ok: true, status: "waiting_for_person", question: "Post this in #general as you?", note: expect.any(String) } });
+  expect(asked).toEqual({ ok: true, value: { ok: true, status: "waiting_for_person", question: "Post this in #General as you?", note: expect.any(String) } });
   const waiting = await w.rows();
   expect(waiting.roots).toEqual(before.roots);
   expect(waiting.receipts).toEqual(before.receipts);
   const listed = await w.questions("member");
-  expect(listed).toEqual([{ id: expect.any(String), kind: "post", question: "Post this in #general as you?", text: words, items: [], canAlways: true }]);
+  expect(listed).toEqual([{ id: expect.any(String), kind: "post", question: "Post this in #General as you?", text: words, items: [], canAlways: true }]);
   // Nobody else sees the member's question.
   expect(await w.questions("other")).toEqual([]);
 
   const yes = await w.answer("member", listed[0].id, "yes");
-  expect(yes).toEqual({ status: "done", line: "Posted in #general as you.", path: expect.stringContaining("run-club") });
+  expect(yes).toEqual({ status: "done", line: "Posted in #General as you.", path: expect.stringContaining("run-club") });
   const after = await w.rows();
   const posted = rootsBy(after.roots, w.ids.member).filter((row) => row.contentSummary === words);
   expect(posted).toHaveLength(1);
   expect(posted[0]).toMatchObject({ actorType: "human", status: "live" });
   expect(after.questions).toHaveLength(1);
-  expect(after.questions[0]).toMatchObject({ status: "done", resultLine: "Posted in #general as you." });
+  expect(after.questions[0]).toMatchObject({ status: "done", resultLine: "Posted in #General as you." });
   expect(await w.questions("member")).toEqual([]);
 
   // The same answer again is told what happened; nothing is posted twice.
-  expect(await w.answer("member", listed[0].id, "yes")).toMatchObject({ status: "done", line: "Posted in #general as you." });
+  expect(await w.answer("member", listed[0].id, "yes")).toMatchObject({ status: "done", line: "Posted in #General as you." });
   expect(rootsBy((await w.rows()).roots, w.ids.member).filter((row) => row.contentSummary === words)).toHaveLength(1);
 });
 
@@ -146,7 +146,7 @@ test("always allow: posted, the next post goes straight through, and switching i
   expect((await w.rows()).always.filter((row: any) => String(row.userId) === String(w.ids.member))).toEqual([]);
   expect(await w.guide("member", "run-3")("polynet_write", { path: GENERAL, mode: "append",
     content: { root_id: String(w.ids.otherPost), text: "Bringing a friend too." }, idempotency_key: "reply-c" }))
-    .toMatchObject({ ok: true, value: { status: "waiting_for_person", question: "Reply with this in #general as you?" } });
+    .toMatchObject({ ok: true, value: { status: "waiting_for_person", question: "Reply with this in #General as you?" } });
 });
 
 test("a question from an earlier run is dropped when a new run asks", async () => {
@@ -294,4 +294,57 @@ test("a channel path with any mode but create or append is refused through both 
   const after = await w.rows();
   expect(after.roots).toEqual(before.roots);
   expect(await w.questions("member")).toEqual([]);
+});
+
+const call = (operation: string, input: Record<string, unknown>, key: string) => ({ operation, version: 1,
+  target: `${ROOT}capabilities/${operation}.json`, input, idempotency_key: key });
+
+test("the owner's guide makes and renames a channel when told, with no question; a member's guide is not offered it", async () => {
+  const w = await world();
+  const made: any = await w.guide("owner")("polynet_call", call("community.channel.create", { name: "Race reports" }, "ch-1"));
+  expect(made).toMatchObject({ ok: true });
+  expect(await w.questions("owner")).toEqual([]);
+  const channels = await w.t.run((ctx) => ctx.db.query("communityChannels").collect());
+  expect(channels.map((row: any) => row.name)).toContain("Race reports");
+  expect(await w.guide("member")("polynet_call", call("community.channel.create", { name: "Mine" }, "ch-2"))).toMatchObject({ ok: false, code: "operation_not_found" });
+  expect((await w.rows()).questions).toEqual([]);
+});
+
+test("a role change through the guide waits for the owner's yes, every time, and names the person and their role now", async () => {
+  const w = await world();
+  const role = (who: "member" | "other", to: string, key: string) => call("community.members.set_role", { members: [`user:${String(w.ids[who])}`], role: to }, key);
+  const membership = async (who: "member" | "other") => (await w.t.run((ctx) => ctx.db.query("communityMemberships").collect()))
+    .find((row: any) => String(row.userId) === String(w.ids[who]))!;
+  expect(await w.guide("owner")("polynet_call", role("member", "admin", "role-1"))).toMatchObject({ ok: true, value: { status: "waiting_for_person", question: "Make member an admin?" } });
+  expect((await membership("member")).role).toBe("member");
+  const [question] = await w.questions("owner");
+  expect(question).toMatchObject({ kind: "change", items: [{ who: "member", text: "Now: member" }], canAlways: false });
+  // "Always" is not kept for this: it changes this once.
+  expect(await w.answer("owner", question.id, "always")).toEqual({ status: "done", line: "Their role was changed.", path: null });
+  expect((await membership("member")).role).toBe("admin");
+  expect((await w.rows()).always).toEqual([]);
+  expect(await w.guide("owner", "run-2")("polynet_call", role("other", "moderator", "role-2"))).toMatchObject({ ok: true, value: { status: "waiting_for_person" } });
+  expect((await membership("other")).role).toBe("member");
+  // A plain member's guide is not offered it, and nothing is asked.
+  expect(await w.guide("other")("polynet_call", role("member", "member", "role-3"))).toMatchObject({ ok: false, code: "operation_not_found" });
+  expect(await w.questions("other")).toEqual([]);
+});
+
+test("publishing the handbook through the guide shows the exact text and waits for the owner's yes", async () => {
+  const w = await world();
+  const words = "# Start here\nWe run at dawn on Saturdays.";
+  expect(await w.guide("owner")("polynet_call", call("community.handbook.approve", { text: words }, "hb-1")))
+    .toMatchObject({ ok: true, value: { status: "waiting_for_person", question: "Publish this handbook to every member?" } });
+  const [question] = await w.questions("owner");
+  expect(question).toMatchObject({ kind: "change", text: words, canAlways: false });
+  expect(await w.answer("owner", question.id, "yes")).toMatchObject({ status: "done", line: "The handbook members see was changed." });
+});
+
+test("removing or banning a member and opening the community stay the person's, through the guide as through their own AI", async () => {
+  const w = await world();
+  for (const door of [w.guide("owner"), w.door("owner", "external_mcp")]) {
+    expect(await door("polynet_call", call("community.members.remove", { members: [`user:${String(w.ids.other)}`] }, "rm-1"))).toMatchObject({ ok: false, code: "person_only" });
+    expect(await door("polynet_call", call("community.join_mode.set", { mode: "open" }, "open-1"))).toMatchObject({ ok: false, code: "person_only" });
+  }
+  expect((await w.rows()).questions).toEqual([]);
 });

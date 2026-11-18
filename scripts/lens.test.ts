@@ -70,7 +70,7 @@ test("a people fact is one the person stated or approved, here or on their profi
   expect(isPeopleFact(fact({ provenance: "observed_behavior" }), "c1")).toBe(false);
 });
 
-test("a private talk is told its lens; moderation only with the permission, member and settings changes never in it", () => {
+test("a private talk is told its lens; moderation only with the permission, settings only for a builder", () => {
   expect(parseTalkLens({ lens: "builder_private", relation: "owner" })).toEqual({ lens: "builder_private", relation: "owner" });
   expect(parseTalkLens({ lens: "guide_public", relation: "owner" })).toBeNull();
   expect(parseTalkLens({ lens: "member_private", relation: "visitor" })).toBeNull();
@@ -85,8 +85,13 @@ test("a private talk is told its lens; moderation only with the permission, memb
   expect(moderator).toContain("review_joins");
   expect(moderator).toContain("remove_posts");
   expect(moderator).toContain("waiting_for_person");
-  expect(moderator).toContain("Changing members or settings is done by the person in the app or through their own AI, never in this talk.");
+  expect(moderator).toContain("Changing members or settings is not something this person can do.");
   expect(moderator).not.toContain("builder_change");
+  // A builder's talk changes settings and channels when told; roles and the handbook wait for their yes.
+  const owner = renderTalkLensForPrompt({ lens: "builder_private", relation: "owner" })!;
+  expect(owner).toContain("builder_change");
+  expect(owner).toContain("Changing someone's role and publishing the handbook also wait for their yes");
+  expect(owner).toContain("Removing or banning a member, opening the community to everyone and publishing a course are theirs to do in the app");
   // A plain member is not told about moderation it can't do.
   const member = renderTalkLensForPrompt({ lens: "member_private", relation: "member", answers: ["\"Post this in #general as you?\" They said no. Nothing was done."] })!;
   expect(member).toContain("react");
