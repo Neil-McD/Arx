@@ -13,6 +13,7 @@ const ENTRY_MODULES = new Set(["auth.config", "crons", "http", "schema"]);
 // Named exceptions, each with its reason. Keep this list short: every entry
 // is either a hand-run operator tool or waiting on a decision or a later slice.
 const ALLOWED = new Map([
+  ["stagingGuideEval", "operator tool: measures the guide on staging by hand (scripts/guide_eval.mjs)"],
   ["stagingSeedBriefLab", "operator tool: seeds staging by hand"],
   ["stagingSeedSunrise", "operator tool: seeds and simulates the staging Sunrise community by hand"],
   ["stagingSeedPolynetDemo", "operator tool: seeds the staging Polynet demo community by hand"],

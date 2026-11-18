@@ -409,7 +409,7 @@ describe("staging seed for the brief", () => {
       expect(snapshot.snapshot.unanswered.map((post: any) => post.author)).toEqual(expect.arrayContaining(["Hannah Kim", "Priya Shah"]));
       expect(snapshot.snapshot.newMembers.names).toEqual(expect.arrayContaining(["Priya Shah", "Marcus Lee"]));
       expect(snapshot.snapshot.quietNewcomers.names).toEqual(expect.arrayContaining(["Jonah Reyes", "Elena Park"]));
-      expect(snapshot.snapshot.upcomingEvents[0].title).toBe("Saturday Long Run: River Loop");
+      expect(snapshot.snapshot.upcomingEvents[0].title).toBe("Long Run: River Loop");
     } finally {
       delete process.env.POLYNET_ALLOW_SEED;
     }
