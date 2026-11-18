@@ -7,7 +7,9 @@ import type { GuideAsk } from "./operationCatalog.ts";
 export const GUIDE_QUESTION_WAIT_MS = 24 * 60 * 60 * 1000;
 // How many posts a question about removing shows by name; the rest are counted.
 export const GUIDE_QUESTION_ITEMS_SHOWN = 100;
-export const GUIDE_QUESTION_TEXT_MAX = 4_000;
+// The person is shown every word that would go out, never a cut: longer
+// than this and the question isn't asked at all.
+export const GUIDE_QUESTION_TEXT_MAX = 12_000;
 export const GUIDE_QUESTION_ITEM_TEXT_MAX = 160;
 
 export type GuideQuestionAnswer = "yes" | "no" | "always";
@@ -40,6 +42,25 @@ export function postQuestion(args: { mode: string; channelName: string }): strin
 export function removeQuestion(args: { count: number; own?: { channelName: string } | null }): string {
   if (args.own) return `Delete your post in #${args.own.channelName}?`;
   return args.count === 1 ? "Remove this post? It can't be brought back." : `Remove these ${args.count} posts? They can't be brought back.`;
+}
+
+const ROLE_WORDS: Record<string, [string, string]> = {
+  admin: ["an admin", "admins"], moderator: ["a moderator", "moderators"], member: ["a member with no host role", "members with no host role"],
+};
+
+export function roleQuestion(args: { names: string[]; role: string }): string {
+  const [one, many] = ROLE_WORDS[args.role] ?? ROLE_WORDS.member;
+  return args.names.length === 1 ? `Make ${args.names[0]} ${one}?` : `Make these ${args.names.length} people ${many}?`;
+}
+
+export function handbookQuestion(text: string): string {
+  return text.trim() ? "Publish this handbook to every member?" : "Take the handbook away from members?";
+}
+
+export function changeResultLine(args: { operation: string; succeeded: number; asked: number }): string {
+  if (args.operation !== "community.members.set_role") return "The handbook members see was changed.";
+  if (args.succeeded === args.asked) return args.asked === 1 ? "Their role was changed." : `The role of ${args.asked} people was changed.`;
+  return `The role of ${args.succeeded} of ${args.asked} people was changed; the others couldn't be.`;
 }
 
 export function postResultLine(args: { mode: string; channelName: string }): string {

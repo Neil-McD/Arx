@@ -160,6 +160,9 @@ don't already know (`shared/operationCatalog.ts`, `guideAskFor`):
 | React, mark a lesson done, approve or decline people asking to join (one, some or all) | It does it and says so. Their sentence is the approval. |
 | Post, reply or edit a post under their name | It shows the exact words above the box where they type: **Yes**, **No**, **Always allow posts**. |
 | Remove posts (one, or up to 100 at once), delete their own post | It shows the posts and asks **Yes** or **No**, every time. There is no "always". |
+| Change the community's settings, the guide's instructions, the handbook draft, channels (a builder) | It does it and says what changed. |
+| Change someone's role, publish the handbook (a builder) | It shows the person and their role now, or the exact handbook text, and asks **Yes** or **No**, every time. |
+| Remove or ban a member, open the community to everyone, publish a course | Not done by any AI: it is answered with the place in the app (below). |
 
 How it works (`convex/communityGuideQuestions.ts`): the guide's call is
 saved as it was made and answered `waiting_for_person`; nothing runs. Yes
@@ -176,7 +179,10 @@ it, and Polynet can't show a question there), so removing posts through it
 is still refused with a link (below). That is the one place the two doors
 differ.
 
-Not yet through the guide: direct messages, settings, roles, channels.
+Not through the guide: direct messages. A community's guide runs on its
+host's instructions, and a person's messages include people they met in
+other communities, so reading them is left to the person's own AI until
+that is decided.
 
 ## Builder parity
 

@@ -94,14 +94,18 @@ export const WORKER_OPERATIONS = {
 //   They see the words. A person may switch this to "always allow".
 // - "remove": it can't be taken back (removing posts, deleting their own).
 //   Asked every time.
+// - "change": who runs the community, or what every member is told: a
+//   person's role, publishing the handbook. Asked every time.
 // Everything else it may do (react, mark a lesson done, approve or decline
-// people) it does when told. A person's own AI is not asked by Polynet: it
+// people, settings and channels) it does when told. A person's own AI is not asked by Polynet: it
 // has its own person watching it.
-export type GuideAsk = "post" | "remove";
-export const GUIDE_ASK_ALWAYS_ALLOWABLE: Record<GuideAsk, boolean> = { post: true, remove: false };
+export type GuideAsk = "post" | "remove" | "change";
+export const GUIDE_ASK_ALWAYS_ALLOWABLE: Record<GuideAsk, boolean> = { post: true, remove: false, change: false };
+const GUIDE_ASKS_BEFORE_CHANGE: string[] = ["community.members.set_role", "community.handbook.approve"];
 
 export function guideAskFor(args: { toolName: string; operation?: string | null; mode?: string | null; localPath?: string | null }): GuideAsk | null {
   if (args.toolName === "polynet_call") {
+    if (GUIDE_ASKS_BEFORE_CHANGE.includes(String(args.operation ?? ""))) return "change";
     return callOperation(String(args.operation ?? ""))?.effect === "destroy" ? "remove" : null;
   }
   if (args.toolName !== "polynet_write" || !/^\/channels\//.test(String(args.localPath ?? ""))) return null;
