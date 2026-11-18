@@ -468,6 +468,11 @@ export function buildResponsesApiFunctionTools(
   });
 }
 
+// The whole call, said in an error: an AI that sees only a tool's name (its
+// app hides the schema until first use) learns the shape from the first refusal.
+const POLYNET_WRITE_SHAPE = "Send { path, mode, content: { text }, idempotency_key }. mode: create for a new post on a channel folder, append for a reply on a post's thread folder, update or delete for one of your own posts on its .md path (delete takes content: {}).";
+const POLYNET_CALL_SHAPE = "Send { operation, version: 1, target, input, idempotency_key }. Read the action's file in the community's capabilities/ folder: its call field has the operation and target, and input lists the fields.";
+
 function normalizeString(value: unknown): string | null {
   if (typeof value !== "string") return null;
   const trimmed = value.trim();
@@ -598,20 +603,20 @@ export function normalizeToolArguments(
     }
     const mode = normalizeString(args.mode)?.toLowerCase();
     if (mode !== "create" && mode !== "append" && mode !== "update" && mode !== "delete") {
-      throw new Error("polynet_write mode must be create, append, update, or delete.");
+      throw new Error(`polynet_write mode must be create, append, update or delete. ${POLYNET_WRITE_SHAPE}`);
     }
     if (
       !args.content ||
       typeof args.content !== "object" ||
       Array.isArray(args.content)
     ) {
-      throw new Error("polynet_write requires object content.");
+      throw new Error(`polynet_write content must be an object, such as { text: "..." }. ${POLYNET_WRITE_SHAPE}`);
     }
     const idempotencyKey = normalizeString(
       args.idempotency_key ?? args.idempotencyKey,
     );
     if (!idempotencyKey) {
-      throw new Error("polynet_write requires idempotency_key.");
+      throw new Error(`polynet_write requires idempotency_key, a new one for each write. ${POLYNET_WRITE_SHAPE}`);
     }
     const expectedRevision = normalizeString(
       args.expected_revision ?? args.expectedRevision,
@@ -629,7 +634,7 @@ export function normalizeToolArguments(
   if (toolName === "polynet_call") {
     const operation = normalizeString(args.operation)?.toLowerCase();
     if (!operation || !/^[a-z0-9][a-z0-9._-]*$/.test(operation)) {
-      throw new Error("polynet_call requires a canonical operation.");
+      throw new Error(`polynet_call requires an operation name. ${POLYNET_CALL_SHAPE}`);
     }
     const version = normalizeBoundedInteger(
       args.version,
@@ -649,7 +654,7 @@ export function normalizeToolArguments(
       args.idempotency_key ?? args.idempotencyKey,
     );
     if (!idempotencyKey) {
-      throw new Error("polynet_call requires idempotency_key.");
+      throw new Error(`polynet_call requires idempotency_key, a new one for each action. ${POLYNET_CALL_SHAPE}`);
     }
     const target = normalizeString(args.target);
     if (target) {
