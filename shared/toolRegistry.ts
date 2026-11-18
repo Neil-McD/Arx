@@ -1,6 +1,7 @@
 import type { BaseToolName, RetrievalToolName } from "./retrievalTools";
 import { isBaseToolName } from "./retrievalTools.ts";
 import { actionTool, guideToolDefinition } from "./actionTools.ts";
+import { isMessagesPath } from "./operationCatalog.ts";
 import { findPlatformOperationByNativeToolName } from "./platformOperationContract.ts";
 import { validatePolynetSemanticRepositoryOperationInput } from "./communitySemanticRepository.ts";
 import {
@@ -521,6 +522,10 @@ export function normalizeToolArguments(
       : {};
   // A named action tool: its inputs are checked when it is translated and run.
   if (actionTool(toolName)) return { ...args };
+  // A person's own direct messages are not part of a community's folder, so
+  // the folder's path rules don't know them. The executor checks them, and
+  // refuses them to everyone but the person's own AI and their private talk.
+  if (isMessagesPath(args.path) && (toolName === "polynet_list" || toolName === "polynet_read" || toolName === "polynet_write")) return { ...args };
   if (toolName === "polynet_list") {
     const validated = validatePolynetSemanticRepositoryOperationInput({
       operation: "list",

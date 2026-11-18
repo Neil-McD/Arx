@@ -346,13 +346,79 @@ test("publishing the handbook through the guide shows the exact text and waits f
   expect((await w.questions("owner"))[0].text).toBe(long);
 });
 
-test("removing or banning a member and opening the community stay the person's, through the guide as through their own AI", async () => {
+test("through a person's own AI, removing or banning a member stays the person's, and opening the community stays the person's through both doors", async () => {
   const w = await world();
-  for (const door of [w.guide("owner"), w.door("owner", "external_mcp")]) {
-    expect(await door("polynet_call", call("community.members.remove", { members: [`user:${String(w.ids.other)}`] }, "rm-1"))).toMatchObject({ ok: false, code: "person_only" });
+  const ownAi = w.door("owner", "external_mcp");
+  expect(await ownAi("polynet_call", call("community.members.remove", { members: [`user:${String(w.ids.other)}`] }, "rm-1"))).toMatchObject({ ok: false, code: "person_only" });
+  expect(await ownAi("polynet_call", call("community.members.ban", { members: [`user:${String(w.ids.other)}`] }, "ban-1"))).toMatchObject({ ok: false, code: "person_only" });
+  for (const door of [w.guide("owner"), ownAi]) {
     expect(await door("polynet_call", call("community.join_mode.set", { mode: "open" }, "open-1"))).toMatchObject({ ok: false, code: "person_only" });
   }
   expect((await w.rows()).questions).toEqual([]);
+  const memberships = await w.t.run((ctx) => ctx.db.query("communityMemberships").collect());
+  expect(memberships.every((row: any) => row.state === "active")).toBe(true);
+});
+
+const membershipOf = async (w: Awaited<ReturnType<typeof world>>, who: "member" | "other") =>
+  (await w.t.run((ctx) => ctx.db.query("communityMemberships").collect())).find((row: any) => String(row.userId) === String(w.ids[who]))!;
+
+test("removing a member through the guide waits for the owner's yes, every time, names them, and runs the Members page's own removal", async () => {
+  const w = await world();
+  const remove = (who: "member" | "other", key: string) => call("community.members.remove", { members: [who] }, key);
+  expect(await w.guide("owner")("polynet_call", remove("other", "rm-1"))).toEqual({ ok: true, value: { ok: true, status: "waiting_for_person",
+    question: "Remove other? They lose access and can ask to join again later. Anyone paying loses their subscription.", note: expect.any(String) } });
+  // Nothing changes until the yes.
+  expect((await membershipOf(w, "other")).state).toBe("active");
+  const [question] = await w.questions("owner");
+  expect(question).toMatchObject({ kind: "remove", items: [{ who: "other", text: "Now: member" }], canAlways: false });
+  // "Always" is never kept for this: it removes them this once.
+  expect(await w.answer("owner", question.id, "always")).toEqual({ status: "done", line: "They were removed.", path: null });
+  expect((await w.rows()).always).toEqual([]);
+  expect(await membershipOf(w, "other")).toMatchObject({ state: "removed", revokedReason: "removed_by_manager" });
+  // As in the app, they may ask to join again after a while.
+  const requests = await w.t.run((ctx) => ctx.db.query("communityJoinRequests").collect());
+  expect(requests).toEqual([expect.objectContaining({ userId: w.ids.other, status: "denied" })]);
+  // The next one is asked again; no says nothing is done.
+  expect(await w.guide("owner", "run-2")("polynet_call", remove("member", "rm-2"))).toMatchObject({ ok: true, value: { status: "waiting_for_person" } });
+  const [next] = await w.questions("owner");
+  expect(await w.answer("owner", next.id, "no")).toMatchObject({ status: "declined" });
+  expect((await membershipOf(w, "member")).state).toBe("active");
+  // Someone no longer here is not asked about.
+  const before = (await w.rows()).questions.length;
+  expect(await w.guide("owner", "run-3")("polynet_call", remove("other", "rm-3"))).toMatchObject({ ok: false, code: "member_not_found" });
+  expect((await w.rows()).questions).toHaveLength(before);
+});
+
+test("banning through the guide shows who and why, waits for the yes, and bans as the Members page does", async () => {
+  const w = await world();
+  const ban = call("community.members.ban", { members: ["member"], reason: "Spam links in #general" }, "ban-1");
+  expect(await w.guide("owner")("polynet_call", ban)).toMatchObject({ ok: true, value: { status: "waiting_for_person",
+    question: "Ban member? They can't rejoin unless unbanned. Anyone paying loses their subscription." } });
+  expect(await w.t.run((ctx) => ctx.db.query("communityBlocks").collect())).toEqual([]);
+  const [question] = await w.questions("owner");
+  expect(question).toMatchObject({ kind: "remove", text: "Reason: Spam links in #general", items: [{ who: "member", text: "Now: member" }], canAlways: false });
+  expect(await w.answer("owner", question.id, "yes")).toEqual({ status: "done", line: "They were banned.", path: null });
+  expect(await w.t.run((ctx) => ctx.db.query("communityBlocks").collect())).toEqual([expect.objectContaining({ userId: w.ids.member, reason: "Spam links in #general" })]);
+  expect(await membershipOf(w, "member")).toMatchObject({ state: "removed", revokedReason: "banned_by_manager" });
+});
+
+test("the owner is never removed or banned, nobody is asked about a stranger, and only the owner removes an admin", async () => {
+  const w = await world();
+  for (const operation of ["community.members.remove", "community.members.ban"]) {
+    expect(await w.guide("owner")("polynet_call", call(operation, { members: ["owner"] }, `${operation}-owner`)))
+      .toMatchObject({ ok: false, code: "owner_fixed", message: "The owner can't be removed or banned." });
+    expect(await w.guide("owner")("polynet_call", call(operation, { members: ["nobody-here"] }, `${operation}-nobody`)))
+      .toMatchObject({ ok: false, code: "member_not_found" });
+  }
+  expect((await w.rows()).questions).toEqual([]);
+  // A plain member's guide is not offered it.
+  expect(await w.guide("other")("polynet_call", call("community.members.remove", { members: ["member"] }, "rm-m"))).toMatchObject({ ok: false, code: "operation_not_found" });
+  // An admin's yes to removing another admin is refused by the same check the app makes.
+  await w.t.run(async (ctx) => { for (const row of await ctx.db.query("communityMemberships").collect()) await ctx.db.patch(row._id, { role: "admin" }); });
+  expect(await w.guide("member")("polynet_call", call("community.members.remove", { members: ["other"] }, "rm-a"))).toMatchObject({ ok: true, value: { status: "waiting_for_person" } });
+  const [question] = await w.questions("member");
+  expect(await w.answer("member", question.id, "yes")).toEqual({ status: "failed", line: "Only the owner removes or bans an admin.", path: null });
+  expect((await membershipOf(w, "other")).state).toBe("active");
 });
 
 test("a builder makes, changes and cancels an event through the guide and through their own AI, with no question; a member is not offered it", async () => {
@@ -510,13 +576,14 @@ test("in a member's private talk the guide acts by named tools only, in the talk
   expect((await w.questions("member")).map((question: any) => question.text).sort()).toEqual(["Hills on Thursday?", "Pool at noon?"]);
   expect(await as.query(api.communityGuideQuestions.listGuideQuestions, { communityId: elsewhere })).toEqual([]);
 
-  // The general action tools, and a person's own messages, are not the guide's.
+  // The general action tools are not the guide's.
   const write = await talk("polynet_write", post("Straight in.", "direct-1"));
   expect(write).toMatchObject({ status: "error", errorCode: "tool_not_in_lens" });
   const call = await talk("polynet_call", { operation: "community.interaction.react", version: 1,
     target: `${ROOT}capabilities/community.interaction.react.json`, input: { ref: `interaction:root:${String(w.ids.memberPost)}`, emoji: "👍", on: true }, idempotency_key: "direct-2" });
   expect(call).toMatchObject({ status: "error", errorCode: "tool_not_in_lens" });
-  expect(await talk("polynet_reply_message", { conversation: "abcd1234", text: "Hi" })).toMatchObject({ status: "error", errorCode: "tool_not_in_lens" });
+  // A reply in a conversation that isn't the member's finds nothing, and asks nothing.
+  expect(await talk("polynet_reply_message", { conversation: "abcd1234", text: "Hi" })).toMatchObject({ status: "error", errorCode: "semantic_not_found" });
   // A builder's tool, called by a member's guide, is refused by the executor for this role.
   expect(await talk("polynet_create_channel", { name: "Mine" })).toMatchObject({ status: "error", errorCode: "operation_not_found" });
   const after = await w.rows();

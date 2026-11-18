@@ -1,7 +1,7 @@
 import { COMMUNITY_HANDBOOK_MAX_CHARS } from "../shared/communityHandbook";
 import { renderCommunityNote, type CommunityNote } from "../shared/communityNotes";
 import { renderBriefDocument } from "../shared/communityBriefs";
-import { internal } from "./_generated/api";
+import { api, internal } from "./_generated/api";
 import {
   budgetTakesFor, callOperation, CALL_OPERATION_NAMES, isMessagesPath, MESSAGES_DIRECTORY_PATH, messagesConversationId, requestFingerprint,
 } from "../shared/operationCatalog";
@@ -37,7 +37,9 @@ import { PERSONAL_MEMORY_OPERATION, PERSONAL_MEMORY_PATH } from "../shared/perso
 import { lensCalls, lensReads, resolveLens, type Lens, type LensView } from "../shared/lens.ts";
 import { guideAskFor, handedBackToPerson, operationFor } from "../shared/operationCatalog.ts";
 import { ACTION_TOOLS } from "../shared/actionTools.ts";
-import { handbookQuestion, NOT_A_MEMBER_HERE, postQuestion, removeQuestion, roleQuestion, waitingToolAnswer } from "../shared/guideQuestions.ts";
+import {
+  handbookQuestion, memberRemovalQuestion, messageQuestion, NOT_A_MEMBER_HERE, postQuestion, removeQuestion, roleQuestion, waitingToolAnswer,
+} from "../shared/guideQuestions.ts";
 import {
   COMMUNITY_MEMBER_SELF_DIRECTORY,
   COMMUNITY_MEMBER_SELF_CONTEXT_PATH,
@@ -928,8 +930,13 @@ function capabilityDocument(args: {
       required: ["members"], members, result: "result: { results, succeeded, failed }", effects: ["unban_members"] }
     : {
       required: ["members"], ...(args.operation === MEMBERS_BAN_OPERATION ? { optional: ["reason"], reason: "why, for the record (up to 1,000 characters)" } : {}),
-      members, result: "never done by an AI. The answer is the refusal person_only, with the link in Polynet where the person does it (one member: their record; several: the Members page). Give them the link.",
-      effects: [], forbidden_effects: [args.operation === MEMBERS_BAN_OPERATION ? "ban_members" : "remove_members"] };
+      members, ...(args.principalKind === "community_agent_for_member" ? {
+        result: "the person is asked first, every time: they are shown who, with Yes and No, and the answer is waiting_for_person until they say. Then result: { results, succeeded, failed }. The owner can't be removed or banned.",
+        effects: [args.operation === MEMBERS_BAN_OPERATION ? "ban_members_after_the_persons_yes" : "remove_members_after_the_persons_yes"],
+      } : {
+        result: "never done by an AI. The answer is the refusal person_only, with the link in Polynet where the person does it (one member: their record; several: the Members page). Give them the link.",
+        effects: [], forbidden_effects: [args.operation === MEMBERS_BAN_OPERATION ? "ban_members" : "remove_members"],
+      }) };
   } else if (isCommunityCapability) {
     operationDefinition.input = args.operation === SETTINGS_UPDATE_OPERATION ? {
       required: ["expected_revision"], optional: ["name", "slug", "one_liner", "about", "visibility"],
@@ -2809,6 +2816,7 @@ async function askPersonFirst(args: {
   input: Record<string, unknown>; rawInput: Record<string, unknown>;
 }): Promise<PolynetCanonicalExecutionResult | null> {
   if (args.toolName !== "polynet_write" && args.toolName !== "polynet_call") return null;
+  if (args.toolName === "polynet_write" && isMessagesPath(args.input.path)) return await askAboutMessage(args);
   const resolved = await resolveCommunityTarget({ ...args, path: args.toolName === "polynet_call" ? args.input.target : args.input.path });
   if (!resolved.ok) return null;
   const { target } = resolved;
@@ -2825,17 +2833,27 @@ async function askPersonFirst(args: {
     const callInput = args.input.input && typeof args.input.input === "object" ? args.input.input as Record<string, unknown> : {};
     if (target.localPath !== `${POLYNET_CAPABILITIES_DIRECTORY_PATH}${operation}.json` ||
         !capabilityDocument({ target, operation, evidenceSurface: args.evidenceSurface, principalKind: args.principalKind })) return null;
-    if (operation === MEMBERS_ROLE_OPERATION) {
+    if (operation === MEMBERS_ROLE_OPERATION || operation === MEMBERS_REMOVE_OPERATION || operation === MEMBERS_BAN_OPERATION) {
       const members = Array.isArray(callInput.members) ? callInput.members : [];
       const userIds = members.map(ref => typeof ref === "string" ? /^user:([A-Za-z0-9]+)$/.exec(ref)?.[1] ?? null : null);
       const role = String(callInput.role);
-      if (!userIds.length || userIds.length > SELECTION_MAX || userIds.some(id => !id) || !["member", "moderator", "admin"].includes(role)) return null;
+      const reason = typeof callInput.reason === "string" ? callInput.reason.trim() : "";
+      if (!userIds.length || userIds.length > SELECTION_MAX || userIds.some(id => !id) ||
+          (operation === MEMBERS_ROLE_OPERATION && !["member", "moderator", "admin"].includes(role))) return null;
       items = await args.ctx.runQuery((internal as any).communityGuideQuestions.describeMembersInternal, { communityId: target.communityId, userIds });
-      // The person is never asked about someone who isn't a member here.
+      // The person is never asked about someone who isn't a member here, or
+      // about the owner, whose place can't change.
       if (items!.some(item => item.text === NOT_A_MEMBER_HERE)) {
         return canonicalError("member_not_found", "One of those people isn't a member of this community. List members/ and name each person by their handle.");
       }
-      question = roleQuestion({ names: items!.map(item => item.who), role });
+      if (items!.some(item => item.text === "Now: owner")) {
+        return canonicalError("owner_fixed", operation === MEMBERS_ROLE_OPERATION ? "The owner's role can't change." : "The owner can't be removed or banned.");
+      }
+      if (operation === MEMBERS_ROLE_OPERATION) question = roleQuestion({ names: items!.map(item => item.who), role });
+      else {
+        question = memberRemovalQuestion({ names: items!.map(item => item.who), ban: operation === MEMBERS_BAN_OPERATION });
+        if (operation === MEMBERS_BAN_OPERATION && reason) text = `Reason: ${reason}`;
+      }
     } else if (operation === HANDBOOK_APPROVE_OPERATION) {
       if (typeof callInput.text !== "string" || callInput.text.length > COMMUNITY_HANDBOOK_MAX_CHARS) return null;
       question = handbookQuestion(callInput.text);
@@ -2877,9 +2895,41 @@ async function askPersonFirst(args: {
   return { ok: true, value: waitingToolAnswer(question) };
 }
 
+// A reply in the person's own direct messages, through the guide: always
+// asked, never always-allowed, and never sent from here. The question is kept
+// with the talk's community, where the person sees it. What would be refused
+// anyway (not their conversation, a block, the words) is refused now; the
+// rate limit is known only when it is sent.
+async function askAboutMessage(args: {
+  runId?: string; ctx: any; userId: string; mountedCommunityId?: string | null; input: Record<string, unknown>; rawInput: Record<string, unknown>;
+}): Promise<PolynetCanonicalExecutionResult> {
+  const conversationId = messagesConversationId(args.input.path);
+  const content = omitNullishObjectFields(args.input.content);
+  const text = String(content.text ?? content.body ?? "").trim();
+  if (!args.mountedCommunityId) return canonicalError("community_context_required", "Replies are sent from a community's private talk.");
+  if (!conversationId) return canonicalError("semantic_not_found", "No conversation of yours at that path. List /messages/ for your conversations.");
+  if (String(args.input.mode ?? "") !== "append" || !text) return canonicalError("invalid_tool_args", "Reply with mode append and content.text.");
+  const refusal = checkAiPost({ text, reply: true });
+  if (refusal) return canonicalError(refusal.code, refusal.message);
+  const reply = await args.ctx.runQuery((internal as any).directMessages.describeAiDirectReplyInternal, { userId: args.userId, conversationId });
+  if (!reply.ok) {
+    return /dm_conversation_not_found|dm_participant_required/.test(reply.code)
+      ? canonicalError("semantic_not_found", "No conversation of yours at that path. List /messages/ for your conversations.")
+      : canonicalError("message_not_allowed", "You can't message this person.");
+  }
+  const question = messageQuestion(reply.name);
+  const asked = await args.ctx.runMutation((internal as any).communityGuideQuestions.askInternal, {
+    communityId: args.mountedCommunityId, userId: args.userId, kind: "message", toolName: "polynet_write", inputJson: JSON.stringify(args.rawInput),
+    question, place: reply.name, text, ...(args.runId ? { runId: args.runId } : {}),
+  });
+  if (!asked.ok) return canonicalError("invalid_tool_args", "That is too long to ask the person about. Make it shorter.");
+  return { ok: true, value: waitingToolAnswer(question) };
+}
+
 // The named tool a person's own AI has for an action (shared/actionTools.ts).
 // The named tool a person's own AI calls for an operation. The guide's own
-// tools (remembering, removing posts after a yes) are not one.
+// tools (remembering; removing posts or members, and banning, after a yes)
+// are not one.
 function namedToolFor(operation: string, door: "own_ai" | "guide"): string | null {
   return ACTION_TOOLS.find((tool) => tool.catalog === operation && (!tool.door || tool.door === door))?.name ?? null;
 }
@@ -2911,12 +2961,15 @@ const PERSON_REFUSALS: Record<string, [string, string]> = {
   community_owner_required_for_admin_role: ["owner_only", "Only the owner makes or unmakes admins."],
   community_owner_required: ["owner_only", "Only the owner makes or unmakes admins."],
   community_owner_role_fixed: ["owner_fixed", "The owner's role can't change."],
+  community_owner_remove_forbidden: ["owner_fixed", "The owner can't be removed or banned."],
+  community_owner_ban_forbidden: ["owner_fixed", "The owner can't be removed or banned."],
 };
 
-// Change the role of, or lift the ban on, a selection of members (owners and
-// admins). Each person is decided on its own; both are states, so a retried
-// item changes nothing. Removing and banning answer with where a person does
-// them (personOnly, above).
+// Change the role of, remove, ban, or lift the ban on, a selection of members
+// (owners and admins). Each person is decided on its own; all are states, so a
+// retried item changes nothing. Removing and banning run only through the
+// guide after the person's yes; a person's own AI is answered with where the
+// person does them (personOnly, above).
 async function executeMembersOperation(args: {
   personSaidYes?: boolean;
   ctx: any; authSubject: string; userId: string; principalKind: PolynetPrincipalKind; input: Record<string, unknown>;
@@ -2951,6 +3004,27 @@ async function executeMembersOperation(args: {
   }
   return await runSelection({ ...args, lane: "builder", items: (members as string[]).map((ref, i) => ({ ref, userId: userIds[i]! })),
     decide: async ({ ref, userId }) => {
+      if (operation === MEMBERS_REMOVE_OPERATION || operation === MEMBERS_BAN_OPERATION) {
+        const ban = operation === MEMBERS_BAN_OPERATION;
+        try {
+          // The Members page's own Remove and Ban, with its checks: the owner
+          // can't be removed, only the owner removes an admin, and anyone
+          // paying has their subscription ended.
+          const key = await args.ctx.runQuery((internal as any).communityPeople.memberRecordKeyInternal, { ...scope, targetUserId: userId });
+          if (key === "owner") throw new Error("community_owner_remove_forbidden");
+          if (!key) throw new Error("community_member_not_found");
+          await args.ctx.runAction(ban ? (api as any).communityAdmin.banCommunityMember : (api as any).communityAdmin.removeCommunityMember, {
+            ...scope, authSubject: args.authSubject, targetMembershipId: key,
+            ...(ban && typeof rawInput.reason === "string" && rawInput.reason.trim() ? { reason: rawInput.reason.trim() } : {}) });
+          return { member: ref, ok: true, ...(ban ? { banned: true } : { removed: true }) };
+        } catch (error) {
+          const raw = error instanceof Error ? error.message : "";
+          const [code, message] = raw.includes("community_owner_required_for_admin_role")
+            ? ["owner_only", "Only the owner removes or bans an admin."]
+            : Object.entries(PERSON_REFUSALS).find(([known]) => raw.includes(known))?.[1] ?? ["member_action_refused", "That wasn't done for them."];
+          return { member: ref, ok: false, code, message };
+        }
+      }
       try {
         const action = operation === MEMBERS_ROLE_OPERATION ? "set_role" : "unban";
         const details = operation === MEMBERS_ROLE_OPERATION ? { role: rawInput.role } : {};
@@ -3182,13 +3256,15 @@ function messagesInput(raw: Record<string, unknown>): Record<string, unknown> {
   };
 }
 
-// A person's own direct messages through their own AI (docs/specs/
-// agent-access-v0.md, slice 3). /messages/ lists the conversations they are
-// in; /messages/<conversation>/ lists its messages and takes a reply. There
-// is no way to name a person, so nothing here starts a conversation. Blocks
-// and the relationship check are Studio's (convex/directMessages.ts).
+// A person's own direct messages through their own AI, or the guide in their
+// private talk (docs/specs/agent-access-v0.md, slice 3). /messages/ lists the
+// conversations they are in; /messages/<conversation>/ lists its messages and
+// takes a reply. There is no way to name a person, so nothing here starts a
+// conversation. Blocks and the relationship check are Studio's
+// (convex/directMessages.ts). Through the guide a reply arrives here only
+// after the person's yes (askAboutMessage).
 async function executeMessages(args: {
-  ctx: any; userId: string; toolName: PolynetCanonicalToolName; input: Record<string, unknown>;
+  ctx: any; userId: string; principalKind: PolynetPrincipalKind; toolName: PolynetCanonicalToolName; input: Record<string, unknown>;
 }): Promise<PolynetCanonicalExecutionResult> {
   const path = String(args.input.path ?? "");
   const conversationId = messagesConversationId(path);
@@ -3208,7 +3284,9 @@ async function executeMessages(args: {
         with: conversation.peer?.name ?? conversation.peer?.handle ?? "Someone", handle: conversation.peer?.handle ?? null,
         met_in: conversation.community_name, unread: conversation.unread_count, blocked: conversation.blocked,
         last_message: conversation.last_message })),
-        guidance: "Read a conversation before replying in it. You can reply in these; you cannot start a new one.",
+        guidance: args.principalKind === "community_agent_for_member"
+          ? "These are the person's own conversations. Read one before replying in it; a reply waits for their yes, every time. You cannot start a new one. What you read here is private to this talk: never put it in a post, a note or anything someone else sees, unless they tell you to say those words."
+          : "Read a conversation before replying in it. You can reply in these; you cannot start a new one.",
         next_cursor: null, truncated: false, skipped_incomplete: 0 } };
     }
     const before = Number(args.input.before_seq ?? args.input.beforeSeq);
@@ -3239,7 +3317,7 @@ async function executeMessages(args: {
     const message = await args.ctx.runMutation((internal as any).directMessages.sendAiDirectReplyInternal,
       { userId: args.userId, conversationId, text, clientMessageId });
     return { ok: true, value: { ok: true, path, message, marked: "via AI",
-      receipt: { contract: "polynet.canonical.operation:v1", tool: "polynet_write", principal_kind: "external_mcp", idempotency_key: idempotencyKey } } };
+      receipt: { contract: "polynet.canonical.operation:v1", tool: "polynet_write", principal_kind: args.principalKind, idempotency_key: idempotencyKey } } };
   } catch (error) {
     const raw = error instanceof Error ? error.message : "";
     if (/dm_conversation_not_found|dm_participant_required/.test(raw)) return notFound();
@@ -3304,8 +3382,8 @@ export async function executePolynetCanonicalTool(args: {
   try {
     // A person's own messages are not part of a community's repository, so
     // the repository's path rules don't know them: taken as they are, and
-    // checked by executeMessages.
-    input = args.principalKind === "external_mcp" && isMessagesPath(args.input?.path)
+    // checked by executeMessages (or refused below, for whoever may not).
+    input = isMessagesPath(args.input?.path)
       ? messagesInput(args.input)
       : normalizeToolArguments(args.toolName, args.input);
   } catch (error) {
@@ -3350,10 +3428,28 @@ export async function executePolynetCanonicalTool(args: {
   }
   const limited = await takeBudgets(args, input);
   if (limited) return limited;
-  // A person's own direct messages: only through their own AI.
+  // A person's own direct messages: through their own AI, or the guide in
+  // their private talk. Never the community's own agent (tagged in a channel,
+  // or a site): it acts for nobody's inbox.
   if (isMessagesPath(input.path)) {
-    return args.principalKind === "external_mcp" ? await executeMessages({ ...common, toolName: args.toolName })
-      : canonicalError("semantic_not_found", "Repository path not found or not accessible.");
+    const privateTalk = args.principalKind === "community_agent_for_member" && args.evidenceSurface === "member_agent_dock" && Boolean(args.mountedCommunityId);
+    if (args.principalKind !== "external_mcp" && !privateTalk) return canonicalError("semantic_not_found", "Repository path not found or not accessible.");
+    // The talk is a community's: someone who has since left it (or lost
+    // access) has no talk there, so nothing is listed and a question asked
+    // earlier can no longer be answered yes into a sent message.
+    if (privateTalk) {
+      try {
+        await args.ctx.runQuery((internal as any).communityAgent.resolveRuntimeCommunityPromptContextInternal,
+          { authSubject, userId: userId as any, communityId: args.mountedCommunityId as any });
+      } catch {
+        return canonicalError("semantic_not_found", "Repository path not found or not accessible.");
+      }
+    }
+    // Through the guide a reply is sent only on the person's yes (askAboutMessage).
+    if (privateTalk && args.toolName === "polynet_write" && args.personSaidYes !== true) {
+      return canonicalError("message_not_sent", "That reply wasn't sent: the person is asked first.");
+    }
+    return await executeMessages({ ...common, toolName: args.toolName });
   }
   if (args.toolName === "polynet_list" || args.toolName === "polynet_read") {
     const result = args.toolName === "polynet_list"

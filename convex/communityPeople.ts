@@ -1,9 +1,10 @@
-// One person, one action, from someone's own AI (the MCP): change their role,
-// remove, ban or unban them. Each runs Studio's own function in one
+// One person, one action, from someone's own AI (the MCP) or the guide:
+// change their role or unban them. Each runs Studio's own function in one
 // transaction, so its checks apply (managers only; only the owner touches
-// admins; the owner can't be changed). Removing or banning a paying member
-// would cancel their Stripe subscription, so through an AI that is refused and
-// left to Studio, where a person confirms it.
+// admins; the owner can't be changed). Removing and banning end a paying
+// member's subscription, so they are not here: after the person's yes to the
+// guide, the executor runs the Members page's own actions
+// (communityAdmin.removeCommunityMember, banCommunityMember).
 import { v } from "convex/values";
 import { api, internal } from "./_generated/api";
 import { internalMutation, internalQuery } from "./_generated/server";
@@ -25,8 +26,8 @@ export const applyPersonActionForTrustedUserInternal = internalMutation({
     communityId: v.id("communities"),
     targetUserId: v.id("users"),
     // Changing a role and lifting a ban take nothing from anyone, so an AI may
-    // do them. Removing and banning are a person's click in the app
-    // (docs/specs/agent-access-v0.md) and are not here.
+    // do them. Removing and banning run the Members page's own actions, after
+    // the person's yes (docs/specs/agent-access-v0.md).
     action: v.union(v.literal("set_role"), v.literal("unban")),
     role: v.optional(v.union(v.literal("admin"), v.literal("moderator"), v.literal("member"))),
   },
@@ -47,8 +48,9 @@ export const applyPersonActionForTrustedUserInternal = internalMutation({
 
 // Where a person's record is in the app's Members page (/members/<key>), for
 // an owner or admin: the membership's id, "owner" for the owner, or null when
-// they aren't a member. An AI is handed this address instead of removing or
-// banning someone itself.
+// they aren't a member. A person's own AI is handed this address instead of
+// removing or banning someone itself; after a yes to the guide it names the
+// membership the Members page's own removal takes.
 export const memberRecordKeyInternal = internalQuery({
   args: { userId: v.id("users"), communityId: v.id("communities"), targetUserId: v.string() },
   handler: async (ctx, args): Promise<string | null> => {

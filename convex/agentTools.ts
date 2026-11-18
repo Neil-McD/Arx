@@ -31,6 +31,7 @@ import {
 import { formatJsonToolOutput } from "./runtimeHarnessShaping";
 import { guideRunLens, lensHasTool } from "../shared/lens";
 import { actionTool, guideActionKey, translateActionTool } from "../shared/actionTools";
+import { isMessagesPath } from "../shared/operationCatalog";
 
 function buildWebResearchCostMetadata(params: {
   estimatedVendorCostUsd: number;
@@ -100,13 +101,22 @@ export async function runAgentTool(params: {
     // The retry key is the server's, from this run and this tool call; the
     // settings revision is the one just read (shared/actionTools.ts, GUIDE_FILLS).
     const callId = String(params.toolCallId ?? "").trim() || `${named.name}:${JSON.stringify(params.args ?? {})}`;
+    // The key is the call's alone. A settings change replayed after it went
+    // through reads a newer revision and is refused as a clash with its own
+    // key: nothing is applied twice, and a change made in between is never
+    // overwritten. The guide reads the settings and sees its change is there.
     const translated = translateActionTool(named, { ...params.args, community: context.community_slug }, Date.now(),
       { key: guideActionKey(params.runId, callId), settingsRevision: context.community_settings_revision ?? null });
     return await runAgentTool({ ...params, toolName: translated.toolName, args: translated.input, fromNamedTool: true });
   }
+  // The person's own direct messages, in their private talk: not part of a
+  // community's folder, so its path rules don't know them; the executor
+  // checks them (and refuses them to everyone else).
+  const ownMessages = params.evidenceSurface !== "community_concierge" && params.communityBoundConversation === true &&
+    isMessagesPath(params.args?.path) && (POLYNET_CANONICAL_TOOL_NAMES as readonly string[]).includes(params.toolName);
   let normalizedArgs: Record<string, unknown>;
   try {
-    normalizedArgs = normalizeRegistryToolArguments(params.toolName, params.args);
+    normalizedArgs = ownMessages ? { ...params.args } : normalizeRegistryToolArguments(params.toolName, params.args);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     return {
@@ -144,7 +154,7 @@ export async function runAgentTool(params: {
       if (path === "/" && params.toolName === "polynet_list") {
         const context = await params.ctx.runQuery(internal.communityAgent.resolveRuntimeCommunityPromptContextInternal, { authSubject, userId: params.userId as any, communityId: params.communityId as any });
         normalizedArgs = { ...normalizedArgs, path: `/communities/${context.community_slug}/` };
-      } else if (!path.startsWith("/communities/")) {
+      } else if (!path.startsWith("/communities/") && !(ownMessages && !communityOwned)) {
         return { status: "error", exitCode: null, outputText: "", errorCode: "community_context_mismatch", errorMessage: "Use paths within this conversation's community." };
       }
     }

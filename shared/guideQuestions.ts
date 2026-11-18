@@ -56,11 +56,32 @@ export function roleQuestion(args: { names: string[]; role: string }): string {
   return args.names.length === 1 ? `Make ${args.names[0]} ${one}?` : `Make these ${args.names.length} people ${many}?`;
 }
 
+// Removing or banning people, in the words the Members page uses.
+export function memberRemovalQuestion(args: { names: string[]; ban: boolean }): string {
+  const who = args.names.length === 1 ? args.names[0] : `these ${args.names.length} people`;
+  const then = args.ban ? "They can't rejoin unless unbanned." : "They lose access and can ask to join again later.";
+  return `${args.ban ? "Ban" : "Remove"} ${who}? ${then} Anyone paying loses their subscription.`;
+}
+
+// A reply in the person's direct messages, to the one other person in it.
+export function messageQuestion(name: string): string {
+  return `Send this to ${name} as you?`;
+}
+
+export function messageResultLine(name: string): string {
+  return `Sent to ${name} as you.`;
+}
+
 export function handbookQuestion(text: string): string {
   return text.trim() ? "Publish this handbook to every member?" : "Take the handbook away from members?";
 }
 
 export function changeResultLine(args: { operation: string; succeeded: number; asked: number }): string {
+  const gone = args.operation === "community.members.ban" ? "banned" : args.operation === "community.members.remove" ? "removed" : null;
+  if (gone) {
+    if (args.succeeded === args.asked) return args.asked === 1 ? `They were ${gone}.` : `${args.asked} people were ${gone}.`;
+    return `${args.succeeded} of ${args.asked} people were ${gone}; the others couldn't be.`;
+  }
   if (args.operation !== "community.members.set_role") return "The handbook members see was changed.";
   if (args.succeeded === args.asked) return args.asked === 1 ? "Their role was changed." : `The role of ${args.asked} people was changed.`;
   return `The role of ${args.succeeded} of ${args.asked} people was changed; the others couldn't be.`;
