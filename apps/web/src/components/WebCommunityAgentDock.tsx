@@ -768,6 +768,10 @@ function WebCommunityAgentDock(props, ref) {
     setHomeRefreshKey((key) => key + 1);
   }, [isOpenSurface]);
   if (streamedText || runtimeEvents.length > 0) followConversationRef.current = true;
+  // The address says where you are: in the conversation (a tap, a refresh or
+  // a link straight to it) you read from its latest message; on the front of
+  // Home (the browser's Back included) from the top.
+  else followConversationRef.current = kitTalking;
 
   useEffect(() => {
     if (!isOpenSurface) return;
