@@ -150,14 +150,11 @@ export const seedBriefLabInternal = internalMutation({
     if (request) await ctx.db.patch(request._id, { status: "pending", message: undefined, deniedAt: undefined, reapplyAt: undefined, createdAt: ago(5), updatedAt: ago(5) });
     else await ctx.db.insert("communityJoinRequests", { communityId: args.communityId, userId: requesterId, status: "pending", createdAt: ago(5), updatedAt: ago(5) });
 
-    // The coming Saturday at 12:00 UTC (early morning in New York), at least a
-    // day away, so the event's name and its day agree.
-    let saturdayRunAt = Math.floor(nowMs / (24 * HOUR_MS)) * 24 * HOUR_MS + 12 * HOUR_MS;
-    while (new Date(saturdayRunAt).getUTCDay() !== 6 || saturdayRunAt < nowMs + 24 * HOUR_MS) saturdayRunAt += 24 * HOUR_MS;
+    // Named without a weekday: it is always a day away, whatever day that is.
     await ctx.db.insert("communityEvents", {
-      communityId: args.communityId, createdByUserId: community.ownerId, title: "Saturday Long Run: River Loop",
-      descriptionMd: `${PREFIX}14k at conversational pace, coffee after.`, startsAt: saturdayRunAt,
-      endsAt: saturdayRunAt + 2 * HOUR_MS, timezone: "America/New_York", locationType: "physical", locationLabel: "Riverside boathouse",
+      communityId: args.communityId, createdByUserId: community.ownerId, title: "Long Run: River Loop",
+      descriptionMd: `${PREFIX}14k at conversational pace, coffee after.`, startsAt: nowMs + 26 * HOUR_MS,
+      endsAt: nowMs + 28 * HOUR_MS, timezone: "America/New_York", locationType: "physical", locationLabel: "Riverside boathouse",
       visibility: "members", status: "live", recurrenceFrequency: "none", createdAt: nowMs, updatedAt: nowMs,
     } as any);
     return { members: MEMBERS.length, posts: POSTS.length };
