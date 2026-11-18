@@ -24,9 +24,10 @@ import { fetchCloudCommunityMemberBillingHistory, type CloudCommunityMemberBilli
 import { formatPrice } from "../../../../shared/communityMemberRecords";
 import { CommunityChannelSessionContext } from "../components/CommunityChannelSessionContext";
 import type { CommunityAdmissionJoinRequest } from "../components/CommunityJoinRequestReview";
+import type { CommunityAdmissionControl } from "../components/CommunityAutoJoinControl";
 import { matchesMemberSearch, memberKey, membersCsv, toggleAllShown } from "../../../../shared/communityMembersTable";
 import { Btn, cx, Icon, KitApp, Rail, Sep, Sec, Top, View } from "./kit";
-import { Face, JoinRequestsDrawer, JoinRequestsLine, MembersBulkBar, MembersTable, MembersToolbar, type MembersFilter, type MembersSortKey } from "./KitMembersTable";
+import { Face, WhoCanJoinLine, JoinRequestsDrawer, JoinRequestsLine, MembersBulkBar, MembersTable, MembersToolbar, type MembersFilter, type MembersSortKey } from "./KitMembersTable";
 
 type MembersView = "everyone" | `price:${string}` | "on_hold" | "cancelling" | "know_little" | "past";
 
@@ -65,6 +66,8 @@ export function KitMembersPage(props: {
   onDecline: (id: string) => void;
   onMessage?: (userId: string) => void;
   onManage?: (member: { id: string; user_id: string; display_name: string; avatar_url: string | null; role: string; created_at: string | null }) => void;
+  // Who can join (a free community): shown and changed here by the host.
+  admission?: CommunityAdmissionControl;
   // Bumped after a role change, removal or block: the table and record reload.
   refreshKey?: number;
   currentUserId: string | null;
@@ -268,6 +271,7 @@ export function KitMembersPage(props: {
           <Top title="Members" titleView={5} />
           <div className={cx("page")} style={{ overflowY: "auto" }}>
             <p className={cx("sub")} style={{ margin: 0 }}>{lead}</p>
+            <WhoCanJoinLine admission={props.admission} waiting={waiting} />
             <JoinRequestsLine count={waiting} open={side === "requests"} onOpen={() => setSide(side === "requests" ? null : "requests")} />
             <MembersToolbar search={search} onSearch={setSearch} filters={filters} filter={view} onFilter={(id) => setView(id as MembersView)}
               onExport={() => void exportCsv()} exporting={exporting} canExport={Boolean(summary)} />

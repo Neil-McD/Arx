@@ -157,12 +157,24 @@ per thing a builder does, each declared in `shared/operationCatalog.ts`.
 in the composer, change things directly: the builder is present and asked
 for the change.
 
-**What takes something from members asks first.** An operation whose effect
-is *destroy* or *broadcast* is not offered until it can ask for the
-builder's yes just above the composer (slice 5). So far that holds back: deleting a channel, changing who may see
-one (opening a private channel shows its history to everyone), pinning a
-post, cancelling an event, and making or changing an event (members are
-emailed reminders).
+**What can't be taken back is a person's click** (Neil, Nov 18). Agents
+prepare; a person makes the change that can't be taken back, with the app's
+own button. It is the same rule as courses. An AI that asks for one of these
+is not queued and not asked "are you sure": it gets the refusal
+`person_only`, one sentence, and the address in Polynet where the person
+does it. So a planted post can never talk an AI into it.
+
+| Asked for | What the AI gets |
+|---|---|
+| Remove a member, ban a member | The member's record (several: the Members page) |
+| Open a closed community | The Members page, where "Who can join" is (added with this rule: the current design had no place for a host to change it) |
+| Remove a post | The community's channels; the AI names the channel and post |
+| Delete a channel, change who may see one, pin a post | Not offered |
+| Publish or unpublish a course, delete what members see | Refused with where the switch is (above) |
+
+Changing a role, lifting a ban and setting joining to approval take nothing
+from anyone, so an AI still does them. Later: a restore for removed posts,
+after which an AI could hide posts (nothing would be lost).
 
 **Channels** (`community.channel.*`, `convex/communityChannels.ts`): `create`
 (open to every member; a private channel is made in the app), `rename` (the
@@ -202,10 +214,10 @@ Four ways things happen, and where each is approved (Neil, Nov 17):
 
 1. **The app**: a host or member clicking. Nothing new.
 2. **The guide, in the composer**, and 3. **your own AI, through the MCP**:
-   you are working through an agent. Anything that needs your yes is asked
-   just above the composer, where you are working. Courses need no ask at
-   all (above). The one-way actions that will (remove a post, remove or ban
-   a member, open a closed community, delete a channel) are slice 5.
+   you are working through an agent. It builds and prepares; what can't be
+   taken back it hands to you as a link to the app's own button (above).
+   Nothing needs a new prompt today. If an action ever does, it is asked
+   just above the composer, where you are working.
 4. **On its own**: the guide's scheduled work, for the community and per
    person, and what arrives by itself (someone asks to join, an event is
    near, a payment fails). This comes forward on **Home**.

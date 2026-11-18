@@ -9,6 +9,7 @@ import { Check, ChevronRight, Download, Plus, Search, X } from "lucide-react";
 import { UserAvatar } from "../../../../shared/UserAvatar";
 import { memberKey, memberStatus, type MemberTableRow } from "../../../../shared/communityMembersTable";
 import type { CommunityAdmissionJoinRequest } from "../components/CommunityJoinRequestReview";
+import type { CommunityAdmissionControl } from "../components/CommunityAutoJoinControl";
 import { Btn, cx } from "./kit";
 
 type Avatars = { getAvatarColor: (id: string) => string; getInitials: (name: string) => string };
@@ -163,6 +164,44 @@ export function MembersBulkBar(props: { count: number; onExport: () => void; onC
 }
 
 // One line above the table when people are waiting; their requests are in the drawer.
+// Who can join a free community: people ask first, or anyone. The host
+// changes it here, with a plain "are you sure" naming what happens. Letting
+// anyone join also lets in everyone who is waiting, and that isn't undone by
+// switching back, so it is a person's click and never an AI's
+// (docs/specs/agent-access-v0.md).
+export function whoCanJoinLine(mode: "open" | "approval"): string {
+  return mode === "open" ? "Anyone can join." : "People ask to join, and you say yes or no.";
+}
+export function whoCanJoinAsk(to: "open" | "approval", waiting: number): string {
+  if (to === "approval") return "Ask people to join first? New people then wait for your yes.";
+  const let_in = waiting === 0 ? "" : waiting === 1 ? " The 1 person waiting is let in now." : ` The ${waiting} people waiting are let in now.`;
+  return `Let anyone join?${let_in} If you switch back later, people who joined stay members.`;
+}
+export function WhoCanJoinLine(props: { admission?: CommunityAdmissionControl; waiting: number }) {
+  const [asking, setAsking] = useState(false);
+  const admission = props.admission;
+  if (!admission?.canManage || !admission.mode) return null;
+  const to = admission.mode === "open" ? "approval" : "open";
+  return (
+    <div className={cx("mjoin")}>
+      {asking ? (
+        <>
+          <span>{whoCanJoinAsk(to, props.waiting)}</span>
+          <Btn small go disabled={admission.pending} onClick={() => { void Promise.resolve(admission.onChange(to)).finally(() => setAsking(false)); }}>
+            {admission.pending ? "…" : to === "open" ? "Let anyone join" : "Ask first"}
+          </Btn>
+          <Btn small txt disabled={admission.pending} onClick={() => setAsking(false)}>Keep it as it is</Btn>
+        </>
+      ) : (
+        <>
+          <span><b>Who can join</b>{whoCanJoinLine(admission.mode)}{admission.error ? <i> {admission.error}</i> : null}</span>
+          <Btn small txt onClick={() => setAsking(true)}>Change</Btn>
+        </>
+      )}
+    </div>
+  );
+}
+
 export function JoinRequestsLine(props: { count: number; open: boolean; onOpen: () => void }) {
   if (props.count === 0) return null;
   return (
