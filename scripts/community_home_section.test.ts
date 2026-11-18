@@ -240,3 +240,12 @@ test("what the guide suggests is its own group: a row per draft, opened by the h
   expect(html).not.toContain("Post reply");
   expect(renderToStaticMarkup(React.createElement(GuideSuggests, { drafts: [], onPost: async () => null, onSkip: () => {} }))).toBe("");
 });
+
+test("a question the guide drafted a reply for shows once, under what the guide suggests", async () => {
+  const { noticedWithoutDrafted } = await import("../apps/web/src/components/WebCommunityHomeSection");
+  const noticed = ownerNoticed({ facts, records: [], nowMs: NOW });
+  expect(noticedWithoutDrafted(noticed, [{ author: "Rafael", channel: "general" }]).map((row) => row.key)).toEqual(["quiet_newcomers", "course_stall"]);
+  // Another person's question, or the same person in another channel, is still its own row.
+  expect(noticedWithoutDrafted(noticed, [{ author: "Sara", channel: "general" }, { author: "Rafael", channel: "wins" }])).toHaveLength(3);
+  expect(noticedWithoutDrafted(noticed, [])).toHaveLength(3);
+});

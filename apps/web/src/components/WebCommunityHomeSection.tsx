@@ -126,6 +126,13 @@ function opener(target: OwnerNoticed["target"] | MemberNextStep["target"], actio
   };
 }
 
+// A waiting question the guide has drafted a reply for shows once, under
+// "Your guide suggests", not also as a row of its own.
+export function noticedWithoutDrafted(noticed: OwnerNoticed[], drafts: Array<Pick<ReplyDraftView, "author" | "channel">>): OwnerNoticed[] {
+  return noticed.filter((entry) => !(entry.key === "questions_waiting" && entry.target.kind === "channel"
+    && drafts.some((draft) => entry.target.kind === "channel" && entry.target.name === draft.channel && entry.title.startsWith(`${draft.author}'s question `))));
+}
+
 const NOTICED_ICON = { questions_waiting: "question", quiet_newcomers: "people", course_stall: "lesson" } as const;
 
 // A host's rows from what was noticed. Without a guide, each says what a
@@ -225,6 +232,9 @@ export function WebCommunityHomeSection(props: WebCommunityHomeSectionProps) {
       const session = await props.ensureSession(props.session);
       if (!session) return "You're signed out. Sign in and try again.";
       await postReplyDraft({ session, communityId: props.communityId, draftId: id, ...(text !== undefined ? { text } : {}) });
+      // Answered: its question is no longer waiting either.
+      const posted = (drafts ?? []).filter((draft) => draft.id === id);
+      setNoticed((current) => noticedWithoutDrafted(current ?? [], posted));
       setDrafts((current) => (current ?? []).filter((draft) => draft.id !== id));
       return null;
     } catch (error) {
@@ -255,7 +265,7 @@ export function WebCommunityHomeSection(props: WebCommunityHomeSectionProps) {
   const joinReview = isHost && props.joinReview && props.joinReview.requests.length > 0 ? props.joinReview : null;
   const joinCount = !isHost ? 0 : joinReview ? joinReview.requests.length : snapshot?.joinRequestsPending ?? 0;
   const things = isHost
-    ? hostThingsFor(noticed ?? [], { agentOn, actions: props, onNotNow: notNow })
+    ? hostThingsFor(noticedWithoutDrafted(noticed ?? [], drafts ?? []), { agentOn, actions: props, onNotNow: notNow })
     : memberThingsFor(steps ?? [], props);
   const needs = homeThingsCount({ joinRequests: joinCount, things: things.length });
   // The page draws as one piece once its parts have answered, so the list is
