@@ -8,6 +8,9 @@
 //   noticed; for a member, what is for them. The three most important show
 //   and the rest stack. Only what came forward on its own is here; work done
 //   through an agent is approved where the agent is being worked with.
+// - What the guide suggests (KitGuideSuggests), for a host with a guide: a
+//   reply it drafted to a question nobody answered. It is kept apart from the
+//   list above: that is what the host must decide, this is an offer.
 // - The right column (KitHomeRail) keeps what is glanceable: the next event,
 //   what the community knows, who is here.
 //
@@ -28,6 +31,9 @@ import {
   type CloudCommunityHomeSnapshot,
 } from "../../../../shared/cloudCommunityAdminGateway";
 import { NeedsYou, homeThingsCount, type HomeThing, type NeedsYouJoinReview } from "../v1/KitNeedsYou";
+import { GuideSuggests } from "../v1/KitGuideSuggests";
+import { fetchReplyDrafts, postReplyDraft, skipReplyDraft } from "../../../../shared/cloudCommunityReplyDraftsGateway";
+import type { ReplyDraftView } from "../../../../shared/communityReplyDrafts";
 import { Eyebrow, Hello, HomeBody, KitApp, Rail, TextLink, cx } from "../v1/kit";
 
 export type WebCommunityHomeSectionProps = {
@@ -157,6 +163,8 @@ export function WebCommunityHomeSection(props: WebCommunityHomeSectionProps) {
   // What was noticed (a host) or what is for them (a member). null: not read yet.
   const [noticed, setNoticed] = useState<OwnerNoticed[] | null>(null);
   const [steps, setSteps] = useState<MemberNextStep[] | null>(null);
+  // What the guide drafted and offers to post (a host with a guide).
+  const [drafts, setDrafts] = useState<ReplyDraftView[] | null>(null);
   const loadedCommunityIdRef = useRef<string | null>(null);
   const isHost = props.audience === "host";
   const agentOn = props.agentOn !== false;
@@ -172,6 +180,7 @@ export function WebCommunityHomeSection(props: WebCommunityHomeSectionProps) {
       setSnapshot(null);
       setNoticed(null);
       setSteps(null);
+      setDrafts(null);
     }
     setFailed(false);
     void (async () => {
@@ -185,13 +194,18 @@ export function WebCommunityHomeSection(props: WebCommunityHomeSectionProps) {
           ? fetchMemberHomeSteps({ session, communityId: props.communityId }).then((rows) => { if (!cancelled) setSteps(rows); })
             .catch(() => { if (!cancelled) setSteps([]); })
           : Promise.resolve().then(() => { if (!cancelled) setSteps([]); });
+      // The guide's suggestions are extra too.
+      const suggested = isHost && agentOn
+        ? fetchReplyDrafts({ session, communityId: props.communityId }).then((rows) => { if (!cancelled) setDrafts(rows); })
+          .catch(() => { if (!cancelled) setDrafts([]); })
+        : Promise.resolve().then(() => { if (!cancelled) setDrafts([]); });
       try {
         const loaded = await getCloudCommunityHomeSnapshot({ session, communityId: props.communityId, audience: props.audience });
         if (!cancelled) setSnapshot(loaded);
       } catch {
         if (!cancelled) setFailed(true);
       }
-      await list;
+      await Promise.all([list, suggested]);
     })();
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -203,6 +217,31 @@ export function WebCommunityHomeSection(props: WebCommunityHomeSectionProps) {
       const session = await props.ensureSession(props.session).catch(() => null);
       // If it isn't saved it shows again next time; nothing is lost.
       if (session) await dismissOwnerMoment({ session, communityId: props.communityId, key }).catch(() => undefined);
+    })();
+  };
+
+  const postDraft = async (id: string, text?: string): Promise<string | null> => {
+    try {
+      const session = await props.ensureSession(props.session);
+      if (!session) return "You're signed out. Sign in and try again.";
+      await postReplyDraft({ session, communityId: props.communityId, draftId: id, ...(text !== undefined ? { text } : {}) });
+      setDrafts((current) => (current ?? []).filter((draft) => draft.id !== id));
+      return null;
+    } catch (error) {
+      const raw = error instanceof Error ? error.message : "";
+      if (raw.includes("no_longer_needed")) {
+        setDrafts((current) => (current ?? []).filter((draft) => draft.id !== id));
+        return null;
+      }
+      return raw.includes("too_long") ? "That's too long to post. Shorten it and try again." : "That didn't post. Try again.";
+    }
+  };
+  const skipDraft = (id: string) => {
+    setDrafts((current) => (current ?? []).filter((draft) => draft.id !== id));
+    void (async () => {
+      const session = await props.ensureSession(props.session).catch(() => null);
+      // If it isn't saved it shows again next time; nothing is lost.
+      if (session) await skipReplyDraft({ session, communityId: props.communityId, draftId: id }).catch(() => undefined);
     })();
   };
 
@@ -222,7 +261,7 @@ export function WebCommunityHomeSection(props: WebCommunityHomeSectionProps) {
   // The page draws as one piece once its parts have answered, so the list is
   // never drawn and then pushed down by the brief (docs/specs/web-architecture
   // -end-state.md: nothing moves after it is drawn).
-  const ready = Boolean(snapshot) && briefSettled && (isHost ? noticed !== null : steps !== null);
+  const ready = Boolean(snapshot) && briefSettled && (isHost ? noticed !== null && drafts !== null : steps !== null);
 
   const panel = snapshot ? (
     <KitHomeRail session={props.session} communityId={props.communityId} snapshot={snapshot}
@@ -258,10 +297,11 @@ export function WebCommunityHomeSection(props: WebCommunityHomeSectionProps) {
           <NeedsYou label={isHost ? "Needs you" : "For you"} join={joinReview} joinCount={joinCount}
             onShowAllJoinRequests={props.onOpenJoinRequests} things={things} />
         ) : null}
+        {ready && isHost ? <GuideSuggests drafts={drafts ?? []} onPost={postDraft} onSkip={skipDraft} /> : null}
         {ready && isHost && !agentOn && things.length > 0 && props.onTurnOnAgent ? (
           <TextLink style={{ marginTop: 14 }} onClick={props.onTurnOnAgent}>Turn on your guide</TextLink>
         ) : null}
-        {agentOn && !kit.talking && kit.hasConversation && needs === 0 ? (
+        {agentOn && !kit.talking && kit.hasConversation && needs === 0 && !(drafts?.length) ? (
           <TextLink style={{ marginTop: 20 }} onClick={kit.onTalkItOver}>Continue your conversation</TextLink>
         ) : null}
         {kit.talk}
