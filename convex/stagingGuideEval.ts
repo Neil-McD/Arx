@@ -45,7 +45,7 @@ export const snapshotForEvalInternal = internalQuery({
 // the community's own settings are put back. Posts need a yes the run never
 // gives, so there are none to remove. The seed puts the rest back.
 export const cleanUpAfterEvalInternal = internalMutation({
-  args: { communityId: v.id("communities"), userId: v.id("users"), sinceMs: v.number(), community: v.any() },
+  args: { communityId: v.id("communities"), sinceMs: v.number(), community: v.any() },
   handler: async (ctx, args) => {
     if (process.env.POLYNET_ALLOW_SEED !== "1") throw new Error("guide_eval_not_allowed_on_this_deployment");
     const removed: Record<string, number> = {};
@@ -57,9 +57,9 @@ export const cleanUpAfterEvalInternal = internalMutation({
     for (const [name, rows] of Object.entries({ events, channels: channels.filter((row: any) => !row.systemRole), lessons, courses })) {
       for (const row of (rows as any[]).filter(fresh)) { await ctx.db.delete(row._id); removed[name] = (removed[name] ?? 0) + 1; }
     }
-    const waiting = await ctx.db.query("communityGuideQuestions")
-      .withIndex("by_community_user_status_createdAt", (q) => q.eq("communityId", args.communityId).eq("userId", args.userId).eq("status", "waiting").gte("createdAt", args.sinceMs))
-      .collect();
+    // A staging table small enough to read whole; no index runs by community alone.
+    const waiting = (await ctx.db.query("communityGuideQuestions").collect())
+      .filter((row) => row.communityId === args.communityId && row.status === "waiting" && row.createdAt >= args.sinceMs);
     for (const row of waiting) await ctx.db.patch(row._id, { status: "declined", answeredAt: Date.now() } as any);
     removed.questions = waiting.length;
     if (args.community && typeof args.community === "object") await ctx.db.replace(args.communityId, args.community);
