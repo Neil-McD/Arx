@@ -251,13 +251,13 @@ assert.match(
 );
 assert.match(
   run,
-  /unsupported_concierge_tool[\s\S]*function coerceToLensTools[\s\S]*lensHasTool\(lens, completion\.toolName\)[\s\S]*buildResponsesApiFunctionTools\(lensTools\)/,
-  "the run should offer only its lens tools and reject any other tool the model asks for before execution",
+  /unsupported_concierge_tool[\s\S]*function coerceToLensTools[\s\S]*lensHasTool\(lens, toolName\) && offered\.includes\(toolName\)[\s\S]*\(args\.tools \?\? LENS_TOOLS\[args\.lens\]\)\.filter\(\(toolName\) => lensHasTool\(args\.lens, toolName\)\)[\s\S]*buildResponsesApiFunctionTools\(lensTools\)/,
+  "the run should offer only its lens tools (a private talk's own list, kept to its lens) and reject any tool that wasn't offered before execution",
 );
 assert.match(
   lens,
-  /const POLYNET_TOOLS = \["polynet_list", "polynet_read", "polynet_search", "polynet_write", "polynet_call"\] as const;[\s\S]*guide_public: POLYNET_TOOLS,/,
-  "the guide in public must get exactly the canonical five Polynet tools",
+  /const READ_TOOLS = \["polynet_list", "polynet_read", "polynet_search"\] as const;[\s\S]*guide_public: READ_TOOLS,/,
+  "the guide in public only reads: its reply is its only speech, so it gets the three read tools and nothing that acts",
 );
 assert.match(worker, /runFundedCommunityAgent\(\{\s*lens: "guide_public",/, "a tag runs under the guide's public lens");
 assert.match(
@@ -267,8 +267,8 @@ assert.match(
 );
 assert.match(
   servePrompt,
-  /The five Polynet tools are your only platform operations[\s\S]*restricted to \$\{communityRoot\}[\s\S]*Use polynet_list to navigate, polynet_search on an exact returned subtree, and polynet_read on exact returned paths[\s\S]*Your reply is your only speech[\s\S]*put the draft in your reply[\s\S]*Use polynet_call only for a versioned operation returned under capabilities\/[\s\S]*member authority, never builder authority/,
-  "serve prompt should orient the Concierge to the canonical five and fixed member authority",
+  /Your three Polynet tools read; they are your only platform operations[\s\S]*restricted to \$\{communityRoot\}[\s\S]*Use polynet_list to navigate, polynet_search on an exact returned subtree, and polynet_read on exact returned paths[\s\S]*Your reply is your only speech[\s\S]*put the draft in your reply[\s\S]*Your tools only read\. You have member authority, never builder authority/,
+  "serve prompt should orient the Concierge to its three read tools and fixed member authority",
 );
 assert.match(
   servePrompt,

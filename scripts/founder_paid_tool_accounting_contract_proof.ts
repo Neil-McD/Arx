@@ -99,8 +99,9 @@ assert.doesNotMatch(runtimePolicy, /web_crawl:/
 );
 // Paid web research is a private-talk tool only (shared/lens.ts).
 const lens = read("shared/lens.ts");
-assert.match(lens, /member_private: \[\.\.\.POLYNET_TOOLS, "web_research"\]/);
-assert.match(lens, /guide_public: POLYNET_TOOLS,/);
+assert.match(lens, /member_private: \[\.\.\.READ_TOOLS, "web_research"\]/);
+assert.match(lens, /builder_private: \[\.\.\.READ_TOOLS, "web_research"\]/);
+assert.match(lens, /guide_public: READ_TOOLS,/);
 assert.doesNotMatch(lens + runtimeInvocationSurface, /"web_crawl"/);
 assert.doesNotMatch(providerPricing, /WEB_RESEARCH_CREDITS_PER_CALL/);
 assert.doesNotMatch(providerPricing, /priceWebResearchCredits/);

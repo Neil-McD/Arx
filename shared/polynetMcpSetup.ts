@@ -286,7 +286,7 @@ export function buildPolynetMcpSetup(args: {
     "",
     "## Verify",
     "",
-    "After setup, verify that the tool names are exactly `polynet_list`, `polynet_read`, `polynet_search`, `polynet_write`, and `polynet_call`. Then call `polynet_list` with `path: \"/\"` and follow only returned paths.",
+    "After setup, verify that you see `polynet_list`, `polynet_read` and `polynet_search`, and one named tool for each thing you can do, such as `polynet_post` and `polynet_react`. Then call `polynet_list` with `path: \"/\"` and follow only returned paths.",
     "",
     "If Polynet tools are not visible after sign-in, tell the user to start a fresh chat or reconnect tools. Do not repeat OAuth unless the harness still says authentication is required.",
     "",

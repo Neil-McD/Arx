@@ -8,6 +8,12 @@
 // polynet_write or polynet_call the executor already runs, with the same
 // checks, limits and receipts (convex/polynetCanonicalExecutor.ts).
 //
+// The guide in a private talk gets the same tools (shared/lens.ts,
+// talkToolNames), so both doors do the same things by construction. Two
+// differences are marked on the tool itself (`door`): a person's messages are
+// their own AI's only; remembering, and removing posts after the person's
+// yes, are the guide's only.
+//
 // The table below is the whole presentation. `catalog` names the entry each
 // tool stands for; its labels (who may do it, how the person is asked) come
 // from there, never from here. scripts/action_tools.test.ts holds that every
@@ -17,6 +23,7 @@ import { CALL_OPERATION_VARIANTS, CALL_OPERATIONS, requestFingerprint, TOOL_OPER
 import type { PlatformOperationJsonSchema } from "./platformOperationContract.ts";
 
 export type ActionToolRole = "member" | "moderator" | "builder";
+export type ActionToolDoor = "own_ai" | "guide";
 
 type Args = Record<string, any>;
 type Translated = { toolName: "polynet_write" | "polynet_call"; input: Record<string, unknown> };
@@ -27,6 +34,9 @@ export type ActionTool = {
   description: string;
   // The entry in the one list this tool stands for.
   catalog: string;
+  // Missing: both doors. "own_ai": only a person's own AI. "guide": only the
+  // guide in a private talk.
+  door?: ActionToolDoor;
   properties: Record<string, PlatformOperationJsonSchema>;
   required: string[];
   translate: (args: Args) => Omit<Translated, "input"> & { input: Record<string, unknown> };
@@ -76,8 +86,8 @@ const call = (operation: string, args: Args, input: Record<string, unknown>): Tr
 const write = (path: string, mode: string, content: Record<string, unknown>): Translated => ({ toolName: "polynet_write", input: { path, mode, content } });
 
 function tool(name: string, catalog: string, title: string, description: string, properties: Record<string, PlatformOperationJsonSchema>,
-  required: string[], translate: ActionTool["translate"]): ActionTool {
-  return { name, catalog, title, description, properties: { ...properties, idempotency_key: KEY }, required, translate };
+  required: string[], translate: ActionTool["translate"], door?: ActionToolDoor): ActionTool {
+  return { name, catalog, title, description, properties: { ...properties, idempotency_key: KEY }, required, translate, ...(door ? { door } : {}) };
 }
 
 // ---- the tools
@@ -118,7 +128,13 @@ export const ACTION_TOOLS: ActionTool[] = [
     "Reply in a direct-message conversation the person is already in. List /messages/ for their conversations and read one before replying. You can't start a new conversation.",
     { conversation: { type: "string", minLength: 4, maxLength: 80, description: "The conversation's id: the <id> in /messages/<id>/ from polynet_list." },
       text: TEXT("The reply, as it will appear.", 4_000) }, ["conversation", "text"],
-    (a) => write(`/messages/${a.conversation}/`, "append", { text: a.text })),
+    (a) => write(`/messages/${a.conversation}/`, "append", { text: a.text }), "own_ai"),
+  tool("polynet_remember", "member.memory.remember", "Remember something about this person",
+    "Keep, change or drop what you remember about the person you are talking with, for next time. Only for what they told you about themselves and would expect you to keep. Their memory is short: when it is full the call fails with what is there, so merge or remove in the same batch.",
+    { community: COMMUNITY, operations: { type: "array", minItems: 1, maxItems: 10,
+      description: 'Each is { action: "add", content } | { action: "patch", old_text, content } | { action: "remove", old_text } | { action: "clear" }; old_text is a unique part of one entry.',
+      items: { type: "object" } } }, ["community", "operations"],
+    (a) => call("member.memory.remember", a, { operations: a.operations }), "guide"),
 
   // A moderator.
   ...(["approve", "deny"] as const).map((verb) => tool(`polynet_${verb === "approve" ? "approve" : "decline"}_join_requests`, `community.admission.${verb}`,
@@ -130,6 +146,12 @@ export const ACTION_TOOLS: ActionTool[] = [
         created_at: { type: "string", maxLength: 24 }, updated_at: { type: "string", maxLength: 24 } } } } }, ["community", "requests"],
     (a) => call(`community.admission.${verb}`, a, { requests: (Array.isArray(a.requests) ? a.requests : []).map((request: Args) => ({
       request_ref: request?.ref, expected_created_at: request?.created_at, expected_updated_at: request?.updated_at })) }))),
+
+  tool("polynet_remove_posts", "community.interaction.remove", "Remove posts",
+    "Remove other people's posts or replies (spam, abuse). They can't be brought back. The person is shown the posts and asked first, every time; say one line and stop.",
+    { community: COMMUNITY, posts: { type: "array", minItems: 1, maxItems: 100, items: POST, description: "The posts' refs from channel or thread listings." } },
+    ["community", "posts"],
+    (a) => call("community.interaction.remove", a, { refs: a.posts }), "guide"),
 
   // A builder (owner or admin).
   tool("polynet_update_community", "community.settings.update", "Change the community's details",
@@ -209,8 +231,6 @@ export const NOT_PUBLISHED: Record<string, string> = {
   "polynet_write:builder:delete": "part of polynet_change_courses; deleting what members see is refused there",
   "community.presence.heartbeat": "that a person is here right now: only their own open site says so",
   "community.typing.set": "that a person is typing: only their own open site says so",
-  "member.memory.remember": "the guide's memory of a member: only in their private talk with the guide",
-  "community.interaction.remove": "can't be taken back: a person removes a post in the app, or says yes to the guide",
   "community.members.remove": "only a person, in the app",
   "community.members.ban": "only a person, in the app",
   "community.join_mode.set:open": "only a person, in the app",
@@ -232,8 +252,19 @@ export function actionToolEntry(entry: ActionTool): OperationEntry {
 const SHOWN_TO: Record<ActionToolRole, OperationEntry["lens"][]> = {
   member: ["member"], moderator: ["member", "moderator"], builder: ["member", "moderator", "builder"],
 };
-export function actionToolsFor(role: ActionToolRole): ActionTool[] {
-  return ACTION_TOOLS.filter((entry) => SHOWN_TO[role].includes(actionToolEntry(entry).lens));
+export function actionToolsFor(role: ActionToolRole, door: ActionToolDoor): ActionTool[] {
+  return ACTION_TOOLS.filter((entry) => (!entry.door || entry.door === door) && SHOWN_TO[role].includes(actionToolEntry(entry).lens));
+}
+
+// The same tool as the guide is given it: its private talk is in one
+// community, so the server fills that in and the guide never names it.
+export function guideToolDefinition(entry: ActionTool) {
+  const { community: _community, ...properties } = entry.properties;
+  return {
+    name: entry.name,
+    description: entry.description,
+    inputSchema: { type: "object", additionalProperties: false, required: entry.required.filter((key) => key !== "community"), properties } as PlatformOperationJsonSchema,
+  };
 }
 
 // A named tool as an MCP tool. The labels are the list's: what asks every

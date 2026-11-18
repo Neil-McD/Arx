@@ -30,6 +30,7 @@ import {
 } from "../shared/polynetCanonicalToolContract.ts";
 import { formatJsonToolOutput } from "./runtimeHarnessShaping";
 import { guideRunLens, lensHasTool } from "../shared/lens";
+import { actionTool, translateActionTool } from "../shared/actionTools";
 
 function buildWebResearchCostMetadata(params: {
   estimatedVendorCostUsd: number;
@@ -70,11 +71,14 @@ export async function runAgentTool(params: {
   // The pod a guide run started in (community concierge only).
   podRoomId?: string | null;
   signal?: AbortSignal;
+  // Set by this function when it runs the call a named tool stands for.
+  fromNamedTool?: boolean;
 }): Promise<NativeToolExecutionResult> {
   // The run's lens decides which tools it has; a tool outside it is refused
   // before anything runs (shared/lens.ts).
   const lens = guideRunLens(params.evidenceSurface);
-  if (!lensHasTool(lens, params.toolName)) {
+  // (The call a named tool stands for was checked as that named tool.)
+  if (!params.fromNamedTool && !lensHasTool(lens, params.toolName)) {
     return {
       status: "error",
       exitCode: null,
@@ -82,6 +86,19 @@ export async function runAgentTool(params: {
       errorCode: "tool_not_in_lens",
       errorMessage: `${String(params.toolName)} isn't one of this run's tools.`,
     };
+  }
+  // A named action tool (shared/actionTools.ts) is the same call the
+  // executor already runs, written out. A private talk is in one community,
+  // so that is filled in here: the guide never names it, and can't name another.
+  const named = params.fromNamedTool ? null : actionTool(String(params.toolName));
+  if (named) {
+    if (!params.communityId || !params.communityBoundConversation || !params.authSubject) {
+      return { status: "error", exitCode: null, outputText: "", errorCode: "community_context_required", errorMessage: "This tool works only in a community's private talk." };
+    }
+    const context = await params.ctx.runQuery(internal.communityAgent.resolveRuntimeCommunityPromptContextInternal,
+      { authSubject: params.authSubject, userId: params.userId as any, communityId: params.communityId as any });
+    const translated = translateActionTool(named, { ...params.args, community: context.community_slug }, Date.now());
+    return await runAgentTool({ ...params, toolName: translated.toolName, args: translated.input, fromNamedTool: true });
   }
   let normalizedArgs: Record<string, unknown>;
   try {

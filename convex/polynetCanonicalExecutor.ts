@@ -889,8 +889,17 @@ function capabilityDocument(args: {
   // points there and not at the general call. What only a person does has no
   // tool: its file gives the place in the app, so the AI can hand it over
   // without asking for a refusal first.
+  // The guide in a private talk has its named tools too, so its file points
+  // there as well.
+  if (args.principalKind === "community_agent_for_member") {
+    const named = namedToolFor(args.operation, "guide");
+    if (named) {
+      operationDefinition.tool = named;
+      operationDefinition.call = `Use the ${named} tool: its inputs are plain, and it needs no version, target or key.`;
+    }
+  }
   if (args.principalKind === "external_mcp") {
-    const named = namedToolFor(args.operation);
+    const named = namedToolFor(args.operation, "own_ai");
     const listed = callOperation(args.operation);
     if (named) {
       operationDefinition.tool = named;
@@ -2851,8 +2860,10 @@ async function askPersonFirst(args: {
 }
 
 // The named tool a person's own AI has for an action (shared/actionTools.ts).
-function namedToolFor(operation: string): string | null {
-  return ACTION_TOOLS.find((tool) => tool.catalog === operation)?.name ?? null;
+// The named tool a person's own AI calls for an operation. The guide's own
+// tools (remembering, removing posts after a yes) are not one.
+function namedToolFor(operation: string, door: "own_ai" | "guide"): string | null {
+  return ACTION_TOOLS.find((tool) => tool.catalog === operation && (!tool.door || tool.door === door))?.name ?? null;
 }
 
 // Whether this call is handed back to the person instead of run: the one

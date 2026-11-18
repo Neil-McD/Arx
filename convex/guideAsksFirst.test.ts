@@ -8,6 +8,7 @@ import { api } from "./_generated/api";
 import { ensureGeneralChannel } from "./communityChannelCore";
 import schema from "./schema";
 import { executePolynetCanonicalTool } from "./polynetCanonicalExecutor";
+import { runAgentTool } from "./agentTools";
 import { PLATFORM_LEGAL_DOCUMENTS } from "../shared/legalDocuments";
 import { actionTool, translateActionTool } from "../shared/actionTools";
 
@@ -463,6 +464,65 @@ test("through a person's own AI, an action's file points at its named tool, and 
   expect(ban.call).toBeUndefined();
   const remove = await file("owner", "external_mcp", "community.interaction.remove");
   expect(remove).toMatchObject({ tool: null, give_the_person_this_link: expect.stringContaining("/c/run-club/chat") });
-  // The guide still makes the general call, so its file is unchanged.
-  expect(await file("owner", "community_agent_for_member", "community.interaction.react")).toMatchObject({ tool: "polynet_call", call: { operation: "community.interaction.react" } });
+  // The guide has its named tools too, so its files point there; removing posts is its own tool (after the person's yes).
+  expect(await file("owner", "community_agent_for_member", "community.interaction.react")).toMatchObject({ tool: "polynet_react", call: expect.stringContaining("polynet_react") });
+  expect(await file("owner", "community_agent_for_member", "community.interaction.remove")).toMatchObject({ tool: "polynet_remove_posts" });
+});
+
+test("in a member's private talk the guide acts by named tools only, in the talk's own community", async () => {
+  const w = await world();
+  const nowMs = Date.now();
+  // A second community the member is also in, to show the talk's community wins.
+  const elsewhere = await w.t.run(async (ctx) => {
+    const communityId = await ctx.db.insert("communities", { ownerId: w.ids.other, slug: "swim-club", name: "Swim club", oneLiner: "We swim.", about: "A club for swimmers.",
+      visibility: "unlisted", inferenceFundingPolicy: "managed_required", entryPolicy: "open", activeMemberCount: 2, createdAt: nowMs, updatedAt: nowMs } as any);
+    await ensureGeneralChannel({ ctx, communityId, nowMs });
+    await ctx.db.insert("communityMemberships", { communityId, userId: w.ids.member, role: "member", accessSource: "free_grant", state: "active",
+      activationSequence: 1, activatedAt: nowMs, createdAt: nowMs, updatedAt: nowMs });
+    const threadId = await ctx.db.insert("threads", { ownerId: w.ids.member, titleSource: "auto", createdAt: nowMs, updatedAt: nowMs } as any);
+    await ctx.db.insert("runtimeRuns", { ownerId: w.ids.member, threadId, runId: "talk-1", lane: "platform", communityId: w.ids.communityId, status: "running",
+      lastEventSeq: 0, startedAt: nowMs, createdAt: nowMs, updatedAt: nowMs } as any);
+    return communityId;
+  });
+  const as = w.t.withIdentity({ subject: "member-subject" });
+  const ctx = { runQuery: (r: any, a: any) => as.query(r, a), runMutation: (r: any, a: any) => as.mutation(r, a), runAction: (r: any, a: any) => as.action(r, a) };
+  const talk = (toolName: string, args: Record<string, unknown>) => runAgentTool({ ctx, userId: String(w.ids.member), authSubject: "member-subject",
+    runId: "talk-1", communityId: String(w.ids.communityId), communityBoundConversation: true, evidenceSurface: "member_agent_dock", toolName, args });
+
+  // A post waits for the member's yes: one question, nothing posted yet.
+  const before = await w.rows();
+  const posted = await talk("polynet_post", { channel: "general", text: "Hills on Thursday?" });
+  expect(posted.status, JSON.stringify(posted)).toBe("ok");
+  expect(posted.outputText).toContain("waiting_for_person");
+  expect(await w.questions("member")).toEqual([expect.objectContaining({ kind: "post", text: "Hills on Thursday?" })]);
+  expect((await w.rows()).roots).toEqual(before.roots);
+
+  // A reaction just happens, with no question.
+  const reacted = await talk("polynet_react", { post: `interaction:root:${String(w.ids.otherPost)}`, emoji: "🔥" });
+  expect(reacted.status, JSON.stringify(reacted)).toBe("ok");
+  const reactions = await w.t.run((ctx) => ctx.db.query("communityInteractionReactions").collect());
+  expect(reactions).toEqual([expect.objectContaining({ actorUserId: w.ids.member, emoji: "🔥" })]);
+  expect((await w.rows()).questions).toHaveLength(1);
+
+  // Naming another community does nothing: the talk's own is used.
+  const redirected = await talk("polynet_post", { community: "swim-club", channel: "general", text: "Pool at noon?" });
+  expect(redirected.status, JSON.stringify(redirected)).toBe("ok");
+  expect((await w.questions("member")).map((question: any) => question.text).sort()).toEqual(["Hills on Thursday?", "Pool at noon?"]);
+  expect(await as.query(api.communityGuideQuestions.listGuideQuestions, { communityId: elsewhere })).toEqual([]);
+
+  // The general action tools, and a person's own messages, are not the guide's.
+  const write = await talk("polynet_write", post("Straight in.", "direct-1"));
+  expect(write).toMatchObject({ status: "error", errorCode: "tool_not_in_lens" });
+  const call = await talk("polynet_call", { operation: "community.interaction.react", version: 1,
+    target: `${ROOT}capabilities/community.interaction.react.json`, input: { ref: `interaction:root:${String(w.ids.memberPost)}`, emoji: "👍", on: true }, idempotency_key: "direct-2" });
+  expect(call).toMatchObject({ status: "error", errorCode: "tool_not_in_lens" });
+  expect(await talk("polynet_reply_message", { conversation: "abcd1234", text: "Hi" })).toMatchObject({ status: "error", errorCode: "tool_not_in_lens" });
+  // A builder's tool, called by a member's guide, is refused by the executor for this role.
+  expect(await talk("polynet_create_channel", { name: "Mine" })).toMatchObject({ status: "error", errorCode: "operation_not_found" });
+  const after = await w.rows();
+  // Nothing was posted (the reaction only changed a post's reaction count).
+  expect(after.roots.map((row: any) => row._id)).toEqual(before.roots.map((row: any) => row._id));
+  expect(after.replies).toEqual(before.replies);
+  expect(after.questions).toHaveLength(2);
+  expect((await w.t.run((ctx) => ctx.db.query("communityChannels").collect())).map((row: any) => row.name)).not.toContain("Mine");
 });

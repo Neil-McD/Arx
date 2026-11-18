@@ -2,7 +2,7 @@ import { api, internal } from "./_generated/api";
 import { parseCommunityConversationIdentity } from "../shared/communityConversationIdentity";
 import { type RetrievalToolName } from "../shared/retrievalTools";
 import type { ThreadWorkingStatePrompt } from "../shared/runtimePrompt";
-import { LENS_TOOLS, guideRunLens, parseTalkLens, type TalkLens } from "../shared/lens";
+import { LENS_TOOLS, guideRunLens, parseTalkLens, talkToolNames, type TalkLens } from "../shared/lens";
 import {
   normalizeRuntimeEngine,
   type RuntimeEngine,
@@ -565,8 +565,11 @@ export async function resolveAuthenticatedRuntimeTurn(args: {
   }
   communityInferenceAdmission = admission;
 
-  // A private talk's tools come from its lens (shared/lens.ts).
-  const allowedToolNames = [...LENS_TOOLS[guideRunLens(invocationSurface)]];
+  // A private talk's tools come from its lens (shared/lens.ts): reading and
+  // the web, then one named tool per action this person may take here.
+  const allowedToolNames = guideRunLens(invocationSurface) === "member_private"
+    ? talkToolNames(runtimeCommunityLens)
+    : [...LENS_TOOLS[guideRunLens(invocationSurface)]];
   return {
     ok: true,
     value: {

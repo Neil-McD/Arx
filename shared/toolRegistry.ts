@@ -1,4 +1,6 @@
-import type { RetrievalToolName } from "./retrievalTools";
+import type { BaseToolName, RetrievalToolName } from "./retrievalTools";
+import { isBaseToolName } from "./retrievalTools.ts";
+import { actionTool, guideToolDefinition } from "./actionTools.ts";
 import { findPlatformOperationByNativeToolName } from "./platformOperationContract.ts";
 import { validatePolynetSemanticRepositoryOperationInput } from "./communitySemanticRepository.ts";
 import {
@@ -96,7 +98,7 @@ const WEB_RESEARCH_TOOL_SCHEMA: JsonSchema = {
   },
 };
 
-const TOOL_REGISTRY: Record<RetrievalToolName, ToolRegistryEntry> = {
+const TOOL_REGISTRY: Record<BaseToolName, ToolRegistryEntry> = {
   polynet_list: {
     name: "polynet_list",
     ...POLYNET_LIST_TOOL,
@@ -125,8 +127,12 @@ const TOOL_REGISTRY: Record<RetrievalToolName, ToolRegistryEntry> = {
   },
 };
 
+// A base tool, or a named action tool as the guide is given it.
 export function getToolDefinition(name: RetrievalToolName): ToolRegistryEntry {
-  return TOOL_REGISTRY[name];
+  if (isBaseToolName(name)) return TOOL_REGISTRY[name];
+  const named = actionTool(name);
+  if (!named) throw new Error(`unknown_tool:${name}`);
+  return guideToolDefinition(named) as ToolRegistryEntry;
 }
 
 export function getToolDefinitions(
@@ -142,8 +148,10 @@ export function getToolDefinitions(
 // other tool stays strict.
 const SERVER_VALIDATED_TOOL_NAMES: ReadonlySet<RetrievalToolName> = new Set(["polynet_call"]);
 
+// A named action tool has optional inputs, which strict mode can't express
+// either; the executor validates it exactly.
 export function isServerValidatedTool(name: RetrievalToolName): boolean {
-  return SERVER_VALIDATED_TOOL_NAMES.has(name);
+  return SERVER_VALIDATED_TOOL_NAMES.has(name) || Boolean(actionTool(name));
 }
 
 function isSchemaRecord(value: JsonSchema): value is Record<string, unknown> {
@@ -511,6 +519,8 @@ export function normalizeToolArguments(
     rawArgs && typeof rawArgs === "object" && !Array.isArray(rawArgs)
       ? rawArgs
       : {};
+  // A named action tool: its inputs are checked when it is translated and run.
+  if (actionTool(toolName)) return { ...args };
   if (toolName === "polynet_list") {
     const validated = validatePolynetSemanticRepositoryOperationInput({
       operation: "list",

@@ -155,9 +155,16 @@ changes.
   load per tool, by name and label. Five general tools hid all of that: a
   real AI had to fail a call to learn its shape, one "allow" covered every
   action, and no label could be true.
-- `polynet_write` and `polynet_call` still run for what is already
-  connected, and are what the guide uses; they are no longer listed to a
-  person's own AI. `scripts/action_tools.test.ts` holds that every action has
+- **The guide gets the same tools** (`shared/lens.ts`, `talkToolNames`): in
+  a private talk it is given reading, the web, and the named tools for what
+  this person may do in this community. The community is filled in for it.
+  So the two doors do the same things by construction, with three marked
+  differences (`door` on the tool): a person's direct messages are their own
+  AI's only; remembering about a member, and removing posts after their yes,
+  are the guide's only. Tagged in a channel the guide only reads.
+- `polynet_write` and `polynet_call` are given to no AI. They are what a
+  named tool is translated into, and still run for an outside AI that
+  connected before the named tools existed. `scripts/action_tools.test.ts` holds that every action has
   exactly one named tool or a stated reason for none.
 
 ## The member lens

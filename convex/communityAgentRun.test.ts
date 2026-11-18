@@ -85,7 +85,7 @@ async function run(t: any, w: any, extra: Record<string, unknown>) {
   } as any);
 }
 
-test("a private talk streams its answer and is offered its lens's tools, web research included", async () => {
+test("a private talk streams its answer and is offered its lens's tools, web research included, or the talk's own when given", async () => {
   const t = convexTest(schema, modules);
   const w = await fundedCommunity(t);
   const bodies = stubModel([{ output_text: "High tide is at six." }]);
@@ -95,9 +95,27 @@ test("a private talk streams its answer and is offered its lens's tools, web res
   expect(result.kernel).toMatchObject({ ok: true, stopReason: "assistant_final" });
   expect(deltas).toEqual([["High ", 0], ["tide is at six.", 0]]);
   expect(bodies[0].stream).toBe(true);
+  // With no talk's tools given, the lens's: reading and the web.
   expect(bodies[0].tools.map((tool: any) => tool.name)).toEqual(
-    ["polynet_list", "polynet_read", "polynet_search", "polynet_write", "polynet_call", "web_research"]);
+    ["polynet_list", "polynet_read", "polynet_search", "web_research"]);
   expect(bodies[0].parallel_tool_calls).toBe(false);
+
+  // A talk's tools are offered as given; one outside the lens never is.
+  const talkBodies = stubModel([{ output_text: "Done." }]);
+  await run(t, w, { tools: ["polynet_list", "polynet_read", "polynet_search", "web_research", "polynet_post", "polynet_remember", "polynet_write", "polynet_reply_message"] });
+  expect(talkBodies[0].tools.map((tool: any) => tool.name)).toEqual(
+    ["polynet_list", "polynet_read", "polynet_search", "web_research", "polynet_post", "polynet_remember"]);
+});
+
+test("a private talk's model may call only the tools it was offered", async () => {
+  const t = convexTest(schema, modules);
+  const w = await fundedCommunity(t);
+  // In the lens (a builder's tool), but not offered to this member's talk.
+  stubModel([{ output: [{ type: "function_call", call_id: "x", name: "polynet_create_channel", arguments: JSON.stringify({ name: "x" }) }] }]);
+  const executeTool = vi.fn();
+  const result: any = await run(t, w, { tools: ["polynet_list", "polynet_read", "polynet_search", "web_research", "polynet_post"], executeTool });
+  expect(result).toMatchObject({ ok: false, failureCode: "unsupported_concierge_tool" });
+  expect(executeTool).not.toHaveBeenCalled();
 });
 
 test("a tool outside the lens is refused before it runs", async () => {
