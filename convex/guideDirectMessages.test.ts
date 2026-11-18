@@ -239,3 +239,13 @@ test("what a host reads about a member (their record, timeline, the builder reco
   // The record and the timeline were really read.
   expect(reads.some((text) => text.includes("member runs hills."))).toBe(true);
 });
+
+// The guide's loop checks a tool's arguments before the router sees them
+// (shared/toolRegistry.ts). Found on staging: it refused /messages/ there, so
+// none of the above was reachable from a real talk.
+import { normalizeToolArguments } from "../shared/toolRegistry";
+test("the guide's loop lets the person's messages path through to the executor", () => {
+  expect(normalizeToolArguments("polynet_list" as any, { path: "/messages/", limit: 50, sort: "newest", cursor: null })).toMatchObject({ path: "/messages/" });
+  expect(normalizeToolArguments("polynet_list" as any, { path: "/messages/abcd1234/" })).toMatchObject({ path: "/messages/abcd1234/" });
+  expect(() => normalizeToolArguments("polynet_list" as any, { path: "/nowhere/" })).toThrow();
+});
