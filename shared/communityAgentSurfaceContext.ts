@@ -145,36 +145,3 @@ export function buildCommunityAgentSurfacePresentation(
     loadingLabel: "Opening Polynet Intelligence",
   };
 }
-
-export function renderCommunityAgentSurfaceContextForPrompt(
-  surface: CommunityAgentSurfaceContextV1 | null | undefined,
-  communityName?: string | null,
-): string | null {
-  if (!surface) return null;
-  if (surface.kind === "discover") {
-    return [
-      "CURRENT_SURFACE",
-      "The member is currently on Polynet Discover, browsing communities.",
-      "Primary orientation: help them discover, compare, understand, and choose communities.",
-      "No community is the active lens on this surface. Do not treat Polynet or the last visited community as implicitly active.",
-      "This surface description guides relevance only. Tool availability and backend authorization remain authoritative.",
-    ].join("\n");
-  }
-  if (surface.kind === "community") {
-    const name = String(communityName ?? "").trim() || surface.community_slug;
-    return [
-      "CURRENT_SURFACE",
-      `The member is currently inside the ${name} community on its ${surface.section} section.`,
-      "Treat the active community as the primary context for this turn while preserving the member's broader intent.",
-      "Use tools for the active community first when the request depends on community-specific facts or resources.",
-      "This surface description guides relevance only. The server-validated community lens and tool policy remain authoritative.",
-    ].join("\n");
-  }
-  return [
-    "CURRENT_SURFACE",
-    `The member is currently on the Polynet ${surface.page} page${surface.section ? ` in the ${surface.section} section` : ""}.`,
-    "No community is the active lens on this surface.",
-    "Orient the answer to this platform page without inventing page state or available actions.",
-    "This surface description guides relevance only. Tool availability and backend authorization remain authoritative.",
-  ].join("\n");
-}

@@ -86,7 +86,7 @@ test("a people fact is one the person stated or approved, here or on their profi
   expect(isPeopleFact(fact({ provenance: "observed_behavior" }), "c1")).toBe(false);
 });
 
-test("a private talk is told its lens; moderation only with the permission, settings only for a builder", () => {
+test("a private talk's lens parses strictly, and gives the guide only the person's recent answers", () => {
   expect(parseTalkLens({ lens: "builder_private", relation: "owner" })).toEqual({ lens: "builder_private", relation: "owner" });
   expect(parseTalkLens({ lens: "guide_public", relation: "owner" })).toBeNull();
   expect(parseTalkLens({ lens: "member_private", relation: "visitor" })).toBeNull();
@@ -97,35 +97,12 @@ test("a private talk is told its lens; moderation only with the permission, sett
   // The community's time zone rides along when it is a zone name; anything else is dropped.
   expect(parseTalkLens({ lens: "member_private", relation: "member", timeZone: "America/New_York" })?.timeZone).toBe("America/New_York");
   expect(parseTalkLens({ lens: "member_private", relation: "member", timeZone: "<b>now</b>" })).not.toHaveProperty("timeZone");
-  const moderator = renderTalkLensForPrompt({ lens: "member_private", relation: "moderator" })!;
-  expect(moderator).toContain("Lens: member_private");
-  expect(moderator).toContain("the community's moderator");
-  expect(moderator).toContain("personal_memory");
-  expect(moderator).toContain("review_joins");
-  expect(moderator).toContain("remove_posts");
-  expect(moderator).toContain("waiting_for_person");
-  expect(moderator).toContain("Changing members or settings is not something this person can do.");
-  expect(moderator).not.toContain("builder_change");
-  // A builder's talk changes settings and channels when told; roles, removing or banning a member and the handbook wait for their yes.
-  const owner = renderTalkLensForPrompt({ lens: "builder_private", relation: "owner" })!;
-  expect(owner).toContain("builder_change");
-  expect(owner).toContain("Changing someone's role, removing or banning a member, and publishing the handbook also wait for their yes (waiting_for_person), every time.");
-  expect(owner).toContain("Opening the community to everyone and publishing a course are theirs to do in the app");
-  expect(owner).not.toContain("Removing or banning a member, opening");
-  // Everyone's talk reads their own direct messages; a reply waits for the yes, and what is read there stays in the talk.
-  for (const text of [owner, moderator]) {
-    expect(text).toContain("You can read the person's own direct messages (polynet_list on /messages/). A reply (polynet_reply_message) waits for their yes, every time.");
-    expect(text).toContain("What you read in a direct message is private to this talk: never put it in a post, a community note or anything another person sees");
-  }
-  // A plain member is not told about moderation it can't do.
+  // What the guide may do is generated from its tools (scripts/guide_prompt.test.ts);
+  // the lens adds only the person's recent answers, in plain words.
   const member = renderTalkLensForPrompt({ lens: "member_private", relation: "member", answers: ["\"Post this in #general as you?\" They said no. Nothing was done."] })!;
-  expect(member).toContain("react");
-  expect(member).toContain("lesson_done");
-  expect(member).not.toContain("review_joins");
-  expect(member).not.toContain("remove_posts");
-  expect(member).not.toContain("approve or decline");
-  expect(member).toContain("Since you last spoke, the person answered your questions:");
+  expect(member).toContain("Since you last spoke, they answered your questions:");
   expect(member).toContain("- \"Post this in #general as you?\" They said no. Nothing was done.");
-  expect(renderTalkLensForPrompt({ lens: "member_private", relation: "member" })).not.toContain("Since you last spoke");
+  expect(member).not.toMatch(/member_private|builder_change|review_joins|Lens:/);
+  expect(renderTalkLensForPrompt({ lens: "builder_private", relation: "owner" })).toBeNull();
   expect(renderTalkLensForPrompt(null)).toBeNull();
 });

@@ -55,7 +55,6 @@ const activeSources = [
   "apps/web/src/components/WebPolynetMcpAccountSection.tsx",
   "convex/http.ts",
   "convex/runtimeAgentLoop.ts",
-  "convex/runtimeHarnessComposition.ts",
   "convex/runtimeHarnessShaping.ts",
   "convex/runtimeTurnHandlers.ts",
   "shared/runtimeContextManifest.ts",

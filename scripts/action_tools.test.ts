@@ -84,7 +84,13 @@ describe("one named tool per action", () => {
       const guide = guideToolDefinition(tool);
       const schema = guide.inputSchema as { type: string; additionalProperties: boolean; properties: Record<string, unknown>; required: string[] };
       expect(guide.name).toBe(tool.name);
-      expect(guide.description).toBe(tool.description);
+      // The MCP's words, except where the guide has its own: only for a tool
+      // that asks every time, whose yes in a private talk is a button, never words.
+      expect(guide.description).toBe(tool.guideDescription ?? tool.description);
+      if (tool.guideDescription) {
+        expect(actionToolEntry(tool).ask, tool.name).toBe("every_time");
+        expect(tool.guideDescription, tool.name).not.toMatch(/get their yes/);
+      }
       expect(schema.type).toBe("object");
       expect(schema.additionalProperties).toBe(false);
       for (const filled of ["community", "idempotency_key", "revision"]) {

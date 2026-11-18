@@ -13,6 +13,7 @@ import {
 
 import { COMMUNITY_MEMBER_SELF_DIRECTORY, COMMUNITY_MEMBER_SELF_CONTEXT_PATH } from "./communityMemberSelfContext.ts";
 import { PERSONAL_MEMORY_PATH } from "./personalMemory.ts";
+import { GUIDE_SKILLS_DIRECTORY_PATH, guideSkillAt } from "./guideSkills.ts";
 
 export const POLYNET_SEMANTIC_ROOT_PATH = "/";
 export const POLYNET_COMMUNITY_PROFILE_PATH = "/community.md";
@@ -638,9 +639,11 @@ export function validatePolynetSemanticRepositoryOperationInput(args: {
       return { ...validated, path: repositoryPath.path };
     }
     const podPath = parseCommunityPodPath(repositoryPath.localPath);
+    // skills/ and its documents (shared/guideSkills.ts) are the executor's too.
+    const skills = repositoryPath.localPath === GUIDE_SKILLS_DIRECTORY_PATH;
     if (repositoryPath.localPath === COMMUNITY_MEMBER_SELF_DIRECTORY || repositoryPath.localPath === COMMUNITY_MEMBER_SELF_CONTEXT_PATH ||
-      repositoryPath.localPath === PERSONAL_MEMORY_PATH || podPath) {
-      const directory = repositoryPath.localPath === COMMUNITY_MEMBER_SELF_DIRECTORY || podPath?.kind === "pods" || podPath?.kind === "pod" || podPath?.kind === "pod_memory";
+      repositoryPath.localPath === PERSONAL_MEMORY_PATH || podPath || skills || guideSkillAt(repositoryPath.localPath)) {
+      const directory = skills || repositoryPath.localPath === COMMUNITY_MEMBER_SELF_DIRECTORY || podPath?.kind === "pods" || podPath?.kind === "pod" || podPath?.kind === "pod_memory";
       const validated = validateCommunitySemanticOperationInput({
         ...args,
         path: directory ? "/" : "/community.md",

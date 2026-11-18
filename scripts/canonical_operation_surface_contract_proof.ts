@@ -101,7 +101,14 @@ for (const name of expected) {
   const mcp = getPolynetMcpToolDefinition(name);
   assert.ok(registry, `${name} must be registered natively`);
   assert.ok(mcp, `${name} must be registered in MCP`);
-  assert.equal(registry.description, canonical.description);
+  // The guide's three reading tools say it in its own words (it works inside
+  // one community's folder); their inputs are the MCP's exactly.
+  if (readVerbs.includes(name)) {
+    assert.notEqual(registry.description, canonical.description, `${name}: the guide's own words`);
+    assert.doesNotMatch(registry.description, /Start at \//, `${name}: the guide is never sent to the top`);
+  } else {
+    assert.equal(registry.description, canonical.description);
+  }
   assert.deepEqual(registry.inputSchema, canonical.inputSchema);
   assert.deepEqual(mcp, canonical);
 

@@ -27,9 +27,6 @@ function main() {
   const communityAgentDock = readText(
     join(root, "apps/web/src/components/WebCommunityAgentDock.tsx"),
   );
-  const runtimeHarnessComposition = readText(
-    join(root, "convex/runtimeHarnessComposition.ts"),
-  );
   const runtimePrompt = readText(join(root, "shared/runtimePrompt.ts"));
   const lens = readText(join(root, "shared/lens.ts"));
   const communityAgent = readText(join(root, "convex/communityAgent.ts"));
@@ -60,14 +57,9 @@ function main() {
     "the talk's lens comes from the executor's own authority",
   );
   assertIncludes(
-    runtimeAgentLoop,
-    "composeResolvedRuntimeHarness({",
-    "community-lens effective harness composer",
-  );
-  assertIncludes(
-    runtimeHarnessComposition,
-    "buildResourcesArchitectPromptBlock(",
-    "builder-lane resources architect instructions",
+    runtimePrompt,
+    "const skills = guideSkillsFor(params.allowedToolNames);",
+    "course-building instructions are a skill offered only with the course tools",
   );
   assertIncludes(
     threads,
@@ -96,20 +88,20 @@ function main() {
   );
   assertIncludes(
     runtimePrompt,
-    "About excerpt:",
-    "community lens prompt keeps about content compact",
+    "COMMUNITY_ABOUT_PROMPT_EXCERPT_CHARS",
+    "the community's own words in the prompt stay compact",
   );
   assertIncludes(
     runtimePrompt,
-    "The about excerpt is not a complete knowledge base.",
-    "community lens prompt distinguishes identity excerpt from retrievable knowledge",
+    "In its own words, in short; community.md has it in full.",
+    "the prompt distinguishes the identity excerpt from the full community document",
   );
   assertIncludes(lens, "export type TalkLens = {", "the private talk's lens type");
   assertIncludes(lens, 'const RELATIONS = new Set(["owner", "admin", "moderator", "member"]);', "a talk's relation is never pending or visitor");
   assertIncludes(
     runtimePrompt,
-    "community_lens_authority",
-    "runtime prompt includes community authority receipt section",
+    '"what_you_may_do"',
+    "runtime prompt receipts what this role may do as its own section",
   );
   assertIncludes(
     runtimeTurnResolution,

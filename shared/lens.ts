@@ -98,7 +98,7 @@ export type LensView =
   | "presence"            // presence.json
   | "memory_notes"        // memory.md and memory/: what the guide knows
   | "builder_directory"   // builder/ (join requests for moderators)
-  | "builder_records"     // builder/community.json, builder/resources/
+  | "builder_records"     // builder/community.json, builder/resources/, skills/
   | "pods"                // pods/ and pods/<slug>/pod.md (inside or outside, by access)
   | "brief";              // brief.md: what's happening in the community
 
@@ -255,32 +255,13 @@ export function parseTalkLens(value: unknown): TalkLens | null {
   return lens && relation ? { lens, relation, ...(answers.length > 0 ? { answers } : {}), ...(timeZone ? { timeZone } : {}) } : null;
 }
 
-// What the guide is told about the lens it is working in. Orientation only:
+// What the guide is told from its talk that its instructions can't work out
+// from the tools it is given (shared/runtimePrompt.ts, what_you_may_do): the
+// person's answers to its questions since it last spoke. Orientation only:
 // the executor checks every call.
 export function renderTalkLensForPrompt(talk: TalkLens | null | undefined): string | null {
-  if (!talk) return null;
-  const builder = talk.lens === "builder_private";
-  const moderates = talk.relation !== "member";
-  const does = (Object.keys(LENS_CALLS) as LensAction[]).filter((action) => LENS_CALLS[action].includes(talk.lens) &&
-    (moderates || (action !== "review_joins" && action !== "remove_posts")));
-  return [
-    "COMMUNITY_LENS_AUTHORITY",
-    `Lens: ${talk.lens}. You are talking privately with ${talk.relation === "member" ? "a member" : `the community's ${talk.relation}`}.`,
-    builder
-      ? "You can see what builders see: the builder records, every member's plan and notes, and the guide's memory."
-      : "You can see what a member sees, their own context and the guide's memory. Never another member's plan, payments or notes.",
-    `You can act for them on: ${does.length > 0 ? does.join(", ") : "nothing"}.`,
-    "When they tell you to do one of these, do it and say what you did. Posting or replying under their name, and removing posts, wait for their yes: call the tool as usual, and when it answers waiting_for_person the person is shown your exact words (or the posts) with Yes and No above the box where they type. Then say one short line and stop; never ask for the yes in words, and never say it is done before it is.",
-    "You can read the person's own direct messages (polynet_list on /messages/). A reply (polynet_reply_message) waits for their yes, every time.",
-    "What you read in a direct message is private to this talk: never put it in a post, a community note or anything another person sees, unless the person tells you to say those words.",
-    ...(moderates ? ["For people asking to join, list builder/join-requests/ first, say what stands out about each, and approve or decline the ones they name (or all of them, if they say so)."] : []),
-    "To act, call the tool named for the action (polynet_post, polynet_react, polynet_create_event and so on). You have exactly the ones this person may use here; each says what it takes.",
-    builder
-      ? "Settings, channels and events: change them when they tell you to, and say what changed, before and after. For an event, work out the exact date and time zone with them first. Changing someone's role, removing or banning a member, and publishing the handbook also wait for their yes (waiting_for_person), every time. Opening the community to everyone and publishing a course are theirs to do in the app: you are answered with the place, so give it to them."
-      : "Changing members or settings is not something this person can do.",
-    ...(talk.answers?.length ? ["Since you last spoke, the person answered your questions:", ...talk.answers.map((line) => `- ${line}`)] : []),
-    "This is orientation only. Backend checks and your tools remain authoritative.",
-  ].join("\n");
+  if (!talk?.answers?.length) return null;
+  return ["RECENT ANSWERS", "Since you last spoke, they answered your questions:", ...talk.answers.map((line) => `- ${line}`)].join("\n");
 }
 
 // How a lens sees one person (people facts, convex/communityPersonFacts.ts):
