@@ -94,7 +94,7 @@ export const askInternal = internalMutation({
     items: v.optional(v.array(v.object({ who: v.string(), text: v.string() }))), runId: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    if (args.inputJson.length > INPUT_MAX_CHARS) return { ok: false as const };
+    if (args.inputJson.length > INPUT_MAX_CHARS || (args.text ?? "").length > GUIDE_QUESTION_TEXT_MAX) return { ok: false as const };
     const nowMs = Date.now();
     for (const row of await waitingRows(ctx, args.communityId, args.userId)) {
       // The same call asked again in the same turn is the same question.
@@ -105,7 +105,7 @@ export const askInternal = internalMutation({
       communityId: args.communityId, userId: args.userId, kind: args.kind, toolName: args.toolName, inputJson: args.inputJson,
       question: args.question.slice(0, 300),
       ...(args.place ? { place: args.place.slice(0, 120) } : {}),
-      ...(args.text ? { text: args.text.slice(0, GUIDE_QUESTION_TEXT_MAX) } : {}),
+      ...(args.text ? { text: args.text } : {}),
       ...(args.items ? { items: args.items } : {}),
       status: "waiting", ...(args.runId ? { runId: args.runId } : {}), createdAt: nowMs,
     });
