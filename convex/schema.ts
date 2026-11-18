@@ -1744,8 +1744,9 @@ export default defineSchema({
     scopeKey: v.optional(v.string()),
     scope: v.union(v.literal("community"), v.literal("pod")),
     // memory_review: the nightly review. brief: the place's brief, an hour
-    // after the first new activity.
-    kind: v.union(v.literal("memory_review"), v.literal("brief")),
+    // after the first new activity. reply_draft: a reply to a question nobody
+    // answered, a day after it was asked (convex/communityReplyDrafts.ts).
+    kind: v.union(v.literal("memory_review"), v.literal("brief"), v.literal("reply_draft")),
     // Evidence since the last review, and when the first of it arrived.
     pending: v.number(),
     firstPendingAt: v.optional(v.number()),
@@ -1761,6 +1762,31 @@ export default defineSchema({
     .index("by_scope_kind", ["scopeKey", "kind"])
     .index("by_dueAt", ["dueAt"]),
 
+  // A reply the guide drafted for a question nobody answered, waiting on the
+  // host's Home (convex/communityReplyDrafts.ts). One row per question, ever:
+  // waiting (the host may post or skip it), posted, skipped, or no_source (no
+  // lesson could answer it, so it is not looked at again).
+  communityReplyDrafts: defineTable({
+    communityId: v.id("communities"),
+    rootId: v.id("communityInteractionRoots"),
+    channelId: v.optional(v.id("communityChannels")),
+    status: v.union(v.literal("waiting"), v.literal("posted"), v.literal("skipped"), v.literal("no_source")),
+    text: v.optional(v.string()),
+    // The lesson the reply rests on, and how it is named in the thread.
+    sourceResourceId: v.optional(v.id("communityResources")),
+    sourceLabel: v.optional(v.string()),
+    runId: v.optional(v.id("agentWorkRuns")),
+    // What went into the thread (the draft, or the host's edit of it).
+    postedText: v.optional(v.string()),
+    decidedByUserId: v.optional(v.id("users")),
+    decidedAt: v.optional(v.number()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_root", ["rootId"])
+    .index("by_community_status_createdAt", ["communityId", "status", "createdAt"])
+    .index("by_community_createdAt", ["communityId", "createdAt"]),
+
   // One review, as its record: what it read, what it changed and why, and
   // what it cost. Builders read these and can undo one.
   agentWorkRuns: defineTable({
@@ -1769,7 +1795,7 @@ export default defineSchema({
     // (convex/communityNotesStore.ts). Every index starts with it.
     scopeKey: v.optional(v.string()),
     workId: v.id("agentWork"),
-    kind: v.union(v.literal("memory_review"), v.literal("brief")),
+    kind: v.union(v.literal("memory_review"), v.literal("brief"), v.literal("reply_draft")),
     status: v.union(v.literal("running"), v.literal("done"), v.literal("empty"), v.literal("failed"), v.literal("undone")),
     windowStart: v.number(),
     windowEnd: v.number(),

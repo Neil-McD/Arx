@@ -211,7 +211,7 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
   notes overview (`communityIntelligenceDirectory`) is deleted (Nov 6): nothing
   read it.
 - **Code:** `communityNotesStore` (the one door to memory records, by scope), `communityNotes`, `communityMemory` (tables `communityNoteRevisions`,
-  `communityNoteRemovals`, `communityMemoryIndex`, `agentWork`, `agentWorkRuns`),
+  `communityNoteRemovals`, `communityMemoryIndex`, `agentWork`, `agentWorkRuns`, `communityReplyDrafts`),
   `agentWork` (the guide's work with nobody present: claiming and completing a
   work row, and the one run every kind goes through),
   `communityMemoryReview` (the guide's nightly review: made due by posts in open
@@ -226,8 +226,15 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
   `brief.write`: a summary of one to three sentences and the posts it drew
   on, or nothing when the posts are only noise; read back as
   `brief.md` and `pods/<pod>/brief.md` through one reader, `readPlaceBrief`;
-  the same reader feeds the first part of Home's and a pod's right panel,
-  `getPlaceBrief`; `communityKnowledgeUse` keeps one row of counts per community
+  the same reader feeds Home's middle column and the first part of a pod's
+  right panel, `getPlaceBrief`; `communityReplyDrafts` (table
+  `communityReplyDrafts`: the guide's first proposal. A post in an open
+  channel makes the community's row due a day later; the run takes the oldest
+  question that has waited a day with no reply, shows the guide the lessons
+  that share its words, and with one `reply.draft` it writes a reply and the
+  lesson it rests on, or that no lesson answers it. The draft waits on the
+  host's Home, "Your guide suggests"; `postReplyDraft` puts it in the thread
+  as the guide, `skipReplyDraft` drops it. At most three in 24 hours); `communityKnowledgeUse` keeps one row of counts per community
   per day of the notes and lessons answers opened, added hours later at a
   random time so nothing traces to a conversation, for how much each is used
   and what is answered together; `communityBrain` (`getBrainMap`) reads it all

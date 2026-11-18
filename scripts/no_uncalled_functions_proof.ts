@@ -14,6 +14,7 @@ const ALLOWED = new Map<string, string>([
   ["communityBrain:readBrainMapInternal", "operator diagnostic: a community's map as a given person sees it (staging acceptance), by hand"],
   ["communityKnowledgeUse:readKnowledgeUseInternal", "operator diagnostic: a community's use summary (what answers read), by hand; the map read uses the same helper"],
   ["communityBriefs:requestCommunityBriefNowInternal", "operator tool: write a community's brief now (staging acceptance), by hand"],
+  ["communityReplyDrafts:requestReplyDraftNowInternal", "operator tool: look for a question to draft a reply for now (staging acceptance), by hand"],
   ["stagingSeedSunrise:seedSunriseSettersPodInternal", "staging seed: an operator makes Sunrise's Setters room a pod with the guide in it (npx convex run) without re-seeding"],
   ["memberOntology:confirmMemberInterviewFacts", "people facts slice: the member-stated, consented write that 'members add their own facts' will call (its only caller was an agent tool no lens offered, deleted Nov 15)"],
   ["communityNotesStore:backfillMemoryScopeInternal", "pods slice B release step: an operator runs it once after the deploy that adds memory scope keys (npx convex run), until remaining is false"],

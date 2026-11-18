@@ -1,5 +1,6 @@
 import { markCommunityMemoryReviewDue } from "./communityMemory";
 import { markCommunityBriefDue } from "./communityBriefs";
+import { markReplyDraftDue } from "./communityReplyDrafts";
 import { type StoredInteractionActorType } from "../shared/communityAgentIdentity";
 import { internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import { resolveNotificationRecipientSource } from "./communityNotificationAccess";
@@ -1168,6 +1169,7 @@ async function createCommunityInteractionComposerMessageCore(
         if (!root) throw new Error("interaction_root_create_failed");
         await markCommunityMemoryReviewDue(ctx, { communityId: args.communityId, channelId: requestedChannel._id, actorType, nowMs });
         await markCommunityBriefDue(ctx, { communityId: args.communityId, channelId: requestedChannel._id, actorType, nowMs });
+        await markReplyDraftDue(ctx, { communityId: args.communityId, channelId: requestedChannel._id, actorType, nowMs });
         await claimInteractionAttachmentsForTarget({
           ctx,
           messageKey: args.idempotencyKey,
