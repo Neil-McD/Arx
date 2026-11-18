@@ -1,10 +1,10 @@
 // The one list of what can be done to a community from outside the app's own
 // screens: by a person's own AI (the MCP), a community's site, the guide.
 // Each entry says who may do it, what kind of thing it does, which budget it
-// spends and whether the community needs the paid plan. The executor
-// advertises and runs only what is listed here
-// (convex/polynetCanonicalExecutor.ts), so an operation cannot be added
-// without saying these four things. Spec: docs/specs/agent-access-v0.md.
+// spends, whether the community needs the paid plan, and how the person is
+// asked before an AI does it. The executor advertises and runs only what is
+// listed here (convex/polynetCanonicalExecutor.ts), so an operation cannot be
+// added without saying these five things. Spec: docs/specs/agent-access-v0.md.
 
 // Who may do it. A moderator's operations are also a builder's.
 export type OperationLens = "member" | "moderator" | "builder" | "worker";
@@ -21,15 +21,27 @@ export type OperationBudget = "read" | "search" | "post" | "message_reply" | "li
 
 export type OperationPlan = "free" | "paid";
 
+// How the person is asked before an AI does it for them.
+// - "none": they said exactly what to do and it can be undone. It is done.
+// - "words": words the AI wrote go out under their name. They are shown the
+//   words first, and may switch that to "always allow".
+// - "every_time": it can't be taken back, or it changes who runs the
+//   community or what every member is told. Asked every time.
+// - "person_only": never done by an AI. It is handed the place in the app
+//   where the person does it.
+export type OperationAsk = "none" | "words" | "every_time" | "person_only";
+
 export type OperationEntry = {
   lens: OperationLens;
   effect: OperationEffect;
   budget: OperationBudget;
   plan: OperationPlan;
+  ask: OperationAsk;
 };
 
-const entry = (lens: OperationLens, effect: OperationEffect, budget: OperationBudget, plan: OperationPlan = "free"): OperationEntry =>
-  ({ lens, effect, budget, plan });
+const entry = (lens: OperationLens, effect: OperationEffect, budget: OperationBudget,
+  more: { plan?: OperationPlan; ask?: OperationAsk } = {}): OperationEntry =>
+  ({ lens, effect, budget, plan: more.plan ?? "free", ask: more.ask ?? "none" });
 
 // The five tools, by what they are pointed at.
 export const TOOL_OPERATIONS = {
@@ -37,7 +49,10 @@ export const TOOL_OPERATIONS = {
   "polynet_read": entry("member", "read", "read"),
   "polynet_search": entry("member", "read", "search"),
   // polynet_write on a channel: a post or a reply, or a change to your own.
-  "polynet_write:channels": entry("member", "write", "post"),
+  "polynet_write:channels": entry("member", "write", "post", { ask: "words" }),
+  // polynet_write on a post of your own, mode delete.
+  // It takes nothing from anyone else, so a person's own AI does it.
+  "polynet_write:channels:delete": entry("member", "write", "post", { ask: "every_time" }),
   // polynet_write under builder/: a batch of changes to courses and lessons,
   // made in draft. Publishing, and deleting what is live, are a person's
   // (convex/communityResourceChangesets.ts).
@@ -46,7 +61,7 @@ export const TOOL_OPERATIONS = {
   // A person's own direct messages (/messages/): reading the conversations
   // they are in, and replying in one that exists. Never starting one.
   "polynet_list:messages": entry("member", "read", "read"),
-  "polynet_write:messages": entry("member", "write", "message_reply"),
+  "polynet_write:messages": entry("member", "write", "message_reply", { ask: "words" }),
 } satisfies Record<string, OperationEntry>;
 
 // polynet_call operations, in the order the capabilities directory lists them.
@@ -57,59 +72,87 @@ export const CALL_OPERATIONS = {
   "community.presence.heartbeat": entry("member", "write", "none"),
   "community.typing.set": entry("member", "write", "none"),
   // What the guide remembers about a member, in their private talk with it.
-  "member.memory.remember": entry("member", "write", "none", "paid"),
+  "member.memory.remember": entry("member", "write", "none", { plan: "paid" }),
   "community.admission.approve": entry("moderator", "write", "builder_change"),
   "community.admission.deny": entry("moderator", "write", "builder_change"),
-  "community.interaction.remove": entry("moderator", "destroy", "builder_change"),
+  "community.interaction.remove": entry("moderator", "destroy", "builder_change", { ask: "every_time" }),
   "community.settings.update": entry("builder", "write", "builder_change"),
-  // Opening a community lets in everyone who was waiting, and tells them.
-  "community.join_mode.set": entry("builder", "broadcast", "builder_change"),
+  // Setting it to approval takes nothing from anyone. Opening it lets in
+  // everyone who was waiting, and tells them: CALL_OPERATION_VARIANTS.
+  "community.join_mode.set": entry("builder", "write", "builder_change"),
   "community.agent.instructions.set": entry("builder", "write", "builder_change"),
   "community.handbook.save_draft": entry("builder", "write", "builder_change"),
-  "community.handbook.approve": entry("builder", "write", "builder_change"),
+  // What every member, and the guide, is told.
+  "community.handbook.approve": entry("builder", "broadcast", "builder_change", { ask: "every_time" }),
   // Channels (slice 4). What takes something away from members (deleting a
   // channel, opening a private one, pinning) waits for the two-step confirm.
   "community.channel.create": entry("builder", "write", "builder_change"),
   "community.channel.rename": entry("builder", "write", "builder_change"),
   "community.channel.describe": entry("builder", "write", "builder_change"),
   "community.channel.move": entry("builder", "write", "builder_change"),
-  "community.members.set_role": entry("builder", "write", "builder_change"),
-  "community.members.remove": entry("builder", "destroy", "builder_change"),
-  "community.members.ban": entry("builder", "destroy", "builder_change"),
+  // Who runs the community.
+  "community.members.set_role": entry("builder", "write", "builder_change", { ask: "every_time" }),
+  "community.members.remove": entry("builder", "destroy", "builder_change", { ask: "person_only" }),
+  "community.members.ban": entry("builder", "destroy", "builder_change", { ask: "person_only" }),
   "community.members.unban": entry("builder", "write", "builder_change"),
+} satisfies Record<string, OperationEntry>;
+
+// An operation that is a different thing for one of its inputs.
+export const CALL_OPERATION_VARIANTS = {
+  "community.join_mode.set:open": entry("builder", "broadcast", "builder_change", { ask: "person_only" }),
 } satisfies Record<string, OperationEntry>;
 
 // What only the background worker writes; never advertised to anyone's tools.
 export const WORKER_OPERATIONS = {
-  "memory.apply": entry("worker", "write", "none", "paid"),
-  "brief.write": entry("worker", "write", "none", "paid"),
-  "reply.draft": entry("worker", "write", "none", "paid"),
+  "memory.apply": entry("worker", "write", "none", { plan: "paid" }),
+  "brief.write": entry("worker", "write", "none", { plan: "paid" }),
+  "reply.draft": entry("worker", "write", "none", { plan: "paid" }),
 } satisfies Record<string, OperationEntry>;
 
-// ---- what the guide asks the person before doing
+// ---- asking the person
 //
-// The guide in a private talk does what the person tells it. It asks only
-// when the question says something the person doesn't already know:
-// - "post": words it wrote go out under their name (a post, a reply, an edit).
-//   They see the words. A person may switch this to "always allow".
-// - "remove": it can't be taken back (removing posts, deleting their own).
-//   Asked every time.
-// - "change": who runs the community, or what every member is told: a
-//   person's role, publishing the handbook. Asked every time.
-// Everything else it may do (react, mark a lesson done, approve or decline
-// people, settings and channels) it does when told. A person's own AI is not asked by Polynet: it
-// has its own person watching it.
+// One call's entry in the list: the tool and where it points, or the named
+// operation and (for the one that has them) its input.
+export function operationFor(args: {
+  toolName: string; operation?: string | null; mode?: string | null; localPath?: string | null; input?: Record<string, unknown> | null;
+}): OperationEntry | null {
+  if (args.toolName === "polynet_call") {
+    const name = String(args.operation ?? "");
+    const variant = name === "community.join_mode.set" && args.input?.mode === "open" ? `${name}:open` : null;
+    if (variant) return CALL_OPERATION_VARIANTS[variant as keyof typeof CALL_OPERATION_VARIANTS];
+    return callOperation(name);
+  }
+  if (args.toolName !== "polynet_write") return null;
+  const path = String(args.localPath ?? "");
+  if (/^\/channels\//.test(path)) return TOOL_OPERATIONS[args.mode === "delete" ? "polynet_write:channels:delete" : "polynet_write:channels"];
+  if (path.startsWith("/builder/")) return TOOL_OPERATIONS["polynet_write:builder"];
+  return null;
+}
+
+// The question the guide puts to the person in their private talk, by kind:
+// "post" (the words, with "always allow" offered), "remove" (can't be taken
+// back) and "change" (who runs the place, what every member is told).
 export type GuideAsk = "post" | "remove" | "change";
 export const GUIDE_ASK_ALWAYS_ALLOWABLE: Record<GuideAsk, boolean> = { post: true, remove: false, change: false };
-const GUIDE_ASKS_BEFORE_CHANGE: string[] = ["community.members.set_role", "community.handbook.approve"];
 
-export function guideAskFor(args: { toolName: string; operation?: string | null; mode?: string | null; localPath?: string | null }): GuideAsk | null {
-  if (args.toolName === "polynet_call") {
-    if (GUIDE_ASKS_BEFORE_CHANGE.includes(String(args.operation ?? ""))) return "change";
-    return callOperation(String(args.operation ?? ""))?.effect === "destroy" ? "remove" : null;
-  }
-  if (args.toolName !== "polynet_write" || !/^\/channels\//.test(String(args.localPath ?? ""))) return null;
-  return args.mode === "delete" ? "remove" : "post";
+export function guideAskFor(args: Parameters<typeof operationFor>[0]): GuideAsk | null {
+  const found = operationFor(args);
+  if (found?.ask === "words") return "post";
+  if (found?.ask === "every_time") return found.effect === "destroy" || args.toolName === "polynet_write" ? "remove" : "change";
+  return null;
+}
+
+// Whether an AI is handed the place in the app instead of doing it.
+// - Any AI, for what only a person does.
+// - A person's own AI, for what can't be taken back: Polynet can't put its
+//   question in their AI's window yet, so it is theirs to do in the app. (The
+//   rest it does: their AI has its own person watching it.)
+// - The guide, for what asks every time, until the person has said yes.
+export function handedBackToPerson(found: OperationEntry | null, door: { guide: boolean; personSaidYes: boolean }): boolean {
+  if (!found) return false;
+  if (found.ask === "person_only") return true;
+  if (found.ask !== "every_time") return false;
+  return door.guide ? !door.personSaidYes : found.effect === "destroy";
 }
 
 export type CallOperationName = keyof typeof CALL_OPERATIONS;
