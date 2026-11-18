@@ -36,6 +36,7 @@ import {
 import { PERSONAL_MEMORY_OPERATION, PERSONAL_MEMORY_PATH } from "../shared/personalMemory.ts";
 import { lensCalls, lensReads, resolveLens, type Lens, type LensView } from "../shared/lens.ts";
 import { guideAskFor, handedBackToPerson, operationFor } from "../shared/operationCatalog.ts";
+import { ACTION_TOOLS } from "../shared/actionTools.ts";
 import { handbookQuestion, postQuestion, removeQuestion, roleQuestion, waitingToolAnswer } from "../shared/guideQuestions.ts";
 import {
   COMMUNITY_MEMBER_SELF_DIRECTORY,
@@ -884,6 +885,27 @@ function capabilityDocument(args: {
       target: `/communities/${args.target.communitySlug}/capabilities/${args.operation}.json`,
       input: "the fields listed under input", idempotency_key: "a new key for each action" },
   };
+  // Through a person's own AI an action is its own named tool, so its file
+  // points there and not at the general call. What only a person does has no
+  // tool: its file gives the place in the app, so the AI can hand it over
+  // without asking for a refusal first.
+  if (args.principalKind === "external_mcp") {
+    const named = namedToolFor(args.operation);
+    const listed = callOperation(args.operation);
+    if (named) {
+      operationDefinition.tool = named;
+      operationDefinition.call = `Use the ${named} tool: its inputs are plain, and it needs no version, target or key.`;
+    } else if (listed?.ask === "person_only" || (listed?.ask === "every_time" && listed.effect === "destroy")) {
+      const page = args.operation === REMOVE_POSTS_OPERATION ? "chat" : "members";
+      delete operationDefinition.call;
+      operationDefinition.tool = null;
+      operationDefinition.done_by = "a person, in Polynet. There is no tool for this.";
+      const path = buildCommunityTabPath(args.target.communitySlug, page);
+      let link = path;
+      try { link = `${readCanonicalPublicAppOrigin()}${path}`; } catch { /* the path alone still says where */ }
+      operationDefinition.give_the_person_this_link = link;
+    }
+  }
   const members = `a selection of 1 to ${SELECTION_MAX} members, as user:<id> refs from members/`;
   if (isMembersCapability) {
     operationDefinition.input = args.operation === MEMBERS_ROLE_OPERATION ? {
@@ -2826,6 +2848,11 @@ async function askPersonFirst(args: {
   });
   if (!asked.ok) return canonicalError("invalid_tool_args", "That is too long to ask the person about. Make it shorter.");
   return { ok: true, value: waitingToolAnswer(question) };
+}
+
+// The named tool a person's own AI has for an action (shared/actionTools.ts).
+function namedToolFor(operation: string): string | null {
+  return ACTION_TOOLS.find((tool) => tool.catalog === operation)?.name ?? null;
 }
 
 // Whether this call is handed back to the person instead of run: the one
