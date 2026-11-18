@@ -89,18 +89,25 @@ test("on the kit, Home has the mock's parts and no old Home classes", async () =
   expect(html).not.toContain("community-home");
 });
 
-test("a quiet Home on the kit still offers the way back into the conversation", async () => {
+test("Home offers the way back into the conversation whenever there is one, busy or quiet", async () => {
+  const { offersConversation } = await import("../apps/web/src/components/WebCommunityHomeSection");
+  const base = { agentOn: true, talking: false, hasConversation: true, drawn: true };
+  // Nothing about what needs you or what the guide drafted takes part.
+  expect(offersConversation(base)).toBe(true);
+  expect(offersConversation({ ...base, hasConversation: false })).toBe(false);
+  expect(offersConversation({ ...base, talking: true })).toBe(false);
+  expect(offersConversation({ ...base, agentOn: false })).toBe(false);
+  // It is Home's last line, drawn with the rest so nothing moves under it.
+  expect(offersConversation({ ...base, drawn: false })).toBe(false);
   const { renderToStaticMarkup } = await import("react-dom/server");
   const { WebCommunityHomeSection } = await import("../apps/web/src/components/WebCommunityHomeSection");
-  const render = (hasConversation: boolean, talking: boolean) => renderToStaticMarkup(React.createElement(WebCommunityHomeSection, {
+  const html = renderToStaticMarkup(React.createElement(WebCommunityHomeSection, {
     communityId: "c1", communityName: "Kiln", firstName: "Neil", audience: "host" as const,
     session: null, ensureSession: async () => null,
     onOpenJoinRequests: () => {}, onOpenChannelByName: () => {}, onOpenEvents: () => {},
-    kit: { talking, hasConversation, talk: null, onTalkItOver: () => {} },
+    kit: { talking: false, hasConversation: true, talk: null, onTalkItOver: () => {} },
   }));
-  expect(render(true, false)).toContain("Continue your conversation");
-  expect(render(false, false)).not.toContain("Continue your conversation");
-  expect(render(true, true)).not.toContain("Continue your conversation");
+  expect(html).not.toContain("Continue your conversation");
 });
 
 // ---- Home: the guide briefs you, then the few things that need you.

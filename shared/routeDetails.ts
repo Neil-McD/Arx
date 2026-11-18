@@ -12,14 +12,14 @@ import {
 
 // Where you are inside a page is part of its address (shared/webAppRouteState):
 // /c/<slug>/chat/<channel>/<thread>, /c/<slug>/resources/<course>/<lesson>,
-// /c/<slug>/resources/guide|brain. The page reads it from the address and
+// /c/<slug>/resources/guide|brain, /c/<slug>/home/talk. The page reads it from the address and
 // writes it back when you move; opening one adds a history entry, so the back
 // button steps back through them.
 //
 // Before Nov 17 these rode on the query (?thread=, ?lesson=, ?view=). Those
 // links still open the same place, and are rewritten to the path.
 
-export type RouteDetailKey = "thread" | "lesson" | "view" | "member" | "conversation" | "event";
+export type RouteDetailKey = "thread" | "lesson" | "view" | "member" | "conversation" | "event" | "homeView";
 const LEGACY_TAGS: RouteDetailKey[] = ["thread", "lesson", "view"];
 const CHANGE_EVENT = "polynet:route-detail";
 
@@ -68,6 +68,7 @@ function detailOf(route: AppRoutePathState | null, key: RouteDetailKey): string 
   if (key === "member") return route.communityMemberKey ?? null;
   if (key === "conversation") return route.communityConversationId ?? null;
   if (key === "event") return route.communityEventKey ?? null;
+  if (key === "homeView") return route.communityHomeView ?? null;
   return route.communityKnowledgeView ?? null;
 }
 
@@ -87,6 +88,7 @@ export function pathWithRouteDetail(path: string, key: RouteDetailKey, value: st
   else if (key === "member") next.communityMemberKey = readRouteId(value);
   else if (key === "conversation") next.communityConversationId = readRouteId(value);
   else if (key === "event") next.communityEventKey = readRouteId(value);
+  else if (key === "homeView") next.communityHomeView = value === "talk" ? "talk" : null;
   else next.communityKnowledgeView = value === "guide" || value === "brain" ? (value as CommunityKnowledgeView) : null;
   const built = buildAppRoutePath(next);
   if (!built) return null;
@@ -112,6 +114,7 @@ export function carryRouteDetails(nextPath: string, currentPath: string): string
     communityMemberKey: current.communityMemberKey ?? null,
     communityConversationId: current.communityConversationId ?? null,
     communityEventKey: current.communityEventKey ?? null,
+    communityHomeView: current.communityHomeView ?? null,
   });
   return built ? join({ ...next, pathname: built, search: withoutLegacyTags(next.search) }) : nextPath;
 }

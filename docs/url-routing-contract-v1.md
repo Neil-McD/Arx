@@ -48,6 +48,7 @@ Current canonical/pathname routes include:
 - `/c/:slug/pods/:pod` (a pod's own address: its room for someone in it, its outside page for a member who may see it, not found otherwise; the room itself is `/c/:slug/chat/:pod`)
 - `/c/:slug/settings`
 - `/c/:slug/home` (Home, the community's guide page)
+- `/c/:slug/home/talk` (Home with the conversation with the guide open)
 - `/c/:slug/browse` (the community's list of channels and pages; the phone's middle tab)
 - `/c/:slug/workflows` (going with member workflows)
 - `/c/:slug/analytics`
@@ -199,9 +200,10 @@ through `shared/routeDetails.ts`.
 - Ids in a path are plain ids (`[A-Za-z0-9_-]`, at most 80); anything else is
   not a place and is dropped.
 - A detail belongs to one page: a thread to a channel or a pod's room, a lesson
-  to a course, a view to the Knowledge shelf. It is dropped when the page
-  changes.
-- History: opening a thread, a lesson you chose, or a view adds a history step,
+  to a course, a view to the Knowledge shelf, the open conversation to Home. It
+  is dropped when the page changes, so Home is at rest each time you come back.
+- History: opening a thread, a lesson you chose, a view, or Home's
+  conversation adds a history step,
   so the back button closes it. A lesson picked for you (the next unfinished
   one) only fills in the address, without a step.
 - Compatibility: the earlier `?thread=`, `?lesson=` and `?view=` tags still open

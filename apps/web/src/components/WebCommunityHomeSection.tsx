@@ -164,6 +164,13 @@ export function memberThingsFor(steps: MemberNextStep[], actions: HomeTargets): 
   }));
 }
 
+// The way back into the conversation without typing: whenever there is one
+// and the guide is on, whatever else needs you. Only once Home is drawn (or
+// could not be), as its last line, so nothing moves under it.
+export function offersConversation(args: { agentOn: boolean; talking: boolean; hasConversation: boolean; drawn: boolean }): boolean {
+  return args.agentOn && !args.talking && args.hasConversation && args.drawn;
+}
+
 export function WebCommunityHomeSection(props: WebCommunityHomeSectionProps) {
   const [snapshot, setSnapshot] = useState<CloudCommunityHomeSnapshot | null>(null);
   const [failed, setFailed] = useState(false);
@@ -311,7 +318,7 @@ export function WebCommunityHomeSection(props: WebCommunityHomeSectionProps) {
         {ready && isHost && !agentOn && things.length > 0 && props.onTurnOnAgent ? (
           <TextLink style={{ marginTop: 14 }} onClick={props.onTurnOnAgent}>Turn on your guide</TextLink>
         ) : null}
-        {agentOn && !kit.talking && kit.hasConversation && needs === 0 && !(drafts?.length) ? (
+        {offersConversation({ agentOn, talking: kit.talking, hasConversation: Boolean(kit.hasConversation), drawn: ready || failed }) ? (
           <TextLink style={{ marginTop: 20 }} onClick={kit.onTalkItOver}>Continue your conversation</TextLink>
         ) : null}
         {kit.talk}
