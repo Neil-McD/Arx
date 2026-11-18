@@ -41,7 +41,10 @@ import {
 const internalRefs = internal as any;
 const DAY_MS = 24 * 60 * 60_000;
 const CHANNELS_MAX = 50;
-const PER_CHANNEL_SCAN = 60;
+// Posts read per channel, oldest first, in each of the two age bands (a day
+// to a week old; under a day), so a busy day's newer posts can't hide an
+// older question.
+const PER_CHANNEL_SCAN = 200;
 const COURSES_MAX = 30;
 const LESSONS_PER_COURSE = 60;
 const MAX_OUTPUT_TOKENS = 700;
@@ -94,9 +97,12 @@ export const readReplyDraftInputInternal = internalQuery({
     const roots: any[] = [];
     for (const channel of channels) {
       for (const visibility of ["community", "public"] as const) {
-        roots.push(...await ctx.db.query("communityInteractionRoots").withIndex("by_community_channel_visibility_status_createdAt", (q: any) => q
-          .eq("communityId", args.communityId).eq("channelId", channel._id).eq("visibilityScope", visibility).eq("status", "live")
-          .gte("createdAt", args.nowMs - REPLY_DRAFT_MAX_AGE_MS)).order("desc").take(PER_CHANNEL_SCAN));
+        const band = (fromMs: number, toMs: number) => ctx.db.query("communityInteractionRoots")
+          .withIndex("by_community_channel_visibility_status_createdAt", (q: any) => q
+            .eq("communityId", args.communityId).eq("channelId", channel._id).eq("visibilityScope", visibility).eq("status", "live")
+            .gte("createdAt", fromMs).lt("createdAt", toMs)).order("asc").take(PER_CHANNEL_SCAN);
+        const dayAgo = args.nowMs - REPLY_DRAFT_WAIT_MS;
+        roots.push(...await band(args.nowMs - REPLY_DRAFT_MAX_AGE_MS, dayAgo + 1), ...await band(dayAgo + 1, args.nowMs + 1));
       }
     }
     const open: any[] = [];
@@ -109,9 +115,13 @@ export const readReplyDraftInputInternal = internalQuery({
     const nextReady = notYet.length ? Number(notYet[0].createdAt) + REPLY_DRAFT_WAIT_MS : null;
 
     // Today's allowance: drafts written in the last 24 hours.
-    const today = (await ctx.db.query("communityReplyDrafts")
-      .withIndex("by_community_createdAt", (q: any) => q.eq("communityId", args.communityId).gte("createdAt", args.nowMs - DAY_MS)).take(50))
-      .filter((row: any) => row.status !== "no_source");
+    // Read by status, so any number of questions no lesson could answer
+    // never crowds the real drafts out of the count.
+    const today: any[] = [];
+    for (const status of ["waiting", "posted", "skipped"] as const) {
+      today.push(...await ctx.db.query("communityReplyDrafts").withIndex("by_community_status_createdAt", (q: any) => q
+        .eq("communityId", args.communityId).eq("status", status).gte("createdAt", args.nowMs - DAY_MS)).take(REPLY_DRAFTS_PER_DAY));
+    }
     if (ready.length && today.length >= REPLY_DRAFTS_PER_DAY) {
       const frees = Math.min(...today.map((row: any) => Number(row.createdAt))) + DAY_MS;
       return { ...none, nextDueAt: frees };
@@ -253,9 +263,14 @@ async function requireOwner(ctx: any, authSubject: string | undefined, community
 }
 
 // A draft the host can still act on: its question is live, still unanswered,
-// and under a week old.
+// and under a week old, and the lesson it rests on is still one members can
+// read (a course taken back to draft, or a deleted lesson, withdraws it).
 async function waitingDraft(ctx: any, draft: any, nowMs: number) {
   if (!draft || draft.status !== "waiting") return null;
+  const lesson: any = draft.sourceResourceId ? await ctx.db.get(draft.sourceResourceId) : null;
+  const course: any = lesson?.moduleId ? await ctx.db.get(lesson.moduleId) : null;
+  if (!lesson || !course || !communityResourceModuleIsLive(course)
+    || !communityResourceIsLiveModulePage(lesson, new Set([normalizeIdValue(course._id)]))) return null;
   const root: any = await ctx.db.get(draft.rootId);
   if (!stillWaiting(root) || nowMs - Number(root.createdAt) > REPLY_DRAFT_MAX_AGE_MS) return null;
   const channel: any = root.channelId ? await ctx.db.get(root.channelId) : null;
