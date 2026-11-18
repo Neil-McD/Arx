@@ -53,7 +53,6 @@ import {
   startNewCloudCommunityAgentConversation,
   type CloudCommunityAgentChannel,
 } from "../../../../shared/cloudCommunityAgentConversationGateway";
-import { listCloudPendingCommunityResourceBuilderChangesets } from "../../../../shared/cloudCommunityAdminGateway";
 import {
   listConvexCloudNewestThreadMessagesByThreadKey,
   type CloudMessageTransportRow,
@@ -72,12 +71,6 @@ import type {
   ThreadStreamingState,
 } from "../../../../shared/webTurnRunnerCore";
 import { RuntimeLiveTimeline } from "./RuntimeLiveTimeline";
-import {
-  buildResourceChangesetCardFromPayload,
-  extractRuntimeResourceChangesetCards,
-  RuntimeResourceChangesetApprovalCards,
-  type ResourceChangesetCardModel,
-} from "./RuntimeResourceChangesetApprovalCards";
 import type { WebCommunityRecord } from "../webAppContracts";
 import "./WebCommunityAgentDock.css";
 import { fitComposerHeight } from "../../../../shared/composerHeight";
@@ -236,9 +229,6 @@ function WebCommunityAgentDock(props, ref) {
   const [isPreparing, setIsPreparing] = useState(false);
   const [isStartingNewChat, setIsStartingNewChat] = useState(false);
   const [resourceBuildLaunchVersion, setResourceBuildLaunchVersion] = useState(0);
-  const [recoveredResourceChangesetCards, setRecoveredResourceChangesetCards] = useState<
-    ResourceChangesetCardModel[]
-  >([]);
   const [localError, setLocalError] = useState<string | null>(null);
   const [inferenceIssue, setInferenceIssue] = useState<InferenceIssueModalState | null>(null);
   const [sendingByThread, setSendingByThread] = useState<Record<string, boolean>>({});
@@ -397,30 +387,6 @@ function WebCommunityAgentDock(props, ref) {
           agentScopeRef.current.userId !== launchScope.userId ||
           agentScopeRef.current.generation !== launchScope.generation
         ) return false;
-        const rows = await listCloudPendingCommunityResourceBuilderChangesets<
-          AuthSession,
-          Record<string, unknown>
-        >({
-          session: usableSession,
-          communityId: requestedCommunityId,
-          limit: 1,
-        });
-        const pendingCards = rows.flatMap((row, index) => {
-          const updatedAt = Date.parse(String(row.updated_at ?? ""));
-          const card = buildResourceChangesetCardFromPayload(
-            row,
-            Number.isFinite(updatedAt) ? updatedAt : index,
-          );
-          return card ? [card] : [];
-        });
-        if (
-          agentScopeRef.current.userId !== launchScope.userId ||
-          agentScopeRef.current.generation !== launchScope.generation
-        ) return false;
-        if (pendingCards.length > 0) {
-          setRecoveredResourceChangesetCards(pendingCards);
-          return true;
-        }
         if (draftTextRef.current.trim() || attachmentsRef.current.length > 0) {
           return false;
         }
@@ -597,7 +563,6 @@ function WebCommunityAgentDock(props, ref) {
     retryRef.current = null;
     pendingResourceBuildRef.current = null;
     resourceBuildStartInFlightRef.current = false;
-    setRecoveredResourceChangesetCards([]);
   }, [clearAttachmentDrafts, props.session?.user.id, communityId, stopStreamingTurn]);
 
   useEffect(() => () => {
@@ -622,7 +587,6 @@ function WebCommunityAgentDock(props, ref) {
     retryRef.current = null;
     setLocalError(null);
     pendingResourceBuildRef.current = null;
-    setRecoveredResourceChangesetCards([]);
   }, [clearAttachmentDrafts, surfaceKey]);
 
   useEffect(() => {
@@ -740,74 +704,6 @@ function WebCommunityAgentDock(props, ref) {
     resourceBuildLaunchVersion,
   ]);
 
-  useEffect(() => {
-    const liveCards = extractRuntimeResourceChangesetCards(runtimeEvents);
-    if (liveCards.length === 0) return;
-    setRecoveredResourceChangesetCards((current) => {
-      const merged = new Map(current.map((card) => [card.changesetId, card]));
-      liveCards.forEach((card) => merged.set(card.changesetId, card));
-      return [...merged.values()]
-        .sort((a, b) => a.seq - b.seq)
-        .slice(-1);
-    });
-  }, [runtimeEvents]);
-
-  useEffect(() => {
-    if (
-      !isOpenSurface ||
-      turnIsActive ||
-      !props.canManageResources ||
-      !props.session ||
-      !communityId
-    ) {
-      return;
-    }
-    let cancelled = false;
-    const scope = agentScopeRef.current;
-    void (async () => {
-      try {
-        const usableSession = await props.ensureSession(
-          props.session,
-          "member_agent_resource_changeset_recovery",
-        );
-        if (!usableSession || cancelled || !isCurrentScope(scope)) return;
-        const rows = await listCloudPendingCommunityResourceBuilderChangesets<
-          AuthSession,
-          Record<string, unknown>
-        >({
-          session: usableSession,
-          communityId,
-          limit: 1,
-        });
-        if (cancelled || !isCurrentScope(scope)) return;
-        setRecoveredResourceChangesetCards(
-          rows.flatMap((row, index) => {
-            const updatedAt = Date.parse(String(row.updated_at ?? ""));
-            const card = buildResourceChangesetCardFromPayload(
-              row,
-              Number.isFinite(updatedAt) ? updatedAt : index,
-            );
-            return card ? [card] : [];
-          }),
-        );
-      } catch (error) {
-        if (!cancelled) {
-          console.warn("member_agent_resource_changeset_recovery_failed", error);
-        }
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [
-    communityId,
-    isCurrentScope,
-    isOpenSurface,
-    props.canManageResources,
-    props.ensureSession,
-    props.session,
-    turnIsActive,
-  ]);
 
   const observeThreadContext = useCallback((communityId: string | null, contextVersion: number) => {
     const next = {
@@ -1224,16 +1120,6 @@ function WebCommunityAgentDock(props, ref) {
   const shouldRenderStreamedText =
     Boolean(streamedText) && !hasSequencedAssistantText(runtimeEvents);
 
-  const liveResourceChangesetIds = new Set(
-    extractRuntimeResourceChangesetCards(runtimeEvents).map(
-      (card) => card.changesetId,
-    ),
-  );
-  const persistentResourceChangesetCards =
-    recoveredResourceChangesetCards.filter(
-      (card) => !liveResourceChangesetIds.has(card.changesetId),
-    );
-
   // Everything said with the guide, live turn included. On Home on the kit it
   // is drawn as the mock's conversation (yours on the right, the guide's in
   // its serif voice); everywhere else, as the dock's messages.
@@ -1269,14 +1155,6 @@ function WebCommunityAgentDock(props, ref) {
               </article>
             );
           })}
-
-          {persistentResourceChangesetCards.length > 0 ? (
-            <RuntimeResourceChangesetApprovalCards
-              cards={persistentResourceChangesetCards}
-              session={props.session}
-              pendingOnly
-            />
-          ) : null}
 
           {isPreparing ? (
             <div className="community-agent-dock-reasoning">
@@ -1340,12 +1218,8 @@ function WebCommunityAgentDock(props, ref) {
   // by itself, so nothing that needs you is hidden behind Home at rest.
   // Opening the guide's thread on arrival is not one of them: it loads behind
   // Home, so Home's layout is the same before and after (no top row moving).
-  // A course change that was already waiting when you arrived is not one
-  // either on the host's Home: its "Needs you" list holds it, so Home stays
-  // Home (the card is still in the conversation when you open it).
-  const waitingChangeIsOnHome = props.home?.audience === "host";
   const conversationNeedsYou =
-    turnIsActive || Boolean(dockError) || Boolean(memberLimitNotice) || (persistentResourceChangesetCards.length > 0 && !waitingChangeIsOnHome);
+    turnIsActive || Boolean(dockError) || Boolean(memberLimitNotice);
   // Home on the kit: Home in design v1, the host's and a member's, on desktop
   // and as the phone's Home tab.
   const agentOn = useCommunityAgentOn();
@@ -1401,8 +1275,6 @@ function WebCommunityAgentDock(props, ref) {
               kit={{
                 talking: kitTalking || conversationNeedsYou,
                 hasConversation: visibleMessages.length > 0,
-                onChangeDecided: (changesetId: string) =>
-                  setRecoveredResourceChangesetCards((cards) => cards.filter((card) => card.changesetId !== changesetId)),
                 talk: <Talk>{conversation(true)}</Talk>,
                 onTalkItOver: () => {
                   openTalk();

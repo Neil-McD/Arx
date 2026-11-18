@@ -2441,13 +2441,11 @@ async function executeCanonicalWrite(args: {
       return { ok: true, value: reservation.completedValue };
     }
     try {
-      // A builder's own AI acts: a batch that takes nothing away is applied
-      // at once; one that deletes waits for a person's click, like every
-      // batch from the guide (docs/specs/agent-access-v0.md, slice 4b).
+      // The batch is applied as it arrives, for the guide and a builder's
+      // own AI alike. Agents build in draft and can't publish or delete what
+      // members see (docs/specs/agent-access-v0.md), so nothing waits.
       const value = (await args.ctx.runMutation(
-        args.principalKind === "external_mcp"
-          ? (internal as any).communityResources.stageAndApplyCommunityResourceBuilderChangesetInternal
-          : (internal as any).communityResources.stageCommunityResourceBuilderChangesetInternal,
+        (internal as any).communityResources.runCommunityResourceBuilderBatchInternal,
         {
           userId: args.userId,
           communityId: target.communityId,
@@ -2483,7 +2481,7 @@ async function executeCanonicalWrite(args: {
       };
     } catch (error) {
       const errorMessage =
-        error instanceof Error ? error.message : "Changeset staging failed.";
+        error instanceof Error ? error.message : "The course changes were not applied.";
       await failMutatingOperation({
         ...args,
         target,

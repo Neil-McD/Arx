@@ -465,17 +465,17 @@ function buildCommunityResourceLanePrompt(params: {
       "For questions about live Resources visible to members, follow the live Resources read workflow before using builder-only resource state.",
       "Broad requests like improve resources, clean this up, refactor knowledge, or organize references are discovery requests first.",
       canStageChangesets
-        ? "For broad requests, read the resource ground truth, explain the current mental model, surface options, and ask for alignment before staging any changeset."
+        ? "For broad requests, read the resource ground truth, explain the current mental model, surface options, and ask for alignment before changing anything."
         : "For broad requests, read the resource ground truth, explain the current mental model, surface options, and ask for alignment before proposing edits.",
       canStageChangesets
-        ? "Stage only an exact implementation proposal after the builder has agreed on the direction."
-        : "Do not imply resource edits have been staged or saved unless a staging tool is actually available and has succeeded.",
-      "A staged changeset is a proposal only; do not say it is live or applied. Ask the builder to review it and choose Apply or Reject in the product.",
-      "Builder-facing replies must translate resource tool results into product state: what exists now, what was saved, what is staged, what is live, what is unverified, and the next concrete builder decision.",
+        ? "Make an exact change only after the builder has agreed on the direction."
+        : "Do not imply resource edits have been saved unless a write tool is actually available and has succeeded.",
+      "Your course changes are saved as you make them; nothing waits for a second step. New courses are drafts: members see nothing of a draft course until the builder turns on its Published switch. In a course that is already published, an edit or a new lesson with content shows to members at once, so say that before you make it.",
+      "You cannot publish or unpublish a course, and you cannot delete a course or a lesson that is in a published course. If the builder wants that, tell them where to do it: Knowledge, open the course, the Published switch at the top or Delete in its menu.",
+      "Builder-facing replies must translate resource tool results into product state: what exists now, what you changed, what is still a draft, what members can see, what is unverified, and the next concrete builder decision.",
       "After source crawl, import, or source-inbox inspection, report source title, URL or domain, saved versus reused state, ready/failed/partial status, page count, source-unit count when visible, failed pages or units, and whether the material lives in source inbox, draft Resources, or live Resources.",
       "Do not expose internal ids, database ids, resource ids, category/module ids, source ids, crawl job ids, run ids, or changeset ids in builder-facing prose unless the user explicitly asks for debugging/internal details.",
       "Use human labels instead of ids: source title, category name, page title, status, and next action. Tool payloads may still use internal ids when required.",
-      "Agents cannot approve, reject, or apply resource changesets. Ask the builder to use the product Apply or Reject controls. Do not ask the builder to paste a changeset id.",
     ].join("\n");
   }
   if (hasLiveTools) {
@@ -547,14 +547,14 @@ function buildPlatformHarnessOperatingPolicyPrompt(params: {
       "- The builder/ repository subtree is owner/admin-only and exposes draft, review, source inbox, and health state that the member projection intentionally hides.",
       "- List builder/resources/ first; its health summary is the deterministic architecture preflight. Read returned entries before proposing edits.",
       canStageChangesets
-        ? "- For builder edits, align on direction, then stage the smallest defensible changeset as a proposal only. Do not claim it is live or applied."
-        : "- For builder edits, explain what you found as product state, align with the builder on direction, and propose the smallest defensible change without claiming it was staged or saved.",
-      "- You may propose delete_page or delete_category only when deletion is clearly justified. Prefer move/edit for ambiguous material. Do not delete source inbox records; delete_category is only for empty categories.",
+        ? "- For builder edits, align on direction, then make the smallest defensible change. It is saved as you send it; say plainly what changed and whether members can see it."
+        : "- For builder edits, explain what you found as product state, align with the builder on direction, and propose the smallest defensible change without claiming it was saved.",
+      "- Use delete_page or delete_category only when deletion is clearly justified and only on drafts: a lesson in a draft course, or an empty draft course. Prefer move/edit for ambiguous material. Do not delete source inbox records.",
     );
     if (canStageChangesets) {
       toolGuidance.push(
-        "- After staging a changeset, summarize the proposal, warnings, and the product Apply or Reject step. Keep the changeset id internal unless the user explicitly asks for debugging details.",
-        "- Agents cannot approve, reject, or apply resource changesets. Those terminal decisions belong only to explicit authenticated product controls.",
+        "- After a change, summarize what you changed and any warnings. Keep internal ids out of your reply unless the user explicitly asks for debugging details.",
+        "- Publishing, unpublishing, and deleting what members can see are the builder's own clicks in Knowledge. A batch that tries one is refused whole; tell the builder where the control is.",
       );
     }
   }

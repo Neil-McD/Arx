@@ -68,11 +68,9 @@ import {
   buildCommunityResourceBuilderExpiredResult,
   communityResourceBuilderChangesetExpiresAt,
   communityResourceBuilderChangesetIsExpired,
-  communityResourceChangesetIsDestructive,
   expireCommunityResourceBuilderChangesetIfNeeded,
   getCommunityResourceBuilderPreflightIssueCount,
   normalizeCommunityResourceBuilderChangesetOperations,
-  readLatestCommunityResourceBuilderActionableRows,
   stageCommunityResourceBuilderChangesetCore,
 } from "./communityResourceChangesets";
 import {
@@ -272,79 +270,15 @@ export const readCommunityResourceBuilderResourceInternal = internalQuery({
     }),
 });
 
-export const stageCommunityResourceBuilderChangesetInternal = internalMutation({
-  args: {
-    userId: v.id("users"),
-    communityId: v.id("communities"),
-    summary: v.string(),
-    operations: v.array(v.any()),
-    idempotencyKey: v.optional(v.string()),
-  },
-  handler: async (ctx, args) =>
-    await stageCommunityResourceBuilderChangesetCore({
-      ctx,
-      userId: args.userId,
-      communityId: args.communityId,
-      summary: args.summary,
-      operations: args.operations,
-      idempotencyKey: args.idempotencyKey ?? null,
-    }),
-});
-
-export const expireCommunityResourceBuilderChangesetInternal = internalMutation({
-  args: {
-    changesetId: v.id("communityResourceBuilderChangesets"),
-  },
-  handler: async (ctx, args) => {
-    const changeset = (await ctx.db.get(
-      args.changesetId as any,
-    )) as CommunityResourceBuilderChangesetRow | null;
-    if (!changeset) {
-      return {
-        ok: true,
-        kind: "community_resource_builder_changeset_expiry_noop",
-        status: "missing",
-        changeset_id: normalizeIdValue(args.changesetId),
-        deduped: true,
-      };
-    }
-    if (changeset.status === "expired") {
-      return buildCommunityResourceBuilderExpiredResult({
-        changeset,
-        changesetId: args.changesetId,
-        communityId: changeset.communityId,
-        deduped: true,
-      });
-    }
-    const nowMs = Date.now();
-    if (
-      !(await expireCommunityResourceBuilderChangesetIfNeeded({
-        ctx,
-        changeset,
-        nowMs,
-      }))
-    ) {
-      return {
-        ok: true,
-        kind: "community_resource_builder_changeset_expiry_noop",
-        status: changeset.status,
-        changeset_id: normalizeIdValue(args.changesetId),
-        community_id: normalizeIdValue(changeset.communityId),
-        expires_at: toIsoString(
-          communityResourceBuilderChangesetExpiresAt(changeset),
-        ),
-        deduped: true,
-      };
-    }
-    return buildCommunityResourceBuilderExpiredResult({
-      changeset,
-      changesetId: args.changesetId,
-      communityId: changeset.communityId,
-      deduped: false,
-    });
-  },
-});
-
+// ---- Kept for web apps still open on the previous production build ----
+// Until this release a course batch could wait for a person, and the web app
+// listed, applied and rejected waiting ones. The app no longer does (nothing
+// waits), but a tab opened before the release still calls these four, so
+// they stay, with the same arguments, for one release
+// (shared/contracts/cached_production_client_compatibility_v1.json). Nothing
+// is waiting for a new client, so the list is empty; a batch an old tab still
+// shows can be applied or rejected there. Delete all four after the next
+// production release.
 export const getCommunityResourceBuilderChangesetStatus = query({
   args: {
     userId: v.optional(v.id("users")),
@@ -401,53 +335,9 @@ export const listPendingCommunityResourceBuilderChangesets = query({
     limit: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
-    const userId = await resolveUserIdForAuthenticatedRequest({
-      ctx,
-      userId: args.userId,
-      authSubject: args.authSubject ?? null,
-    });
-    await requireCommunityManager({
-      ctx,
-      communityId: args.communityId,
-      userId,
-    });
-    const rows = await readLatestCommunityResourceBuilderActionableRows({
-      ctx,
-      communityId: args.communityId,
-    });
-    const nowMs = Date.now();
-    return rows
-      .filter(
-        (changeset) =>
-          !communityResourceBuilderChangesetIsExpired(changeset, nowMs),
-      )
-      .sort((a, b) => b.updatedAt - a.updatedAt)
-      .slice(0, 1)
-      .map((changeset) => {
-        const operations = normalizeCommunityResourceBuilderChangesetOperations(
-          changeset.operations,
-        );
-        const preview = buildCommunityResourceBuilderChangesetPreview(operations);
-        return {
-          ok: true,
-          kind: "community_resource_builder_changeset_pending",
-          changeset_id: normalizeIdValue(changeset._id),
-          community_id: normalizeIdValue(args.communityId),
-          status: changeset.status,
-          summary: changeset.summary,
-          operation_count: operations.length,
-          preview_items: preview.preview_items,
-          preview_total_count: preview.total_count,
-          preview_limit: preview.preview_limit,
-          warning_count:
-            getCommunityResourceBuilderPreflightIssueCount(changeset.preflight),
-          approved_by_current_user: changeset.approvedByUserId
-            ? String(changeset.approvedByUserId) === String(userId)
-            : false,
-          created_at: toIsoString(changeset.createdAt),
-          updated_at: toIsoString(changeset.updatedAt),
-        };
-      });
+    const userId = await resolveUserIdForAuthenticatedRequest({ ctx, userId: args.userId, authSubject: args.authSubject ?? null });
+    await requireCommunityManager({ ctx, communityId: args.communityId, userId });
+    return [];
   },
 });
 
@@ -536,9 +426,8 @@ export const rejectCommunityResourceBuilderChangeset = mutation({
   },
 });
 
-// Applies a staged batch for someone already known to be an owner or admin:
-// the person clicking Apply in the app, or a builder's own AI applying a batch
-// that takes nothing away (stageAndApply... below).
+// Applies a recorded batch for someone already known to be an owner or admin
+// (runCommunityResourceBuilderBatchInternal below).
 async function applyCommunityResourceBuilderChangesetForUser(ctx: any, userId: any, args: { communityId: any; changesetId: any }) {
   const changeset = (await ctx.db.get(args.changesetId as any)) as CommunityResourceBuilderChangesetRow | null;
   if (!changeset || String(changeset.communityId) !== String(args.communityId)) {
@@ -651,11 +540,13 @@ export const applyCommunityResourceBuilderChangeset = mutation({
   },
 });
 
-// A batch from a builder's own AI (the MCP; docs/specs/agent-access-v0.md,
-// slice 4b). Its owner is present and asked for it, so a batch that takes
-// nothing away is applied at once. A batch that deletes a lesson or a course
-// is only staged: a person applies or rejects it in the app, as for the guide.
-export const stageAndApplyCommunityResourceBuilderChangesetInternal = internalMutation({
+// A batch of course changes from an agent: the guide, or a builder's own AI
+// through the MCP (docs/specs/agent-access-v0.md). It is checked and applied
+// here, all or nothing, as the agent sends it. There is no waiting step:
+// agents build in draft and may not publish, unpublish or delete what
+// members can see (communityResourceChangesets.ts), so the course's own
+// Published switch, pressed by a person, is the approval.
+export const runCommunityResourceBuilderBatchInternal = internalMutation({
   args: {
     userId: v.id("users"),
     communityId: v.id("communities"),
@@ -664,19 +555,14 @@ export const stageAndApplyCommunityResourceBuilderChangesetInternal = internalMu
     idempotencyKey: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const destructive = communityResourceChangesetIsDestructive(normalizeCommunityResourceBuilderChangesetOperations(args.operations));
-    const staged = await stageCommunityResourceBuilderChangesetCore({
+    const recorded = await stageCommunityResourceBuilderChangesetCore({
       ctx, userId: args.userId, communityId: args.communityId, summary: args.summary, operations: args.operations,
-      idempotencyKey: args.idempotencyKey ?? null, applyingNow: !destructive,
+      idempotencyKey: args.idempotencyKey ?? null,
     }) as Record<string, any>;
-    if (destructive) {
-      return { ...staged, applied: false, needs_confirmation: true,
-        confirm: "This batch deletes something, so it was not applied. The host applies or rejects it in the app (their guide shows it), within 24 hours." };
-    }
-    // Sent again after it was applied, or expired meanwhile: the answer it already has.
-    if (staged.status !== "staged" && staged.status !== "approved") return { ...staged, applied: staged.status === "applied" };
+    // Sent again after it was applied (or an old one that ran out): the answer it already has.
+    if (recorded.status !== "staged" && recorded.status !== "approved") return { ...recorded, applied: recorded.status === "applied" };
     const applied = await applyCommunityResourceBuilderChangesetForUser(ctx, args.userId,
-      { communityId: args.communityId, changesetId: ctx.db.normalizeId("communityResourceBuilderChangesets", String(staged.changeset_id)) });
+      { communityId: args.communityId, changesetId: ctx.db.normalizeId("communityResourceBuilderChangesets", String(recorded.changeset_id)) });
     return { ...applied, applied: true };
   },
 });

@@ -231,8 +231,6 @@ function buildCallTitle(toolName: string, args: Record<string, unknown> | null):
     const target = resourceId || moduleId;
     return `Read builder item${target ? `: ${target}` : ""}`;
   }
-  if (toolName === "community_resource_builder_stage_changeset") return "Resource changeset";
-  if (toolName === "community_resource_builder_apply_changeset") return "Apply resource changeset";
   if (toolName === "list_dir") return `Listed ${path || "."}`;
   if (toolName === "read") return `Read ${shortPath || path || "file"}`;
   if (toolName === "glob") return `Glob ${pattern || "pattern"}`;

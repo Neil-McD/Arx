@@ -131,12 +131,14 @@ and marked "via AI" for everyone.
 
 Both lanes can list, read, and search the member repository. Both can write
 participation to an exact returned `channels/<slug>/` path. Only the builder lane
-can see `builder/` and send resource changesets there. A builder's own AI
-applies a changeset that takes nothing away as it sends it; one that deletes,
-and every changeset from the guide, is staged for the authenticated product
-Apply/Reject controls. There is no agent capability to apply, approve or
-reject a staged changeset. Builder capabilities are advertised individually
-under the mutation model below.
+can see `builder/` and send resource changesets there. A changeset is
+checked and applied as it is sent, all or nothing, for the guide and a
+builder's own AI alike; nothing waits for a second step. Agents build in
+draft: a changeset may not publish or unpublish a course, or delete a course
+or lesson that is in a published course. Those are a person's clicks in the
+app, and a changeset that tries one is refused whole with a sentence saying
+where the control is. Builder capabilities are advertised individually under
+the mutation model below.
 
 The community-owned agent always uses the member lane, even when its
 operational sponsor is an owner or admin. It publishes with community-agent
@@ -165,14 +167,14 @@ approval capability below does not make the queue writable.
 
 - `channels/<slug>/`: create a post or append a reply in that exact channel.
 - `builder/resources/`: a bounded changeset (up to 25 changes, all or
-  nothing): `create_module`, `edit_module` (including `module_status`),
+  nothing): `create_module` (always a draft), `edit_module` (name and
+  description; a changed `module_status` is refused),
   `create_page`, `edit_page` (with `lesson_links`), `move_resource`,
   `reorder_pages` (every lesson of a course, in order), `reorder_modules`
-  (every course, in order), `delete_page`, `delete_category`. Through a
-  builder's own AI (`external_mcp`) a changeset with no delete is applied at
-  once (`result.applied: true`); with a delete it is staged
-  (`result.needs_confirmation: true`) and a person applies or rejects it in
-  the app within 24 hours. From the guide every changeset is staged.
+  (every course, in order), `delete_page` and `delete_category` (drafts
+  only: a lesson in a draft course, an empty draft course). The answer has
+  `result.applied: true`. In a published course, an edit or a new lesson with
+  content shows to members at once.
 
 `polynet_call` accepts only an exact operation and version returned by
 `capabilities/`. Current operations are:
@@ -288,11 +290,10 @@ owner; an uncertain receipt completion may recover its one committed outcome.
 An observed outcome creates one pending `attach_outcome` request and marks
 metabolism pending; it does not directly promote or validate accepted memory.
 
-A staged builder resource changeset is terminally decided only through the
-authenticated product Apply or Reject controls; those are not agent-callable
-capabilities. A builder's own AI applying its own non-destructive changeset
-as it sends it is the one path that needs no click
-([specs/agent-access-v0.md](specs/agent-access-v0.md), "Builder parity").
+A builder resource changeset has no approval step. The course's Published
+switch, pressed by a person in the app, is what decides whether members see
+the work ([specs/agent-access-v0.md](specs/agent-access-v0.md), "Builder
+parity"). There is no agent capability to publish.
 
 Unknown, undiscoverable, wrong-version, cross-community, and unauthorized
 operations fail closed.
@@ -474,9 +475,9 @@ Acceptance is deliberately fail closed:
 Acceptance proves OAuth discovery, exact five-tool discovery, repository
 navigation, current authority, search/read, real chat write/read/replay,
 retired AI Feed absence, inaccessible-community denial, and—when the actor has
-builder authority—a staged changeset plus an expected `operation_not_found`
-response to an agent terminal-decision call. The changeset remains pending
-product review; this probe neither applies nor rejects it. Run it with a
+builder authority—a changeset that makes one draft course, plus an expected
+`operation_not_found` response to an agent approve, reject or apply call.
+The draft course stays a draft; delete it in the app after the run. Run it with a
 builder identity, or a member identity for a member-lane run. Preserve a separate successful control read of the
 denied community so the certificate proves isolation from a real object rather
 than only missing-path behavior.

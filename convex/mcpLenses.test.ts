@@ -496,7 +496,7 @@ test("a builder's AI makes, renames, describes and orders channels; a member's c
 
 // ---- builder parity, part one: courses and lessons (docs/specs/agent-access-v0.md, slice 4b)
 
-test("a builder's AI changes courses directly; a batch that deletes waits for a person", async () => {
+test("a builder's AI builds courses in draft; it can't publish them or delete what members see", async () => {
   const f = await fixture();
   const communityId = await f.t.run(async (ctx: any) => (await ctx.db.query("communities").withIndex("by_slug", (q: any) => q.eq("slug", "run-club")).first())._id);
   const batch = (who: string, key: string, summary: string, operations: unknown[]) => f.call(who, "polynet_write", {
@@ -528,17 +528,22 @@ test("a builder's AI changes courses directly; a batch that deletes waits for a 
   ])).isError).toBe(false);
   expect(await lessons()).toHaveLength(2);
 
-  // Edit, reorder and publish in one batch.
+  // Edit and reorder in one batch.
   const [course] = await courses();
-  const second = await batch("owner", "b2", "Fix the title, put week 2 first, publish.", [
+  const second = await batch("owner", "b2", "Fix the title, put week 2 first.", [
     { op: "edit_page", resource_id: week1.id, expected_updated_at: week1.updatedAt, title: "Week 1: walk, then run", lesson_links: [] },
     { op: "reorder_pages", module_id: course.id, resource_ids: [week2.id, week1.id] },
-    { op: "edit_module", module_id: course.id, expected_updated_at: course.updatedAt, module_status: "live" },
   ]);
   expect(second.isError, JSON.stringify(second)).toBe(false);
   expect(second.structuredContent.result).toMatchObject({ applied: true });
   expect((await lessons()).map((lesson: any) => [lesson.title, lesson.links.length])).toEqual([["Week 2: longer runs", 0], ["Week 1: walk, then run", 0]]);
-  expect((await courses())[0].status).toBe("live");
+
+  // Publishing is a person's switch: the AI is refused and told where it is.
+  const publishing = await batch("owner", "b2p", "Publish.", [
+    { op: "edit_module", module_id: course.id, expected_updated_at: (await courses())[0].updatedAt, module_status: "live" }]);
+  expect(publishing.isError).toBe(true);
+  expect(JSON.stringify(publishing)).toContain("use the Published switch");
+  expect((await courses())[0].status).toBe("draft");
 
   // An order that leaves a lesson out is refused, and nothing in its batch is applied.
   const stale = await batch("owner", "b3", "Reorder.", [
@@ -548,23 +553,29 @@ test("a builder's AI changes courses directly; a batch that deletes waits for a 
   expect(stale.isError).toBe(true);
   expect(await lessons()).toHaveLength(2);
 
-  // A batch that deletes is not applied: it waits for a person.
-  const now = await lessons();
-  const doomed = now.find((lesson: any) => lesson.title.startsWith("Week 2"));
+  // While the course is a draft, the AI deletes a lesson in it.
+  const drafts = await lessons();
+  const doomed = drafts.find((lesson: any) => lesson.title.startsWith("Week 2"));
   const deleting = await batch("owner", "b4", "Drop week 2.", [{ op: "delete_page", resource_id: doomed.id, expected_updated_at: doomed.updatedAt }]);
   expect(deleting.isError, JSON.stringify(deleting)).toBe(false);
-  expect(deleting.structuredContent.result).toMatchObject({ status: "staged", applied: false, needs_confirmation: true });
-  expect(await lessons()).toHaveLength(2);
-  // While it waits, a safe batch still goes through.
+  expect((await lessons()).map((lesson: any) => lesson.title)).toEqual(["Week 1: walk, then run"]);
   const meanwhile = await batch("owner", "b5", "Add a second course.", [{ op: "create_module", name: "Race day" }]);
   expect(meanwhile.structuredContent.result).toMatchObject({ applied: true });
   await f.call("owner", "polynet_write", { path: "/communities/run-club/builder/resources/", mode: "create",
     content: { summary: "Race day first.", operations: [{ op: "reorder_modules", module_ids: (await courses()).map((row: any) => row.id).reverse() }] }, idempotency_key: "b6" });
   expect((await courses()).map((row: any) => row.name)).toEqual(["Race day", "Your first 5k"]);
-  // The person applies the delete in the app.
-  await f.t.withIdentity({ subject: "owner-subject" }).mutation((api as any).communityResources.applyCommunityResourceBuilderChangeset,
-    { authSubject: "owner-subject", communityId, changesetId: deleting.structuredContent.ref });
-  expect((await lessons()).map((lesson: any) => lesson.title)).toEqual(["Week 1: walk, then run"]);
+
+  // The person publishes the course in the app. From then on the AI can still
+  // edit and add lessons, but not delete one members can see.
+  await f.t.run(async (ctx: any) => ctx.db.patch(ctx.db.normalizeId("communityResourceModules", course.id), { status: "live" }));
+  const [live] = await lessons();
+  const edited = await batch("owner", "b7", "Tidy the title.", [{ op: "edit_page", resource_id: live.id, expected_updated_at: live.updatedAt, title: "Week 1" }]);
+  expect(edited.isError, JSON.stringify(edited)).toBe(false);
+  const [after] = await lessons();
+  const removing = await batch("owner", "b8", "Drop week 1.", [{ op: "delete_page", resource_id: after.id, expected_updated_at: after.updatedAt }]);
+  expect(removing.isError).toBe(true);
+  expect(JSON.stringify(removing)).toContain("members can see it");
+  expect((await lessons()).map((lesson: any) => lesson.title)).toEqual(["Week 1"]);
 
   // A member's AI has no builder folder at all.
   expect((await batch("member", "m1", "Mine.", [{ op: "create_module", name: "Mine" }])).isError).toBe(true);
