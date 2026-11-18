@@ -6,8 +6,8 @@
 // left to Studio, where a person confirms it.
 import { v } from "convex/values";
 import { api, internal } from "./_generated/api";
-import { internalMutation } from "./_generated/server";
-import { communityMembershipRowIsActive, requireCommunityManager } from "./communityCore";
+import { internalMutation, internalQuery } from "./_generated/server";
+import { communityMembershipRowIsActive, getUniqueCommunityMembershipByPair, requireCommunityManager } from "./communityCore";
 
 const refs: { api: any; internal: any } = { api, internal };
 
@@ -66,6 +66,22 @@ export const applyPersonActionForTrustedUserInternal = internalMutation({
       return { banned: true };
     }
     return { removed: true };
+  },
+});
+
+// Where a person's record is in the app's Members page (/members/<key>), for
+// an owner or admin: the membership's id, "owner" for the owner, or null when
+// they aren't a member. An AI is handed this address instead of removing or
+// banning someone itself.
+export const memberRecordKeyInternal = internalQuery({
+  args: { userId: v.id("users"), communityId: v.id("communities"), targetUserId: v.string() },
+  handler: async (ctx, args): Promise<string | null> => {
+    const { community } = await requireCommunityManager({ ctx, communityId: args.communityId, userId: args.userId });
+    const targetUserId = ctx.db.normalizeId("users", args.targetUserId);
+    if (!targetUserId) return null;
+    if (String((community as any).ownerId) === String(targetUserId)) return "owner";
+    const membership = await getUniqueCommunityMembershipByPair({ ctx, communityId: args.communityId, userId: targetUserId });
+    return membership && communityMembershipRowIsActive(membership as any) ? String((membership as any)._id) : null;
   },
 });
 

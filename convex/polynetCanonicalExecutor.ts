@@ -58,6 +58,8 @@ import {
 import { normalizeToolArguments } from "../shared/toolRegistry.ts";
 import { COMMUNITY_CARD_LIMITS, renderCommunityCard, renderMemberTimeline } from "../shared/communityOntology.ts";
 import { executePlatformOperation } from "./platformOperationExecutor.ts";
+import { buildCommunityTabPath } from "../shared/webAppRouteState.ts";
+import { readCanonicalPublicAppOrigin } from "./publicAppUrl.ts";
 
 export type PolynetCanonicalExecutionResult =
   | { ok: true; value: Record<string, unknown> }
@@ -872,9 +874,8 @@ function capabilityDocument(args: {
       required: ["members"], members, result: "result: { results, succeeded, failed }", effects: ["unban_members"] }
     : {
       required: ["members"], ...(args.operation === MEMBERS_BAN_OPERATION ? { optional: ["reason"], reason: "why, for the record (up to 1,000 characters)" } : {}),
-      members, result: "result: { results, succeeded, failed }: a paying member is refused (paid_member_use_studio: removing them cancels their subscription, so a person does it in Studio); the rest still go through",
-      effects: [args.operation === MEMBERS_BAN_OPERATION ? "ban_members" : "remove_members"],
-      forbidden_effects: ["cancel_subscriptions", "remove_admins_unless_owner", "remove_owner"] };
+      members, result: "never done by an AI. The answer is the refusal person_only, with the link in Polynet where the person does it (one member: their record; several: the Members page). Give them the link.",
+      effects: [], forbidden_effects: [args.operation === MEMBERS_BAN_OPERATION ? "ban_members" : "remove_members"] };
   } else if (isCommunityCapability) {
     operationDefinition.input = args.operation === SETTINGS_UPDATE_OPERATION ? {
       required: ["expected_revision"], optional: ["name", "slug", "one_liner", "about", "visibility"],
@@ -884,8 +885,8 @@ function capabilityDocument(args: {
       result: "result: the community as builder/community.json shows it", effects: ["change_community_profile"],
       forbidden_effects: ["pricing", "pictures", "archive"] }
     : args.operation === JOIN_MODE_OPERATION ? {
-      required: ["mode"], mode: "open or approval (a paid community stays paid)",
-      result: "result: { entry_policy, approved_pending_request_count }", effects: ["set_join_mode", "opening_approves_waiting_requests"] }
+      required: ["mode"], mode: "approval (people ask and a host answers) or open. Opening lets in everyone who is waiting and can't be taken back, so an AI never does it: open answers person_only with the link in Polynet where the person does it. A paid community stays paid.",
+      result: "result: { entry_policy, approved_pending_request_count }", effects: ["set_join_mode_to_approval"], forbidden_effects: ["open_the_community"] }
     : args.operation === AGENT_INSTRUCTIONS_OPERATION ? {
       required: ["text"], text: "what the community agent is told about this community (up to 40,000 characters); empty clears it",
       result: "result: { instructions }", effects: ["set_community_agent_instructions"],
@@ -914,8 +915,8 @@ function capabilityDocument(args: {
   } else if (isRemovePostsCapability) {
     operationDefinition.input = { required: ["refs"],
       refs: `a selection of 1 to ${SELECTION_MAX} interaction:root:<id> or interaction:reply:<id> refs from channel or thread listings`,
-      result: "result: { results: [{ ref, ok, removed | code, message }], succeeded, failed }: each post is removed or refused on its own; one already removed counts as removed",
-      effects: ["remove_posts_for_everyone"], forbidden_effects: ["edit_posts", "ban_authors", "remove_from_other_communities"] };
+      result: "never done by an AI: a removed post can't be brought back. The answer is the refusal person_only, with the link in Polynet where the person removes it. Tell them which channel and post.",
+      effects: [], forbidden_effects: ["remove_posts_for_everyone", "edit_posts", "ban_authors"] };
   } else if (isReactCapability) {
     operationDefinition.input = { required: ["ref", "emoji", "on"],
       ref: "interaction:root:<id> or interaction:reply:<id> from a channel or thread listing",
@@ -2663,17 +2664,9 @@ async function executeCanonicalCall(args: {
       return canonicalError("invalid_tool_args",
         `Give refs: 1 to ${SELECTION_MAX} different interaction:root:<id> or interaction:reply:<id> refs.`);
     }
-    // Removing is a state, so a post already removed still counts as removed.
-    return await runSelection({ ...args, target, operation, idempotencyKey, items: refs as string[],
-      decide: async ref => {
-        try {
-          const value = await args.ctx.runMutation((internal as any).communityInteractions.removeInteractionForTrustedModeratorInternal,
-            { userId: args.userId, communityId: target.communityId, ref });
-          return { ref, ok: true, removed: true, ...(value?.alreadyRemoved ? { already_removed: true } : {}) };
-        } catch {
-          return { ref, ok: false, code: "interaction_unavailable", message: "That post isn't one you can remove here." };
-        }
-      } });
+    // A removed post can't be brought back, so a person removes it.
+    return personOnly({ what: refs.length === 1 ? "Removing a post" : `Removing ${refs.length} posts`,
+      where: "open the post in its channel, then Remove in its menu", path: buildCommunityTabPath(target.communitySlug, "chat") });
   }
   if (COMMUNITY_OPERATIONS.includes(operation)) {
     return await executeCommunityOperation({ ...args, target, operation, rawInput, idempotencyKey });
@@ -2682,6 +2675,20 @@ async function executeCanonicalCall(args: {
     return await executeMembersOperation({ ...args, target, operation, rawInput, idempotencyKey });
   }
   return canonicalError("operation_not_found", "Operation is not discoverable or authorized for this community.");
+}
+
+// Agents prepare; a person makes the change that can't be taken back, with
+// the app's own button (docs/specs/agent-access-v0.md). An AI that asks for
+// one of these is not refused silently and nothing is queued: it is told so
+// in one sentence, with the address in the app where the person does it.
+// Community content is other people's writing, and a planted post must never
+// be able to talk an AI into banning someone or deleting something.
+export const PERSON_ONLY_CODE = "person_only";
+function personOnly(args: { what: string; where: string; path: string | null }): PolynetCanonicalExecutionResult {
+  let address = args.path ?? "";
+  try { if (args.path) address = `${readCanonicalPublicAppOrigin()}${args.path}`; } catch { /* the path alone still says where */ }
+  return canonicalError(PERSON_ONLY_CODE,
+    `${args.what} is done by a person in Polynet, not by an AI. Nothing was changed. Give the person this link: ${address} (${args.where}).`);
 }
 
 // What a refused action on one person means, by the domain's code.
@@ -2716,6 +2723,18 @@ async function executeMembersOperation(args: {
       `Give members: 1 to ${SELECTION_MAX} different user:<id> refs, with the inputs the capability lists.`);
   }
   const scope = { userId: args.userId, communityId: target.communityId };
+  if (operation === MEMBERS_REMOVE_OPERATION || operation === MEMBERS_BAN_OPERATION) {
+    // One person: their own record. Several: the Members page, where they are ticked together.
+    const key = userIds.length === 1
+      ? await args.ctx.runQuery((internal as any).communityPeople.memberRecordKeyInternal, { ...scope, targetUserId: userIds[0]! }).catch(() => null)
+      : null;
+    const membersPath = buildCommunityTabPath(target.communitySlug, "members");
+    const verb = operation === MEMBERS_BAN_OPERATION ? "Banning" : "Removing";
+    return personOnly({ what: userIds.length === 1 ? `${verb} a member` : `${verb} ${userIds.length} members`,
+      where: key ? `their record, then ${operation === MEMBERS_BAN_OPERATION ? "Ban" : "Remove"}`
+        : `Members: tick them, then ${operation === MEMBERS_BAN_OPERATION ? "Ban" : "Remove"}`,
+      path: membersPath && key ? `${membersPath}/${key}` : membersPath });
+  }
   return await runSelection({ ...args, lane: "builder", items: (members as string[]).map((ref, i) => ({ ref, userId: userIds[i]! })),
     decide: async ({ ref, userId }) => {
       try {
@@ -2798,6 +2817,11 @@ async function executeCommunityOperation(args: {
       : operation === CHANNEL_DESCRIBE_OPERATION ? "Give channel (its slug) and description."
       : operation === CHANNEL_MOVE_OPERATION ? "Give channel (its slug) and, to put it after another, after (that channel's slug)."
       : `Give text (the handbook is at most ${COMMUNITY_HANDBOOK_MAX_CHARS.toLocaleString("en-US")} characters).`);
+  }
+  // Opening lets in everyone who is waiting, and that can't be taken back.
+  if (operation === JOIN_MODE_OPERATION && rawInput.mode === "open") {
+    return personOnly({ what: "Opening the community to everyone", where: "Members, then who can join",
+      path: buildCommunityTabPath(target.communitySlug, "members") });
   }
   // The receipt is the community's (by id), not its address's: after a rename,
   // the same call at the new address replays the answer.
