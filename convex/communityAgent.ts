@@ -97,9 +97,10 @@ async function resolveRuntimeCommunityPromptContextForUser(args: {
     .map((row: any) => answerLineForGuide({ question: row.question, status: row.status, resultLine: row.resultLine ?? null }));
   // The community stores no time zone of its own, so it is the zone its most
   // recent event was set in (not a pod's call): the guide reads "7am Saturday"
-  // in it. None yet: no zone, and the guide works in UTC as before.
+  // in it. None yet: no zone, and the guide works in UTC as before. A hundred
+  // are read so a run of pod calls doesn't hide the last community-wide one.
   const recentEvents = await args.ctx.db.query("communityEvents")
-    .withIndex("by_community", (q: any) => q.eq("communityId", args.communityId)).order("desc").take(10);
+    .withIndex("by_community", (q: any) => q.eq("communityId", args.communityId)).order("desc").take(100);
   const timeZone: string | undefined = communityWideEvents<any>(recentEvents).find((event) => validTimeZone(event.timezone))?.timezone;
   const communityLens: TalkLens = { lens: lens.name, relation: authority.relation, ...(answers.length > 0 ? { answers } : {}),
     ...(timeZone ? { timeZone } : {}) };

@@ -272,6 +272,9 @@ export const resolveSearchAuthorInternal = internalQuery({
     const name = handle.replace(/\s+/g, " ");
     const rows = await ctx.db.query("communityMemberships")
       .withIndex("by_community", (q) => q.eq("communityId", args.communityId!)).take(AUTHOR_NAME_SCAN_MAX);
+    // More members than were read: one match can't be known to be the only
+    // one, so a name is not guessed at; the handle is asked for instead.
+    if (rows.length >= AUTHOR_NAME_SCAN_MAX) return null;
     const userIds = [community.ownerId, ...rows.filter((row) => communityMembershipRowIsActive(row as any)).map((row) => row.userId)];
     const matches = new Map<string, { userId: any; handle: string | null }>();
     for (const userId of userIds) {

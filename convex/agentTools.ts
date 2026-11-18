@@ -101,8 +101,13 @@ export async function runAgentTool(params: {
     // The retry key is the server's, from this run and this tool call; the
     // settings revision is the one just read (shared/actionTools.ts, GUIDE_FILLS).
     const callId = String(params.toolCallId ?? "").trim() || `${named.name}:${JSON.stringify(params.args ?? {})}`;
+    // Where the server fills in the settings revision, the key carries it: the
+    // same call replayed after it already went through reads a newer revision,
+    // and is then the same settings set again, not a clash with its own key.
+    const settingsRevision = context.community_settings_revision ?? null;
+    const keyedCall = "revision" in named.properties ? `${callId}:r${settingsRevision ?? ""}` : callId;
     const translated = translateActionTool(named, { ...params.args, community: context.community_slug }, Date.now(),
-      { key: guideActionKey(params.runId, callId), settingsRevision: context.community_settings_revision ?? null });
+      { key: guideActionKey(params.runId, keyedCall), settingsRevision });
     return await runAgentTool({ ...params, toolName: translated.toolName, args: translated.input, fromNamedTool: true });
   }
   // The person's own direct messages, in their private talk: not part of a
