@@ -8,7 +8,7 @@
 import { getFunctionName } from "convex/server";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
-import { internalAction, internalQuery } from "./_generated/server";
+import { action, internalQuery } from "./_generated/server";
 import { settleCommunityInferenceFundingSession } from "./founderInferenceRuntime";
 import { founderProviderRequests } from "./founderInferenceUsage";
 import { executeChatToolsAgentLoop } from "./runtimeAgentLoop";
@@ -20,27 +20,31 @@ const refs = internal as any;
 export const readForEvalInternal = internalQuery({
   args: { userId: v.id("users"), communityId: v.id("communities"), sinceMs: v.number() },
   handler: async (ctx, args) => {
-    const user = await ctx.db.get(args.userId);
     const questions = await ctx.db.query("communityGuideQuestions")
       .withIndex("by_community_user_status_createdAt", (q) => q.eq("communityId", args.communityId).eq("userId", args.userId).eq("status", "waiting"))
       .collect();
     return {
-      authSubject: String(user?.authSubject ?? ""),
       questions: questions.filter((row) => row.createdAt >= args.sinceMs)
         .map((row) => ({ kind: row.kind, question: row.question, text: row.text ?? null, items: row.items ?? [] })),
     };
   },
 });
 
-export const runGuideRequestInternal = internalAction({
-  args: { communityId: v.id("communities"), userId: v.id("users"), text: v.string() },
-  handler: async (ctx, args) => {
+// Public so it can be run as a person (`npx convex run ... --identity`): the
+// guide's tools check the person's own sign-in, exactly as on Home. It only
+// ever acts as whoever is signed in, never as someone named in the arguments.
+export const runGuideRequest = action({
+  args: { communityId: v.id("communities"), text: v.string() },
+  handler: async (ctx, args): Promise<any> => {
     if (process.env.POLYNET_ALLOW_SEED !== "1") throw new Error("guide_eval_not_allowed_on_this_deployment");
+    const authSubject = String((await ctx.auth.getUserIdentity())?.subject ?? "").trim();
+    if (!authSubject) throw new Error("guide_eval_sign_in_required");
+    const user = await ctx.runQuery(refs.threads.getUserByAuthSubjectInternal, { authSubject });
+    if (!user) throw new Error("guide_eval_person_not_found");
+    const userId = user._id;
     const startedAt = Date.now();
-    const before = await ctx.runQuery(refs.stagingGuideEval.readForEvalInternal, { userId: args.userId, communityId: args.communityId, sinceMs: startedAt });
-    const authSubject = before.authSubject;
     const context = await ctx.runQuery(refs.communityAgent.resolveRuntimeCommunityPromptContextInternal,
-      { authSubject, userId: args.userId, communityId: args.communityId });
+      { authSubject, userId, communityId: args.communityId });
     const talk = parseTalkLens(context.community_lens);
     const admission = await ctx.runQuery(refs.founderInference.resolveCommunityInferenceFundingAdmissionInternal, { communityId: args.communityId });
     if (admission.ok === false) throw new Error(`guide_eval_ai_unavailable:${admission.code}`);
@@ -61,7 +65,7 @@ export const runGuideRequestInternal = internalAction({
     const result = await executeChatToolsAgentLoop({
       ctx: loopCtx,
       req: new Request("https://guide-eval.invalid/"),
-      userId: String(args.userId),
+      userId: String(userId),
       threadId: null,
       authSubject,
       requestedModelId: COMMUNITY_OWNER_FUNDED_MODEL_ID,
@@ -91,7 +95,7 @@ export const runGuideRequestInternal = internalAction({
         providerRequests: founderProviderRequests(usage), usageComplete: usage.complete, outcomeCode: "guide_eval_completed",
       });
     }
-    const after = await ctx.runQuery(refs.stagingGuideEval.readForEvalInternal, { userId: args.userId, communityId: args.communityId, sinceMs: startedAt });
+    const after = await ctx.runQuery(refs.stagingGuideEval.readForEvalInternal, { userId, communityId: args.communityId, sinceMs: startedAt });
     const short = (value: unknown, max: number) => {
       const text = typeof value === "string" ? value : JSON.stringify(value ?? null);
       return text.length > max ? `${text.slice(0, max)}…` : text;

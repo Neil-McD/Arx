@@ -48,7 +48,7 @@ const ALLOWED = new Map<string, string>([
   ["communityHomeMoments:getHomeMoments", "the older Home: web apps still open on the previous production build call it; delete after the next production release (Nov 18)"],
   ["communityOwnerMoments:getOwnerMoment", "the older Home: web apps still open on the previous production build call it; delete after the next production release (Nov 18)"],
   ["communityOwnerMoments:markOwnerMomentShown", "the older Home: web apps still open on the previous production build call it; delete after the next production release (Nov 18)"],
-  ["stagingGuideEval:runGuideRequestInternal", "operator tool: runs one request through the guide on staging, for measuring it"],
+  ["stagingGuideEval:runGuideRequest", "operator tool: runs one request through the guide on staging, for measuring it"],
   ["stagingSeedBriefLab:seedBriefLabInternal", "operator tool: seeds the staging brief lab"],
   ["stagingSeedSunrise:seedSunriseInternal", "operator tool: seeds the staging Sunrise community"],
   ["stagingSeedSunrise:simulateSunriseLiveInternal", "operator tool: a simulated second member for live site checks"],
