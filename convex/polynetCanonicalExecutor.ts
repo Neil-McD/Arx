@@ -2868,6 +2868,11 @@ async function askPersonFirst(args: {
       if (items!.some(item => item.text === "Now: owner")) {
         return canonicalError("owner_fixed", operation === MEMBERS_ROLE_OPERATION ? "The owner's role can't change." : "The owner can't be removed or banned.");
       }
+      // Only the owner removes or bans an admin (the Members page's rule):
+      // said now, not after the person has been asked and said yes.
+      if (operation !== MEMBERS_ROLE_OPERATION && target.authority.relation !== "owner" && items!.some(item => item.text === "Now: admin")) {
+        return canonicalError("owner_only", "Only the owner removes or bans an admin.");
+      }
       if (operation === MEMBERS_ROLE_OPERATION) question = roleQuestion({ names: items!.map(item => item.who), role });
       else {
         question = memberRemovalQuestion({ names: items!.map(item => item.who), ban: operation === MEMBERS_BAN_OPERATION });
@@ -3153,6 +3158,21 @@ async function executeCommunityOperation(args: {
   const reservation = await reserveMutatingOperation(receiptArgs);
   if (!reservation.ok) return reservation.result;
   if (reservation.status === "completed") return { ok: true, value: reservation.completedValue };
+  // Joining that already needs approval: nothing to change, and said so. The
+  // guide reached for this when asked to open the community (the only join
+  // tool it has); a plain "nothing changed, and opening is theirs to do" stops
+  // it reporting a change it never made. Checked after the receipt, so a retry
+  // of the call that did make the change still gets its own answer back.
+  if (operation === JOIN_MODE_OPERATION && rawInput.mode === "approval") {
+    const settings = await args.ctx.runQuery((internal as any).communityLifecycle.readCommunitySettingsForTrustedManagerInternal,
+      { userId: args.userId, communityId: target.communityId }).catch(() => null);
+    if (settings?.join_mode === "approval") {
+      const message = "Joining already needs approval, so nothing changed. Opening the community to everyone is done by a person in the app: Members, Who can join, then Change.";
+      await failMutatingOperation({ ...receiptArgs, requestFingerprint: reservation.requestFingerprint,
+        attemptToken: reservation.attemptToken, errorCode: "nothing_to_change", errorMessage: message });
+      return canonicalError("nothing_to_change", message);
+    }
+  }
   try {
     // The change and its receipt commit together (communityOperations).
     const applied = await args.ctx.runMutation((internal as any).communityOperations.applyCommunityOperationInternal, {
