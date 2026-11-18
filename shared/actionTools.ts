@@ -49,7 +49,7 @@ const MEMBERS: PlatformOperationJsonSchema = { type: "array", minItems: 1, maxIt
 const EVENT: PlatformOperationJsonSchema = { type: "string", minLength: 1, maxLength: 64,
   description: "The event's parent_event_id from the events listing." };
 const KEY: PlatformOperationJsonSchema = { type: "string", minLength: 1, maxLength: 120,
-  description: "Optional. A name of your own for this one action; sending the same name again replays the first answer instead of doing it twice." };
+  description: "Optional. A name of your own for this one action; sending the same name again replays the first answer instead of doing it twice. Give one when you might retry." };
 
 const EVENT_FIELDS: Record<string, PlatformOperationJsonSchema> = {
   title: TEXT("What the event is called.", 200),
@@ -255,13 +255,16 @@ export function actionToolDefinition(entry: ActionTool) {
   };
 }
 
-// How long a repeat of the very same action counts as a retry when the AI
-// gave it no name of its own.
+// The clock is cut into windows this long; a repeat of the very same action
+// in the same window counts as a retry when the AI gave it no name of its own.
 export const ACTION_TOOL_RETRY_WINDOW_MS = 5 * 60 * 1000;
 
 // The call the executor runs for a named tool. The AI may name the action
-// (idempotency_key); otherwise the same action with the same inputs inside a
-// few minutes is taken as a retry, never done twice.
+// (idempotency_key), which is exact. Otherwise the same action with the same
+// inputs in the same five-minute window is taken as a retry. That catches an
+// immediate retry; one that falls across a window's edge is a new action
+// (posts are still caught by the same-words rule). An AI that must be sure
+// names the action.
 export function translateActionTool(entry: ActionTool, args: Args, nowMs: number): Translated {
   const { idempotency_key: given, ...rest } = args ?? {};
   const translated = entry.translate(rest);

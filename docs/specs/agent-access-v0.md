@@ -149,7 +149,8 @@ changes.
   so the person's own AI app asks them. What only a person does is not a tool.
 - **No bookkeeping.** No version, no target path. The key that stops a
   repeat is optional: without one, the same action with the same inputs
-  inside five minutes is a retry.
+  in the same five-minute window is a retry (an immediate retry is caught;
+  one across a window's edge is not, so an AI that must be sure names it).
 - **Why.** An AI app decides what to show, what to ask its person and what to
   load per tool, by name and label. Five general tools hid all of that: a
   real AI had to fail a call to learn its shape, one "allow" covered every
