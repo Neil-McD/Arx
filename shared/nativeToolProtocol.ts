@@ -46,9 +46,10 @@ export type NativeToolAwareMessage =
           arguments: string;
         };
       }>;
-      // Provider-opaque reasoning items (e.g. ChatGPT encrypted reasoning) that
-      // preceded this assistant output. Re-sent verbatim ahead of the message so
-      // the model resumes its chain of thought instead of re-deriving it.
+      // The model's own thinking before this step, sealed by the provider
+      // (nobody here can read it). Sent back as it came, ahead of the step's
+      // tool calls, so the next step carries on from what it had worked out
+      // instead of starting cold. Kept for the run only, never stored.
       reasoningItems?: Array<Record<string, unknown>>;
     }
   | {
@@ -120,9 +121,11 @@ export function buildAssistantToolCallsMessage(params: {
     toolName: string;
     rawArguments: string;
   }>;
+  reasoningItems?: Array<Record<string, unknown>>;
 }): NativeToolAssistantMessage {
   return {
     role: "assistant",
+    ...(params.reasoningItems?.length ? { reasoningItems: params.reasoningItems } : {}),
     content: typeof params.content === "string" && params.content.trim() ? params.content : null,
     tool_calls: params.toolCalls.map((toolCall) => ({
       id: toolCall.providerCallId,
