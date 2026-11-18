@@ -66,6 +66,7 @@ const schema = read("convex/schema.ts");
 const uiOnlyIntervalFiles = [
   "apps/web/src/components/ChannelRosterPanel.tsx",
   "apps/web/src/components/RuntimeLiveTimeline.tsx",
+  "apps/web/src/v1/SiteDemo.tsx",
   "shared/useCommunityTypingPresence.ts",
   "shared/useDirectMessageTypingPresence.ts",
 ] as const;
