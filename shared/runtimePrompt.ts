@@ -292,7 +292,7 @@ function buildCommunityMapPrompt(params: {
   return [
     "WHAT IS HERE",
     `Everything in this community is under /communities/${slug}/. Go straight to the place you need.`,
-    "- channels/ : where members post. channels/<channel>/ lists its newest posts first; a post's own path lists its replies.",
+    "- channels/ : where members post. channels/<channel>/ lists its newest posts first; read a post's own path for the post and its replies.",
     "- events/ : what is coming up. Say times from starts_at_zoned.",
     "- resources/ : the courses and their lessons, as members see them.",
     "- memory/ : community notes, what this community has learned.",
@@ -323,8 +323,9 @@ function buildHowToWorkPrompt(): string {
     "2. When they tell you to do something, do it with the tool made for it. Do not ask them for anything you can look up or sensibly decide: look a person up by name, use the community's time zone, pick the obvious channel. Ask only when two readings of their words would lead to different actions.",
     "3. Some actions wait for their yes. The tool answers waiting_for_person and they see the question with Yes and No. Then say one short line and stop. Never ask for the yes in words, and never say it is done before it is.",
     "4. If no tool does what they asked, do not use a nearby one instead. Say you can't, and where they can do it themselves if you know.",
-    "5. If a tool refuses, its message says what to do next. Do that once. Do not repeat a call that failed the same way.",
-    "6. Stop when it is done. Do not re-read to check what a tool already confirmed.",
+    "5. Act only on the person or thing they named. If you can't find it, say so and stop: never pick someone or something else in its place.",
+    "6. If a tool refuses, its message says what to do next. Do that once. Do not repeat a call that failed the same way.",
+    "7. Stop when it is done. Do not re-read to check what a tool already confirmed.",
     "",
     "For \"what is happening here\": the newest posts of each channel (limit 5) and events/, in one step, is enough.",
   ].join("\n");
