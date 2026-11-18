@@ -7,7 +7,9 @@ import type { GuideAsk } from "./operationCatalog.ts";
 export const GUIDE_QUESTION_WAIT_MS = 24 * 60 * 60 * 1000;
 // How many posts a question about removing shows by name; the rest are counted.
 export const GUIDE_QUESTION_ITEMS_SHOWN = 100;
-export const GUIDE_QUESTION_TEXT_MAX = 4_000;
+// The person is shown every word that would go out, never a cut: longer
+// than this and the question isn't asked at all.
+export const GUIDE_QUESTION_TEXT_MAX = 12_000;
 export const GUIDE_QUESTION_ITEM_TEXT_MAX = 160;
 
 export type GuideQuestionAnswer = "yes" | "no" | "always";

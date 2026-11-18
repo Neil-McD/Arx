@@ -338,6 +338,10 @@ test("publishing the handbook through the guide shows the exact text and waits f
   const [question] = await w.questions("owner");
   expect(question).toMatchObject({ kind: "change", text: words, canAlways: false });
   expect(await w.answer("owner", question.id, "yes")).toMatchObject({ status: "done", line: "The handbook members see was changed." });
+  // A long handbook is shown whole, never cut.
+  const long = `# Start here\n${"We run at dawn. ".repeat(350)}`.trim();
+  expect(await w.guide("owner", "run-2")("polynet_call", call("community.handbook.approve", { text: long }, "hb-2"))).toMatchObject({ ok: true, value: { status: "waiting_for_person" } });
+  expect((await w.questions("owner"))[0].text).toBe(long);
 });
 
 test("removing or banning a member and opening the community stay the person's, through the guide as through their own AI", async () => {
