@@ -200,8 +200,9 @@ export const answerGuideQuestion = action({
       } else {
         const slug = channelSlugOf(input.path);
         const mode = String(input.mode ?? "create");
+        // Nothing to open once a post is deleted.
         result = { status: "done", line: postResultLine({ mode, channelName: claimed.place ?? slug ?? "the channel" }),
-          path: buildCommunityTabPath(claimed.communitySlug, "chat", null, null, slug) };
+          path: mode === "delete" ? null : buildCommunityTabPath(claimed.communitySlug, "chat", null, null, slug) };
       }
     } catch {
       result = { status: "failed", line: "It couldn't be done just now. Ask your guide to try again.", path: null };

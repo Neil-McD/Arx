@@ -127,6 +127,12 @@ export const seedBriefLabInternal = internalMutation({
     }
 
     const requesterId = await user("felix", "Felix Grant");
+    // Someone asking to join is not a member yet: an earlier approval in a
+    // test is undone here, or the request could never be answered again.
+    for (const membership of await ctx.db.query("communityMemberships")
+      .withIndex("by_community_user", (q: any) => q.eq("communityId", args.communityId).eq("userId", requesterId)).collect()) {
+      await ctx.db.delete(membership._id);
+    }
     const request = await ctx.db.query("communityJoinRequests")
       .withIndex("by_community_user", (q: any) => q.eq("communityId", args.communityId).eq("userId", requesterId)).unique();
     // A join request carries no message (convex/communityJoinRequestCore.ts

@@ -2059,11 +2059,13 @@ test("admission queue advances bounded pages, exact reads and replay without dom
     expect(entries.length).toBeLessThanOrEqual(2);
     for (const entry of entries) {
       found.push(entry.path);
-      expect(Object.keys(entry).sort()).toEqual(["applicant_ref", "created_at", "kind", "path", "ref", "status", "type", "updated_at"]);
+      expect(Object.keys(entry).sort()).toEqual(["applicant", "applicant_ref", "created_at", "kind", "path", "ref", "status", "type", "updated_at"]);
+      // Who is asking, as a host sees them: name, handle and what they wrote about themselves. Nothing else.
+      expect(Object.keys(entry.applicant).sort()).toEqual(["about", "handle", "name"]);
       expect(entry.applicant_ref).toMatch(/^user:applicant-/);
       const read = await f.call("polynet_read", { path: entry.path });
       expect(read, entry.path).toMatchObject({ ok: true }); if (!read.ok) throw new Error("read failed");
-      expect(JSON.parse(String(read.value.body))).toEqual({ ref: entry.ref, applicant_ref: entry.applicant_ref,
+      expect(JSON.parse(String(read.value.body))).toEqual({ ref: entry.ref, applicant_ref: entry.applicant_ref, applicant: entry.applicant,
         status: "pending", created_at: entry.created_at, updated_at: entry.updated_at });
       expect(await f.call("polynet_read", { path: entry.path })).toEqual(read);
     }
