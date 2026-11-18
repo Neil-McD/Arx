@@ -418,7 +418,7 @@ function RosterSurface(props: RosterProps & {
       decidingJoinRequestId={props.joinReview?.decidingJoinRequestId ?? null}
       onApprove={id => void props.joinReview?.onApproveJoinRequest?.(id)}
       onDecline={id => void props.joinReview?.onDenyJoinRequest?.(id)}
-      onMessage={props.onMessageUser} onManage={setKitTarget} refreshKey={kitVersion}
+      onMessage={props.onMessageUser} onManage={setKitTarget} refreshKey={kitVersion} admission={props.admission}
       currentUserId={props.currentUserId ?? null} recordContainer={recordEl}
       getAvatarColor={props.getAvatarColor} getInitials={props.getInitials} /></Suspense>
     <aside ref={setRecordEl} className="community-context-panel members-page-record" aria-label="Member record" />

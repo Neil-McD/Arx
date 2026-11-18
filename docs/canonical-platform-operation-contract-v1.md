@@ -223,7 +223,9 @@ takes `expected_revision` and any of `name`, `slug`, `visibility` (owner) and
 pricing and pictures are carried over (`updateCommunityProfileForTrustedUserInternal`
 over Studio's save). A stale revision is `community_settings_conflict`; an
 admin changing an owner field is `owner_only`. `community.join_mode.set`
-(`open` approves waiting requests), `community.agent.instructions.set`,
+(`approval`; `open` lets in everyone waiting and can't be taken back, so it
+answers `person_only` with where a person does it),
+`community.agent.instructions.set`,
 `community.handbook.save_draft` and `community.handbook.approve` (exactly this
 text; empty withdraws) call Studio's own functions. Each call has a receipt.
 `community.member_experience.request` was retired with custom sites (Nov 13
@@ -231,14 +233,20 @@ text; empty withdraws) call Studio's own functions. Each call has a receipt.
 `operation_not_found`. `builder/community.json` still shows `member_experience`
 (`members_use`, `has_custom_site`).
 
-People (builder lens): `community.members.set_role` (`members`,
-`role`), `.remove`, `.ban` (`reason` optional) and `.unban` take a selection of
-`user:<id>` refs and run Studio's own functions per person
-(`communityPeople.applyPersonActionForTrustedUserInternal`): only the owner
-makes, unmakes or removes admins; the owner can't change. A paying member is
-refused with `paid_member_use_studio` (removal cancels their subscription;
-a person does it in Studio). Each is a state, so a retried item changes
-nothing.
+People (builder lens): `community.members.set_role` (`members`, `role`) and
+`.unban` take a selection of `user:<id>` refs and run Studio's own functions
+per person (`communityPeople.applyPersonActionForTrustedUserInternal`): only
+the owner makes or unmakes admins; the owner can't change. Each is a state,
+so a retried item changes nothing. `.remove` and `.ban` are a person's click:
+they answer `person_only` with the address of the member's record in the app
+(several people: the Members page) and touch nobody.
+
+**What can't be taken back is a person's click.** Removing a post, removing
+or banning a member and opening a closed community are never carried out for
+an AI, and nothing is queued. The answer is the error `person_only`: one
+sentence and the address in Polynet where the person does it
+([specs/agent-access-v0.md](specs/agent-access-v0.md)). Community content is
+untrusted, and no text in it can make an AI do one of these.
 
 Every `polynet_call` answers in the published output shape:
 `{ ok, operation, result, receipt }`. A test lists every role's actions and

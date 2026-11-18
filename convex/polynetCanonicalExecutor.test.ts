@@ -2641,7 +2641,7 @@ test("a moderator reviews a selection of join requests: each is decided on its o
   expect(await call({ requests: [observed(rows[3])] }, "k".repeat(136))).toMatchObject({ ok: false, code: "invalid_tool_args" });
 });
 
-test("moderators remove a selection of posts through their own AI; members and the agent can't", async () => {
+test("an AI never removes a post: a moderator's is handed the link where a person does; members and the agent can't ask", async () => {
   const t = convexTest(schema, modules);
   const f = await createFixture(t);
   const as = (subject: string, userId: any, principalKind: any = "external_mcp") => (toolName: any, input: Record<string, unknown>) => executePolynetCanonicalTool({
@@ -2667,18 +2667,14 @@ test("moderators remove a selection of posts through their own AI; members and t
   expect(await remove(as(f.ownerSubject, f.ownerId, "community_agent"), refs.slice(0, 1))).toMatchObject({ ok: false, code: "operation_not_found" });
   await makeModerator(t, f);
   expect(await capabilities(member)).toEqual(expect.arrayContaining(["community.interaction.remove.json", "community.admission.approve.json"]));
-  const removed = await remove(member, [refs[0], refs[1], "interaction:root:nosuchpost"]);
-  expect(removed, JSON.stringify(removed)).toMatchObject({ ok: true, value: { ok: true, operation: "community.interaction.remove",
-    receipt: { authority_lane: "moderator", relation: "moderator" }, result: { succeeded: 2, failed: 1, results: [
-    { ref: refs[0], ok: true, removed: true }, { ref: refs[1], ok: true, removed: true }, { ref: "interaction:root:nosuchpost", ok: false } ] } } });
-  // The same call replays its receipt; the same key with another selection is refused.
-  const replay = await remove(member, [refs[0], refs[1], "interaction:root:nosuchpost"]);
-  expect(replay).toMatchObject({ ok: true, value: { result: { succeeded: 2, failed: 1 } } });
-  expect(await remove(member, [refs[2]])).toMatchObject({ ok: false, code: "idempotency_key_conflict" });
-  // Removing again under a new key is still removed.
-  expect(await remove(member, [refs[0]], "again")).toMatchObject({ ok: true, value: { result: { succeeded: 1, results: [{ already_removed: true }] } } });
+  // A moderator's AI is told a person removes posts, with where; nothing is removed.
+  const asked = await remove(member, [refs[0], refs[1]]);
+  expect(asked, JSON.stringify(asked)).toMatchObject({ ok: false, code: "person_only" });
+  expect((asked as any).message).toContain("Removing 2 posts is done by a person in Polynet, not by an AI. Nothing was changed.");
+  expect((asked as any).message).toContain("/c/canonical-community/chat");
+  expect((await remove(owner, [refs[2]], "owner")) as any).toMatchObject({ ok: false, code: "person_only" });
   const live = await t.run(async ctx => (await ctx.db.query("communityInteractionRoots").collect()).filter(r => r.status === "live").length);
-  expect(live).toBe(1);
+  expect(live).toBe(3);
   expect(await remove(member, [], "k1")).toMatchObject({ ok: false, code: "invalid_tool_args" });
   expect(await remove(member, [refs[2], refs[2]], "k2")).toMatchObject({ ok: false, code: "invalid_tool_args" });
   expect(await remove(member, ["not-a-ref"], "k3")).toMatchObject({ ok: false, code: "invalid_tool_args" });
@@ -2759,8 +2755,9 @@ test("the published polynet_call schema covers every input any role's actions ac
     await call(memberMcp, "community.channel.mark_read", { channel: "general" }, "a2"),
     await call(memberSite, "community.presence.heartbeat", {}, "a3"),
     await call(memberSite, "community.typing.set", { channel: "general", on: true }, "a4"),
-    await call(memberMcp, "community.interaction.remove", { refs: [ref] }, "a5"),
   ];
+  // What only a person does answers with the refusal, in the error shape.
+  expect(await call(memberMcp, "community.interaction.remove", { refs: [ref] }, "a5")).toMatchObject({ ok: false, code: "person_only" });
   for (const answer of answers) {
     expect(answer.ok, JSON.stringify(answer)).toBe(true);
     for (const key of required) expect((answer as any).value, `${(answer as any).value?.operation} answers ${key}`).toHaveProperty(key);
@@ -2811,6 +2808,12 @@ test("owners and admins run the community itself through their own AI; owner-onl
 
   // How people join, the agent's instructions and the handbook.
   expect(await adminAi.call("community.join_mode.set", { mode: "approval" }, "j1")).toMatchObject({ ok: true, value: { result: { entry_policy: "approval" } } });
+  // Opening lets in everyone who is waiting and can't be taken back: a person does it.
+  const opening = await adminAi.call("community.join_mode.set", { mode: "open" }, "j-open");
+  expect(opening, JSON.stringify(opening)).toMatchObject({ ok: false, code: "person_only" });
+  expect((opening as any).message).toContain("Opening the community to everyone is done by a person in Polynet");
+  expect((opening as any).message).toContain("(Members: Who can join, then Change)");
+  expect(await t.run(async ctx => (await ctx.db.get(f.communityId) as any).entryPolicy)).toBe("approval");
   expect(await owner.call("community.agent.instructions.set", { text: "Keep answers short. Point new runners to the Tuesday easy run." }, "i1"))
     .toMatchObject({ ok: true, value: { result: { instructions: "Keep answers short. Point new runners to the Tuesday easy run." } } });
   expect(await owner.call("community.handbook.save_draft", { text: "# Start here\nCome on Tuesday." }, "h1"))
@@ -2869,7 +2872,7 @@ test("a change to the community and its receipt commit together; a retry after a
   expect(await revision()).toBe(before + 1);
 });
 
-test("people: owners and admins re-role, remove, ban and unban a selection", async () => {
+test("people: an owner's or admin's AI re-roles and unbans; removing and banning are handed to a person with a link", async () => {
   vi.stubEnv("ARX_PUBLIC_APP_URL", "https://polynet.test");
   const t = convexTest(schema, modules);
   const f = await createFixture(t);
@@ -2917,58 +2920,27 @@ test("people: owners and admins re-role, remove, ban and unban a selection", asy
   expect(await owner.call("community.members.set_role", { members: [ref(f.ownerId)], role: "member" }, "r3"))
     .toMatchObject({ ok: true, value: { result: { failed: 1 } } });
 
-  // Remove: a paying member is left to Studio; the free one goes; again is still gone.
-  const removed = await adminAi.call("community.members.remove", { members: [ref(extra.payer.userId), ref(extra.quiet.userId)] }, "rm1");
-  expect(removed, JSON.stringify(removed)).toMatchObject({ ok: true, value: { result: { succeeded: 1, failed: 1, results: [
-    { member: ref(extra.payer.userId), ok: false, code: "paid_member_use_studio" }, { member: ref(extra.quiet.userId), ok: true, removed: true } ] } } });
-  expect(await adminAi.call("community.members.remove", { members: [ref(extra.quiet.userId)] }, "rm2"))
-    .toMatchObject({ ok: true, value: { result: { results: [{ ok: true, already_gone: true }] } } });
+  // Removing and banning are a person's click: the AI is handed the link, and nobody is touched.
   const active = (id: any) => t.run(async ctx => (await ctx.db.query("communityMemberships").collect()).some(m => String(m.userId) === String(id) && m.state === "active"));
-  expect(await active(extra.payer.userId)).toBe(true);
-  expect(await active(extra.quiet.userId)).toBe(false);
-  // An admin can't remove an admin.
-  expect(await adminAi.call("community.members.remove", { members: [ref(admin.userId)] }, "rm3"))
-    .toMatchObject({ ok: true, value: { result: { failed: 1 } } });
-
-  // Ban, then unban.
-  expect(await owner.call("community.members.ban", { members: [ref(f.memberId)], reason: "Spam" }, "b1"))
-    .toMatchObject({ ok: true, value: { result: { succeeded: 1, results: [{ banned: true }] } } });
-  expect(await active(f.memberId)).toBe(false);
-  expect(await t.run(async ctx => (await ctx.db.query("communityBlocks" as any).collect()).length)).toBe(1);
-  expect(await owner.call("community.members.unban", { members: [ref(f.memberId)] }, "u1")).toMatchObject({ ok: true, value: { result: { succeeded: 1 } } });
-
-  // A selection cut off after a removal: the person rejoins, and the retry
-  // replays their receipt instead of removing them again.
-  const solo = await t.run(async ctx => {
-    const userId = await ctx.db.insert("users", { authSubject: "solo-subject", displayName: "solo", handle: "solo", normalizedHandle: "solo", createdAt: 1, updatedAt: 1 });
-    const membershipId = await ctx.db.insert("communityMemberships", { communityId: f.communityId, userId, role: "member", accessSource: "free_grant",
-      state: "active", activationSequence: 1, activatedAt: 1, createdAt: 1, updatedAt: 1 });
-    return { userId, membershipId };
-  });
-  const original = (completeCanonicalOperationReceiptInternal as any)._handler;
-  const crash = vi.spyOn(completeCanonicalOperationReceiptInternal as any, "_handler").mockImplementation(async (ctx: any, a: any) => {
-    if (a.idempotencyKey === "rm-crash") throw new Error("simulated_completion_failure");
-    return original(ctx, a);
-  });
-  await expect(adminAi.call("community.members.remove", { members: [ref(solo.userId)] }, "rm-crash")).rejects.toThrow();
-  crash.mockRestore();
-  expect(await active(solo.userId)).toBe(false);
-  await t.run(ctx => ctx.db.patch(solo.membershipId, { state: "active", revokedAt: undefined, revokedReason: undefined }));
-  await expireCanonicalReceipt(t, { toolName: "polynet_call", idempotencyKey: "rm-crash" });
-  expect(await adminAi.call("community.members.remove", { members: [ref(solo.userId)] }, "rm-crash"))
-    .toMatchObject({ ok: true, value: { result: { succeeded: 1, results: [{ ok: true, deduped: true }] } } });
-  expect(await active(solo.userId)).toBe(true);
-
-  // An older membership row without the active field still counts as active.
-  const legacy = await t.run(async ctx => {
-    const userId = await ctx.db.insert("users", { authSubject: "legacy-subject", displayName: "legacy", handle: "legacy", normalizedHandle: "legacy", createdAt: 1, updatedAt: 1 });
-    await ctx.db.insert("communityMemberships", { communityId: f.communityId, userId, role: "member", state: "active", accessSource: "free_grant",
-      activationSequence: 1, activatedAt: 1, createdAt: 1, updatedAt: 1 } as any);
-    return userId;
-  });
-  expect(await owner.call("community.members.remove", { members: [ref(legacy)] }, "legacy-rm"))
-    .toMatchObject({ ok: true, value: { result: { succeeded: 1, results: [{ removed: true }] } } });
-  expect(await t.run(async ctx => (await ctx.db.query("communityMemberships").collect()).find(m => String(m.userId) === String(legacy))!.state === "active")).toBe(false);
+  const one = await adminAi.call("community.members.remove", { members: [ref(extra.quiet.userId)] }, "rm1");
+  expect(one, JSON.stringify(one)).toMatchObject({ ok: false, code: "person_only" });
+  expect((one as any).message).toBe(`Removing a member is done by a person in Polynet, not by an AI. Nothing was changed. Give the person this link: https://polynet.test/c/canonical-community/members/${extra.quiet.membershipId} (their record: Manage, then Remove).`);
+  const several = await adminAi.call("community.members.remove", { members: [ref(extra.payer.userId), ref(extra.quiet.userId)] }, "rm2");
+  expect((several as any).message).toContain("Removing 2 members is done by a person");
+  expect((several as any).message).toContain("https://polynet.test/c/canonical-community/members (Members: open each person, Manage, then Remove)");
+  const banned = await owner.call("community.members.ban", { members: [ref(f.memberId)], reason: "Spam" }, "b1");
+  expect(banned, JSON.stringify(banned)).toMatchObject({ ok: false, code: "person_only" });
+  expect((banned as any).message).toContain("Banning a member is done by a person");
+  expect((banned as any).message).toContain("(their record: Manage, then Ban)");
+  // Someone who isn't a member has no record to point at: the Members page.
+  expect(((await owner.call("community.members.ban", { members: [ref(extra.outsider)] }, "b2")) as any).message)
+    .toContain("https://polynet.test/c/canonical-community/members (Members: open each person, Manage, then Ban)");
+  for (const id of [extra.quiet.userId, extra.payer.userId, f.memberId]) expect(await active(id)).toBe(true);
+  expect(await t.run(async ctx => (await ctx.db.query("communityBlocks" as any).collect()).length)).toBe(0);
+  // A moderator's AI can't ask at all.
+  expect(await modAi.call("community.members.ban", { members: [ref(f.memberId)] }, "b-mod")).toMatchObject({ ok: false });
+  // Lifting a ban takes nothing from anyone, so an AI still does it.
+  expect(await owner.call("community.members.unban", { members: [ref(f.memberId)] }, "u1")).toMatchObject({ ok: true });
 
   // Bad selections are refused whole.
   expect(await owner.call("community.members.remove", { members: ["not-a-ref"] }, "x1")).toMatchObject({ ok: false, code: "invalid_tool_args" });
