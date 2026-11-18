@@ -60,7 +60,7 @@ export const cleanUpAfterEvalInternal = internalMutation({
     // A staging table small enough to read whole; no index runs by community alone.
     const waiting = (await ctx.db.query("communityGuideQuestions").collect())
       .filter((row) => row.communityId === args.communityId && row.status === "waiting" && row.createdAt >= args.sinceMs);
-    for (const row of waiting) await ctx.db.patch(row._id, { status: "declined", answeredAt: Date.now() } as any);
+    for (const row of waiting) await ctx.db.patch(row._id, { status: "declined", dropped: true, answeredAt: Date.now() } as any); // dropped: not an answer the person gave, so the guide is never told "they said no"
     removed.questions = waiting.length;
     if (args.community && typeof args.community === "object") await ctx.db.replace(args.communityId, args.community);
     return removed;
