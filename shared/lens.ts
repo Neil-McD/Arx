@@ -12,7 +12,8 @@
 //   channel) or the worker (nobody present; it reads what the server hands it
 //   and never calls the executor).
 // Moderating (reviewing join requests, removing posts) is a permission a
-// member or builder may hold through their own AI, not a lens.
+// member or builder may hold, not a lens: it counts through their own AI and
+// in their private talk with the guide alike.
 //
 // Scope: every lens sees the community. The guide working inside a pod (tagged
 // in its room) also sees that one pod: its facts and its room, and no other
@@ -38,7 +39,7 @@ export type LensName =
 export type Lens = {
   name: LensName;
   family: LensFamily | null;
-  // Moderation permissions, held only through someone's own AI.
+  // Moderation permissions, for a person through their own AI or the guide.
   reviewsJoins: boolean;
   moderatesPosts: boolean;
   // The pod (its room's id) the guide is working in, for this run only.
@@ -55,6 +56,10 @@ export const LENS_FAMILY: Record<LensName, LensFamily | null> = {
   worker: "community",
   retired: null,
 };
+
+// A person working through their own AI or the guide in a private talk: the
+// two doors do the same things (docs/specs/agent-access-v0.md).
+const PERSON_LENSES: LensName[] = ["member_private", "member_own_ai", "builder_private", "builder_own_ai"];
 
 // The lens of one call, from who is calling, where from and their authority.
 export function resolveLens(args: {
@@ -73,12 +78,12 @@ export function resolveLens(args: {
     // A private talk happens only in the dock.
     name = args.evidenceSurface !== "member_agent_dock" ? "retired" : builder ? "builder_private" : "member_private";
   } else name = builder ? "builder_own_ai" : "member_own_ai";
-  const ownAi = name === "member_own_ai" || name === "builder_own_ai";
+  const person = PERSON_LENSES.includes(name);
   return {
     name,
     family: LENS_FAMILY[name],
-    reviewsJoins: ownAi && args.authority.canReviewJoinRequests === true,
-    moderatesPosts: ownAi && args.authority.canModerateContent === true,
+    reviewsJoins: person && args.authority.canReviewJoinRequests === true,
+    moderatesPosts: person && args.authority.canModerateContent === true,
     podRoomId: name === "guide_public" && args.podRoomId ? String(args.podRoomId) : null,
   };
 }
@@ -132,19 +137,21 @@ export type LensAction =
   | "builder_change";       // members.* and community settings
 
 export const LENS_CALLS: Record<LensAction, LensName[]> = {
-  // Speaking for the member (their reaction, their progress): only their own
-  // tools; the guide suggests and the member acts.
-  react: ["member_own_ai", "builder_own_ai", "member_site"],
-  lesson_done: ["member_own_ai", "builder_own_ai", "member_site"],
+  // The member's own reaction and progress: their own tools, and the guide
+  // when they tell it to.
+  react: [...PERSON_LENSES, "member_site"],
+  lesson_done: [...PERSON_LENSES, "member_site"],
   mark_read: MEMBERS_AND_BUILDERS,
   // That a person is here right now: only their own open site.
   presence: ["member_site"],
   // The guide remembers a member only in their own private talk.
   personal_memory: ["member_private", "builder_private"],
-  // Decisions about people and others' posts: only from a harness the person
-  // operates directly, with the permission.
-  review_joins: ["member_own_ai", "builder_own_ai"],
-  remove_posts: ["member_own_ai", "builder_own_ai"],
+  // Decisions about people and others' posts, with the permission. Through
+  // the guide a removal waits for the person's yes, every time
+  // (shared/operationCatalog.ts, guideAskFor); through their own AI it is
+  // refused with a link, because Polynet can't show its question there.
+  review_joins: PERSON_LENSES,
+  remove_posts: PERSON_LENSES,
   builder_change: ["builder_own_ai"],
 };
 
@@ -196,7 +203,12 @@ export function guideRunLens(evidenceSurface: string | null | undefined): "guide
 export type TalkLens = {
   lens: "member_private" | "builder_private";
   relation: "owner" | "admin" | "moderator" | "member";
+  // What the person answered to the guide's questions since it last spoke
+  // (convex/communityGuideQuestions.ts), one plain line each.
+  answers?: string[];
 };
+
+export const TALK_LENS_ANSWERS_MAX = 5;
 
 const RELATIONS = new Set(["owner", "admin", "moderator", "member"]);
 
@@ -204,7 +216,10 @@ export function parseTalkLens(value: unknown): TalkLens | null {
   const record = value && typeof value === "object" ? value as Record<string, unknown> : {};
   const lens = record.lens === "member_private" || record.lens === "builder_private" ? record.lens : null;
   const relation = RELATIONS.has(String(record.relation)) ? record.relation as TalkLens["relation"] : null;
-  return lens && relation ? { lens, relation } : null;
+  const answers = (Array.isArray(record.answers) ? record.answers : [])
+    .filter((line): line is string => typeof line === "string" && line.trim().length > 0)
+    .slice(0, TALK_LENS_ANSWERS_MAX).map((line) => line.trim().slice(0, 300));
+  return lens && relation ? { lens, relation, ...(answers.length > 0 ? { answers } : {}) } : null;
 }
 
 // What the guide is told about the lens it is working in. Orientation only:
@@ -212,7 +227,9 @@ export function parseTalkLens(value: unknown): TalkLens | null {
 export function renderTalkLensForPrompt(talk: TalkLens | null | undefined): string | null {
   if (!talk) return null;
   const builder = talk.lens === "builder_private";
-  const does = (Object.keys(LENS_CALLS) as LensAction[]).filter((action) => LENS_CALLS[action].includes(talk.lens));
+  const moderates = talk.relation !== "member";
+  const does = (Object.keys(LENS_CALLS) as LensAction[]).filter((action) => LENS_CALLS[action].includes(talk.lens) &&
+    (moderates || (action !== "review_joins" && action !== "remove_posts")));
   return [
     "COMMUNITY_LENS_AUTHORITY",
     `Lens: ${talk.lens}. You are talking privately with ${talk.relation === "member" ? "a member" : `the community's ${talk.relation}`}.`,
@@ -220,7 +237,10 @@ export function renderTalkLensForPrompt(talk: TalkLens | null | undefined): stri
       ? "You can see what builders see: the builder records, every member's plan and notes, and the guide's memory."
       : "You can see what a member sees, their own context and the guide's memory. Never another member's plan, payments or notes.",
     `You can act for them on: ${does.length > 0 ? does.join(", ") : "nothing"}.`,
-    "Reviewing join requests, removing posts and changing members or settings are done by the person through their own AI, never in this talk.",
+    "When they tell you to do one of these, do it and say what you did. Posting or replying under their name, and removing posts, wait for their yes: call the tool as usual, and when it answers waiting_for_person the person is shown your exact words (or the posts) with Yes and No above the box where they type. Then say one short line and stop; never ask for the yes in words, and never say it is done before it is.",
+    ...(moderates ? ["For people asking to join, read builder/ first, say what stands out about each, and approve or decline the ones they name (or all of them, if they say so)."] : []),
+    "Changing members or settings is done by the person in the app or through their own AI, never in this talk.",
+    ...(talk.answers?.length ? ["Since you last spoke, the person answered your questions:", ...talk.answers.map((line) => `- ${line}`)] : []),
     "This is orientation only. Backend checks and your tools remain authoritative.",
   ].join("\n");
 }

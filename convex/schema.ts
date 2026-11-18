@@ -1787,6 +1787,41 @@ export default defineSchema({
     .index("by_community_status_createdAt", ["communityId", "status", "createdAt"])
     .index("by_community_createdAt", ["communityId", "createdAt"]),
 
+  // What the guide asked a person before doing something for them in their
+  // private talk (shared/operationCatalog.ts, guideAskFor): the exact call,
+  // held until they answer above the box where they type. Yes runs it as them.
+  communityGuideQuestions: defineTable({
+    communityId: v.id("communities"),
+    userId: v.id("users"),
+    kind: v.union(v.literal("post"), v.literal("remove")),
+    toolName: v.string(),
+    // The call as the guide made it, run unchanged on yes.
+    inputJson: v.string(),
+    question: v.string(),
+    // What the person is shown: the words, or the posts.
+    text: v.optional(v.string()),
+    items: v.optional(v.array(v.object({ who: v.string(), text: v.string() }))),
+    status: v.union(v.literal("waiting"), v.literal("running"), v.literal("done"), v.literal("declined"), v.literal("failed")),
+    // What happened, in one line, and where to see it.
+    resultLine: v.optional(v.string()),
+    resultPath: v.optional(v.string()),
+    runId: v.optional(v.string()),
+    createdAt: v.number(),
+    answeredAt: v.optional(v.number()),
+    // Dropped because the person moved on to another turn, not answered.
+    dropped: v.optional(v.boolean()),
+  })
+    .index("by_community_user_status_createdAt", ["communityId", "userId", "status", "createdAt"])
+    .index("by_community_user_answeredAt", ["communityId", "userId", "answeredAt"]),
+
+  // What a person lets the guide do for them without asking, per community.
+  communityGuideAlwaysAllowed: defineTable({
+    communityId: v.id("communities"),
+    userId: v.id("users"),
+    kind: v.literal("post"),
+    createdAt: v.number(),
+  }).index("by_community_user_kind", ["communityId", "userId", "kind"]),
+
   // One review, as its record: what it read, what it changed and why, and
   // what it cost. Builders read these and can undo one.
   agentWorkRuns: defineTable({

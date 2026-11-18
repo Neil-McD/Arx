@@ -2296,6 +2296,36 @@ export const deleteCommunityInteractionMessage = mutation({
 // only, so a site's own code never reaches it): a post of the session's own
 // community, by ref, that its member may remove as a moderator.
 
+// A moderator's removal of anyone's post in their community, by ref: run
+// only after the person said yes to the guide's question about these posts
+// (convex/polynetCanonicalExecutor.ts, askPersonFirst).
+async function loadModerationTarget(ctx: any, args: { communityId: any; ref: string }) {
+  const match = /^interaction:(root|reply):([A-Za-z0-9_-]{1,64})$/.exec(String(args.ref ?? ""));
+  if (!match) return null;
+  const targetType = match[1] as "root" | "reply";
+  const id = ctx.db.normalizeId(targetType === "root" ? "communityInteractionRoots" : "communityInteractionReplies", match[2]);
+  if (!id) return null;
+  const target = (await ctx.db.get(id)) as InteractionRootRow | InteractionReplyRow | null;
+  if (!target || normalizeIdValue(target.communityId) !== normalizeIdValue(args.communityId)) return null;
+  return { targetType, target };
+}
+
+export const removeInteractionForTrustedModeratorInternal = internalMutation({
+  args: { userId: v.id("users"), communityId: v.id("communities"), ref: v.string() },
+  handler: async (ctx, args) => {
+    const found = await loadModerationTarget(ctx, args);
+    if (!found) throw new Error("interaction_target_not_found");
+    // Already removed: still removed (a retried selection), for a moderator.
+    if (found.target.status === "deleted") {
+      await requireCommunityModerator({ ctx, communityId: args.communityId, userId: args.userId });
+      return { ok: true, alreadyRemoved: true };
+    }
+    return await deleteCommunityInteractionMessageCore(ctx, {
+      targetType: found.targetType, targetId: String(found.target._id),
+    }, args.userId, true);
+  },
+});
+
 export const deleteOwnCommunityInteractionMessageForTrustedUserInternal = internalMutation({
   args: { ...deleteTargetArgs, trustedUserId: v.id("users") },
   handler: (ctx, { trustedUserId, ...args }) => deleteCommunityInteractionMessageCore(ctx, args, trustedUserId, false),

@@ -34,7 +34,9 @@ export type LiveQueryName =
   | "communityMemberRecords:getCommunityMemberSummary"
   | "communityResources:listCommunityResources"
   | "communityResources:listCommunityResourceModules"
-  | "communityNotes:listCommunityNotes";
+  | "communityNotes:listCommunityNotes"
+  | "communityGuideQuestions:listGuideQuestions"
+  | "communityGuideQuestions:getGuideAlwaysAllowed";
 
 export type LiveResult<T> = { data: T | undefined; error: unknown };
 const NOTHING: LiveResult<never> = { data: undefined, error: null };

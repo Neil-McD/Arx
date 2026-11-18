@@ -38,9 +38,8 @@ export const TOOL_OPERATIONS = {
   "polynet_search": entry("member", "read", "search"),
   // polynet_write on a channel: a post or a reply, or a change to your own.
   "polynet_write:channels": entry("member", "write", "post"),
-  // polynet_write under builder/: a batch of changes to courses and lessons.
-  // A builder's own AI applies it at once unless it deletes something; then,
-  // and always from the guide, it is staged for a person's click
+  // polynet_write under builder/: a batch of changes to courses and lessons,
+  // made in draft. Publishing, and deleting what is live, are a person's
   // (convex/communityResourceChangesets.ts).
   "polynet_write:builder": entry("builder", "write", "builder_change"),
   "polynet_write:builder:delete": entry("builder", "destroy", "builder_change"),
@@ -86,6 +85,28 @@ export const WORKER_OPERATIONS = {
   "brief.write": entry("worker", "write", "none", "paid"),
   "reply.draft": entry("worker", "write", "none", "paid"),
 } satisfies Record<string, OperationEntry>;
+
+// ---- what the guide asks the person before doing
+//
+// The guide in a private talk does what the person tells it. It asks only
+// when the question says something the person doesn't already know:
+// - "post": words it wrote go out under their name (a post, a reply, an edit).
+//   They see the words. A person may switch this to "always allow".
+// - "remove": it can't be taken back (removing posts, deleting their own).
+//   Asked every time.
+// Everything else it may do (react, mark a lesson done, approve or decline
+// people) it does when told. A person's own AI is not asked by Polynet: it
+// has its own person watching it.
+export type GuideAsk = "post" | "remove";
+export const GUIDE_ASK_ALWAYS_ALLOWABLE: Record<GuideAsk, boolean> = { post: true, remove: false };
+
+export function guideAskFor(args: { toolName: string; operation?: string | null; mode?: string | null; localPath?: string | null }): GuideAsk | null {
+  if (args.toolName === "polynet_call") {
+    return callOperation(String(args.operation ?? ""))?.effect === "destroy" ? "remove" : null;
+  }
+  if (args.toolName !== "polynet_write" || !/^\/channels\//.test(String(args.localPath ?? ""))) return null;
+  return args.mode === "delete" ? "remove" : "post";
+}
 
 export type CallOperationName = keyof typeof CALL_OPERATIONS;
 export const CALL_OPERATION_NAMES = Object.keys(CALL_OPERATIONS) as CallOperationName[];

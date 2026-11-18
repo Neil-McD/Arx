@@ -663,6 +663,27 @@ css += """
 .app .gacts{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:12px}
 .app .gacts small{margin-left:auto;font-size:12px;color:var(--ink3)}
 :where(:root[data-layout="phone"]) .app .gacts small{margin-left:0;flex-basis:100%}
+/* The guide's question (KitGuideAsks), above the box where you type: what it
+   would do, in full, then Yes, No and for posts Always allow. After the
+   click, one line saying what happened. */
+.app .gask{display:flex;flex-direction:column;gap:8px;margin-bottom:10px}
+.app .gbox{border:1px solid rgba(var(--au),.42);border-radius:14px;background:var(--panel);padding:13px 16px 14px;box-shadow:0 18px 40px -26px rgba(0,0,0,.7)}
+.app .gbox h3{display:flex;align-items:center;gap:8px;margin:0;font-size:14.5px;font-weight:550;color:var(--ink)}
+.app .gbox h3 svg{flex:none;color:var(--aurora-ink)}
+.app .gwhat{margin:10px 0 0;padding:11px 13px;border-radius:10px;border:1px solid var(--line);background:var(--s1);font-size:14.5px;line-height:1.55;color:var(--ink);white-space:pre-wrap;overflow-wrap:anywhere;max-height:220px;overflow-y:auto}
+.app ul.gwhat{list-style:none;white-space:normal;display:flex;flex-direction:column;gap:8px;font-size:13.5px}
+.app ul.gwhat li{display:grid;grid-template-columns:minmax(0,120px) minmax(0,1fr);gap:12px}
+.app ul.gwhat li b{font-weight:550;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.app ul.gwhat li span{color:var(--ink2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.app .gdid{display:flex;align-items:center;gap:10px;padding:8px 8px 8px 13px;border-radius:10px;border:1px solid var(--line2);background:var(--panel);font-size:13px;color:var(--ink)}
+.app .gdid span{flex:1;min-width:0}
+.app .gdid.bad{color:var(--bad)}
+.app .gopen{font-size:12.5px;font-weight:500;color:var(--aurora-ink);cursor:pointer;text-decoration:none}
+.app .gopen:hover{text-decoration:underline}
+.app button.gx{display:grid;place-items:center;width:24px;height:24px;border-radius:6px;color:var(--ink3);cursor:pointer}
+.app button.gx:hover{background:var(--s2);color:var(--ink)}
+:where(:root[data-layout="phone"]) .app ul.gwhat li{grid-template-columns:minmax(0,1fr)}
+:where(:root[data-layout="phone"]) .app ul.gwhat li{gap:1px}
 :where(:root[data-layout="phone"]) .app .nyou{max-width:none}
 :where(:root[data-layout="phone"]) .app .nperson{grid-template-columns:28px minmax(0,1fr)}
 :where(:root[data-layout="phone"]) .app .nbtns{grid-column:2}
