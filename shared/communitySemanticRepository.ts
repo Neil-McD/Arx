@@ -397,10 +397,12 @@ export function parsePolynetSemanticPath(value: unknown) {
       value !== POLYNET_BUILDER_RESOURCES_DIRECTORY_PATH) ||
     value.split("/").some((part) => part === "." || part === "..")
   ) {
-    return semanticError(
-      "invalid_selector",
-      "path must be canonical and traversal-free.",
-    );
+    // A folder Polynet doesn't have reads as one, not as a malformed path.
+    const wellFormed = value.startsWith("/") && !value.includes("//") && !value.includes("%") &&
+      !value.split("/").some((part) => part === "." || part === "..");
+    return wellFormed
+      ? semanticError("semantic_not_found", "There's no folder at that path. List its parent and use only the paths it returns.")
+      : semanticError("invalid_selector", "path must be canonical and traversal-free.");
   }
   const memberProfile = parseMemberProfilePath(value);
   if (memberProfile) {
