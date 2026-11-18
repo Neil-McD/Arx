@@ -14,7 +14,8 @@ import {
   toIsoString,
 } from "./communityCore";
 import { derivePolynetHumanAuthority } from "../shared/polynetAuthority";
-import { resolveLens, type TalkLens } from "../shared/lens";
+import { resolveLens, TALK_LENS_ANSWERS_MAX, type TalkLens } from "../shared/lens";
+import { answerLineForGuide } from "../shared/guideQuestions";
 
 function normalizeCommunitySystemPrompt(raw: unknown): string {
   const prompt = String(raw ?? "").trim();
@@ -83,7 +84,16 @@ async function resolveRuntimeCommunityPromptContextForUser(args: {
   }
   const lens = resolveLens({ principalKind: "community_agent_for_member", evidenceSurface: "member_agent_dock", authority });
   if (lens.name !== "member_private" && lens.name !== "builder_private") throw new Error("community_entitlement_required");
-  const communityLens: TalkLens = { lens: lens.name, relation: authority.relation };
+  // What the person answered to the guide's questions in the last half hour
+  // (convex/communityGuideQuestions.ts), so it knows what was done.
+  const answered = await args.ctx.db.query("communityGuideQuestions")
+    .withIndex("by_community_user_answeredAt", (q: any) => q.eq("communityId", args.communityId).eq("userId", args.userId).gt("answeredAt", Date.now() - 30 * 60 * 1000))
+    .order("desc").take(20);
+  const answers = answered
+    .filter((row: any) => !row.dropped && (row.status === "done" || row.status === "declined" || row.status === "failed"))
+    .slice(0, TALK_LENS_ANSWERS_MAX).reverse()
+    .map((row: any) => answerLineForGuide({ question: row.question, status: row.status, resultLine: row.resultLine ?? null }));
+  const communityLens: TalkLens = { lens: lens.name, relation: authority.relation, ...(answers.length > 0 ? { answers } : {}) };
   const config = selectPrimaryCommunityAgentConfigRow(
     await listCommunityAgentConfigRows(args.ctx, args.communityId),
   );

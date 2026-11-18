@@ -2508,6 +2508,14 @@ exchange rather than everything ever said.
 
 ## Thirty-Seventh Implementation Slice: The Agent Drafts, The Member Posts
 
+Changed Nov 18 2026 (docs/specs/agent-access-v0.md, "The guide does what
+your own AI does, and asks first"): in a private talk (`ask`,
+`ask_in_conversation`) `channelWrites` is `asks_person`. The guide's channel
+write is saved and answered `waiting_for_person`; the member sees the exact
+words and their yes posts it under their name, marked "via AI". The
+executor's second lock is that question, not a refusal. A tag stays
+`draft_only`. What follows describes the slice as it first shipped.
+
 Goal: the community only ever sees a member speak as themselves. The agent
 never posts, replies, edits or deletes in a channel for a member.
 

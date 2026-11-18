@@ -25,6 +25,7 @@ import { StripeConnectCountrySelect } from "./StripeConnectCountrySelect";
 import { StripeSetupButton } from "./StripeSetupButton";
 import { WebCommunityAiAgentSection } from "./WebCommunityAiAgentSection";
 import { WebCommunityAiRulesEditor } from "./WebCommunityAiRulesEditor";
+import { GuideAllowedSettings } from "./GuideAllowedSettings";
 import {
   platformTabId,
   platformTabPanelId,
@@ -963,6 +964,7 @@ function CommunityMemberSettingsSection({
               onChange={(checked) => void actions.handleToggleCommunityMute(checked)} />
           </SettingsRow>
         </SettingsGroup>
+        <GuideAllowedSettings communityId={activeCommunity.id} session={session} />
         <CommunityMyPlanSection communityId={activeCommunity.id} session={session} ensureSession={ensureSession} />
         <SettingsGroup label="Danger zone" tone="danger">
           <SettingsRow label={`Leave ${activeCommunity.name}`} help="You lose access to it. You can join again later.">
@@ -1327,6 +1329,10 @@ export function WebCommunitySettingsSection(props: WebCommunitySettingsSectionPr
               ) : null}
               {selectedSettingsPane === "agent" ? (
               <WebCommunityAiAgentSection {...aiAgentProps} embedded />
+              ) : null}
+              {/* What the guide does for this person without asking: theirs alone. */}
+              {selectedSettingsPane === "agent" && isDesignV1Active() ? (
+              <GuideAllowedSettings communityId={resolvedActiveCommunity.id} session={props.session} />
               ) : null}
               {/* House rules for members' own AIs: free or paid, whether or not the guide is on. */}
               {selectedSettingsPane === "agent" ? (

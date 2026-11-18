@@ -28,6 +28,7 @@ import { isDesignV1Active } from "../../../../shared/designSystem";
 import { Chips, Dock, Icon, KitApp, Mine, Scroll, Talk, Theirs, Top, View, cx } from "../v1/kit";
 import { getAuthUrl, type AuthSession } from "../auth";
 import { CommunityComposerControls } from "./CommunityComposerControls";
+import { GuideAsks, useGuideQuestions } from "../v1/KitGuideAsks";
 import { renderMarkdown } from "../../../../shared/markdownUi";
 import {
   extractTextFromContentJson,
@@ -1218,6 +1219,11 @@ function WebCommunityAgentDock(props, ref) {
   // by itself, so nothing that needs you is hidden behind Home at rest.
   // Opening the guide's thread on arrival is not one of them: it loads behind
   // Home, so Home's layout is the same before and after (no top row moving).
+  // What the guide asked before doing something for this person: shown above
+  // the box where they type, on Home at rest and in the conversation. It
+  // never holds Home in the conversation: a question left overnight waits
+  // quietly above the box.
+  const guideQuestions = useGuideQuestions(props.session, communityId || null, Boolean(props.home));
   const conversationNeedsYou =
     turnIsActive || Boolean(dockError) || Boolean(memberLimitNotice);
   // Home on the kit: Home in design v1, the host's and a member's, on desktop
@@ -1285,7 +1291,8 @@ function WebCommunityAgentDock(props, ref) {
           </Scroll>
           {/* No agent here: Home has no guide box (docs/specs/community-agent-gateway-v0.md). */}
           {agentOn ? <Dock>
-            {kitTalking ? null : (
+            {communityId ? <GuideAsks session={props.session} communityId={communityId} questions={guideQuestions} /> : null}
+            {kitTalking || guideQuestions.length > 0 ? null : (
               <Chips chips={kitHomeIsHost ? HOST_HOME_SUGGESTIONS : MEMBER_HOME_SUGGESTIONS} onChip={sendSuggestion} />
             )}
             {attachments.length > 0 ? (

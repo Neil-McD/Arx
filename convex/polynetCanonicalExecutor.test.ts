@@ -230,7 +230,7 @@ const modules = import.meta.glob([
   "./communitySearchDocs.ts",
   "./communityMemberTimeline.ts",
   "./communityHandbook.ts", "./communityNotes.ts", "./communityMemory.ts", "./communityBriefs.ts", "./memberMemory.ts", "./communityPersonFacts.ts", "./communityPodFacts.ts", "./communityPods.ts", "./communityFounderBrief.ts", "./communityEvents.ts", "./communityPodPayments.ts", "./communityPlanChange.ts", "./communityLessonProgress.ts", "./accessBudgets.ts", "./communityAiRules.ts", "./communityLifecycle.ts", "./communityOperations.ts", "./communityPeople.ts", "./userProfileProjection.ts",
-  "./communityAccessQueries.ts",
+  "./communityAccessQueries.ts", "./communityGuideQuestions.ts",
   "./communityAdmin.ts",
   "./email.ts",
   "./communityAgent.ts",
@@ -1768,33 +1768,54 @@ test("canonical writes are attributed, retry safe, and reject conflicting idempo
   expect(rows.receipts).toHaveLength(2);
 });
 
-test("the community agent never posts, replies, edits or deletes in a channel for a member", async () => {
+test("the community agent asks the member before it posts, replies, edits or deletes in a channel for them", async () => {
   const t = convexTest(schema, modules);
   const fixture = await createFixture(t);
   const memberCtx = executionContext(t.withIdentity({ subject: fixture.memberSubject }));
   const channel = "/communities/canonical-community/channels/general/";
-  for (const input of [
-    { path: channel, mode: "create", content: { text: "Who's in for Saturday dawn?" }, idempotency_key: "draft-create" },
-    { path: channel, mode: "append", content: { text: "Me!", root_id: "abc" }, idempotency_key: "draft-append" },
-    { path: `${channel}interaction:root:abc.md`, mode: "update", content: { text: "Edited" }, idempotency_key: "draft-update" },
-    { path: `${channel}interaction:root:abc.md`, mode: "delete", content: {}, idempotency_key: "draft-delete" },
-  ]) {
-    await expect(executePolynetCanonicalTool({
-      ctx: memberCtx,
-      authSubject: fixture.memberSubject,
-      userId: fixture.memberId,
-      principalKind: "community_agent_for_member",
-      evidenceSurface: "member_agent_dock",
-      toolName: "polynet_write",
-      input,
-    })).resolves.toMatchObject({ ok: false, code: "draft_only", message: expect.stringContaining("draft") });
-  }
-  const rows = await t.run(async (ctx) => ({
+  // The member's own post, through their own AI, for the guide to reply to, edit and delete.
+  const own = await executePolynetCanonicalTool({ ctx: memberCtx, authSubject: fixture.memberSubject, userId: fixture.memberId,
+    principalKind: "external_mcp", evidenceSurface: "external_mcp", toolName: "polynet_write",
+    input: { path: channel, mode: "create", content: { text: "Dawn patrol report from the member." }, idempotency_key: "own-post" } });
+  expect(own.ok, JSON.stringify(own)).toBe(true);
+  const rootId = await t.run(async (ctx) => String((await ctx.db.query("communityInteractionRoots").first())!._id));
+  const before = await t.run(async (ctx) => ({
     roots: await ctx.db.query("communityInteractionRoots").collect(),
+    replies: await ctx.db.query("communityInteractionReplies").collect(),
     receipts: await ctx.db.query("polynetCanonicalOperationReceipts").collect(),
   }));
-  expect(rows.roots).toHaveLength(0);
-  expect(rows.receipts).toHaveLength(0);
+  const guide = (input: Record<string, unknown>) => executePolynetCanonicalTool({
+    ctx: memberCtx, authSubject: fixture.memberSubject, userId: fixture.memberId, runId: "guide-run",
+    principalKind: "community_agent_for_member", evidenceSurface: "member_agent_dock", toolName: "polynet_write", input,
+  });
+  const asked = [
+    { input: { path: channel, mode: "create", content: { text: "Who's in for Saturday dawn?" }, idempotency_key: "ask-create" }, question: "Post this in #general as you?" },
+    { input: { path: channel, mode: "append", content: { text: "Me!", root_id: rootId }, idempotency_key: "ask-append" }, question: "Reply with this in #general as you?" },
+    { input: { path: `${channel}interaction:root:${rootId}.md`, mode: "update", content: { text: "Edited" }, idempotency_key: "ask-update" }, question: "Change your post in #general to this?" },
+    { input: { path: `${channel}interaction:root:${rootId}.md`, mode: "delete", content: {}, idempotency_key: "ask-delete" }, question: "Delete your post in #general?" },
+  ];
+  for (const { input, question } of asked) {
+    const answer = await guide(input);
+    expect(answer, JSON.stringify(answer)).toMatchObject({ ok: true, value: { ok: true, status: "waiting_for_person", question } });
+  }
+  const after = await t.run(async (ctx) => ({
+    roots: await ctx.db.query("communityInteractionRoots").collect(),
+    replies: await ctx.db.query("communityInteractionReplies").collect(),
+    receipts: await ctx.db.query("polynetCanonicalOperationReceipts").collect(),
+    questions: await ctx.db.query("communityGuideQuestions").collect(),
+  }));
+  // Nothing was posted, changed or deleted, and no operation ran.
+  expect(after.roots).toEqual(before.roots);
+  expect(after.replies).toEqual(before.replies);
+  expect(after.receipts).toEqual(before.receipts);
+  // A call that would be refused anyway is refused as before, not asked about.
+  expect(await guide({ path: channel, mode: "create", content: { text: "   " }, idempotency_key: "ask-empty" })).toMatchObject({ ok: false });
+  expect(await guide({ path: "/communities/canonical-community/channels/no-such-channel/", mode: "create", content: { text: "Hi" }, idempotency_key: "ask-nowhere" })).toMatchObject({ ok: false });
+  expect(await t.run(async (ctx) => (await ctx.db.query("communityGuideQuestions").collect()).length)).toBe(asked.length);
+  expect(await t.run(async (ctx) => ctx.db.query("communityInteractionRoots").collect())).toEqual(before.roots);
+  expect(after.questions.map((row) => ({ status: row.status, kind: row.kind, question: row.question, userId: row.userId }))).toEqual(asked.map(({ input, question }) => ({
+    status: "waiting", kind: input.mode === "delete" ? "remove" : "post", question, userId: fixture.memberId })));
+  expect(after.questions.map((row) => JSON.parse(row.inputJson))).toEqual(asked.map(({ input }) => input));
 });
 
 test("chat roots and replies survive receipt-completion crashes without duplication", async () => {
@@ -2304,28 +2325,42 @@ test.each(["approve", "deny"])("admission first response can be discarded after 
   expect(await f.snapshot()).toEqual(committed);
 });
 
-test.each(["approve", "deny"])("admission capability is discoverable only by current human builders (%s)", async operation => {
+test.each(["approve", "deny"])("admission capability is discoverable only by current human builders, through their own AI or the guide (%s)", async operation => {
   const t = convexTest(schema, modules); const f = await approvalFixture(t, operation);
-  for (const actor of [{ userId: f.ownerId, authSubject: f.ownerSubject }, f.admin, { userId: f.memberId, authSubject: f.memberSubject }]) {
+  const doors = [{ principalKind: "external_mcp" as const, evidenceSurface: "external_mcp" as const },
+    { principalKind: "community_agent_for_member" as const, evidenceSurface: "member_agent_dock" as const }];
+  for (const door of doors) for (const actor of [{ userId: f.ownerId, authSubject: f.ownerSubject }, f.admin, { userId: f.memberId, authSubject: f.memberSubject }]) {
     const execute = (toolName: "polynet_list" | "polynet_read", path: string) => executePolynetCanonicalTool({
-      ctx: executionContext(t.withIdentity({ subject: actor.authSubject })), ...actor, principalKind: "external_mcp",
-      evidenceSurface: "external_mcp", toolName, input: { path } });
+      ctx: executionContext(t.withIdentity({ subject: actor.authSubject })), ...actor, ...door, toolName, input: { path } });
     const list = await execute("polynet_list", "/communities/canonical-community/capabilities/");
+    expect(list.ok).toBe(true);
     const read = await execute("polynet_read", admissionApprovalPath.replace(".approve.", `.${operation}.`));
     const permitted = actor.userId !== f.memberId;
-    expect(JSON.stringify(list).includes(`community.admission.${operation}`)).toBe(permitted);
+    expect(JSON.stringify(list).includes(`community.admission.${operation}`), `${door.principalKind} ${actor.userId}`).toBe(permitted);
     expect(read.ok).toBe(permitted);
   }
   const before = await f.snapshot();
-  const personalAgent = { ctx: executionContext(t.withIdentity({ subject: f.ownerSubject })), userId: f.ownerId,
-    authSubject: f.ownerSubject, principalKind: "community_agent_for_member" as const, evidenceSurface: "member_agent_dock" as const };
-  const inventory = await executePolynetCanonicalTool({ ...personalAgent, toolName: "polynet_list",
-    input: { path: "/communities/canonical-community/capabilities/" } });
-  expect(inventory.ok).toBe(true);
-  expect(JSON.stringify(inventory).includes(`community.admission.${operation}`)).toBe(false);
-  expect(await executePolynetCanonicalTool({ ...personalAgent, toolName: "polynet_call", input: f.input }))
+  const guideFor = (actor: { userId: any; authSubject: string }) => ({ ctx: executionContext(t.withIdentity({ subject: actor.authSubject })),
+    ...actor, principalKind: "community_agent_for_member" as const, evidenceSurface: "member_agent_dock" as const });
+  // A plain member's guide is not offered the call, and nothing changes.
+  expect(await executePolynetCanonicalTool({ ...guideFor({ userId: f.memberId, authSubject: f.memberSubject }), toolName: "polynet_call", input: f.input }))
     .toMatchObject({ ok: false, code: "operation_not_found" });
   expect(await f.snapshot()).toEqual(before);
+  // The owner's guide decides the request at once, with no question, as their own AI would.
+  const decided = await executePolynetCanonicalTool({ ...guideFor({ userId: f.ownerId, authSubject: f.ownerSubject }), toolName: "polynet_call", input: f.input });
+  expect(decided, JSON.stringify(decided)).toMatchObject({ ok: true, value: { deduped: false, operation: `community.admission.${operation}`,
+    result: { status: operation === "approve" ? "approved" : "denied" } } });
+  const after = await f.snapshot();
+  if (operation === "approve") {
+    expect(after.request).toBeNull();
+    expect(after.memberships).toHaveLength(1);
+    expect(after.memberships[0]).toMatchObject({ state: "active", role: "member" });
+  } else {
+    expect(after.request).toMatchObject({ status: "denied" });
+    expect(after.memberships).toEqual(before.memberships);
+  }
+  expect(after.audit).toHaveLength(1); expect(after.receipts).toHaveLength(1); expect(after.receipts[0].status).toBe("completed");
+  expect(await t.run(async ctx => ctx.db.query("communityGuideQuestions").collect())).toHaveLength(0);
 });
 
 test.each(["owner", "admin"])("denial by %s preserves one cooldown and has no activation effects", async role => {
@@ -2563,28 +2598,40 @@ test("community notes: the guide and builders read them, a member's own AI does 
   expect(JSON.stringify(general)).not.toContain("private_room");
 });
 
-test("the Ask agent can't react for the member; the member's own tools can, and no form or workflow action remains", async () => {
+test("the guide reacts for the member when told, as the member's own tools do, and no form or workflow action remains", async () => {
   const t = convexTest(schema, modules);
   const f = await createFixture(t);
   const memberCtx = executionContext(t.withIdentity({ subject: f.memberSubject }));
-  const list = (principalKind: "community_agent_for_member" | "external_mcp") => executePolynetCanonicalTool({
+  const doorOf = (principalKind: "community_agent_for_member" | "external_mcp") => ({
     ctx: memberCtx, authSubject: f.memberSubject, userId: f.memberId, principalKind,
-    evidenceSurface: principalKind === "external_mcp" ? "external_mcp" : "member_agent_dock",
-    toolName: "polynet_list", input: { path: "/communities/canonical-community/capabilities/" },
-  });
+    evidenceSurface: principalKind === "external_mcp" ? "external_mcp" as const : "member_agent_dock" as const });
+  const list = (principalKind: "community_agent_for_member" | "external_mcp") => executePolynetCanonicalTool({
+    ...doorOf(principalKind), toolName: "polynet_list", input: { path: "/communities/canonical-community/capabilities/" } });
   const operations = (result: any) => (result.value.entries as any[]).map((entry) => String(entry.path).split("/").pop());
   const agent = operations(await list("community_agent_for_member"));
-  expect(agent).not.toContain("community.interaction.react.json");
+  expect(agent).toContain("community.interaction.react.json");
   const harness = operations(await list("external_mcp"));
   expect(harness).toEqual(expect.arrayContaining(["community.interaction.react.json"]));
   expect([...agent, ...harness]).not.toContain("community.form.submit.json");
   expect([...agent, ...harness]).not.toContain("community.workflow.approve_milestone.json");
-  await expect(executePolynetCanonicalTool({
-    ctx: memberCtx, authSubject: f.memberSubject, userId: f.memberId, principalKind: "community_agent_for_member",
-    evidenceSurface: "member_agent_dock", toolName: "polynet_call",
+  const posted = await executePolynetCanonicalTool({ ctx: executionContext(t.withIdentity({ subject: f.ownerSubject })), authSubject: f.ownerSubject,
+    userId: f.ownerId, principalKind: "external_mcp", evidenceSurface: "external_mcp", toolName: "polynet_write",
+    input: { path: "/communities/canonical-community/channels/general/", mode: "create", content: { text: "react to me" }, idempotency_key: "owner-post" } });
+  const ref = (posted as any).value.ref;
+  const react = (principalKind: "community_agent_for_member" | "external_mcp", emoji: string) => executePolynetCanonicalTool({
+    ...doorOf(principalKind), toolName: "polynet_call",
     input: { operation: "community.interaction.react", version: 1, target: "/communities/canonical-community/capabilities/community.interaction.react.json",
-      input: { ref: "interaction:root:abc", emoji: "🔥" }, idempotency_key: "react-1" },
-  })).resolves.toMatchObject({ ok: false, code: "operation_not_found" });
+      input: { ref, emoji, on: true }, idempotency_key: `react-${principalKind}` } });
+  const viaGuide = await react("community_agent_for_member", "🔥");
+  const viaOwnAi = await react("external_mcp", "🙌");
+  expect(viaGuide, JSON.stringify(viaGuide)).toMatchObject({ ok: true, value: { operation: "community.interaction.react" } });
+  expect(viaOwnAi).toMatchObject({ ok: true, value: { operation: "community.interaction.react" } });
+  // The same result: a reaction of the member's own, done at once with no question.
+  expect((viaGuide as any).value.result).toEqual({ reacted: true, reaction_summary: [{ emoji: "🔥", count: 1 }] });
+  expect((viaOwnAi as any).value.result).toEqual({ reacted: true, reaction_summary: expect.arrayContaining([{ emoji: "🔥", count: 1 }, { emoji: "🙌", count: 1 }]) });
+  const reactions = await t.run(async ctx => ctx.db.query("communityInteractionReactions").collect());
+  expect(reactions.map((row: any) => [row.actorType, String(row.actorUserId), row.emoji]).sort()).toEqual([["human", String(f.memberId), "🔥"], ["human", String(f.memberId), "🙌"]].sort());
+  expect(await t.run(async ctx => ctx.db.query("communityGuideQuestions").collect())).toHaveLength(0);
 });
 
 async function makeModerator(t: ReturnType<typeof convexTest>, f: { communityId: any; memberId: any }) {
@@ -3104,8 +3151,12 @@ test("lens grid: what each lens reads and may do is exactly what the lens table 
     const run = (toolName: "polynet_list" | "polynet_read", path: string) => executePolynetCanonicalTool({
       ctx: executionContext(t.withIdentity({ subject: caller.subject })), authSubject: caller.subject, userId: caller.userId,
       principalKind: caller.principalKind, evidenceSurface: caller.evidenceSurface as any, mountedCommunityId: f.communityId, toolName, input: { path } });
+    // The owner holds the moderator's permissions through their own AI and in
+    // their private talk with the guide alike.
+    const moderator = expectedLens === "builder_own_ai" || expectedLens === "builder_private";
     const lens = resolveLens({ principalKind: caller.principalKind, evidenceSurface: caller.evidenceSurface,
-      authority: { canUseBuilderProjection: expectedLens.startsWith("builder"), canReviewJoinRequests: expectedLens === "builder_own_ai", canModerateContent: expectedLens === "builder_own_ai" } });
+      authority: { canUseBuilderProjection: expectedLens.startsWith("builder"), canReviewJoinRequests: moderator, canModerateContent: moderator } });
+    expect(lens.reviewsJoins && lens.moderatesPosts).toBe(moderator);
     expect(lens.name).toBe(expectedLens);
     for (const [view, [toolName, path]] of Object.entries(views)) {
       const result = await run(toolName, path);

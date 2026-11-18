@@ -1119,7 +1119,8 @@ export const readPendingAdmissionRequestInternal = internalQuery({
 // Reservation, domain effects and completed result share one transaction.
 const freshAdmissionArgs = {
   userId: v.id("users"), communityId: v.id("communities"),
-  principalKind: v.literal("external_mcp"),
+  // A person's own AI, or the guide in their private talk when told to.
+  principalKind: v.union(v.literal("external_mcp"), v.literal("community_agent_for_member")),
   requestId: v.id("communityJoinRequests"),
   expectedCreatedAt: v.number(), expectedUpdatedAt: v.number(),
   idempotencyKey: v.string(),
@@ -1127,7 +1128,7 @@ const freshAdmissionArgs = {
 
 type FreshAdmissionArgs = {
   userId: Id<"users">; communityId: Id<"communities">;
-  principalKind: "external_mcp"; requestId: Id<"communityJoinRequests">;
+  principalKind: "external_mcp" | "community_agent_for_member"; requestId: Id<"communityJoinRequests">;
   expectedCreatedAt: number; expectedUpdatedAt: number; idempotencyKey: string;
 };
 

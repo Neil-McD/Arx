@@ -1,5 +1,4 @@
 import { COMMUNITY_HANDBOOK_MAX_CHARS } from "../shared/communityHandbook";
-import { DRAFT_ONLY_REFUSAL_MESSAGE } from "../shared/communityTurnContract";
 import { renderCommunityNote, type CommunityNote } from "../shared/communityNotes";
 import { renderBriefDocument } from "../shared/communityBriefs";
 import { internal } from "./_generated/api";
@@ -36,6 +35,8 @@ import {
 } from "../shared/communitySemanticRepository.ts";
 import { PERSONAL_MEMORY_OPERATION, PERSONAL_MEMORY_PATH } from "../shared/personalMemory.ts";
 import { lensCalls, lensReads, resolveLens, type Lens, type LensView } from "../shared/lens.ts";
+import { guideAskFor } from "../shared/operationCatalog.ts";
+import { postQuestion, removeQuestion, waitingToolAnswer } from "../shared/guideQuestions.ts";
 import {
   COMMUNITY_MEMBER_SELF_DIRECTORY,
   COMMUNITY_MEMBER_SELF_CONTEXT_PATH,
@@ -109,6 +110,8 @@ const MEMBERS_UNBAN_OPERATION = "community.members.unban";
 const MEMBERS_OPERATIONS = [MEMBERS_ROLE_OPERATION, MEMBERS_REMOVE_OPERATION, MEMBERS_BAN_OPERATION, MEMBERS_UNBAN_OPERATION];
 // Actions take a selection: up to this many items, each decided on its own.
 const SELECTION_MAX = 50;
+// Posts in one removal: a whole run of spam is one question to the person.
+const REMOVE_POSTS_MAX = 100;
 
 // Each item of a selection gets its own receipt key, derived from the call's key.
 // Ids are at most 64 characters, so a key up to SELECTION_KEY_MAX always fits.
@@ -914,9 +917,14 @@ function capabilityDocument(args: {
       result: "result: { approved_md, draft_md, ... }", effects: ["publish_handbook"] };
   } else if (isRemovePostsCapability) {
     operationDefinition.input = { required: ["refs"],
-      refs: `a selection of 1 to ${SELECTION_MAX} interaction:root:<id> or interaction:reply:<id> refs from channel or thread listings`,
-      result: "never done by an AI: a removed post can't be brought back. The answer is the refusal person_only, with the link in Polynet where the person removes it. Tell them which channel and post.",
-      effects: [], forbidden_effects: ["remove_posts_for_everyone", "edit_posts", "ban_authors"] };
+      refs: `a selection of 1 to ${REMOVE_POSTS_MAX} interaction:root:<id> or interaction:reply:<id> refs from channel or thread listings`,
+      ...(args.principalKind === "community_agent_for_member" ? {
+        result: "the person is asked first, every time: they are shown the posts with Yes and No, and the answer is waiting_for_person until they say. A removed post can't be brought back.",
+        effects: ["remove_posts_for_everyone_after_the_persons_yes"], forbidden_effects: ["edit_posts", "ban_authors", "remove_from_other_communities"],
+      } : {
+        result: "never done by an AI: a removed post can't be brought back. The answer is the refusal person_only, with the link in Polynet where the person removes it. Tell them which channel and post.",
+        effects: [], forbidden_effects: ["remove_posts_for_everyone", "edit_posts", "ban_authors"],
+      }) };
   } else if (isReactCapability) {
     operationDefinition.input = { required: ["ref", "emoji", "on"],
       ref: "interaction:root:<id> or interaction:reply:<id> from a channel or thread listing",
@@ -2176,15 +2184,12 @@ async function executeCanonicalWrite(args: {
   const writableChannelPath = parseCommunityChannelSemanticPath(
     target.localPath,
   );
-  // Edit or delete your own post or reply. Moderating others' posts stays in Studio.
-  // The community agent never speaks in a channel for a member: what a member
-  // asks it to post comes back as a draft the member sends themselves.
-  if (writableChannelPath && args.principalKind === "community_agent_for_member") {
-    return canonicalError("draft_only", DRAFT_ONLY_REFUSAL_MESSAGE);
-  }
-  // The host's switch: members' own AIs may post here, or only read. Taking
+  // Edit or delete your own post or reply. Written through an AI (a person's
+  // own, or the guide after their yes): the same rules through both doors.
+  const throughAi = args.principalKind === "external_mcp" || args.principalKind === "community_agent_for_member";
+  // The host's switch: AIs may post here for members, or only read. Taking
   // your own post down is always allowed.
-  if (writableChannelPath && args.principalKind === "external_mcp" && mode !== "delete") {
+  if (writableChannelPath && throughAi && mode !== "delete") {
     const rules = await args.ctx.runQuery((internal as any).communityAiRules.readCommunityAiRulesInternal, { communityId: target.communityId });
     if (rules && rules.postingAllowed === false) return canonicalError(AI_POSTING_OFF_REFUSAL.code, AI_POSTING_OFF_REFUSAL.message);
   }
@@ -2197,7 +2202,7 @@ async function executeCanonicalWrite(args: {
     if (mode === "update" && !text.trim()) {
       return canonicalError("invalid_tool_args", "Provide content.text to edit a post.");
     }
-    if (mode === "update" && args.principalKind === "external_mcp") {
+    if (mode === "update" && throughAi) {
       const refusal = checkAiPost({ text, reply: ref.objectType === "reply" });
       if (refusal) return canonicalError(refusal.code, refusal.message);
     }
@@ -2213,7 +2218,7 @@ async function executeCanonicalWrite(args: {
     }
     // An edit through an AI may not turn a post into words already posted
     // elsewhere here today. The post's own words, unchanged, are not a repeat.
-    if (mode === "update" && args.principalKind === "external_mcp" && text.trim().length >= AI_DUPLICATE_MIN_CHARS) {
+    if (mode === "update" && throughAi && text.trim().length >= AI_DUPLICATE_MIN_CHARS) {
       const claimed = await args.ctx.runMutation((internal as any).communityAiRules.claimAiPostWordsInternal,
         { userId: args.userId, communityId: target.communityId, fingerprint: aiPostFingerprint(text), key: idempotencyKey, ref: writableChannelPath.ref });
       if (!claimed.ok) return canonicalError(AI_DUPLICATE_REFUSAL.code, AI_DUPLICATE_REFUSAL.message);
@@ -2284,10 +2289,12 @@ async function executeCanonicalWrite(args: {
       return canonicalError("invalid_tool_args", "root_id doesn't match the post this path names; leave it out when replying on the post's own path.");
     }
     const rootId = pathRootId ?? contentRootId;
+    // Only create (a new post) and append (a reply) write here: any other
+    // mode on a channel or thread path is refused, never taken as a post.
     if (
+      (mode !== "create" && mode !== "append") ||
       (mode === "create" && rootId) ||
-      (mode === "append" && !rootId) ||
-      mode === "update"
+      (mode === "append" && !rootId)
     ) {
       return canonicalError(
         "invalid_tool_args",
@@ -2307,9 +2314,9 @@ async function executeCanonicalWrite(args: {
     // Words claimed for this post and not yet posted (given back if it fails).
     let pendingWords: string | null = null;
     try {
-      // Written through a person's own AI: checked whatever the AI was told
+      // Written through an AI: checked whatever the AI was told
       // (shared/aiPostingRules.ts), then marked as made through an AI.
-      const viaAi = args.principalKind === "external_mcp";
+      const viaAi = throughAi;
       const aiText = String(content.text ?? content.body ?? "");
       const aiFingerprint = viaAi && aiText.trim().length >= AI_DUPLICATE_MIN_CHARS ? aiPostFingerprint(aiText) : null;
       if (viaAi) {
@@ -2508,6 +2515,7 @@ async function executeCanonicalWrite(args: {
 }
 
 async function executeCanonicalCall(args: {
+  personSaidYes?: boolean;
   runId?: string;
   ctx: any;
   authSubject: string;
@@ -2602,7 +2610,7 @@ async function executeCanonicalCall(args: {
     return await executeLiveMemberCall({ ...args, target, operation, input, idempotencyKey });
   }
   if (ADMISSION_OPERATIONS.includes(operation)) {
-    if (args.principalKind !== "external_mcp") {
+    if (args.principalKind !== "external_mcp" && args.principalKind !== "community_agent_for_member") {
       return canonicalError("operation_not_found", "Operation is not discoverable or authorized for this community.");
     }
     const timestamp = (value: unknown): number | null => {
@@ -2662,15 +2670,28 @@ async function executeCanonicalCall(args: {
   }
   if (operation === REMOVE_POSTS_OPERATION) {
     const refs = Array.isArray(rawInput.refs) ? rawInput.refs : null;
-    if (args.principalKind !== "external_mcp" || target.localPath !== `${POLYNET_CAPABILITIES_DIRECTORY_PATH}${operation}.json` ||
-        !refs || !refs.length || refs.length > SELECTION_MAX || Object.keys(rawInput).some(key => key !== "refs") ||
-        !refs.every(ref => typeof ref === "string" && parseCommunityInteractionEvidenceRef(ref)) || new Set(refs).size !== refs.length) {
+    if (!removePostsRefs(target, operation, rawInput)) {
       return canonicalError("invalid_tool_args",
-        `Give refs: 1 to ${SELECTION_MAX} different interaction:root:<id> or interaction:reply:<id> refs.`);
+        `Give refs: 1 to ${REMOVE_POSTS_MAX} different interaction:root:<id> or interaction:reply:<id> refs.`);
     }
-    // A removed post can't be brought back, so a person removes it.
-    return personOnly({ what: refs.length === 1 ? "Removing a post" : `Removing ${refs.length} posts`,
-      where: "open the post in its channel, then Remove in its menu", path: buildCommunityTabPath(target.communitySlug, "chat") });
+    // A removed post can't be brought back. Through the guide the person was
+    // shown these posts and said yes (askPersonFirst); a person's own AI is
+    // handed the place in Polynet where they remove it themselves.
+    if (args.principalKind !== "community_agent_for_member" || args.personSaidYes !== true) {
+      return personOnly({ what: refs!.length === 1 ? "Removing a post" : `Removing ${refs!.length} posts`,
+        where: "open the post in its channel, then Remove in its menu", path: buildCommunityTabPath(target.communitySlug, "chat") });
+    }
+    // Removing is a state, so a post already removed still counts as removed.
+    return await runSelection({ ...args, target, operation, idempotencyKey, items: refs as string[],
+      decide: async ref => {
+        try {
+          const value = await args.ctx.runMutation((internal as any).communityInteractions.removeInteractionForTrustedModeratorInternal,
+            { userId: args.userId, communityId: target.communityId, ref });
+          return { ref, ok: true, removed: true, ...(value?.alreadyRemoved ? { already_removed: true } : {}) };
+        } catch {
+          return { ref, ok: false, code: "interaction_unavailable", message: "That post isn't one you can remove here." };
+        }
+      } });
   }
   if (COMMUNITY_OPERATIONS.includes(operation)) {
     return await executeCommunityOperation({ ...args, target, operation, rawInput, idempotencyKey });
@@ -2679,6 +2700,74 @@ async function executeCanonicalCall(args: {
     return await executeMembersOperation({ ...args, target, operation, rawInput, idempotencyKey });
   }
   return canonicalError("operation_not_found", "Operation is not discoverable or authorized for this community.");
+}
+
+// The posts a removal names, when the call is well formed.
+function removePostsRefs(target: ResolvedCommunityTarget, operation: string, rawInput: Record<string, unknown>): string[] | null {
+  const refs = Array.isArray(rawInput.refs) ? rawInput.refs : null;
+  return target.localPath === `${POLYNET_CAPABILITIES_DIRECTORY_PATH}${operation}.json` &&
+    refs && refs.length > 0 && refs.length <= REMOVE_POSTS_MAX && !Object.keys(rawInput).some(key => key !== "refs") &&
+    refs.every(ref => typeof ref === "string" && parseCommunityInteractionEvidenceRef(ref)) && new Set(refs).size === refs.length
+    ? refs as string[] : null;
+}
+
+// The guide in a private talk does what the person tells it, and asks first
+// when the question says something they don't already know: words going out
+// under their name, and what can't be taken back (shared/operationCatalog.ts,
+// guideAskFor). The call is saved as it was made and answered with
+// waiting_for_person; the person's yes runs it again with personSaidYes
+// (convex/communityGuideQuestions.ts). A call that would be refused anyway
+// is not asked about: it falls through and is refused as usual.
+async function askPersonFirst(args: {
+  runId?: string; ctx: any; authSubject: string; userId: string; principalKind: PolynetPrincipalKind;
+  mountedCommunityId?: string | null; evidenceSurface: CommunityEvidenceSurface; toolName: PolynetCanonicalToolName;
+  input: Record<string, unknown>; rawInput: Record<string, unknown>;
+}): Promise<PolynetCanonicalExecutionResult | null> {
+  if (args.toolName !== "polynet_write" && args.toolName !== "polynet_call") return null;
+  const resolved = await resolveCommunityTarget({ ...args, path: args.toolName === "polynet_call" ? args.input.target : args.input.path });
+  if (!resolved.ok) return null;
+  const { target } = resolved;
+  const mode = String(args.input.mode ?? "");
+  const operation = String(args.input.operation ?? "");
+  const kind = guideAskFor({ toolName: args.toolName, operation, mode, localPath: target.localPath });
+  if (!kind) return null;
+  let question: string;
+  let text: string | undefined;
+  let items: Array<{ who: string; text: string }> | undefined;
+  if (args.toolName === "polynet_call") {
+    const callInput = args.input.input && typeof args.input.input === "object" ? args.input.input as Record<string, unknown> : {};
+    const refs = operation === REMOVE_POSTS_OPERATION ? removePostsRefs(target, operation, callInput) : null;
+    if (!refs || !capabilityDocument({ target, operation, evidenceSurface: args.evidenceSurface, principalKind: args.principalKind })) return null;
+    items = await args.ctx.runQuery((internal as any).communityGuideQuestions.describePostsInternal, { communityId: target.communityId, userId: args.userId, refs });
+    question = removeQuestion({ count: refs.length });
+  } else {
+    const path = parseCommunityChannelSemanticPath(target.localPath);
+    if (!path || !target.authority.canWriteParticipation) return null;
+    const channel = await resolveRepositoryChannel({ ctx: args.ctx, userId: args.userId, principalKind: args.principalKind, target, slug: path.slug });
+    if (!channel) return null;
+    const content = omitNullishObjectFields(args.input.content);
+    const words = String(content.text ?? content.body ?? "").trim();
+    if (kind === "post") {
+      if (!words) return null;
+      // The host switched AI posting off: refused now, not after a yes.
+      const rules = await args.ctx.runQuery((internal as any).communityAiRules.readCommunityAiRulesInternal, { communityId: target.communityId });
+      if (rules && rules.postingAllowed === false) return null;
+      if (await args.ctx.runQuery((internal as any).communityGuideQuestions.isAlwaysAllowedInternal,
+        { communityId: target.communityId, userId: args.userId, kind: "post" })) return null;
+      question = postQuestion({ mode, channelName: channel.slug });
+      text = words;
+    } else {
+      if (path.kind !== "document") return null;
+      items = await args.ctx.runQuery((internal as any).communityGuideQuestions.describePostsInternal, { communityId: target.communityId, userId: args.userId, refs: [path.ref] });
+      question = removeQuestion({ count: 1, own: { channelName: channel.slug } });
+    }
+  }
+  const asked = await args.ctx.runMutation((internal as any).communityGuideQuestions.askInternal, {
+    communityId: target.communityId, userId: args.userId, kind, toolName: args.toolName, inputJson: JSON.stringify(args.rawInput),
+    question, ...(text ? { text } : {}), ...(items ? { items } : {}), ...(args.runId ? { runId: args.runId } : {}),
+  });
+  if (!asked.ok) return canonicalError("invalid_tool_args", "That is too long to ask the person about. Make it shorter.");
+  return { ok: true, value: waitingToolAnswer(question) };
 }
 
 // Agents prepare; a person makes the change that can't be taken back, with
@@ -2912,7 +3001,9 @@ const BUDGET_WORDS: Record<string, string> = {
 };
 async function takeBudgets(args: { ctx: any; userId: string; principalKind: PolynetPrincipalKind; toolName: PolynetCanonicalToolName },
   input: Record<string, unknown>): Promise<PolynetCanonicalExecutionResult | null> {
-  if (args.principalKind !== "external_mcp" && args.principalKind !== "community_app") return null;
+  // The guide in a private talk is counted for what it writes for the person
+  // (after their yes, never for the asking), like a community's site.
+  if (args.principalKind !== "external_mcp" && args.principalKind !== "community_app" && args.principalKind !== "community_agent_for_member") return null;
   const parsed = parsePolynetSemanticRepositoryPath(input.path ?? input.target);
   const community = parsed.ok && parsed.kind === "community" ? parsed : null;
   const takes = budgetTakesFor({
@@ -3029,6 +3120,9 @@ export async function executePolynetCanonicalTool(args: {
   evidenceSurface: CommunityEvidenceSurface;
   toolName: PolynetCanonicalToolName;
   input: Record<string, unknown>;
+  // The person answered yes to the guide's question about exactly this call
+  // (convex/communityGuideQuestions.ts). Set only by that answer.
+  personSaidYes?: boolean;
 }): Promise<PolynetCanonicalExecutionResult> {
   if (!POLYNET_CANONICAL_TOOL_DEFINITIONS[args.toolName]) {
     return canonicalError("unknown_tool", "Unknown Polynet tool.");
@@ -3074,6 +3168,11 @@ export async function executePolynetCanonicalTool(args: {
     userId,
     input,
   };
+  // Asking the person costs nothing; what runs is counted.
+  if (args.principalKind === "community_agent_for_member" && args.personSaidYes !== true) {
+    const asked = await askPersonFirst({ ...common, toolName: args.toolName, rawInput: args.input });
+    if (asked) return asked;
+  }
   const limited = await takeBudgets(args, input);
   if (limited) return limited;
   // A person's own direct messages: only through their own AI.
