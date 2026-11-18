@@ -61,6 +61,31 @@ export const memberRecordKeyInternal = internalQuery({
   },
 });
 
+// People named to an AI's member action, as the refs the action takes. An
+// AI knows a person by their handle (members/<handle>.json), so a handle is
+// accepted as well as user:<id>. A name that is nobody at all is reported,
+// never guessed at; whether a real person is a member here is each action's
+// own check, answered per person.
+export const resolveMemberRefsInternal = internalQuery({
+  args: { communityId: v.id("communities"), refs: v.array(v.string()) },
+  handler: async (ctx, args) => {
+    const refs: string[] = [];
+    const missing: string[] = [];
+    for (const raw of args.refs.slice(0, 100)) {
+      const text = String(raw ?? "").trim();
+      const bare = text.replace(/^user:/, "").replace(/^@/, "");
+      let userId = /^user:/.test(text) ? ctx.db.normalizeId("users", bare) : null;
+      if (!userId && bare) {
+        const byHandle = await ctx.db.query("users").withIndex("by_normalizedHandle", (q) => q.eq("normalizedHandle", bare.toLowerCase())).first();
+        userId = byHandle?._id ?? null;
+      }
+      if (userId && (await ctx.db.get(userId))) refs.push(`user:${String(userId)}`);
+      else missing.push(text.slice(0, 80));
+    }
+    return { refs, missing };
+  },
+});
+
 // One person in a selection, with their own receipt, all in one transaction:
 // the receipt is reserved, the change made and the receipt completed together,
 // so a retried selection replays what was done for them instead of doing it

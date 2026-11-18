@@ -2994,7 +2994,9 @@ test("people: an owner's or admin's AI re-roles and unbans; removing and banning
   expect(await owner.call("community.members.unban", { members: [ref(f.memberId)] }, "u1")).toMatchObject({ ok: true });
 
   // Bad selections are refused whole.
-  expect(await owner.call("community.members.remove", { members: ["not-a-ref"] }, "x1")).toMatchObject({ ok: false, code: "invalid_tool_args" });
+  // A handle names a person now, so a name that is nobody is refused by that name.
+  expect(await owner.call("community.members.remove", { members: ["not-a-ref"] }, "x1")).toMatchObject({ ok: false, code: "member_not_found", message: expect.stringContaining('"not-a-ref"') });
+  expect(await owner.call("community.members.remove", { members: [42] }, "x1b")).toMatchObject({ ok: false, code: "invalid_tool_args" });
   expect(await owner.call("community.members.set_role", { members: [ref(f.memberId)], role: "owner" }, "x2")).toMatchObject({ ok: false, code: "invalid_tool_args" });
 });
 

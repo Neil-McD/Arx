@@ -54,8 +54,8 @@ const ROOT_POST: PlatformOperationJsonSchema = { type: "string", pattern: "^inte
   description: "The ref of the post being answered (the first post of the thread), such as interaction:root:abc123." };
 const TEXT = (what: string, max: number): PlatformOperationJsonSchema => ({ type: "string", minLength: 1, maxLength: max, description: what });
 const MEMBERS: PlatformOperationJsonSchema = { type: "array", minItems: 1, maxItems: 50,
-  items: { type: "string", pattern: "^user:[A-Za-z0-9]+$", maxLength: 180 },
-  description: "The people, as user:<id> refs from the members listing." };
+  items: { type: "string", minLength: 1, maxLength: 180 },
+  description: "The people, each by their handle from the members listing (such as priya-shah), or a user:<id> ref. Look them up first; don't guess." };
 const EVENT: PlatformOperationJsonSchema = { type: "string", minLength: 1, maxLength: 64,
   description: "The event's parent_event_id from the events listing." };
 const KEY: PlatformOperationJsonSchema = { type: "string", minLength: 1, maxLength: 120,

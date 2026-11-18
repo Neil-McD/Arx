@@ -32,6 +32,9 @@ export type GuideAnswerResult = {
   path: string | null;
 };
 
+// How a person who isn't in the community is described; never shown in a question.
+export const NOT_A_MEMBER_HERE = "Not a member here.";
+
 export function postQuestion(args: { mode: string; channelName: string }): string {
   const channel = `#${args.channelName}`;
   if (args.mode === "append") return `Reply with this in ${channel} as you?`;

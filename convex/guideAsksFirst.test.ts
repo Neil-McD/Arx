@@ -526,3 +526,24 @@ test("in a member's private talk the guide acts by named tools only, in the talk
   expect(after.questions).toHaveLength(2);
   expect((await w.t.run((ctx) => ctx.db.query("communityChannels").collect())).map((row: any) => row.name)).not.toContain("Mine");
 });
+
+test("a person is named to an AI by their handle; someone who isn't here is refused by name, and nobody is asked about a stranger", async () => {
+  const w = await world();
+  const role = (members: string[], key: string) => call("community.members.set_role", { members, role: "moderator" }, key);
+  // By handle, with or without @: the question names the real person.
+  expect(await w.guide("owner")("polynet_call", role(["@member"], "h-1"))).toMatchObject({ ok: true, value: { status: "waiting_for_person", question: "Make member a moderator?" } });
+  const [question] = await w.questions("owner");
+  expect(question.items).toEqual([{ who: "member", text: "Now: member" }]);
+  // The saved call names them by id, so the yes changes exactly who was shown.
+  expect(await w.answer("owner", question.id, "yes")).toMatchObject({ status: "done" });
+  const membership = (await w.t.run((ctx) => ctx.db.query("communityMemberships").collect())).find((row: any) => String(row.userId) === String(w.ids.member))!;
+  expect(membership.role).toBe("moderator");
+  // A made-up reference, or someone not in this community: refused by name, through both doors, with no question.
+  for (const door of [w.guide("owner", "run-2"), w.door("owner", "external_mcp")]) {
+    expect(await door("polynet_call", role(["user:PriyaShah"], "h-2"))).toMatchObject({ ok: false, code: "member_not_found", message: expect.stringContaining('"user:PriyaShah"') });
+    expect(await door("polynet_call", role(["other", "nobody-here"], "h-3"))).toMatchObject({ ok: false, code: "member_not_found", message: expect.stringContaining('"nobody-here"') });
+  }
+  expect(await w.questions("owner")).toEqual([]);
+  // A person's own AI can use a handle too.
+  expect(await w.door("owner", "external_mcp")("polynet_call", role(["other"], "h-4"))).toMatchObject({ ok: true, value: { result: { succeeded: 1 } } });
+});

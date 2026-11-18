@@ -14,7 +14,7 @@ import { executePolynetCanonicalTool } from "./polynetCanonicalExecutor";
 import { GUIDE_ASK_ALWAYS_ALLOWABLE, type GuideAsk } from "../shared/operationCatalog";
 import {
   GUIDE_QUESTION_ITEM_TEXT_MAX, GUIDE_QUESTION_ITEMS_SHOWN, GUIDE_QUESTION_TEXT_MAX, GUIDE_QUESTION_WAIT_MS,
-  changeResultLine, postResultLine, removeResultLine, type GuideAnswerResult, type GuideQuestionView,
+  changeResultLine, NOT_A_MEMBER_HERE, postResultLine, removeResultLine, type GuideAnswerResult, type GuideQuestionView,
 } from "../shared/guideQuestions";
 import { buildCommunityTabPath } from "../shared/webAppRouteState";
 
@@ -77,7 +77,7 @@ export const describeMembersInternal = internalQuery({
       const user: any = userId ? await ctx.db.get(userId) : null;
       const membership = userId ? await ctx.db.query("communityMemberships")
         .withIndex("by_community_user", (q) => q.eq("communityId", args.communityId).eq("userId", userId)).first() : null;
-      if (!user || !membership) { people.push({ who: "Someone", text: "Not a member here." }); continue; }
+      if (!user || !membership) { people.push({ who: "Someone", text: NOT_A_MEMBER_HERE }); continue; }
       const now = String(community?.ownerId) === String(userId) ? "owner" : membership.role;
       people.push({ who: String(user.displayName ?? user.handle ?? "A member"), text: `Now: ${now}` });
     }
