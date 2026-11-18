@@ -5,6 +5,7 @@
 // For measuring a change to the guide's instructions or tools before and
 // after (scripts/guide_eval.mjs). No conversation is kept: each request
 // starts fresh. Refuses unless the deployment sets POLYNET_ALLOW_SEED=1.
+import { getFunctionName } from "convex/server";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import { internalAction, internalQuery } from "./_generated/server";
@@ -45,8 +46,20 @@ export const runGuideRequestInternal = internalAction({
     if (admission.ok === false) throw new Error(`guide_eval_ai_unavailable:${admission.code}`);
     const runId = `guide-eval-${startedAt}-${Math.random().toString(36).slice(2, 8)}`;
     const events: Array<{ eventType: string; payload: Record<string, unknown> }> = [];
+    // The loop asks, before each step, whether the person pressed stop on
+    // this run. A measurement has no stored run to stop, so that one question
+    // is answered here ("still running"); everything else goes to the database.
+    const loopCtx = {
+      ...ctx,
+      runQuery: async (ref: any, queryArgs: any) =>
+        getFunctionName(ref) === "threads:getRuntimeRunByOwnerRunIdInternal" && queryArgs?.runId === runId
+          ? { status: "running" }
+          : await ctx.runQuery(ref, queryArgs),
+      runMutation: ctx.runMutation.bind(ctx),
+      runAction: ctx.runAction.bind(ctx),
+    };
     const result = await executeChatToolsAgentLoop({
-      ctx,
+      ctx: loopCtx,
       req: new Request("https://guide-eval.invalid/"),
       userId: String(args.userId),
       threadId: null,
