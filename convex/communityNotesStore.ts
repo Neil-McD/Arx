@@ -104,7 +104,7 @@ export async function removeBrief(ctx: any, scopeKey: ScopeKey) {
 
 // ---------- work the guide does with nobody present
 
-export type AgentWorkKind = "memory_review" | "brief";
+export type AgentWorkKind = "memory_review" | "brief" | "reply_draft";
 
 export async function workFor(ctx: any, scopeKey: ScopeKey, kind: AgentWorkKind) {
   return await ctx.db.query("agentWork").withIndex("by_scope_kind", (q: any) => q.eq("scopeKey", scopeKey).eq("kind", kind)).first();

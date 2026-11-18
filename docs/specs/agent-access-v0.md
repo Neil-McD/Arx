@@ -244,8 +244,34 @@ you, then the box to ask it anything (Neil, Nov 18;
 - **The right column** keeps what is glanceable: the next event, what the
   community knows, who is here.
 - Only what came forward on its own is on Home. There is no news list.
-- Not yet: the daily report, guide proposals, money problems, RSVP on the
-  event row, and a count on the Home item in the left column.
+- **What the guide suggests** (a host with a guide), under the list and
+  apart from it: see "The guide's own work" below.
+- Not yet: money problems, RSVP on the event row, and a count on the Home
+  item in the left column. The morning report stays an email: every part of
+  it is on Home live.
+
+### The guide's own work
+
+The guide does things with nobody present, and what it prepares comes
+forward on Home for the host. It never acts on a member without that click.
+
+**A reply to a question nobody answered** (`convex/communityReplyDrafts.ts`,
+`shared/communityReplyDrafts.ts`, `apps/web/src/v1/KitGuideSuggests.tsx`):
+
+- A member's question in an open channel that has had no reply for 24 hours.
+  Never a pod's room or a direct message.
+- The guide is shown the question and up to 6 lessons members can see that
+  share its words. With none, no model request is made.
+- It writes one reply of at most 600 characters, with no links, resting on
+  one lesson it was shown; or it says no lesson answers it.
+- The draft waits on Home under "Your guide suggests": Post reply, Edit,
+  Skip. Posting puts it in the thread as the guide, ending with the lesson
+  it came from.
+- Limits: 3 drafts in any 24 hours per community; a question gets one draft,
+  ever; a draft is no longer offered once someone replies or the question is
+  a week old.
+- Paid: it is the guide working, on the owner's AI allowance, one request a
+  draft.
 
 ## Slices
 

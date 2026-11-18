@@ -84,6 +84,7 @@ export const CALL_OPERATIONS = {
 export const WORKER_OPERATIONS = {
   "memory.apply": entry("worker", "write", "none", "paid"),
   "brief.write": entry("worker", "write", "none", "paid"),
+  "reply.draft": entry("worker", "write", "none", "paid"),
 } satisfies Record<string, OperationEntry>;
 
 export type CallOperationName = keyof typeof CALL_OPERATIONS;

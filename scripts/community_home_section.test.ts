@@ -224,3 +224,19 @@ test("the Members page says who can join and what changing it does, in plain wor
   expect(whoCanJoinAsk("open", 4)).toContain("The 4 people waiting are let in now.");
   expect(whoCanJoinAsk("approval", 3)).toBe("Ask people to join first? New people then wait for your yes.");
 });
+
+test("what the guide suggests is its own group: a row per draft, opened by the host", async () => {
+  const { renderToStaticMarkup } = await import("react-dom/server");
+  const { GuideSuggests, replyDraftTitle, replyDraftDetail } = await import("../apps/web/src/v1/KitGuideSuggests");
+  const draft = { id: "d1", author: "Maya", question: "How do I price a first client?", channel: "General", hours_waiting: 26,
+    text: "Maya, price on the hours you save them.", source: "Start Here · Lesson 2: Pricing your offer" };
+  expect(replyDraftTitle(draft)).toBe("A reply to Maya's question is ready");
+  expect(replyDraftDetail(draft)).toBe("“How do I price a first client?” in #General · no answer for 26 hours.");
+  const html = renderToStaticMarkup(React.createElement(GuideSuggests, { drafts: [draft], onPost: async () => null, onSkip: () => {} }));
+  expect(html).toContain("Your guide suggests");
+  expect(html).toContain("A reply to Maya&#x27;s question is ready");
+  // Closed, the words it would post are not shown, and nothing can be posted from the row.
+  expect(html).not.toContain("price on the hours");
+  expect(html).not.toContain("Post reply");
+  expect(renderToStaticMarkup(React.createElement(GuideSuggests, { drafts: [], onPost: async () => null, onSkip: () => {} }))).toBe("");
+});
