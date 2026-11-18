@@ -27,17 +27,20 @@ test("an Ask needs a member and every turn needs a community; the receipt summar
   expect(JSON.stringify(summary)).not.toMatch(/u1|c1/);
 });
 
-// Governed actions: a member's Ask or tag never becomes a post.
-test("Asks and tags only draft channel posts", () => {
+// Governed actions: a tag never becomes another post; in a private talk the
+// guide may post for the person, and the person is asked first (the executor).
+test("a tag only drafts channel posts; a private Ask asks the person before posting", () => {
   const surfaces = { ask: "u1", ask_in_conversation: "u1", tag: "u1" } as const;
   const writes = Object.fromEntries(Object.entries(surfaces).map(([surface, speakerUserId]) => [
     surface, buildCommunityTurnContract({ surface: surface as keyof typeof surfaces, communityId: "c1", speakerUserId }).channelWrites,
   ]));
-  expect(writes).toEqual({ ask: "draft_only", ask_in_conversation: "draft_only", tag: "draft_only" });
+  expect(writes).toEqual({ ask: "asks_person", ask_in_conversation: "asks_person", tag: "draft_only" });
   expect(summarizeCommunityTurnContract(buildCommunityTurnContract({ surface: "tag", communityId: "c1", speakerUserId: "u1" })).channel_writes).toBe("draft_only");
+  expect(summarizeCommunityTurnContract(buildCommunityTurnContract({ surface: "ask", communityId: "c1", speakerUserId: "u1" })).channel_writes).toBe("asks_person");
 });
 
-test("the tool-call check refuses every channel write on a draft-only turn and nothing else", () => {
+test("the tool-call check refuses every channel write on a tag turn and nothing else; an Ask's channel writes reach the executor", () => {
+  const tag = buildCommunityTurnContract({ surface: "tag", communityId: "c1", speakerUserId: "u1", channelId: "ch1" });
   const ask = buildCommunityTurnContract({ surface: "ask", communityId: "c1", speakerUserId: "u1" });
   for (const path of [
     "/communities/sunrise/channels/general/",
@@ -46,10 +49,12 @@ test("the tool-call check refuses every channel write on a draft-only turn and n
     "//communities/sunrise//channels/general/",
     "  /communities/sunrise/channels",
   ]) {
-    expect(checkCommunityTurnToolCall(ask, "polynet_write", { path, mode: "create" })).toMatchObject({ ok: false, errorCode: "draft_only" });
+    expect(checkCommunityTurnToolCall(tag, "polynet_write", { path, mode: "create" })).toMatchObject({ ok: false, errorCode: "draft_only" });
+    // The Ask's write is not refused here: the executor asks the person first.
+    expect(checkCommunityTurnToolCall(ask, "polynet_write", { path, mode: "create" })).toEqual({ ok: true });
   }
-  expect(checkCommunityTurnToolCall(ask, "polynet_write", { path: "/communities/sunrise/builder/resources/", mode: "create" })).toEqual({ ok: true });
-  expect(checkCommunityTurnToolCall(ask, "polynet_read", { path: "/communities/sunrise/channels/general/" })).toEqual({ ok: true });
+  expect(checkCommunityTurnToolCall(tag, "polynet_write", { path: "/communities/sunrise/builder/resources/", mode: "create" })).toEqual({ ok: true });
+  expect(checkCommunityTurnToolCall(tag, "polynet_read", { path: "/communities/sunrise/channels/general/" })).toEqual({ ok: true });
   expect(checkCommunityTurnToolCall(null, "polynet_write", { path: "/communities/sunrise/channels/general/" })).toEqual({ ok: true });
 });
 

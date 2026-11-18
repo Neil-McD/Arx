@@ -234,7 +234,13 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
   that share its words, and with one `reply.draft` it writes a reply and the
   lesson it rests on, or that no lesson answers it. The draft waits on the
   host's Home, "Your guide suggests"; `postReplyDraft` puts it in the thread
-  as the guide, `skipReplyDraft` drops it. At most three in 24 hours); `communityKnowledgeUse` keeps one row of counts per community
+  as the guide, `skipReplyDraft` drops it. At most three in 24 hours); `communityGuideQuestions` (tables
+  `communityGuideQuestions`, `communityGuideAlwaysAllowed`: what the guide
+  asks a person before doing something for them in their private talk. The
+  executor saves a channel write or a removal instead of running it and
+  answers `waiting_for_person`; `KitGuideAsks` shows it above the box where
+  they type; `answerGuideQuestion` runs the same call as them on yes.
+  "Always allow posts" is per person per community); `communityKnowledgeUse` keeps one row of counts per community
   per day of the notes and lessons answers opened, added hours later at a
   random time so nothing traces to a conversation, for how much each is used
   and what is answered together; `communityBrain` (`getBrainMap`) reads it all

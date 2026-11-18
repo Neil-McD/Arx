@@ -39,10 +39,11 @@ export type CommunityTurnContract = {
   // How many recent conversation turns (the current one included) a turn may
   // carry. Older turns stay stored; they just don't ride along.
   historyTurns: number;
-  // Channel speech. "draft_only": the agent never posts, replies, edits or
-  // deletes in a channel for anyone; it writes the draft in its answer and the
-  // member sends it. "own_voice": the agent may post as itself.
-  channelWrites: "draft_only" | "own_voice";
+  // Channel speech. "asks_person": in a private talk the guide may post for
+  // the person it is talking with, and the person is asked first
+  // (shared/operationCatalog.ts, guideAskFor). "draft_only": tagged in a
+  // channel, its reply is its only speech; it never posts for anyone.
+  channelWrites: "draft_only" | "asks_person";
 };
 
 export const COMMUNITY_TURN_HISTORY_TURNS = 20;
@@ -80,10 +81,10 @@ export function buildCommunityTurnContract(args: {
     },
     cacheKey: `pn:${communityId}:${args.surface === "ask_in_conversation" ? "ask" : args.surface}`,
     historyTurns: COMMUNITY_TURN_HISTORY_TURNS,
-    // A member's Ask or tag never becomes a post: the answer (or the tag's
-    // reply) is the agent's only speech. It never writes community notes:
-    // the founder keeps them (Studio).
-    channelWrites: "draft_only",
+    // A tag never becomes another post: the tag's reply is the agent's only
+    // speech. In a private talk it posts for the person after their yes. It
+    // never writes community notes: the founder keeps them (Studio).
+    channelWrites: args.surface === "tag" ? "draft_only" : "asks_person",
   };
 }
 
@@ -108,7 +109,7 @@ export function isCommunityTurnRefusalCode(code: unknown): boolean {
 }
 
 export const DRAFT_ONLY_REFUSAL_MESSAGE =
-  "You never post, reply, edit or delete in a channel for anyone. Write the post in your answer as a draft, say which channel it belongs in, and ask the member to post it themselves.";
+  "Tagged in a channel, your reply is your only post. You never post, reply, edit or delete anywhere else for anyone here.";
 
 // Checked before every tool call of a turn: what the contract forbids never
 // reaches a tool.

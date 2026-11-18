@@ -148,6 +148,36 @@ What a member's own AI reaches, beyond channels, people and courses:
   own post down stays allowed. Direct messages are between two people and
   are not the host's to switch off.
 
+## The guide does what your own AI does, and asks first
+
+(Neil, Nov 18.) The guide in a person's private talk does for them what
+their own AI does through the MCP: the same operations, the same checks, one
+executor. It asks only when the question tells the person something they
+don't already know (`shared/operationCatalog.ts`, `guideAskFor`):
+
+| The person tells the guide to | What happens |
+|---|---|
+| React, mark a lesson done, approve or decline people asking to join (one, some or all) | It does it and says so. Their sentence is the approval. |
+| Post, reply or edit a post under their name | It shows the exact words above the box where they type: **Yes**, **No**, **Always allow posts**. |
+| Remove posts (one, or up to 100 at once), delete their own post | It shows the posts and asks **Yes** or **No**, every time. There is no "always". |
+
+How it works (`convex/communityGuideQuestions.ts`): the guide's call is
+saved as it was made and answered `waiting_for_person`; nothing runs. Yes
+runs that same call as the person, through the executor, with every check
+made again. No, a day without an answer, or the person moving on to another
+turn drops it. The guide is told the answers at the start of its next turn.
+"Always allow posts" is per person per community, switched off again in
+Settings (Membership for a member, Guide for a host). Posts made this way
+follow the same rules as posts through anyone's AI: the host's switch, the
+content checks, the "via AI" mark.
+
+A person's own AI is not asked by Polynet (it has its own person watching
+it, and Polynet can't show a question there), so removing posts through it
+is still refused with a link (below). That is the one place the two doors
+differ.
+
+Not yet through the guide: direct messages, settings, roles, channels.
+
 ## Builder parity
 
 A builder's own AI calls the same rules the app's screens use, one operation
@@ -168,7 +198,7 @@ does it. So a planted post can never talk an AI into it.
 |---|---|
 | Remove a member, ban a member | The member's record (several: the Members page) |
 | Open a closed community | The Members page, where "Who can join" is (added with this rule: the current design had no place for a host to change it) |
-| Remove a post | The community's channels; the AI names the channel and post |
+| Remove a post | Through the guide: asked, then done (above). Through a person's own AI: the community's channels; the AI names the channel and post |
 | Delete a channel, change who may see one, pin a post | Not offered |
 | Publish or unpublish a course, delete what members see | Refused with where the switch is (above) |
 
@@ -216,7 +246,7 @@ Four ways things happen, and where each is approved (Neil, Nov 17):
 2. **The guide, in the composer**, and 3. **your own AI, through the MCP**:
    you are working through an agent. It builds and prepares; what can't be
    taken back it hands to you as a link to the app's own button (above).
-   Nothing needs a new prompt today. If an action ever does, it is asked
+   The guide's questions (words under your name, removing posts) are asked
    just above the composer, where you are working.
 4. **On its own**: the guide's scheduled work, for the community and per
    person, and what arrives by itself (someone asks to join, an event is

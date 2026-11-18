@@ -70,15 +70,32 @@ test("a people fact is one the person stated or approved, here or on their profi
   expect(isPeopleFact(fact({ provenance: "observed_behavior" }), "c1")).toBe(false);
 });
 
-test("a private talk is told its lens, and that moderation never happens in it", () => {
+test("a private talk is told its lens; moderation only with the permission, member and settings changes never in it", () => {
   expect(parseTalkLens({ lens: "builder_private", relation: "owner" })).toEqual({ lens: "builder_private", relation: "owner" });
   expect(parseTalkLens({ lens: "guide_public", relation: "owner" })).toBeNull();
   expect(parseTalkLens({ lens: "member_private", relation: "visitor" })).toBeNull();
-  const member = renderTalkLensForPrompt({ lens: "member_private", relation: "moderator" })!;
-  expect(member).toContain("Lens: member_private");
-  expect(member).toContain("the community's moderator");
-  expect(member).toContain("personal_memory");
+  // The person's answers ride along, trimmed and capped; empty ones are dropped.
+  const parsed = parseTalkLens({ lens: "member_private", relation: "member", answers: [" said yes ", "", 3, ...Array(10).fill("x")] })!;
+  expect(parsed.answers?.[0]).toBe("said yes");
+  expect(parsed.answers).toHaveLength(5);
+  const moderator = renderTalkLensForPrompt({ lens: "member_private", relation: "moderator" })!;
+  expect(moderator).toContain("Lens: member_private");
+  expect(moderator).toContain("the community's moderator");
+  expect(moderator).toContain("personal_memory");
+  expect(moderator).toContain("review_joins");
+  expect(moderator).toContain("remove_posts");
+  expect(moderator).toContain("waiting_for_person");
+  expect(moderator).toContain("Changing members or settings is done by the person in the app or through their own AI, never in this talk.");
+  expect(moderator).not.toContain("builder_change");
+  // A plain member is not told about moderation it can't do.
+  const member = renderTalkLensForPrompt({ lens: "member_private", relation: "member", answers: ["\"Post this in #general as you?\" They said no. Nothing was done."] })!;
+  expect(member).toContain("react");
+  expect(member).toContain("lesson_done");
   expect(member).not.toContain("review_joins");
-  expect(member).toContain("never in this talk");
+  expect(member).not.toContain("remove_posts");
+  expect(member).not.toContain("approve or decline");
+  expect(member).toContain("Since you last spoke, the person answered your questions:");
+  expect(member).toContain("- \"Post this in #general as you?\" They said no. Nothing was done.");
+  expect(renderTalkLensForPrompt({ lens: "member_private", relation: "member" })).not.toContain("Since you last spoke");
   expect(renderTalkLensForPrompt(null)).toBeNull();
 });

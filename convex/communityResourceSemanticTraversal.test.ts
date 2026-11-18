@@ -1442,7 +1442,7 @@ test("member directory skips a member with broken identity rows instead of faili
   );
 });
 
-test("a member marks a lesson done for themselves; only reads made for them show it", async () => {
+test("a member marks a lesson done for themselves, or has the guide do it in their private talk; only reads made for them show it", async () => {
   vi.stubEnv("ARX_PUBLIC_APP_URL", "https://polynet.test");
   const t = convexTest(schema, modules);
   const fixture = await createFixture(t);
@@ -1466,8 +1466,13 @@ test("a member marks a lesson done for themselves; only reads made for them show
   };
 
   expect(await doneIn(fixture.memberSubject, fixture.memberId, "external_mcp")).toBe(false);
-  // The community agent in an Ask reads progress but can't change it.
-  expect(await setDone("community_agent_for_member", true, "agent-done")).toMatchObject({ ok: false, code: "operation_not_found" });
+  // The guide answering in a channel can't change anyone's progress.
+  expect(await setDone("community_agent", true, "channel-guide-done")).toMatchObject({ ok: false, code: "operation_not_found" });
+  expect(await doneIn(fixture.memberSubject, fixture.memberId, "external_mcp")).toBe(false);
+  // The guide in the member's private talk marks it when told, with no question, as their own AI does.
+  expect(await setDone("community_agent_for_member", true, "agent-done")).toMatchObject({ ok: true, value: { ok: true, operation: "community.lesson.set_done", result: { ref: lessonRef, done: true } } });
+  expect(await t.run((ctx) => ctx.db.query("communityGuideQuestions").collect())).toHaveLength(0);
+  expect(await t.run((ctx) => ctx.db.query("communityLessonProgress").collect())).toHaveLength(1);
   expect(await setDone("external_mcp", true, "member-done")).toMatchObject({ ok: true, value: { ok: true, operation: "community.lesson.set_done", result: { ref: lessonRef, done: true } } });
   expect(await setDone("external_mcp", true, "member-done-again")).toMatchObject({ ok: true });
   expect(await t.run((ctx) => ctx.db.query("communityLessonProgress").collect())).toHaveLength(1);
