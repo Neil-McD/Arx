@@ -532,6 +532,21 @@ export async function handleMcpPost(args: {
         ? (message.params as Record<string, unknown>)
         : {};
     const requestedVersion = normalizeString(params.protocolVersion, 32);
+    // Which AI app connected and what it says it supports: its name and
+    // version, the revision it asked for and the names of its capabilities.
+    // Nothing about the person or what they do.
+    const clientInfo = params.clientInfo && typeof params.clientInfo === "object" ? params.clientInfo as Record<string, unknown> : {};
+    const clientCapabilities = params.capabilities && typeof params.capabilities === "object" ? params.capabilities as Record<string, unknown> : {};
+    const elicitation = clientCapabilities.elicitation && typeof clientCapabilities.elicitation === "object" ? clientCapabilities.elicitation as Record<string, unknown> : null;
+    console.log(JSON.stringify({
+      event: "mcp_client_connected",
+      client: normalizeString(clientInfo.name, 80) ?? null,
+      client_version: normalizeString(clientInfo.version, 40) ?? null,
+      requested_version: requestedVersion ?? null,
+      supported: !requestedVersion || isSupportedPolynetMcpProtocolVersion(requestedVersion),
+      capabilities: Object.keys(clientCapabilities).slice(0, 12).map((key) => key.slice(0, 40)),
+      asks_person: elicitation ? (Object.keys(elicitation).length ? Object.keys(elicitation).slice(0, 4) : ["form"]) : [],
+    }));
     if (requestedVersion && !isSupportedPolynetMcpProtocolVersion(requestedVersion)) {
       return jsonRpcErrorResponse(
         req,
