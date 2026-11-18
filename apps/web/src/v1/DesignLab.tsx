@@ -317,8 +317,8 @@ function RealPanels(props: { pod: boolean }) {
       <Main><Top /></Main>
       {props.pod ? <KitPodRail session={labSession} communityId="lab" pod={pod} onChanged={noop} /> : (
         <Rail index={1} label="Home">
-          <KitHomeRail session={labSession} communityId="lab" audience="host" snapshot={snapshot} presence={presence} now={Date.now()}
-            onOpenEvents={noop} onOpenChannelByName={noop} onOpenMembers={noop} onOpenKnowledge={noop} />
+          <KitHomeRail session={labSession} communityId="lab" snapshot={snapshot} presence={presence} now={Date.now()}
+            onOpenEvents={noop} onOpenKnowledge={noop} />
         </Rail>
       )}
     </KitApp>

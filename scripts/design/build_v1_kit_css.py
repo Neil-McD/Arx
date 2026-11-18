@@ -615,8 +615,16 @@ css += """
 .app .kedit-pub{white-space:nowrap}
 :where(:root[data-layout="phone"]) .app .kresadd{grid-template-columns:minmax(0,1fr)}
 
-/* Kit addition: the host's "Needs you" list on Home (KitNeedsYou): every
-   decision waiting on the host, a row each, opening in place. */
+/* Kit addition: Home's middle column. The guide's brief under the greeting
+   (.hbrief), then one list of what needs this person (KitNeedsYou): a row
+   each, the first three shown and the rest stacked behind "N more". */
+.app .hbrief{margin-top:18px;max-width:640px}
+.app .hbrief p{margin:0;font-size:16px;line-height:1.6;color:var(--ink)}
+.app .hbrief>span{display:flex;flex-wrap:wrap;align-items:center;gap:4px 10px;margin-top:8px;font-size:12.5px;color:var(--ink3)}
+.app .hbrief em{font-style:normal}
+.app .hbrief button{color:inherit;cursor:pointer}.app .hbrief button:hover{color:var(--ink)}
+.app .hnone{margin:16px 0 0;font-size:15px;color:var(--ink2)}
+.app.on-t-on .hbrief,.app.on-t-on .hnone{display:none}
 .app .nyou{margin-top:28px;width:100%}
 .app .nyou h3{display:flex;align-items:center;gap:8px;margin:0 0 10px;font-size:13px;font-weight:600;color:var(--ink)}
 .app .nyou h3 i{font-style:normal;min-width:18px;height:18px;padding:0 5px;border-radius:9px;background:var(--accent);color:#fff;font-size:11.5px;font-weight:600;display:inline-grid;place-items:center}
@@ -630,7 +638,9 @@ css += """
 .app .ntext>span{display:block;font-size:13px;color:var(--ink2);margin-top:1px;overflow-wrap:anywhere}
 .app .ntext small{display:block;font-size:12px;color:var(--ink3);margin-top:4px}
 .app .nchev{color:var(--ink3);transition:rotate .16s var(--ease)}.app .nchev.up{rotate:180deg}
-.app .nacts{display:flex;gap:6px;padding:0 14px 13px 54px}
+.app .nside{display:flex;gap:6px;align-items:center}
+.app .nstack{display:flex;align-items:center;justify-content:center;gap:6px;width:100%;padding:9px 0;border-top:1px solid var(--line);font-size:12.5px;color:var(--ink3)}
+.app .nstack:hover{color:var(--ink);background:var(--s2)}
 .app .nopen{border-top:1px solid var(--line);background:var(--panel);padding:6px 14px 12px 54px}
 .app .nperson{display:grid;grid-template-columns:28px minmax(0,1fr) auto;gap:12px;align-items:center;padding:9px 0}
 .app .nperson+.nperson{border-top:1px solid var(--line)}
@@ -642,7 +652,10 @@ css += """
 :where(:root[data-layout="phone"]) .app .nyou{max-width:none}
 :where(:root[data-layout="phone"]) .app .nperson{grid-template-columns:28px minmax(0,1fr)}
 :where(:root[data-layout="phone"]) .app .nbtns{grid-column:2}
-:where(:root[data-layout="phone"]) .app .nopen,:where(:root[data-layout="phone"]) .app .nacts{padding-left:14px}
+:where(:root[data-layout="phone"]) .app .nopen{padding-left:14px}
+:where(:root[data-layout="phone"]) .app div.nhead{grid-template-columns:28px minmax(0,1fr)}
+:where(:root[data-layout="phone"]) .app .nside{grid-column:2}
+:where(:root[data-layout="phone"]) .app .hbrief{max-width:none}
 
 /* Kit addition: holding a lesson or a course by its grip and dropping it
    where it should go (useDragOrder). The line is where it will land. */

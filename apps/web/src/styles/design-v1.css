@@ -599,214 +599,6 @@
 }
 
 /*
- * Design system v1: Home for the owner (spec section 5). The guide's greeting,
- * the one card, and what happened across the community.
- */
-:root[data-design="v1"] .community-home {
-  display: grid;
-  gap: 40px;
-  width: 100%;
-  max-width: 720px;
-  /* Left edge shared with the composer below, not centred on its own. */
-  margin: 0 auto 32px 0;
-  padding-top: 28px;
-}
-
-:root[data-design="v1"] .community-home-main {
-  display: grid;
-  gap: 0;
-  min-width: 0;
-}
-
-:root[data-design="v1"] .community-home-eyebrow {
-  position: relative;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  color: var(--text-ink-secondary);
-  font-size: 13px;
-}
-
-:root[data-design="v1"] .community-home-eyebrow svg {
-  color: var(--accent-agent);
-}
-
-/* Light belongs to the guide: one faint glow behind its mark. */
-:root[data-design="v1"] .community-home-eyebrow::before {
-  content: "";
-  position: absolute;
-  left: -150px;
-  top: -120px;
-  width: 420px;
-  height: 300px;
-  pointer-events: none;
-  background: radial-gradient(closest-side, color-mix(in srgb, var(--accent-agent) 10%, transparent), transparent);
-}
-
-:root[data-design="v1"][data-theme="light"] .community-home-eyebrow::before {
-  background: radial-gradient(closest-side, color-mix(in srgb, var(--accent-agent) 6%, transparent), transparent);
-}
-
-:root[data-design="v1"] .community-home-hello {
-  position: relative;
-  margin: 12px 0 0;
-  color: var(--text-ink-primary);
-  font-family: var(--font-voice);
-  font-size: 40px;
-  font-weight: 300;
-  line-height: 1.1;
-  letter-spacing: -0.022em;
-}
-
-:root[data-design="v1"][data-theme="light"] .community-home-hello {
-  font-weight: 350;
-}
-
-:root[data-design="v1"] .community-home-hello span {
-  display: block;
-  margin-top: 10px;
-  color: var(--text-ink-secondary);
-  font-size: 24px;
-  line-height: 1.3;
-  letter-spacing: -0.012em;
-}
-
-:root[data-design="v1"] .community-home-card {
-  position: relative;
-  display: grid;
-  gap: 8px;
-  margin-top: 28px;
-  padding: 22px 24px 20px;
-  border: 1px solid var(--border-strong);
-  border-radius: 14px;
-  background: var(--bg-card);
-}
-
-:root[data-design="v1"][data-theme="light"] .community-home-card {
-  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.05), 0 18px 44px -18px rgba(16, 24, 40, 0.16);
-}
-
-:root[data-design="v1"] .community-home-card-label {
-  color: var(--text-faint);
-  font-size: 12px;
-  font-weight: 500;
-}
-
-:root[data-design="v1"] .community-home-card h2 {
-  margin: 0;
-  color: var(--text-ink-primary);
-  font-size: 20px;
-  font-weight: 600;
-  letter-spacing: -0.015em;
-}
-
-:root[data-design="v1"] .community-home-card p {
-  margin: 0;
-  color: var(--text-ink-secondary);
-  font-family: var(--font-voice);
-  font-size: 17px;
-  line-height: 1.45;
-}
-
-:root[data-design="v1"] .community-home-card-action {
-  justify-self: start;
-  height: 36px;
-  margin-top: 10px;
-  padding: 0 14px;
-  border: 0;
-  border-radius: 9px;
-  background: var(--bg-button);
-  color: var(--bg-button-text);
-  font-size: 14px;
-  font-weight: 550;
-  cursor: pointer;
-}
-
-:root[data-design="v1"] .community-home-card-action:hover {
-  background: var(--bg-button-hover);
-}
-
-:root[data-design="v1"] .community-home-card-action:focus-visible,
-:root[data-design="v1"] .community-home-row:focus-visible {
-  outline: 2px solid var(--focus-ring);
-  outline-offset: 2px;
-}
-
-:root[data-design="v1"] .community-home-rows {
-  display: grid;
-  margin-top: 28px;
-}
-
-:root[data-design="v1"] .community-home-rows-label {
-  margin-bottom: 6px;
-  color: var(--text-faint);
-  font-size: 12px;
-  font-weight: 500;
-}
-
-:root[data-design="v1"] .community-home-row {
-  position: relative;
-  display: grid;
-  grid-template-columns: 84px minmax(0, 1fr) 20px;
-  align-items: center;
-  gap: 0 12px;
-  margin: 0 -10px;
-  padding: 13px 10px;
-  border: 0;
-  border-radius: 10px;
-  background: transparent;
-  color: inherit;
-  font: inherit;
-  text-align: left;
-}
-
-:root[data-design="v1"] .community-home-row + .community-home-row::before {
-  content: "";
-  position: absolute;
-  top: 0;
-  right: 10px;
-  left: 10px;
-  height: 1px;
-  background: var(--border-default);
-}
-
-:root[data-design="v1"] button.community-home-row {
-  cursor: pointer;
-}
-
-:root[data-design="v1"] button.community-home-row:hover {
-  background: var(--hover-overlay);
-}
-
-:root[data-design="v1"] .community-home-row-kind {
-  color: var(--text-faint);
-  font-size: 12px;
-}
-
-:root[data-design="v1"] .community-home-row-text {
-  display: grid;
-  min-width: 0;
-}
-
-:root[data-design="v1"] .community-home-row-text b {
-  color: var(--text-ink-primary);
-  font-size: 15px;
-  font-weight: 500;
-}
-
-:root[data-design="v1"] .community-home-row-text span {
-  overflow: hidden;
-  color: var(--text-faint);
-  font-size: 13px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-:root[data-design="v1"] .community-home-row svg {
-  color: var(--text-faint);
-}
-
-/*
  * Design system v1: the frame (spec section 4). Inside a community there is no
  * rail of community icons; the name on the banner is the switcher, Inbox and
  * Members are rows, and the host's tools sit quietly above the account row.
@@ -1202,79 +994,6 @@
   white-space: nowrap;
 }
 
-:root[data-design="v1"] .community-home-aside {
-  display: grid;
-  align-content: start;
-  gap: 24px;
-  min-width: 0;
-  padding-top: 24px;
-  border-top: 1px solid var(--border-default);
-}
-
-:root[data-design="v1"] .community-home-figures {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-
-:root[data-design="v1"] .community-home-figure {
-  display: grid;
-  min-width: 0;
-}
-
-:root[data-design="v1"] .community-home-figure span {
-  color: var(--text-faint);
-  font-size: 12px;
-}
-
-:root[data-design="v1"] .community-home-figure b {
-  color: var(--text-ink-primary);
-  font-size: 24px;
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-}
-
-:root[data-design="v1"] .community-home-figure em {
-  color: var(--text-ink-secondary);
-  font-size: 12px;
-  font-style: normal;
-}
-
-:root[data-design="v1"] .community-home-aside-section {
-  display: grid;
-  justify-items: start;
-  border-top: 1px solid var(--border-default);
-}
-
-:root[data-design="v1"] .community-home-aside-section h3 {
-  margin: 0;
-  color: var(--text-ink-primary);
-  font-size: 15px;
-}
-
-:root[data-design="v1"] .community-home-aside-section p {
-  margin: 0;
-  color: var(--text-ink-secondary);
-  font-size: 13px;
-}
-
-:root[data-design="v1"] .community-home-aside-link {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  margin-top: 4px;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: var(--text-ink-secondary);
-  font-size: 13px;
-  cursor: pointer;
-}
-
-:root[data-design="v1"] .community-home-aside-link:hover,
-:root[data-design="v1"] .community-home-aside-link:focus-visible {
-  outline: none;
-  color: var(--text-ink-primary);
-}
 
 /*
  * Design system v1: the page's structure, flat as in the mock (Neil, Nov 11,
@@ -1371,9 +1090,6 @@
   display: none;
 }
 
-:root[data-design="v1"] .community-home-aside.is-rail {
-  border-top: 0;
-}
 
 @media (min-width: 1024px) {
   :root[data-design="v1"] .community-agent-dock-panel.has-home-rail {
@@ -1394,9 +1110,7 @@
   }
 
   /* The rail carries the panel, so the copy under the rows is not shown. */
-  :root[data-design="v1"] .community-home-aside.is-inline {
-    display: none;
-  }
+
 }
 
 /*
@@ -2491,11 +2205,6 @@
 /* The mock's eyebrow sits 40px under a 52px header line. Home has no line,
    so the same 92px keeps the greeting where the mock has it and leaves the
    new-conversation button its own row, on the gutter. */
-:root[data-design="v1"]:where(:not([data-layout="phone"])) .community-agent-page .community-home {
-  max-width: 760px;
-  margin: 0 0 32px;
-  padding-top: 92px;
-}
 
 :root[data-design="v1"]:where(:not([data-layout="phone"])) .community-agent-page .community-agent-page-header {
   top: 10px;
@@ -2542,43 +2251,6 @@
   font-size: 15px;
 }
 
-:root[data-design="v1"] .community-home-hello {
-  max-width: 680px;
-  margin-top: 14px;
-}
-
-:root[data-design="v1"] .community-home-aside.is-rail {
-  gap: 26px;
-  padding: 20px 24px 24px;
-}
-
-:root[data-design="v1"] .community-home-figures {
-  gap: 20px 16px;
-}
-
-:root[data-design="v1"] .community-home-figure {
-  gap: 0;
-}
-
-:root[data-design="v1"] .community-home-figure b {
-  margin-top: 4px;
-  letter-spacing: -0.025em;
-  line-height: 1.1;
-}
-
-:root[data-design="v1"] .community-home-figure em {
-  margin-top: 3px;
-}
-
-:root[data-design="v1"] .community-home-aside-section {
-  gap: 8px;
-  padding-top: 26px;
-}
-
-:root[data-design="v1"] .community-home-aside-section h3 {
-  font-weight: 550;
-  letter-spacing: -0.005em;
-}
 
 /*
  * Design system v1: the Events page at the mock's measurements

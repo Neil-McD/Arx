@@ -11,7 +11,7 @@ export type OwnerMomentKey =
   | "busy_week";
 
 export type OwnerMomentFacts = {
-  questionsWaiting: Array<{ author: string; channel: string; hoursAgo: number }>;
+  questionsWaiting: Array<{ author: string; channel: string; hoursAgo: number; text?: string }>;
   quietNewcomers: { count: number; names: string[] };
   courseStall: { course: string; lessonNumber: number; members: number } | null;
   weekMessages: number;
@@ -115,4 +115,65 @@ export function pickOwnerMoment(args: {
     return !record || args.nowMs - Math.max(record.shownAt, record.dismissedAt ?? 0) >= PROBLEM_QUIET_MS;
   });
   return next ? { moment: next, isNew: true } : null;
+}
+
+// ---- Home's list of things that need the host (docs/specs/agent-access-v0.md,
+// "Home"). What was noticed, as rows: each has one action and "Not now",
+// which hides it for PROBLEM_QUIET_MS. All that are true are returned (no
+// one-a-week rule: they are rows in a short list, not a card that takes over
+// the page). A busy week is not here: it is not something to do.
+export type OwnerNoticedKey = "questions_waiting" | "quiet_newcomers" | "course_stall";
+export type OwnerNoticed = {
+  key: OwnerNoticedKey;
+  title: string;
+  detail: string;
+  action: string;
+  target: { kind: "channel"; name: string } | { kind: "members" } | { kind: "knowledge" };
+  // What the guide does about it, for a community without one.
+  guide: string;
+};
+
+const waitedFor = (hours: number) => hours >= 48 ? plural(Math.floor(hours / 24), "day", "days") : plural(Math.max(1, Math.floor(hours)), "hour", "hours");
+
+export function ownerNoticed(args: { facts: OwnerMomentFacts; records: OwnerMomentRecord[]; nowMs: number }): OwnerNoticed[] {
+  const hidden = new Set(args.records
+    .filter((record) => record.dismissedAt !== null && args.nowMs - record.dismissedAt < PROBLEM_QUIET_MS)
+    .map((record) => record.key));
+  const list: OwnerNoticed[] = [];
+  const waiting = args.facts.questionsWaiting.filter((question) => question.hoursAgo >= QUESTION_WAIT_HOURS);
+  if (waiting.length) {
+    const first = waiting[0];
+    const said = String(first.text ?? "").trim();
+    list.push({
+      key: "questions_waiting",
+      title: `${first.author}'s question has had no answer for ${waitedFor(first.hoursAgo)}`,
+      detail: [said ? `\u201c${said}\u201d in #${first.channel}.` : `In #${first.channel}.`,
+        waiting.length > 1 ? `${plural(waiting.length - 1, "other question is", "other questions are")} waiting too.` : ""].filter(Boolean).join(" "),
+      action: `Open #${first.channel}`,
+      target: { kind: "channel", name: first.channel },
+      guide: "answers from your Knowledge, or points them to the member who knows",
+    });
+  }
+  if (args.facts.quietNewcomers.count >= QUIET_NEWCOMERS_MIN) {
+    list.push({
+      key: "quiet_newcomers",
+      title: `${names(args.facts.quietNewcomers.names, args.facts.quietNewcomers.count)} joined and haven't said hello`,
+      detail: "They joined in the last two weeks.",
+      action: "See them",
+      target: { kind: "members" },
+      guide: "welcomes each one and introduces them to someone",
+    });
+  }
+  if (args.facts.courseStall && args.facts.courseStall.members >= COURSE_STALL_MIN) {
+    const stall = args.facts.courseStall;
+    list.push({
+      key: "course_stall",
+      title: `${stall.members} members stopped after lesson ${stall.lessonNumber} of ${stall.course}`,
+      detail: "None of them has moved on in a week.",
+      action: "Open Knowledge",
+      target: { kind: "knowledge" },
+      guide: "follows up where each person stopped, and answers their questions on that lesson",
+    });
+  }
+  return list.filter((entry) => !hidden.has(entry.key));
 }

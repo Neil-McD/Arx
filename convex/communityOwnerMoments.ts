@@ -15,6 +15,7 @@ import { communityIsActive } from "../shared/communityLifecycle";
 import {
   COURSE_STALL_MIN,
   OWNER_MOMENT_KEYS,
+  ownerNoticed,
   pickOwnerMoment,
   type OwnerMomentFacts,
 } from "../shared/communityOwnerMoments";
@@ -73,23 +74,43 @@ async function courseStall(ctx: any, communityId: any, nowMs: number): Promise<O
   return best;
 }
 
+// The facts, and what was shown and waved off, for one community's owner.
+async function ownerFactsAndRecords(ctx: any, community: any, nowMs: number) {
+  const snapshot = await buildSnapshot(ctx, community, nowMs - DAY_MS, nowMs);
+  const facts: OwnerMomentFacts = {
+    questionsWaiting: snapshot.unanswered.map((row) => ({ author: row.author, channel: row.channel, hoursAgo: row.hoursAgo, text: row.text })),
+    quietNewcomers: snapshot.quietNewcomers,
+    courseStall: await courseStall(ctx, community._id, nowMs),
+    weekMessages: snapshot.week.messages,
+  };
+  const records = (await ctx.db.query("communityOwnerMoments")
+    .withIndex("by_community_key", (q: any) => q.eq("communityId", community._id)).take(50))
+    .map((row: any) => ({ key: String(row.key), shownAt: Number(row.shownAt), dismissedAt: typeof row.dismissedAt === "number" ? row.dismissedAt : null }));
+  return { facts, records };
+}
+
+// Home's list: everything noticed that the owner hasn't waved off
+// (shared/communityOwnerMoments.ts, ownerNoticed). "Not now" is
+// dismissOwnerMoment below.
+export const listOwnerNoticed = query({
+  args: { authSubject: v.optional(v.string()), communityId: v.id("communities") },
+  handler: async (ctx, args) => {
+    const community = await requireOwner(ctx, args.authSubject, args.communityId);
+    if (!communityIsActive(community)) return [];
+    const nowMs = Date.now();
+    return ownerNoticed({ ...(await ownerFactsAndRecords(ctx, community, nowMs)), nowMs });
+  },
+});
+
+// The older one-card Home (web apps still open on the previous build read
+// this and mark the card shown; delete both after the next production release).
 export const getOwnerMoment = query({
   args: { authSubject: v.optional(v.string()), communityId: v.id("communities") },
   handler: async (ctx, args) => {
     const community = await requireOwner(ctx, args.authSubject, args.communityId);
     if (!communityIsActive(community)) return null;
     const nowMs = Date.now();
-    const snapshot = await buildSnapshot(ctx, community, nowMs - DAY_MS, nowMs);
-    const facts: OwnerMomentFacts = {
-      questionsWaiting: snapshot.unanswered.map((row) => ({ author: row.author, channel: row.channel, hoursAgo: row.hoursAgo })),
-      quietNewcomers: snapshot.quietNewcomers,
-      courseStall: await courseStall(ctx, args.communityId, nowMs),
-      weekMessages: snapshot.week.messages,
-    };
-    const records = (await ctx.db.query("communityOwnerMoments")
-      .withIndex("by_community_key", (q: any) => q.eq("communityId", args.communityId)).take(50))
-      .map((row: any) => ({ key: String(row.key), shownAt: Number(row.shownAt), dismissedAt: typeof row.dismissedAt === "number" ? row.dismissedAt : null }));
-    return pickOwnerMoment({ facts, records, nowMs });
+    return pickOwnerMoment({ ...(await ownerFactsAndRecords(ctx, community, nowMs)), nowMs });
   },
 });
 
