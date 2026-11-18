@@ -3434,6 +3434,17 @@ export async function executePolynetCanonicalTool(args: {
   if (isMessagesPath(input.path)) {
     const privateTalk = args.principalKind === "community_agent_for_member" && args.evidenceSurface === "member_agent_dock" && Boolean(args.mountedCommunityId);
     if (args.principalKind !== "external_mcp" && !privateTalk) return canonicalError("semantic_not_found", "Repository path not found or not accessible.");
+    // The talk is a community's: someone who has since left it (or lost
+    // access) has no talk there, so nothing is listed and a question asked
+    // earlier can no longer be answered yes into a sent message.
+    if (privateTalk) {
+      try {
+        await args.ctx.runQuery((internal as any).communityAgent.resolveRuntimeCommunityPromptContextInternal,
+          { authSubject, userId: userId as any, communityId: args.mountedCommunityId as any });
+      } catch {
+        return canonicalError("semantic_not_found", "Repository path not found or not accessible.");
+      }
+    }
     // Through the guide a reply is sent only on the person's yes (askAboutMessage).
     if (privateTalk && args.toolName === "polynet_write" && args.personSaidYes !== true) {
       return canonicalError("message_not_sent", "That reply wasn't sent: the person is asked first.");

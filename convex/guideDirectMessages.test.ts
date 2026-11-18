@@ -249,3 +249,21 @@ test("the guide's loop lets the person's messages path through to the executor",
   expect(normalizeToolArguments("polynet_list" as any, { path: "/messages/abcd1234/" })).toMatchObject({ path: "/messages/abcd1234/" });
   expect(() => normalizeToolArguments("polynet_list" as any, { path: "/nowhere/" })).toThrow();
 });
+
+test("someone who has left the community can no longer list messages in its talk, or answer yes to a reply asked earlier", async () => {
+  const w = await world();
+  await w.talk("member")("polynet_reply_message", { conversation: w.ownerMember, text: "See you there." }, "call_1");
+  const [question] = await w.questions("member");
+  const before = await w.messages();
+  // The member is removed from the community; their conversation with the owner still exists.
+  await w.t.run(async (ctx) => {
+    for (const row of await ctx.db.query("communityMemberships").collect()) {
+      if (String(row.userId) === String(w.ids.member)) await ctx.db.patch(row._id, { state: "removed" } as any);
+    }
+  });
+  const inbox = await w.talk("member")("polynet_list", { path: "/messages/" });
+  expect(inbox.status).toBe("error");
+  const answered = await w.answer("member", question.id, "yes").catch((error: any) => ({ status: "threw", line: String(error?.message ?? error) }));
+  expect(answered.status).not.toBe("done");
+  expect(await w.messages()).toHaveLength(before.length);
+});
