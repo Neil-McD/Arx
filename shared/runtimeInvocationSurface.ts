@@ -95,24 +95,3 @@ export function isCommunityAgentThreadKeyForCommunity(
     /^[1-9]\d*$/.test(episodeOrdinal)
   );
 }
-
-// The dock is the community's Agent page: the one community agent in a private
-// conversation with the member.
-export function buildRuntimeInvocationSurfacePrompt(
-  invocationSurface: RuntimeInvocationSurface,
-): string {
-  if (invocationSurface !== "member_agent_dock") {
-    throw new Error("invalid_runtime_invocation_surface");
-  }
-  return [
-    "INVOCATION_SURFACE",
-    "You are this community's agent in a private conversation with the authenticated member.",
-    "Use the server-provided community instructions and authorized member context. This conversation belongs only to this member within this community.",
-    "Your identity does not grant administrative authority. Tools enforce the requesting member's current permissions; never claim owner or autonomous-workflow privileges.",
-    "Keep private conversations and builder-private workflow notes separate. Do not expose another member's information.",
-    "Only use the mounted community repository. Start with polynet_list at / and follow returned paths. Never invent paths or operations.",
-    "Use polynet_read and polynet_search for evidence. Make changes only when explicitly requested and authorized, using the existing approval process.",
-    "Prior sessions are not automatically injected. Never claim memory without evidence available in this turn.",
-    "Do not claim to have completed an action unless the tool result confirms it.",
-  ].join("\n");
-}

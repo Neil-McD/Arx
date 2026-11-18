@@ -290,7 +290,7 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
 - **Does:** the one community agent: Agent-page conversations, @mention replies,
   site conversations; tools, streaming, model calls, receipts.
 - **Code:** `communityTurnContract` (shared: who speaks, who sees the answer, which layers that allows, and how many recent turns an Ask carries: 20, current turn included; older messages stay stored, unsummarized; and whether the agent may speak in channels: Ask and tag turns only draft posts, the member sends them), `communityNotes` (community notes under memory/: hosts write them in Knowledge, everyone reads them), `runtimeAgentLoop` (a private talk's context, then the run entry `communityAgentRun`), `runtimeKernel` (the loop rules, `RuntimeKernelRun`), `piRuntimeKernel` (the loop engine, on Pi), `runtimeTurn*`, `runtimeContextIntegrity`,
-  `runtimeHarnessShaping`, `runtimeHarnessComposition`, `polynetCanonicalExecutor`,
+  `runtimeHarnessShaping`, `polynetCanonicalExecutor`,
   `communityRepositorySearch`, `threads`, `communityAgent`, `communityAgentRuntime`,
   `communityAgentFilesystem`,
   `communityAgentContext`, `communityAgentChannelAccess`, `communityAgentConcierge*`,
@@ -340,9 +340,9 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
   `harnessSkills`, `runtimeSkillResolution`, `platformSkillRuntime`). What stays:
   each turn's resource lane follows the private talk's lens (`TalkLens` in
   `shared/lens.ts`, worked out once in `communityAgent`; fails closed without
-  community entry), and
-  `runtimeHarnessComposition` adds the resources architect instructions
-  (`shared/communityResourcesArchitect.ts`) to builder-lane turns only.
+  community entry). The course-building instructions are a skill
+  (`shared/guideSkills.ts`, Nov 18 2026): a document under skills/ for hosts,
+  in the guide's prompt only when a host is on Knowledge.
 
 ### 9. Proactive agent — Keep, growing
 

@@ -26,7 +26,7 @@ const [
   interactions,
   runtimeLoop,
   retrievalTools,
-  invocationSurface,
+  privateTalk,
   conciergeTools,
   conciergeWorker,
   mcp,
@@ -43,7 +43,7 @@ const [
   read("convex/communityInteractions.ts"),
   Promise.all([read("convex/runtimeAgentLoop.ts"), read("convex/agentTools.ts")]).then((parts) => parts.join("\n")),
   read("shared/retrievalTools.ts"),
-  read("shared/runtimeInvocationSurface.ts"),
+  Promise.all([read("shared/runtimePrompt.ts"), read("shared/lens.ts")]).then((parts) => parts.join("\n")),
   read("shared/lens.ts"),
   read("convex/communityAgentServeWorker.ts"),
   read("shared/polynetMcp.ts"),
@@ -111,7 +111,7 @@ assert.doesNotMatch(communityChat, /communityArchiveDocuments|deleteArchiveDocum
 assert.match(interactions, /scheduleCommunityInteractionEvidenceSync/);
 
 assert.doesNotMatch(retrievalTools, /community_chat_search|community_chat_read/);
-for (const source of [invocationSurface, conciergeTools]) {
+for (const source of [privateTalk, conciergeTools]) {
   assert.match(source, /polynet_search/);
   assert.match(source, /polynet_read/);
   assert.doesNotMatch(source, /community_chat_search|community_chat_read/);

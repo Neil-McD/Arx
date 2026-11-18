@@ -64,7 +64,6 @@ import type { CommunityInferenceFundingAdmission } from "../shared/founderInfere
 import {
   summarizeToolArgsForLog,
 } from "./runtimeHarnessShaping";
-import { composeResolvedRuntimeHarness } from "./runtimeHarnessComposition.ts";
 import {
   buildRuntimeToolPolicySurface,
 } from "../shared/runtimeToolPolicy";
@@ -181,13 +180,11 @@ async function executeRetrievalAgentLoop(
 ): Promise<PrivateTalkRunResult> {
   const now = new Date();
   // The resources lane follows the talk's lens: builders get the builder
-  // lane (and the resources architect); members read live resources.
+  // lane; members read live resources. It is recorded in the turn envelope
+  // and the context manifest.
   const communityResourceLane = buildCommunityResourceRuntimeLaneState(
     !params.communityLens ? "none" : LENS_FAMILY[params.communityLens.lens] === "builder" ? "builder" : "member",
   );
-  const resolvedHarness = composeResolvedRuntimeHarness({
-    communityResourceLane,
-  });
   const effectiveAllowedToolNames = params.allowedToolNames;
   const latestUserContent = [...params.messages]
     .reverse()
@@ -202,7 +199,7 @@ async function executeRetrievalAgentLoop(
     threadWorkingState: params.threadWorkingState,
     threadId: params.threadId ?? null,
     communityId: params.communityId ?? null,
-    communityResourceLane: resolvedHarness.communityResourceLane,
+    communityResourceLane: communityResourceLane,
     communityLens: params.communityLens ?? null,
     allowedToolNames: effectiveAllowedToolNames,
     communityAgentSurfaceContext: params.communityAgentSurfaceContext,
@@ -337,10 +334,7 @@ async function executeRetrievalAgentLoop(
     }
   }
   const runtimePromptBundle = buildPlatformHarnessRuntimePromptBundle({
-    loopBudget: params.loopBudget,
     allowedToolNames: effectiveAllowedToolNames,
-    communityResourceLane: resolvedHarness.communityResourceLane,
-    harnessName: params.harnessName,
     communityId: params.communityId,
     communityName: params.communityName,
     communitySlug: params.communitySlug,
@@ -354,6 +348,7 @@ async function executeRetrievalAgentLoop(
     currentDateLabel: runtimeDateLabel,
     currentTimeZone: runtimeTimeZone,
     currentTimeZoneIsCommunity: Boolean(communityTimeZone),
+    currentTimeZoneIsPerson: !communityTimeZone && runtimeTimeZone !== "UTC" && Boolean(askerTimeZone),
     invocationSurface: params.invocationSurface,
     communityAgentSurfaceContext: params.communityAgentSurfaceContext,
     memberIdentityContextMd,
@@ -361,15 +356,10 @@ async function executeRetrievalAgentLoop(
     personalMemoryMd,
     communityCardMd,
     communityHandbookMd,
-    promptExtensions: resolvedHarness.promptExtensions,
   });
   // One cache group per community and surface: they share the stable prefix.
   const promptCacheKey = turnContract?.cacheKey ?? `pn:none:${params.invocationSurface}`;
   const systemPrompt = runtimePromptBundle.text;
-  const promptSuffixChars = resolvedHarness.promptExtensions.reduce(
-    (total, section) => total + String(section.text ?? "").length,
-    0,
-  );
   const providerToolPolicySurface = buildRuntimeToolPolicySurface({
     fixedToolNames: effectiveAllowedToolNames,
   });
@@ -527,7 +517,7 @@ async function executeRetrievalAgentLoop(
       content: extractTextFromNativeToolMessageContent(message.content),
     })),
     allowedToolNames: effectiveAllowedToolNames,
-    communityResourceLane: resolvedHarness.communityResourceLane,
+    communityResourceLane: communityResourceLane,
     communityAbout: params.communityAbout ?? null,
     promptSections: runtimePromptBundle.sections,
     runtimeTurnEnvelope,
@@ -555,10 +545,12 @@ async function executeRetrievalAgentLoop(
       eventType: "runtime_prompt_bundle_resolved",
       eventKey: `${params.runId}:runtime_prompt_bundle_resolved:1`,
       payload: {
-        version: 3,
+        // Version 4 (Nov 18 2026): the guide's rewritten instructions
+        // (shared/runtimePrompt.ts); nothing is appended after the sections.
+        version: 4,
         run_id: params.runId,
-        base_prompt_chars: runtimePromptBundle.text.length - promptSuffixChars,
-        prompt_suffix_chars: promptSuffixChars,
+        base_prompt_chars: runtimePromptBundle.text.length,
+        prompt_suffix_chars: 0,
         system_prompt_chars: systemPrompt.length,
         sections: runtimePromptBundle.sections,
       },
