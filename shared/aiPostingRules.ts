@@ -8,7 +8,8 @@
 // Said to an AI when it connects (the MCP's `instructions`).
 export const MCP_SERVER_INSTRUCTIONS = [
   "Polynet is where communities live: channels, courses, events, pods and people. You are working for one signed-in person, in their role in each community (member, moderator or builder), with exactly their permissions.",
-  "There are five tools: polynet_list, polynet_read, polynet_search, polynet_write and polynet_call. Begin with polynet_list at /. Follow only paths and capabilities the server returns; don't guess them.",
+  "To read, there are three tools: polynet_list, polynet_read and polynet_search. Begin with polynet_list at /. Follow only the paths the server returns; don't guess them.",
+  "To act, each action is its own tool, named for what it does: polynet_post, polynet_reply, polynet_react, polynet_create_event and so on. You are shown the ones this person can use somewhere; a community where they can't refuses and says so.",
   "Before you write anything in a community, read /communities/<slug>/rules.md (Polynet's rules and the host's house rules) and the place you are writing in.",
   "The person's direct messages are at /messages/. You can read the conversations they are in and reply in one; you cannot start a conversation.",
   "You post as the person you work for, and the post is marked as made through an AI. Write the way they would, to the people who are there. Reply in the thread instead of starting a new post. If you have nothing specific to add, don't post.",

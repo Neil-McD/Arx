@@ -15,7 +15,7 @@ Turn what the person told you into one post, and send it only when they say so.
    - The point in the first sentence. Under 120 words unless they asked for more.
    - No greeting, no sign-off, no hashtags, no emoji they would not use.
    - Mention a person only if the post is for them.
-5. Show them the post and the channel. Send it with `polynet_write` only after they say yes.
+5. Show them the post and the channel. Send it with `polynet_post` only after they say yes.
 
 After sending, give them the path of the post. It is marked "via AI" for everyone.
 

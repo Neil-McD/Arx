@@ -131,6 +131,34 @@ sets it; a client can neither set nor clear it.
 members, weekly recap. Each reads `rules.md` first and asks before it
 posts. Not published.
 
+## What a person's own AI is shown: read like a file system, act like an API
+
+(Neil, Nov 18, after the first runs with a real AI.) Reading is browsing, so
+three general tools do it: `polynet_list`, `polynet_read`, `polynet_search`.
+Acting is a short, fixed set of verbs, so **each action is its own named
+tool** with plain inputs (`polynet_post`, `polynet_react`,
+`polynet_create_event`, ...), generated from the one list
+(`shared/actionTools.ts`). A named tool is translated into the same
+`polynet_write` or `polynet_call` the executor already runs; nothing else
+changes.
+
+- **Who is shown what.** A member's tools for everyone; a moderator's and a
+  builder's too for someone who holds that role in any community. Every call
+  is still checked for the community it names.
+- **Labels are the list's.** What asks every time is marked as needing care,
+  so the person's own AI app asks them. What only a person does is not a tool.
+- **No bookkeeping.** No version, no target path. The key that stops a
+  repeat is optional: without one, the same action with the same inputs
+  inside five minutes is a retry.
+- **Why.** An AI app decides what to show, what to ask its person and what to
+  load per tool, by name and label. Five general tools hid all of that: a
+  real AI had to fail a call to learn its shape, one "allow" covered every
+  action, and no label could be true.
+- `polynet_write` and `polynet_call` still run for what is already
+  connected, and are what the guide uses; they are no longer listed to a
+  person's own AI. `scripts/action_tools.test.ts` holds that every action has
+  exactly one named tool or a stated reason for none.
+
 ## The member lens
 
 What a member's own AI reaches, beyond channels, people and courses:

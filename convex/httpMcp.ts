@@ -8,6 +8,8 @@ import {
   isSupportedPolynetMcpProtocolVersion,
 } from "../shared/polynetMcp";
 import { executePolynetCanonicalTool } from "./polynetCanonicalExecutor.ts";
+import { internal } from "./_generated/api";
+import { actionTool, actionToolDefinition, actionToolsFor, translateActionTool, type ActionToolRole } from "../shared/actionTools";
 import {
   POLYNET_CANONICAL_TOOL_NAMES,
   type PolynetCanonicalToolName,
@@ -589,8 +591,17 @@ export async function handleMcpPost(args: {
     if (id === null) {
       return jsonRpcErrorResponse(req, jsonResponse, null, -32600, "Invalid Request.");
     }
+    // Reading is three general tools; each action is its own named tool
+    // (shared/actionTools.ts), the ones this person can use somewhere.
+    // polynet_write and polynet_call still run for what is already connected,
+    // but are no longer shown.
+    const role = (await ctx.runQuery((internal as any).mcpActionTools.highestRoleInternal, { userId: actor.dbUserId })
+      .catch(() => "member")) as ActionToolRole;
     return jsonRpcResultResponse(req, jsonResponse, id, {
-      tools: getPolynetMcpToolDefinitions(),
+      tools: [
+        ...getPolynetMcpToolDefinitions().filter((tool) => tool.annotations.readOnlyHint === true),
+        ...actionToolsFor(role).map(actionToolDefinition),
+      ],
     });
   }
 
@@ -606,19 +617,22 @@ export async function handleMcpPost(args: {
     if (!toolName) {
       return jsonRpcErrorResponse(req, jsonResponse, id, -32602, "Tool name is required.");
     }
-    if (!getPolynetMcpToolDefinition(toolName)) {
+    const named = actionTool(toolName);
+    if (!named && !getPolynetMcpToolDefinition(toolName)) {
       return jsonRpcErrorResponse(req, jsonResponse, id, -32601, "Tool not found.");
     }
-    const toolArgs =
+    const givenArgs =
       params.arguments && typeof params.arguments === "object" && !Array.isArray(params.arguments)
         ? (params.arguments as Record<string, unknown>)
         : {};
+    // A named tool is the same call the executor already runs, written out.
+    const translated = named ? translateActionTool(named, givenArgs, Date.now()) : null;
     const result = await handleToolCall({
       ctx,
       authSubject: actor.authSubject,
       actor: { dbUserId: actor.dbUserId },
-      toolName,
-      toolArgs,
+      toolName: translated ? translated.toolName : toolName,
+      toolArgs: translated ? translated.input : givenArgs,
     });
     if (!result.ok && result.type === "protocol") {
       return jsonRpcErrorResponse(req, jsonResponse, id, -32601, result.message);

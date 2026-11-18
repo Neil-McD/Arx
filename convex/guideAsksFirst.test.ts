@@ -9,6 +9,7 @@ import { ensureGeneralChannel } from "./communityChannelCore";
 import schema from "./schema";
 import { executePolynetCanonicalTool } from "./polynetCanonicalExecutor";
 import { PLATFORM_LEGAL_DOCUMENTS } from "../shared/legalDocuments";
+import { actionTool, translateActionTool } from "../shared/actionTools";
 
 const modules = import.meta.glob("./**/*.*s");
 
@@ -403,4 +404,50 @@ test("what a real AI tripped on: a missing folder says so, a cut-off list says t
     .map((entry: any) => entry.capabilities?.canManage);
   for (const door of [w.door("owner", "external_mcp"), w.guide("owner")]) expect(await channelsFor(door)).toEqual([true]);
   for (const door of [w.door("member", "external_mcp"), w.guide("member")]) expect(await channelsFor(door)).toEqual([false]);
+});
+
+test("the named tools a person's own AI is shown do the real thing, end to end, with no key to invent", async () => {
+  const w = await world();
+  // What the MCP does with a named tool: translate it, then run it as that person's own AI.
+  const named = (who: "member" | "owner") => async (name: string, args: Record<string, unknown>): Promise<any> => {
+    const translated = translateActionTool(actionTool(name)!, args, Date.now());
+    return await w.door(who, "external_mcp")(translated.toolName, translated.input);
+  };
+  const member = named("member");
+  const owner = named("owner");
+  const C = "run-club";
+
+  // A member: post, reply, edit, react, lesson, read, delete.
+  const posted = await member("polynet_post", { community: C, channel: "general", text: "Easy five tomorrow, anyone?" });
+  expect(posted).toMatchObject({ ok: true, value: { ref: expect.stringMatching(/^interaction:root:/) } });
+  const mine = posted.value.ref;
+  // The very same post again is a retry, not a second post.
+  expect(await member("polynet_post", { community: C, channel: "general", text: "Easy five tomorrow, anyone?" })).toMatchObject({ ok: true, value: { ref: mine, deduped: true } });
+  expect(await member("polynet_reply", { community: C, channel: "general", post: mine, text: "Meeting at the boathouse." })).toMatchObject({ ok: true });
+  expect(await member("polynet_edit_post", { community: C, channel: "general", post: mine, text: "Easy five tomorrow at 7, anyone?" })).toMatchObject({ ok: true, value: { done: "edited" } });
+  expect(await member("polynet_react", { community: C, post: `interaction:root:${String(w.ids.otherPost)}`, emoji: "👍" })).toMatchObject({ ok: true, value: { result: { reacted: true } } });
+  expect(await member("polynet_mark_lesson_done", { community: C, lesson: `resource:${String(w.ids.lesson)}` })).toMatchObject({ ok: true, value: { result: { done: true } } });
+  expect(await member("polynet_mark_channel_read", { community: C, channel: "general" })).toMatchObject({ ok: true });
+  expect(await member("polynet_delete_post", { community: C, channel: "general", post: mine })).toMatchObject({ ok: true, value: { done: "deleted" } });
+  // A member using a builder's tool is refused for that community, whatever they were shown.
+  expect(await member("polynet_create_channel", { community: C, name: "Mine" })).toMatchObject({ ok: false, code: "operation_not_found" });
+
+  // A builder: channels, events, the guide's instructions, the handbook draft, a role.
+  const channel = await owner("polynet_create_channel", { community: C, name: "Race reports" });
+  expect(channel).toMatchObject({ ok: true, value: { result: { channel: { name: "Race reports" } } } });
+  const slug = channel.value.result.channel.slug;
+  expect(await owner("polynet_describe_channel", { community: C, channel: slug, description: "How it went." })).toMatchObject({ ok: true, value: { result: { channel: { description: "How it went." } } } });
+  expect(await owner("polynet_rename_channel", { community: C, channel: slug, name: "Races" })).toMatchObject({ ok: true, value: { result: { channel: { name: "Races" } } } });
+  expect(await owner("polynet_move_channel", { community: C, channel: slug })).toMatchObject({ ok: true });
+  const event = await owner("polynet_create_event", { community: C, title: "Track night", starts_at: "2027-02-03T18:30:00-05:00", timezone: "America/New_York" });
+  expect(event).toMatchObject({ ok: true, value: { result: { event: { title: "Track night", status: "live" } } } });
+  const eventId = event.value.result.event.parent_event_id;
+  expect(await owner("polynet_update_event", { community: C, event: eventId, location_label: "High school track" })).toMatchObject({ ok: true, value: { result: { event: { location_label: "High school track" } } } });
+  expect(await owner("polynet_cancel_event", { community: C, event: eventId })).toMatchObject({ ok: true, value: { result: { event: { status: "cancelled" } } } });
+  expect(await owner("polynet_set_guide_instructions", { community: C, text: "Keep answers short." })).toMatchObject({ ok: true });
+  expect(await owner("polynet_save_handbook_draft", { community: C, text: "# Start here" })).toMatchObject({ ok: true });
+  expect(await owner("polynet_require_approval_to_join", { community: C })).toMatchObject({ ok: true });
+  expect(await owner("polynet_set_member_role", { community: C, members: [`user:${String(w.ids.member)}`], role: "moderator" })).toMatchObject({ ok: true, value: { result: { succeeded: 1 } } });
+  // Nothing here was held for a yes: that is the guide's way of asking, not a person's own AI's.
+  expect((await w.rows()).questions).toEqual([]);
 });
