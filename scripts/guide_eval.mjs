@@ -4,8 +4,10 @@
 // change to the guide's instructions or tools and compare.
 //
 //   cd <a checkout whose Convex is the staging deployment>
-//   GUIDE_EVAL_OWNER_SUBJECT=<the test community owner's sign-in subject> \
-//     node <repo>/scripts/guide_eval.mjs <communityId> <out.json> [only=id,id]
+//   node <repo>/scripts/guide_eval.mjs <communityId> <out.json> [only=id,id]
+//
+// It runs as the seed's pretend host and pretend member, never as a real
+// person: a real host's Home would show every question a request leaves waiting.
 //
 // The seed (stagingSeedBriefLab) is put back before every request that
 // changes something, so requests don't see each other's leftovers.
@@ -14,9 +16,8 @@ import { writeFileSync } from "node:fs";
 
 const [communityId, outPath, ...rest] = process.argv.slice(2);
 const only = (rest.find((arg) => arg.startsWith("only=")) ?? "").slice(5).split(",").filter(Boolean);
-const ownerSubject = process.env.GUIDE_EVAL_OWNER_SUBJECT;
-if (!communityId || !outPath || !ownerSubject) throw new Error("usage: GUIDE_EVAL_OWNER_SUBJECT=... guide_eval.mjs <communityId> <out.json>");
-const SUBJECTS = { host: ownerSubject, member: "seed:brief-lab:tess" };
+if (!communityId || !outPath) throw new Error("usage: guide_eval.mjs <communityId> <out.json>");
+const SUBJECTS = { host: "seed:brief-lab:host", member: "seed:brief-lab:tess" };
 
 const convex = (fn, args, subject) => {
   const identity = subject
@@ -94,8 +95,10 @@ const reset = () => {
   convex("stagingGuideEval:cleanUpAfterEvalInternal", { communityId, sinceMs: startedAt, community: snapshot });
   convex("stagingSeedBriefLab:seedBriefLabInternal", { communityId });
 };
+// The seed first: it makes the pretend host and member the run acts as.
+reset();
 const results = [];
-let dirty = true;
+let dirty = false;
 const lastStart = {};
 for (const item of CASES.filter((c) => only.length === 0 || only.includes(c.id))) {
   if (item.resets && dirty) reset();
