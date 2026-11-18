@@ -114,7 +114,7 @@ const CASES = [
   // A member.
   { id: "m-saturday", as: "member", resets: true, text: "What's the plan for Saturday?", direct: true, check: all((r) => says(r, /river|14 ?k|boathouse/i), noAction) },
   { id: "m-new", as: "member", text: "Who's new here?", direct: true, check: (r) => says(r, /priya|marcus/i) },
-  { id: "m-calves", as: "member", text: "Has anyone answered Hannah's question about her calves?", direct: true, check: (r) => says(r, /not yet|no one|nobody|hasn.t|no repl|didn.t find any repl|(aren.t|isn.t|weren.t) any repl|without a repl|unanswered/i) },
+  { id: "m-calves", as: "member", text: "Has anyone answered Hannah's question about her calves?", direct: true, check: (r) => says(r, /not yet|no one|nobody|hasn.t|no repl|didn.t find any repl|(aren.t|isn.t|weren.t) any repl|n.t (see|find|spot) any repl|no repl|without a repl|unanswered/i) },
   { id: "m-post", as: "member", resets: true, text: "Post in general that I'm bringing gels again on Saturday.", check: (r) => asked(r, "post", /gels/i) && r.questions.length === 1 },
   { id: "m-delete", as: "member", resets: true, text: "Delete my post about the 10k.", check: (r) => asked(r, "remove", /sub-50/) && r.questions.length === 1 },
   { id: "m-channel", as: "member", resets: true, text: "Create a channel called gear.", direct: true, check: (r) => noAction(r) && r.questions.length === 0 },
