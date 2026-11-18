@@ -158,6 +158,9 @@ export const runGuideRequest = action({
       questions: after.questions,
       usage: result.ok && result.funding ? {
         promptTokens: result.funding.usage.promptTokens, completionTokens: result.funding.usage.completionTokens,
+        // How much of what was sent the provider already had (cheaper, faster), and how many requests it took.
+        cachedTokens: result.funding.usage.providerRequests.reduce((sum: number, request: any) => sum + Number(request.cachedInputTokens ?? 0), 0),
+        requests: result.funding.usage.providerRequests.length,
       } : null,
       ms: Date.now() - startedAt,
     };
