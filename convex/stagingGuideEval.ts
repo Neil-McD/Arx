@@ -81,6 +81,7 @@ export const runGuideRequestInternal = internalAction({
       communitySystemPrompt: context.community_system_prompt,
       communityLens: talk,
       communityInferenceAdmission: admission,
+      measurementWithoutReceipt: true,
       appendRunEvent: async (event: { eventType: string; payload: Record<string, unknown> }) => { events.push({ eventType: event.eventType, payload: event.payload }); },
     } as any);
     if (result.ok && result.funding) {

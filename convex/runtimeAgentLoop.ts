@@ -118,6 +118,9 @@ type RuntimeProviderLifecycleHooks = {
   recordInitialProviderContextAttestation?: (
     attestation: RuntimeProviderContextAttestationV1,
   ) => Promise<{ ok: boolean; errorCode?: string | null }>;
+  // The staging measurement (stagingGuideEval) keeps no conversation, so it
+  // has nowhere to store a context receipt; a person's talk never sets this.
+  measurementWithoutReceipt?: boolean;
   // Output text as the model writes it. completionIndex tells model turns apart:
   // text from a turn that ends in tool calls is a preamble, not the final reply.
   onAssistantTextDelta?: (delta: string, completionIndex: number) => void;
@@ -604,7 +607,7 @@ async function executeRetrievalAgentLoop(
   // The private talk's context receipt, with exactly what the first model
   // request sends; without it the turn doesn't run.
   const recordContextReceipt = async (providerMessages: NativeToolAwareMessage[]): Promise<RuntimeAgentLoopFailureInput | null> => {
-    if (params.invocationSurface !== "member_agent_dock") return null;
+    if (params.invocationSurface !== "member_agent_dock" || params.measurementWithoutReceipt) return null;
     try {
       await throwIfRunCannotContinue();
       if (!params.recordInitialProviderContextAttestation || !params.threadId || !params.communityId
