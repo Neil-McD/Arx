@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { readCommunityResourceSources } from "./lib/communityResourceSources.ts";
 
@@ -24,7 +24,6 @@ assert.match(
   "a resource mutation reload refreshes both modules and resources",
 );
 const runtimeTimeline = read("apps/web/src/components/RuntimeLiveTimeline.tsx");
-const changesetApprovalCards = read("apps/web/src/components/RuntimeResourceChangesetApprovalCards.tsx");
 const mutationEvents = read("shared/communityResourceMutationEvents.ts");
 const toolRegistry = read("shared/toolRegistry.ts");
 const runtimeAgentLoop = read("convex/runtimeAgentLoop.ts");
@@ -32,17 +31,13 @@ const canonicalExecutor = read("convex/polynetCanonicalExecutor.ts");
 
 assert.match(
   packageJson,
-  /"check:community-resource-builder-tools-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts\/community_resource_builder_tools_contract_proof\.ts && vitest run scripts\/runtime_resource_changeset_cards\.test\.ts"/,
+  /"check:community-resource-builder-tools-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts\/community_resource_builder_tools_contract_proof\.ts && vitest run convex\/communityResourceBuilder\.test\.ts"/,
   "builder resource tool contract proof should be wired into package scripts",
 );
 
 for (const exportName of [
   "listCommunityResourceBuilderDirectory",
   "readCommunityResourceBuilderResource",
-  "getCommunityResourceBuilderChangesetStatus",
-  "listPendingCommunityResourceBuilderChangesets",
-  "rejectCommunityResourceBuilderChangeset",
-  "applyCommunityResourceBuilderChangeset",
 ] as const) {
   assert.match(resources, new RegExp(`export const ${exportName} = (query|mutation)\\(`));
 }
@@ -192,48 +187,13 @@ assert.doesNotMatch(
 );
 assert.match(
   canonicalExecutor,
-  /POLYNET_BUILDER_RESOURCES_DIRECTORY_PATH[\s\S]*toolName: "polynet_write"[\s\S]*stageCommunityResourceBuilderChangesetInternal/,
+  /POLYNET_BUILDER_RESOURCES_DIRECTORY_PATH[\s\S]*toolName: "polynet_write"[\s\S]*runCommunityResourceBuilderBatchInternal/,
   "canonical polynet_write should be the only agent path into internal changeset staging",
-);
-assert.match(
-  resources,
-  /getCommunityResourceBuilderChangesetStatus[\s\S]*await requireCommunityManager[\s\S]*community_resource_builder_changeset_status/,
-  "changeset status lookup should hydrate approval UI from canonical server state",
-);
-assert.match(
-  resources,
-  /getCommunityResourceBuilderChangesetStatus[\s\S]*communityResourceBuilderChangesetIsExpired[\s\S]*approved_by_current_user/,
-  "changeset status lookup should expose effective expiry and current-user approval state",
-);
-assert.match(
-  resources,
-  /listPendingCommunityResourceBuilderChangesets[\s\S]*await requireCommunityManager[\s\S]*readLatestCommunityResourceBuilderActionableRows[\s\S]*communityResourceBuilderChangesetIsExpired/,
-  "pending changeset recovery must be manager-authorized, indexed, and TTL-aware",
-);
-assert.match(
-  resources,
-  /readLatestCommunityResourceBuilderActionableRows[\s\S]*by_community_status_createdAt/,
-  "active changeset lookup should use the existing community and status index",
 );
 assert.doesNotMatch(
   resources,
   /throw new Error\("community_resource_changeset_expired"\)/,
   "expected expiry must commit as a typed terminal result instead of rolling back by throwing",
-);
-assert.match(
-  changesetApprovalCards,
-  /CHANGESET_CARD_LIMIT = 1/,
-  "runtime changeset rendering should expose at most one active proposal",
-);
-assert.match(
-  communityAgentDock,
-  /member_agent_resource_build[\s\S]*limit: 1[\s\S]*member_agent_resource_changeset_recovery[\s\S]*limit: 1/,
-  "resource-build launch and recovery should request one canonical proposal",
-);
-assert.match(
-  gateway,
-  /listCloudPendingCommunityResourceBuilderChangesets[\s\S]*communityResources:listPendingCommunityResourceBuilderChangesets/,
-  "web recovery must use one canonical pending changeset gateway",
 );
 assert.match(
   resources,
@@ -271,11 +231,6 @@ assert.doesNotMatch(
   "product Apply must not depend on a browser-coordinated approval transition or one approving manager",
 );
 assert.doesNotMatch(
-  changesetApprovalCards,
-  /approveCloudCommunityResourceBuilderChangeset|approvedByCurrentUser|canApply/,
-  "approval card must issue one atomic Apply request without client-owned approval state",
-);
-assert.doesNotMatch(
   gateway,
   /export async function approveCloudCommunityResourceBuilderChangeset/,
   "new web clients must not expose the legacy approval gateway",
@@ -289,31 +244,6 @@ assert.match(
   mutationEvents,
   /readCommunityResourcesMutatedEventDetail[\s\S]*communityId[\s\S]*dispatchCommunityResourcesMutated/,
   "resource mutation event should validate community id before frontend refresh",
-);
-assert.match(
-  changesetApprovalCards,
-  /finishVerifiedApply[\s\S]*setActionState\("applied"\)[\s\S]*dispatchCommunityResourcesMutated[\s\S]*applyCloudCommunityResourceBuilderChangeset[\s\S]*readAuthoritativeStatus[\s\S]*status !== "applied"[\s\S]*finishVerifiedApply/,
-  "approval card should verify applied changeset state before dispatching resource refresh",
-);
-assert.match(
-  changesetApprovalCards,
-  /rejectCloudCommunityResourceBuilderChangeset[\s\S]*readAuthoritativeStatus[\s\S]*status !== "rejected"[\s\S]*setActionState\("rejected"\)/,
-  "rejection card should verify rejected changeset state before presenting success",
-);
-assert.doesNotMatch(
-  changesetApprovalCards,
-  /setServerStatus\("applied"\)|setServerStatus\("rejected"\)/,
-  "the browser must not manufacture terminal changeset state when confirmation fails",
-);
-assert.match(
-  changesetApprovalCards,
-  /findChangesetOutputRecord[\s\S]*"result"[\s\S]*toolName !== "polynet_write"[\s\S]*community_resource_builder_changeset_staged/,
-  "approval extraction must unwrap canonical polynet_write staging receipts",
-);
-assert.match(
-  runtimeTimeline,
-  /RuntimeResourceChangesetApprovalCards/,
-  "runtime timeline should delegate resource approval cards to the dedicated component",
 );
 assert.match(
   communityAgentDock,
@@ -330,26 +260,6 @@ assert.match(
   /runtimeEvents\.length > 0[\s\S]*<RuntimeLiveTimeline[\s\S]*events=\{runtimeEvents\}/,
   "mounted member-agent dock should render live resource changeset events through the retained timeline",
 );
-assert.match(
-  communityAgentDock,
-  /startResourceBuild[\s\S]*listCloudPendingCommunityResourceBuilderChangesets[\s\S]*pendingResourceBuildRef[\s\S]*composerFormRef\.current\?\.requestSubmit/,
-  "resource launch must check durable pending state and reuse the mounted dock submit path",
-);
-assert.match(
-  communityAgentDock,
-  /member_agent_resource_changeset_recovery[\s\S]*listCloudPendingCommunityResourceBuilderChangesets[\s\S]*setRecoveredResourceChangesetCards/,
-  "mounted member-agent dock must recover staged proposals after a reload",
-);
-assert.match(
-  changesetApprovalCards,
-  /actionInFlightRef[\s\S]*readAuthoritativeStatus[\s\S]*status === "applied"[\s\S]*finishVerifiedApply/,
-  "resource changeset application must suppress duplicate requests and recover authoritative applied state",
-);
-assert.doesNotMatch(
-  `${resources}\n${changesetApprovalCards}\n${app}`,
-  /initial_community_resources|initial-community-resources|onInitialResourcesApplied|resource-changeset-next-action/,
-  "generic resource changesets must not retain initial-launch presentation branching",
-);
 assert.doesNotMatch(
   app,
   /buildWebCommunityResourceBuildHandler|handleBuildCommunityResources/,
@@ -359,6 +269,37 @@ assert.match(
   communityContentController,
   /COMMUNITY_RESOURCES_MUTATED_EVENT[\s\S]*readCommunityResourcesMutatedEventDetail[\s\S]*loadCommunityResources\(detail\.communityId/,
   "workspace should refresh modules and resources after a verified resource mutation",
+);
+
+// Agents build in draft; people decide what members see. There is no waiting
+// step and no approval card: a batch is applied as it is sent, and the engine
+// refuses to publish, unpublish, or delete what members can see. The
+// behaviour is tested in convex/communityResourceBuilder.test.ts and
+// convex/mcpLenses.test.ts; these lines keep the old path from coming back.
+assert.doesNotMatch(
+  resources,
+  /export const (?:approve|stage)CommunityResourceBuilderChangeset = mutation/,
+  "no public way to make a batch wait",
+);
+assert.match(
+  resources,
+  /Kept for web apps still open on the previous production build[\s\S]*listPendingCommunityResourceBuilderChangesets[\s\S]*return \[\];/,
+  "nothing waits for a new client; the old functions stay one release for tabs on the previous build",
+);
+assert.match(
+  resources,
+  /AGENT_PUBLISH_REFUSAL[\s\S]*AGENT_DELETE_LIVE_REFUSAL[\s\S]*refuseIfModuleIsLive/,
+  "the engine refuses publishing and deleting what members see, in plain words",
+);
+assert.doesNotMatch(
+  gateway,
+  /ResourceBuilderChangeset/,
+  "the web app has no gateway into course batches: only agents send them",
+);
+assert.equal(
+  existsSync(join(root, "apps/web/src/components/RuntimeResourceChangesetApprovalCards.tsx")),
+  false,
+  "the Apply card is gone",
 );
 
 console.log("community_resource_builder_tools_contract_proof: ok");

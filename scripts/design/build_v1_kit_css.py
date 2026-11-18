@@ -628,14 +628,6 @@ css += """
 .app .nchev{color:var(--ink3);transition:rotate .16s var(--ease)}.app .nchev.up{rotate:180deg}
 .app .nacts{display:flex;gap:6px;padding:0 14px 13px 54px}
 .app .nopen{border-top:1px solid var(--line);background:var(--panel);padding:6px 14px 12px 54px}
-.app .nopen .nacts{padding:12px 0 2px}
-.app .nopen h4{margin:8px 0 6px;font-size:12.5px;font-weight:600;color:var(--ink2)}
-.app .nopen ul{margin:0;padding:0;list-style:none;display:grid;gap:6px}
-.app .nopen li{display:grid;grid-template-columns:14px minmax(0,1fr);gap:8px;font-size:13.5px}
-.app .nopen li em{font-style:normal;color:var(--ink3);font-variant-numeric:tabular-nums}
-.app .nopen li b{font-weight:500;color:var(--ink)}.app .nopen li span span{display:block;font-size:12.5px;color:var(--ink3)}
-.app .nopen li.gone em,.app .nopen li.gone b{color:var(--bad)}
-.app .nnote{margin:8px 0 0;font-size:12.5px;color:var(--ink3)}.app .nnote.bad{color:var(--bad)}
 .app .nperson{display:grid;grid-template-columns:28px minmax(0,1fr) auto;gap:12px;align-items:center;padding:9px 0}
 .app .nperson+.nperson{border-top:1px solid var(--line)}
 .app .nface{width:28px;height:28px;border-radius:50%;overflow:hidden;background:var(--s2);display:grid;place-items:center;font-size:12px;font-weight:600;color:var(--ink2)}

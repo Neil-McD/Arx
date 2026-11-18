@@ -29,7 +29,7 @@ the starting point; section 4 is what is true now.
 | The agent as Home | The `agent` community tab renders the community agent full-page (`WebCommunityAgentDock` in page mode) | Home is this page with a greeting and a brief above the conversation |
 | A host's brief | The founder daily brief exists (`CommunityFounderBriefSection`, the proactive agent spec) | Show it on Home |
 | Join requests | `CommunityJoinRequestReview` | Restyle and place on Members |
-| Knowledge review for a host | `RuntimeResourceChangesetApprovalCards` | Restyle and place on Knowledge |
+| Knowledge review for a host | (removed Nov 17: agents build in draft and the Published switch is the approval) | None |
 | Banner, logo, name | Banner and avatar editors exist in community settings | Restyle as Branding |
 | Events | `WebCommunityEventsSection` | Restyle |
 | Direct messages | `WebDirectMessageInboxPanel`, `WebDirectMessagePanel` | Restyle as Inbox |
