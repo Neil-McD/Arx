@@ -241,9 +241,10 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
   answers `waiting_for_person`; `KitGuideAsks` shows it above the box where
   they type; `answerGuideQuestion` runs the same call as them on yes.
   "Always allow posts" is per person per community); `shared/actionTools.ts`
-  (one named tool per action for a person's own AI, generated from the one
-  list and translated into the calls the executor already runs;
-  `mcpActionTools` decides which a person is shown); `communityKnowledgeUse` keeps one row of counts per community
+  (one named tool per action, generated from the one list and translated
+  into the calls the executor already runs: a person's own AI is shown theirs
+  over the MCP, `mcpActionTools` deciding which, and the guide's private talk
+  is given the ones its person may use in that community, `talkToolNames`); `communityKnowledgeUse` keeps one row of counts per community
   per day of the notes and lessons answers opened, added hours later at a
   random time so nothing traces to a conversation, for how much each is used
   and what is answered together; `communityBrain` (`getBrainMap`) reads it all

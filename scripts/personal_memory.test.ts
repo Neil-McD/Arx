@@ -59,7 +59,10 @@ test("the private talk's prompt holds the memory and how to keep it; no slug, no
   const { buildPersonalMemoryPromptBlock } = await import("../shared/runtimePrompt");
   const block = buildPersonalMemoryPromptBlock("- Keep answers short.", "club")!;
   expect(block).toContain("PERSONAL_MEMORY");
-  expect(block).toContain("/communities/club/capabilities/member.memory.remember.json");
+  // It is kept with the guide's own named tool, never the general call or a capability path.
+  expect(block).toContain('Save with polynet_remember { operations: [{ action: "add", content }');
+  expect(block).not.toContain("polynet_call");
+  expect(block).not.toContain("capabilities/");
   expect(block).toContain("- Keep answers short.");
   expect(buildPersonalMemoryPromptBlock(null, "club")).toContain("_Nothing yet._");
   expect(buildPersonalMemoryPromptBlock("x", "")).toBeNull();

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { ACTION_TOOLS, ACTION_TOOL_RETRY_WINDOW_MS, NOT_PUBLISHED, actionTool, actionToolDefinition, actionToolEntry, actionToolsFor, translateActionTool } from "../shared/actionTools";
+import { ACTION_TOOLS, ACTION_TOOL_RETRY_WINDOW_MS, NOT_PUBLISHED, actionTool, actionToolDefinition, actionToolEntry, actionToolsFor, guideToolDefinition, translateActionTool } from "../shared/actionTools";
+import { talkToolNames } from "../shared/lens";
 import { CALL_OPERATIONS, CALL_OPERATION_VARIANTS, TOOL_OPERATIONS } from "../shared/operationCatalog";
 
 const LISTED = { ...TOOL_OPERATIONS, ...CALL_OPERATIONS, ...CALL_OPERATION_VARIANTS } as Record<string, { ask: string; lens: string }>;
@@ -38,22 +39,97 @@ describe("one named tool per action", () => {
     }
   });
 
-  it("a person is shown the tools they can use somewhere: a member's, plus a moderator's, plus a builder's", () => {
-    const names = (role: "member" | "moderator" | "builder") => actionToolsFor(role).map((tool) => tool.name);
+  it("a person's own AI is shown the tools they can use somewhere: a member's, plus a moderator's, plus a builder's", () => {
+    const names = (role: "member" | "moderator" | "builder") => actionToolsFor(role, "own_ai").map((tool) => tool.name);
     expect(names("member")).toEqual(["polynet_post", "polynet_reply", "polynet_edit_post", "polynet_delete_post", "polynet_react",
       "polynet_mark_lesson_done", "polynet_mark_channel_read", "polynet_reply_message"]);
     expect(names("moderator").filter((name) => !names("member").includes(name))).toEqual(["polynet_approve_join_requests", "polynet_decline_join_requests"]);
-    expect(names("builder")).toHaveLength(ACTION_TOOLS.length);
+    // Every tool but the guide's own two.
+    expect(names("builder")).toEqual(ACTION_TOOLS.filter((tool) => tool.door !== "guide").map((tool) => tool.name));
+    expect(names("builder")).toHaveLength(ACTION_TOOLS.length - 2);
     expect(names("builder")).toContain("polynet_create_event");
     expect(names("moderator")).not.toContain("polynet_set_member_role");
   });
 
+  it("over the MCP a guide-only tool doesn't exist: no role's own AI is given remembering or removing posts", () => {
+    expect(ACTION_TOOLS.filter((tool) => tool.door === "guide").map((tool) => tool.name)).toEqual(["polynet_remember", "polynet_remove_posts"]);
+    for (const role of ["member", "moderator", "builder"] as const) {
+      const names = actionToolsFor(role, "own_ai").map((tool) => tool.name);
+      expect(names, role).not.toContain("polynet_remember");
+      expect(names, role).not.toContain("polynet_remove_posts");
+    }
+  });
+
+  it("both doors, same tools: the guide and a person's own AI differ only by messages, remembering and removing posts", () => {
+    const names = (role: "member" | "moderator" | "builder", door: "own_ai" | "guide") => actionToolsFor(role, door).map((tool) => tool.name);
+    const shared = (role: "member" | "moderator" | "builder") => names(role, "own_ai").filter((name) => name !== "polynet_reply_message");
+    for (const role of ["member", "moderator", "builder"] as const) {
+      const ownAi = names(role, "own_ai");
+      const guide = names(role, "guide");
+      expect(ownAi.filter((name) => !guide.includes(name)), role).toEqual(["polynet_reply_message"]);
+      expect(guide.filter((name) => !ownAi.includes(name)), role)
+        .toEqual(role === "member" ? ["polynet_remember"] : ["polynet_remember", "polynet_remove_posts"]);
+      expect(guide.filter((name) => name !== "polynet_remember" && name !== "polynet_remove_posts"), role).toEqual(shared(role));
+    }
+    expect(names("member", "guide")).toEqual(["polynet_post", "polynet_reply", "polynet_edit_post", "polynet_delete_post", "polynet_react",
+      "polynet_mark_lesson_done", "polynet_mark_channel_read", "polynet_remember"]);
+    expect(names("moderator", "guide").filter((name) => !names("member", "guide").includes(name)))
+      .toEqual(["polynet_approve_join_requests", "polynet_decline_join_requests", "polynet_remove_posts"]);
+    expect(names("builder", "guide")).toEqual(ACTION_TOOLS.filter((tool) => tool.door !== "own_ai").map((tool) => tool.name));
+  });
+
+  it("the guide's version of a tool has no community input, and otherwise the very inputs the MCP version has", () => {
+    for (const tool of ACTION_TOOLS) {
+      const mcp = actionToolDefinition(tool).inputSchema as { properties: Record<string, unknown>; required: string[] };
+      const guide = guideToolDefinition(tool);
+      const schema = guide.inputSchema as { type: string; additionalProperties: boolean; properties: Record<string, unknown>; required: string[] };
+      expect(guide.name).toBe(tool.name);
+      expect(guide.description).toBe(tool.description);
+      expect(schema.type).toBe("object");
+      expect(schema.additionalProperties).toBe(false);
+      expect(Object.keys(schema.properties)).not.toContain("community");
+      expect(schema.required).not.toContain("community");
+      const { community: _community, ...rest } = mcp.properties;
+      expect(schema.properties, tool.name).toEqual(rest);
+      expect(schema.required, tool.name).toEqual(mcp.required.filter((key) => key !== "community"));
+    }
+    expect(guideToolDefinition(actionTool("polynet_remember")!).inputSchema).toMatchObject({ required: ["operations"] });
+  });
+
   it("labels come from the list: what asks every time is marked as needing care, so the person's own AI app asks them", () => {
-    const careful = ACTION_TOOLS.filter((tool) => actionToolDefinition(tool).annotations.destructiveHint).map((tool) => tool.name);
-    expect(careful).toEqual(["polynet_delete_post", "polynet_publish_handbook", "polynet_set_member_role"]);
+    const careful = (tools: typeof ACTION_TOOLS) => tools.filter((tool) => actionToolDefinition(tool).annotations.destructiveHint).map((tool) => tool.name);
+    expect(careful(actionToolsFor("builder", "own_ai"))).toEqual(["polynet_delete_post", "polynet_publish_handbook", "polynet_set_member_role"]);
+    // Removing posts asks every time too; only the guide is given it, after the person's yes.
+    expect(careful(ACTION_TOOLS)).toEqual(["polynet_delete_post", "polynet_remove_posts", "polynet_publish_handbook", "polynet_set_member_role"]);
     for (const tool of ACTION_TOOLS) {
       expect(actionToolDefinition(tool).annotations.destructiveHint).toBe(actionToolEntry(tool).ask === "every_time");
       expect(actionToolDefinition(tool).annotations.readOnlyHint).toBe(false);
+    }
+  });
+});
+
+describe("a private talk's tools", () => {
+  const read = ["polynet_list", "polynet_read", "polynet_search", "web_research"];
+  const memberGuide = ["polynet_post", "polynet_reply", "polynet_edit_post", "polynet_delete_post", "polynet_react",
+    "polynet_mark_lesson_done", "polynet_mark_channel_read", "polynet_remember"];
+
+  it("reading, the web, then the named tools for that person's role in that community", () => {
+    expect(talkToolNames({ lens: "member_private", relation: "member" })).toEqual([...read, ...memberGuide]);
+    expect(talkToolNames({ lens: "member_private", relation: "moderator" }))
+      .toEqual([...read, ...memberGuide, "polynet_approve_join_requests", "polynet_decline_join_requests", "polynet_remove_posts"]);
+    const builder = talkToolNames({ lens: "builder_private", relation: "owner" });
+    expect(builder).toEqual([...read, ...ACTION_TOOLS.filter((tool) => tool.door !== "own_ai").map((tool) => tool.name)]);
+    expect(talkToolNames({ lens: "builder_private", relation: "admin" })).toEqual(builder);
+    // No talk, no actions: reading and the web only.
+    expect(talkToolNames(null)).toEqual(read);
+    expect(talkToolNames(undefined)).toEqual(read);
+  });
+
+  it("no talk is given the general action tools, or a person's own messages", () => {
+    for (const talk of [null, { lens: "member_private", relation: "member" }, { lens: "member_private", relation: "moderator" },
+      { lens: "builder_private", relation: "owner" }] as const) {
+      const names = talkToolNames(talk);
+      for (const forbidden of ["polynet_write", "polynet_call", "polynet_reply_message"]) expect(names, JSON.stringify(talk)).not.toContain(forbidden);
     }
   });
 });

@@ -600,7 +600,7 @@ export async function handleMcpPost(args: {
     return jsonRpcResultResponse(req, jsonResponse, id, {
       tools: [
         ...getPolynetMcpToolDefinitions().filter((tool) => tool.annotations.readOnlyHint === true),
-        ...actionToolsFor(role).map(actionToolDefinition),
+        ...actionToolsFor(role, "own_ai").map(actionToolDefinition),
       ],
     });
   }
@@ -617,7 +617,8 @@ export async function handleMcpPost(args: {
     if (!toolName) {
       return jsonRpcErrorResponse(req, jsonResponse, id, -32602, "Tool name is required.");
     }
-    const named = actionTool(toolName);
+    // The guide's own tools (remembering, removing after a yes) are not a person's own AI's.
+    const named = actionTool(toolName)?.door === "guide" ? null : actionTool(toolName);
     if (!named && !getPolynetMcpToolDefinition(toolName)) {
       return jsonRpcErrorResponse(req, jsonResponse, id, -32601, "Tool not found.");
     }

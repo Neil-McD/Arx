@@ -132,13 +132,13 @@ export function renderPersonalMemory(entries: PersonalMemoryEntry[]): string {
 
 // What the guide is told in a member's private talk.
 export function personalMemoryInstructions(communitySlug: string): string {
-  const target = `/communities/${communitySlug}/capabilities/${PERSONAL_MEMORY_OPERATION}.json`;
+  void communitySlug;
   return [
     "PERSONAL_MEMORY",
     "What you remember about this member, from their own private talks with you. Only they see it: never repeat it in a channel or pod, and never treat it as something the community knows.",
     "Save when they ask you to remember something, or tell you something clearly worth keeping for later talks (a goal, how they like answers, what they're working on). Not small talk, not what's already below, nothing they'd regret seeing written down.",
     "Write preferences as instructions (\"Keep answers short.\"); when one changes, patch it rather than adding a second. Keep entries short; when memory is full, merge or remove entries in the same batch.",
-    `Save with polynet_call { target: "${target}", operation: "${PERSONAL_MEMORY_OPERATION}", version: 1, idempotencyKey, input: { operations: [{ action: "add", content } | { action: "patch", old_text, content } | { action: "remove", old_text } | { action: "clear" }] } }.`,
+    'Save with polynet_remember { operations: [{ action: "add", content } | { action: "patch", old_text, content } | { action: "remove", old_text } | { action: "clear" }] }.',
     "After saving, say in one short line what you remembered. If they ask what you remember, tell them plainly; if they say forget something (or everything), remove it (or clear) and say so.",
   ].join("\n");
 }

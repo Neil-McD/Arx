@@ -1,4 +1,5 @@
-import type { RetrievalToolName } from "./retrievalTools";
+import type { BaseToolName, RetrievalToolName } from "./retrievalTools";
+import { isBaseToolName } from "./retrievalTools.ts";
 import { findPlatformOperationByNativeToolName } from "./platformOperationContract.ts";
 
 export type RuntimeToolSource = "fixed" | "unknown";
@@ -60,7 +61,7 @@ function buildPlatformOperationRuntimePolicy(
   };
 }
 
-const FIXED_TOOL_POLICIES: Record<RetrievalToolName, RuntimeToolPolicy> = {
+const FIXED_TOOL_POLICIES: Record<BaseToolName, RuntimeToolPolicy> = {
   polynet_list: {
     toolName: "polynet_list", source: "fixed", category: "community", riskLevel: "read",
     readOnly: true, mutatesState: false, parallelSafe: true, exclusive: false,
@@ -101,8 +102,11 @@ function emptyCategoryCounts(): Record<RuntimeToolCategory, number> {
   return { docs: 0, community: 0, web: 0, unknown: 0 };
 }
 
+// A named action tool changes the community: one at a time, like the general
+// action tools it is translated into.
 export function getFixedRuntimeToolPolicy(toolName: RetrievalToolName): RuntimeToolPolicy {
-  return FIXED_TOOL_POLICIES[toolName];
+  if (isBaseToolName(toolName)) return FIXED_TOOL_POLICIES[toolName];
+  return { ...FIXED_TOOL_POLICIES.polynet_call, toolName };
 }
 
 export function getUnknownRuntimeToolPolicy(toolName: string): RuntimeToolPolicy {

@@ -80,19 +80,21 @@ function unsupportedToolFailure(toolName: unknown): RuntimeKernelFailureInput {
   };
 }
 
-// The model may ask only for the run's lens tools.
+// The model may ask only for the tools this run was offered, all in its lens.
 function coerceToLensTools(
   lens: AgentRunLens,
+  offered: readonly string[],
   completion: NativeToolAwareCompletionSuccess<string> | RuntimeKernelFailureInput,
 ): NativeToolAwareCompletionSuccess<RetrievalToolName> | RuntimeKernelFailureInput {
   if (completion.ok === false) return completion;
+  const allowed = (toolName: string) => lensHasTool(lens, toolName) && offered.includes(toolName);
   if (completion.type === "tool_call") {
-    if (!lensHasTool(lens, completion.toolName)) return unsupportedToolFailure(completion.toolName);
+    if (!allowed(completion.toolName)) return unsupportedToolFailure(completion.toolName);
     return { ...completion, toolName: completion.toolName };
   }
   if (completion.type === "tool_calls") {
     for (const toolCall of completion.toolCalls) {
-      if (!lensHasTool(lens, toolCall.toolName)) return unsupportedToolFailure(toolCall.toolName);
+      if (!allowed(toolCall.toolName)) return unsupportedToolFailure(toolCall.toolName);
     }
   }
   return completion as NativeToolAwareCompletionSuccess<RetrievalToolName>;
@@ -117,6 +119,9 @@ export async function runFundedCommunityAgent(args: {
   sourceRunId: string;
   admission: CommunityInferenceFundingAdmission;
   messages: any[];
+  // The tools offered, when the caller narrows its lens's (a private talk
+  // offers talkToolNames: reading, the web and that person's named tools).
+  tools?: readonly RetrievalToolName[];
   maxOutputTokens: number;
   maxToolSteps: number;
   promptCacheKey: string;
@@ -162,7 +167,7 @@ export async function runFundedCommunityAgent(args: {
   // Work with nobody present (reviews, briefs) is not an answer.
   const answersAPerson = args.lens !== "worker";
   const readRefs = new Set<string>();
-  const lensTools = LENS_TOOLS[args.lens];
+  const lensTools = (args.tools ?? LENS_TOOLS[args.lens]).filter((toolName) => lensHasTool(args.lens, toolName));
   let firstCompletionChecked = !args.beforeFirstCompletion;
   const tools = buildResponsesApiFunctionTools(lensTools);
   let usage = createFounderInferenceUsageTotals("");
@@ -263,7 +268,7 @@ export async function runFundedCommunityAgent(args: {
         }
         observeFounderProviderResult(usage, toolCompletion,
           toolCompletion.ok === false && providerFailureIsKnownPreSpend(toolCompletion.code));
-        return coerceToLensTools(args.lens, toolCompletion);
+        return coerceToLensTools(args.lens, lensTools, toolCompletion);
       },
       normalizeToolArguments: args.normalizeToolArguments ?? normalizeToolArguments,
       onToolStepStart: async (step) => {

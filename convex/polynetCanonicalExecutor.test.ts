@@ -2994,7 +2994,9 @@ test("people: an owner's or admin's AI re-roles and unbans; removing and banning
   expect(await owner.call("community.members.unban", { members: [ref(f.memberId)] }, "u1")).toMatchObject({ ok: true });
 
   // Bad selections are refused whole.
-  expect(await owner.call("community.members.remove", { members: ["not-a-ref"] }, "x1")).toMatchObject({ ok: false, code: "invalid_tool_args" });
+  // A handle names a person now, so a name that is nobody is refused by that name.
+  expect(await owner.call("community.members.remove", { members: ["not-a-ref"] }, "x1")).toMatchObject({ ok: false, code: "member_not_found", message: expect.stringContaining('"not-a-ref"') });
+  expect(await owner.call("community.members.remove", { members: [42] }, "x1b")).toMatchObject({ ok: false, code: "invalid_tool_args" });
   expect(await owner.call("community.members.set_role", { members: [ref(f.memberId)], role: "owner" }, "x2")).toMatchObject({ ok: false, code: "invalid_tool_args" });
 });
 
@@ -3105,12 +3107,18 @@ test("personal memory is the member's own: written in their private talk, read b
   await memberTalk("polynet_call", remember([{ action: "patch", old_text: "short", content: "very short" }], "pm-retry"));
   expect(((await memberTalk("polynet_read", { path: memoryPath })) as any).value.body).toContain("- Keep answers very short.");
 
-  // On the Agent page (a community conversation), the call goes through the
-  // conversation's guard by its target.
-  const viaPage = await runAgentTool({ ctx: executionContext(t.withIdentity({ subject: f.memberSubject })), userId: f.memberId,
-    authSubject: f.memberSubject, runId: "member-talk", communityId: f.communityId, communityBoundConversation: true, toolName: "polynet_call",
-    args: remember([{ action: "add", content: "Training for a V6 by March." }], "pm-page"), evidenceSurface: "member_agent_dock" });
+  // On the Agent page (a community conversation), the guide saves with its
+  // named tool: no community, no target, no key; the conversation's community is used.
+  const onPage = (toolName: string, args: Record<string, unknown>) => runAgentTool({ ctx: executionContext(t.withIdentity({ subject: f.memberSubject })),
+    userId: f.memberId, authSubject: f.memberSubject, runId: "member-talk", communityId: f.communityId, communityBoundConversation: true, toolName,
+    args, evidenceSurface: "member_agent_dock" });
+  const viaPage = await onPage("polynet_remember", { operations: [{ action: "add", content: "Training for a V6 by March." }] });
   expect(viaPage.status, JSON.stringify(viaPage)).toBe("ok");
+  expect(((await memberTalk("polynet_read", { path: memoryPath })) as any).value.body).toContain("- Training for a V6 by March.");
+  // The general call it stands for is not the guide's to make.
+  const direct = await onPage("polynet_call", remember([{ action: "add", content: "Direct." }], "pm-page-direct"));
+  expect(direct).toMatchObject({ status: "error", errorCode: "tool_not_in_lens" });
+  expect(((await memberTalk("polynet_read", { path: memoryPath })) as any).value.body).not.toContain("Direct.");
 
   // Forget: remove one, then clear.
   await memberTalk("polynet_call", remember([{ action: "remove", old_text: "Tuesdays" }], "pm-5"));
