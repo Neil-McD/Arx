@@ -159,7 +159,7 @@ export const answerGuideQuestion = action({
         const outcome = (execution.value as any)?.result ?? {};
         const asked = Number(outcome.succeeded ?? 0) + Number(outcome.failed ?? 0);
         const removed = Number(outcome.succeeded ?? 0);
-        result = { status: removed > 0 ? "done" : "failed", line: removeResultLine({ removed, asked }), path: buildCommunityTabPath(claimed.communitySlug, "chat") };
+        result = { status: removed > 0 ? "done" : "failed", line: removeResultLine({ removed, asked }), path: null };
       } else {
         const slug = channelSlugOf(input.path);
         const mode = String(input.mode ?? "create");

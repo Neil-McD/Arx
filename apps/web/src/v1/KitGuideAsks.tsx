@@ -51,7 +51,8 @@ export function GuideAsks(props: {
   const hidden = question ? question.items.length - items.length : 0;
   return (
     <div className={cx("gask")}>
-      {result ? (
+      {/* What the last answer did, until the guide asks again. */}
+      {result && !question ? (
         <div className={cx("gdid", result.status === "failed" && "bad")} role="status">
           <span>{result.line}</span>
           {result.path && result.status === "done" ? <a className={cx("gopen")} href={result.path}>Open</a> : null}
