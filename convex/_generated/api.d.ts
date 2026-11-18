@@ -185,6 +185,7 @@ import type * as httpRuntimeTurnState from "../httpRuntimeTurnState.js";
 import type * as httpStreaming from "../httpStreaming.js";
 import type * as httpVoice from "../httpVoice.js";
 import type * as legalAcceptances from "../legalAcceptances.js";
+import type * as mcpActionTools from "../mcpActionTools.js";
 import type * as memberEntryDestination from "../memberEntryDestination.js";
 import type * as memberMemory from "../memberMemory.js";
 import type * as memberOntology from "../memberOntology.js";
@@ -418,6 +419,7 @@ declare const fullApi: ApiFromModules<{
   httpStreaming: typeof httpStreaming;
   httpVoice: typeof httpVoice;
   legalAcceptances: typeof legalAcceptances;
+  mcpActionTools: typeof mcpActionTools;
   memberEntryDestination: typeof memberEntryDestination;
   memberMemory: typeof memberMemory;
   memberOntology: typeof memberOntology;

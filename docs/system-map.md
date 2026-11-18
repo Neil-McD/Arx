@@ -240,7 +240,10 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
   executor saves a channel write or a removal instead of running it and
   answers `waiting_for_person`; `KitGuideAsks` shows it above the box where
   they type; `answerGuideQuestion` runs the same call as them on yes.
-  "Always allow posts" is per person per community); `communityKnowledgeUse` keeps one row of counts per community
+  "Always allow posts" is per person per community); `shared/actionTools.ts`
+  (one named tool per action for a person's own AI, generated from the one
+  list and translated into the calls the executor already runs;
+  `mcpActionTools` decides which a person is shown); `communityKnowledgeUse` keeps one row of counts per community
   per day of the notes and lessons answers opened, added hours later at a
   random time so nothing traces to a conversation, for how much each is used
   and what is answered together; `communityBrain` (`getBrainMap`) reads it all

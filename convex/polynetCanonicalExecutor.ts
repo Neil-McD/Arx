@@ -36,6 +36,7 @@ import {
 import { PERSONAL_MEMORY_OPERATION, PERSONAL_MEMORY_PATH } from "../shared/personalMemory.ts";
 import { lensCalls, lensReads, resolveLens, type Lens, type LensView } from "../shared/lens.ts";
 import { guideAskFor, handedBackToPerson, operationFor } from "../shared/operationCatalog.ts";
+import { ACTION_TOOLS } from "../shared/actionTools.ts";
 import { handbookQuestion, postQuestion, removeQuestion, roleQuestion, waitingToolAnswer } from "../shared/guideQuestions.ts";
 import {
   COMMUNITY_MEMBER_SELF_DIRECTORY,
@@ -883,6 +884,8 @@ function capabilityDocument(args: {
     call: { tool: "polynet_call", operation: args.operation, version: 1,
       target: `/communities/${args.target.communitySlug}/capabilities/${args.operation}.json`,
       input: "the fields listed under input", idempotency_key: "a new key for each action" },
+    // Through a person's own AI this action is also its own tool.
+    ...(args.principalKind === "external_mcp" && namedToolFor(args.operation) ? { named_tool: namedToolFor(args.operation) } : {}),
   };
   const members = `a selection of 1 to ${SELECTION_MAX} members, as user:<id> refs from members/`;
   if (isMembersCapability) {
@@ -2826,6 +2829,11 @@ async function askPersonFirst(args: {
   });
   if (!asked.ok) return canonicalError("invalid_tool_args", "That is too long to ask the person about. Make it shorter.");
   return { ok: true, value: waitingToolAnswer(question) };
+}
+
+// The named tool a person's own AI has for an action (shared/actionTools.ts).
+function namedToolFor(operation: string): string | null {
+  return ACTION_TOOLS.find((tool) => tool.catalog === operation)?.name ?? null;
 }
 
 // Whether this call is handed back to the person instead of run: the one
