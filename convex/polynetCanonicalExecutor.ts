@@ -3151,17 +3151,6 @@ async function executeCommunityOperation(args: {
       : personOnly({ what: "Publishing the handbook", where: "Settings: Guide, then the handbook",
         path: buildCommunityTabPath(target.communitySlug, "settings", null, "agent") });
   }
-  // Joining that already needs approval: nothing to change, and said so. The
-  // guide reached for this when asked to open the community (the only join
-  // tool it has); a plain "nothing changed, and opening is theirs to do" stops
-  // it reporting a change it never made.
-  if (operation === JOIN_MODE_OPERATION && rawInput.mode === "approval") {
-    const settings = await args.ctx.runQuery((internal as any).communityLifecycle.readCommunitySettingsForTrustedManagerInternal,
-      { userId: args.userId, communityId: target.communityId }).catch(() => null);
-    if (settings?.join_mode === "approval") {
-      return canonicalError("nothing_to_change", "Joining already needs approval, so nothing changed. Opening the community to everyone is done by a person in the app: Members, Who can join, then Change.");
-    }
-  }
   // The receipt is the community's (by id), not its address's: after a rename,
   // the same call at the new address replays the answer.
   const receiptArgs = { ...args, toolName: "polynet_call" as const,
@@ -3169,6 +3158,21 @@ async function executeCommunityOperation(args: {
   const reservation = await reserveMutatingOperation(receiptArgs);
   if (!reservation.ok) return reservation.result;
   if (reservation.status === "completed") return { ok: true, value: reservation.completedValue };
+  // Joining that already needs approval: nothing to change, and said so. The
+  // guide reached for this when asked to open the community (the only join
+  // tool it has); a plain "nothing changed, and opening is theirs to do" stops
+  // it reporting a change it never made. Checked after the receipt, so a retry
+  // of the call that did make the change still gets its own answer back.
+  if (operation === JOIN_MODE_OPERATION && rawInput.mode === "approval") {
+    const settings = await args.ctx.runQuery((internal as any).communityLifecycle.readCommunitySettingsForTrustedManagerInternal,
+      { userId: args.userId, communityId: target.communityId }).catch(() => null);
+    if (settings?.join_mode === "approval") {
+      const message = "Joining already needs approval, so nothing changed. Opening the community to everyone is done by a person in the app: Members, Who can join, then Change.";
+      await failMutatingOperation({ ...receiptArgs, requestFingerprint: reservation.requestFingerprint,
+        attemptToken: reservation.attemptToken, errorCode: "nothing_to_change", errorMessage: message });
+      return canonicalError("nothing_to_change", message);
+    }
+  }
   try {
     // The change and its receipt commit together (communityOperations).
     const applied = await args.ctx.runMutation((internal as any).communityOperations.applyCommunityOperationInternal, {
