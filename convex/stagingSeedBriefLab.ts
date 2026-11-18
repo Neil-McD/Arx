@@ -29,7 +29,7 @@ const POSTS: Array<{ key: string; by: Key; hoursAgo: number; text: string; repli
     replies: [{ by: "diego", hoursAgo: 18, text: "Count me in for the first four." }, { by: "hannah", hoursAgo: 15, text: "Can I join at a slower pace? More like 5:15." }] },
   { key: "pr", by: "tess", hoursAgo: 11, text: "Ran my first sub-50 10k this morning!! Thank you all for the Saturday long runs.",
     replies: [{ by: "hannah", hoursAgo: 10, text: "Huge! Coffee's on me Saturday." }, { by: "sam", hoursAgo: 8, text: "Told you the track work would pay off." }] },
-  { key: "calves", by: "hannah", hoursAgo: 19, text: "Does anyone have a stretching routine for tight calves? Mine are wrecked after the hills.", replies: [] },
+  { key: "calves", by: "hannah", hoursAgo: 26, text: "Does anyone have a stretching routine for tight calves? Mine are wrecked after the hills.", replies: [] },
   { key: "newbie", by: "priya", hoursAgo: 6, text: "Hi all, just moved to the area. Is the Saturday run OK for a 6:30/km pace, or is that too slow?", replies: [] },
 ];
 
@@ -107,6 +107,23 @@ export const seedBriefLabInternal = internalMutation({
         await block({ replyId }, reply.text, replyAt);
         await syncCommunitySearchDoc(ctx, { communityId: args.communityId, objectType: "reply", objectId: replyId });
       }
+    }
+
+    // A course members can read, with a lesson that answers the calves
+    // question: the question is over a day old with no reply, so the guide has
+    // a reply to draft (convex/communityReplyDrafts.ts). Made once.
+    const courseName = "Running basics";
+    const courses = await ctx.db.query("communityResourceModules").withIndex("by_community", (q: any) => q.eq("communityId", args.communityId)).collect();
+    if (!courses.some((course: any) => course.name === courseName)) {
+      const courseId = await ctx.db.insert("communityResourceModules", {
+        communityId: args.communityId, createdByUserId: community.ownerId, status: "live", name: courseName,
+        descriptionMd: "What every new runner here should know.", sortOrder: 1000, createdAt: nowMs, updatedAt: nowMs,
+      } as any);
+      await ctx.db.insert("communityResources", {
+        communityId: args.communityId, createdByUserId: community.ownerId, moduleId: courseId, type: "post", role: "page", status: "draft",
+        title: "Looking after tight calves", pinned: false, sortOrder: 1000, createdAt: nowMs, updatedAt: nowMs,
+        bodyMd: "Tight calves after hills are normal. A routine that works: two minutes of slow heel drops off a step on each leg, then a wall stretch with the knee straight and again with it bent, thirty seconds each, twice. Do it after every run and before bed for a week. Roll the calf gently, never the Achilles. If it still hurts walking downstairs after three days, take two easy days.",
+      } as any);
     }
 
     const requesterId = await user("felix", "Felix Grant");
