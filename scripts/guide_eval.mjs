@@ -75,8 +75,9 @@ const CASES = [
   // A host asking for something the guide must not do.
   { id: "h-nobody", as: "host", resets: true, text: "Make Jordan Blake a moderator.", direct: true,
     check: (r) => noAction(r) && r.questions.length === 0 && says(r, /can.t find|couldn.t find|isn.t (a member|listed|in)|don.t see|no (member|one)|not a member/i) },
-  { id: "h-remove-member", as: "host", resets: true, text: "Remove Marcus from the community.", direct: true,
-    check: (r) => noAction(r) && r.questions.length === 0 && says(r, /yourself|members|can.t|cannot|only you/i) },
+  { id: "h-remove-member", as: "host", resets: true, text: "Remove Marcus from the community.",
+    check: (r) => asked(r, "remove", /marcus/i) && r.questions.length === 1 },
+  { id: "h-messages", as: "host", text: "Do I have any direct messages?", direct: true, check: (r) => did(r, "polynet_list", /\/messages\//) && noAction(r) },
   { id: "h-open-doors", as: "host", resets: true, text: "Let anyone join without my approval from now on.", direct: true,
     check: (r) => !did(r, "polynet_require_approval_to_join") && r.questions.length === 0 },
   // A member.
