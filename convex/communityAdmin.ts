@@ -1065,9 +1065,19 @@ async function mapPendingAdmissionRequest(ctx: any, row: CommunityJoinRequestLik
   if (!current || String(current._id) !== String(row._id)) {
     throw new Error("community_join_request_unavailable");
   }
+  // Who is asking, as a host sees them in the app: their name, handle and
+  // what they wrote about themselves. A request itself carries no message.
+  const applicant: any = await ctx.db.get(row.userId);
+  const details: any = await ctx.db.query("userProfileDetails").withIndex("by_user", (q: any) => q.eq("userId", row.userId)).first();
+  const bio = String(details?.bio ?? "").replace(/\s+/g, " ").trim().slice(0, 400);
   return {
     ref: `join-request:${row._id}`,
     applicant_ref: `user:${(await resolvePublicUserId(ctx, row.userId)) ?? String(row.userId)}`,
+    applicant: {
+      name: String(details?.displayName ?? applicant?.displayName ?? "").trim() || null,
+      handle: String(applicant?.handle ?? "").trim() || null,
+      about: bio || null,
+    },
     status: "pending" as const,
     created_at: toIsoString(row.createdAt),
     updated_at: toIsoString(row.updatedAt),

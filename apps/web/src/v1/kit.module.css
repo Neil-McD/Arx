@@ -1212,13 +1212,14 @@
 .app .nface img{width:100%;height:100%;object-fit:cover}
 .app .nbtns{display:flex;gap:6px}
 .app .nmore{margin-top:8px;font-size:12.5px;color:var(--ink3)}.app .nmore:hover{color:var(--ink)}
-.app.on-t-on .nyou,.app.on-t-on .gsug{display:none}
-/* "Your guide suggests" (KitGuideSuggests): the same rows, in the guide's
+.app.on-t-on .nyou,.app.on-t-on .gprops{display:none}
+/* "Your guide suggests" (KitGuideSuggests; .gprops, since .gsug is the
+   guide's suggestion chip): the same rows, in the guide's
    colour, under the list. Opened, the exact words it would post. */
-.app .gsug{margin-top:22px;width:100%}
-.app .gsug h3{display:flex;align-items:center;gap:7px;margin:0 0 10px;font-size:13px;font-weight:600;color:var(--aurora-ink)}
-.app .gsug h3 i{font-style:normal;min-width:18px;height:18px;padding:0 5px;border-radius:9px;background:rgba(var(--au),.2);color:var(--aurora-ink);font-size:11.5px;font-weight:600;display:inline-grid;place-items:center}
-.app .gsug .nlist{border-color:rgba(var(--au),.26);background:linear-gradient(180deg,rgba(var(--au),.07),rgba(var(--au),.02))}
+.app .gprops{margin-top:22px;width:100%}
+.app .gprops h3{display:flex;align-items:center;gap:7px;margin:0 0 10px;font-size:13px;font-weight:600;color:var(--aurora-ink)}
+.app .gprops h3 i{font-style:normal;min-width:18px;height:18px;padding:0 5px;border-radius:9px;background:rgba(var(--au),.2);color:var(--aurora-ink);font-size:11.5px;font-weight:600;display:inline-grid;place-items:center}
+.app .gprops .nlist{border-color:rgba(var(--au),.26);background:linear-gradient(180deg,rgba(var(--au),.07),rgba(var(--au),.02))}
 .app .nicon.guide{background:rgba(var(--au),.14);color:var(--aurora-ink)}
 .app .gdraft{margin:8px 0 0;padding:11px 13px;border-radius:10px;border:1px solid rgba(var(--au),.26);background:rgba(var(--au),.05);font-size:14.5px;line-height:1.55;color:var(--ink);white-space:pre-wrap;overflow-wrap:anywhere}
 .app textarea.gdraft{display:block;width:100%;box-sizing:border-box;border-color:var(--accent);background:var(--field);font:inherit;font-size:14.5px;line-height:1.55;resize:vertical;outline:0}
