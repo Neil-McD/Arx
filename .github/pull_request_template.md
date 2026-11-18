@@ -1,29 +1,11 @@
-## Issue
+## Outcome
 
-<!-- Linear issue, e.g. POL-123. Title format: POL-123: <user-visible outcome> -->
+<!-- What should someone be able to do? Include the failing case or request if it helps. -->
 
-## Spec
+## Evidence
 
-<!-- Link to the spec comment on the issue -->
+<!-- Link the preview or staging result and describe what you exercised. CI reports its own results. Record any missing proof or changed test contract. -->
 
-## What changed
+## Risk and recovery
 
-<!-- What a user or operator would notice -->
-
-## Verify output
-
-<!-- Paste the verify command and its output -->
-
-## Preview
-
-<!-- Vercel preview URL (backed by the Convex preview deployment) -->
-
-## Risk
-
-<!-- risk:low | risk:med | risk:high, and which risk-high areas this touches -->
-
-## Rollback plan
-
-<!-- Flag off, revert PR, or the manual steps. Convex changes must accept the previous web release. -->
-
-Built-By: <!-- codex | claude | neil -->
+<!-- For consequential changes, name the affected boundary, independent review, approval, and recovery procedure. For a small reversible change a sentence is enough. -->
