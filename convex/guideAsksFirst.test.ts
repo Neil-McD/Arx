@@ -413,11 +413,11 @@ test("the owner is never removed or banned, nobody is asked about a stranger, an
   expect((await w.rows()).questions).toEqual([]);
   // A plain member's guide is not offered it.
   expect(await w.guide("other")("polynet_call", call("community.members.remove", { members: ["member"] }, "rm-m"))).toMatchObject({ ok: false, code: "operation_not_found" });
-  // An admin's yes to removing another admin is refused by the same check the app makes.
+  // An admin asking to remove another admin is told so at once: nobody is asked for a yes that could only fail.
   await w.t.run(async (ctx) => { for (const row of await ctx.db.query("communityMemberships").collect()) await ctx.db.patch(row._id, { role: "admin" }); });
-  expect(await w.guide("member")("polynet_call", call("community.members.remove", { members: ["other"] }, "rm-a"))).toMatchObject({ ok: true, value: { status: "waiting_for_person" } });
-  const [question] = await w.questions("member");
-  expect(await w.answer("member", question.id, "yes")).toEqual({ status: "failed", line: "Only the owner removes or bans an admin.", path: null });
+  expect(await w.guide("member")("polynet_call", call("community.members.remove", { members: ["other"] }, "rm-a")))
+    .toMatchObject({ ok: false, code: "owner_only", message: "Only the owner removes or bans an admin." });
+  expect(await w.questions("member")).toEqual([]);
   expect((await membershipOf(w, "other")).state).toBe("active");
 });
 
