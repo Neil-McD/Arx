@@ -112,8 +112,11 @@ export const seedBriefLabInternal = internalMutation({
     const requesterId = await user("felix", "Felix Grant");
     const request = await ctx.db.query("communityJoinRequests")
       .withIndex("by_community_user", (q: any) => q.eq("communityId", args.communityId).eq("userId", requesterId)).unique();
-    if (request) await ctx.db.patch(request._id, { status: "pending", createdAt: ago(5), updatedAt: ago(5) });
-    else await ctx.db.insert("communityJoinRequests", { communityId: args.communityId, userId: requesterId, status: "pending", message: "Training for my first half marathon!", createdAt: ago(5), updatedAt: ago(5) });
+    // A join request carries no message (convex/communityJoinRequestCore.ts
+    // refuses a row that has one, and one such row empties the whole list a
+    // host sees), so an older seed's message is cleared here.
+    if (request) await ctx.db.patch(request._id, { status: "pending", message: undefined, deniedAt: undefined, reapplyAt: undefined, createdAt: ago(5), updatedAt: ago(5) });
+    else await ctx.db.insert("communityJoinRequests", { communityId: args.communityId, userId: requesterId, status: "pending", createdAt: ago(5), updatedAt: ago(5) });
 
     await ctx.db.insert("communityEvents", {
       communityId: args.communityId, createdByUserId: community.ownerId, title: "Saturday Long Run: River Loop",
