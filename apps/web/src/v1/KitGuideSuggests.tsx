@@ -39,7 +39,7 @@ export function GuideSuggests(props: {
     else { setOpenId(null); setEditing(null); }
   };
   return (
-    <section className={cx("gsug")} aria-label="Your guide suggests">
+    <section className={cx("gprops")} aria-label="Your guide suggests">
       <h3><Sparkles size={14} strokeWidth={1.8} aria-hidden="true" />Your guide suggests <i>{props.drafts.length}</i></h3>
       <div className={cx("nlist")}>
         {props.drafts.map((draft) => {
