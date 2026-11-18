@@ -128,7 +128,17 @@ export const seedBriefLabInternal = internalMutation({
 
     // Leftover members from other tests would be this community's "newest
     // members" forever; the seed's own members are the only ones it keeps.
-    const keep = new Set([String(community.ownerId), ...Object.values(ids).map(String)]);
+    // A pretend host (an admin), so the guide can be measured as a host
+    // (scripts/guide_eval.mjs) without acting as the real owner, whose Home
+    // would show every question the measurement leaves waiting.
+    const hostId = await user("host", "Riley Chen");
+    const hostMembership = await ctx.db.query("communityMemberships")
+      .withIndex("by_community_user" as any, (q: any) => q.eq("communityId", args.communityId).eq("userId", hostId)).unique();
+    if (hostMembership) await ctx.db.patch(hostMembership._id, { role: "admin", createdAt: ago(1200), updatedAt: nowMs, state: "active" } as any);
+    else await ctx.db.insert("communityMemberships", {
+      communityId: args.communityId, userId: hostId, role: "admin", accessSource: "free_grant", state: "active", createdAt: ago(1200), updatedAt: nowMs,
+    } as any);
+    const keep = new Set([String(community.ownerId), String(hostId), ...Object.values(ids).map(String)]);
     for (const membership of await ctx.db.query("communityMemberships").withIndex("by_community_user", (q: any) => q.eq("communityId", args.communityId)).collect()) {
       if (keep.has(String(membership.userId))) continue;
       const other = await ctx.db.get(membership.userId) as any;
