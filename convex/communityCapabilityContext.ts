@@ -727,6 +727,8 @@ export const resolveCommunitySemanticRepositoryInternal = internalQuery({
     path: v.string(),
     cursor: v.optional(v.union(v.string(), v.null())),
     limit: v.optional(v.number()),
+    // Members only: newest joins first.
+    sort: v.optional(v.literal("newest")),
   },
   handler: async (ctx, args) => {
     const validatedInput = validateCommunitySemanticOperationInput({
@@ -916,6 +918,7 @@ export const resolveCommunitySemanticRepositoryInternal = internalQuery({
             validatedInput.operation === "list" ? validatedInput.cursor : null,
           limit:
             validatedInput.operation === "list" ? validatedInput.limit : null,
+          sort: args.sort ?? null,
         });
         return listCommunitySemanticMembers({
           path: parsedPath.path,

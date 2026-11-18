@@ -30,7 +30,7 @@ import {
 } from "../shared/polynetCanonicalToolContract.ts";
 import { formatJsonToolOutput } from "./runtimeHarnessShaping";
 import { guideRunLens, lensHasTool } from "../shared/lens";
-import { actionTool, translateActionTool } from "../shared/actionTools";
+import { actionTool, guideActionKey, translateActionTool } from "../shared/actionTools";
 
 function buildWebResearchCostMetadata(params: {
   estimatedVendorCostUsd: number;
@@ -97,7 +97,11 @@ export async function runAgentTool(params: {
     }
     const context = await params.ctx.runQuery(internal.communityAgent.resolveRuntimeCommunityPromptContextInternal,
       { authSubject: params.authSubject, userId: params.userId as any, communityId: params.communityId as any });
-    const translated = translateActionTool(named, { ...params.args, community: context.community_slug }, Date.now());
+    // The retry key is the server's, from this run and this tool call; the
+    // settings revision is the one just read (shared/actionTools.ts, GUIDE_FILLS).
+    const callId = String(params.toolCallId ?? "").trim() || `${named.name}:${JSON.stringify(params.args ?? {})}`;
+    const translated = translateActionTool(named, { ...params.args, community: context.community_slug }, Date.now(),
+      { key: guideActionKey(params.runId, callId), settingsRevision: context.community_settings_revision ?? null });
     return await runAgentTool({ ...params, toolName: translated.toolName, args: translated.input, fromNamedTool: true });
   }
   let normalizedArgs: Record<string, unknown>;

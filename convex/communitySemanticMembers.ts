@@ -73,6 +73,7 @@ async function buildMemberDirectoryEntry(args: {
   communityId: any;
   userId: any;
   role: unknown;
+  joinedMs: unknown;
   onlineUserIds: Set<string>;
 }): Promise<{
   entry: MemberSemanticDirectorySource["entries"][number] | null;
@@ -119,6 +120,7 @@ async function buildMemberDirectoryEntry(args: {
       avatarUrl: (await resolveUserProfileDisplayProjectionForUser(args.ctx, user, detail)).avatar_url,
       online: args.onlineUserIds.has(String(user._id)),
       role: normalizeSemanticMemberRole(args.role),
+      joinedAt: Number.isFinite(args.joinedMs) ? new Date(args.joinedMs as number).toISOString() : null,
       isSelf,
     },
     skippedIncomplete: false,
@@ -131,6 +133,8 @@ export async function listMemberSemanticDirectory(args: {
   context: ResolvedCommunityCapabilityContext;
   cursor?: string | null;
   limit?: number | null;
+  // "newest": who joined most recently comes first. Left out: oldest first.
+  sort?: "newest" | null;
 }): Promise<MemberSemanticDirectorySource> {
   const communityId = normalizeCommunityId(args.ctx, args.context);
   const community = (await args.ctx.db.get(communityId)) as CommunityLike | null;
@@ -138,24 +142,28 @@ export async function listMemberSemanticDirectory(args: {
   const cursor = normalizeSemanticDirectoryCursor(args.cursor);
   const pageSize = normalizeSemanticDirectoryLimit(args.limit);
   const isFirstPage = cursor === null;
-  const membershipPageSize = isFirstPage ? pageSize - 1 : pageSize;
+  const newest = args.sort === "newest";
+  // The owner is not a membership row, so it is added by hand: first when
+  // oldest come first, last when newest do. A page that may hold it reads
+  // one row fewer.
+  const membershipPageSize = newest || isFirstPage ? pageSize - 1 : pageSize;
   const rawPage = await args.ctx.db
     .query("communityMemberships")
     .withIndex("by_community_createdAt", (q: any) =>
       q.eq("communityId", communityId),
     )
-    .order("asc")
+    .order(newest ? "desc" : "asc")
     .paginate({
       cursor,
       numItems: membershipPageSize,
       maximumRowsRead: membershipPageSize * 3,
     });
+  const owner = { userId: community.ownerId, role: "owner", joinedMs: community.createdAt };
   const candidates: Array<{
     userId: any;
     role: unknown;
-  }> = isFirstPage
-    ? [{ userId: community.ownerId, role: "owner" }]
-    : [];
+    joinedMs: unknown;
+  }> = !newest && isFirstPage ? [owner] : [];
   for (const row of rawPage.page as CommunityMembershipLike[]) {
     if (
       !communityMembershipRowIsActive(row) ||
@@ -166,8 +174,14 @@ export async function listMemberSemanticDirectory(args: {
     candidates.push({
       userId: row.userId,
       role: normalizeCommunityRoleForOutput(row.role) || "member",
+      // Joined when let in (an approved request), else when the row was made.
+      joinedMs: row.activatedAt ?? row.createdAt,
     });
   }
+  // Pages follow when the row was made; within a page, by when they were
+  // let in, so an approved request reads as the day it was approved.
+  if (newest) candidates.sort((a, b) => Number(b.joinedMs ?? 0) - Number(a.joinedMs ?? 0));
+  if (newest && rawPage.isDone) candidates.push(owner);
   // Who is online, read once for the page.
   const onlineUserIds = new Set(
     (await resolveAuthorizedCommunityPresenceWindow(args.ctx, community)).entries
@@ -185,6 +199,7 @@ export async function listMemberSemanticDirectory(args: {
       communityId,
       userId: candidate.userId,
       role: candidate.role,
+      joinedMs: candidate.joinedMs,
       onlineUserIds,
     }).catch(() => ({ entry: null, skippedIncomplete: true }));
     if (mapped.entry) entries.push(mapped.entry);

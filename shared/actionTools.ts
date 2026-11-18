@@ -155,7 +155,7 @@ export const ACTION_TOOLS: ActionTool[] = [
 
   // A builder (owner or admin).
   tool("polynet_update_community", "community.settings.update", "Change the community's details",
-    "Change the community's name, address, one-liner, about text or whether it is listed. Read builder/community.json first for the current values and its settings_revision.",
+    "Change the community's name, address, one-liner, about text or whether it is listed. Read builder/community.json first for the current values.",
     { community: COMMUNITY, revision: { type: "integer", minimum: 0, description: "settings_revision from builder/community.json: a change made since you read it is refused." },
       name: TEXT("The community's name (owner only).", 120), slug: TEXT("Its address (owner only). Its links move with it.", 64),
       one_liner: { type: ["string", "null"], maxLength: 280, description: "One line on what it is." },
@@ -256,15 +256,27 @@ export function actionToolsFor(role: ActionToolRole, door: ActionToolDoor): Acti
   return ACTION_TOOLS.filter((entry) => (!entry.door || entry.door === door) && SHOWN_TO[role].includes(actionToolEntry(entry).lens));
 }
 
-// The same tool as the guide is given it: its private talk is in one
-// community, so the server fills that in and the guide never names it.
+// What the server fills in for the guide, so the guide never writes it: the
+// community (its private talk is in one), the retry key (made from the run
+// and the tool call, so a key the guide invents can never collide with an
+// earlier, different action), and the settings revision (read just before
+// the change, so the guide doesn't have to find it or guess 0).
+const GUIDE_FILLS = new Set(["community", "idempotency_key", "revision"]);
+
+// The same tool as the guide is given it.
 export function guideToolDefinition(entry: ActionTool) {
-  const { community: _community, ...properties } = entry.properties;
+  const properties = Object.fromEntries(Object.entries(entry.properties).filter(([key]) => !GUIDE_FILLS.has(key)));
   return {
     name: entry.name,
     description: entry.description,
-    inputSchema: { type: "object", additionalProperties: false, required: entry.required.filter((key) => key !== "community"), properties } as PlatformOperationJsonSchema,
+    inputSchema: { type: "object", additionalProperties: false, required: entry.required.filter((key) => !GUIDE_FILLS.has(key)), properties } as PlatformOperationJsonSchema,
   };
+}
+
+// The guide's retry key for one tool call: the same call in the same run is
+// the same key (a replay, not a second action); any other call is a new one.
+export function guideActionKey(runId: string, toolCallId: string): string {
+  return requestFingerprint(`guide-${runId}`, "tool_call", toolCallId);
 }
 
 // A named tool as an MCP tool. The labels are the list's: what asks every
@@ -296,11 +308,19 @@ export const ACTION_TOOL_RETRY_WINDOW_MS = 5 * 60 * 1000;
 // immediate retry; one that falls across a window's edge is a new action
 // (posts are still caught by the same-words rule). An AI that must be sure
 // names the action.
-export function translateActionTool(entry: ActionTool, args: Args, nowMs: number): Translated {
+//
+// The guide's door passes `guide`: its key is the server's (guideActionKey),
+// and the settings revision is the one the server just read; whatever the
+// guide sent for either is ignored.
+export function translateActionTool(entry: ActionTool, args: Args, nowMs: number,
+  guide?: { key: string; settingsRevision?: number | null }): Translated {
   const { idempotency_key: given, ...rest } = args ?? {};
+  if (guide && "revision" in entry.properties) rest.revision = guide.settingsRevision ?? undefined;
   const translated = entry.translate(rest);
-  const key = typeof given === "string" && given.trim()
-    ? given.trim().slice(0, 120)
-    : requestFingerprint(`auto-${Math.floor(nowMs / ACTION_TOOL_RETRY_WINDOW_MS)}`, entry.name, rest);
+  const key = guide
+    ? guide.key
+    : typeof given === "string" && given.trim()
+      ? given.trim().slice(0, 120)
+      : requestFingerprint(`auto-${Math.floor(nowMs / ACTION_TOOL_RETRY_WINDOW_MS)}`, entry.name, rest);
   return { toolName: translated.toolName, input: { ...translated.input, idempotency_key: key } };
 }

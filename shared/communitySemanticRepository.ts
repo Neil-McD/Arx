@@ -145,6 +145,8 @@ export type MemberSemanticDirectorySource = {
     avatarUrl: string | null;
     online: boolean;
     role: "owner" | "admin" | "moderator" | "member";
+    // When they joined (ISO), so "who joined last?" needs no profile reads.
+    joinedAt?: string | null;
     isSelf: boolean;
   }>;
   nextCursor: string | null;
@@ -1017,6 +1019,7 @@ export function listCommunitySemanticMembers(args: {
     handle: string | null;
     avatar_url: string | null;
     online: boolean;
+    joined_at: string | null;
   }> = [];
   const paths = new Set<string>();
   for (const row of args.source.entries) {
@@ -1043,6 +1046,7 @@ export function listCommunitySemanticMembers(args: {
       handle: validatedHandle.ok ? validatedHandle.normalizedHandle : null,
       avatar_url: normalizeText(row.avatarUrl, 2_048),
       online: row.online === true,
+      joined_at: normalizeText(row.joinedAt, 40),
     });
   }
   const nextCursor = normalizeText(args.source.nextCursor, 2_048);

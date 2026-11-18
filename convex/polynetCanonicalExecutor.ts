@@ -571,16 +571,20 @@ function parseSearchDate(value: unknown, endOfDay: boolean): number | null | "in
   return Number.isFinite(ms) ? ms : "invalid";
 }
 
-// Search filters for channels/: an author handle, a date range, a kind and a sort.
-async function resolvePostSearchFilters(ctx: any, input: Record<string, unknown>): Promise<
+// Search filters for channels/: an author (a handle, or a name only one
+// member here has), a date range, a kind and a sort.
+async function resolvePostSearchFilters(ctx: any, input: Record<string, unknown>, communityId: string): Promise<
   { ok: true; value: Record<string, unknown> } | { ok: false; message: string }
 > {
   const value: Record<string, unknown> = {};
   const author = requiredString(input.author, 64);
   if (author) {
-    const authorUserId = await ctx.runQuery((internal as any).communitySearchDocs.resolveSearchAuthorInternal, { handle: author });
-    if (!authorUserId) return { ok: false, message: `No member has the handle "${author}". List members/ for handles, e.g. author: "maya-crimps".` };
-    value.authorUserId = authorUserId;
+    const found = await ctx.runQuery((internal as any).communitySearchDocs.resolveSearchAuthorInternal, { handle: author, communityId });
+    if (found && Array.isArray(found.handles)) {
+      return { ok: false, message: `More than one member is called "${author}": ${found.handles.join(", ")}. Search again with one of those handles as author.` };
+    }
+    if (!found?.userId) return { ok: false, message: `No member has the handle "${author}". List members/ for handles, e.g. author: "maya-crimps".` };
+    value.authorUserId = found.userId;
   }
   const fromMs = parseSearchDate(input.from, false);
   const toMs = parseSearchDate(input.to, true);
@@ -2008,6 +2012,18 @@ async function executeCanonicalRead(args: {
     : execution;
 }
 
+// The folders search works on are the ones executeCanonicalSearch handles
+// below: the whole community, channels/ (or one channel), resources/ and,
+// for whoever reads the guide's notes, memory/.
+function unsearchableFolderMessage(target: ResolvedCommunityTarget, notes: boolean): string {
+  const base = mountedPath(target.communitySlug, "/");
+  const folders = [`${base} (everything)`, `${base}channels/ (or one channel)`, `${base}resources/`, ...(notes ? [`${base}memory/`] : [])];
+  const path = mountedPath(target.communitySlug, target.localPath);
+  const instead = path.endsWith("/") ? `This folder can't be searched. List it instead: polynet_list ${path}.`
+    : `This can't be searched. Read it instead: polynet_read ${path}.`;
+  return `${instead} Search works on ${folders.join(", ")}.`;
+}
+
 async function executeCanonicalSearch(args: {
   podRoomId?: string | null;
   ctx: any;
@@ -2090,7 +2106,7 @@ async function executeCanonicalSearch(args: {
           "Channel path not found or not accessible.",
         );
       }
-      const filters = await resolvePostSearchFilters(args.ctx, args.input);
+      const filters = await resolvePostSearchFilters(args.ctx, args.input, target.communityId);
       if (!filters.ok) return canonicalError("invalid_tool_args", filters.message);
       if (Object.keys(filters.value).length && !buildCommunitySearchQuery(String(args.input.query ?? ""))) {
         return canonicalError("invalid_tool_args", 'Filters need at least one keyword, e.g. query: "circuit", author: "maya-crimps". To browse recent posts, use polynet_list on the channel.');
@@ -2153,10 +2169,8 @@ async function executeCanonicalSearch(args: {
       };
     }
     if (target.localPath !== "/") {
-      return canonicalError(
-        "semantic_not_found",
-        "Search path not found or not searchable.",
-      );
+      // Say where to go instead, so a refused search isn't a dead end.
+      return canonicalError("semantic_not_found", unsearchableFolderMessage(target, notesReadable(args, target)));
     }
     const value = (await args.ctx.runAction(
       (internal as any).communityRepositorySearch

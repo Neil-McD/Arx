@@ -4,13 +4,13 @@
 // (shared/operationCatalog.ts, guideAskFor; convex/communityGuideQuestions.ts).
 import { convexTest } from "convex-test";
 import { expect, test, vi } from "vitest";
-import { api } from "./_generated/api";
+import { api, internal } from "./_generated/api";
 import { ensureGeneralChannel } from "./communityChannelCore";
 import schema from "./schema";
 import { executePolynetCanonicalTool } from "./polynetCanonicalExecutor";
 import { runAgentTool } from "./agentTools";
 import { PLATFORM_LEGAL_DOCUMENTS } from "../shared/legalDocuments";
-import { actionTool, translateActionTool } from "../shared/actionTools";
+import { actionTool, guideActionKey, translateActionTool } from "../shared/actionTools";
 
 const modules = import.meta.glob("./**/*.*s");
 
@@ -546,4 +546,59 @@ test("a person is named to an AI by their handle; someone who isn't here is refu
   expect(await w.questions("owner")).toEqual([]);
   // A person's own AI can use a handle too.
   expect(await w.door("owner", "external_mcp")("polynet_call", role(["other"], "h-4"))).toMatchObject({ ok: true, value: { result: { succeeded: 1 } } });
+});
+
+test("in the guide's talk the server makes the retry key per tool call and reads the settings revision itself", async () => {
+  const w = await world();
+  const nowMs = Date.now();
+  await w.t.run(async (ctx) => {
+    for (const [ownerId, runId] of [[w.ids.member, "talk-k"], [w.ids.owner, "talk-o"]] as const) {
+      const threadId = await ctx.db.insert("threads", { ownerId, titleSource: "auto", createdAt: nowMs, updatedAt: nowMs } as any);
+      await ctx.db.insert("runtimeRuns", { ownerId, threadId, runId, lane: "platform", communityId: w.ids.communityId, status: "running",
+        lastEventSeq: 0, startedAt: nowMs, createdAt: nowMs, updatedAt: nowMs } as any);
+    }
+  });
+  const talkAs = (who: "member" | "owner", runId: string) => {
+    const as = w.t.withIdentity({ subject: `${who}-subject` });
+    const ctx = { runQuery: (r: any, a: any) => as.query(r, a), runMutation: (r: any, a: any) => as.mutation(r, a), runAction: (r: any, a: any) => as.action(r, a) };
+    return (toolName: string, args: Record<string, unknown>, toolCallId: string) => runAgentTool({ ctx, userId: String(w.ids[who]), authSubject: `${who}-subject`,
+      runId, toolCallId, communityId: String(w.ids.communityId), communityBoundConversation: true, evidenceSurface: "member_agent_dock", toolName, args });
+  };
+  const member = talkAs("member", "talk-k");
+  // Two different posts that both carry the same invented key: two questions,
+  // each under its own server key; the invented one is never used.
+  expect(await member("polynet_post", { channel: "general", text: "Hills?", idempotency_key: "post-20261118" }, "call_1")).toMatchObject({ status: "ok" });
+  expect(await member("polynet_post", { channel: "general", text: "Track?", idempotency_key: "post-20261118" }, "call_2")).toMatchObject({ status: "ok" });
+  // The very same call again is the same question.
+  await member("polynet_post", { channel: "general", text: "Hills?" }, "call_1");
+  // The same words asked again under a new call in the same turn are still one question.
+  await member("polynet_post", { channel: "general", text: "Hills?" }, "call_3");
+  const keys = (await w.rows()).questions.map((row: any) => JSON.parse(row.inputJson).idempotencyKey);
+  expect(keys).toEqual([guideActionKey("talk-k", "call_1"), guideActionKey("talk-k", "call_2")]);
+  // The yes runs the call under the key the question saved.
+  const hills = (await w.questions("member")).find((question: any) => question.text === "Hills?")!;
+  expect(await w.answer("member", hills.id, "yes")).toMatchObject({ status: "done" });
+  expect((await w.rows()).receipts.map((row: any) => row.idempotencyKey)).toContain(guideActionKey("talk-k", "call_1"));
+
+  // Settings: no revision from the guide, or a wrong one, and it still works,
+  // because the server reads the revision right before the change.
+  const owner = talkAs("owner", "talk-o");
+  expect(await owner("polynet_update_community", { one_liner: "We run hills." }, "call_a"), "first").toMatchObject({ status: "ok" });
+  expect(await owner("polynet_update_community", { one_liner: "We run far.", revision: 0 }, "call_b"), "second").toMatchObject({ status: "ok" });
+  const community: any = await w.t.run((ctx) => ctx.db.get(w.ids.communityId));
+  expect(community.oneLiner).toBe("We run far.");
+
+  // The guide's context carries the community's time zone: its most recent
+  // event's, never a pod call's; none before there is an event.
+  const context = () => w.t.withIdentity({ subject: "member-subject" }).query(internal.communityAgent.resolveRuntimeCommunityPromptContextInternal,
+    { authSubject: "member-subject", userId: w.ids.member, communityId: w.ids.communityId });
+  expect((await context()).community_lens).not.toHaveProperty("timeZone");
+  await w.t.run(async (ctx) => {
+    const event = { communityId: w.ids.communityId, createdByUserId: w.ids.owner, title: "Long run", startsAt: nowMs + 86_400_000, locationType: "physical" as const,
+      visibility: "members" as const, status: "live" as const, createdAt: nowMs, updatedAt: nowMs };
+    await ctx.db.insert("communityEvents", { ...event, timezone: "America/Denver" });
+    const pod = await ctx.db.query("communityChannels").first();
+    await ctx.db.insert("communityEvents", { ...event, timezone: "Asia/Tokyo", podChannelId: pod!._id });
+  });
+  expect((await context()).community_lens).toMatchObject({ timeZone: "America/Denver" });
 });

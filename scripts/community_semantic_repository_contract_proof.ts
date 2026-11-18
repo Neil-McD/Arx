@@ -357,6 +357,7 @@ const listedMembers = listCommunitySemanticMembers({
         avatarUrl: "https://example.com/neil.png",
         online: true,
         role: "owner",
+        joinedAt: "2026-01-02T03:04:05.678Z",
         isSelf: true,
       },
       {
@@ -367,6 +368,7 @@ const listedMembers = listCommunitySemanticMembers({
         avatarUrl: null,
         online: false,
         role: "moderator",
+        joinedAt: "2026-02-03T04:05:06.789Z",
         isSelf: false,
       },
       {
@@ -409,6 +411,8 @@ assert.deepEqual(listedMembers.result, {
       handle: "neil",
       avatar_url: "https://example.com/neil.png",
       online: true,
+      // When each joined, so "who joined last?" needs no profile reads.
+      joined_at: "2026-01-02T03:04:05.678Z",
     },
     {
       path: "/members/emma.md",
@@ -419,6 +423,7 @@ assert.deepEqual(listedMembers.result, {
       handle: "emma",
       avatar_url: null,
       online: false,
+      joined_at: "2026-02-03T04:05:06.789Z",
     },
     {
       path: "/members/by-user/user-legacy.md",
@@ -429,6 +434,7 @@ assert.deepEqual(listedMembers.result, {
       handle: null,
       avatar_url: null,
       online: false,
+      joined_at: null,
     },
   ],
   next_cursor: "opaque-cursor",
@@ -978,7 +984,9 @@ const nativeTools = buildResponsesApiFunctionTools([
   "polynet_read",
 ]);
 assert.equal(nativeTools.length, 2);
-assert.deepEqual(nativeTools[0]?.parameters.required, ["path", "cursor", "limit"]);
+// sort: members/ can be listed newest join first.
+assert.deepEqual(nativeTools[0]?.parameters.required, ["path", "cursor", "limit", "sort"]);
+assert.deepEqual(nativeTools[0]?.parameters.properties?.sort?.enum, ["newest"]);
 assert.deepEqual(nativeTools[1]?.parameters.required, ["path", "offset", "limit"]);
 assert.equal(nativeTools[1]?.parameters.properties?.offset?.maximum, 1_000_000);
 assert.equal(nativeTools[1]?.parameters.properties?.limit?.maximum, 20_000);

@@ -276,7 +276,11 @@ async function executeRetrievalAgentLoop(
       memberIdentityContextStatus = "error";
     }
   }
-  const runtimeTimeZone = resolveRuntimeTimeZone(askerTimeZone);
+  // In a community's private talk with no profile zone, "now" is in the
+  // community's own zone when it has one (shared/lens.ts, timeZone).
+  const communityTimeZone = !askerTimeZone && params.communityLens?.timeZone
+    ? resolveRuntimeTimeZone(params.communityLens.timeZone) : null;
+  const runtimeTimeZone = resolveRuntimeTimeZone(askerTimeZone ?? communityTimeZone);
   const runtimeDateTimeIso = now.toISOString();
   const runtimeDateLabel = new Intl.DateTimeFormat("en-US", {
     dateStyle: "full",
@@ -349,6 +353,7 @@ async function executeRetrievalAgentLoop(
     currentDateTimeIso: runtimeDateTimeIso,
     currentDateLabel: runtimeDateLabel,
     currentTimeZone: runtimeTimeZone,
+    currentTimeZoneIsCommunity: Boolean(communityTimeZone),
     invocationSurface: params.invocationSurface,
     communityAgentSurfaceContext: params.communityAgentSurfaceContext,
     memberIdentityContextMd,

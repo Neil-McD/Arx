@@ -536,6 +536,7 @@ export function normalizeToolArguments(
         ? { cursor: validated.cursor }
         : {}),
       ...(validated.limit !== null ? { limit: validated.limit } : {}),
+      ...(args.sort === "newest" ? { sort: "newest" } : {}),
     };
   }
   if (toolName === "polynet_read") {

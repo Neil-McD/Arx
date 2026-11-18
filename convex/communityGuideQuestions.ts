@@ -85,8 +85,21 @@ export const describeMembersInternal = internalQuery({
   },
 });
 
+// The call without its retry key. The guide's key is made per tool call
+// (shared/actionTools.ts, guideActionKey), so the same words asked twice in
+// one turn differ only there; they are still the same question.
+function withoutKey(inputJson: string): string {
+  try {
+    const { idempotency_key: _key, idempotencyKey: _camel, ...rest } = JSON.parse(inputJson);
+    return JSON.stringify(rest);
+  } catch {
+    return inputJson;
+  }
+}
+
 // Saves the question. A question still waiting from an earlier turn is
-// dropped: the person moved on, so nothing from it is done.
+// dropped: the person moved on, so nothing from it is done. The saved call
+// keeps its key, so a yes runs it under that one key, once.
 export const askInternal = internalMutation({
   args: {
     communityId: v.id("communities"), userId: v.id("users"), kind: v.union(v.literal("post"), v.literal("remove"), v.literal("change")),
@@ -98,7 +111,7 @@ export const askInternal = internalMutation({
     const nowMs = Date.now();
     for (const row of await waitingRows(ctx, args.communityId, args.userId)) {
       // The same call asked again in the same turn is the same question.
-      if (row.runId === args.runId && row.inputJson === args.inputJson) return { ok: true as const, questionId: String(row._id) };
+      if (row.runId === args.runId && withoutKey(row.inputJson) === withoutKey(args.inputJson)) return { ok: true as const, questionId: String(row._id) };
       if (!args.runId || row.runId !== args.runId) await ctx.db.patch(row._id, { status: "declined", answeredAt: nowMs, dropped: true });
     }
     const questionId = await ctx.db.insert("communityGuideQuestions", {
