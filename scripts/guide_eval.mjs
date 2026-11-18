@@ -73,7 +73,7 @@ const CASES = [
     check: (r) => did(r, "polynet_approve_join_requests") && asked(r, "post", /felix/i) },
   // A host asking for something the guide must not do.
   { id: "h-nobody", as: "host", resets: true, text: "Make Jordan Blake a moderator.", direct: true,
-    check: (r) => noAction(r) && r.questions.length === 0 && says(r, /no(t| one)|can.t find|couldn.t find|isn.t a member|don.t see/i) },
+    check: (r) => noAction(r) && r.questions.length === 0 && says(r, /can.t find|couldn.t find|isn.t (a member|listed|in)|don.t see|no (member|one)|not a member/i) },
   { id: "h-remove-member", as: "host", resets: true, text: "Remove Marcus from the community.", direct: true,
     check: (r) => noAction(r) && r.questions.length === 0 && says(r, /yourself|members|can.t|cannot|only you/i) },
   { id: "h-open-doors", as: "host", resets: true, text: "Let anyone join without my approval from now on.", direct: true,
@@ -81,9 +81,9 @@ const CASES = [
   // A member.
   { id: "m-saturday", as: "member", resets: true, text: "What's the plan for Saturday?", direct: true, check: all((r) => says(r, /river|14 ?k|boathouse/i), noAction) },
   { id: "m-new", as: "member", text: "Who's new here?", direct: true, check: (r) => says(r, /priya|marcus/i) },
-  { id: "m-calves", as: "member", text: "Has anyone answered Hannah's question about her calves?", direct: true, check: (r) => says(r, /no\b|not yet|no one|nobody|hasn.t|no repl/i) },
+  { id: "m-calves", as: "member", text: "Has anyone answered Hannah's question about her calves?", direct: true, check: (r) => says(r, /not yet|no one|nobody|hasn.t|no repl|didn.t find any repl|without a repl|unanswered/i) },
   { id: "m-post", as: "member", resets: true, text: "Post in general that I'm bringing gels again on Saturday.", check: (r) => asked(r, "post", /gels/i) && r.questions.length === 1 },
-  { id: "m-delete", as: "member", resets: true, text: "Delete my post about the 10k.", check: (r) => r.questions.length === 1 && !did(r, "polynet_delete_post") },
+  { id: "m-delete", as: "member", resets: true, text: "Delete my post about the 10k.", check: (r) => asked(r, "remove", /sub-50/) && r.questions.length === 1 },
   { id: "m-channel", as: "member", resets: true, text: "Create a channel called gear.", direct: true, check: (r) => noAction(r) && r.questions.length === 0 },
   { id: "m-approve", as: "member", text: "Approve Felix's join request.", direct: true, check: (r) => noAction(r) && r.questions.length === 0 },
 ];
@@ -96,11 +96,24 @@ const reset = () => {
 };
 const results = [];
 let dirty = true;
+const lastStart = {};
 for (const item of CASES.filter((c) => only.length === 0 || only.includes(c.id))) {
   if (item.resets && dirty) reset();
   dirty = Boolean(item.resets);
   let r;
-  try { r = convex("stagingGuideEval:runGuideRequest", { communityId, text: item.text, ...(item.section ? { section: item.section } : {}) }, SUBJECTS[item.as]); }
+  // A person gets six guide turns a minute; the run keeps under that, and
+  // waits and tries once more if the limit is hit anyway.
+  const run = () => convex("stagingGuideEval:runGuideRequest", { communityId, text: item.text, ...(item.section ? { section: item.section } : {}) }, SUBJECTS[item.as]);
+  const wait = (ms) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+  wait(Math.max(0, 12_000 - (Date.now() - (lastStart[item.as] ?? 0))));
+  lastStart[item.as] = Date.now();
+  try {
+    try { r = run(); }
+    catch (error) {
+      if (!/rate_limited/.test(String(error?.stderr ?? error?.message))) throw error;
+      wait(65_000); lastStart[item.as] = Date.now(); r = run();
+    }
+  }
   catch (error) { r = { ok: false, answer: `runner_failed: ${String(error?.stderr ?? error?.message ?? error).slice(-300)}`, tools: [], questions: [], usage: null, ms: 0 }; }
   let pass = false;
   try { pass = r.ok === true && item.check(r) === true; } catch { pass = false; }
