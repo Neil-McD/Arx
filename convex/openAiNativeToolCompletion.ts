@@ -34,8 +34,6 @@ type OpenAiResponsesParseResult = {
     name: string;
     arguments: string;
   }>;
-  // The step's sealed thinking, to hand back on the next step.
-  reasoningItems: Array<Record<string, unknown>>;
   promptTokens: number | null;
   completionTokens: number | null;
 };
@@ -126,9 +124,6 @@ export function normalizeMessagesForResponsesApi(messages: NativeToolAwareMessag
 
     if (role === "assistant") {
       const assistantMessage = message as Extract<NativeToolAwareMessage, { role: "assistant" }>;
-      // Its thinking goes first, where the provider put it: before the words
-      // and the tool calls it led to.
-      for (const item of assistantMessage.reasoningItems ?? []) inputItems.push(item);
       const content = String(assistantMessage.content ?? "").trim();
       if (content) {
         inputItems.push({
@@ -226,20 +221,10 @@ function parseOpenAiResponsesPayload(payload: Record<string, any>): OpenAiRespon
   const tokenUsage = parseTokenUsage(payload);
 
   const functionCalls: OpenAiResponsesParseResult["functionCalls"] = [];
-  const reasoningItems: OpenAiResponsesParseResult["reasoningItems"] = [];
   let text = typeof payload?.output_text === "string" ? payload.output_text : "";
 
   for (const item of outputItems) {
     if (!item || typeof item !== "object") continue;
-    // Only a sealed item can be handed back (requests are not stored with the
-    // provider, so an id alone means nothing to it). Sent back as it came.
-    if (item.type === "reasoning") {
-      if (typeof item.encrypted_content === "string" && item.encrypted_content) {
-        reasoningItems.push({ type: "reasoning", ...(typeof item.id === "string" ? { id: item.id } : {}),
-          summary: Array.isArray(item.summary) ? item.summary : [], encrypted_content: item.encrypted_content });
-      }
-      continue;
-    }
     if (item.type === "function_call") {
       functionCalls.push(
         parseNativeProviderFunctionCallItem({
@@ -259,7 +244,6 @@ function parseOpenAiResponsesPayload(payload: Record<string, any>): OpenAiRespon
     modelId,
     providerRequestUsage: parseFounderProviderRequestUsage(payload),
     functionCalls,
-    reasoningItems,
     promptTokens: tokenUsage.promptTokens,
     completionTokens: tokenUsage.completionTokens,
   };
@@ -383,9 +367,6 @@ export async function runOpenAiNativeToolCompletion(params: {
       // Medium: on low the guide skipped steps (acting on a person it had not
       // looked up). Neil, Nov 18 2026.
       requestBody.reasoning = { effort: "medium" };
-      // Ask for each step's thinking back in sealed form, to return it on the
-      // next step (the requests are not stored with the provider).
-      requestBody.include = ["reasoning.encrypted_content"];
     }
     if (normalized.instructions) requestBody.instructions = normalized.instructions;
     // Explicit breakpoints plus the implicit one at the latest message, so both
@@ -548,7 +529,6 @@ export async function runOpenAiNativeToolCompletion(params: {
       }
 
       const assistantToolCallMessage = buildAssistantToolCallsMessage({
-        reasoningItems: result.reasoningItems,
         content: result.text.trim() || null,
         toolCalls: parsedToolCalls.map((toolCall) => ({
           providerCallId: toolCall.callId,

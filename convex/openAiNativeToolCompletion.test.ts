@@ -86,22 +86,3 @@ test("without a marked breakpoint, system text stays in instructions with no cac
   expect(body).not.toHaveProperty("prompt_cache_options");
   expect(body.input.map((item: any) => item.role)).toEqual(["user"]);
 });
-
-test("a step's sealed thinking comes back with its tool call and is sent ahead of it on the next step", async () => {
-  const sealed = { type: "reasoning", id: "rs_1", summary: [], encrypted_content: "sealed-thinking" };
-  const fetch = vi.fn(async (_url: any, _options: any) => new Response(JSON.stringify({ ...payload, output_text: "",
-    output: [sealed, { type: "reasoning", id: "rs_unsealed", summary: [] },
-      { type: "function_call", call_id: "call_1", name: "polynet_list", arguments: "{\"path\":\"/\"}" }] }), { status: 200 }));
-  vi.stubGlobal("fetch", fetch);
-  const base = { modelId: "gpt-6-luna", apiKeyOverride: "test-key", maxTokens: 200, tools: [] };
-  const first: any = await runOpenAiNativeToolCompletion({ ...base, messages: [{ role: "user", content: "What is here?" }] });
-  expect(JSON.parse(fetch.mock.calls[0]![1].body).include).toEqual(["reasoning.encrypted_content"]);
-  // Only the sealed item is kept: an id alone means nothing to a provider that stores nothing.
-  expect(first.assistantToolCallMessage.reasoningItems).toEqual([sealed]);
-
-  await runOpenAiNativeToolCompletion({ ...base, messages: [{ role: "user", content: "What is here?" },
-    first.assistantToolCallMessage, { role: "tool", tool_call_id: "call_1", content: "{\"entries\":[]}" }] });
-  const sent = JSON.parse(fetch.mock.calls[1]![1].body).input.map((item: any) => item.type);
-  expect(sent).toEqual(["message", "reasoning", "function_call", "function_call_output"]);
-  expect(JSON.parse(fetch.mock.calls[1]![1].body).input[1]).toEqual(sealed);
-});
