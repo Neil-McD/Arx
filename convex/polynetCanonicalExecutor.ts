@@ -367,6 +367,7 @@ function replayedOperationValue(value: unknown): Record<string, unknown> {
   return {
     ...record,
     deduped: true,
+    replayed: "This idempotency_key was used before, so nothing new was done: this is the answer from that time. Use a new key for a new action.",
     ...(receipt ? { receipt: { ...receipt, deduped: true } } : {}),
   };
 }
@@ -877,6 +878,11 @@ function capabilityDocument(args: {
     authority_lane: isCommunityCapability || isMembersCapability ? "builder"
       : isAdmissionCapability || isRemovePostsCapability ? "moderator" : "member",
     idempotency_required: true,
+    // The whole call, ready to fill in: an AI that only sees a tool's name
+    // learns its shape here.
+    call: { tool: "polynet_call", operation: args.operation, version: 1,
+      target: `/communities/${args.target.communitySlug}/capabilities/${args.operation}.json`,
+      input: "the fields listed under input", idempotency_key: "a new key for each action" },
   };
   const members = `a selection of 1 to ${SELECTION_MAX} members, as user:<id> refs from members/`;
   if (isMembersCapability) {
@@ -1118,6 +1124,11 @@ async function executeCanonicalList(args: {
       : [];
     // The member's own read state per channel (Studio's unread dots). The
     // community agent has none. Attention is a nicety: it never fails a listing.
+    // Through an AI, canManage says whether this AI may change the channel
+    // (rename, describe, move, through capabilities/), not whether the app's
+    // own channel settings would open for a person.
+    const throughAi = args.principalKind === "external_mcp" || args.principalKind === "community_agent_for_member";
+    const aiManages = throughAi && lensCalls(lensOf(args, target), "builder_change");
     const attention = args.principalKind === "community_agent" || channels.length === 0 ? [] : ((await args.ctx.runQuery(
       (internal as any).communityAttention.listCommunityChannelAttentionForUserInternal,
       { userId: args.userId, communityId: target.communityId,
@@ -1133,9 +1144,11 @@ async function executeCanonicalList(args: {
           if (!slug) return [];
           const row = attention.find((candidate) => channelId && candidate.channel_id
             ? candidate.channel_id === channelId : candidate.channel_slug === slug);
+          const capabilities = channel.capabilities && typeof channel.capabilities === "object" ? channel.capabilities as Record<string, unknown> : null;
           return [
             {
               ...channel,
+              ...(throughAi && capabilities ? { capabilities: { ...capabilities, canManage: aiManages && capabilities.canRead === true } } : {}),
               path: mountedPath(target.communitySlug, `/channels/${slug}/`),
               kind: "directory",
               type: "channel",
@@ -2264,6 +2277,8 @@ async function executeCanonicalWrite(args: {
         ok: true,
         path: evidencePath({ communitySlug: target.communitySlug, channelSlug: channel.slug, sourceType: "interaction", ref: writableChannelPath.ref }),
         ref: writableChannelPath.ref,
+        // What was done, in a word: an answer that only says ok leaves an AI guessing.
+        done: mode === "update" ? "edited" : "deleted",
         deduped: false,
         receipt: canonicalReceipt({ toolName: "polynet_write", principalKind: args.principalKind, target, idempotencyKey, deduped: false }),
       };
@@ -3178,6 +3193,15 @@ async function executeMessages(args: {
   }
 }
 
+// A listing cut short says so in words: an AI reading only the entries would
+// take the first page for everything.
+function sayWhenThereIsMore(result: PolynetCanonicalExecutionResult): PolynetCanonicalExecutionResult {
+  if (!result.ok || !result.value || typeof result.value !== "object") return result;
+  const value = result.value as Record<string, unknown>;
+  if (!value.next_cursor) return result;
+  return { ok: true, value: { ...value, more: "This is not everything: call polynet_list again with the same path and cursor: next_cursor for the rest." } };
+}
+
 export async function executePolynetCanonicalTool(args: {
   // The pod a guide run started in (set by the server, honoured for the
   // community agent only): its lens sees that one pod.
@@ -3258,7 +3282,7 @@ export async function executePolynetCanonicalTool(args: {
       ? await executeCanonicalList(common)
       : await executeCanonicalRead(common);
     if (!result.ok) return result;
-    return await markLessonProgress(args, result);
+    return await markLessonProgress(args, args.toolName === "polynet_list" ? sayWhenThereIsMore(result) : result);
   }
   if (args.toolName === "polynet_search")
     return await executeCanonicalSearch(common);

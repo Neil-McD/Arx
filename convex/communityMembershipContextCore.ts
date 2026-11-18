@@ -42,7 +42,8 @@ export async function resolveSelfCommunityMembershipContext(args: {
     membership_id: active ? String(active._id) : null,
     display_name: profile.display_name ?? "Member",
     role: isOwner ? "owner" : String(membership!.role),
-    joined_at: active ? toIsoString(active.activatedAt ?? active.createdAt) : null,
+    // The owner has no membership: they have been here since they made it.
+    joined_at: active ? toIsoString(active.activatedAt ?? active.createdAt) : isOwner ? toIsoString(community.createdAt) : null,
     approved_community_context: factPage.facts
       .map((fact) => ({
         id: String(fact._id),

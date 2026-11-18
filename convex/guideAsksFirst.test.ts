@@ -390,3 +390,17 @@ test("a builder makes, changes and cancels an event through the guide and throug
   expect((await events()).find((row) => row.id === eventId)).toMatchObject({ title: "Hill repeats", status: "cancelled", location: "Boathouse" });
   expect((await w.rows()).questions).toEqual([]);
 });
+
+test("what a real AI tripped on: a missing folder says so, a cut-off list says there is more, a delete says what it did, canManage means what this AI may change", async () => {
+  const w = await world();
+  const own = w.door("member", "external_mcp");
+  expect(await own("polynet_list", { path: `${ROOT}members/other/` })).toMatchObject({ ok: false, message: expect.stringContaining("no folder at that path") });
+  expect(await own("polynet_list", { path: `${ROOT}members/../users/` })).toMatchObject({ ok: false, message: expect.stringContaining("traversal-free") });
+  const made: any = await own("polynet_write", post("Mine, briefly.", "mine-1"));
+  const gone: any = await own("polynet_write", { path: made.value.path, mode: "delete", content: {}, idempotency_key: "mine-2" });
+  expect(gone).toMatchObject({ ok: true, value: { done: "deleted" } });
+  const channelsFor = async (door: any) => ((await door("polynet_list", { path: `${ROOT}channels/` })) as any).value.entries
+    .map((entry: any) => entry.capabilities?.canManage);
+  for (const door of [w.door("owner", "external_mcp"), w.guide("owner")]) expect(await channelsFor(door)).toEqual([true]);
+  for (const door of [w.door("member", "external_mcp"), w.guide("member")]) expect(await channelsFor(door)).toEqual([false]);
+});
