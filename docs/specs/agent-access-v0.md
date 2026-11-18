@@ -222,19 +222,30 @@ Four ways things happen, and where each is approved (Neil, Nov 17):
    person, and what arrives by itself (someone asks to join, an event is
    near, a payment fails). This comes forward on **Home**.
 
-### Needs you (the host's Home)
+### Home
 
-Home holds one list of what came forward on its own and waits on the host
-(`apps/web/src/v1/KitNeedsYou.tsx`). A row opens in place.
+Home is one column: the guide briefs you, then the few things that need
+you, then the box to ask it anything (Neil, Nov 18;
+`apps/web/src/components/WebCommunityHomeSection.tsx`,
+`apps/web/src/v1/KitNeedsYou.tsx`). Each thing appears once.
 
-- **People asking to join**: one row; opened, the first three with Approve
-  and Decline, then a link to all of them in Members.
-- **The oldest unanswered question**, with the guide on.
-- Empty, the list is not drawn. News (posts, new members) is not in it, and
-  neither is work done through an agent.
-- Not yet: the daily report, guide proposals, money problems, a member's
-  Home rows (an event that is near), and a count on the Home item in the
-  left column.
+- **The brief**: one to three sentences in the guide's voice about what is
+  happening (the place brief, `convex/communityBriefs.ts`). With the guide
+  off, or before it has written one, a plain sentence of facts stands in.
+- **The list**: the three most important rows show; the rest stack behind
+  "N more". Empty, it is not drawn.
+  - A host, "Needs you": people asking to join (answered in place, first),
+    then what was noticed: a question with no answer for a day, new members
+    who haven't posted, people stalling on a lesson. A noticed row has one
+    action and "Not now", which hides it for 30 days. With the guide off a
+    noticed row also says what a guide would do.
+  - A member, "For you" (guide on): saying hello when new, the lesson they
+    are on, the event that is near.
+- **The right column** keeps what is glanceable: the next event, what the
+  community knows, who is here.
+- Only what came forward on its own is on Home. There is no news list.
+- Not yet: the daily report, guide proposals, money problems, RSVP on the
+  event row, and a count on the Home item in the left column.
 
 ## Slices
 
