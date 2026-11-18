@@ -208,7 +208,7 @@ const WRITE_ATTACHMENT_SCHEMA: PlatformOperationJsonSchema = {
   },
 };
 
-const RESOURCE_CHANGESET_OPERATION_SCHEMA: PlatformOperationJsonSchema = {
+export const RESOURCE_CHANGESET_OPERATION_SCHEMA: PlatformOperationJsonSchema = {
   type: "object",
   additionalProperties: false,
   required: ["op"],
