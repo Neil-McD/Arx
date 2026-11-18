@@ -367,6 +367,7 @@ function replayedOperationValue(value: unknown): Record<string, unknown> {
   return {
     ...record,
     deduped: true,
+    replayed: "This idempotency_key was used before, so nothing new was done: this is the answer from that time. Use a new key for a new action.",
     ...(receipt ? { receipt: { ...receipt, deduped: true } } : {}),
   };
 }
@@ -877,6 +878,11 @@ function capabilityDocument(args: {
     authority_lane: isCommunityCapability || isMembersCapability ? "builder"
       : isAdmissionCapability || isRemovePostsCapability ? "moderator" : "member",
     idempotency_required: true,
+    // The whole call, ready to fill in: an AI that only sees a tool's name
+    // learns its shape here.
+    call: { tool: "polynet_call", operation: args.operation, version: 1,
+      target: `/communities/${args.target.communitySlug}/capabilities/${args.operation}.json`,
+      input: "the fields listed under input", idempotency_key: "a new key for each action" },
   };
   const members = `a selection of 1 to ${SELECTION_MAX} members, as user:<id> refs from members/`;
   if (isMembersCapability) {
