@@ -21,6 +21,7 @@
 
 import type { PolynetPrincipalKind, PolynetResolvedAuthority } from "./polynetAuthority.ts";
 import type { RetrievalToolName } from "./retrievalTools.ts";
+import { actionTool, actionToolsFor, type ActionToolRole } from "./actionTools.ts";
 
 export type LensFamily = "member" | "builder" | "community";
 
@@ -172,26 +173,49 @@ export function lensCalls(lens: Lens, action: LensAction): boolean {
 
 // The tools a lens is given: the one list a run's model sees. What each call
 // may then see and do is the executor's, per call, from the tables above.
-const POLYNET_TOOLS = ["polynet_list", "polynet_read", "polynet_search", "polynet_write", "polynet_call"] as const;
+// Reading is three general tools. Acting is one named tool per action
+// (shared/actionTools.ts): a private talk is given the ones its person may use
+// in this community (talkToolNames); a person's own AI is given its own over
+// the MCP (convex/httpMcp.ts). The two general action tools the named ones
+// are translated into are given to no AI.
+const READ_TOOLS = ["polynet_list", "polynet_read", "polynet_search"] as const;
 
 export const LENS_TOOLS: Record<LensName, readonly RetrievalToolName[]> = {
   // A private talk also researches the web, paid by the community.
-  member_private: [...POLYNET_TOOLS, "web_research"],
-  builder_private: [...POLYNET_TOOLS, "web_research"],
-  // Through MCP: the five tools; the person's own AI does its own web.
-  member_own_ai: POLYNET_TOOLS,
-  builder_own_ai: POLYNET_TOOLS,
+  member_private: [...READ_TOOLS, "web_research"],
+  builder_private: [...READ_TOOLS, "web_research"],
+  // Through MCP: the person's own AI does its own web.
+  member_own_ai: READ_TOOLS,
+  builder_own_ai: READ_TOOLS,
   // A site calls operations through its app API, not tools.
   member_site: [],
-  guide_public: POLYNET_TOOLS,
+  // Tagged in a channel, the guide reads; its reply is its only speech.
+  guide_public: READ_TOOLS,
   // The night review is handed everything and makes one write, checked by
   // the review's own rules (convex/communityMemoryReview.ts).
   worker: ["polynet_call"],
   retired: [],
 };
 
+// A named action tool the guide may be given in a private talk.
+function isGuideActionTool(toolName: string): boolean {
+  const named = actionTool(toolName);
+  return Boolean(named) && named!.door !== "own_ai";
+}
+
 export function lensHasTool(name: LensName, toolName: string): toolName is RetrievalToolName {
-  return (LENS_TOOLS[name] as readonly string[]).includes(toolName);
+  if ((LENS_TOOLS[name] as readonly string[]).includes(toolName)) return true;
+  return (name === "member_private" || name === "builder_private") && isGuideActionTool(toolName);
+}
+
+// The tools one private talk is given: reading and the web, then the named
+// tools for what this person may do in this community. A host sees a host's,
+// a moderator a moderator's, a member a member's.
+export function talkToolNames(talk: TalkLens | null | undefined): RetrievalToolName[] {
+  const base: RetrievalToolName[] = [...LENS_TOOLS.member_private];
+  if (!talk) return base;
+  const role: ActionToolRole = talk.lens === "builder_private" ? "builder" : talk.relation === "moderator" ? "moderator" : "member";
+  return [...base, ...actionToolsFor(role, "guide").map((tool) => tool.name)];
 }
 
 // A guide run's lens before any call resolves it: in public (tagged in a
@@ -241,7 +265,8 @@ export function renderTalkLensForPrompt(talk: TalkLens | null | undefined): stri
       : "You can see what a member sees, their own context and the guide's memory. Never another member's plan, payments or notes.",
     `You can act for them on: ${does.length > 0 ? does.join(", ") : "nothing"}.`,
     "When they tell you to do one of these, do it and say what you did. Posting or replying under their name, and removing posts, wait for their yes: call the tool as usual, and when it answers waiting_for_person the person is shown your exact words (or the posts) with Yes and No above the box where they type. Then say one short line and stop; never ask for the yes in words, and never say it is done before it is.",
-    ...(moderates ? ["For people asking to join, read builder/ first, say what stands out about each, and approve or decline the ones they name (or all of them, if they say so)."] : []),
+    ...(moderates ? ["For people asking to join, list builder/join-requests/ first, say what stands out about each, and approve or decline the ones they name (or all of them, if they say so)."] : []),
+    "To act, call the tool named for the action (polynet_post, polynet_react, polynet_create_event and so on). You have exactly the ones this person may use here; each says what it takes.",
     builder
       ? "Settings, channels and events: change them when they tell you to, and say what changed, before and after. For an event, work out the exact date and time zone with them first. Changing someone's role and publishing the handbook also wait for their yes (waiting_for_person). Removing or banning a member, opening the community to everyone and publishing a course are theirs to do in the app: you are answered with the place, so give it to them."
       : "Changing members or settings is not something this person can do.",

@@ -80,12 +80,20 @@ assert.equal(
   false,
   "the native harness must not keep a duplicate five-tool authority",
 );
-// The guide in public and every own-AI lens get exactly the five verbs.
+// The executor's five verbs are unchanged. What an AI is handed is the three
+// that read; the two that act are what one named tool per action is
+// translated into (shared/actionTools.ts) and are given to no AI.
+const readVerbs = expected.slice(0, 3);
 for (const lens of ["guide_public", "member_own_ai", "builder_own_ai"] as const) {
-  assert.deepEqual([...LENS_TOOLS[lens]], expected, `${lens} must receive the same five tool names`);
+  assert.deepEqual([...LENS_TOOLS[lens]], readVerbs, `${lens} must receive exactly the three read verbs`);
 }
-assert.deepEqual(LENS_TOOLS.member_private.filter((name) => name !== "web_research"), expected,
-  "a private talk gets the five verbs plus paid web research only");
+assert.deepEqual(LENS_TOOLS.member_private.filter((name) => name !== "web_research"), readVerbs,
+  "a private talk gets the three read verbs plus paid web research, then its named tools");
+for (const lens of Object.keys(LENS_TOOLS) as Array<keyof typeof LENS_TOOLS>) {
+  if (lens === "worker") continue;
+  assert.equal(LENS_TOOLS[lens].some((name) => name === "polynet_write" || name === "polynet_call"), false,
+    `${lens} must not be handed a general action verb`);
+}
 
 for (const name of expected) {
   const canonical = POLYNET_CANONICAL_TOOL_DEFINITIONS[name];

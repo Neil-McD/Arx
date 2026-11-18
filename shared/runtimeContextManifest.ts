@@ -1,4 +1,5 @@
 import { type RetrievalToolName } from "./retrievalTools.ts";
+import { actionTool } from "./actionTools.ts";
 import {
   EMPTY_COMMUNITY_RESOURCE_RUNTIME_LANE,
   normalizeCommunityResourceRuntimeLaneState,
@@ -209,7 +210,7 @@ function classifyFixedTool(toolName: RetrievalToolName): Omit<RuntimeContextMani
   if (COMMUNITY_CONTEXT_TOOL_NAMES.has(toolName)) {
     return { family: "community_context", grantedBy: "validated_community_lens", effect: "read" };
   }
-  if (COMMUNITY_CONTEXT_MUTATION_TOOL_NAMES.has(toolName)) {
+  if (COMMUNITY_CONTEXT_MUTATION_TOOL_NAMES.has(toolName) || actionTool(toolName)) {
     return {
       family: "community_context",
       grantedBy: "server_derived_community_authority",

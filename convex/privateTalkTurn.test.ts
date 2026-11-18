@@ -107,8 +107,11 @@ test("a private talk: the guide uses a tool through the canonical door, answers,
   expect(requests.length).toBe(2);
   expect(JSON.stringify(requests[0].input)).toContain("When does the club meet?");
   const tools = (requests[0].tools ?? []).map((tool: any) => tool.name).sort();
-  expect(tools).toEqual(expect.arrayContaining(["polynet_list", "polynet_read", "polynet_search", "polynet_call", "polynet_write"]));
+  expect(tools).toEqual(expect.arrayContaining(["polynet_list", "polynet_read", "polynet_search", "polynet_post", "polynet_remember"]));
   expect(tools).not.toContain("search_product_docs");
+  // The general action tools are the server's, never the model's.
+  expect(tools).not.toContain("polynet_call");
+  expect(tools).not.toContain("polynet_write");
   // The tool's answer went back to the model.
   expect(JSON.stringify(requests[1].input)).toContain("/communities/club/");
 
@@ -192,9 +195,19 @@ test("the tools a member's private talk is offered today", async () => {
   const requests = fakeModel([answer("Hi.")]);
   const { member, conversation } = await startTalk(t, w, "Hi");
   await (await turn(member, conversation.thread_key)).text();
-  // The five Polynet tools and web research (web_crawl was deleted).
-  expect((requests[0].tools ?? []).map((tool: any) => tool.name).sort())
-    .toEqual(["polynet_call", "polynet_list", "polynet_read", "polynet_search", "polynet_write", "web_research"]);
+  // Reading, web research (web_crawl was deleted), then one named tool per
+  // thing a member may do here, in the order shared/actionTools.ts lists them.
+  // Never the general action tools, and never a person's own messages.
+  expect((requests[0].tools ?? []).map((tool: any) => tool.name))
+    .toEqual(["polynet_list", "polynet_read", "polynet_search", "web_research",
+      "polynet_post", "polynet_reply", "polynet_edit_post", "polynet_delete_post", "polynet_react",
+      "polynet_mark_lesson_done", "polynet_mark_channel_read", "polynet_remember"]);
+  // The guide's tools never ask for the community: the talk is in one.
+  for (const tool of requests[0].tools ?? []) {
+    if (String(tool.name).startsWith("polynet_") && !["polynet_list", "polynet_read", "polynet_search"].includes(tool.name)) {
+      expect(Object.keys(tool.parameters?.properties ?? {}), tool.name).not.toContain("community");
+    }
+  }
 });
 
 test("the same turn sent twice is answered once", async () => {

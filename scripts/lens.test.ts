@@ -35,16 +35,30 @@ test("the guide never acts for a person, and the worker reads nothing through th
   for (const view of Object.keys(LENS_READS)) expect(LENS_READS[view as keyof typeof LENS_READS]).not.toContain("worker");
 });
 
-test("a lens's tools: private talks research the web, the guide in public and own AIs get the five, the review only writes", () => {
-  const five = ["polynet_list", "polynet_read", "polynet_search", "polynet_write", "polynet_call"];
-  expect(LENS_TOOLS.member_private).toEqual([...five, "web_research"]);
+test("a lens's tools: everyone reads with three tools, private talks also research the web, the review only writes", () => {
+  const read = ["polynet_list", "polynet_read", "polynet_search"];
+  expect(LENS_TOOLS.member_private).toEqual([...read, "web_research"]);
   // guideRunLens stands the member lens in for both private lenses.
   expect(LENS_TOOLS.builder_private).toEqual(LENS_TOOLS.member_private);
-  expect(LENS_TOOLS.guide_public).toEqual(five);
-  expect(LENS_TOOLS.member_own_ai).toEqual(five);
+  // Tagged in a channel the guide only reads; own AIs get their named tools over the MCP.
+  expect(LENS_TOOLS.guide_public).toEqual(read);
+  expect(LENS_TOOLS.member_own_ai).toEqual(read);
+  expect(LENS_TOOLS.builder_own_ai).toEqual(read);
   expect(LENS_TOOLS.worker).toEqual(["polynet_call"]);
   expect(LENS_TOOLS.member_site).toEqual([]);
   expect(LENS_TOOLS.retired).toEqual([]);
+  // The two general action tools are given to no AI but the night review.
+  for (const lens of Object.keys(LENS_TOOLS) as (keyof typeof LENS_TOOLS)[]) {
+    if (lens === "worker") continue;
+    expect(lensHasTool(lens, "polynet_write"), lens).toBe(false);
+    expect(lensHasTool(lens, "polynet_call"), lens).toBe(false);
+  }
+  // A private talk has the guide's named tools; the guide in public and own AIs (here) have none.
+  expect(lensHasTool("member_private", "polynet_post")).toBe(true);
+  expect(lensHasTool("builder_private", "polynet_remember")).toBe(true);
+  expect(lensHasTool("member_private", "polynet_reply_message")).toBe(false);
+  expect(lensHasTool("guide_public", "polynet_post")).toBe(false);
+  expect(lensHasTool("member_own_ai", "polynet_post")).toBe(false);
   expect(lensHasTool("guide_public", "web_research")).toBe(false);
   expect(lensHasTool("member_private", "web_crawl")).toBe(false);
   expect(guideRunLens("community_concierge")).toBe("guide_public");

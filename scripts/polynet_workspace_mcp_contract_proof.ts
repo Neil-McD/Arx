@@ -104,8 +104,11 @@ assert.match(setupSource, /POLYNET_MCP_PATH = "\/runtime\/mcp"/);
 assert.match(setup.setupBundle, /polynet_list/);
 assert.match(setup.setupBundle, /polynet_read/);
 assert.match(setup.setupBundle, /polynet_search/);
-assert.match(setup.setupBundle, /polynet_write/);
-assert.match(setup.setupBundle, /polynet_call/);
+// Acting is one named tool per action; the setup packet names two as
+// examples and never teaches the two general action tools.
+assert.match(setup.setupBundle, /polynet_post/);
+assert.match(setup.setupBundle, /polynet_react/);
+assert.doesNotMatch(setup.setupBundle, /polynet_write|polynet_call/);
 assert.doesNotMatch(
   setup.setupBundle,
   /polynet_workspace_|polynet_get_my_profile|polynet_confirm_my_profile_facts|workspace_context_id/,

@@ -9,7 +9,7 @@ import {
   isReadOnlyLegacyCommunityAgentThreadKey,
   resolveRuntimeInvocationSurfaceForThread,
 } from "../shared/runtimeInvocationSurface.ts";
-import { LENS_TOOLS, guideRunLens } from "../shared/lens.ts";
+import { LENS_TOOLS, guideRunLens, talkToolNames } from "../shared/lens.ts";
 import { buildCommunityAgentConversationContext } from "../shared/communityAgentConversationContext.ts";
 import {
   COMMUNITY_AGENT_IDENTITY_CONTEXT_MAX_CHARS,
@@ -199,8 +199,12 @@ assert.equal(
 // The dock is a private talk: its tools come from the private lens.
 assert.deepEqual(
   [...LENS_TOOLS[guideRunLens("member_agent_dock")]],
-  ["polynet_list", "polynet_read", "polynet_search", "polynet_write", "polynet_call", "web_research"],
+  ["polynet_list", "polynet_read", "polynet_search", "web_research"],
 );
+// What it may do is one named tool per action, by the person's role here;
+// the two general action tools are given to no AI.
+assert.equal(talkToolNames({ lens: "member_private", relation: "member" }).includes("polynet_react"), true);
+assert.equal(talkToolNames({ lens: "member_private", relation: "member" }).includes("polynet_call"), false);
 assert.match(
   buildRuntimeInvocationSurfacePrompt("member_agent_dock"),
   /this community's agent in a private conversation with the authenticated member[\s\S]*requesting member's current permissions/,
@@ -484,7 +488,7 @@ assert.match(
 );
 assert.match(
   resolution,
-  /const allowedToolNames = \[\.\.\.LENS_TOOLS\[guideRunLens\(invocationSurface\)\]\];/,
+  /const allowedToolNames = guideRunLens\(invocationSurface\) === "member_private"\s*\? talkToolNames\(runtimeCommunityLens\)\s*: \[\.\.\.LENS_TOOLS\[guideRunLens\(invocationSurface\)\]\];/,
   "the server picks the tools from the lens instead of trusting the web client",
 );
 assert.match(
@@ -569,7 +573,7 @@ assert.match(
 );
 assert.match(
   runtimeLoop,
-  /const lens = guideRunLens\(params\.evidenceSurface\);\s*if \(!lensHasTool\(lens, params\.toolName\)\)[\s\S]*tool_not_in_lens/,
+  /const lens = guideRunLens\(params\.evidenceSurface\);[\s\S]{0,120}if \(!params\.fromNamedTool && !lensHasTool\(lens, params\.toolName\)\)[\s\S]*tool_not_in_lens[\s\S]*translateActionTool\(named, \{ \.\.\.params\.args, community: context\.community_slug \}/,
   "the router must refuse any tool outside the run's lens before it runs",
 );
 assert.doesNotMatch(

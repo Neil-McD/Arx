@@ -691,6 +691,7 @@ async function executeRetrievalAgentLoop(
     sourceRunId: `runtime:${params.runId}`,
     admission: params.communityInferenceAdmission,
     messages: nativeTranscript,
+    tools: effectiveAllowedToolNames,
     maxOutputTokens: params.maxTokens,
     maxToolSteps: params.loopBudget.maxToolSteps,
     budget: params.loopBudget,
