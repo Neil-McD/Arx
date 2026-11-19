@@ -8,6 +8,7 @@ import type { WebCommunityShellProps } from "./webShellChromeShared";
 import { WebCommunityCommandPalette } from "./WebCommunityCommandPalette";
 import { SearchOrAskButton } from "./CommunityPageHeader";
 import { useCommunityAppLinks } from "../controllers/communityAppLinks";
+import { podsAttentionDot } from "../../../../shared/podsAttentionDot";
 
 type WebCommunityNavSurfaceProps = {
   communityShell: WebCommunityShellProps;
@@ -108,6 +109,11 @@ export function WebCommunityNavSurface({
       // Pods on phones too (design v1 on): the phone menu has no other way in.
       onOpenPods={useV1Layout ? () => selectTab("pods") : undefined}
       podsActive={inPod}
+      podsDot={useV1Layout ? podsAttentionDot({
+        channels: communityShell.communityChannels,
+        indicators: communityShell.communityChannelIndicators,
+        openSlug: inPod ? communityShell.selectedCommunityChannelSlug : null,
+      }) : "none"}
       // One door: the community's own app, opened from here (design v1).
       appLinks={isDesignV1Active() ? appLinks : undefined}
       memberCount={communityShell.activeCommunityMemberCount}

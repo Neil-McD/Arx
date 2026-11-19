@@ -434,6 +434,10 @@ clamps that request to the current readable head. Legacy
 `communityMemberSettings.chatLastSeenAt` and `mentionsLastSeenAt` fields are
 lazy-migration fallbacks only. Pre-channel cursor rows are upgraded in place to
 General. There is no per-root follow, mute, or drawer-read state.
+A room's chat dot compares the cursor with the newest readable activity by
+someone other than the viewer (their own human messages never light it). In a
+restricted room (a pod) a builder or admin gets the chat dot only when they are
+in it (`isInPod`); a tag of them still sets `mentions` wherever they can read.
 
 ### Typing presence
 

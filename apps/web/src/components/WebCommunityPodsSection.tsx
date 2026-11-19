@@ -33,6 +33,7 @@ import { KitPodLanding } from "../v1/KitPodLanding";
 import { PanelLine, PanelPart, PanelPeople } from "../v1/KitPanel";
 import { podShown, recallPod, takePodPagePreview } from "../v1/podMemory";
 import { podRhythmText } from "../v1/KitPodCall";
+import { roomDot, type RoomAttention } from "../../../../shared/podsAttentionDot";
 
 export type WebCommunityPodsSectionProps = {
   session: unknown;
@@ -46,6 +47,9 @@ export type WebCommunityPodsSectionProps = {
   onNavigate: (to: { kind: "pods" } | { kind: "pod"; slug: string } | { kind: "room"; slug: string }) => void;
   // Creates the pod's invite-only room (the channels controller's createChannel).
   createRoom: (name: string, accessMode: "all_members" | "restricted") => Promise<{ id: string; slug: string } | null>;
+  // Each room's live attention by slug (the left column's channel dots), so a
+  // pod with something new carries the same dot as the Pods row.
+  roomAttention?: Record<string, RoomAttention>;
 };
 
 function activeLabel(iso: string | null, now: number): string {
@@ -56,6 +60,13 @@ function activeLabel(iso: string | null, now: number): string {
   if (hours < 24) return `Active ${hours} h ago`;
   const days = Math.round(hours / 24);
   return days === 1 ? "Active yesterday" : `Active ${days} days ago`;
+}
+
+// The same dot as a channel's row: new messages, or the accent one for a tag.
+function PodDot(props: { attention: RoomAttention | undefined }) {
+  const dot = roomDot(props.attention);
+  if (dot === "none") return null;
+  return <span className={`nav-item-dot${dot === "mention" ? " is-mention" : ""}`} role="img" aria-label={dot === "mention" ? "You were tagged" : "New messages"} />;
 }
 
 function seatsLabel(pod: CloudCommunityPod): string {
@@ -425,7 +436,7 @@ function PodsList(props: WebCommunityPodsSectionProps) {
               {pods.map((pod) => (
                 <button key={pod.channel_id} type="button" className={cx(selected === pod.slug ? "podcard podsel" : "podcard")} aria-current={selected === pod.slug ? "true" : undefined}
                   onClick={() => pick(pod)} onDoubleClick={() => props.onNavigate({ kind: "room", slug: pod.slug })}>
-                  <span className={cx("podname")}><Icon name="users" />{pod.name}</span>
+                  <span className={cx("podname")}><Icon name="users" />{pod.name}<PodDot attention={props.roomAttention?.[pod.slug]} /></span>
                   <span className={cx("podpurpose")}>{pod.purpose || (pod.can_manage ? "Add what this pod is for." : "")}</span>
                   {pod.can_manage && pod.waiting ? <span className={cx("podask")}>{pod.waiting} asking to join</span> : null}
                   <span className={cx("podmeta")}>

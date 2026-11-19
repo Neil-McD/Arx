@@ -90,6 +90,28 @@ problem, or Added by a host.
   member's goal and progress, the pod's knowledge, and (with the Agent plan)
   the guide's catch-up for the pod.
 
+### What tells you something happened (Neil, Nov 18)
+
+A pod behaves exactly like a channel for these signals; the only difference
+is who is in it. There is no separate pod notification system.
+
+| What happened | Dot | Email |
+|---|---|---|
+| Someone posted in a pod you are in | a quiet dot on **Pods** and on that pod's card | no |
+| Someone tagged you in a pod | the accent dot (the tag wins over the quiet one) | yes, the same tag email as in a channel, with the same preferences and limits |
+| Activity in a pod you are not in | nothing | nothing |
+
+"In the pod" is the Pods page's own rule (`isInPod` in
+`convex/communityPods.ts`): an active grant or one of its hosts. Builders and
+admins can open every pod but get its quiet dot only for the pods they are in;
+a tag reaches whoever was tagged, anywhere they can read. Your own messages
+never light your own dot (this holds for every channel). Opening the pod's room
+clears its dots the way a channel's clear (the same read position). The dots
+are `convex/communityAttention.ts` combined by `shared/podsAttentionDot.ts`.
+`@everybody` in a pod reaches the people who can read it: its members, the
+builder and admins. Home ("For you", "Needs you") shows no tags yet, in a pod
+or a channel.
+
 ## Pod knowledge
 
 Two layers with a one-way wall:
