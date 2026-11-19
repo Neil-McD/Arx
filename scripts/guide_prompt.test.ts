@@ -246,11 +246,11 @@ describe("the channel guide's instructions", () => {
     return bundle.systemPromptBundle.text.slice(0, sections[0]!.chars + sections[1]!.chars);
   };
 
-  test("its core is under 3,500 characters, with every optional line drawn", () => {
+  test("its core is under 3,600 characters, with every optional line drawn", () => {
     const core = coreText(tag());
     expect(core).toContain("handbook.md");
     expect(core).toContain("People tag you as @Dawn Patrol Guide.");
-    expect(core.length).toBeLessThan(3_500);
+    expect(core.length).toBeLessThan(3_600);
   });
 
   test("it uses no internal word; the thread's own labels and the zoned event field are the words it needs", () => {

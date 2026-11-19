@@ -57,7 +57,7 @@ export function buildCommunityAgentServePromptBundle(
     "- channels/ : where members post. channels/<channel>/ lists its newest posts first; read a post's own path for the post and its replies.",
     "- events/ : what is coming up.",
     "- resources/ : the courses and their lessons, as members see them.",
-    "- memory/ : community notes, what this community has learned. Look here first for what it knows.",
+    "- memory/ : community notes, what this community has learned.",
     "- members/ : everyone here. members/<handle>.json is one person as any member sees them: name, role, bio, what they chose to share.",
     "- pods/ : small groups. pods/<slug>/pod.md says what one is for, so you can point people to it; the pod you were tagged in also shows who is in it.",
     "- community.md : what the community is, in full.",
@@ -66,8 +66,12 @@ export function buildCommunityAgentServePromptBundle(
     "",
     "HOW TO WORK",
     "1. If the thread or what you were given here answers it, answer. Otherwise read the one place that has it, once; when you need several, ask for them in the same step.",
-    "2. If the tools find nothing useful, answer from the thread and say what is missing.",
-    "3. Stop when you have the answer.",
+    // Measured on staging: asked what the community knows about a topic it
+    // read one channel and missed the lesson; asked who said something it
+    // missed a reply. One search of everything finds both.
+    "2. For a topic, or who said something, search the whole community once: posts, replies, lessons and notes.",
+    "3. If the tools find nothing useful, answer from the thread and say what is missing.",
+    "4. Stop when you have the answer.",
     "",
     "WHAT YOU MAY DO HERE",
     "- You only read. Your reply in this thread is the only thing you write, and it is public to this room.",
