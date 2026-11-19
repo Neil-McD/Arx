@@ -2285,6 +2285,9 @@ async function executeCanonicalWrite(args: {
   mountedCommunityId?: string | null;
   evidenceSurface: CommunityEvidenceSurface;
   input: Record<string, unknown>;
+  runId?: string;
+  personSaidYes?: boolean;
+  approvedPictures?: string[];
 }): Promise<PolynetCanonicalExecutionResult> {
   const resolved = await resolveCommunityTarget({
     ...args,
@@ -2320,6 +2323,17 @@ async function executeCanonicalWrite(args: {
   if (writableChannelPath && throughAi && mode !== "delete") {
     const rules = await args.ctx.runQuery((internal as any).communityAiRules.readCommunityAiRulesInternal, { communityId: target.communityId });
     if (rules && rules.postingAllowed === false) return canonicalError(AI_POSTING_OFF_REFUSAL.code, AI_POSTING_OFF_REFUSAL.message);
+  }
+  // Pictures from a person's talk go only on a post or reply the guide makes
+  // in that private talk. The door sets who is calling, never the caller, so
+  // a person's own AI, the guide tagged in a channel and a site are refused.
+  if (content.pictures !== undefined) {
+    if (args.principalKind !== "community_agent_for_member" || args.evidenceSurface !== "member_agent_dock" || !writableChannelPath) {
+      return canonicalError("pictures_not_allowed", "Pictures from a talk go on a post only through the guide in that private talk.");
+    }
+    if (mode !== "create" && mode !== "append") {
+      return canonicalError("invalid_tool_args", "Pictures go on a new post or a reply, not on an edit.");
+    }
   }
   if (writableChannelPath?.kind === "document" && (mode === "update" || mode === "delete")) {
     const ref = parseCommunityInteractionEvidenceRef(writableChannelPath.ref);
@@ -2431,6 +2445,23 @@ async function executeCanonicalWrite(args: {
         "Use create without root_id for a new post or append with root_id for a reply.",
       );
     }
+    // The person's yes carries the pictures they were shown; without a
+    // question (always allowed) they are chosen from the talk now.
+    let pictureIds: string[] = [];
+    if (content.pictures !== undefined) {
+      if (args.personSaidYes === true) {
+        if (!args.approvedPictures?.length) {
+          return canonicalError("pictures_not_found", "A picture for this post is no longer in the talk, so nothing was posted.");
+        }
+        pictureIds = args.approvedPictures;
+      } else {
+        const chosen = await resolveTalkPictures(args, target.communityId, content.pictures);
+        if (!chosen.ok) return canonicalError(chosen.code, chosen.message);
+        pictureIds = chosen.pictures.map((picture) => picture.id);
+      }
+    } else if (!String(content.text ?? content.body ?? "").trim() && !Array.isArray(content.attachments)) {
+      return canonicalError("invalid_tool_args", "Give the words to post.");
+    }
     const reservation = await reserveMutatingOperation({
       ...args,
       target,
@@ -2443,6 +2474,8 @@ async function executeCanonicalWrite(args: {
     }
     // Words claimed for this post and not yet posted (given back if it fails).
     let pendingWords: string | null = null;
+    // The post's own copies of the pictures, removed if it isn't made.
+    let stagedPictures: string[] = [];
     try {
       // Written through an AI: checked whatever the AI was told
       // (shared/aiPostingRules.ts), then marked as made through an AI.
@@ -2464,6 +2497,23 @@ async function executeCanonicalWrite(args: {
         pendingWords = aiFingerprint;
       }
       const canonicalIdempotencyKey = `polynet:${args.principalKind}:${idempotencyKey}`;
+      if (pictureIds.length) {
+        const staged = await args.ctx.runAction((internal as any).communityGuidePictures.stagePicturesInternal, {
+          userId: args.userId, communityId: target.communityId, ...(channel.id ? { channelId: channel.id } : {}),
+          ...(rootId ? { rootId } : {}), messageKey: canonicalIdempotencyKey, pictureIds });
+        if (!staged.ok) {
+          if (pendingWords) {
+            await args.ctx.runMutation((internal as any).communityAiRules.releaseAiPostWordsInternal,
+              { userId: args.userId, communityId: target.communityId, fingerprint: pendingWords, key: idempotencyKey }).catch(() => null);
+            pendingWords = null;
+          }
+          await failMutatingOperation({ ...args, target, toolName: "polynet_write", idempotencyKey,
+            requestFingerprint: reservation.requestFingerprint, attemptToken: reservation.attemptToken,
+            errorCode: staged.code, errorMessage: staged.message });
+          return canonicalError(staged.code, staged.message);
+        }
+        stagedPictures = staged.attachmentIds;
+      }
       const mutationArgs = {
         userId: args.userId,
         authSubject: args.authSubject,
@@ -2478,9 +2528,11 @@ async function executeCanonicalWrite(args: {
         ...(Array.isArray(content.mentions)
           ? { mentions: content.mentions }
           : {}),
-        ...(Array.isArray(content.attachments)
-          ? { attachments: content.attachments }
-          : {}),
+        ...(stagedPictures.length
+          ? { attachments: stagedPictures.map((attachmentId) => ({ attachmentId })) }
+          : Array.isArray(content.attachments)
+            ? { attachments: content.attachments }
+            : {}),
       };
       // A person's own tools (their site, their AI through the MCP) post as
       // that person: their name, their post, theirs to edit or delete. The
@@ -2496,6 +2548,7 @@ async function executeCanonicalWrite(args: {
           : { ...mutationArgs, trustedUserId: args.userId, ...(viaAi ? { viaAi: true } : {}) },
       )) as Record<string, unknown>;
       pendingWords = null;
+      stagedPictures = [];
       const interaction =
         value.interaction && typeof value.interaction === "object"
           ? (value.interaction as Record<string, unknown>)
@@ -2542,10 +2595,15 @@ async function executeCanonicalWrite(args: {
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : "Community chat write failed.";
-      // The post was not made: its words are free to be posted again.
+      // The post was not made: its words are free to be posted again, and
+      // its copies of the pictures belong to nothing.
       if (pendingWords) {
         await args.ctx.runMutation((internal as any).communityAiRules.releaseAiPostWordsInternal,
           { userId: args.userId, communityId: target.communityId, fingerprint: pendingWords, key: idempotencyKey }).catch(() => null);
+      }
+      if (stagedPictures.length) {
+        await args.ctx.runMutation((internal as any).communityGuidePictures.discardStagedInternal,
+          { userId: args.userId, attachmentIds: stagedPictures }).catch(() => null);
       }
       await failMutatingOperation({
         ...args,
@@ -2867,6 +2925,7 @@ async function askPersonFirst(args: {
   let place: string | undefined;
   let text: string | undefined;
   let items: Array<{ who: string; text: string }> | undefined;
+  let pictures: Array<{ id: string; name: string }> | undefined;
   if (args.toolName === "polynet_call") {
     const callInput = args.input.input && typeof args.input.input === "object" ? args.input.input as Record<string, unknown> : {};
     if (target.localPath !== `${POLYNET_CAPABILITIES_DIRECTORY_PATH}${operation}.json` ||
@@ -2916,12 +2975,22 @@ async function askPersonFirst(args: {
     const content = omitNullishObjectFields(args.input.content);
     const words = String(content.text ?? content.body ?? "").trim();
     if (kind === "post") {
-      if (!words) return null;
+      // A post may be pictures alone, as a person's own post may be; pictures
+      // on an edit are refused by the write itself.
+      if (content.pictures !== undefined && mode !== "create" && mode !== "append") return null;
+      if (!words && content.pictures === undefined) return null;
       // The host switched AI posting off: refused now, not after a yes.
       const rules = await args.ctx.runQuery((internal as any).communityAiRules.readCommunityAiRulesInternal, { communityId: target.communityId });
       if (rules && rules.postingAllowed === false) return null;
       if (await args.ctx.runQuery((internal as any).communityGuideQuestions.isAlwaysAllowedInternal,
         { communityId: target.communityId, userId: args.userId, kind: "post" })) return null;
+      // The pictures are chosen now and kept with the question, so the yes
+      // posts the very pictures shown, whatever is sent in the talk meanwhile.
+      if (content.pictures !== undefined) {
+        const chosen = await resolveTalkPictures(args, target.communityId, content.pictures);
+        if (!chosen.ok) return canonicalError(chosen.code, chosen.message);
+        pictures = chosen.pictures.map((picture) => ({ id: picture.id, name: picture.name }));
+      }
       question = postQuestion({ mode, channelName: channel.name });
       text = words;
     } else {
@@ -2933,9 +3002,19 @@ async function askPersonFirst(args: {
   const asked = await args.ctx.runMutation((internal as any).communityGuideQuestions.askInternal, {
     communityId: target.communityId, userId: args.userId, kind, toolName: args.toolName, inputJson: JSON.stringify(args.rawInput),
     question, ...(place ? { place } : {}), ...(text ? { text } : {}), ...(items ? { items } : {}), ...(args.runId ? { runId: args.runId } : {}),
+    ...(pictures ? { pictures } : {}),
   });
   if (!asked.ok) return canonicalError("invalid_tool_args", "That is too long to ask the person about. Make it shorter.");
   return { ok: true, value: waitingToolAnswer(question) };
+}
+
+// The pictures the guide named, from the talk it is in (the run's), as
+// convex/communityGuidePictures.ts finds and checks them.
+async function resolveTalkPictures(args: { ctx: any; userId: string; runId?: string }, communityId: string, selection: unknown):
+  Promise<{ ok: true; pictures: Array<{ id: string; name: string }> } | { ok: false; code: string; message: string }> {
+  if (!args.runId) return { ok: false, code: "pictures_not_found", message: "There are no pictures in this talk. Ask the person to attach them to a message here first." };
+  return await args.ctx.runQuery((internal as any).communityGuidePictures.resolveTalkPicturesInternal,
+    { userId: args.userId, communityId, runId: args.runId, selection });
 }
 
 // A reply in the person's own direct messages, through the guide: always
@@ -3412,6 +3491,9 @@ export async function executePolynetCanonicalTool(args: {
   // The person answered yes to the guide's question about exactly this call
   // (convex/communityGuideQuestions.ts). Set only by that answer.
   personSaidYes?: boolean;
+  // The talk pictures that question showed (cloudThreadAttachments ids). Set
+  // only by that answer, never from a tool's input.
+  approvedPictures?: string[];
 }): Promise<PolynetCanonicalExecutionResult> {
   if (!POLYNET_CANONICAL_TOOL_DEFINITIONS[args.toolName]) {
     return canonicalError("unknown_tool", "Unknown Polynet tool.");
