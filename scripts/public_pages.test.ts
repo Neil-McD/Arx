@@ -4,6 +4,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
+  OPERATOR_NAME,
   PUBLIC_PAGES,
   SUPPORT_EMAIL,
   publicPageForPath,
@@ -26,6 +27,7 @@ describe("public pages", () => {
       expect(html).not.toMatch(/<script/i);
       expect(html).toContain(`<link rel="canonical" href="https://www.polynet.ai${entry.path}">`);
       expect(html).toContain(`mailto:${SUPPORT_EMAIL}`);
+      expect(html).toContain(`Polynet is operated by ${OPERATOR_NAME}.`);
       expect(html).not.toMatch(/^---$/m);
     }
   });

@@ -15,6 +15,8 @@ import {
 
 export const PUBLIC_SITE_ORIGIN = "https://www.polynet.ai";
 export const SUPPORT_EMAIL = "support@polynet.ai";
+/** The company behind Polynet, as verified with OpenAI and named in the terms. */
+export const OPERATOR_NAME = "EXECUTIVEINTELLIGENCE LLC";
 
 export type PublicPage = {
   /** The address people use, e.g. "/privacy". */
@@ -120,7 +122,7 @@ export function renderPublicPage(page: PublicPage, source: string): string {
 <a class="home" href="/"><img src="/favicon.svg" alt="" width="20" height="20">Polynet</a>
 <main>
 ${body}</main>
-<footer><a href="/ai">AI apps</a><a href="/privacy">Privacy</a><a href="/terms">Terms</a><a href="mailto:${SUPPORT_EMAIL}">${SUPPORT_EMAIL}</a></footer>
+<footer><a href="/ai">AI apps</a><a href="/privacy">Privacy</a><a href="/terms">Terms</a><a href="mailto:${SUPPORT_EMAIL}">${SUPPORT_EMAIL}</a><span>Polynet is operated by ${OPERATOR_NAME}.</span></footer>
 </div>
 </body>
 </html>
