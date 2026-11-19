@@ -442,6 +442,14 @@ Home's tag lines (`listMyHomeTags`) use the same rule per tag: a non-suppressed
 user mention newer than the cursor of the room it resolves to, whose source the
 recipient can still read (`resolveMentionRecipientSource`), never their own
 message; the scan is the newest 40 rows on the mentioned-user notify-state index (so suppressed rows are never read).
+The Knowledge dot (`resources`) compares `communityMemberSettings.resourcesLastSeenAt`
+with the moment the newest member-visible lesson became visible: the later of
+the lesson's `createdAt` and its course's `publishedAt` (set when a course goes
+from draft to published). Editing a lesson, or renaming or reordering a course,
+is not news. Reads are bounded: the newest 50 resources by creation, and the
+newest five published courses by `by_community_publishedAt`. Anyone who can
+edit courses never gets it. Opening Knowledge while the server says it is new
+marks it seen (to the current newest moment).
 
 ### Typing presence
 

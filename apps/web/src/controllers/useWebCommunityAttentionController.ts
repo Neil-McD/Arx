@@ -33,10 +33,6 @@ type InteractionReplyLike = {
   };
 };
 
-type TimestampedRow = {
-  created_at: string;
-};
-
 type UpdatedRow = {
   updated_at: string;
 };
@@ -60,7 +56,6 @@ type UseWebCommunityAttentionControllerParams = {
   };
   resources: {
     isLoading: boolean;
-    rows: TimestampedRow[];
   };
   events: {
     cacheKey: string | null;
@@ -184,10 +179,6 @@ export function useWebCommunityAttentionModel(
     return latestTimestamp(timestamps);
   }, [interactions.repliesByRootId, interactions.roots]);
 
-  const latestResourcesCreatedAt = useMemo(
-    () => latestTimestamp(resources.rows.map((row) => ({ timestamp: row.created_at }))),
-    [resources.rows],
-  );
   const latestEventsUpdatedAt = useMemo(
     () => latestTimestamp(events.rows.map((row) => ({ timestamp: row.updated_at }))),
     [events.rows],
@@ -259,23 +250,33 @@ export function useWebCommunityAttentionModel(
     });
   }, [activeCommunityId, markCommunitySurfaceSeen]);
 
+  // Knowledge (shelf, course or lesson) is open and the server says something
+  // there is new: it is being read, so it is seen. Driven by the server's own
+  // signal rather than the newest lesson in the list, because a course being
+  // published makes older lessons new. The marker is cleared once the dot is
+  // off, so the next new thing is acknowledged again.
+  const knowledgeIsNew = Boolean(activeCommunityId && attentionByCommunityId[activeCommunityId]?.resources);
   useEffect(() => {
+    if (!activeCommunityId) return;
+    const requestKey = `${activeCommunityId}:resources`;
+    if (!knowledgeIsNew) {
+      delete seenMarkerBySurfaceRef.current[requestKey];
+      return;
+    }
     if (
       activePage !== "community"
       || communityTab !== "resources"
-      || !activeCommunityId
       || resources.isLoading
-      || latestResourcesCreatedAt === null
     ) {
       return;
     }
-    acknowledgeSurface("resources", String(latestResourcesCreatedAt));
+    acknowledgeSurface("resources", "new");
   }, [
     acknowledgeSurface,
     activeCommunityId,
     activePage,
     communityTab,
-    latestResourcesCreatedAt,
+    knowledgeIsNew,
     resources.isLoading,
   ]);
 

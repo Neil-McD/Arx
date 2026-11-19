@@ -642,12 +642,16 @@ export const saveCommunityResourceModule = mutation({
       const nextModuleStatus = Object.prototype.hasOwnProperty.call(payload, "module_status")
         ? requireResourceModuleStatusForWrite(payload.module_status)
         : normalizeResourceModuleStatus(existing.status);
+      // Going from draft to published is the moment its lessons become new
+      // to members (the Knowledge dot); saving a published course again isn't.
+      const publishesNow = nextModuleStatus === "live" && !communityResourceModuleIsLive(existing);
       await ctx.db.patch(existing._id as any, {
         name: normalizeName(nextNameRaw),
         descriptionMd: normalizeOptionalText(nextDescriptionRaw, 1200),
         ...(Object.prototype.hasOwnProperty.call(payload, "module_status")
           ? { status: nextModuleStatus }
           : {}),
+        ...(publishesNow ? { publishedAt: nowMs } : {}),
         bannerUrl: nextBannerStorageId ? undefined : normalizeOptionalUrl(nextBannerUrlRaw),
         bannerStorageId: nextBannerStorageId,
         bannerFocusX: normalizeBannerFocus(payload.banner_focus_x ?? existing.bannerFocusX),
@@ -681,12 +685,14 @@ export const saveCommunityResourceModule = mutation({
       .collect()) as CommunityResourceModuleLike[];
     const nextSortOrder = rows.reduce((max, row) => Math.max(max, Number(row.sortOrder) || 0), 0) + 1000;
     const bannerStorageId = payload.banner_storage_id ?? undefined;
+    const status = Object.prototype.hasOwnProperty.call(payload, "module_status")
+      ? requireResourceModuleStatusForWrite(payload.module_status)
+      : "draft";
     const id = await ctx.db.insert("communityResourceModules" as any, {
       communityId: community._id,
       createdByUserId: args.userId,
-      status: Object.prototype.hasOwnProperty.call(payload, "module_status")
-        ? requireResourceModuleStatusForWrite(payload.module_status)
-        : "draft",
+      status,
+      ...(status === "live" ? { publishedAt: nowMs } : {}),
       name: normalizeName(payload.name),
       descriptionMd: normalizeOptionalText(payload.description_md, 1200),
       bannerUrl: bannerStorageId ? undefined : normalizeOptionalUrl(payload.banner_url),

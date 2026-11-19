@@ -31,6 +31,7 @@ import {
 } from "./communityChannelCore";
 import { resolveCommunityChannelActor, type ChannelActor } from "./communityChannelAccess";
 import { isInPod, podRecord } from "./communityPods";
+import { canManageCommunityResources } from "./communityResourceShared";
 
 type CommunityAttentionSurface = "chat" | "resources" | "events" | "mentions";
 
@@ -87,6 +88,8 @@ type CommunityEventLike = {
 };
 
 const MAX_COMMUNITY_ATTENTION_RECENT_RESOURCES = 50;
+const MAX_COMMUNITY_ATTENTION_RECENT_PUBLISHED_COURSES = 5;
+const MAX_COMMUNITY_ATTENTION_LESSONS_PER_PUBLISHED_COURSE = 20;
 
 function normalizePositiveMarker(value: unknown): number | null {
   if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) return null;
@@ -218,7 +221,13 @@ async function getLatestCommunityChatActivityAt(
   );
 }
 
-async function getLatestCommunityResourcesCreatedAt(
+// Knowledge's newest moment: when the newest lesson a member can see became
+// visible to members. That is the later of the lesson's creation and its
+// course's publishing, so a course written as a draft and published today is
+// new today, and editing a lesson's words (or renaming or reordering a
+// course) is not news. Reads stay bounded: the newest lessons by creation,
+// and the few most recently published courses by their own index.
+async function getLatestCommunityKnowledgeVisibleAt(
   ctx: any,
   communityId: any,
 ): Promise<number | null> {
@@ -243,15 +252,37 @@ async function getLatestCommunityResourcesCreatedAt(
     (module): module is CommunityResourceModuleLike =>
       module !== null && normalizeIdValue(module.communityId) === normalizeIdValue(communityId),
   );
-  const liveModuleIds = new Set(
+  const liveModules = new Map(
     modules
       .filter(communityResourceModuleIsLive)
-      .map((module) => String(module._id)),
+      .map((module) => [String(module._id), module] as const),
   );
-  const createdAt = recentRows.find((row) => communityResourceIsLiveModulePage(row, liveModuleIds))?.createdAt;
-  return typeof createdAt === "number" && Number.isFinite(createdAt) && createdAt > 0
-    ? Math.floor(createdAt)
-    : null;
+  const liveModuleIds = new Set(liveModules.keys());
+  let latest = 0;
+  for (const row of recentRows) {
+    if (!communityResourceIsLiveModulePage(row, liveModuleIds)) continue;
+    const publishedAt = normalizePositiveMarker(liveModules.get(String(row.moduleId))?.publishedAt) ?? 0;
+    latest = Math.max(latest, normalizePositiveMarker(row.createdAt) ?? 0, publishedAt);
+  }
+  // A course published after its lessons were written: its lessons may be
+  // older than the window above, so the newest published courses are read
+  // directly. One counts only when it has a lesson a member can see.
+  const recentlyPublished = (await ctx.db
+    .query("communityResourceModules" as any)
+    .withIndex("by_community_publishedAt", (q: any) => q.eq("communityId", communityId))
+    .order("desc")
+    .take(MAX_COMMUNITY_ATTENTION_RECENT_PUBLISHED_COURSES)) as CommunityResourceModuleLike[];
+  for (const module of recentlyPublished) {
+    const publishedAt = normalizePositiveMarker(module.publishedAt);
+    if (publishedAt === null || publishedAt <= latest || !communityResourceModuleIsLive(module)) continue;
+    const lessons = (await ctx.db
+      .query("communityResources" as any)
+      .withIndex("by_community_module", (q: any) => q.eq("communityId", communityId).eq("moduleId", module._id))
+      .take(MAX_COMMUNITY_ATTENTION_LESSONS_PER_PUBLISHED_COURSE)) as CommunityResourceLike[];
+    const thisCourse = new Set([String(module._id)]);
+    if (lessons.some((row) => communityResourceIsLiveModulePage(row, thisCourse))) latest = publishedAt;
+  }
+  return latest > 0 ? latest : null;
 }
 
 async function getLatestCommunityEventsUpdatedAt(
@@ -365,10 +396,13 @@ async function getCommunityAttentionRow(
   const settingsRow = await getCommunityMemberSettingsRow(ctx, communityId, userId);
   const actor = await resolveCommunityChannelActor({ ctx, communityId, userId });
   const channels = selectedChannels ?? await listAuthorizedCommunityChannels({ ctx, communityId, actor });
+  // Anyone who can edit courses never gets the Knowledge dot: what is new
+  // there is their own (or their co-hosts') work, and they see drafts anyway.
+  const editsCourses = await canManageCommunityResources({ ctx, communityId, userId });
   const [
     channelAttentionInputs,
     latestMentionsByChannel,
-    latestResourcesCreatedAt,
+    latestKnowledgeVisibleAt,
     latestEventsUpdatedAt,
   ] = await Promise.all([
     Promise.all(
@@ -396,7 +430,7 @@ async function getCommunityAttentionRow(
       userId,
       channels,
     }),
-    getLatestCommunityResourcesCreatedAt(ctx, communityId),
+    editsCourses ? null : getLatestCommunityKnowledgeVisibleAt(ctx, communityId),
     getLatestCommunityEventsUpdatedAt(ctx, communityId),
   ]);
   const channelRows: CommunityChannelAttentionRow[] = channelAttentionInputs.map(
@@ -430,8 +464,8 @@ async function getCommunityAttentionRow(
     community_id: String(communityId),
     chat: channelRows.some((row) => row.chat),
     resources:
-      typeof latestResourcesCreatedAt === "number" &&
-      latestResourcesCreatedAt > Math.max(0, Math.floor(settingsRow?.resourcesLastSeenAt ?? 0)),
+      typeof latestKnowledgeVisibleAt === "number" &&
+      latestKnowledgeVisibleAt > Math.max(0, Math.floor(settingsRow?.resourcesLastSeenAt ?? 0)),
     events:
       typeof latestEventsUpdatedAt === "number" &&
       latestEventsUpdatedAt > Math.max(0, Math.floor(settingsRow?.eventsLastSeenAt ?? 0)),
@@ -494,12 +528,12 @@ async function upsertCommunitySurfaceSeen(args: {
   }
 
   if (surface === "resources") {
-    const latestResourcesCreatedAt = await getLatestCommunityResourcesCreatedAt(ctx, communityId);
-    if (latestResourcesCreatedAt === null) return;
-    if ((existing?.resourcesLastSeenAt ?? 0) >= latestResourcesCreatedAt) return;
+    const latestKnowledgeVisibleAt = await getLatestCommunityKnowledgeVisibleAt(ctx, communityId);
+    if (latestKnowledgeVisibleAt === null) return;
+    if ((existing?.resourcesLastSeenAt ?? 0) >= latestKnowledgeVisibleAt) return;
     if (existing) {
       await ctx.db.patch(existing._id as any, {
-        resourcesLastSeenAt: latestResourcesCreatedAt,
+        resourcesLastSeenAt: latestKnowledgeVisibleAt,
         updatedAt: nowMs,
       });
       return;
@@ -508,7 +542,7 @@ async function upsertCommunitySurfaceSeen(args: {
       communityId,
       userId,
       muted: false,
-      resourcesLastSeenAt: latestResourcesCreatedAt,
+      resourcesLastSeenAt: latestKnowledgeVisibleAt,
       createdAt: nowMs,
       updatedAt: nowMs,
     });
