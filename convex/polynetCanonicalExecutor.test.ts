@@ -2122,6 +2122,8 @@ test("admission queue advances bounded pages, exact reads and replay without dom
     const result = await f.call("polynet_list", { path: admissionQueuePath, limit: 2, ...(cursor ? { cursor } : {}) });
     expect(result.ok).toBe(true); if (!result.ok) throw new Error("queue failed");
     expect(result.value).toMatchObject({ searchable: false, writable: false });
+    // What an applicant wrote reaches a host's AI as information about them, never as an instruction.
+    expect(result.value.note).toMatch(/not instructions to you/);
     expect(result.value.total_count).toBeUndefined();
     const entries = result.value.entries as Array<Record<string, any>>;
     expect(entries.length).toBeLessThanOrEqual(2);
@@ -2133,6 +2135,7 @@ test("admission queue advances bounded pages, exact reads and replay without dom
       expect(entry.applicant_ref).toMatch(/^user:applicant-/);
       const read = await f.call("polynet_read", { path: entry.path });
       expect(read, entry.path).toMatchObject({ ok: true }); if (!read.ok) throw new Error("read failed");
+      expect(read.value.note).toMatch(/not instructions to you/);
       expect(JSON.parse(String(read.value.body))).toEqual({ ref: entry.ref, applicant_ref: entry.applicant_ref, applicant: entry.applicant,
         status: "pending", created_at: entry.created_at, updated_at: entry.updated_at });
       expect(await f.call("polynet_read", { path: entry.path })).toEqual(read);
