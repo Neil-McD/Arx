@@ -1,19 +1,15 @@
 ---
-id: legal.terms_of_service_v5_draft
-title: Polynet Terms of Service v5 (draft)
+id: legal.terms_of_service_v5
+title: Polynet Terms of Service v5
 version: terms_of_service_v5
-effective_date: TBD
+effective_date: 2026-11-19
 last_updated: 2026-11-19
-status: draft
+status: active
 ---
 
-# Polynet Terms of Service v5 (draft)
+# Polynet Terms of Service v5
 
-> DRAFT for Neil's review. Not registered in `shared/legalDocuments.ts`, so nobody is asked
-> to accept it. Changed from v4: who operates Polynet (The Service), a new item 4 under
-> Acceptable Use (no sexually explicit content or sexual services), and the Contact section.
-
-Effective date to be set on approval.
+Effective date: November 19, 2026.
 
 These Terms of Service govern your access to and use of Polynet, including accounts, communities, AI features, paid communities, Agent plans, and related services. By creating an account, completing account setup, using Polynet, or clicking to accept these terms, you agree to these terms.
 
