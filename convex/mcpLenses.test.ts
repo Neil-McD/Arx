@@ -749,22 +749,21 @@ test("the person's No does nothing, and the AI is told so when it asks again", a
   expect(again.structuredContent.code).toBe("declined_by_person");
 });
 
-test("removing and banning, and deleting a post, wait for the person's Yes too; posts and replies still go out", async () => {
+test("removing and banning wait for the person's Yes too; their own posts, and deleting them, are their AI app's call", async () => {
   const f = await approvalsFixture();
   // A post goes out as before: no card.
   const posted = await f.call("owner", "polynet_post", { community: "run-club", channel: "general", text: "Hills on Thursday?" }, "ChatGPT");
   expect(posted.isError, JSON.stringify(posted)).toBe(false);
   expect(await f.cards()).toEqual([]);
-  // Deleting it waits.
+  // Deleting their own post is done at once: it is their own content.
   const del = await f.call("owner", "polynet_delete_post", { community: "run-club", channel: "general", post: posted.structuredContent.ref }, "ChatGPT");
-  expect(del.structuredContent.status, JSON.stringify(del)).toBe("waiting_for_person");
+  expect(del.structuredContent, JSON.stringify(del)).toMatchObject({ done: "deleted" });
   // Banning a member waits (it was a link to do by hand before).
   const ban = await f.call("owner", "polynet_ban_members", { community: "run-club", members: ["member"], reason: "spam" }, "ChatGPT");
   expect(ban.structuredContent.status, JSON.stringify(ban)).toBe("waiting_for_person");
   const cards = await f.cards();
-  expect(cards.map((card) => [card.kind, card.askedBy])).toEqual([["remove", "ChatGPT"], ["remove", "ChatGPT"]]);
+  expect(cards.map((card) => [card.kind, card.askedBy])).toEqual([["remove", "ChatGPT"]]);
   const roots = () => f.t.run((ctx: any) => ctx.db.query("communityInteractionRoots").collect()) as Promise<any[]>;
-  expect((await roots()).find((row) => row.contentSummary === "Hills on Thursday?").status).toBe("live");
   expect(await f.role()).toBe("member");
   for (const card of cards) expect(await f.answer(card.id, "yes"), card.question).toMatchObject({ status: "done" });
   // Asked again after the Yes, the AI is told it was done, though the person banned is no longer a member to name.
@@ -812,4 +811,34 @@ test("an outside AI sees a weekly event once, at its next time, with the next fe
   expect(entries[0].next_times).toHaveLength(3);
   // The occurrence listed still reads on its own path.
   expect((await f.call("member", "polynet_read", { path: entries[0].path })).isError).toBe(false);
+});
+
+test("the guide's instructions and opening the community wait for the person's Yes, then run once", async () => {
+  const f = await approvalsFixture();
+  await f.t.run(async (ctx: any) => ctx.db.patch(f.runClub, { entryPolicy: "approval" }));
+  const told = await f.call("owner", "polynet_set_guide_instructions", { community: "run-club", text: "Keep answers short.", idempotency_key: "ins-1" }, "Claude");
+  expect(told.structuredContent.status, JSON.stringify(told)).toBe("waiting_for_person");
+  const opened = await f.call("owner", "polynet_open_community", { community: "run-club", idempotency_key: "open-1" }, "Claude");
+  expect(opened.structuredContent.status, JSON.stringify(opened)).toBe("waiting_for_person");
+  const community = () => f.t.run((ctx: any) => ctx.db.get(f.runClub)) as Promise<any>;
+  expect((await community()).entryPolicy).toBe("approval");
+  const cards = await f.cards();
+  expect(cards.map((card) => [card.kind, card.askedBy, card.text])).toEqual([
+    ["change", "Claude", "Keep answers short."], ["change", "Claude", null]]);
+  for (const card of cards) expect(await f.answer(card.id, "yes"), card.question).toMatchObject({ status: "done" });
+  expect((await community()).entryPolicy).toBe("open");
+  expect((await f.call("owner", "polynet_open_community", { community: "run-club", idempotency_key: "open-1" }, "Claude")).structuredContent.status).toBe("done");
+  // A builder's own AI is offered opening as its own tool; a member's is not.
+  const listTools = async (handle: string) => {
+    const res = await handleMcpPost({
+      ctx: { runQuery: (ref: any, a: any) => f.t.query(ref, a), runMutation: (ref: any, a: any) => f.t.mutation(ref, a), runAction: (ref: any, a: any) => f.t.action(ref, a) },
+      req: new Request("https://example.convex.site/runtime/mcp", { method: "POST", headers: { "content-type": "application/json" },
+        body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list" }) }),
+      jsonResponse: (_req, status, payload) => Response.json(payload, { status }),
+      requireAuthenticatedActor: async () => ({ ok: true, actor: { authSubject: `${handle}-subject`, dbUserId: (f.users as any)[handle] } }) as any,
+    });
+    return ((await res.json() as any).result.tools as any[]).map((tool) => tool.name);
+  };
+  expect(await listTools("owner")).toContain("polynet_open_community");
+  expect(await listTools("member")).not.toContain("polynet_open_community");
 });

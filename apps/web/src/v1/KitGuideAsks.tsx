@@ -38,7 +38,7 @@ export function guideAskPictures(question: Pick<GuideQuestionView, "pictures">):
 }
 
 export function alwaysLabel(question: Pick<GuideQuestionView, "kind">): string {
-  return question.kind === "post" ? "Always allow posts" : "Always allow";
+  return question.kind === "post" ? "Always allow posts" : question.kind === "message" ? "Always allow replies" : "Always allow";
 }
 
 export function GuideAsks(props: {

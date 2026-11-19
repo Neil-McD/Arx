@@ -105,12 +105,22 @@ export function handbookQuestion(text: string): string {
   return text.trim() ? "Publish this handbook to every member?" : "Take the handbook away from members?";
 }
 
+export function guideInstructionsQuestion(text: string): string {
+  return text.trim() ? "Replace the guide's instructions with this? It changes how the guide answers every member." : "Clear the guide's instructions?";
+}
+
+export function openCommunityQuestion(): string {
+  return "Open the community to everyone? Anyone can join without asking, and everyone waiting is let in now. This can't be undone.";
+}
+
 export function changeResultLine(args: { operation: string; succeeded: number; asked: number }): string {
   const gone = args.operation === "community.members.ban" ? "banned" : args.operation === "community.members.remove" ? "removed" : null;
   if (gone) {
     if (args.succeeded === args.asked) return args.asked === 1 ? `They were ${gone}.` : `${args.asked} people were ${gone}.`;
     return `${args.succeeded} of ${args.asked} people were ${gone}; the others couldn't be.`;
   }
+  if (args.operation === "community.agent.instructions.set") return "The guide's instructions were changed.";
+  if (args.operation === "community.join_mode.set") return "The community is open to everyone now.";
   if (args.operation !== "community.members.set_role") return "The handbook members see was changed.";
   if (args.succeeded === args.asked) return args.asked === 1 ? "Their role was changed." : `The role of ${args.asked} people was changed.`;
   return `The role of ${args.succeeded} of ${args.asked} people was changed; the others couldn't be.`;

@@ -90,17 +90,20 @@ describe("what you may do", () => {
 
   test("what only a person does is said, with where, for a role given the tool it belongs to", () => {
     const owner = prompt(TALKS.owner).text;
-    expect(owner).toMatch(/Only they can do these, in the app; tell them where: opening the community to everyone \(Members, then Who can join\); publishing or unpublishing a course/);
+    // Opening the community is asked about, like a role change; courses are still a person's, in Knowledge.
+    expect(owner).toMatch(/Only they can do these, in the app; tell them where: publishing or unpublishing a course/);
+    expect(owner).toMatch(/After their yes, every time: [^\n]*open the community to everyone/);
+    expect(owner).toMatch(/After their yes, every time: [^\n]*set the guide's instructions/);
     expect(prompt(TALKS.member).text).not.toContain("Only they can do these");
     for (const [key, entry] of Object.entries(CALL_OPERATION_VARIANTS)) {
       if (entry.ask === "person_only") expect(PERSON_ONLY_WORDS[key], key).toBeTruthy();
     }
   });
 
-  test("the guide is told a post waits for a yes it can always allow, and a reply in a direct message every time", () => {
+  test("the guide is told posts and replies in their messages wait for a yes they can always allow; deleting a post every time", () => {
     const member = prompt(TALKS.member).text;
-    expect(member).toMatch(/After their yes, unless they chose "always allow" for posts: post in a channel, reply to a post, edit their own post\./);
-    expect(member).toMatch(/After their yes, every time: delete their own post, reply in a direct message\./);
+    expect(member).toMatch(/After their yes, unless they chose "always allow" for it: post in a channel, reply to a post, edit their own post, reply in a direct message\./);
+    expect(member).toMatch(/After their yes, every time: delete their own post\./);
     expect(member).toContain("The tool answers waiting_for_person and they see the question with Yes and No. Then say one short line and stop. Never ask for the yes in words");
   });
 });
