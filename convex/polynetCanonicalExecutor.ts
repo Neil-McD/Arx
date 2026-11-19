@@ -2454,10 +2454,6 @@ async function executeCanonicalWrite(args: {
           return canonicalError("pictures_not_found", "A picture for this post is no longer in the talk, so nothing was posted.");
         }
         pictureIds = args.approvedPictures;
-      } else {
-        const chosen = await resolveTalkPictures(args, target.communityId, content.pictures);
-        if (!chosen.ok) return canonicalError(chosen.code, chosen.message);
-        pictureIds = chosen.pictures.map((picture) => picture.id);
       }
     } else if (!String(content.text ?? content.body ?? "").trim() && !Array.isArray(content.attachments)) {
       return canonicalError("invalid_tool_args", "Give the words to post.");
@@ -2471,6 +2467,19 @@ async function executeCanonicalWrite(args: {
     if (!reservation.ok) return reservation.result;
     if (reservation.status === "completed") {
       return { ok: true, value: reservation.completedValue };
+    }
+    // Chosen from the talk only for a post that is really being made now: a
+    // retry of one already made is answered above, even if the talk's
+    // pictures have since gone.
+    if (content.pictures !== undefined && args.personSaidYes !== true) {
+      const chosen = await resolveTalkPictures(args, target.communityId, content.pictures);
+      if (!chosen.ok) {
+        await failMutatingOperation({ ...args, target, toolName: "polynet_write", idempotencyKey,
+          requestFingerprint: reservation.requestFingerprint, attemptToken: reservation.attemptToken,
+          errorCode: chosen.code, errorMessage: chosen.message });
+        return canonicalError(chosen.code, chosen.message);
+      }
+      pictureIds = chosen.pictures.map((picture) => picture.id);
     }
     // Words claimed for this post and not yet posted (given back if it fails).
     let pendingWords: string | null = null;
