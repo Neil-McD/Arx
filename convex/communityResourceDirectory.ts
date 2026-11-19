@@ -26,6 +26,7 @@ import {
 import {
   hydrateCommunityResourceBody,
 } from "./communityResourceContent";
+import { readCourseProgressPeople } from "./communityLessonProgress";
 import {
   COMMUNITY_RESOURCE_SOURCE_INBOX_SEGMENT,
   COMMUNITY_RESOURCE_UNSORTED_MODULE_SEGMENT,
@@ -1034,6 +1035,7 @@ export function resolveCommunityResourceBuilderRef(args: {
 
 async function buildCommunityResourceBuilderModuleReadPayload(args: {
   ctx: any;
+  community: any;
   communityId: any;
   module: CommunityResourceModuleLike | null;
   sourceInbox: boolean;
@@ -1068,12 +1070,22 @@ async function buildCommunityResourceBuilderModuleReadPayload(args: {
         created_at: null,
         updated_at: null,
       };
+  // Who has started this course and how far each is, so a host's AI can say
+  // who is stuck. This read is the builders' only (requireCommunityManager
+  // above); a member's reads never carry anyone else's progress.
+  const people = args.module ? await readCourseProgressPeople(args.ctx, args.community, args.module._id) : null;
   return {
     ok: true,
     kind: "community_resource_builder_read",
     target_type: "module",
     source_inbox: args.sourceInbox,
     module,
+    ...(people ? {
+      progress: {
+        lessons: people.lessons, started: people.started, finished: people.finished,
+        people: people.people.map(({ member_key: _key, ...person }) => person), more: people.more,
+      },
+    } : {}),
     resource_count: rows.length,
     resources: rows.map((row) =>
       mapCompactCommunityResourceBuilderListRow(row, args.moduleNameMap, liveModuleIds),
@@ -1149,7 +1161,7 @@ export async function readCommunityResourceBuilderResourceCore(args: {
   resourceId?: any;
   moduleId?: any;
 }) {
-  await requireCommunityManager({
+  const { community } = await requireCommunityManager({
     ctx: args.ctx,
     communityId: args.communityId,
     userId: args.userId,
@@ -1202,6 +1214,7 @@ export async function readCommunityResourceBuilderResourceCore(args: {
   }
   return await buildCommunityResourceBuilderModuleReadPayload({
     ctx: args.ctx,
+    community,
     communityId: args.communityId,
     module: resolved.module,
     sourceInbox: resolved.sourceInbox,

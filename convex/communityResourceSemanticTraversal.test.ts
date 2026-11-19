@@ -1499,3 +1499,45 @@ test("a member marks a lesson done for themselves, or has the guide do it in the
   })).rejects.toThrow();
   expect(await t.run((ctx) => ctx.db.query("communityLessonProgress").collect())).toHaveLength(0);
 });
+
+test("a host's AI reads who has started a course in builder/resources/; a member's AI and the guide in a member's talk never see anyone else's progress", async () => {
+  vi.stubEnv("ARX_PUBLIC_APP_URL", "https://polynet.test");
+  const t = convexTest(schema, modules);
+  const fixture = await createFixture(t);
+  const owner = await t.run(async (ctx) => (await ctx.db.get(fixture.communityId))!.ownerId);
+  const as = (subject: string) => {
+    const identity = t.withIdentity({ subject });
+    return { runQuery: identity.query, runAction: identity.action, runMutation: identity.mutation };
+  };
+  const run = (subject: string, userId: any, principalKind: "external_mcp" | "community_agent_for_member", toolName: any, input: Record<string, unknown>) =>
+    executePolynetCanonicalTool({ ctx: as(subject), authSubject: subject, userId: String(userId), principalKind,
+      evidenceSurface: principalKind === "external_mcp" ? "external_mcp" : "member_agent_dock", toolName, input });
+  await t.mutation((internal as any).communityLessonProgress.setLessonDoneInternal, {
+    communityId: fixture.communityId, userId: fixture.memberId, ref: `resource:${fixture.firstPageId}`, done: true,
+  });
+  const builderCourse = `/communities/resource-semantic/builder/resources/${fixture.firstModuleId}.json`;
+
+  // The host's guide, and the host's own AI: the course carries its people.
+  for (const principalKind of ["community_agent_for_member", "external_mcp"] as const) {
+    const read = await run("resource-semantic-owner", owner, principalKind, "polynet_read", { path: builderCourse });
+    expect(read.ok, JSON.stringify(read)).toBe(true);
+    const progress = JSON.parse(String(read.ok ? read.value.body : "{}")).progress;
+    expect(progress).toMatchObject({ started: 1, more: 0 });
+    expect(progress.people).toEqual([expect.objectContaining({ name: "Semantic member profile", handle: "semantic-member", done: 1, last_lesson: expect.any(String), finished: progress.lessons === 1 })]);
+    expect(progress.people[0]).not.toHaveProperty("member_key");
+  }
+
+  // A member: the builder read is refused to their guide and their own AI, and
+  // what they can read of the course says only their own progress.
+  for (const [subject, userId] of [["resource-semantic-member", fixture.memberId], ["resource-semantic-peer", fixture.peerId]] as const) {
+    for (const principalKind of ["community_agent_for_member", "external_mcp"] as const) {
+      expect(await run(subject, userId, principalKind, "polynet_read", { path: builderCourse })).toMatchObject({ ok: false, code: "semantic_not_found" });
+      const listed = await run(subject, userId, principalKind, "polynet_list", { path: `/communities/resource-semantic/resources/start-here~${fixture.firstModuleId}/` });
+      expect(listed.ok).toBe(true);
+      const body = JSON.stringify(listed.ok ? listed.value : {});
+      expect(body).not.toMatch(/"progress"|"started"|Semantic member profile|semantic-member/);
+      const own = ((listed.ok ? listed.value.entries : []) as any[]).find((entry) => entry.ref === `resource:${fixture.firstPageId}`)?.done;
+      expect(own).toBe(subject === "resource-semantic-member");
+    }
+  }
+});

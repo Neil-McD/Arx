@@ -27,6 +27,9 @@ export function KitCourseInline(props: {
   coverClassName: string;
   coverStyle?: React.CSSProperties;
   stats: string;
+  // With this, the stats line opens who has started the course (hosts).
+  onOpenStats?: () => void;
+  statsOpen?: boolean;
   // A course just made: its name is ready to type over.
   startRenaming?: boolean;
   // Told once the name has been typed or left alone.
@@ -95,8 +98,19 @@ export function KitCourseInline(props: {
         {field === "name" ? input("Course name", 80) : <button type="button" className={cx("kinline-name")} onClick={() => start("name")} title="Rename the course">{course.name}</button>}
         {field === "about" ? input("One line about this course", 160)
           : <button type="button" className={cx("kinline-about", about ? "" : "empty")} onClick={() => start("about")}>{about || "Add a line about it"}</button>}
-        <em role={error ? "alert" : undefined}>{error ?? props.stats}</em>
+        <em role={error ? "alert" : undefined}>{error ?? (props.onOpenStats && props.stats
+          ? <StatsButton stats={props.stats} open={Boolean(props.statsOpen)} onClick={props.onOpenStats} />
+          : props.stats)}</em>
       </span>
     </>
+  );
+}
+
+// "3 started · 1 finished", which opens (and closes) who they are.
+export function StatsButton(props: { stats: string; open: boolean; onClick: () => void }) {
+  return (
+    <button type="button" className={cx("kinline-stats")} aria-expanded={props.open} title={props.open ? "Back to the lessons" : "See who has started"} onClick={props.onClick}>
+      {props.stats}
+    </button>
   );
 }

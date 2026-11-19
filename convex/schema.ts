@@ -1578,7 +1578,7 @@ export default defineSchema({
 
 
   // Lesson progress (communityLessonProgress.ts): the lessons a member has
-  // marked done. Only that member reads it.
+  // marked done. That member and the community's hosts read it.
   communityLessonProgress: defineTable({
     communityId: v.id("communities"),
     userId: v.id("users"),
