@@ -243,7 +243,7 @@ export const ACTION_TOOLS: ActionTool[] = [
     "edit_module (module_id, expected_updated_at, then name or description_md); " +
     "move_resource (resource_id, expected_updated_at, module_id); " +
     "reorder_pages (module_id, resource_ids: every lesson of that course in order); reorder_modules (module_ids: every course in order); " +
-    "delete_page (resource_id, expected_updated_at) and delete_category (module_id, expected_updated_at), drafts only.",
+    "delete_page (resource_id, expected_updated_at) and delete_category (module_id, expected_updated_at), only in a draft course. The answer says for each lesson made or changed whether members can see it (members_can_see).",
     { community: COMMUNITY, summary: { type: "string", maxLength: 1_000, description: "One line on what this batch does." },
       operations: { type: "array", minItems: 1, maxItems: 25, description: "The changes, in order.", items: RESOURCE_CHANGESET_OPERATION_SCHEMA } },
     ["community", "operations"],

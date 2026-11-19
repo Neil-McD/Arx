@@ -3,8 +3,11 @@ import { internal } from "./_generated/api";
 import {
   type CommunityResourceModuleLike,
   type CommunityResourceLike,
+  communityResourceIsLiveModulePage,
+  communityResourceModuleIsLive,
   mapCommunityResourceRow,
   normalizeIdValue,
+  normalizeResourceRole,
   requireCommunityManager,
 } from "./communityCore";
 import {
@@ -23,6 +26,40 @@ export async function mapCommunityResourceRowWithBody(
 ) {
   const hydrated = await hydrateCommunityResourceBody(ctx, row) ?? row;
   return await mapCommunityResourceRow(ctx, hydrated, userIdCache, moduleNameCache);
+}
+
+// The courses members can see: the published ones.
+export function communityResourceLiveModuleIds(
+  modules: CommunityResourceModuleLike[],
+): Set<string> {
+  return new Set(
+    modules
+      .filter(communityResourceModuleIsLive)
+      .map((module) => normalizeIdValue(module._id)),
+  );
+}
+
+// What an agent reads about a lesson under builder/resources/ says whether
+// members can see it, by the one rule members are shown by
+// (shared/communityResourceVisibility.ts): its course is published and it has
+// a title and content. A lesson's own status is not part of that rule (every
+// lesson an agent makes is stored as "draft"), so a lesson's resource_status
+// is left out here: read as visibility it told hosts a lesson members could
+// already see was hidden. A source keeps its status (members never see one).
+export function withMembersCanSee<T extends { resource_status?: unknown }>(
+  entry: T,
+  row: CommunityResourceLike,
+  liveModuleIds: Set<string>,
+): Omit<T, "resource_status"> & {
+  resource_status?: T["resource_status"];
+  members_can_see: boolean;
+} {
+  const { resource_status, ...rest } = entry;
+  return {
+    ...rest,
+    ...(normalizeResourceRole(row.role) === "source" ? { resource_status } : {}),
+    members_can_see: communityResourceIsLiveModulePage(row, liveModuleIds),
+  };
 }
 
 // Source units: page evidence old crawls saved (nothing writes them now).

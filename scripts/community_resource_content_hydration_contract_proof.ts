@@ -77,7 +77,7 @@ assert.match(
 );
 assert.match(
   resources,
-  /async function readCommunityResourceBuilderResourceCore[\s\S]*target_type: "resource"[\s\S]*resource: await mapCommunityResourceRowWithBody\(args\.ctx, resolved\.resource\)/,
+  /async function readCommunityResourceBuilderResourceCore[\s\S]*target_type: "resource"[\s\S]*resource: withMembersCanSee\(\s*await mapCommunityResourceRowWithBody\(args\.ctx, resolved\.resource\)/,
   "builder resource reads must hydrate split body content before exposing draft or source rows",
 );
 

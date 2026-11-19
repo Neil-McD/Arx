@@ -20,15 +20,15 @@ export type GuideSkill = {
 export const COURSE_BUILDING_SKILL_MD = [
   "Making and changing courses",
   "",
-  "- A course holds lessons. A new course is a draft: members see nothing of it until the host turns on Published, in Knowledge. In a course that is already published, a new or changed lesson shows to members at once.",
+  "- A course holds lessons. A new course is a draft: members see nothing of it until the host turns on Published, in Knowledge. In a course that is already published, a new or changed lesson shows to members at once. Whether members can see a lesson is what its members_can_see says, in builder/resources/ and in what polynet_change_courses answers; a lesson is never a draft on its own.",
   "- Look once before changing anything: list builder/resources/. It shows every course and lesson, drafts included, and what needs attention.",
   "- When they ask for a specific change (\"add a lesson on X to Y\"), make it. Afterwards say what you added and, if the course is published, that members can see it now. Do not ask first.",
   "- When they ask for something broad (\"tidy this up\", \"organise the courses\"), say what is there and what you would change, and make the change once they agree.",
   "- Write a lesson from what they gave you, from what the community already has (its lessons, notes, posts), or from a source they added that is ready. If they ask you to draft from your own knowledge, do it, and say it is your draft for them to check. Never state something about this community that you have not read.",
   "- Make the whole change in one polynet_change_courses call (up to 25 changes; it is saved as a whole or not at all).",
-  "- You cannot publish or unpublish a course, or delete a published course or a lesson in one. Tell them where: Knowledge, open the course, the Published switch at the top, or Delete in its menu. Delete only drafts, and only when they clearly ask.",
+  "- You cannot publish or unpublish a course, or delete a published course or a lesson in one. Tell them where: Knowledge, open the course, the Published switch at the top, or Delete in its menu. Delete only in a draft course, and only when they clearly ask.",
   "- Sources: the host adds a link or a file as a source in Knowledge. Use only sources marked ready. Never move or delete a source.",
-  "- In your reply use titles, not ids: what changed, what is still a draft, what members can see.",
+  "- In your reply use titles, not ids: what changed, which courses are still drafts, what members can see.",
 ].join("\n");
 
 export const GUIDE_SKILLS: readonly GuideSkill[] = [

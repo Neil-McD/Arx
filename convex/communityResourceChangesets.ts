@@ -5,6 +5,7 @@ import {
   type CommunityResourceModuleLike,
   type CommunityResourceLike,
   communityResourceBodyChars,
+  communityResourceIsLiveModulePage,
   communityResourceModuleIsLive,
   maybeDeleteStorageAsset,
   normalizeIdValue,
@@ -42,6 +43,7 @@ import {
   type CommunityResourceBuilderChangesetOperation,
   type CommunityResourceBuilderChangesetPreviewItem,
   type CommunityResourceBuilderChangesetRow,
+  communityResourceLiveModuleIds,
   getNextResourceSortOrder,
   normalizeOptionalModuleId,
   requireResourceModuleForRole,
@@ -1163,14 +1165,38 @@ export async function applyCommunityResourceBuilderChangesetOperations(args: {
     });
   }
 
+  const { modules, resources } = await loadCommunityResourceBuilderRows(args.ctx, args.communityId);
+  // Each lesson this batch made or changed and whether members can see it
+  // now, by the rule they are shown by, so what the agent says next about it
+  // is true without another read. A lesson's stored status ("draft") is not
+  // part of that rule.
+  const liveModuleIds = communityResourceLiveModuleIds(modules);
+  const resourcesById = new Map(resources.map((row) => [normalizeIdValue(row._id), row]));
+  const lessonIds = [
+    ...new Set(
+      applied
+        .filter((entry) => entry.op !== "delete_page" && typeof entry.resource_id === "string")
+        .map((entry) => entry.resource_id as string),
+    ),
+  ];
+  const lessons = lessonIds.flatMap((id) => {
+    const row = resourcesById.get(id);
+    if (!row || normalizeResourceRole(row.role) !== "page") return [];
+    return [{
+      id,
+      title: row.title,
+      members_can_see: communityResourceIsLiveModulePage(row, liveModuleIds),
+    }];
+  });
   return {
     ok: true,
     kind: "community_resource_builder_changeset_apply_result",
     operation_count: args.operations.length,
     applied,
-    health: await buildCommunityResourceBuilderHealthReport({
-      ctx: args.ctx,
-      communityId: args.communityId,
+    lessons,
+    health: buildCommunityResourceBuilderHealthReportFromRows({
+      modules,
+      resources,
       nowMs: args.nowMs,
     }),
   };
@@ -1364,21 +1390,26 @@ export async function stageCommunityResourceBuilderChangesetCore(args: {
   };
 }
 
+async function loadCommunityResourceBuilderRows(ctx: any, communityId: any) {
+  const [modules, resources] = await Promise.all([
+    ctx.db
+      .query("communityResourceModules" as any)
+      .withIndex("by_community", (q: any) => q.eq("communityId", communityId))
+      .collect() as Promise<CommunityResourceModuleLike[]>,
+    ctx.db
+      .query("communityResources" as any)
+      .withIndex("by_community", (q: any) => q.eq("communityId", communityId))
+      .collect() as Promise<CommunityResourceLike[]>,
+  ]);
+  return { modules, resources };
+}
+
 export async function buildCommunityResourceBuilderHealthReport(args: {
   ctx: any;
   communityId: any;
   nowMs: number;
 }): Promise<any> {
-  const [modules, resources] = await Promise.all([
-    args.ctx.db
-      .query("communityResourceModules" as any)
-      .withIndex("by_community", (q: any) => q.eq("communityId", args.communityId))
-      .collect() as Promise<CommunityResourceModuleLike[]>,
-    args.ctx.db
-      .query("communityResources" as any)
-      .withIndex("by_community", (q: any) => q.eq("communityId", args.communityId))
-      .collect() as Promise<CommunityResourceLike[]>,
-  ]);
+  const { modules, resources } = await loadCommunityResourceBuilderRows(args.ctx, args.communityId);
   return buildCommunityResourceBuilderHealthReportFromRows({
     modules,
     resources,
@@ -1406,6 +1437,9 @@ export function buildCommunityResourceBuilderHealthReportFromRows(args: {
     modulePageCounts.set(moduleId, (modulePageCounts.get(moduleId) ?? 0) + 1);
   }
   const staleDraftCutoff = args.nowMs - COMMUNITY_RESOURCE_BUILDER_HEALTH_STALE_DRAFT_MS;
+  // A lesson in these lists says whether members can see it, not its stored
+  // status (see withMembersCanSee in communityResourceShared.ts).
+  const liveModuleIds = communityResourceLiveModuleIds(modules);
   const allIssues = {
     emptyModules: modules
       .filter((module) => (modulePageCounts.get(normalizeIdValue(module._id)) ?? 0) === 0)
@@ -1418,7 +1452,7 @@ export function buildCommunityResourceBuilderHealthReportFromRows(args: {
       .map((page) => ({
         resource_id: normalizeIdValue(page._id),
         title: page.title,
-        status: normalizeResourceStatus(page.status),
+        members_can_see: communityResourceIsLiveModulePage(page, liveModuleIds),
         body_chars: communityResourceBodyChars(page),
       })),
     pagesWithoutSourceLineage: pages
@@ -1426,7 +1460,7 @@ export function buildCommunityResourceBuilderHealthReportFromRows(args: {
       .map((page) => ({
         resource_id: normalizeIdValue(page._id),
         title: page.title,
-        status: normalizeResourceStatus(page.status),
+        members_can_see: communityResourceIsLiveModulePage(page, liveModuleIds),
       })),
     unreferencedSources: sources
       .filter((source) => !referencedSourceIds.has(normalizeIdValue(source._id)))
