@@ -1,8 +1,8 @@
 # Official Polynet MCP contract v1
 
 Status: staging contract. The historical filename remains stable while the
-wire contract moves from the retired workspace-specific tools to the canonical
-five-tool Polynet repository.
+wire contract moved from the retired workspace-specific tools to the
+Polynet repository: three reading tools plus one named tool per action.
 
 ## First principle
 
@@ -21,21 +21,34 @@ agent (Agent page, @mentions, a site's `/ask`), community sites and external MCP
 all project the same tool definitions and execute through the same canonical
 executor and domain owners.
 
-## Canonical Five-Tool Surface
+## Tool Surface
 
-`tools/list` advertises exactly these tools, in this order:
+`tools/list` advertises the three reading tools and then the named action
+tools this person can use somewhere (`shared/actionTools.ts`, one per action:
+`polynet_post`, `polynet_create_event`, `polynet_set_member_role` and so on),
+each with its own description, input schema and labels (`destructiveHint`
+for anything that emails members, replaces or removes what others see, or
+decides who is in).
 
 1. `polynet_list`
 2. `polynet_read`
 3. `polynet_search`
-4. `polynet_write`
-5. `polynet_call`
+4. the named action tools for the person's highest role
 
-There are no public workspace-, memory-, feed-, resource-, profile-, or
-administration-specific MCP tools. Those jobs are repository paths and
-discoverable operations behind the five irreducible verbs.
+`tools/call` runs only those (Nov 19). The generic `polynet_write` and
+`polynet_call` are internal: each named tool is translated into one of them
+for the canonical executor, but an outside AI can't call them by name
+("Tool not found."). Arguments are checked against the tool's published
+input schema before anything runs (`shared/toolArgumentCheck.ts`): an
+unknown, missing or wrong field answers `invalid_tool_args` with each
+problem as `where: what`, never dropped silently.
 
-The tools mean:
+A post's stored retry key is the person's own
+(`polynet:<principal>:<userId>:<key>`): two people's AIs sending the same
+words, or the same `idempotency_key`, make two posts; one person's retry
+replays.
+
+The reading tools mean:
 
 - `polynet_list`: enumerate one authorized directory.
 - `polynet_read`: read one exact path returned by the repository.
@@ -45,11 +58,11 @@ The tools mean:
   optional `author` (handle), `from`/`to` (dates), `kind` (`post`/`reply`) and
   `sort` (`relevant`/`newest`). Each hit is re-checked against its post before
   it is returned; an empty result carries a `hint` on how to search again.
-- `polynet_write`: create, append, update or delete a naturally writable
-  repository object with an idempotency key. Update and delete apply only to
-  the caller's own posts and replies; moderation stays in Studio.
-- `polynet_call`: invoke one versioned operation that was first discovered
-  under the selected community's `capabilities/` directory.
+
+Internally, `polynet_write` creates, appends, updates or deletes a naturally
+writable repository object with an idempotency key, and `polynet_call`
+invokes one versioned operation from the selected community's
+`capabilities/` directory.
 
 The shared schema source is
 [`shared/polynetCanonicalToolContract.ts`](../shared/polynetCanonicalToolContract.ts).

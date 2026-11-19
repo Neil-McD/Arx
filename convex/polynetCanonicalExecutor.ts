@@ -2521,7 +2521,9 @@ async function executeCanonicalWrite(args: {
         }
         pendingWords = aiFingerprint;
       }
-      const canonicalIdempotencyKey = `polynet:${args.principalKind}:${idempotencyKey}`;
+      // The stored key is the person's own: two people's AIs sending the same
+      // words (or picking the same key) are two posts, not a conflict.
+      const canonicalIdempotencyKey = `polynet:${args.principalKind}:${args.userId}:${idempotencyKey}`;
       if (pictureIds.length) {
         const staged = await args.ctx.runAction((internal as any).communityGuidePictures.stagePicturesInternal, {
           userId: args.userId, communityId: target.communityId, ...(channel.id ? { channelId: channel.id } : {}),
@@ -2676,7 +2678,7 @@ async function executeCanonicalWrite(args: {
           communityId: target.communityId,
           summary: String(content.summary ?? ""),
           operations: content.operations,
-          idempotencyKey: `polynet:${args.principalKind}:${idempotencyKey}`,
+          idempotencyKey: `polynet:${args.principalKind}:${args.userId}:${idempotencyKey}`,
         },
       )) as Record<string, unknown>;
       const responseValue = {

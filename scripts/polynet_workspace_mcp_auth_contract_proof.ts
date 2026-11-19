@@ -341,7 +341,8 @@ includes(
   "preflight shared executor assertion",
 );
 
-includes(contract, "## Canonical Five-Tool Surface", "five-tool contract");
+includes(contract, "## Tool Surface", "tool surface contract");
+includes(contract, "`tools/call` runs only those", "the generic tools are not offered to an outside AI");
 for (const toolName of POLYNET_CANONICAL_TOOL_NAMES) {
   includes(contract, `\`${toolName}\``, `${toolName} documentation`);
 }
