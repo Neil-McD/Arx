@@ -232,7 +232,6 @@ export const seedReviewDemoInternal = internalMutation({
       ids[member.key] = await upsertPerson(ctx, member, nowMs);
       await upsertMembership(ctx, communityId, ids[member.key], member.role ?? "member", nowMs - member.joinedDaysAgo * DAY_MS, nowMs);
     }
-    await syncCommunityActiveMemberCount({ ctx, communityId });
 
     // People waiting to join, answered fresh each run.
     for (const applicant of APPLICANTS) {
@@ -245,6 +244,8 @@ export const seedReviewDemoInternal = internalMutation({
       }
       await ctx.db.insert("communityJoinRequests", { communityId, userId, status: "pending", createdAt: ago(6), updatedAt: ago(6) });
     }
+    // Counted after the applicants are back to waiting, in case a run let one in.
+    await syncCommunityActiveMemberCount({ ctx, communityId });
 
     const channels: Record<string, any> = {};
     for (const channel of CHANNELS) {
