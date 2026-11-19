@@ -2727,11 +2727,16 @@ export default defineSchema({
     bannerFocusY: v.optional(v.number()),
     bannerZoom: v.optional(v.number()),
     sortOrder: v.number(),
+    // When the course last went from draft to published: the moment its
+    // lessons became new to members (the Knowledge dot). updatedAt moves on
+    // every rename and reorder, so it can't say this.
+    publishedAt: v.optional(v.number()),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
     .index("by_community", ["communityId"])
     .index("by_community_sortOrder", ["communityId", "sortOrder"])
+    .index("by_community_publishedAt", ["communityId", "publishedAt"])
     .index("by_createdBy", ["createdByUserId"]),
 
   communityResourceBuilderChangesets: defineTable({

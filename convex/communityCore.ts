@@ -263,6 +263,7 @@ export type CommunityResourceModuleLike = {
   bannerFocusY?: number;
   bannerZoom?: number;
   sortOrder: number;
+  publishedAt?: number;
   createdAt: number;
   updatedAt: number;
 };

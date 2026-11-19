@@ -409,8 +409,13 @@ assert.match(
 );
 assert.doesNotMatch(
   attention,
-  /query\("communityResourceModules"/,
-  "resource attention must not restore the broad community-module scan",
+  /query\("communityResourceModules"(?![\s\S]{0,40}withIndex\("by_community_publishedAt")/,
+  "resource attention must not restore the broad community-module scan (only the newest published courses, by their index)",
+);
+assert.match(
+  attention,
+  /withIndex\("by_community_publishedAt"[\s\S]{0,120}\.take\(MAX_COMMUNITY_ATTENTION_RECENT_PUBLISHED_COURSES\)/,
+  "the published-course read for resource attention must stay bounded",
 );
 assert.match(
   attention,

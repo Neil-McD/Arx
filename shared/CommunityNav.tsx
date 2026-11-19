@@ -25,6 +25,7 @@ import type { CommunityTab } from "./appShellNavigation";
 import { StableFramedMedia } from "./StableFramedMedia";
 import { usePointerSortableList } from "./usePointerSortableList";
 import type { PodsDot } from "./podsAttentionDot";
+import { knowledgeAttentionDot } from "./knowledgeAttentionDot.ts";
 import { communityChannelCapacity, MAX_TOTAL_COMMUNITY_CHANNELS } from "./communityChannelCapacity";
 import { channelRowsToReserve, communitySlugInAddress, navRowsToReserve, recallChannelRows, recallNavRows, rememberChannelRows, rememberNavRows } from "./channelRowsMemory";
 
@@ -730,7 +731,7 @@ export const CommunityNav = memo(function CommunityNav({
               {isV1 ? <Library size={17} strokeWidth={1.7} aria-hidden="true" /> : <Brain size={18} strokeWidth={1.7} aria-hidden="true" />}
             </span>
             <span className="nav-item-label">Knowledge</span>
-            {communityTab !== "resources" && tabIndicators.resources ? <span className="nav-item-dot" aria-hidden="true" /> : null}
+            {knowledgeAttentionDot({ indicators: tabIndicators, knowledgeOpen: communityTab === "resources" }) ? <span className="nav-item-dot" aria-hidden="true" /> : null}
           </button>
           <button
             className={showActiveSelection && communityTab === "events" ? "nav-item active" : "nav-item"}

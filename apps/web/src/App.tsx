@@ -1127,7 +1127,6 @@ export default function App() {
     },
     resources: {
       isLoading: isLoadingResources,
-      rows: communityResources,
     },
     events: {
       cacheKey: communityEventsCacheKey,

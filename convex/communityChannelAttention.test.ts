@@ -208,6 +208,24 @@ test("resource attention inspects only recent referenced modules and fails close
       return communityId;
     };
     const communityId = await insertCommunity("resource-attention");
+    // The Knowledge dot is a member's: whoever can edit courses never gets it.
+    const memberId = await ctx.db.insert("users", {
+      authSubject: "resource-attention-member",
+      displayName: "resource-attention-member",
+      handle: "resource-attention-member",
+      normalizedHandle: "resource-attention-member",
+      createdAt: 1_000,
+      updatedAt: 1_000,
+    });
+    await ctx.db.insert("communityMemberships", {
+      communityId,
+      userId: memberId,
+      role: "member",
+      accessSource: "manual_grant",
+      state: "active",
+      createdAt: 1_000,
+      updatedAt: 1_000,
+    });
     const foreignCommunityId = await insertCommunity("resource-attention-foreign");
     const insertModule = async (targetCommunityId: any, status: "draft" | "live", name: string) =>
       await ctx.db.insert("communityResourceModules", {
@@ -242,16 +260,18 @@ test("resource attention inspects only recent referenced modules and fails close
     return { communityId, liveModuleId };
   });
   const asOwner = t.withIdentity({ subject: "resource-attention-owner" });
+  const asMember = t.withIdentity({ subject: "resource-attention-member" });
 
-  const initial = await myAttention(asOwner, fixture.communityId);
+  const initial = await myAttention(asMember, fixture.communityId);
   expect(initial[0]?.resources).toBe(true);
+  expect((await myAttention(asOwner, fixture.communityId))[0]?.resources).toBe(false);
 
-  await asOwner.mutation(api.communityAttention.markCommunitySurfaceSeen, {
+  await asMember.mutation(api.communityAttention.markCommunitySurfaceSeen, {
     communityId: fixture.communityId,
     surface: "resources",
     nowMs: 4_500,
   });
-  const acknowledged = await myAttention(asOwner, fixture.communityId);
+  const acknowledged = await myAttention(asMember, fixture.communityId);
   expect(acknowledged[0]?.resources).toBe(false);
 
   await t.run(async (ctx) => {
@@ -272,6 +292,7 @@ test("resource attention inspects only recent referenced modules and fails close
       updatedAt: 5_000,
     });
   });
-  const afterNewLivePage = await myAttention(asOwner, fixture.communityId);
+  const afterNewLivePage = await myAttention(asMember, fixture.communityId);
   expect(afterNewLivePage[0]?.resources).toBe(true);
+  expect((await myAttention(asOwner, fixture.communityId))[0]?.resources).toBe(false);
 });
