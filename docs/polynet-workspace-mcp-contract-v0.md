@@ -174,7 +174,11 @@ approval capability below does not make the queue writable.
   (every course, in order), `delete_page` and `delete_category` (drafts
   only: a lesson in a draft course, an empty draft course). The answer has
   `result.applied: true`. In a published course, an edit or a new lesson with
-  content shows to members at once.
+  content shows to members at once. The answer's `result.result.lessons`
+  gives each lesson made or changed with `members_can_see`; listing and
+  reading `builder/resources/` give every course and lesson the same field,
+  from the rule members are shown by (`shared/communityResourceVisibility.ts`).
+  A lesson's own stored status is not shown there: it is not what decides.
 
 `polynet_call` accepts only an exact operation and version returned by
 `capabilities/`. Current operations are:

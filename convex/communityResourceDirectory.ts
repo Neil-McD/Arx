@@ -48,9 +48,11 @@ import {
   boundedReadLimit,
   boundedReadOffset,
   compareCommunityResources,
+  communityResourceLiveModuleIds,
   mapCommunityResourceRowWithBody,
   normalizeDirectoryPathForMatch,
   resourceModuleIdentity,
+  withMembersCanSee,
 } from "./communityResourceShared";
 import {
   buildCommunityResourceBuilderHealthReportFromRows,
@@ -309,10 +311,11 @@ function compactResourceSummary(row: CommunityResourceLike): string | null {
 function mapCompactCommunityResourceBuilderListRow(
   row: CommunityResourceLike,
   moduleNameMap: Map<string, string>,
+  liveModuleIds: Set<string>,
 ) {
   const moduleId = row.moduleId ? normalizeIdValue(row.moduleId) : null;
   const directory = buildResourceDirectoryFieldsForTool(row, moduleNameMap);
-  return {
+  return withMembersCanSee({
     id: normalizeIdValue(row._id),
     community_id: normalizeIdValue(row.communityId),
     module_id: moduleId,
@@ -331,7 +334,7 @@ function mapCompactCommunityResourceBuilderListRow(
     body_chars: communityResourceBodyChars(row),
     summary: compactResourceSummary(row),
     updated_at: toIsoString(row.updatedAt),
-  };
+  }, row, liveModuleIds);
 }
 
 function compactModuleSummary(module: CommunityResourceModuleLike | null): string | null {
@@ -559,7 +562,9 @@ type CommunityResourceBuilderRefMatch =
       directory_path: string;
       directory_uri: string;
       resource_role: string;
-      resource_status: string;
+      // A source's status; a lesson has members_can_see instead.
+      resource_status?: string;
+      members_can_see: boolean;
     }
   | {
       target_type: "module";
@@ -569,6 +574,7 @@ type CommunityResourceBuilderRefMatch =
       directory_path: string;
       directory_uri: string;
       module_status: string | null;
+      members_can_see: boolean;
       source_inbox?: boolean;
       resource_count: number;
       page_count: number;
@@ -617,8 +623,9 @@ function normalizeBuilderRefSlug(raw: unknown): string {
 function buildBuilderResourceRefMatch(
   row: CommunityResourceLike,
   moduleNameMap: Map<string, string>,
+  liveModuleIds: Set<string>,
 ): CommunityResourceBuilderRefMatch {
-  const compact = mapCompactCommunityResourceBuilderListRow(row, moduleNameMap);
+  const compact = mapCompactCommunityResourceBuilderListRow(row, moduleNameMap, liveModuleIds);
   return {
     target_type: "resource",
     id: compact.id,
@@ -629,7 +636,8 @@ function buildBuilderResourceRefMatch(
     directory_path: compact.directory_path,
     directory_uri: compact.directory_uri,
     resource_role: compact.resource_role,
-    resource_status: compact.resource_status,
+    ...(compact.resource_status ? { resource_status: compact.resource_status } : {}),
+    members_can_see: compact.members_can_see,
   };
 }
 
@@ -663,6 +671,7 @@ function buildBuilderModuleRefMatch(args: {
       ? `${entry.directory_uri}/${COMMUNITY_RESOURCE_SOURCE_INBOX_SEGMENT}`
       : entry.directory_uri,
     module_status: args.module ? normalizeResourceModuleStatus(args.module.status) : null,
+    members_can_see: args.module ? communityResourceModuleIsLive(args.module) : false,
     ...(args.sourceInbox ? { source_inbox: true } : null),
     resource_count: resourceRows.length,
     page_count: resourceRows.filter((row) => normalizeResourceRole(row.role) !== "source").length,
@@ -713,7 +722,13 @@ function missingBuilderRef(args: {
     .slice()
     .sort(compareSuggestedResourceReadTargets)
     .slice(0, 7)
-    .map((row) => buildBuilderResourceRefMatch(row, args.moduleNameMap));
+    .map((row) =>
+      buildBuilderResourceRefMatch(
+        row,
+        args.moduleNameMap,
+        communityResourceLiveModuleIds(args.modules),
+      ),
+    );
   return {
     ok: false,
     reason_code: "resource_builder_ref_not_found",
@@ -796,6 +811,7 @@ export function resolveCommunityResourceBuilderRef(args: {
 }): ResolvedCommunityResourceBuilderRef {
   const ref = String(args.ref ?? "").trim();
   if (!ref) throw new Error("community_resource_builder_read_ref_required");
+  const liveModuleIds = communityResourceLiveModuleIds(args.modules);
 
   const resourceById = args.resources.find((row) => normalizeIdValue(row._id) === ref) ?? null;
   if (resourceById) {
@@ -870,7 +886,7 @@ export function resolveCommunityResourceBuilderRef(args: {
     .map((resource) => ({
       target_type: "resource" as const,
       resource,
-      match: buildBuilderResourceRefMatch(resource, args.moduleNameMap),
+      match: buildBuilderResourceRefMatch(resource, args.moduleNameMap, liveModuleIds),
     }));
   const resourcePath = resolveBuilderRefStage({
     ref,
@@ -960,7 +976,7 @@ export function resolveCommunityResourceBuilderRef(args: {
       .map((resource) => ({
         target_type: "resource" as const,
         resource,
-        match: buildBuilderResourceRefMatch(resource, args.moduleNameMap),
+        match: buildBuilderResourceRefMatch(resource, args.moduleNameMap, liveModuleIds),
       })),
   });
   if (resourceTitle) return resourceTitle;
@@ -991,7 +1007,7 @@ export function resolveCommunityResourceBuilderRef(args: {
         .map((resource) => ({
           target_type: "resource" as const,
           resource,
-          match: buildBuilderResourceRefMatch(resource, args.moduleNameMap),
+          match: buildBuilderResourceRefMatch(resource, args.moduleNameMap, liveModuleIds),
         })),
     });
     if (resourceSlug) return resourceSlug;
@@ -1018,13 +1034,19 @@ async function buildCommunityResourceBuilderModuleReadPayload(args: {
   const rows = moduleResources(args.resources, moduleId)
     .filter((row) => !args.sourceInbox || normalizeResourceRole(row.role) === "source")
     .sort(compareCommunityResources);
+  const liveModuleIds = communityResourceLiveModuleIds(args.module ? [args.module] : []);
+  // A course is seen by members when it is published (module_status "live").
   const module = args.module
-    ? await mapCommunityResourceModuleRow(args.ctx, args.module)
+    ? {
+        ...(await mapCommunityResourceModuleRow(args.ctx, args.module)),
+        members_can_see: communityResourceModuleIsLive(args.module),
+      }
     : {
         id: null,
         community_id: normalizeIdValue(args.communityId),
         ...buildUnsortedModuleDirectoryFields(args.communityId),
         module_status: null,
+        members_can_see: false,
         name: "Unsorted",
         description_md: "Existing knowledge items that are not assigned to a module.",
         banner_url: null,
@@ -1043,7 +1065,9 @@ async function buildCommunityResourceBuilderModuleReadPayload(args: {
     source_inbox: args.sourceInbox,
     module,
     resource_count: rows.length,
-    resources: rows.map((row) => mapCompactCommunityResourceBuilderListRow(row, args.moduleNameMap)),
+    resources: rows.map((row) =>
+      mapCompactCommunityResourceBuilderListRow(row, args.moduleNameMap, liveModuleIds),
+    ),
   };
 }
 
@@ -1078,6 +1102,7 @@ export async function listCommunityResourceBuilderDirectoryCore(args: {
   const moduleNameMap = new Map(
     modules.map((module) => [normalizeIdValue(module._id), module.name]),
   );
+  const liveModuleIds = communityResourceLiveModuleIds(modules);
   return {
     ok: true,
     kind: "community_resource_builder_directory",
@@ -1093,15 +1118,16 @@ export async function listCommunityResourceBuilderDirectoryCore(args: {
       modules
         .slice()
         .sort((a, b) => a.sortOrder - b.sortOrder || b.createdAt - a.createdAt)
-        .map((row) => mapCommunityResourceModuleRow(args.ctx, row)),
+        .map(async (row) => ({
+          ...(await mapCommunityResourceModuleRow(args.ctx, row)),
+          members_can_see: communityResourceModuleIsLive(row),
+        })),
     ),
-    resources: await Promise.all(
-      resources
-        .slice()
-        .sort(compareCommunityResources)
-        .slice(0, limit)
-        .map((row) => mapCompactCommunityResourceBuilderListRow(row, moduleNameMap)),
-    ),
+    resources: resources
+      .slice()
+      .sort(compareCommunityResources)
+      .slice(0, limit)
+      .map((row) => mapCompactCommunityResourceBuilderListRow(row, moduleNameMap, liveModuleIds)),
   };
 }
 
@@ -1150,7 +1176,13 @@ export async function readCommunityResourceBuilderResourceCore(args: {
       ok: true,
       kind: "community_resource_builder_read",
       target_type: "resource",
-      resource: await mapCommunityResourceRowWithBody(args.ctx, resolved.resource),
+      // The full row the app also reads, with members_can_see in place of a
+      // lesson's status (withMembersCanSee).
+      resource: withMembersCanSee(
+        await mapCommunityResourceRowWithBody(args.ctx, resolved.resource),
+        resolved.resource,
+        communityResourceLiveModuleIds(modules),
+      ),
     };
   }
   return await buildCommunityResourceBuilderModuleReadPayload({

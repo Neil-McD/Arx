@@ -1963,6 +1963,74 @@ test("an agent's course batch is applied as it is sent, and agents have no appro
   }
 });
 
+// Every lesson an agent makes is stored as "draft", but members see a lesson
+// when its course is published and it has a title and content
+// (shared/communityResourceVisibility.ts). What the guide gets back and reads
+// says members_can_see by that rule, and never a lesson's "draft".
+test("an agent's course change and its builder/resources/ reads say whether members can see each lesson", async () => {
+  const t = convexTest(schema, modules);
+  const fixture = await createFixture(t);
+  const ownerCtx = executionContext(t.withIdentity({ subject: fixture.ownerSubject }));
+  const nowMs = 1_760_000_000_000;
+  const [liveCourseId, draftCourseId] = await t.run(async (ctx) => Promise.all(
+    [["Published course", "live", 1], ["Draft course", "draft", 2]].map(([name, status, sortOrder]) =>
+      ctx.db.insert("communityResourceModules", {
+        communityId: fixture.communityId, createdByUserId: fixture.ownerId, status: status as "live" | "draft",
+        name: String(name), sortOrder: Number(sortOrder), createdAt: nowMs, updatedAt: nowMs,
+      })),
+  ));
+  const execute = (toolName: "polynet_write" | "polynet_list" | "polynet_read", input: Record<string, unknown>) =>
+    executePolynetCanonicalTool({
+      ctx: ownerCtx, authSubject: fixture.ownerSubject, userId: fixture.ownerId,
+      principalKind: "community_agent_for_member", evidenceSurface: "member_agent_dock", toolName, input,
+    });
+  const builderResources = "/communities/canonical-community/builder/resources/";
+  const sent = await execute("polynet_write", {
+    path: builderResources, mode: "create", idempotency_key: "lesson-visibility",
+    content: { summary: "Add three lessons.", operations: [
+      { op: "create_page", module_id: liveCourseId, title: "Week one", body_md: "Start by running a mile." },
+      { op: "create_page", module_id: draftCourseId, title: "Coming soon", body_md: "Not ready yet." },
+      { op: "create_page", module_id: liveCourseId, title: "Empty for now" },
+    ] },
+  });
+  expect(sent.ok).toBe(true);
+  const result = (sent.ok ? sent.value.result : null) as any;
+  expect(result.result.lessons.map((lesson: any) => [lesson.title, lesson.members_can_see])).toEqual([
+    ["Week one", true], ["Coming soon", false], ["Empty for now", false],
+  ]);
+  const idOf = (title: string) => result.result.lessons.find((lesson: any) => lesson.title === title).id as string;
+  // Stored as drafts all the same: the rule, not the stored word, decides.
+  await t.run(async (ctx) => {
+    const rows = await ctx.db.query("communityResources").collect();
+    expect(rows.map((row) => row.status)).toEqual(["draft", "draft", "draft"]);
+  });
+
+  const listed = await execute("polynet_list", { path: builderResources });
+  expect(listed.ok).toBe(true);
+  const entries = ((listed.ok ? listed.value.entries : []) as any[]);
+  for (const [title, visible] of [["Week one", true], ["Coming soon", false], ["Empty for now", false]] as const) {
+    const entry = entries.find((row) => row.id === idOf(title));
+    expect(entry).toMatchObject({ title, members_can_see: visible });
+    expect(entry).not.toHaveProperty("resource_status");
+  }
+  expect(entries.find((row) => row.id === String(liveCourseId))).toMatchObject({ module_status: "live", members_can_see: true });
+  expect(entries.find((row) => row.id === String(draftCourseId))).toMatchObject({ module_status: "draft", members_can_see: false });
+
+  for (const [title, visible] of [["Week one", true], ["Coming soon", false], ["Empty for now", false]] as const) {
+    const read = await execute("polynet_read", { path: `${builderResources}${idOf(title)}.json` });
+    expect(read.ok).toBe(true);
+    const lesson = JSON.parse(String(read.ok ? read.value.body : "{}")).resource;
+    expect(lesson).toMatchObject({ title, members_can_see: visible });
+    expect(lesson).not.toHaveProperty("resource_status");
+  }
+  // A course's own read lists its lessons the same way.
+  const course = await execute("polynet_read", { path: `${builderResources}${String(liveCourseId)}.json` });
+  const coursePayload = JSON.parse(String(course.ok ? course.value.body : "{}"));
+  expect(coursePayload.module).toMatchObject({ members_can_see: true });
+  expect(coursePayload.resources.map((row: any) => [row.title, row.members_can_see, "resource_status" in row]))
+    .toEqual([["Week one", true, false], ["Empty for now", false, false]]);
+});
+
 test("builder resource effects survive receipt-completion crashes without duplication", async () => {
   const t = convexTest(schema, modules);
   const fixture = await createFixture(t);
