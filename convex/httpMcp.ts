@@ -401,6 +401,17 @@ function buildToolTextContent(payload: Record<string, unknown>): Array<{ type: "
   ];
 }
 
+// What an outside AI is answered: the result, without Polynet's own
+// bookkeeping (the receipt's contract, lane, relation and ids), which it
+// repeated back to people as if it meant something. A retry is still said:
+// already_done.
+export function forOutsideAi(value: unknown): unknown {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return value;
+  const { receipt, ...rest } = value as Record<string, unknown>;
+  const deduped = receipt && typeof receipt === "object" && (receipt as Record<string, unknown>).deduped === true;
+  return { ...rest, ...(deduped ? { already_done: true } : {}) };
+}
+
 // Runs one tool for the person the door verified; tools/call has already
 // checked the tool is offered and its arguments fit.
 export async function handleToolCall(args: {
@@ -446,7 +457,7 @@ export async function handleToolCall(args: {
         ...(details ? { details } : {}),
       };
     }
-    const structuredContent = execution.value;
+    const structuredContent = forOutsideAi(execution.value) as Record<string, unknown>;
     return {
       ok: true,
       result: {

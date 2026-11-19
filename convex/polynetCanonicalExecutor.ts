@@ -38,6 +38,7 @@ import { PERSONAL_MEMORY_OPERATION, PERSONAL_MEMORY_PATH } from "../shared/perso
 import { lensCalls, lensReads, resolveLens, type Lens, type LensView } from "../shared/lens.ts";
 import { guideAskFor, handedBackToPerson, operationFor } from "../shared/operationCatalog.ts";
 import { ACTION_TOOLS } from "../shared/actionTools.ts";
+import { aiEventList } from "../shared/aiEventList.ts";
 import { GUIDE_SKILLS, GUIDE_SKILLS_DIRECTORY_PATH, guideSkillAt, guideSkillPath } from "../shared/guideSkills.ts";
 import {
   handbookQuestion, memberRemovalQuestion, messageQuestion, NOT_A_MEMBER_HERE, postQuestion, removeQuestion, roleQuestion, OWN_AI_WAITING_MAX, WAITING_FOR_PERSON, waitingToolAnswer,
@@ -1367,13 +1368,20 @@ async function executeCanonicalList(args: {
           userId: args.userId,
           communityId: target.communityId,
           ...(args.input.cursor ? { cursor: String(args.input.cursor) } : {}),
-          limit: typeof args.input.limit === "number" ? args.input.limit : 20,
+          // Read the most there are, then list a repeating event once
+          // (shared/aiEventList.ts).
+          limit: 50,
           ...guideEventReader(args),
         },
       )) as Record<string, unknown>;
-      const events = Array.isArray(value.events)
-        ? (value.events as Array<Record<string, unknown>>)
-        : [];
+      const limit = typeof args.input.limit === "number" && args.input.limit >= 2 ? Math.min(50, Math.floor(args.input.limit)) : 20;
+      const listed = aiEventList(Array.isArray(value.events) ? (value.events as Array<Record<string, unknown>>) : [], limit);
+      const events = listed.events;
+      // The next page starts after the last event listed here (a series
+      // listed here may come round again there, at its later times).
+      const lastStart = events.length ? Date.parse(String(events[events.length - 1]!.starts_at ?? "")) : Number.NaN;
+      const nextCursor = listed.more && Number.isSafeInteger(lastStart) ? String(lastStart + 1)
+        : !listed.more && value.truncated === true ? requiredString(value.next_cursor, 2_048) : null;
       return {
         ok: true,
         value: virtualDirectory({
@@ -1401,8 +1409,8 @@ async function executeCanonicalList(args: {
               name: event.title ?? "Community event",
             }];
           }),
-          nextCursor: requiredString(value.next_cursor, 2_048),
-          truncated: value.truncated === true,
+          nextCursor,
+          truncated: nextCursor !== null,
         }),
       };
     } catch (error) {
@@ -3063,7 +3071,8 @@ async function askPersonFirst(args: {
   if (!ownAi) return { ok: true, value: waitingToolAnswer(question) };
   // The same request asked again: what the person answered, once they have.
   if (asked.settled) return ownAiSettledAnswer(asked.settled);
-  return { ok: true, value: ownAiWaitingAnswer({ question, slug: target.communitySlug, key: String(args.rawInput.idempotency_key ?? "") }) };
+  // The card's own key: the one it was first asked with, if this is that card again.
+  return { ok: true, value: ownAiWaitingAnswer({ question, slug: target.communitySlug, key: String(asked.key ?? args.rawInput.idempotency_key ?? "") }) };
 }
 
 // What the person answered to an own AI's request, told to that AI.
