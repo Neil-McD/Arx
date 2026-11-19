@@ -299,6 +299,10 @@ and is present, so there is no waiting step and no approval card:
 - An agent **can edit a published lesson and add a lesson to a published
   course**. Publication belongs to the course, so that shows to members at
   once (the same as a host doing it by hand). The guide says so first.
+- What the agent reads and gets back says, for every course and lesson,
+  `members_can_see`, from the one rule members are shown by. A lesson's
+  stored status (every lesson an agent makes is "draft") is left out, so
+  the guide never tells a host a lesson members can see is hidden.
 - A refused step refuses the whole batch, with a sentence saying where the
   control is.
 - Added to the engine: `reorder_pages` and `reorder_modules` (each names
