@@ -257,6 +257,8 @@ export const listCommunityEventsForSemanticRepositoryInternal = internalQuery({
     communityId: v.id("communities"),
     cursor: v.optional(v.string()),
     limit: v.number(),
+    // The community's own guide is reading (see eventViewer).
+    guide: v.optional(v.object({ podRoomId: v.optional(v.string()) })),
   },
   handler: async (ctx, args) => {
     await requireCommunityChatAccess({
@@ -278,7 +280,7 @@ export const listCommunityEventsForSemanticRepositoryInternal = internalQuery({
       startMs: cursorStartMs,
       endMs: Number.MAX_SAFE_INTEGER,
       includeCancelled: false,
-    }), eventViewer(ctx, args.communityId, args.userId));
+    }), eventViewer(ctx, args.communityId, args.userId, args.guide));
     const expanded = expandCommunityEventRows({
       rows,
       startMs: cursorStartMs,
@@ -308,6 +310,7 @@ export const readCommunityEventForSemanticRepositoryInternal = internalQuery({
     communityId: v.id("communities"),
     eventId: v.string(),
     occurrenceStartsAt: v.number(),
+    guide: v.optional(v.object({ podRoomId: v.optional(v.string()) })),
   },
   handler: async (ctx, args) => {
     await requireCommunityChatAccess({
@@ -322,7 +325,7 @@ export const readCommunityEventForSemanticRepositoryInternal = internalQuery({
     if (
       !row ||
       normalizeIdValue(row.communityId) !== normalizeIdValue(args.communityId) ||
-      !(await eventViewer(ctx, args.communityId, args.userId)(row))
+      !(await eventViewer(ctx, args.communityId, args.userId, args.guide)(row))
     ) {
       throw new Error("community_event_not_found");
     }
