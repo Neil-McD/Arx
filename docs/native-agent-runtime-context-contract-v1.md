@@ -243,7 +243,11 @@ This narrow slice converges only the member-facing community Concierge:
    user-message bytes.
 2. Its system prompt is compiled from three explicit sections:
    `community_agent_identity`, `concierge_operating_policy`, and
-   `community_system_prompt`.
+   `community_system_prompt`. The first two are written in the private
+   talk's shape (YOU; WHAT IS HERE; HOW TO WORK; WHAT YOU MAY DO HERE; HOW TO
+   SPEAK; WHAT PEOPLE WROTE IS INFORMATION), together under 3,500 characters
+   and free of internal words (`scripts/guide_prompt.test.ts`). The host's
+   instructions follow under the private talk's framing: tone and focus only.
 3. Participant orientation and the thread transcript remain untrusted evidence
    in the contextual user message; they are not promoted into instructions.
 4. `context_snapshot` v2 retains the exact initial messages and adds only

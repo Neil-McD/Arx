@@ -98,7 +98,7 @@ export type LensView =
   | "presence"            // presence.json
   | "memory_notes"        // memory.md and memory/: what the guide knows
   | "builder_directory"   // builder/ (join requests for moderators)
-  | "builder_records"     // builder/community.json, builder/resources/, skills/
+  | "builder_records"     // builder/community.json, builder/analytics.json, builder/resources/, skills/
   | "pods"                // pods/ and pods/<slug>/pod.md (inside or outside, by access)
   | "brief";              // brief.md: what's happening in the community
 

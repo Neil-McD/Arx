@@ -233,6 +233,14 @@ text; empty withdraws) call Studio's own functions. Each call has a receipt.
 `operation_not_found`. `builder/community.json` still shows `member_experience`
 (`members_use`, `has_custom_site`).
 
+`builder/analytics.json` (read-only, same readers as `builder/community.json`:
+whoever may manage the community, never a member, a moderator or the guide in a
+channel) holds the Analytics page's numbers in the page's words: `members`,
+`monthly_revenue`, `by_plan`, and for `last_30_days` (the page's default range)
+and `last_7_days` the dates, `new_members`, `active`, `visits_to_the_join_page`,
+`started_joining`, `join_rate` and `monthly_revenue_change`. It is computed by
+the page's own query (`communityAdmin.computeCommunityAnalyticsSnapshot`).
+
 People (builder lens): `community.members.set_role` (`members`, `role`) and
 `.unban` take a selection of `user:<id>` refs and run Studio's own functions
 per person (`communityPeople.applyPersonActionForTrustedUserInternal`): only

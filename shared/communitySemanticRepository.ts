@@ -54,6 +54,8 @@ export const POLYNET_BUILDER_DIRECTORY_PATH = "/builder/";
 export const POLYNET_JOIN_REQUESTS_DIRECTORY_PATH = "/builder/join-requests/";
 // The community itself, for its owners and admins.
 export const POLYNET_BUILDER_COMMUNITY_PATH = "/builder/community.json";
+// Its numbers, as the Analytics page shows them to its owners and admins.
+export const POLYNET_BUILDER_ANALYTICS_PATH = "/builder/analytics.json";
 export const POLYNET_BUILDER_RESOURCES_DIRECTORY_PATH = "/builder/resources/";
 
 export type ParsedCommunityChannelSemanticPath =
@@ -430,6 +432,7 @@ export function parsePolynetSemanticPath(value: unknown) {
     value === POLYNET_BUILDER_RESOURCES_DIRECTORY_PATH ||
     value === POLYNET_JOIN_REQUESTS_DIRECTORY_PATH ||
     value === POLYNET_BUILDER_COMMUNITY_PATH ||
+    value === POLYNET_BUILDER_ANALYTICS_PATH ||
     /^\/builder\/join-requests\/[A-Za-z0-9]+\.md$/.test(value) ||
     /^\/events\/event:[A-Za-z0-9_-]+:[0-9]{1,16}\.md$/.test(value) ||
     /^\/memory\/[A-Za-z0-9_-]+\.md$/.test(value) ||
@@ -567,6 +570,7 @@ export function validateCommunitySemanticOperationInput(args: {
   const isCanonicalVirtualDocumentRead =
     /^\/integrations\/hubspot\/contacts\/[0-9]{1,32}$/.test(parsed.path) ||
     parsed.path === POLYNET_BUILDER_COMMUNITY_PATH ||
+    parsed.path === POLYNET_BUILDER_ANALYTICS_PATH ||
     /^\/builder\/join-requests\/[A-Za-z0-9]+\.md$/.test(parsed.path) ||
     parseCommunityChannelSemanticPath(parsed.path)?.kind === "document" ||
     /^\/events\/event:[A-Za-z0-9_-]+:[0-9]{1,16}\.md$/.test(parsed.path) ||

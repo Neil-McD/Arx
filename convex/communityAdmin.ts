@@ -4,6 +4,7 @@ import { action, internalAction, internalMutation, internalQuery, mutation, quer
 import { schedulePodBillingCheck } from "./communityPodBillingCheck";
 import { communityHasCustomSite, communityMemberExperience } from "./communitySites";
 import { v } from "convex/values";
+import { formatMoneyBaseUnits } from "../shared/contentFormatting";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import type { MutationCtx } from "./_generated/server";
@@ -23,6 +24,7 @@ import {
   getCommunityAndMembership,
   getActiveCommunityBlock,
   getUniqueCommunityMembershipByPair,
+  listCanonicalCommunityMemberMembershipRows,
   listCommunityMembershipRowsForManager,
   mapCommunityMemberSettingsRow,
   normalizeCommunityRoleForOutput,
@@ -2347,8 +2349,81 @@ export const getCommunityAnalyticsSnapshot = query({
       userId,
       authSubject: args.authSubject ?? null,
     });
+    return await computeCommunityAnalyticsSnapshot(ctx, { communityId: args.communityId, community, rows, range, nowMs: Date.now() });
+  },
+});
 
+// The Analytics page's numbers for a host's guide or own AI
+// (builder/analytics.json): the same manager check and the same computation
+// as the page, for the page's default range (30 days) and the last 7 days.
+export const readCommunityAnalyticsForTrustedManagerInternal = internalQuery({
+  args: { userId: v.id("users"), communityId: v.id("communities") },
+  handler: async (ctx, args) => {
+    const { community } = await requireCommunityManager({ ctx, communityId: args.communityId, userId: args.userId });
+    const { rows } = await listCanonicalCommunityMemberMembershipRows({ ctx, communityId: args.communityId, community });
     const nowMs = Date.now();
+    const snapshot = (range: AnalyticsRangeValue) =>
+      computeCommunityAnalyticsSnapshot(ctx, { communityId: args.communityId, community, rows, range, nowMs });
+    return communityAnalyticsDocument({
+      nowMs,
+      communityCreatedAt: community.createdAt,
+      last30Days: await snapshot("30d"),
+      last7Days: await snapshot("7d"),
+    });
+  },
+});
+
+type CommunityAnalyticsSnapshot = Awaited<ReturnType<typeof computeCommunityAnalyticsSnapshot>>;
+
+// The figures as the Analytics page words and works them out
+// (apps/web/src/v1/KitAnalyticsPage.tsx): kept short, it is read into a model.
+export function communityAnalyticsDocument(args: {
+  nowMs: number;
+  communityCreatedAt: number;
+  last30Days: CommunityAnalyticsSnapshot;
+  last7Days: CommunityAnalyticsSnapshot;
+}) {
+  const current = args.last30Days.summary;
+  const money = (value: number | null) => formatMoneyBaseUnits(value, current.currency, current.currency_decimals);
+  const percent = (part: number, whole: number) => `${Math.round((part / whole) * 100)}%`;
+  // Nothing has ever been paid: no currency to show money in.
+  const unpaid = !current.mrr_base_units && !current.currency;
+  const day = (ms: number) => new Date(ms).toISOString().slice(0, 10);
+  const window = (snapshot: CommunityAnalyticsSnapshot) => {
+    const summary = snapshot.summary;
+    const visits = summary.page_visits_window ?? 0;
+    const revenue = snapshot.series.revenue;
+    const change = revenue.length > 1 && summary.mrr_base_units != null ? summary.mrr_base_units - (revenue[0]?.value ?? 0) : null;
+    return {
+      from: day(resolveAnalyticsWindowStartMs({ range: snapshot.range, nowMs: args.nowMs, communityCreatedAt: args.communityCreatedAt })),
+      to: day(args.nowMs),
+      new_members: summary.new_members_window,
+      active: `${summary.active_members_window} of ${summary.total_members} (${percent(summary.active_members_window, summary.total_members)})`,
+      visits_to_the_join_page: visits,
+      started_joining: summary.join_starts_window,
+      join_rate: visits > 0 ? `${percent(summary.new_members_window, visits)} of visitors` : "No visits yet",
+      ...(unpaid || change == null ? {} : { monthly_revenue_change: change === 0 ? "No change" : `${change < 0 ? "−" : "+"}${money(Math.abs(change))}` }),
+    };
+  };
+  return {
+    as_of: new Date(args.nowMs).toISOString(),
+    members: current.total_members,
+    monthly_revenue: unpaid ? "None: no paid plans yet" : money(current.mrr_base_units),
+    by_plan: current.plans.map((plan) => ({ plan: plan.name, members: plan.members,
+      ...(plan.mrr_base_units ? { monthly_revenue: `${money(plan.mrr_base_units)}/mo` } : {}) })),
+    last_30_days: window(args.last30Days),
+    last_7_days: window(args.last7Days),
+  };
+}
+
+async function computeCommunityAnalyticsSnapshot(ctx: any, args: {
+  communityId: any;
+  community: CommunityLike;
+  rows: CommunityMembershipLike[];
+  range: AnalyticsRangeValue;
+  nowMs: number;
+}) {
+    const { community, rows, range, nowMs } = args;
     const sinceMs = resolveAnalyticsWindowStartMs({
       range,
       nowMs,
@@ -2540,5 +2615,4 @@ export const getCommunityAnalyticsSnapshot = query({
           }),
       },
     };
-  },
-});
+}
