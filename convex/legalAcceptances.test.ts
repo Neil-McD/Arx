@@ -4,7 +4,7 @@ import { hasAcceptedCurrentPlatformLegalFromRows } from "./legalAcceptances";
 
 const privacyAcceptance = {
   documentKey: "privacy_ai_data_policy",
-  documentVersion: "privacy_ai_data_policy_v1",
+  documentVersion: "privacy_ai_data_policy_v2",
 };
 
 describe("platform legal acceptance versioning", () => {
@@ -40,6 +40,13 @@ describe("platform legal acceptance versioning", () => {
     expect(hasAcceptedCurrentPlatformLegalFromRows([
       { documentKey: "terms_of_service", documentVersion: "terms_of_service_unknown" },
       privacyAcceptance,
+    ])).toBe(false);
+  });
+
+  test("Privacy v1 acceptance (before outside AI apps) no longer satisfies v2: members re-accept once", () => {
+    expect(hasAcceptedCurrentPlatformLegalFromRows([
+      { documentKey: "terms_of_service", documentVersion: "terms_of_service_v4" },
+      { documentKey: "privacy_ai_data_policy", documentVersion: "privacy_ai_data_policy_v1" },
     ])).toBe(false);
   });
 

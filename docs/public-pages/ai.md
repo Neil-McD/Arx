@@ -46,7 +46,7 @@ Only what you can see in Polynet, in each community you belong to:
 
 - channels, posts and replies
 - courses and lessons, events, and the community's handbook
-- pods you are in
+- pods you can open
 - people in the community, as your role shows them
 - your own direct messages
 

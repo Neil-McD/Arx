@@ -1,4 +1,4 @@
-import privacyAiDataPolicyV1 from "../../../../docs/legal/privacy-ai-data-policy-v1.md?raw";
+import privacyAiDataPolicyV2 from "../../../../docs/legal/privacy-ai-data-policy-v2.md?raw";
 import termsOfServiceV4 from "../../../../docs/legal/terms-of-service-v4.md?raw";
 import {
   PRIVACY_AI_DATA_POLICY_DOCUMENT,
@@ -36,5 +36,5 @@ export const TERMS_OF_SERVICE_ENTRY: LegalDocumentEntry = {
 
 export const PRIVACY_AI_DATA_POLICY_ENTRY: LegalDocumentEntry = {
   ...PRIVACY_AI_DATA_POLICY_DOCUMENT,
-  content: stripMarkdownFrontmatter(privacyAiDataPolicyV1),
+  content: stripMarkdownFrontmatter(privacyAiDataPolicyV2),
 };
