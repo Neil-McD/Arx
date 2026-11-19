@@ -2,6 +2,7 @@ import { internalMutation, internalQuery, mutation, query } from "./_generated/s
 import { discardUnsentDirectMessageAttachment, attachDirectMessageAttachments, directMessageAttachmentEntries, parseDirectMessageAttachmentIds, readDirectMessageAttachments, requireSendableDirectMessageAttachments } from "./directMessageAttachmentCore";
 import { internal } from "./_generated/api";
 import { v } from "convex/values";
+import { AI_DUPLICATE_MIN_CHARS, AI_DUPLICATE_WINDOW_MS, aiPostFingerprint } from "../shared/aiPostingRules";
 import {
   communityMembershipRowIsActive,
   normalizeIdValue,
@@ -1856,8 +1857,42 @@ export const sendAiDirectReplyInternal = internalMutation({
     const viewer = await resolvePublicUserId(ctx, args.userId);
     const conversationId = ctx.db.normalizeId("dmConversations", args.conversationId);
     if (!conversationId) throw new Error("dm_conversation_not_found");
+    // A retry of a message already sent gets that message back, unchecked.
+    const sent = await ctx.db.query("dmMessages")
+      .withIndex("by_conversation_clientMessageId", (q) => q.eq("conversationId", conversationId).eq("clientMessageId", args.clientMessageId)).first();
+    if (!sent) await checkAiDirectReply(ctx, { userId: args.userId, conversationId, text: args.text });
     const message = await sendDirectMessageForUser(ctx, args.userId,
       { conversationId, text: args.text, clientMessageId: args.clientMessageId, viaAi: true });
+    if (!sent) await rememberAiDirectWords(ctx, { userId: args.userId, conversationId, text: args.text });
     return aiDirectMessage(message, viewer);
   },
 });
+
+// How an AI may write in someone's direct messages (Neil, Nov 19: AIs may
+// reply, with governance). Beyond the rate limit and the content checks:
+// - no pestering: two messages in a row from this person with no answer, and
+//   the AI waits for the other person;
+// - no copy-paste blasts: the same words to at most three different people in
+//   a day (short replies like "thanks!" are not counted).
+export const AI_DM_IN_A_ROW_MAX = 2;
+export const AI_DM_SAME_WORDS_PEOPLE_MAX = 3;
+async function checkAiDirectReply(ctx: any, args: { userId: any; conversationId: any; text: string }) {
+  const last = await ctx.db.query("dmMessages").withIndex("by_conversation_seq", (q: any) => q.eq("conversationId", args.conversationId))
+    .order("desc").take(AI_DM_IN_A_ROW_MAX);
+  if (last.length === AI_DM_IN_A_ROW_MAX && last.every((row: any) => String(row.senderUserId ?? "") === String(args.userId))) {
+    throw new Error("dm_ai_wait_for_reply");
+  }
+  if (String(args.text).trim().length < AI_DUPLICATE_MIN_CHARS) return;
+  const fingerprint = aiPostFingerprint(args.text);
+  const since = Date.now() - AI_DUPLICATE_WINDOW_MS;
+  const rows = await ctx.db.query("aiMessageFingerprints").withIndex("by_user_fingerprint", (q: any) => q.eq("userId", args.userId).eq("fingerprint", fingerprint))
+    .order("desc").take(50);
+  const others = new Set(rows.filter((row: any) => row.createdAt >= since && String(row.conversationId) !== String(args.conversationId)).map((row: any) => String(row.conversationId)));
+  if (others.size >= AI_DM_SAME_WORDS_PEOPLE_MAX) throw new Error("dm_ai_same_words");
+}
+
+async function rememberAiDirectWords(ctx: any, args: { userId: any; conversationId: any; text: string }) {
+  if (String(args.text).trim().length < AI_DUPLICATE_MIN_CHARS) return;
+  await ctx.db.insert("aiMessageFingerprints", { userId: args.userId, conversationId: args.conversationId,
+    fingerprint: aiPostFingerprint(args.text), createdAt: Date.now() });
+}
