@@ -36,46 +36,31 @@
             {
               "description": "Lists upcoming events, with a repeating event shown once.",
               "prompt": "What events are coming up in Harbor Run Club?",
-              "tools_triggered": [
-                "polynet_list"
-              ],
+              "tools_triggered": "polynet_list",
               "expected_behavior": "Lists the community's upcoming events with their dates and times. The weekly Saturday long run appears once, with its next dates, not once per week."
             },
             {
               "description": "Summarizes recent talk in a channel.",
               "prompt": "Summarize what people have been talking about in Harbor Run Club's General channel lately.",
-              "tools_triggered": [
-                "polynet_list",
-                "polynet_read"
-              ],
+              "tools_triggered": "polynet_list, polynet_read",
               "expected_behavior": "A short summary of the recent posts in General that names who said what. It does not post anything."
             },
             {
               "description": "Searches past posts.",
               "prompt": "Has anyone in Harbor Run Club talked about knee pain?",
-              "tools_triggered": [
-                "polynet_list",
-                "polynet_search"
-              ],
+              "tools_triggered": "polynet_list, polynet_search",
               "expected_behavior": "Lists matching posts with who wrote them and when, or says plainly that nothing was found."
             },
             {
               "description": "Posts in a channel as the signed-in person.",
               "prompt": "Post in Harbor Run Club's General channel: \"Reminder: Saturday's long run starts at 7am from the boathouse.\"",
-              "tools_triggered": [
-                "polynet_list",
-                "polynet_read",
-                "polynet_post"
-              ],
-              "expected_behavior": "Posts the message in General under the signed-in person's name, marked as made through an AI, and says it is done. Running it again posts it again; the reviewer can delete the post with polynet_delete_post."
+              "tools_triggered": "polynet_list, polynet_read, polynet_post",
+              "expected_behavior": "Posts the message in General under the signed-in person's name, marked as made through an AI, and says it is done. Asking for the same words again within a day is refused as a duplicate post, and the plugin says so instead of posting twice; the reset script removes the post between review runs."
             },
             {
               "description": "A high-impact change waits for the person's Yes in Polynet.",
               "prompt": "Make Jordan Lee a moderator in Harbor Run Club.",
-              "tools_triggered": [
-                "polynet_list",
-                "polynet_set_member_role"
-              ],
+              "tools_triggered": "polynet_list, polynet_set_member_role",
               "expected_behavior": "The answer says the change is waiting for the person's Yes in Polynet and gives the link to the community's Home, where the question \"Make Jordan Lee a moderator?\" has Yes and No buttons. It does not say Jordan Lee is a moderator. Jordan Lee stays a member until the person presses Yes in Polynet. Asking again before answering says the same request is already waiting."
             }
           ],
