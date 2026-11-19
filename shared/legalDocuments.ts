@@ -1,4 +1,7 @@
-export const TERMS_OF_SERVICE_VERSION = "terms_of_service_v4";
+export const TERMS_OF_SERVICE_VERSION = "terms_of_service_v5";
+// v5 (Nov 19 2026) only names the operator, adds the adult-content rule and
+// the support address, so a v4 acceptance still counts (legalAcceptances.ts).
+export const STILL_ACCEPTED_TERMS_OF_SERVICE_VERSION = "terms_of_service_v4";
 export const PREVIOUS_TERMS_OF_SERVICE_VERSION = "terms_of_service_v3";
 export const HISTORICAL_TERMS_OF_SERVICE_VERSION = "terms_of_service_v2";
 export const LEGACY_TERMS_OF_SERVICE_VERSION = "terms_of_service_v1";
@@ -30,6 +33,14 @@ export function legalDocumentPublicUrl(document: LegalDocument, origin = ""): st
 export const TERMS_OF_SERVICE_DOCUMENT: LegalDocument = {
   key: "terms_of_service",
   version: TERMS_OF_SERVICE_VERSION,
+  title: "Polynet Terms of Service v5",
+  effectiveDate: "2026-11-19",
+  sourcePath: "docs/legal/terms-of-service-v5.md",
+};
+
+export const STILL_ACCEPTED_TERMS_OF_SERVICE_DOCUMENT: LegalDocument = {
+  key: "terms_of_service",
+  version: STILL_ACCEPTED_TERMS_OF_SERVICE_VERSION,
   title: "Polynet Terms of Service v4",
   effectiveDate: "2026-11-03",
   sourcePath: "docs/legal/terms-of-service-v4.md",
