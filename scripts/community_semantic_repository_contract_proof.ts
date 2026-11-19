@@ -992,12 +992,12 @@ assert.equal(nativeTools[1]?.parameters.properties?.offset?.maximum, 1_000_000);
 assert.equal(nativeTools[1]?.parameters.properties?.limit?.maximum, 20_000);
 assert.match(
   String(nativeTools[0]?.parameters.properties?.path?.description ?? ""),
-  /directory path[\s\S]*path ending in \/[\s\S]*polynet_read only[\s\S]*kind is document/,
+  /folder path[\s\S]*ends in \/[\s\S]*polynet_read only[\s\S]*kind is document/,
   "the provider-facing list path schema must distinguish directories from documents",
 );
 assert.match(
   String(nativeTools[1]?.parameters.properties?.path?.description ?? ""),
-  /kind is document[\s\S]*Never pass a directory[\s\S]*polynet_list with the same path/,
+  /kind is document[\s\S]*Never a folder[\s\S]*polynet_list/,
   "the provider-facing read path schema must reject directory selection",
 );
 assert.equal(

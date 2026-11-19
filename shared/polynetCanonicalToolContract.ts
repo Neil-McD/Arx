@@ -43,7 +43,7 @@ const PATH_SCHEMA: PlatformOperationJsonSchema = {
   minLength: 1,
   maxLength: 1024,
   description:
-    "Canonical absolute Polynet repository path returned by Polynet.",
+    "An exact path Polynet returned, such as /communities/<slug>/channels/.",
 };
 
 const LIST_OUTPUT_SCHEMA: PlatformOperationJsonSchema = {
@@ -550,7 +550,7 @@ export const POLYNET_CANONICAL_TOOL_DEFINITIONS: Readonly<
     name: "polynet_search",
     title: "Search Polynet",
     description:
-      "Search one authorized Polynet repository subtree and return bounded snippets plus exact paths for follow-up reads. On channels/ it searches every post and reply you can read, across all history, by whole words: use one to three keywords, try another form of a word if nothing matches, and narrow with author (a member's handle), from/to dates, kind or sort newest. truncated means more matched than returned.",
+      "Search one folder you can read (a community, its channels/, resources/ or memory/) and return short snippets with exact paths to read next. On channels/ it searches every post and reply you can read, across all history, by whole words: use one to three keywords, try another form of a word if nothing matches, and narrow with author (a member's handle), from/to dates, kind or sort newest. truncated means more matched than returned.",
     inputSchema: SEARCH_INPUT_SCHEMA,
     outputSchema: SEARCH_OUTPUT_SCHEMA,
     annotations: {

@@ -881,3 +881,33 @@ test("deleting a published lesson waits for the person's Yes, then is done; a dr
   // Both, or neither, is refused.
   expect((await f.call("owner", "polynet_delete_published", { community: "run-club", idempotency_key: "del-3" }, "Claude")).isError).toBe(true);
 });
+
+test("an AI app is told who Polynet is, browser-based AI apps may call, and a pod's price is never shown to an outside AI", async () => {
+  const f = await fixture();
+  const rpc = async (body: Record<string, unknown>, headers: Record<string, string> = {}) => {
+    const res = await handleMcpPost({
+      ctx: { runQuery: (ref: any, a: any) => f.t.query(ref, a), runMutation: (ref: any, a: any) => f.t.mutation(ref, a), runAction: (ref: any, a: any) => f.t.action(ref, a) },
+      req: new Request("https://example.convex.site/runtime/mcp", { method: "POST", headers: { "content-type": "application/json", ...headers }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, ...body }) }),
+      jsonResponse: (_req, status, payload) => Response.json(payload, { status }),
+      requireAuthenticatedActor: async () => ({ ok: true, actor: { authSubject: "member-subject", dbUserId: f.users.member } }) as any,
+    });
+    return { status: res.status, json: await res.json() as any };
+  };
+  const init = await rpc({ method: "initialize", params: { protocolVersion: "2025-11-25", capabilities: {}, clientInfo: { name: "t", version: "1" } } });
+  expect(init.json.result.serverInfo).toMatchObject({ name: "polynet", title: "Polynet", websiteUrl: "https://www.polynet.ai", icons: [expect.objectContaining({ src: expect.stringContaining("polynet.ai") })] });
+  expect(init.json.result.serverInfo.version).not.toMatch(/alpha/);
+  for (const origin of ["https://claude.ai", "https://chatgpt.com"]) expect((await rpc({ method: "ping" }, { origin })).status, origin).toBe(200);
+  expect((await rpc({ method: "ping" }, { origin: "https://evil.example" })).status).toBe(403);
+  // A paid pod the member can see from outside: no price, just where to join.
+  await f.t.run(async (ctx: any) => {
+    const runClub = (await ctx.db.query("communities").collect()).find((row: any) => row.slug === "run-club")._id;
+    const now = Date.now();
+    const channelId = await ctx.db.insert("communityChannels", { communityId: runClub, slug: "coached", name: "Coached", accessMode: "restricted", postingPolicy: "members", status: "active", position: 5, createdAt: now, updatedAt: now });
+    await ctx.db.insert("communityPods", { communityId: runClub, channelId, purpose: "Weekly coaching.", visibility: "listed", seats: 10, priceAmountBaseUnits: 2_900, priceCurrency: "usd", createdAt: now, updatedAt: now });
+  });
+  const pod = await f.call("member", "polynet_read", { path: "/communities/run-club/pods/coached/pod.md" });
+  expect(pod.isError, JSON.stringify(pod)).toBe(false);
+  const text = JSON.stringify(pod.structuredContent);
+  expect(text).toContain("A paid pod: joining is done in Polynet.");
+  expect(text).not.toMatch(/\$29|29\.00|a month/);
+});
