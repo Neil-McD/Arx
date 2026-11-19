@@ -1588,6 +1588,34 @@ export default defineSchema({
     .index("by_user_resource", ["userId", "resourceId"])
     .index("by_resource", ["resourceId"]),
 
+  // Files under a lesson, beside its links (communityLessonFiles.ts, Nov 18).
+  // A row of its own, not an entry in lessonLinks, so the guide's course
+  // changes (which set lessonLinks) can never drop or forge one. "pending" is
+  // an upload not yet saved with the lesson: deleted, bytes and all, when it
+  // expires. "attached" is on the lesson and served to whoever may read it.
+  communityLessonFiles: defineTable({
+    communityId: v.id("communities"),
+    resourceId: v.id("communityResources"),
+    status: v.union(v.literal("pending"), v.literal("attached"), v.literal("failed")),
+    // The file's own name (the download is saved under it) and what the host
+    // calls it in the list.
+    name: v.string(),
+    title: v.string(),
+    mimeType: v.string(),
+    sizeBytes: v.number(),
+    storageId: v.optional(v.id("_storage")),
+    contentHash: v.optional(v.string()),
+    // Its place in the lesson's list of files, as saved.
+    position: v.optional(v.number()),
+    uploadExpiresAt: v.optional(v.number()),
+    createdByUserId: v.id("users"),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_resource_status", ["resourceId", "status"])
+    .index("by_uploader_status", ["createdByUserId", "status"])
+    .index("by_storage", ["storageId"]),
+
   // Community notes (communityNotes.ts): what the community agent learned
   // that is worth sharing with everyone, one short markdown note each.
   communityNotes: defineTable({
