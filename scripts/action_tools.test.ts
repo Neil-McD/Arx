@@ -281,7 +281,7 @@ describe("an outside AI's arguments are checked against the published shapes", (
 
 describe("what reviewers and their scanners check, on every tool an outside AI is shown", () => {
   // Internal words an outside AI should never read, and anything that sells.
-  const BANNED = /repository|subtree|private talk|\blens\b|semantic|authority_lane|principal|\bthe guide\b|\$\d|price|checkout|upgrade|subscribe/i;
+  const BANNED = /repository|subtree|private talk|stable resource|\blens\b|semantic|authority_lane|principal|\bthe guide\b|\$\d|price|checkout|upgrade|subscribe/i;
   const shown = () => [
     ...getPolynetMcpToolDefinitions().filter((tool) => tool.annotations.readOnlyHint === true),
     ...actionToolsFor("builder", "own_ai").map(actionToolDefinition),
@@ -293,7 +293,7 @@ describe("what reviewers and their scanners check, on every tool an outside AI i
       for (const label of ["readOnlyHint", "destructiveHint", "idempotentHint", "openWorldHint"]) expect(typeof tool.annotations[label], `${tool.name} ${label}`).toBe("boolean");
       expect(tool.description.length, tool.name).toBeLessThanOrEqual(600);
       expect(tool.description, tool.name).not.toMatch(BANNED);
-      expect(JSON.stringify(tool.inputSchema), tool.name).not.toMatch(/repository|subtree|private talk/i);
+      expect(JSON.stringify(tool.inputSchema), tool.name).not.toMatch(/repository|subtree|private talk|stable resource/i);
       expect(tool.outputSchema, tool.name).toBeTruthy();
       // What waits for the person's Yes is said once.
       expect((tool.description.match(/asked first|Waits for the person's Yes/g) ?? []).length, tool.name).toBeLessThanOrEqual(1);
