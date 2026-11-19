@@ -648,6 +648,13 @@ test("two people's AIs sending the same short words, or picking the same key, ma
   expect(b.isError, JSON.stringify(b)).toBe(false);
   // One person's retry is still a retry: the same post, not a second.
   expect((await post("member", "Anyone up for hills on Thursday evening?", "post-1")).structuredContent.ref).toBe(a.structuredContent.ref);
+  // Two long keys that differ only at the end are two posts too.
+  const long = "k".repeat(110);
+  const first = await post("member", "Long key, first post about the weekend.", `${long}-a`);
+  const second = await post("member", "Long key, second post about shoes.", `${long}-b`);
+  expect(first.isError, JSON.stringify(first)).toBe(false);
+  expect(second.isError, JSON.stringify(second)).toBe(false);
+  expect(second.structuredContent.ref).not.toBe(first.structuredContent.ref);
   const roots = (await f.t.run((ctx: any) => ctx.db.query("communityInteractionRoots").collect())) as any[];
   expect(roots.filter((root) => root.contentSummary === "Count me in!")).toHaveLength(2);
   expect(roots.filter((root) => /hills on Thursday/.test(root.contentSummary))).toHaveLength(1);
