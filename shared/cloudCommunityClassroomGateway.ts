@@ -1,7 +1,7 @@
 import { bootstrapConvexAuthenticatedClient } from "./convexAuthenticatedClient";
 
 // The classroom (design v1 Knowledge): a member's own lesson progress, and for
-// hosts how many people have started and finished each course.
+// hosts how many people have started and finished each course, and who.
 type Call = { session: unknown; communityId: string };
 
 export async function fetchMyLessonProgress(params: Call): Promise<Array<{ resource_id: string; completed_at: string }>> {
@@ -21,4 +21,16 @@ export async function fetchCourseProgressSummary(params: Call): Promise<CoursePr
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
   const result = await client.query("communityLessonProgress:getCourseProgressSummary" as any, { authSubject, communityId: params.communityId }) as { courses: CourseProgressSummary[] };
   return result.courses;
+}
+
+export type CourseProgressPerson = {
+  member_key: string; name: string; handle: string | null;
+  done: number; of: number; last_lesson: string; last_done_at: string; finished: boolean;
+};
+export type CourseProgressPeople = { module_id: string; lessons: number; started: number; finished: number; people: CourseProgressPerson[]; more: number };
+
+// Hosts: who has started one course, the stuck first.
+export async function fetchCourseProgressPeople(params: Call & { moduleId: string }): Promise<CourseProgressPeople> {
+  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
+  return await client.query("communityLessonProgress:getCourseProgressPeople" as any, { authSubject, communityId: params.communityId, moduleId: params.moduleId }) as CourseProgressPeople;
 }

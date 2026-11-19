@@ -302,7 +302,7 @@ function buildCommunityMapPrompt(params: {
     ...(reviewsJoins ? ["- builder/join-requests/ : people asking to join."] : []),
     ...(host ? [
       "- builder/community.json : the community's settings.",
-      "- builder/resources/ : every course and lesson, drafts included.",
+      "- builder/resources/ : every course and lesson, drafts included. A course there also says who has started and finished it.",
     ] : []),
     "- /messages/ : this person's own direct messages. Private to this talk.",
     ...(params.skills.length ? [
