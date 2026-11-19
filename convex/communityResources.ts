@@ -785,7 +785,14 @@ export const deleteCommunityResourceModule = mutation({
       communityId: module.communityId,
       userId: args.userId,
     });
+    return await deleteCourseCore(ctx, module);
+  },
+});
 
+// Deleting a course: its lessons and their files go, its sources stay (moved
+// out of it). The app's Delete and a person's Yes to their AI both run this.
+async function deleteCourseCore(ctx: any, module: CommunityResourceModuleLike) {
+  {
     const resources = (await ctx.db
       .query("communityResources" as any)
       .withIndex("by_community_module", (q: any) =>
@@ -820,6 +827,72 @@ export const deleteCommunityResourceModule = mutation({
       deletedLessons: lessons.length,
       detachedIngestionSources: ingestionSources.length,
     };
+  }
+}
+
+// What a person said Yes to their AI about (shared/operationCatalog.ts:
+// asked every time): publishing or unpublishing a course, or deleting a
+// published course or a lesson in one. The same steps as the app's Published
+// switch and Delete, for a builder of this community.
+export const describeCourseTargetInternal = internalQuery({
+  args: { communityId: v.id("communities"), course: v.optional(v.string()), lesson: v.optional(v.string()) },
+  handler: async (ctx, args) => {
+    if (args.lesson) {
+      const id = ctx.db.normalizeId("communityResources", args.lesson);
+      const lesson = id ? (await ctx.db.get(id)) as CommunityResourceLike | null : null;
+      if (!lesson || String(lesson.communityId) !== String(args.communityId) || normalizeResourceRole(lesson.role) !== "page") return null;
+      const module = lesson.moduleId ? (await ctx.db.get(lesson.moduleId as any)) as CommunityResourceModuleLike | null : null;
+      return { kind: "lesson" as const, name: String(lesson.title ?? "Lesson"), course: module ? String(module.name ?? "") : null,
+        live: Boolean(module && communityResourceModuleIsLive(module)), lessons: 0 };
+    }
+    const id = args.course ? ctx.db.normalizeId("communityResourceModules", args.course) : null;
+    const module = id ? (await ctx.db.get(id)) as CommunityResourceModuleLike | null : null;
+    if (!module || String(module.communityId) !== String(args.communityId)) return null;
+    const lessons = ((await ctx.db.query("communityResources" as any)
+      .withIndex("by_community_module", (q: any) => q.eq("communityId", module.communityId).eq("moduleId", module._id)).take(500)) as CommunityResourceLike[])
+      .filter((row) => normalizeResourceRole(row.role) === "page").length;
+    return { kind: "course" as const, name: String(module.name ?? "Course"), course: null, live: communityResourceModuleIsLive(module), lessons };
+  },
+});
+
+export const applyCourseCardForTrustedUserInternal = internalMutation({
+  args: { userId: v.id("users"), communityId: v.id("communities"), operation: v.string(), input: v.any() },
+  handler: async (ctx, args) => {
+    await requireCommunityManager({ ctx, communityId: args.communityId, userId: args.userId });
+    const input = (args.input ?? {}) as Record<string, unknown>;
+    const nowMs = Date.now();
+    const courseOf = async (raw: unknown) => {
+      const id = ctx.db.normalizeId("communityResourceModules", String(raw ?? ""));
+      const module = id ? (await ctx.db.get(id)) as CommunityResourceModuleLike | null : null;
+      if (!module || String(module.communityId) !== String(args.communityId)) throw new Error("community_resource_module_not_found");
+      return module;
+    };
+    if (args.operation === "community.course.publish") {
+      const module = await courseOf(input.course);
+      const live = input.published === true;
+      if (live !== communityResourceModuleIsLive(module)) {
+        await ctx.db.patch(module._id as any, { status: live ? "live" : "draft", ...(live ? { publishedAt: nowMs } : {}), updatedAt: nowMs });
+      }
+      return { course: String(module.name ?? ""), published: live };
+    }
+    if (args.operation === "community.course.delete") {
+      if (input.lesson) {
+        const id = ctx.db.normalizeId("communityResources", String(input.lesson));
+        const lesson = id ? (await ctx.db.get(id)) as CommunityResourceLike | null : null;
+        if (!lesson || String(lesson.communityId) !== String(args.communityId) || normalizeResourceRole(lesson.role) !== "page") {
+          throw new Error("community_resource_not_found");
+        }
+        await deleteLessonFilesForLesson(ctx, lesson._id);
+        await deleteCommunitySourceUnitsForSourceResource(ctx, lesson._id);
+        await deleteCommunityResourceBodyContent(ctx, lesson._id);
+        await ctx.db.delete(lesson._id as any);
+        return { deleted: "lesson", name: String(lesson.title ?? "") };
+      }
+      const module = await courseOf(input.course);
+      const done = await deleteCourseCore(ctx, module);
+      return { deleted: "course", name: String(module.name ?? ""), lessons: done.deletedLessons };
+    }
+    throw new Error("operation_not_found");
   },
 });
 

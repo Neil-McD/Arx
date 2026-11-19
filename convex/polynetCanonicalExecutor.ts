@@ -41,7 +41,7 @@ import { ACTION_TOOLS } from "../shared/actionTools.ts";
 import { aiEventList } from "../shared/aiEventList.ts";
 import { GUIDE_SKILLS, GUIDE_SKILLS_DIRECTORY_PATH, guideSkillAt, guideSkillPath } from "../shared/guideSkills.ts";
 import {
-  guideInstructionsQuestion, handbookQuestion, memberRemovalQuestion, openCommunityQuestion, GUIDE_QUESTION_TEXT_MAX, messageQuestion, NOT_A_MEMBER_HERE, postQuestion, removeQuestion, roleQuestion, OWN_AI_WAITING_MAX, WAITING_FOR_PERSON, waitingToolAnswer,
+  courseDeleteQuestion, coursePublishQuestion, guideInstructionsQuestion, handbookQuestion, memberRemovalQuestion, openCommunityQuestion, GUIDE_QUESTION_TEXT_MAX, messageQuestion, NOT_A_MEMBER_HERE, postQuestion, removeQuestion, roleQuestion, OWN_AI_WAITING_MAX, WAITING_FOR_PERSON, waitingToolAnswer,
 } from "../shared/guideQuestions.ts";
 import {
   COMMUNITY_MEMBER_SELF_DIRECTORY,
@@ -114,8 +114,12 @@ const EVENT_OPERATIONS = [EVENT_CREATE_OPERATION, EVENT_UPDATE_OPERATION, EVENT_
 // An event made through an AI is for members; making one public is the app's.
 const EVENT_FIELDS = ["title", "description_md", "starts_at", "ends_at", "timezone", "location_type", "location_label", "url",
   "recurrence_frequency", "recurrence_interval", "recurrence_until"];
+// Courses members see: published or unpublished, and deleted, on the person's yes.
+const COURSE_PUBLISH_OPERATION = "community.course.publish";
+const COURSE_DELETE_OPERATION = "community.course.delete";
 const COMMUNITY_OPERATIONS = [SETTINGS_UPDATE_OPERATION, JOIN_MODE_OPERATION, AGENT_INSTRUCTIONS_OPERATION,
-  HANDBOOK_DRAFT_OPERATION, HANDBOOK_APPROVE_OPERATION, ...CHANNEL_OPERATIONS, ...EVENT_OPERATIONS];
+  HANDBOOK_DRAFT_OPERATION, HANDBOOK_APPROVE_OPERATION, ...CHANNEL_OPERATIONS, ...EVENT_OPERATIONS,
+  COURSE_PUBLISH_OPERATION, COURSE_DELETE_OPERATION];
 const BUILDER_COMMUNITY_PATH = POLYNET_BUILDER_COMMUNITY_PATH;
 // People: actions on a selection of members (owners and admins).
 const MEMBERS_ROLE_OPERATION = "community.members.set_role";
@@ -1012,6 +1016,14 @@ function capabilityDocument(args: {
       required: ["channel"], optional: ["after"], channel: "a channel slug from the channels listing",
       after: "the slug of the channel it should follow; leave out or null to put it first",
       result: "result: { channel }", effects: ["reorder_channels"], forbidden_effects: ["move_general"] }
+    : args.operation === COURSE_PUBLISH_OPERATION ? {
+      required: ["course", "published"], course: "the course's id from builder/resources/", published: "true publishes it, false makes it a draft again",
+      result: "the person is shown the course with Yes and No, every time: the answer is waiting_for_person until they say. Then result: { course, published }",
+      effects: ["publish_or_unpublish_a_course_after_the_persons_yes"] }
+    : args.operation === COURSE_DELETE_OPERATION ? {
+      required: [], optional: ["course", "lesson"], one_of: "course or lesson, not both", course: "a published course's id from builder/resources/ (deletes it with its lessons)",
+      lesson: "a lesson's id in a published course", result: "the person is shown what goes with Yes and No, every time: the answer is waiting_for_person until they say. Then result: { deleted, name }",
+      effects: ["delete_published_course_content_after_the_persons_yes"], forbidden_effects: ["delete_sources"] }
     : args.operation === HANDBOOK_DRAFT_OPERATION ? {
       required: ["text"], text: `the handbook draft in markdown, up to ${COMMUNITY_HANDBOOK_MAX_CHARS} characters; members and the agent don't see it until approved`,
       result: "result: { approved_md, draft_md, ... }", effects: ["save_handbook_draft"] }
@@ -3031,6 +3043,22 @@ async function askPersonFirst(args: {
     } else if (operation === JOIN_MODE_OPERATION) {
       if (callInput.mode !== "open") return null;
       question = openCommunityQuestion();
+    } else if (operation === COURSE_PUBLISH_OPERATION || operation === COURSE_DELETE_OPERATION) {
+      const course = typeof callInput.course === "string" ? callInput.course : undefined;
+      const lesson = typeof callInput.lesson === "string" ? callInput.lesson : undefined;
+      if (operation === COURSE_PUBLISH_OPERATION && (!course || typeof callInput.published !== "boolean")) return null;
+      if (operation === COURSE_DELETE_OPERATION && Boolean(course) === Boolean(lesson)) return null;
+      const found = await args.ctx.runQuery((internal as any).communityResources.describeCourseTargetInternal,
+        { communityId: target.communityId, ...(lesson ? { lesson } : { course }) }) as { kind: "course" | "lesson"; name: string; course: string | null; live: boolean; lessons: number } | null;
+      if (!found) return canonicalError("semantic_not_found", "No course or lesson with that id here. List builder/resources/ for the ids.");
+      if (operation === COURSE_PUBLISH_OPERATION) {
+        // Nothing to change is said now, not after the person is asked.
+        if (found.live === callInput.published) return canonicalError("nothing_to_change", found.live ? "That course is already published." : "That course is already a draft.");
+        question = coursePublishQuestion({ name: found.name, publish: callInput.published === true, lessons: found.lessons });
+      } else {
+        if (!found.live) return canonicalError("not_published", "That is a draft: delete it with polynet_change_courses, no question needed.");
+        question = courseDeleteQuestion(found);
+      }
     } else {
       const refs = operation === REMOVE_POSTS_OPERATION ? removePostsRefs(target, operation, callInput) : null;
       if (!refs) return null;
@@ -3345,6 +3373,8 @@ async function executeCommunityOperation(args: {
     : operation === CHANNEL_DESCRIBE_OPERATION ? only(["channel", "description"]) && text("channel", 64) && text("description", 400)
     : operation === CHANNEL_MOVE_OPERATION ? only(["channel", "after"]) && text("channel", 64) &&
       (rawInput.after === undefined || rawInput.after === null || text("after", 64))
+    : operation === COURSE_PUBLISH_OPERATION ? only(["course", "published"]) && text("course", 180) && typeof rawInput.published === "boolean"
+    : operation === COURSE_DELETE_OPERATION ? only(["course", "lesson"]) && (text("course", 180) !== text("lesson", 180))
     // The handbook is published exactly as given, so a longer one is refused, never cut.
     : only(["text"]) && text("text", COMMUNITY_HANDBOOK_MAX_CHARS));
   if (!valid) {
@@ -3359,6 +3389,8 @@ async function executeCommunityOperation(args: {
       : operation === CHANNEL_RENAME_OPERATION ? "Give channel (its slug) and name."
       : operation === CHANNEL_DESCRIBE_OPERATION ? "Give channel (its slug) and description."
       : operation === CHANNEL_MOVE_OPERATION ? "Give channel (its slug) and, to put it after another, after (that channel's slug)."
+      : operation === COURSE_PUBLISH_OPERATION ? "Give course (its id from builder/resources/) and published (true or false)."
+      : operation === COURSE_DELETE_OPERATION ? "Give course or lesson (its id from builder/resources/), not both."
       : `Give text (the handbook is at most ${COMMUNITY_HANDBOOK_MAX_CHARS.toLocaleString("en-US")} characters).`);
   }
   // Opening lets in everyone who is waiting, and that can't be taken back.
@@ -3370,6 +3402,9 @@ async function executeCommunityOperation(args: {
       : operation === AGENT_INSTRUCTIONS_OPERATION
         ? personOnly({ what: "Changing the guide's instructions", where: "Settings: Guide",
           path: buildCommunityTabPath(target.communitySlug, "settings", null, "agent") })
+      : operation === COURSE_PUBLISH_OPERATION || operation === COURSE_DELETE_OPERATION
+        ? personOnly({ what: operation === COURSE_PUBLISH_OPERATION ? "Publishing or unpublishing a course" : "Deleting a published course or lesson",
+          where: "Knowledge: open the course, then the Published switch or Delete", path: buildCommunityTabPath(target.communitySlug, "resources") })
         : personOnly({ what: "Publishing the handbook", where: "Settings: Guide, then the handbook",
           path: buildCommunityTabPath(target.communitySlug, "settings", null, "agent") });
   }

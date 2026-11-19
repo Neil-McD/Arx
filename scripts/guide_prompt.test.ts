@@ -88,10 +88,11 @@ describe("what you may do", () => {
     expect(prompt(TALKS.owner).text).not.toContain("is not something this person can do");
   });
 
-  test("what only a person does is said, with where, for a role given the tool it belongs to", () => {
+  test("nothing is left only to a person: what can't be undone is asked about, for a role given the tool it belongs to", () => {
     const owner = prompt(TALKS.owner).text;
-    // Opening the community is asked about, like a role change; courses are still a person's, in Knowledge.
-    expect(owner).toMatch(/Only they can do these, in the app; tell them where: publishing or unpublishing a course/);
+    // Opening the community, the guide's instructions and publishing or deleting a published course are all asked about now.
+    expect(owner).not.toContain("Only they can do these");
+    expect(owner).toMatch(/After their yes, every time: [^\n]*publish or unpublish a course[^\n]*delete a published course or lesson/);
     expect(owner).toMatch(/After their yes, every time: [^\n]*open the community to everyone/);
     expect(owner).toMatch(/After their yes, every time: [^\n]*set the guide's instructions/);
     expect(prompt(TALKS.member).text).not.toContain("Only they can do these");

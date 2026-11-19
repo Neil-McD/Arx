@@ -339,10 +339,6 @@ function buildHowToWorkPrompt(): string {
 // An operation's person_only variant (CALL_OPERATION_VARIANTS) is said when
 // its tool is offered; a variant with no words here fails the guide's test.
 export const PERSON_ONLY_WORDS: Record<string, string> = {};
-// Course changes are made in draft; publishing, unpublishing and deleting
-// what members see are refused whole (convex/communityResourceChangesets.ts).
-const COURSE_PERSON_ONLY_WORDS =
-  "publishing or unpublishing a course, and deleting a published course or its lessons (Knowledge: open the course, then the Published switch at the top or Delete in its menu)";
 
 function toolWords(tool: ActionTool): string {
   return `${tool.title.slice(0, 1).toLowerCase()}${tool.title.slice(1)}`;
@@ -364,7 +360,7 @@ export function buildWhatYouMayDoPrompt(allowedToolNames: readonly RetrievalTool
         if (!words) throw new Error(`guide_person_only_words_missing:${key}`);
         return words;
       }),
-    ...(tools.some((tool) => tool.name === "polynet_change_courses") ? [COURSE_PERSON_ONLY_WORDS] : []),
+
   ];
   return [
     "WHAT YOU MAY DO",

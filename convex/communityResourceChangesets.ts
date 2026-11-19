@@ -135,9 +135,9 @@ function normalizeChangesetModuleStatus(raw: unknown): "draft" | "live" {
 // course or lesson members can see. Those are a person's click in the app.
 // A refused step refuses the whole batch, so nothing is half done.
 export const AGENT_PUBLISH_REFUSAL =
-  "Publishing and unpublishing a course is done by a person in Polynet: open the course and use the Published switch. Nothing in this batch was applied.";
+  "A batch builds in draft: publishing or unpublishing a course is its own step, polynet_publish_course, which asks the person first. Nothing in this batch was applied.";
 export const AGENT_DELETE_LIVE_REFUSAL =
-  "This is in a published course, so members can see it. Deleting it is done by a person in Polynet (or unpublish the course there first). Nothing in this batch was applied.";
+  "This is in a published course, so members can see it: deleting it is its own step, polynet_delete_published, which asks the person first. Nothing in this batch was applied.";
 
 async function refuseIfModuleIsLive(ctx: any, moduleId: unknown): Promise<void> {
   if (!moduleId) return;

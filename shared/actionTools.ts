@@ -258,8 +258,18 @@ export const ACTION_TOOLS: ActionTool[] = [
     (a) => call("community.members.unban", a, { members: a.members })),
   // The operations are spelled out here: left to "as builder/resources/
   // describes", the guide guessed at names (create_lesson) and was refused.
+  tool("polynet_publish_course", "community.course.publish", "Publish or unpublish a course",
+    "Publish a course so members see it and its lessons, or unpublish it back to a draft so they stop seeing it. List builder/resources/ for the course's id. The person is asked first, every time.",
+    { community: COMMUNITY, course: { type: "string", minLength: 1, maxLength: 180, description: "The course's id from builder/resources/." },
+      published: { type: "boolean", description: "true publishes it, false makes it a draft again." } }, ["community", "course", "published"],
+    (a) => call("community.course.publish", a, { course: a.course, published: a.published })),
+  tool("polynet_delete_published", "community.course.delete", "Delete a published course or lesson",
+    "Delete a published course with its lessons, or one lesson in a published course. Members lose it, and it can't be brought back. Give course or lesson, not both; drafts are deleted with polynet_change_courses. The person is asked first, every time.",
+    { community: COMMUNITY, course: { type: "string", minLength: 1, maxLength: 180, description: "The course's id from builder/resources/." },
+      lesson: { type: "string", minLength: 1, maxLength: 180, description: "The lesson's id from builder/resources/." } }, ["community"],
+    (a) => call("community.course.delete", a, { ...only(a, ["course", "lesson"]) })),
   tool("polynet_change_courses", "polynet_write:builder", "Change courses and lessons",
-    "Make, edit, move and order courses and lessons, as one batch that is applied whole or not at all. A new course is a draft; publishing is done by a person in the app. List builder/resources/ first for each course's and lesson's id and updated_at. Each operation is one of: " +
+    "Make, edit, move and order courses and lessons, as one batch that is applied whole or not at all. A new course is a draft; publishing, unpublishing and deleting what members can see are polynet_publish_course and polynet_delete_published. List builder/resources/ first for each course's and lesson's id and updated_at. Each operation is one of: " +
     "create_module (a course: name, description_md, and a module_key you make up if lessons in this batch go in it); " +
     "create_page (a lesson: title, body_md, and module_id of an existing course or module_key of one made in this batch); " +
     "edit_page (resource_id, expected_updated_at, then what changes: title, body_md, module_id, lesson_links, which sets the links only: a lesson's files are added and removed by a person in the app); " +
