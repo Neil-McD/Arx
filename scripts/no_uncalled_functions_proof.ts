@@ -54,6 +54,8 @@ const ALLOWED = new Map<string, string>([
   ["stagingSeedBriefLab:seedBriefLabInternal", "operator tool: seeds the staging brief lab"],
   ["stagingSeedSunrise:seedSunriseInternal", "operator tool: seeds the staging Sunrise community"],
   ["stagingSeedSunrise:simulateSunriseLiveInternal", "operator tool: a simulated second member for live site checks"],
+  ["reviewDemoSeed:seedReviewDemoMessagesInternal", "operator tool: seeds direct messages to the reviewer account"],
+  ["reviewDemoSeed:resetReviewDemoInternal", "operator tool: resets the reviewer demo community between review runs"],
   ["stagingSeedPolynetDemo:seedPolynetDemoInternal", "operator tool: seeds the staging Polynet demo community with the mock's content"],
   ["stagingSeedPolynetDemo:seedPolynetDemoMessagesInternal", "operator tool: seeds direct messages to the demo community's owner"],
   ["stagingSeedPolynetDemo:seedPolynetDemoCoursesInternal", "operator tool: seeds the demo community's courses, lessons and progress"],
