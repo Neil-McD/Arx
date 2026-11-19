@@ -193,7 +193,12 @@ test("a file over the limit and a 13th resource are refused; only course editors
   await save(lessonId, { lesson_links: links });
   const twelfth = (await upload(lessonId)).body.file.id;
   await save(lessonId, { lesson_files: [{ id: twelfth, title: "Twelfth" }] });
-  expect(await upload(lessonId)).toMatchObject({ status: 409, body: { code: "lesson_resources_limit" } });
+  // A thirteenth can be uploaded (the host may be replacing one) but not saved alongside the other twelve...
+  const thirteenth = (await upload(lessonId)).body.file.id;
+  await expect(save(lessonId, { lesson_files: [{ id: twelfth, title: "Twelfth" }, { id: thirteenth, title: "Thirteenth" }] }))
+    .rejects.toThrow("lesson_resources_limit");
+  // ...and saved in place of one, in a single save.
+  await save(lessonId, { lesson_files: [{ id: thirteenth, title: "Its replacement" }] });
   await expect(save(lessonId, { lesson_links: [...links, { title: "One more", url: "https://example.com/more" }] }))
     .rejects.toThrow("lesson_resources_limit");
 });
