@@ -1347,6 +1347,29 @@ function WebCommunityAgentDock(props, ref) {
                 aria-label={presentation.composerLabel}
                 disabled={isPreparing || isStartingNewChat}
               />
+              {/* A picture for the guide to look at, or to put in a post for you. Dropping or pasting one worked already; this is the way in you can see. */}
+              <input
+                ref={fileInputRef}
+                className="community-agent-dock-file-input"
+                type="file"
+                multiple
+                accept={COMMUNITY_AGENT_IMAGE_ACCEPT}
+                onChange={(event) => {
+                  const files = Array.from(event.currentTarget.files ?? []);
+                  ingestAttachmentFiles(files);
+                  event.currentTarget.value = "";
+                }}
+              />
+              <button
+                type="button"
+                className={cx("ib")}
+                onClick={() => fileInputRef.current?.click()}
+                disabled={composerIsBusy || isPreparing || isStartingNewChat}
+                aria-label="Attach a picture"
+                title="Attach a picture"
+              >
+                <Icon name="image" />
+              </button>
               <button
                 type="button"
                 className={cx("ib")}

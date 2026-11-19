@@ -29,9 +29,18 @@ function waitingRows(ctx: any, communityId: any, userId: any) {
     .order("asc").take(20);
 }
 
-function view(row: any): GuideQuestionView {
-  return { id: String(row._id), kind: row.kind, question: row.question, text: row.text ?? null, items: row.items ?? [],
+async function view(ctx: any, row: any): Promise<GuideQuestionView> {
+  const shown: GuideQuestionView = { id: String(row._id), kind: row.kind, question: row.question, text: row.text ?? null, items: row.items ?? [],
     canAlways: GUIDE_ASK_ALWAYS_ALLOWABLE[row.kind as GuideAsk] === true };
+  if (!row.pictures?.length) return shown;
+  // Drawn from the person's own talk files, as the talk draws them; a
+  // picture whose message they deleted since has no address.
+  const pictures = await Promise.all(row.pictures.map(async (picture: { id: any; name: string }) => {
+    const file: any = await ctx.db.get(picture.id);
+    const url = file && String(file.ownerId) === String(row.userId) ? await ctx.storage.getUrl(file.storageId) : null;
+    return { id: String(picture.id), name: picture.name, url: url ?? null };
+  }));
+  return { ...shown, pictures };
 }
 
 // ---- the executor's side
@@ -112,6 +121,7 @@ export const askInternal = internalMutation({
     kind: v.union(v.literal("post"), v.literal("remove"), v.literal("change"), v.literal("message")),
     toolName: v.string(), inputJson: v.string(), question: v.string(), place: v.optional(v.string()), text: v.optional(v.string()),
     items: v.optional(v.array(v.object({ who: v.string(), text: v.string() }))), runId: v.optional(v.string()),
+    pictures: v.optional(v.array(v.object({ id: v.id("cloudThreadAttachments"), name: v.string() }))),
   },
   handler: async (ctx, args) => {
     if (args.inputJson.length > INPUT_MAX_CHARS || (args.text ?? "").length > GUIDE_QUESTION_TEXT_MAX) return { ok: false as const };
@@ -127,6 +137,7 @@ export const askInternal = internalMutation({
       ...(args.place ? { place: args.place.slice(0, 120) } : {}),
       ...(args.text ? { text: args.text } : {}),
       ...(args.items ? { items: args.items } : {}),
+      ...(args.pictures?.length ? { pictures: args.pictures } : {}),
       status: "waiting", ...(args.runId ? { runId: args.runId } : {}), createdAt: nowMs,
     });
     return { ok: true as const, questionId: String(questionId) };
@@ -140,7 +151,7 @@ export const listGuideQuestions = query({
   handler: async (ctx, args): Promise<GuideQuestionView[]> => {
     const userId = await resolveUserIdForAuthenticatedRequest({ ctx, authSubject: args.authSubject ?? null });
     const since = Date.now() - GUIDE_QUESTION_WAIT_MS;
-    return (await waitingRows(ctx, args.communityId, userId)).filter((row: any) => row.createdAt > since).map(view);
+    return await Promise.all((await waitingRows(ctx, args.communityId, userId)).filter((row: any) => row.createdAt > since).map((row: any) => view(ctx, row)));
   },
 });
 
@@ -167,7 +178,8 @@ export const claimInternal = internalMutation({
     const user: any = await ctx.db.get(userId);
     const community: any = await ctx.db.get(row.communityId);
     return { run: true as const, userId: String(userId), authSubject: String(user?.authSubject ?? ""), communitySlug: String(community?.slug ?? ""),
-      toolName: row.toolName, inputJson: row.inputJson, kind: row.kind, place: row.place ?? null };
+      toolName: row.toolName, inputJson: row.inputJson, kind: row.kind, place: row.place ?? null,
+      pictures: (row.pictures ?? []).map((picture: any) => String(picture.id)) };
   },
 });
 
@@ -203,6 +215,8 @@ export const answerGuideQuestion = action({
         ctx, authSubject: claimed.authSubject, userId: claimed.userId, principalKind: "community_agent_for_member",
         mountedCommunityId: String(args.communityId), evidenceSurface: "member_agent_dock", toolName: claimed.toolName, input,
         personSaidYes: true,
+        // The pictures the person was shown, never chosen again.
+        ...(claimed.pictures.length ? { approvedPictures: claimed.pictures } : {}),
       });
       // Changing, removing or banning members: done for each person on its own.
       const members = String(input.operation ?? "").startsWith("community.members.");

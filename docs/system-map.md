@@ -246,7 +246,7 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
   that share its words, and with one `reply.draft` it writes a reply and the
   lesson it rests on, or that no lesson answers it. The draft waits on the
   host's Home, "Your guide suggests"; `postReplyDraft` puts it in the thread
-  as the guide, `skipReplyDraft` drops it. At most three in 24 hours); `communityGuideQuestions` (tables
+  as the guide, `skipReplyDraft` drops it. At most three in 24 hours); `communityGuidePictures` (the pictures a person attached in their talk, found again from the guide's run so a post or reply can carry them: only this person's, this talk's, images within the limits, copied into files of the post's own); `communityGuideQuestions` (tables
   `communityGuideQuestions`, `communityGuideAlwaysAllowed`: what the guide
   asks a person before doing something for them in their private talk. The
   executor saves a channel write or a removal instead of running it and

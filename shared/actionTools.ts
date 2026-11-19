@@ -23,6 +23,7 @@
 import { CALL_OPERATION_VARIANTS, CALL_OPERATIONS, requestFingerprint, TOOL_OPERATIONS, type OperationEntry } from "./operationCatalog.ts";
 import type { PlatformOperationJsonSchema } from "./platformOperationContract.ts";
 import { RESOURCE_CHANGESET_OPERATION_SCHEMA } from "./polynetCanonicalToolContract.ts";
+import { COMMUNITY_ATTACHMENT_MAX_COUNT } from "./communityAttachmentPolicy.ts";
 
 export type ActionToolRole = "member" | "moderator" | "builder";
 export type ActionToolDoor = "own_ai" | "guide";
@@ -44,6 +45,10 @@ export type ActionTool = {
   // Missing: both doors. "own_ai": only a person's own AI. "guide": only the
   // guide in a private talk.
   door?: ActionToolDoor;
+  // Inputs only the guide in a private talk is given, with the one sentence
+  // that tells it when to use them and what it then requires. A person's own
+  // AI is not shown them, and the executor refuses them from it.
+  guideOnly?: { properties: Record<string, PlatformOperationJsonSchema>; required: string[]; sentence: string };
   properties: Record<string, PlatformOperationJsonSchema>;
   required: string[];
   translate: (args: Args) => Omit<Translated, "input"> & { input: Record<string, unknown> };
@@ -65,6 +70,12 @@ const MEMBERS: PlatformOperationJsonSchema = { type: "array", minItems: 1, maxIt
   description: "The people, each by their handle from the members listing (such as priya-shah), or a user:<id> ref. Look them up first; don't guess." };
 const EVENT: PlatformOperationJsonSchema = { type: "string", minLength: 1, maxLength: 64,
   description: "The event's parent_event_id from the events listing." };
+// The guide's only: pictures the person attached in their private talk, by
+// place, never by a file id, so it can name nothing else
+// (convex/communityGuidePictures.ts).
+const PICTURES: PlatformOperationJsonSchema = { type: ["string", "array"], items: { type: "integer", minimum: 1 },
+  maxItems: COMMUNITY_ATTACHMENT_MAX_COUNT,
+  description: 'Optional. "all", or which of the pictures on the person\'s latest message with pictures, by place, such as [1, 3] (1 is the first).' };
 const KEY: PlatformOperationJsonSchema = { type: "string", minLength: 1, maxLength: 120,
   description: "Optional. A name of your own for this one action; sending the same name again replays the first answer instead of doing it twice. Give one when you might retry." };
 
@@ -93,10 +104,16 @@ const call = (operation: string, args: Args, input: Record<string, unknown>): Tr
 const write = (path: string, mode: string, content: Record<string, unknown>): Translated => ({ toolName: "polynet_write", input: { path, mode, content } });
 
 function tool(name: string, catalog: string, title: string, description: string, properties: Record<string, PlatformOperationJsonSchema>,
-  required: string[], translate: ActionTool["translate"], door?: ActionToolDoor, guideDescription?: string): ActionTool {
+  required: string[], translate: ActionTool["translate"], door?: ActionToolDoor, guideDescription?: string,
+  guideOnly?: ActionTool["guideOnly"]): ActionTool {
   return { name, catalog, title, description, properties: { ...properties, idempotency_key: KEY }, required, translate,
-    ...(door ? { door } : {}), ...(guideDescription ? { guideDescription } : {}) };
+    ...(door ? { door } : {}), ...(guideDescription ? { guideDescription } : {}), ...(guideOnly ? { guideOnly } : {}) };
 }
+
+// A post's words, and the pictures when the guide was given some. The
+// pictures go through to the executor from either door; it refuses them from
+// anyone but the guide in a private talk.
+const postContent = (a: Args) => ({ text: a.text, ...(a.pictures !== undefined ? { pictures: a.pictures } : {}) });
 
 // ---- the tools
 
@@ -105,11 +122,14 @@ export const ACTION_TOOLS: ActionTool[] = [
   tool("polynet_post", "polynet_write:channels", "Post in a channel",
     "Start a new post in a channel, as the person you act for. Read the community's rules.md and the channel's recent posts first.",
     { community: COMMUNITY, channel: CHANNEL, text: TEXT("The post, as it will appear.", 8_000) }, ["community", "channel", "text"],
-    (a) => write(`${root(a.community)}channels/${a.channel}/`, "create", { text: a.text })),
+    (a) => write(`${root(a.community)}channels/${a.channel}/`, "create", postContent(a)), undefined, undefined,
+    // A post may be pictures alone, as a person's own post may be.
+    { properties: { pictures: PICTURES }, required: ["channel"], sentence: "If they attached pictures and want them in the post, set pictures." }),
   tool("polynet_reply", "polynet_write:channels", "Reply to a post",
     "Reply in a post's thread, as the person you act for.",
     { community: COMMUNITY, channel: CHANNEL, post: ROOT_POST, text: TEXT("The reply, as it will appear.", 8_000) }, ["community", "channel", "post", "text"],
-    (a) => write(`${root(a.community)}channels/${a.channel}/${a.post}/`, "append", { text: a.text })),
+    (a) => write(`${root(a.community)}channels/${a.channel}/${a.post}/`, "append", postContent(a)), undefined, undefined,
+    { properties: { pictures: PICTURES }, required: ["channel", "post"], sentence: "If they attached pictures and want them in the reply, set pictures." }),
   tool("polynet_edit_post", "polynet_write:channels", "Edit their own post",
     "Change the words of a post or reply the person you act for wrote. Not for anyone else's.",
     { community: COMMUNITY, channel: CHANNEL, post: POST, text: TEXT("The new words, in full.", 8_000) }, ["community", "channel", "post", "text"],
@@ -291,11 +311,14 @@ const GUIDE_FILLS = new Set(["community", "idempotency_key", "revision"]);
 
 // The same tool as the guide is given it.
 export function guideToolDefinition(entry: ActionTool) {
-  const properties = Object.fromEntries(Object.entries(entry.properties).filter(([key]) => !GUIDE_FILLS.has(key)));
+  const properties = { ...Object.fromEntries(Object.entries(entry.properties).filter(([key]) => !GUIDE_FILLS.has(key))),
+    ...entry.guideOnly?.properties };
+  const description = entry.guideDescription ?? entry.description;
   return {
     name: entry.name,
-    description: entry.guideDescription ?? entry.description,
-    inputSchema: { type: "object", additionalProperties: false, required: entry.required.filter((key) => !GUIDE_FILLS.has(key)), properties } as PlatformOperationJsonSchema,
+    description: entry.guideOnly ? `${description} ${entry.guideOnly.sentence}` : description,
+    inputSchema: { type: "object", additionalProperties: false,
+      required: entry.guideOnly?.required ?? entry.required.filter((key) => !GUIDE_FILLS.has(key)), properties } as PlatformOperationJsonSchema,
   };
 }
 

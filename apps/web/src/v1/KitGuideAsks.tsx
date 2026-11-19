@@ -3,7 +3,8 @@
 // posts, or change, remove or ban members, it shows exactly what it would do
 // (the words, the posts, or the people) and waits here: Yes, No, and for
 // posts only "Always allow" (shared/guideQuestions.ts). A message's question
-// names who it goes to. Nothing is done before the click. After it, one line
+// names who it goes to; a post with pictures shows them, as small as the
+// pictures waiting in the box below. Nothing is done before the click. After it, one line
 // says what happened, with the way to see it.
 import { useState } from "react";
 import { Sparkles, X } from "lucide-react";
@@ -22,6 +23,18 @@ export function useGuideQuestions(session: unknown, communityId: string | null, 
   const { data } = useLiveQuery<GuideQuestionView[]>(session, "communityGuideQuestions:listGuideQuestions",
     subject && communityId && enabled ? { authSubject: subject, communityId } : null);
   return enabled ? data ?? [] : [];
+}
+
+// The pictures a post's question shows, and a line for any the person has
+// since deleted from their talk (a yes is then refused, so they are told).
+export function guideAskPictures(question: Pick<GuideQuestionView, "pictures">): {
+  shown: Array<{ id: string; name: string; url: string }>; goneLine: string | null;
+} {
+  const pictures = question.pictures ?? [];
+  const shown = pictures.flatMap((picture) => (picture.url ? [{ id: picture.id, name: picture.name, url: picture.url }] : []));
+  const gone = pictures.length - shown.length;
+  return { shown, goneLine: gone === 0 ? null
+    : `${gone === 1 ? "1 picture is" : `${gone} pictures are`} no longer in your talk, so this can't be posted. Say No and ask again.` };
 }
 
 export function alwaysLabel(question: Pick<GuideQuestionView, "kind">): string {
@@ -51,6 +64,7 @@ export function GuideAsks(props: {
   if (!question && !result) return null;
   const items = question ? (allShown ? question.items : question.items.slice(0, GUIDE_ASK_ITEMS_SHOWN)) : [];
   const hidden = question ? question.items.length - items.length : 0;
+  const pictures = guideAskPictures(question ?? {});
   return (
     <div className={cx("gask")}>
       {/* What the last answer did, until the guide asks again. */}
@@ -65,6 +79,15 @@ export function GuideAsks(props: {
         <section className={cx("gbox")} aria-label="Your guide asks">
           <h3><Sparkles size={15} strokeWidth={1.8} aria-hidden="true" />{question.question}</h3>
           {question.text ? <p className={cx("gwhat")}>{question.text}</p> : null}
+          {/* The talk's own picture tiles (WebCommunityAgentDock.css), without the remove button. */}
+          {pictures.shown.length > 0 ? (
+            <div className="community-agent-dock-composer-attachments" style={{ marginTop: 10, padding: 0 }}>
+              {pictures.shown.map((picture) => (
+                <div className="community-agent-dock-composer-image" key={picture.id}><img src={picture.url} alt={picture.name} /></div>
+              ))}
+            </div>
+          ) : null}
+          {pictures.goneLine ? <p className={cx("gwhat")}>{pictures.goneLine}</p> : null}
           {items.length > 0 ? (
             <ul className={cx("gwhat", "list")}>
               {items.map((item, index) => <li key={index}><b>{item.who}</b><span>{item.text}</span></li>)}
