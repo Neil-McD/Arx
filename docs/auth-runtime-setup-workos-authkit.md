@@ -59,7 +59,7 @@ For hosted MCP auth, configure the WorkOS/AuthKit Resource Indicator to the same
 https://<POLYNET_ORIGIN>/runtime/mcp
 ```
 
-Set `ARX_MCP_RESOURCE_URL` to that exact value in production so OAuth protected-resource metadata does not drift when requests pass through Vercel, Convex, or another proxy origin. Set `ARX_MCP_AUTH_JWT_AUDIENCE` to the same value when MCP access tokens carry the resource URL as their `aud` claim. Keep `ARX_AUTH_JWT_AUDIENCE` for the primary web/session JWT audience if it differs.
+Set `ARX_MCP_RESOURCE_URL` to that exact value in production so OAuth protected-resource metadata does not drift when requests pass through Vercel, Convex, or another proxy origin. Set `ARX_MCP_AUTH_JWT_AUDIENCE` to the same value (MCP access tokens carry the resource URL as their `aud` claim). It is not a Convex sign-in provider: only `/runtime/mcp` accepts such a token, after checking it itself (`shared/mcpAccessToken.ts`). Keep `ARX_AUTH_JWT_AUDIENCE` for the primary web/session JWT audience if it differs.
 
 Only set `ARX_AUTH_REGISTRATION_URL` when the upstream issuer has a verified dynamic registration endpoint. Polynet must not infer one from the token endpoint.
 

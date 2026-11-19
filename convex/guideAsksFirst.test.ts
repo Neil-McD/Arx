@@ -51,7 +51,8 @@ async function world() {
   });
   const subject = (who: Who) => `${who}-subject`;
   const door = (who: Who, principalKind: "external_mcp" | "community_agent_for_member", runId?: string) => (toolName: any, input: Record<string, unknown>) => {
-    const as = t.withIdentity({ subject: subject(who) });
+    // An outside AI's call has no backend sign-in behind it (the MCP door checks its token itself).
+    const as = principalKind === "external_mcp" ? t : t.withIdentity({ subject: subject(who) });
     return executePolynetCanonicalTool({
       ctx: { runQuery: (r: any, a: any) => as.query(r, a), runMutation: (r: any, a: any) => as.mutation(r, a), runAction: (r: any, a: any) => as.action(r, a) } as any,
       authSubject: subject(who), userId: String(ids[who]), principalKind, ...(runId ? { runId } : {}),

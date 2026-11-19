@@ -171,6 +171,9 @@ export async function listAccessibleCommunityDirectoryPage(args: {
   ctx: any;
   authSubject: string;
   userId?: any;
+  // The MCP door verified this person's token itself (convex/http.ts); there
+  // is no Convex session identity to recheck.
+  verifiedAtDoor?: boolean;
   cursor?: string | null;
   limit?: number | null;
 }): Promise<
@@ -194,11 +197,13 @@ export async function listAccessibleCommunityDirectoryPage(args: {
     return { ok: false, code: "invalid_limit" };
   }
   const limit = args.limit ?? COMMUNITY_SEMANTIC_DIRECTORY_DEFAULT_LIMIT;
-  const userId = await resolveUserIdForAuthenticatedRequest({
-    ctx: args.ctx,
-    userId: args.userId,
-    authSubject: args.authSubject,
-  });
+  const userId = args.verifiedAtDoor
+    ? (await resolveAuthenticatedActorByTrustedSubject({ ctx: args.ctx, authSubject: args.authSubject, userId: args.userId })).dbUserId
+    : await resolveUserIdForAuthenticatedRequest({
+      ctx: args.ctx,
+      userId: args.userId,
+      authSubject: args.authSubject,
+    });
   const communities: CommunityReadSummary[] = [];
   let skippedIncomplete = 0;
   const phase = parsedCursor.phase;
@@ -311,6 +316,7 @@ export const listAccessibleCommunityDirectoryPageInternal = internalQuery({
     userId: v.optional(v.id("users")),
     cursor: v.optional(v.string()),
     limit: v.optional(v.number()),
+    verifiedAtDoor: v.optional(v.literal(true)),
   },
   handler: async (ctx, args) =>
     await listAccessibleCommunityDirectoryPage({
@@ -319,6 +325,7 @@ export const listAccessibleCommunityDirectoryPageInternal = internalQuery({
       userId: args.userId,
       cursor: args.cursor,
       limit: args.limit,
+      verifiedAtDoor: args.verifiedAtDoor === true,
     }),
 });
 
@@ -530,12 +537,16 @@ export const resolveCommunityMemberSelfContextInternal = internalQuery({
     authSubject: v.string(),
     userId: v.optional(v.id("users")),
     communityId: v.id("communities"),
+    // The MCP door verified this person's token itself (convex/http.ts).
+    verifiedAtDoor: v.optional(v.literal(true)),
   },
   handler: async (ctx, args) => {
     try {
-      const actorUserId = await resolveUserIdForAuthenticatedRequest({
-        ctx, authSubject: args.authSubject, userId: args.userId,
-      });
+      const actorUserId = args.verifiedAtDoor
+        ? (await resolveAuthenticatedActorByTrustedSubject({ ctx, authSubject: args.authSubject, userId: args.userId })).dbUserId
+        : await resolveUserIdForAuthenticatedRequest({
+          ctx, authSubject: args.authSubject, userId: args.userId,
+        });
       const context = await resolveSelfCommunityMembershipContext({
         ctx, actorUserId, communityId: args.communityId,
       });

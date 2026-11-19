@@ -6,7 +6,8 @@ import { registerRuntimeAuthBridgeRoutes } from "./httpAuthBridge";
 import { registerRuntimeBillingRoutes } from "./httpBilling";
 import { registerRuntimeMcpRoutes } from "./httpMcp";
 import { registerEmailRoutes } from "./httpEmail";
-import { readAuthenticatedIdentityProfile } from "./authIdentity";
+import { identityProfileFromClaims, readAuthenticatedIdentityProfile, type AuthenticatedIdentityProfile } from "./authIdentity";
+import { bearerToken, verifyMcpAccessToken } from "../shared/mcpAccessToken.ts";
 import { parseOptionalString } from "./httpInferenceConfig";
 import { registerRuntimeTurnRoutes } from "./httpRuntimeRoutes";
 import { registerRuntimeVoiceRoutes } from "./httpVoice";
@@ -128,25 +129,41 @@ async function requireVerifiedIdentity(
   };
 }
 
-const requireAuthenticatedActor: RequireAuthenticatedActor = async (
-  ctx: any,
-  req: Request,
-): Promise<
-  | {
-      ok: true;
-      actor: {
-        userId: string;
-        dbUserId: any;
-        authSubject: string;
-        email: string | null;
-        displayName: string | null;
-        avatarUrl: string | null;
-      };
-    }
-  | { ok: false; response: Response }
-> => {
+type ActorResult = Awaited<ReturnType<RequireAuthenticatedActor>>;
+
+const requireAuthenticatedActor: RequireAuthenticatedActor = async (ctx: any, req: Request) => {
   const authIdentity = await requireVerifiedIdentity(ctx, req);
   if (!authIdentity.ok) return authIdentity;
+  return await actorForVerifiedIdentity(ctx, req, authIdentity.identity);
+};
+
+// The MCP door: only a token minted for it (shared/mcpAccessToken.ts), which
+// the backend's general sign-in does not accept.
+const requireMcpActor: RequireAuthenticatedActor = async (ctx: any, req: Request) => {
+  const algorithm = readEnvValue("ARX_AUTH_JWT_ALGORITHM").toUpperCase() === "ES256" ? "ES256" as const : "RS256" as const;
+  const issuer = readEnvValue("ARX_AUTH_JWT_ISSUER").replace(/\/+$/, "");
+  const verified = await verifyMcpAccessToken(bearerToken(req), {
+    issuer,
+    jwksUrl: readEnvValue("ARX_AUTH_JWT_JWKS_URL") || (issuer ? `${issuer}/.well-known/jwks.json` : ""),
+    audience: readEnvValue("ARX_MCP_AUTH_JWT_AUDIENCE"),
+    algorithm,
+  });
+  const identity = verified.ok ? identityProfileFromClaims(verified.claims) : null;
+  if (!identity) {
+    return { ok: false, response: jsonResponse(req, 401, { ok: false, code: "auth_invalid_bearer_token", reason: verified.ok ? "no_subject" : verified.reason }) };
+  }
+  return await actorForVerifiedIdentity(ctx, req, identity);
+};
+
+function readEnvValue(name: string): string {
+  return String((globalThis as any)?.process?.env?.[name] ?? "").trim();
+}
+
+async function actorForVerifiedIdentity(
+  ctx: any,
+  req: Request,
+  identity: AuthenticatedIdentityProfile,
+): Promise<ActorResult> {
   const {
     authSubject,
     email,
@@ -154,7 +171,7 @@ const requireAuthenticatedActor: RequireAuthenticatedActor = async (
     emailVerificationSource,
     displayName,
     avatarUrl,
-  } = authIdentity.identity;
+  } = identity;
   const normalizedIdentityEmail = normalizeEmailForVerification(email);
   const existingActor = await ctx
     .runQuery((internal as any).authActor.resolveAuthenticatedActorInternal, { authSubject })
@@ -216,7 +233,7 @@ const requireAuthenticatedActor: RequireAuthenticatedActor = async (
       avatarUrl,
     },
   };
-};
+}
 
 const http = httpRouter();
 
@@ -280,7 +297,7 @@ registerRuntimeMcpRoutes({
   httpAction,
   jsonResponse,
   optionsResponse,
-  requireAuthenticatedActor,
+  requireAuthenticatedActor: requireMcpActor,
 });
 
 registerRuntimeTurnRoutes({

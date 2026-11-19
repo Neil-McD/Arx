@@ -79,8 +79,9 @@ async function fixture() {
   });
   const users: Record<string, any> = ids;
   const call = async (handle: string, name: string, args: Record<string, unknown>) => {
-    // The verified sign-in travels with the request, as it does in production.
-    const as = t.withIdentity({ subject: `${handle}-subject` });
+    // As in production: the MCP door verified the token itself, and nothing
+    // after it has a backend sign-in to lean on.
+    const as = t;
     const res = await handleMcpPost({
       ctx: { runQuery: (ref: any, a: any) => as.query(ref, a), runMutation: (ref: any, a: any) => as.mutation(ref, a), runAction: (ref: any, a: any) => as.action(ref, a) },
       req: new Request("https://example.convex.site/runtime/mcp", {
