@@ -126,6 +126,26 @@ export async function verifyMcpAccessToken(
   return { ok: true, claims };
 }
 
+// Which AI app a token was issued to, as a person would name it: its OAuth
+// client (client_id, or azp) by the address it is published at (Claude's and
+// ChatGPT's published client documents), else null and the card says "Your
+// AI app". Only a label on the Yes/No card; nothing is allowed by it.
+const AI_APPS: Array<[RegExp, string]> = [
+  [/(^|\.)(claude\.ai|anthropic\.com)$/i, "Claude"],
+  [/(^|\.)(chatgpt\.com|openai\.com)$/i, "ChatGPT"],
+  [/(^|\.)cursor\.(com|sh)$/i, "Cursor"],
+  [/(^|\.)(github\.com|visualstudio\.com)$/i, "VS Code"],
+];
+export function aiAppNameFromClaims(claims: Record<string, unknown>): string | null {
+  const client = String(claims.client_id ?? claims.azp ?? "").trim();
+  let host = "";
+  try { host = new URL(client).hostname; } catch { return null; }
+  const path = (() => { try { return new URL(client).pathname.toLowerCase(); } catch { return ""; } })();
+  if (/(^|\.)openai\.com$/i.test(host) && path.includes("codex")) return "Codex";
+  if (/(^|\.)claude\.ai$/i.test(host) && path.includes("claude-code")) return "Claude Code";
+  return AI_APPS.find(([pattern]) => pattern.test(host))?.[1] ?? null;
+}
+
 // Tests start from an empty key cache.
 export function resetMcpAccessTokenKeysForTest() {
   keyCache.clear();

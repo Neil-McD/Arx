@@ -135,7 +135,7 @@ export const ACTION_TOOLS: ActionTool[] = [
     { community: COMMUNITY, channel: CHANNEL, post: POST, text: TEXT("The new words, in full.", 8_000) }, ["community", "channel", "post", "text"],
     (a) => write(`${root(a.community)}channels/${a.channel}/${a.post}.md`, "update", { text: a.text })),
   tool("polynet_delete_post", "polynet_write:channels:delete", "Delete their own post",
-    "Delete a post or reply the person you act for wrote. It can't be brought back. Not for anyone else's.",
+    "Delete a post or reply the person you act for wrote. It can't be brought back. Not for anyone else's. The person is asked first, every time.",
     { community: COMMUNITY, channel: CHANNEL, post: POST }, ["community", "channel", "post"],
     (a) => write(`${root(a.community)}channels/${a.channel}/${a.post}.md`, "delete", {})),
   tool("polynet_react", "community.interaction.react", "React to a post",
@@ -179,7 +179,7 @@ export const ACTION_TOOLS: ActionTool[] = [
     "Remove other people's posts or replies (spam, abuse). They can't be brought back. The person is shown the posts and asked first, every time.",
     { community: COMMUNITY, posts: { type: "array", minItems: 1, maxItems: 100, items: POST, description: "The posts' refs from channel or thread listings." } },
     ["community", "posts"],
-    (a) => call("community.interaction.remove", a, { refs: a.posts }), "guide"),
+    (a) => call("community.interaction.remove", a, { refs: a.posts })),
 
   // A builder (owner or admin).
   tool("polynet_update_community", "community.settings.update", "Change the community's details",
@@ -203,10 +203,9 @@ export const ACTION_TOOLS: ActionTool[] = [
     { community: COMMUNITY, text: { type: "string", maxLength: 6_000, description: "The draft, in markdown." } }, ["community", "text"],
     (a) => call("community.handbook.save_draft", a, { text: a.text })),
   tool("polynet_publish_handbook", "community.handbook.approve", "Publish the handbook to members",
-    "Publish exactly this text as the handbook every member and the guide reads. Show the person the text and get their yes first. Empty text takes the handbook away.",
+    "Publish exactly this text as the handbook every member and the guide reads. The person is shown the text and asked first, every time. Empty text takes the handbook away.",
     { community: COMMUNITY, text: { type: "string", maxLength: 6_000, description: "The handbook, in markdown, exactly as members will read it." } }, ["community", "text"],
-    (a) => call("community.handbook.approve", a, { text: a.text }), undefined,
-    "Publish exactly this text as the handbook every member and the guide reads. The person is shown the text and asked first, every time. Empty text takes the handbook away."),
+    (a) => call("community.handbook.approve", a, { text: a.text })),
   tool("polynet_create_channel", "community.channel.create", "Make a channel",
     "Make a new channel open to every member. A private channel is made in the app.",
     { community: COMMUNITY, name: TEXT("The channel's name.", 40) }, ["community", "name"],
@@ -236,19 +235,18 @@ export const ACTION_TOOLS: ActionTool[] = [
     { community: COMMUNITY, event: EVENT }, ["community", "event"],
     (a) => call("community.event.cancel", a, { event: a.event })),
   tool("polynet_set_member_role", "community.members.set_role", "Change people's role",
-    "Make people admins, moderators or plain members. This changes who runs the community: name the people and the role to the person and get their yes first.",
+    "Make people admins, moderators or plain members. This changes who runs the community. The person is shown who and the role and asked first, every time.",
     { community: COMMUNITY, members: MEMBERS, role: { type: "string", enum: ["member", "moderator", "admin"], description: "The role to give them." } }, ["community", "members", "role"],
-    (a) => call("community.members.set_role", a, { members: a.members, role: a.role }), undefined,
-    "Make people admins, moderators or plain members. This changes who runs the community. The person is shown who and the role and asked first, every time."),
+    (a) => call("community.members.set_role", a, { members: a.members, role: a.role })),
   tool("polynet_remove_members", "community.members.remove", "Remove people from the community",
     "Remove people from the community: they lose access, anyone paying loses their subscription, and they can ask to join again later. The person is shown who and asked first, every time.",
     { community: COMMUNITY, members: MEMBERS }, ["community", "members"],
-    (a) => call("community.members.remove", a, { members: a.members }), "guide"),
+    (a) => call("community.members.remove", a, { members: a.members })),
   tool("polynet_ban_members", "community.members.ban", "Ban people",
     "Ban people: they are removed, anyone paying loses their subscription, and they can't rejoin unless unbanned. The person is shown who and asked first, every time.",
     { community: COMMUNITY, members: MEMBERS, reason: { type: "string", maxLength: 1_000, description: "Optional. Why, for the record; the person sees it in the question." } },
     ["community", "members"],
-    (a) => call("community.members.ban", a, { members: a.members, ...only(a, ["reason"]) }), "guide"),
+    (a) => call("community.members.ban", a, { members: a.members, ...only(a, ["reason"]) })),
   tool("polynet_unban_members", "community.members.unban", "Lift a ban",
     "Lift the ban on people so they can ask to join again.",
     { community: COMMUNITY, members: MEMBERS }, ["community", "members"],
@@ -328,6 +326,9 @@ export function guideActionKey(runId: string, toolCallId: string): string {
   return requestFingerprint(`guide-${runId}`, "tool_call", toolCallId);
 }
 
+// What an outside AI is told about a tool Polynet asks the person about.
+export const OWN_AI_ASKED_IN_POLYNET = "Polynet asks the person itself: the answer is waiting_for_person, with where they say Yes or No in Polynet. Tell them that, and don't call again until they say they have answered; then the same call with the same idempotency_key gives what happened.";
+
 // Tools whose effect is more than adding something: they email members,
 // replace or take away what others see, or decide who is in. Marked
 // destructive, so the person's own AI app asks them before running one
@@ -351,9 +352,16 @@ export const ACTION_TOOLS_THAT_ADD = new Set([
 export function actionToolDefinition(entry: ActionTool) {
   const listed = actionToolEntry(entry);
   const destructive = listed.ask === "every_time" || listed.effect === "destroy" || ACTION_TOOLS_THAT_NEED_CARE.has(entry.name);
-  // Said to an outside AI only: the guide's own questions come from the server.
-  const askFirst = destructive && !/yes first|asked first/.test(entry.description)
-    ? " Tell the person what this will do and get their yes before calling it." : "";
+  // Said to an outside AI only (the guide's own questions come from the
+  // server). What asks every time is asked by Polynet itself, with a Yes/No
+  // card in Polynet (convex/communityGuideQuestions.ts); a reply in the
+  // person's direct messages is sent by their own AI, as they asked. For the
+  // rest that needs care, their AI app is told to ask them.
+  const askedInPolynet = listed.ask === "every_time" && entry.catalog !== "polynet_write:messages";
+  const askFirst = askedInPolynet
+    ? ` ${OWN_AI_ASKED_IN_POLYNET}`
+    : destructive && !/yes first|asked first/.test(entry.description)
+      ? " Tell the person what this will do and get their yes before calling it." : "";
   return {
     name: entry.name,
     title: entry.title,

@@ -57,6 +57,8 @@ export type AuthenticatedActor = {
   email: string | null;
   displayName: string | null;
   avatarUrl: string | null;
+  // The MCP door only: which AI app the token was issued to, by name.
+  aiApp?: string | null;
 };
 
 export type RequireAuthenticatedActor = (

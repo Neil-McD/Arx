@@ -23,6 +23,8 @@ export type GuideQuestionView = {
   items: Array<{ who: string; text: string }>;
   // Whether "Always allow" is offered for this kind.
   canAlways: boolean;
+  // The person's own AI app that asked ("Claude"), when it wasn't the guide.
+  askedBy?: string;
   // The pictures that would go out with the words, from the person's own
   // talk. Only on a post that has them; url is null once the person deleted
   // the message they were on (then a yes is refused).
@@ -136,6 +138,9 @@ export function answerLineForGuide(args: { question: string; status: "done" | "d
 
 // What the guide's tool call answers while the person hasn't.
 export const WAITING_FOR_PERSON = "waiting_for_person";
+// At most this many requests from a person's own AIs wait for their answer at
+// once, in one community; past it the AI is told to wait.
+export const OWN_AI_WAITING_MAX = 10;
 export function waitingToolAnswer(question: string) {
   return {
     ok: true,

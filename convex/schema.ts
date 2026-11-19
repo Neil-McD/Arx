@@ -1841,6 +1841,10 @@ export default defineSchema({
     resultLine: v.optional(v.string()),
     resultPath: v.optional(v.string()),
     runId: v.optional(v.string()),
+    // Asked by the person's own AI through the MCP, not the guide: the app it
+    // is, as the card names it ("Claude asks"). Its yes runs the call as that
+    // AI's (external_mcp), and the guide's turns never drop it.
+    ownAiApp: v.optional(v.string()),
     createdAt: v.number(),
     answeredAt: v.optional(v.number()),
     // Dropped because the person moved on to another turn, not answered.

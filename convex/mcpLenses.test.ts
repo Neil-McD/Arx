@@ -79,7 +79,7 @@ async function fixture() {
   });
   const users: Record<string, any> = ids;
   let lastError: { code: number; message: string } | null = null;
-  const call = async (handle: string, name: string, args: Record<string, unknown>) => {
+  const call = async (handle: string, name: string, args: Record<string, unknown>, aiApp?: string) => {
     // As in production: the MCP door verified the token itself, and nothing
     // after it has a backend sign-in to lean on.
     const as = t;
@@ -90,7 +90,7 @@ async function fixture() {
         body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name, arguments: args } }),
       }),
       jsonResponse: (_req, status, payload) => Response.json(payload, { status }),
-      requireAuthenticatedActor: async () => ({ ok: true, actor: { authSubject: `${handle}-subject`, dbUserId: users[handle] } }) as any,
+      requireAuthenticatedActor: async () => ({ ok: true, actor: { authSubject: `${handle}-subject`, dbUserId: users[handle], ...(aiApp ? { aiApp } : {}) } }) as any,
     });
     const json = await res.json() as any;
     lastError = json.error ?? null;
@@ -658,4 +658,104 @@ test("two people's AIs sending the same short words, or picking the same key, ma
   const roots = (await f.t.run((ctx: any) => ctx.db.query("communityInteractionRoots").collect())) as any[];
   expect(roots.filter((root) => root.contentSummary === "Count me in!")).toHaveLength(2);
   expect(roots.filter((root) => /hills on Thursday/.test(root.contentSummary))).toHaveLength(1);
+});
+
+// A person's own AI asks for what asks every time: Polynet asks the person
+// with a Yes/No card (convex/communityGuideQuestions.ts) and runs the saved
+// request only after their yes, once.
+async function approvalsFixture() {
+  const f = await fixture();
+  const runClub = await f.t.run(async (ctx: any) => (await ctx.db.query("communities").collect()).find((row: any) => row.slug === "run-club")._id);
+  const asOwner = f.t.withIdentity({ subject: "owner-subject" });
+  const cards = () => asOwner.query((api as any).communityGuideQuestions.listGuideQuestions, { communityId: runClub }) as Promise<any[]>;
+  const answer = (questionId: string, reply: "yes" | "no") =>
+    asOwner.action((api as any).communityGuideQuestions.answerGuideQuestion, { communityId: runClub, questionId, answer: reply });
+  const role = () => f.t.run(async (ctx: any) => (await ctx.db.query("communityMemberships").collect())
+    .find((row: any) => String(row.userId) === String(f.users.member) && String(row.communityId) === String(runClub)).role);
+  return { ...f, runClub, cards, answer, role };
+}
+
+test("a person's own AI asks to change a role: Polynet asks the person, and only their Yes runs it, once", async () => {
+  const f = await approvalsFixture();
+  const ask = { community: "run-club", members: ["member"], role: "moderator", idempotency_key: "make-mod" };
+  const asked = await f.call("owner", "polynet_set_member_role", ask, "Claude");
+  expect(asked.isError, JSON.stringify(asked)).toBe(false);
+  expect(asked.structuredContent).toMatchObject({ status: "waiting_for_person", approve_in_polynet: expect.stringContaining("/c/run-club/") });
+  expect(asked.structuredContent.note).toContain('idempotency_key "make-mod"');
+  expect(await f.role()).toBe("member");
+  // The card names the app that asked; it can't be always-allowed.
+  const [card, ...others] = await f.cards();
+  expect(others).toEqual([]);
+  expect(card).toMatchObject({ kind: "change", askedBy: "Claude", canAlways: false });
+  // Asking again is the same request, still waiting: one card, nothing done.
+  expect((await f.call("owner", "polynet_set_member_role", ask, "Claude")).structuredContent.status).toBe("waiting_for_person");
+  expect(await f.cards()).toHaveLength(1);
+  // Someone else can't answer it.
+  await expect(f.t.withIdentity({ subject: "member-subject" }).action((api as any).communityGuideQuestions.answerGuideQuestion,
+    { communityId: f.runClub, questionId: card.id, answer: "yes" })).rejects.toThrow();
+  expect(await f.role()).toBe("member");
+  // The person's Yes runs it.
+  expect(await f.answer(card.id, "yes")).toMatchObject({ status: "done" });
+  expect(await f.role()).toBe("moderator");
+  expect(await f.cards()).toEqual([]);
+  // Asking again now gives what happened, and runs nothing again.
+  const again = await f.call("owner", "polynet_set_member_role", ask, "Claude");
+  expect(again.structuredContent).toMatchObject({ status: "done" });
+  const audits = await f.t.run((ctx: any) => ctx.db.query("criticalAuditEvents").collect()) as any[];
+  expect(audits.filter((row) => row.eventType === "community_member_role_set")).toHaveLength(1);
+});
+
+test("the person's No does nothing, and the AI is told so when it asks again", async () => {
+  const f = await approvalsFixture();
+  const ask = { community: "run-club", text: "# Handbook\n\nBe kind.", idempotency_key: "publish-1" };
+  expect((await f.call("owner", "polynet_publish_handbook", ask)).structuredContent.status).toBe("waiting_for_person");
+  const [card] = await f.cards();
+  // No app name in the sign-in: the card says so plainly.
+  expect(card.askedBy).toBe("Your AI app");
+  expect(await f.answer(card.id, "no")).toMatchObject({ status: "declined" });
+  const handbook = await f.t.run((ctx: any) => ctx.db.query("communityHandbooks").collect()) as any[];
+  expect(handbook.filter((row) => row.approvedMd)).toEqual([]);
+  const again = await f.call("owner", "polynet_publish_handbook", ask);
+  expect(again.isError).toBe(true);
+  expect(again.structuredContent.code).toBe("declined_by_person");
+});
+
+test("removing and banning, and deleting a post, wait for the person's Yes too; posts and replies still go out", async () => {
+  const f = await approvalsFixture();
+  // A post goes out as before: no card.
+  const posted = await f.call("owner", "polynet_post", { community: "run-club", channel: "general", text: "Hills on Thursday?" }, "ChatGPT");
+  expect(posted.isError, JSON.stringify(posted)).toBe(false);
+  expect(await f.cards()).toEqual([]);
+  // Deleting it waits.
+  const del = await f.call("owner", "polynet_delete_post", { community: "run-club", channel: "general", post: posted.structuredContent.ref }, "ChatGPT");
+  expect(del.structuredContent.status, JSON.stringify(del)).toBe("waiting_for_person");
+  // Banning a member waits (it was a link to do by hand before).
+  const ban = await f.call("owner", "polynet_ban_members", { community: "run-club", members: ["member"], reason: "spam" }, "ChatGPT");
+  expect(ban.structuredContent.status, JSON.stringify(ban)).toBe("waiting_for_person");
+  const cards = await f.cards();
+  expect(cards.map((card) => [card.kind, card.askedBy])).toEqual([["remove", "ChatGPT"], ["remove", "ChatGPT"]]);
+  const roots = () => f.t.run((ctx: any) => ctx.db.query("communityInteractionRoots").collect()) as Promise<any[]>;
+  expect((await roots()).find((row) => row.contentSummary === "Hills on Thursday?").status).toBe("live");
+  expect(await f.role()).toBe("member");
+  for (const card of cards) expect(await f.answer(card.id, "yes"), card.question).toMatchObject({ status: "done" });
+  expect((await roots()).find((row) => row.contentSummary === "Hills on Thursday?").status).not.toBe("live");
+  const blocks = await f.t.run((ctx: any) => ctx.db.query("communityBlocks").collect()) as any[];
+  expect(blocks.filter((row) => String(row.userId) === String(f.users.member) && !row.liftedAt)).toHaveLength(1);
+});
+
+test("an AI can't pile up requests: ten wait at most, and the guide's questions are left alone", async () => {
+  const f = await approvalsFixture();
+  // A question the guide asked in the person's talk.
+  await f.t.run((ctx: any) => ctx.db.insert("communityGuideQuestions", { communityId: f.runClub, userId: f.users.owner, kind: "post", toolName: "polynet_write",
+    inputJson: "{}", question: "Post this in General?", status: "waiting", runId: "guide-run", createdAt: Date.now() }));
+  for (let index = 0; index < 10; index += 1) {
+    const asked = await f.call("owner", "polynet_publish_handbook", { community: "run-club", text: `Draft ${index}`, idempotency_key: `p${index}` }, "Claude");
+    expect(asked.structuredContent.status, JSON.stringify(asked)).toBe("waiting_for_person");
+  }
+  const over = await f.call("owner", "polynet_publish_handbook", { community: "run-club", text: "One more", idempotency_key: "p10" }, "Claude");
+  expect(over.isError).toBe(true);
+  expect(over.structuredContent.code).toBe("approvals_waiting");
+  const cards = await f.cards();
+  expect(cards).toHaveLength(11);
+  expect(cards.filter((card) => !card.askedBy).map((card) => card.question)).toEqual(["Post this in General?"]);
 });

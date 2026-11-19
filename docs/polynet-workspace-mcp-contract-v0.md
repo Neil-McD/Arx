@@ -43,6 +43,22 @@ input schema before anything runs (`shared/toolArgumentCheck.ts`): an
 unknown, missing or wrong field answers `invalid_tool_args` with each
 problem as `where: what`, never dropped silently.
 
+What asks every time (shared/operationCatalog.ts: changing a role, publishing
+the handbook, deleting a post, removing posts, removing or banning members)
+is asked by Polynet itself, not trusted to the AI app (Nov 19). The tool
+answers `waiting_for_person` with `approve_in_polynet` (the community's Home);
+the person sees a Yes/No card there naming the app that asked ("Claude
+asks: ..."), the same queue the guide uses (convex/communityGuideQuestions.ts).
+On Yes the saved request runs once, as that AI's (`external_mcp`), with every
+check made again. The same call with the same `idempotency_key` then answers
+what happened (`done`, `declined_by_person`, `failed_after_yes`) and never runs
+twice. At most 10 such requests wait per person and community
+(`approvals_waiting`). The app's name comes from the token's OAuth client
+(`shared/mcpAccessToken.ts`, `aiAppNameFromClaims`); it is a label only.
+Posts, replies and direct-message replies are the AI's own to send. Opening a
+community to everyone and publishing or deleting a live course stay
+`person_only` with a link.
+
 A post's stored retry key is the person's own
 (`polynet:<principal>:<userId>:<key>`): two people's AIs sending the same
 words, or the same `idempotency_key`, make two posts; one person's retry
