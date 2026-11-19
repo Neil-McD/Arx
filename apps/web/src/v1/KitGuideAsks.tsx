@@ -7,7 +7,7 @@
 // pictures waiting in the box below. Nothing is done before the click. After it, one line
 // says what happened, with the way to see it.
 import { useState } from "react";
-import { Sparkles, X } from "lucide-react";
+import { Bot, Sparkles, X } from "lucide-react";
 import { answerGuideQuestion } from "../../../../shared/cloudGuideQuestionsGateway";
 import type { GuideAnswerResult, GuideQuestionAnswer, GuideQuestionView } from "../../../../shared/guideQuestions";
 import { resolveAuthSubject, type AuthSessionLike } from "../../../../shared/authSession";
@@ -76,8 +76,11 @@ export function GuideAsks(props: {
         </div>
       ) : null}
       {question ? (
-        <section className={cx("gbox")} aria-label="Your guide asks">
-          <h3><Sparkles size={15} strokeWidth={1.8} aria-hidden="true" />{question.question}</h3>
+        <section className={cx("gbox")} aria-label={question.askedBy ? `${question.askedBy} asks` : "Your guide asks"}>
+          {/* The person's own AI app asked (through the MCP), not the guide: named, and without the guide's mark. */}
+          <h3>{question.askedBy
+            ? <><Bot size={15} strokeWidth={1.8} aria-hidden="true" />{`${question.askedBy} asks: ${question.question}`}</>
+            : <><Sparkles size={15} strokeWidth={1.8} aria-hidden="true" />{question.question}</>}</h3>
           {question.text ? <p className={cx("gwhat")}>{question.text}</p> : null}
           {/* The talk's own picture tiles (WebCommunityAgentDock.css), without the remove button. */}
           {pictures.shown.length > 0 ? (

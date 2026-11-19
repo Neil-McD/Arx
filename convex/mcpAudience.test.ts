@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import { resetMcpAccessTokenKeysForTest, verifyMcpAccessToken, type McpAccessTokenConfig } from "../shared/mcpAccessToken.ts";
+import { aiAppNameFromClaims, resetMcpAccessTokenKeysForTest, verifyMcpAccessToken, type McpAccessTokenConfig } from "../shared/mcpAccessToken.ts";
 
 // The MCP door checks an outside AI's token itself (shared/mcpAccessToken.ts),
 // and the backend's general sign-in never accepts one (convex/auth.config.ts).
@@ -99,4 +99,15 @@ test("the backend's general sign-in does not accept the MCP audience", async () 
   vi.stubEnv("ARX_MCP_AUTH_JWT_AUDIENCE", "");
   vi.resetModules();
   await expect(import("./auth.config.ts")).rejects.toThrow("ARX_MCP_AUTH_JWT_AUDIENCE is required");
+});
+
+test("the Yes/No card names the AI app from the token's client, and says 'Your AI app' when it can't tell", () => {
+  expect(aiAppNameFromClaims({ client_id: "https://claude.ai/oauth/mcp-oauth-client-metadata" })).toBe("Claude");
+  expect(aiAppNameFromClaims({ client_id: "https://claude.ai/oauth/claude-code-client-metadata" })).toBe("Claude Code");
+  expect(aiAppNameFromClaims({ azp: "https://chatgpt.com/oauth/client.json" })).toBe("ChatGPT");
+  expect(aiAppNameFromClaims({ client_id: "https://cdn.openai.com/codex/client.json" })).toBe("Codex");
+  // A registered client's opaque id, a look-alike host, or nothing: no name.
+  expect(aiAppNameFromClaims({ client_id: "client_01ABC" })).toBeNull();
+  expect(aiAppNameFromClaims({ client_id: "https://claude.ai.evil.example/x" })).toBeNull();
+  expect(aiAppNameFromClaims({})).toBeNull();
 });

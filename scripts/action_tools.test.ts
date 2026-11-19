@@ -45,17 +45,20 @@ describe("one named tool per action", () => {
     const names = (role: "member" | "moderator" | "builder") => actionToolsFor(role, "own_ai").map((tool) => tool.name);
     expect(names("member")).toEqual(["polynet_post", "polynet_reply", "polynet_edit_post", "polynet_delete_post", "polynet_react",
       "polynet_mark_lesson_done", "polynet_mark_channel_read", "polynet_reply_message"]);
-    expect(names("moderator").filter((name) => !names("member").includes(name))).toEqual(["polynet_approve_join_requests", "polynet_decline_join_requests"]);
-    // Every tool but the guide's own four.
+    // Removing posts, like changing a role or banning, is asked about in Polynet before it runs.
+    expect(names("moderator").filter((name) => !names("member").includes(name))).toEqual(["polynet_approve_join_requests", "polynet_decline_join_requests", "polynet_remove_posts"]);
+    // Every tool but the guide's own one (remembering).
     expect(names("builder")).toEqual(ACTION_TOOLS.filter((tool) => tool.door !== "guide").map((tool) => tool.name));
-    expect(names("builder")).toHaveLength(ACTION_TOOLS.length - 4);
+    expect(names("builder")).toHaveLength(ACTION_TOOLS.length - 1);
     expect(names("builder")).toContain("polynet_create_event");
     expect(names("moderator")).not.toContain("polynet_set_member_role");
   });
 
-  const GUIDE_ONLY = ["polynet_remember", "polynet_remove_posts", "polynet_remove_members", "polynet_ban_members"];
+  // Remembering is the guide's own. Removing posts and members, and banning,
+  // are offered through both doors: Polynet asks the person before either runs.
+  const GUIDE_ONLY = ["polynet_remember"];
 
-  it("over the MCP a guide-only tool doesn't exist: no role's own AI is given remembering, or removing posts or members, or banning", () => {
+  it("over the MCP a guide-only tool doesn't exist: no role's own AI is given remembering", () => {
     expect(ACTION_TOOLS.filter((tool) => tool.door === "guide").map((tool) => tool.name)).toEqual(GUIDE_ONLY);
     for (const role of ["member", "moderator", "builder"] as const) {
       const names = actionToolsFor(role, "own_ai").map((tool) => tool.name);
@@ -63,14 +66,14 @@ describe("one named tool per action", () => {
     }
   });
 
-  it("both doors, same tools: the guide has everything a person's own AI has, plus remembering and, after the person's yes, removing posts and members and banning", () => {
+  it("both doors, same tools: the guide has everything a person's own AI has, plus remembering", () => {
     const names = (role: "member" | "moderator" | "builder", door: "own_ai" | "guide") => actionToolsFor(role, door).map((tool) => tool.name);
     for (const role of ["member", "moderator", "builder"] as const) {
       const ownAi = names(role, "own_ai");
       const guide = names(role, "guide");
       expect(ownAi.filter((name) => !guide.includes(name)), role).toEqual([]);
       expect(guide.filter((name) => !ownAi.includes(name)), role)
-        .toEqual(role === "member" ? ["polynet_remember"] : role === "moderator" ? ["polynet_remember", "polynet_remove_posts"] : GUIDE_ONLY);
+        .toEqual(GUIDE_ONLY);
       expect(guide.filter((name) => !GUIDE_ONLY.includes(name)), role).toEqual(ownAi);
     }
     expect(names("member", "guide")).toEqual(["polynet_post", "polynet_reply", "polynet_edit_post", "polynet_delete_post", "polynet_react",
