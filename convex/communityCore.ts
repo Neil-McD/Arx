@@ -14,6 +14,7 @@ import {
   communityResourceModuleIsMemberLive,
 } from "../shared/communityResourceVisibility";
 import type { CommunityVisualIdentity } from "../shared/communityVisualIdentity";
+import { lessonFileTypeLabel } from "../shared/lessonFiles";
 import {
   communityIsActive,
   type CommunityLifecycleStatus,
@@ -694,6 +695,32 @@ export function normalizeLessonLinks(raw: unknown): Array<{ title: string; url: 
   return links;
 }
 
+// A lesson's files (communityLessonFiles.ts), here so the row every reader
+// maps (mapCommunityResourceRow) can list them without an import cycle.
+export type LessonFileRow = {
+  _id: any; communityId: any; resourceId: any; status: "pending" | "attached" | "failed";
+  name: string; title: string; mimeType: string; sizeBytes: number; storageId?: any;
+  position?: number; uploadExpiresAt?: number; createdByUserId: any; createdAt: number;
+};
+
+export async function listAttachedLessonFiles(ctx: any, resourceId: any): Promise<LessonFileRow[]> {
+  const rows = (await ctx.db.query("communityLessonFiles")
+    .withIndex("by_resource_status", (q: any) => q.eq("resourceId", resourceId).eq("status", "attached"))
+    .collect()) as LessonFileRow[];
+  return rows.sort((a, b) => (a.position ?? 0) - (b.position ?? 0) || a.createdAt - b.createdAt);
+}
+
+// What the app shows: the row's id is how a host keeps or removes a file and
+// how a member asks for its bytes. Never a storage id or a URL.
+export function lessonFileView(row: LessonFileRow) {
+  return { id: String(row._id), title: row.title, name: row.name, type: lessonFileTypeLabel(row.name, row.mimeType), size_bytes: row.sizeBytes };
+}
+
+// What an AI reads: what the file is, not how to fetch it.
+export function lessonFileForAi(row: LessonFileRow) {
+  return { title: row.title, type: lessonFileTypeLabel(row.name, row.mimeType), size_bytes: row.sizeBytes };
+}
+
 export function normalizeOptionalUrl(raw: unknown): string | undefined {
   const value = String(raw ?? "").trim();
   if (!value) return undefined;
@@ -1008,6 +1035,8 @@ export async function mapCommunityResourceRow(
     url: row.url ?? null,
     file_key: row.fileKey ?? null,
     lesson_links: normalizeLessonLinks(row.lessonLinks),
+    lesson_files: normalizeResourceRole(row.role) === "page"
+      ? (await listAttachedLessonFiles(ctx, row._id)).map(lessonFileView) : [],
     source_ingestion_status: normalizeResourceSourceIngestionStatus(row),
     source_ingestion_kind: normalizeResourceSourceIngestionKind(row),
     source_ingestion_error: row.sourceIngestionError ?? null,

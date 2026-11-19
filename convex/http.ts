@@ -13,6 +13,7 @@ import { registerRuntimeVoiceRoutes } from "./httpVoice";
 import { registerCommunityAgentAttachmentRoutes } from "./httpCommunityAgentAttachments";
 import { registerCommunityAttachmentRoutes } from "./httpCommunityAttachments";
 import { registerDirectMessageAttachmentRoutes } from "./httpDirectMessageAttachments";
+import { registerCommunityLessonFileRoutes } from "./httpCommunityLessonFiles";
 import { registerCommunityLandingRoutes } from "./httpCommunityLanding";
 import { registerConnectedAppRoutes } from "./httpConnectedApps";
 import { sseResponseWithHeaders, type SseSource } from "./httpStreaming";
@@ -268,6 +269,7 @@ registerCommunityAgentAttachmentRoutes({
 
 registerCommunityAttachmentRoutes({ http, httpAction, jsonResponse, optionsResponse, requireAuthenticatedActor });
 registerDirectMessageAttachmentRoutes({ http, httpAction, jsonResponse, optionsResponse, requireAuthenticatedActor });
+registerCommunityLessonFileRoutes({ http, httpAction, jsonResponse, optionsResponse, requireAuthenticatedActor });
 
 registerCommunityLandingRoutes({ http, httpAction });
 registerConnectedAppRoutes({ http, httpAction });

@@ -307,6 +307,9 @@ and is present, so there is no waiting step and no approval card:
   control is.
 - Added to the engine: `reorder_pages` and `reorder_modules` (each names
   every lesson, or every course, once), and `lesson_links` on a lesson.
+- A lesson's files (Nov 18) are not in a batch: a person adds and removes
+  them in the app. A lesson read lists them by name, type and size, with no
+  address; `lesson_links` leaves them as they are.
 - One batch is one builder change against the budget, whatever it holds.
 - Covers are not here: they need file upload.
 

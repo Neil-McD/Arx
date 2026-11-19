@@ -183,6 +183,7 @@ const DOMAIN_REFUSAL_MESSAGES: Record<string, string> = {
   community_channel_post_forbidden: "Only managers can post in that channel.",
   community_forbidden: "You don't have permission to do that here.",
   profile_setup_required: "Finish setting up your Polynet profile first.",
+  lesson_resources_limit: "A lesson can have 12 resources at most, links and files together. Remove one first.",
 };
 
 // A refusal never carries a raw server error or stack trace: a thrown domain

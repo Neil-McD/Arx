@@ -9,6 +9,7 @@ import type { CommunityActivityEventType } from "./communityTypes";
 import { resolveConvexRuntimeToken, type AuthSessionLike } from "./authSession";
 import { readConvexRuntimeUrl } from "./convexRuntime";
 import { COMMUNITY_ATTACHMENT_DOWNLOAD_PATH, COMMUNITY_ATTACHMENT_UPLOAD_PATH } from "./communityAttachmentPolicy";
+import { LESSON_FILE_DOWNLOAD_PATH, LESSON_FILE_UPLOAD_PATH } from "./lessonFiles.ts";
 
 type CloudCommunityChatGatewayParams<SessionT> = {
   session: SessionT;
@@ -203,5 +204,49 @@ export async function downloadCloudCommunityChatAttachment<SessionT>(params: {
     signal: params.signal,
   });
   if (!response.ok) throw new Error("This attachment is unavailable or you no longer have access.");
+  return response.blob();
+}
+
+// A file under a lesson, as a host's upload returns it and a lesson lists it.
+export type CloudLessonFile = { id: string; title: string; name: string; type: string; size_bytes: number };
+
+// A host uploads a file for a lesson. It is theirs, pending, until the lesson
+// is saved with it. A refusal throws its code (lesson_file_too_large,
+// lesson_resources_limit, ...) for the editor to put in plain words.
+export async function uploadCloudLessonFile<SessionT>(params: {
+  session: SessionT; resourceId: string; file: File;
+}): Promise<CloudLessonFile> {
+  await bootstrapConvexAuthenticatedClient(params.session);
+  const token = resolveConvexRuntimeToken(params.session as AuthSessionLike);
+  const baseUrl = String(readConvexRuntimeUrl() ?? "").replace(/\/+$/, "");
+  if (!token || !baseUrl) throw new Error("lesson_file_upload_failed");
+  const response = await fetch(`${baseUrl}${LESSON_FILE_UPLOAD_PATH}`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": params.file.type || "application/octet-stream",
+      "X-Polynet-Resource-Id": params.resourceId,
+      "X-Polynet-File-Name": encodeURIComponent(params.file.name),
+    },
+    body: params.file,
+  });
+  const payload = await response.json().catch(() => null);
+  if (!response.ok || !payload?.file?.id) throw new Error(String(payload?.code ?? "lesson_file_upload_failed"));
+  return payload.file as CloudLessonFile;
+}
+
+// The bytes of a lesson's file, for someone who may read the lesson now.
+export async function downloadCloudLessonFile<SessionT>(params: {
+  session: SessionT; fileId: string; signal?: AbortSignal;
+}): Promise<Blob> {
+  await bootstrapConvexAuthenticatedClient(params.session);
+  const token = resolveConvexRuntimeToken(params.session as AuthSessionLike);
+  const baseUrl = String(readConvexRuntimeUrl() ?? "").replace(/\/+$/, "");
+  if (!token || !baseUrl) throw new Error("Sign in to download this file.");
+  const response = await fetch(`${baseUrl}${LESSON_FILE_DOWNLOAD_PATH}`, {
+    method: "POST", headers: { Authorization: `Bearer ${token}`, "X-Polynet-Lesson-File-Id": params.fileId },
+    signal: params.signal,
+  });
+  if (!response.ok) throw new Error("This file is unavailable or you no longer have access.");
   return response.blob();
 }

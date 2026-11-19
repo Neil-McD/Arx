@@ -169,7 +169,9 @@ approval capability below does not make the queue writable.
 - `builder/resources/`: a bounded changeset (up to 25 changes, all or
   nothing): `create_module` (always a draft), `edit_module` (name and
   description; a changed `module_status` is refused),
-  `create_page`, `edit_page` (with `lesson_links`), `move_resource`,
+  `create_page`, `edit_page` (with `lesson_links`: links only; a lesson's
+  files are added and removed by a person in the app, are left as they are,
+  and count toward the lesson's 12 resources), `move_resource`,
   `reorder_pages` (every lesson of a course, in order), `reorder_modules`
   (every course, in order), `delete_page` and `delete_category` (drafts
   only: a lesson in a draft course, an empty draft course). The answer has
