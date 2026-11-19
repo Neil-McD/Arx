@@ -68,8 +68,10 @@ async function renderPod(ctx: any, args: { communityId: any; lens: LensName }, c
     if (typeof record?.seats === "number") lines.push(`- Seats left: ${Math.max(0, record.seats - grants.length)}`);
     lines.push("- Ask to join from the Pods page.");
   }
+  // An outside AI app is never handed a price (OpenAI's rules ban selling or
+  // advertising inside ChatGPT): it says the pod is paid, and joining is in Polynet.
   const price = priceLine(record);
-  if (price) lines.push(`- Costs ${price}`);
+  if (price) lines.push(args.lens === "member_own_ai" || args.lens === "builder_own_ai" ? "- A paid pod: joining is done in Polynet." : `- Costs ${price}`);
   const whatYouGet: string[] = record?.whatYouGet ?? [];
   if (whatYouGet.length) lines.push("", "What you get:", ...whatYouGet.map((line) => `- ${line}`));
   return lines.join("\n");

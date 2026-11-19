@@ -154,10 +154,11 @@ export const ACTION_TOOLS: ActionTool[] = [
     { community: COMMUNITY, channel: CHANNEL }, ["community", "channel"],
     (a) => call("community.channel.mark_read", a, { channel: a.channel })),
   tool("polynet_reply_message", "polynet_write:messages", "Reply in a direct message",
-    "Reply in a direct-message conversation the person is already in. List /messages/ for their conversations and read one before replying. You can't start a new conversation. In the person's private talk they are shown who it goes to and the exact words and asked first, every time.",
+    "Reply in a direct-message conversation the person is already in, as them. It is sent at once and marked as written through an AI. List /messages/ and read the conversation first. You can't start a new conversation.",
     { conversation: { type: "string", minLength: 4, maxLength: 80, description: "The conversation's id: the <id> in /messages/<id>/ from polynet_list." },
       text: TEXT("The reply, as it will appear.", 4_000) }, ["conversation", "text"],
-    (a) => write(`/messages/${a.conversation}/`, "append", { text: a.text })),
+    (a) => write(`/messages/${a.conversation}/`, "append", { text: a.text }), undefined,
+    "Reply in a direct-message conversation the person is already in. List /messages/ for their conversations and read one before replying. You can't start a new conversation. They are shown who it goes to and the exact words first, unless they chose \"always allow\" for replies."),
   tool("polynet_remember", "member.memory.remember", "Remember something about this person",
     "Keep, change or drop what you remember about the person you are talking with, for next time. Only for what they told you about themselves and would expect you to keep. Their memory is short: when it is full the call fails with what is there, so merge or remove in the same batch.",
     { community: COMMUNITY, operations: { type: "array", minItems: 1, maxItems: 10,
@@ -200,15 +201,15 @@ export const ACTION_TOOLS: ActionTool[] = [
     { community: COMMUNITY }, ["community"],
     (a) => call("community.join_mode.set", a, { mode: "open" })),
   tool("polynet_set_guide_instructions", "community.agent.instructions.set", "Set the guide's instructions",
-    "Replace what the community's own guide is told about this community. The guide follows it in every member's talk and in channels. Empty text clears it. The person is shown the text and asked first, every time.",
+    "Replace what the community's AI guide is told about this community. It follows these instructions in every member's talks and in channels. Empty text clears them. The person is shown the text and asked first, every time.",
     { community: COMMUNITY, text: { type: "string", maxLength: 12_000, description: "The instructions, in full." } }, ["community", "text"],
     (a) => call("community.agent.instructions.set", a, { text: a.text })),
   tool("polynet_save_handbook_draft", "community.handbook.save_draft", "Save a handbook draft",
-    "Save a draft of the community's handbook. Members and the guide don't see a draft.",
+    "Save a draft of the community's handbook. Members and the community's AI guide don't see a draft.",
     { community: COMMUNITY, text: { type: "string", maxLength: 6_000, description: "The draft, in markdown." } }, ["community", "text"],
     (a) => call("community.handbook.save_draft", a, { text: a.text })),
   tool("polynet_publish_handbook", "community.handbook.approve", "Publish the handbook to members",
-    "Publish exactly this text as the handbook every member and the guide reads. The person is shown the text and asked first, every time. Empty text takes the handbook away.",
+    "Publish exactly this text as the handbook every member, and the community's AI guide, reads. The person is shown the text and asked first, every time. Empty text takes the handbook away.",
     { community: COMMUNITY, text: { type: "string", maxLength: 6_000, description: "The handbook, in markdown, exactly as members will read it." } }, ["community", "text"],
     (a) => call("community.handbook.approve", a, { text: a.text })),
   tool("polynet_create_channel", "community.channel.create", "Make a channel",
@@ -269,16 +270,16 @@ export const ACTION_TOOLS: ActionTool[] = [
       lesson: { type: "string", minLength: 1, maxLength: 180, description: "The lesson's id from builder/resources/." } }, ["community"],
     (a) => call("community.course.delete", a, { ...only(a, ["course", "lesson"]) })),
   tool("polynet_change_courses", "polynet_write:builder", "Change courses and lessons",
-    "Make, edit, move and order courses and lessons, as one batch that is applied whole or not at all. A new course is a draft; publishing, unpublishing and deleting what members can see are polynet_publish_course and polynet_delete_published. List builder/resources/ first for each course's and lesson's id and updated_at. Each operation is one of: " +
+    "Make, edit, move and order courses and lessons, as one batch applied whole or not at all. A new course is a draft; publishing, unpublishing and deleting what members see are polynet_publish_course and polynet_delete_published. List builder/resources/ first for each course's and lesson's id and updated_at. The answer says for each lesson made or changed whether members can see it.",
+    { community: COMMUNITY, summary: { type: "string", maxLength: 1_000, description: "One line on what this batch does." },
+      operations: { type: "array", minItems: 1, maxItems: 25, items: RESOURCE_CHANGESET_OPERATION_SCHEMA, description: "The changes, in order. Each is one of: " +
     "create_module (a course: name, description_md, and a module_key you make up if lessons in this batch go in it); " +
     "create_page (a lesson: title, body_md, and module_id of an existing course or module_key of one made in this batch); " +
     "edit_page (resource_id, expected_updated_at, then what changes: title, body_md, module_id, lesson_links, which sets the links only: a lesson's files are added and removed by a person in the app); " +
     "edit_module (module_id, expected_updated_at, then name or description_md); " +
     "move_resource (resource_id, expected_updated_at, module_id); " +
     "reorder_pages (module_id, resource_ids: every lesson of that course in order); reorder_modules (module_ids: every course in order); " +
-    "delete_page (resource_id, expected_updated_at) and delete_category (module_id, expected_updated_at), only in a draft course. The answer says for each lesson made or changed whether members can see it (members_can_see).",
-    { community: COMMUNITY, summary: { type: "string", maxLength: 1_000, description: "One line on what this batch does." },
-      operations: { type: "array", minItems: 1, maxItems: 25, description: "The changes, in order.", items: RESOURCE_CHANGESET_OPERATION_SCHEMA } },
+    "delete_page (resource_id, expected_updated_at) and delete_category (module_id, expected_updated_at), only in a draft course." } },
     ["community", "operations"],
     (a) => write(`${root(a.community)}builder/resources/`, "create", { summary: a.summary ?? "", operations: a.operations })),
 ];
@@ -340,8 +341,23 @@ export function guideActionKey(runId: string, toolCallId: string): string {
   return requestFingerprint(`guide-${runId}`, "tool_call", toolCallId);
 }
 
+// What every action tool answers: done (with what changed), or waiting for
+// the person's Yes in Polynet. Other fields depend on the action.
+export const ACTION_TOOL_OUTPUT_SCHEMA: PlatformOperationJsonSchema = {
+  type: "object",
+  properties: {
+    ok: { type: "boolean", description: "true when it was done, or is waiting for the person." },
+    status: { type: "string", description: "waiting_for_person while it waits for their Yes in Polynet; done once it ran after their Yes." },
+    result: { type: "object", description: "What changed." },
+    question: { type: "string", description: "What the person is asked, while it waits." },
+    approve_in_polynet: { type: "string", description: "Where the person answers, while it waits." },
+    already_done: { type: "boolean", description: "true when this same call had already been done." },
+  },
+  additionalProperties: true,
+};
+
 // What an outside AI is told about a tool Polynet asks the person about.
-export const OWN_AI_ASKED_IN_POLYNET = "Polynet asks the person itself: the answer is waiting_for_person, with where they say Yes or No in Polynet. Tell them that, and don't call again until they say they have answered; then the same call with the same idempotency_key gives what happened.";
+export const OWN_AI_ASKED_IN_POLYNET = "Waits for the person's Yes in Polynet: the answer is waiting_for_person, with where they answer. After they have, the same call with the same idempotency_key gives the result.";
 
 // Tools whose effect is more than adding something: they email members,
 // replace or take away what others see, or decide who is in. Marked
@@ -354,6 +370,10 @@ export const ACTION_TOOLS_THAT_NEED_CARE = new Set([
   "polynet_create_event", "polynet_update_event", "polynet_cancel_event",
   "polynet_approve_join_requests", "polynet_decline_join_requests", "polynet_unban_members", "polynet_change_courses",
 ]);
+// Tools whose effect leaves the chat by email (event reminders, the
+// "you're in" email): labelled as reaching the outside world.
+export const ACTION_TOOLS_THAT_EMAIL = new Set(["polynet_create_event", "polynet_update_event", "polynet_approve_join_requests"]);
+
 // Tools that make something new each time they run: calling one twice makes
 // two (unless the AI names the action with idempotency_key).
 export const ACTION_TOOLS_THAT_ADD = new Set([
@@ -372,21 +392,24 @@ export function actionToolDefinition(entry: ActionTool) {
   // person's direct messages is sent by their own AI, as they asked. For the
   // rest that needs care, their AI app is told to ask them.
   const askedInPolynet = askAt(listed, "own_ai") === "every_time";
+  // Said once: the base text's "asked first, every time" becomes the line that says where.
+  const base = askedInPolynet ? entry.description.replace(/ ?The person is (?:shown [^.]* and )?asked first, every time\./, "").trim() : entry.description;
   const askFirst = askedInPolynet
     ? ` ${OWN_AI_ASKED_IN_POLYNET}`
-    : destructive && !/yes first|asked first/.test(entry.description)
+    : destructive && !/yes first|asked first/.test(base)
       ? " Tell the person what this will do and get their yes before calling it." : "";
   return {
     name: entry.name,
     title: entry.title,
-    description: `${entry.description}${askFirst}`,
+    description: `${base}${askFirst}`,
     inputSchema: { type: "object", additionalProperties: false, required: entry.required, properties: entry.properties } as PlatformOperationJsonSchema,
+    outputSchema: ACTION_TOOL_OUTPUT_SCHEMA,
     annotations: {
       title: entry.title,
       readOnlyHint: false,
       idempotentHint: !ACTION_TOOLS_THAT_ADD.has(entry.name),
       destructiveHint: destructive,
-      openWorldHint: false,
+      openWorldHint: ACTION_TOOLS_THAT_EMAIL.has(entry.name),
     },
   };
 }

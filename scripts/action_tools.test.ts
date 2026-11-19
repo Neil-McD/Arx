@@ -89,12 +89,12 @@ describe("one named tool per action", () => {
       const guide = guideToolDefinition(tool);
       const schema = guide.inputSchema as { type: string; additionalProperties: boolean; properties: Record<string, unknown>; required: string[] };
       expect(guide.name).toBe(tool.name);
-      // The MCP's words, except where the guide has its own: only for a tool
-      // that asks every time, whose yes in a private talk is a button, never words.
+      // The MCP's words, except where the guide has its own: only for a tool the
+      // guide asks about, whose yes in a private talk is a button, never words.
       // The guide's only inputs (the person's talk pictures) are told in one sentence on the tool.
       expect(guide.description).toBe(`${tool.guideDescription ?? tool.description}${tool.guideOnly ? ` ${tool.guideOnly.sentence}` : ""}`);
       if (tool.guideDescription) {
-        expect(actionToolEntry(tool).ask, tool.name).toBe("every_time");
+        expect(["every_time", "words"], tool.name).toContain(actionToolEntry(tool).ask);
         expect(tool.guideDescription, tool.name).not.toMatch(/get their yes/);
       }
       expect(schema.type).toBe("object");
@@ -276,5 +276,36 @@ describe("an outside AI's arguments are checked against the published shapes", (
       const required = actionToolDefinition(tool).inputSchema.required as string[];
       expect(toolArgumentProblems(actionToolDefinition(tool).inputSchema, {})).toEqual(required.slice(0, 8).map((key) => `${key}: missing`));
     }
+  });
+});
+
+describe("what reviewers and their scanners check, on every tool an outside AI is shown", () => {
+  // Internal words an outside AI should never read, and anything that sells.
+  const BANNED = /repository|subtree|private talk|\blens\b|semantic|authority_lane|principal|\bthe guide\b|\$\d|price|checkout|upgrade|subscribe/i;
+  const shown = () => [
+    ...getPolynetMcpToolDefinitions().filter((tool) => tool.annotations.readOnlyHint === true),
+    ...actionToolsFor("builder", "own_ai").map(actionToolDefinition),
+  ];
+  it("each has a title, all four labels set on purpose, a short name, a short plain description, and a result shape", () => {
+    for (const tool of shown() as any[]) {
+      expect(tool.name.length, tool.name).toBeLessThanOrEqual(64);
+      expect(tool.title ?? tool.annotations.title, tool.name).toBeTruthy();
+      for (const label of ["readOnlyHint", "destructiveHint", "idempotentHint", "openWorldHint"]) expect(typeof tool.annotations[label], `${tool.name} ${label}`).toBe("boolean");
+      expect(tool.description.length, tool.name).toBeLessThanOrEqual(600);
+      expect(tool.description, tool.name).not.toMatch(BANNED);
+      expect(JSON.stringify(tool.inputSchema), tool.name).not.toMatch(/repository|subtree|private talk/i);
+      expect(tool.outputSchema, tool.name).toBeTruthy();
+      // What waits for the person's Yes is said once.
+      expect((tool.description.match(/asked first|Waits for the person's Yes/g) ?? []).length, tool.name).toBeLessThanOrEqual(1);
+    }
+  });
+  it("what emails people is labelled as reaching beyond the chat; the rest isn't", () => {
+    const open = (shown() as any[]).filter((tool) => tool.annotations.openWorldHint).map((tool) => tool.name).sort();
+    expect(open).toEqual(["polynet_approve_join_requests", "polynet_create_event", "polynet_update_event"]);
+  });
+  it("an outside AI is told a DM reply is sent, never that the person is asked", () => {
+    const dm = actionToolDefinition(ACTION_TOOLS.find((tool) => tool.name === "polynet_reply_message")!);
+    expect(dm.description).toMatch(/sent at once and marked as written through an AI/);
+    expect(dm.description).not.toMatch(/asked first|shown who it goes to/);
   });
 });

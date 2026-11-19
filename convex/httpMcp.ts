@@ -74,8 +74,23 @@ function readEnv(name: string): string {
   return "";
 }
 
+// Who Polynet says it is to an AI app (initialize): its name, version, icon
+// and website, as both directories show it.
+export const MCP_SERVER_INFO = {
+  name: "polynet",
+  title: "Polynet",
+  version: "1.0.0",
+  websiteUrl: "https://www.polynet.ai",
+  icons: [{ src: "https://www.polynet.ai/icon-512.png", mimeType: "image/png", sizes: ["512x512"] }],
+};
+
+// AI apps that call from a browser, and the standard MCP test tool on its
+// usual local address: let in by default (a missing Origin, as server-side
+// connectors send, is always fine). More come from ARX_ALLOWED_MCP_ORIGINS.
+export const DEFAULT_MCP_ORIGINS = ["https://claude.ai", "https://chatgpt.com", "http://localhost:6274", "http://127.0.0.1:6274"];
+
 function buildAllowedMcpOrigins(): Set<string> {
-  const out = new Set<string>();
+  const out = new Set<string>(DEFAULT_MCP_ORIGINS);
   // MCP hosts are a different trust boundary than the Polynet SPA/web origins.
   // Remote MCP clients may also omit Origin entirely, so only validate the header
   // when it is present and compare it against the dedicated MCP allowlist.
@@ -593,10 +608,7 @@ export async function handleMcpPost(args: {
         capabilities: {
           tools: {},
         },
-        serverInfo: {
-          name: "polynet-mcp",
-          version: "0.1.0-alpha",
-        },
+        serverInfo: MCP_SERVER_INFO,
         instructions: MCP_SERVER_INSTRUCTIONS,
       },
       {
