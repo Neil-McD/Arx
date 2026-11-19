@@ -133,16 +133,28 @@ describe("one named tool per action", () => {
     expect((translateActionTool(actionTool("polynet_post")!, { community: "c", channel: "general", text: "Hi" }, 0).input as any).content).toEqual({ text: "Hi" });
   });
 
-  it("labels come from the list: what asks every time is marked as needing care, so the person's own AI app asks them", () => {
-    const careful = (tools: typeof ACTION_TOOLS) => tools.filter((tool) => actionToolDefinition(tool).annotations.destructiveHint).map((tool) => tool.name);
-    expect(careful(actionToolsFor("builder", "own_ai"))).toEqual(["polynet_delete_post", "polynet_reply_message", "polynet_publish_handbook", "polynet_set_member_role"]);
-    // Removing posts and members and banning ask every time too; only the guide is given them, after the person's yes.
-    expect(careful(ACTION_TOOLS)).toEqual(["polynet_delete_post", "polynet_reply_message", "polynet_remove_posts", "polynet_publish_handbook",
-      "polynet_set_member_role", "polynet_remove_members", "polynet_ban_members"]);
+  it("labels tell the person's own AI app the truth: what emails members, replaces, removes or decides who is in needs care; what makes something new isn't a retry", () => {
+    const careful = (tools: typeof ACTION_TOOLS) => tools.filter((tool) => actionToolDefinition(tool).annotations.destructiveHint).map((tool) => tool.name).sort();
+    // Only adding or marking something for the person runs without care.
+    expect(ACTION_TOOLS.filter((tool) => !actionToolDefinition(tool).annotations.destructiveHint).map((tool) => tool.name).sort()).toEqual([
+      "polynet_create_channel", "polynet_mark_channel_read", "polynet_mark_lesson_done", "polynet_move_channel",
+      "polynet_post", "polynet_react", "polynet_remember", "polynet_reply",
+    ]);
+    // Everything that asks every time is among the careful ones.
     for (const tool of ACTION_TOOLS) {
-      expect(actionToolDefinition(tool).annotations.destructiveHint).toBe(actionToolEntry(tool).ask === "every_time");
+      if (actionToolEntry(tool).ask === "every_time") expect(actionToolDefinition(tool).annotations.destructiveHint).toBe(true);
       expect(actionToolDefinition(tool).annotations.readOnlyHint).toBe(false);
     }
+    expect(careful(actionToolsFor("builder", "own_ai"))).toContain("polynet_create_event");
+    // A careful tool tells an outside AI to get the person's yes; the guide's copy doesn't (its questions come from the server).
+    const event = ACTION_TOOLS.find((tool) => tool.name === "polynet_create_event")!;
+    expect(actionToolDefinition(event).description).toMatch(/emailed a reminder[\s\S]*get their yes before calling it/);
+    expect(guideToolDefinition(event).description).not.toMatch(/get their yes/);
+    expect(event.description).not.toMatch(/Nothing is sent/);
+    // Making something new twice makes two; setting something twice is the same as once.
+    const repeats = (name: string) => actionToolDefinition(ACTION_TOOLS.find((tool) => tool.name === name)!).annotations.idempotentHint;
+    for (const name of ["polynet_post", "polynet_reply", "polynet_reply_message", "polynet_create_channel", "polynet_create_event"]) expect(repeats(name)).toBe(false);
+    for (const name of ["polynet_react", "polynet_rename_channel", "polynet_update_community", "polynet_cancel_event"]) expect(repeats(name)).toBe(true);
   });
 });
 
