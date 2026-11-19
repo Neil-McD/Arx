@@ -2,7 +2,8 @@ export const TERMS_OF_SERVICE_VERSION = "terms_of_service_v4";
 export const PREVIOUS_TERMS_OF_SERVICE_VERSION = "terms_of_service_v3";
 export const HISTORICAL_TERMS_OF_SERVICE_VERSION = "terms_of_service_v2";
 export const LEGACY_TERMS_OF_SERVICE_VERSION = "terms_of_service_v1";
-export const PRIVACY_AI_DATA_POLICY_VERSION = "privacy_ai_data_policy_v1";
+export const PRIVACY_AI_DATA_POLICY_VERSION = "privacy_ai_data_policy_v2";
+export const PREVIOUS_PRIVACY_AI_DATA_POLICY_VERSION = "privacy_ai_data_policy_v1";
 
 export type LegalDocumentKey =
   | "terms_of_service"
@@ -61,6 +62,14 @@ export const LEGACY_TERMS_OF_SERVICE_DOCUMENT: LegalDocument = {
 export const PRIVACY_AI_DATA_POLICY_DOCUMENT: LegalDocument = {
   key: "privacy_ai_data_policy",
   version: PRIVACY_AI_DATA_POLICY_VERSION,
+  title: "Polynet Privacy & AI Data Policy v2",
+  effectiveDate: "2026-11-19",
+  sourcePath: "docs/legal/privacy-ai-data-policy-v2.md",
+};
+
+export const PREVIOUS_PRIVACY_AI_DATA_POLICY_DOCUMENT: LegalDocument = {
+  key: "privacy_ai_data_policy",
+  version: PREVIOUS_PRIVACY_AI_DATA_POLICY_VERSION,
   title: "Polynet Privacy & AI Data Policy v1",
   effectiveDate: "2026-05-21",
   sourcePath: "docs/legal/privacy-ai-data-policy-v1.md",

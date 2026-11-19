@@ -1,5 +1,6 @@
 {
   "routes": [
+    { "src": "/(?:m/)?(ai|privacy|terms)/?", "dest": "/$1.html" },
     { "handle": "filesystem" },
     { "src": "/(.*\\..*)", "status": 404 },
     { "src": "/(.*)", "dest": "/index.html" }
