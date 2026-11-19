@@ -53,8 +53,8 @@ const MEMBERS: MemberSpec[] = [
 ];
 // People asking to join, so the host tools have someone to answer.
 const APPLICANTS = [
-  { key: "alex", name: "Alex Kim", handle: "alex-kim-hrc", message: "I run about 25 km a week and would love a Saturday group." },
-  { key: "morgan", name: "Morgan Diaz", handle: "morgan-diaz-hrc", message: "Coming back from an injury, hoping to join the easy group." },
+  { key: "alex", name: "Alex Kim", handle: "alex-kim-hrc", bio: "I run about 25 km a week and want a Saturday group." },
+  { key: "morgan", name: "Morgan Diaz", handle: "morgan-diaz-hrc", bio: "Coming back from an injury, easing in." },
 ];
 type Author = string; // a member key, or "owner"
 
@@ -243,7 +243,7 @@ export const seedReviewDemoInternal = internalMutation({
       for (const row of await ctx.db.query("communityJoinRequests").withIndex("by_community_user", (q: any) => q.eq("communityId", communityId).eq("userId", userId)).collect()) {
         await ctx.db.delete(row._id);
       }
-      await ctx.db.insert("communityJoinRequests", { communityId, userId, status: "pending", message: applicant.message, createdAt: ago(6), updatedAt: ago(6) });
+      await ctx.db.insert("communityJoinRequests", { communityId, userId, status: "pending", createdAt: ago(6), updatedAt: ago(6) });
     }
 
     const channels: Record<string, any> = {};
