@@ -28,10 +28,6 @@ const SOURCE_WORDS: Record<CommunityNoteSource, string> = {
   learned: "learned by the guide from what was said in the community's open channels",
 };
 
-// What the agent is told about community notes: read them, never write them.
-export const COMMUNITY_NOTES_SHARING_RULES =
-  "memory/ holds community notes the founder keeps: read them when they help. You never write, add to or change a note; if something seems worth keeping, suggest the member tell the founder.";
-
 function oneLine(value: unknown, max: number): string {
   return String(value ?? "").replace(/\s+/g, " ").trim().slice(0, max);
 }

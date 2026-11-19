@@ -2974,6 +2974,69 @@ test("owners and admins run the community itself through their own AI; owner-onl
   expect(JSON.parse(((await moved.read("builder/community.json")) as any).value.body).handbook.approved_md).toBe("# Start here\nCome on Tuesday.");
 });
 
+// builder/analytics.json: the Analytics page's numbers, for whoever may manage
+// the community (the page's own rule), read through the page's own query.
+test("hosts' guide and own AI read the Analytics page's numbers; members, moderators and the channel guide get not-found", async () => {
+  vi.stubEnv("ARX_PUBLIC_APP_URL", "https://polynet.test");
+  vi.useFakeTimers({ toFake: ["Date"] }); vi.setSystemTime(new Date("2026-11-18T20:00:00.000Z"));
+  const t = convexTest(schema, modules);
+  const f = await createFixture(t);
+  const admin = await createAdminFixture(t, f);
+  const now = Date.now();
+  await t.run(async (ctx) => {
+    // Visits to the join page: three this week, two more earlier this month; one started joining.
+    for (const daysAgo of [1, 2, 3, 10, 20]) await ctx.db.insert("communityAnalyticsEvents", { communityId: f.communityId, eventType: "funnel_visit", createdAt: now - daysAgo * 86_400_000 });
+    await ctx.db.insert("communityAnalyticsEvents", { communityId: f.communityId, eventType: "funnel_join_started", createdAt: now - 2 * 86_400_000 });
+    // The admin joined twelve days ago: new this month, not this week.
+    const joined = await (ctx.db as any).query("communityMemberships").withIndex("by_community_user", (q: any) => q.eq("communityId", f.communityId).eq("userId", admin.userId)).unique();
+    await ctx.db.patch(joined._id, { createdAt: now - 12 * 86_400_000 });
+  });
+  const path = "/communities/canonical-community/builder/analytics.json";
+  const run = (subject: string, userId: any, principalKind: string, evidenceSurface: string, toolName: "polynet_read" | "polynet_list" = "polynet_read", at = path) =>
+    executePolynetCanonicalTool({ ctx: executionContext(t.withIdentity({ subject })), authSubject: subject, userId, principalKind: principalKind as any,
+      evidenceSurface: evidenceSurface as any, mountedCommunityId: f.communityId, toolName, input: { path: at } });
+  const page = async (subject: string, range: string) => t.withIdentity({ subject }).query(api.communityAdmin.getCommunityAnalyticsSnapshot, { communityId: f.communityId, range });
+
+  for (const [subject, userId] of [[f.ownerSubject, f.ownerId], [admin.authSubject, admin.userId]] as const) {
+    const [page30, page7] = [await page(subject, "30d"), await page(subject, "7d")];
+    for (const [principalKind, evidenceSurface] of [["community_agent_for_member", "member_agent_dock"], ["external_mcp", "external_mcp"]]) {
+      const read = await run(subject, userId, principalKind, evidenceSurface);
+      expect(read, JSON.stringify(read)).toMatchObject({ ok: true, value: { writable: false, truncated: false } });
+      const doc = JSON.parse((read as any).value.body);
+      expect(doc).toMatchObject({ as_of: "2026-11-18T20:00:00.000Z", members: page30.summary.total_members, monthly_revenue: "None: no paid plans yet",
+        by_plan: page30.summary.plans.map((plan: any) => ({ plan: plan.name, members: plan.members })) });
+      for (const [key, snapshot, from] of [["last_30_days", page30, "2026-10-19"], ["last_7_days", page7, "2026-11-11"]] as const) {
+        const s = snapshot.summary;
+        expect(doc[key]).toEqual({ from, to: "2026-11-18", new_members: s.new_members_window,
+          active: `${s.active_members_window} of ${s.total_members} (${Math.round((s.active_members_window / s.total_members) * 100)}%)`,
+          visits_to_the_join_page: s.page_visits_window, started_joining: s.join_starts_window,
+          join_rate: `${Math.round((s.new_members_window / s.page_visits_window) * 100)}% of visitors` });
+      }
+      expect([doc.last_30_days.visits_to_the_join_page, doc.last_7_days.visits_to_the_join_page, doc.last_7_days.started_joining]).toEqual([5, 3, 1]);
+      expect([doc.last_30_days.new_members, doc.last_30_days.join_rate, doc.last_7_days.new_members]).toEqual([1, "20% of visitors", 0]);
+    }
+    // The builder directory lists it for hosts.
+    const listed = await run(subject, userId, "community_agent_for_member", "member_agent_dock", "polynet_list", "/communities/canonical-community/builder/");
+    expect((listed as any).value.entries.map((entry: any) => entry.path)).toContain(path);
+  }
+
+  // A member's guide, a member's own AI, and the guide tagged in a channel (even by the owner) get not-found.
+  for (const [subject, userId, principalKind, evidenceSurface] of [
+    [f.memberSubject, f.memberId, "community_agent_for_member", "member_agent_dock"],
+    [f.memberSubject, f.memberId, "external_mcp", "external_mcp"],
+    [f.ownerSubject, f.ownerId, "community_agent", "community_concierge"],
+  ] as const) {
+    expect(await run(subject, userId, principalKind, evidenceSurface)).toMatchObject({ ok: false, code: "semantic_not_found" });
+  }
+  await expect(page(f.memberSubject, "30d")).rejects.toThrow();
+  // A moderator, like on the page, neither reads it nor sees it listed.
+  await makeModerator(t, f);
+  expect(await run(f.memberSubject, f.memberId, "external_mcp", "external_mcp")).toMatchObject({ ok: false, code: "semantic_not_found" });
+  const moderatorBuilder = await run(f.memberSubject, f.memberId, "external_mcp", "external_mcp", "polynet_list", "/communities/canonical-community/builder/");
+  expect(JSON.stringify(moderatorBuilder)).not.toContain("analytics.json");
+  await expect(page(f.memberSubject, "30d")).rejects.toThrow();
+});
+
 test("a change to the community and its receipt commit together; a retry after a failure makes it once", async () => {
   const t = convexTest(schema, modules);
   const f = await createFixture(t);
