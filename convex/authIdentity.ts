@@ -78,53 +78,57 @@ export async function readAuthenticatedIdentityProfile(
   ctx: any,
 ): Promise<AuthenticatedIdentityProfile | null> {
   try {
-    const identity = await ctx.auth.getUserIdentity();
-    if (!identity) return null;
-    const record = asRecord(identity);
-    if (!record) return null;
-    const authSubject = normalizeSubject(record.subject);
-    if (!authSubject) return null;
-
-    const email = readIdentityString(record, "email") || null;
-    const emailVerified = email
-      ? readIdentityBool(record, "email_verified", "emailVerified", "verified_email", "verifiedEmail")
-      : false;
-    const directDisplayName = readIdentityString(
-      record,
-      "name",
-      "displayName",
-      "display_name",
-      "full_name",
-      "fullName",
-    );
-    const givenName = readIdentityString(record, "given_name", "givenName", "first_name", "firstName");
-    const familyName = readIdentityString(record, "family_name", "familyName", "last_name", "lastName");
-    const displayName = directDisplayName || [givenName, familyName].filter(Boolean).join(" ").trim() || null;
-    const avatarUrl =
-      readIdentityString(
-        record,
-        "picture",
-        "pictureUrl",
-        "picture_url",
-        "profile_picture_url",
-        "profilePictureUrl",
-        "avatarUrl",
-        "avatar_url",
-        "imageUrl",
-        "image_url",
-      ) || null;
-
-    return {
-      authSubject,
-      email,
-      emailVerified,
-      emailVerificationSource: emailVerified ? "oauth_provider" : null,
-      displayName,
-      avatarUrl,
-    };
+    return identityProfileFromClaims(await ctx.auth.getUserIdentity());
   } catch {
     return null;
   }
+}
+
+// The same profile from a token's own claims (sub, email, name...): the MCP
+// door verifies its tokens itself (shared/mcpAccessToken.ts).
+export function identityProfileFromClaims(raw: unknown): AuthenticatedIdentityProfile | null {
+  const record = asRecord(raw);
+  if (!record) return null;
+  const authSubject = normalizeSubject(record.subject ?? record.sub);
+  if (!authSubject) return null;
+
+  const email = readIdentityString(record, "email") || null;
+  const emailVerified = email
+    ? readIdentityBool(record, "email_verified", "emailVerified", "verified_email", "verifiedEmail")
+    : false;
+  const directDisplayName = readIdentityString(
+    record,
+    "name",
+    "displayName",
+    "display_name",
+    "full_name",
+    "fullName",
+  );
+  const givenName = readIdentityString(record, "given_name", "givenName", "first_name", "firstName");
+  const familyName = readIdentityString(record, "family_name", "familyName", "last_name", "lastName");
+  const displayName = directDisplayName || [givenName, familyName].filter(Boolean).join(" ").trim() || null;
+  const avatarUrl =
+    readIdentityString(
+      record,
+      "picture",
+      "pictureUrl",
+      "picture_url",
+      "profile_picture_url",
+      "profilePictureUrl",
+      "avatarUrl",
+      "avatar_url",
+      "imageUrl",
+      "image_url",
+    ) || null;
+
+  return {
+    authSubject,
+    email,
+    emailVerified,
+    emailVerificationSource: emailVerified ? "oauth_provider" : null,
+    displayName,
+    avatarUrl,
+  };
 }
 
 export async function resolveAuthenticatedSubject(args: {

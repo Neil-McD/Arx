@@ -9,6 +9,7 @@ import { v } from "convex/values";
 import { api, internal } from "./_generated/api";
 import { internalMutation, internalQuery } from "./_generated/server";
 import { communityMembershipRowIsActive, getUniqueCommunityMembershipByPair, requireCommunityManager } from "./communityCore";
+import { setCommunityMemberRoleForUser, unbanCommunityUserForUser } from "./communityAdmin";
 
 const refs: { api: any; internal: any } = { api, internal };
 
@@ -33,15 +34,14 @@ export const applyPersonActionForTrustedUserInternal = internalMutation({
   },
   handler: async (ctx, args) => {
     await requireCommunityManager({ ctx, communityId: args.communityId, userId: args.userId });
-    const actor = { userId: args.userId, authSubject: args.authSubject, communityId: args.communityId };
     if (args.action === "unban") {
-      await ctx.runMutation(refs.api.communityAdmin.unbanCommunityUser, { ...actor, targetUserId: args.targetUserId });
+      await unbanCommunityUserForUser(ctx, { userId: args.userId, communityId: args.communityId, targetUserId: args.targetUserId });
       return { unbanned: true };
     }
     const membership = await membershipOf(ctx, args.communityId, args.targetUserId);
     if (!membership || !communityMembershipRowIsActive(membership)) throw new Error("community_member_not_found");
-    await ctx.runMutation(refs.api.communityAdmin.setCommunityMemberRole, {
-      ...actor, targetMembershipId: membership._id, role: args.role ?? "member" });
+    await setCommunityMemberRoleForUser(ctx, {
+      userId: args.userId, communityId: args.communityId, targetMembershipId: membership._id, role: args.role ?? "member" });
     return { role: args.role ?? "member" };
   },
 });

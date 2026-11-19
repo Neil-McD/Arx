@@ -16,13 +16,11 @@ const jwks = explicitJwks || (issuer ? `${trimTrailingSlash(issuer)}/.well-known
 
 const primaryApplicationID =
   readEnv("ARX_AUTH_JWT_AUDIENCE") || readEnv("ARX_AUTH_JWT_APPLICATION_ID") || readEnv("ARX_AUTH_CLIENT_ID");
+// The MCP audience is deliberately not a provider here: a token minted for
+// someone's AI app works at the MCP door only, which checks it itself
+// (shared/mcpAccessToken.ts). Every other function refuses it.
 const mcpApplicationID = readEnv("ARX_MCP_AUTH_JWT_AUDIENCE");
-const applicationIDs = Array.from(
-  new Set([
-    primaryApplicationID,
-    mcpApplicationID,
-  ].filter(Boolean)),
-);
+const applicationIDs = [primaryApplicationID].filter(Boolean);
 const workOsClientId = readEnv("ARX_AUTH_CLIENT_ID") || primaryApplicationID;
 const algorithmRaw = readEnv("ARX_AUTH_JWT_ALGORITHM").toUpperCase();
 const algorithm: "RS256" | "ES256" = algorithmRaw === "ES256" ? "ES256" : "RS256";

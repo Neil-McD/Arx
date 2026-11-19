@@ -368,16 +368,21 @@ bearer_methods_supported: ["header"]
 ```
 
 `ARX_MCP_RESOURCE_URL` is the canonical resource indicator. WorkOS/AuthKit
-must issue audience-bound access tokens for that same URL, and Convex accepts
-the audience through `ARX_MCP_AUTH_JWT_AUDIENCE`.
+must issue audience-bound access tokens for that same URL
+(`ARX_MCP_AUTH_JWT_AUDIENCE`).
 
-`/runtime/mcp` accepts only those tokens (Nov 5). Convex verifies every
-token's signature and issuer, but it accepts several sign-in providers; the
-MCP route additionally requires the token's `aud` to include
-`ARX_MCP_AUTH_JWT_AUDIENCE` (`bearerTokenAudienceIncludes` in
-`convex/httpMcp.ts`), and refuses everything else with 401 (MCP's normal
-"authorize" answer). A Studio browser token, which carries no `aud`, can never
-act as an AI client's key. Unconfigured, the route fails closed.
+Those tokens work at `/runtime/mcp` and nowhere else (Nov 19). The MCP
+audience is not a Convex sign-in provider (`convex/auth.config.ts`), so every
+public Convex function refuses an AI app's token. `/runtime/mcp` checks the
+token itself (`shared/mcpAccessToken.ts`, called from `requireMcpActor` in
+`convex/http.ts`): signed by a key from the issuer's JWKS, with the configured
+algorithm only, issuer `ARX_AUTH_JWT_ISSUER`, `aud` including
+`ARX_MCP_AUTH_JWT_AUDIENCE`, and `exp`/`nbf` in date. Anything else gets 401
+(MCP's normal "authorize" answer); a Studio browser token, which carries no
+`aud`, can never act as an AI client's key. Unconfigured, the route fails
+closed. After the door, the person is the one the door verified: server-side
+reads take them explicitly (`verifiedAtDoor`, trusted-actor lookups), since
+there is no Convex session identity behind an MCP request.
 
 `/.well-known/oauth-authorization-server` is a compatibility projection of
 the configured upstream authorization server. It advertises

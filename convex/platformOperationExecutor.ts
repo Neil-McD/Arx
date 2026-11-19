@@ -218,6 +218,7 @@ export async function executePlatformOperation(args: {
                 {
                   authSubject: String(args.authSubject),
                   ...(args.userId ? { userId: args.userId } : null),
+                  ...(args.evidenceSurface === "external_mcp" ? { verifiedAtDoor: true } : null),
                   ...(pageCursor ? { cursor: pageCursor } : null),
                   ...(typeof limit === "number" ? { limit } : null),
                 },

@@ -425,8 +425,8 @@ require_multiline_match "$COMMUNITY_ADMIN_FILE" \
   'export const blockCommunityUserInternal = internalMutation\(' \
   "ban writes durable community block state"
 require_multiline_match "$COMMUNITY_ADMIN_FILE" \
-  'export const unbanCommunityUser = mutation\(' \
-  "unbanCommunityUser mutation exists"
+  'export async function unbanCommunityUserForUser\(' \
+  "unbanCommunityUserForUser exists"
 require_multiline_match "$COMMUNITY_JOIN_REQUEST_CORE_FILE" \
   'export const COMMUNITY_REMOVAL_REAPPLY_COOLDOWN_MS = 14 \* 24 \* 60 \* 60 \* 1000;' \
   "removed member reapply cooldown is 14 days"
