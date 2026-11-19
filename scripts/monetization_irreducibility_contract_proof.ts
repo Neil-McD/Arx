@@ -39,7 +39,8 @@ const legalContent = read("apps/web/src/docs/legalDocumentsContent.ts");
 const legacyTerms = read("docs/legal/terms-of-service-v1.md");
 const historicalTerms = read("docs/legal/terms-of-service-v2.md");
 const previousTerms = read("docs/legal/terms-of-service-v3.md");
-const currentTerms = read("docs/legal/terms-of-service-v4.md");
+const acceptedV4Terms = read("docs/legal/terms-of-service-v4.md");
+const currentTerms = read("docs/legal/terms-of-service-v5.md");
 const previousPrivacy = read("docs/legal/privacy-ai-data-policy-v1.md");
 const currentPrivacy = read("docs/legal/privacy-ai-data-policy-v2.md");
 const privacyV1SupersessionNotice = read("docs/legal/privacy-ai-data-policy-v1-supersession-notice.md");
@@ -269,7 +270,9 @@ assert.equal(
   "63f0cc88984aadbb40999e100d370381a8fe84f57d5b3e6651edf9460091b11a",
   "accepted Builder Partner terms must remain byte-for-byte immutable",
 );
-assert.match(legalRegistry, /TERMS_OF_SERVICE_VERSION = "terms_of_service_v4"/);
+assert.match(legalRegistry, /TERMS_OF_SERVICE_VERSION = "terms_of_service_v5"/);
+assert.match(legalRegistry, /STILL_ACCEPTED_TERMS_OF_SERVICE_VERSION = "terms_of_service_v4"/);
+assert.match(legalRegistry, /sourcePath: "docs\/legal\/terms-of-service-v5\.md"/);
 assert.match(legalRegistry, /PREVIOUS_TERMS_OF_SERVICE_VERSION = "terms_of_service_v3"/);
 assert.match(legalRegistry, /HISTORICAL_TERMS_OF_SERVICE_VERSION = "terms_of_service_v2"/);
 assert.match(legalRegistry, /LEGACY_TERMS_OF_SERVICE_VERSION = "terms_of_service_v1"/);
@@ -284,7 +287,17 @@ assert.match(
   /documentVersion: TERMS_OF_SERVICE_DOCUMENT\.version/,
   "new Terms acceptance writes must record only the current version",
 );
-assert.match(legalContent, /terms-of-service-v4\.md\?raw/);
+assert.match(legalContent, /terms-of-service-v5\.md\?raw/);
+assert.doesNotMatch(legalContent, /terms-of-service-v4\.md\?raw/);
+// Terms v5: v4 stays byte-for-byte as accepted; v5 names the operator and bans adult content.
+assert.equal(
+  createHash("sha256").update(acceptedV4Terms).digest("hex"),
+  "65abee2e9254db94a8a9a002c96007ecc7115053a2d3ca6c8cd478407992f332",
+  "accepted Terms v4 must remain byte-for-byte immutable",
+);
+assert.match(currentTerms, /Polynet is operated by EXECUTIVEINTELLIGENCE LLC/);
+assert.match(currentTerms, /sexually explicit or pornographic content/);
+assert.match(currentTerms, /support@polynet\.ai/);
 // Privacy v2: adds outside AI apps; v1 stays byte-for-byte as accepted.
 assert.equal(
   createHash("sha256").update(previousPrivacy).digest("hex"),
