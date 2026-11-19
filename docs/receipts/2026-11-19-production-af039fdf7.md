@@ -22,5 +22,5 @@
 
 ## Post-release smoke (fill in)
 
-- [ ] Auth/session bootstrap
-- [ ] Changed surface verified
+- [x] Auth/session bootstrap: www.polynet.ai loads signed in; `version.json` is af039fdf7.
+- [x] Changed surface verified (read-only): Home shows "Continue your conversation"; `/c/polynet/home/talk` opens the conversation at its latest message; one read-only question to the guide ("who are you, and what is the next event?") answered "I'm Polynet's AI guide, and the next event is the Group Call on Friday, November 20, at 10:00 a.m. EST." Nothing was posted or changed.
