@@ -1,0 +1,6 @@
+Contact: mailto:support@polynet.ai
+Contact: https://github.com/Neil-McD/Arx/security/advisories/new
+Policy: https://github.com/Neil-McD/Arx/blob/main/SECURITY.md
+Expires: 2027-11-19T00:00:00.000Z
+Preferred-Languages: en
+Canonical: https://www.polynet.ai/.well-known/security.txt

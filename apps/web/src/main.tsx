@@ -7,7 +7,6 @@ import "@fontsource-variable/geist/wght.css";
 import "@fontsource-variable/geist-mono/wght.css";
 import "./index.css";
 import { isLoginTrampolinePathname, LoginTrampolineRoute } from "./auth/loginTrampoline";
-import { LegalDocumentPage, legalDocumentKeyForPathname } from "./legal/LegalDocumentPage";
 import { bootConvexProbe } from "../../../shared/convexRuntime";
 import { buildTelemetryRouteLabel } from "../../../shared/routePrivacy";
 import { CommunityVisualIdentityRegistryProvider } from "../../../shared/CommunityVisualIdentityRegistry";
@@ -367,23 +366,18 @@ if (typeof window !== "undefined") {
   }, 5000);
 }
 
-// /terms and /privacy: the public legal pages, without the app.
-const legalDocumentKey = legalDocumentKeyForPathname(window.location.pathname || "/");
-
 // /design-lab: the design v1 kit with the mock's sample content, on builds
 // with the design switch on (staging) only. It talks to no backend.
 const isDesignLab =
   document.documentElement.dataset.design === "v1" && window.location.pathname === "/design-lab";
 const DesignLab = React.lazy(() => import("./v1/DesignLab").then((m) => ({ default: m.DesignLab })));
 
-if (!isLoginTrampoline && !legalDocumentKey && !isDesignLab) {
+if (!isLoginTrampoline && !isDesignLab) {
   bootConvexProbe();
 }
 
 const rootView = isDesignLab
   ? <React.Suspense fallback={null}><DesignLab /></React.Suspense>
-  : legalDocumentKey
-  ? <LegalDocumentPage documentKey={legalDocumentKey} />
   : isLoginTrampoline
     ? <LoginTrampolineRoute />
     : <App />;
