@@ -17,6 +17,7 @@ const NOT_READERS: Record<string, string> = {
   "stagingSeedBriefLab.ts": "staging seed: deletes and recreates its own events",
   "stagingSeedSunrise.ts": "staging seed: deletes and recreates its own events",
   "stagingSeedPolynetDemo.ts": "staging seed: deletes and recreates its own events",
+  "reviewDemoSeed.ts": "reviewer demo seed: deletes and recreates the demo community's own events",
 };
 
 test("every file that reads events applies the pod audience rule", () => {
