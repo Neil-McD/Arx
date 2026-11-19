@@ -1,20 +1,15 @@
 ---
-id: legal.privacy_ai_data_policy_v2_draft
-title: Polynet Privacy & AI Data Policy v2 (draft)
+id: legal.privacy_ai_data_policy_v2
+title: Polynet Privacy & AI Data Policy v2
 version: privacy_ai_data_policy_v2
-effective_date: TBD
+effective_date: 2026-11-19
 last_updated: 2026-11-19
-status: draft
+status: active
 ---
 
-# Polynet Privacy & AI Data Policy v2 (draft)
+# Polynet Privacy & AI Data Policy v2
 
-> DRAFT for Neil's review. Not registered in `shared/legalDocuments.ts`, so nobody is asked
-> to accept it. Changed from v1: the opening line, "founder subscriptions" now "Agent plans",
-> a new section "Outside AI Apps You Connect", item 8 under Information We Collect,
-> item 5 under Sharing Information, and the Retention, User Choices and Contact sections.
-
-Effective date to be set on approval.
+Effective November 19, 2026.
 
 This Privacy & AI Data Policy explains how Polynet collects, uses, shares, and protects information when you use Polynet, including accounts, communities, AI features, outside AI apps you connect to Polynet, paid communities, Agent plans, and connected services.
 
@@ -70,7 +65,7 @@ What the app does with that information is governed by the app provider's own te
 
 Posts, replies and direct messages an outside AI app makes for you are published under your name and marked as made through an AI. Certain actions, such as changing a member's role, removing or banning a member, removing other people's posts, publishing a community's handbook or a course, and opening a community to everyone, are held until you approve them inside Polynet. Outside AI apps cannot make payments or change billing.
 
-You can disconnect an app at any time by removing Polynet from that app's settings. If you leave a community, connected apps lose access to it with your next request.
+You can disconnect an app at any time by removing Polynet from that app's settings. If you leave a community, connected apps lose access to it on their next request.
 
 ## Community Memory And Shared Context
 
@@ -113,7 +108,7 @@ Polynet does not sell full payment card data. Polynet does not intentionally sel
 
 Polynet keeps information for as long as needed to provide the service, operate communities, maintain access and billing truth, resolve disputes, enforce policies, prevent fraud, support users, satisfy legal or accounting obligations, and maintain security and audit records.
 
-Polynet keeps a record of each request and action an outside AI app makes for you, for security and audit, for as long as your account exists.
+Polynet keeps a record of the requests and actions an outside AI app makes for you for as long as needed for security, audit, abuse prevention and support.
 
 Deleting content or an account may not immediately remove backups, logs, payment records, audit records, dispute records, legal records, security records, or information already processed by third-party providers, including outside AI apps you connected.
 

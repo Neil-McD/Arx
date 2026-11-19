@@ -40,6 +40,9 @@ const legacyTerms = read("docs/legal/terms-of-service-v1.md");
 const historicalTerms = read("docs/legal/terms-of-service-v2.md");
 const previousTerms = read("docs/legal/terms-of-service-v3.md");
 const currentTerms = read("docs/legal/terms-of-service-v4.md");
+const previousPrivacy = read("docs/legal/privacy-ai-data-policy-v1.md");
+const currentPrivacy = read("docs/legal/privacy-ai-data-policy-v2.md");
+const privacyV1SupersessionNotice = read("docs/legal/privacy-ai-data-policy-v1-supersession-notice.md");
 const v3SupersessionNotice = read("docs/legal/terms-of-service-v3-supersession-notice.md");
 const legacyTermsSupersessionNotice = read("docs/legal/terms-of-service-v1-supersession-notice.md");
 const termsSupersessionNotice = read("docs/legal/terms-of-service-v2-supersession-notice.md");
@@ -282,6 +285,23 @@ assert.match(
   "new Terms acceptance writes must record only the current version",
 );
 assert.match(legalContent, /terms-of-service-v4\.md\?raw/);
+// Privacy v2: adds outside AI apps; v1 stays byte-for-byte as accepted.
+assert.equal(
+  createHash("sha256").update(previousPrivacy).digest("hex"),
+  "b1e95e770141250d85ddc597755550853152d2ba0dd01867c2362eae19cfe23c",
+  "accepted Privacy v1 must remain byte-for-byte immutable",
+);
+assert.match(legalRegistry, /PRIVACY_AI_DATA_POLICY_VERSION = "privacy_ai_data_policy_v2"/);
+assert.match(legalRegistry, /PREVIOUS_PRIVACY_AI_DATA_POLICY_VERSION = "privacy_ai_data_policy_v1"/);
+assert.match(legalRegistry, /sourcePath: "docs\/legal\/privacy-ai-data-policy-v2\.md"/);
+assert.match(legalContent, /privacy-ai-data-policy-v2\.md\?raw/);
+assert.doesNotMatch(legalContent, /privacy-ai-data-policy-v1\.md\?raw/);
+assert.match(currentPrivacy, /status: active/);
+assert.match(currentPrivacy, /## Outside AI Apps You Connect/);
+assert.match(currentPrivacy, /support@polynet\.ai/);
+assert.doesNotMatch(currentPrivacy, /DRAFT|\(draft\)/);
+assert.match(privacyV1SupersessionNotice, /superseded_by: privacy_ai_data_policy_v2/);
+assert.match(privacyV1SupersessionNotice, /New acceptance\s+writes require `privacy_ai_data_policy_v2`/);
 assert.doesNotMatch(legalContent, /terms-of-service-v3\.md\?raw/);
 assert.doesNotMatch(legalContent, /terms-of-service-v2\.md\?raw/);
 assert.doesNotMatch(legalContent, /terms-of-service-v1\.md\?raw/);
