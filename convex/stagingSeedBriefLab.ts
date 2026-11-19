@@ -6,6 +6,7 @@
 import { syncCommunitySearchDoc } from "./communitySearchDocs";
 import { v } from "convex/values";
 import { internalMutation } from "./_generated/server";
+import { PLATFORM_LEGAL_DOCUMENTS } from "../shared/legalDocuments";
 
 const HOUR_MS = 60 * 60 * 1000;
 const PREFIX = "seed:brief-lab:";
@@ -149,6 +150,20 @@ export const seedBriefLabInternal = internalMutation({
     const staff: Record<string, any> = {};
     for (const [key, name, role] of [["host", "Riley Chen", "admin"], ["mod", "Jo Bell", "moderator"]] as const) {
       const userId = staff[key] = await user(key, name);
+      // Their profile is complete (a handle, a picture, the terms accepted),
+      // so a check can post as them through the real composer, tags and all.
+      const person = await ctx.db.get(userId) as any;
+      const handle = `seed-${key}-${String(userId).slice(-6)}`;
+      if (!person?.handle) await ctx.db.patch(userId, { handle, normalizedHandle: handle, updatedAt: nowMs } as any);
+      const detail = await ctx.db.query("userProfileDetails").withIndex("by_user", (q: any) => q.eq("userId", userId)).first();
+      const profile = { displayName: name, avatarUrl: "https://polynet-staging.vercel.app/favicon.ico", updatedAt: nowMs };
+      if (detail) await ctx.db.patch(detail._id, profile as any);
+      else await ctx.db.insert("userProfileDetails", { userId, ...profile, createdAt: nowMs } as any);
+      const accepted = await ctx.db.query("legalAcceptances").withIndex("by_user", (q: any) => q.eq("userId", userId)).collect();
+      for (const document of PLATFORM_LEGAL_DOCUMENTS) {
+        if (accepted.some((row: any) => row.documentKey === document.key && row.documentVersion === document.version)) continue;
+        await ctx.db.insert("legalAcceptances", { userId, documentKey: document.key, documentVersion: document.version, acceptedAt: nowMs, source: "staging_seed", createdAt: nowMs });
+      }
       const membership = await ctx.db.query("communityMemberships")
         .withIndex("by_community_user" as any, (q: any) => q.eq("communityId", args.communityId).eq("userId", userId)).unique();
       if (membership) await ctx.db.patch(membership._id, { role, createdAt: ago(1200), updatedAt: nowMs, state: "active" } as any);
