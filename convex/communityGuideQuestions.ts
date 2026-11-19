@@ -23,9 +23,12 @@ import { buildCommunityTabPath } from "../shared/webAppRouteState";
 const internalRefs = internal as any;
 const INPUT_MAX_CHARS = 60_000;
 
+// Questions still waiting and still in date (asked within GUIDE_QUESTION_WAIT_MS):
+// bounded in the index, so ones that expired unanswered never crowd out the rest.
 function waitingRows(ctx: any, communityId: any, userId: any) {
+  const since = Date.now() - GUIDE_QUESTION_WAIT_MS;
   return ctx.db.query("communityGuideQuestions")
-    .withIndex("by_community_user_status_createdAt", (q: any) => q.eq("communityId", communityId).eq("userId", userId).eq("status", "waiting"))
+    .withIndex("by_community_user_status_createdAt", (q: any) => q.eq("communityId", communityId).eq("userId", userId).eq("status", "waiting").gt("createdAt", since))
     .order("asc").take(20);
 }
 
@@ -177,6 +180,24 @@ async function askForOwnAi(ctx: any, args: any, nowMs: number) {
   });
   return { ok: true as const, questionId: String(questionId), settled: null };
 }
+
+// What happened to an own AI's request already answered, the very same call
+// (key and all): asked again, the AI is told this before anything else is
+// checked, since a person removed or banned is no longer a member to name.
+export const ownAiOutcomeInternal = internalQuery({
+  args: { communityId: v.id("communities"), userId: v.id("users"), toolName: v.string(), inputJson: v.string() },
+  handler: async (ctx, args) => {
+    const since = Date.now() - GUIDE_QUESTION_WAIT_MS;
+    for (const status of ["done", "declined", "failed"] as const) {
+      const rows = await ctx.db.query("communityGuideQuestions")
+        .withIndex("by_community_user_status_createdAt", (q: any) => q.eq("communityId", args.communityId).eq("userId", args.userId).eq("status", status).gt("createdAt", since))
+        .order("desc").take(50);
+      const same = rows.find((row: any) => row.ownAiApp && row.toolName === args.toolName && row.inputJson === args.inputJson);
+      if (same) return { status, line: same.resultLine ?? "" };
+    }
+    return null;
+  },
+});
 
 // ---- the person's side
 

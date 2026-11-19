@@ -2963,6 +2963,14 @@ async function askPersonFirst(args: {
   const operation = String(args.input.operation ?? "");
   const kind = guideAskFor({ toolName: args.toolName, operation, mode, localPath: target.localPath });
   if (!kind || (ownAi && kind === "post")) return null;
+  // A person's own AI asking again about a request the person already
+  // answered is told what happened, before its targets are checked again
+  // (someone removed or banned is no longer a member to name).
+  if (ownAi) {
+    const settled = await args.ctx.runQuery((internal as any).communityGuideQuestions.ownAiOutcomeInternal,
+      { communityId: target.communityId, userId: args.userId, toolName: args.toolName, inputJson: JSON.stringify(args.rawInput) });
+    if (settled) return ownAiSettledAnswer(settled);
+  }
   let question: string;
   // The channel's name, for the line that says what was done.
   let place: string | undefined;
@@ -3054,10 +3062,15 @@ async function askPersonFirst(args: {
   if (!asked.ok) return canonicalError("invalid_tool_args", "That is too long to ask the person about. Make it shorter.");
   if (!ownAi) return { ok: true, value: waitingToolAnswer(question) };
   // The same request asked again: what the person answered, once they have.
-  if (asked.settled?.status === "done") return { ok: true, value: { ok: true, status: "done", line: asked.settled.line } };
-  if (asked.settled?.status === "declined") return canonicalError("declined_by_person", "The person said No in Polynet, so nothing was done. Don't ask again unless they tell you to.");
-  if (asked.settled?.status === "failed") return canonicalError("failed_after_yes", `The person said Yes, but it couldn't be done: ${asked.settled.line}`);
+  if (asked.settled) return ownAiSettledAnswer(asked.settled);
   return { ok: true, value: ownAiWaitingAnswer({ question, slug: target.communitySlug, key: String(args.rawInput.idempotency_key ?? "") }) };
+}
+
+// What the person answered to an own AI's request, told to that AI.
+function ownAiSettledAnswer(settled: { status: string; line: string }): PolynetCanonicalExecutionResult {
+  if (settled.status === "done") return { ok: true, value: { ok: true, status: "done", line: settled.line } };
+  if (settled.status === "declined") return canonicalError("declined_by_person", "The person said No in Polynet, so nothing was done. Don't ask again unless they tell you to.");
+  return canonicalError("failed_after_yes", `The person said Yes, but it couldn't be done: ${settled.line}`);
 }
 
 // A person's own AI's request, waiting for their Yes or No in Polynet: where

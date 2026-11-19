@@ -738,6 +738,10 @@ test("removing and banning, and deleting a post, wait for the person's Yes too; 
   expect((await roots()).find((row) => row.contentSummary === "Hills on Thursday?").status).toBe("live");
   expect(await f.role()).toBe("member");
   for (const card of cards) expect(await f.answer(card.id, "yes"), card.question).toMatchObject({ status: "done" });
+  // Asked again after the Yes, the AI is told it was done, though the person banned is no longer a member to name.
+  const banAgain = await f.call("owner", "polynet_ban_members", { community: "run-club", members: ["member"], reason: "spam" }, "ChatGPT");
+  expect(banAgain.isError, JSON.stringify(banAgain)).toBe(false);
+  expect(banAgain.structuredContent.status).toBe("done");
   expect((await roots()).find((row) => row.contentSummary === "Hills on Thursday?").status).not.toBe("live");
   const blocks = await f.t.run((ctx: any) => ctx.db.query("communityBlocks").collect()) as any[];
   expect(blocks.filter((row) => String(row.userId) === String(f.users.member) && !row.liftedAt)).toHaveLength(1);
@@ -745,6 +749,13 @@ test("removing and banning, and deleting a post, wait for the person's Yes too; 
 
 test("an AI can't pile up requests: ten wait at most, and the guide's questions are left alone", async () => {
   const f = await approvalsFixture();
+  // Twenty requests that expired unanswered a while ago: they neither count nor hide new ones.
+  await f.t.run(async (ctx: any) => {
+    for (let index = 0; index < 20; index += 1) {
+      await ctx.db.insert("communityGuideQuestions", { communityId: f.runClub, userId: f.users.owner, kind: "change", toolName: "polynet_call",
+        inputJson: `{"old":${index}}`, question: `Old request ${index}?`, status: "waiting", ownAiApp: "Claude", createdAt: Date.now() - 3 * 24 * 60 * 60 * 1000 - index });
+    }
+  });
   // A question the guide asked in the person's talk.
   await f.t.run((ctx: any) => ctx.db.insert("communityGuideQuestions", { communityId: f.runClub, userId: f.users.owner, kind: "post", toolName: "polynet_write",
     inputJson: "{}", question: "Post this in General?", status: "waiting", runId: "guide-run", createdAt: Date.now() }));
