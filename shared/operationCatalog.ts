@@ -117,6 +117,10 @@ export const CALL_OPERATIONS = {
   "community.event.create": entry("builder", "write", "builder_change"),
   "community.event.update": entry("builder", "write", "builder_change"),
   "community.event.cancel": entry("builder", "write", "builder_change"),
+  // A course members see, or stop seeing, all at once; and deleting what they
+  // can see. Asked every time (a course batch builds in draft only).
+  "community.course.publish": entry("builder", "broadcast", "builder_change", { ask: "every_time" }),
+  "community.course.delete": entry("builder", "destroy", "builder_change", { ask: "every_time" }),
   "community.members.set_role": entry("builder", "write", "builder_change", { ask: "every_time" }),
   // Removing or banning someone always waits for the person's yes.
   "community.members.remove": entry("builder", "destroy", "builder_change", { ask: "every_time" }),

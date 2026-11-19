@@ -350,6 +350,10 @@ const CALL_OPERATION_INPUT_SCHEMA: PlatformOperationJsonSchema = {
   additionalProperties: false,
   properties: {
     membership_ref: { type: "string", pattern: "^membership:[A-Za-z0-9]+$", maxLength: 180 },
+    // Courses members see (community.course.publish / .delete): ids from builder/resources/.
+    course: { type: "string", minLength: 1, maxLength: 180 },
+    lesson: { type: "string", minLength: 1, maxLength: 180 },
+    published: { type: "boolean" },
     expected_activation_sequence: { type: "integer", minimum: 0 },
     review_ref: { type: "string", pattern: "^workflow-approval:v1:[a-f0-9]{64}$", maxLength: 100 },
     form_request_ref: { type: "string", pattern: "^form-request:[A-Za-z0-9]+$", maxLength: 180 },

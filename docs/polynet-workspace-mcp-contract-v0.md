@@ -47,8 +47,10 @@ Polynet asks for its own Yes only for what takes something from other people
 that can't be given back, or changes who holds power or what every member (or
 the guide) is told (shared/operationCatalog.ts; Nov 19): changing a role,
 removing or banning members, removing other people's posts, publishing the
-handbook, changing the guide's instructions, and opening the community to
-everyone. Everything else is the AI app's own call, by its approval settings
+handbook, changing the guide's instructions, opening the community to
+everyone, and publishing, unpublishing or deleting a published course
+(`polynet_publish_course`, `polynet_delete_published`; a course batch still
+builds in draft only). Everything else is the AI app's own call, by its approval settings
 and each tool's labels; a person's own posts, replies, direct-message replies
 and deleting their own posts included. This is asked by Polynet itself, not
 trusted to the AI app. The tool
@@ -61,8 +63,7 @@ what happened (`done`, `declined_by_person`, `failed_after_yes`) and never runs
 twice. At most 10 such requests wait per person and community
 (`approvals_waiting`). The app's name comes from the token's OAuth client
 (`shared/mcpAccessToken.ts`, `aiAppNameFromClaims`); it is a label only.
-Publishing, unpublishing or deleting a published course stays `person_only`
-with a link for now.
+Money is never offered to an AI.
 
 A post's stored retry key is the person's own
 (`polynet:<principal>:<userId>:<key>`): two people's AIs sending the same

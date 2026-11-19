@@ -109,6 +109,18 @@ export function guideInstructionsQuestion(text: string): string {
   return text.trim() ? "Replace the guide's instructions with this? It changes how the guide answers every member." : "Clear the guide's instructions?";
 }
 
+export function coursePublishQuestion(args: { name: string; publish: boolean; lessons: number }): string {
+  return args.publish
+    ? `Publish the course "${args.name}"? Members see it and its ${args.lessons === 1 ? "lesson" : `${args.lessons} lessons`} now.`
+    : `Unpublish the course "${args.name}"? Members stop seeing it until it is published again.`;
+}
+
+export function courseDeleteQuestion(args: { kind: "course" | "lesson"; name: string; course: string | null; lessons: number }): string {
+  return args.kind === "course"
+    ? `Delete the published course "${args.name}"${args.lessons ? ` and its ${args.lessons === 1 ? "lesson" : `${args.lessons} lessons`}` : ""}? Members lose it, and it can't be brought back.`
+    : `Delete the lesson "${args.name}"${args.course ? ` from "${args.course}"` : ""}? Members lose it, and it can't be brought back.`;
+}
+
 export function openCommunityQuestion(): string {
   return "Open the community to everyone? Anyone can join without asking, and everyone waiting is let in now. This can't be undone.";
 }
@@ -121,6 +133,8 @@ export function changeResultLine(args: { operation: string; succeeded: number; a
   }
   if (args.operation === "community.agent.instructions.set") return "The guide's instructions were changed.";
   if (args.operation === "community.join_mode.set") return "The community is open to everyone now.";
+  if (args.operation === "community.course.publish") return "Done: the course is changed for members now.";
+  if (args.operation === "community.course.delete") return "It was deleted.";
   if (args.operation !== "community.members.set_role") return "The handbook members see was changed.";
   if (args.succeeded === args.asked) return args.asked === 1 ? "Their role was changed." : `The role of ${args.asked} people was changed.`;
   return `The role of ${args.succeeded} of ${args.asked} people was changed; the others couldn't be.`;
