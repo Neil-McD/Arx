@@ -5,6 +5,7 @@ import { sentryVitePlugin } from "@sentry/vite-plugin";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { pdfAssetsPlugin } from "./pdfAssetsPlugin";
+import { publicPagesPlugin } from "./publicPages";
 import { applyDesignAttribute, DESIGN_V1_ENV_KEY, isDesignV1Enabled } from "./designSystemFlag";
 
 const webRoot = fileURLToPath(new URL(".", import.meta.url));
@@ -105,6 +106,7 @@ export default defineConfig(({ mode }) => {
     plugins: [
       react(),
       pdfAssetsPlugin(),
+      publicPagesPlugin(repoRoot),
       designSystemPlugin(designV1),
       polynetBuildVersionPlugin({
         buildId: appBuildId,
