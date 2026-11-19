@@ -107,7 +107,7 @@ const COMMUNITY_SEMANTIC_LIST_NATIVE_INPUT_SCHEMA: PlatformOperationJsonSchema =
       minLength: 1,
       maxLength: 1024,
       description:
-        "Exact returned directory path, including any path ending in /, or a stable resource-directory ref. Use polynet_read only for entries whose kind is document.",
+        "A folder path exactly as Polynet returned it (it ends in /), or a course's ref from a listing. Use polynet_read only for entries whose kind is document.",
     },
     cursor: {
       type: ["string", "null"],
@@ -234,7 +234,7 @@ const COMMUNITY_SEMANTIC_READ_NATIVE_INPUT_SCHEMA: PlatformOperationJsonSchema =
       minLength: 1,
       maxLength: 1024,
       description:
-        "Exact returned entry whose kind is document, or an exact readable stable resource ref. Never pass a directory or a path ending in /; use polynet_list with the same path.",
+        "A document's path exactly as Polynet returned it (an entry whose kind is document), or a lesson's ref from a listing. Never a folder (a path ending in /): list that with polynet_list.",
     },
     offset: {
       type: "integer",
