@@ -50,7 +50,7 @@ async function view(ctx: any, row: any): Promise<GuideQuestionView> {
 // ---- the executor's side
 
 export const isAlwaysAllowedInternal = internalQuery({
-  args: { communityId: v.id("communities"), userId: v.id("users"), kind: v.literal("post") },
+  args: { communityId: v.id("communities"), userId: v.id("users"), kind: v.union(v.literal("post"), v.literal("message")) },
   handler: async (ctx, args) => Boolean(await ctx.db.query("communityGuideAlwaysAllowed")
     .withIndex("by_community_user_kind", (q) => q.eq("communityId", args.communityId).eq("userId", args.userId).eq("kind", args.kind)).first()),
 });
@@ -251,10 +251,13 @@ export const claimInternal = internalMutation({
       await ctx.db.patch(row._id, { status: "declined", answeredAt: nowMs });
       return { run: false as const, status: "declined" as const, resultLine: null, resultPath: null };
     }
-    if (args.answer === "always" && row.kind === "post") {
+    // "Always allow" is kept only for what may be always allowed (posts and
+    // message replies), and never for a question an outside AI asked.
+    if (args.answer === "always" && !row.ownAiApp && (row.kind === "post" || row.kind === "message")) {
+      const kind = row.kind as "post" | "message";
       const has = await ctx.db.query("communityGuideAlwaysAllowed")
-        .withIndex("by_community_user_kind", (q) => q.eq("communityId", row.communityId).eq("userId", userId).eq("kind", "post")).first();
-      if (!has) await ctx.db.insert("communityGuideAlwaysAllowed", { communityId: row.communityId, userId, kind: "post", createdAt: nowMs });
+        .withIndex("by_community_user_kind", (q) => q.eq("communityId", row.communityId).eq("userId", userId).eq("kind", kind)).first();
+      if (!has) await ctx.db.insert("communityGuideAlwaysAllowed", { communityId: row.communityId, userId, kind, createdAt: nowMs });
     }
     await ctx.db.patch(row._id, { status: "running", answeredAt: nowMs });
     const user: any = await ctx.db.get(userId);
@@ -308,14 +311,14 @@ export const answerGuideQuestion = action({
       // Changing, removing or banning members: done for each person on its own.
       const members = String(input.operation ?? "").startsWith("community.members.");
       if (!execution.ok) result = { status: "failed", line: execution.message, path: null };
-      else if (claimed.kind === "change" || (claimed.kind === "remove" && members)) {
+      else if (claimed.kind === "change" || (claimed.kind === "remove" && (members || String(input.operation ?? "") === "community.course.delete"))) {
         const outcome = (execution.value as any)?.result ?? {};
         const asked = Number(outcome.succeeded ?? 0) + Number(outcome.failed ?? 0);
         const failedAll = members && Number(outcome.succeeded ?? 0) === 0;
         result = { status: failedAll ? "failed" : "done", path: null,
           line: failedAll && outcome.results?.[0]?.message ? String(outcome.results[0].message)
             : changeResultLine({ operation: String(input.operation), succeeded: Number(outcome.succeeded ?? 0), asked }) };
-      } else if (claimed.kind === "remove" && claimed.toolName === "polynet_call") {
+      } else if (claimed.kind === "remove" && claimed.toolName === "polynet_call" && String(input.operation ?? "") === "community.interaction.remove") {
         const outcome = (execution.value as any)?.result ?? {};
         const asked = Number(outcome.succeeded ?? 0) + Number(outcome.failed ?? 0);
         const removed = Number(outcome.succeeded ?? 0);
@@ -347,20 +350,20 @@ export const getGuideAlwaysAllowed = query({
   args: { authSubject: v.optional(v.string()), communityId: v.id("communities") },
   handler: async (ctx, args) => {
     const userId = await resolveUserIdForAuthenticatedRequest({ ctx, authSubject: args.authSubject ?? null });
-    const row = await ctx.db.query("communityGuideAlwaysAllowed")
-      .withIndex("by_community_user_kind", (q) => q.eq("communityId", args.communityId).eq("userId", userId).eq("kind", "post")).first();
-    return { post: Boolean(row) };
+    const rows = await ctx.db.query("communityGuideAlwaysAllowed")
+      .withIndex("by_community_user_kind", (q) => q.eq("communityId", args.communityId).eq("userId", userId)).take(10);
+    return { post: rows.some((row) => row.kind === "post"), message: rows.some((row) => row.kind === "message") };
   },
 });
 
 export const setGuideAlwaysAllowed = mutation({
-  args: { authSubject: v.optional(v.string()), communityId: v.id("communities"), kind: v.literal("post"), on: v.boolean() },
+  args: { authSubject: v.optional(v.string()), communityId: v.id("communities"), kind: v.union(v.literal("post"), v.literal("message")), on: v.boolean() },
   handler: async (ctx, args) => {
     const userId = await resolveUserIdForAuthenticatedRequest({ ctx, authSubject: args.authSubject ?? null });
     const rows = await ctx.db.query("communityGuideAlwaysAllowed")
       .withIndex("by_community_user_kind", (q) => q.eq("communityId", args.communityId).eq("userId", userId).eq("kind", args.kind)).take(5);
     if (args.on && rows.length === 0) await ctx.db.insert("communityGuideAlwaysAllowed", { communityId: args.communityId, userId, kind: args.kind, createdAt: Date.now() });
     if (!args.on) for (const row of rows) await ctx.db.delete(row._id);
-    return { post: args.on };
+    return { [args.kind]: args.on };
   },
 });

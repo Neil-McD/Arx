@@ -88,19 +88,23 @@ describe("what you may do", () => {
     expect(prompt(TALKS.owner).text).not.toContain("is not something this person can do");
   });
 
-  test("what only a person does is said, with where, for a role given the tool it belongs to", () => {
+  test("nothing is left only to a person: what can't be undone is asked about, for a role given the tool it belongs to", () => {
     const owner = prompt(TALKS.owner).text;
-    expect(owner).toMatch(/Only they can do these, in the app; tell them where: opening the community to everyone \(Members, then Who can join\); publishing or unpublishing a course/);
+    // Opening the community, the guide's instructions and publishing or deleting a published course are all asked about now.
+    expect(owner).not.toContain("Only they can do these");
+    expect(owner).toMatch(/After their yes, every time: [^\n]*publish or unpublish a course[^\n]*delete a published course or lesson/);
+    expect(owner).toMatch(/After their yes, every time: [^\n]*open the community to everyone/);
+    expect(owner).toMatch(/After their yes, every time: [^\n]*set the guide's instructions/);
     expect(prompt(TALKS.member).text).not.toContain("Only they can do these");
     for (const [key, entry] of Object.entries(CALL_OPERATION_VARIANTS)) {
       if (entry.ask === "person_only") expect(PERSON_ONLY_WORDS[key], key).toBeTruthy();
     }
   });
 
-  test("the guide is told a post waits for a yes it can always allow, and a reply in a direct message every time", () => {
+  test("the guide is told posts and replies in their messages wait for a yes they can always allow; deleting a post every time", () => {
     const member = prompt(TALKS.member).text;
-    expect(member).toMatch(/After their yes, unless they chose "always allow" for posts: post in a channel, reply to a post, edit their own post\./);
-    expect(member).toMatch(/After their yes, every time: delete their own post, reply in a direct message\./);
+    expect(member).toMatch(/After their yes, unless they chose "always allow" for it: post in a channel, reply to a post, edit their own post, reply in a direct message\./);
+    expect(member).toMatch(/After their yes, every time: delete their own post\./);
     expect(member).toContain("The tool answers waiting_for_person and they see the question with Yes and No. Then say one short line and stop. Never ask for the yes in words");
   });
 });

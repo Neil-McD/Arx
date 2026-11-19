@@ -557,11 +557,28 @@ test("a builder's AI builds courses in draft; it can't publish them or delete wh
   expect(second.structuredContent.result).toMatchObject({ applied: true });
   expect((await lessons()).map((lesson: any) => [lesson.title, lesson.links.length])).toEqual([["Week 2: longer runs", 0], ["Week 1: walk, then run", 0]]);
 
-  // Publishing is a person's switch: the AI is refused and told where it is.
+  // A batch builds in draft: publishing is its own tool, which asks the person first.
   const publishing = await batch("owner", "b2p", "Publish.", [
     { op: "edit_module", module_id: course.id, expected_updated_at: (await courses())[0].updatedAt, module_status: "live" }]);
   expect(publishing.isError).toBe(true);
-  expect(JSON.stringify(publishing)).toContain("use the Published switch");
+  expect(JSON.stringify(publishing)).toContain("polynet_publish_course");
+  expect((await courses())[0].status).toBe("draft");
+  // Through that tool it waits for the person's Yes, then the course is published.
+  const asked = await f.call("owner", "polynet_publish_course", { community: "run-club", course: course.id, published: true, idempotency_key: "pub-1" }, "Claude");
+  expect(asked.structuredContent, JSON.stringify(asked)).toMatchObject({ status: "waiting_for_person", question: expect.stringContaining("Publish the course") });
+  expect((await courses())[0].status).toBe("draft");
+  const asOwner = f.t.withIdentity({ subject: "owner-subject" });
+  const runClub = await f.t.run(async (ctx: any) => (await ctx.db.query("communities").collect()).find((row: any) => row.slug === "run-club")._id);
+  const [card] = await asOwner.query((api as any).communityGuideQuestions.listGuideQuestions, { communityId: runClub }) as any[];
+  expect(card).toMatchObject({ kind: "change", askedBy: "Claude" });
+  expect(await asOwner.action((api as any).communityGuideQuestions.answerGuideQuestion, { communityId: runClub, questionId: card.id, answer: "yes" })).toMatchObject({ status: "done" });
+  expect((await courses())[0].status).toBe("live");
+  // Asked to publish what is already published: said at once, no card.
+  expect((await f.call("owner", "polynet_publish_course", { community: "run-club", course: course.id, published: true, idempotency_key: "pub-2" }, "Claude")).structuredContent.code).toBe("nothing_to_change");
+  // Back to a draft for the rest of this test, through the same card.
+  expect((await f.call("owner", "polynet_publish_course", { community: "run-club", course: course.id, published: false, idempotency_key: "pub-3" }, "Claude")).structuredContent.status).toBe("waiting_for_person");
+  const [back] = await asOwner.query((api as any).communityGuideQuestions.listGuideQuestions, { communityId: runClub }) as any[];
+  await asOwner.action((api as any).communityGuideQuestions.answerGuideQuestion, { communityId: runClub, questionId: back.id, answer: "yes" });
   expect((await courses())[0].status).toBe("draft");
 
   // An order that leaves a lesson out is refused, and nothing in its batch is applied.
@@ -749,22 +766,21 @@ test("the person's No does nothing, and the AI is told so when it asks again", a
   expect(again.structuredContent.code).toBe("declined_by_person");
 });
 
-test("removing and banning, and deleting a post, wait for the person's Yes too; posts and replies still go out", async () => {
+test("removing and banning wait for the person's Yes too; their own posts, and deleting them, are their AI app's call", async () => {
   const f = await approvalsFixture();
   // A post goes out as before: no card.
   const posted = await f.call("owner", "polynet_post", { community: "run-club", channel: "general", text: "Hills on Thursday?" }, "ChatGPT");
   expect(posted.isError, JSON.stringify(posted)).toBe(false);
   expect(await f.cards()).toEqual([]);
-  // Deleting it waits.
+  // Deleting their own post is done at once: it is their own content.
   const del = await f.call("owner", "polynet_delete_post", { community: "run-club", channel: "general", post: posted.structuredContent.ref }, "ChatGPT");
-  expect(del.structuredContent.status, JSON.stringify(del)).toBe("waiting_for_person");
+  expect(del.structuredContent, JSON.stringify(del)).toMatchObject({ done: "deleted" });
   // Banning a member waits (it was a link to do by hand before).
   const ban = await f.call("owner", "polynet_ban_members", { community: "run-club", members: ["member"], reason: "spam" }, "ChatGPT");
   expect(ban.structuredContent.status, JSON.stringify(ban)).toBe("waiting_for_person");
   const cards = await f.cards();
-  expect(cards.map((card) => [card.kind, card.askedBy])).toEqual([["remove", "ChatGPT"], ["remove", "ChatGPT"]]);
+  expect(cards.map((card) => [card.kind, card.askedBy])).toEqual([["remove", "ChatGPT"]]);
   const roots = () => f.t.run((ctx: any) => ctx.db.query("communityInteractionRoots").collect()) as Promise<any[]>;
-  expect((await roots()).find((row) => row.contentSummary === "Hills on Thursday?").status).toBe("live");
   expect(await f.role()).toBe("member");
   for (const card of cards) expect(await f.answer(card.id, "yes"), card.question).toMatchObject({ status: "done" });
   // Asked again after the Yes, the AI is told it was done, though the person banned is no longer a member to name.
@@ -812,4 +828,56 @@ test("an outside AI sees a weekly event once, at its next time, with the next fe
   expect(entries[0].next_times).toHaveLength(3);
   // The occurrence listed still reads on its own path.
   expect((await f.call("member", "polynet_read", { path: entries[0].path })).isError).toBe(false);
+});
+
+test("the guide's instructions and opening the community wait for the person's Yes, then run once", async () => {
+  const f = await approvalsFixture();
+  await f.t.run(async (ctx: any) => ctx.db.patch(f.runClub, { entryPolicy: "approval" }));
+  const told = await f.call("owner", "polynet_set_guide_instructions", { community: "run-club", text: "Keep answers short.", idempotency_key: "ins-1" }, "Claude");
+  expect(told.structuredContent.status, JSON.stringify(told)).toBe("waiting_for_person");
+  const opened = await f.call("owner", "polynet_open_community", { community: "run-club", idempotency_key: "open-1" }, "Claude");
+  expect(opened.structuredContent.status, JSON.stringify(opened)).toBe("waiting_for_person");
+  const community = () => f.t.run((ctx: any) => ctx.db.get(f.runClub)) as Promise<any>;
+  expect((await community()).entryPolicy).toBe("approval");
+  const cards = await f.cards();
+  expect(cards.map((card) => [card.kind, card.askedBy, card.text])).toEqual([
+    ["change", "Claude", "Keep answers short."], ["change", "Claude", null]]);
+  for (const card of cards) expect(await f.answer(card.id, "yes"), card.question).toMatchObject({ status: "done" });
+  expect((await community()).entryPolicy).toBe("open");
+  expect((await f.call("owner", "polynet_open_community", { community: "run-club", idempotency_key: "open-1" }, "Claude")).structuredContent.status).toBe("done");
+  // A builder's own AI is offered opening as its own tool; a member's is not.
+  const listTools = async (handle: string) => {
+    const res = await handleMcpPost({
+      ctx: { runQuery: (ref: any, a: any) => f.t.query(ref, a), runMutation: (ref: any, a: any) => f.t.mutation(ref, a), runAction: (ref: any, a: any) => f.t.action(ref, a) },
+      req: new Request("https://example.convex.site/runtime/mcp", { method: "POST", headers: { "content-type": "application/json" },
+        body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list" }) }),
+      jsonResponse: (_req, status, payload) => Response.json(payload, { status }),
+      requireAuthenticatedActor: async () => ({ ok: true, actor: { authSubject: `${handle}-subject`, dbUserId: (f.users as any)[handle] } }) as any,
+    });
+    return ((await res.json() as any).result.tools as any[]).map((tool) => tool.name);
+  };
+  expect(await listTools("owner")).toContain("polynet_open_community");
+  expect(await listTools("member")).not.toContain("polynet_open_community");
+});
+
+test("deleting a published lesson waits for the person's Yes, then is done; a draft is the batch's own", async () => {
+  const f = await approvalsFixture();
+  const ids = await f.t.run(async (ctx: any) => {
+    const now = Date.now();
+    const course = await ctx.db.insert("communityResourceModules", { communityId: f.runClub, createdByUserId: f.users.owner, status: "live", name: "Start here", sortOrder: 1, createdAt: now, updatedAt: now });
+    const draft = await ctx.db.insert("communityResourceModules", { communityId: f.runClub, createdByUserId: f.users.owner, status: "draft", name: "Later", sortOrder: 2, createdAt: now, updatedAt: now });
+    const lesson = await ctx.db.insert("communityResources", { communityId: f.runClub, createdByUserId: f.users.owner, moduleId: course, type: "post", role: "page", status: "draft",
+      title: "Week one", bodyMd: "Three easy runs.", pinned: false, sortOrder: 1, createdAt: now, updatedAt: now });
+    return { course: String(course), draft: String(draft), lesson: String(lesson) };
+  });
+  const asked = await f.call("owner", "polynet_delete_published", { community: "run-club", lesson: ids.lesson, idempotency_key: "del-1" }, "Claude");
+  expect(asked.structuredContent, JSON.stringify(asked)).toMatchObject({ status: "waiting_for_person", question: 'Delete the lesson "Week one" from "Start here"? Members lose it, and it can\'t be brought back.' });
+  const [card] = await f.cards();
+  expect(card).toMatchObject({ kind: "remove", askedBy: "Claude" });
+  expect(await f.answer(card.id, "yes")).toMatchObject({ status: "done", line: "It was deleted." });
+  expect(await f.t.run((ctx: any) => ctx.db.get(ids.lesson as any))).toBeNull();
+  // A draft course is the course batch's to delete, with no question.
+  expect((await f.call("owner", "polynet_delete_published", { community: "run-club", course: ids.draft, idempotency_key: "del-2" }, "Claude")).structuredContent.code).toBe("not_published");
+  // Both, or neither, is refused.
+  expect((await f.call("owner", "polynet_delete_published", { community: "run-club", idempotency_key: "del-3" }, "Claude")).isError).toBe(true);
 });

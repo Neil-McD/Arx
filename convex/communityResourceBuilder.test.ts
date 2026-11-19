@@ -98,7 +98,7 @@ test("a batch made against an older version of a page is refused, and nothing is
 test("an agent can't publish or unpublish a course, or delete what members can see", async () => {
   const t = convexTest(schema, modules);
   const f = await createFixture(t);
-  const publish = "Publishing and unpublishing a course is done by a person";
+  const publish = "publishing or unpublishing a course is its own step, polynet_publish_course";
   const live = "This is in a published course, so members can see it";
   await expect(send(t, f, "publish-page", [{ op: "create_page", module_id: f.moduleId, title: "Launch", body_md: "Hi", resource_status: "published" }]))
     .rejects.toThrow("community_resource_changeset_publish_deferred");

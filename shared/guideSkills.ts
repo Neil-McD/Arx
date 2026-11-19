@@ -26,7 +26,7 @@ export const COURSE_BUILDING_SKILL_MD = [
   "- When they ask for something broad (\"tidy this up\", \"organise the courses\"), say what is there and what you would change, and make the change once they agree.",
   "- Write a lesson from what they gave you, from what the community already has (its lessons, notes, posts), or from a source they added that is ready. If they ask you to draft from your own knowledge, do it, and say it is your draft for them to check. Never state something about this community that you have not read.",
   "- Make the whole change in one polynet_change_courses call (up to 25 changes; it is saved as a whole or not at all).",
-  "- You cannot publish or unpublish a course, or delete a published course or a lesson in one. Tell them where: Knowledge, open the course, the Published switch at the top, or Delete in its menu. Delete only in a draft course, and only when they clearly ask.",
+  "- Publishing or unpublishing a course is polynet_publish_course; deleting a published course or a lesson in one is polynet_delete_published. Each asks them first, with Yes and No. Delete only when they clearly ask; drafts are deleted in a polynet_change_courses batch.",
   "- Sources: the host adds a link or a file as a source in Knowledge. Use only sources marked ready. Never move or delete a source.",
   "- In your reply use titles, not ids: what changed, which courses are still drafts, what members can see.",
 ].join("\n");

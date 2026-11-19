@@ -36,12 +36,12 @@ import {
 } from "../shared/communitySemanticRepository.ts";
 import { PERSONAL_MEMORY_OPERATION, PERSONAL_MEMORY_PATH } from "../shared/personalMemory.ts";
 import { lensCalls, lensReads, resolveLens, type Lens, type LensView } from "../shared/lens.ts";
-import { guideAskFor, handedBackToPerson, operationFor } from "../shared/operationCatalog.ts";
+import { askAt, guideAskFor, handedBackToPerson, operationFor } from "../shared/operationCatalog.ts";
 import { ACTION_TOOLS } from "../shared/actionTools.ts";
 import { aiEventList } from "../shared/aiEventList.ts";
 import { GUIDE_SKILLS, GUIDE_SKILLS_DIRECTORY_PATH, guideSkillAt, guideSkillPath } from "../shared/guideSkills.ts";
 import {
-  handbookQuestion, memberRemovalQuestion, messageQuestion, NOT_A_MEMBER_HERE, postQuestion, removeQuestion, roleQuestion, OWN_AI_WAITING_MAX, WAITING_FOR_PERSON, waitingToolAnswer,
+  courseDeleteQuestion, coursePublishQuestion, guideInstructionsQuestion, handbookQuestion, memberRemovalQuestion, openCommunityQuestion, GUIDE_QUESTION_TEXT_MAX, messageQuestion, NOT_A_MEMBER_HERE, postQuestion, removeQuestion, roleQuestion, OWN_AI_WAITING_MAX, WAITING_FOR_PERSON, waitingToolAnswer,
 } from "../shared/guideQuestions.ts";
 import {
   COMMUNITY_MEMBER_SELF_DIRECTORY,
@@ -114,8 +114,12 @@ const EVENT_OPERATIONS = [EVENT_CREATE_OPERATION, EVENT_UPDATE_OPERATION, EVENT_
 // An event made through an AI is for members; making one public is the app's.
 const EVENT_FIELDS = ["title", "description_md", "starts_at", "ends_at", "timezone", "location_type", "location_label", "url",
   "recurrence_frequency", "recurrence_interval", "recurrence_until"];
+// Courses members see: published or unpublished, and deleted, on the person's yes.
+const COURSE_PUBLISH_OPERATION = "community.course.publish";
+const COURSE_DELETE_OPERATION = "community.course.delete";
 const COMMUNITY_OPERATIONS = [SETTINGS_UPDATE_OPERATION, JOIN_MODE_OPERATION, AGENT_INSTRUCTIONS_OPERATION,
-  HANDBOOK_DRAFT_OPERATION, HANDBOOK_APPROVE_OPERATION, ...CHANNEL_OPERATIONS, ...EVENT_OPERATIONS];
+  HANDBOOK_DRAFT_OPERATION, HANDBOOK_APPROVE_OPERATION, ...CHANNEL_OPERATIONS, ...EVENT_OPERATIONS,
+  COURSE_PUBLISH_OPERATION, COURSE_DELETE_OPERATION];
 const BUILDER_COMMUNITY_PATH = POLYNET_BUILDER_COMMUNITY_PATH;
 // People: actions on a selection of members (owners and admins).
 const MEMBERS_ROLE_OPERATION = "community.members.set_role";
@@ -976,11 +980,11 @@ function capabilityDocument(args: {
       result: "result: the community as builder/community.json shows it", effects: ["change_community_profile"],
       forbidden_effects: ["pricing", "pictures", "archive"] }
     : args.operation === JOIN_MODE_OPERATION ? {
-      required: ["mode"], mode: "approval (people ask and a host answers) or open. Opening lets in everyone who is waiting and can't be taken back, so an AI never does it: open answers person_only with the link in Polynet where the person does it. A paid community stays paid.",
+      required: ["mode"], mode: "approval (people ask and a host answers) or open. Opening lets in everyone who is waiting and can't be taken back: the person is asked first, every time (waiting_for_person until they say). A paid community stays paid.",
       result: "result: { entry_policy, approved_pending_request_count }", effects: ["set_join_mode_to_approval"], forbidden_effects: ["open_the_community"] }
     : args.operation === AGENT_INSTRUCTIONS_OPERATION ? {
-      required: ["text"], text: "what the community agent is told about this community (up to 40,000 characters); empty clears it",
-      result: "result: { instructions }", effects: ["set_community_agent_instructions"],
+      required: ["text"], text: "what the community agent is told about this community (up to 12,000 characters); empty clears it",
+      result: "the person is shown the text and asked first, every time: the answer is waiting_for_person until they say. Then result: { instructions }", effects: ["set_community_agent_instructions_after_the_persons_yes"],
       forbidden_effects: ["platform_rules", "agent_permissions"] }
     : args.operation === EVENT_CREATE_OPERATION || args.operation === EVENT_UPDATE_OPERATION ? {
       required: args.operation === EVENT_CREATE_OPERATION ? ["title", "starts_at", "timezone"] : ["event"],
@@ -1012,6 +1016,14 @@ function capabilityDocument(args: {
       required: ["channel"], optional: ["after"], channel: "a channel slug from the channels listing",
       after: "the slug of the channel it should follow; leave out or null to put it first",
       result: "result: { channel }", effects: ["reorder_channels"], forbidden_effects: ["move_general"] }
+    : args.operation === COURSE_PUBLISH_OPERATION ? {
+      required: ["course", "published"], course: "the course's id from builder/resources/", published: "true publishes it, false makes it a draft again",
+      result: "the person is shown the course with Yes and No, every time: the answer is waiting_for_person until they say. Then result: { course, published }",
+      effects: ["publish_or_unpublish_a_course_after_the_persons_yes"] }
+    : args.operation === COURSE_DELETE_OPERATION ? {
+      required: [], optional: ["course", "lesson"], one_of: "course or lesson, not both", course: "a published course's id from builder/resources/ (deletes it with its lessons)",
+      lesson: "a lesson's id in a published course", result: "the person is shown what goes with Yes and No, every time: the answer is waiting_for_person until they say. Then result: { deleted, name }",
+      effects: ["delete_published_course_content_after_the_persons_yes"], forbidden_effects: ["delete_sources"] }
     : args.operation === HANDBOOK_DRAFT_OPERATION ? {
       required: ["text"], text: `the handbook draft in markdown, up to ${COMMUNITY_HANDBOOK_MAX_CHARS} characters; members and the agent don't see it until approved`,
       result: "result: { approved_md, draft_md, ... }", effects: ["save_handbook_draft"] }
@@ -2969,8 +2981,13 @@ async function askPersonFirst(args: {
   const { target } = resolved;
   const mode = String(args.input.mode ?? "");
   const operation = String(args.input.operation ?? "");
-  const kind = guideAskFor({ toolName: args.toolName, operation, mode, localPath: target.localPath });
-  if (!kind || (ownAi && kind === "post")) return null;
+  const callInputRaw = args.toolName === "polynet_call" && args.input.input && typeof args.input.input === "object" ? args.input.input as Record<string, unknown> : null;
+  const kind = guideAskFor({ toolName: args.toolName, operation, mode, localPath: target.localPath, input: callInputRaw });
+  // A person's own AI is asked about only what the list asks of it every time
+  // (shared/operationCatalog.ts askAt): its own posts and edits, and deleting
+  // its own posts, are its app's call.
+  const listed = operationFor({ toolName: args.toolName, operation, mode, localPath: target.localPath, input: callInputRaw });
+  if (!kind || (ownAi && (!listed || askAt(listed, "own_ai") !== "every_time"))) return null;
   // A person's own AI asking again about a request the person already
   // answered is told what happened, before its targets are checked again
   // (someone removed or banned is no longer a member to name).
@@ -3019,6 +3036,29 @@ async function askPersonFirst(args: {
       if (typeof callInput.text !== "string" || callInput.text.length > COMMUNITY_HANDBOOK_MAX_CHARS) return null;
       question = handbookQuestion(callInput.text);
       text = callInput.text.trim() || undefined;
+    } else if (operation === AGENT_INSTRUCTIONS_OPERATION) {
+      if (typeof callInput.text !== "string" || callInput.text.length > GUIDE_QUESTION_TEXT_MAX) return null;
+      question = guideInstructionsQuestion(callInput.text);
+      text = callInput.text.trim() || undefined;
+    } else if (operation === JOIN_MODE_OPERATION) {
+      if (callInput.mode !== "open") return null;
+      question = openCommunityQuestion();
+    } else if (operation === COURSE_PUBLISH_OPERATION || operation === COURSE_DELETE_OPERATION) {
+      const course = typeof callInput.course === "string" ? callInput.course : undefined;
+      const lesson = typeof callInput.lesson === "string" ? callInput.lesson : undefined;
+      if (operation === COURSE_PUBLISH_OPERATION && (!course || typeof callInput.published !== "boolean")) return null;
+      if (operation === COURSE_DELETE_OPERATION && Boolean(course) === Boolean(lesson)) return null;
+      const found = await args.ctx.runQuery((internal as any).communityResources.describeCourseTargetInternal,
+        { communityId: target.communityId, ...(lesson ? { lesson } : { course }) }) as { kind: "course" | "lesson"; name: string; course: string | null; live: boolean; lessons: number } | null;
+      if (!found) return canonicalError("semantic_not_found", "No course or lesson with that id here. List builder/resources/ for the ids.");
+      if (operation === COURSE_PUBLISH_OPERATION) {
+        // Nothing to change is said now, not after the person is asked.
+        if (found.live === callInput.published) return canonicalError("nothing_to_change", found.live ? "That course is already published." : "That course is already a draft.");
+        question = coursePublishQuestion({ name: found.name, publish: callInput.published === true, lessons: found.lessons });
+      } else {
+        if (!found.live) return canonicalError("not_published", "That is a draft: delete it with polynet_change_courses, no question needed.");
+        question = courseDeleteQuestion(found);
+      }
     } else {
       const refs = operation === REMOVE_POSTS_OPERATION ? removePostsRefs(target, operation, callInput) : null;
       if (!refs) return null;
@@ -3116,13 +3156,20 @@ async function resolveTalkPictures(args: { ctx: any; userId: string; runId?: str
 // with the talk's community, where the person sees it. What would be refused
 // anyway (not their conversation, a block, the words) is refused now; the
 // rate limit is known only when it is sent.
+async function guideMayReplyWithoutAsking(ctx: any, communityId: string, userId: string): Promise<boolean> {
+  return await ctx.runQuery((internal as any).communityGuideQuestions.isAlwaysAllowedInternal,
+    { communityId, userId, kind: "message" }).catch(() => false) === true;
+}
+
 async function askAboutMessage(args: {
   runId?: string; ctx: any; userId: string; mountedCommunityId?: string | null; input: Record<string, unknown>; rawInput: Record<string, unknown>;
-}): Promise<PolynetCanonicalExecutionResult> {
+}): Promise<PolynetCanonicalExecutionResult | null> {
   const conversationId = messagesConversationId(args.input.path);
   const content = omitNullishObjectFields(args.input.content);
   const text = String(content.text ?? content.body ?? "").trim();
   if (!args.mountedCommunityId) return canonicalError("community_context_required", "Replies are sent from a community's private talk.");
+  // The person chose "always allow" for replies: sent without a question, with every other check.
+  if (await guideMayReplyWithoutAsking(args.ctx, args.mountedCommunityId, args.userId)) return null;
   if (!conversationId) return canonicalError("semantic_not_found", "No conversation of yours at that path. List /messages/ for your conversations.");
   if (String(args.input.mode ?? "") !== "append" || !text) return canonicalError("invalid_tool_args", "Reply with mode append and content.text.");
   const refusal = checkAiPost({ text, reply: true });
@@ -3326,13 +3373,15 @@ async function executeCommunityOperation(args: {
     : operation === CHANNEL_DESCRIBE_OPERATION ? only(["channel", "description"]) && text("channel", 64) && text("description", 400)
     : operation === CHANNEL_MOVE_OPERATION ? only(["channel", "after"]) && text("channel", 64) &&
       (rawInput.after === undefined || rawInput.after === null || text("after", 64))
+    : operation === COURSE_PUBLISH_OPERATION ? only(["course", "published"]) && text("course", 180) && typeof rawInput.published === "boolean"
+    : operation === COURSE_DELETE_OPERATION ? only(["course", "lesson"]) && (text("course", 180) !== text("lesson", 180))
     // The handbook is published exactly as given, so a longer one is refused, never cut.
     : only(["text"]) && text("text", COMMUNITY_HANDBOOK_MAX_CHARS));
   if (!valid) {
     return canonicalError("invalid_tool_args", operation === SETTINGS_UPDATE_OPERATION
       ? "Give expected_revision and at least one of name, slug, one_liner, about or visibility (published or unlisted)."
       : operation === JOIN_MODE_OPERATION ? "mode is open or approval."
-      : operation === AGENT_INSTRUCTIONS_OPERATION ? "Give text (up to 40,000 characters)."
+      : operation === AGENT_INSTRUCTIONS_OPERATION ? "Give text (up to 12,000 characters)."
       : operation === EVENT_CREATE_OPERATION ? "Give title, starts_at (an ISO time) and timezone (an IANA zone), and only the fields the capability lists."
       : operation === EVENT_UPDATE_OPERATION ? "Give event (its parent_event_id) and at least one field to change."
       : operation === EVENT_CANCEL_OPERATION ? "Give event (its parent_event_id)."
@@ -3340,6 +3389,8 @@ async function executeCommunityOperation(args: {
       : operation === CHANNEL_RENAME_OPERATION ? "Give channel (its slug) and name."
       : operation === CHANNEL_DESCRIBE_OPERATION ? "Give channel (its slug) and description."
       : operation === CHANNEL_MOVE_OPERATION ? "Give channel (its slug) and, to put it after another, after (that channel's slug)."
+      : operation === COURSE_PUBLISH_OPERATION ? "Give course (its id from builder/resources/) and published (true or false)."
+      : operation === COURSE_DELETE_OPERATION ? "Give course or lesson (its id from builder/resources/), not both."
       : `Give text (the handbook is at most ${COMMUNITY_HANDBOOK_MAX_CHARS.toLocaleString("en-US")} characters).`);
   }
   // Opening lets in everyone who is waiting, and that can't be taken back.
@@ -3348,8 +3399,14 @@ async function executeCommunityOperation(args: {
     return operation === JOIN_MODE_OPERATION
       ? personOnly({ what: "Opening the community to everyone", where: "Members: Who can join, then Change",
         path: buildCommunityTabPath(target.communitySlug, "members") })
-      : personOnly({ what: "Publishing the handbook", where: "Settings: Guide, then the handbook",
-        path: buildCommunityTabPath(target.communitySlug, "settings", null, "agent") });
+      : operation === AGENT_INSTRUCTIONS_OPERATION
+        ? personOnly({ what: "Changing the guide's instructions", where: "Settings: Guide",
+          path: buildCommunityTabPath(target.communitySlug, "settings", null, "agent") })
+      : operation === COURSE_PUBLISH_OPERATION || operation === COURSE_DELETE_OPERATION
+        ? personOnly({ what: operation === COURSE_PUBLISH_OPERATION ? "Publishing or unpublishing a course" : "Deleting a published course or lesson",
+          where: "Knowledge: open the course, then the Published switch or Delete", path: buildCommunityTabPath(target.communitySlug, "resources") })
+        : personOnly({ what: "Publishing the handbook", where: "Settings: Guide, then the handbook",
+          path: buildCommunityTabPath(target.communitySlug, "settings", null, "agent") });
   }
   // The receipt is the community's (by id), not its address's: after a rename,
   // the same call at the new address replays the answer.
@@ -3691,8 +3748,10 @@ export async function executePolynetCanonicalTool(args: {
         return canonicalError("semantic_not_found", "Repository path not found or not accessible.");
       }
     }
-    // Through the guide a reply is sent only on the person's yes (askAboutMessage).
-    if (privateTalk && args.toolName === "polynet_write" && args.personSaidYes !== true) {
+    // Through the guide a reply is sent only on the person's yes (askAboutMessage),
+    // or when they chose "always allow" for replies.
+    if (privateTalk && args.toolName === "polynet_write" && args.personSaidYes !== true &&
+        !(args.mountedCommunityId && await guideMayReplyWithoutAsking(args.ctx, String(args.mountedCommunityId), userId))) {
       return canonicalError("message_not_sent", "That reply wasn't sent: the person is asked first.");
     }
     return await executeMessages({ ...common, toolName: args.toolName });

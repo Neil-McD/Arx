@@ -2936,13 +2936,14 @@ test("owners and admins run the community itself through their own AI; owner-onl
   // Asked again when it already needs approval: nothing changes, and it says so with where opening is done.
   expect(await adminAi.call("community.join_mode.set", { mode: "approval" }, "j2")).toMatchObject({ ok: false, code: "nothing_to_change",
     message: expect.stringContaining("Joining already needs approval, so nothing changed.") });
-  // Opening lets in everyone who is waiting and can't be taken back: a person does it.
+  // Opening lets in everyone who is waiting and can't be taken back: it waits for the person's Yes in Polynet.
   const opening = await adminAi.call("community.join_mode.set", { mode: "open" }, "j-open");
-  expect(opening, JSON.stringify(opening)).toMatchObject({ ok: false, code: "person_only" });
-  expect((opening as any).message).toContain("Opening the community to everyone is done by a person in Polynet");
-  expect((opening as any).message).toContain("(Members: Who can join, then Change)");
+  expect(opening, JSON.stringify(opening)).toMatchObject({ ok: true, value: { status: "waiting_for_person", question: expect.stringContaining("Open the community to everyone?") } });
   expect(await t.run(async ctx => (await ctx.db.get(f.communityId) as any).entryPolicy)).toBe("approval");
+  // The guide's instructions wait for the Yes too; after it, they are set.
   expect(await owner.call("community.agent.instructions.set", { text: "Keep answers short. Point new runners to the Tuesday easy run." }, "i1"))
+    .toMatchObject({ ok: true, value: { status: "waiting_for_person" } });
+  expect(await owner.call("community.agent.instructions.set", { text: "Keep answers short. Point new runners to the Tuesday easy run." }, "i1", true))
     .toMatchObject({ ok: true, value: { result: { instructions: "Keep answers short. Point new runners to the Tuesday easy run." } } });
   expect(await owner.call("community.handbook.save_draft", { text: "# Start here\nCome on Tuesday." }, "h1"))
     .toMatchObject({ ok: true, value: { result: { draft_md: "# Start here\nCome on Tuesday.", approved_md: null } } });

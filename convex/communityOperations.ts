@@ -40,6 +40,8 @@ export const applyCommunityOperationInternal = internalMutation({
         ? await ctx.runMutation(refs.communityHandbook.approveCommunityHandbookForTrustedUserInternal, { ...scope, text: input.text })
       : args.operation.startsWith("community.event.")
         ? await ctx.runMutation(refs.communityEvents.applyEventOperationForTrustedUserInternal, { ...scope, operation: args.operation, input })
+      : args.operation.startsWith("community.course.")
+        ? await ctx.runMutation(refs.communityResources.applyCourseCardForTrustedUserInternal, { ...scope, operation: args.operation, input })
       : args.operation.startsWith("community.channel.")
         ? await ctx.runMutation(refs.communityChannels.applyChannelOperationForTrustedUserInternal, { ...scope, operation: args.operation, input })
       : (() => { throw new Error("operation_not_found"); })();

@@ -338,13 +338,7 @@ function buildHowToWorkPrompt(): string {
 // What only a person does, in the app, in the words the guide says it.
 // An operation's person_only variant (CALL_OPERATION_VARIANTS) is said when
 // its tool is offered; a variant with no words here fails the guide's test.
-export const PERSON_ONLY_WORDS: Record<string, string> = {
-  "community.join_mode.set:open": "opening the community to everyone (Members, then Who can join)",
-};
-// Course changes are made in draft; publishing, unpublishing and deleting
-// what members see are refused whole (convex/communityResourceChangesets.ts).
-const COURSE_PERSON_ONLY_WORDS =
-  "publishing or unpublishing a course, and deleting a published course or its lessons (Knowledge: open the course, then the Published switch at the top or Delete in its menu)";
+export const PERSON_ONLY_WORDS: Record<string, string> = {};
 
 function toolWords(tool: ActionTool): string {
   return `${tool.title.slice(0, 1).toLowerCase()}${tool.title.slice(1)}`;
@@ -366,12 +360,12 @@ export function buildWhatYouMayDoPrompt(allowedToolNames: readonly RetrievalTool
         if (!words) throw new Error(`guide_person_only_words_missing:${key}`);
         return words;
       }),
-    ...(tools.some((tool) => tool.name === "polynet_change_courses") ? [COURSE_PERSON_ONLY_WORDS] : []),
+
   ];
   return [
     "WHAT YOU MAY DO",
     ...(byAsk.none.length ? [`Straight away, when they tell you to: ${byAsk.none.join(", ")}.`] : []),
-    ...(byAsk.words.length ? [`After their yes, unless they chose "always allow" for posts: ${byAsk.words.join(", ")}.`] : []),
+    ...(byAsk.words.length ? [`After their yes, unless they chose "always allow" for it: ${byAsk.words.join(", ")}.`] : []),
     ...(byAsk.every_time.length ? [`After their yes, every time: ${byAsk.every_time.join(", ")}.`] : []),
     ...(personOnly.length ? [`Only they can do these, in the app; tell them where: ${personOnly.join("; ")}.`] : []),
     ...(!offersHostTools(tools) ? ["Changing members, settings, channels, events or courses is not something this person can do. Say so."] : []),
