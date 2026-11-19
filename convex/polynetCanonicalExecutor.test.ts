@@ -3356,6 +3356,13 @@ test("pods: inside for people in it, builders and the guide working there; outsi
     await ctx.db.insert("communityNotes", { scopeKey: `pod:${String(climbersId)}`, communityId: f.communityId, slug: "session-log", title: "Session log",
       bodyMd: "Log every session by Sunday.", source: "learned", authorKind: "guide", searchText: "session", createdAt: nowMs, updatedAt: nowMs });
     await ctx.db.insert("communityMemoryIndex", { scopeKey: `pod:${String(climbersId)}`, communityId: f.communityId, bodyMd: "- [Session log](memory/session-log.md)", updatedAt: nowMs });
+    // Each pod has a call with its own link; the community has an open event.
+    const call = (title: string, podChannelId: any, url: string) => ctx.db.insert("communityEvents", { communityId: f.communityId, title,
+      startsAt: Date.now() + 86_400_000, endsAt: Date.now() + 90_000_000, timezone: "UTC", status: "live", url, locationType: "online", visibility: "members",
+      ...(podChannelId ? { podChannelId } : {}), createdByUserId: f.ownerId, createdAt: nowMs, updatedAt: nowMs });
+    await call("Open long run", null, "https://meet.example/open-run");
+    await call("Climbers pod call", climbersId, "https://meet.example/climbers-link");
+    await call("Founders pod call", foundersId, "https://meet.example/founders-link");
     const climbPostId = (await ctx.db.query("communityInteractionRoots").collect()).find((row: any) => row.idempotencyKey === "climb-1")._id;
     const foundersPostId = (await ctx.db.query("communityInteractionRoots").collect()).find((row: any) => row.idempotencyKey === "found-1")._id;
     return { climbersId, climbPostId, foundersPostId };
@@ -3433,6 +3440,33 @@ test("pods: inside for people in it, builders and the guide working there; outsi
   const otherRoom = await working("polynet_list", `${base}/channels/founders/`);
   expect(otherRoom.ok).toBe(false);
   expect(JSON.stringify(otherRoom)).not.toContain("Founders-only");
+  // A pod's calls (title, time, link): the guide tagged in an open channel
+  // sees none of them, whoever tagged it, in events/, one event, or
+  // community.md. Working in a pod it sees that pod's calls only.
+  const calls = async (reader: ReturnType<typeof as>) => {
+    const list = await reader("polynet_list", `${base}/events/`);
+    expect(list.ok, JSON.stringify(list)).toBe(true);
+    const each = await Promise.all(((list as any).value.entries ?? []).map((entry: any) => reader("polynet_read", entry.path)));
+    return JSON.stringify([list, each, await reader("polynet_read", `${base}/community.md`)]);
+  };
+  for (const tagged of [guide, as(f.memberSubject, f.memberId, "community_agent", "community_concierge")]) {
+    const seen = await calls(tagged);
+    expect(seen).toContain("Open long run");
+    expect(seen).not.toMatch(/pod call|climbers-link|founders-link/);
+  }
+  const inPod = await calls(working);
+  expect(inPod).toContain("Climbers pod call");
+  expect(inPod).toContain("climbers-link");
+  expect(inPod).not.toMatch(/Founders pod call|founders-link/);
+  // A pod call's own address is closed to the channel guide too.
+  const podCallPath = ((await working("polynet_list", `${base}/events/`)) as any).value.entries.find((entry: any) => JSON.stringify(entry).includes("Climbers pod call")).path;
+  expect(await guide("polynet_read", podCallPath)).toMatchObject({ ok: false });
+  // People keep what they had: a member their own pod's calls, a host every pod's.
+  const memberCalls = await calls(member);
+  expect(memberCalls).toContain("climbers-link");
+  expect(memberCalls).not.toContain("founders-link");
+  expect(await calls(builder)).toContain("founders-link");
+
   // A pod scope is the server's to set: anyone else's call ignores it.
   const memberClaimingPod = as(f.memberSubject, f.memberId, "external_mcp", "external_mcp", "anything");
   expect(listed(await memberClaimingPod("polynet_list", `${base}/pods/`)).sort()).toEqual(["climbers/+in", "scouts/"]);

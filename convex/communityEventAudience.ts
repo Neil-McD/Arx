@@ -24,12 +24,17 @@ async function openPodRoom(ctx: any, communityId: any, channelId: any) {
 }
 
 // A per-person check, reused across a list: may this member see this event?
-export function eventViewer(ctx: any, communityId: any, userId: any): (row: any) => Promise<boolean> {
+// When the reader is the community's own guide (tagged in a channel or
+// working in a pod), pass `guide`: the person who tagged it lends it no pod.
+// It sees a pod's calls only in the pod it is working in, the same rule its
+// channel reads follow (convex/communityChannels.ts).
+export function eventViewer(ctx: any, communityId: any, userId: any, guide?: { podRoomId?: string | null }): (row: any) => Promise<boolean> {
   let actor: any = null;
   const seen = new Map<string, boolean>();
   return async (row: any) => {
     if (!isPodEvent(row)) return true;
     const key = String(row.podChannelId);
+    if (guide && key !== String(guide.podRoomId ?? "")) return false;
     const known = seen.get(key);
     if (known !== undefined) return known;
     const channel = await openPodRoom(ctx, communityId, row.podChannelId);

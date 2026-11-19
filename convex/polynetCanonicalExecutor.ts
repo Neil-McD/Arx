@@ -523,7 +523,7 @@ async function failMutatingOperation(args: {
 // The card's reader-dependent parts come through the same lens-filtered reads
 // as channels/ and events/; a part that can't be read is left out, never failed.
 async function readCommunityCard(
-  args: { ctx: any; userId: string; principalKind: PolynetPrincipalKind },
+  args: { ctx: any; userId: string; principalKind: PolynetPrincipalKind; podRoomId?: string | null },
   target: { communityId: any },
 ): Promise<string | null> {
   const source = await args.ctx.runQuery((internal as any).communityOntologyCards.loadCommunityCardSourceInternal, { communityId: target.communityId });
@@ -542,7 +542,7 @@ async function readCommunityCard(
     if (!cursor) break;
   }
   const eventPage = await args.ctx.runQuery((internal as any).communityEvents.listCommunityEventsForSemanticRepositoryInternal, {
-    userId: args.userId, communityId: target.communityId, limit: COMMUNITY_CARD_LIMITS.events,
+    userId: args.userId, communityId: target.communityId, limit: COMMUNITY_CARD_LIMITS.events, ...guideEventReader(args),
   }).catch(() => null) as { events?: Array<Record<string, unknown>> } | null;
   return renderCommunityCard({
     ...source,
@@ -600,6 +600,14 @@ async function resolvePostSearchFilters(ctx: any, input: Record<string, unknown>
   if (input.kind === "post" || input.kind === "reply") value.kind = input.kind;
   if (input.sort === "relevant" || input.sort === "newest") value.sort = input.sort;
   return { ok: true, value };
+}
+
+// Events read by the community's own guide: the person who tagged it lends it
+// no pod, so a pod's calls show only in the pod it is working in.
+function guideEventReader(args: { principalKind: PolynetPrincipalKind; podRoomId?: string | null }) {
+  return args.principalKind === "community_agent"
+    ? { guide: args.podRoomId ? { podRoomId: String(args.podRoomId) } : {} }
+    : {};
 }
 
 function channelActorKind(principalKind: PolynetPrincipalKind) {
@@ -1343,6 +1351,7 @@ async function executeCanonicalList(args: {
           communityId: target.communityId,
           ...(args.input.cursor ? { cursor: String(args.input.cursor) } : {}),
           limit: typeof args.input.limit === "number" ? args.input.limit : 20,
+          ...guideEventReader(args),
         },
       )) as Record<string, unknown>;
       const events = Array.isArray(value.events)
@@ -1936,6 +1945,7 @@ async function executeCanonicalRead(args: {
           communityId: target.communityId,
           eventId: eventMatch[1],
           occurrenceStartsAt,
+          ...guideEventReader(args),
         },
       )) as Record<string, unknown>;
       return {
