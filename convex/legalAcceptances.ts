@@ -1,5 +1,6 @@
 import {
   PLATFORM_LEGAL_DOCUMENTS,
+  PREVIOUS_PRIVACY_AI_DATA_POLICY_DOCUMENT,
   PRIVACY_AI_DATA_POLICY_DOCUMENT,
   TERMS_OF_SERVICE_DOCUMENT,
 } from "../shared/legalDocuments";
@@ -18,13 +19,21 @@ function throwPlatformLegalAcceptanceError(code: PlatformLegalAcceptanceErrorCod
   throw new ConvexError({ code, reason: code });
 }
 
+// Earlier versions that still count, so members aren't asked to accept again.
+// Privacy v2 (Nov 19) only adds outside AI apps a person connects themselves;
+// members who accepted v1 are told, not re-asked. New acceptances record v2.
+const STILL_ACCEPTED_VERSIONS: Record<string, readonly string[]> = {
+  [PRIVACY_AI_DATA_POLICY_DOCUMENT.key]: [PREVIOUS_PRIVACY_AI_DATA_POLICY_DOCUMENT.version],
+};
+
 function hasLegalAcceptance(
   rows: LegalAcceptanceRow[],
   document: (typeof PLATFORM_LEGAL_DOCUMENTS)[number],
 ): boolean {
   return rows.some((row) =>
     row.documentKey === document.key &&
-    row.documentVersion === document.version
+    (row.documentVersion === document.version ||
+      (STILL_ACCEPTED_VERSIONS[document.key] ?? []).includes(String(row.documentVersion)))
   );
 }
 
