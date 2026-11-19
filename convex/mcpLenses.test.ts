@@ -2,7 +2,7 @@ import { convexTest } from "convex-test";
 import { afterEach, expect, test, vi } from "vitest";
 import { ensureGeneralChannel } from "./communityChannelCore";
 import schema from "./schema";
-import { handleMcpPost } from "./httpMcp";
+import { handleMcpPost, handleToolCall } from "./httpMcp";
 import { api, internal } from "./_generated/api";
 import { PLATFORM_LEGAL_DOCUMENTS } from "../shared/legalDocuments";
 import { BUDGET_LIMITS } from "../shared/operationCatalog";
@@ -78,6 +78,7 @@ async function fixture() {
     return { owner, member, outsider };
   });
   const users: Record<string, any> = ids;
+  let lastError: { code: number; message: string } | null = null;
   const call = async (handle: string, name: string, args: Record<string, unknown>) => {
     // As in production: the MCP door verified the token itself, and nothing
     // after it has a backend sign-in to lean on.
@@ -91,9 +92,21 @@ async function fixture() {
       jsonResponse: (_req, status, payload) => Response.json(payload, { status }),
       requireAuthenticatedActor: async () => ({ ok: true, actor: { authSubject: `${handle}-subject`, dbUserId: users[handle] } }) as any,
     });
-    return (await res.json() as any).result;
+    const json = await res.json() as any;
+    lastError = json.error ?? null;
+    return json.result;
   };
-  return { call, t, users };
+  // The generic write, as the executor runs it for an outside AI behind the
+  // door. tools/call no longer offers it (each action has its own named
+  // tool), but the rules these tests prove are the executor's.
+  const raw = async (handle: string, name: string, args: Record<string, unknown>) => {
+    const result = await handleToolCall({
+      ctx: { runQuery: (ref: any, a: any) => t.query(ref, a), runMutation: (ref: any, a: any) => t.mutation(ref, a), runAction: (ref: any, a: any) => t.action(ref, a) },
+      authSubject: `${handle}-subject`, actor: { dbUserId: users[handle] }, toolName: name, toolArgs: args });
+    return result.ok ? result.result as any
+      : { isError: true, structuredContent: { error: result.message, ...((result as any).code ? { code: (result as any).code } : {}), ...((result as any).details ?? {}) } } as any;
+  };
+  return { call, raw, t, users, lastError: () => lastError };
 }
 
 test("every member reaches the MCP in their own lens; outsiders find nothing", async () => {
@@ -105,7 +118,7 @@ test("every member reaches the MCP in their own lens; outsiders find nothing", a
   expect(JSON.stringify(memberCall.structuredContent.entries)).not.toContain("/builder/");
   expect((await f.call("member", "polynet_list", { path: "/communities/run-club/builder/" })).content[0].text).toContain("semantic_not_found");
   // Posting works in the member lens.
-  const posted = await f.call("member", "polynet_write", { path: "/communities/run-club/channels/general/", mode: "create",
+  const posted = await f.raw("member", "polynet_write", { path: "/communities/run-club/channels/general/", mode: "create",
     content: { text: "Morning run at 7" }, idempotency_key: "member-post" });
   expect(posted.isError, JSON.stringify(posted)).toBe(false);
   // Someone who isn't in run-club gets nothing from it.
@@ -121,7 +134,7 @@ test("every member reaches the MCP in their own lens; outsiders find nothing", a
 const spent = (f: any, userId: any, budget: string, scope: string, minuteCount: number, dayCount = minuteCount) => f.t.run((ctx: any) =>
   ctx.db.insert("accessBudgetCounters", { userId, budget, scope, minuteStartMs: Date.now(), minuteCount, dayStartMs: Date.now(), dayCount, updatedAt: Date.now() }));
 const post = (f: any, who: string, key: string, path = "/communities/run-club/channels/general/") =>
-  f.call(who, "polynet_write", { path, mode: "create", content: { text: `post ${key}` }, idempotency_key: key });
+  f.raw(who, "polynet_write", { path, mode: "create", content: { text: `post ${key}` }, idempotency_key: key });
 
 test("past the post budget, the MCP answers rate_limited with a machine-readable retry time", async () => {
   const f = await fixture();
@@ -151,11 +164,11 @@ test("nothing in a call makes it cheaper: a reused key or a blank root_id is sti
   const f = await fixture();
   expect((await post(f, "member", "first")).isError).toBe(false);
   // A second new post dressed as a reply to nothing is still a new post.
-  const dressed = await f.call("member", "polynet_write", { path: "/communities/run-club/channels/general/", mode: "create",
+  const dressed = await f.raw("member", "polynet_write", { path: "/communities/run-club/channels/general/", mode: "create",
     content: { text: "another", root_id: " " }, idempotency_key: "dressed" });
   expect(dressed.structuredContent).toMatchObject({ code: "rate_limited", budget: "post_channel" });
   // The same key with different words is a different request, and is counted.
-  const reused = await f.call("member", "polynet_write", { path: "/communities/run-club/channels/general/", mode: "create",
+  const reused = await f.raw("member", "polynet_write", { path: "/communities/run-club/channels/general/", mode: "create",
     content: { text: "different words" }, idempotency_key: "first" });
   expect(reused.structuredContent).toMatchObject({ code: "rate_limited", budget: "post_channel" });
   // The same request, to the letter, is a retry: not refused, not counted again.
@@ -249,7 +262,7 @@ test("a post through an AI is marked for everyone; one typed in the app is not",
 
 test("the server refuses what guidance alone would not stop", async () => {
   const f = await fixture();
-  const write = (key: string, content: Record<string, unknown>) => f.call("member", "polynet_write",
+  const write = (key: string, content: Record<string, unknown>) => f.raw("member", "polynet_write",
     { path: "/communities/run-club/channels/general/", mode: "create", content, idempotency_key: key });
   const minute = () => f.t.run(async (ctx: any) => {
     for (const row of await ctx.db.query("accessBudgetCounters").collect()) await ctx.db.patch(row._id, { minuteStartMs: row.minuteStartMs - 60_000 });
@@ -288,22 +301,22 @@ test("the same words cannot be reached by an edit, or by two requests at once", 
     for (const row of await ctx.db.query("accessBudgetCounters").collect()) await ctx.db.patch(row._id, { minuteStartMs: row.minuteStartMs - 60_000 });
   });
   const words = "Join my new course, link in my profile, starts Monday.";
-  const first = await f.call("member", "polynet_write", { path: general, mode: "create", content: { text: words }, idempotency_key: "a" });
+  const first = await f.raw("member", "polynet_write", { path: general, mode: "create", content: { text: words }, idempotency_key: "a" });
   expect(first.isError, JSON.stringify(first)).toBe(false);
   const firstRef = first.structuredContent.ref as string;
   await minute();
-  const other = await f.call("member", "polynet_write", { path: general, mode: "create", content: { text: "Something else entirely, about the weekend run." }, idempotency_key: "b" });
+  const other = await f.raw("member", "polynet_write", { path: general, mode: "create", content: { text: "Something else entirely, about the weekend run." }, idempotency_key: "b" });
   expect(other.isError, JSON.stringify(other)).toBe(false);
   // Editing the second post into the first one's words is a repeat.
-  const edited = await f.call("member", "polynet_write", { path: `${general}${other.structuredContent.ref}.md`, mode: "update", content: { text: words }, idempotency_key: "c" });
+  const edited = await f.raw("member", "polynet_write", { path: `${general}${other.structuredContent.ref}.md`, mode: "update", content: { text: words }, idempotency_key: "c" });
   expect(edited.structuredContent).toMatchObject({ code: "ai_post_duplicate" });
   // Editing the first post without changing its words is not.
-  const same = await f.call("member", "polynet_write", { path: `${general}${firstRef}.md`, mode: "update", content: { text: `${words} ` }, idempotency_key: "d" });
+  const same = await f.raw("member", "polynet_write", { path: `${general}${firstRef}.md`, mode: "update", content: { text: `${words} ` }, idempotency_key: "d" });
   expect(same.isError, JSON.stringify(same)).toBe(false);
   // Two requests at once for new words: one posts.
   await minute();
   const twice = "Two requests arrive together with these exact words.";
-  const [one, two] = await Promise.all(["e", "f"].map((key) => f.call("member", "polynet_write",
+  const [one, two] = await Promise.all(["e", "f"].map((key) => f.raw("member", "polynet_write",
     { path: `${general}${firstRef}/`, mode: "append", content: { text: twice }, idempotency_key: key })));
   expect([one.isError, two.isError].filter(Boolean)).toHaveLength(1);
   expect(await f.t.run((ctx: any) => ctx.db.query("communityInteractionReplies").collect())).toHaveLength(1);
@@ -312,10 +325,10 @@ test("the same words cannot be reached by an edit, or by two requests at once", 
 test("words whose post failed can be posted again", async () => {
   const f = await fixture();
   const words = "This post goes to a channel that does not exist first.";
-  const missing = await f.call("member", "polynet_write", { path: "/communities/run-club/channels/nowhere/", mode: "create", content: { text: words }, idempotency_key: "x" });
+  const missing = await f.raw("member", "polynet_write", { path: "/communities/run-club/channels/nowhere/", mode: "create", content: { text: words }, idempotency_key: "x" });
   expect(missing.isError).toBe(true);
   expect(await f.t.run((ctx: any) => ctx.db.query("aiPostFingerprints").collect())).toHaveLength(0);
-  expect((await f.call("member", "polynet_write", { path: "/communities/run-club/channels/general/", mode: "create", content: { text: words }, idempotency_key: "y" })).isError).toBe(false);
+  expect((await f.raw("member", "polynet_write", { path: "/communities/run-club/channels/general/", mode: "create", content: { text: words }, idempotency_key: "y" })).isError).toBe(false);
 });
 
 test("the server tells a connecting AI how to behave", async () => {
@@ -356,13 +369,13 @@ test("a person's AI reads their own conversations and replies in one that exists
   const read = await f.call("member", "polynet_list", { path: c.path });
   expect(read.structuredContent.entries).toMatchObject([{ from_me: false, text: "Are you coming to the Sunday run?", via_ai: false }]);
   // A reply through the AI: sent as the member, marked for both people.
-  const reply = await f.call("member", "polynet_write", { path: c.path, mode: "append", content: { text: "Yes, see you at 7." }, idempotency_key: "r1" });
+  const reply = await f.raw("member", "polynet_write", { path: c.path, mode: "append", content: { text: "Yes, see you at 7." }, idempotency_key: "r1" });
   expect(reply.isError, JSON.stringify(reply)).toBe(false);
   expect(reply.structuredContent.message).toMatchObject({ from_me: true, text: "Yes, see you at 7.", via_ai: true });
   const stored: any[] = await f.t.run((ctx: any) => ctx.db.query("dmMessages").collect());
   expect(stored.map((row) => [row.viaAi === true, String(row.senderUserId) === String(f.users.member)])).toEqual([[false, false], [true, true]]);
   // The same reply sent again is the same message.
-  await f.call("member", "polynet_write", { path: c.path, mode: "append", content: { text: "Yes, see you at 7." }, idempotency_key: "r1" });
+  await f.raw("member", "polynet_write", { path: c.path, mode: "append", content: { text: "Yes, see you at 7." }, idempotency_key: "r1" });
   expect(await f.t.run((ctx: any) => ctx.db.query("dmMessages").collect())).toHaveLength(2);
   // The owner, in the app, sees the mark on it.
   const seen = await f.t.withIdentity({ subject: "owner-subject" }).query((api as any).directMessages.listDirectMessages,
@@ -378,10 +391,10 @@ test("message answers are in the tools' published shapes, and two people's AIs c
     for (const field of (POLYNET_CANONICAL_TOOL_DEFINITIONS.polynet_list.outputSchema as any).required as string[]) expect(listed.structuredContent, `${path} ${field}`).toHaveProperty(field);
   }
   expect((await f.call("member", "polynet_read", { path: c.path })).isError).toBe(true);
-  const mine = await f.call("member", "polynet_write", { path: c.path, mode: "append", content: { text: "From the member." }, idempotency_key: "r1" });
+  const mine = await f.raw("member", "polynet_write", { path: c.path, mode: "append", content: { text: "From the member." }, idempotency_key: "r1" });
   for (const field of (POLYNET_CANONICAL_TOOL_DEFINITIONS.polynet_write.outputSchema as any).required as string[]) expect(mine.structuredContent).toHaveProperty(field);
   // The owner's AI, with the same key, sends its own message.
-  const theirs = await f.call("owner", "polynet_write", { path: c.path, mode: "append", content: { text: "From the owner." }, idempotency_key: "r1" });
+  const theirs = await f.raw("owner", "polynet_write", { path: c.path, mode: "append", content: { text: "From the owner." }, idempotency_key: "r1" });
   expect(theirs.structuredContent.message).toMatchObject({ from_me: true, text: "From the owner." });
   const stored: any[] = await f.t.run((ctx: any) => ctx.db.query("dmMessages").collect());
   expect(stored.filter((row) => row.viaAi).map((row) => String(row.senderUserId)).sort()).toEqual([String(f.users.member), String(f.users.owner)].sort());
@@ -392,19 +405,19 @@ test("an AI cannot start a conversation, read someone else's, or get round a blo
   const c = await conversation(f);
   // Someone who is not in the conversation finds nothing at its path.
   expect((await f.call("outsider", "polynet_list", { path: c.path })).isError).toBe(true);
-  expect((await f.call("outsider", "polynet_write", { path: c.path, mode: "append", content: { text: "hello there" }, idempotency_key: "o1" })).isError).toBe(true);
+  expect((await f.raw("outsider", "polynet_write", { path: c.path, mode: "append", content: { text: "hello there" }, idempotency_key: "o1" })).isError).toBe(true);
   expect((await f.call("outsider", "polynet_list", { path: "/messages/" })).structuredContent.entries).toEqual([]);
   // There is no path that names a person: nothing starts a conversation.
   for (const path of ["/messages/", "/messages/owner/", "/messages/new/"]) {
-    expect((await f.call("member", "polynet_write", { path, mode: "append", content: { text: "hello there" }, idempotency_key: `n${path.length}` })).isError, path).toBe(true);
+    expect((await f.raw("member", "polynet_write", { path, mode: "append", content: { text: "hello there" }, idempotency_key: `n${path.length}` })).isError, path).toBe(true);
   }
-  expect((await f.call("member", "polynet_write", { path: c.path, mode: "create", content: { text: "hello there" }, idempotency_key: "n0" })).isError).toBe(true);
+  expect((await f.raw("member", "polynet_write", { path: c.path, mode: "create", content: { text: "hello there" }, idempotency_key: "n0" })).isError).toBe(true);
   expect(await f.t.run((ctx: any) => ctx.db.query("dmConversations").collect())).toHaveLength(1);
   // The owner blocks the member: the member's AI can no longer reply.
   const memberPublic = await f.t.run(async (ctx: any) => (await ctx.db.get(f.users.member)).publicUserId ?? null);
   if (memberPublic) {
     await f.t.withIdentity({ subject: "owner-subject" }).mutation((api as any).directMessages.blockDirectMessageUser, { authSubject: "owner-subject", targetUserId: memberPublic });
-    const blocked = await f.call("member", "polynet_write", { path: c.path, mode: "append", content: { text: "Still coming?" }, idempotency_key: "b1" });
+    const blocked = await f.raw("member", "polynet_write", { path: c.path, mode: "append", content: { text: "Still coming?" }, idempotency_key: "b1" });
     expect(blocked.isError).toBe(true);
   }
 });
@@ -412,11 +425,11 @@ test("an AI cannot start a conversation, read someone else's, or get round a blo
 test("message replies through an AI have their own, smaller budget, and the same content checks", async () => {
   const f = await fixture();
   const c = await conversation(f);
-  expect((await f.call("member", "polynet_write", { path: c.path, mode: "append", content: { text: "x".repeat(1_600) }, idempotency_key: "long" })).structuredContent)
+  expect((await f.raw("member", "polynet_write", { path: c.path, mode: "append", content: { text: "x".repeat(1_600) }, idempotency_key: "long" })).structuredContent)
     .toMatchObject({ code: "ai_post_too_long" });
   await f.t.run(async (ctx: any) => { for (const row of await ctx.db.query("accessBudgetCounters").collect()) await ctx.db.delete(row._id); });
   await spent(f, f.users.member, "message_reply", "", BUDGET_LIMITS.message_reply.perMinute);
-  const refused = await f.call("member", "polynet_write", { path: c.path, mode: "append", content: { text: "One more." }, idempotency_key: "over" });
+  const refused = await f.raw("member", "polynet_write", { path: c.path, mode: "append", content: { text: "One more." }, idempotency_key: "over" });
   expect(refused.structuredContent).toMatchObject({ code: "rate_limited", budget: "message_reply", window: "minute" });
   // Posting in a channel is a different budget.
   expect((await post(f, "member", "still-posts")).isError).toBe(false);
@@ -438,7 +451,7 @@ test("the host's switch: members' AIs read but do not post, and the rules say so
   // Reading still works, the rules say why, and messages are not the host's to switch off.
   expect((await f.call("member", "polynet_list", { path: "/communities/run-club/channels/general/" })).isError).toBe(false);
   expect((await f.call("member", "polynet_read", { path: "/communities/run-club/rules.md" })).structuredContent.body).toContain("turned off in this community");
-  expect((await f.call("member", "polynet_write", { path: c.path, mode: "append", content: { text: "Yes, see you at 7." }, idempotency_key: "dm" })).isError).toBe(false);
+  expect((await f.raw("member", "polynet_write", { path: c.path, mode: "append", content: { text: "Yes, see you at 7." }, idempotency_key: "dm" })).isError).toBe(false);
   // The host's own AI is refused too: the switch is about AIs, not about who.
   expect((await post(f, "owner", "host-ai")).structuredContent).toMatchObject({ code: "ai_posting_off" });
   // Back on.
@@ -451,7 +464,7 @@ test("the host's switch: members' AIs read but do not post, and the rules say so
 
 test("a builder's AI makes, renames, describes and orders channels; a member's cannot", async () => {
   const f = await fixture();
-  const op = (who: string, operation: string, input: Record<string, unknown>, key: string) => f.call(who, "polynet_call", {
+  const op = (who: string, operation: string, input: Record<string, unknown>, key: string) => f.raw(who, "polynet_call", {
     operation, version: 1, target: `/communities/run-club/capabilities/${operation}.json`, input, idempotency_key: key });
   const slugs = async () => (await f.call("owner", "polynet_list", { path: "/communities/run-club/channels/" })).structuredContent.entries
     .map((entry: any) => entry.path.split("/channels/")[1].replace(/\/$/, ""));
@@ -500,7 +513,7 @@ test("a builder's AI makes, renames, describes and orders channels; a member's c
 test("a builder's AI builds courses in draft; it can't publish them or delete what members see", async () => {
   const f = await fixture();
   const communityId = await f.t.run(async (ctx: any) => (await ctx.db.query("communities").withIndex("by_slug", (q: any) => q.eq("slug", "run-club")).first())._id);
-  const batch = (who: string, key: string, summary: string, operations: unknown[]) => f.call(who, "polynet_write", {
+  const batch = (who: string, key: string, summary: string, operations: unknown[]) => f.raw(who, "polynet_write", {
     path: "/communities/run-club/builder/resources/", mode: "create", content: { summary, operations }, idempotency_key: key });
   const courses = () => f.t.run(async (ctx: any) => (await ctx.db.query("communityResourceModules").collect())
     .sort((a: any, b: any) => a.sortOrder - b.sortOrder).map((row: any) => ({ id: String(row._id), name: row.name, status: row.status, updatedAt: row.updatedAt })));
@@ -562,7 +575,7 @@ test("a builder's AI builds courses in draft; it can't publish them or delete wh
   expect((await lessons()).map((lesson: any) => lesson.title)).toEqual(["Week 1: walk, then run"]);
   const meanwhile = await batch("owner", "b5", "Add a second course.", [{ op: "create_module", name: "Race day" }]);
   expect(meanwhile.structuredContent.result).toMatchObject({ applied: true });
-  await f.call("owner", "polynet_write", { path: "/communities/run-club/builder/resources/", mode: "create",
+  await f.raw("owner", "polynet_write", { path: "/communities/run-club/builder/resources/", mode: "create",
     content: { summary: "Race day first.", operations: [{ op: "reorder_modules", module_ids: (await courses()).map((row: any) => row.id).reverse() }] }, idempotency_key: "b6" });
   expect((await courses()).map((row: any) => row.name)).toEqual(["Race day", "Your first 5k"]);
 
@@ -581,4 +594,68 @@ test("a builder's AI builds courses in draft; it can't publish them or delete wh
   // A member's AI has no builder folder at all.
   expect((await batch("member", "m1", "Mine.", [{ op: "create_module", name: "Mine" }])).isError).toBe(true);
   expect(await courses()).toHaveLength(2);
+});
+
+test("an outside AI is offered only reading and the named actions: the generic write and call are not there", async () => {
+  const f = await fixture();
+  for (const name of ["polynet_write", "polynet_call"]) {
+    expect(await f.call("member", name, { path: "/communities/run-club/channels/general/", mode: "create", content: { text: "hi" }, idempotency_key: "g" })).toBeUndefined();
+    expect(f.lastError()).toEqual({ code: -32601, message: "Tool not found." });
+  }
+  const posts = (await f.t.run((ctx: any) => ctx.db.query("communityInteractionRoots").collect())) as any[];
+  expect(posts.filter((post) => post.contentSummary === "hi")).toEqual([]);
+});
+
+test("what an outside AI sends must fit the tool's shape: unknown, missing or wrong fields are refused with where and what", async () => {
+  const f = await fixture();
+  const refused = async (name: string, args: Record<string, unknown>, ...expected: string[]) => {
+    const result = await f.call("owner", name, args);
+    expect(result.isError, JSON.stringify(result)).toBe(true);
+    expect(result.structuredContent.code).toBe("invalid_tool_args");
+    for (const problem of expected) expect(result.structuredContent.problems).toContain(problem);
+  };
+  await refused("polynet_post", { community: "run-club", channel: "general", text: "Hello", not_in_schema: { x: 1 } }, "not_in_schema: not a field of this tool");
+  await refused("polynet_post", { community: "run-club", channel: "general" }, "text: missing");
+  await refused("polynet_post", { community: "run-club", channel: "general", text: 42 }, "text: should be text, got a number");
+  // A misspelled optional field would have been dropped, and the event made without it.
+  await refused("polynet_create_event", { community: "run-club", title: "Hill repeats", starts_at: "2026-12-01T07:00:00-05:00",
+    timezone: "America/New_York", recurence_frequency: "weekly" }, "recurence_frequency: not a field of this tool");
+  await refused("polynet_create_event", { community: "run-club", title: "Hill repeats", starts_at: "2026-12-01T07:00:00-05:00",
+    timezone: "America/New_York", recurrence_frequency: "fortnightly" }, 'recurrence_frequency: must be one of "none", "daily", "weekly", "monthly"');
+  await refused("polynet_list", { path: "/communities/", limt: 5 }, "limt: not a field of this tool");
+  expect(await f.t.run((ctx: any) => ctx.db.query("communityEvents").collect())).toEqual([]);
+  // What fits runs.
+  expect((await f.call("owner", "polynet_post", { community: "run-club", channel: "general", text: "Hello" })).isError).toBe(false);
+});
+
+test("two people's AIs sending the same short words, or picking the same key, make two posts", async () => {
+  const f = await fixture();
+  // One new post a minute in a channel, per person: each post here starts a fresh minute.
+  const post = async (who: string, text: string, key?: string) => {
+    await f.t.run(async (ctx: any) => {
+      for (const row of await ctx.db.query("accessBudgetCounters").collect()) await ctx.db.patch(row._id, { minuteStartMs: row.minuteStartMs - 60_000 });
+    });
+    return await f.call(who, "polynet_post", { community: "run-club", channel: "general", text, ...(key ? { idempotency_key: key } : {}) });
+  };
+  const mine = await post("member", "Count me in!");
+  const theirs = await post("owner", "Count me in!");
+  expect(mine.isError, JSON.stringify(mine)).toBe(false);
+  expect(theirs.isError, JSON.stringify(theirs)).toBe(false);
+  expect(theirs.structuredContent.ref).not.toBe(mine.structuredContent.ref);
+  const a = await post("member", "Anyone up for hills on Thursday evening?", "post-1");
+  const b = await post("owner", "I lost my water bottle at the track, has anyone seen it?", "post-1");
+  expect(a.isError, JSON.stringify(a)).toBe(false);
+  expect(b.isError, JSON.stringify(b)).toBe(false);
+  // One person's retry is still a retry: the same post, not a second.
+  expect((await post("member", "Anyone up for hills on Thursday evening?", "post-1")).structuredContent.ref).toBe(a.structuredContent.ref);
+  // Two long keys that differ only at the end are two posts too.
+  const long = "k".repeat(110);
+  const first = await post("member", "Long key, first post about the weekend.", `${long}-a`);
+  const second = await post("member", "Long key, second post about shoes.", `${long}-b`);
+  expect(first.isError, JSON.stringify(first)).toBe(false);
+  expect(second.isError, JSON.stringify(second)).toBe(false);
+  expect(second.structuredContent.ref).not.toBe(first.structuredContent.ref);
+  const roots = (await f.t.run((ctx: any) => ctx.db.query("communityInteractionRoots").collect())) as any[];
+  expect(roots.filter((root) => root.contentSummary === "Count me in!")).toHaveLength(2);
+  expect(roots.filter((root) => /hills on Thursday/.test(root.contentSummary))).toHaveLength(1);
 });
