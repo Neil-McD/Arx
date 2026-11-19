@@ -40,7 +40,7 @@ import { guideAskFor, handedBackToPerson, operationFor } from "../shared/operati
 import { ACTION_TOOLS } from "../shared/actionTools.ts";
 import { GUIDE_SKILLS, GUIDE_SKILLS_DIRECTORY_PATH, guideSkillAt, guideSkillPath } from "../shared/guideSkills.ts";
 import {
-  handbookQuestion, memberRemovalQuestion, messageQuestion, NOT_A_MEMBER_HERE, postQuestion, removeQuestion, roleQuestion, waitingToolAnswer,
+  handbookQuestion, memberRemovalQuestion, messageQuestion, NOT_A_MEMBER_HERE, postQuestion, removeQuestion, roleQuestion, OWN_AI_WAITING_MAX, WAITING_FOR_PERSON, waitingToolAnswer,
 } from "../shared/guideQuestions.ts";
 import {
   COMMUNITY_MEMBER_SELF_DIRECTORY,
@@ -939,7 +939,7 @@ function capabilityDocument(args: {
     if (named) {
       operationDefinition.tool = named;
       operationDefinition.call = `Use the ${named} tool: its inputs are plain, and it needs no version, target or key.`;
-    } else if (listed?.ask === "person_only" || (listed?.ask === "every_time" && listed.effect === "destroy")) {
+    } else if (listed?.ask === "person_only") {
       const page = args.operation === REMOVE_POSTS_OPERATION ? "chat" : "members";
       delete operationDefinition.call;
       operationDefinition.tool = null;
@@ -959,7 +959,7 @@ function capabilityDocument(args: {
       required: ["members"], members, result: "result: { results, succeeded, failed }", effects: ["unban_members"] }
     : {
       required: ["members"], ...(args.operation === MEMBERS_BAN_OPERATION ? { optional: ["reason"], reason: "why, for the record (up to 1,000 characters)" } : {}),
-      members, ...(args.principalKind === "community_agent_for_member" ? {
+      members, ...(polynetAsksPerson(args.principalKind) ? {
         result: "the person is asked first, every time: they are shown who, with Yes and No, and the answer is waiting_for_person until they say. Then result: { results, succeeded, failed }. The owner can't be removed or banned.",
         effects: [args.operation === MEMBERS_BAN_OPERATION ? "ban_members_after_the_persons_yes" : "remove_members_after_the_persons_yes"],
       } : {
@@ -1020,7 +1020,7 @@ function capabilityDocument(args: {
   } else if (isRemovePostsCapability) {
     operationDefinition.input = { required: ["refs"],
       refs: `a selection of 1 to ${REMOVE_POSTS_MAX} interaction:root:<id> or interaction:reply:<id> refs from channel or thread listings`,
-      ...(args.principalKind === "community_agent_for_member" ? {
+      ...(polynetAsksPerson(args.principalKind) ? {
         result: "the person is asked first, every time: they are shown the posts with Yes and No, and the answer is waiting_for_person until they say. A removed post can't be brought back.",
         effects: ["remove_posts_for_everyone_after_the_persons_yes"], forbidden_effects: ["edit_posts", "ban_authors", "remove_from_other_communities"],
       } : {
@@ -2948,17 +2948,29 @@ function removePostsRefs(target: ResolvedCommunityTarget, operation: string, raw
 async function askPersonFirst(args: {
   runId?: string; ctx: any; authSubject: string; userId: string; principalKind: PolynetPrincipalKind;
   mountedCommunityId?: string | null; evidenceSurface: CommunityEvidenceSurface; toolName: PolynetCanonicalToolName;
-  input: Record<string, unknown>; rawInput: Record<string, unknown>;
+  input: Record<string, unknown>; rawInput: Record<string, unknown>; ownAiApp?: string | null;
 }): Promise<PolynetCanonicalExecutionResult | null> {
   if (args.toolName !== "polynet_write" && args.toolName !== "polynet_call") return null;
-  if (args.toolName === "polynet_write" && isMessagesPath(args.input.path)) return await askAboutMessage(args);
+  // A person's own AI is asked about in Polynet for what asks every time.
+  // Its posts and its replies in their direct messages are its own to send:
+  // the person chose that app to act for them, and it marks what it writes.
+  const ownAi = args.principalKind === "external_mcp";
+  if (args.toolName === "polynet_write" && isMessagesPath(args.input.path)) return ownAi ? null : await askAboutMessage(args);
   const resolved = await resolveCommunityTarget({ ...args, path: args.toolName === "polynet_call" ? args.input.target : args.input.path });
   if (!resolved.ok) return null;
   const { target } = resolved;
   const mode = String(args.input.mode ?? "");
   const operation = String(args.input.operation ?? "");
   const kind = guideAskFor({ toolName: args.toolName, operation, mode, localPath: target.localPath });
-  if (!kind) return null;
+  if (!kind || (ownAi && kind === "post")) return null;
+  // A person's own AI asking again about a request the person already
+  // answered is told what happened, before its targets are checked again
+  // (someone removed or banned is no longer a member to name).
+  if (ownAi) {
+    const settled = await args.ctx.runQuery((internal as any).communityGuideQuestions.ownAiOutcomeInternal,
+      { communityId: target.communityId, userId: args.userId, toolName: args.toolName, inputJson: JSON.stringify(args.rawInput) });
+    if (settled) return ownAiSettledAnswer(settled);
+  }
   let question: string;
   // The channel's name, for the line that says what was done.
   let place: string | undefined;
@@ -3042,9 +3054,43 @@ async function askPersonFirst(args: {
     communityId: target.communityId, userId: args.userId, kind, toolName: args.toolName, inputJson: JSON.stringify(args.rawInput),
     question, ...(place ? { place } : {}), ...(text ? { text } : {}), ...(items ? { items } : {}), ...(args.runId ? { runId: args.runId } : {}),
     ...(pictures ? { pictures } : {}),
+    ...(ownAi ? { ownAiApp: ownAiAppName(args.ownAiApp) } : {}),
   });
+  if (!asked.ok && asked.reason === "too_many_waiting") {
+    return canonicalError("approvals_waiting", `The person already has ${OWN_AI_WAITING_MAX} requests from AIs waiting for their answer in Polynet. Wait for them to answer those first.`);
+  }
   if (!asked.ok) return canonicalError("invalid_tool_args", "That is too long to ask the person about. Make it shorter.");
-  return { ok: true, value: waitingToolAnswer(question) };
+  if (!ownAi) return { ok: true, value: waitingToolAnswer(question) };
+  // The same request asked again: what the person answered, once they have.
+  if (asked.settled) return ownAiSettledAnswer(asked.settled);
+  return { ok: true, value: ownAiWaitingAnswer({ question, slug: target.communitySlug, key: String(args.rawInput.idempotency_key ?? "") }) };
+}
+
+// What the person answered to an own AI's request, told to that AI.
+function ownAiSettledAnswer(settled: { status: string; line: string }): PolynetCanonicalExecutionResult {
+  if (settled.status === "done") return { ok: true, value: { ok: true, status: "done", line: settled.line } };
+  if (settled.status === "declined") return canonicalError("declined_by_person", "The person said No in Polynet, so nothing was done. Don't ask again unless they tell you to.");
+  return canonicalError("failed_after_yes", `The person said Yes, but it couldn't be done: ${settled.line}`);
+}
+
+// A person's own AI's request, waiting for their Yes or No in Polynet: where
+// they answer, and how the AI learns what happened.
+function ownAiWaitingAnswer(args: { question: string; slug: string; key: string }) {
+  // The community's Home ("agent" is Home's tab), where the cards are.
+  const path = buildCommunityTabPath(args.slug, "agent");
+  let link = path;
+  try { link = `${readCanonicalPublicAppOrigin()}${path}`; } catch { /* the path alone still says where */ }
+  return {
+    ok: true, status: WAITING_FOR_PERSON, question: args.question,
+    approve_in_polynet: link,
+    note: `Not done yet, and it won't be unless the person says Yes in Polynet. They see this request on the community's Home in Polynet, with Yes and No: tell them that, with the link. Don't call again until they say they have answered. Then call again with exactly the same input${args.key ? ` and idempotency_key "${args.key}"` : ""} to learn what happened: it runs at most once.`,
+  };
+}
+
+// The app an outside AI is, as the person sees it on the card.
+function ownAiAppName(app: string | null | undefined): string {
+  const name = String(app ?? "").trim();
+  return name ? name.slice(0, 60) : "Your AI app";
 }
 
 // The pictures the guide named, from the talk it is in (the run's), as
@@ -3099,7 +3145,15 @@ function namedToolFor(operation: string, door: "own_ai" | "guide"): string | nul
 // list says so (shared/operationCatalog.ts, handedBackToPerson).
 function handsBack(args: { principalKind: PolynetPrincipalKind; personSaidYes?: boolean }, operation: string, rawInput: Record<string, unknown>): boolean {
   return handedBackToPerson(operationFor({ toolName: "polynet_call", operation, input: rawInput }),
-    { guide: args.principalKind === "community_agent_for_member", personSaidYes: args.personSaidYes === true });
+    { asks: polynetAsksPerson(args.principalKind), personSaidYes: args.personSaidYes === true });
+}
+
+// Where Polynet can put a Yes/No card to the person before an AI acts for
+// them: the guide in their private talk, and their own AI through the MCP.
+// (The community's own agent and a community's site act for nobody who can
+// be asked.)
+function polynetAsksPerson(principalKind: PolynetPrincipalKind): boolean {
+  return principalKind === "community_agent_for_member" || principalKind === "external_mcp";
 }
 
 // Agents prepare; a person makes the change that can't be taken back, with
@@ -3533,6 +3587,9 @@ export async function executePolynetCanonicalTool(args: {
   // The talk pictures that question showed (cloudThreadAttachments ids). Set
   // only by that answer, never from a tool's input.
   approvedPictures?: string[];
+  // Which AI app a person's own AI is (from its verified sign-in, by the MCP
+  // door), shown on the Yes/No card Polynet puts to the person.
+  ownAiApp?: string | null;
 }): Promise<PolynetCanonicalExecutionResult> {
   if (!POLYNET_CANONICAL_TOOL_DEFINITIONS[args.toolName]) {
     return canonicalError("unknown_tool", "Unknown Polynet tool.");
@@ -3600,8 +3657,9 @@ export async function executePolynetCanonicalTool(args: {
       rawInput = { ...args.input, input: { ...rawCall, members: found.refs } };
     }
   }
-  // Asking the person costs nothing; what runs is counted.
-  if (args.principalKind === "community_agent_for_member" && args.personSaidYes !== true) {
+  // Asking the person costs nothing; what runs is counted. The guide in a
+  // private talk and a person's own AI are both asked about in Polynet.
+  if (polynetAsksPerson(args.principalKind) && args.personSaidYes !== true) {
     const asked = await askPersonFirst({ ...common, toolName: args.toolName, rawInput });
     if (asked) return asked;
   }

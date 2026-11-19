@@ -15,7 +15,7 @@ import { executePolynetCanonicalTool } from "./polynetCanonicalExecutor";
 import { GUIDE_ASK_ALWAYS_ALLOWABLE, type GuideAsk } from "../shared/operationCatalog";
 import {
   GUIDE_QUESTION_ITEM_TEXT_MAX, GUIDE_QUESTION_ITEMS_SHOWN, GUIDE_QUESTION_TEXT_MAX, GUIDE_QUESTION_WAIT_MS,
-  changeResultLine, messageResultLine, NOT_A_MEMBER_HERE, postResultLine, removeResultLine, type GuideAnswerResult, type GuideQuestionView,
+  changeResultLine, messageResultLine, NOT_A_MEMBER_HERE, OWN_AI_WAITING_MAX, postResultLine, removeResultLine, type GuideAnswerResult, type GuideQuestionView,
 } from "../shared/guideQuestions";
 import { messagesConversationId } from "../shared/operationCatalog";
 import { buildCommunityTabPath } from "../shared/webAppRouteState";
@@ -23,15 +23,19 @@ import { buildCommunityTabPath } from "../shared/webAppRouteState";
 const internalRefs = internal as any;
 const INPUT_MAX_CHARS = 60_000;
 
+// Questions still waiting and still in date (asked within GUIDE_QUESTION_WAIT_MS):
+// bounded in the index, so ones that expired unanswered never crowd out the rest.
 function waitingRows(ctx: any, communityId: any, userId: any) {
+  const since = Date.now() - GUIDE_QUESTION_WAIT_MS;
   return ctx.db.query("communityGuideQuestions")
-    .withIndex("by_community_user_status_createdAt", (q: any) => q.eq("communityId", communityId).eq("userId", userId).eq("status", "waiting"))
+    .withIndex("by_community_user_status_createdAt", (q: any) => q.eq("communityId", communityId).eq("userId", userId).eq("status", "waiting").gt("createdAt", since))
     .order("asc").take(20);
 }
 
 async function view(ctx: any, row: any): Promise<GuideQuestionView> {
   const shown: GuideQuestionView = { id: String(row._id), kind: row.kind, question: row.question, text: row.text ?? null, items: row.items ?? [],
-    canAlways: GUIDE_ASK_ALWAYS_ALLOWABLE[row.kind as GuideAsk] === true };
+    canAlways: !row.ownAiApp && GUIDE_ASK_ALWAYS_ALLOWABLE[row.kind as GuideAsk] === true,
+    ...(row.ownAiApp ? { askedBy: String(row.ownAiApp) } : {}) };
   if (!row.pictures?.length) return shown;
   // Drawn from the person's own talk files, as the talk draws them; a
   // picture whose message they deleted since has no address.
@@ -122,11 +126,15 @@ export const askInternal = internalMutation({
     toolName: v.string(), inputJson: v.string(), question: v.string(), place: v.optional(v.string()), text: v.optional(v.string()),
     items: v.optional(v.array(v.object({ who: v.string(), text: v.string() }))), runId: v.optional(v.string()),
     pictures: v.optional(v.array(v.object({ id: v.id("cloudThreadAttachments"), name: v.string() }))),
+    ownAiApp: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    if (args.inputJson.length > INPUT_MAX_CHARS || (args.text ?? "").length > GUIDE_QUESTION_TEXT_MAX) return { ok: false as const };
+    if (args.inputJson.length > INPUT_MAX_CHARS || (args.text ?? "").length > GUIDE_QUESTION_TEXT_MAX) return { ok: false as const, reason: "too_long" as const };
     const nowMs = Date.now();
+    if (args.ownAiApp) return await askForOwnAi(ctx, args, nowMs);
     for (const row of await waitingRows(ctx, args.communityId, args.userId)) {
+      // A person's own AI's request is its own: the guide moving on drops nothing of it.
+      if (row.ownAiApp) continue;
       // The same call asked again in the same turn is the same question.
       if (row.runId === args.runId && withoutKey(row.inputJson) === withoutKey(args.inputJson)) return { ok: true as const, questionId: String(row._id) };
       if (!args.runId || row.runId !== args.runId) await ctx.db.patch(row._id, { status: "declined", answeredAt: nowMs, dropped: true });
@@ -141,6 +149,53 @@ export const askInternal = internalMutation({
       status: "waiting", ...(args.runId ? { runId: args.runId } : {}), createdAt: nowMs,
     });
     return { ok: true as const, questionId: String(questionId) };
+  },
+});
+
+// A person's own AI asks. Each request stands alone (there is no turn to
+// move on from). The same request again, key and all, is the same question:
+// waiting, it is still waiting; answered, the AI is told what happened, so
+// asking again never runs it twice. At most OWN_AI_WAITING_MAX wait at once.
+const ANSWER_STATUSES = ["waiting", "running", "done", "declined", "failed"] as const;
+async function askForOwnAi(ctx: any, args: any, nowMs: number) {
+  const since = nowMs - GUIDE_QUESTION_WAIT_MS;
+  for (const status of ANSWER_STATUSES) {
+    const rows = await ctx.db.query("communityGuideQuestions")
+      .withIndex("by_community_user_status_createdAt", (q: any) => q.eq("communityId", args.communityId).eq("userId", args.userId).eq("status", status).gt("createdAt", since))
+      .order("desc").take(50);
+    const same = rows.find((row: any) => row.ownAiApp && row.toolName === args.toolName && row.inputJson === args.inputJson);
+    if (!same) continue;
+    if (status === "waiting" || status === "running") return { ok: true as const, questionId: String(same._id), settled: null };
+    return { ok: true as const, questionId: String(same._id), settled: { status, line: same.resultLine ?? "" } };
+  }
+  const waiting = (await waitingRows(ctx, args.communityId, args.userId)).filter((row: any) => row.ownAiApp && row.createdAt > since);
+  if (waiting.length >= OWN_AI_WAITING_MAX) return { ok: false as const, reason: "too_many_waiting" as const };
+  const questionId = await ctx.db.insert("communityGuideQuestions", {
+    communityId: args.communityId, userId: args.userId, kind: args.kind, toolName: args.toolName, inputJson: args.inputJson,
+    question: args.question.slice(0, 300),
+    ...(args.place ? { place: args.place.slice(0, 120) } : {}),
+    ...(args.text ? { text: args.text } : {}),
+    ...(args.items ? { items: args.items } : {}),
+    status: "waiting", ownAiApp: String(args.ownAiApp).slice(0, 60), createdAt: nowMs,
+  });
+  return { ok: true as const, questionId: String(questionId), settled: null };
+}
+
+// What happened to an own AI's request already answered, the very same call
+// (key and all): asked again, the AI is told this before anything else is
+// checked, since a person removed or banned is no longer a member to name.
+export const ownAiOutcomeInternal = internalQuery({
+  args: { communityId: v.id("communities"), userId: v.id("users"), toolName: v.string(), inputJson: v.string() },
+  handler: async (ctx, args) => {
+    const since = Date.now() - GUIDE_QUESTION_WAIT_MS;
+    for (const status of ["done", "declined", "failed"] as const) {
+      const rows = await ctx.db.query("communityGuideQuestions")
+        .withIndex("by_community_user_status_createdAt", (q: any) => q.eq("communityId", args.communityId).eq("userId", args.userId).eq("status", status).gt("createdAt", since))
+        .order("desc").take(50);
+      const same = rows.find((row: any) => row.ownAiApp && row.toolName === args.toolName && row.inputJson === args.inputJson);
+      if (same) return { status, line: same.resultLine ?? "" };
+    }
+    return null;
   },
 });
 
@@ -178,7 +233,7 @@ export const claimInternal = internalMutation({
     const user: any = await ctx.db.get(userId);
     const community: any = await ctx.db.get(row.communityId);
     return { run: true as const, userId: String(userId), authSubject: String(user?.authSubject ?? ""), communitySlug: String(community?.slug ?? ""),
-      toolName: row.toolName, inputJson: row.inputJson, kind: row.kind, place: row.place ?? null,
+      toolName: row.toolName, inputJson: row.inputJson, kind: row.kind, place: row.place ?? null, ownAiApp: row.ownAiApp ?? null,
       pictures: (row.pictures ?? []).map((picture: any) => String(picture.id)) };
   },
 });
@@ -211,9 +266,14 @@ export const answerGuideQuestion = action({
     const input = JSON.parse(claimed.inputJson) as Record<string, any>;
     let result: GuideAnswerResult;
     try {
+      // Run as whoever asked: the guide, or the person's own AI (so it is
+      // marked, counted and replayed as that AI's, under the key it gave).
       const execution = await executePolynetCanonicalTool({
-        ctx, authSubject: claimed.authSubject, userId: claimed.userId, principalKind: "community_agent_for_member",
-        mountedCommunityId: String(args.communityId), evidenceSurface: "member_agent_dock", toolName: claimed.toolName, input,
+        ctx, authSubject: claimed.authSubject, userId: claimed.userId,
+        ...(claimed.ownAiApp
+          ? { principalKind: "external_mcp" as const, evidenceSurface: "external_mcp" as const, ownAiApp: claimed.ownAiApp }
+          : { principalKind: "community_agent_for_member" as const, mountedCommunityId: String(args.communityId), evidenceSurface: "member_agent_dock" as const }),
+        toolName: claimed.toolName, input,
         personSaidYes: true,
         // The pictures the person was shown, never chosen again.
         ...(claimed.pictures.length ? { approvedPictures: claimed.pictures } : {}),

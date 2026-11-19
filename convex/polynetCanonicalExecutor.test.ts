@@ -2763,7 +2763,7 @@ test("a moderator reviews a selection of join requests: each is decided on its o
   expect(await call({ requests: [observed(rows[3])] }, "k".repeat(136))).toMatchObject({ ok: false, code: "invalid_tool_args" });
 });
 
-test("an AI never removes a post: a moderator's is handed the link where a person does; members and the agent can't ask", async () => {
+test("an AI never removes a post on its own: a moderator's own AI waits for their Yes in Polynet; members and the agent can't ask", async () => {
   const t = convexTest(schema, modules);
   const f = await createFixture(t);
   const as = (subject: string, userId: any, principalKind: any = "external_mcp") => (toolName: any, input: Record<string, unknown>) => executePolynetCanonicalTool({
@@ -2789,12 +2789,11 @@ test("an AI never removes a post: a moderator's is handed the link where a perso
   expect(await remove(as(f.ownerSubject, f.ownerId, "community_agent"), refs.slice(0, 1))).toMatchObject({ ok: false, code: "operation_not_found" });
   await makeModerator(t, f);
   expect(await capabilities(member)).toEqual(expect.arrayContaining(["community.interaction.remove.json", "community.admission.approve.json"]));
-  // A moderator's AI is told a person removes posts, with where; nothing is removed.
+  // A moderator's AI is answered waiting_for_person, with where the person says Yes in Polynet; nothing is removed yet.
   const asked = await remove(member, [refs[0], refs[1]]);
-  expect(asked, JSON.stringify(asked)).toMatchObject({ ok: false, code: "person_only" });
-  expect((asked as any).message).toContain("Removing 2 posts is done by a person in Polynet, not by an AI. Nothing was changed.");
-  expect((asked as any).message).toContain("/c/canonical-community/chat");
-  expect((await remove(owner, [refs[2]], "owner")) as any).toMatchObject({ ok: false, code: "person_only" });
+  expect(asked, JSON.stringify(asked)).toMatchObject({ ok: true, value: { status: "waiting_for_person", question: "Remove these 2 posts? They can't be brought back.",
+    approve_in_polynet: expect.stringContaining("/c/canonical-community/") } });
+  expect((await remove(owner, [refs[2]], "owner")) as any).toMatchObject({ ok: true, value: { status: "waiting_for_person" } });
   const live = await t.run(async ctx => (await ctx.db.query("communityInteractionRoots").collect()).filter(r => r.status === "live").length);
   expect(live).toBe(3);
   expect(await remove(member, [], "k1")).toMatchObject({ ok: false, code: "invalid_tool_args" });
@@ -2878,8 +2877,8 @@ test("the published polynet_call schema covers every input any role's actions ac
     await call(memberSite, "community.presence.heartbeat", {}, "a3"),
     await call(memberSite, "community.typing.set", { channel: "general", on: true }, "a4"),
   ];
-  // What only a person does answers with the refusal, in the error shape.
-  expect(await call(memberMcp, "community.interaction.remove", { refs: [ref] }, "a5")).toMatchObject({ ok: false, code: "person_only" });
+  // What waits for the person's Yes answers waiting_for_person; what only a person does answers with the refusal, in the error shape.
+  expect(await call(memberMcp, "community.interaction.remove", { refs: [ref] }, "a5")).toMatchObject({ ok: true, value: { status: "waiting_for_person" } });
   for (const answer of answers) {
     expect(answer.ok, JSON.stringify(answer)).toBe(true);
     for (const key of required) expect((answer as any).value, `${(answer as any).value?.operation} answers ${key}`).toHaveProperty(key);
@@ -2895,9 +2894,11 @@ test("owners and admins run the community itself through their own AI; owner-onl
   const as = (subject: string, userId: any, slug = "canonical-community") => ({
     read: (path: string) => executePolynetCanonicalTool({ ctx: executionContext(t.withIdentity({ subject })), authSubject: subject, userId,
       principalKind: "external_mcp", evidenceSurface: "external_mcp", toolName: "polynet_read", input: { path: `/communities/${slug}/${path}` } }),
-    call: (operation: string, input: Record<string, unknown>, key: string) => executePolynetCanonicalTool({
+    // personSaidYes: as the person's Yes in Polynet runs it (convex/communityGuideQuestions.ts).
+    call: (operation: string, input: Record<string, unknown>, key: string, personSaidYes = false) => executePolynetCanonicalTool({
       ctx: executionContext(t.withIdentity({ subject })), authSubject: subject, userId, principalKind: "external_mcp", evidenceSurface: "external_mcp",
-      toolName: "polynet_call", input: { operation, version: 1, target: `/communities/${slug}/capabilities/${operation}.json`, input, idempotency_key: key } }),
+      toolName: "polynet_call", input: { operation, version: 1, target: `/communities/${slug}/capabilities/${operation}.json`, input, idempotency_key: key },
+      ...(personSaidYes ? { personSaidYes: true } : {}) }),
   });
   const owner = as(f.ownerSubject, f.ownerId);
   const adminAi = as(admin.authSubject, admin.userId);
@@ -2945,7 +2946,11 @@ test("owners and admins run the community itself through their own AI; owner-onl
     .toMatchObject({ ok: true, value: { result: { instructions: "Keep answers short. Point new runners to the Tuesday easy run." } } });
   expect(await owner.call("community.handbook.save_draft", { text: "# Start here\nCome on Tuesday." }, "h1"))
     .toMatchObject({ ok: true, value: { result: { draft_md: "# Start here\nCome on Tuesday.", approved_md: null } } });
+  // Publishing to every member waits for the person's Yes in Polynet; after it, it is published.
   expect(await adminAi.call("community.handbook.approve", { text: "# Start here\nCome on Tuesday." }, "h2"))
+    .toMatchObject({ ok: true, value: { status: "waiting_for_person" } });
+  expect((await settings()).handbook.approved_md).toBeNull();
+  expect(await adminAi.call("community.handbook.approve", { text: "# Start here\nCome on Tuesday." }, "h2", true))
     .toMatchObject({ ok: true, value: { result: { approved_md: "# Start here\nCome on Tuesday." } } });
   expect(await settings()).toMatchObject({ join_mode: "approval", agent_instructions: "Keep answers short. Point new runners to the Tuesday easy run.",
     handbook: { approved_md: "# Start here\nCome on Tuesday." } });
@@ -3062,7 +3067,7 @@ test("a change to the community and its receipt commit together; a retry after a
   expect(await revision()).toBe(before + 1);
 });
 
-test("people: an owner's or admin's AI re-roles and unbans; removing and banning are handed to a person with a link", async () => {
+test("people: an owner's or admin's AI unbans; re-roling, removing and banning wait for the person's Yes in Polynet", async () => {
   vi.stubEnv("ARX_PUBLIC_APP_URL", "https://polynet.test");
   const t = convexTest(schema, modules);
   const f = await createFixture(t);
@@ -3089,9 +3094,11 @@ test("people: an owner's or admin's AI re-roles and unbans; removing and banning
     list: (path: string) => executePolynetCanonicalTool({ ctx: executionContext(t.withIdentity({ subject })), authSubject: subject, userId, principalKind,
       evidenceSurface: principalKind === "external_mcp" ? "external_mcp" : "community_concierge",
       ...(principalKind === "community_agent" ? { mountedCommunityId: f.communityId } : {}), toolName: "polynet_list", input: { path: `/communities/canonical-community/${path}` } }),
-    call: (operation: string, input: Record<string, unknown>, key: string) => executePolynetCanonicalTool({
+    // yes: as the person's Yes in Polynet runs it (convex/communityGuideQuestions.ts).
+    call: (operation: string, input: Record<string, unknown>, key: string, yes = false) => executePolynetCanonicalTool({
       ctx: executionContext(t.withIdentity({ subject })), authSubject: subject, userId, principalKind: "external_mcp", evidenceSurface: "external_mcp",
-      toolName: "polynet_call", input: { operation, version: 1, target: `/communities/canonical-community/capabilities/${operation}.json`, input, idempotency_key: key } }),
+      toolName: "polynet_call", input: { operation, version: 1, target: `/communities/canonical-community/capabilities/${operation}.json`, input, idempotency_key: key },
+      ...(yes ? { personSaidYes: true } : {}) }),
   });
   const owner = as(f.ownerSubject, f.ownerId);
   const adminAi = as(admin.authSubject, admin.userId);
@@ -3099,32 +3106,31 @@ test("people: an owner's or admin's AI re-roles and unbans; removing and banning
   const memberAi = as(f.memberSubject, f.memberId);
   const ref = (id: any) => `user:${id}`;
 
+  // A role change waits for the person's Yes in Polynet. After it, the Members page's rules apply.
+  expect(await adminAi.call("community.members.set_role", { members: [ref(extra.quiet.userId)], role: "moderator" }, "r0"))
+    .toMatchObject({ ok: true, value: { status: "waiting_for_person" } });
   // Roles: only the owner makes admins.
-  expect(await adminAi.call("community.members.set_role", { members: [ref(extra.quiet.userId)], role: "admin" }, "r1"))
+  expect(await adminAi.call("community.members.set_role", { members: [ref(extra.quiet.userId)], role: "admin" }, "r1", true))
     .toMatchObject({ ok: true, value: { result: { failed: 1, results: [{ ok: false, code: "owner_only" }] } } });
   // Someone who isn't a member is refused; the rest of the selection still goes through.
-  const reroled = await adminAi.call("community.members.set_role", { members: [ref(extra.quiet.userId), ref(extra.outsider)], role: "moderator" }, "r2");
+  const reroled = await adminAi.call("community.members.set_role", { members: [ref(extra.quiet.userId), ref(extra.outsider)], role: "moderator" }, "r2", true);
   expect(reroled, JSON.stringify(reroled)).toMatchObject({ ok: true, value: { receipt: { authority_lane: "builder" }, result: { succeeded: 1, failed: 1,
     results: [{ ok: true }, { member: ref(extra.outsider), ok: false, code: "member_not_found" }] } } });
   expect(await modAi.call("community.members.set_role", { members: [ref(f.memberId)], role: "member" }, "r-mod")).toMatchObject({ ok: false });
+  // The owner's role is fixed: said before anyone is asked.
   expect(await owner.call("community.members.set_role", { members: [ref(f.ownerId)], role: "member" }, "r3"))
-    .toMatchObject({ ok: true, value: { result: { failed: 1 } } });
+    .toMatchObject({ ok: false, code: "owner_fixed" });
 
-  // Removing and banning are a person's click: the AI is handed the link, and nobody is touched.
+  // Removing and banning wait for the person's Yes in Polynet: the AI is told so, and nobody is touched.
   const active = (id: any) => t.run(async ctx => (await ctx.db.query("communityMemberships").collect()).some(m => String(m.userId) === String(id) && m.state === "active"));
   const one = await adminAi.call("community.members.remove", { members: [ref(extra.quiet.userId)] }, "rm1");
-  expect(one, JSON.stringify(one)).toMatchObject({ ok: false, code: "person_only" });
-  expect((one as any).message).toBe(`Removing a member is done by a person in Polynet, not by an AI. Nothing was changed. Give the person this link: https://polynet.test/c/canonical-community/members/${extra.quiet.membershipId} (their record: Manage, then Remove).`);
+  expect(one, JSON.stringify(one)).toMatchObject({ ok: true, value: { status: "waiting_for_person", approve_in_polynet: "https://polynet.test/c/canonical-community/home" } });
   const several = await adminAi.call("community.members.remove", { members: [ref(extra.payer.userId), ref(extra.quiet.userId)] }, "rm2");
-  expect((several as any).message).toContain("Removing 2 members is done by a person");
-  expect((several as any).message).toContain("https://polynet.test/c/canonical-community/members (Members: open each person, Manage, then Remove)");
+  expect(several).toMatchObject({ ok: true, value: { status: "waiting_for_person" } });
   const banned = await owner.call("community.members.ban", { members: [ref(f.memberId)], reason: "Spam" }, "b1");
-  expect(banned, JSON.stringify(banned)).toMatchObject({ ok: false, code: "person_only" });
-  expect((banned as any).message).toContain("Banning a member is done by a person");
-  expect((banned as any).message).toContain("(their record: Manage, then Ban)");
-  // Someone who isn't a member has no record to point at: the Members page.
-  expect(((await owner.call("community.members.ban", { members: [ref(extra.outsider)] }, "b2")) as any).message)
-    .toContain("https://polynet.test/c/canonical-community/members (Members: open each person, Manage, then Ban)");
+  expect(banned, JSON.stringify(banned)).toMatchObject({ ok: true, value: { status: "waiting_for_person" } });
+  // Someone who isn't a member is refused by name, before anyone is asked.
+  expect(await owner.call("community.members.ban", { members: [ref(extra.outsider)] }, "b2")).toMatchObject({ ok: false, code: "member_not_found" });
   for (const id of [extra.quiet.userId, extra.payer.userId, f.memberId]) expect(await active(id)).toBe(true);
   expect(await t.run(async ctx => (await ctx.db.query("communityBlocks" as any).collect()).length)).toBe(0);
   // A moderator's AI can't ask at all.

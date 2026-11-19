@@ -92,7 +92,8 @@ async function resolveRuntimeCommunityPromptContextForUser(args: {
     .withIndex("by_community_user_answeredAt", (q: any) => q.eq("communityId", args.communityId).eq("userId", args.userId).gt("answeredAt", Date.now() - 30 * 60 * 1000))
     .order("desc").take(20);
   const answers = answered
-    .filter((row: any) => !row.dropped && (row.status === "done" || row.status === "declined" || row.status === "failed"))
+    // The guide's own questions: not what the person's own AI asked about.
+    .filter((row: any) => !row.dropped && !row.ownAiApp && (row.status === "done" || row.status === "declined" || row.status === "failed"))
     .slice(0, TALK_LENS_ANSWERS_MAX).reverse()
     .map((row: any) => answerLineForGuide({ question: row.question, status: row.status, resultLine: row.resultLine ?? null }));
   // The community stores no time zone of its own, so it is the zone its most

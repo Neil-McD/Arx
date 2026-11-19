@@ -64,11 +64,13 @@ describe("the operations list", () => {
       expect(guideAskFor(call(operation)), operation).toBeNull();
     }
     expect(guideAskFor(call("community.join_mode.set", { mode: "open" }))).toBeNull();
-    const guide = (yes: boolean) => ({ guide: true, personSaidYes: yes });
-    const ownAi = { guide: false, personSaidYes: false };
-    const back = (operation: string, door: { guide: boolean; personSaidYes: boolean }, input?: Record<string, unknown>) => handedBackToPerson(operationFor(call(operation, input)), door);
+    // The guide and a person's own AI: Polynet asks the person. A community's site: nobody can be asked.
+    const guide = (yes: boolean) => ({ asks: true, personSaidYes: yes });
+    const ownAi = guide;
+    const site = { asks: false, personSaidYes: false };
+    const back = (operation: string, door: { asks: boolean; personSaidYes: boolean }, input?: Record<string, unknown>) => handedBackToPerson(operationFor(call(operation, input)), door);
     // Only a person: every door, even after a yes.
-    for (const door of [guide(false), guide(true), ownAi]) {
+    for (const door of [guide(false), guide(true), ownAi(false), site]) {
       expect(back("community.join_mode.set", door, { mode: "open" })).toBe(true);
       expect(back("community.join_mode.set", door, { mode: "approval" })).toBe(false);
       expect(back("community.settings.update", door)).toBe(false);
@@ -81,17 +83,21 @@ describe("the operations list", () => {
     for (const operation of ["community.members.remove", "community.members.ban"]) {
       expect(back(operation, guide(false)), operation).toBe(true);
       expect(back(operation, guide(true)), operation).toBe(false);
-      expect(back(operation, ownAi), operation).toBe(true);
+      expect(back(operation, site), operation).toBe(true);
     }
-    // A person's own AI can't be asked yet: what can't be taken back is theirs to do; the rest it does.
-    expect(back("community.interaction.remove", ownAi)).toBe(true);
-    expect(back("community.members.set_role", ownAi)).toBe(false);
-    expect(back("community.handbook.approve", ownAi)).toBe(false);
-    // A reply in the person's direct messages: the guide only after the yes; their own AI sends it.
+    // A person's own AI is asked about in Polynet too: nothing that asks every time runs before the yes.
+    for (const operation of ["community.interaction.remove", "community.members.set_role", "community.handbook.approve", "community.members.ban"]) {
+      expect(back(operation, ownAi(false)), operation).toBe(true);
+      expect(back(operation, ownAi(true)), operation).toBe(false);
+    }
+    // Where nobody can be asked, what takes away is the person's; the rest runs.
+    expect(back("community.interaction.remove", site)).toBe(true);
+    expect(back("community.members.set_role", site)).toBe(false);
+    // A reply in the person's direct messages: the guide only after the yes.
+    // (A person's own AI sends it: the executor doesn't ask it, convex/polynetCanonicalExecutor.ts askPersonFirst.)
     const message = operationFor({ toolName: "polynet_write", mode: "append", localPath: "/messages/abcd1234/" });
     expect(handedBackToPerson(message, guide(false))).toBe(true);
     expect(handedBackToPerson(message, guide(true))).toBe(false);
-    expect(handedBackToPerson(message, ownAi)).toBe(false);
   });
 
   it("no member action, role change or direct message can ever be always-allowed: only posts can", () => {

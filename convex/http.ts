@@ -7,7 +7,7 @@ import { registerRuntimeBillingRoutes } from "./httpBilling";
 import { registerRuntimeMcpRoutes } from "./httpMcp";
 import { registerEmailRoutes } from "./httpEmail";
 import { identityProfileFromClaims, readAuthenticatedIdentityProfile, type AuthenticatedIdentityProfile } from "./authIdentity";
-import { bearerToken, verifyMcpAccessToken } from "../shared/mcpAccessToken.ts";
+import { aiAppNameFromClaims, bearerToken, verifyMcpAccessToken } from "../shared/mcpAccessToken.ts";
 import { parseOptionalString } from "./httpInferenceConfig";
 import { registerRuntimeTurnRoutes } from "./httpRuntimeRoutes";
 import { registerRuntimeVoiceRoutes } from "./httpVoice";
@@ -149,10 +149,11 @@ const requireMcpActor: RequireAuthenticatedActor = async (ctx: any, req: Request
     algorithm,
   });
   const identity = verified.ok ? identityProfileFromClaims(verified.claims) : null;
-  if (!identity) {
+  if (!identity || !verified.ok) {
     return { ok: false, response: jsonResponse(req, 401, { ok: false, code: "auth_invalid_bearer_token", reason: verified.ok ? "no_subject" : verified.reason }) };
   }
-  return await actorForVerifiedIdentity(ctx, req, identity);
+  const actor = await actorForVerifiedIdentity(ctx, req, identity);
+  return actor.ok ? { ok: true, actor: { ...actor.actor, aiApp: aiAppNameFromClaims(verified.claims) } } : actor;
 };
 
 function readEnvValue(name: string): string {

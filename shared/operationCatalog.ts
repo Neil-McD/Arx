@@ -156,15 +156,17 @@ export function guideAskFor(args: Parameters<typeof operationFor>[0]): GuideAsk 
 
 // Whether an AI is handed the place in the app instead of doing it.
 // - Any AI, for what only a person does.
-// - A person's own AI, for what can't be taken back: Polynet can't put its
-//   question in their AI's window yet, so it is theirs to do in the app. (The
-//   rest it does: their AI has its own person watching it.)
-// - The guide, for what asks every time, until the person has said yes.
-export function handedBackToPerson(found: OperationEntry | null, door: { guide: boolean; personSaidYes: boolean }): boolean {
+// - Where Polynet asks the person (the guide in their private talk, and a
+//   person's own AI through the MCP: a Yes/No card in Polynet,
+//   convex/communityGuideQuestions.ts), what asks every time runs only after
+//   their yes.
+// - Where nobody can be asked (a community's own site), what can't be taken
+//   back is the person's to do in the app.
+export function handedBackToPerson(found: OperationEntry | null, door: { asks: boolean; personSaidYes: boolean }): boolean {
   if (!found) return false;
   if (found.ask === "person_only") return true;
   if (found.ask !== "every_time") return false;
-  return door.guide ? !door.personSaidYes : found.effect === "destroy";
+  return door.asks ? !door.personSaidYes : found.effect === "destroy";
 }
 
 export type CallOperationName = keyof typeof CALL_OPERATIONS;

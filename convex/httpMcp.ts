@@ -43,6 +43,7 @@ type RequireAuthenticatedActor = (
         email: string | null;
         displayName: string | null;
         avatarUrl: string | null;
+        aiApp?: string | null;
       };
     }
   | { ok: false; response: Response }
@@ -407,6 +408,8 @@ export async function handleToolCall(args: {
   authSubject: string;
   actor: {
     dbUserId: any;
+    // Which AI app it is, by name, for the Yes/No card Polynet shows.
+    aiApp?: string | null;
   };
   toolName: string;
   toolArgs: Record<string, unknown>;
@@ -428,6 +431,7 @@ export async function handleToolCall(args: {
       evidenceSurface: "external_mcp",
       toolName: toolName as PolynetCanonicalToolName,
       input: toolArgs,
+      ownAiApp: actor.aiApp ?? null,
     });
     if (!execution.ok) {
       // The code and any machine-readable details (retry_after_ms, ...) travel
@@ -644,7 +648,7 @@ export async function handleMcpPost(args: {
     const result = await handleToolCall({
       ctx,
       authSubject: actor.authSubject,
-      actor: { dbUserId: actor.dbUserId },
+      actor: { dbUserId: actor.dbUserId, aiApp: actor.aiApp ?? null },
       toolName: translated ? translated.toolName : toolName,
       toolArgs: translated ? translated.input : givenArgs,
     });
