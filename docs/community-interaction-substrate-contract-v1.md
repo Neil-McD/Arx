@@ -438,6 +438,10 @@ A room's chat dot compares the cursor with the newest readable activity by
 someone other than the viewer (their own human messages never light it). In a
 restricted room (a pod) a builder or admin gets the chat dot only when they are
 in it (`isInPod`); a tag of them still sets `mentions` wherever they can read.
+Home's tag lines (`listMyHomeTags`) use the same rule per tag: a non-suppressed
+user mention newer than the cursor of the room it resolves to, whose source the
+recipient can still read (`resolveMentionRecipientSource`), never their own
+message; the scan is the newest 40 rows on the mentioned-user notify-state index (so suppressed rows are never read).
 
 ### Typing presence
 

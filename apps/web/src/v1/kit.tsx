@@ -255,8 +255,13 @@ export function View(props: { index: number; children: ReactNode }) {
   return <section className={cx("view", `v${props.index}`)}>{props.children}</section>;
 }
 
-export function HomeBody(props: { hostOnly?: boolean; memberOnly?: boolean; children: ReactNode }) {
-  return <div className={cx("home", props.hostOnly && "h-only", props.memberOnly && "m-only")}>{props.children}</div>;
+// `onPointerEnter`/`onPointerLeave`: Home holds a live list still while the
+// pointer is over it, so nothing moves under it.
+export function HomeBody(props: { hostOnly?: boolean; memberOnly?: boolean; onPointerEnter?: () => void; onPointerLeave?: () => void; children: ReactNode }) {
+  return (
+    <div className={cx("home", props.hostOnly && "h-only", props.memberOnly && "m-only")}
+      onPointerEnter={props.onPointerEnter} onPointerLeave={props.onPointerLeave}>{props.children}</div>
+  );
 }
 
 // `plain`: a community without its agent; just its name and the time.

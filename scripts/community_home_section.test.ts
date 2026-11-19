@@ -256,3 +256,62 @@ test("a question the guide drafted a reply for shows once, under what the guide 
   expect(noticedWithoutDrafted(noticed, [{ author: "Sara", channel: "general" }, { author: "Rafael", channel: "wins" }])).toHaveLength(3);
   expect(noticedWithoutDrafted(noticed, [])).toHaveLength(3);
 });
+
+test("tags come first in either list, open their message, have no Not now, and count like any row", async () => {
+  const { renderToStaticMarkup } = await import("react-dom/server");
+  const { tagThingsFor, homeTagsTotal } = await import("../apps/web/src/components/WebCommunityHomeSection");
+  const { NeedsYou, homeThingsCount } = await import("../apps/web/src/v1/KitNeedsYou");
+  const tags = {
+    lines: [
+      { key: "tag:1", title: "Maya tagged you in #General", detail: "can you look?", channelSlug: "general", rootId: "r1" },
+      { key: "tag:2", title: "Dev tagged everybody in Founders", detail: "call moved", channelSlug: "founders", rootId: "r2" },
+    ],
+    more: { count: 4, title: "And 4 more tags", detail: "The next is Sam's, in #wins.", action: "Open #wins", channelSlug: "wins" },
+  };
+  const onOpenTag = vi.fn();
+  const rows = tagThingsFor(tags, onOpenTag);
+  expect(rows.map((row) => [row.title, row.action])).toEqual([
+    ["Maya tagged you in #General", "Open"],
+    ["Dev tagged everybody in Founders", "Open"],
+    ["And 4 more tags", "Open #wins"],
+  ]);
+  expect(rows.every((row) => row.icon === "tag" && row.onNotNow === undefined)).toBe(true);
+  rows[0].onAction(); rows[2].onAction();
+  expect(onOpenTag).toHaveBeenNthCalledWith(1, "general", "r1");
+  expect(onOpenTag).toHaveBeenNthCalledWith(2, "wins", null);
+  expect(tagThingsFor(null)).toEqual([]);
+  expect(tagThingsFor({ lines: [], more: null })).toEqual([]);
+  expect(homeTagsTotal(tags)).toBe(6);
+  // Each line counts as one row, as the join row and the waiting-questions row do.
+  expect(homeThingsCount({ joinRequests: 2, things: 1 + rows.length })).toBe(5);
+
+  // Above the people waiting to join, in the host's list; in a member's list too.
+  const thing = { key: "q", icon: "question" as const, title: "Thing q", detail: "d", action: "Do", onAction: () => {}, onNotNow: () => {} };
+  const host = renderToStaticMarkup(React.createElement(NeedsYou, {
+    label: "Needs you", join: null, joinCount: 2, onShowAllJoinRequests: () => {}, things: [thing], tags: rows.slice(0, 1),
+  }));
+  expect(host.indexOf("Maya tagged you in #General")).toBeLessThan(host.indexOf("2 people asked to join"));
+  expect(host).toContain("<i>3</i>");
+  const member = renderToStaticMarkup(React.createElement(NeedsYou, {
+    label: "For you", join: null, joinCount: 0, onShowAllJoinRequests: () => {}, things: [], tags: rows,
+  }));
+  expect(member).toContain("For you");
+  expect(member).toContain("Maya tagged you in #General");
+  expect(member).toContain("<i>3</i>");
+  expect(member).not.toContain("Not now");
+});
+
+test("a member's quiet day with a tag says so; the host's sentence counts tags as things that need you", () => {
+  expect(homeSentenceFor(quiet, "member", 0, 1)).toBe("Someone tagged you.");
+  expect(homeSentenceFor(quiet, "member", 0, 4)).toBe("You were tagged 4 times.");
+  expect(homeSentenceFor(busy, "member", 0, 4)).toBe("3 people joined since yesterday, and there are 30 new messages.");
+  expect(homeSentenceFor(quiet, "host", 2, 2)).toBe("2 things need you today.");
+});
+
+test("a tag's message has one address: its thread in its room", async () => {
+  const { buildCommunityThreadPath } = await import("../shared/webAppRouteState");
+  expect(buildCommunityThreadPath("kiln", "general", "r1")).toBe("/c/kiln/chat/general/r1");
+  expect(buildCommunityThreadPath("kiln", "founders", "r2")).toBe("/c/kiln/chat/founders/r2");
+  expect(buildCommunityThreadPath("kiln", "founders", null)).toBe("/c/kiln/chat/founders");
+  expect(buildCommunityThreadPath(null, "founders", "r2")).toBeNull();
+});

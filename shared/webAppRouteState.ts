@@ -841,6 +841,16 @@ export function withoutCommunityRouteDetails(state: AppRoutePathState): AppRoute
   return base;
 }
 
+// One message's address: its thread, open in its channel or pod's room
+// (/c/<slug>/chat/<channel>/<thread>). Without a thread, the room itself.
+export function buildCommunityThreadPath(communitySlug: string | null | undefined, channelSlug: string | null | undefined, rootId: string | null | undefined): string | null {
+  const room = buildCommunityTabPath(communitySlug, "chat", null, null, channelSlug);
+  const thread = readRouteId(rootId);
+  if (!room || !thread) return room;
+  const route = parseAppRouteFromPathname(room);
+  return route ? buildAppRoutePath({ ...route, communityThreadId: thread }) ?? room : room;
+}
+
 export function buildAppRoutePath(state: AppRoutePathState): string | null {
   if (state.page === "settings") {
     return state.settingsIndex

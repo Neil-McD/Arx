@@ -83,7 +83,7 @@ reload.
   token renewal redraws nothing.
 
 Live today: the channel feed, pinned post and replies; the channel list;
-Members' roster; unread dots; Inbox and typing; the guide's brief; the brain
+Members' roster; unread dots and Home's tag lines; Inbox and typing; the guide's brief; the brain
 map; the next event; the Events page; the Pods list; a pod's detail and
 notes; join requests; the host's Members table (by its counts); Knowledge's
 courses, lessons and notes.
