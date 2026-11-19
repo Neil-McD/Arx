@@ -3,16 +3,21 @@
 // left off, and the courses as cards with progress, in pages. An open course:
 // its lesson, Mark done and Next, with the outline in the right column. Under
 // the shelf, one list of notes, files and links (KitKnowledgeList); a note
-// opens in the right column.
+// opens in the right column. A host opens who has started a course from its
+// "started · finished" line; the people take the lessons' place in the panel.
 import { courseProgressWord } from "../../../../shared/communityMemberWords";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { usePageHeaderEnd } from "../components/CommunityPageHeader";
-import { useRouteDetail, writeRouteDetail } from "../../../../shared/routeDetails";
+import { goToMembersPage, useRouteDetail, writeRouteDetail } from "../../../../shared/routeDetails";
+import { briefAge } from "../../../../shared/communityBriefs";
 import {
+  fetchCourseProgressPeople,
   fetchCourseProgressSummary,
   fetchMyLessonProgress,
   setMyLessonDone,
+  type CourseProgressPeople,
+  type CourseProgressPerson,
   type CourseProgressSummary,
 } from "../../../../shared/cloudCommunityClassroomGateway";
 import {
@@ -38,7 +43,7 @@ import { NoteForm, OpenNote } from "./KitKnowledgeNotes";
 import { PanelAction, PanelLine, PanelPart, usePanelSettled } from "./KitPanel";
 import { KitLessonEditor, lessonFileFacts, lessonLinkPlace, type LessonFile, type LessonPatch } from "./KitLessonEditor";
 import { cx, Icon, KitApp, Rail, TextLink, useMinWidth } from "./kit";
-import { KitCourseInline, type CourseEditPatch } from "./KitCourseEdit";
+import { KitCourseInline, StatsButton, type CourseEditPatch } from "./KitCourseEdit";
 import { useDragOrder } from "./useDragOrder";
 import { askInApp } from "../../../../shared/inAppConfirm";
 import { KitKnowledgeAddButtons, KitKnowledgeList, type KnowledgeAddResult } from "./KitKnowledgeList";
@@ -54,6 +59,22 @@ export function courseOrderAfterMove(ids: string[], index: number, by: -1 | 1): 
   [next[index], next[to]] = [next[to], next[index]];
   return next;
 }
+
+// A person's line under their name in a course's people: how far, the last
+// lesson they marked done and when; or that they finished, and when.
+export function courseProgressPersonLine(person: Pick<CourseProgressPerson, "done" | "of" | "last_lesson" | "last_done_at" | "finished">, now: number): string {
+  const when = briefAge(person.last_done_at, now);
+  if (person.finished) return when ? `Finished · ${when}` : "Finished";
+  return [`${person.done} of ${person.of}`, person.last_lesson ? `last: ${person.last_lesson}` : "", when].filter(Boolean).join(" · ");
+}
+
+// Under the people when there are more than are shown.
+export function courseProgressMoreLine(shown: number, more: number): string | null {
+  return more > 0 ? `Showing the ${shown} most in need of a look. ${more} more ${more === 1 ? "has" : "have"} started.` : null;
+}
+
+// Members are told plainly that their host sees their progress.
+export const HOST_SEES_PROGRESS = "Your host can see which lessons you've finished.";
 
 // A course without a cover gets one of three soft tints, the same one every
 // time (from its id), so a shelf never reads as a row of empty boxes.
@@ -279,6 +300,20 @@ export function KitClassroom(props: {
   }, [open?.course.id]); // eslint-disable-line react-hooks/exhaustive-deps
   const summaryBy = useMemo(() => new Map(summary.map((row) => [row.module_id, row])), [summary]);
 
+  // Who has started a course (hosts): opened from its "started · finished"
+  // line. Read when opened and again when lessons change, like the counts.
+  const [peopleFor, setPeopleFor] = useState<string | null>(null);
+  const [people, setPeople] = useState<CourseProgressPeople | { module_id: string; failed: true } | null>(null);
+  const peopleCourse = open && props.canManage && peopleFor === open.course.id ? open.course.id : null;
+  useEffect(() => {
+    if (!peopleCourse) return;
+    let cancelled = false;
+    fetchCourseProgressPeople({ session: props.session, communityId: props.communityId, moduleId: peopleCourse })
+      .then((view) => { if (!cancelled) setPeople(view); })
+      .catch(() => { if (!cancelled) setPeople({ module_id: peopleCourse, failed: true }); });
+    return () => { cancelled = true; };
+  }, [props.session, props.communityId, peopleCourse, lessonSetKey]);
+
   // Opening a course lands on its next lesson (or the first). Progress may
   // arrive after the course does: a lesson picked for the reader is picked
   // again then, but one the reader chose stays.
@@ -437,7 +472,8 @@ export function KitClassroom(props: {
       <PanelPart key="learning" label="Learning">
         {liveCourses.slice(0, 5).map(({ course }) => {
           const row = summaryBy.get(course.id);
-          return <PanelLine key={course.id} fact={row ? `${row.started} started · ${row.finished} finished` : null}>{course.name}</PanelLine>;
+          return <PanelLine key={course.id} fact={row ? `${row.started} started · ${row.finished} finished` : null}
+            action={row?.started ? <PanelAction label={`Who has started ${course.name}`} onClick={() => { setPeopleFor(course.id); props.onOpenCourse(course.id); }}>Who</PanelAction> : null}>{course.name}</PanelLine>;
         })}
       </PanelPart>
     ) : null,
@@ -616,6 +652,31 @@ export function KitClassroom(props: {
   const courseProgressWords = open && openProgress ? (props.canManage
     ? `${summaryBy.get(open.course.id)?.started ?? 0} started · ${summaryBy.get(open.course.id)?.finished ?? 0} finished`
     : `${openProgress.done} of ${openProgress.total} done`) : "";
+  // A course's people, in the lessons' rows: the stuck first. Drawn once the
+  // read has answered, under the course's top, so nothing above it moves.
+  const peopleView = peopleCourse && people && people.module_id === peopleCourse ? ("failed" in people ? "failed" : people) : null;
+  const moreLine = peopleView && peopleView !== "failed" ? courseProgressMoreLine(peopleView.people.length, peopleView.more) : null;
+  const peopleList = peopleCourse ? (
+    <>
+      <div className={cx("klrows")} aria-label="Who has started this course">
+        {peopleView === "failed" ? <p className={cx("kpeople-note")}>Who has started couldn't be read. Try again.</p>
+          : peopleView && peopleView.people.length === 0 ? <p className={cx("kpeople-note")}>Nobody has started this yet.</p>
+          : peopleView ? peopleView.people.map((person) => (
+            <button key={person.member_key} type="button" className={cx("kl", person.finished && "d")} title={`Open ${person.name} in Members`}
+              onClick={() => goToMembersPage(person.member_key)}>
+              <span className={cx("kdot", person.finished ? "done" : "")}>{person.finished ? <Icon name="check" /> : null}</span>
+              <span className={cx("kpeople-who")}>
+                <span>{person.name}</span>
+                <span className={cx("kpeople-sub")}>{courseProgressPersonLine(person, now)}</span>
+              </span>
+            </button>
+          )) : null}
+        {moreLine ? <p className={cx("kpeople-note")}>{moreLine}</p> : null}
+      </div>
+      <button type="button" className={cx("klist-foot")} onClick={() => setPeopleFor(null)}><Icon name="back" />Back to the lessons</button>
+    </>
+  ) : null;
+  const togglePeople = open && props.canManage ? () => setPeopleFor(peopleCourse ? null : open.course.id) : undefined;
   const openCoverStyle = open?.course.banner_url ? { backgroundImage: `url(${JSON.stringify(open.course.banner_url)})`, backgroundSize: "cover", backgroundPosition: `${(open.course.banner_focus_x ?? 0.5) * 100}% ${(open.course.banner_focus_y ?? 0.5) * 100}%` } : undefined;
   // The floating lesson panel: the course, how far along, its lessons.
   // The top of the lesson panel: the course's cover, name and where things
@@ -623,7 +684,7 @@ export function KitClassroom(props: {
   const lessonPanelTop = open && openProgress ? (
       <div className={cx("klist-top")}>
         {props.canManage && props.onSaveCourse ? (
-          <KitCourseInline key={open.course.id} course={open.course} stats={courseProgressWords} startRenaming={renameNextCourseRef.current || namingCourseId === open.course.id} onRenameEnd={() => setNamingCourseId(null)}
+          <KitCourseInline key={open.course.id} course={open.course} stats={courseProgressWords} onOpenStats={togglePeople} statsOpen={Boolean(peopleCourse)} startRenaming={renameNextCourseRef.current || namingCourseId === open.course.id} onRenameEnd={() => setNamingCourseId(null)}
             coverClassName={cx("kcover", "klist-cover", open.course.banner_url ? "" : "knocover")} coverStyle={openCoverStyle}
             onSave={(patch) => props.onSaveCourse!(open.course.id, patch)} />
         ) : (
@@ -631,7 +692,7 @@ export function KitClassroom(props: {
             <span className={cx("kcover", "klist-cover", open.course.banner_url ? "" : coverTint(open.course.id))} style={openCoverStyle}>
               {open.course.banner_url ? null : <Icon name="book" />}
             </span>
-            <span><b>{open.course.name}</b><em>{courseProgressWords}</em></span>
+            <span><b>{open.course.name}</b><em>{togglePeople ? <StatsButton stats={courseProgressWords} open={Boolean(peopleCourse)} onClick={togglePeople} /> : courseProgressWords}</em></span>
           </>
         )}
       </div>
@@ -640,8 +701,7 @@ export function KitClassroom(props: {
     <>
       {lessonPanelTop}
       {props.canManage ? null : <div className={cx("bar", "kbar")}><i style={{ width: `${openProgress.percent}%` }} /></div>}
-      {lessonList}
-      {lessonListFoot}
+      {peopleList ?? <>{lessonList}{lessonListFoot}</>}
     </>
   ) : null;
 
@@ -711,7 +771,8 @@ export function KitClassroom(props: {
         <div className={cx("kmainc")}>
         {/* Where the panel is not beside the lesson (a narrow window, a phone, a
             course with no lessons yet), a host still changes the course here. */}
-        {props.canManage && !listBeside && lessonPanelTop ? <div className={cx("klist", "solo")}>{lessonPanelTop}</div> : null}
+        {/* A phone included: who has started opens here, under the course's top. */}
+        {props.canManage && !listBeside && lessonPanelTop ? <div className={cx("klist", "solo")}>{lessonPanelTop}{peopleList}</div> : null}
         {/* No room beside the lesson (a phone, a narrow window): the same panel folds above it. */}
         {!listBeside && listWorthShowing ? (
           <details className={cx("kfold")}>
@@ -826,6 +887,8 @@ export function KitClassroom(props: {
               : start?.kind === "all_finished" ? "You've finished every course." : "Nothing to learn here yet."}
           </p>
         ) : null}
+        {/* Someone who has finished everything has no Start here block to carry the line, and is told all the same. */}
+        {props.loaded && start?.kind === "all_finished" ? <p className={cx("lab", "khost-sees")} style={{ marginTop: 0 }}>{HOST_SEES_PROGRESS}</p> : null}
         {/* One bar, for everyone: it asks the guide. Nothing is added through it. */}
         {agentOn ? (
           <button type="button" className={cx("ask kask kask-btn")} onClick={() => openGuideFromSearch()}>
@@ -859,6 +922,8 @@ export function KitClassroom(props: {
                 </span>
               ) : null}
               <span className={cx("khero-prog")}><span className={cx("bar", "kbar")}><i style={{ width: `${here.total ? Math.round((here.done / here.total) * 100) : 0}%` }} /></span>{here.done} of {here.total} {here.total === 1 ? "lesson" : "lessons"} done</span>
+              {/* Members only (a host never has this block); "View as a member" shows it too, since it is what members see. */}
+              <span className={cx("lab", "khost-sees")}>{HOST_SEES_PROGRESS}</span>
               <span className={cx("acts")}><span className={cx("btn go", "lg")}><Icon name="play" />{here.done > 0 ? "Continue" : "Start"}</span></span>
             </span>
           </button>

@@ -25,6 +25,7 @@ import { KitMembersDirectory } from "../v1/KitMembersDirectory";
 import { CommunityMembersBulkBar, type SelectedMember } from "./CommunityMembersBulkBar";
 import type { CommunityPresenceSummary } from "../../../../shared/communityTypes";
 import { resolveAuthSubject, type AuthSessionLike } from "../../../../shared/authSession";
+import { goToMembersPage } from "../../../../shared/routeDetails";
 
 // The host's Members table: only the people who run a community ever open
 // it, so it is fetched when they do, not shipped to every member.
@@ -85,7 +86,7 @@ function ChannelRosterWorkspace(props: RosterProps) {
     goToMembersPage();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [asksForMembers]);
-  if (isDesignV1Active()) return <RosterSurface {...props} narrowOpen={false} onOpenMembers={goToMembersPage} />;
+  if (isDesignV1Active()) return <RosterSurface {...props} narrowOpen={false} onOpenMembers={() => goToMembersPage()} />;
   return <>
     <RosterSurface {...props} onOpenMembers={() => setMembersOpen(true)} />
     {membersOpen ? <RosterSurface {...props} channelId={undefined} narrowOpen={false}
@@ -94,14 +95,6 @@ function ChannelRosterWorkspace(props: RosterProps) {
   </>;
 }
 
-// The Members page of the community in the address bar (the app follows the
-// address on popstate, as goToPodsPath does).
-function goToMembersPage(): void {
-  const match = window.location.pathname.match(/^(\/m)?\/c\/([^/]+)/);
-  if (!match) return;
-  window.history.pushState({}, "", `${match[1] ?? ""}/c/${match[2]}/members`);
-  window.dispatchEvent(new PopStateEvent("popstate"));
-}
 
 // Design system v1: the Members page itself (WebCommunityMembersPage), with no
 // channel around it.

@@ -2647,7 +2647,8 @@ let the founder see what the agent shares.
 ## Forty-Second Implementation Slice: Lesson Progress
 
 Goal: a member can mark the lessons they've finished, and see how far
-through each course they are. Progress is private to the member.
+through each course they are. (Changed Nov 18, 2026: hosts now see each
+member's progress; see "Hosts See Course Progress" below.)
 
 - `community.lesson.set_done` (`ref`: a lesson's `resource:<id>`, `done`)
   is offered only to the member's own tools (`community_app`,
@@ -2661,7 +2662,30 @@ through each course they are. Progress is private to the member.
 - The site SDK has `polynet.lessonDone(lesson, done)`. The Learn block shows
   a tick on finished lessons, "n of m done" on course cards and course pages,
   and a "Mark as done" button at the end of each lesson, which undoes too.
-- No founder view of progress yet.
+- No founder view of progress yet (superseded below).
+
+## Slice: Hosts See Course Progress (Nov 18, 2026)
+
+The rule now: hosts (owner and admins) see each current member's progress in
+a course; members are told; nobody else sees it.
+
+- `communityLessonProgress.getCourseProgressPeople` (hosts only,
+  `requireCommunityManager`): for one course, the people who have started
+  it, with name, handle, lessons done of the member-visible lessons, the last
+  lesson they marked done and when, and whether they finished. In progress
+  first, the longest idle first; then finished, the most recent first. At
+  most 200 people, with a count of the rest. Only people in the community
+  now; only lessons members can see count. `getCourseProgressSummary` counts
+  the same rows the same way, so the two always agree.
+- In Knowledge a host opens the list from a course's "N started · M
+  finished" line; it takes the lessons' place in the course's panel, and a
+  person opens their record in Members.
+- The Knowledge shelf tells a member, under their progress: "Your host can
+  see which lessons you've finished."
+- A host's AI and the guide in a host's talk read the same list as
+  `progress` on a course in `builder/resources/`. A member's reads, a
+  member's AI, the guide in a member's talk and a tag never get anyone
+  else's progress; a member's own `done` marks are unchanged.
 
 ## Slice: Community Notes Are The Founder's (Nov 5, 2026)
 

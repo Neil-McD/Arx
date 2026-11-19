@@ -184,7 +184,7 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
   `communityResourceContent`, `communityResourceEvidence*`,
   `communityResourceMemoryProjection`, `communitySourceUrlPolicy`,
   `communityBuilderKnowledgeSetup`, `communityLessonProgress` (lessons a member
-  marked done, private to them), `communityLessonFiles` (files under a lesson:
+  marked done; hosts see each member's progress in a course, nobody else), `communityLessonFiles` (files under a lesson:
   reserve, finish, attach on Save, clean up, resolve a download) and
   `httpCommunityLessonFiles` (the signed-in upload and download routes);
   Vercel `api/source-url-fetch.js`.

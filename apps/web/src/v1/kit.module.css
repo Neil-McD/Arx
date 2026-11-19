@@ -1620,3 +1620,12 @@
 .app .kresacts button{opacity:0;transition:opacity .15s var(--ease)}
 .app .kresrow:hover .kresacts button,.app .kresacts button:focus-visible{opacity:1}
 @media (hover:none){.app .kedit-videotools{opacity:1}}
+/* A host opens who has started a course from its "started · finished" line;
+   the people sit where the lessons were, in the same rows. */
+.app .kinline-stats{padding:1px 4px;margin:-1px -4px;border-radius:5px;font:inherit;color:inherit;text-align:left;cursor:pointer}
+.app .kinline-stats:hover,.app .kinline-stats[aria-expanded="true"]{background:var(--s2);color:var(--ink2)}
+.app .kpeople-who{display:flex;flex-direction:column;min-width:0}
+.app .kpeople-who>span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.app .kpeople-sub{margin-top:2px;font-size:12px;font-weight:400;color:var(--ink3)}
+.app .kpeople-note{padding:10px 8px;font-size:12.5px;line-height:1.4;color:var(--ink3)}
+.app .khost-sees{margin-top:8px}
