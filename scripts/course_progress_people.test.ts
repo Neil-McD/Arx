@@ -37,7 +37,9 @@ describe("where the people and the members' line show", () => {
     expect(page).toMatch(/const start = props\.canManage \? null : shelfStart\(coursePath\(courses, done\)\);/);
     const hero = page.slice(page.indexOf("{here ? ("), page.indexOf("{/* One course: the block above is the whole shelf. */}"));
     expect(hero).toContain("{HOST_SEES_PROGRESS}");
-    expect(page.match(/\{HOST_SEES_PROGRESS\}/g)).toHaveLength(1);
+    // And once more for a member who has finished every course, who has no such block.
+    expect(page).toMatch(/start\?\.kind === "all_finished" \? <p[^>]*>\{HOST_SEES_PROGRESS\}<\/p> : null/);
+    expect(page.match(/\{HOST_SEES_PROGRESS\}/g)).toHaveLength(2);
   });
   it("opens a course's people for hosts only, in the lessons' place, on a phone too", () => {
     expect(page).toMatch(/const peopleCourse = open && props\.canManage && peopleFor === open\.course\.id/);
