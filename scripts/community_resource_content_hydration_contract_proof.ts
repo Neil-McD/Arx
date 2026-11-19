@@ -67,7 +67,12 @@ assert.match(
 );
 assert.match(
   resources,
-  /export const readCommunityResourceDirectoryInternal = internalQuery\([\s\S]*const row = await hydrateCommunityResourceBody\(ctx, resolved\.resource\) \?\? resolved\.resource[\s\S]*const body = String\(row\.bodyMd \?\? ""\)[\s\S]*body_md: bodySlice/,
+  /export const readCommunityResourceDirectoryInternal = internalQuery\([\s\S]*return await buildCommunityResourceDirectoryReadPayload\(\{\s*ctx,\s*resource: resolved\.resource,/,
+  "single member-visible resource reads must go through the one read payload builder",
+);
+assert.match(
+  resources,
+  /export async function buildCommunityResourceDirectoryReadPayload[\s\S]*const row = await hydrateCommunityResourceBody\(args\.ctx, args\.resource\) \?\? args\.resource[\s\S]*const body = String\(row\.bodyMd \?\? ""\)[\s\S]*body_md: bodySlice/,
   "single member-visible resource reads must hydrate split body content before slicing response text",
 );
 assert.match(
@@ -77,7 +82,7 @@ assert.match(
 );
 assert.match(
   resources,
-  /async function readCommunityResourceBuilderResourceCore[\s\S]*target_type: "resource"[\s\S]*resource: withMembersCanSee\(\s*await mapCommunityResourceRowWithBody\(args\.ctx, resolved\.resource\)/,
+  /async function readCommunityResourceBuilderResourceCore[\s\S]*target_type: "resource"[\s\S]*resource: withMembersCanSee\(\s*\{\s*\.\.\.\(await mapCommunityResourceRowWithBody\(args\.ctx, resolved\.resource\)\)/,
   "builder resource reads must hydrate split body content before exposing draft or source rows",
 );
 

@@ -20,6 +20,8 @@ export type CommunityResource = {
   file_key?: string | null;
   // A lesson's resources: links a member can open from the lesson.
   lesson_links?: Array<{ title: string; url: string }>;
+  // And its files, downloaded only through the signed-in lesson file route.
+  lesson_files?: Array<{ id: string; title: string; name: string; type: string; size_bytes: number }>;
   source_ingestion_status?: "not_required" | "queued" | "processing" | "ready" | "failed";
   source_ingestion_kind?: "manual" | "url" | "file";
   source_ingestion_error?: string | null;

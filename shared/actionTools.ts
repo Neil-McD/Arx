@@ -239,7 +239,7 @@ export const ACTION_TOOLS: ActionTool[] = [
     "Make, edit, move and order courses and lessons, as one batch that is applied whole or not at all. A new course is a draft; publishing is done by a person in the app. List builder/resources/ first for each course's and lesson's id and updated_at. Each operation is one of: " +
     "create_module (a course: name, description_md, and a module_key you make up if lessons in this batch go in it); " +
     "create_page (a lesson: title, body_md, and module_id of an existing course or module_key of one made in this batch); " +
-    "edit_page (resource_id, expected_updated_at, then what changes: title, body_md, module_id, lesson_links); " +
+    "edit_page (resource_id, expected_updated_at, then what changes: title, body_md, module_id, lesson_links, which sets the links only: a lesson's files are added and removed by a person in the app); " +
     "edit_module (module_id, expected_updated_at, then name or description_md); " +
     "move_resource (resource_id, expected_updated_at, module_id); " +
     "reorder_pages (module_id, resource_ids: every lesson of that course in order); reorder_modules (module_ids: every course in order); " +

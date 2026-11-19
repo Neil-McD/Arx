@@ -184,11 +184,23 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
   `communityResourceContent`, `communityResourceEvidence*`,
   `communityResourceMemoryProjection`, `communitySourceUrlPolicy`,
   `communityBuilderKnowledgeSetup`, `communityLessonProgress` (lessons a member
-  marked done, private to them); Vercel `api/source-url-fetch.js`.
+  marked done, private to them), `communityLessonFiles` (files under a lesson:
+  reserve, finish, attach on Save, clean up, resolve a download) and
+  `httpCommunityLessonFiles` (the signed-in upload and download routes);
+  Vercel `api/source-url-fetch.js`.
+- **Lesson files (Nov 18):** under a lesson, beside its links, 12 at most
+  together. A host's upload streams through `/runtime/lesson_file_upload` the
+  way channel attachments do (type read from the bytes, up to 100 MB each,
+  `shared/lessonFiles`) into a pending row that Save attaches; one never
+  saved is deleted after a day. `/runtime/lesson_file_download` streams the
+  bytes as a download only to a course editor, or to a current member while
+  the lesson is visible to members, asked again on every request. Removing
+  a file, or deleting its lesson or course, deletes its bytes. AIs read a
+  lesson's files by name, type and size only, and cannot add or remove one.
 - **Tables:** `communityResourceModules`, `communityResources`,
   `communityResourceContents`, `communitySourceUnits`, `communitySourceUnitContents`,
   `communitySourceCrawlJobs`, `communityResourceBuilderChangesets`,
-  `communityLessonProgress`.
+  `communityLessonProgress`, `communityLessonFiles`.
 
 ### 6. Events — Keep
 

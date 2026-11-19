@@ -1169,7 +1169,13 @@
 .app .kresrow span{min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:13.5px}
 .app .kresrow b{font-weight:550;margin-right:8px}
 .app .kresrow em{font-style:normal;font-size:12px;color:var(--ink3)}
-.app a.kresrow.klink:hover b{text-decoration:underline;text-decoration-color:var(--line2)}
+.app a.kresrow.klink:hover b,.app button.kresrow.klink:hover b{text-decoration:underline;text-decoration-color:var(--line2)}
+/* A lesson's files sit in the same list: a row a member clicks to download,
+   and the editor's two ways to add (a link, a file) side by side. */
+.app button.kresrow{width:100%;text-align:left;cursor:pointer}
+.app button.kresrow:disabled{cursor:default}
+.app .kresrow.kfile-busy em{color:var(--ink2)}
+.app .kresadds{display:flex;flex-wrap:wrap;gap:0 14px}
 .app .kresadd{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr) auto;gap:8px;margin-top:8px}
 .app .kresadd input{min-width:0;height:32px;padding:0 10px;border-radius:8px;border:1px solid var(--line);background:var(--field);color:var(--ink);font:inherit;font-size:13.5px;outline:0}
 .app .kresadd input:focus{border-color:var(--line2)}

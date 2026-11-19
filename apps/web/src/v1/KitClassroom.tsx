@@ -25,6 +25,7 @@ import {
   type CommunityNoteView,
 } from "../../../../shared/cloudCommunityNotesGateway";
 import { getCloudCommunityHomeSnapshot } from "../../../../shared/cloudCommunityAdminGateway";
+import { downloadCloudLessonFile, uploadCloudLessonFile } from "../../../../shared/cloudCommunityChatGateway";
 import { courseLessons, courseProgress, pageOf, coursePath } from "../../../../shared/communityClassroom";
 import type { CommunityResource, CommunityResourceModule } from "../components/communityResourcesContracts";
 import { askGuide, openGuideFromSearch } from "../components/guideSearch";
@@ -35,7 +36,7 @@ import { resolveAuthSubject, type AuthSessionLike } from "../../../../shared/aut
 import { useLiveAnswer } from "../../../../shared/liveQuery";
 import { NoteForm, OpenNote } from "./KitKnowledgeNotes";
 import { PanelAction, PanelLine, PanelPart, usePanelSettled } from "./KitPanel";
-import { KitLessonEditor, lessonLinkPlace, type LessonPatch } from "./KitLessonEditor";
+import { KitLessonEditor, lessonFileFacts, lessonLinkPlace, type LessonFile, type LessonPatch } from "./KitLessonEditor";
 import { cx, Icon, KitApp, Rail, TextLink, useMinWidth } from "./kit";
 import { KitCourseInline, type CourseEditPatch } from "./KitCourseEdit";
 import { useDragOrder } from "./useDragOrder";
@@ -157,6 +158,28 @@ export function KitClassroom(props: {
   const [courseError, setCourseError] = useState<string | null>(null);
   useEffect(() => { setCourseError(null); }, [props.openCourseId]);
   const editingTools = props.canManage ? props.lessonEditing : null;
+  // A lesson's file is fetched through the signed-in route (the server asks
+  // again whether this person may read the lesson) and saved under its name.
+  const [fileBusy, setFileBusy] = useState<string | null>(null);
+  const [fileError, setFileError] = useState<string | null>(null);
+  const downloadLessonFile = async (file: LessonFile) => {
+    if (fileBusy) return;
+    setFileBusy(file.id);
+    setFileError(null);
+    try {
+      const bytes = await downloadCloudLessonFile({ session: props.session, fileId: file.id });
+      const url = URL.createObjectURL(new Blob([bytes], { type: "application/octet-stream" }));
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = file.name;
+      link.click();
+      window.setTimeout(() => URL.revokeObjectURL(url), 30_000);
+    } catch {
+      setFileError("That file couldn't be downloaded. It may have been removed, or you no longer have access.");
+    } finally {
+      setFileBusy(null);
+    }
+  };
   // Questions members asked in channels that nobody answered (the owner's
   // brief already finds them): where Knowledge is thin.
   const [waiting, setWaiting] = useState<Array<{ author: string; channel: string; text: string; hoursAgo: number }>>([]);
@@ -690,22 +713,34 @@ export function KitClassroom(props: {
         ) : null}
         {lesson && editingTools ? (
           // For a host the lesson page is the editor: no edit mode.
+          <>
           <KitLessonEditor key={lesson.id} resource={lesson} focusTitle={editingLessonId === lesson.id}
             onDirtyChange={noteLessonDirty}
+            onUploadFile={(file) => uploadCloudLessonFile({ session: props.session, resourceId: lesson.id, file })}
+            onDownloadFile={(file) => void downloadLessonFile(file)}
             onSave={async (patch) => { await editingTools.save(lesson.id, patch); setEditingLessonId(null); }} />
+          {fileError ? <p className={cx("sub")} role="alert" style={{ color: "var(--bad)" }}>{fileError}</p> : null}
+          </>
         ) : lesson ? (
           <div className={`kit-lesson ${cx("klesson")}`}>
             {/* Drawn after the video (design-v1.css orders the lesson's parts). "Lesson 1 of 1" says nothing. */}
             <div className={`kit-lesson-facts ${cx("lab")}`}>{open.lessons.length > 1 ? `Lesson ${index + 1} of ${open.lessons.length}` : ""}{open.course.module_status === "draft" ? `${open.lessons.length > 1 ? " · " : ""}Draft course` : ""}</div>
             <div className="kit-lesson-body"><WebCommunityResourceViewerContent resource={lesson} /></div>
-            {lesson.lesson_links?.length ? (
+            {lesson.lesson_links?.length || lesson.lesson_files?.length ? (
               <div className={`kit-lesson-after ${cx("kres")}`}>
                 <span className={cx("lab")}>Resources for this lesson</span>
-                {lesson.lesson_links.map((link) => (
+                {(lesson.lesson_links ?? []).map((link) => (
                   <a key={link.url} className={cx("kresrow", "klink")} href={link.url} target="_blank" rel="noreferrer noopener">
                     <Icon name="link" /><span><b>{link.title}</b><em>{lessonLinkPlace(link)}</em></span><Icon name="arrow" />
                   </a>
                 ))}
+                {(lesson.lesson_files ?? []).map((file) => (
+                  <button key={file.id} type="button" className={cx("kresrow", "klink")} disabled={fileBusy === file.id}
+                    aria-label={`Download ${file.title}`} onClick={() => void downloadLessonFile(file)}>
+                    <Icon name="file" /><span><b>{file.title}</b><em>{fileBusy === file.id ? "Downloading…" : lessonFileFacts(file)}</em></span><Icon name="down" />
+                  </button>
+                ))}
+                {fileError ? <p className={cx("sub")} role="alert">{fileError}</p> : null}
               </div>
             ) : null}
             {/* One way forward, with what it leads to. Back to the shelf is the header's arrow. */}

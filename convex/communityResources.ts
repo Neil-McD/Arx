@@ -50,8 +50,6 @@ import {
 } from "./communityResourceConstants";
 import {
   type CommunityResourceBuilderChangesetRow,
-  boundedReadLimit,
-  boundedReadOffset,
   canManageCommunityResources,
   compareCommunityResources,
   getNextResourceSortOrder,
@@ -76,14 +74,12 @@ import {
 import {
   buildCommunityResourceDirectoryReadPayload,
   buildModuleNameMap,
-  buildResourceDirectoryEntry,
   listCommunityResourceBuilderDirectoryCore,
   listCommunityResourceSemanticDirectoryCore,
   listResourceDirectoryLiveModules,
   listResourceDirectoryLivePageResources,
   mapCommunityLaunchKnowledgeSourceRow,
   readCommunityResourceBuilderResourceCore,
-  readContentUnavailableReason,
   requireCommunityResourceDirectoryToolAccess,
   resolveResourceByRef,
 } from "./communityResourceDirectory";
@@ -93,6 +89,7 @@ import {
   isPlainUrlSource,
   normalizeCommunitySourceIngestionAttempt,
 } from "./communitySourceFetch";
+import { applyLessonFilesFromSave, deleteLessonFilesForLesson, lessonLinkCountAfterSave } from "./communityLessonFiles";
 import {
   deleteCommunitySourceUnitsForSourceResource,
   runCommunitySourceIngestion,
@@ -166,25 +163,13 @@ export const readCommunityResourceDirectoryInternal = internalQuery({
       };
     }
 
-    const row = await hydrateCommunityResourceBody(ctx, resolved.resource) ?? resolved.resource;
-    const body = String(row.bodyMd ?? "");
-    const offset = boundedReadOffset(args.offset);
-    const limit = boundedReadLimit(args.limit);
-    const bodySlice = body ? body.slice(offset, offset + limit) : null;
-    return {
-      ok: true,
-      kind: "community_resource_read",
-      resource: buildResourceDirectoryEntry(row, moduleNameMap),
-      source: null,
-      content: {
-        body_md: bodySlice,
-        offset,
-        limit,
-        total_chars: body.length,
-        truncated: Boolean(body && offset + (bodySlice?.length ?? 0) < body.length),
-        unavailable_reason: readContentUnavailableReason(row),
-      },
-    };
+    return await buildCommunityResourceDirectoryReadPayload({
+      ctx,
+      resource: resolved.resource,
+      moduleNameMap,
+      offset: args.offset,
+      limit: args.limit,
+    });
   },
 });
 
@@ -805,6 +790,7 @@ export const deleteCommunityResourceModule = mutation({
     const ingestionSources = resources.filter((resource) => normalizeResourceRole(resource.role) === "source");
 
     for (const lesson of lessons) {
+      await deleteLessonFilesForLesson(ctx, lesson._id);
       await deleteCommunitySourceUnitsForSourceResource(ctx, lesson._id);
       await deleteCommunityResourceBodyContent(ctx, lesson._id);
       await ctx.db.delete(lesson._id as any);
@@ -1366,6 +1352,19 @@ export const saveCommunityResource = mutation({
           })
         : existing.sortOrder;
 
+      // A lesson's resources: links and files together within the limit; the
+      // files named are the lesson's whole list (communityLessonFiles.ts).
+      const linksSent = Object.prototype.hasOwnProperty.call(payload, "lesson_links");
+      const filesSent = Object.prototype.hasOwnProperty.call(payload, "lesson_files");
+      if (nextRole === "page" && (linksSent || filesSent)) {
+        await applyLessonFilesFromSave(ctx, {
+          lesson: existing,
+          userId: args.userId,
+          requested: filesSent ? payload.lesson_files : undefined,
+          linkCount: lessonLinkCountAfterSave(existing, payload),
+          nowMs,
+        });
+      }
       await ctx.db.patch(existing._id as any, {
         ...(nextModuleId ? { moduleId: nextModuleId } : { moduleId: undefined }),
         type: normalizeResourceType(nextTypeRaw),
@@ -1719,6 +1718,7 @@ export const deleteCommunityResource = mutation({
       communityId: resource.communityId,
       userId: args.userId,
     });
+    await deleteLessonFilesForLesson(ctx, resource._id);
     await deleteCommunitySourceUnitsForSourceResource(ctx, resource._id);
     await deleteCommunityResourceBodyContent(ctx, resource._id);
     await ctx.db.delete(resource._id as any);

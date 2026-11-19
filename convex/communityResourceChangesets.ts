@@ -50,6 +50,7 @@ import {
   requireValidResourceModule,
   resourceModuleIdentity,
 } from "./communityResourceShared";
+import { deleteLessonFilesForLesson, requireLessonResourcesWithinLimit } from "./communityLessonFiles";
 
 function requireExpectedUpdatedAt(args: {
   expectedUpdatedAt: unknown;
@@ -847,6 +848,11 @@ async function editPageFromChangesetOperation(args: {
       })
     : existing.moduleId;
   if (!nextModuleId) throw new Error("community_resource_course_required");
+  // Links only: the lesson's files are a person's, added and removed in the
+  // app. New links still leave room for the files already there.
+  if (hasOwnField(args.operation as any, "lesson_links")) {
+    await requireLessonResourcesWithinLimit(args.ctx, existing._id, args.operation.lesson_links?.length ?? 0);
+  }
   const nextSourceResourceId = hasOwnField(args.operation as any, "source_resource_id")
     ? normalizeOptionalModuleId(args.operation.source_resource_id)
     : normalizeIdValue(existing.sourceResourceId ?? "");
@@ -950,6 +956,7 @@ export async function deletePageFromChangesetOperation(args: {
     expectedUpdatedAt: args.operation.expected_updated_at,
   });
   await refuseIfModuleIsLive(args.ctx, existing.moduleId);
+  await deleteLessonFilesForLesson(args.ctx, existing._id);
   await deleteCommunityResourceBodyContent(args.ctx, existing._id);
   await args.ctx.db.delete(existing._id as any);
   return existing;

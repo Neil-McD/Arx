@@ -42,6 +42,9 @@ const ICON_PATHS: Record<string, string> = {
   trash: '<path d="M4 7h16M9 7V4h6v3M6.5 7l1 13h9l1-13"/>',
   image: '<rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="10" r="1.6"/><path d="m4 18 5.5-5 3.5 3 3-2.5 4 4"/>',
   pen: '<path d="M4 20h4L19 9l-4-4L4 16z"/>',
+  // A lesson's files: the file itself, and its download.
+  file: '<path d="M14 3H6.5A1.5 1.5 0 0 0 5 4.5v15A1.5 1.5 0 0 0 6.5 21h11a1.5 1.5 0 0 0 1.5-1.5V8z"/><path d="M14 3v5h5"/>',
+  down: '<path d="M12 5v14M5.5 12.5 12 19l6.5-6.5"/>',
 };
 
 export type IconName = keyof typeof ICON_PATHS;

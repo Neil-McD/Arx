@@ -6,7 +6,11 @@ type RouteDependencies = Parameters<typeof registerCommunityAgentAttachmentRoute
 
 // Forward bounded bytes rather than buffering up to 50 MiB inside the runtime.
 // The storage upload URL and its storage ID never come from the browser.
-export async function prepareCommunityAttachmentStream(req: Request) {
+// Lesson files pass their own byte limit, and take any type: a file the
+// browser calls an image but whose bytes are not one is kept as a plain file.
+export async function prepareCommunityAttachmentStream(req: Request, options: {
+  maxBytes?: (mime: string) => number; anyType?: boolean;
+} = {}) {
   if (!req.body) throw new Error("community_attachment_empty");
   const reader = req.body.getReader();
   const first: Uint8Array[] = [];
@@ -27,8 +31,9 @@ export async function prepareCommunityAttachmentStream(req: Request) {
       offset += part.length;
       if (offset === prefix.length) break;
     }
-    const mime = detectCommunityAttachmentMime(prefix, (req.headers.get("content-type") ?? "").toLowerCase());
-    const maxBytes = communityAttachmentByteLimit(mime);
+    const declared = (req.headers.get("content-type") ?? "").toLowerCase();
+    const mime = detectCommunityAttachmentMime(prefix, options.anyType && declared.startsWith("image/") ? "" : declared);
+    const maxBytes = (options.maxBytes ?? communityAttachmentByteLimit)(mime);
     if (prefixSize > maxBytes || Number(req.headers.get("content-length")) > maxBytes) {
       throw new Error("community_attachment_too_large");
     }

@@ -6,7 +6,10 @@ import {
   communityResourceBodyChars,
   communityResourceIsLiveModulePage,
   communityResourceModuleIsLive,
+  lessonFileForAi,
+  listAttachedLessonFiles,
   mapCommunityResourceModuleRow,
+  normalizeLessonLinks,
   normalizeIdValue,
   normalizeOptionalText,
   normalizeOptionalUrl,
@@ -535,10 +538,17 @@ export async function buildCommunityResourceDirectoryReadPayload(args: {
   const offset = boundedReadOffset(args.offset);
   const limit = boundedReadLimit(args.limit);
   const bodySlice = body ? body.slice(offset, offset + limit) : null;
+  const isLesson = normalizeResourceRole(row.role) === "page";
   return {
     ok: true,
     kind: "community_resource_read",
     resource: buildResourceDirectoryEntry(row, args.moduleNameMap),
+    // "Resources for this lesson": its links, and its files by name, type
+    // and size. A file is downloaded by a person in the app; no address here.
+    ...(isLesson ? {
+      lesson_links: normalizeLessonLinks(row.lessonLinks),
+      lesson_files: (await listAttachedLessonFiles(args.ctx, row._id)).map(lessonFileForAi),
+    } : {}),
     source: null,
     content: {
       body_md: bodySlice,
@@ -1179,7 +1189,12 @@ export async function readCommunityResourceBuilderResourceCore(args: {
       // The full row the app also reads, with members_can_see in place of a
       // lesson's status (withMembersCanSee).
       resource: withMembersCanSee(
-        await mapCommunityResourceRowWithBody(args.ctx, resolved.resource),
+        {
+          ...(await mapCommunityResourceRowWithBody(args.ctx, resolved.resource)),
+          // Files by name, type and size; the app's ids stay in the app.
+          lesson_files: normalizeResourceRole(resolved.resource.role) === "page"
+            ? (await listAttachedLessonFiles(args.ctx, resolved.resource._id)).map(lessonFileForAi) : [],
+        },
         resolved.resource,
         communityResourceLiveModuleIds(modules),
       ),
