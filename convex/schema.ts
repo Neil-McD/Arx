@@ -1831,6 +1831,11 @@ export default defineSchema({
     // What the person is shown: the words, or the posts.
     text: v.optional(v.string()),
     items: v.optional(v.array(v.object({ who: v.string(), text: v.string() }))),
+    // The pictures from the person's talk that a post would carry, chosen
+    // when asked, so a yes posts exactly what was shown even after more
+    // messages (convex/communityGuidePictures.ts). Optional: most questions
+    // have none, and rows asked before pictures existed have none.
+    pictures: v.optional(v.array(v.object({ id: v.id("cloudThreadAttachments"), name: v.string() }))),
     status: v.union(v.literal("waiting"), v.literal("running"), v.literal("done"), v.literal("declined"), v.literal("failed")),
     // What happened, in one line, and where to see it.
     resultLine: v.optional(v.string()),

@@ -86,7 +86,8 @@ describe("one named tool per action", () => {
       expect(guide.name).toBe(tool.name);
       // The MCP's words, except where the guide has its own: only for a tool
       // that asks every time, whose yes in a private talk is a button, never words.
-      expect(guide.description).toBe(tool.guideDescription ?? tool.description);
+      // The guide's only inputs (the person's talk pictures) are told in one sentence on the tool.
+      expect(guide.description).toBe(`${tool.guideDescription ?? tool.description}${tool.guideOnly ? ` ${tool.guideOnly.sentence}` : ""}`);
       if (tool.guideDescription) {
         expect(actionToolEntry(tool).ask, tool.name).toBe("every_time");
         expect(tool.guideDescription, tool.name).not.toMatch(/get their yes/);
@@ -98,8 +99,10 @@ describe("one named tool per action", () => {
         expect(schema.required).not.toContain(filled);
       }
       const { community: _community, idempotency_key: _key, revision: _revision, ...rest } = mcp.properties;
-      expect(schema.properties, tool.name).toEqual(rest);
-      expect(schema.required, tool.name).toEqual(mcp.required.filter((key) => !["community", "revision"].includes(key)));
+      expect(schema.properties, tool.name).toEqual({ ...rest, ...tool.guideOnly?.properties });
+      expect(schema.required, tool.name).toEqual(tool.guideOnly?.required ?? mcp.required.filter((key) => !["community", "revision"].includes(key)));
+      // A person's own AI is never shown the guide's only inputs.
+      for (const key of Object.keys(tool.guideOnly?.properties ?? {})) expect(Object.keys(mcp.properties), tool.name).not.toContain(key);
       // A person's own AI still names its action and gives the revision it read.
       expect(Object.keys(mcp.properties)).toContain("idempotency_key");
     }
@@ -108,6 +111,26 @@ describe("one named tool per action", () => {
     expect((actionToolDefinition(update).inputSchema as any).required).toEqual(["community", "revision"]);
     expect((guideToolDefinition(update).inputSchema as any).required).toEqual([]);
     expect(Object.keys((guideToolDefinition(update).inputSchema as any).properties)).not.toContain("revision");
+  });
+
+  it("only posting and replying have a guide-only input: the pictures the person attached in the talk, said in one sentence, never on the MCP", () => {
+    expect(ACTION_TOOLS.filter((tool) => tool.guideOnly).map((tool) => tool.name)).toEqual(["polynet_post", "polynet_reply"]);
+    for (const name of ["polynet_post", "polynet_reply"]) {
+      const tool = actionTool(name)!;
+      const guide = guideToolDefinition(tool) as any;
+      expect(Object.keys(guide.inputSchema.properties)).toContain("pictures");
+      expect(guide.description).toMatch(/If they attached pictures and want them in the (post|reply), set pictures\.$/);
+      const mcp = actionToolDefinition(tool) as any;
+      expect(Object.keys(mcp.inputSchema.properties)).not.toContain("pictures");
+      expect(mcp.description).not.toMatch(/pictures/);
+      // A post may be pictures alone for the guide; a person's own AI still gives words.
+      expect(mcp.inputSchema.required).toContain("text");
+      expect(guide.inputSchema.required).not.toContain("text");
+    }
+    // The pictures go to the executor from either door (which refuses them from a person's own AI).
+    expect(translateActionTool(actionTool("polynet_post")!, { community: "c", channel: "general", text: "Hi", pictures: "all" }, 0).input)
+      .toMatchObject({ content: { text: "Hi", pictures: "all" } });
+    expect((translateActionTool(actionTool("polynet_post")!, { community: "c", channel: "general", text: "Hi" }, 0).input as any).content).toEqual({ text: "Hi" });
   });
 
   it("labels come from the list: what asks every time is marked as needing care, so the person's own AI app asks them", () => {

@@ -23,7 +23,34 @@ export type GuideQuestionView = {
   items: Array<{ who: string; text: string }>;
   // Whether "Always allow" is offered for this kind.
   canAlways: boolean;
+  // The pictures that would go out with the words, from the person's own
+  // talk. Only on a post that has them; url is null once the person deleted
+  // the message they were on (then a yes is refused).
+  pictures?: Array<{ id: string; name: string; url: string | null }>;
 };
+
+// Which of the person's pictures a post through the guide carries
+// (convex/communityGuidePictures.ts): "all", or places among the pictures on
+// the person's latest message that has pictures, 1 for the first. Plain
+// words back, naming how many there are, so a small model gets it right
+// the second time.
+export function choosePictures(selection: unknown, count: number, max: number):
+  { ok: true; positions: number[] } | { ok: false; message: string } {
+  const there = count === 1 ? "There is 1 picture" : `There are ${count} pictures`;
+  const range = count === 1 ? 'give [1] or "all"' : `give places from 1 to ${count}, or "all"`;
+  if (count === 0) return { ok: false, message: "There are no pictures in this talk. Ask the person to attach them to a message here first." };
+  const list = selection === "all" ? Array.from({ length: count }, (_, index) => index + 1)
+    : typeof selection === "number" ? [selection] : Array.isArray(selection) ? selection : null;
+  if (!list || list.length === 0 || list.some((place) => typeof place !== "number" || !Number.isInteger(place))) {
+    return { ok: false, message: `pictures is "all" or a list of places such as [1, 2]. ${there} on their latest message with pictures: ${range}.` };
+  }
+  if (list.length > max) return { ok: false, message: `A post holds up to ${max} pictures.` };
+  if (new Set(list).size !== list.length) return { ok: false, message: "Name each picture once." };
+  if (list.some((place) => place < 1 || place > count)) {
+    return { ok: false, message: `${there} on their latest message with pictures: ${range}.` };
+  }
+  return { ok: true, positions: list as number[] };
+}
 
 export type GuideAnswerResult = {
   // done: it was done. declined: nothing was done. failed: it was tried and refused.
