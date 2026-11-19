@@ -887,6 +887,8 @@ export function KitClassroom(props: {
               : start?.kind === "all_finished" ? "You've finished every course." : "Nothing to learn here yet."}
           </p>
         ) : null}
+        {/* Someone who has finished everything has no Start here block to carry the line, and is told all the same. */}
+        {props.loaded && start?.kind === "all_finished" ? <p className={cx("lab", "khost-sees")} style={{ marginTop: 0 }}>{HOST_SEES_PROGRESS}</p> : null}
         {/* One bar, for everyone: it asks the guide. Nothing is added through it. */}
         {agentOn ? (
           <button type="button" className={cx("ask kask kask-btn")} onClick={() => openGuideFromSearch()}>
