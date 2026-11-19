@@ -447,6 +447,8 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
   written. `aiPostFingerprints` (`communityAiRules`: the words a person's AI
   posted lately, so they are not posted twice; the same file serves
   `rules.md` and the host's house rules, `communities.aiHouseRules`).
+  `aiMessageFingerprints` (`directMessages`: the words an AI sent in someone's
+  direct messages for a day, so the same words reach at most three people).
 - **Contracts:** [polynet-workspace-mcp-contract-v0.md](polynet-workspace-mcp-contract-v0.md),
   [canonical-platform-operation-contract-v1.md](canonical-platform-operation-contract-v1.md).
 

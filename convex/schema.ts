@@ -2325,6 +2325,16 @@ export default defineSchema({
 
   // What a person's own AI posted lately, by its words, so the same words
   // are not posted twice in a community in a day (shared/aiPostingRules.ts).
+  // The words an AI sent in someone's direct messages, by person and
+  // conversation, for a day: the same words to more than three people is a
+  // blast (convex/directMessages.ts, checkAiDirectReply).
+  aiMessageFingerprints: defineTable({
+    userId: v.id("users"),
+    conversationId: v.id("dmConversations"),
+    fingerprint: v.string(),
+    createdAt: v.number(),
+  }).index("by_user_fingerprint", ["userId", "fingerprint"]),
+
   aiPostFingerprints: defineTable({
     userId: v.id("users"),
     communityId: v.id("communities"),
