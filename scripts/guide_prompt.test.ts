@@ -118,6 +118,13 @@ describe("the course-building skill", () => {
       expect(text).not.toContain("skills/");
       expect(text).not.toContain(COURSE_BUILDING_SKILL_MD);
       expect(text).not.toContain("builder/resources/");
+      expect(text).not.toContain("builder/analytics.json");
+    }
+  });
+
+  test("a host's map has the community's numbers; a member's does not", () => {
+    for (const talk of [TALKS.owner, TALKS.admin]) {
+      expect(prompt(talk).text).toContain("- builder/analytics.json : the community's numbers, as the Analytics page shows them.");
     }
   });
 

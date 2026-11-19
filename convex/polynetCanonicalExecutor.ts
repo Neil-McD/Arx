@@ -14,6 +14,7 @@ import type { CommunityEvidenceSurface } from "../shared/communityEvidenceContra
 import { parseCommunityInteractionEvidenceRef } from "../shared/communityEvidenceContract.ts";
 import {
   POLYNET_JOIN_REQUESTS_DIRECTORY_PATH,
+  POLYNET_BUILDER_ANALYTICS_PATH,
   POLYNET_BUILDER_COMMUNITY_PATH,
   POLYNET_BUILDER_DIRECTORY_PATH,
   POLYNET_BUILDER_RESOURCES_DIRECTORY_PATH,
@@ -1472,6 +1473,7 @@ async function executeCanonicalList(args: {
         path: absolutePath,
         entries: [
           { path: mountedPath(target.communitySlug, BUILDER_COMMUNITY_PATH), kind: "document", type: "builder", name: "The community itself: profile, how people join, where members spend time, agent instructions, handbook" },
+          { path: mountedPath(target.communitySlug, POLYNET_BUILDER_ANALYTICS_PATH), kind: "document", type: "builder", name: "The community's numbers, as the Analytics page shows them" },
           joinRequests,
           {
             path: mountedPath(
@@ -1827,6 +1829,22 @@ async function executeCanonicalRead(args: {
       return { ok: true, value: { ...canonicalJsonDocument({ target, localPath: target.localPath,
         payload: { ...settings, member_experience: memberExperience, agent_instructions: agent.instructions,
           handbook: { approved_md: handbook.approved_md, approved_at: handbook.approved_at, draft_md: handbook.draft_md } } }),
+        writable: false, searchable: false } };
+    } catch {
+      return canonicalError("semantic_not_found", "Community path not found or not accessible.");
+    }
+  }
+
+  // Its numbers, as the Analytics page shows them: read by whoever may
+  // manage the community, like builder/community.json above.
+  if (target.localPath === POLYNET_BUILDER_ANALYTICS_PATH) {
+    if (!reads(args, target, "builder_records")) {
+      return canonicalError("semantic_not_found", "Community path not found or not accessible.");
+    }
+    try {
+      const analytics = await args.ctx.runQuery((internal as any).communityAdmin.readCommunityAnalyticsForTrustedManagerInternal,
+        { userId: args.userId, communityId: target.communityId });
+      return { ok: true, value: { ...canonicalJsonDocument({ target, localPath: target.localPath, payload: analytics }),
         writable: false, searchable: false } };
     } catch {
       return canonicalError("semantic_not_found", "Community path not found or not accessible.");
