@@ -333,6 +333,19 @@ you, then the box to ask it anything (Neil, Nov 18;
   off, or before it has written one, a plain sentence of facts stands in.
 - **The list**: the three most important rows show; the rest stack behind
   "N more". Empty, it is not drawn.
+  - First, for every role (member, moderator, admin, owner): each tag of you
+    you haven't seen, in a channel or a pod (Neil, Nov 18). "<Name> tagged you
+    in #General" (a pod by its name; "tagged everybody" for `@everybody`),
+    with the start of the message, its opening tags dropped. Newest first,
+    three lines, then "And N more tags", which opens the next one's room. A
+    line opens its message (its thread, in its room). "Not seen" is the
+    unread dots' rule: newer than your read position in that room, in a room
+    and a post you can still read; opening the room clears the line and the
+    dot together, so there is no "Not now". Read live
+    (`communityAttention:listMyHomeTags`, the newest 40 tags of you; no post
+    is scanned); while the pointer is over Home a new line waits until it
+    leaves, so nothing moves under it. Each line counts as one thing that
+    needs you, as the join row does. The Inbox stays direct messages only.
   - A host, "Needs you": people asking to join (answered in place, first),
     then what was noticed: a question with no answer for a day, new members
     who haven't posted, people stalling on a lesson. A noticed row has one

@@ -109,8 +109,10 @@ never light your own dot (this holds for every channel). Opening the pod's room
 clears its dots the way a channel's clear (the same read position). The dots
 are `convex/communityAttention.ts` combined by `shared/podsAttentionDot.ts`.
 `@everybody` in a pod reaches the people who can read it: its members, the
-builder and admins. Home ("For you", "Needs you") shows no tags yet, in a pod
-or a channel.
+builder and admins. A tag you haven't seen is also a line at the top of Home,
+in a pod or a channel, for every role (see "Home" in
+`docs/specs/agent-access-v0.md`); opening the room clears the line and the dot
+together.
 
 ## Pod knowledge
 

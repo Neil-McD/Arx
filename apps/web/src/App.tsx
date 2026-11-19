@@ -86,6 +86,7 @@ import {
   type PublicRoute,
   buildAppRoutePath,
   buildCommunityTabPath,
+  buildCommunityThreadPath,
   buildSettingsIndexPath,
   buildSettingsPath,
 } from "../../../shared/webAppRouteState";
@@ -2573,6 +2574,13 @@ export default function App() {
                   if (!channel) return;
                   leavePhoneHome();
                   shellChromeHostProps.communityShell.onSelectCommunityChannel(channel);
+                },
+                // A tag opens its message; the address is the truth.
+                onOpenTag: (channelSlug: string, rootId: string | null) => {
+                  const path = buildCommunityThreadPath(selectedActiveCommunitySlug, channelSlug, rootId);
+                  if (!path) return;
+                  leavePhoneHome();
+                  navigateTo(path);
                 },
                 onOpenEvents: () => {
                   leavePhoneHome();

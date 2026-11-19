@@ -4,9 +4,10 @@
 // - The brief: what's happening here, in one to three sentences the guide
 //   wrote (shared/communityBriefs.ts). Without a guide, or before it has
 //   written one, a plain sentence of facts stands in.
-// - The list (KitNeedsYou): for a host, people asking to join and what was
-//   noticed; for a member, what is for them. The three most important show
-//   and the rest stack. Only what came forward on its own is here; work done
+// - The list (KitNeedsYou): first, for everyone, the tags of you nobody has
+//   seen yet (shared/communityHomeTags.ts), live; then for a host, people
+//   asking to join and what was noticed; for a member, what is for them. The
+//   three most important show and the rest stack. Only what came forward on its own is here; work done
 //   through an agent is approved where the agent is being worked with.
 // - What the guide suggests (KitGuideSuggests), for a host with a guide: a
 //   reply it drafted to a question nobody answered. It is kept apart from the
@@ -35,6 +36,9 @@ import { GuideSuggests } from "../v1/KitGuideSuggests";
 import { fetchReplyDrafts, postReplyDraft, skipReplyDraft } from "../../../../shared/cloudCommunityReplyDraftsGateway";
 import type { ReplyDraftView } from "../../../../shared/communityReplyDrafts";
 import { Eyebrow, Hello, HomeBody, KitApp, Rail, TextLink, cx } from "../v1/kit";
+import type { HomeTags } from "../../../../shared/communityHomeTags";
+import { useLiveQuery } from "../../../../shared/liveQuery";
+import { resolveAuthSubject, type AuthSessionLike } from "../../../../shared/authSession";
 
 export type WebCommunityHomeSectionProps = {
   communityId: string;
@@ -49,6 +53,9 @@ export type WebCommunityHomeSectionProps = {
   onOpenChannelByName: (channelName: string) => void;
   onOpenEvents: () => void;
   onOpenKnowledge?: () => void;
+  // A tag line opens its message (the thread, in its channel or pod); the
+  // "and N more" line opens the next one's room (rootId null).
+  onOpenTag?: (channelSlug: string, rootId: string | null) => void;
   // Changes each time Home is opened, so the facts are read again.
   refreshKey?: number;
   // Home stays mounted, hidden, while you are on another page. Its facts are
@@ -92,6 +99,8 @@ export function homeSentenceFor(
   snapshot: CloudCommunityHomeSnapshot,
   audience: "host" | "member" = "host",
   needs = 0,
+  // A member's tags not seen yet: a quiet day isn't quiet for them.
+  tags = 0,
 ): string {
   const joined = snapshot.newMembers.count;
   const joinedPart = joined > 0 ? `${plural(joined, "person", "people")} joined since yesterday` : "";
@@ -100,6 +109,7 @@ export function homeSentenceFor(
     if (joinedPart && said > 0) return `${joinedPart}, and there ${said === 1 ? "is 1 new message" : `are ${said} new messages`}.`;
     if (joinedPart) return `${joinedPart}.`;
     if (said > 0) return `${plural(said, "new message", "new messages")} since yesterday.`;
+    if (tags > 0) return tags === 1 ? "Someone tagged you." : `You were tagged ${tags} times.`;
     return "It's quiet today.";
   }
   const needsPart = needs === 1 ? "1 thing needs you" : `${needs} things need you`;
@@ -164,6 +174,27 @@ export function memberThingsFor(steps: MemberNextStep[], actions: HomeTargets): 
   }));
 }
 
+// The tag lines, the same for every role: each opens its message, and the
+// last ("and N more") the next one's room. Nothing to decide, so no "Not now":
+// opening the room is what clears them.
+export function tagThingsFor(tags: HomeTags | null | undefined, onOpenTag?: (channelSlug: string, rootId: string | null) => void): HomeThing[] {
+  if (!tags) return [];
+  const rows: HomeThing[] = tags.lines.map((line) => ({
+    key: line.key, icon: "tag", title: line.title, detail: line.detail, action: "Open",
+    onAction: () => onOpenTag?.(line.channelSlug, line.rootId),
+  }));
+  if (tags.more) {
+    const more = tags.more;
+    rows.push({ key: "tag:more", icon: "tag", title: more.title, detail: more.detail, action: more.action, onAction: () => onOpenTag?.(more.channelSlug, null) });
+  }
+  return rows;
+}
+
+// How many tags are waiting, the stacked ones included.
+export function homeTagsTotal(tags: HomeTags | null | undefined): number {
+  return tags ? tags.lines.length + (tags.more?.count ?? 0) : 0;
+}
+
 // The way back into the conversation without typing: whenever there is one
 // and the guide is on, whatever else needs you. Only once Home is drawn (or
 // could not be), as its last line, so nothing moves under it.
@@ -183,6 +214,22 @@ export function WebCommunityHomeSection(props: WebCommunityHomeSectionProps) {
   const isHost = props.audience === "host";
   const agentOn = props.agentOn !== false;
   const { brief, settled: briefSettled } = usePlaceBriefRead(props.session, props.communityId, null, agentOn);
+  // The tags of you not seen yet, live while Home is the page you are on
+  // (they come and go with the unread dots).
+  const subject = props.session ? resolveAuthSubject(props.session as AuthSessionLike) : null;
+  const tagsRead = useLiveQuery<HomeTags>(props.session, "communityAttention:listMyHomeTags",
+    subject && props.open !== false ? { authSubject: subject, communityId: props.communityId } : null);
+  // Coming back to Home draws the last answer at once, not a blank page.
+  const lastTagsRef = useRef<{ communityId: string; tags: HomeTags } | null>(null);
+  if (tagsRead.data) lastTagsRef.current = { communityId: props.communityId, tags: tagsRead.data };
+  const liveTags = tagsRead.data ?? (lastTagsRef.current?.communityId === props.communityId ? lastTagsRef.current.tags : undefined);
+  // While the pointer is over Home the lines hold still; a tag that arrives
+  // then is drawn when it leaves, so nothing moves under it. A hold belongs to
+  // one opening of Home.
+  const [heldTags, setHeldTags] = useState<{ refreshKey: number | undefined; tags: HomeTags } | null>(null);
+  const shownTags = heldTags && heldTags.refreshKey === props.refreshKey ? heldTags.tags : liveTags;
+  // Tags are extra: if they can't be read, Home shows without them.
+  const tagsSettled = liveTags !== undefined || Boolean(tagsRead.error) || !subject;
 
   useEffect(() => {
     if (props.open === false) return;
@@ -274,11 +321,15 @@ export function WebCommunityHomeSection(props: WebCommunityHomeSectionProps) {
   const things = isHost
     ? hostThingsFor(noticedWithoutDrafted(noticed ?? [], drafts ?? []), { agentOn, actions: props, onNotNow: notNow })
     : memberThingsFor(steps ?? [], props);
-  const needs = homeThingsCount({ joinRequests: joinCount, things: things.length });
+  const tagThings = tagThingsFor(shownTags, (channelSlug, rootId) => {
+    setHeldTags(null);
+    props.onOpenTag?.(channelSlug, rootId);
+  });
+  const needs = homeThingsCount({ joinRequests: joinCount, things: things.length + tagThings.length });
   // The page draws as one piece once its parts have answered, so the list is
   // never drawn and then pushed down by the brief (docs/specs/web-architecture
   // -end-state.md: nothing moves after it is drawn).
-  const ready = Boolean(snapshot) && briefSettled && (isHost ? noticed !== null && drafts !== null : steps !== null);
+  const ready = Boolean(snapshot) && briefSettled && tagsSettled && (isHost ? noticed !== null && drafts !== null : steps !== null);
 
   const panel = snapshot ? (
     <KitHomeRail session={props.session} communityId={props.communityId} snapshot={snapshot}
@@ -293,9 +344,11 @@ export function WebCommunityHomeSection(props: WebCommunityHomeSectionProps) {
   const age = brief ? briefAge(brief.updated_at, now.getTime()) : "";
   return (
     <>
-      <HomeBody>
+      <HomeBody
+        onPointerEnter={() => { if (liveTags) setHeldTags({ refreshKey: props.refreshKey, tags: liveTags }); }}
+        onPointerLeave={() => setHeldTags(null)}>
         <Eyebrow community={props.communityName} time={homeClockFor(now)} plain={!agentOn} />
-        <Hello greeting={greeting} line={!ready ? (failed ? "" : " ") : brief ? "" : homeSentenceFor(snapshot!, props.audience, needs)} />
+        <Hello greeting={greeting} line={!ready ? (failed ? "" : " ") : brief ? "" : homeSentenceFor(snapshot!, props.audience, needs, homeTagsTotal(shownTags))} />
         {ready && brief ? (
           <div className={cx("hbrief")}>
             <p>{brief.summary}</p>
@@ -312,7 +365,7 @@ export function WebCommunityHomeSection(props: WebCommunityHomeSectionProps) {
         {ready && brief && isHost && needs === 0 ? <p className={cx("hnone")}>Nothing needs you today.</p> : null}
         {ready ? (
           <NeedsYou label={isHost ? "Needs you" : "For you"} join={joinReview} joinCount={joinCount}
-            onShowAllJoinRequests={props.onOpenJoinRequests} things={things} />
+            onShowAllJoinRequests={props.onOpenJoinRequests} things={things} tags={tagThings} />
         ) : null}
         {ready && isHost ? <GuideSuggests drafts={drafts ?? []} onPost={postDraft} onSkip={skipDraft} /> : null}
         {ready && isHost && !agentOn && things.length > 0 && props.onTurnOnAgent ? (
