@@ -392,7 +392,12 @@ test("message answers are in the tools' published shapes, and two people's AIs c
   }
   expect((await f.call("member", "polynet_read", { path: c.path })).isError).toBe(true);
   const mine = await f.raw("member", "polynet_write", { path: c.path, mode: "append", content: { text: "From the member." }, idempotency_key: "r1" });
-  for (const field of (POLYNET_CANONICAL_TOOL_DEFINITIONS.polynet_write.outputSchema as any).required as string[]) expect(mine.structuredContent).toHaveProperty(field);
+  // The write's own fields, without Polynet's bookkeeping: an outside AI is never handed the receipt.
+  for (const field of ((POLYNET_CANONICAL_TOOL_DEFINITIONS.polynet_write.outputSchema as any).required as string[]).filter((field) => field !== "receipt")) {
+    expect(mine.structuredContent).toHaveProperty(field);
+  }
+  expect(mine.structuredContent).not.toHaveProperty("receipt");
+  expect(JSON.stringify(mine.structuredContent)).not.toMatch(/authority_lane|principal_kind|polynet\.canonical/);
   // The owner's AI, with the same key, sends its own message.
   const theirs = await f.raw("owner", "polynet_write", { path: c.path, mode: "append", content: { text: "From the owner." }, idempotency_key: "r1" });
   expect(theirs.structuredContent.message).toMatchObject({ from_me: true, text: "From the owner." });
@@ -687,8 +692,11 @@ test("a person's own AI asks to change a role: Polynet asks the person, and only
   const [card, ...others] = await f.cards();
   expect(others).toEqual([]);
   expect(card).toMatchObject({ kind: "change", askedBy: "Claude", canAlways: false });
-  // Asking again is the same request, still waiting: one card, nothing done.
+  // Asking again is the same request, still waiting: one card, nothing done. With a new key too: the card's own key is given back.
   expect((await f.call("owner", "polynet_set_member_role", ask, "Claude")).structuredContent.status).toBe("waiting_for_person");
+  const newKey = await f.call("owner", "polynet_set_member_role", { ...ask, idempotency_key: "make-mod-again" }, "Claude");
+  expect(newKey.structuredContent.status).toBe("waiting_for_person");
+  expect(newKey.structuredContent.note).toContain('idempotency_key "make-mod"');
   expect(await f.cards()).toHaveLength(1);
   // Someone else can't answer it.
   await expect(f.t.withIdentity({ subject: "member-subject" }).action((api as any).communityGuideQuestions.answerGuideQuestion,
@@ -703,6 +711,27 @@ test("a person's own AI asks to change a role: Polynet asks the person, and only
   expect(again.structuredContent).toMatchObject({ status: "done" });
   const audits = await f.t.run((ctx: any) => ctx.db.query("criticalAuditEvents").collect()) as any[];
   expect(audits.filter((row) => row.eventType === "community_member_role_set")).toHaveLength(1);
+  // Asked for again on purpose, with a new key, it is a new request: a new card.
+  expect((await f.call("owner", "polynet_set_member_role", { ...ask, idempotency_key: "make-mod-2" }, "Claude")).structuredContent.status).toBe("waiting_for_person");
+  expect(await f.cards()).toHaveLength(1);
+});
+
+test("a Yes that stopped part way is marked failed after ten minutes, so the AI isn't told to wait for ever", async () => {
+  const f = await approvalsFixture();
+  const ask = { community: "run-club", members: ["member"], role: "moderator", idempotency_key: "stuck-1" };
+  await f.call("owner", "polynet_set_member_role", ask, "Claude");
+  const [card] = await f.cards();
+  // The run started and never finished.
+  await f.t.run((ctx: any) => ctx.db.patch(card.id, { status: "running", answeredAt: Date.now() - 11 * 60 * 1000 }));
+  const again = await f.call("owner", "polynet_set_member_role", ask, "Claude");
+  expect(again.isError).toBe(true);
+  expect(again.structuredContent.code).toBe("failed_after_yes");
+  expect(await f.role()).toBe("member");
+  // A run still within its ten minutes is still waiting.
+  await f.call("owner", "polynet_set_member_role", { ...ask, idempotency_key: "stuck-2" }, "Claude");
+  const [fresh] = await f.cards();
+  await f.t.run((ctx: any) => ctx.db.patch(fresh.id, { status: "running", answeredAt: Date.now() - 60 * 1000 }));
+  expect((await f.call("owner", "polynet_set_member_role", { ...ask, idempotency_key: "stuck-2" }, "Claude")).structuredContent.status).toBe("waiting_for_person");
 });
 
 test("the person's No does nothing, and the AI is told so when it asks again", async () => {
@@ -769,4 +798,18 @@ test("an AI can't pile up requests: ten wait at most, and the guide's questions 
   const cards = await f.cards();
   expect(cards).toHaveLength(11);
   expect(cards.filter((card) => !card.askedBy).map((card) => card.question)).toEqual(["Post this in General?"]);
+});
+
+test("an outside AI sees a weekly event once, at its next time, with the next few after it", async () => {
+  const f = await fixture();
+  const made = await f.call("owner", "polynet_create_event", { community: "run-club", title: "Hill repeats", starts_at: "2027-01-05T07:00:00-05:00",
+    timezone: "America/New_York", location_type: "online", recurrence_frequency: "weekly" });
+  expect(made.isError, JSON.stringify(made)).toBe(false);
+  expect(made.structuredContent).not.toHaveProperty("receipt");
+  const listed = await f.call("member", "polynet_list", { path: "/communities/run-club/events/" });
+  const entries = listed.structuredContent.entries as any[];
+  expect(entries.map((entry) => entry.title)).toEqual(["Hill repeats"]);
+  expect(entries[0].next_times).toHaveLength(3);
+  // The occurrence listed still reads on its own path.
+  expect((await f.call("member", "polynet_read", { path: entries[0].path })).isError).toBe(false);
 });

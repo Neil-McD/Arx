@@ -107,6 +107,16 @@ export const describeMembersInternal = internalQuery({
 // The call without its retry key. The guide's key is made per tool call
 // (shared/actionTools.ts, guideActionKey), so the same words asked twice in
 // one turn differ only there; they are still the same question.
+function keyOf(inputJson: string): string | null {
+  try {
+    const parsed = JSON.parse(inputJson);
+    const key = parsed.idempotency_key ?? parsed.idempotencyKey;
+    return typeof key === "string" && key ? key : null;
+  } catch {
+    return null;
+  }
+}
+
 function withoutKey(inputJson: string): string {
   try {
     const { idempotency_key: _key, idempotencyKey: _camel, ...rest } = JSON.parse(inputJson);
@@ -153,20 +163,44 @@ export const askInternal = internalMutation({
 });
 
 // A person's own AI asks. Each request stands alone (there is no turn to
-// move on from). The same request again, key and all, is the same question:
-// waiting, it is still waiting; answered, the AI is told what happened, so
-// asking again never runs it twice. At most OWN_AI_WAITING_MAX wait at once.
+// move on from). While one waits, the same request again is that same card,
+// whatever key the AI gave it this time (and the AI is told the card's key).
+// Once answered, the very same call (same key) is told what happened, so it
+// never runs twice; a new key is a new request, put to the person again (it
+// may be asked for again on purpose: banned, unbanned, banned again). At most
+// OWN_AI_WAITING_MAX wait at once.
 const ANSWER_STATUSES = ["waiting", "running", "done", "declined", "failed"] as const;
-async function askForOwnAi(ctx: any, args: any, nowMs: number) {
+// A Yes still running after this long didn't finish (the run stopped): it is
+// marked failed, so the AI isn't told "waiting" for ever.
+const OWN_AI_RUNNING_STALE_MS = 10 * 60 * 1000;
+
+async function ownAiMatch(ctx: any, args: { communityId: any; userId: any; toolName: string; inputJson: string }, nowMs: number, statuses: readonly string[]) {
   const since = nowMs - GUIDE_QUESTION_WAIT_MS;
-  for (const status of ANSWER_STATUSES) {
+  const bare = withoutKey(args.inputJson);
+  for (const status of statuses) {
     const rows = await ctx.db.query("communityGuideQuestions")
       .withIndex("by_community_user_status_createdAt", (q: any) => q.eq("communityId", args.communityId).eq("userId", args.userId).eq("status", status).gt("createdAt", since))
       .order("desc").take(50);
-    const same = rows.find((row: any) => row.ownAiApp && row.toolName === args.toolName && row.inputJson === args.inputJson);
-    if (!same) continue;
-    if (status === "waiting" || status === "running") return { ok: true as const, questionId: String(same._id), settled: null };
-    return { ok: true as const, questionId: String(same._id), settled: { status, line: same.resultLine ?? "" } };
+    const exactOnly = status !== "waiting" && status !== "running";
+    const same = rows.find((row: any) => row.ownAiApp && row.toolName === args.toolName &&
+      (exactOnly ? row.inputJson === args.inputJson : withoutKey(row.inputJson) === bare));
+    if (same) return { status, row: same };
+  }
+  return null;
+}
+
+async function askForOwnAi(ctx: any, args: any, nowMs: number) {
+  const since = nowMs - GUIDE_QUESTION_WAIT_MS;
+  let found = await ownAiMatch(ctx, args, nowMs, ANSWER_STATUSES);
+  if (found?.status === "running" && Number(found.row.answeredAt ?? found.row.createdAt) < nowMs - OWN_AI_RUNNING_STALE_MS) {
+    await ctx.db.patch(found.row._id, { status: "failed", resultLine: "It didn't finish. Nothing more will be done unless it is asked again." });
+    found = await ownAiMatch(ctx, args, nowMs, ANSWER_STATUSES);
+  }
+  if (found) {
+    if (found.status === "waiting" || found.status === "running") {
+      return { ok: true as const, questionId: String(found.row._id), settled: null, key: keyOf(found.row.inputJson) };
+    }
+    return { ok: true as const, questionId: String(found.row._id), settled: { status: found.status, line: found.row.resultLine ?? "" } };
   }
   const waiting = (await waitingRows(ctx, args.communityId, args.userId)).filter((row: any) => row.ownAiApp && row.createdAt > since);
   if (waiting.length >= OWN_AI_WAITING_MAX) return { ok: false as const, reason: "too_many_waiting" as const };
@@ -181,21 +215,14 @@ async function askForOwnAi(ctx: any, args: any, nowMs: number) {
   return { ok: true as const, questionId: String(questionId), settled: null };
 }
 
-// What happened to an own AI's request already answered, the very same call
-// (key and all): asked again, the AI is told this before anything else is
-// checked, since a person removed or banned is no longer a member to name.
+// What happened to an own AI's request already answered (the same rules):
+// asked again, the AI is told this before anything else is checked, since a
+// person removed or banned is no longer a member to name.
 export const ownAiOutcomeInternal = internalQuery({
   args: { communityId: v.id("communities"), userId: v.id("users"), toolName: v.string(), inputJson: v.string() },
   handler: async (ctx, args) => {
-    const since = Date.now() - GUIDE_QUESTION_WAIT_MS;
-    for (const status of ["done", "declined", "failed"] as const) {
-      const rows = await ctx.db.query("communityGuideQuestions")
-        .withIndex("by_community_user_status_createdAt", (q: any) => q.eq("communityId", args.communityId).eq("userId", args.userId).eq("status", status).gt("createdAt", since))
-        .order("desc").take(50);
-      const same = rows.find((row: any) => row.ownAiApp && row.toolName === args.toolName && row.inputJson === args.inputJson);
-      if (same) return { status, line: same.resultLine ?? "" };
-    }
-    return null;
+    const found = await ownAiMatch(ctx, args, Date.now(), ["done", "declined", "failed"]);
+    return found ? { status: found.status, line: found.row.resultLine ?? "" } : null;
   },
 });
 
