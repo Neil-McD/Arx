@@ -1857,7 +1857,8 @@ export default defineSchema({
   communityGuideAlwaysAllowed: defineTable({
     communityId: v.id("communities"),
     userId: v.id("users"),
-    kind: v.literal("post"),
+    // What the guide may do without asking: post as them, or reply in their direct messages.
+    kind: v.union(v.literal("post"), v.literal("message")),
     createdAt: v.number(),
   }).index("by_community_user_kind", ["communityId", "userId", "kind"]),
 

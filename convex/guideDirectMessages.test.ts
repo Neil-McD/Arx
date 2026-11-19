@@ -94,7 +94,7 @@ test("the guide lists the person's own conversations and reads one, and is told 
   expect(listed(read).entries).toMatchObject([{ from_me: false, text: "Are you coming to the Sunday run?" }]);
 });
 
-test("a reply through the guide is never sent without a yes, is asked every time, and always-allow for posts does not cover it", async () => {
+test("a reply through the guide waits for a yes; always-allow for posts doesn't cover it, but always-allow for replies does", async () => {
   const w = await world();
   // The member has said posts may go out without asking.
   await w.as("member").mutation(api.communityGuideQuestions.setGuideAlwaysAllowed, { communityId: w.ids.communityId, kind: "post", on: true });
@@ -104,12 +104,12 @@ test("a reply through the guide is never sent without a yes, is asked every time
   expect(listed(asked)).toMatchObject({ status: "waiting_for_person", question: "Send this to owner as you?" });
   expect(await w.messages()).toEqual(before);
   const [question] = await w.questions("member");
-  expect(question).toEqual({ id: expect.any(String), kind: "message", question: "Send this to owner as you?", text: "Yes, see you at 7.", items: [], canAlways: false });
+  expect(question).toEqual({ id: expect.any(String), kind: "message", question: "Send this to owner as you?", text: "Yes, see you at 7.", items: [], canAlways: true });
   // Nobody else sees it, the owner included.
   expect(await w.questions("owner")).toEqual([]);
 
-  // "Always" is never kept for a message: it sends this one.
-  expect(await w.answer("member", question.id, "always")).toEqual({ status: "done", line: "Sent to owner as you.",
+  // A plain yes sends this one and keeps nothing.
+  expect(await w.answer("member", question.id, "yes")).toEqual({ status: "done", line: "Sent to owner as you.",
     path: `/c/run-club/inbox/${encodeURIComponent(w.ownerMember)}` });
   const after = await w.messages();
   const sent = after.filter((row: any) => !before.some((old: any) => String(old._id) === String(row._id)));
@@ -126,12 +126,28 @@ test("a reply through the guide is never sent without a yes, is asked every time
   expect(await w.answer("member", next.id, "no")).toMatchObject({ status: "declined" });
   expect(await w.messages()).toHaveLength(after.length);
 
+  // "Always allow replies": this one is sent, and the next goes straight out, with every other check.
+  await w.talk("member", "talk-member-2")("polynet_reply_message", { conversation: w.ownerMember, text: "On my way." }, "call_3");
+  const [third] = await w.questions("member");
+  expect(await w.answer("member", third.id, "always")).toMatchObject({ status: "done" });
+  expect((await w.t.run((ctx) => ctx.db.query("communityGuideAlwaysAllowed").collect())).map((row: any) => row.kind).sort()).toEqual(["message", "post"]);
+  const straight = await w.talk("member", "talk-member-3")("polynet_reply_message", { conversation: w.ownerMember, text: "Parked by the gate." }, "call_4");
+  expect(listed(straight).status).not.toBe("waiting_for_person");
+  expect(await w.questions("member")).toEqual([]);
+  const sentNow = (await w.messages()).filter((row: any) => !after.some((old: any) => String(old._id) === String(row._id)));
+  expect(sentNow.map((row: any) => row.text ?? row.body ?? row.contentSummary)).toHaveLength(2);
+  // Switched off, the question comes back.
+  await w.as("member").mutation(api.communityGuideQuestions.setGuideAlwaysAllowed, { communityId: w.ids.communityId, kind: "message", on: false });
+  await w.talk("member", "talk-member-4")("polynet_reply_message", { conversation: w.ownerMember, text: "Here now." }, "call_5");
+  expect((await w.questions("member"))[0]).toMatchObject({ kind: "message", text: "Here now." });
+  const afterAlways = await w.messages();
+
   // Calling the executor as the guide directly, without a yes, never sends either.
   const direct = await executePolynetCanonicalTool({ ctx: w.ctxOf("member"), authSubject: "member-subject", userId: String(w.ids.member),
     principalKind: "community_agent_for_member", mountedCommunityId: String(w.ids.communityId), evidenceSurface: "member_agent_dock",
     toolName: "polynet_write", input: { path: `/messages/${w.ownerMember}/`, mode: "append", content: { text: "Straight in?" }, idempotency_key: "k1" } });
   expect(direct).toMatchObject({ ok: true, value: { status: "waiting_for_person" } });
-  expect(await w.messages()).toHaveLength(after.length);
+  expect(await w.messages()).toHaveLength(afterAlways.length);
 });
 
 test("a reply that would be refused is refused before asking; one refused after the question fails with the plain reason", async () => {

@@ -132,7 +132,7 @@ test("always allow: posted, the next post goes straight through, and switching i
   expect(await w.answer("member", question.id, "always")).toMatchObject({ status: "done" });
   expect((await w.rows()).always).toEqual([expect.objectContaining({ userId: w.ids.member, communityId: w.ids.communityId, kind: "post" })]);
   expect(await w.t.withIdentity({ subject: "member-subject" }).query(api.communityGuideQuestions.getGuideAlwaysAllowed, { communityId: w.ids.communityId }))
-    .toEqual({ post: true });
+    .toEqual({ post: true, message: false });
 
   const straight = await w.guide("member", "run-2")("polynet_write", { path: GENERAL, mode: "append",
     content: { root_id: String(w.ids.otherPost), text: "I'm in, see you there." }, idempotency_key: "reply-b" });
@@ -350,15 +350,16 @@ test("publishing the handbook through the guide shows the exact text and waits f
   expect((await w.questions("owner"))[0].text).toBe(long);
 });
 
-test("through a person's own AI, removing or banning a member waits for their Yes in Polynet, and opening the community stays the person's through both doors", async () => {
+test("through a person's own AI, removing or banning a member waits for their Yes in Polynet, and opening the community waits for it through both doors", async () => {
   const w = await world();
   const ownAi = w.door("owner", "external_mcp");
   expect(await ownAi("polynet_call", call("community.members.remove", { members: [`user:${String(w.ids.other)}`] }, "rm-1"))).toMatchObject({ ok: true, value: { status: "waiting_for_person" } });
   expect(await ownAi("polynet_call", call("community.members.ban", { members: [`user:${String(w.ids.other)}`] }, "ban-1"))).toMatchObject({ ok: true, value: { status: "waiting_for_person" } });
-  for (const door of [w.guide("owner"), ownAi]) {
-    expect(await door("polynet_call", call("community.join_mode.set", { mode: "open" }, "open-1"))).toMatchObject({ ok: false, code: "person_only" });
-  }
-  expect((await w.questions("owner")).map((question: any) => [question.kind, question.askedBy])).toEqual([["remove", "Your AI app"], ["remove", "Your AI app"]]);
+  // Opening waits for the person's Yes through both doors; nothing opens before it.
+  expect(await ownAi("polynet_call", call("community.join_mode.set", { mode: "open" }, "open-1"))).toMatchObject({ ok: true, value: { status: "waiting_for_person" } });
+  expect((await w.questions("owner")).map((question: any) => [question.kind, question.askedBy])).toEqual([["remove", "Your AI app"], ["remove", "Your AI app"], ["change", "Your AI app"]]);
+  expect(await w.guide("owner", "run-open")("polynet_call", call("community.join_mode.set", { mode: "open" }, "open-2")))
+    .toMatchObject({ ok: true, value: { status: "waiting_for_person", question: expect.stringContaining("Open the community to everyone?") } });
   const memberships = await w.t.run((ctx) => ctx.db.query("communityMemberships").collect());
   expect(memberships.every((row: any) => row.state === "active")).toBe(true);
 });
@@ -469,12 +470,10 @@ test("what a real AI tripped on: a missing folder says so, a cut-off list says t
   expect(await own("polynet_list", { path: `${ROOT}members/other/` })).toMatchObject({ ok: false, message: expect.stringContaining("no folder at that path") });
   expect(await own("polynet_list", { path: `${ROOT}members/../users/` })).toMatchObject({ ok: false, message: expect.stringContaining("traversal-free") });
   const made: any = await own("polynet_write", post("Mine, briefly.", "mine-1"));
-  // Deleting waits for the person's Yes in Polynet; asked again afterwards, the AI is told what happened.
-  const deleteIt = { path: made.value.path, mode: "delete", content: {}, idempotency_key: "mine-2" };
-  expect(await own("polynet_write", deleteIt)).toMatchObject({ ok: true, value: { status: "waiting_for_person" } });
-  const [question] = await w.questions("member");
-  expect(await w.answer("member", question.id, "yes")).toMatchObject({ status: "done", line: expect.stringContaining("deleted") });
-  expect(await own("polynet_write", deleteIt)).toMatchObject({ ok: true, value: { status: "done", line: expect.stringContaining("deleted") } });
+  // Deleting their own post is their AI app's call: it is done, and says so.
+  const gone: any = await own("polynet_write", { path: made.value.path, mode: "delete", content: {}, idempotency_key: "mine-2" });
+  expect(gone).toMatchObject({ ok: true, value: { done: "deleted" } });
+  expect(await w.questions("member")).toEqual([]);
   const channelsFor = async (door: any) => ((await door("polynet_list", { path: `${ROOT}channels/` })) as any).value.entries
     .map((entry: any) => entry.capabilities?.canManage);
   for (const door of [w.door("owner", "external_mcp"), w.guide("owner")]) expect(await channelsFor(door)).toEqual([true]);
@@ -503,8 +502,8 @@ test("the named tools a person's own AI is shown do the real thing, end to end, 
   expect(await member("polynet_react", { community: C, post: `interaction:root:${String(w.ids.otherPost)}`, emoji: "👍" })).toMatchObject({ ok: true, value: { result: { reacted: true } } });
   expect(await member("polynet_mark_lesson_done", { community: C, lesson: `resource:${String(w.ids.lesson)}` })).toMatchObject({ ok: true, value: { result: { done: true } } });
   expect(await member("polynet_mark_channel_read", { community: C, channel: "general" })).toMatchObject({ ok: true });
-  // Deleting asks the person in Polynet first.
-  expect(await member("polynet_delete_post", { community: C, channel: "general", post: mine })).toMatchObject({ ok: true, value: { status: "waiting_for_person" } });
+  // Deleting their own post is their AI app's call.
+  expect(await member("polynet_delete_post", { community: C, channel: "general", post: mine })).toMatchObject({ ok: true, value: { done: "deleted" } });
   // A member using a builder's tool is refused for that community, whatever they were shown.
   expect(await member("polynet_create_channel", { community: C, name: "Mine" })).toMatchObject({ ok: false, code: "operation_not_found" });
 
@@ -520,12 +519,15 @@ test("the named tools a person's own AI is shown do the real thing, end to end, 
   const eventId = event.value.result.event.parent_event_id;
   expect(await owner("polynet_update_event", { community: C, event: eventId, location_label: "High school track" })).toMatchObject({ ok: true, value: { result: { event: { location_label: "High school track" } } } });
   expect(await owner("polynet_cancel_event", { community: C, event: eventId })).toMatchObject({ ok: true, value: { result: { event: { status: "cancelled" } } } });
-  expect(await owner("polynet_set_guide_instructions", { community: C, text: "Keep answers short." })).toMatchObject({ ok: true });
+  // What the guide is told changes how it answers every member: it waits for the Yes.
+  expect(await owner("polynet_set_guide_instructions", { community: C, text: "Keep answers short." })).toMatchObject({ ok: true, value: { status: "waiting_for_person" } });
   expect(await owner("polynet_save_handbook_draft", { community: C, text: "# Start here" })).toMatchObject({ ok: true });
   expect(await owner("polynet_require_approval_to_join", { community: C })).toMatchObject({ ok: true });
   expect(await owner("polynet_set_member_role", { community: C, members: [`user:${String(w.ids.member)}`], role: "moderator" })).toMatchObject({ ok: true, value: { status: "waiting_for_person" } });
-  // Only what asks every time was held for a yes: the delete and the role change. The rest ran.
-  expect((await w.rows()).questions.map((row: any) => [row.kind, row.status])).toEqual([["remove", "waiting"], ["change", "waiting"]]);
+  // Only what asks every time was held for a yes: the guide's instructions and the role change. The rest ran.
+  expect((await w.rows()).questions.map((row: any) => [row.kind, row.question, row.status])).toEqual([
+    ["change", "Replace the guide's instructions with this? It changes how the guide answers every member.", "waiting"],
+    ["change", expect.stringContaining("moderator"), "waiting"]]);
 });
 
 test("through a person's own AI, an action's file points at its named tool, and what only a person does gives the link instead", async () => {

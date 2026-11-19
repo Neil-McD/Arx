@@ -20,7 +20,7 @@
 // from there, never from here. scripts/action_tools.test.ts holds that every
 // action has exactly one named tool or is listed in NOT_PUBLISHED.
 
-import { CALL_OPERATION_VARIANTS, CALL_OPERATIONS, requestFingerprint, TOOL_OPERATIONS, type OperationEntry } from "./operationCatalog.ts";
+import { askAt, CALL_OPERATION_VARIANTS, CALL_OPERATIONS, requestFingerprint, TOOL_OPERATIONS, type OperationEntry } from "./operationCatalog.ts";
 import type { PlatformOperationJsonSchema } from "./platformOperationContract.ts";
 import { RESOURCE_CHANGESET_OPERATION_SCHEMA } from "./polynetCanonicalToolContract.ts";
 import { COMMUNITY_ATTACHMENT_MAX_COUNT } from "./communityAttachmentPolicy.ts";
@@ -135,9 +135,10 @@ export const ACTION_TOOLS: ActionTool[] = [
     { community: COMMUNITY, channel: CHANNEL, post: POST, text: TEXT("The new words, in full.", 8_000) }, ["community", "channel", "post", "text"],
     (a) => write(`${root(a.community)}channels/${a.channel}/${a.post}.md`, "update", { text: a.text })),
   tool("polynet_delete_post", "polynet_write:channels:delete", "Delete their own post",
-    "Delete a post or reply the person you act for wrote. It can't be brought back. Not for anyone else's. The person is asked first, every time.",
+    "Delete a post or reply the person you act for wrote. It can't be brought back. Not for anyone else's.",
     { community: COMMUNITY, channel: CHANNEL, post: POST }, ["community", "channel", "post"],
-    (a) => write(`${root(a.community)}channels/${a.channel}/${a.post}.md`, "delete", {})),
+    (a) => write(`${root(a.community)}channels/${a.channel}/${a.post}.md`, "delete", {}), undefined,
+    "Delete a post or reply the person you act for wrote. It can't be brought back. Not for anyone else's. The person is asked first, every time."),
   tool("polynet_react", "community.interaction.react", "React to a post",
     "Add the person's reaction to a post or reply, or take it off.",
     { community: COMMUNITY, post: POST, emoji: { type: "string", minLength: 1, maxLength: 32, description: "One emoji." },
@@ -191,12 +192,16 @@ export const ACTION_TOOLS: ActionTool[] = [
       visibility: { type: "string", enum: ["published", "unlisted"], description: "published lists it in Discover (owner only); unlisted hides it." } }, ["community", "revision"],
     (a) => call("community.settings.update", a, { expected_revision: a.revision, ...only(a, ["name", "slug", "one_liner", "about", "visibility"]) })),
   tool("polynet_require_approval_to_join", "community.join_mode.set", "Make joining need approval",
-    "Set the community so people ask to join and a host answers. Opening a community to everyone is done by a person in the app, never here.",
+    "Set the community so people ask to join and a host answers.",
     { community: COMMUNITY }, ["community"],
     (a) => call("community.join_mode.set", a, { mode: "approval" })),
+  tool("polynet_open_community", "community.join_mode.set:open", "Open the community to everyone",
+    "Let anyone join without asking. Everyone waiting to join is let in at once, which can't be taken back. A paid community stays paid. The person is asked first, every time.",
+    { community: COMMUNITY }, ["community"],
+    (a) => call("community.join_mode.set", a, { mode: "open" })),
   tool("polynet_set_guide_instructions", "community.agent.instructions.set", "Set the guide's instructions",
-    "Replace what the community's own guide is told about this community. The guide follows it in every member's talk and in channels. Empty text clears it.",
-    { community: COMMUNITY, text: { type: "string", maxLength: 40_000, description: "The instructions, in full." } }, ["community", "text"],
+    "Replace what the community's own guide is told about this community. The guide follows it in every member's talk and in channels. Empty text clears it. The person is shown the text and asked first, every time.",
+    { community: COMMUNITY, text: { type: "string", maxLength: 12_000, description: "The instructions, in full." } }, ["community", "text"],
     (a) => call("community.agent.instructions.set", a, { text: a.text })),
   tool("polynet_save_handbook_draft", "community.handbook.save_draft", "Save a handbook draft",
     "Save a draft of the community's handbook. Members and the guide don't see a draft.",
@@ -277,7 +282,6 @@ export const NOT_PUBLISHED: Record<string, string> = {
   "polynet_write:builder:delete": "part of polynet_change_courses; deleting what members see is refused there",
   "community.presence.heartbeat": "that a person is here right now: only their own open site says so",
   "community.typing.set": "that a person is typing: only their own open site says so",
-  "community.join_mode.set:open": "only a person, in the app",
 };
 
 const BY_NAME = new Map(ACTION_TOOLS.map((entry) => [entry.name, entry]));
@@ -335,7 +339,7 @@ export const OWN_AI_ASKED_IN_POLYNET = "Polynet asks the person itself: the answ
 // (undo existing elsewhere doesn't make one harmless). Everything else here
 // only adds or marks something for the person.
 export const ACTION_TOOLS_THAT_NEED_CARE = new Set([
-  "polynet_edit_post", "polynet_update_community", "polynet_require_approval_to_join", "polynet_set_guide_instructions",
+  "polynet_edit_post", "polynet_reply_message", "polynet_update_community", "polynet_require_approval_to_join", "polynet_set_guide_instructions",
   "polynet_save_handbook_draft", "polynet_rename_channel", "polynet_describe_channel",
   "polynet_create_event", "polynet_update_event", "polynet_cancel_event",
   "polynet_approve_join_requests", "polynet_decline_join_requests", "polynet_unban_members", "polynet_change_courses",
@@ -357,7 +361,7 @@ export function actionToolDefinition(entry: ActionTool) {
   // card in Polynet (convex/communityGuideQuestions.ts); a reply in the
   // person's direct messages is sent by their own AI, as they asked. For the
   // rest that needs care, their AI app is told to ask them.
-  const askedInPolynet = listed.ask === "every_time" && entry.catalog !== "polynet_write:messages";
+  const askedInPolynet = askAt(listed, "own_ai") === "every_time";
   const askFirst = askedInPolynet
     ? ` ${OWN_AI_ASKED_IN_POLYNET}`
     : destructive && !/yes first|asked first/.test(entry.description)

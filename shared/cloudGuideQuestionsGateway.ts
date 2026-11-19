@@ -11,7 +11,7 @@ export async function answerGuideQuestion(params: Params & { questionId: string;
     authSubject, communityId: params.communityId, questionId: params.questionId, answer: params.answer });
 }
 
-export async function setGuideAlwaysAllowed(params: Params & { on: boolean }): Promise<void> {
+export async function setGuideAlwaysAllowed(params: Params & { on: boolean; kind?: "post" | "message" }): Promise<void> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session as any);
-  await client.mutation("communityGuideQuestions:setGuideAlwaysAllowed" as any, { authSubject, communityId: params.communityId, kind: "post", on: params.on });
+  await client.mutation("communityGuideQuestions:setGuideAlwaysAllowed" as any, { authSubject, communityId: params.communityId, kind: params.kind ?? "post", on: params.on });
 }

@@ -23,12 +23,21 @@ export type OperationPlan = "free" | "paid";
 
 // How the person is asked before an AI does it for them.
 // - "none": they said exactly what to do and it can be undone. It is done.
-// - "words": words the AI wrote go out under their name. They are shown the
-//   words first, and may switch that to "always allow".
+// - "words": words the AI wrote go out under their name (a post, a reply, a
+//   reply in their messages). The guide shows them the words first, and they
+//   may switch that to "always allow". A person's own AI app decides for itself.
 // - "every_time": it can't be taken back, or it changes who runs the
 //   community or what every member is told. Asked every time.
 // - "person_only": never done by an AI. It is handed the place in the app
 //   where the person does it.
+//
+// The rule (Neil, Nov 19 2026): Polynet asks for its own Yes only for what
+// takes something from other people that can't be given back, or changes who
+// holds power or what every member (or the guide) is told. Everything else is
+// the person's own AI app's call, by its own approval settings and the labels
+// on each tool. The guide is Polynet's own AI, so it also asks before words
+// go out under the person's name (posts, and replies in their direct
+// messages), which they may switch to "always allow".
 export type OperationAsk = "none" | "words" | "every_time" | "person_only";
 
 export type OperationEntry = {
@@ -37,11 +46,20 @@ export type OperationEntry = {
   budget: OperationBudget;
   plan: OperationPlan;
   ask: OperationAsk;
+  // How a person's own AI (through the MCP) is asked, where it differs from
+  // the guide: their own words and their own posts are their AI app's call.
+  ownAi?: OperationAsk;
 };
 
 const entry = (lens: OperationLens, effect: OperationEffect, budget: OperationBudget,
-  more: { plan?: OperationPlan; ask?: OperationAsk } = {}): OperationEntry =>
-  ({ lens, effect, budget, plan: more.plan ?? "free", ask: more.ask ?? "none" });
+  more: { plan?: OperationPlan; ask?: OperationAsk; ownAi?: OperationAsk } = {}): OperationEntry =>
+  ({ lens, effect, budget, plan: more.plan ?? "free", ask: more.ask ?? "none", ...(more.ownAi ? { ownAi: more.ownAi } : {}) });
+
+// How this door is asked about an entry: the guide by `ask`; a person's own AI
+// by `ownAi` where the list says so.
+export function askAt(found: OperationEntry, door: "guide" | "own_ai"): OperationAsk {
+  return door === "own_ai" && found.ownAi ? found.ownAi : found.ask;
+}
 
 // The five tools, by what they are pointed at.
 export const TOOL_OPERATIONS = {
@@ -52,18 +70,18 @@ export const TOOL_OPERATIONS = {
   "polynet_write:channels": entry("member", "write", "post", { ask: "words" }),
   // polynet_write on a post of your own, mode delete.
   // It takes nothing from anyone else, so a person's own AI does it.
-  "polynet_write:channels:delete": entry("member", "write", "post", { ask: "every_time" }),
+  "polynet_write:channels:delete": entry("member", "write", "post", { ask: "every_time", ownAi: "none" }),
   // polynet_write under builder/: a batch of changes to courses and lessons,
   // made in draft. Publishing, and deleting what is live, are a person's
   // (convex/communityResourceChangesets.ts).
   "polynet_write:builder": entry("builder", "write", "builder_change"),
   "polynet_write:builder:delete": entry("builder", "destroy", "builder_change"),
   // A person's own direct messages (/messages/): reading the conversations
-  // they are in, and replying in one that exists. Never starting one. A reply
-  // lands in one person's inbox, so through the guide it is asked about every
-  // time, never "always allowed" like posts.
+  // they are in, and replying in one that exists. Never starting one. Through
+  // the guide a reply is asked about (the person may "always allow" it); their
+  // own AI sends it, within the message limits and checks.
   "polynet_list:messages": entry("member", "read", "read"),
-  "polynet_write:messages": entry("member", "write", "message_reply", { ask: "every_time" }),
+  "polynet_write:messages": entry("member", "write", "message_reply", { ask: "words" }),
 } satisfies Record<string, OperationEntry>;
 
 // polynet_call operations, in the order the capabilities directory lists them.
@@ -82,7 +100,8 @@ export const CALL_OPERATIONS = {
   // Setting it to approval takes nothing from anyone. Opening it lets in
   // everyone who was waiting, and tells them: CALL_OPERATION_VARIANTS.
   "community.join_mode.set": entry("builder", "write", "builder_change"),
-  "community.agent.instructions.set": entry("builder", "write", "builder_change"),
+  // What the guide is told changes how it answers every member: asked every time.
+  "community.agent.instructions.set": entry("builder", "broadcast", "builder_change", { ask: "every_time" }),
   "community.handbook.save_draft": entry("builder", "write", "builder_change"),
   // What every member, and the guide, is told.
   "community.handbook.approve": entry("builder", "broadcast", "builder_change", { ask: "every_time" }),
@@ -107,7 +126,8 @@ export const CALL_OPERATIONS = {
 
 // An operation that is a different thing for one of its inputs.
 export const CALL_OPERATION_VARIANTS = {
-  "community.join_mode.set:open": entry("builder", "broadcast", "builder_change", { ask: "person_only" }),
+  // Opening lets in everyone waiting and can't be taken back: asked every time.
+  "community.join_mode.set:open": entry("builder", "broadcast", "builder_change", { ask: "every_time" }),
 } satisfies Record<string, OperationEntry>;
 
 // What only the background worker writes; never advertised to anyone's tools.
@@ -142,9 +162,10 @@ export function operationFor(args: {
 // "post" (the words, with "always allow" offered), "remove" (can't be taken
 // back: posts, or a member removed or banned), "change" (who runs the place,
 // what every member is told) and "message" (a reply in their direct messages,
-// with the words and who it goes to). Only posts can be always allowed.
+// with the words and who it goes to). Posts and message replies can be always
+// allowed; what takes from others or changes who runs the place never can.
 export type GuideAsk = "post" | "remove" | "change" | "message";
-export const GUIDE_ASK_ALWAYS_ALLOWABLE: Record<GuideAsk, boolean> = { post: true, remove: false, change: false, message: false };
+export const GUIDE_ASK_ALWAYS_ALLOWABLE: Record<GuideAsk, boolean> = { post: true, remove: false, change: false, message: true };
 
 export function guideAskFor(args: Parameters<typeof operationFor>[0]): GuideAsk | null {
   const found = operationFor(args);
