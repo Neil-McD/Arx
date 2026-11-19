@@ -26,6 +26,7 @@ import {
   resolveRequestedCommunityChannel,
 } from "./communityChannelCore";
 import { resolveCommunityChannelActor, type ChannelActor } from "./communityChannelAccess";
+import { isInPod, memberGrants, podRecord } from "./communityPods";
 
 type CommunityAttentionSurface = "chat" | "resources" | "events" | "mentions";
 
@@ -55,6 +56,8 @@ type CommunityInteractionRootLike = {
   _id: any;
   communityId: any;
   channelId?: any;
+  actorType?: string;
+  actorUserId?: any;
   status: "live" | "hidden" | "deleted";
   visibilityScope: "private" | "admin" | "community" | "public";
   lastReplyAt?: number;
@@ -65,6 +68,8 @@ type CommunityInteractionReplyLike = {
   _id: any;
   communityId: any;
   channelId?: any;
+  actorType?: string;
+  actorUserId?: any;
   status: "live" | "hidden" | "deleted";
   visibilityScope: "private" | "admin" | "community" | "public";
   createdAt: number;
@@ -130,6 +135,63 @@ async function getLatestCommunityChannelChatActivityAt(
     normalizePositiveMarker(latestReply?.createdAt),
   ].filter((value): value is number => value !== null);
   return markers.length > 0 ? Math.max(...markers) : null;
+}
+
+// How far back a room's dot looks past the viewer's own messages for someone
+// else's. Someone who has just posted this many times in a row was in the room.
+const OTHERS_ACTIVITY_SCAN_LIMIT = 10;
+
+// A room's newest activity, and its newest activity by someone other than the
+// viewer: your own message never lights your own dot.
+async function getCommunityChannelActivityMarkers(
+  ctx: any,
+  communityId: any,
+  channel: CommunityChannelLike,
+  actor: ChannelActor,
+  viewerUserId: any,
+): Promise<{ latestAt: number | null; latestFromOthersAt: number | null }> {
+  const [roots, replies] = await Promise.all([
+    listChannelReadableRows<CommunityInteractionRootLike>({
+      ctx, actor, tableName: "communityInteractionRoots", communityId, channel, limit: OTHERS_ACTIVITY_SCAN_LIMIT,
+    }),
+    listChannelReadableRows<CommunityInteractionReplyLike>({
+      ctx, actor, tableName: "communityInteractionReplies", communityId, channel, limit: OTHERS_ACTIVITY_SCAN_LIMIT,
+    }),
+  ]);
+  const viewerKey = normalizeIdValue(viewerUserId);
+  const own = (row: { actorType?: string; actorUserId?: any }) =>
+    row.actorType === "human" && Boolean(viewerKey) && normalizeIdValue(row.actorUserId) === viewerKey;
+  const newest = (values: Array<number | null>) => {
+    const markers = values.filter((value): value is number => value !== null);
+    return markers.length > 0 ? Math.max(...markers) : null;
+  };
+  return {
+    latestAt: newest([
+      normalizePositiveMarker(roots[0]?.createdAt),
+      normalizePositiveMarker(roots[0]?.lastReplyAt),
+      normalizePositiveMarker(replies[0]?.createdAt),
+    ]),
+    // Replies are read from the room itself, so a root's lastReplyAt (which
+    // may be the viewer's own reply) is not needed here.
+    latestFromOthersAt: newest([
+      normalizePositiveMarker(roots.find((row) => !own(row))?.createdAt),
+      normalizePositiveMarker(replies.find((row) => !own(row))?.createdAt),
+    ]),
+  };
+}
+
+// A pod's plain activity is for the people in it. Builders and admins can
+// open every pod, but its quiet dot is only for the pods they are in (a tag
+// still reaches them anywhere they can read).
+async function viewerGetsRoomChatDot(
+  ctx: any,
+  communityId: any,
+  channel: CommunityChannelLike,
+  actor: ChannelActor,
+  userId: any,
+): Promise<boolean> {
+  if (channel.accessMode !== "restricted" || !actor.isManager) return true;
+  return isInPod(await memberGrants(ctx, channel._id), await podRecord(ctx, communityId, channel._id), actor, userId);
 }
 
 async function getLatestCommunityChatActivityAt(
@@ -309,12 +371,14 @@ async function getCommunityAttentionRow(
           userId,
           channel._id,
         ),
-        latestActivityAt: await getLatestCommunityChannelChatActivityAt(
+        activity: await getCommunityChannelActivityMarkers(
           ctx,
           communityId,
           channel,
           actor,
+          userId,
         ),
+        chatDot: await viewerGetsRoomChatDot(ctx, communityId, channel, actor, userId),
       })),
     ),
     getLatestCommunityMentionsByChannel({
@@ -327,16 +391,18 @@ async function getCommunityAttentionRow(
     getLatestCommunityEventsUpdatedAt(ctx, communityId),
   ]);
   const channelRows: CommunityChannelAttentionRow[] = channelAttentionInputs.map(
-    ({ channel, readState, latestActivityAt }) => {
+    ({ channel, readState, activity, chatDot }) => {
       const latestMentionAt = latestMentionsByChannel.get(
         communityAttentionChannelKey(channel),
       );
+      const latestActivityAt = activity.latestAt;
       return {
         channel_id: normalizeIdValue(channel._id) || null,
         channel_slug: channel.slug,
         chat:
-          typeof latestActivityAt === "number" &&
-          latestActivityAt > readState.chatSeenThroughAt,
+          chatDot &&
+          typeof activity.latestFromOthersAt === "number" &&
+          activity.latestFromOthersAt > readState.chatSeenThroughAt,
         mentions:
           typeof latestMentionAt === "number" &&
           latestMentionAt > readState.mentionSeenThroughAt,

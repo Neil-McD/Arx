@@ -1905,6 +1905,7 @@ export default function App() {
           if (path) navigateTo(path);
         },
         createRoom: handleCreateCommunityChannel,
+        roomAttention: communityChannelIndicators,
       },
       discoverProps: discoverPageProps,
       canPostMessagesActiveCommunity: canPostMessagesActiveChannel,
