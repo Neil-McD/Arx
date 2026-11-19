@@ -15,8 +15,12 @@ import {
 } from "./communityCore";
 import {
   advanceCommunityChatReadCursor,
+  normalizeCommunityReadPosition,
+  readCommunityChannelReadState,
   readCommunityChatReadState,
 } from "./communityReadCursorCore";
+import { readCanonicalUserIdentityProjection } from "./profileCore";
+import { homeTagLines, type HomeTag } from "../shared/communityHomeTags";
 import {
   type CommunityChannelLike,
   listChannelReadableRows,
@@ -582,6 +586,82 @@ export const listMyCommunityAttentionPage = query({
       section: args.section, paginationOpts: { ...args.paginationOpts, numItems: Math.min(10, args.paginationOpts.numItems) } });
     const attention = await getCommunityAttentionRow(ctx, args.communityId, userId, result.page);
     return { ...result, page: attention.channels, attention };
+  },
+});
+
+// How many of the newest tags of you Home looks through. Tags are indexed by
+// who was tagged, so this never reads the community's posts.
+const HOME_TAGS_SCAN_LIMIT = 40;
+
+// Home's tag lines (shared/communityHomeTags.ts): every tag of this person in
+// this community they haven't seen, by the dots' own rule. A tag counts only
+// while its post is up and its room is one they can still read
+// (resolveMentionRecipientSource), and stays until their read position in
+// that room passes it. Read live, so a line comes and goes with the dot.
+export const listMyHomeTags = query({
+  args: { authSubject: v.optional(v.string()), communityId: v.id("communities") },
+  handler: async (ctx, args) => {
+    const userId = await resolveUserIdForAuthenticatedRequest({ ctx, authSubject: args.authSubject ?? null });
+    await requireCommunityChatAccess({ ctx, communityId: args.communityId, userId });
+    // Suppressed tags are left out by the index itself, as the dots' are.
+    const rows = (await Promise.all((["pending", "sent", "read"] as const).map(async (notifyState) =>
+      (await ctx.db
+        .query("communityInteractionMentions" as any)
+        .withIndex("by_mentionedUser_community_notifyState_createdAt", (q: any) =>
+          q.eq("mentionedUserId", userId).eq("communityId", args.communityId).eq("notifyState", notifyState))
+        .order("desc")
+        .take(HOME_TAGS_SCAN_LIMIT)) as Array<Record<string, any>>)))
+      .flat()
+      .sort((a, b) => Number(b.createdAt) - Number(a.createdAt))
+      .slice(0, HOME_TAGS_SCAN_LIMIT);
+    // A room's read position, by the room the tag names: most tags are already
+    // seen, and this skips them before their post is looked up.
+    const positions = new Map<string, number>();
+    const positionOf = async (channel: CommunityChannelLike) => {
+      const key = normalizeIdValue(channel._id) || "general";
+      if (!positions.has(key)) {
+        positions.set(key, (await readCommunityChannelReadState(ctx, args.communityId, userId, channel)).mentionSeenThroughAt);
+      }
+      return positions.get(key)!;
+    };
+    const names = new Map<string, string>();
+    const nameOf = async (authorId: any) => {
+      const key = normalizeIdValue(authorId);
+      if (!key) return "Someone";
+      if (!names.has(key)) {
+        const identity = await readCanonicalUserIdentityProjection(ctx, authorId).catch(() => null);
+        names.set(key, identity?.displayName || (identity?.handle ? `@${identity.handle}` : "Someone"));
+      }
+      return names.get(key)!;
+    };
+    const viewerKey = normalizeIdValue(userId);
+    const tags: HomeTag[] = [];
+    for (const mention of rows) {
+      if (mention.mentionKind !== "user" || mention.notifyState === "suppressed") continue;
+      const createdAt = normalizeCommunityReadPosition(mention.createdAt);
+      if (mention.channelId) {
+        const known = positions.get(normalizeIdValue(mention.channelId));
+        if (known !== undefined && createdAt <= known) continue;
+      }
+      const resolved = await resolveMentionRecipientSource({ ctx, mention, userId });
+      if (!resolved) continue;
+      const { channel, source } = resolved as { channel: CommunityChannelLike & { name?: string }; source: any };
+      if (createdAt <= await positionOf(channel)) continue;
+      // Your own message never tags you.
+      if (normalizeIdValue(source.row.actorUserId) === viewerKey) continue;
+      tags.push({
+        id: normalizeIdValue(mention._id),
+        author: source.row.actorUserId ? await nameOf(source.row.actorUserId) : "The guide",
+        everybody: Boolean(mention.sourceBroadcastId),
+        room: String(channel.name ?? channel.slug ?? "General"),
+        isPod: channel.accessMode === "restricted",
+        channelSlug: String(channel.slug ?? "general"),
+        rootId: normalizeIdValue(source.root._id),
+        text: String(source.row.contentSummary || source.row.title || ""),
+        createdAt,
+      });
+    }
+    return homeTagLines(tags);
   },
 });
 

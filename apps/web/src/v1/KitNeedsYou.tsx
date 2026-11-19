@@ -4,9 +4,11 @@
 // people stalling on a lesson). For a member, "For you": saying hello, the
 // lesson they are on, the event that is near. The three most important show;
 // the rest stack behind "N more". Work done through an agent is never here.
+// For everyone, above all of it: the tags of you nobody has seen yet
+// (`tags`), because a person is waiting on each.
 // Empty, the list isn't drawn.
 import { useState, type ReactNode } from "react";
-import { BookOpen, CalendarDays, ChevronDown, MessageCircleQuestion, MessageSquare, UserPlus, Users } from "lucide-react";
+import { AtSign, BookOpen, CalendarDays, ChevronDown, MessageCircleQuestion, MessageSquare, UserPlus, Users } from "lucide-react";
 import type { CommunityAdmissionJoinRequest } from "../components/CommunityJoinRequestReview";
 import { Btn, cx } from "./kit";
 
@@ -22,7 +24,7 @@ export type NeedsYouJoinReview = {
   onDecline: (id: string) => void;
 };
 
-export type HomeThingIcon = "question" | "people" | "lesson" | "event" | "hello";
+export type HomeThingIcon = "question" | "people" | "lesson" | "event" | "hello" | "tag";
 
 // One row: what it is, one button that does the thing, and (for what was
 // noticed) "Not now".
@@ -61,6 +63,7 @@ const ICONS: Record<HomeThingIcon, ReactNode> = {
   lesson: <BookOpen size={16} strokeWidth={1.7} />,
   event: <CalendarDays size={16} strokeWidth={1.7} />,
   hello: <MessageSquare size={16} strokeWidth={1.7} />,
+  tag: <AtSign size={16} strokeWidth={1.7} />,
 };
 
 // `side`: the row's buttons, to the right of its words (under them on a phone).
@@ -90,15 +93,25 @@ export function NeedsYou(props: {
   joinCount: number;
   onShowAllJoinRequests: () => void;
   things: HomeThing[];
+  // The tag lines (and their "and N more"), drawn first.
+  tags?: HomeThing[];
 }) {
   const [open, setOpen] = useState(false);
   const [all, setAll] = useState(false);
   const requests = props.join?.requests ?? [];
   const waiting = props.join ? requests.length : props.joinCount;
-  const total = homeThingsCount({ joinRequests: waiting, things: props.things.length });
+  const tags = props.tags ?? [];
+  const total = homeThingsCount({ joinRequests: waiting, things: props.things.length + tags.length });
   if (total === 0) return null;
 
   const rows: ReactNode[] = [];
+  const plainRow = (thing: HomeThing) => (
+    <Row key={thing.key} icon={ICONS[thing.icon]} title={thing.title} detail={thing.detail} side={<>
+      {thing.onNotNow ? <Btn small txt onClick={thing.onNotNow}>Not now</Btn> : null}
+      <Btn small go={thing.strong} onClick={thing.onAction}>{thing.action}</Btn>
+    </>} />
+  );
+  rows.push(...tags.map(plainRow));
   if (waiting > 0) {
     rows.push(
       <Row key="join" icon={<UserPlus size={16} strokeWidth={1.7} />} title={joinRowTitle(waiting)}
@@ -134,14 +147,7 @@ export function NeedsYou(props: {
       </Row>,
     );
   }
-  for (const thing of props.things) {
-    rows.push(
-      <Row key={thing.key} icon={ICONS[thing.icon]} title={thing.title} detail={thing.detail} side={<>
-        {thing.onNotNow ? <Btn small txt onClick={thing.onNotNow}>Not now</Btn> : null}
-        <Btn small go={thing.strong} onClick={thing.onAction}>{thing.action}</Btn>
-      </>} />,
-    );
-  }
+  rows.push(...props.things.map(plainRow));
   const hiddenCount = Math.max(0, rows.length - HOME_THINGS_SHOWN);
   return (
     <section className={cx("nyou")} aria-label={props.label}>
