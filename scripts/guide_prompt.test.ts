@@ -16,6 +16,7 @@ import {
 } from "../shared/runtimePrompt";
 import { buildRuntimeTurnContextPacket } from "../shared/runtimeTurnContextPacket";
 import { renderCommunityAgentIdentityContext } from "../shared/communityAgentIdentityContext";
+import { buildCommunityAgentServePromptBundle } from "../shared/communityAgentServePrompt";
 
 const TALKS: Record<string, TalkLens> = {
   owner: { lens: "builder_private", relation: "owner", timeZone: "America/New_York" },
@@ -49,6 +50,9 @@ const section = (bundle: ReturnType<typeof prompt>, id: string) => {
   expect(found, id).toBeTruthy();
   return found!;
 };
+// Words the guide must never be told in, in either place it speaks.
+const INTERNAL = [/\blens\b/i, /builder_private/, /member_private/, /builder_change/, /semantic document/i, /stable ref/i,
+  /\bevidence\b/i, /accepted memory/i, /\bResources\b/, /PLATFORM_DOCTRINE/, /capabilities\//, /idempotency/i, /agent soul/i];
 const words = (title: string) => `${title.slice(0, 1).toLowerCase()}${title.slice(1)}`;
 
 describe("what you may do", () => {
@@ -213,8 +217,6 @@ describe("the size of the core", () => {
   });
 
   test("no instruction the guide reads uses an internal word", () => {
-    const INTERNAL = [/\blens\b/i, /builder_private/, /member_private/, /builder_change/, /semantic document/i, /stable ref/i,
-      /\bevidence\b/i, /accepted memory/i, /\bResources\b/, /PLATFORM_DOCTRINE/, /capabilities\//, /idempotency/i, /agent soul/i];
     for (const talk of Object.values(TALKS)) {
       const bundle = prompt({ ...talk, answers: ["They said yes."] }, "resources", { communitySystemPrompt: "x", communityCardMd: "x", communityHandbookMd: "x", communityMemoryMd: "x",
         memberIdentityContextMd: renderCommunityAgentIdentityContext({ handle: "x" }) });
@@ -223,5 +225,40 @@ describe("the size of the core", () => {
       const framing = bundle.text.split("\n").filter((line) => line !== "x" && !line.startsWith("{"));
       for (const word of INTERNAL) expect(framing.filter((line) => word.test(line)), String(word)).toEqual([]);
     }
+  });
+});
+
+// The guide tagged in a channel (shared/communityAgentServePrompt.ts): its own
+// instructions are who it is and how it works there; the card, handbook,
+// notes, the host's instructions and the thread are the community's.
+describe("the channel guide's instructions", () => {
+  const tag = (over: Record<string, unknown> = {}) => buildCommunityAgentServePromptBundle({
+    community: { name: "Dawn Patrol Run Club", slug: "dawn-patrol", oneLiner: "Runs and coffee.", about: "A running club." },
+    agent: { displayName: "Dawn Patrol Guide", systemPrompt: "x" },
+    threadContext: { rendered: "THREAD" },
+    communityCardMd: "x", communityHandbookMd: "x", communityMemoryMd: "x",
+    ...over,
+  });
+  const coreText = (bundle: ReturnType<typeof tag>) => {
+    const ids = ["community_agent_identity", "concierge_operating_policy"];
+    const sections = bundle.systemPromptBundle.sections;
+    expect(sections.slice(0, 2).map((entry) => entry.id)).toEqual(ids);
+    return bundle.systemPromptBundle.text.slice(0, sections[0]!.chars + sections[1]!.chars);
+  };
+
+  test("its core is under 3,500 characters, with every optional line drawn", () => {
+    const core = coreText(tag());
+    expect(core).toContain("handbook.md");
+    expect(core).toContain("People tag you as @Dawn Patrol Guide.");
+    expect(core.length).toBeLessThan(3_500);
+  });
+
+  test("it uses no internal word; the thread's own labels and the zoned event field are the words it needs", () => {
+    // Words of the old channel instructions that said how the system works, not what to do.
+    const CHANNEL_INTERNAL = [/\bsponsor\b/i, /mention flow/i, /concierge/i, /\bauthority\b/i, /transport/i, /platform operations?/i, /\bPolynet tools\b/];
+    const core = coreText(tag());
+    for (const word of [...INTERNAL, ...CHANNEL_INTERNAL]) expect(core.split("\n").filter((line) => word.test(line)), String(word)).toEqual([]);
+    expect(core).toContain("starts_at_zoned");
+    expect(core).toContain("speaker_role");
   });
 });

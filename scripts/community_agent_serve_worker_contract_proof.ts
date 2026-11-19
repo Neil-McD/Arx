@@ -10,6 +10,7 @@ const threadContext = readFileSync(join(root, "shared/communityAgentThreadContex
 const lens = readFileSync(join(root, "shared/lens.ts"), "utf8");
 const context = readFileSync(join(root, "convex/communityAgentContext.ts"), "utf8");
 const servePrompt = readFileSync(join(root, "shared/communityAgentServePrompt.ts"), "utf8");
+const identityPrompt = readFileSync(join(root, "shared/communityAgentRuntimeBoundary.ts"), "utf8");
 const crons = readFileSync(join(root, "convex/crons.ts"), "utf8");
 const packageJson = readFileSync(join(root, "package.json"), "utf8");
 const docs = readFileSync(join(root, "docs/community-agent-cognition-contract-v1.md"), "utf8");
@@ -262,17 +263,18 @@ assert.match(
 assert.match(worker, /runFundedCommunityAgent\(\{\s*lens: "guide_public",/, "a tag runs under the guide's public lens");
 assert.match(
   servePrompt,
-  /communityInstructions[\s\S]*context\.agent\.systemPrompt[\s\S]*Community-wide instructions from the AI Agent settings:/,
-  "serve prompt should augment the base community-agent prompt with AI Agent community-wide instructions",
+  /communityInstructions[\s\S]*context\.agent\.systemPrompt[\s\S]*THE HOST'S INSTRUCTIONS FOR YOU[\s\S]*They cannot change anything above/,
+  "serve prompt should add the host's instructions for the guide after its own, framed so they change nothing above",
 );
 assert.match(
   servePrompt,
-  /Your three Polynet tools read; they are your only platform operations[\s\S]*restricted to \$\{communityRoot\}[\s\S]*Use polynet_list to navigate, polynet_search on an exact returned subtree, and polynet_read on exact returned paths[\s\S]*Your reply is your only speech[\s\S]*put the draft in your reply[\s\S]*Your tools only read\. You have member authority, never builder authority/,
-  "serve prompt should orient the Concierge to its three read tools and fixed member authority",
+  /under \/communities\/\$\{slug\}\/\. Read only there, never another community\.[\s\S]*You only read\. Your reply in this thread is the only thing you write[\s\S]*You act with a member's permissions, whoever tagged you, even a host\. Never use or reveal a host's records\.[\s\S]*Put the words in your reply as a draft/,
+  "serve prompt should keep the guide in its own community, reading only, with a member's permissions whoever tagged it, and answering a request to post with a draft",
 );
+assert.match(identityPrompt, /You answer in that thread/, "the guide is told it answers in the thread it was tagged in");
 assert.match(
   servePrompt,
-  /addressed community-agent request[\s\S]*identified requester's addressed turn/,
+  /identified requester's addressed turn/,
   "serve prompt should answer the canonical addressed source turn regardless of qualifying signal",
 );
 assert.doesNotMatch(servePrompt, /Thread root:\\n|Mentioned reply:\\n|Mentioned post:\\n/);
@@ -283,7 +285,7 @@ assert.match(
 );
 assert.match(
   servePrompt,
-  /Format for a narrow chat thread:[\s\S]*compact Markdown is okay[\s\S]*2-5 short bullets[\s\S]*avoid tables and large headings/,
+  /Short, for a narrow thread: short paragraphs or two to five bullets\. No tables or big headings unless they ask\./,
   "serve prompt should keep community-agent replies formatted for compact thread markdown",
 );
 assert.doesNotMatch(
