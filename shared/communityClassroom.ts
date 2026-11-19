@@ -65,6 +65,44 @@ export function coursePath<C extends { id: string }, L extends { id: string }>(
   });
 }
 
+// The shelf's "Start here / Continue" block: the step you are on, never a
+// course you've finished. When every course with lessons is finished it says
+// so; with no lessons anywhere there is nothing to show.
+export type ShelfStart<C, L> =
+  | { kind: "course"; step: CoursePathStep<C, L>; index: number }
+  | { kind: "all_finished" }
+  | null;
+export function shelfStart<C, L>(path: Array<CoursePathStep<C, L>>): ShelfStart<C, L> {
+  const index = path.findIndex((step) => step.state === "now");
+  if (index >= 0) return { kind: "course", step: path[index], index };
+  return path.some((step) => step.state === "done") ? { kind: "all_finished" } : null;
+}
+
+// What the end of a lesson offers a member. While the course has lessons left
+// to do: the next lesson in it (null on its last lesson). Once every lesson in
+// it is done: the course is finished, and the way on is the course the shelf
+// would start them on next (the first unfinished one, in the host's order),
+// or none. Derived from their own progress and the lessons they can see, so
+// a lesson undone, or a lesson a host adds, makes it unfinished again.
+export type LessonEnd<C, L> =
+  | { kind: "next_lesson"; lesson: L | null }
+  | { kind: "finished"; course: C; nextCourse: CoursePathStep<C, L> | null };
+export function lessonEnd<C extends { id: string }, L extends { id: string }>(
+  courses: Array<{ course: C; lessons: L[] }>,
+  courseId: string,
+  lessonId: string,
+  done: ReadonlySet<string>,
+): LessonEnd<C, L> {
+  const open = courses.find((entry) => entry.course.id === courseId);
+  if (!open) return { kind: "next_lesson", lesson: null };
+  if (courseProgress(open.lessons, done).finished) {
+    const next = shelfStart(coursePath(courses, done));
+    return { kind: "finished", course: open.course, nextCourse: next?.kind === "course" ? next.step : null };
+  }
+  const index = open.lessons.findIndex((lesson) => lesson.id === lessonId);
+  return { kind: "next_lesson", lesson: index >= 0 ? open.lessons[index + 1] ?? null : null };
+}
+
 // Dropping one thing in a list before another (or at the end, with null).
 // Null when nothing would move, so nothing is saved.
 export function orderAfterDrop(ids: string[], dragged: string, before: string | null): string[] | null {

@@ -26,7 +26,7 @@ import {
 } from "../../../../shared/cloudCommunityNotesGateway";
 import { getCloudCommunityHomeSnapshot } from "../../../../shared/cloudCommunityAdminGateway";
 import { downloadCloudLessonFile, uploadCloudLessonFile } from "../../../../shared/cloudCommunityChatGateway";
-import { courseLessons, courseProgress, pageOf, coursePath } from "../../../../shared/communityClassroom";
+import { courseLessons, courseProgress, lessonEnd, pageOf, coursePath, shelfStart } from "../../../../shared/communityClassroom";
 import type { CommunityResource, CommunityResourceModule } from "../components/communityResourcesContracts";
 import { askGuide, openGuideFromSearch } from "../components/guideSearch";
 import { WebCommunityResourceViewerContent } from "../components/WebCommunityResourceViewerContent";
@@ -683,6 +683,15 @@ export function KitClassroom(props: {
     const lesson = index >= 0 ? open.lessons[index] : null;
     const next = index >= 0 ? open.lessons[index + 1] ?? null : null;
     const previous = index > 0 ? open.lessons[index - 1] : null;
+    // A member's end of the lesson: the next lesson, or (every lesson done)
+    // the finish and the course the shelf would start them on next.
+    const end = lesson && !props.canManage ? lessonEnd(courses, open.course.id, lesson.id, done) : null;
+    const finished = end?.kind === "finished" ? end : null;
+    // Marking this one done finishes the course: the page stays to say so.
+    const finishesCourse = lesson && !done.has(lesson.id) && !props.canManage
+      ? lessonEnd(courses, open.course.id, lesson.id, new Set([...done, lesson.id])).kind === "finished"
+      : false;
+    const goOn = finished?.nextCourse ?? null;
     // A list of one lesson is noise; a host still needs it, to add the second.
     const listWorthShowing = open.lessons.length > 1 || (Boolean(editingTools) && open.lessons.length > 0);
     const listBeside = roomForList && listWorthShowing;
@@ -747,7 +756,13 @@ export function KitClassroom(props: {
             {/* A host on the last (or only) lesson has nothing to do here: no bar. */}
             {props.canManage && !next && !previous ? null : (
             <div className={`kit-lesson-after ${cx("kfinish", open.lessons.length > 1 ? "" : "bare")}`}>
-              {open.lessons.length > 1 ? (
+              {finished ? (
+                // The course is done: said once, calmly, where "Up next" was.
+                <div className={cx("kfinish-next")} role="status">
+                  <span>Finished</span>
+                  <b>You finished {open.course.name}.</b>
+                </div>
+              ) : open.lessons.length > 1 ? (
                 <div className={cx("kfinish-next")}>
                   <span>{next ? "Up next" : "Last lesson in this course"}</span>
                   <b>{next ? next.title : `You're at the end of ${open.course.name}`}</b>
@@ -760,11 +775,18 @@ export function KitClassroom(props: {
               ) : done.has(lesson.id) ? (
                 <>
                   <button type="button" className={cx("kisdone")} aria-pressed title="Done. Click to undo." disabled={saving} onClick={() => void mark(lesson.id, false)}><Icon name="check" />Done</button>
-                  {next ? <button type="button" className={cx("btn go", "lg")} onClick={() => chooseLesson(next.id)}>Next lesson <Icon name="arrow" /></button> : null}
+                  {finished ? (
+                    // One way on: the next course the shelf would start them on, or back to the shelf.
+                    goOn ? (
+                      <button type="button" className={cx("btn go", "lg")} onClick={() => { props.onOpenCourse(goOn.course.id); if (goOn.nextLesson) chooseLesson(goOn.nextLesson.id); }}>
+                        {goOn.done > 0 ? "Continue" : "Start"} {goOn.course.name} <Icon name="arrow" />
+                      </button>
+                    ) : <button type="button" className={cx("btn go", "lg")} onClick={() => props.onOpenCourse(null)}>Back to Knowledge</button>
+                  ) : next ? <button type="button" className={cx("btn go", "lg")} onClick={() => chooseLesson(next.id)}>Next lesson <Icon name="arrow" /></button> : null}
                 </>
               ) : (
-                <button type="button" className={cx("btn go", "lg")} disabled={saving} onClick={async () => { await mark(lesson.id, true); if (next) chooseLesson(next.id); }}>
-                  <Icon name="check" />{next ? "Mark done and continue" : "Mark done"}
+                <button type="button" className={cx("btn go", "lg")} disabled={saving} onClick={async () => { await mark(lesson.id, true); if (next && !finishesCourse) chooseLesson(next.id); }}>
+                  <Icon name="check" />{next && !finishesCourse ? "Mark done and continue" : "Mark done"}
                 </button>
               )}
             </div>
@@ -793,14 +815,15 @@ export function KitClassroom(props: {
     const learning = summary.reduce((total, row) => total + row.started, 0);
     // A member is shown where they are first (the first unfinished course,
     // in the host's order), then every course. Nothing is locked.
-    const path = props.canManage ? [] : coursePath(courses, done);
-    const here = path.find((step) => step.state === "now") ?? path.find((step) => step.total > 0) ?? null;
-    const hereAt = here ? path.indexOf(here) : -1;
+    const start = props.canManage ? null : shelfStart(coursePath(courses, done));
+    const here = start?.kind === "course" ? start.step : null;
+    const hereAt = start?.kind === "course" ? start.index : -1;
     page = (
       <div className={`knowledge-shelf ${cx("page")}`} style={{ padding: 0, overflow: "visible" }}>
-        {props.canManage || !courses.length ? (
+        {props.canManage || !courses.length || start?.kind === "all_finished" ? (
           <p className={cx("lead")} style={{ marginTop: 0 }}>{agentOn ? <span className={cx("aura")}><Icon name="spark" /></span> : null}
-            {!props.loaded ? " " : props.canManage ? hostLead(courses.map((entry) => entry.course), learning) : "Nothing to learn here yet."}
+            {!props.loaded ? " " : props.canManage ? hostLead(courses.map((entry) => entry.course), learning)
+              : start?.kind === "all_finished" ? "You've finished every course." : "Nothing to learn here yet."}
           </p>
         ) : null}
         {/* One bar, for everyone: it asks the guide. Nothing is added through it. */}
@@ -821,22 +844,22 @@ export function KitClassroom(props: {
         ) : null}
 
         {here ? (
-          <button type="button" className={cx("khero")} onClick={() => { props.onOpenCourse(here.course.id); if (here.state === "now" && here.nextLesson) chooseLesson(here.nextLesson.id); }}>
+          <button type="button" className={cx("khero")} onClick={() => { props.onOpenCourse(here.course.id); if (here.nextLesson) chooseLesson(here.nextLesson.id); }}>
             <span className={cx("kcover", "khero-cover", here.course.banner_url ? "" : coverTint(here.course.id))} style={here.course.banner_url ? { backgroundImage: `url(${JSON.stringify(here.course.banner_url)})`, backgroundSize: "cover", backgroundPosition: `${(here.course.banner_focus_x ?? 0.5) * 100}% ${(here.course.banner_focus_y ?? 0.5) * 100}%` } : undefined}>
               {here.course.banner_url ? null : <Icon name="book" />}
             </span>
             <span className={cx("khero-body")}>
-              <span className={cx("khero-eye")}>{here.state === "done" ? "Finished" : here.done > 0 ? "Continue" : "Start here"}{courses.length > 1 ? ` · Course ${hereAt + 1} of ${courses.length}` : ""}</span>
+              <span className={cx("khero-eye")}>{here.done > 0 ? "Continue" : "Start here"}{courses.length > 1 ? ` · Course ${hereAt + 1} of ${courses.length}` : ""}</span>
               <b>{here.course.name}</b>
               {firstLine(here.course.description_md) ? <span className={cx("s")}>{firstLine(here.course.description_md)}</span> : null}
-              {here.state === "now" && here.nextLesson ? (
+              {here.nextLesson ? (
                 <span className={cx("khero-next")}>
                   <i>{here.lessons.indexOf(here.nextLesson) + 1}</i>
                   <span><b>{here.nextLesson.title}</b><em>{here.done > 0 ? "Your next lesson" : "The first lesson"}</em></span>
                 </span>
               ) : null}
               <span className={cx("khero-prog")}><span className={cx("bar", "kbar")}><i style={{ width: `${here.total ? Math.round((here.done / here.total) * 100) : 0}%` }} /></span>{here.done} of {here.total} {here.total === 1 ? "lesson" : "lessons"} done</span>
-              <span className={cx("acts")}><span className={cx("btn go", "lg")}><Icon name="play" />{here.state === "done" ? "Open" : here.done > 0 ? "Continue" : "Start"}</span></span>
+              <span className={cx("acts")}><span className={cx("btn go", "lg")}><Icon name="play" />{here.done > 0 ? "Continue" : "Start"}</span></span>
             </span>
           </button>
         ) : null}

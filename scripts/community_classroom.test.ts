@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { continueLesson, courseLessons, courseProgress, coursePath, orderAfterDrop, pageOf } from "../shared/communityClassroom";
+import { continueLesson, courseLessons, courseProgress, coursePath, lessonEnd, orderAfterDrop, pageOf, shelfStart } from "../shared/communityClassroom";
 
 const lesson = (id: string, module_id: string, sort_order: number | null, role = "page") =>
   ({ id, module_id, resource_role: role, title: id, sort_order, created_at: `2026-01-0${sort_order ?? 9}` });
@@ -71,4 +71,45 @@ test("dropping a lesson or a course moves only that one, and a drop that changes
   expect(orderAfterDrop(ids, "d", null)).toBeNull();
   expect(orderAfterDrop(ids, "x", "a")).toBeNull();
   expect(orderAfterDrop(ids, "a", "x")).toBeNull();
+});
+
+test("the shelf's start block never points at a finished course, and says when everything is finished", () => {
+  const courses = [
+    { course: { id: "one" }, lessons: [{ id: "a" }, { id: "b" }] },
+    { course: { id: "empty" }, lessons: [] as Array<{ id: string }> },
+    { course: { id: "two" }, lessons: [{ id: "c" }] },
+  ];
+  expect(shelfStart(coursePath(courses, new Set()))).toMatchObject({ kind: "course", index: 0, step: { course: { id: "one" } } });
+  // Course one finished: the block moves on to two, past the course with no lessons.
+  expect(shelfStart(coursePath(courses, new Set(["a", "b"])))).toMatchObject({ kind: "course", index: 2, step: { course: { id: "two" }, state: "now" } });
+  // Everything with lessons finished.
+  expect(shelfStart(coursePath(courses, new Set(["a", "b", "c"])))).toEqual({ kind: "all_finished" });
+  // No lessons anywhere: nothing to show.
+  expect(shelfStart(coursePath([{ course: { id: "empty" }, lessons: [] as Array<{ id: string }> }], new Set()))).toBeNull();
+  expect(shelfStart(coursePath([], new Set()))).toBeNull();
+});
+
+test("the end of a lesson offers the next lesson, or the finish and the next course", () => {
+  const courses = [
+    { course: { id: "one" }, lessons: [{ id: "a" }, { id: "b" }] },
+    { course: { id: "two" }, lessons: [{ id: "c" }, { id: "d" }] },
+    { course: { id: "empty" }, lessons: [] as Array<{ id: string }> },
+    { course: { id: "three" }, lessons: [{ id: "e" }] },
+  ];
+  // Lessons left in this course: the next one, and none on the last.
+  expect(lessonEnd(courses, "one", "a", new Set())).toEqual({ kind: "next_lesson", lesson: { id: "b" } });
+  expect(lessonEnd(courses, "one", "b", new Set(["b"]))).toEqual({ kind: "next_lesson", lesson: null });
+  // Finished: the way on is the first unfinished course in the host's order.
+  expect(lessonEnd(courses, "one", "b", new Set(["a", "b"]))).toMatchObject({ kind: "finished", course: { id: "one" }, nextCourse: { course: { id: "two" }, done: 0 } });
+  // Finished on a middle lesson (the rest done earlier): still the finish, not the next lesson.
+  expect(lessonEnd(courses, "two", "c", new Set(["c", "d"]))).toMatchObject({ kind: "finished", course: { id: "two" }, nextCourse: { course: { id: "one" } } });
+  // A course already finished and one with no lessons are skipped.
+  expect(lessonEnd(courses, "one", "b", new Set(["a", "b", "c", "d"]))).toMatchObject({ kind: "finished", nextCourse: { course: { id: "three" } } });
+  // Every course finished: nothing left.
+  expect(lessonEnd(courses, "three", "e", new Set(["a", "b", "c", "d", "e"]))).toEqual({ kind: "finished", course: { id: "three" }, nextCourse: null });
+  // Undoing a lesson takes the finish away again.
+  expect(lessonEnd(courses, "one", "b", new Set(["a"]))).toEqual({ kind: "next_lesson", lesson: null });
+  // A lesson a host adds later makes the course unfinished.
+  const grown = [{ course: { id: "one" }, lessons: [{ id: "a" }, { id: "b" }, { id: "new" }] }];
+  expect(lessonEnd(grown, "one", "b", new Set(["a", "b"]))).toEqual({ kind: "next_lesson", lesson: { id: "new" } });
 });
