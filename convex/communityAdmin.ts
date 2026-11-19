@@ -1463,60 +1463,63 @@ export const setCommunityMemberRole = mutation({
       v.literal("member"),
     ),
   },
-  handler: async (ctx, args) => {
-    const userId = await resolveUserIdForAuthenticatedRequest({
-      ctx,
-      userId: args.userId,
-      authSubject: args.authSubject ?? null,
-    });
-    (args as { userId?: any }).userId = userId;
-    return await runLoggedCommunityAdminMutation({
-      operation: "set_member_role",
-      context: {
-        actorUserId: args.userId,
-        communityId: String(args.communityId),
-        targetMembershipId: String(args.targetMembershipId),
-        nextRole: args.role,
-      },
-      handler: async () => {
-        const nowMs = Date.now();
-        const role = normalizeRoleAssignment(args.role);
-        const { community } = await requireCommunityManager({
-          ctx,
-          communityId: args.communityId,
-          userId: args.userId,
-        });
-        const membership = (await ctx.db.get(
-          args.targetMembershipId,
-        )) as CommunityMembershipLike | null;
-        if (!membership) throw new Error("community_membership_not_found");
-        if (String(membership.communityId) !== String(args.communityId)) {
-          throw new Error("community_membership_not_found");
-        }
-        if (String(community.ownerId) === String(membership.userId)) {
-          throw new Error("community_owner_role_fixed");
-        }
-        requireOwnerForAdminAuthorityChange({
-          community,
-          actorUserId: args.userId,
-          targetMembership: membership,
-          nextRole: role,
-        });
-        await ctx.db.patch(membership._id as any, {
-          role,
-          updatedAt: nowMs,
-        });
-        // The member's record shows who did this, and when.
-        await recordCriticalAuditEvent(ctx, {
-          eventKey: `community_member_role_set:${membership._id}:${nowMs}`, eventType: "community_member_role_set",
-          severity: "info", status: "succeeded", actorUserId: args.userId, subjectUserId: membership.userId,
-          communityId: args.communityId, provider: "polynet", providerObjectId: String(membership._id), metadata: { role }, createdAt: nowMs,
-        });
-        return { ok: true };
-      },
-    });
-  },
+  handler: async (ctx, args) => await setCommunityMemberRoleForUser(ctx, {
+    ...args,
+    userId: await resolveUserIdForAuthenticatedRequest({ ctx, userId: args.userId, authSubject: args.authSubject ?? null }),
+  }),
 });
+
+// Studio's role change, for a person already verified by the caller (the
+// Members page above, or an AI's request through communityPeople).
+export async function setCommunityMemberRoleForUser(ctx: any, args: {
+  userId: any; communityId: any; targetMembershipId: any; role: "admin" | "moderator" | "member";
+}) {
+  return await runLoggedCommunityAdminMutation({
+    operation: "set_member_role",
+    context: {
+      actorUserId: args.userId,
+      communityId: String(args.communityId),
+      targetMembershipId: String(args.targetMembershipId),
+      nextRole: args.role,
+    },
+    handler: async () => {
+      const nowMs = Date.now();
+      const role = normalizeRoleAssignment(args.role);
+      const { community } = await requireCommunityManager({
+        ctx,
+        communityId: args.communityId,
+        userId: args.userId,
+      });
+      const membership = (await ctx.db.get(
+        args.targetMembershipId,
+      )) as CommunityMembershipLike | null;
+      if (!membership) throw new Error("community_membership_not_found");
+      if (String(membership.communityId) !== String(args.communityId)) {
+        throw new Error("community_membership_not_found");
+      }
+      if (String(community.ownerId) === String(membership.userId)) {
+        throw new Error("community_owner_role_fixed");
+      }
+      requireOwnerForAdminAuthorityChange({
+        community,
+        actorUserId: args.userId,
+        targetMembership: membership,
+        nextRole: role,
+      });
+      await ctx.db.patch(membership._id as any, {
+        role,
+        updatedAt: nowMs,
+      });
+      // The member's record shows who did this, and when.
+      await recordCriticalAuditEvent(ctx, {
+        eventKey: `community_member_role_set:${membership._id}:${nowMs}`, eventType: "community_member_role_set",
+        severity: "info", status: "succeeded", actorUserId: args.userId, subjectUserId: membership.userId,
+        communityId: args.communityId, provider: "polynet", providerObjectId: String(membership._id), metadata: { role }, createdAt: nowMs,
+      });
+      return { ok: true };
+    },
+  });
+}
 
 export const prepareCommunityMemberRemovalInternal = internalQuery({
   args: {
@@ -1904,38 +1907,28 @@ export const blockCommunityUserInternal = internalMutation({
   },
 });
 
-export const unbanCommunityUser = mutation({
-  args: {
-    userId: v.optional(v.id("users")),
-    authSubject: v.optional(v.string()),
-    communityId: v.id("communities"),
-    targetUserId: v.id("users"),
-  },
-  handler: async (ctx, args) => {
-    const userId = await resolveUserIdForAuthenticatedRequest({
-      ctx,
-      userId: args.userId,
-      authSubject: args.authSubject ?? null,
-    });
-    const nowMs = Date.now();
-    await requireCommunityManager({
-      ctx,
-      communityId: args.communityId,
-      userId,
-    });
-    const block = (await getActiveCommunityBlock({
-      ctx,
-      communityId: args.communityId,
-      userId: args.targetUserId,
-    })) as CommunityBlockLike | null;
-    if (!block) return { ok: true };
-    await ctx.db.patch(block._id as any, {
-      liftedAt: nowMs,
-      updatedAt: nowMs,
-    });
-    return { ok: true };
-  },
-});
+// Lifting a ban, for a person already verified by the caller (an AI's request
+// through communityPeople; nothing in the app calls it directly).
+export async function unbanCommunityUserForUser(ctx: any, args: { userId: any; communityId: any; targetUserId: any }) {
+  const userId = args.userId;
+  const nowMs = Date.now();
+  await requireCommunityManager({
+    ctx,
+    communityId: args.communityId,
+    userId,
+  });
+  const block = (await getActiveCommunityBlock({
+    ctx,
+    communityId: args.communityId,
+    userId: args.targetUserId,
+  })) as CommunityBlockLike | null;
+  if (!block) return { ok: true };
+  await ctx.db.patch(block._id as any, {
+    liftedAt: nowMs,
+    updatedAt: nowMs,
+  });
+  return { ok: true };
+}
 
 export const getCommunityMemberSettings = query({
   args: {

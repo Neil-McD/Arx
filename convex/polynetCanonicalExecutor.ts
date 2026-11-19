@@ -636,10 +636,11 @@ async function resolveCommunityTarget(args: {
     };
   }
   const communityAgentPrincipal = args.principalKind === "community_agent";
-  // Community agents and community apps have no Convex session identity; their
-  // user was established server-side (sponsor, or app session token).
+  // Community agents, community apps and outside AIs have no Convex session
+  // identity; their user was established server-side (sponsor, app session
+  // token, or the MCP door's own token check).
   const trustedActorPrincipal =
-    communityAgentPrincipal || args.principalKind === "community_app";
+    communityAgentPrincipal || args.principalKind === "community_app" || args.principalKind === "external_mcp";
   const resolved = (await args.ctx.runQuery(
     trustedActorPrincipal
       ? (internal as any).communityCapabilityContext
@@ -1812,7 +1813,8 @@ async function executeCanonicalRead(args: {
     }
     const resolvedSelf = await args.ctx.runQuery(
       (internal as any).communityCapabilityContext.resolveCommunityMemberSelfContextInternal,
-      { authSubject: args.authSubject, userId: args.userId, communityId: target.communityId },
+      { authSubject: args.authSubject, userId: args.userId, communityId: target.communityId,
+        ...(args.principalKind === "external_mcp" ? { verifiedAtDoor: true } : {}) },
     );
     if (!resolvedSelf.ok) return canonicalError(resolvedSelf.code, resolvedSelf.message);
     return { ok: true, value: {

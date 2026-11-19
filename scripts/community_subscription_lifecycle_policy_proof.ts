@@ -581,7 +581,7 @@ function assertSourceAnchors() {
   );
   assertIncludes(
     communityAdmin,
-    "export const unbanCommunityUser = mutation({",
+    "export async function unbanCommunityUserForUser(",
     "unban action exists",
   );
   assertIncludes(
