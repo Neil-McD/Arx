@@ -26,7 +26,7 @@ import {
   resolveRequestedCommunityChannel,
 } from "./communityChannelCore";
 import { resolveCommunityChannelActor, type ChannelActor } from "./communityChannelAccess";
-import { isInPod, memberGrants, podRecord } from "./communityPods";
+import { isInPod, podRecord } from "./communityPods";
 
 type CommunityAttentionSurface = "chat" | "resources" | "events" | "mentions";
 
@@ -191,7 +191,12 @@ async function viewerGetsRoomChatDot(
   userId: any,
 ): Promise<boolean> {
   if (channel.accessMode !== "restricted" || !actor.isManager) return true;
-  return isInPod(await memberGrants(ctx, channel._id), await podRecord(ctx, communityId, channel._id), actor, userId);
+  // The viewer's own grant, read directly: the pod's member list is capped,
+  // so in a large pod theirs could fall outside it.
+  const own = (await ctx.db.query("communityChannelParticipants")
+    .withIndex("by_channel_principal", (q: any) => q.eq("channelId", channel._id).eq("principalKey", actor.principalKey)).collect())
+    .filter((row: any) => row.status === "active");
+  return isInPod(own, await podRecord(ctx, communityId, channel._id), actor, userId);
 }
 
 async function getLatestCommunityChatActivityAt(
