@@ -43,9 +43,16 @@ describe("platform legal acceptance versioning", () => {
     ])).toBe(false);
   });
 
-  test("Privacy v1 acceptance (before outside AI apps) no longer satisfies v2: members re-accept once", () => {
+  test("Privacy v1 acceptance still counts under v2: members are not asked again", () => {
     expect(hasAcceptedCurrentPlatformLegalFromRows([
       { documentKey: "terms_of_service", documentVersion: "terms_of_service_v4" },
+      { documentKey: "privacy_ai_data_policy", documentVersion: "privacy_ai_data_policy_v1" },
+    ])).toBe(true);
+  });
+
+  test("a v1 privacy acceptance never stands in for the terms", () => {
+    expect(hasAcceptedCurrentPlatformLegalFromRows([
+      { documentKey: "terms_of_service", documentVersion: "privacy_ai_data_policy_v1" },
       { documentKey: "privacy_ai_data_policy", documentVersion: "privacy_ai_data_policy_v1" },
     ])).toBe(false);
   });
