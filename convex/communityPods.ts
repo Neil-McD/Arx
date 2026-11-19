@@ -68,6 +68,13 @@ export function isHost(record: any, userId: any): boolean {
   return Boolean(record?.hostUserIds?.some((id: any) => String(id) === String(userId)));
 }
 
+// "In the pod": added to it (an active grant) or one of its hosts. Builders
+// and admins can open every pod, but they are only in the ones this says.
+// The Pods page's own pods and the pod dots both read it.
+export function isInPod(grants: any[], record: any, actor: { principalKey: string }, userId: any): boolean {
+  return grants.some((row: any) => row.principalKey === actor.principalKey) || isHost(record, userId);
+}
+
 // Builders and admins manage every pod; a pod's hosts manage theirs.
 async function requirePodManager(ctx: Ctx, authSubject: string | undefined, communityId: any, channelId: any) {
   const { userId, actor } = await viewerOf(ctx, authSubject, communityId);
@@ -105,7 +112,7 @@ export const listCommunityPods = query({
       const isMember = grants.some((row: any) => row.principalKey === actor.principalKey);
       const record = await podRecord(ctx, args.communityId, channel._id);
       const hosting = isHost(record, userId);
-      if (!canManage && !isMember && !hosting) continue;
+      if (!canManage && !isInPod(grants, record, actor, userId)) continue;
       inside.add(normalizeIdValue(channel._id));
       const latest = await ctx.db.query("communityInteractionRoots")
         .withIndex("by_channel_updatedAt", (q: any) => q.eq("channelId", channel._id)).order("desc").first();

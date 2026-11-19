@@ -24,6 +24,7 @@ import {
 import type { CommunityTab } from "./appShellNavigation";
 import { StableFramedMedia } from "./StableFramedMedia";
 import { usePointerSortableList } from "./usePointerSortableList";
+import type { PodsDot } from "./podsAttentionDot";
 import { communityChannelCapacity, MAX_TOTAL_COMMUNITY_CHANNELS } from "./communityChannelCapacity";
 import { channelRowsToReserve, communitySlugInAddress, navRowsToReserve, recallChannelRows, recallNavRows, rememberChannelRows, rememberNavRows } from "./channelRowsMemory";
 
@@ -99,6 +100,8 @@ type CommunityNavProps = {
   // v1: one Pods item (docs/specs/pods-v0.md); private rooms are never listed.
   onOpenPods?: () => void;
   podsActive?: boolean;
+  // The pods' dot, as a channel's row shows it (shared/podsAttentionDot.ts).
+  podsDot?: PodsDot;
   // One door: the community's own apps, opened in a new tab.
   appLinks?: Array<{ name: string; url: string }>;
   memberCount?: number | null;
@@ -219,6 +222,7 @@ export const CommunityNav = memo(function CommunityNav({
   onOpenPods,
   appLinks,
   podsActive = false,
+  podsDot = "none",
   memberCount = null,
 }: CommunityNavProps) {
   const isV1 = layout === "v1";
@@ -713,6 +717,7 @@ export const CommunityNav = memo(function CommunityNav({
                 <Boxes size={17} strokeWidth={1.7} />
               </span>
               <span className="nav-item-label">Pods</span>
+              {podsDot !== "none" ? <span className={`nav-item-dot${podsDot === "mention" ? " is-mention" : ""}`} aria-hidden="true" /> : null}
             </button>
           ) : null}
           <button

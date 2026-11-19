@@ -66,7 +66,9 @@ test("paged directory isolates member grants from 120 private rooms and bounds m
     attentionCursor = page.isDone ? null : page.continueCursor;
   } while (attentionCursor);
   expect(attentionRows).toHaveLength(120);
-  expect(attentionRows[attentionRows.length - 1]).toMatchObject({ channel_id: String(seeded.last), chat: true });
+  // The last page still reaches the late room. Its message is the owner's own
+  // and the owner isn't in this room, so it gives the owner no dot.
+  expect(attentionRows[attentionRows.length - 1]).toMatchObject({ channel_id: String(seeded.last), chat: false });
   let agentCursor: string | undefined;
   const agentRows: any[] = [];
   do {
