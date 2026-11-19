@@ -123,10 +123,10 @@ export const prepareInternal = internalMutation({
       .withIndex("by_uploader_status", (q) => q.eq("createdByUserId", args.ownerId).eq("status", "pending"))
       .take(MAX_PENDING_PER_HOST);
     if (pending.length >= MAX_PENDING_PER_HOST) throw new Error("lesson_file_pending_limit");
-    const attached = await listAttachedLessonFiles(ctx, lesson._id);
-    if (normalizeLessonLinks(lesson.lessonLinks).length + attached.length >= LESSON_RESOURCES_MAX) {
-      throw new Error("lesson_resources_limit");
-    }
+    // The twelve-resource limit is checked when the lesson is saved, on the
+    // list the host ends up with: a host with a full lesson can take one away
+    // and add its replacement in one save. Uploads waiting to be saved are
+    // bounded by the cap above.
     const now = Date.now();
     const name = args.name.replace(/[\r\n"\\/]+/g, " ").trim().slice(0, 200) || "file";
     const fileId = await ctx.db.insert("communityLessonFiles", {
