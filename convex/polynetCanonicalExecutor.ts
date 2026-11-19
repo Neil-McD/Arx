@@ -3618,9 +3618,26 @@ async function executeMessages(args: {
     const raw = error instanceof Error ? error.message : "";
     if (/dm_conversation_not_found|dm_participant_required/.test(raw)) return notFound();
     if (/dm_rate_limited/.test(raw)) return canonicalError("rate_limited", "Too many messages in a minute. Try again in a minute.", { retry_after_ms: 60_000 });
+    if (/dm_ai_wait_for_reply/.test(raw)) return canonicalError("wait_for_reply", "They haven't answered the last two messages. Wait for them to reply before writing again.");
+    if (/dm_ai_same_words/.test(raw)) return canonicalError("same_words", "Those words already went to three other people today. Write to this person about what is between you, or don't send.");
     if (/dm_conversation_access_required|block/.test(raw)) return canonicalError("message_not_allowed", "You can't message this person.");
     return canonicalError("message_not_sent", "That reply wasn't sent.");
   }
+}
+
+// The content checks for words written through an AI (shared/aiPostingRules.ts),
+// run once more where the write is made; here only to refuse early.
+function wordingRefusal(principalKind: PolynetPrincipalKind, toolName: string, input: Record<string, unknown>): PolynetCanonicalExecutionResult | null {
+  if (toolName !== "polynet_write" || (principalKind !== "external_mcp" && principalKind !== "community_agent_for_member")) return null;
+  const mode = String(input.mode ?? "");
+  if (mode !== "create" && mode !== "append" && mode !== "update") return null;
+  const content = omitNullishObjectFields(input.content);
+  const text = String(content.text ?? content.body ?? "");
+  if (!text.trim()) return null;
+  const toMessages = isMessagesPath(input.path);
+  const reply = toMessages || mode === "append" || Boolean(content.root_id);
+  const refusal = checkAiPost({ text, reply, mentions: Array.isArray(content.mentions) ? content.mentions as never : null });
+  return refusal ? canonicalError(refusal.code, refusal.message) : null;
 }
 
 // A listing cut short says so in words: an AI reading only the entries would
@@ -3729,6 +3746,10 @@ export async function executePolynetCanonicalTool(args: {
     const asked = await askPersonFirst({ ...common, toolName: args.toolName, rawInput });
     if (asked) return asked;
   }
+  // Words an AI may not send are refused before anything is counted, so
+  // rewriting them doesn't wait for the next minute.
+  const wording = wordingRefusal(args.principalKind, args.toolName, input);
+  if (wording) return wording;
   const limited = await takeBudgets(args, input);
   if (limited) return limited;
   // A person's own direct messages: through their own AI, or the guide in

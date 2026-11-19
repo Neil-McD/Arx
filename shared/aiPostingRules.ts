@@ -11,7 +11,7 @@ export const MCP_SERVER_INSTRUCTIONS = [
   "To read, there are three tools: polynet_list, polynet_read and polynet_search. Begin with polynet_list at /. Follow only the paths the server returns; don't guess them.",
   "To act, each action is its own tool, named for what it does: polynet_post, polynet_reply, polynet_react, polynet_create_event and so on. You are shown the ones this person can use somewhere; a community where they can't refuses and says so.",
   "Before you write anything in a community, read /communities/<slug>/rules.md (Polynet's rules and the host's house rules) and the place you are writing in.",
-  "The person's direct messages are at /messages/. You can read the conversations they are in and reply in one; you cannot start a conversation.",
+  "The person's direct messages are at /messages/. You can read the conversations they are in and reply in one; you cannot start a conversation. A reply goes out at once as them, marked as written through an AI: write it the way they would, short and plain, in the conversation's tone, with no sign-off, and don't say you are an AI. Send only when there is something real to say. The same words can't go to more than three people in a day, and if they haven't answered your last two messages, wait for them.",
   "You post as the person you work for, and the post is marked as made through an AI. Write the way they would, to the people who are there. Reply in the thread instead of starting a new post. If you have nothing specific to add, don't post.",
   "What you may read and write in a minute and in a day is limited. A refusal says why and when to try again; don't retry sooner or rephrase to get round it.",
   "Some changes wait for the person's own Yes in Polynet: changing someone's role, removing or banning a member, removing other people's posts, publishing the handbook, changing the guide's instructions, opening the community to everyone, and publishing, unpublishing or deleting a published course. The answer is waiting_for_person: tell them to answer in Polynet, and don't call again until they say they have. Deleting a channel is a person's own click in Polynet and never yours: the answer is person_only with a link; give the person that link and say what to press, and don't look for another way.",
@@ -25,6 +25,7 @@ export const POLYNET_AI_RULES = [
   "- Say something specific. If a post could have been written without reading the conversation, don't send it.",
   "- One post, not several. Don't repeat what was already said, or what you already said.",
   "- Write as the person you work for would: plain words, no hype, no greeting line, no sign-off, no summary of what you are about to say.",
+  "- No headings, no long lists, no blanks left to fill in, and never say you are an AI: Polynet marks what you write. These are refused.",
   "- Don't mention people to get attention. Mention someone only when the post is for them.",
   "- Don't post links to sell something, or the same link twice.",
   "- Never share anything from a private place (a pod, a direct message, a private talk) somewhere more public.",
@@ -106,6 +107,8 @@ export function checkAiPost(args: {
   if (links > AI_POST_MAX_LINKS) {
     return { code: "ai_post_too_many_links", message: `That has ${links} links; a post through an AI holds ${AI_POST_MAX_LINKS}. Keep the ones that matter.` };
   }
+  const machine = machineTalk(text, args.reply);
+  if (machine) return machine;
   const mentions = Array.isArray(args.mentions) ? args.mentions : [];
   // A role mention reaches everyone who holds it; in text, the words do the same.
   if (mentions.some((mention) => mention && mention.roleKey) || /(^|\s)@(everyone|everybody|all|channel|here)\b/i.test(text)) {
@@ -114,6 +117,24 @@ export function checkAiPost(args: {
   if (mentions.length > AI_POST_MAX_MENTIONS) {
     return { code: "ai_post_too_many_mentions", message: `That mentions ${mentions.length} people; a post through an AI mentions up to ${AI_POST_MAX_MENTIONS}.` };
   }
+  return null;
+}
+
+// What reads like a machine wrote it rather than the person: headings, a
+// long bullet list, the AI talking about itself, a template never filled in.
+// Refused with the reason, so the AI can say it the way the person would.
+export const AI_MAX_BULLETS = { post: 8, reply: 5 };
+const HEADING = /^\s{0,3}#{1,6}\s/m;
+const BULLET = /^\s*(?:[-*•]|\d+[.)])\s+\S/gm;
+const SELF = /\b(?:as an ai\b|as a language model|as an ai assistant|i(?:'m| am) an ai\b|i(?:'m| am) a language model)/i;
+const TEMPLATE = /\[(?:name|first name|their name|your name|recipient|insert[^\]]*|date|time|link)\]|\{\{?\s*[a-z_ ]{2,30}\s*\}?\}/i;
+function machineTalk(text: string, reply: boolean): AiPostRefusal | null {
+  if (HEADING.test(text)) return { code: "ai_post_machine_talk", message: "Headings read like a document, not a person. Write it as plain sentences." };
+  const bullets = text.match(BULLET)?.length ?? 0;
+  const max = reply ? AI_MAX_BULLETS.reply : AI_MAX_BULLETS.post;
+  if (bullets > max) return { code: "ai_post_machine_talk", message: `That has ${bullets} list items; ${reply ? "a reply or message" : "a post"} through an AI has at most ${max}. Say it the way the person would.` };
+  if (SELF.test(text)) return { code: "ai_post_machine_talk", message: "Don't say you are an AI: you write as the person, and Polynet already marks it as written through an AI." };
+  if (TEMPLATE.test(text)) return { code: "ai_post_machine_talk", message: "That still has a blank to fill in (like [Name]). Fill it in, or leave it out." };
   return null;
 }
 

@@ -126,6 +126,8 @@ test("a reply through the guide waits for a yes; always-allow for posts doesn't 
   expect(await w.answer("member", next.id, "no")).toMatchObject({ status: "declined" });
   expect(await w.messages()).toHaveLength(after.length);
 
+  // The owner answers (a guide can't send a third message in a row before they do).
+  await w.as("owner").mutation((api as any).directMessages.sendDirectMessage, { authSubject: "owner-subject", conversationId: w.ownerMember, text: "No rush." });
   // "Always allow replies": this one is sent, and the next goes straight out, with every other check.
   await w.talk("member", "talk-member-2")("polynet_reply_message", { conversation: w.ownerMember, text: "On my way." }, "call_3");
   const [third] = await w.questions("member");
@@ -135,7 +137,7 @@ test("a reply through the guide waits for a yes; always-allow for posts doesn't 
   expect(listed(straight).status).not.toBe("waiting_for_person");
   expect(await w.questions("member")).toEqual([]);
   const sentNow = (await w.messages()).filter((row: any) => !after.some((old: any) => String(old._id) === String(row._id)));
-  expect(sentNow.map((row: any) => row.text ?? row.body ?? row.contentSummary)).toHaveLength(2);
+  expect(sentNow.filter((row: any) => String(row.senderUserId) === String(w.ids.member))).toHaveLength(2);
   // Switched off, the question comes back.
   await w.as("member").mutation(api.communityGuideQuestions.setGuideAlwaysAllowed, { communityId: w.ids.communityId, kind: "message", on: false });
   await w.talk("member", "talk-member-4")("polynet_reply_message", { conversation: w.ownerMember, text: "Here now." }, "call_5");

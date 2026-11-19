@@ -911,3 +911,56 @@ test("an AI app is told who Polynet is, browser-based AI apps may call, and a po
   expect(text).toContain("A paid pod: joining is done in Polynet.");
   expect(text).not.toMatch(/\$29|29\.00|a month/);
 });
+
+test("what an AI writes must read like the person: no headings, long lists, AI talk or unfilled blanks", async () => {
+  const f = await fixture();
+  const say = (text: string) => f.call("member", "polynet_post", { community: "run-club", channel: "general", text });
+  for (const text of ["## Saturday plan\nMeet at 7.", Array.from({ length: 9 }, (_, i) => `- point ${i}`).join("\n"),
+    "As an AI, I think Saturday works.", "Hi [Name], see you Saturday!"]) {
+    const refused = await say(text);
+    expect(refused.structuredContent?.code, `${text}: ${JSON.stringify(refused.structuredContent)}`).toBe("ai_post_machine_talk");
+  }
+  // Refused for its wording, nothing was counted: said plainly at once, it goes out.
+  const counted: any[] = await f.t.run((ctx: any) => ctx.db.query("accessBudgetCounters").collect());
+  expect(counted.filter((row) => row.budget === "post" || row.budget === "post_channel")).toEqual([]);
+  expect((await say("Saturday works for me, see you at 7.")).isError).toBe(false);
+});
+
+test("an AI in someone's messages: no third message in a row before they answer, and no copy-paste to many people", async () => {
+  const f = await fixture();
+  const c = await conversation(f, "Are you coming Sunday?");
+  const reply = (conversation: string, text: string) => f.call("member", "polynet_reply_message", { conversation, text });
+  expect((await reply(c.id, "Yes, I'll be there.")).isError).toBe(false);
+  expect((await reply(c.id, "Bringing a friend too.")).isError).toBe(false);
+  const third = await reply(c.id, "Also, should I bring water?");
+  expect(third.structuredContent?.code).toBe("wait_for_reply");
+  // Once they answer, it may write again.
+  await f.t.mutation((internal as any).directMessages.sendSiteDirectMessageForTrustedUserInternal, { userId: f.users.owner, communityId: c.communityId, handle: "member", text: "Great!" });
+  expect((await reply(c.id, "Also, should I bring water?")).isError).toBe(false);
+
+  // Four people write to the member; their AI answers each with the same long words.
+  const conversations = await f.t.run(async (ctx: any) => {
+    const now = Date.now();
+    const ids: any[] = [];
+    for (let i = 1; i <= 4; i += 1) {
+      const userId = await ctx.db.insert("users", { authSubject: `p${i}-subject`, displayName: `p${i}`, handle: `p${i}`, normalizedHandle: `p${i}`, createdAt: now, updatedAt: now });
+      for (const document of PLATFORM_LEGAL_DOCUMENTS) await ctx.db.insert("legalAcceptances", { userId, documentKey: document.key, documentVersion: document.version, acceptedAt: now, source: "test", createdAt: now });
+      await ctx.db.insert("communityMemberships", { communityId: c.communityId, userId, role: "member", accessSource: "free_grant", state: "active", activationSequence: 1, activatedAt: now, createdAt: now, updatedAt: now });
+      ids.push(userId);
+    }
+    return ids;
+  });
+  const ids: string[] = [];
+  for (const userId of conversations) {
+    const sent = await f.t.mutation((internal as any).directMessages.sendSiteDirectMessageForTrustedUserInternal, { userId, communityId: c.communityId, handle: "member", text: "Hey, are you joining the Saturday run?" });
+    ids.push(sent.conversation_id);
+  }
+  // A new minute: the message budget (5 a minute) is not what this is about.
+  await f.t.run(async (ctx: any) => { for (const row of await ctx.db.query("accessBudgetCounters").collect()) await ctx.db.delete(row._id); });
+  const canned = "Thanks for reaching out! I'll be at the Saturday long run, see you there.";
+  for (const id of ids.slice(0, 3)) expect((await reply(id, canned)).isError, id).toBe(false);
+  const fourth = await reply(ids[3]!, canned);
+  expect(fourth.structuredContent?.code).toBe("same_words");
+  // Short replies aren't counted as a blast, and words of its own go out.
+  expect((await reply(ids[3]!, "Yes! See you.")).isError).toBe(false);
+});
