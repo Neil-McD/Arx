@@ -8,6 +8,7 @@ import {
   isSupportedPolynetMcpProtocolVersion,
 } from "../shared/polynetMcp";
 import { executePolynetCanonicalTool } from "./polynetCanonicalExecutor.ts";
+import { toolArgumentProblems } from "../shared/toolArgumentCheck.ts";
 import { internal } from "./_generated/api";
 import { actionTool, actionToolDefinition, actionToolsFor, translateActionTool, type ActionToolRole } from "../shared/actionTools";
 import {
@@ -399,7 +400,9 @@ function buildToolTextContent(payload: Record<string, unknown>): Array<{ type: "
   ];
 }
 
-async function handleToolCall(args: {
+// Runs one tool for the person the door verified; tools/call has already
+// checked the tool is offered and its arguments fit.
+export async function handleToolCall(args: {
   ctx: any;
   authSubject: string;
   actor: {
@@ -593,8 +596,6 @@ export async function handleMcpPost(args: {
     }
     // Reading is three general tools; each action is its own named tool
     // (shared/actionTools.ts), the ones this person can use somewhere.
-    // polynet_write and polynet_call still run for what is already connected,
-    // but are no longer shown.
     const role = (await ctx.runQuery((internal as any).mcpActionTools.highestRoleInternal, { userId: actor.dbUserId })
       .catch(() => "member")) as ActionToolRole;
     return jsonRpcResultResponse(req, jsonResponse, id, {
@@ -617,15 +618,27 @@ export async function handleMcpPost(args: {
     if (!toolName) {
       return jsonRpcErrorResponse(req, jsonResponse, id, -32602, "Tool name is required.");
     }
-    // The guide's own tools (remembering, removing after a yes) are not a person's own AI's.
+    // The guide's own tools (remembering, removing after a yes) are not a
+    // person's own AI's. Of the general tools, only reading is offered: the
+    // generic polynet_write and polynet_call are not, so every action goes
+    // through its own named tool, its description and its labels.
     const named = actionTool(toolName)?.door === "guide" ? null : actionTool(toolName);
-    if (!named && !getPolynetMcpToolDefinition(toolName)) {
+    const reading = getPolynetMcpToolDefinition(toolName);
+    const definition = named ? actionToolDefinition(named) : reading?.annotations?.readOnlyHint === true ? reading : null;
+    if (!definition) {
       return jsonRpcErrorResponse(req, jsonResponse, id, -32601, "Tool not found.");
     }
     const givenArgs =
       params.arguments && typeof params.arguments === "object" && !Array.isArray(params.arguments)
         ? (params.arguments as Record<string, unknown>)
         : {};
+    // What was sent must fit the tool's published shape: a misspelled or
+    // unknown field is refused with where and what, never dropped silently.
+    const problems = toolArgumentProblems(definition.inputSchema, givenArgs);
+    if (problems.length) {
+      const error = { error: `invalid_tool_args: ${problems.join("; ")}`, code: "invalid_tool_args", problems };
+      return jsonRpcResultResponse(req, jsonResponse, id, { content: buildToolTextContent(error), structuredContent: error, isError: true });
+    }
     // A named tool is the same call the executor already runs, written out.
     const translated = named ? translateActionTool(named, givenArgs, Date.now()) : null;
     const result = await handleToolCall({

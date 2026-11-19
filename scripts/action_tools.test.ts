@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { ACTION_TOOLS, ACTION_TOOL_RETRY_WINDOW_MS, NOT_PUBLISHED, actionTool, actionToolDefinition, actionToolEntry, actionToolsFor, guideActionKey, guideToolDefinition, translateActionTool } from "../shared/actionTools";
 import { talkToolNames } from "../shared/lens";
+import { getPolynetMcpToolDefinitions } from "../shared/polynetMcp";
+import { toolArgumentProblems } from "../shared/toolArgumentCheck";
 import { CALL_OPERATIONS, CALL_OPERATION_VARIANTS, TOOL_OPERATIONS } from "../shared/operationCatalog";
 
 const LISTED = { ...TOOL_OPERATIONS, ...CALL_OPERATIONS, ...CALL_OPERATION_VARIANTS } as Record<string, { ask: string; lens: string }>;
@@ -250,5 +252,26 @@ describe("a named tool is the call the executor already runs", () => {
     expect(out.input).toMatchObject({ idempotency_key: "k", input: { expected_revision: 7, one_liner: "We run." } });
     // A person's own AI still sends its own.
     expect(translateActionTool(update, { community: "run-club", revision: 3, one_liner: "x" }, now).input).toMatchObject({ input: { expected_revision: 3 } });
+  });
+});
+
+describe("an outside AI's arguments are checked against the published shapes", () => {
+  it("every pattern in every published shape is a valid check, and an empty call says what is missing", () => {
+    const patterns: string[] = [];
+    const walk = (schema: unknown) => {
+      if (!schema || typeof schema !== "object") return;
+      for (const [key, value] of Object.entries(schema as Record<string, unknown>)) {
+        if (key === "pattern" && typeof value === "string") patterns.push(value);
+        else if (value && typeof value === "object") Array.isArray(value) ? value.forEach(walk) : walk(value);
+      }
+    };
+    const shapes = [...ACTION_TOOLS.map((tool) => actionToolDefinition(tool).inputSchema),
+      ...getPolynetMcpToolDefinitions().filter((tool) => tool.annotations.readOnlyHint === true).map((tool) => tool.inputSchema)];
+    shapes.forEach(walk);
+    for (const pattern of patterns) expect(() => new RegExp(pattern, "u")).not.toThrow();
+    for (const tool of ACTION_TOOLS) {
+      const required = actionToolDefinition(tool).inputSchema.required as string[];
+      expect(toolArgumentProblems(actionToolDefinition(tool).inputSchema, {})).toEqual(required.slice(0, 8).map((key) => `${key}: missing`));
+    }
   });
 });

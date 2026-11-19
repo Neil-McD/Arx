@@ -614,6 +614,18 @@ function guideEventReader(args: { principalKind: PolynetPrincipalKind; podRoomId
     : {};
 }
 
+// The key a write is stored under: the person's own. The post store keeps
+// 160 characters with its own prefix, so a long key is shortened to its
+// start plus a fingerprint of all of it; two long keys that differ only at
+// the end stay different.
+const STORED_KEY_MAX = 120;
+export function personalStoredKey(principalKind: string, userId: string, key: string): string {
+  const own = `polynet:${principalKind}:${userId}:`;
+  if (own.length + key.length <= STORED_KEY_MAX) return `${own}${key}`;
+  const mark = requestFingerprint("", "stored_key", key);
+  return `${own}${key.slice(0, Math.max(0, STORED_KEY_MAX - own.length - mark.length))}${mark}`;
+}
+
 function channelActorKind(principalKind: PolynetPrincipalKind) {
   return principalKind === "community_app" ? "human" as const : principalKind;
 }
@@ -2521,7 +2533,9 @@ async function executeCanonicalWrite(args: {
         }
         pendingWords = aiFingerprint;
       }
-      const canonicalIdempotencyKey = `polynet:${args.principalKind}:${idempotencyKey}`;
+      // The stored key is the person's own: two people's AIs sending the same
+      // words (or picking the same key) are two posts, not a conflict.
+      const canonicalIdempotencyKey = personalStoredKey(args.principalKind, args.userId, idempotencyKey);
       if (pictureIds.length) {
         const staged = await args.ctx.runAction((internal as any).communityGuidePictures.stagePicturesInternal, {
           userId: args.userId, communityId: target.communityId, ...(channel.id ? { channelId: channel.id } : {}),
@@ -2676,7 +2690,7 @@ async function executeCanonicalWrite(args: {
           communityId: target.communityId,
           summary: String(content.summary ?? ""),
           operations: content.operations,
-          idempotencyKey: `polynet:${args.principalKind}:${idempotencyKey}`,
+          idempotencyKey: personalStoredKey(args.principalKind, args.userId, idempotencyKey),
         },
       )) as Record<string, unknown>;
       const responseValue = {
