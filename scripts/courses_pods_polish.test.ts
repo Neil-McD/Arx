@@ -37,11 +37,12 @@ describe("courses pager and pod rail button affordance", () => {
     expect(kitCss).toMatch(/\.app \.railfoot button\{[^}]*border:1px solid var\(--line2\);background:var\(--s1\)/);
   });
 
-  it("renders Pod host actions as bordered buttons instead of bare text links", () => {
+  it("renders Pod host actions as bordered buttons and shows About this pod inline by default", () => {
     expect(podRail).not.toMatch(/<Btn small txt[^>]*>Edit<\/Btn>/);
     expect(podRail).not.toMatch(/<Btn small txt[^>]*>\{copied \? "Copied" : "Copy link"\}<\/Btn>/);
     expect(podRail).not.toMatch(/<Btn small txt[^>]*>See it as members do<\/Btn>/);
     expect(podRail).not.toMatch(/<Btn small txt[^>]*>Leave pod<\/Btn>/);
+    expect(podRail).not.toMatch(/aria-expanded=\{foot === "about"\}/);
     expect(podKnowledge).not.toMatch(/<Btn small txt[^>]*>Edit<\/Btn>/);
     expect(podKnowledge).not.toMatch(/<Btn small txt[^>]*>Delete<\/Btn>/);
   });
