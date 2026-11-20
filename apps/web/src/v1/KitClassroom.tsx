@@ -929,6 +929,7 @@ export function KitClassroom(props: {
         ) : null}
 
         {here ? (
+          <div className={cx("khero-wrap")}>
           <button type="button" className={cx("khero")} onClick={() => { props.onOpenCourse(here.course.id); if (here.nextLesson) chooseLesson(here.nextLesson.id); }}>
             <span className={cx("kcover", "khero-cover", here.course.banner_url ? "" : coverTint(here.course.id))} style={here.course.banner_url ? { backgroundImage: `url(${JSON.stringify(here.course.banner_url)})`, backgroundSize: "cover", backgroundPosition: `${(here.course.banner_focus_x ?? 0.5) * 100}% ${(here.course.banner_focus_y ?? 0.5) * 100}%` } : undefined}>
               {here.course.banner_url ? null : <Icon name="book" />}
@@ -949,6 +950,7 @@ export function KitClassroom(props: {
               <span className={cx("acts")}><span className={cx("btn go", "lg")}><Icon name="play" />{here.done > 0 ? "Continue" : "Start"}</span></span>
             </span>
           </button>
+          </div>
         ) : null}
 
         {/* One course: the block above is the whole shelf. */}
