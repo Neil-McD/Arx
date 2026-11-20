@@ -46,18 +46,20 @@ describe("courses pager and pod rail button affordance", () => {
     expect(podKnowledge).not.toMatch(/<Btn small txt[^>]*>Delete<\/Btn>/);
   });
 
-  it("uses responsive shelf sizing and styled Previous / Next buttons on the Courses page", () => {
+  it("uses responsive shelf sizing, container-responsive hero stacking, and styled Previous / Next buttons on the Courses page", () => {
     expect(classroom).toContain("shelfPageSize(");
     expect(classroom).toContain("kpager-btn");
+    expect(classroom).toContain("khero-wrap");
     expect(kitCss).toMatch(/\.app \.kpager \.btn\.kpager-btn\{[^}]*background:var\(--s2\)/);
+    expect(kitCss).toContain("@container (max-width:680px){.app .khero{grid-template-columns:minmax(0,1fr)");
   });
 
-  it("supports both outside-member and enrolled-member pod views under View as a member", () => {
+  it("shows outside-member pods view and lets hosts click straight inside as a member without a redundant switcher", () => {
     const podsSection = readFileSync(new URL("../apps/web/src/components/WebCommunityPodsSection.tsx", import.meta.url), "utf8");
     const app = readFileSync(new URL("../apps/web/src/App.tsx", import.meta.url), "utf8");
     const navSurface = readFileSync(new URL("../apps/web/src/components/WebCommunityNavSurface.tsx", import.meta.url), "utf8");
-    expect(podsSection).toContain("Outside member");
-    expect(podsSection).toContain("Enrolled member");
+    expect(podsSection).not.toContain("Outside member");
+    expect(podsSection).not.toContain("Enrolled member");
     expect(podsSection).toContain("Preview inside as a member");
     expect(podRail).toContain("scope?.memberPreview");
     expect(podKnowledge).toContain("props.asMember");

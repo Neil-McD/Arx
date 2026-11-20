@@ -1385,21 +1385,24 @@
 .app .kunsaved .btn:disabled{opacity:.4;cursor:default}
 .app .btn.lg{height:40px;padding:0 16px;border-radius:10px;font-size:14px}
 .app .tag.live::before{content:"";width:6px;height:6px;margin-right:6px;border-radius:50%;background:#3fb76b}
-.app .khero{display:grid;grid-template-columns:minmax(0,460px) minmax(0,1fr);gap:32px;align-items:center;width:100%;margin-top:18px;padding:20px;border-radius:14px;background:var(--panel2);border:1px solid var(--line);box-shadow:0 18px 40px -26px rgba(0,0,0,.5);text-align:left;cursor:pointer;transition:border-color .16s var(--ease)}
+.app .khero-wrap{container-type:inline-size;width:100%}
+.app .khero{display:grid;grid-template-columns:minmax(0,min(44%,440px)) minmax(0,1fr);gap:28px;align-items:center;width:100%;margin-top:18px;padding:20px;border-radius:14px;background:var(--panel2);border:1px solid var(--line);box-shadow:0 18px 40px -26px rgba(0,0,0,.5);text-align:left;cursor:pointer;overflow:hidden;transition:border-color .16s var(--ease)}
 .app .khero:hover{border-color:var(--line2)}
 .app .khero-cover{display:grid;place-items:center;aspect-ratio:16/9;height:auto;border-radius:10px;color:var(--ink3)}
 .app .khero-cover .ic{width:28px;height:28px}
 .app .khero-body{display:flex;flex-direction:column;min-width:0}
 .app .khero-eye{font-size:12.5px;font-weight:500;color:var(--v1-accent-ink,var(--accent))}
-.app .khero-body>b{margin-top:6px;font-size:30px;font-weight:600;letter-spacing:-.02em;line-height:1.12}
+.app .khero-body>b{margin-top:6px;font-size:30px;font-weight:600;letter-spacing:-.02em;line-height:1.12;overflow-wrap:anywhere}
 .app .khero-body>.s{margin-top:8px;max-width:46ch;font-size:15px;line-height:1.5;color:var(--ink2)}
-.app .khero-next{display:flex;align-items:center;gap:12px;margin-top:18px;padding:10px 12px;border-radius:10px;background:var(--panel);border:1px solid var(--line)}
+.app .khero-next{display:flex;align-items:center;gap:12px;min-width:0;margin-top:18px;padding:10px 12px;border-radius:10px;background:var(--panel);border:1px solid var(--line)}
+.app .khero-next>span{min-width:0}
 .app .khero-next i{flex:none;display:grid;place-items:center;width:28px;height:28px;border-radius:50%;border:1.5px solid var(--accent);font-style:normal;font-size:12.5px;font-weight:600}
 .app .khero-next b{display:block;font-size:14.5px;font-weight:550}.app .khero-next em{font-style:normal;font-size:12.5px;color:var(--ink3)}
 .app .khero-prog{display:flex;align-items:center;gap:10px;margin-top:14px;font-size:12.5px;color:var(--ink3)}
 .app .khero-prog .kbar{flex:1;max-width:220px;margin-top:0}
 .app .khero .acts{margin-top:18px}
 .app .knum{margin-right:8px;font-style:normal;font-size:12.5px;font-weight:500;color:var(--ink3);font-variant-numeric:tabular-nums}
+@container (max-width:680px){.app .khero{grid-template-columns:minmax(0,1fr);gap:16px;padding:16px}.app .khero-body>b{font-size:24px}}
 @media (max-width:760px){.app .khero{grid-template-columns:minmax(0,1fr);gap:16px;padding:12px 12px 16px}.app .khero-body>b{font-size:24px}}
 .app .kcols{display:flex;gap:40px;max-width:860px;margin:22px auto 0;align-items:flex-start}
 .app .kcols.two{max-width:1216px}
@@ -1643,10 +1646,7 @@
 .app .kpager .btn.kpager-btn:hover:not(:disabled){background:var(--s3);border-color:rgba(var(--w),.28)}
 .app .kpager .btn.kpager-btn:disabled{opacity:.38;cursor:not-allowed;background:var(--s1);border-color:var(--line)}
 .app .kpager .btn.kpager-btn .ic{width:14px;height:14px}
-/* Member preview perspective switch on the Pods page (hosts only). */
-.app .podlens{display:inline-flex;align-items:center;gap:6px;margin:0 0 18px;padding:3px;border-radius:10px;border:1px solid var(--line);background:var(--s1)}
-.app .podlens .btn.sm{height:28px;padding:0 11px;border-radius:7px;border-color:transparent;background:transparent;color:var(--ink2);font-size:12.5px}
-.app .podlens .btn.sm:hover{color:var(--ink);background:var(--s2)}
-.app .podlens .btn.sm.on{background:var(--s3);border-color:var(--line2);color:var(--ink)}
+/* Quiet host note under Member View when hidden pods exist. */
 .app .podhidden-note{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-top:20px;padding:12px 14px;border-radius:10px;border:1px dashed var(--line2);background:var(--s1);font-size:13px;color:var(--ink2)}
-.app .podhidden-note .btn.sm{margin-left:auto;background:var(--s2)}
+.app .podhidden-note .acts{flex-wrap:wrap}
+.app .podhidden-note .btn.sm{background:var(--s2)}
