@@ -1,8 +1,9 @@
 import { askInApp } from "../../../../shared/inAppConfirm";
-import { Fragment, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
+import { Fragment, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { enterSendsMessage, isImeComposing } from "../controllers/communityComposerTextEditing";
 import { CommunityChannelSessionContext } from "./CommunityChannelSessionContext";
 import { downloadCloudCommunityChatAttachment } from "../../../../shared/cloudCommunityChatGateway";
+import { resolveAuthPresentationIdentity, type AuthSessionLike } from "../../../../shared/authSession";
 import {
   MessageCircle,
   MessageSquare,
@@ -774,8 +775,66 @@ export function InteractionContent(
   );
 }
 
-// Render a post's attachments: images in a grid, video/audio as inline players, and any other
-// file as a download chip.
+const RASTER_EXT = /\.(png|jpe?g|gif|webp|avif)$/i;
+const MIME_BY_EXT: Record<string, string> = { jpg: "image/jpeg", jpeg: "image/jpeg", gif: "image/gif", webp: "image/webp", avif: "image/avif" };
+let cacheSub: string | null = null;
+const imgCache = new Map<string, string>();
+const imgPending = new Map<string, Promise<string>>();
+const imgRefs = new Map<string, number>();
+
+export function isProtectedInlineImageAttachment(
+  attachment: Pick<CommunityInteractionAttachment, "protected_download" | "type" | "mime" | "name">,
+): boolean {
+  if (!attachment.protected_download) return false;
+  const mime = String(attachment.mime ?? "").trim().toLowerCase();
+  const name = String(attachment.name ?? "").trim().toLowerCase();
+  if (mime.includes("svg") || name.endsWith(".svg")) return false;
+  return mime.startsWith("image/") || attachment.type === "image" || RASTER_EXT.test(name);
+}
+
+function syncProtectedImgCache(nextSub: string | null) {
+  if (cacheSub === nextSub) return;
+  for (const url of imgCache.values()) { try { URL.revokeObjectURL(url); } catch { /* ignore */ } }
+  imgCache.clear();
+  imgPending.clear();
+  imgRefs.clear();
+  cacheSub = nextSub;
+}
+
+function evictUnusedProtectedImages() {
+  if (imgCache.size <= 160) return;
+  for (const [k, u] of imgCache.entries()) {
+    if (imgCache.size <= 160) break;
+    if ((imgRefs.get(k) ?? 0) > 0) continue;
+    imgCache.delete(k);
+    try { URL.revokeObjectURL(u); } catch { /* ignore */ }
+  }
+}
+
+function loadProtectedImageUrl(session: unknown, sub: string, attachment: CommunityInteractionAttachment): Promise<string> {
+  syncProtectedImgCache(sub);
+  const key = `${sub}:${attachment.id}`;
+  const hit = imgCache.get(key);
+  if (hit) { imgCache.delete(key); imgCache.set(key, hit); return Promise.resolve(hit); }
+  const inflight = imgPending.get(key);
+  if (inflight) return inflight;
+  const task = downloadCloudCommunityChatAttachment({ session, attachmentId: attachment.id })
+    .then((bytes) => {
+      if (cacheSub !== sub) throw new Error("stale");
+      const raw = String(attachment.mime || bytes.type || "").trim().toLowerCase();
+      const ext = RASTER_EXT.exec(attachment.name)?.[1]?.toLowerCase() ?? "";
+      const mime = raw.startsWith("image/") && !raw.includes("svg") ? raw : (MIME_BY_EXT[ext] ?? "image/png");
+      const url = URL.createObjectURL(new Blob([bytes], { type: mime }));
+      imgCache.set(key, url);
+      evictUnusedProtectedImages();
+      return url;
+    })
+    .finally(() => { imgPending.delete(key); });
+  imgPending.set(key, task);
+  return task;
+}
+
+// Render a post's non-image protected attachment as an explicit click-to-open download chip.
 function ProtectedInteractionAttachment({ attachment, onOpenImage }: {
   attachment: CommunityInteractionAttachment;
   onOpenImage?: (images: CommunityChatMediaImage[], index: number) => void;
@@ -817,44 +876,145 @@ function ProtectedInteractionAttachment({ attachment, onOpenImage }: {
       <span className="attachment-name">{busy ? "Opening…" : attachment.name}</span></button>{error ? <p role="alert">{error}</p> : null}</div>;
 }
 
+// Render a post's attachments: images (including authorized private-channel images) in one grid,
+// video/audio as inline players, and any other file as a download chip.
 export function InteractionAttachments(props: {
   attachments: CommunityInteractionAttachment[];
   onOpenImage?: (images: CommunityChatMediaImage[], index: number) => void;
 }) {
-  const { imageAttachments, videoAttachments, audioAttachments, fileAttachments } =
-    partitionCommunityAttachments(props.attachments.filter(attachment => !attachment.protected_download));
-  if (
-    imageAttachments.length === 0 &&
-    videoAttachments.length === 0 &&
-    audioAttachments.length === 0 &&
-    fileAttachments.length === 0
-    && !props.attachments.some(attachment => attachment.protected_download)
-  ) {
+  const scope = useContext(CommunityChannelSessionContext);
+  const authSubject = scope?.session ? resolveAuthPresentationIdentity(scope.session as AuthSessionLike) : null;
+  const protectedImages = useMemo(() => props.attachments.filter(isProtectedInlineImageAttachment), [props.attachments]);
+  const protectedKey = protectedImages.map((a) => a.id).join(",");
+  const protectedOther = useMemo(
+    () => props.attachments.filter((a) => Boolean(a.protected_download) && !isProtectedInlineImageAttachment(a)),
+    [props.attachments],
+  );
+  const { imageAttachments, videoAttachments, audioAttachments, fileAttachments } = useMemo(
+    () => partitionCommunityAttachments(props.attachments.filter((a) => !a.protected_download)),
+    [props.attachments],
+  );
+
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const [visible, setVisible] = useState(() => typeof IntersectionObserver === "undefined");
+  const [retryNonce, setRetryNonce] = useState(0);
+  const readCached = (sub: string | null) => {
+    syncProtectedImgCache(sub);
+    const hits: Record<string, string> = {};
+    if (sub) for (const a of protectedImages) { const u = imgCache.get(`${sub}:${a.id}`); if (u) hits[a.id] = u; }
+    return hits;
+  };
+  const [resolvedUrls, setResolvedUrls] = useState<Record<string, string>>(() => readCached(authSubject));
+  const [failedIds, setFailedIds] = useState<Record<string, boolean>>({});
+
+  useEffect(() => {
+    setResolvedUrls(readCached(authSubject));
+    setFailedIds({});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [authSubject, protectedKey]);
+
+  // Keep ref-counts on mounted protected image URLs so LRU eviction never revokes an image on screen.
+  const resolvedKeys = authSubject
+    ? protectedImages.filter((a) => Boolean(resolvedUrls[a.id])).map((a) => `${authSubject}:${a.id}`)
+    : [];
+  const resolvedKeysSig = resolvedKeys.join(",");
+  useEffect(() => {
+    if (!resolvedKeys.length) return;
+    for (const k of resolvedKeys) imgRefs.set(k, (imgRefs.get(k) ?? 0) + 1);
+    return () => {
+      for (const k of resolvedKeys) {
+        const next = (imgRefs.get(k) ?? 1) - 1;
+        if (next <= 0) imgRefs.delete(k);
+        else imgRefs.set(k, next);
+      }
+      evictUnusedProtectedImages();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resolvedKeysSig]);
+
+  useEffect(() => {
+    if (visible || !protectedImages.length || !containerRef.current) return;
+    if (typeof IntersectionObserver === "undefined") { setVisible(true); return; }
+    const observer = new IntersectionObserver((entries) => {
+      if (entries.some((e) => e.isIntersecting)) { setVisible(true); observer.disconnect(); }
+    }, { rootMargin: "300px 0px" });
+    observer.observe(containerRef.current);
+    return () => observer.disconnect();
+  }, [visible, protectedImages.length]);
+
+  useEffect(() => {
+    if (!visible || !scope?.session || !authSubject || !protectedImages.length) return;
+    let cancelled = false;
+    for (const a of protectedImages) {
+      if (resolvedUrls[a.id] || failedIds[a.id]) continue;
+      void loadProtectedImageUrl(scope.session, authSubject, a).then(
+        (url) => { if (!cancelled) setResolvedUrls((p) => (p[a.id] === url ? p : { ...p, [a.id]: url })); },
+        () => { if (!cancelled) setFailedIds((p) => (p[a.id] ? p : { ...p, [a.id]: true })); },
+      );
+    }
+    return () => { cancelled = true; };
+  }, [visible, scope?.session, authSubject, protectedImages, resolvedUrls, failedIds, retryNonce]);
+
+  if (!imageAttachments.length && !protectedImages.length && !videoAttachments.length && !audioAttachments.length && !fileAttachments.length && !protectedOther.length) {
     return null;
   }
-  const imageViews = imageAttachments.map((item) => ({
-    id: item.attachment.id,
-    url: item.url,
-    previewUrl: item.previewUrl,
-    fullUrl: item.fullUrl,
-    name: item.name,
-  }));
+
+  const openImage = props.onOpenImage ?? ((images: CommunityChatMediaImage[], idx: number) => {
+    const target = images[idx]?.fullUrl || images[idx]?.url;
+    if (target) window.open(target, "_blank", "noopener,noreferrer");
+  });
+
+  const allSlots: Array<{ id: string; name: string; image?: CommunityChatMediaImage; failed?: boolean }> = [
+    ...imageAttachments.map((item) => ({
+      id: item.attachment.id,
+      name: item.name,
+      image: { id: item.attachment.id, url: item.url, previewUrl: item.previewUrl, fullUrl: item.fullUrl, name: item.name },
+    })),
+    ...protectedImages.map((a) => {
+      const url = resolvedUrls[a.id];
+      return {
+        id: a.id,
+        name: a.name,
+        image: url ? { id: a.id, url, previewUrl: url, fullUrl: url, name: a.name } : undefined,
+        failed: Boolean(failedIds[a.id] || !scope?.session),
+      };
+    }),
+  ];
+  const loadedImages = allSlots.flatMap((slot) => (slot.image ? [slot.image] : []));
+  const allReady = loadedImages.length === allSlots.length;
+
   return (
-    <div className="community-interaction-attachments">
-      {props.attachments.filter(attachment => attachment.protected_download).map(attachment =>
-        <ProtectedInteractionAttachment key={attachment.id} attachment={attachment} onOpenImage={props.onOpenImage} />)}
-      {imageViews.length > 0 ? (
-        <CommunityChatMediaGrid
-          images={imageViews}
-          onOpenImage={
-            props.onOpenImage ??
-            ((images, index) => {
-              const target = images[index]?.fullUrl || images[index]?.url;
-              if (target) window.open(target, "_blank", "noopener,noreferrer");
-            })
-          }
-        />
+    <div ref={containerRef} className="community-interaction-attachments">
+      {allSlots.length > 0 ? (
+        allReady ? (
+          <CommunityChatMediaGrid images={loadedImages} onOpenImage={openImage} />
+        ) : (
+          <div className={`chat-media-grid count-${Math.min(allSlots.length, 4)}`}>
+            {allSlots.map((slot) => {
+              if (slot.image) {
+                const idx = loadedImages.indexOf(slot.image);
+                return (
+                  <button key={slot.id} type="button" className="chat-media-item" onClick={() => openImage(loadedImages, Math.max(0, idx))} title={slot.name} aria-label={slot.name}>
+                    <img src={slot.image.previewUrl || slot.image.url} alt={slot.name} loading="lazy" />
+                  </button>
+                );
+              }
+              return slot.failed ? (
+                <button key={slot.id} type="button" className="chat-media-item chat-media-item-error" disabled={!scope?.session} title={slot.name}
+                  onClick={() => { setFailedIds((p) => { const n = { ...p }; delete n[slot.id]; return n; }); setRetryNonce((n) => n + 1); }}>
+                  <strong>{slot.name}</strong>
+                  <span>{scope?.session ? "Couldn't load image · Tap to retry" : "Sign in to view image"}</span>
+                </button>
+              ) : (
+                <div key={slot.id} className="chat-media-item chat-media-item-static chat-media-item-loading" role="status" aria-busy="true" aria-label={`Loading ${slot.name}`} />
+              );
+            })}
+          </div>
+        )
       ) : null}
+      {protectedOther.map((attachment) => (
+        <ProtectedInteractionAttachment key={attachment.id} attachment={attachment} onOpenImage={props.onOpenImage} />
+      ))}
       <CommunityChatMediaPlayers videos={videoAttachments} audios={audioAttachments} />
       {fileAttachments.length > 0 ? (
         <div className="attachments-preview chat-attachments-preview">

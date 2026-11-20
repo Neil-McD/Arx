@@ -114,6 +114,24 @@ export function orderAfterDrop(ids: string[], dragged: string, before: string | 
   return next.every((id, index) => id === ids[index]) ? null : next;
 }
 
+// How many course cards fit across one row of the shelf at a given container
+// width (matches .kgrid's responsive column sizing: 190..280px min card, 16px gap).
+export function shelfColumnsForWidth(gridWidthPx: number): number {
+  if (!Number.isFinite(gridWidthPx) || gridWidthPx <= 0) return 3;
+  const gap = 16;
+  const minCard = Math.max(190, Math.min((gridWidthPx - 32) / 3, 280));
+  return Math.max(1, Math.floor((gridWidthPx + gap) / (minCard + gap)));
+}
+
+// How many courses to show on one page of the shelf: always complete rows
+// (at least 3 full rows, minimum 12 courses) so typical catalogs show together
+// and wide monitors never stall after a single row.
+export function shelfPageSize(gridWidthPx: number, rows = 3): number {
+  const cols = shelfColumnsForWidth(gridWidthPx);
+  const safeRows = Math.max(1, Math.floor(rows));
+  return Math.max(12, cols * safeRows);
+}
+
 // One page of the course shelf.
 export function pageOf<T>(items: T[], page: number, size: number): { items: T[]; page: number; pages: number; from: number; to: number } {
   const pages = Math.max(1, Math.ceil(items.length / size));

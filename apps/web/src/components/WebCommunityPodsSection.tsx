@@ -153,7 +153,7 @@ const planPrice = (plan: CloudPlanOffer) => {
 // how you get in (a plan that includes it, its own price, or asking), and the
 // one button. Never who is in it or what is said. On the Pods page it fills
 // the right column (on a narrow screen, the page itself).
-function PodPitch(props: WebCommunityPodsSectionProps & { podSlug: string; inline: boolean; reloadKey: number; preview: boolean; onChanged?: () => void }) {
+function PodPitch(props: WebCommunityPodsSectionProps & { podSlug: string; inline: boolean; reloadKey: number; preview: boolean; onChanged?: () => void; onPreviewInside?: () => void }) {
   const [page, setPage] = useState<CloudPodPage | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -277,7 +277,10 @@ function PodPitch(props: WebCommunityPodsSectionProps & { podSlug: string; inlin
       ) : null}
       {note ? <p className={cx("sub")} role="status">{note}</p> : null}
       {error ? <p className={cx("bad")} role="alert">{error}</p> : null}
-      <div className={cx("joinbar")}>{way}</div>
+      <div className={cx("joinbar")}>
+        {way}
+        {props.onPreviewInside ? <Btn small onClick={props.onPreviewInside}>Preview inside as a member</Btn> : null}
+      </div>
       {page.can_edit ? (
         <p className={cx("sub2")}>This is what members who aren't in it see. Edit it from the pod's right column.{page.visibility === "hidden" ? " It's hidden, so only its members know it's here." : ""}</p>
       ) : null}
@@ -291,6 +294,10 @@ export function WebCommunityPodsSection(props: WebCommunityPodsSectionProps) {
 
 function PodsList(props: WebCommunityPodsSectionProps) {
   const [state, setState] = useState<{ canManage: boolean; pods: CloudCommunityPod[]; outside: CloudOutsidePod[] } | null>(null);
+  // Hosts in "View as a member" can switch between outside-member view (listed pitches)
+  // and enrolled-member view (stepping inside any of their pods as a regular member).
+  const [previewPods, setPreviewPods] = useState<CloudCommunityPod[]>([]);
+  const [memberLens, setMemberLens] = useState<"outside" | "enrolled">("outside");
   const [failed, setFailed] = useState(false);
   const [creating, setCreating] = useState(false);
   const [draft, setDraft] = useState({ name: "", purpose: "", listed: true, seats: "" });
@@ -309,9 +316,20 @@ function PodsList(props: WebCommunityPodsSectionProps) {
     try {
       const session = await props.ensureSession(props.session);
       if (!session) return;
-      const result = await fetchCloudCommunityPods({ session, communityId: props.communityId, asMember: props.asMember });
+      const [result, managerResult] = await Promise.all([
+        fetchCloudCommunityPods({ session, communityId: props.communityId, asMember: props.asMember }),
+        props.asMember
+          ? fetchCloudCommunityPods({ session, communityId: props.communityId, asMember: false }).catch(() => null)
+          : Promise.resolve(null),
+      ]);
       setLiveSession(session);
       setState({ canManage: result.can_manage, pods: result.pods, outside: result.outside });
+      setPreviewPods(
+        props.asMember && managerResult?.can_manage
+          ? managerResult.pods.map((pod) => ({ ...pod, can_manage: false, waiting: 0 }))
+          : [],
+      );
+      if (!props.asMember) setMemberLens("outside");
       setFailed(false);
       setReloadKey((key) => key + 1);
     } catch { setFailed(true); }
@@ -375,8 +393,23 @@ function PodsList(props: WebCommunityPodsSectionProps) {
   };
 
   const canManage = Boolean(state?.canManage);
-  const pods = state?.pods ?? [];
-  const outside = state?.outside ?? [];
+  const rawPods = state?.pods ?? [];
+  const rawOutside = state?.outside ?? [];
+  const canToggleMemberLens = props.asMember && previewPods.length > 0;
+  // If the host turned on Member View while looking at a hidden pod's URL, show its
+  // enrolled-member landing instead of "This pod isn't here."
+  const hiddenSlugInAddress = Boolean(
+    canToggleMemberLens && props.podSlug
+    && !rawPods.some((p) => p.slug === props.podSlug)
+    && !rawOutside.some((p) => p.slug === props.podSlug)
+    && previewPods.some((p) => p.slug === props.podSlug),
+  );
+  const effectiveLens: "outside" | "enrolled" = canToggleMemberLens && (memberLens === "enrolled" || hiddenSlugInAddress) ? "enrolled" : "outside";
+  const pods = effectiveLens === "enrolled" ? previewPods : rawPods;
+  const outside = effectiveLens === "enrolled" ? [] : rawOutside;
+  const hiddenOutsideCount = canToggleMemberLens && effectiveLens === "outside"
+    ? previewPods.filter((p) => p.visibility === "hidden" && !rawPods.some((m) => m.channel_id === p.channel_id)).length
+    : 0;
   // The pod shown is read from the address and the lists (podShown).
   const shown = podShown({
     podSlug: props.podSlug,
@@ -394,11 +427,16 @@ function PodsList(props: WebCommunityPodsSectionProps) {
     if (!wide) { props.onNavigate({ kind: "room", slug: pod.slug }); return; }
     if (props.podSlug !== pod.slug) props.onNavigate({ kind: "pod", slug: pod.slug });
   };
+  const canPreviewShownInside = Boolean(
+    canToggleMemberLens && effectiveLens === "outside" && shown?.kind === "pitch"
+    && previewPods.some((p) => p.slug === shown.slug),
+  );
   const shownPage = (inline: boolean) => !shown ? null : selectedMine && props.communityId ? (
     <KitPodLanding session={liveSession} communityId={props.communityId} pod={selectedMine}
       onOpen={() => props.onNavigate({ kind: "room", slug: selectedMine.slug })} />
   ) : (
-    <PodPitch {...props} podSlug={shown.slug} inline={inline} reloadKey={reloadKey} preview={shown.kind === "pitch" && previewSlug === shown.slug} onChanged={() => void load()} />
+    <PodPitch {...props} podSlug={shown.slug} inline={inline} reloadKey={reloadKey} preview={shown.kind === "pitch" && previewSlug === shown.slug}
+      onChanged={() => void load()} onPreviewInside={canPreviewShownInside ? () => setMemberLens("enrolled") : undefined} />
   );
   const lead = !state ? " " : canManage
     ? (pods.length ? `${pods.length} ${pods.length === 1 ? "pod" : "pods"} in ${props.communityName}.` : "Start your first pod.")
@@ -429,6 +467,14 @@ function PodsList(props: WebCommunityPodsSectionProps) {
       <KitApp view="events" host={canManage} part="flow">
         <div className={cx("page")} style={{ padding: 0, overflow: "visible" }}>
           <p className={cx("lead")} style={{ marginTop: 0 }}>{lead}</p>
+          {canToggleMemberLens ? (
+            <div className={cx("podlens")} role="group" aria-label="Member preview perspective">
+              <button type="button" className={cx("btn sm", effectiveLens === "outside" && "on")} aria-pressed={effectiveLens === "outside"}
+                onClick={() => { setMemberLens("outside"); if (hiddenSlugInAddress) props.onNavigate({ kind: "pods" }); }}>Outside member</button>
+              <button type="button" className={cx("btn sm", effectiveLens === "enrolled" && "on")} aria-pressed={effectiveLens === "enrolled"}
+                onClick={() => setMemberLens("enrolled")}>Enrolled member</button>
+            </div>
+          ) : null}
           {notice ? <p className={cx("sub")} role="status">{notice}</p> : null}
           {failed ? <p className={cx("sub")} role="alert">Pods couldn't load. <button type="button" className={cx("link")} onClick={() => void load()}>Try again</button></p> : null}
           {pods.length || canManage ? (
@@ -498,6 +544,12 @@ function PodsList(props: WebCommunityPodsSectionProps) {
                 })}
               </div>
             </>
+          ) : null}
+          {hiddenOutsideCount > 0 ? (
+            <div className={cx("podhidden-note")}>
+              <span>{hiddenOutsideCount} hidden {hiddenOutsideCount === 1 ? "pod isn't" : "pods aren't"} shown to outside members.</span>
+              <button type="button" className={cx("btn sm")} onClick={() => setMemberLens("enrolled")}>Preview as an enrolled member</button>
+            </div>
           ) : null}
         </div>
       </KitApp>

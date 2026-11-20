@@ -77,6 +77,7 @@ export type WebCommunityShellProps = {
   }>;
   isLoadingCommunityChannels: boolean;
   selectedCommunityChannelSlug: string;
+  isInPodRoom?: boolean;
   communityChannelIndicators: Record<string, { chat: boolean; mentions: boolean }>;
   onSelectCommunityChannel: (channel: {
     id: string;

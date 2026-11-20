@@ -1908,6 +1908,7 @@ export default function App() {
         roomAttention: communityChannelIndicators,
       },
       discoverProps: discoverPageProps,
+      memberPreview: memberPreview.active,
       canPostMessagesActiveCommunity: canPostMessagesActiveChannel,
       isProfileSetupComplete: isProfileSetupCompleteForPublicActions,
       onCommunityTypingSignal: signalCommunityTyping,
@@ -2348,7 +2349,9 @@ export default function App() {
 
   const handleToggleMemberPreview = (on: boolean) => {
     memberPreview.set(on);
-    if (on && activeCommunityChannel?.access_mode === "restricted") {
+    // In Design v1, private rooms are Pods — stay inside the Pod so hosts can
+    // inspect the enrolled-member experience directly without getting kicked out.
+    if (on && activeCommunityChannel?.access_mode === "restricted" && !isDesignV1Active()) {
       const path = buildCommunityTabPath(selectedActiveCommunitySlug, "chat");
       if (path) navigateTo(path);
     }
@@ -2428,6 +2431,7 @@ export default function App() {
     communityChannels: memberPreview.active ? memberPreviewChannels(activeCommunityChannels) : activeCommunityChannels,
     isLoadingCommunityChannels: isLoadingActiveCommunityChannels,
     selectedCommunityChannelSlug: activeCommunityChannelSlug,
+    isInPodRoom: activeCommunityChannel?.access_mode === "restricted",
     communityChannelIndicators,
     handleSelectCommunityChannel: (channel) => {
       const path = buildCommunityTabPath(

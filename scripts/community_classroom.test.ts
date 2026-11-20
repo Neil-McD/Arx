@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { continueLesson, courseLessons, courseProgress, coursePath, lessonEnd, orderAfterDrop, pageOf, shelfStart } from "../shared/communityClassroom";
+import { continueLesson, courseLessons, courseProgress, coursePath, lessonEnd, orderAfterDrop, pageOf, shelfColumnsForWidth, shelfPageSize, shelfStart } from "../shared/communityClassroom";
 
 const lesson = (id: string, module_id: string, sort_order: number | null, role = "page") =>
   ({ id, module_id, resource_role: role, title: id, sort_order, created_at: `2026-01-0${sort_order ?? 9}` });
@@ -33,6 +33,23 @@ test("the shelf comes in pages", () => {
   expect(pageOf(items, 0, 3)).toEqual({ items: [1, 2, 3], page: 0, pages: 3, from: 1, to: 3 });
   expect(pageOf(items, 9, 3)).toMatchObject({ items: [7], page: 2, from: 7, to: 7 });
   expect(pageOf([], 0, 3)).toMatchObject({ items: [], pages: 1, from: 0, to: 0 });
+});
+
+test("the shelf sizes each page to complete rows for the monitor width, never stalling after one row of 6", () => {
+  expect(shelfColumnsForWidth(0)).toBe(3);
+  expect(shelfColumnsForWidth(900)).toBe(3);
+  expect(shelfColumnsForWidth(1200)).toBe(4);
+  expect(shelfColumnsForWidth(1800)).toBe(6);
+
+  expect(shelfPageSize(0)).toBe(12);
+  expect(shelfPageSize(900)).toBe(12);
+  expect(shelfPageSize(1200)).toBe(12);
+  expect(shelfPageSize(1500)).toBe(15);
+  expect(shelfPageSize(1800)).toBe(18);
+  // Every page size above the minimum is an exact multiple of the column count.
+  for (const width of [900, 1200, 1500, 1800, 2100]) {
+    expect(shelfPageSize(width) % shelfColumnsForWidth(width)).toBe(0);
+  }
 });
 
 test("the path puts you on the first unfinished course, in the host's order", () => {

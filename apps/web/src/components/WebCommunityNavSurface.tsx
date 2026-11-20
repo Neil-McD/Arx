@@ -34,7 +34,8 @@ export function WebCommunityNavSurface({
     ? communityShell.communityChannels.filter((channel) => channel.access_mode !== "restricted")
     : communityShell.communityChannels;
   const inPod = useV1Layout && communityShell.destination.kind === "community_chat"
-    && communityShell.communityChannels.some((channel) => channel.access_mode === "restricted" && channel.slug === communityShell.selectedCommunityChannelSlug);
+    && (Boolean(communityShell.isInPodRoom)
+      || communityShell.communityChannels.some((channel) => channel.access_mode === "restricted" && channel.slug === communityShell.selectedCommunityChannelSlug));
   return (
     <>
     {useV1Layout && !isMobileHome ? <WebCommunityCommandPalette communityShell={communityShell} /> : null}
