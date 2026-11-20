@@ -28,6 +28,28 @@ import {
   resolveUserIdForAuthenticatedRequest,
 } from "./communityCore";
 import { MAX_TOTAL_COMMUNITY_CHANNELS } from "../shared/communityChannelCapacity";
+import { isHost, podRecord } from "./communityPods";
+
+// Matches communityPods.isInPod: an active participant grant for this viewer
+// or a host seat on the pod. Managers can read every restricted room without
+// belonging to it; sidebar shortcuts show only pods the viewer is actually in.
+async function viewerIsInPod(
+  ctx: any,
+  communityId: any,
+  channelId: any,
+  actor: { principalKey: string },
+  userId: any,
+): Promise<boolean> {
+  const grant = await ctx.db
+    .query("communityChannelParticipants")
+    .withIndex("by_channel_principal", (q: any) =>
+      q.eq("channelId", channelId).eq("principalKey", actor.principalKey),
+    )
+    .first();
+  if (grant?.status === "active") return true;
+  const record = await podRecord(ctx, communityId, channelId);
+  return isHost(record, userId);
+}
 
 function mapCommunityChannel(channel: CommunityChannelLike) {
   return {
@@ -97,6 +119,9 @@ export const listCommunityChannels = query({
     return {
       channels: await Promise.all(channels.map(async (channel) => ({
         ...mapCommunityChannel(channel),
+        ...(channel.accessMode === "restricted"
+          ? { is_pod_member: await viewerIsInPod(ctx, args.communityId, channel._id, actor, userId) }
+          : {}),
         capabilities: await requireCommunityChannelCapability({ ctx, channel, actor, capability: "canRead" }),
       }))),
       max_active_channels: LEGACY_CHANNEL_LIST_LIMIT,
@@ -114,8 +139,13 @@ export const listCommunityChannelPage = query({
     const actor = await resolveCommunityChannelActor({ ctx, communityId: args.communityId, userId });
     const result = await listAuthorizedCommunityChannelPage({ ctx, communityId: args.communityId, actor,
       section: args.section, paginationOpts: args.paginationOpts });
-    const channels = await Promise.all(result.page.map(async channel => ({ ...mapCommunityChannel(channel),
-      capabilities: await getCommunityChannelCapabilities({ ctx, channel, actor }) })));
+    const channels = await Promise.all(result.page.map(async channel => ({
+      ...mapCommunityChannel(channel),
+      ...(channel.accessMode === "restricted"
+        ? { is_pod_member: await viewerIsInPod(ctx, args.communityId, channel._id, actor, userId) }
+        : {}),
+      capabilities: await getCommunityChannelCapabilities({ ctx, channel, actor }),
+    })));
     return { ...result, page: channels, max_active_channels: MAX_TOTAL_COMMUNITY_CHANNELS };
   },
 });

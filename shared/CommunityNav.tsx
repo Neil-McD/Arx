@@ -46,6 +46,7 @@ type CommunityNavChannel = {
   is_general: boolean;
   position: number;
   access_mode?: "all_members" | "restricted";
+  is_pod_member?: boolean;
 };
 
 type CommunityNavProps = {

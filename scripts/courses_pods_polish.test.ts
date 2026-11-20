@@ -110,6 +110,20 @@ describe("next slice: pods dropdown, pod knowledge cleanup, real avatars, clicka
     });
     expect(none.shown).toEqual([]);
     expect(none.allDot).toBe("none");
+
+    // Owners/admins who manage pods without belonging to them (is_pod_member: false)
+    // must not see those rooms in their "Your pods" sidebar shortcuts.
+    const managerWithOneActualPod = selectNavPods({
+      channels: [
+        { id: "m1", slug: "managed-only-1", name: "Managed 1", is_general: false, position: 1, access_mode: "restricted" as const, is_pod_member: false },
+        { id: "m2", slug: "managed-only-2", name: "Managed 2", is_general: false, position: 2, access_mode: "restricted" as const, is_pod_member: false },
+        { id: "m3", slug: "my-pod", name: "My Pod", is_general: false, position: 3, access_mode: "restricted" as const, is_pod_member: true },
+      ],
+      indicators: { "managed-only-1": { chat: false, mentions: true } },
+      openSlug: null,
+    });
+    expect(managerWithOneActualPod.shown.map((p) => p.slug)).toEqual(["my-pod"]);
+    expect(managerWithOneActualPod.overflowDot).toBe("mention");
   });
 
   it("renders real profile photos in PanelPeople at 28px (.av.s) and makes PanelNext clickable without nesting action links", async () => {
@@ -156,7 +170,7 @@ describe("next slice: pods dropdown, pod knowledge cleanup, real avatars, clicka
     expect(podLanding).not.toContain("PanelLearned");
     expect(podsSection).toContain("isHiddenPodInAddress");
     expect(podsSection).toContain("page.host_people");
-    expect(homeSection).toContain("hasLiveJoinReview");
+    expect(homeSection).toContain("hasLoadedJoinReview");
     expect(nextEvent).toContain("onClick={props.onOpenEvents}");
     expect(homeRail).toContain('cx("av s")');
     expect(channelRail).toContain('cx("av s")');

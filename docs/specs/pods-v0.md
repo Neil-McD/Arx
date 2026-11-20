@@ -33,8 +33,12 @@ monthly recurring. A member can be in several pods.
 
 A list of private channels down the left column says nothing about what each
 one is for, who it's for or what it costs, and it grows without limit. Pods
-are one item in the left column, **Pods**, which opens a page (as Knowledge
-does). Nothing private is ever listed in the left column.
+are one item in the left column, **Pods**, which opens the Pods page (as
+Knowledge does). When a person belongs to one or more pods (an active grant or
+host seat), a collapsible Linear-style branch under **Pods** offers direct
+shortcuts to at most **3** of their pods (hidden when in zero pods or in Member
+View); anything beyond 3 is reached from the Pods page, and rooms a person is
+not in are never listed in the left column.
 
 ## Who sees what
 
@@ -239,9 +243,12 @@ membership); one branch in the Stripe notice handler routes anything carrying
 - **New**: a pod record (purpose, hosts, seats, listed or hidden, price point,
   rhythm) pointing at its room; pod-scoped notes; pod calls (events visible to
   the pod only); agent participants.
-- **Existing private channels** become hidden pods with no price, so nothing
-  anyone has today disappears. Creating a "private channel" is replaced by
-  "New pod".
+- **Default visibility (listed unless explicitly hidden)**: restricted rooms
+  without an explicit `hidden` setting default to **listed** pods with no price
+  (visible from outside with name, purpose, hosts and join/request actions;
+  messages, members, notes and call links stay strictly locked inside). Builders
+  who want a secret invite-only pod explicitly choose **Hidden**. Creating a
+  "private channel" is replaced by "New pod".
 - **Lessons from the earlier outside attempt** (PR #290): the community agent
   must not read pod calls or pod content unless it is in that pod; changing a
   pod's audience must never fire automations for everyone; "who is in this
