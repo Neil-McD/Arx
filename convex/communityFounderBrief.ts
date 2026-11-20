@@ -13,7 +13,7 @@ import { resolveUserIdForAuthenticatedRequest } from "./authActor";
 import { listSharedChannelReadableRows } from "./communityChannelCore";
 import { readCanonicalUserIdentityProjection } from "./profileCore";
 import { communityIsActive, normalizeCommunityLifecycle } from "../shared/communityLifecycle";
-import { readCommunityActiveMemberCount, communityMembershipRowIsActive, requireCommunityChatAccess } from "./communityCore";
+import { readCommunityActiveMemberCount, communityMembershipRowIsActive, getUniqueCommunityMembershipByPair, requireCommunityChatAccess } from "./communityCore";
 import { resolveCommunityInferenceFundingForAction } from "./founderInferenceRuntime";
 import { startFundedInferenceRun } from "./fundedInferenceGateway";
 import { readCanonicalPublicAppOrigin } from "./publicAppUrl";
@@ -196,6 +196,18 @@ export async function buildSnapshot(ctx: any, community: any, windowStartMs: num
     return list;
   };
 
+  const pendingJoinRequests = [];
+  for (const request of joinRequests) {
+    if (String(request.userId) === ownerId) continue;
+    const membership = await getUniqueCommunityMembershipByPair({
+      ctx,
+      communityId: community._id,
+      userId: request.userId,
+    }).catch(() => null);
+    if (membership && communityMembershipRowIsActive(membership)) continue;
+    pendingJoinRequests.push(request);
+  }
+
   return {
     communityName: String(community.name ?? community.slug ?? "your community"),
     memberCount: readCommunityActiveMemberCount(community) ?? 0,
@@ -211,7 +223,7 @@ export async function buildSnapshot(ctx: any, community: any, windowStartMs: num
     highlight,
     unanswered,
     quietNewcomers: { count: quiet.length, names: await nameList(quiet) },
-    joinRequestsPending: joinRequests.length,
+    joinRequestsPending: pendingJoinRequests.length,
     upcomingEvents: communityWideEvents(events).map((event: any) => ({ title: clip(event.title, 120), startsAt: new Date(Number(event.startsAt)).toISOString() })),
   };
 }

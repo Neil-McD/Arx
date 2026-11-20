@@ -4,16 +4,15 @@
 // and the way in. A pod they are not in shows its pitch instead
 // (WebCommunityPodsSection's PodPitch).
 import { useEffect, useState } from "react";
-import { fetchCloudPod, fetchCloudPodNotes, formatPodDate, type CloudPodDetail, type CloudPodNote } from "../../../../shared/cloudCommunityPodsGateway";
+import { fetchCloudPod, fetchCloudPodNotes, type CloudPodDetail, type CloudPodNote } from "../../../../shared/cloudCommunityPodsGateway";
 import { formatMomentWhen } from "../../../../shared/communityHomeMoments";
 import { Btn, cx } from "./kit";
 import { BriefPart, usePlaceBriefRead } from "./KitBrief";
 import { resolveAuthSubject, type AuthSessionLike } from "../../../../shared/authSession";
 import { useLiveAnswer } from "../../../../shared/liveQuery";
-import { PanelLearned, PanelNext, PanelPart, PanelPeople, usePanelSettled } from "./KitPanel";
+import { PanelLine, PanelNext, PanelPart, PanelPeople, usePanelSettled } from "./KitPanel";
 
 const REPEATS: Record<string, string> = { daily: "every day", weekly: "every week", monthly: "every month" };
-const LEARNED_SHOWN = 3;
 
 export function KitPodLanding(props: {
   session: unknown;
@@ -52,7 +51,6 @@ export function KitPodLanding(props: {
 
   const call = detail?.next_call ?? null;
   const members = detail?.members ?? [];
-  const latest = [...notes].sort((a, b) => Date.parse(b.updated_at) - Date.parse(a.updated_at)).slice(0, LEARNED_SHOWN);
   return (
     <div className={cx("land")}>
       <header>
@@ -66,14 +64,14 @@ export function KitPodLanding(props: {
           <PanelNext title={formatMomentWhen(call.starts_at)} sub={call.title} />
         </PanelPart>
       ) : null}
-      {latest.length ? (
+      {notes.length ? (
         <PanelPart label="What this pod knows" fact={String(notes.length)}>
-          {latest.map((note) => <PanelLearned key={note.slug} title={note.title} when={formatPodDate(note.updated_at)} />)}
+          <PanelLine>{notes.length} {notes.length === 1 ? "note" : "notes"} learned</PanelLine>
         </PanelPart>
       ) : null}
       {members.length ? (
         <PanelPart label="In this pod" fact={String(members.length)}>
-          <PanelPeople names={members.map((member) => member.name)} />
+          <PanelPeople people={members.map((member) => ({ id: member.user_id, name: member.name, avatarUrl: member.avatar_url ?? null }))} />
         </PanelPart>
       ) : null}
       {/* The way in sits under the parts on a phone, so it draws with them. */}

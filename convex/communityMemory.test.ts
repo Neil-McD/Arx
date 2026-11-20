@@ -108,6 +108,23 @@ test("a review adds at most five notes, and a finished review writes nothing", a
   expect(await t.mutation(internal.communityMemory.finishMemoryReviewRunInternal, { communityId: w.communityId, runId: second.runId, nowMs: NOW })).toEqual({ status: "empty" });
 });
 
+test("re-submitting a guide note with the same title updates in place instead of creating a duplicate", async () => {
+  const t = convexTest(schema, modules);
+  const w = await world(t);
+  const { runId } = await run(t, w.communityId);
+  expect(await observe(t, w.communityId, runId, [`post:${w.open}`], { title: "Home request reminder", body: "Original body." }))
+    .toMatchObject({ ok: true, slug: "home-request-reminder", change: "added" });
+  // Retrying the exact same note in the same review is an idempotent no-op.
+  expect(await observe(t, w.communityId, runId, [`post:${w.open}`], { title: "  home request reminder  ", body: "Original body." }))
+    .toMatchObject({ ok: true, slug: "home-request-reminder", change: "changed" });
+  // Re-submitting with updated text updates the same note rather than cloning -2.
+  expect(await observe(t, w.communityId, runId, [`post:${w.open}`, `reply:${w.reply}`], { title: "Home request reminder", body: "Updated body." }))
+    .toMatchObject({ ok: true, slug: "home-request-reminder", change: "changed" });
+  const notes: any[] = await t.run((ctx: any) => ctx.db.query("communityNotes").collect());
+  expect(notes).toHaveLength(1);
+  expect(notes[0]).toMatchObject({ slug: "home-request-reminder", bodyMd: "Updated body." });
+});
+
 test("memory.md stays short and links only to notes that exist", async () => {
   const t = convexTest(schema, modules);
   const w = await world(t);
