@@ -58,11 +58,9 @@ export function KitPodRail(props: { session: unknown; communityId: string; pod: 
   useEffect(() => {
     if (asMember) { setEditing(null); setManaging(false); }
   }, [asMember]);
-  // Which of the foot's two things is open.
-  // It starts open on what needs the viewer: a payment that failed, or
-  // (for someone who can edit it) a pod that doesn't yet say what it's for.
-  const [foot, setFoot] = useState<"about" | "membership" | null>(() =>
-    pod.my_membership?.state === "payment_problem" ? "membership" : pod.can_edit && !pod.purpose ? "about" : null);
+  // Your membership (paying, leaving, payment problem) starts open when a
+  // payment needs attention, and toggles from the foot for enrolled members.
+  const [membershipOpen, setMembershipOpen] = useState(() => pod.my_membership?.state === "payment_problem");
   const act = async (key: string, work: () => Promise<void>) => {
     if (busy) return;
     setBusy(key);
@@ -160,7 +158,7 @@ export function KitPodRail(props: { session: unknown; communityId: string; pod: 
         )) : <PanelPeople names={names} max={5} />}
       </PanelPart>
     )],
-    ["about", foot === "about" ? foot === "about" ? (
+    ["about", (
       <Sec label="About this pod">
         {editing ? (
           <div className={cx("podform")} style={{ marginTop: 0 }}>
@@ -215,8 +213,8 @@ export function KitPodRail(props: { session: unknown; communityId: string; pod: 
           </>
         )}
       </Sec>
-    ) : null : null],
-    ["membership", foot === "membership" && mine ? (
+    )],
+    ["membership", membershipOpen && mine ? (
       <Sec label="Your membership">
         <p className={cx("sub")}>
           {mine.state === "added" ? "You're in."
@@ -248,10 +246,11 @@ export function KitPodRail(props: { session: unknown; communityId: string; pod: 
     <KitApp view="wins" part="rail">
       <Rail index={1} label="About this pod">
         {settled ? parts.map(([key, part]) => <Fragment key={key}>{part}</Fragment>) : null}
-        <div className={cx("railfoot")}>
-          <button type="button" aria-expanded={foot === "about"} onClick={() => setFoot(foot === "about" ? null : "about")}>About this pod</button>
-          {mine ? <button type="button" aria-expanded={foot === "membership"} onClick={() => setFoot(foot === "membership" ? null : "membership")}>Your membership</button> : null}
-        </div>
+        {mine ? (
+          <div className={cx("railfoot")}>
+            <button type="button" aria-expanded={membershipOpen} onClick={() => setMembershipOpen((open) => !open)}>Your membership</button>
+          </div>
+        ) : null}
       </Rail>
     </KitApp>
   );
