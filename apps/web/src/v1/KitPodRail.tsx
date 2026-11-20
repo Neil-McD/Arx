@@ -21,6 +21,7 @@ import { Btn, KitApp, Rail, Sec, cx } from "./kit";
 import { BriefPart, usePlaceBriefRead } from "./KitBrief";
 import { resolveAuthSubject, type AuthSessionLike } from "../../../../shared/authSession";
 import { useLiveAnswer } from "../../../../shared/liveQuery";
+import { UserAvatar } from "../../../../shared/UserAvatar";
 import { KitPodCall } from "./KitPodCall";
 import { KitPodKnowledge } from "./KitPodKnowledge";
 import { PanelAction, PanelLine, PanelPart, PanelPeople, usePanelSettled } from "./KitPanel";
@@ -122,7 +123,7 @@ export function KitPodRail(props: { session: unknown; communityId: string; pod: 
   // looked at rarely: two links at the foot open them in place. Each part
   // keeps its own key, so one coming or going never resets a draft in
   // another.
-  const names = pod.members.map((member) => member.name);
+  const people = pod.members.map((member) => ({ id: member.user_id, name: member.name, avatarUrl: member.avatar_url ?? null }));
   const parts = ([
     ["requests", pod.can_manage && pod.requests.length ? (
       <div className={cx("needs")}>
@@ -147,6 +148,16 @@ export function KitPodRail(props: { session: unknown; communityId: string; pod: 
         action={pod.can_manage && pod.members.length ? <PanelAction expanded={managing} onClick={() => setManaging(!managing)}>{managing ? "Done" : "Manage"}</PanelAction> : null}>
         {!pod.members.length ? <PanelLine dim>No one yet</PanelLine> : managing ? pod.members.map((member) => (
           <div key={member.user_id} className={cx("ln")}>
+            <span className={cx("av s")} title={member.name}>
+              <UserAvatar
+                className="community-dm-kit-avatar"
+                readyClassName="has-image"
+                name={member.name}
+                imageUrl={member.avatar_url ?? null}
+                alt=""
+                fallback={<span>{member.name.trim().charAt(0).toUpperCase() || "?"}</span>}
+              />
+            </span>
             <span className={cx("t")}>{member.name}{member.is_host ? " · host" : ""}</span>
             {member.payment ? <em>{memberTag(member.payment)}</em> : null}
             {pod.can_edit ? (
@@ -155,7 +166,7 @@ export function KitPodRail(props: { session: unknown; communityId: string; pod: 
               </PanelAction>
             ) : null}
           </div>
-        )) : <PanelPeople names={names} max={5} />}
+        )) : <PanelPeople people={people} max={5} />}
       </PanelPart>
     )],
     ["about", (

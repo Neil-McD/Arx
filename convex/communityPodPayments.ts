@@ -94,7 +94,7 @@ export const savePodPrice = mutation({
       ? { priceAmountBaseUnits: amount, priceCurrency: "usd", ...(sameAmount ? {} : { providerPriceId: undefined }) }
       : { priceAmountBaseUnits: undefined, providerPriceId: undefined };
     if (record) await ctx.db.patch(record._id, { ...patch, updatedAt: nowMs });
-    else await ctx.db.insert("communityPods", { communityId: args.communityId, channelId: args.channelId, purpose: "", ...patch, createdAt: nowMs, updatedAt: nowMs } as any);
+    else await ctx.db.insert("communityPods", { communityId: args.communityId, channelId: args.channelId, purpose: "", visibility: "listed", ...patch, createdAt: nowMs, updatedAt: nowMs } as any);
     return null;
   },
 });
@@ -111,7 +111,7 @@ export const podCheckoutConfigInternal = internalQuery({
     const channel = await podRoom(ctx, args.communityId, args.channelId);
     const record = await podRecord(ctx, args.communityId, args.channelId);
     const price = podPriceOf(record);
-    if (!record || record.visibility !== "listed" || !price) throw new Error("community_pod_not_paid");
+    if (!record || record.visibility === "hidden" || !price) throw new Error("community_pod_not_paid");
     const grants = await activeGrants(ctx, args.channelId);
     if (grants.some((row: any) => row.principalKey === `user:${normalizeIdValue(args.userId)}`)) throw new Error("already_in_pod");
     if (typeof record.seats === "number" && grants.length >= record.seats) throw new Error("community_pod_full");

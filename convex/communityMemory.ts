@@ -264,8 +264,42 @@ export const observeCommunityMemoryInternal = internalMutation({
       return { ok: true, slug: note.slug, title, change: "changed" };
     }
 
-    if (run.added.length >= MEMORY_NEW_NOTES_PER_RUN) return refuse(ctx, run, title, "run_note_limit");
     const existing = await notesByUpdated(ctx, scope).take(COMMUNITY_NOTES_MAX_PER_COMMUNITY + 1);
+    // Deduplicate: if a guide-authored note in this scope already has the exact
+    // same normalized title (for example, when a review retries memory.apply on
+    // a follow-up step), update it in place instead of cloning a -2 duplicate.
+    const normalizedTitleKey = title.toLowerCase();
+    const duplicate = existing.find(
+      (row: any) =>
+        noteAuthorKind(row) === "guide" &&
+        (normalizeCommunityNoteTitle(String(row.title ?? "")) ?? "").toLowerCase() === normalizedTitleKey,
+    );
+    if (duplicate) {
+      const sameRefs =
+        Array.isArray(duplicate.evidenceRefs) &&
+        duplicate.evidenceRefs.length === refs.length &&
+        refs.every((ref, index) => duplicate.evidenceRefs[index] === ref);
+      const sameFiling =
+        (!("aboutLessonId" in filed) || String(duplicate.aboutLessonId ?? "") === String(filed.aboutLessonId ?? "")) &&
+        (!("subject" in filed) || (duplicate.subject ?? undefined) === filed.subject);
+      if (duplicate.bodyMd === body && sameRefs && sameFiling) {
+        return { ok: true, slug: duplicate.slug, title: duplicate.title, change: "changed" };
+      }
+      await insertRevision(ctx, scope, {
+        communityId: args.communityId, slug: duplicate.slug, change: "changed", runId: run._id, createdAt: args.nowMs,
+        ...(duplicate.lastRunId ? { previousRunId: duplicate.lastRunId } : {}),
+        before: { title: duplicate.title, bodyMd: duplicate.bodyMd, source: duplicate.source, authorKind: "guide", evidenceRefs: duplicate.evidenceRefs ?? [] },
+      });
+      await ctx.db.patch(duplicate._id, {
+        title, bodyMd: body, searchText: buildCommunityNoteSearchText({ title, bodyMd: body }),
+        evidenceRefs: refs, lastRunId: run._id, updatedAt: args.nowMs,
+        ...filed,
+      });
+      await ctx.db.patch(run._id, { changed: [...new Set([...run.changed, duplicate.slug])] });
+      return { ok: true, slug: duplicate.slug, title, change: "changed" };
+    }
+
+    if (run.added.length >= MEMORY_NEW_NOTES_PER_RUN) return refuse(ctx, run, title, "run_note_limit");
     if (existing.length >= COMMUNITY_NOTES_MAX_PER_COMMUNITY) return refuse(ctx, run, title, "notes_full");
     const taken = new Set<string>(existing.map((row: any) => row.slug));
     const base = communityNoteSlug(title);

@@ -273,7 +273,14 @@ function PodPitch(props: WebCommunityPodsSectionProps & { podSlug: string; inlin
         </PanelPart>
       ) : null}
       {page.hosts.length ? (
-        <PanelPart label="Hosted by"><PanelPeople names={page.hosts} /></PanelPart>
+        <PanelPart label="Hosted by">
+          <PanelPeople
+            names={page.hosts}
+            people={page.host_people?.length
+              ? page.host_people.map((host) => ({ id: host.user_id, name: host.name, avatarUrl: host.avatar_url ?? null }))
+              : undefined}
+          />
+        </PanelPart>
       ) : null}
       {note ? <p className={cx("sub")} role="status">{note}</p> : null}
       {error ? <p className={cx("bad")} role="alert">{error}</p> : null}
@@ -396,14 +403,14 @@ function PodsList(props: WebCommunityPodsSectionProps) {
   const hiddenPreviewPods = props.asMember
     ? previewPods.filter((p) => p.visibility === "hidden" && !pods.some((m) => m.channel_id === p.channel_id))
     : [];
-  // If the host turned on Member View while looking at a hidden pod's URL, show its
-  // inside-member landing instead of "This pod isn't here."
-  const hiddenPodInAddress = props.asMember && props.podSlug
-    ? hiddenPreviewPods.find((p) => p.slug === props.podSlug) ?? null
-    : null;
+  // In Member View, a hidden pod isn't shown to outside members at all —
+  // never leave its inside landing panel open on the right.
+  const isHiddenPodInAddress = Boolean(
+    props.asMember && props.podSlug && hiddenPreviewPods.some((p) => p.slug === props.podSlug),
+  );
   // The pod shown is read from the address and the lists (podShown).
-  const shown = hiddenPodInAddress
-    ? { slug: hiddenPodInAddress.slug, kind: "landing" as const }
+  const shown = isHiddenPodInAddress
+    ? null
     : podShown({
         podSlug: props.podSlug,
         mine: state ? pods.map((pod) => pod.slug) : null,
@@ -414,7 +421,7 @@ function PodsList(props: WebCommunityPodsSectionProps) {
       });
   const selected = shown?.slug ?? null;
   const selectedMine = shown?.kind === "landing"
-    ? (pods.find((pod) => pod.slug === shown.slug) ?? hiddenPodInAddress)
+    ? (pods.find((pod) => pod.slug === shown.slug) ?? null)
     : null;
   // Picking a pod is a step to its address; with no right column, a pod you're
   // in opens its room.
