@@ -778,7 +778,7 @@ export function InteractionContent(
 const RASTER_EXT = /\.(png|jpe?g|gif|webp|avif)$/i;
 const MIME_BY_EXT: Record<string, string> = { jpg: "image/jpeg", jpeg: "image/jpeg", gif: "image/gif", webp: "image/webp", avif: "image/avif" };
 let cacheSub: string | null = null;
-const imgCache = new Map<string, string>();
+const imgCache = new Map<string, { url: string; at: number }>();
 const imgPending = new Map<string, Promise<string>>();
 const imgRefs = new Map<string, number>();
 
@@ -794,20 +794,23 @@ export function isProtectedInlineImageAttachment(
 
 function syncProtectedImgCache(nextSub: string | null) {
   if (cacheSub === nextSub) return;
-  for (const url of imgCache.values()) { try { URL.revokeObjectURL(url); } catch { /* ignore */ } }
+  for (const entry of imgCache.values()) { try { URL.revokeObjectURL(entry.url); } catch { /* ignore */ } }
   imgCache.clear();
   imgPending.clear();
   imgRefs.clear();
   cacheSub = nextSub;
 }
 
-function evictUnusedProtectedImages() {
+function evictUnusedProtectedImages(keepKey?: string) {
   if (imgCache.size <= 160) return;
-  for (const [k, u] of imgCache.entries()) {
+  const now = Date.now();
+  for (const [k, entry] of imgCache.entries()) {
     if (imgCache.size <= 160) break;
-    if ((imgRefs.get(k) ?? 0) > 0) continue;
+    // Never revoke the newly inserted key, any mounted image, or a freshly fetched
+    // entry that React has not yet had a tick to pin via its mount effect.
+    if (k === keepKey || (imgRefs.get(k) ?? 0) > 0 || now - entry.at < 10_000) continue;
     imgCache.delete(k);
-    try { URL.revokeObjectURL(u); } catch { /* ignore */ }
+    try { URL.revokeObjectURL(entry.url); } catch { /* ignore */ }
   }
 }
 
@@ -815,7 +818,7 @@ function loadProtectedImageUrl(session: unknown, sub: string, attachment: Commun
   syncProtectedImgCache(sub);
   const key = `${sub}:${attachment.id}`;
   const hit = imgCache.get(key);
-  if (hit) { imgCache.delete(key); imgCache.set(key, hit); return Promise.resolve(hit); }
+  if (hit) { imgCache.delete(key); imgCache.set(key, hit); return Promise.resolve(hit.url); }
   const inflight = imgPending.get(key);
   if (inflight) return inflight;
   const task = downloadCloudCommunityChatAttachment({ session, attachmentId: attachment.id })
@@ -825,8 +828,8 @@ function loadProtectedImageUrl(session: unknown, sub: string, attachment: Commun
       const ext = RASTER_EXT.exec(attachment.name)?.[1]?.toLowerCase() ?? "";
       const mime = raw.startsWith("image/") && !raw.includes("svg") ? raw : (MIME_BY_EXT[ext] ?? "image/png");
       const url = URL.createObjectURL(new Blob([bytes], { type: mime }));
-      imgCache.set(key, url);
-      evictUnusedProtectedImages();
+      imgCache.set(key, { url, at: Date.now() });
+      evictUnusedProtectedImages(key);
       return url;
     })
     .finally(() => { imgPending.delete(key); });
@@ -901,7 +904,7 @@ export function InteractionAttachments(props: {
   const readCached = (sub: string | null) => {
     syncProtectedImgCache(sub);
     const hits: Record<string, string> = {};
-    if (sub) for (const a of protectedImages) { const u = imgCache.get(`${sub}:${a.id}`); if (u) hits[a.id] = u; }
+    if (sub) for (const a of protectedImages) { const hit = imgCache.get(`${sub}:${a.id}`); if (hit) hits[a.id] = hit.url; }
     return hits;
   };
   const [resolvedUrls, setResolvedUrls] = useState<Record<string, string>>(() => readCached(authSubject));
