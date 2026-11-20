@@ -81,7 +81,7 @@ export function KitChannelRail(props: {
                 {faces.map((face) => {
                   const name = String(face.display_name ?? "Member");
                   return (
-                    <span key={face.user_id} className={cx("av xs")} title={name}>
+                    <span key={face.user_id} className={cx("av s")} title={name}>
                       <UserAvatar className="community-dm-kit-avatar" readyClassName="has-image" name={name} imageUrl={face.avatar_url} alt=""
                         fallback={<span>{getInitials(name)}</span>} fallbackStyle={{ backgroundColor: getAvatarColor(face.user_id) }} />
                     </span>

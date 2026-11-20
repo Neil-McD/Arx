@@ -68,3 +68,111 @@ describe("courses pager and pod rail button affordance", () => {
     expect(navSurface).toContain("communityShell.isInPodRoom");
   });
 });
+
+describe("next slice: pods dropdown, pod knowledge cleanup, real avatars, clickable Home event, Home ghost join request", () => {
+  it("caps the Linear-style left-nav pods list at 3 and rolls overflow unread dots up cleanly", async () => {
+    const { selectNavPods, NAV_PODS_MAX } = await import("../shared/podsAttentionDot");
+    expect(NAV_PODS_MAX).toBe(3);
+    const channels = [
+      { id: "g", slug: "general", name: "General", is_general: true, position: 0, access_mode: "all_members" as const },
+      { id: "p1", slug: "pod-1", name: "Pod 1", is_general: false, position: 1, access_mode: "restricted" as const },
+      { id: "p2", slug: "pod-2", name: "Pod 2", is_general: false, position: 2, access_mode: "restricted" as const },
+      { id: "p3", slug: "pod-3", name: "Pod 3", is_general: false, position: 3, access_mode: "restricted" as const },
+      { id: "p4", slug: "pod-4", name: "Pod 4", is_general: false, position: 4, access_mode: "restricted" as const },
+    ];
+    const picked = selectNavPods({
+      channels,
+      indicators: {
+        "pod-1": { chat: true, mentions: false },
+        "pod-4": { chat: false, mentions: true },
+      },
+      openSlug: null,
+    });
+    expect(picked.shown.map((p) => p.slug)).toEqual(["pod-1", "pod-2", "pod-3"]);
+    expect(picked.overflowDot).toBe("mention");
+    expect(picked.allDot).toBe("mention");
+
+    const openFourth = selectNavPods({
+      channels,
+      indicators: {
+        "pod-1": { chat: true, mentions: false },
+        "pod-4": { chat: false, mentions: true },
+      },
+      openSlug: "pod-4",
+    });
+    expect(openFourth.overflowDot).toBe("none");
+    expect(openFourth.allDot).toBe("quiet");
+
+    const none = selectNavPods({
+      channels: [channels[0]],
+      indicators: {},
+      openSlug: null,
+    });
+    expect(none.shown).toEqual([]);
+    expect(none.allDot).toBe("none");
+
+    // Owners/admins who manage pods without belonging to them (is_pod_member: false)
+    // must not see those rooms in their "Your pods" sidebar shortcuts.
+    const managerWithOneActualPod = selectNavPods({
+      channels: [
+        { id: "m1", slug: "managed-only-1", name: "Managed 1", is_general: false, position: 1, access_mode: "restricted" as const, is_pod_member: false },
+        { id: "m2", slug: "managed-only-2", name: "Managed 2", is_general: false, position: 2, access_mode: "restricted" as const, is_pod_member: false },
+        { id: "m3", slug: "my-pod", name: "My Pod", is_general: false, position: 3, access_mode: "restricted" as const, is_pod_member: true },
+      ],
+      indicators: { "managed-only-1": { chat: false, mentions: true } },
+      openSlug: null,
+    });
+    expect(managerWithOneActualPod.shown.map((p) => p.slug)).toEqual(["my-pod"]);
+    expect(managerWithOneActualPod.overflowDot).toBe("mention");
+  });
+
+  it("renders real profile photos in PanelPeople at 28px (.av.s) and makes PanelNext clickable without nesting action links", async () => {
+    const { renderToStaticMarkup } = await import("react-dom/server");
+    const { PanelNext, PanelPeople } = await import("../apps/web/src/v1/KitPanel");
+
+    const peopleHtml = renderToStaticMarkup(React.createElement(PanelPeople, {
+      people: [
+        { id: "u1", name: "Rashid Ali", avatarUrl: "https://cdn.example.com/rashid.png" },
+        { id: "u2", name: "Neil McDevitt", avatarUrl: null },
+      ],
+    }));
+    expect(peopleHtml).toContain('title="Rashid Ali"');
+    expect(peopleHtml).toContain('data-image-state="loading"');
+    expect(peopleHtml).toContain('title="Neil McDevitt"');
+    expect(peopleHtml).toContain('data-image-state="empty"');
+    expect(peopleHtml).toContain("Rashid, Neil");
+    expect(peopleHtml).toContain("_s_");
+
+    const nextHtml = renderToStaticMarkup(React.createElement(PanelNext, {
+      title: "Group Call",
+      sub: "5:00 PM · Weekly",
+      onClick: () => {},
+      ariaLabel: "Open Group Call in Events",
+      action: React.createElement("a", { href: "https://meet.example.com" }, "Join"),
+    }));
+    expect(nextHtml).toContain("Open Group Call in Events");
+    expect(nextHtml).toContain("https://meet.example.com");
+    // Join link must remain a sibling outside the <button>, never nested inside it.
+    expect(nextHtml).toMatch(/<\/button><a href="https:\/\/meet\.example\.com"/);
+  });
+
+  it("keeps Pod knowledge notes collapsed behind View notes by default, hides hidden-pod right panels in Member View, and trusts empty live joinReview on Home", () => {
+    const podKnowledge = readFileSync(new URL("../apps/web/src/v1/KitPodKnowledge.tsx", import.meta.url), "utf8");
+    const podLanding = readFileSync(new URL("../apps/web/src/v1/KitPodLanding.tsx", import.meta.url), "utf8");
+    const podsSection = readFileSync(new URL("../apps/web/src/components/WebCommunityPodsSection.tsx", import.meta.url), "utf8");
+    const homeSection = readFileSync(new URL("../apps/web/src/components/WebCommunityHomeSection.tsx", import.meta.url), "utf8");
+    const nextEvent = readFileSync(new URL("../apps/web/src/v1/KitNextEvent.tsx", import.meta.url), "utf8");
+    const homeRail = readFileSync(new URL("../apps/web/src/v1/KitHomeRail.tsx", import.meta.url), "utf8");
+    const channelRail = readFileSync(new URL("../apps/web/src/v1/KitChannelRail.tsx", import.meta.url), "utf8");
+
+    expect(podKnowledge).toContain("useState(false)");
+    expect(podKnowledge).toContain("View notes");
+    expect(podLanding).not.toContain("PanelLearned");
+    expect(podsSection).toContain("isHiddenPodInAddress");
+    expect(podsSection).toContain("page.host_people");
+    expect(homeSection).toContain("hasLoadedJoinReview");
+    expect(nextEvent).toContain("onClick={props.onOpenEvents}");
+    expect(homeRail).toContain('cx("av s")');
+    expect(channelRail).toContain('cx("av s")');
+  });
+});
