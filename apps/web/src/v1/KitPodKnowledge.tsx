@@ -19,7 +19,7 @@ import { useLiveAnswer } from "../../../../shared/liveQuery";
 
 type Draft = { slug: string | null; title: string; text: string };
 
-export function KitPodKnowledge(props: { session: unknown; communityId: string; channelId: string }) {
+export function KitPodKnowledge(props: { session: unknown; communityId: string; channelId: string; asMember?: boolean }) {
   const [state, setState] = useState<CloudPodNotes | null>(null);
   const [open, setOpen] = useState<string | null>(null);
   const [draft, setDraft] = useState<Draft | null>(null);
@@ -28,6 +28,9 @@ export function KitPodKnowledge(props: { session: unknown; communityId: string; 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const call = { session: props.session, communityId: props.communityId, channelId: props.channelId };
+  useEffect(() => {
+    if (props.asMember) { setDraft(null); setConfirm(null); }
+  }, [props.asMember]);
 
   // Answers are kept only for the pod still on screen: switching pods clears
   // the list at once, and a late answer for the previous pod is dropped.
@@ -63,13 +66,15 @@ export function KitPodKnowledge(props: { session: unknown; communityId: string; 
   const [now] = useState(() => Date.now());
 
   if (!state) return null;
+  const canWrite = state.can_write && !props.asMember;
+  const canPublish = state.can_publish && !props.asMember;
   const words = filter.trim().toLowerCase();
   const notes = words ? state.notes.filter((note) => `${note.title}\n${note.body_md}`.toLowerCase().includes(words)) : state.notes;
-  if (!state.notes.length && !state.can_write) return null;
+  if (!state.notes.length && !canWrite) return null;
 
   return (
     <PanelPart label="What this pod knows" fact={state.notes.length ? String(state.notes.length) : null}
-      action={state.can_write && !draft ? (
+      action={canWrite && !draft ? (
         <PanelAction icon label="New note" onClick={() => { setDraft({ slug: null, title: "", text: "" }); setError(null); }}><Icon name="plus" /></PanelAction>
       ) : null}>
       {draft ? (
@@ -127,11 +132,11 @@ export function KitPodKnowledge(props: { session: unknown; communityId: string; 
                         <Btn small txt onClick={() => setConfirm(null)}>Cancel</Btn>
                       </span>
                     </div>
-                  ) : state.can_write || state.can_publish ? (
+                  ) : canWrite || canPublish ? (
                     <div className={cx("acts")} style={{ marginTop: 6 }}>
-                      {state.can_write ? <Btn small txt onClick={() => setDraft({ slug: note.slug, title: note.title, text: note.body_md })}>Edit</Btn> : null}
-                      {state.can_publish ? <Btn small txt onClick={() => setConfirm({ slug: note.slug, what: "publish" })}>{note.published ? "Update shared copy" : "Share with community"}</Btn> : null}
-                      {state.can_write ? <Btn small txt onClick={() => setConfirm({ slug: note.slug, what: "delete" })}>Delete</Btn> : null}
+                      {canWrite ? <Btn small onClick={() => setDraft({ slug: note.slug, title: note.title, text: note.body_md })}>Edit</Btn> : null}
+                      {canPublish ? <Btn small onClick={() => setConfirm({ slug: note.slug, what: "publish" })}>{note.published ? "Update shared copy" : "Share with community"}</Btn> : null}
+                      {canWrite ? <Btn small onClick={() => setConfirm({ slug: note.slug, what: "delete" })}>Delete</Btn> : null}
                     </div>
                   ) : null}
                 </>
