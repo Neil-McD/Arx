@@ -49,8 +49,13 @@ the guide) is told (shared/operationCatalog.ts; Nov 19): changing a role,
 removing or banning members, removing other people's posts, publishing the
 handbook, changing the guide's instructions, opening the community to
 everyone, and publishing, unpublishing or deleting a published course
-(`polynet_publish_course`, `polynet_delete_published`; a course batch still
-builds in draft only). Everything else is the AI app's own call, by its approval settings
+(`polynet_publish_course`, `polynet_delete_published`). Courses are built in
+draft: a person's own AI gets one tool per job (`polynet_create_course`,
+`polynet_add_lesson`, `polynet_edit_lesson`, `polynet_edit_course`,
+`polynet_order_lessons`, `polynet_order_courses`, `polynet_delete_draft`),
+because OpenAI's plugin review requires every operation to be its own tool;
+the guide keeps the one-batch `polynet_change_courses`. Each job runs through
+the same batch path with the same checks. Everything else is the AI app's own call, by its approval settings
 and each tool's labels; a person's own posts, replies, direct-message replies
 and deleting their own posts included. This is asked by Polynet itself, not
 trusted to the AI app. The tool

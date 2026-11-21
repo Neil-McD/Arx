@@ -3056,7 +3056,7 @@ async function askPersonFirst(args: {
         if (found.live === callInput.published) return canonicalError("nothing_to_change", found.live ? "That course is already published." : "That course is already a draft.");
         question = coursePublishQuestion({ name: found.name, publish: callInput.published === true, lessons: found.lessons });
       } else {
-        if (!found.live) return canonicalError("not_published", "That is a draft: delete it with polynet_change_courses, no question needed.");
+        if (!found.live) return canonicalError("not_published", "That is a draft: delete it with polynet_delete_draft (the guide: a delete in polynet_change_courses), no question needed.");
         question = courseDeleteQuestion(found);
       }
     } else {

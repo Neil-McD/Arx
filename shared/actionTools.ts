@@ -113,6 +113,15 @@ function tool(name: string, catalog: string, title: string, description: string,
 // A post's words, and the pictures when the guide was given some. The
 // pictures go through to the executor from either door; it refuses them from
 // anyone but the guide in a private talk.
+// A course change as the one-change batch the executor already runs.
+const course = (a: Args, operation: Record<string, unknown>): Translated =>
+  write(`${root(a.community)}builder/resources/`, "create", { summary: "", operations: [operation] });
+const descriptionOf = (a: Args) => (a.description !== undefined ? { description_md: a.description } : {});
+const bodyOf = (a: Args) => (a.body !== undefined ? { body_md: a.body } : {});
+const COURSE: PlatformOperationJsonSchema = { type: "string", minLength: 1, maxLength: 180, description: "The course's id from builder/resources/." };
+const LESSON: PlatformOperationJsonSchema = { type: "string", minLength: 1, maxLength: 180, description: "The lesson's id from builder/resources/." };
+const UPDATED_AT: PlatformOperationJsonSchema = { type: "number", minimum: 0, description: "Its updated_at from builder/resources/, so a change made since is not overwritten." };
+
 const postContent = (a: Args) => ({ text: a.text, ...(a.pictures !== undefined ? { pictures: a.pictures } : {}) });
 
 // ---- the tools
@@ -265,7 +274,7 @@ export const ACTION_TOOLS: ActionTool[] = [
       published: { type: "boolean", description: "true publishes it, false makes it a draft again." } }, ["community", "course", "published"],
     (a) => call("community.course.publish", a, { course: a.course, published: a.published })),
   tool("polynet_delete_published", "community.course.delete", "Delete a published course or lesson",
-    "Delete a published course with its lessons, or one lesson in a published course. Members lose it, and it can't be brought back. Give course or lesson, not both; drafts are deleted with polynet_change_courses. The person is asked first, every time.",
+    "Delete a published course with its lessons, or one lesson in a published course. Members lose it, and it can't be brought back. Give course or lesson, not both; drafts are deleted with polynet_delete_draft. The person is asked first, every time.",
     { community: COMMUNITY, course: { type: "string", minLength: 1, maxLength: 180, description: "The course's id from builder/resources/." },
       lesson: { type: "string", minLength: 1, maxLength: 180, description: "The lesson's id from builder/resources/." } }, ["community"],
     (a) => call("community.course.delete", a, { ...only(a, ["course", "lesson"]) })),
@@ -281,7 +290,50 @@ export const ACTION_TOOLS: ActionTool[] = [
     "reorder_pages (module_id, resource_ids: every lesson of that course in order); reorder_modules (module_ids: every course in order); " +
     "delete_page (resource_id, expected_updated_at) and delete_category (module_id, expected_updated_at), only in a draft course." } },
     ["community", "operations"],
-    (a) => write(`${root(a.community)}builder/resources/`, "create", { summary: a.summary ?? "", operations: a.operations })),
+    (a) => write(`${root(a.community)}builder/resources/`, "create", { summary: a.summary ?? "", operations: a.operations }), "guide"),
+  // A person's own AI gets one tool per job (OpenAI's plugin review asks that
+  // every operation be its own tool). Each runs as a one-change batch through
+  // the same path as polynet_change_courses, with the same checks.
+  tool("polynet_create_course", "polynet_write:builder", "Make a course",
+    "Make a new course. It is a draft: members see nothing of it until it is published (polynet_publish_course). The answer gives the course's id, for adding lessons.",
+    { community: COMMUNITY, name: TEXT("The course's name.", 180), description: { type: ["string", "null"], maxLength: 1_200, description: "What the course is for, in markdown." } },
+    ["community", "name"], (a) => course(a, { op: "create_module", name: a.name, ...descriptionOf(a) }), "own_ai"),
+  tool("polynet_add_lesson", "polynet_write:builder", "Add a lesson",
+    "Add a lesson to a course. In a published course members see it at once; the answer says whether they can.",
+    { community: COMMUNITY, course: COURSE, title: TEXT("The lesson's title.", 180), body: { type: ["string", "null"], maxLength: 20_000, description: "The lesson, in markdown." } },
+    ["community", "course", "title"], (a) => course(a, { op: "create_page", module_id: a.course, title: a.title, ...bodyOf(a) }), "own_ai"),
+  tool("polynet_edit_lesson", "polynet_write:builder", "Change a lesson",
+    "Change a lesson's title, words or links, or move it to another course. Give only what changes.",
+    { community: COMMUNITY, lesson: LESSON, updated_at: UPDATED_AT, title: TEXT("The new title.", 180),
+      body: { type: ["string", "null"], maxLength: 20_000, description: "The new words, in markdown." },
+      course: { ...COURSE, description: "Move it to this course: the course's id from builder/resources/." },
+      lesson_links: { type: "array", maxItems: 12, items: { type: "object", additionalProperties: false, required: ["title", "url"],
+        properties: { title: { type: "string", minLength: 1, maxLength: 120 }, url: { type: "string", minLength: 1, maxLength: 2_048 } } },
+        description: "The lesson's links, replacing the ones it has. A lesson's files are added and removed by a person in the app." } },
+    ["community", "lesson", "updated_at"], (a) => course(a, { op: "edit_page", resource_id: a.lesson, expected_updated_at: a.updated_at,
+      ...only(a, ["title", "lesson_links"]), ...bodyOf(a), ...(a.course !== undefined ? { module_id: a.course } : {}) }), "own_ai"),
+  tool("polynet_edit_course", "polynet_write:builder", "Change a course",
+    "Change a course's name or description. Give only what changes.",
+    { community: COMMUNITY, course: COURSE, updated_at: UPDATED_AT, name: TEXT("The new name.", 180),
+      description: { type: ["string", "null"], maxLength: 1_200, description: "The new description, in markdown." } },
+    ["community", "course", "updated_at"], (a) => course(a, { op: "edit_module", module_id: a.course, expected_updated_at: a.updated_at,
+      ...only(a, ["name"]), ...descriptionOf(a) }), "own_ai"),
+  tool("polynet_order_lessons", "polynet_write:builder", "Put a course's lessons in order",
+    "Set the order of a course's lessons: list every lesson of the course, in the order members follow.",
+    { community: COMMUNITY, course: COURSE, lessons: { type: "array", minItems: 1, maxItems: 500, items: { type: "string", minLength: 1, maxLength: 180 },
+      description: "Every lesson's id in the course, in order." } },
+    ["community", "course", "lessons"], (a) => course(a, { op: "reorder_pages", module_id: a.course, resource_ids: a.lessons }), "own_ai"),
+  tool("polynet_order_courses", "polynet_write:builder", "Put courses in order",
+    "Set the order members see courses in: list every course, in order.",
+    { community: COMMUNITY, courses: { type: "array", minItems: 1, maxItems: 500, items: { type: "string", minLength: 1, maxLength: 180 },
+      description: "Every course's id, in order." } },
+    ["community", "courses"], (a) => course(a, { op: "reorder_modules", module_ids: a.courses }), "own_ai"),
+  tool("polynet_delete_draft", "polynet_write:builder:delete", "Delete a draft course or lesson",
+    "Delete one lesson in a draft course, or a draft course with no lessons left (delete its lessons first). It can't be brought back. Give course or lesson, not both. What members can see is deleted with polynet_delete_published.",
+    { community: COMMUNITY, course: COURSE, lesson: LESSON, updated_at: UPDATED_AT }, ["community", "updated_at"],
+    (a) => course(a, a.lesson !== undefined
+      ? { op: "delete_page", resource_id: a.lesson, expected_updated_at: a.updated_at }
+      : { op: "delete_category", module_id: a.course, expected_updated_at: a.updated_at }), "own_ai"),
 ];
 
 // What is in the one list but has no named tool, and why.
@@ -290,7 +342,6 @@ export const NOT_PUBLISHED: Record<string, string> = {
   "polynet_read": "reading: its own general tool",
   "polynet_search": "reading: its own general tool",
   "polynet_list:messages": "reading: polynet_list on /messages/",
-  "polynet_write:builder:delete": "part of polynet_change_courses; deleting what members see is refused there",
   "community.presence.heartbeat": "that a person is here right now: only their own open site says so",
   "community.typing.set": "that a person is typing: only their own open site says so",
 };
@@ -369,16 +420,19 @@ export const ACTION_TOOLS_THAT_NEED_CARE = new Set([
   "polynet_save_handbook_draft", "polynet_rename_channel", "polynet_describe_channel",
   "polynet_create_event", "polynet_update_event", "polynet_cancel_event",
   "polynet_approve_join_requests", "polynet_decline_join_requests", "polynet_unban_members", "polynet_change_courses",
+  "polynet_add_lesson", "polynet_edit_lesson", "polynet_edit_course", "polynet_order_lessons", "polynet_order_courses",
 ]);
-// Tools whose effect leaves the chat by email (event reminders, the
-// "you're in" email): labelled as reaching the outside world.
-export const ACTION_TOOLS_THAT_EMAIL = new Set(["polynet_create_event", "polynet_update_event", "polynet_approve_join_requests"]);
+// Tools whose effect leaves the chat: by email (event reminders, the "you're
+// in" email), or to the public (a community's name, address and whether it is
+// listed show to visitors and change links already shared). Labelled as
+// reaching the outside world.
+export const ACTION_TOOLS_THAT_EMAIL = new Set(["polynet_create_event", "polynet_update_event", "polynet_approve_join_requests", "polynet_update_community"]);
 
 // Tools that make something new each time they run: calling one twice makes
 // two (unless the AI names the action with idempotency_key).
 export const ACTION_TOOLS_THAT_ADD = new Set([
   "polynet_post", "polynet_reply", "polynet_reply_message", "polynet_create_channel", "polynet_create_event",
-  "polynet_change_courses", "polynet_remember",
+  "polynet_change_courses", "polynet_create_course", "polynet_add_lesson", "polynet_remember",
 ]);
 
 // A named tool as an MCP tool. What asks every time, destroys, or is listed
