@@ -745,6 +745,16 @@ export const createCommunity = mutation({
       createdAt: nowMs,
       updatedAt: nowMs,
     });
+    await ctx.db.insert("communityBillingSummary", {
+      communityId,
+      mrrBaseUnits: 0,
+      mixedCurrency: false,
+      activePaidMembers: 0,
+      paidUserCount: 0,
+      plans: [],
+      computedAt: nowMs,
+      dirtyWhileRecomputing: false,
+    });
     await syncCommunityMemberSearchEntry(ctx, {
       communityId,
       userId: ownerId,

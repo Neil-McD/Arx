@@ -843,6 +843,7 @@ export default defineSchema({
     // Set once communityDailyAnalytics contains historical visit/join/member counts.
     analyticsRollupIndexedAt: v.optional(v.number()),
     analyticsRollupBackfillStartedAt: v.optional(v.number()),
+    analyticsRollupBackfillCutoffMs: v.optional(v.number()),
     // Durable activity marker for bounded memory metabolism. The revision is
     // incremented with each new canonical outcome; settlement clears pending
     // only when no newer outcome arrived during the sweep.
@@ -1217,10 +1218,12 @@ export default defineSchema({
     joinStarts: v.number(),
     newMembers: v.number(),
     mrrBaseUnits: v.optional(v.number()),
+    hasMrrSnapshot: v.optional(v.boolean()),
     updatedAt: v.number(),
   })
     .index("by_community_dayKey", ["communityId", "dayKey"])
-    .index("by_community_dayStartMs", ["communityId", "dayStartMs"]),
+    .index("by_community_dayStartMs", ["communityId", "dayStartMs"])
+    .index("by_community_hasMrr_dayStartMs", ["communityId", "hasMrrSnapshot", "dayStartMs"]),
 
   // Live billing and plan breakdown summary per community (communityAnalyticsRollups.ts),
   // refreshed asynchronously in bounded batches when marked stale.

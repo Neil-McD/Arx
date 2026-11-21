@@ -66,6 +66,7 @@ export async function applyAppGrants(ctx: any, communityId: any, userId: any, no
   if (active.length) {
     if (membership && communityMembershipRowIsActive(membership)) {
       // Already in: their tier may have changed.
+      await markCommunityBillingSummaryStale(ctx, communityId, nowMs);
       await memberAccessChanged(ctx, communityId, userId);
       return "in";
     }
@@ -78,6 +79,7 @@ export async function applyAppGrants(ctx: any, communityId: any, userId: any, no
   }
   if (!membership || !communityMembershipRowIsActive(membership)) return "ended";
   if (await otherBasis(ctx, community, membership)) {
+    await markCommunityBillingSummaryStale(ctx, communityId, nowMs);
     await memberAccessChanged(ctx, communityId, userId);
     return "kept_by_other_access";
   }

@@ -75,6 +75,7 @@ import { deleteCommunityPresenceForUser } from "./communityPresenceCore";
 import { communityIsActive } from "../shared/communityLifecycle";
 import { recordCriticalAuditEvent } from "./criticalAudit";
 import { markCommunityMemberViewCountsStale } from "./communityMemberRecords";
+import { analyticsDayBucket } from "./communityAnalyticsRollups";
 import { resolveUserProfileDisplayProjection } from "./userProfileProjection";
 
 type AnalyticsRangeValue = "7d" | "30d" | "90d" | "1y" | "all";
@@ -2490,9 +2491,9 @@ async function tryComputeCommunityAnalyticsFromRollups(ctx: any, args: {
     endMs: nowMs,
     bucket,
   });
-  const windowStartDayMs = startOfAnalyticsBucket(sinceMs, "day").getTime();
+  const windowStartDayMs = analyticsDayBucket(sinceMs).dayStartMs;
 
-  const [dailyRows, presenceRows] = await Promise.all([
+  const [dailyRows, openingMrrRow, presenceRows] = await Promise.all([
     ctx.db
       .query("communityDailyAnalytics" as any)
       .withIndex("by_community_dayStartMs", (q: any) =>
@@ -2507,6 +2508,16 @@ async function tryComputeCommunityAnalyticsFromRollups(ctx: any, args: {
         mrrBaseUnits?: number;
       }>
     >,
+    ctx.db
+      .query("communityDailyAnalytics" as any)
+      .withIndex("by_community_hasMrr_dayStartMs", (q: any) =>
+        q
+          .eq("communityId", args.communityId)
+          .eq("hasMrrSnapshot", true)
+          .lt("dayStartMs", windowStartDayMs),
+      )
+      .order("desc")
+      .first() as Promise<{ mrrBaseUnits?: number } | null>,
     ctx.db
       .query("communityPresence" as any)
       .withIndex("by_community_lastSeenAt", (q: any) =>
@@ -2575,7 +2586,19 @@ async function tryComputeCommunityAnalyticsFromRollups(ctx: any, args: {
 
   const mixedCurrency = Boolean(billingSummary.mixedCurrency);
   const currentMrr = mixedCurrency ? null : Number(billingSummary.mrrBaseUnits ?? 0);
-  let carriedMrr = 0;
+  const openingMrrFromRollup =
+    typeof openingMrrRow?.mrrBaseUnits === "number" && Number.isFinite(openingMrrRow.mrrBaseUnits)
+      ? openingMrrRow.mrrBaseUnits
+      : null;
+  let carriedMrr =
+    openingMrrFromRollup != null
+      ? openingMrrFromRollup
+      : revenueByBucket.size === 0 &&
+          currentMrr != null &&
+          currentMrr > 0 &&
+          Number(billingSummary.computedAt ?? 0) < windowStartDayMs
+        ? currentMrr
+        : 0;
   const revenueSeries = mixedCurrency
     ? []
     : bucketStarts.map((bucketStart, index) => {
