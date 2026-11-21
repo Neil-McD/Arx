@@ -378,10 +378,37 @@ describe("Wave 1.5 security & billing-race hardening", () => {
     });
     expect((await t.run((ctx) => ctx.db.get(w.payerMembershipId)) as any).state).toBe("active");
 
-    // 5. Subscription canceled/deleted at t=4000 -> stale active update at t=3500 is IGNORED,
-    // and non-restoring active update on the ended subscription at t=4500 is ALSO ignored.
+    // 5. Recoverable non-terminal ended state (e.g. Stripe paused/unpaid at t=3600)
+    // CAN resume when a genuinely newer active event arrives (t=3800), while older
+    // stale events (t=3500) are still ignored.
+    await sync("ended", {
+      preserveRiskRevocation: true,
+      isTerminalCancellation: false,
+      providerEventCreatedAt: NOW + 3600,
+      nowMs: NOW + 3600,
+    });
+    expect((await t.run((ctx) => ctx.db.get(w.payerMembershipId)) as any).state).toBe("lapsed");
+
+    const staleWhilePaused = await sync("active", {
+      preserveRiskRevocation: true,
+      providerEventCreatedAt: NOW + 3500,
+      nowMs: NOW + 3500,
+    });
+    expect(staleWhilePaused).toMatchObject({ ignored: true, reason: "community_subscription_event_stale" });
+    expect((await t.run((ctx) => ctx.db.get(w.payerMembershipId)) as any).state).toBe("lapsed");
+
+    await sync("active", {
+      preserveRiskRevocation: true,
+      providerEventCreatedAt: NOW + 3800,
+      nowMs: NOW + 3800,
+    });
+    expect((await t.run((ctx) => ctx.db.get(w.payerMembershipId)) as any).state).toBe("active");
+
+    // 6. Terminal Stripe cancellation at t=4000 -> stale active update at t=3900 is IGNORED,
+    // and non-restoring active update on the terminally canceled subscription at t=4500 is ALSO ignored.
     await sync("canceled", {
       preserveRiskRevocation: true,
+      isTerminalCancellation: true,
       providerEventCreatedAt: NOW + 4000,
       nowMs: NOW + 4000,
     });
@@ -389,8 +416,8 @@ describe("Wave 1.5 security & billing-race hardening", () => {
 
     const stale = await sync("active", {
       preserveRiskRevocation: true,
-      providerEventCreatedAt: NOW + 3500,
-      nowMs: NOW + 3500,
+      providerEventCreatedAt: NOW + 3900,
+      nowMs: NOW + 3900,
     });
     expect(stale).toMatchObject({ ignored: true, reason: "community_subscription_event_stale" });
     expect((await t.run((ctx) => ctx.db.get(w.payerMembershipId)) as any).state).toBe("lapsed");

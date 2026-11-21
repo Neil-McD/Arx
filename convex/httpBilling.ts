@@ -581,6 +581,7 @@ async function syncCommunitySubscriptionFromStripeSubscription(
   options?: {
     preserveRiskRevocation?: boolean;
     allowRiskRestoration?: boolean;
+    isTerminalCancellation?: boolean;
     forceStatus?: "active" | "past_due" | "cancel_at_period_end" | "ended";
     providerEventCreatedAt?: number;
   },
@@ -634,6 +635,9 @@ async function syncCommunitySubscriptionFromStripeSubscription(
       cancelAtPeriodEnd: Boolean((subscription as any)?.cancel_at_period_end),
       preserveRiskRevocation: options?.preserveRiskRevocation === true,
       allowRiskRestoration: options?.allowRiskRestoration === true,
+      isTerminalCancellation:
+        options?.isTerminalCancellation === true ||
+        String(subscription.status ?? "").trim().toLowerCase() === "canceled",
       providerEventCreatedAt,
       nowMs: providerEventCreatedAt,
     },
@@ -1516,7 +1520,9 @@ export function registerRuntimeBillingRoutes(
             subscription,
             {
               preserveRiskRevocation: true,
-              ...(event.type === "customer.subscription.deleted" ? { forceStatus: "ended" as const } : {}),
+              ...(event.type === "customer.subscription.deleted"
+                ? { forceStatus: "ended" as const, isTerminalCancellation: true }
+                : {}),
             },
           );
           if (!communityLifecycleResult.ignored) {
