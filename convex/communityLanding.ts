@@ -18,6 +18,7 @@ import { communityIsActive } from "../shared/communityLifecycle";
 import type { CommunityLike } from "./communityCore";
 import { resolveUserProfileDisplayProjection } from "./userProfileProjection";
 import { recordCommunityJoinStarted } from "./communityFunnelEvents";
+import { incrementCommunityDailyAnalytics } from "./communityAnalyticsRollups";
 import { cancelPendingCommunityJoinRequest } from "./communityJoinRequestCore";
 import { joinPublicCommunityInternal } from "./communityPublic";
 import { readCanonicalPublicAppOrigin } from "./publicAppUrl";
@@ -230,6 +231,7 @@ export const recordCommunityLandingVisit = mutation({
     await ctx.db.insert("communityAnalyticsEvents", {
       communityId: community._id, eventType: "funnel_visit", visitorKeyHash: visitorHash, createdAt: nowMs,
     });
+    await incrementCommunityDailyAnalytics(ctx, { communityId: community._id, nowMs, visitsDelta: 1 });
     return { ok: true };
   },
 });

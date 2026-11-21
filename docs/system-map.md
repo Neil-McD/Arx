@@ -548,12 +548,14 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
 
 - **Code:** `operatorAccess`, `operatorDashboard`, `operatorEntitlementsCore`,
   `operatorGrantUsageCore`, `operatorIntelligence`, `operatorSentryDiagnostics`,
+  `communityAnalyticsRollups` (daily community analytics rollups, live billing summaries, and paginated platform operator summaries),
   `platformDiagnostics`, `businessAnalytics*`, `distributionAttribution*` (cron;
   kept on purpose, Nov 7: it forwards sign-ups that arrive from Distribution
   Engineer, Neil's own product, and has had none yet),
   `criticalAudit`, `errorLogging`, `probe` (health check).
 - **Tables:** `operatorRoles`, `operatorGrantUsageCycles`, `platformDiagnosticEvents`,
-  `criticalAuditEvents`, `communityAnalyticsEvents`, `platformBusinessVisits`,
+  `criticalAuditEvents`, `communityAnalyticsEvents`, `communityDailyAnalytics`,
+  `communityBillingSummary`, `platformOperatorSummary`, `platformBusinessVisits`,
   `distributionAttributionDeliveries`.
 - **Contracts:** [platform-diagnostics-contract-v1.md](platform-diagnostics-contract-v1.md).
 

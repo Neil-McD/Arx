@@ -11,6 +11,7 @@ import {
 } from "./communityCore";
 import { syncCommunityMemberSearchEntry } from "./communityMemberSearch";
 import { markCommunityMemberViewCountsStale } from "./communityMemberRecords";
+import { incrementCommunityDailyAnalytics } from "./communityAnalyticsRollups";
 import { recordCommunityActivityEventBestEffort } from "./communityActivity";
 import { ensureCommunityPresenceBaseline } from "./communityPresenceCore";
 import { deleteCommunityJoinRequestByPair } from "./communityJoinRequestCore";
@@ -126,6 +127,13 @@ export async function activateCommunityMembershipCore(args: {
     nowMs: args.nowMs,
   });
   await markCommunityMemberViewCountsStale(args.ctx, args.communityId, args.nowMs);
+  if (!existing) {
+    await incrementCommunityDailyAnalytics(args.ctx, {
+      communityId: args.communityId,
+      nowMs: args.nowMs,
+      newMembersDelta: 1,
+    });
+  }
   await recordCommunityActivityEventBestEffort({
     ctx: args.ctx,
     communityId: args.communityId,

@@ -440,6 +440,7 @@ export default defineSchema({
     .index("by_actor_createdAt", ["actorUserId", "createdAt"])
     .index("by_community_createdAt", ["communityId", "createdAt"])
     .index("by_community_subject_createdAt", ["communityId", "subjectUserId", "createdAt"])
+    .index("by_createdAt", ["createdAt"])
     .index("by_providerObject", ["provider", "providerObjectId"]),
 
   platformDiagnosticEvents: defineTable({
@@ -551,7 +552,8 @@ export default defineSchema({
     .index("by_owner", ["ownerUserId"])
     .index("by_owner_status", ["ownerUserId", "status"])
     .index("by_mode_status", ["mode", "status"])
-    .index("by_community_status", ["communityId", "status"]),
+    .index("by_community_status", ["communityId", "status"])
+    .index("by_createdAt", ["createdAt"]),
 
   userStripeCustomers: defineTable({
     userId: v.id("users"),
@@ -703,7 +705,8 @@ export default defineSchema({
     .index("by_status_scheduledAt", ["status", "scheduledAt"])
     .index("by_dedupeKey", ["dedupeKey"])
     .index("by_recipientUserId", ["recipientUserId"])
-    .index("by_providerMessageId", ["providerMessageId"]),
+    .index("by_providerMessageId", ["providerMessageId"])
+    .index("by_createdAt", ["createdAt"]),
 
   emailDeliveries: defineTable({
     outboxId: v.optional(v.id("emailOutbox")),
@@ -714,7 +717,8 @@ export default defineSchema({
     createdAt: v.number(),
   })
     .index("by_outbox", ["outboxId"])
-    .index("by_providerMessageId", ["providerMessageId"]),
+    .index("by_providerMessageId", ["providerMessageId"])
+    .index("by_createdAt", ["createdAt"]),
 
 
   /* Member ontology ledger — docs/member-ontology-contract-v1.md.
@@ -836,6 +840,9 @@ export default defineSchema({
     // Set once communityMemberSearch contains all active members of this community.
     memberSearchIndexedAt: v.optional(v.number()),
     memberSearchBackfillStartedAt: v.optional(v.number()),
+    // Set once communityDailyAnalytics contains historical visit/join/member counts.
+    analyticsRollupIndexedAt: v.optional(v.number()),
+    analyticsRollupBackfillStartedAt: v.optional(v.number()),
     // Durable activity marker for bounded memory metabolism. The revision is
     // incremented with each new canonical outcome; settlement clears pending
     // only when no newer outcome arrived during the sweep.
@@ -1198,6 +1205,56 @@ export default defineSchema({
   })
     .index("by_community", ["communityId"])
     .index("by_staleAt", ["staleAt"]),
+
+  // Daily community analytics rollups (communityAnalyticsRollups.ts): compact
+  // UTC-day totals updated incrementally on visits, join starts, activations,
+  // and billing recomputes so Analytics reads 7-365 rows instead of raw history.
+  communityDailyAnalytics: defineTable({
+    communityId: v.id("communities"),
+    dayKey: v.string(),
+    dayStartMs: v.number(),
+    visits: v.number(),
+    joinStarts: v.number(),
+    newMembers: v.number(),
+    mrrBaseUnits: v.optional(v.number()),
+    updatedAt: v.number(),
+  })
+    .index("by_community_dayKey", ["communityId", "dayKey"])
+    .index("by_community_dayStartMs", ["communityId", "dayStartMs"]),
+
+  // Live billing and plan breakdown summary per community (communityAnalyticsRollups.ts),
+  // refreshed asynchronously in bounded batches when marked stale.
+  communityBillingSummary: defineTable({
+    communityId: v.id("communities"),
+    mrrBaseUnits: v.number(),
+    currency: v.optional(v.string()),
+    currencyDecimals: v.optional(v.number()),
+    mixedCurrency: v.boolean(),
+    activePaidMembers: v.number(),
+    paidUserCount: v.number(),
+    plans: v.array(
+      v.object({
+        key: v.string(),
+        name: v.string(),
+        members: v.number(),
+        mrr_base_units: v.union(v.number(), v.null()),
+      }),
+    ),
+    computedAt: v.number(),
+    staleAt: v.optional(v.number()),
+    recomputingStartedAt: v.optional(v.number()),
+    dirtyWhileRecomputing: v.optional(v.boolean()),
+  })
+    .index("by_community", ["communityId"])
+    .index("by_staleAt", ["staleAt"]),
+
+  // Pre-computed platform-wide operator overview totals refreshed in paginated
+  // background batches so operator dashboards never scan every row on read.
+  platformOperatorSummary: defineTable({
+    key: v.string(),
+    totals: v.any(),
+    computedAt: v.number(),
+  }).index("by_key", ["key"]),
 
   communityAnalyticsEvents: defineTable({
     communityId: v.id("communities"),
