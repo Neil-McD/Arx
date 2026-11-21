@@ -22,6 +22,7 @@ import {
 import { activateCommunityMembershipCore, endedCommunityMembershipFields } from "./communityMembershipLifecycle";
 import { syncCommunityMemberSearchEntry } from "./communityMemberSearch";
 import { markCommunityMemberViewCountsStale } from "./communityMemberRecords";
+import { markCommunityBillingSummaryStale } from "./communityAnalyticsRollups";
 import { memberAccessChanged } from "./communityPlanPods";
 import { schedulePodBillingCheck } from "./communityPodBillingCheck";
 import { adjustCommunityActiveMemberCountForMembershipTransition } from "./communityCore";
@@ -72,6 +73,7 @@ export async function applyAppGrants(ctx: any, communityId: any, userId: any, no
     // Left or removed by choice, on hold over a payment, or blocked: not put back.
     if ((state && state !== "lapsed") || await blocked(ctx, communityId, userId) || String(community.ownerId) === String(userId)) return "kept_out";
     await activateCommunityMembershipCore({ ctx, communityId, userId, accessSource: "app_grant" as any, activationReason: "connected_app_sale", nowMs });
+    await markCommunityBillingSummaryStale(ctx, communityId, nowMs);
     return "in";
   }
   if (!membership || !communityMembershipRowIsActive(membership)) return "ended";
@@ -90,6 +92,7 @@ export async function applyAppGrants(ctx: any, communityId: any, userId: any, no
     nowMs,
   });
   await markCommunityMemberViewCountsStale(ctx, communityId, nowMs);
+  await markCommunityBillingSummaryStale(ctx, communityId, nowMs);
   await schedulePodBillingCheck(ctx, { communityId, userId });
   await memberAccessChanged(ctx, communityId, userId);
   return "ended";

@@ -5,6 +5,7 @@ import { ConvexError, v } from "convex/values";
 import { recordCriticalAuditEvent } from "./criticalAudit";
 import { syncCommunityMemberSearchEntry } from "./communityMemberSearch";
 import { markCommunityMemberViewCountsStale } from "./communityMemberRecords";
+import { markCommunityBillingSummaryStale } from "./communityAnalyticsRollups";
 import { requireOwnerBelowFreeCommunityLimit } from "./communityCore";
 import {
   type CommunityLike,
@@ -538,6 +539,7 @@ async function upsertCommunityPricePoint(args: {
     updatedAt: args.nowMs,
   });
   await markCommunityMemberViewCountsStale(args.ctx, args.communityId, args.nowMs);
+  await markCommunityBillingSummaryStale(args.ctx, args.communityId, args.nowMs);
   return String(pricePointId);
 }
 
@@ -739,6 +741,7 @@ export const createCommunity = mutation({
       entryPolicy,
       activeMemberCount: 1,
       memberSearchIndexedAt: nowMs,
+      analyticsRollupIndexedAt: nowMs,
       createdAt: nowMs,
       updatedAt: nowMs,
     });
