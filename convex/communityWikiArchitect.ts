@@ -1408,6 +1408,7 @@ export async function applyCommunityWikiArchitectProposalCore(ctx: any, args: {
         name: normalizeName(moduleProposal.name),
         descriptionMd: normalizeOptionalText(moduleProposal.purpose, 1200),
         sortOrder: nextModuleSortOrder,
+        progressIndexedAt: nowMs,
         createdAt: nowMs,
         updatedAt: nowMs,
       });

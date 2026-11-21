@@ -760,6 +760,7 @@ async function createModuleFromChangesetOperation(args: {
     name: args.operation.name,
     descriptionMd: args.operation.description_md ?? undefined,
     sortOrder: nextSortOrder,
+    progressIndexedAt: args.nowMs,
     createdAt: args.nowMs,
     updatedAt: args.nowMs,
   });

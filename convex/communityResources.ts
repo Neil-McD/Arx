@@ -708,6 +708,7 @@ export const saveCommunityResourceModule = mutation({
       bannerFocusY: normalizeBannerFocus(payload.banner_focus_y),
       bannerZoom: normalizeBannerZoom(payload.banner_zoom),
       sortOrder: nextSortOrder,
+      progressIndexedAt: nowMs,
       createdAt: nowMs,
       updatedAt: nowMs,
     });
@@ -929,31 +930,42 @@ export const listCommunityResources = query({
       userId: args.userId,
     });
     const limit = Math.max(1, Math.min(5000, Math.floor(args.limit ?? 200)));
-    const rows = (await ctx.db
-      .query("communityResources" as any)
-      .withIndex("by_community", (q: any) => q.eq("communityId", args.communityId))
-      .collect()) as CommunityResourceLike[];
-    const modules = canManageResources
-      ? []
-      : ((await ctx.db
-          .query("communityResourceModules" as any)
-          .withIndex("by_community", (q: any) => q.eq("communityId", args.communityId))
-          .collect()) as CommunityResourceModuleLike[]);
+    const [rows, modules] = await Promise.all([
+      ctx.db
+        .query("communityResources" as any)
+        .withIndex("by_community", (q: any) => q.eq("communityId", args.communityId))
+        .collect() as Promise<CommunityResourceLike[]>,
+      ctx.db
+        .query("communityResourceModules" as any)
+        .withIndex("by_community", (q: any) => q.eq("communityId", args.communityId))
+        .collect() as Promise<CommunityResourceModuleLike[]>,
+    ]);
     const liveModuleIds = new Set(
       modules
         .filter(communityResourceModuleIsLive)
         .map((module) => normalizeIdValue(module._id)),
     );
-    const userIdCache = new Map<string, string | null>();
     const moduleNameCache = new Map<string, string | null>();
-    return await Promise.all(
-      rows
-        .slice()
-        .filter((row) => canManageResources || communityResourceIsLiveModulePage(row, liveModuleIds))
-        .sort(compareCommunityResources)
-        .slice(0, limit)
-        .map((row) => mapCommunityResourceRowWithBody(ctx, row, userIdCache, moduleNameCache)),
-    );
+    for (const module of modules) {
+      const id = normalizeIdValue(module._id);
+      const name = String(module.name ?? "").trim();
+      moduleNameCache.set(id, name || null);
+    }
+    const visible = rows
+      .slice()
+      .filter((row) => canManageResources || communityResourceIsLiveModulePage(row, liveModuleIds))
+      .sort(compareCommunityResources)
+      .slice(0, limit);
+    const userIdCache = new Map<string, string | null>();
+    const out: any[] = [];
+    for (let i = 0; i < visible.length; i += 25) {
+      const chunk = visible.slice(i, i + 25);
+      const mapped = await Promise.all(
+        chunk.map((row) => mapCommunityResourceRowWithBody(ctx, row, userIdCache, moduleNameCache)),
+      );
+      out.push(...mapped);
+    }
+    return out;
   },
 });
 
@@ -1454,6 +1466,11 @@ export const saveCommunityResource = mutation({
           nowMs,
         });
       }
+      const prevModuleId = existing.moduleId ? normalizeIdValue(existing.moduleId) : null;
+      const nextModuleIdNorm = nextModuleId ? normalizeIdValue(nextModuleId) : null;
+      if (nextModuleId && prevModuleId !== nextModuleIdNorm) {
+        await ctx.db.patch(nextModuleId as any, { progressIndexedAt: undefined });
+      }
       await ctx.db.patch(existing._id as any, {
         ...(nextModuleId ? { moduleId: nextModuleId } : { moduleId: undefined }),
         type: normalizeResourceType(nextTypeRaw),
@@ -1770,6 +1787,11 @@ export const moveCommunityResourceToModule = mutation({
     orderedRows.splice(insertIndex >= 0 ? insertIndex : orderedRows.length, 0, resource);
     const nowMs = Date.now();
 
+    const prevModuleId = resource.moduleId ? normalizeIdValue(resource.moduleId) : null;
+    const targetModuleIdNorm = targetModuleId ? normalizeIdValue(targetModuleId) : null;
+    if (targetModuleId && prevModuleId !== targetModuleIdNorm) {
+      await ctx.db.patch(targetModuleId as any, { progressIndexedAt: undefined });
+    }
     await Promise.all(
       orderedRows.map((row, index) => {
         const rowId = normalizeIdValue(row._id);
