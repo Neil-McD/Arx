@@ -15,6 +15,7 @@ import {
 import { internal } from "./_generated/api";
 import { internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import { resolveUserIdForAuthenticatedRequest } from "./authActor";
+import { getCommunityChannelCapabilities, resolveCommunityChannelActor } from "./communityChannelAccess";
 import { requireCommunityChatAccess, requireCommunityManager } from "./communityCore";
 import {
   buildCommunityNoteSearchText,
@@ -407,7 +408,7 @@ async function manager(ctx: any, args: { userId?: any; authSubject?: string; com
 }
 
 // Who may correct a scope's memory: builders for every scope; a pod's hosts
-// for their own pod.
+// for their own pod only while they still have active pod access.
 async function memoryEditor(ctx: any, args: { userId?: any; authSubject?: string; communityId: any }, scope: ScopeKey) {
   const userId = await resolveUserIdForAuthenticatedRequest({ ctx, userId: args.userId, authSubject: args.authSubject ?? null });
   await requireCommunityChatAccess({ ctx, communityId: args.communityId, userId });
@@ -415,9 +416,17 @@ async function memoryEditor(ctx: any, args: { userId?: any; authSubject?: string
   if (isBuilder) return userId;
   const pod = parseScopeKey(scope);
   if (pod?.kind === "pod") {
+    const room = await podRoom(ctx, args.communityId, pod.id);
+    if (!room) throw new Error("community_forbidden");
+    const actor = await resolveCommunityChannelActor({ ctx, communityId: args.communityId, userId });
     const record = await ctx.db.query("communityPods")
-      .withIndex("by_community_channel", (q: any) => q.eq("communityId", args.communityId).eq("channelId", pod.id)).first();
-    if (record?.hostUserIds?.some((id: any) => String(id) === String(userId))) return userId;
+      .withIndex("by_community_channel", (q: any) => q.eq("communityId", args.communityId).eq("channelId", room._id)).first();
+    if (
+      record?.hostUserIds?.some((id: any) => String(id) === String(userId)) &&
+      (await getCommunityChannelCapabilities({ ctx, channel: room, actor })).canRead
+    ) {
+      return userId;
+    }
   }
   throw new Error("community_forbidden");
 }
@@ -449,7 +458,7 @@ export const listNoteSources = query({
       const ref = parseMemoryEvidenceRef(raw);
       if (!ref) continue;
       const facts = await evidenceFacts(ctx, args.communityId, ref, scope);
-      if (!facts.exists || !facts.communityMatches || !facts.live || !facts.inScope) {
+      if (!facts.exists || !facts.communityMatches || !facts.live || !facts.inScope || !facts.sharedVisibility) {
         sources.push({ ref: raw, kind: ref.kind, available: false as const });
         continue;
       }
