@@ -129,6 +129,33 @@ async function reviewerByEmail(ctx: any, email: string) {
   return reviewer;
 }
 
+// The reviewer signs in only through an AI app (email and password on the
+// AuthKit page), never through the website's profile setup, so its name,
+// handle and terms acceptance are filled in here. Only what's missing.
+const REVIEWER_HANDLE = "polynet-reviewer";
+const REVIEWER_NAME = "Polynet Reviewer";
+async function completeReviewerProfile(ctx: any, reviewer: any, nowMs: number) {
+  let handle = String(reviewer.handle ?? "").trim();
+  if (!handle) {
+    const holder = await ctx.db.query("users").withIndex("by_normalizedHandle", (q: any) => q.eq("normalizedHandle", REVIEWER_HANDLE)).first();
+    if (holder && normalizeIdValue(holder._id) !== normalizeIdValue(reviewer._id)) throw new Error("review_demo_reviewer_handle_taken");
+    handle = REVIEWER_HANDLE;
+    await ctx.db.patch(reviewer._id, { handle, normalizedHandle: handle, updatedAt: nowMs });
+  }
+  const detail = await getUniqueUserProfileDetailByUserId<any>(ctx, reviewer._id);
+  const displayName = String(detail?.displayName ?? reviewer.displayName ?? "").trim() || REVIEWER_NAME;
+  if (!detail) await ctx.db.insert("userProfileDetails", { userId: reviewer._id, displayName, bio: "", onboardingCompletedAt: nowMs, createdAt: nowMs, updatedAt: nowMs });
+  else if (!String(detail.displayName ?? "").trim() || !detail.onboardingCompletedAt) {
+    await ctx.db.patch(detail._id, { displayName, onboardingCompletedAt: detail.onboardingCompletedAt ?? nowMs, updatedAt: nowMs });
+  }
+  if (!String(reviewer.displayName ?? "").trim()) await ctx.db.patch(reviewer._id, { displayName, updatedAt: nowMs });
+  await recordCurrentPlatformLegalAcceptance(ctx, {
+    userId: reviewer._id, termsVersion: TERMS_OF_SERVICE_DOCUMENT.version, privacyPolicyVersion: PRIVACY_AI_DATA_POLICY_DOCUMENT.version,
+    source: "review_demo_seed", acceptedAt: nowMs,
+  });
+  return handle;
+}
+
 // The demo community, only if the reviewer owns it. Anyone else's community
 // with this slug is never touched.
 async function demoCommunityFor(ctx: any, reviewerId: any) {
@@ -223,6 +250,7 @@ export const seedReviewDemoInternal = internalMutation({
     const ago = (hours: number) => Math.round(nowMs - hours * HOUR_MS);
     const reviewer = await reviewerByEmail(ctx, args.reviewerEmail);
     const ownerId = reviewer._id;
+    const reviewerHandle = await completeReviewerProfile(ctx, reviewer, nowMs);
     const existing = await demoCommunityFor(ctx, ownerId);
     const communityId = existing?._id ?? await createDemoCommunity(ctx, ownerId, nowMs);
     if (existing) await ctx.db.patch(communityId, { visibility: "unlisted", entryPolicy: "approval", updatedAt: nowMs });
@@ -340,7 +368,7 @@ export const seedReviewDemoInternal = internalMutation({
     else await ctx.db.insert("communityHandbooks", { communityId, ...handbookFields, createdAt: nowMs });
 
     return {
-      communityId: normalizeIdValue(communityId), slug: REVIEW_DEMO_SLUG, created: !existing, owner: normalizeIdValue(ownerId),
+      communityId: normalizeIdValue(communityId), slug: REVIEW_DEMO_SLUG, created: !existing, owner: normalizeIdValue(ownerId), reviewerHandle,
       members: MEMBERS.map((member) => member.name), applicants: APPLICANTS.map((applicant) => applicant.name),
       posts: POSTS.length, removedPosts, saturday: new Date(saturday).toISOString(), tuesday: new Date(tuesday).toISOString(),
       lessons: LESSONS.length,
