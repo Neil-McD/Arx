@@ -107,7 +107,7 @@ export const setParticipant = mutation({
       if (seatReasons(seat as any).includes("plan")) throw new Error("community_pod_seat_from_plan");
     }
     const result = await setChannelParticipantCore(ctx, { ...args, createdByUserId: manager.userId });
-    // Off a paid pod: stop their billing for it now.
+    // Off a pod: stop paid pod billing now (host seat stripped inside setChannelParticipantCore).
     if (!args.active && args.target.kind === "member" && result.changed) {
       await schedulePodBillingCheck(ctx, { channelId: args.channelId, userId: args.target.userId });
     }
@@ -175,6 +175,18 @@ export async function setChannelParticipantCore(ctx: any, args: {
       ? [...new Set([...before, args.reason ?? "host"])] as PodSeatReason[]
       : before.filter((reason) => (args.reason ? reason !== args.reason : reason === "plan"));
     const status = reasons.length ? "active" as const : "revoked" as const;
+    if (status === "revoked") {
+      const targetUserId = args.target.userId;
+      const pod = await ctx.db.query("communityPods")
+        .withIndex("by_community_channel", (q: any) => q.eq("communityId", args.communityId).eq("channelId", args.channelId))
+        .first();
+      if (pod?.hostUserIds?.some((id: any) => normalizeIdValue(id) === normalizeIdValue(targetUserId))) {
+        await ctx.db.patch(pod._id, {
+          hostUserIds: pod.hostUserIds.filter((id: any) => normalizeIdValue(id) !== normalizeIdValue(targetUserId)),
+          updatedAt: Date.now(),
+        });
+      }
+    }
     if (!previous && status === "revoked") return { changed: false };
     const sameReasons = before.length === reasons.length && before.every((reason) => reasons.includes(reason));
     if (previous && previous.status === status && sameReasons && (status === "revoked" || !args.active || sameBinding)

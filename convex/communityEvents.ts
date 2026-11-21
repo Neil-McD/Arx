@@ -438,7 +438,10 @@ async function saveCommunityEventCore(ctx: any, userId: any, args: { eventId?: s
     const nowMs = Date.now();
 
     if (eventId) {
-      const existing = (await ctx.db.get(eventId as any)) as CommunityEventLike | null;
+      const normalizedEventId = ctx.db.normalizeId("communityEvents", eventId);
+      const existing = normalizedEventId
+        ? ((await ctx.db.get(normalizedEventId)) as CommunityEventLike | null)
+        : null;
       if (!existing) throw new Error("community_event_not_found");
       await requireEventManager(ctx, existing, userId);
       const title = normalizeName(
@@ -515,8 +518,10 @@ async function saveCommunityEventCore(ctx: any, userId: any, args: { eventId?: s
       return mapCommunityEventRow(updated);
     }
 
-    const communityId = payload.community_id as any;
-    if (!communityId) throw new Error("community_id_required");
+    const rawCommunityId = String(payload.community_id ?? "").trim();
+    if (!rawCommunityId) throw new Error("community_id_required");
+    const communityId = ctx.db.normalizeId("communities", rawCommunityId);
+    if (!communityId) throw new Error("community_not_found");
     // A pod's call (pod_channel_id): its hosts may schedule it; anything else
     // is the builder's.
     const podChannelId = payload.pod_channel_id ? ctx.db.normalizeId("communityChannels", String(payload.pod_channel_id)) : null;
@@ -610,7 +615,10 @@ export const cancelCommunityEvent = mutation({
       userId: args.userId,
       authSubject: args.authSubject ?? null,
     });
-    const event = (await ctx.db.get(args.eventId as any)) as CommunityEventLike | null;
+    const normalizedEventId = ctx.db.normalizeId("communityEvents", String(args.eventId ?? "").trim());
+    const event = normalizedEventId
+      ? ((await ctx.db.get(normalizedEventId)) as CommunityEventLike | null)
+      : null;
     if (!event) return { ok: true };
     await requireEventManager(ctx, event, userId);
     await ctx.db.patch(event._id as any, {

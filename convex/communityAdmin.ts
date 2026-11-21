@@ -2,6 +2,7 @@ import { BASE_TIER_KEY } from "./communityHeldTiers";
 import { memberAccessChanged } from "./communityPlanPods";
 import { action, internalAction, internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import { schedulePodBillingCheck } from "./communityPodBillingCheck";
+import { removeUserFromPodHosts } from "./communityPods";
 import { communityHasCustomSite, communityMemberExperience } from "./communitySites";
 import { v } from "convex/values";
 import { formatMoneyBaseUnits } from "../shared/contentFormatting";
@@ -1041,12 +1042,15 @@ export const syncCommunityMembershipCount = mutation({
     communityId: v.id("communities"),
   },
   handler: async (ctx, args) => {
-    const { community } = await resolveCommunityAdminMembersContext({
+    const { community, viewerCanManageMembers } = await resolveCommunityAdminMembersContext({
       ctx,
       userId: args.userId,
       authSubject: args.authSubject ?? null,
       communityId: args.communityId,
     });
+    if (!viewerCanManageMembers) {
+      throw new Error("community_manager_required");
+    }
     return await syncCommunityActiveMemberCount({
       ctx,
       communityId: args.communityId,
@@ -1662,6 +1666,7 @@ export const revokeCommunityMemberInternal = internalMutation({
         const revokedMembership = { ...membership, ...removal } as CommunityMembershipLike;
         if (removal) {
           await ctx.db.patch(membership._id as any, removal);
+          await removeUserFromPodHosts(ctx, { communityId: args.communityId, userId: membership.userId });
           await schedulePodBillingCheck(ctx, { communityId: args.communityId, userId: membership.userId });
           await memberAccessChanged(ctx, args.communityId, membership.userId);
           await recordCriticalAuditEvent(ctx, {
@@ -2288,6 +2293,7 @@ async function leaveCommunityForUser(ctx: any, args: { communityId: any; userId:
           : null;
         const after = { ...membership, ...leaving } as CommunityMembershipLike;
         if (leaving) await ctx.db.patch(membership._id as any, leaving);
+        if (leaving) await removeUserFromPodHosts(ctx, { communityId: args.communityId, userId: membership.userId });
         if (leaving) await schedulePodBillingCheck(ctx, { communityId: args.communityId, userId: membership.userId });
         if (leaving) await memberAccessChanged(ctx, args.communityId, membership.userId);
         await adjustCommunityActiveMemberCountForMembershipTransition({

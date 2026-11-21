@@ -55,7 +55,7 @@ export async function visibleEvents<T>(rows: T[], visible: (row: T) => Promise<b
 }
 
 // Who may schedule, change or cancel a pod's calls: builders and admins, and
-// the pod's own hosts.
+// the pod's own hosts who still have active access to that pod.
 export async function requirePodEventManager(ctx: any, communityId: any, channelId: any, userId: any) {
   const channel = await openPodRoom(ctx, communityId, channelId);
   if (!channel) throw new Error("community_pod_not_found");
@@ -64,6 +64,7 @@ export async function requirePodEventManager(ctx: any, communityId: any, channel
   const record = await ctx.db.query("communityPods")
     .withIndex("by_community_channel", (q: any) => q.eq("communityId", communityId).eq("channelId", channelId)).first();
   if (!record?.hostUserIds?.some((id: any) => String(id) === String(userId))) throw new Error("community_pod_manager_required");
+  if (!(await getCommunityChannelCapabilities({ ctx, channel, actor })).canRead) throw new Error("community_pod_manager_required");
   return channel;
 }
 
