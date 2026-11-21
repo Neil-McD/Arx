@@ -329,7 +329,7 @@ export const ACTION_TOOLS: ActionTool[] = [
       description: "Every course's id, in order." } },
     ["community", "courses"], (a) => course(a, { op: "reorder_modules", module_ids: a.courses }), "own_ai"),
   tool("polynet_delete_draft", "polynet_write:builder:delete", "Delete a draft course or lesson",
-    "Delete a course that is still a draft, with its lessons, or one lesson in a draft course. It can't be brought back. Give course or lesson, not both. What members can see is deleted with polynet_delete_published.",
+    "Delete one lesson in a draft course, or a draft course with no lessons left (delete its lessons first). It can't be brought back. Give course or lesson, not both. What members can see is deleted with polynet_delete_published.",
     { community: COMMUNITY, course: COURSE, lesson: LESSON, updated_at: UPDATED_AT }, ["community", "updated_at"],
     (a) => course(a, a.lesson !== undefined
       ? { op: "delete_page", resource_id: a.lesson, expected_updated_at: a.updated_at }
