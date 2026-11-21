@@ -405,7 +405,8 @@ export const seedReviewDemoMessagesInternal = internalMutation({
   },
 });
 
-// Puts back what the test cases change, then runs the seed again:
+// Puts back what the test cases change (including the duplicate-post memory
+// of the reviewer's test words), then runs the seed again:
 // Jordan Lee is a member again, the reviewer's waiting Yes cards in this
 // community are declined, and every post that isn't seeded (the reviewer's
 // test posts) is removed.
@@ -428,6 +429,14 @@ export const resetReviewDemoInternal = internalMutation({
       }
     }
     const removedPosts = await clearPosts(ctx, communityId, "all");
+    // The duplicate-post check remembers the reviewer's words for a day; a
+    // fresh run posts the same test words again.
+    let clearedFingerprints = 0;
+    for (const row of await ctx.db.query("aiPostFingerprints")
+      .withIndex("by_user_community_fingerprint", (q: any) => q.eq("userId", reviewer._id).eq("communityId", communityId)).collect()) {
+      await ctx.db.delete(row._id);
+      clearedFingerprints += 1;
+    }
     for (const member of MEMBERS) {
       const user = await ctx.db.query("users").withIndex("by_authSubject", (q: any) => q.eq("authSubject", `${REVIEW_DEMO_PREFIX}${member.key}`)).unique();
       if (user) await upsertMembership(ctx, communityId, user._id, member.role ?? "member", nowMs - member.joinedDaysAgo * DAY_MS, nowMs);
@@ -439,6 +448,6 @@ export const resetReviewDemoInternal = internalMutation({
     await syncCommunityActiveMemberCount({ ctx, communityId });
     // Then the seed puts the posts, events, course and join requests back.
     await ctx.scheduler.runAfter(0, (internal as any).reviewDemoSeed.seedReviewDemoInternal, { reviewer: args.reviewer });
-    return { communityId: normalizeIdValue(communityId), declinedQuestions: declined, removedPosts, reseeding: true };
+    return { communityId: normalizeIdValue(communityId), declinedQuestions: declined, removedPosts, clearedFingerprints, reseeding: true };
   },
 });
