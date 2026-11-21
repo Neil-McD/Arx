@@ -261,6 +261,7 @@ export const syncCommunitySubscriptionLifecycleInternal = internalMutation({
     preserveRiskRevocation: v.optional(v.boolean()),
     providerEventCreatedAt: v.optional(v.number()),
     isRiskRevocation: v.optional(v.boolean()),
+    isTerminalCancellation: v.optional(v.boolean()),
     allowRiskRestoration: v.optional(v.boolean()),
     nowMs: v.optional(v.number()),
   },
@@ -409,6 +410,10 @@ export const syncCommunitySubscriptionLifecycleInternal = internalMutation({
         revokedReasonNormalized === "subscription_dispute_opened" ||
         revokedReasonNormalized === "subscription_dispute_lost"
       ));
+    const isTerminalCancellation =
+      args.isTerminalCancellation === true ||
+      String(args.status ?? "").trim().toLowerCase() === "canceled";
+    const wasTerminallyCanceled = sameSubscription && Boolean(current?.providerCanceled);
     const hasRiskHold =
       sameSubscription && (current?.riskAccessState === "revoked" || before === "payment_hold");
     const riskChangedAt =
@@ -425,8 +430,9 @@ export const syncCommunitySubscriptionLifecycleInternal = internalMutation({
     );
 
     // Out-of-order / replayed Stripe webhook guard (mirrors founderBilling.ts):
-    // ignore older events for the same subscription, and never let an older or
-    // non-restoring event resurrect a canceled/ended subscription.
+    // ignore older events for the same subscription, and never let a routine
+    // event resurrect a terminally canceled subscription (while still allowing
+    // recoverable paused/unpaid subscriptions to resume on newer active events).
     if (
       sameSubscription &&
       providerEventCreatedAt !== null &&
@@ -450,6 +456,7 @@ export const syncCommunitySubscriptionLifecycleInternal = internalMutation({
       }
       if (
         previousStatus === "ended" &&
+        wasTerminallyCanceled &&
         status !== "ended" &&
         !hasRiskHold
       ) {
@@ -502,6 +509,11 @@ export const syncCommunitySubscriptionLifecycleInternal = internalMutation({
         : sameSubscription
           ? current?.lastProviderEventCreatedAt
           : undefined;
+    const nextProviderCanceled = isTerminalCancellation
+      ? true
+      : !sameSubscription
+        ? undefined
+        : current?.providerCanceled;
     const nextRiskAccessState = isRiskRevocation
       ? ("revoked" as const)
       : riskRestorationAuthorized || !sameSubscription || (!preserveRiskRevocation && communitySubscriptionStatusGrantsAccess(status))
@@ -530,6 +542,7 @@ export const syncCommunitySubscriptionLifecycleInternal = internalMutation({
           ? currentPeriodEndAt
           : current?.currentPeriodEndAt,
       lastProviderEventCreatedAt: nextLastProviderEventCreatedAt,
+      providerCanceled: nextProviderCanceled,
       riskAccessState: nextRiskAccessState,
       riskStateChangedAt: nextRiskStateChangedAt,
       ...statusFields,

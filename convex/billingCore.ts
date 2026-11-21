@@ -245,6 +245,7 @@ export async function createCommunitySubscriptionForMembership(args: {
         ? {
           cancelRequestedAt: undefined,
           lastProviderEventCreatedAt: undefined,
+          providerCanceled: undefined,
           riskAccessState: "clear" as const,
           riskStateChangedAt: undefined,
         }
