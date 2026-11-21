@@ -483,5 +483,26 @@ describe("Wave 1 security & reliability hardening", () => {
         .first(),
     );
     expect(emailUser._id).toBe(existingEmailUserId);
+
+    // Legacy user missing normalizedEmail gets self-healed on sign-in without losing verification.
+    const legacyUserId = await t.run(async (ctx) =>
+      ctx.db.insert("users", {
+        authSubject: "legacy-missing-norm",
+        displayName: "Legacy",
+        email: "Legacy@Example.com",
+        emailVerifiedAt: NOW - 5000,
+        emailVerificationSource: "oauth_provider",
+        createdAt: NOW - 5000,
+        updatedAt: NOW - 5000,
+      }),
+    );
+    await t.mutation(internal.authActor.ensureAuthenticatedActorByExplicitSubjectInternal, {
+      authSubject: "legacy-missing-norm",
+      email: "Legacy@Example.com",
+      nowMs: NOW + 2000,
+    });
+    const healed: any = await t.run((ctx) => ctx.db.get(legacyUserId));
+    expect(healed.normalizedEmail).toBe("legacy@example.com");
+    expect(healed.emailVerifiedAt).toBe(NOW - 5000);
   });
 });
