@@ -35,6 +35,7 @@ import type * as communityAgentContext from "../communityAgentContext.js";
 import type * as communityAgentRun from "../communityAgentRun.js";
 import type * as communityAgentServeWorker from "../communityAgentServeWorker.js";
 import type * as communityAiRules from "../communityAiRules.js";
+import type * as communityAnalyticsRollups from "../communityAnalyticsRollups.js";
 import type * as communityAppJoin from "../communityAppJoin.js";
 import type * as communityAppSales from "../communityAppSales.js";
 import type * as communityApplicationFeeRefundCore from "../communityApplicationFeeRefundCore.js";
@@ -274,6 +275,7 @@ declare const fullApi: ApiFromModules<{
   communityAgentRun: typeof communityAgentRun;
   communityAgentServeWorker: typeof communityAgentServeWorker;
   communityAiRules: typeof communityAiRules;
+  communityAnalyticsRollups: typeof communityAnalyticsRollups;
   communityAppJoin: typeof communityAppJoin;
   communityAppSales: typeof communityAppSales;
   communityApplicationFeeRefundCore: typeof communityApplicationFeeRefundCore;

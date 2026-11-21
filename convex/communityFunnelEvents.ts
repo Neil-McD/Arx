@@ -3,6 +3,8 @@
 // new member. One per person per community per half hour, like visits: a
 // signed-in person by account, a signed-out buyer by the keyed hash of their
 // address (never the address). Analytics only: it never decides access.
+import { incrementCommunityDailyAnalytics } from "./communityAnalyticsRollups";
+
 export const JOIN_STARTED_DEDUPE_WINDOW_MS = 30 * 60 * 1000;
 
 export async function recordCommunityJoinStarted(ctx: any, args: {
@@ -27,6 +29,11 @@ export async function recordCommunityJoinStarted(ctx: any, args: {
     eventType: "funnel_join_started",
     ...(visitorKey ? { visitorKey, userId: args.userId } : { visitorKeyHash }),
     createdAt: args.nowMs,
+  });
+  await incrementCommunityDailyAnalytics(ctx, {
+    communityId: args.communityId,
+    nowMs: args.nowMs,
+    joinStartsDelta: 1,
   });
   return true;
 }

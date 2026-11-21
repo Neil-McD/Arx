@@ -71,4 +71,10 @@ crons.interval("backfill course progress projections", { minutes: 15 },
 // Refresh stale pre-computed member view counts and seed large communities (500+).
 crons.interval("refresh community member view counts", { minutes: 15 },
   (internal as any).communityMemberRecords.sweepStaleMemberViewCountsInternal, {});
+// Refresh stale community billing summaries and backfill daily analytics rollups.
+crons.interval("refresh community analytics rollups", { minutes: 15 },
+  (internal as any).communityAnalyticsRollups.sweepCommunityAnalyticsRollupsInternal, {});
+// Refresh platform-wide operator summary in paginated batches.
+crons.interval("refresh platform operator summary", { minutes: 15 },
+  (internal as any).communityAnalyticsRollups.refreshPlatformOperatorSummaryBatchInternal, {});
 export default crons;

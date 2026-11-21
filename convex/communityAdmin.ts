@@ -36,6 +36,7 @@ import {
   normalizeRoleAssignment,
   parseIsoMs,
   pickMostRelevantCommunityMembership,
+  readCommunityActiveMemberCount,
   requireCommunityChatAccess,
   requireCommunityModerator,
   requireCommunityManager,
@@ -74,6 +75,7 @@ import { deleteCommunityPresenceForUser } from "./communityPresenceCore";
 import { communityIsActive } from "../shared/communityLifecycle";
 import { recordCriticalAuditEvent } from "./criticalAudit";
 import { markCommunityMemberViewCountsStale } from "./communityMemberRecords";
+import { analyticsDayBucket } from "./communityAnalyticsRollups";
 import { resolveUserProfileDisplayProjection } from "./userProfileProjection";
 
 type AnalyticsRangeValue = "7d" | "30d" | "90d" | "1y" | "all";
@@ -2410,13 +2412,25 @@ export const getCommunityAnalyticsSnapshot = query({
     });
     (args as { userId?: any }).userId = userId;
     const range = normalizeAnalyticsRange(args.range);
-    const { community, rows } = await listCommunityMembershipRowsForManager({
+    const { community } = await requireCommunityManager({
       ctx,
       communityId: args.communityId,
       userId,
-      authSubject: args.authSubject ?? null,
     });
-    return await computeCommunityAnalyticsSnapshot(ctx, { communityId: args.communityId, community, rows, range, nowMs: Date.now() });
+    const nowMs = Date.now();
+    const rolled = await tryComputeCommunityAnalyticsFromRollups(ctx, {
+      communityId: args.communityId,
+      community,
+      range,
+      nowMs,
+    });
+    if (rolled) return rolled;
+    const { rows } = await listCanonicalCommunityMemberMembershipRows({
+      ctx,
+      communityId: args.communityId,
+      community,
+    });
+    return await computeCommunityAnalyticsSnapshot(ctx, { communityId: args.communityId, community, rows, range, nowMs });
   },
 });
 
@@ -2427,18 +2441,214 @@ export const readCommunityAnalyticsForTrustedManagerInternal = internalQuery({
   args: { userId: v.id("users"), communityId: v.id("communities") },
   handler: async (ctx, args) => {
     const { community } = await requireCommunityManager({ ctx, communityId: args.communityId, userId: args.userId });
-    const { rows } = await listCanonicalCommunityMemberMembershipRows({ ctx, communityId: args.communityId, community });
     const nowMs = Date.now();
+    const [rolled30, rolled7] = await Promise.all([
+      tryComputeCommunityAnalyticsFromRollups(ctx, { communityId: args.communityId, community, range: "30d", nowMs }),
+      tryComputeCommunityAnalyticsFromRollups(ctx, { communityId: args.communityId, community, range: "7d", nowMs }),
+    ]);
+    if (rolled30 && rolled7) {
+      return communityAnalyticsDocument({
+        nowMs,
+        communityCreatedAt: community.createdAt,
+        last30Days: rolled30,
+        last7Days: rolled7,
+      });
+    }
+    const { rows } = await listCanonicalCommunityMemberMembershipRows({ ctx, communityId: args.communityId, community });
     const snapshot = (range: AnalyticsRangeValue) =>
       computeCommunityAnalyticsSnapshot(ctx, { communityId: args.communityId, community, rows, range, nowMs });
     return communityAnalyticsDocument({
       nowMs,
       communityCreatedAt: community.createdAt,
-      last30Days: await snapshot("30d"),
-      last7Days: await snapshot("7d"),
+      last30Days: rolled30 ?? await snapshot("30d"),
+      last7Days: rolled7 ?? await snapshot("7d"),
     });
   },
 });
+
+async function tryComputeCommunityAnalyticsFromRollups(ctx: any, args: {
+  communityId: any;
+  community: CommunityLike;
+  range: AnalyticsRangeValue;
+  nowMs: number;
+}): Promise<CommunityAnalyticsSnapshot | null> {
+  const { community, range, nowMs } = args;
+  if (typeof (community as any).analyticsRollupIndexedAt !== "number") return null;
+  const billingSummary = await ctx.db
+    .query("communityBillingSummary" as any)
+    .withIndex("by_community", (q: any) => q.eq("communityId", args.communityId))
+    .first();
+  if (!billingSummary || billingSummary.staleAt !== undefined) return null;
+
+  const sinceMs = resolveAnalyticsWindowStartMs({
+    range,
+    nowMs,
+    communityCreatedAt: community.createdAt,
+  });
+  const bucket = resolveAnalyticsBucket(range);
+  const bucketStarts = buildAnalyticsBucketStarts({
+    startMs: sinceMs,
+    endMs: nowMs,
+    bucket,
+  });
+  const windowStartDayMs = analyticsDayBucket(sinceMs).dayStartMs;
+
+  const [dailyRows, openingMrrRow, presenceRows] = await Promise.all([
+    ctx.db
+      .query("communityDailyAnalytics" as any)
+      .withIndex("by_community_dayStartMs", (q: any) =>
+        q.eq("communityId", args.communityId).gte("dayStartMs", windowStartDayMs),
+      )
+      .take(4_000) as Promise<
+      Array<{
+        dayStartMs: number;
+        visits: number;
+        joinStarts: number;
+        newMembers: number;
+        mrrBaseUnits?: number;
+      }>
+    >,
+    ctx.db
+      .query("communityDailyAnalytics" as any)
+      .withIndex("by_community_hasMrr_dayStartMs", (q: any) =>
+        q
+          .eq("communityId", args.communityId)
+          .eq("hasMrrSnapshot", true)
+          .lt("dayStartMs", windowStartDayMs),
+      )
+      .order("desc")
+      .first() as Promise<{ mrrBaseUnits?: number } | null>,
+    ctx.db
+      .query("communityPresence" as any)
+      .withIndex("by_community_lastSeenAt", (q: any) =>
+        q.eq("communityId", args.communityId).gte("lastSeenAt", sinceMs),
+      )
+      .take(MAX_ANALYTICS_SNAPSHOT_EVENT_ROWS) as Promise<
+      Array<{
+        userId: any;
+        lastSeenAt: number;
+        createdAt: number;
+        activeUntil?: number;
+      }>
+    >,
+  ]);
+
+  let visitsTotal = 0;
+  let joinStartsTotal = 0;
+  let newMembersTotal = 0;
+  const visitsByBucket = new Map<number, number>();
+  const membersByBucket = new Map<number, number>();
+  const revenueByBucket = new Map<number, number>();
+  for (const dayRow of dailyRows) {
+    if (dayRow.dayStartMs > nowMs) continue;
+    visitsTotal += Number(dayRow.visits ?? 0);
+    joinStartsTotal += Number(dayRow.joinStarts ?? 0);
+    newMembersTotal += Number(dayRow.newMembers ?? 0);
+    const bucketKey = startOfAnalyticsBucket(dayRow.dayStartMs, bucket).getTime();
+    visitsByBucket.set(bucketKey, (visitsByBucket.get(bucketKey) ?? 0) + Number(dayRow.visits ?? 0));
+    membersByBucket.set(bucketKey, (membersByBucket.get(bucketKey) ?? 0) + Number(dayRow.newMembers ?? 0));
+    if (typeof dayRow.mrrBaseUnits === "number" && Number.isFinite(dayRow.mrrBaseUnits)) {
+      revenueByBucket.set(bucketKey, dayRow.mrrBaseUnits);
+    }
+  }
+
+  // Verify active membership only for recently active presence rows (parallel chunks).
+  const candidatePresenceUsers = Array.from(
+    new Map(
+      presenceRows
+        .filter((row) => row.activeUntil != null || row.lastSeenAt > row.createdAt)
+        .map((row) => [String(row.userId), row.userId]),
+    ).values(),
+  );
+  let activeMembers = 0;
+  for (let i = 0; i < candidatePresenceUsers.length; i += 25) {
+    const chunk = candidatePresenceUsers.slice(i, i + 25);
+    const checks = await Promise.all(
+      chunk.map(async (uid) => {
+        if (String(uid) === String(community.ownerId)) return true;
+        const mem = await ctx.db
+          .query("communityMemberships" as any)
+          .withIndex("by_community_user", (q: any) =>
+            q.eq("communityId", args.communityId).eq("userId", uid),
+          )
+          .first();
+        return Boolean(mem && communityMembershipRowIsActive(mem));
+      }),
+    );
+    for (const ok of checks) if (ok) activeMembers += 1;
+  }
+
+  const totalMembers = Math.max(1, readCommunityActiveMemberCount(community) ?? 1);
+  const plans: Array<{ key: string; name: string; members: number; mrr_base_units: number | null }> =
+    (billingSummary.plans ?? []).map((p: any) => ({ ...p }));
+  const freeMembers = Math.max(0, totalMembers - Number(billingSummary.paidUserCount ?? 0));
+  if (freeMembers > 0) plans.push({ key: "free", name: "Free", members: freeMembers, mrr_base_units: 0 });
+
+  const mixedCurrency = Boolean(billingSummary.mixedCurrency);
+  const currentMrr = mixedCurrency ? null : Number(billingSummary.mrrBaseUnits ?? 0);
+  const openingMrrFromRollup =
+    typeof openingMrrRow?.mrrBaseUnits === "number" && Number.isFinite(openingMrrRow.mrrBaseUnits)
+      ? openingMrrRow.mrrBaseUnits
+      : null;
+  let carriedMrr =
+    openingMrrFromRollup != null
+      ? openingMrrFromRollup
+      : revenueByBucket.size === 0 &&
+          currentMrr != null &&
+          currentMrr > 0 &&
+          Number(billingSummary.computedAt ?? 0) < windowStartDayMs
+        ? currentMrr
+        : 0;
+  const revenueSeries = mixedCurrency
+    ? []
+    : bucketStarts.map((bucketStart, index) => {
+        const key = bucketStart.getTime();
+        if (revenueByBucket.has(key)) {
+          carriedMrr = revenueByBucket.get(key)!;
+        } else if (index === bucketStarts.length - 1 && currentMrr != null) {
+          carriedMrr = currentMrr;
+        }
+        return {
+          bucket_start: bucketStart.toISOString(),
+          label: analyticsBucketLabel(bucketStart, bucket),
+          value: carriedMrr,
+        };
+      });
+
+  return {
+    range,
+    bucket,
+    generated_at: toIsoString(nowMs),
+    summary: {
+      plans,
+      page_visits_window: visitsTotal,
+      join_starts_window: joinStartsTotal,
+      total_members: totalMembers,
+      new_members_window: newMembersTotal,
+      conversion_rate_window: visitsTotal > 0 ? newMembersTotal / visitsTotal : null,
+      mrr_base_units: currentMrr,
+      currency: mixedCurrency ? null : (billingSummary.currency ?? null),
+      currency_decimals: mixedCurrency ? null : (billingSummary.currencyDecimals ?? null),
+      active_members_window: activeMembers,
+      retention_window: null,
+      total_resources: null,
+      resources_added_window: null,
+    },
+    series: {
+      visits: bucketStarts.map((bucketStart) => ({
+        bucket_start: bucketStart.toISOString(),
+        label: analyticsBucketLabel(bucketStart, bucket),
+        value: visitsByBucket.get(bucketStart.getTime()) ?? 0,
+      })),
+      members: bucketStarts.map((bucketStart) => ({
+        bucket_start: bucketStart.toISOString(),
+        label: analyticsBucketLabel(bucketStart, bucket),
+        value: membersByBucket.get(bucketStart.getTime()) ?? 0,
+      })),
+      revenue: revenueSeries,
+    },
+  };
+}
 
 type CommunityAnalyticsSnapshot = Awaited<ReturnType<typeof computeCommunityAnalyticsSnapshot>>;
 

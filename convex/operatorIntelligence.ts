@@ -703,29 +703,42 @@ async function readCheckoutSessionsByCommunity(ctx: any, communityId: any) {
 }
 
 async function estimateSubscriptionMrr(ctx: any, subscriptions: any[]): Promise<MoneyMetric | null> {
+  const uniqueIds = Array.from(new Set(subscriptions.map((s) => s.pricePointId).filter(Boolean)));
+  const priceById = new Map<string, any>();
+  for (let i = 0; i < uniqueIds.length; i += 25) {
+    const chunk = uniqueIds.slice(i, i + 25);
+    const docs = await Promise.all(chunk.map((id) => ctx.db.get(id)));
+    for (let j = 0; j < chunk.length; j += 1) {
+      priceById.set(String(chunk[j]), docs[j] ?? null);
+    }
+  }
   let total: MoneyMetric | null = null;
   for (const subscription of subscriptions) {
-    const pricePoint = await ctx.db.get(subscription.pricePointId);
+    const pricePoint = priceById.get(String(subscription.pricePointId)) ?? null;
     total = addMoney(total, monthlyMoneyFromPricePoint(pricePoint));
   }
   return total;
 }
 
 async function buildOperatorCommunityRecord(ctx: any, community: any, nowMs: number) {
-  const owner = await ctx.db.get(community.ownerId);
-  const memberships = await ctx.db
-    .query("communityMemberships")
-    .withIndex("by_community", (q: any) => q.eq("communityId", community._id))
-    .collect();
+  const [owner, memberships, price, revenueSubscriptions, checkouts, payoutStatus, tier] = await Promise.all([
+    ctx.db.get(community.ownerId),
+    ctx.db
+      .query("communityMemberships")
+      .withIndex("by_community", (q: any) => q.eq("communityId", community._id))
+      .collect(),
+    ctx.db
+      .query("communityPricePoints")
+      .withIndex("by_community_current", (q: any) => q.eq("communityId", community._id).eq("isCurrent", true))
+      .first(),
+    readCommunitySubscriptionsByStatuses(ctx, community._id, ACTIVE_SUBSCRIPTION_STATUSES),
+    readCheckoutSessionsByCommunity(ctx, community._id),
+    readPayoutStatus(ctx, community.ownerId),
+    readActiveTier(ctx, community.ownerId, nowMs),
+  ]);
   const activeMemberships = memberships.filter((row: any) => communityMembershipRowIsActive(row));
   const removedMemberships = memberships.filter((row: any) => !communityMembershipRowIsActive(row));
-  const price = await ctx.db
-    .query("communityPricePoints")
-    .withIndex("by_community_current", (q: any) => q.eq("communityId", community._id).eq("isCurrent", true))
-    .first();
-  const revenueSubscriptions = await readCommunitySubscriptionsByStatuses(ctx, community._id, ACTIVE_SUBSCRIPTION_STATUSES);
   const activePaidMembers = revenueSubscriptions.length;
-  const checkouts = await readCheckoutSessionsByCommunity(ctx, community._id);
   const pendingCheckouts = checkouts.filter((row: any) => row.status === "pending");
   const completedCheckouts = checkouts.filter((row: any) => row.status === "complete");
   const currentPrice = moneyFromPrice(price);
@@ -745,7 +758,6 @@ async function buildOperatorCommunityRecord(ctx: any, community: any, nowMs: num
   if (community.entryPolicy === "paid_subscription" && activePaidMembers === 0) {
     riskFlags.push("paid_enabled_no_sales");
   }
-  const payoutStatus = await readPayoutStatus(ctx, community.ownerId);
   if (community.entryPolicy === "paid_subscription" && payoutStatus !== "ready") {
     riskFlags.push("payout_not_ready");
   }
@@ -756,7 +768,6 @@ async function buildOperatorCommunityRecord(ctx: any, community: any, nowMs: num
     riskFlags.push("stale_member_activity");
   }
 
-  const tier = await readActiveTier(ctx, community.ownerId, nowMs);
   const checkoutStarts = checkouts.length;
   return {
     creator: {
@@ -881,6 +892,55 @@ export const getOperatorOverviewInternal = internalQuery({
   handler: async (ctx, args) => {
     const nowMs = Date.now();
     const rangeStart = normalizeRangeStart(args.range, nowMs);
+    const [summaryRow, events] = await Promise.all([
+      ctx.db
+        .query("platformOperatorSummary")
+        .withIndex("by_key", (q: any) => q.eq("key", "current"))
+        .first(),
+      rangeStart == null
+        ? ctx.db.query("criticalAuditEvents").withIndex("by_createdAt").order("desc").take(10_000)
+        : ctx.db
+            .query("criticalAuditEvents")
+            .withIndex("by_createdAt", (q: any) => q.gte("createdAt", rangeStart))
+            .take(10_000),
+    ]);
+    const recentCriticalEvents = events.length;
+
+    // Fast O(1) path when the 15-minute background platform summary is fresh.
+    if (summaryRow && nowMs - Number(summaryRow.computedAt ?? 0) <= 30 * 60_000 && summaryRow.totals) {
+      const t = summaryRow.totals as any;
+      const communityCount = Number(t.communities ?? 0);
+      const totalMembers = Number(t.totalCommunityMembers ?? 0);
+      const paidCount = Number(t.paidCommunities ?? 0);
+      const mrr = (t.estimatedMrr ?? null) as MoneyMetric | null;
+      return {
+        computedAt: nowMs,
+        totals: {
+          communityCreators: Number(t.communityCreators ?? 0),
+          communities: communityCount,
+          activeCommunities: Number(t.activeCommunities ?? 0),
+          totalCommunityMembers: totalMembers,
+          averageMembersPerCommunity: communityCount > 0 ? totalMembers / communityCount : null,
+          paidCommunities: paidCount,
+          paidCommunityConversionRate: conversionRate(paidCount, communityCount),
+          activePaidMembers: Number(t.activePaidMembers ?? 0),
+          estimatedMrr: mrr,
+          averageMrrPerCommunity: divideMoney(mrr, communityCount),
+          setupRiskCommunities: Number(t.setupRiskCommunities ?? 0),
+          staleCommunities: Number(t.staleCommunities ?? 0),
+          riskItems: Number(t.riskItems ?? 0),
+          recentCriticalEvents,
+        },
+        evidence: {
+          sourceTables: [
+            "platformOperatorSummary",
+            "criticalAuditEvents",
+          ],
+          computedAt: summaryRow.computedAt,
+        },
+      };
+    }
+
     const communities = await ctx.db.query("communities").collect();
     let estimatedMrr: MoneyMetric | null = null;
     let activePaidMembers = 0;
@@ -890,21 +950,22 @@ export const getOperatorOverviewInternal = internalQuery({
     let setupRiskCommunities = 0;
     let staleCommunities = 0;
     let riskItems = 0;
-    for (const community of communities) {
-      const record = await buildOperatorCommunityRecord(ctx, community, nowMs);
-      activePaidMembers += record.money.activePaidMembers;
-      if (record.money.activePaidMembers > 0) paidCommunities += 1;
-      totalCommunityMembers += record.members.activeMemberships;
-      if (record.members.activeMemberships > 0) activeCommunities += 1;
-      estimatedMrr = addMoney(estimatedMrr, record.money.estimatedMrr);
-      if (record.risk.flags.some((flag: string) => COMMUNITY_SETUP_RISK_FLAGS.has(flag))) setupRiskCommunities += 1;
-      if (record.risk.flags.includes("stale_member_activity")) staleCommunities += 1;
-      if (record.risk.flags.length > 0) riskItems += record.risk.flags.length;
+    for (let i = 0; i < communities.length; i += 10) {
+      const chunk = communities.slice(i, i + 10);
+      const records = await Promise.all(
+        chunk.map((community: any) => buildOperatorCommunityRecord(ctx, community, nowMs)),
+      );
+      for (const record of records) {
+        activePaidMembers += record.money.activePaidMembers;
+        if (record.money.activePaidMembers > 0) paidCommunities += 1;
+        totalCommunityMembers += record.members.activeMemberships;
+        if (record.members.activeMemberships > 0) activeCommunities += 1;
+        estimatedMrr = addMoney(estimatedMrr, record.money.estimatedMrr);
+        if (record.risk.flags.some((flag: string) => COMMUNITY_SETUP_RISK_FLAGS.has(flag))) setupRiskCommunities += 1;
+        if (record.risk.flags.includes("stale_member_activity")) staleCommunities += 1;
+        if (record.risk.flags.length > 0) riskItems += record.risk.flags.length;
+      }
     }
-    const events = await ctx.db.query("criticalAuditEvents").collect();
-    const recentCriticalEvents = rangeStart == null
-      ? events.length
-      : events.filter((row: any) => row.createdAt >= rangeStart).length;
     return {
       computedAt: nowMs,
       totals: {
@@ -1042,6 +1103,18 @@ export const getOperatorMonetizationInternal = internalQuery({
         .query("platformBusinessVisits" as any)
         .withIndex("by_createdAt", (q: any) => q.gte("createdAt", rangeStart))
         .collect();
+    const emailOutboxPromise = rangeStart == null
+      ? ctx.db.query("emailOutbox").withIndex("by_createdAt").order("desc").take(10_000)
+      : ctx.db
+          .query("emailOutbox")
+          .withIndex("by_createdAt", (q: any) => q.gte("createdAt", rangeStart))
+          .take(10_000);
+    const emailDeliveriesPromise = rangeStart == null
+      ? ctx.db.query("emailDeliveries").withIndex("by_createdAt").order("desc").take(10_000)
+      : ctx.db
+          .query("emailDeliveries")
+          .withIndex("by_createdAt", (q: any) => q.gte("createdAt", rangeStart))
+          .take(10_000);
     const [
       checkouts,
       users,
@@ -1051,13 +1124,13 @@ export const getOperatorMonetizationInternal = internalQuery({
       emailOutboxRows,
       emailDeliveryRows,
     ] = await Promise.all([
-      ctx.db.query("checkoutSessions").collect(),
+      ctx.db.query("checkoutSessions").withIndex("by_createdAt").order("desc").take(10_000),
       ctx.db.query("users").collect(),
       ctx.db.query("communities").collect(),
       ctx.db.query("communityMemberships").collect(),
       businessVisitRowsPromise,
-      ctx.db.query("emailOutbox").collect(),
-      ctx.db.query("emailDeliveries").collect(),
+      emailOutboxPromise,
+      emailDeliveriesPromise,
     ]);
     const accountUsers = users.filter(isAccountUserRow);
     const accountUserIds = new Set<string>(accountUsers.map((row: any) => String(row._id)));
@@ -1105,19 +1178,17 @@ export const getOperatorMonetizationInternal = internalQuery({
     const inRangeEmailDeliveryRows = rangeStart == null
       ? emailDeliveryRows
       : emailDeliveryRows.filter((row: any) => row.createdAt >= rangeStart);
-    const activeSubscriptions = [];
-    for (const status of ACTIVE_SUBSCRIPTION_STATUSES) {
-      const rows = await ctx.db
-        .query("communitySubscriptions")
-        .withIndex("by_status", (q: any) => q.eq("status", status))
-        .collect();
-      activeSubscriptions.push(...rows);
-    }
-    let estimatedCommunityMrr: MoneyMetric | null = null;
-    for (const row of activeSubscriptions) {
-      const price = await ctx.db.get(row.pricePointId);
-      estimatedCommunityMrr = addMoney(estimatedCommunityMrr, monthlyMoneyFromPricePoint(price));
-    }
+    const activeSubscriptions = (
+      await Promise.all(
+        Array.from(ACTIVE_SUBSCRIPTION_STATUSES).map((status) =>
+          ctx.db
+            .query("communitySubscriptions")
+            .withIndex("by_status", (q: any) => q.eq("status", status))
+            .collect(),
+        ),
+      )
+    ).flat();
+    const estimatedCommunityMrr = await estimateSubscriptionMrr(ctx, activeSubscriptions);
     const activePaidCommunityIds = new Set<string>(
       activeSubscriptions
         .map((row: any) => String(row.communityId ?? "").trim())
