@@ -42,6 +42,7 @@ export async function incrementCommunityDailyAnalytics(
     joinStartsDelta?: number;
     newMembersDelta?: number;
     mrrBaseUnits?: number | null;
+    fromBackfill?: boolean;
   },
 ): Promise<void> {
   const visitsDelta = Math.floor(args.visitsDelta ?? 0);
@@ -49,6 +50,17 @@ export async function incrementCommunityDailyAnalytics(
   const newMembersDelta = Math.floor(args.newMembersDelta ?? 0);
   const hasMrr = typeof args.mrrBaseUnits === "number" && Number.isFinite(args.mrrBaseUnits);
   if (visitsDelta === 0 && joinStartsDelta === 0 && newMembersDelta === 0 && !hasMrr) return;
+
+  // Fence live additive increments against historical backfill so events on or
+  // before the backfill cutoff are never double-counted.
+  if (!args.fromBackfill) {
+    const community = await ctx.db.get(args.communityId);
+    if (!community) return;
+    if (typeof (community as any).analyticsRollupIndexedAt !== "number") {
+      const cutoffMs = (community as any).analyticsRollupBackfillCutoffMs;
+      if (typeof cutoffMs !== "number" || args.nowMs <= cutoffMs) return;
+    }
+  }
 
   const { dayKey, dayStartMs } = analyticsDayBucket(args.nowMs);
   const existing = await ctx.db
@@ -58,12 +70,16 @@ export async function incrementCommunityDailyAnalytics(
     )
     .first();
 
+  const mrrPatch = hasMrr
+    ? { mrrBaseUnits: Math.max(0, Math.floor(args.mrrBaseUnits!)), hasMrrSnapshot: true }
+    : {};
+
   if (existing) {
     await ctx.db.patch(existing._id, {
       visits: Math.max(0, Number(existing.visits ?? 0) + visitsDelta),
       joinStarts: Math.max(0, Number(existing.joinStarts ?? 0) + joinStartsDelta),
       newMembers: Math.max(0, Number(existing.newMembers ?? 0) + newMembersDelta),
-      ...(hasMrr ? { mrrBaseUnits: Math.max(0, Math.floor(args.mrrBaseUnits!)) } : {}),
+      ...mrrPatch,
       updatedAt: args.nowMs,
     });
     return;
@@ -76,13 +92,14 @@ export async function incrementCommunityDailyAnalytics(
     visits: Math.max(0, visitsDelta),
     joinStarts: Math.max(0, joinStartsDelta),
     newMembers: Math.max(0, newMembersDelta),
-    ...(hasMrr ? { mrrBaseUnits: Math.max(0, Math.floor(args.mrrBaseUnits!)) } : {}),
+    ...mrrPatch,
     updatedAt: args.nowMs,
   });
 }
 
-// Zero-write fast path when no billing summary exists or it is already marked
-// stale (while still fencing writes that arrive mid-recomputation).
+// Zero-write fast path when no billing summary exists for an unindexed
+// community or when it is already marked stale (while still fencing writes
+// that arrive mid-recomputation and self-healing indexed communities).
 export async function markCommunityBillingSummaryStale(
   ctx: any,
   communityId: any,
@@ -92,7 +109,22 @@ export async function markCommunityBillingSummaryStale(
     .query("communityBillingSummary")
     .withIndex("by_community", (q: any) => q.eq("communityId", communityId))
     .first();
-  if (!existing) return;
+  if (!existing) {
+    const community = await ctx.db.get(communityId);
+    if (typeof (community as any)?.analyticsRollupIndexedAt !== "number") return;
+    await ctx.db.insert("communityBillingSummary", {
+      communityId,
+      mrrBaseUnits: 0,
+      mixedCurrency: false,
+      activePaidMembers: 0,
+      paidUserCount: 0,
+      plans: [],
+      computedAt: 0,
+      staleAt: nowMs,
+      dirtyWhileRecomputing: false,
+    });
+    return;
+  }
   if (typeof existing.recomputingStartedAt === "number") {
     if (existing.dirtyWhileRecomputing) return;
     await ctx.db.patch(existing._id, {
@@ -281,6 +313,7 @@ export const recomputeCommunityBillingSummaryInternal = internalMutation({
         communityId: args.communityId,
         nowMs,
         mrrBaseUnits,
+        fromBackfill: true,
       });
     }
 
@@ -289,10 +322,11 @@ export const recomputeCommunityBillingSummaryInternal = internalMutation({
 });
 
 // Multi-phase historical backfill for communityDailyAnalytics:
-// phase 0: clear obsolete daily rows for clean rebuild
-// phase 1: paginate funnel_visit events
-// phase 2: paginate funnel_join_started events
-// phase 3: paginate active non-owner memberships
+// phase 0: clear obsolete daily rows and establish cutoffMs fence
+// phase 1: paginate funnel_visit events (createdAt <= cutoffMs)
+// phase 2: paginate funnel_join_started events (createdAt <= cutoffMs)
+// phase 3: paginate active non-owner memberships (createdAt <= cutoffMs)
+// phase 4: reconstruct historical daily MRR snapshots from subscriptions
 export const backfillCommunityDailyAnalyticsBatchInternal = internalMutation({
   args: {
     communityId: v.id("communities"),
@@ -301,8 +335,11 @@ export const backfillCommunityDailyAnalyticsBatchInternal = internalMutation({
       v.literal("visits"),
       v.literal("join_starts"),
       v.literal("members"),
+      v.literal("revenue"),
     ),
     cursor: v.union(v.string(), v.null()),
+    cutoffMs: v.optional(v.number()),
+    revenueAcc: v.optional(v.any()),
   },
   handler: async (ctx, args) => {
     const community = await ctx.db.get(args.communityId);
@@ -323,20 +360,28 @@ export const backfillCommunityDailyAnalyticsBatchInternal = internalMutation({
         });
         return { done: false };
       }
+      const cutoffMs = nowMs;
+      await ctx.db.patch(args.communityId, {
+        analyticsRollupBackfillStartedAt: cutoffMs,
+        analyticsRollupBackfillCutoffMs: cutoffMs,
+      });
       await ctx.scheduler.runAfter(0, (internal as any).communityAnalyticsRollups.backfillCommunityDailyAnalyticsBatchInternal, {
         communityId: args.communityId,
         phase: "visits",
         cursor: null,
+        cutoffMs,
       });
       return { done: false };
     }
+
+    const cutoffMs = args.cutoffMs ?? (community as any).analyticsRollupBackfillCutoffMs ?? nowMs;
 
     if (args.phase === "visits" || args.phase === "join_starts") {
       const eventType = args.phase === "visits" ? "funnel_visit" : "funnel_join_started";
       const page = await ctx.db
         .query("communityAnalyticsEvents")
         .withIndex("by_community_event_createdAt", (q) =>
-          q.eq("communityId", args.communityId).eq("eventType", eventType),
+          q.eq("communityId", args.communityId).eq("eventType", eventType).lte("createdAt", cutoffMs),
         )
         .paginate({ cursor: args.cursor, numItems: BACKFILL_BATCH_SIZE });
 
@@ -352,6 +397,7 @@ export const backfillCommunityDailyAnalyticsBatchInternal = internalMutation({
           communityId: args.communityId,
           nowMs: dayStartMs,
           ...(args.phase === "visits" ? { visitsDelta: count } : { joinStartsDelta: count }),
+          fromBackfill: true,
         });
       }
 
@@ -360,6 +406,7 @@ export const backfillCommunityDailyAnalyticsBatchInternal = internalMutation({
           communityId: args.communityId,
           phase: args.phase,
           cursor: page.continueCursor,
+          cutoffMs,
         });
         return { done: false };
       }
@@ -369,46 +416,156 @@ export const backfillCommunityDailyAnalyticsBatchInternal = internalMutation({
         communityId: args.communityId,
         phase: nextPhase,
         cursor: null,
+        cutoffMs,
       });
       return { done: false };
     }
 
-    // phase === "members"
-    const page = await ctx.db
-      .query("communityMemberships")
-      .withIndex("by_community_createdAt", (q) => q.eq("communityId", args.communityId))
-      .order("asc")
-      .paginate({ cursor: args.cursor, numItems: BACKFILL_BATCH_SIZE });
+    if (args.phase === "members") {
+      const page = await ctx.db
+        .query("communityMemberships")
+        .withIndex("by_community_createdAt", (q) =>
+          q.eq("communityId", args.communityId).lte("createdAt", cutoffMs),
+        )
+        .order("asc")
+        .paginate({ cursor: args.cursor, numItems: BACKFILL_BATCH_SIZE });
 
-    const countsByDay = new Map<string, { dayStartMs: number; count: number }>();
-    for (const row of page.page) {
-      if (String(row.userId) === String(community.ownerId)) continue;
-      if (!communityMembershipRowIsActive(row as any)) continue;
-      const bucket = analyticsDayBucket(row.createdAt);
-      const entry = countsByDay.get(bucket.dayKey) ?? { dayStartMs: bucket.dayStartMs, count: 0 };
-      entry.count += 1;
-      countsByDay.set(bucket.dayKey, entry);
-    }
-    for (const { dayStartMs, count } of countsByDay.values()) {
-      await incrementCommunityDailyAnalytics(ctx, {
+      const countsByDay = new Map<string, { dayStartMs: number; count: number }>();
+      for (const row of page.page) {
+        if (String(row.userId) === String(community.ownerId)) continue;
+        if (!communityMembershipRowIsActive(row as any)) continue;
+        const bucket = analyticsDayBucket(row.createdAt);
+        const entry = countsByDay.get(bucket.dayKey) ?? { dayStartMs: bucket.dayStartMs, count: 0 };
+        entry.count += 1;
+        countsByDay.set(bucket.dayKey, entry);
+      }
+      for (const { dayStartMs, count } of countsByDay.values()) {
+        await incrementCommunityDailyAnalytics(ctx, {
+          communityId: args.communityId,
+          nowMs: dayStartMs,
+          newMembersDelta: count,
+          fromBackfill: true,
+        });
+      }
+
+      if (!page.isDone) {
+        await ctx.scheduler.runAfter(0, (internal as any).communityAnalyticsRollups.backfillCommunityDailyAnalyticsBatchInternal, {
+          communityId: args.communityId,
+          phase: "members",
+          cursor: page.continueCursor,
+          cutoffMs,
+        });
+        return { done: false };
+      }
+
+      await ctx.scheduler.runAfter(0, (internal as any).communityAnalyticsRollups.backfillCommunityDailyAnalyticsBatchInternal, {
         communityId: args.communityId,
-        nowMs: dayStartMs,
-        newMembersDelta: count,
+        phase: "revenue",
+        cursor: null,
+        cutoffMs,
       });
+      return { done: false };
+    }
+
+    // phase === "revenue": reconstruct historical daily MRR snapshots
+    const revAcc: {
+      currency: string | null;
+      mixedCurrency: boolean;
+      deltasByDay: Record<string, number>;
+    } = args.revenueAcc
+      ? {
+          currency: args.revenueAcc.currency ?? null,
+          mixedCurrency: Boolean(args.revenueAcc.mixedCurrency),
+          deltasByDay: { ...(args.revenueAcc.deltasByDay ?? {}) },
+        }
+      : { currency: null, mixedCurrency: false, deltasByDay: {} };
+
+    const [page, pricePoints] = await Promise.all([
+      ctx.db
+        .query("communitySubscriptions")
+        .withIndex("by_community_status", (q) => q.eq("communityId", args.communityId))
+        .paginate({ cursor: args.cursor, numItems: BACKFILL_BATCH_SIZE }),
+      ctx.db
+        .query("communityPricePoints")
+        .withIndex("by_community", (q) => q.eq("communityId", args.communityId))
+        .take(200),
+    ]);
+    const priceById = new Map<string, any>(pricePoints.map((p) => [String(p._id), p]));
+    const cutoffDayStartMs = analyticsDayBucket(cutoffMs).dayStartMs;
+
+    for (const sub of page.page) {
+      if (Number(sub.createdAt ?? 0) > cutoffMs) continue;
+      const status = String(sub.status ?? "");
+      const isCurrentRecurring = (ACTIVE_RECURRING_STATUSES as readonly string[]).includes(status);
+      const endedAtRaw = Number((sub as any).endedAt ?? NaN);
+      const endedAt = Number.isFinite(endedAtRaw)
+        ? endedAtRaw
+        : isCurrentRecurring
+          ? null
+          : Number(sub.updatedAt ?? NaN);
+      if (!isCurrentRecurring && !Number.isFinite(Number(endedAt))) continue;
+
+      let pricePoint = priceById.get(String(sub.pricePointId));
+      if (pricePoint === undefined) {
+        pricePoint = (await ctx.db.get(sub.pricePointId)) ?? null;
+        priceById.set(String(sub.pricePointId), pricePoint);
+      }
+      if (!pricePoint) continue;
+      const rowCurrency = String(pricePoint.currency ?? "").trim().toUpperCase() || null;
+      if (revAcc.currency && rowCurrency && revAcc.currency !== rowCurrency) {
+        revAcc.mixedCurrency = true;
+      }
+      revAcc.currency = revAcc.currency ?? rowCurrency;
+      const period = String(pricePoint.billingPeriod ?? "").trim().toLowerCase();
+      const monthlyBaseUnits =
+        period === "annual"
+          ? Math.round(Math.max(0, Number(pricePoint.amountBaseUnits ?? 0)) / 12)
+          : Math.max(0, Math.floor(Number(pricePoint.amountBaseUnits ?? 0)));
+      if (monthlyBaseUnits <= 0) continue;
+
+      const startDay = analyticsDayBucket(sub.createdAt).dayStartMs;
+      revAcc.deltasByDay[String(startDay)] = (revAcc.deltasByDay[String(startDay)] ?? 0) + monthlyBaseUnits;
+      if (endedAt != null && endedAt <= cutoffMs) {
+        const nextDayAfterEnd = analyticsDayBucket(endedAt).dayStartMs + 86_400_000;
+        if (nextDayAfterEnd <= cutoffDayStartMs) {
+          revAcc.deltasByDay[String(nextDayAfterEnd)] =
+            (revAcc.deltasByDay[String(nextDayAfterEnd)] ?? 0) - monthlyBaseUnits;
+        }
+      }
     }
 
     if (!page.isDone) {
       await ctx.scheduler.runAfter(0, (internal as any).communityAnalyticsRollups.backfillCommunityDailyAnalyticsBatchInternal, {
         communityId: args.communityId,
-        phase: "members",
+        phase: "revenue",
         cursor: page.continueCursor,
+        cutoffMs,
+        revenueAcc: revAcc,
       });
       return { done: false };
+    }
+
+    if (!revAcc.mixedCurrency) {
+      const sortedDays = Object.keys(revAcc.deltasByDay)
+        .map((k) => Number(k))
+        .filter((ms) => Number.isFinite(ms))
+        .sort((a, b) => a - b);
+      let runningMrr = 0;
+      for (const dayStartMs of sortedDays) {
+        runningMrr = Math.max(0, runningMrr + (revAcc.deltasByDay[String(dayStartMs)] ?? 0));
+        await incrementCommunityDailyAnalytics(ctx, {
+          communityId: args.communityId,
+          nowMs: dayStartMs,
+          mrrBaseUnits: runningMrr,
+          fromBackfill: true,
+        });
+      }
     }
 
     await ctx.db.patch(args.communityId, {
       analyticsRollupIndexedAt: nowMs,
       analyticsRollupBackfillStartedAt: undefined,
+      analyticsRollupBackfillCutoffMs: undefined,
     });
     await ctx.scheduler.runAfter(0, (internal as any).communityAnalyticsRollups.recomputeCommunityBillingSummaryInternal, {
       communityId: args.communityId,
@@ -455,7 +612,10 @@ export const sweepCommunityAnalyticsRollupsInternal = internalMutation({
       if (typeof (community as any).analyticsRollupIndexedAt === "number") continue;
       const startedAt = (community as any).analyticsRollupBackfillStartedAt;
       if (typeof startedAt === "number" && nowMs - startedAt < 10 * 60_000) continue;
-      await ctx.db.patch(community._id, { analyticsRollupBackfillStartedAt: nowMs });
+      await ctx.db.patch(community._id, {
+        analyticsRollupBackfillStartedAt: nowMs,
+        analyticsRollupBackfillCutoffMs: undefined,
+      });
       await ctx.scheduler.runAfter(0, (internal as any).communityAnalyticsRollups.backfillCommunityDailyAnalyticsBatchInternal, {
         communityId: community._id,
         phase: "clear",
