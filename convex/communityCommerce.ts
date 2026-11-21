@@ -259,6 +259,9 @@ export const syncCommunitySubscriptionLifecycleInternal = internalMutation({
     cancelAtPeriodEnd: v.optional(v.union(v.boolean(), v.null())),
     revokedReason: v.optional(v.string()),
     preserveRiskRevocation: v.optional(v.boolean()),
+    providerEventCreatedAt: v.optional(v.number()),
+    isRiskRevocation: v.optional(v.boolean()),
+    allowRiskRestoration: v.optional(v.boolean()),
     nowMs: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
@@ -392,6 +395,88 @@ export const syncCommunitySubscriptionLifecycleInternal = internalMutation({
     // Only for the very subscription they left: a later purchase is a new subscription.
     const sameSubscription = String(args.providerSubscriptionId ?? "").trim() !== ""
       && String(args.providerSubscriptionId).trim() === String(current?.providerSubscriptionId ?? "").trim();
+
+    const before = communityMembershipState(membership)!;
+    const providerEventCreatedAt =
+      typeof args.providerEventCreatedAt === "number" && Number.isFinite(args.providerEventCreatedAt)
+        ? Math.floor(args.providerEventCreatedAt)
+        : null;
+    const revokedReasonNormalized = String(args.revokedReason ?? "").trim().toLowerCase();
+    const isRiskRevocation =
+      args.isRiskRevocation === true ||
+      (status === "ended" && (
+        revokedReasonNormalized === "subscription_refunded" ||
+        revokedReasonNormalized === "subscription_dispute_opened" ||
+        revokedReasonNormalized === "subscription_dispute_lost"
+      ));
+    const hasRiskHold =
+      sameSubscription && (current?.riskAccessState === "revoked" || before === "payment_hold");
+    const riskChangedAt =
+      typeof current?.riskStateChangedAt === "number"
+        ? current.riskStateChangedAt
+        : typeof current?.lastProviderEventCreatedAt === "number"
+          ? current.lastProviderEventCreatedAt
+          : 0;
+    const riskRestorationAuthorized = Boolean(
+      hasRiskHold &&
+      providerEventCreatedAt !== null &&
+      args.allowRiskRestoration === true &&
+      providerEventCreatedAt > riskChangedAt,
+    );
+
+    // Out-of-order / replayed Stripe webhook guard (mirrors founderBilling.ts):
+    // ignore older events for the same subscription, and never let an older or
+    // non-restoring event resurrect a canceled/ended subscription.
+    if (
+      sameSubscription &&
+      providerEventCreatedAt !== null &&
+      !isRiskRevocation &&
+      !riskRestorationAuthorized
+    ) {
+      if (
+        typeof current?.lastProviderEventCreatedAt === "number" &&
+        providerEventCreatedAt < current.lastProviderEventCreatedAt
+      ) {
+        return {
+          ok: true,
+          ignored: true,
+          reason: "community_subscription_event_stale",
+          community_id: String(args.communityId),
+          user_id: String(args.userId),
+          price_point_id: String(pricePointId),
+          source,
+          subscription_status: String(current?.status ?? status),
+        };
+      }
+      if (
+        previousStatus === "ended" &&
+        status !== "ended" &&
+        !hasRiskHold
+      ) {
+        return {
+          ok: true,
+          ignored: true,
+          reason: "community_subscription_already_ended",
+          community_id: String(args.communityId),
+          user_id: String(args.userId),
+          price_point_id: String(pricePointId),
+          source,
+          subscription_status: "ended",
+        };
+      }
+    }
+
+    // While a refund/dispute payment hold is active, only an authorized newer
+    // payment or won dispute (providerEventCreatedAt > riskChangedAt) may lift
+    // it; delayed/duplicate events from the refunded charge keep the hold.
+    const preserveRiskRevocation =
+      args.preserveRiskRevocation === true ||
+      (hasRiskHold && providerEventCreatedAt !== null && !riskRestorationAuthorized && !isRiskRevocation);
+    if (preserveRiskRevocation && hasRiskHold && !isRiskRevocation) {
+      status = "ended";
+      cancelAtPeriodEnd = false;
+    }
+
     if (cancelRequestedAt !== null && sameSubscription && status === "active" && !cancelAtPeriodEnd) {
       status = "cancel_at_period_end";
       cancelAtPeriodEnd = true;
@@ -406,6 +491,29 @@ export const syncCommunitySubscriptionLifecycleInternal = internalMutation({
       String(args.providerCustomerId ?? "").trim() ||
       String(current?.providerCustomerId ?? "").trim() ||
       undefined;
+    const nextLastProviderEventCreatedAt =
+      providerEventCreatedAt !== null
+        ? Math.max(
+          providerEventCreatedAt,
+          sameSubscription && typeof current?.lastProviderEventCreatedAt === "number"
+            ? current.lastProviderEventCreatedAt
+            : 0,
+        )
+        : sameSubscription
+          ? current?.lastProviderEventCreatedAt
+          : undefined;
+    const nextRiskAccessState = isRiskRevocation
+      ? ("revoked" as const)
+      : riskRestorationAuthorized || !sameSubscription || (!preserveRiskRevocation && communitySubscriptionStatusGrantsAccess(status))
+        ? ("clear" as const)
+        : current?.riskAccessState;
+    const nextRiskStateChangedAt = isRiskRevocation
+      ? Math.max(providerEventCreatedAt ?? nowMs, riskChangedAt)
+      : riskRestorationAuthorized
+        ? providerEventCreatedAt ?? nowMs
+        : !sameSubscription
+          ? undefined
+          : current?.riskStateChangedAt;
 
     const patch = {
       source: currentSource === "stripe" || currentSource === "external_sync" ? current?.source : source,
@@ -421,6 +529,9 @@ export const syncCommunitySubscriptionLifecycleInternal = internalMutation({
         typeof currentPeriodEndAt === "number"
           ? currentPeriodEndAt
           : current?.currentPeriodEndAt,
+      lastProviderEventCreatedAt: nextLastProviderEventCreatedAt,
+      riskAccessState: nextRiskAccessState,
+      riskStateChangedAt: nextRiskStateChangedAt,
       ...statusFields,
       updatedAt: nowMs,
     };
@@ -446,11 +557,10 @@ export const syncCommunitySubscriptionLifecycleInternal = internalMutation({
     const revokedReason = String(args.revokedReason ?? "")
       .trim()
       .slice(0, 160) || `subscription_${status}`;
-    const before = communityMembershipState(membership)!;
     const afterPayment = communityMembershipStateAfterSubscriptionUpdate({
       current: before,
       grantsAccess,
-      liftsHold: args.preserveRiskRevocation !== true,
+      liftsHold: !preserveRiskRevocation,
       reason: revokedReason,
     });
     // One door: the Polynet subscription ending doesn't end access a sale the

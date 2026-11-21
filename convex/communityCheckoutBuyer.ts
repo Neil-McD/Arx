@@ -12,7 +12,7 @@ import { normalizeAuthRelinkEmail } from "../shared/authRelinkPolicy";
 import { internal } from "./_generated/api";
 import { internalMutation, internalQuery } from "./_generated/server";
 import { grantCommunityCheckout } from "./billingCore";
-import { communitySubscriptionStatusGrantsAccess, requireCommunityUserNotBlocked } from "./communityCore";
+import { communitySubscriptionStatusGrantsAccess, getActiveCommunityBlock, requireCommunityUserNotBlocked } from "./communityCore";
 import { recordCriticalAuditEventBestEffort } from "./criticalAudit";
 import { acceptCommunityJoin } from "./starterProfile";
 
@@ -111,7 +111,34 @@ export async function settleCommunityCheckout(
           createdAt: nowMs,
         });
       } catch (error) {
-        // Blocked or no longer allowed: the return page shows it; nothing is lost.
+        // If a signed-in buyer was blocked while completing Stripe Checkout,
+        // mark the checkout held and automatically cancel + refund them (same
+        // as guest buyers who turn out to be blocked).
+        const isBlocked = Boolean(await getActiveCommunityBlock({ ctx, communityId: row.communityId, userId: row.ownerUserId }));
+        if (isBlocked && newSubscriptionId) {
+          await ctx.db.patch(row._id, { communityHold: "buyer_blocked", updatedAt: nowMs });
+          await ctx.scheduler.runAfter(0, internal.communityCommerce.refundDuplicateCommunitySubscriptionInternal, {
+            providerSubscriptionId: newSubscriptionId,
+            providerAccountId: String(row.providerAccountId ?? ""),
+            paymentIntentId: evidence.paymentIntentId,
+            chargeId: evidence.chargeId,
+          });
+          await recordCriticalAuditEventBestEffort(ctx, {
+            eventKey: `community_blocked_buyer_refunded:${newSubscriptionId}`,
+            eventType: "community_blocked_buyer_refunded",
+            status: "started",
+            actorUserId: row.ownerUserId,
+            subjectUserId: row.ownerUserId,
+            communityId: row.communityId,
+            checkoutSessionId: row.sessionId,
+            provider: "stripe",
+            providerObjectId: newSubscriptionId,
+            metadata: { providerAccountId: String(row.providerAccountId ?? "") },
+            createdAt: nowMs,
+          });
+          return;
+        }
+        // No longer allowed for another reason: the return page shows it; nothing is lost.
         console.error("community_checkout_grant_failed", { sessionId: row.sessionId, error: error instanceof Error ? error.message : String(error) });
       }
     }

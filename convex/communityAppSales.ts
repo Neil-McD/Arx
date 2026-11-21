@@ -14,6 +14,7 @@ import { internalMutation } from "./_generated/server";
 import {
   communityMembershipRowIsActive,
   communityMembershipState,
+  getActiveCommunityBlock,
   getUniqueCommunityMembershipByPair,
   normalizeCommunitySubscriptionStatus,
   communitySubscriptionStatusGrantsAccess,
@@ -38,8 +39,7 @@ async function activeAppGrants(ctx: any, communityId: any, userId: any) {
 }
 
 async function blocked(ctx: any, communityId: any, userId: any): Promise<boolean> {
-  const rows = await ctx.db.query("communityBlocks").withIndex("by_community", (q: any) => q.eq("communityId", communityId)).take(500);
-  return rows.some((row: any) => String(row.userId) === String(userId) && !row.liftedAt);
+  return Boolean(await getActiveCommunityBlock({ ctx, communityId, userId }));
 }
 
 // Does anything other than an app sale still let this member in?

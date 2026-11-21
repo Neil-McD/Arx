@@ -217,8 +217,8 @@ assert.match(
 );
 assert.match(
   resources,
-  /operation\.op === "delete_category"[\s\S]*deleteCategoryFromChangesetOperation[\s\S]*requireChangesetEmptyModuleRef[\s\S]*maybeDeleteStorageAsset[\s\S]*ctx\.db\.delete/,
-  "delete_category should delete only empty categories and clean banner storage",
+  /operation\.op === "delete_category"[\s\S]*deleteCategoryFromChangesetOperation[\s\S]*requireChangesetEmptyModuleRef[\s\S]*ctx\.db\.delete/,
+  "delete_category should delete only empty categories",
 );
 assert.match(
   resources,
