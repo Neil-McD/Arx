@@ -8,7 +8,7 @@
 // - It refuses unless the deployment sets POLYNET_ALLOW_REVIEW_DEMO=1 (or the
 //   staging seed switch POLYNET_ALLOW_SEED=1).
 // - It only ever touches the community with slug harbor-run-club, and only
-//   when its owner is the reviewer account named by email. A community with
+//   when its owner is the reviewer account (named by WorkOS user id or email). A community with
 //   that slug owned by anyone else is refused, never changed.
 // - Made-up members have auth subject `seed:review:<key>` and no email
 //   address at all, so Polynet's normal email rules suppress anything
@@ -18,8 +18,8 @@
 // test cases' changes back: Jordan Lee is a member again, the reviewer's
 // waiting Yes cards are declined, and posts the reviewer made are removed.
 //
-//   npx convex run reviewDemoSeed:seedReviewDemoInternal '{"reviewerEmail":"<reviewer email>"}'
-//   npx convex run reviewDemoSeed:resetReviewDemoInternal '{"reviewerEmail":"<reviewer email>"}'
+//   npx convex run reviewDemoSeed:seedReviewDemoInternal '{"reviewer":"<WorkOS user id or email>"}'
+//   npx convex run reviewDemoSeed:resetReviewDemoInternal '{"reviewer":"<WorkOS user id or email>"}'
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import { internalMutation } from "./_generated/server";
@@ -119,14 +119,19 @@ function assertReviewDemoAllowed() {
   }
 }
 
-async function reviewerByEmail(ctx: any, email: string) {
-  const normalized = String(email ?? "").trim().toLowerCase();
-  if (!normalized) throw new Error("review_demo_reviewer_email_required");
-  const rows = await ctx.db.query("users").withIndex("by_email", (q: any) => q.eq("email", normalized)).collect();
-  if (rows.length !== 1) throw new Error(rows.length ? "review_demo_reviewer_email_ambiguous" : "review_demo_reviewer_not_found");
-  const reviewer = rows[0];
-  if (String(reviewer.authSubject ?? "").startsWith("seed:")) throw new Error("review_demo_reviewer_must_be_a_real_account");
-  return reviewer;
+// The reviewer: their WorkOS user id (user_...) or their email. An account
+// that has only ever signed in through an AI app may have no email on file,
+// so the id is the dependable handle.
+async function findReviewer(ctx: any, reviewer: string) {
+  const value = String(reviewer ?? "").trim();
+  if (!value) throw new Error("review_demo_reviewer_required");
+  const rows = value.includes("@")
+    ? await ctx.db.query("users").withIndex("by_email", (q: any) => q.eq("email", value.toLowerCase())).collect()
+    : await ctx.db.query("users").withIndex("by_authSubject", (q: any) => q.eq("authSubject", value)).collect();
+  if (rows.length !== 1) throw new Error(rows.length ? "review_demo_reviewer_ambiguous" : "review_demo_reviewer_not_found");
+  const found = rows[0];
+  if (String(found.authSubject ?? "").startsWith("seed:")) throw new Error("review_demo_reviewer_must_be_a_real_account");
+  return found;
 }
 
 // The reviewer signs in only through an AI app (email and password on the
@@ -243,12 +248,12 @@ async function createDemoCommunity(ctx: any, ownerId: any, nowMs: number) {
 }
 
 export const seedReviewDemoInternal = internalMutation({
-  args: { reviewerEmail: v.string() },
+  args: { reviewer: v.string() },
   handler: async (ctx: any, args): Promise<Record<string, any>> => {
     assertReviewDemoAllowed();
     const nowMs = Date.now();
     const ago = (hours: number) => Math.round(nowMs - hours * HOUR_MS);
-    const reviewer = await reviewerByEmail(ctx, args.reviewerEmail);
+    const reviewer = await findReviewer(ctx, args.reviewer);
     const ownerId = reviewer._id;
     const reviewerHandle = await completeReviewerProfile(ctx, reviewer, nowMs);
     const existing = await demoCommunityFor(ctx, ownerId);
@@ -379,10 +384,10 @@ export const seedReviewDemoInternal = internalMutation({
 // Direct messages to the reviewer from two members, through the real send
 // path. Stable client message ids make a second run a no-op.
 export const seedReviewDemoMessagesInternal = internalMutation({
-  args: { reviewerEmail: v.string() },
+  args: { reviewer: v.string() },
   handler: async (ctx: any, args): Promise<Record<string, any>> => {
     assertReviewDemoAllowed();
-    const reviewer = await reviewerByEmail(ctx, args.reviewerEmail);
+    const reviewer = await findReviewer(ctx, args.reviewer);
     const community = await demoCommunityFor(ctx, reviewer._id);
     if (!community) throw new Error("review_demo_not_seeded");
     const handle = String(reviewer.normalizedHandle ?? reviewer.handle ?? "").replace(/^@+/, "");
@@ -405,11 +410,11 @@ export const seedReviewDemoMessagesInternal = internalMutation({
 // community are declined, and every post that isn't seeded (the reviewer's
 // test posts) is removed.
 export const resetReviewDemoInternal = internalMutation({
-  args: { reviewerEmail: v.string() },
+  args: { reviewer: v.string() },
   handler: async (ctx: any, args): Promise<Record<string, any>> => {
     assertReviewDemoAllowed();
     const nowMs = Date.now();
-    const reviewer = await reviewerByEmail(ctx, args.reviewerEmail);
+    const reviewer = await findReviewer(ctx, args.reviewer);
     const community = await demoCommunityFor(ctx, reviewer._id);
     if (!community) throw new Error("review_demo_not_seeded");
     const communityId = community._id;
@@ -433,7 +438,7 @@ export const resetReviewDemoInternal = internalMutation({
     }
     await syncCommunityActiveMemberCount({ ctx, communityId });
     // Then the seed puts the posts, events, course and join requests back.
-    await ctx.scheduler.runAfter(0, (internal as any).reviewDemoSeed.seedReviewDemoInternal, { reviewerEmail: args.reviewerEmail });
+    await ctx.scheduler.runAfter(0, (internal as any).reviewDemoSeed.seedReviewDemoInternal, { reviewer: args.reviewer });
     return { communityId: normalizeIdValue(communityId), declinedQuestions: declined, removedPosts, reseeding: true };
   },
 });
