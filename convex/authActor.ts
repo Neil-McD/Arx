@@ -326,9 +326,14 @@ function buildUserPatch(args: {
   const normalizedEmailChanged =
     hasEmailUpdate &&
     normalizeStoredEmail(args.normalizedEmail) !== normalizeStoredEmail(args.existing.normalizedEmail ?? args.existing.email);
+  const repairedNormalizedEmail =
+    !normalizeStoredEmail(args.existing.normalizedEmail)
+      ? normalizeStoredEmail(args.normalizedEmail ?? args.existing.email)
+      : undefined;
 
   if (emailChanged) patch.email = args.email;
   if (normalizedEmailChanged) patch.normalizedEmail = args.normalizedEmail;
+  else if (repairedNormalizedEmail) patch.normalizedEmail = repairedNormalizedEmail;
 
   if (args.displayName !== undefined && args.displayName !== args.existing.displayName) {
     patch.displayName = args.displayName;
