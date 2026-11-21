@@ -71,6 +71,7 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
   app still calls; its stored copy is the `communityPublicPages` table),
   `communityCore`, `communityLifecycle`, `communityMembershipLifecycle`,
   `communityJoinRequestCore`, `communityAdmin`, `communityPublic`, `communityDirectory`,
+  `communityMemberSearch` (per-community searchable member index for fast `@` mention autocomplete, synced on membership/profile writes and backfilled asynchronously),
   `communityColdArchive`, `communityCapabilityContext`, `communityPresenceCore`,
   `communityAccessAudit`, `communityAccessQueries`, `communityMembershipContextCore`,
   `communityNotificationAccess`, `communityRecipientCore`, `communitySemanticMembers`,
@@ -92,7 +93,7 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
   Rejoining starts as `member` (an earlier role is never restored);
   an active membership keeps its role through checkout. See
   [community-member-arrival-v1.md](community-member-arrival-v1.md).
-- **Tables:** `communities`, `communityMemberships`, `communityJoinRequests`, `communityMemberNotes`,
+- **Tables:** `communities`, `communityMemberships`, `communityMemberSearch`, `communityJoinRequests`, `communityMemberNotes`,
   `communityBlocks`, `communityMemberSettings`, `communityPresence`,
   `communityOnboardingConfigs`, `communityArchiveBillingJobs`. Tags on people
   (`communityTags`, `communityMemberTags`) were never used and were dropped Nov 7.
