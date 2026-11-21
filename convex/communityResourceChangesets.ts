@@ -879,6 +879,14 @@ async function editPageFromChangesetOperation(args: {
     });
   }
   const moduleChanged = resourceModuleIdentity(existing.moduleId) !== resourceModuleIdentity(nextModuleId);
+  if (moduleChanged) {
+    if (existing.moduleId) {
+      await args.ctx.db.patch(existing.moduleId as any, { progressIndexedAt: undefined });
+    }
+    if (nextModuleId) {
+      await args.ctx.db.patch(nextModuleId as any, { progressIndexedAt: undefined });
+    }
+  }
   const nextSortOrder = moduleChanged
     ? await getNextResourceSortOrder({
         ctx: args.ctx,
@@ -1104,6 +1112,15 @@ export async function applyCommunityResourceBuilderChangesetOperations(args: {
         moduleId,
         excludeResourceId: resource._id,
       });
+      const movedAcrossModules = resourceModuleIdentity(resource.moduleId) !== resourceModuleIdentity(moduleId);
+      if (movedAcrossModules) {
+        if (resource.moduleId) {
+          await args.ctx.db.patch(resource.moduleId as any, { progressIndexedAt: undefined });
+        }
+        if (moduleId) {
+          await args.ctx.db.patch(moduleId as any, { progressIndexedAt: undefined });
+        }
+      }
       await args.ctx.db.patch(resource._id as any, {
         ...(moduleId ? { moduleId } : { moduleId: undefined }),
         sortOrder,
