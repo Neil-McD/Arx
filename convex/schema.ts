@@ -439,6 +439,7 @@ export default defineSchema({
     .index("by_severity_createdAt", ["severity", "createdAt"])
     .index("by_actor_createdAt", ["actorUserId", "createdAt"])
     .index("by_community_createdAt", ["communityId", "createdAt"])
+    .index("by_community_subject_createdAt", ["communityId", "subjectUserId", "createdAt"])
     .index("by_providerObject", ["provider", "providerObjectId"]),
 
   platformDiagnosticEvents: defineTable({
@@ -1049,6 +1050,8 @@ export default defineSchema({
     .index("by_community", ["communityId"])
     .index("by_community_user", ["communityId", "userId"])
     .index("by_community_createdAt", ["communityId", "createdAt"])
+    .index("by_community_state_createdAt", ["communityId", "state", "createdAt"])
+    .index("by_community_pricePoint", ["communityId", "pricePointId"])
     // Who holds a role (the community card names its admins and moderators).
     .index("by_community_role_state", ["communityId", "role", "state"]),
 
@@ -1165,7 +1168,36 @@ export default defineSchema({
   })
     .index("by_user", ["userId"])
     .index("by_community", ["communityId"])
-    .index("by_community_user", ["communityId", "userId"]),
+    .index("by_community_user", ["communityId", "userId"])
+    .index("by_community_liftedAt", ["communityId", "liftedAt"]),
+
+  // Pre-computed host Members view counts for large communities (500+ members),
+  // refreshed asynchronously in paginated batches when marked stale.
+  communityMemberViewCounts: defineTable({
+    communityId: v.id("communities"),
+    counts: v.object({
+      everyone: v.number(),
+      on_hold: v.number(),
+      cancelling: v.number(),
+      know_little: v.number(),
+      past: v.number(),
+    }),
+    withAccess: v.number(),
+    prices: v.array(
+      v.object({
+        price_point_id: v.string(),
+        label: v.string(),
+        count: v.number(),
+        current: v.boolean(),
+      }),
+    ),
+    computedAt: v.number(),
+    staleAt: v.optional(v.number()),
+    recomputingStartedAt: v.optional(v.number()),
+    dirtyWhileRecomputing: v.optional(v.boolean()),
+  })
+    .index("by_community", ["communityId"])
+    .index("by_staleAt", ["staleAt"]),
 
   communityAnalyticsEvents: defineTable({
     communityId: v.id("communities"),
@@ -1625,7 +1657,24 @@ export default defineSchema({
     completedAt: v.number(),
   })
     .index("by_user_resource", ["userId", "resourceId"])
+    .index("by_community_user", ["communityId", "userId"])
     .index("by_resource", ["resourceId"]),
+
+  // Per-student per-course progress projection (communityLessonProgress.ts):
+  // one compact row per student who started a course, intersected at read time
+  // with current live lessons so course summaries scale 100x cleanly.
+  communityCourseProgress: defineTable({
+    communityId: v.id("communities"),
+    moduleId: v.id("communityResourceModules"),
+    userId: v.id("users"),
+    doneResourceIds: v.array(v.id("communityResources")),
+    lastResourceId: v.optional(v.id("communityResources")),
+    lastCompletedAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_community_module_user", ["communityId", "moduleId", "userId"])
+    .index("by_community_module", ["communityId", "moduleId"])
+    .index("by_community_user", ["communityId", "userId"]),
 
   // Files under a lesson, beside its links (communityLessonFiles.ts, Nov 18).
   // A row of its own, not an entry in lessonLinks, so the guide's course
@@ -2794,6 +2843,8 @@ export default defineSchema({
     // lessons became new to members (the Knowledge dot). updatedAt moves on
     // every rename and reorder, so it can't say this.
     publishedAt: v.optional(v.number()),
+    progressIndexedAt: v.optional(v.number()),
+    progressBackfillStartedAt: v.optional(v.number()),
     createdAt: v.number(),
     updatedAt: v.number(),
   })

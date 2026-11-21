@@ -54,6 +54,7 @@ import {
 import { POLYNET_COMMUNITY_PLATFORM_FEE_BPS } from "../shared/founderPlan";
 import { schedulePodBillingCheck } from "./communityPodBillingCheck";
 import { syncCommunityMemberSearchEntry } from "./communityMemberSearch";
+import { markCommunityMemberViewCountsStale } from "./communityMemberRecords";
 import { requireCommunityProviderAccountMatch } from "./communityCommerceCore";
 import {
   communityIsActive,
@@ -624,6 +625,7 @@ export const syncCommunitySubscriptionLifecycleInternal = internalMutation({
         nowMs,
       });
     }
+    await markCommunityMemberViewCountsStale(ctx, args.communityId, nowMs);
     // Recorded: their plan's pods follow, then connected apps hear of it. The
     // subscription's own status counts too: someone kept in by an app sale who
     // stops paying Polynet no longer holds the plan that payment bought.

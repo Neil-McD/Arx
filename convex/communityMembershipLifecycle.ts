@@ -10,6 +10,7 @@ import {
   normalizeCommunityRoleForOutput,
 } from "./communityCore";
 import { syncCommunityMemberSearchEntry } from "./communityMemberSearch";
+import { markCommunityMemberViewCountsStale } from "./communityMemberRecords";
 import { recordCommunityActivityEventBestEffort } from "./communityActivity";
 import { ensureCommunityPresenceBaseline } from "./communityPresenceCore";
 import { deleteCommunityJoinRequestByPair } from "./communityJoinRequestCore";
@@ -124,6 +125,7 @@ export async function activateCommunityMembershipCore(args: {
     active: true,
     nowMs: args.nowMs,
   });
+  await markCommunityMemberViewCountsStale(args.ctx, args.communityId, args.nowMs);
   await recordCommunityActivityEventBestEffort({
     ctx: args.ctx,
     communityId: args.communityId,

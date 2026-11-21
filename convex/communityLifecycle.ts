@@ -4,6 +4,7 @@ import { communityHasCustomSite, requireCommunitySlugShape, storedCommunityMembe
 import { ConvexError, v } from "convex/values";
 import { recordCriticalAuditEvent } from "./criticalAudit";
 import { syncCommunityMemberSearchEntry } from "./communityMemberSearch";
+import { markCommunityMemberViewCountsStale } from "./communityMemberRecords";
 import { requireOwnerBelowFreeCommunityLimit } from "./communityCore";
 import {
   type CommunityLike,
@@ -536,6 +537,7 @@ async function upsertCommunityPricePoint(args: {
     createdAt: args.nowMs,
     updatedAt: args.nowMs,
   });
+  await markCommunityMemberViewCountsStale(args.ctx, args.communityId, args.nowMs);
   return String(pricePointId);
 }
 

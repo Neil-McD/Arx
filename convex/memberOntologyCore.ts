@@ -15,6 +15,7 @@ import {
   type MemberFactLike,
   type MemberFactProvenance,
 } from "../shared/memberOntology";
+import { markCommunityMemberViewCountsStale } from "./communityMemberRecords";
 
 export type MemberFactRow = MemberFactLike & {
   _id: any;
@@ -130,6 +131,9 @@ export async function insertMemberFacts(ctx: any, args: {
       updatedAt: args.nowMs,
     });
     insertedIds.push(String(id));
+  }
+  if (args.communityId && insertedIds.length > 0) {
+    await markCommunityMemberViewCountsStale(ctx, args.communityId, args.nowMs);
   }
   await recomputeMemberSpine(ctx, args.userId, args.nowMs);
   return insertedIds;
