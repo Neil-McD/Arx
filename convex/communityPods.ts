@@ -76,12 +76,39 @@ export function isInPod(grants: any[], record: any, actor: { principalKey: strin
   return grants.some((row: any) => row.principalKey === actor.principalKey) || isHost(record, userId);
 }
 
-// Builders and admins manage every pod; a pod's hosts manage theirs.
+// Strip a user from hostUserIds on one pod (when their pod seat is revoked) or
+// every pod in a community (when they leave or are removed/banned).
+export async function removeUserFromPodHosts(
+  ctx: Ctx,
+  args: { communityId: any; userId: any; channelId?: any },
+): Promise<void> {
+  const target = String(args.userId);
+  const nowMs = Date.now();
+  const records = args.channelId
+    ? [await podRecord(ctx, args.communityId, args.channelId)].filter(Boolean)
+    : await ctx.db
+        .query("communityPods")
+        .withIndex("by_community_channel", (q: any) => q.eq("communityId", args.communityId))
+        .take(PODS_CAP);
+  for (const record of records) {
+    const existing: any[] = record?.hostUserIds ?? [];
+    if (!existing.some((id: any) => String(id) === target)) continue;
+    const hostUserIds = existing.filter((id: any) => String(id) !== target);
+    await ctx.db.patch(record._id, { hostUserIds, updatedAt: nowMs });
+  }
+}
+
+// Builders and admins manage every pod; a pod's hosts manage theirs only while
+// they still have active access to that pod room.
 async function requirePodManager(ctx: Ctx, authSubject: string | undefined, communityId: any, channelId: any) {
   const { userId, actor } = await viewerOf(ctx, authSubject, communityId);
   const channel = await activePodRoom(ctx, communityId, channelId);
   const record = await podRecord(ctx, communityId, channelId);
-  if (!actor.isManager && !isHost(record, userId)) throw new Error("community_pod_manager_required");
+  if (actor.isManager) return { userId, actor, channel, record };
+  if (!isHost(record, userId)) throw new Error("community_pod_manager_required");
+  if (!(await getCommunityChannelCapabilities({ ctx, channel, actor })).canRead) {
+    throw new Error("community_pod_manager_required");
+  }
   return { userId, actor, channel, record };
 }
 
@@ -150,7 +177,7 @@ export const listCommunityPods = query({
       const grants = await memberGrants(ctx, channel._id);
       const isMember = grants.some((row: any) => row.principalKey === actor.principalKey);
       const record = await podRecord(ctx, args.communityId, channel._id);
-      const hosting = isHost(record, userId);
+      const hosting = isHost(record, userId) && (isMember || actor.isManager);
       if (!canManage && !isInPod(grants, record, actor, userId)) continue;
       inside.add(normalizeIdValue(channel._id));
       const latest = await ctx.db.query("communityInteractionRoots")
@@ -376,8 +403,9 @@ export const getPodPage = query({
     if (!channel || channel.accessMode !== "restricted" || channel.status !== "active") return notFound;
     const record = await podRecord(ctx, args.communityId, channel._id);
     const grants = await memberGrants(ctx, channel._id);
-    const isIn = grants.some((row: any) => row.principalKey === actor.principalKey);
-    const hosting = isHost(record, userId);
+    const canReadRoom = (await getCommunityChannelCapabilities({ ctx, channel, actor })).canRead;
+    const isIn = !actor.isManager ? canReadRoom : grants.some((row: any) => row.principalKey === actor.principalKey);
+    const hosting = canReadRoom && isHost(record, userId);
     const manages = actor.isManager && !args.asMember;
     const canEnter = isIn || manages || hosting;
     const visibility = podVisibilityOf(record);

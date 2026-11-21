@@ -3728,8 +3728,13 @@ export async function executePolynetCanonicalTool(args: {
     const scope = named && named.length <= SELECTION_MAX && named.every(ref => typeof ref === "string")
       ? await resolveCommunityTarget({ ...common, path: input.target }) : null;
     if (named && scope?.ok) {
-      const found = await args.ctx.runQuery((internal as any).communityPeople.resolveMemberRefsInternal,
-        { communityId: scope.target.communityId, refs: named }) as { refs: string[]; missing: string[] };
+      let found: { refs: string[]; missing: string[] };
+      try {
+        found = await args.ctx.runQuery((internal as any).communityPeople.resolveMemberRefsInternal,
+          { communityId: scope.target.communityId, actorUserId: userId, refs: named }) as { refs: string[]; missing: string[] };
+      } catch {
+        return canonicalError("operation_not_found", "Operation not available for this caller.");
+      }
       if (found.missing.length) {
         return canonicalError("member_not_found",
           `Nobody in this community matches ${found.missing.map(name => `"${name}"`).join(", ")}. List members/ and name each person by their handle (the name in members/<handle>.json).`);

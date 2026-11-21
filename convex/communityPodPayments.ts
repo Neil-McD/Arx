@@ -13,7 +13,7 @@ import { resolveUserIdForAuthenticatedRequest } from "./authActor";
 import { fillCheckoutSuccessUrl, normalizeStripeCommunitySubscriptionStatus, requireCanonicalCheckoutReturnUrl } from "./billingCore";
 import { seatReasons, setChannelParticipantCore } from "./communityChannelParticipants";
 import { ensureCommunityStripeCustomerForUser } from "./communityCommerce";
-import { communityMembershipRowIsActive, getUniqueCommunityMembershipByPair, normalizeIdValue, requireCommunityChatAccess, requireCommunityManager } from "./communityCore";
+import { communityMembershipRowIsActive, getActiveCommunityBlock, getUniqueCommunityMembershipByPair, normalizeIdValue, requireCommunityChatAccess, requireCommunityManager } from "./communityCore";
 import { communitySubscriptionStatusGrantsAccess } from "./communitySubscriptionLifecycle";
 import { canReceiveCommunityRevenue, getStripeConnectDestinationAccountId, isStripeConnectCheckoutCapabilityError } from "./stripeConnectAccountCore";
 import { getStripeClient, requireStripeConnectWebhookConfiguration } from "./stripeCore";
@@ -167,6 +167,30 @@ export const createPendingPodPaymentInternal = internalMutation({
       // Unopened and stale, or for an old price: replaced.
       if (!row.checkoutUrl) await ctx.db.patch(row._id, { status: "expired", updatedAt: nowMs });
     }
+    const blocked = await getActiveCommunityBlock({ ctx, communityId: args.communityId, userId: args.userId });
+    if (blocked) throw new Error("community_access_blocked");
+    const record = await podRecord(ctx, args.communityId, args.channelId);
+    if (record?.visibility === "hidden") throw new Error("community_pod_not_paid");
+    if (typeof record?.seats === "number") {
+      const grants = await activeGrants(ctx, args.channelId);
+      const userPrincipal = `user:${normalizeIdValue(args.userId)}`;
+      if (grants.some((row: any) => row.principalKey === userPrincipal)) throw new Error("already_in_pod");
+      const activePrincipals = new Set(grants.map((row: any) => String(row.principalKey)));
+      const otherPendingUsers = new Set<string>();
+      const channelPending = await ctx.db.query("communityPodPayments")
+        .withIndex("by_channel_status", (q: any) => q.eq("channelId", args.channelId).eq("status", "pending"))
+        .take(MEMBERS_CAP);
+      for (const row of channelPending) {
+        const otherUserId = normalizeIdValue(row.userId);
+        if (otherUserId === normalizeIdValue(args.userId)) continue;
+        if (activePrincipals.has(`user:${otherUserId}`)) continue;
+        const stillLive = row.checkoutUrl
+          ? row.checkoutExpiresAt > nowMs
+          : row.createdAt > nowMs - RESERVATION_SHARED_MS;
+        if (stillLive) otherPendingUsers.add(otherUserId);
+      }
+      if (grants.length + otherPendingUsers.size >= record.seats) throw new Error("community_pod_full");
+    }
     const checkoutExpiresAt = nowMs + CHECKOUT_LIFETIME_MS;
     const paymentId = await ctx.db.insert("communityPodPayments", { ...rest, status: "pending", checkoutExpiresAt, createdAt: nowMs, updatedAt: nowMs });
     return { paymentId, checkoutExpiresAt, checkoutUrl: null as string | null };
@@ -179,7 +203,11 @@ export const attachPodCheckoutInternal = internalMutation({
     checkoutExpiresAt: v.optional(v.number()) },
   handler: async (ctx, args) => {
     const { paymentId, ...rest } = args;
-    await ctx.db.patch(paymentId, { ...rest, updatedAt: Date.now() });
+    const row = await ctx.db.get(paymentId);
+    if (!row) return null;
+    // Recover if another tab expired this empty reservation while Stripe was creating the checkout.
+    const statusPatch = row.status === "expired" ? { status: "pending" as const } : {};
+    await ctx.db.patch(paymentId, { ...rest, ...statusPatch, updatedAt: Date.now() });
     return null;
   },
 });
@@ -307,13 +335,23 @@ export const syncPodPaymentInternal = internalMutation({
     if (grants && !grantedAt) {
       const community = await ctx.db.get(row.communityId) as any;
       const membership = await getUniqueCommunityMembershipByPair({ ctx, communityId: row.communityId, userId: row.userId });
+      const blocked = await getActiveCommunityBlock({ ctx, communityId: row.communityId, userId: row.userId });
       const room = await ctx.db.get(row.channelId) as any;
+      const record = await podRecord(ctx, row.communityId, row.channelId);
       // Already paying for this pod through another subscription.
       const duplicate = (await ctx.db.query("communityPodPayments")
         .withIndex("by_channel_user", (q: any) => q.eq("channelId", row.channelId).eq("userId", row.userId)).collect())
         .some((other: any) => String(other._id) !== String(row._id) && other.grantedAt && GRANTING.includes(other.status));
-      const canLetIn = !duplicate && community && communityIsActive(community)
-        && membership && communityMembershipRowIsActive(membership) && room?.status === "active";
+      let hasSeat = true;
+      if (typeof record?.seats === "number") {
+        const currentGrants = await activeGrants(ctx, row.channelId);
+        const userPrincipal = `user:${normalizeIdValue(row.userId)}`;
+        const otherActiveSeats = currentGrants.filter((grant: any) => grant.principalKey !== userPrincipal).length;
+        hasSeat = otherActiveSeats < record.seats;
+      }
+      const canLetIn = !duplicate && !blocked && hasSeat && community && communityIsActive(community)
+        && membership && communityMembershipRowIsActive(membership)
+        && room?.status === "active" && room?.accessMode === "restricted";
       if (!canLetIn) {
         // Paid, but it can't let them in (the community was archived, they
         // left, the pod closed, or they already pay for it): never granted,
@@ -553,14 +591,19 @@ export const expireAbandonedPodCheckoutsInternal = internalMutation({
 });
 
 export const endUnreachablePodPaymentInternal = internalMutation({
-  args: { paymentId: v.id("communityPodPayments"), refundDue: v.optional(v.boolean()) },
+  args: { paymentId: v.id("communityPodPayments"), refundDue: v.optional(v.boolean()), cancelDue: v.optional(v.boolean()) },
   handler: async (ctx, args) => {
     const row = await ctx.db.get(args.paymentId);
     if (!row || row.status === "ended") return { ended: false };
     // Checked again inside the write: re-added meanwhile means keep billing.
     if (await reachable(ctx, row)) return { ended: false };
     await endPodPayment(ctx, row, Date.now());
-    if (args.refundDue) await ctx.db.patch(row._id, { refundDue: true });
+    if (args.refundDue || args.cancelDue) {
+      await ctx.db.patch(row._id, {
+        ...(args.refundDue ? { refundDue: true } : {}),
+        ...(args.cancelDue ? { cancelDue: true } : {}),
+      });
+    }
     return { ended: true };
   },
 });
@@ -583,6 +626,23 @@ export const clearPodRefundDueInternal = internalMutation({
   },
 });
 
+// Stripe cancellations owed after a pod became unreachable and the row was
+// locked ended. Retried by the hourly pass if the first Stripe call failed.
+export const listPodCancelsDueInternal = internalQuery({
+  args: {},
+  handler: async (ctx) => (await ctx.db.query("communityPodPayments").withIndex("by_cancelDue", (q: any) => q.eq("cancelDue", true)).take(SWEEP_PAGE))
+    .filter((row: any) => row.providerSubscriptionId)
+    .map((row: any) => ({ paymentId: row._id, providerAccountId: row.providerAccountId as string, providerSubscriptionId: row.providerSubscriptionId as string })),
+});
+
+export const clearPodCancelDueInternal = internalMutation({
+  args: { paymentId: v.id("communityPodPayments") },
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.paymentId, { cancelDue: undefined, updatedAt: Date.now() });
+    return null;
+  },
+});
+
 export const processPodRefundsInternal = internalAction({
   args: {},
   handler: async (ctx): Promise<{ refunded: number; waiting: number }> => {
@@ -599,6 +659,16 @@ export const processPodRefundsInternal = internalAction({
         console.error("pod_refund_failed", { paymentId: String(target.paymentId), error: error instanceof Error ? error.message : String(error) });
       }
     }
+    const cancelsDue: Array<{ paymentId: any; providerAccountId: string; providerSubscriptionId: string }> =
+      await ctx.runQuery(internal.communityPodPayments.listPodCancelsDueInternal, {});
+    for (const target of cancelsDue) {
+      try {
+        await cancelStripeSubscriptionIfActive({ providerAccountId: target.providerAccountId, providerSubscriptionId: target.providerSubscriptionId });
+        await ctx.runMutation(internal.communityPodPayments.clearPodCancelDueInternal, { paymentId: target.paymentId });
+      } catch (error) {
+        console.error("pod_cancel_retry_failed", { paymentId: String(target.paymentId), error: error instanceof Error ? error.message : String(error) });
+      }
+    }
     return { refunded, waiting: due.length - refunded };
   },
 });
@@ -609,14 +679,19 @@ async function stopBilling(ctx: any, targets: SweepTarget[]): Promise<number> {
     try {
       if (target.refund) {
         // Recorded as owed first; the refund pass (below, and hourly) pays it.
-        await ctx.runMutation(internal.communityPodPayments.endUnreachablePodPaymentInternal, { paymentId: target.paymentId, refundDue: true });
+        const ended = await ctx.runMutation(internal.communityPodPayments.endUnreachablePodPaymentInternal, { paymentId: target.paymentId, refundDue: true });
+        if (ended.ended) stopped += 1;
       } else {
+        // Re-check reachability and lock the row ended BEFORE canceling Stripe,
+        // so a re-added member never has their live Stripe subscription canceled.
+        const ended = await ctx.runMutation(internal.communityPodPayments.endUnreachablePodPaymentInternal, { paymentId: target.paymentId, cancelDue: true });
+        if (!ended.ended) continue;
         await cancelStripeSubscriptionIfActive({ providerAccountId: target.providerAccountId, providerSubscriptionId: target.providerSubscriptionId });
-        await ctx.runMutation(internal.communityPodPayments.endUnreachablePodPaymentInternal, { paymentId: target.paymentId });
+        await ctx.runMutation(internal.communityPodPayments.clearPodCancelDueInternal, { paymentId: target.paymentId });
+        stopped += 1;
       }
-      stopped += 1;
     } catch (error) {
-      // Left as it was; the hourly pass tries again.
+      // If ended with cancelDue: true, the hourly pass retries Stripe cancellation.
       console.error("pod_payment_stop_failed", { paymentId: String(target.paymentId), error: error instanceof Error ? error.message : String(error) });
     }
   }

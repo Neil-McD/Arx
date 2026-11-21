@@ -19,7 +19,7 @@ async function world(t: any) {
     const hostId = await user("host");
     const communityId = await ctx.db.insert("communities", { ownerId, slug: "club", name: "Club", visibility: "published",
       inferenceFundingPolicy: "managed_required", entryPolicy: "open", activeMemberCount: 2, createdAt: NOW, updatedAt: NOW });
-    await ctx.db.insert("communityMemberships", { communityId, userId: hostId, role: "member", accessSource: "free_grant", state: "active", createdAt: NOW, updatedAt: NOW });
+    const hostMembershipId = await ctx.db.insert("communityMemberships", { communityId, userId: hostId, role: "member", accessSource: "free_grant", state: "active", createdAt: NOW, updatedAt: NOW });
     await ctx.db.insert("operatorRoles", { userId: ownerId, role: "owner", active: true, createdAt: NOW, updatedAt: NOW });
     const channel = (slug: string, accessMode: "all_members" | "restricted") => ctx.db.insert("communityChannels", { communityId, slug, name: slug,
       accessMode, postingPolicy: "members", status: "active", position: 0, createdAt: NOW, updatedAt: NOW });
@@ -28,8 +28,9 @@ async function world(t: any) {
     const foundersId = await channel("founders", "restricted");
     await ctx.db.insert("communityPods", { communityId, channelId: climbersId, purpose: "Train together.", visibility: "listed", hostUserIds: [hostId], createdAt: NOW, updatedAt: NOW });
     await ctx.db.insert("communityPods", { communityId, channelId: foundersId, purpose: "Founders.", visibility: "hidden", createdAt: NOW, updatedAt: NOW });
-    // The guide works in climbers only.
+    // The guide works in climbers only, and hostId holds an active pod seat.
     await ctx.db.insert("communityChannelParticipants", { communityId, channelId: climbersId, principalKey: "community_agent", status: "active", createdByUserId: ownerId, createdAt: NOW, updatedAt: NOW });
+    await ctx.db.insert("communityChannelParticipants", { communityId, channelId: climbersId, principalKey: `user:${hostId}`, status: "active", reasons: ["host"], membershipId: hostMembershipId, membershipActivationSequence: 0, createdByUserId: ownerId, createdAt: NOW, updatedAt: NOW });
     const post = (channelId: any, text: string, key: string, at: number) => ctx.db.insert("communityInteractionRoots", { communityId, channelId,
       actorType: "human", actorUserId: hostId, kind: "discussion", status: "live", visibilityScope: "community", contentSummary: text,
       replyCount: 0, reactionSummary: [], idempotencyKey: key, createdAt: at, updatedAt: at });
