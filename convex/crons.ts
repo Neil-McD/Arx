@@ -65,4 +65,10 @@ crons.interval("repair lost memory reviews", { hours: 24 },
 // independently of member administration actions (no-op once all are indexed).
 crons.interval("backfill community member search index", { minutes: 15 },
   (internal as any).communityMemberSearch.sweepUnindexedCommunityMemberSearchInternal, {});
+// Backfill pre-existing courses into the per-student course progress projection.
+crons.interval("backfill course progress projections", { minutes: 15 },
+  (internal as any).communityLessonProgress.sweepUnindexedCourseProgressInternal, {});
+// Refresh stale pre-computed member view counts and seed large communities (500+).
+crons.interval("refresh community member view counts", { minutes: 15 },
+  (internal as any).communityMemberRecords.sweepStaleMemberViewCountsInternal, {});
 export default crons;

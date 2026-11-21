@@ -93,7 +93,7 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
   Rejoining starts as `member` (an earlier role is never restored);
   an active membership keeps its role through checkout. See
   [community-member-arrival-v1.md](community-member-arrival-v1.md).
-- **Tables:** `communities`, `communityMemberships`, `communityMemberSearch`, `communityJoinRequests`, `communityMemberNotes`,
+- **Tables:** `communities`, `communityMemberships`, `communityMemberSearch`, `communityMemberViewCounts`, `communityJoinRequests`, `communityMemberNotes`,
   `communityBlocks`, `communityMemberSettings`, `communityPresence`,
   `communityOnboardingConfigs`, `communityArchiveBillingJobs`. Tags on people
   (`communityTags`, `communityMemberTags`) were never used and were dropped Nov 7.
@@ -201,7 +201,7 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
 - **Tables:** `communityResourceModules`, `communityResources`,
   `communityResourceContents`, `communitySourceUnits`, `communitySourceUnitContents`,
   `communitySourceCrawlJobs`, `communityResourceBuilderChangesets`,
-  `communityLessonProgress`, `communityLessonFiles`.
+  `communityLessonProgress`, `communityCourseProgress`, `communityLessonFiles`.
 
 ### 6. Events — Keep
 

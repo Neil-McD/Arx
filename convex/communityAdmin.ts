@@ -73,6 +73,7 @@ import { deleteCommunityReadCursorsForUserCommunity } from "./communityReadCurso
 import { deleteCommunityPresenceForUser } from "./communityPresenceCore";
 import { communityIsActive } from "../shared/communityLifecycle";
 import { recordCriticalAuditEvent } from "./criticalAudit";
+import { markCommunityMemberViewCountsStale } from "./communityMemberRecords";
 import { resolveUserProfileDisplayProjection } from "./userProfileProjection";
 
 type AnalyticsRangeValue = "7d" | "30d" | "90d" | "1y" | "all";
@@ -1475,6 +1476,7 @@ async function denyCommunityJoinRequestForReviewerCore(ctx: any, args: {
           nowMs,
           cooldownMs: COMMUNITY_JOIN_REAPPLY_COOLDOWN_MS,
         });
+        await markCommunityMemberViewCountsStale(ctx, request.communityId, nowMs);
         return { ok: true };
       },
     });
@@ -1726,6 +1728,7 @@ export const revokeCommunityMemberInternal = internalMutation({
             active: false,
             nowMs,
           });
+          await markCommunityMemberViewCountsStale(ctx, args.communityId, nowMs);
         }
         const memberSettings = (await ctx.db
           .query("communityMemberSettings" as any)
@@ -1956,6 +1959,7 @@ export const blockCommunityUserInternal = internalMutation({
       active: false,
       nowMs,
     });
+    await markCommunityMemberViewCountsStale(ctx, args.communityId, nowMs);
     await recordCriticalAuditEvent(ctx, {
       eventKey: `community_member_blocked:${args.targetUserId}:${nowMs}`, eventType: "community_member_blocked",
       severity: "info", status: "succeeded", actorUserId: userId, subjectUserId: args.targetUserId,
@@ -1985,6 +1989,7 @@ export async function unbanCommunityUserForUser(ctx: any, args: { userId: any; c
     liftedAt: nowMs,
     updatedAt: nowMs,
   });
+  await markCommunityMemberViewCountsStale(ctx, args.communityId, nowMs);
   return { ok: true };
 }
 
@@ -2363,6 +2368,7 @@ async function leaveCommunityForUser(ctx: any, args: { communityId: any; userId:
             active: false,
             nowMs,
           });
+          await markCommunityMemberViewCountsStale(ctx, args.communityId, nowMs);
         }
       }
       const memberSettings = (await ctx.db

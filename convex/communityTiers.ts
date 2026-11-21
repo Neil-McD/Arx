@@ -1,5 +1,6 @@
 import { heldTiers } from "./communityHeldTiers";
 import { tierHoldersChanged } from "./communityPlanPods";
+import { markCommunityMemberViewCountsStale } from "./communityMemberRecords";
 // Tiers and grants (one door, docs/specs/builder-modalities-v0.md, slice 1).
 // A membership holds one tier at a time; a tier gives grants, the names a
 // connected app reads (for Distribution Engineer: de:connect, de:setter,
@@ -181,6 +182,7 @@ export const saveCommunityTier = mutation({
           isCurrent: true, tierKey: key, createdAt: nowMs, updatedAt: nowMs,
         } as any);
       }
+      await markCommunityMemberViewCountsStale(ctx, args.communityId, nowMs);
     }
     void community;
     // Grants or pods changed: everyone holding this plan gets its pods as they are now,

@@ -21,6 +21,7 @@ import {
 } from "./communityCore";
 import { activateCommunityMembershipCore, endedCommunityMembershipFields } from "./communityMembershipLifecycle";
 import { syncCommunityMemberSearchEntry } from "./communityMemberSearch";
+import { markCommunityMemberViewCountsStale } from "./communityMemberRecords";
 import { memberAccessChanged } from "./communityPlanPods";
 import { schedulePodBillingCheck } from "./communityPodBillingCheck";
 import { adjustCommunityActiveMemberCountForMembershipTransition } from "./communityCore";
@@ -88,6 +89,7 @@ export async function applyAppGrants(ctx: any, communityId: any, userId: any, no
     active: false,
     nowMs,
   });
+  await markCommunityMemberViewCountsStale(ctx, communityId, nowMs);
   await schedulePodBillingCheck(ctx, { communityId, userId });
   await memberAccessChanged(ctx, communityId, userId);
   return "ended";
