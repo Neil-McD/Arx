@@ -213,6 +213,7 @@ import type * as profileRelationshipCore from "../profileRelationshipCore.js";
 import type * as profiles from "../profiles.js";
 import type * as providerCostCore from "../providerCostCore.js";
 import type * as publicAppUrl from "../publicAppUrl.js";
+import type * as reviewDemoSeed from "../reviewDemoSeed.js";
 import type * as runtimeAgentLoop from "../runtimeAgentLoop.js";
 import type * as runtimeCancellation from "../runtimeCancellation.js";
 import type * as runtimeContextIntegrity from "../runtimeContextIntegrity.js";
@@ -451,6 +452,7 @@ declare const fullApi: ApiFromModules<{
   profiles: typeof profiles;
   providerCostCore: typeof providerCostCore;
   publicAppUrl: typeof publicAppUrl;
+  reviewDemoSeed: typeof reviewDemoSeed;
   runtimeAgentLoop: typeof runtimeAgentLoop;
   runtimeCancellation: typeof runtimeCancellation;
   runtimeContextIntegrity: typeof runtimeContextIntegrity;

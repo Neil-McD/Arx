@@ -39,10 +39,12 @@ export function podsAttentionDot(args: {
   return combinedDot(restricted, args.indicators, args.openSlug);
 }
 
-// Linear-style left-nav pods list: up to 3 pods the viewer is in, plus the
-// rolled-up dot for all pods (when collapsed) and for overflow pods #4+ (when
-// expanded so visible pod rows carry their own dots without duplication).
-export function selectNavPods<T extends { slug: string; access_mode?: string | null }>(args: {
+// Linear-style left-nav pods list: up to 3 pods the viewer actually belongs to
+// (active participant grant or pod host — excluding unrelated managed rooms an
+// owner/admin isn't in), plus the rolled-up dot for all pods (when collapsed)
+// and for overflow pods #4+ (when expanded so visible pod rows carry their own
+// dots without duplication).
+export function selectNavPods<T extends { slug: string; access_mode?: string | null; is_pod_member?: boolean }>(args: {
   channels: T[];
   indicators: Record<string, RoomAttention>;
   openSlug?: string | null;
@@ -50,8 +52,10 @@ export function selectNavPods<T extends { slug: string; access_mode?: string | n
 }): { shown: T[]; overflowDot: PodsDot; allDot: PodsDot } {
   const max = args.max ?? NAV_PODS_MAX;
   const restricted = args.channels.filter((channel) => channel.access_mode === "restricted");
-  const shown = restricted.slice(0, max);
-  const overflow = restricted.slice(max);
+  const memberPods = restricted.filter((channel) => channel.is_pod_member !== false);
+  const shown = memberPods.slice(0, max);
+  const shownSlugs = new Set(shown.map((channel) => channel.slug));
+  const overflow = restricted.filter((channel) => !shownSlugs.has(channel.slug));
   return {
     shown,
     overflowDot: combinedDot(overflow, args.indicators, args.openSlug),

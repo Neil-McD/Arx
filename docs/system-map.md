@@ -364,7 +364,9 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
 - **Code:** `communityFounderBrief` (cron "send due founder briefs", every 15 minutes;
   the owner turns it on in Settings → Daily brief, `CommunityFounderBriefSection`);
   `stagingSeedBriefLab` and `stagingSeedPolynetDemo` (hand-run staging seeds; the demo
-  community behind design v1).
+  community behind design v1); `reviewDemoSeed` (hand-run on production too, behind
+  `POLYNET_ALLOW_REVIEW_DEMO=1`: the Unlisted Harbor Run Club for app-directory
+  reviewers, owned by the reviewer account; seed, messages, reset).
 - **Tables:** `communityFounderBriefSettings`, `communityFounderBriefs`.
 - **Owner moments:** `communityOwnerMoments` (Home's milestone and detected-problem
   cards for the owner, [gateway spec](specs/community-agent-gateway-v0.md); the card

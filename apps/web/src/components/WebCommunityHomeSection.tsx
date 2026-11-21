@@ -314,12 +314,13 @@ export function WebCommunityHomeSection(props: WebCommunityHomeSectionProps) {
   const now = props.now ?? new Date();
   const greeting = `${greetingFor(now)}, ${props.firstName}.`;
 
-  // When live join-review state is provided, trust its count directly (including
-  // 0 right after approving the last request) instead of falling back to a stale
-  // snapshot count. Only fall back to the snapshot count when joinReview is absent.
-  const hasLiveJoinReview = isHost && props.joinReview !== null && props.joinReview !== undefined;
-  const joinReview = hasLiveJoinReview && props.joinReview!.requests.length > 0 ? props.joinReview! : null;
-  const joinCount = !isHost ? 0 : hasLiveJoinReview ? props.joinReview!.requests.length : snapshot?.joinRequestsPending ?? 0;
+  // Trust live join-review state (including 0 right after approving the last
+  // request) only once live loading has succeeded. While loading or on fetch
+  // failure, fall back to the server snapshot count so genuine pending requests
+  // are never hidden.
+  const hasLoadedJoinReview = isHost && props.joinReview != null && props.joinReview.loaded !== false;
+  const joinReview = hasLoadedJoinReview && props.joinReview!.requests.length > 0 ? props.joinReview! : null;
+  const joinCount = !isHost ? 0 : hasLoadedJoinReview ? props.joinReview!.requests.length : snapshot?.joinRequestsPending ?? 0;
   const things = isHost
     ? hostThingsFor(noticedWithoutDrafted(noticed ?? [], drafts ?? []), { agentOn, actions: props, onNotNow: notNow })
     : memberThingsFor(steps ?? [], props);

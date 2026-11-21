@@ -19,6 +19,9 @@ export const NEEDS_YOU_JOIN_SHOWN = 3;
 
 export type NeedsYouJoinReview = {
   requests: CommunityAdmissionJoinRequest[];
+  // True only once live join-request loading has succeeded for this community.
+  // When false (initial load or fetch error), Home falls back to snapshot counts.
+  loaded?: boolean;
   decidingId: string | null;
   onApprove: (id: string) => void;
   onDecline: (id: string) => void;

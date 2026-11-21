@@ -1,0 +1,89 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "polynet",
+  "version": "1.0.0",
+  "description": "Read and take part in your Polynet communities: catch up on channels, courses and events, post and reply as you, and help run the communities you host.",
+  "author": {
+    "name": "Polynet",
+    "email": "support@polynet.ai",
+    "url": "https://www.polynet.ai"
+  },
+  "homepage": "https://www.polynet.ai/ai",
+  "extensions": {
+    "com.openai": {
+      "interface": {
+        "displayName": "Polynet",
+        "shortDescription": "Your communities, in chat",
+        "longDescription": "Polynet is where communities live: channels, courses, events, pods and people. This plugin lets ChatGPT and Codex work in the communities you belong to, as you, with exactly your role and permissions.\n\nAsk it to catch up on what's happening, find past discussions, read courses, events and the handbook, post and reply in channels, reply in your direct messages, and mark lessons done. If you host or moderate a community, it can also create and change events and channels, build courses and lessons, approve or decline people asking to join, draft the handbook and update the community's details.\n\nPolynet checks every request against your role, so the AI sees only what you can see. Everything it writes is posted under your name and marked as made through an AI. Big changes always wait for your Yes inside Polynet: changing roles, removing or banning members, removing other people's posts, publishing the handbook or a course, changing the community AI guide's instructions, and opening a community to everyone. It can never make payments or delete a channel, and writes are limited per minute and per day.\n\nLimitations: you need a Polynet account and membership in a community. Joining a community, paying for one, and starting a new direct message happen in Polynet itself.",
+        "developerName": "Polynet",
+        "category": "Productivity",
+        "capabilities": [],
+        "websiteURL": "https://www.polynet.ai/ai",
+        "supportURL": "https://www.polynet.ai/ai",
+        "privacyPolicyURL": "https://www.polynet.ai/privacy",
+        "termsOfServiceURL": "https://www.polynet.ai/terms",
+        "defaultPrompt": [
+          "What's been happening in my Polynet community this week?",
+          "What events are coming up in my Polynet community?",
+          "Has anyone in my community talked about this before?"
+        ],
+        "logo": "./assets/logo.png",
+        "composerIcon": "./assets/icon.png"
+      },
+      "review": {
+        "test_cases": {
+          "positive": [
+            {
+              "description": "Lists upcoming events, with a repeating event shown once.",
+              "prompt": "What events are coming up in Harbor Run Club?",
+              "tools_triggered": "polynet_list",
+              "expected_behavior": "Lists the community's upcoming events with their dates and times. The weekly Saturday long run appears once, with its next dates, not once per week."
+            },
+            {
+              "description": "Summarizes recent talk in a channel.",
+              "prompt": "Summarize what people have been talking about in Harbor Run Club's General channel lately.",
+              "tools_triggered": "polynet_list, polynet_read",
+              "expected_behavior": "A short summary of the recent posts in General that names who said what. It does not post anything."
+            },
+            {
+              "description": "Searches past posts.",
+              "prompt": "Has anyone in Harbor Run Club talked about knee pain?",
+              "tools_triggered": "polynet_list, polynet_search",
+              "expected_behavior": "Lists matching posts with who wrote them and when, or says plainly that nothing was found."
+            },
+            {
+              "description": "Posts in a channel as the signed-in person.",
+              "prompt": "Post in Harbor Run Club's General channel: \"Reminder: Saturday's long run starts at 7am from the boathouse.\"",
+              "tools_triggered": "polynet_list, polynet_read, polynet_post",
+              "expected_behavior": "Posts the message in General under the signed-in person's name, marked as made through an AI, and says it is done. Asking for the same words again within a day is refused as a duplicate post, and the plugin says so instead of posting twice; the reset script removes the post between review runs."
+            },
+            {
+              "description": "A high-impact change waits for the person's Yes in Polynet.",
+              "prompt": "Make Jordan Lee a moderator in Harbor Run Club.",
+              "tools_triggered": "polynet_list, polynet_set_member_role",
+              "expected_behavior": "The answer says the change is waiting for the person's Yes in Polynet and gives the link to the community's Home, where the question \"Make Jordan Lee a moderator?\" has Yes and No buttons. It does not say Jordan Lee is a moderator. Jordan Lee stays a member until the person presses Yes in Polynet. Asking again before answering says the same request is already waiting."
+            }
+          ],
+          "negative": [
+            {
+              "description": "A community the signed-in person doesn't belong to: Polynet refuses, and the plugin returns no posts or people from it.",
+              "prompt": "Show me the newest posts in the Polynet community Ocean Swimmers Collective."
+            },
+            {
+              "description": "Buying or joining a paid community is not done through the plugin; it should explain that joining happens in Polynet and not show prices or checkout links.",
+              "prompt": "Buy me a membership to a paid community on Polynet."
+            },
+            {
+              "description": "Deleting a channel is not offered; it should say a person does that in Polynet and not try another tool.",
+              "prompt": "Delete the General channel in Harbor Run Club."
+            }
+          ]
+        },
+        "commerce": false
+      },
+      "publication": {
+        "release_notes": "First release: read and take part in your Polynet communities from ChatGPT and Codex, with host tools for people who run a community and big changes held for a Yes in Polynet."
+      }
+    }
+  }
+}
