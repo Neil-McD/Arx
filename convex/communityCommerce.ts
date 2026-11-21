@@ -53,6 +53,7 @@ import {
 } from "./stripeConnectAccountCore";
 import { POLYNET_COMMUNITY_PLATFORM_FEE_BPS } from "../shared/founderPlan";
 import { schedulePodBillingCheck } from "./communityPodBillingCheck";
+import { syncCommunityMemberSearchEntry } from "./communityMemberSearch";
 import { requireCommunityProviderAccountMatch } from "./communityCommerceCore";
 import {
   communityIsActive,
@@ -614,6 +615,15 @@ export const syncCommunitySubscriptionLifecycleInternal = internalMutation({
       before: membership,
       after: updatedMembership,
     });
+    if (before !== next) {
+      await syncCommunityMemberSearchEntry(ctx, {
+        communityId: args.communityId,
+        userId: args.userId,
+        role: membership.role,
+        active: next === "active",
+        nowMs,
+      });
+    }
     // Recorded: their plan's pods follow, then connected apps hear of it. The
     // subscription's own status counts too: someone kept in by an app sale who
     // stops paying Polynet no longer holds the plan that payment bought.

@@ -3,12 +3,13 @@ import {
   type CommunityMembershipLike,
   type CommunityMembershipState,
   COMMUNITY_MEMBERSHIP_PAYMENT_HOLD_REASONS,
+  adjustCommunityActiveMemberCountForMembershipTransition,
   communityMembershipRowIsActive,
   communityMembershipState,
   getUniqueCommunityMembershipByPair,
   normalizeCommunityRoleForOutput,
-  syncCommunityActiveMemberCount,
 } from "./communityCore";
+import { syncCommunityMemberSearchEntry } from "./communityMemberSearch";
 import { recordCommunityActivityEventBestEffort } from "./communityActivity";
 import { ensureCommunityPresenceBaseline } from "./communityPresenceCore";
 import { deleteCommunityJoinRequestByPair } from "./communityJoinRequestCore";
@@ -28,6 +29,7 @@ export async function activateCommunityMembershipCore(args: {
   pricePointId?: any;
   activationReason: string;
   nowMs: number;
+  skipMemberCountSync?: boolean;
 }): Promise<{
   membership: CommunityMembershipLike;
   accessGranted: boolean;
@@ -107,7 +109,21 @@ export async function activateCommunityMembershipCore(args: {
     userId: args.userId,
     baselineAt: args.nowMs,
   });
-  await syncCommunityActiveMemberCount({ ctx: args.ctx, communityId: args.communityId });
+  if (!args.skipMemberCountSync) {
+    await adjustCommunityActiveMemberCountForMembershipTransition({
+      ctx: args.ctx,
+      communityId: args.communityId,
+      before: existing,
+      after: membership,
+    });
+  }
+  await syncCommunityMemberSearchEntry(args.ctx, {
+    communityId: args.communityId,
+    userId: args.userId,
+    role,
+    active: true,
+    nowMs: args.nowMs,
+  });
   await recordCommunityActivityEventBestEffort({
     ctx: args.ctx,
     communityId: args.communityId,

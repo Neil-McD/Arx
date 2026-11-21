@@ -62,8 +62,11 @@ export async function markReplyDraftDue(ctx: any, args: { communityId: any; chan
   if (!channel || channel.status !== "active" || channel.accessMode !== "all_members" || String(channel.communityId) !== String(args.communityId)) return;
   const scope = communityScopeKey(args.communityId);
   const work = await workFor(ctx, scope, "reply_draft");
-  if (work?.dueAt) {
-    await ctx.db.patch(work._id, { pending: work.pending + 1, updatedAt: args.nowMs });
+  if (work?.dueAt && work.pending > 0) {
+    const leased = typeof work.leaseUntil === "number" && work.leaseUntil > args.nowMs;
+    if (leased && !work.dirtyWhileLeased) {
+      await ctx.db.patch(work._id, { pending: work.pending + 1, dirtyWhileLeased: true, updatedAt: args.nowMs });
+    }
     return;
   }
   const dueAt = args.nowMs + REPLY_DRAFT_WAIT_MS;

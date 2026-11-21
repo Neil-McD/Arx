@@ -3,6 +3,7 @@ import { internalMutation, internalQuery, mutation, query } from "./_generated/s
 import { communityHasCustomSite, requireCommunitySlugShape, storedCommunityMemberExperience } from "./communitySites";
 import { ConvexError, v } from "convex/values";
 import { recordCriticalAuditEvent } from "./criticalAudit";
+import { syncCommunityMemberSearchEntry } from "./communityMemberSearch";
 import { requireOwnerBelowFreeCommunityLimit } from "./communityCore";
 import {
   type CommunityLike,
@@ -735,8 +736,16 @@ export const createCommunity = mutation({
       inferenceFundingPolicy: COMMUNITY_FUNDING_POLICY_MANAGED,
       entryPolicy,
       activeMemberCount: 1,
+      memberSearchIndexedAt: nowMs,
       createdAt: nowMs,
       updatedAt: nowMs,
+    });
+    await syncCommunityMemberSearchEntry(ctx, {
+      communityId,
+      userId: ownerId,
+      role: "owner",
+      active: true,
+      nowMs,
     });
     await syncCommunityWeeklyDigestScheduleForCommunity(ctx, {
       communityId,

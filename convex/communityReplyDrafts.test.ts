@@ -81,7 +81,7 @@ test("a person's post in an open channel makes the look due a day later; a pod's
   expect(await work(t, w.communityId)).toBeNull();
   await t.run((ctx: any) => markReplyDraftDue(ctx, { communityId: w.communityId, channelId: w.general, actorType: "human", nowMs: NOW }));
   await t.run((ctx: any) => markReplyDraftDue(ctx, { communityId: w.communityId, channelId: w.general, actorType: "human", nowMs: NOW + 5_000 }));
-  expect(await work(t, w.communityId)).toMatchObject({ kind: "reply_draft", pending: 2, dueAt: NOW + DAY });
+  expect(await work(t, w.communityId)).toMatchObject({ kind: "reply_draft", pending: 1, dueAt: NOW + DAY });
 });
 
 test("one request: the guide reads the question and the lessons members can see, and its draft waits for the host", async () => {

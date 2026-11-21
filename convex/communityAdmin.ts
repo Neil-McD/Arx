@@ -3,6 +3,10 @@ import { memberAccessChanged } from "./communityPlanPods";
 import { action, internalAction, internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import { schedulePodBillingCheck } from "./communityPodBillingCheck";
 import { removeUserFromPodHosts } from "./communityPods";
+import {
+  maybeScheduleMemberSearchBackfill,
+  syncCommunityMemberSearchEntry,
+} from "./communityMemberSearch";
 import { communityHasCustomSite, communityMemberExperience } from "./communitySites";
 import { v } from "convex/values";
 import { formatMoneyBaseUnits } from "../shared/contentFormatting";
@@ -682,6 +686,7 @@ async function approveCommunityJoinRequestForFreeAccess(args: {
   request: CommunityJoinRequestLike;
   nowMs: number;
   grantReason: string;
+  skipMemberCountSync?: boolean;
 }): Promise<{ grantedMembership: boolean; membership: CommunityMembershipLike }> {
   if (String(args.community.ownerId) === String(args.request.userId)) {
     throw new Error("community_owner_join_request_forbidden");
@@ -712,6 +717,7 @@ async function approveCommunityJoinRequestForFreeAccess(args: {
     accessSource: restoredAccessSource,
     activationReason: args.grantReason,
     nowMs: args.nowMs,
+    skipMemberCountSync: args.skipMemberCountSync,
   });
   const grantedMembershipMarker = activation.activationMarker;
   if (grantedMembershipMarker) {
@@ -732,15 +738,17 @@ async function approvePendingJoinRequestsForOpenAccessBatch(args: {
   nowMs: number;
   limit: number;
 }): Promise<{ approvedCount: number; hasMore: boolean }> {
+  const safeLimit = Math.max(1, Math.min(50, Math.floor(args.limit)));
   const rows = (await args.ctx.db
     .query("communityJoinRequests")
     .withIndex("by_community_status_createdAt", (q: any) =>
       q.eq("communityId", args.community._id).eq("status", "pending"),
     )
     .order("asc")
-    .take(args.limit + 1)) as CommunityJoinRequestLike[];
-  const batch = rows.slice(0, args.limit);
+    .take(safeLimit + 1)) as CommunityJoinRequestLike[];
+  const batch = rows.slice(0, safeLimit);
   let approvedCount = 0;
+  let newlyActiveCount = 0;
   for (const request of batch) {
     const impossibleApplicant =
       String(args.community.ownerId) === String(request.userId) ||
@@ -757,18 +765,41 @@ async function approvePendingJoinRequestsForOpenAccessBatch(args: {
       });
       continue;
     }
-    await approveCommunityJoinRequestForFreeAccess({
+    const result = await approveCommunityJoinRequestForFreeAccess({
       ctx: args.ctx,
       community: args.community,
       request,
       nowMs: args.nowMs,
       grantReason: "free_access_mode_opened",
+      skipMemberCountSync: true,
     });
     approvedCount += 1;
+    if (result.grantedMembership && String(request.userId) !== String(args.community.ownerId)) {
+      newlyActiveCount += 1;
+    }
+  }
+  if (newlyActiveCount > 0) {
+    const freshCommunity = (await args.ctx.db.get(args.community._id as any)) as CommunityLike | null;
+    if (freshCommunity) {
+      const currentCount = typeof freshCommunity.activeMemberCount === "number" && Number.isFinite(freshCommunity.activeMemberCount)
+        ? Math.max(1, Math.floor(freshCommunity.activeMemberCount))
+        : null;
+      if (currentCount === null) {
+        await syncCommunityActiveMemberCount({
+          ctx: args.ctx,
+          communityId: args.community._id,
+          community: freshCommunity,
+        });
+      } else {
+        await args.ctx.db.patch(freshCommunity._id as any, {
+          activeMemberCount: currentCount + newlyActiveCount,
+        });
+      }
+    }
   }
   return {
     approvedCount,
-    hasMore: rows.length > args.limit,
+    hasMore: rows.length > safeLimit,
   };
 }
 
@@ -1051,6 +1082,7 @@ export const syncCommunityMembershipCount = mutation({
     if (!viewerCanManageMembers) {
       throw new Error("community_manager_required");
     }
+    await maybeScheduleMemberSearchBackfill(ctx, community as any, Date.now());
     return await syncCommunityActiveMemberCount({
       ctx,
       communityId: args.communityId,
@@ -1680,6 +1712,13 @@ export const revokeCommunityMemberInternal = internalMutation({
             before: membership,
             after: revokedMembership,
           });
+          await syncCommunityMemberSearchEntry(ctx, {
+            communityId: args.communityId,
+            userId: membership.userId,
+            role: membership.role,
+            active: false,
+            nowMs,
+          });
         }
         const memberSettings = (await ctx.db
           .query("communityMemberSettings" as any)
@@ -2302,6 +2341,15 @@ async function leaveCommunityForUser(ctx: any, args: { communityId: any; userId:
           before: membership,
           after,
         });
+        if (leaving) {
+          await syncCommunityMemberSearchEntry(ctx, {
+            communityId: args.communityId,
+            userId: membership.userId,
+            role: membership.role,
+            active: false,
+            nowMs,
+          });
+        }
       }
       const memberSettings = (await ctx.db
         .query("communityMemberSettings" as any)
