@@ -200,7 +200,7 @@ require_multiline_match "$COMMUNITY_CORE_FILE" \
   'export async function adjustCommunityActiveMemberCountForMembershipTransition\([\s\S]*?syncCommunityActiveMemberCount' \
   "membership transitions go through the durable member-count helper"
 require_multiline_match "$COMMUNITY_MEMBERSHIP_LIFECYCLE_FILE" \
-  'export async function activateCommunityMembershipCore[\s\S]*?syncCommunityActiveMemberCount' \
+  'export async function activateCommunityMembershipCore[\s\S]*?adjustCommunityActiveMemberCountForMembershipTransition' \
   "membership activations reconcile member counts through one canonical helper"
 require_multiline_match "$COMMUNITY_ADMIN_FILE" \
   'export const countCommunityMemberships = query\([\s\S]*?if \(sinceMs === null\) \{[\s\S]*?return await countCanonicalCommunityMembers\(\{' \
