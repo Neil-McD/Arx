@@ -4,6 +4,7 @@ import { ensureAuthenticatedActor, resolveUserIdForAuthenticatedRequest } from "
 import { readAuthenticatedIdentityProfile } from "./authIdentity";
 import { validateProfileHandle } from "../shared/profileHandle";
 import {
+  assertUnclaimedPublicImageStorageId,
   communityMembershipRowIsActive,
   getUniqueCommunityMembershipByPair,
   normalizeCommunityRoleForOutput,
@@ -128,6 +129,7 @@ async function maybeResolveStorageUrl(ctx: any, storageId: unknown): Promise<str
 async function assertProfileAvatarStorageResolvable(ctx: any, storageId: unknown): Promise<void> {
   if (!storageId) return;
   try {
+    await assertUnclaimedPublicImageStorageId(ctx, storageId, "profile_avatar_invalid");
     const resolved = await maybeResolveStorageUrl(ctx, storageId);
     if (resolved) return;
   } catch {
@@ -568,7 +570,10 @@ async function writeProfileDetailForUser(
   await ctx.db.patch(actor.dbUserId, userPatch);
 
   const existingDetail = await findProfileDetailByUserId(ctx, actor.dbUserId);
-  if (args.avatarStorageId) {
+  if (
+    args.avatarStorageId &&
+    String(args.avatarStorageId) !== String(existingDetail?.avatarStorageId ?? "")
+  ) {
     await assertProfileAvatarStorageResolvable(ctx, args.avatarStorageId);
   }
   const termsOfServiceVersion = normalizeOptionalText(args.termsOfServiceVersion);

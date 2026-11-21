@@ -7,7 +7,6 @@ import {
   communityResourceBodyChars,
   communityResourceIsLiveModulePage,
   communityResourceModuleIsLive,
-  maybeDeleteStorageAsset,
   normalizeIdValue,
   normalizeLessonLinks,
   normalizeName,
@@ -141,7 +140,9 @@ export const AGENT_DELETE_LIVE_REFUSAL =
 
 async function refuseIfModuleIsLive(ctx: any, moduleId: unknown): Promise<void> {
   if (!moduleId) return;
-  const module = (await ctx.db.get(moduleId as any)) as CommunityResourceModuleLike | null;
+  const normalizedModuleId = ctx.db.normalizeId("communityResourceModules", String(moduleId));
+  if (!normalizedModuleId) return;
+  const module = (await ctx.db.get(normalizedModuleId)) as CommunityResourceModuleLike | null;
   if (module && communityResourceModuleIsLive(module)) throw new Error(AGENT_DELETE_LIVE_REFUSAL);
 }
 
@@ -470,7 +471,11 @@ async function requireChangesetResourceRef(args: {
   role?: "page" | "source";
   expectedUpdatedAt?: number;
 }): Promise<CommunityResourceLike> {
-  const resource = (await args.ctx.db.get(args.resourceId as any)) as CommunityResourceLike | null;
+  const normalizedResourceId = args.ctx.db.normalizeId("communityResources", args.resourceId);
+  if (!normalizedResourceId) {
+    throw new Error("community_resource_changeset_resource_not_found");
+  }
+  const resource = (await args.ctx.db.get(normalizedResourceId)) as CommunityResourceLike | null;
   if (!resource || String(resource.communityId) !== String(args.communityId)) {
     throw new Error("community_resource_changeset_resource_not_found");
   }
@@ -492,7 +497,11 @@ export async function requireChangesetEmptyModuleRef(args: {
   moduleId: string;
   expectedUpdatedAt: number;
 }): Promise<CommunityResourceModuleLike> {
-  const module = (await args.ctx.db.get(args.moduleId as any)) as CommunityResourceModuleLike | null;
+  const normalizedModuleId = args.ctx.db.normalizeId("communityResourceModules", args.moduleId);
+  if (!normalizedModuleId) {
+    throw new Error("community_resource_module_not_found");
+  }
+  const module = (await args.ctx.db.get(normalizedModuleId)) as CommunityResourceModuleLike | null;
   if (!module || String(module.communityId) !== String(args.communityId)) {
     throw new Error("community_resource_module_not_found");
   }
@@ -538,7 +547,11 @@ export async function buildCommunityResourceBuilderChangesetPreflight(args: {
     }
 
     if (operation.op === "edit_module") {
-      const module = (await args.ctx.db.get(operation.module_id as any)) as CommunityResourceModuleLike | null;
+      const normalizedModuleId = args.ctx.db.normalizeId("communityResourceModules", operation.module_id);
+      if (!normalizedModuleId) {
+        throw new Error("community_resource_module_not_found");
+      }
+      const module = (await args.ctx.db.get(normalizedModuleId)) as CommunityResourceModuleLike | null;
       if (!module || String(module.communityId) !== String(args.communityId)) {
         throw new Error("community_resource_module_not_found");
       }
@@ -974,9 +987,6 @@ export async function deleteCategoryFromChangesetOperation(args: {
     expectedUpdatedAt: args.operation.expected_updated_at,
   });
   if (communityResourceModuleIsLive(module)) throw new Error(AGENT_DELETE_LIVE_REFUSAL);
-  if (module.bannerStorageId) {
-    await maybeDeleteStorageAsset(args.ctx, module.bannerStorageId);
-  }
   await args.ctx.db.delete(module._id as any);
   return module;
 }
@@ -1011,7 +1021,11 @@ export async function applyCommunityResourceBuilderChangesetOperations(args: {
     }
 
     if (operation.op === "edit_module") {
-      const module = (await args.ctx.db.get(operation.module_id as any)) as CommunityResourceModuleLike | null;
+      const normalizedModuleId = args.ctx.db.normalizeId("communityResourceModules", operation.module_id);
+      if (!normalizedModuleId) {
+        throw new Error("community_resource_module_not_found");
+      }
+      const module = (await args.ctx.db.get(normalizedModuleId)) as CommunityResourceModuleLike | null;
       if (!module || String(module.communityId) !== String(args.communityId)) {
         throw new Error("community_resource_module_not_found");
       }

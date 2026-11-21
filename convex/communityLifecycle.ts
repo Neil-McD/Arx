@@ -7,7 +7,7 @@ import { requireOwnerBelowFreeCommunityLimit } from "./communityCore";
 import {
   type CommunityLike,
   type CommunityPricePointLike,
-  maybeDeleteStorageAsset,
+  assertUnclaimedPublicImageStorageId,
   normalizeAvatarFocus,
   normalizeAvatarZoom,
   normalizeBannerFocus,
@@ -688,8 +688,12 @@ export const createCommunity = mutation({
       ? "unlisted"
       : normalizeVisibility(args.visibility);
     const entryPolicy = normalizeEntryPolicy(args.entryPolicy, "approval");
-    const avatarStorageId = args.avatarStorageId ?? undefined;
-    const bannerStorageId = args.bannerStorageId ?? undefined;
+    const avatarStorageId = args.avatarStorageId
+      ? await assertUnclaimedPublicImageStorageId(ctx, args.avatarStorageId, "community_avatar_invalid")
+      : undefined;
+    const bannerStorageId = args.bannerStorageId
+      ? await assertUnclaimedPublicImageStorageId(ctx, args.bannerStorageId, "community_banner_invalid")
+      : undefined;
     const name = normalizeName(args.name);
     const oneLiner = normalizeOptionalText(args.oneLiner);
     const avatarUrl = avatarStorageId ? undefined : normalizeOptionalCommunityImageUrl(args.avatarUrl);
@@ -857,6 +861,18 @@ async function saveCommunitySettingsCore(ctx: any, args: any) {
 
   const previousAvatarStorageId = community.avatarStorageId;
   const previousBannerStorageId = community.bannerStorageId;
+  if (
+    settingsState.nextAvatarStorageId &&
+    String(settingsState.nextAvatarStorageId) !== String(previousAvatarStorageId ?? "")
+  ) {
+    await assertUnclaimedPublicImageStorageId(ctx, settingsState.nextAvatarStorageId, "community_avatar_invalid");
+  }
+  if (
+    settingsState.nextBannerStorageId &&
+    String(settingsState.nextBannerStorageId) !== String(previousBannerStorageId ?? "")
+  ) {
+    await assertUnclaimedPublicImageStorageId(ctx, settingsState.nextBannerStorageId, "community_banner_invalid");
+  }
   if (settingsState.normalizedSlug !== String(community.slug ?? "")) requireCommunitySlugShape(settingsState.normalizedSlug);
 
   await ctx.db.patch(community._id as any, {
@@ -885,12 +901,9 @@ async function saveCommunitySettingsCore(ctx: any, args: any) {
     updatedAt: nowMs,
   });
 
-  if (previousAvatarStorageId && String(previousAvatarStorageId) !== String(settingsState.nextAvatarStorageId ?? "")) {
-    await maybeDeleteStorageAsset(ctx, previousAvatarStorageId);
-  }
-  if (previousBannerStorageId && String(previousBannerStorageId) !== String(settingsState.nextBannerStorageId ?? "")) {
-    await maybeDeleteStorageAsset(ctx, previousBannerStorageId);
-  }
+  // Replaced branding storage blobs are intentionally left un-deleted here:
+  // without server-bound upload ownership, deleting a replaced ID could delete
+  // another tenant's asset (matching profiles.ts).
 
   await upsertCommunitySettingsPricePoints({
     ctx,
