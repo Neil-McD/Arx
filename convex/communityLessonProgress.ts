@@ -502,11 +502,34 @@ export const backfillCourseProgressModuleBatchInternal = internalMutation({
     moduleId: v.id("communityResourceModules"),
     lessonIndex: v.number(),
     cursor: v.union(v.string(), v.null()),
+    cleared: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
     const module = await ctx.db.get(args.moduleId);
     if (!module) return { done: true, processed: 0 };
     const nowMs = Date.now();
+
+    // Phase 1: purge any obsolete projection rows for this module before
+    // rebuilding from canonical communityLessonProgress rows.
+    if (args.lessonIndex === 0 && args.cursor === null && args.cleared !== true) {
+      const obsolete = await ctx.db
+        .query("communityCourseProgress")
+        .withIndex("by_community_module", (q) => q.eq("communityId", module.communityId).eq("moduleId", module._id))
+        .take(BACKFILL_PROGRESS_BATCH_SIZE);
+      for (const row of obsolete) {
+        await ctx.db.delete(row._id);
+      }
+      if (obsolete.length >= BACKFILL_PROGRESS_BATCH_SIZE) {
+        await ctx.scheduler.runAfter(0, (internal as any).communityLessonProgress.backfillCourseProgressModuleBatchInternal, {
+          moduleId: module._id,
+          lessonIndex: 0,
+          cursor: null,
+          cleared: false,
+        });
+        return { done: false, processed: obsolete.length };
+      }
+    }
+
     const lessons = await ctx.db
       .query("communityResources")
       .withIndex("by_community_module", (q) => q.eq("communityId", module.communityId).eq("moduleId", module._id))
@@ -542,6 +565,7 @@ export const backfillCourseProgressModuleBatchInternal = internalMutation({
         moduleId: module._id,
         lessonIndex: args.lessonIndex,
         cursor: page.continueCursor,
+        cleared: true,
       });
       return { done: false, processed: page.page.length };
     }
@@ -552,6 +576,7 @@ export const backfillCourseProgressModuleBatchInternal = internalMutation({
         moduleId: module._id,
         lessonIndex: nextLessonIndex,
         cursor: null,
+        cleared: true,
       });
       return { done: false, processed: page.page.length };
     }

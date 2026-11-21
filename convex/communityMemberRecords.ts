@@ -93,7 +93,8 @@ const pointFor = (point: PricePointRow | null) => point
   ? { id: String(point._id), name: point.name, amountBaseUnits: point.amountBaseUnits, currency: point.currency, currencyDecimals: point.currencyDecimals, billingPeriod: point.billingPeriod }
   : null;
 
-// Zero-write fast path when no pre-computed view-counts doc exists or it is already marked stale.
+// Zero-write fast path when no pre-computed view-counts doc exists or it is
+// already marked stale (and not currently mid-recompute without dirty flag).
 export async function markCommunityMemberViewCountsStale(
   ctx: any,
   communityId: any,
@@ -103,7 +104,16 @@ export async function markCommunityMemberViewCountsStale(
     .query("communityMemberViewCounts")
     .withIndex("by_community", (q: any) => q.eq("communityId", communityId))
     .first();
-  if (!existing || typeof existing.staleAt === "number") return;
+  if (!existing) return;
+  if (typeof existing.recomputingStartedAt === "number") {
+    if (existing.dirtyWhileRecomputing) return;
+    await ctx.db.patch(existing._id, {
+      staleAt: nowMs,
+      dirtyWhileRecomputing: true,
+    });
+    return;
+  }
+  if (typeof existing.staleAt === "number") return;
   await ctx.db.patch(existing._id, { staleAt: nowMs });
 }
 
@@ -245,6 +255,32 @@ export const recomputeCommunityMemberViewCountsBatchInternal = internalMutation(
   handler: async (ctx, args) => {
     const community = await ctx.db.get(args.communityId);
     if (!community) return { done: true };
+    if (args.cursor === null) {
+      // Establish a recomputation fence before scanning page 0 so any
+      // intervening mutation during initial seeding OR refresh sets
+      // dirtyWhileRecomputing=true and is never silently dropped.
+      const existingFence = await ctx.db
+        .query("communityMemberViewCounts")
+        .withIndex("by_community", (q) => q.eq("communityId", args.communityId))
+        .first();
+      if (existingFence) {
+        await ctx.db.patch(existingFence._id, {
+          recomputingStartedAt: args.startedAt,
+          dirtyWhileRecomputing: false,
+        });
+      } else {
+        await ctx.db.insert("communityMemberViewCounts", {
+          communityId: args.communityId,
+          counts: { everyone: 0, on_hold: 0, cancelling: 0, know_little: 0, past: 0 },
+          withAccess: 0,
+          prices: [],
+          computedAt: 0,
+          staleAt: args.startedAt,
+          recomputingStartedAt: args.startedAt,
+          dirtyWhileRecomputing: false,
+        });
+      }
+    }
     const { blocked, priceById } = await lookups(ctx, args.communityId);
 
     const counts = args.counts
@@ -361,17 +397,19 @@ export const recomputeCommunityMemberViewCountsBatchInternal = internalMutation(
       .query("communityMemberViewCounts")
       .withIndex("by_community", (q) => q.eq("communityId", args.communityId))
       .first();
-    // Preserve staleAt if another write arrived while this recomputation was running.
-    const nextStaleAt =
-      existing && typeof existing.staleAt === "number" && existing.staleAt > args.startedAt
-        ? existing.staleAt
-        : undefined;
+    // Keep the snapshot stale if any write arrived while this recomputation ran.
+    const interruptedByWrite =
+      Boolean(existing?.dirtyWhileRecomputing) ||
+      (typeof existing?.staleAt === "number" && existing.staleAt > args.startedAt);
+    const nextStaleAt = interruptedByWrite ? nowMs : undefined;
     const payload = {
       counts,
       withAccess,
       prices: [...prices.values()],
       computedAt: nowMs,
       staleAt: nextStaleAt,
+      recomputingStartedAt: undefined,
+      dirtyWhileRecomputing: false,
     };
     if (existing) {
       await ctx.db.patch(existing._id, payload);

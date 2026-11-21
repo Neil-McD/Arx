@@ -1468,8 +1468,13 @@ export const saveCommunityResource = mutation({
       }
       const prevModuleId = existing.moduleId ? normalizeIdValue(existing.moduleId) : null;
       const nextModuleIdNorm = nextModuleId ? normalizeIdValue(nextModuleId) : null;
-      if (nextModuleId && prevModuleId !== nextModuleIdNorm) {
-        await ctx.db.patch(nextModuleId as any, { progressIndexedAt: undefined });
+      if (prevModuleId !== nextModuleIdNorm) {
+        if (existing.moduleId) {
+          await ctx.db.patch(existing.moduleId as any, { progressIndexedAt: undefined });
+        }
+        if (nextModuleId) {
+          await ctx.db.patch(nextModuleId as any, { progressIndexedAt: undefined });
+        }
       }
       await ctx.db.patch(existing._id as any, {
         ...(nextModuleId ? { moduleId: nextModuleId } : { moduleId: undefined }),
@@ -1789,8 +1794,13 @@ export const moveCommunityResourceToModule = mutation({
 
     const prevModuleId = resource.moduleId ? normalizeIdValue(resource.moduleId) : null;
     const targetModuleIdNorm = targetModuleId ? normalizeIdValue(targetModuleId) : null;
-    if (targetModuleId && prevModuleId !== targetModuleIdNorm) {
-      await ctx.db.patch(targetModuleId as any, { progressIndexedAt: undefined });
+    if (prevModuleId !== targetModuleIdNorm) {
+      if (resource.moduleId) {
+        await ctx.db.patch(resource.moduleId as any, { progressIndexedAt: undefined });
+      }
+      if (targetModuleId) {
+        await ctx.db.patch(targetModuleId as any, { progressIndexedAt: undefined });
+      }
     }
     await Promise.all(
       orderedRows.map((row, index) => {

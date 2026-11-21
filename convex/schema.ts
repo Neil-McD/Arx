@@ -1193,6 +1193,8 @@ export default defineSchema({
     ),
     computedAt: v.number(),
     staleAt: v.optional(v.number()),
+    recomputingStartedAt: v.optional(v.number()),
+    dirtyWhileRecomputing: v.optional(v.boolean()),
   })
     .index("by_community", ["communityId"])
     .index("by_staleAt", ["staleAt"]),
