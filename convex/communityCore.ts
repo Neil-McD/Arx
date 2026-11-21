@@ -331,13 +331,53 @@ async function maybeResolveStorageUrl(ctx: any, storageId: any): Promise<string 
   return typeof resolved === "string" && resolved.trim() ? resolved.trim() : null;
 }
 
-export async function maybeDeleteStorageAsset(ctx: any, storageId: any): Promise<void> {
-  if (!storageId) return;
+// Ensures a newly supplied avatar/banner storage ID is a real image blob and
+// never belongs to a private attachment table (DMs, channels/pods, lessons, or
+// private AI threads). Prevents signed-URL exfiltration of private tenant files.
+export async function assertUnclaimedPublicImageStorageId(
+  ctx: any,
+  rawStorageId: unknown,
+  errorCode: string,
+): Promise<any> {
+  const candidate = String(rawStorageId ?? "").trim();
+  if (!candidate) throw new Error(errorCode);
+  let metadata: any = null;
   try {
-    await ctx.storage.delete(storageId);
+    metadata = await ctx.db.system.get(candidate as any);
   } catch {
-    // Best-effort cleanup for replaced branding assets.
+    throw new Error(errorCode);
   }
+  const storageId = metadata?._id;
+  const isStorageDoc =
+    Boolean(storageId) &&
+    typeof metadata?.size === "number" &&
+    typeof metadata?.sha256 === "string";
+  const contentType = String(metadata?.contentType ?? "").trim().toLowerCase();
+  if (!isStorageDoc || (contentType && !contentType.startsWith("image/"))) {
+    throw new Error(errorCode);
+  }
+  const [interactionClaim, dmClaim, lessonClaim, threadClaim] = await Promise.all([
+    ctx.db
+      .query("communityInteractionAttachments" as any)
+      .withIndex("by_storage", (q: any) => q.eq("storageId", storageId))
+      .first(),
+    ctx.db
+      .query("dmAttachments" as any)
+      .withIndex("by_storage", (q: any) => q.eq("storageId", storageId))
+      .first(),
+    ctx.db
+      .query("communityLessonFiles" as any)
+      .withIndex("by_storage", (q: any) => q.eq("storageId", storageId))
+      .first(),
+    ctx.db
+      .query("cloudThreadAttachments" as any)
+      .withIndex("by_storage", (q: any) => q.eq("storageId", storageId))
+      .first(),
+  ]);
+  if (interactionClaim || dmClaim || lessonClaim || threadClaim) {
+    throw new Error(errorCode);
+  }
+  return storageId;
 }
 
 export async function resolveCommunityBrandingFields(
@@ -855,12 +895,34 @@ export async function adjustCommunityActiveMemberCountForMembershipTransition(ar
   communityId: any;
   before: CommunityMembershipLike | null | undefined;
   after: CommunityMembershipLike | null | undefined;
+  community?: CommunityLike | null;
 }): Promise<void> {
-  void args.before;
-  void args.after;
-  await syncCommunityActiveMemberCount({
-    ctx: args.ctx,
-    communityId: args.communityId,
+  const community =
+    args.community ??
+    ((await args.ctx.db.get(args.communityId as any)) as CommunityLike | null);
+  if (!community) throw new Error("community_not_found");
+  const countedBefore = communityMembershipCountsTowardActiveMemberCount({
+    community,
+    membership: args.before,
+  });
+  const countedAfter = communityMembershipCountsTowardActiveMemberCount({
+    community,
+    membership: args.after,
+  });
+  const delta = (countedAfter ? 1 : 0) - (countedBefore ? 1 : 0);
+  if (delta === 0) return;
+  const current = readCommunityActiveMemberCount(community);
+  if (current === null) {
+    await syncCommunityActiveMemberCount({
+      ctx: args.ctx,
+      communityId: args.communityId,
+      community,
+    });
+    return;
+  }
+  const nextCount = Math.max(1, current + delta);
+  await args.ctx.db.patch(community._id as any, {
+    activeMemberCount: nextCount,
   });
 }
 

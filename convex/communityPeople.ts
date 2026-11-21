@@ -69,19 +69,45 @@ export const memberRecordKeyInternal = internalQuery({
 // never guessed at; whether a real person is a member here is each action's
 // own check, answered per person.
 export const resolveMemberRefsInternal = internalQuery({
-  args: { communityId: v.id("communities"), refs: v.array(v.string()) },
+  args: { communityId: v.id("communities"), actorUserId: v.id("users"), refs: v.array(v.string()) },
   handler: async (ctx, args) => {
+    const { community } = await requireCommunityManager({ ctx, communityId: args.communityId, userId: args.actorUserId });
+    const ownerId = String((community as any).ownerId ?? "");
     const refs: string[] = [];
     const missing: string[] = [];
     for (const raw of args.refs.slice(0, 100)) {
       const text = String(raw ?? "").trim();
       const bare = text.replace(/^user:/, "").replace(/^@/, "");
-      let userId = /^user:/.test(text) ? ctx.db.normalizeId("users", bare) : null;
-      if (!userId && bare) {
-        const byHandle = await ctx.db.query("users").withIndex("by_normalizedHandle", (q) => q.eq("normalizedHandle", bare.toLowerCase())).first();
-        userId = byHandle?._id ?? null;
+      if (/^user:/.test(text)) {
+        // Explicit user:<id> refs pass through without probing global user
+        // existence; each downstream member action validates membership in this
+        // community per item (supporting partial-batch responses).
+        const normalized = ctx.db.normalizeId("users", bare);
+        if (normalized) refs.push(`user:${String(normalized)}`);
+        else missing.push(text.slice(0, 80));
+        continue;
       }
-      if (userId && (await ctx.db.get(userId))) refs.push(`user:${String(userId)}`);
+      const byHandle = bare
+        ? await ctx.db.query("users").withIndex("by_normalizedHandle", (q) => q.eq("normalizedHandle", bare.toLowerCase())).first()
+        : null;
+      const userId = byHandle?._id ?? null;
+      if (!userId) {
+        missing.push(text.slice(0, 80));
+        continue;
+      }
+      // Scope handle lookups strictly to this community (owner, current/past
+      // member, or blocked user here) so non-members on the platform can never
+      // be probed by handle.
+      const inCommunity =
+        String(userId) === ownerId ||
+        Boolean(await membershipOf(ctx, args.communityId, userId)) ||
+        Boolean(
+          await ctx.db
+            .query("communityBlocks")
+            .withIndex("by_community_user", (q: any) => q.eq("communityId", args.communityId).eq("userId", userId))
+            .first(),
+        );
+      if (inCommunity) refs.push(`user:${String(userId)}`);
       else missing.push(text.slice(0, 80));
     }
     return { refs, missing };

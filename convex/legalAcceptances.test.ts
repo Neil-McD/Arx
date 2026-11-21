@@ -29,7 +29,7 @@ describe("platform legal acceptance versioning", () => {
     ])).toBe(false);
   });
 
-  test("current Terms v4 acceptance is sufficient", () => {
+  test("Terms v4 acceptance still counts under v5: members are not asked again", () => {
     expect(hasAcceptedCurrentPlatformLegalFromRows([
       { documentKey: "terms_of_service", documentVersion: "terms_of_service_v4" },
       privacyAcceptance,
@@ -55,6 +55,13 @@ describe("platform legal acceptance versioning", () => {
       { documentKey: "terms_of_service", documentVersion: "privacy_ai_data_policy_v1" },
       { documentKey: "privacy_ai_data_policy", documentVersion: "privacy_ai_data_policy_v1" },
     ])).toBe(false);
+  });
+
+  test("current Terms v5 acceptance is sufficient", () => {
+    expect(hasAcceptedCurrentPlatformLegalFromRows([
+      { documentKey: "terms_of_service", documentVersion: "terms_of_service_v5" },
+      privacyAcceptance,
+    ])).toBe(true);
   });
 
   test("privacy acceptance remains independently required", () => {

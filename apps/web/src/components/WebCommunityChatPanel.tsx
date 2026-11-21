@@ -241,6 +241,7 @@ export type WebCommunityChatPanelProps = {
     avatar_zoom?: number | null;
   } | null;
   session: unknown | null;
+  memberPreview?: boolean;
   isResolvingSelectedCommunity: boolean;
   hasAuthenticatedPresentation: boolean;
   isAuthRecoveringSignedIn: boolean;
@@ -1458,7 +1459,7 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
   ) : null;
 
   return (
-    <CommunityChannelSessionContext.Provider value={session && activeCommunity ? { session, communityId: activeCommunity.id } : null}>
+    <CommunityChannelSessionContext.Provider value={session && activeCommunity ? { session, communityId: activeCommunity.id, memberPreview: Boolean(props.memberPreview) } : null}>
       <div
         className={`community-chat community-member-chat community-attachment-drop-surface${isCommunityAttachmentDragOver ? " drag-over" : ""}`}
         onDrop={canUseCommunityAttachments ? onCommunityAttachmentDrop : undefined}

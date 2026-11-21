@@ -15,6 +15,7 @@ import {
 import { internal } from "./_generated/api";
 import { internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import { resolveUserIdForAuthenticatedRequest } from "./authActor";
+import { getCommunityChannelCapabilities, resolveCommunityChannelActor } from "./communityChannelAccess";
 import { requireCommunityChatAccess, requireCommunityManager } from "./communityCore";
 import {
   buildCommunityNoteSearchText,
@@ -264,8 +265,42 @@ export const observeCommunityMemoryInternal = internalMutation({
       return { ok: true, slug: note.slug, title, change: "changed" };
     }
 
-    if (run.added.length >= MEMORY_NEW_NOTES_PER_RUN) return refuse(ctx, run, title, "run_note_limit");
     const existing = await notesByUpdated(ctx, scope).take(COMMUNITY_NOTES_MAX_PER_COMMUNITY + 1);
+    // Deduplicate: if a guide-authored note in this scope already has the exact
+    // same normalized title (for example, when a review retries memory.apply on
+    // a follow-up step), update it in place instead of cloning a -2 duplicate.
+    const normalizedTitleKey = title.toLowerCase();
+    const duplicate = existing.find(
+      (row: any) =>
+        noteAuthorKind(row) === "guide" &&
+        (normalizeCommunityNoteTitle(String(row.title ?? "")) ?? "").toLowerCase() === normalizedTitleKey,
+    );
+    if (duplicate) {
+      const sameRefs =
+        Array.isArray(duplicate.evidenceRefs) &&
+        duplicate.evidenceRefs.length === refs.length &&
+        refs.every((ref, index) => duplicate.evidenceRefs[index] === ref);
+      const sameFiling =
+        (!("aboutLessonId" in filed) || String(duplicate.aboutLessonId ?? "") === String(filed.aboutLessonId ?? "")) &&
+        (!("subject" in filed) || (duplicate.subject ?? undefined) === filed.subject);
+      if (duplicate.bodyMd === body && sameRefs && sameFiling) {
+        return { ok: true, slug: duplicate.slug, title: duplicate.title, change: "changed" };
+      }
+      await insertRevision(ctx, scope, {
+        communityId: args.communityId, slug: duplicate.slug, change: "changed", runId: run._id, createdAt: args.nowMs,
+        ...(duplicate.lastRunId ? { previousRunId: duplicate.lastRunId } : {}),
+        before: { title: duplicate.title, bodyMd: duplicate.bodyMd, source: duplicate.source, authorKind: "guide", evidenceRefs: duplicate.evidenceRefs ?? [] },
+      });
+      await ctx.db.patch(duplicate._id, {
+        title, bodyMd: body, searchText: buildCommunityNoteSearchText({ title, bodyMd: body }),
+        evidenceRefs: refs, lastRunId: run._id, updatedAt: args.nowMs,
+        ...filed,
+      });
+      await ctx.db.patch(run._id, { changed: [...new Set([...run.changed, duplicate.slug])] });
+      return { ok: true, slug: duplicate.slug, title, change: "changed" };
+    }
+
+    if (run.added.length >= MEMORY_NEW_NOTES_PER_RUN) return refuse(ctx, run, title, "run_note_limit");
     if (existing.length >= COMMUNITY_NOTES_MAX_PER_COMMUNITY) return refuse(ctx, run, title, "notes_full");
     const taken = new Set<string>(existing.map((row: any) => row.slug));
     const base = communityNoteSlug(title);
@@ -373,7 +408,7 @@ async function manager(ctx: any, args: { userId?: any; authSubject?: string; com
 }
 
 // Who may correct a scope's memory: builders for every scope; a pod's hosts
-// for their own pod.
+// for their own pod only while they still have active pod access.
 async function memoryEditor(ctx: any, args: { userId?: any; authSubject?: string; communityId: any }, scope: ScopeKey) {
   const userId = await resolveUserIdForAuthenticatedRequest({ ctx, userId: args.userId, authSubject: args.authSubject ?? null });
   await requireCommunityChatAccess({ ctx, communityId: args.communityId, userId });
@@ -381,9 +416,17 @@ async function memoryEditor(ctx: any, args: { userId?: any; authSubject?: string
   if (isBuilder) return userId;
   const pod = parseScopeKey(scope);
   if (pod?.kind === "pod") {
+    const room = await podRoom(ctx, args.communityId, pod.id);
+    if (!room) throw new Error("community_forbidden");
+    const actor = await resolveCommunityChannelActor({ ctx, communityId: args.communityId, userId });
     const record = await ctx.db.query("communityPods")
-      .withIndex("by_community_channel", (q: any) => q.eq("communityId", args.communityId).eq("channelId", pod.id)).first();
-    if (record?.hostUserIds?.some((id: any) => String(id) === String(userId))) return userId;
+      .withIndex("by_community_channel", (q: any) => q.eq("communityId", args.communityId).eq("channelId", room._id)).first();
+    if (
+      record?.hostUserIds?.some((id: any) => String(id) === String(userId)) &&
+      (await getCommunityChannelCapabilities({ ctx, channel: room, actor })).canRead
+    ) {
+      return userId;
+    }
   }
   throw new Error("community_forbidden");
 }
@@ -415,7 +458,7 @@ export const listNoteSources = query({
       const ref = parseMemoryEvidenceRef(raw);
       if (!ref) continue;
       const facts = await evidenceFacts(ctx, args.communityId, ref, scope);
-      if (!facts.exists || !facts.communityMatches || !facts.live || !facts.inScope) {
+      if (!facts.exists || !facts.communityMatches || !facts.live || !facts.inScope || !facts.sharedVisibility) {
         sources.push({ ref: raw, kind: ref.kind, available: false as const });
         continue;
       }
@@ -732,8 +775,13 @@ export async function markCommunityMemoryReviewDue(ctx: any, args: { communityId
   else if (channel.accessMode === "restricted" && await guideSeatedInPod(ctx, channel._id)) scope = podScopeKey(channel._id);
   else return;
   const work = await workFor(ctx, scope, "memory_review");
-  if (work?.dueAt) {
-    await ctx.db.patch(work._id, { pending: work.pending + 1, updatedAt: args.nowMs });
+  if (work?.dueAt && work.pending > 0) {
+    // Already scheduled: zero-write fast path unless a run is actively leased
+    // (in which case flip dirtyWhileLeased at most once per lease window).
+    const leased = typeof work.leaseUntil === "number" && work.leaseUntil > args.nowMs;
+    if (leased && !work.dirtyWhileLeased) {
+      await ctx.db.patch(work._id, { pending: work.pending + 1, dirtyWhileLeased: true, updatedAt: args.nowMs });
+    }
     return;
   }
   const dueAt = nextMemoryReviewAtMs(args.nowMs, await communityTimeZone(ctx, args.communityId));

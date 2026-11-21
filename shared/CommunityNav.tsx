@@ -46,6 +46,7 @@ type CommunityNavChannel = {
   is_general: boolean;
   position: number;
   access_mode?: "all_members" | "restricted";
+  is_pod_member?: boolean;
 };
 
 type CommunityNavProps = {
@@ -98,11 +99,15 @@ type CommunityNavProps = {
   isInboxOpen?: boolean;
   inboxUnreadCount?: number;
   onOpenMembers?: () => void;
-  // v1: one Pods item (docs/specs/pods-v0.md); private rooms are never listed.
+  // v1: one Pods item (docs/specs/pods-v0.md); when the person is in pods,
+  // up to 3 of their pods sit in a collapsible Linear-style branch underneath.
   onOpenPods?: () => void;
   podsActive?: boolean;
-  // The pods' dot, as a channel's row shows it (shared/podsAttentionDot.ts).
+  pods?: CommunityNavChannel[];
+  onSelectPod?: (channel: CommunityNavChannel) => void;
+  // The pods' dot when collapsed, and overflow dot for pods #4+ when expanded.
   podsDot?: PodsDot;
+  podsOverflowDot?: PodsDot;
   // One door: the community's own apps, opened in a new tab.
   appLinks?: Array<{ name: string; url: string }>;
   memberCount?: number | null;
@@ -221,12 +226,16 @@ export const CommunityNav = memo(function CommunityNav({
   inboxUnreadCount = 0,
   onOpenMembers,
   onOpenPods,
+  pods = [],
+  onSelectPod,
   appLinks,
   podsActive = false,
   podsDot = "none",
+  podsOverflowDot = "none",
   memberCount = null,
 }: CommunityNavProps) {
   const isV1 = layout === "v1";
+  const [podsExpanded, setPodsExpanded] = useState(true);
   const [didCopyJoinLink, setDidCopyJoinLink] = useState(false);
   const [isAddChannelOpen, setIsAddChannelOpen] = useState(false);
   const [reorderControlsChannelId, setReorderControlsChannelId] = useState<string | null>(null);
@@ -708,18 +717,84 @@ export const CommunityNav = memo(function CommunityNav({
           )}
           {/* Pods, then Knowledge, Events, Members (Neil, Nov 14). Offered by the caller only when pods exist for this layout (design v1, desktop or phone). */}
           {onOpenPods ? (
-            <button
-              className={showActiveSelection && (communityTab === "pods" || podsActive) ? "nav-item active" : "nav-item"}
-              type="button"
-              onClick={onOpenPods}
-              title="Pods"
-            >
-              <span className="nav-icon" aria-hidden="true">
-                <Boxes size={17} strokeWidth={1.7} />
-              </span>
-              <span className="nav-item-label">Pods</span>
-              {podsDot !== "none" ? <span className={`nav-item-dot${podsDot === "mention" ? " is-mention" : ""}`} aria-hidden="true" /> : null}
-            </button>
+            pods.length > 0 ? (
+              <div className="community-nav-pods-group">
+                <div className="community-nav-pods-row">
+                  <button
+                    className={
+                      showActiveSelection &&
+                      (communityTab === "pods" ||
+                        (podsActive && (!podsExpanded || !pods.some((pod) => pod.slug === selectedChannelSlug))))
+                        ? "nav-item community-nav-pods-trigger active"
+                        : "nav-item community-nav-pods-trigger"
+                    }
+                    type="button"
+                    onClick={onOpenPods}
+                    title="Pods"
+                  >
+                    <span className="nav-icon" aria-hidden="true">
+                      <Boxes size={17} strokeWidth={1.7} />
+                    </span>
+                    <span className="nav-item-label">Pods</span>
+                    {(podsExpanded ? podsOverflowDot : podsDot) !== "none" ? (
+                      <span
+                        className={`nav-item-dot${(podsExpanded ? podsOverflowDot : podsDot) === "mention" ? " is-mention" : ""}`}
+                        aria-hidden="true"
+                      />
+                    ) : null}
+                  </button>
+                  <button
+                    type="button"
+                    className={podsExpanded ? "community-nav-pods-toggle is-open" : "community-nav-pods-toggle"}
+                    aria-expanded={podsExpanded}
+                    aria-label={podsExpanded ? "Collapse your pods" : "Expand your pods"}
+                    title={podsExpanded ? "Hide your pods" : "Show your pods"}
+                    onClick={() => setPodsExpanded((open) => !open)}
+                  >
+                    <ChevronDown size={13} strokeWidth={1.8} aria-hidden="true" />
+                  </button>
+                </div>
+                {podsExpanded ? (
+                  <div className="community-nav-pods-tree" role="group" aria-label="Your pods">
+                    {pods.map((pod) => {
+                      const isPodSelected = showActiveSelection && podsActive && selectedChannelSlug === pod.slug;
+                      const indicator = channelIndicators[pod.slug];
+                      return (
+                        <button
+                          key={pod.id || pod.slug}
+                          className={isPodSelected ? "nav-item community-nav-pod-item active" : "nav-item community-nav-pod-item"}
+                          type="button"
+                          onClick={() => {
+                            if (onSelectPod) onSelectPod(pod);
+                            else if (onSelectChannel) onSelectChannel(pod);
+                            else onOpenPods();
+                          }}
+                          title={pod.name}
+                        >
+                          <span className="nav-item-label">{pod.name}</span>
+                          {!isPodSelected && (indicator?.chat || indicator?.mentions) ? (
+                            <span className={`nav-item-dot${indicator.mentions ? " is-mention" : ""}`} aria-hidden="true" />
+                          ) : null}
+                        </button>
+                      );
+                    })}
+                  </div>
+                ) : null}
+              </div>
+            ) : (
+              <button
+                className={showActiveSelection && (communityTab === "pods" || podsActive) ? "nav-item active" : "nav-item"}
+                type="button"
+                onClick={onOpenPods}
+                title="Pods"
+              >
+                <span className="nav-icon" aria-hidden="true">
+                  <Boxes size={17} strokeWidth={1.7} />
+                </span>
+                <span className="nav-item-label">Pods</span>
+                {podsDot !== "none" ? <span className={`nav-item-dot${podsDot === "mention" ? " is-mention" : ""}`} aria-hidden="true" /> : null}
+              </button>
+            )
           ) : null}
           <button
             className={showActiveSelection && communityTab === "resources" ? "nav-item active" : "nav-item"}

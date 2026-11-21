@@ -6,6 +6,7 @@
 // Rows are one line and never wrap. What only a host does sits as an action
 // in a part's label row.
 import { useEffect, useState, type ReactNode } from "react";
+import { UserAvatar } from "../../../../shared/UserAvatar";
 import { cx } from "./kit";
 
 // Layout before data: a panel whose parts load separately draws once they
@@ -54,10 +55,15 @@ export function PanelLine(props: { children: ReactNode; fact?: string | null; di
 }
 
 // The next thing to do: what it is, a small line under it, the way in.
-export function PanelNext(props: { title: string; sub?: string | null; action?: ReactNode }) {
+export function PanelNext(props: { title: string; sub?: string | null; action?: ReactNode; onClick?: () => void; ariaLabel?: string }) {
+  const details = <><b>{props.title}</b>{props.sub ? <small>{props.sub}</small> : null}</>;
   return (
     <div className={cx("nx")}>
-      <div><b>{props.title}</b>{props.sub ? <small>{props.sub}</small> : null}</div>
+      {props.onClick ? (
+        <button type="button" className={cx("nx-go")} onClick={props.onClick} aria-label={props.ariaLabel ?? props.title}>
+          {details}
+        </button>
+      ) : <div>{details}</div>}
       {props.action}
     </div>
   );
@@ -72,17 +78,39 @@ function faceColour(name: string): string {
   return FACE_COLOURS[sum % FACE_COLOURS.length];
 }
 
-// People, as initials and names: one in full, several by first name
-// ("Maya, Priya and 3 more").
-export function PanelPeople(props: { names: string[]; max?: number }) {
+export type PanelPerson = { id?: string; name: string; avatarUrl?: string | null };
+
+// People, as real profile photos (or initials when none is set) and names:
+// one in full, several by first name ("Maya, Priya and 3 more").
+export function PanelPeople(props: { names?: string[]; people?: PanelPerson[]; max?: number }) {
   const max = props.max ?? 4;
-  const shown = props.names.slice(0, max);
-  const more = props.names.length - shown.length;
-  const first = shown.length === 1 ? [shown[0].trim()] : shown.map((name) => name.trim().split(/\s+/)[0]).filter(Boolean);
+  const entries: PanelPerson[] = props.people?.length
+    ? props.people
+    : (props.names ?? []).map((name, index) => ({ id: `${name}:${index}`, name, avatarUrl: null }));
+  const shown = entries.slice(0, max);
+  const more = entries.length - shown.length;
+  const first = shown.length === 1
+    ? [shown[0].name.trim()]
+    : shown.map((person) => person.name.trim().split(/\s+/)[0]).filter(Boolean);
   return (
     <div className={cx("ln")}>
       <span className={cx("stack")}>
-        {shown.map((name, index) => <span key={index} className={cx("av xs")} style={{ background: faceColour(name), color: "#fff" }}>{name.trim().charAt(0).toUpperCase() || "?"}</span>)}
+        {shown.map((person, index) => {
+          const clean = person.name.trim() || "Member";
+          return (
+            <span key={person.id ?? index} className={cx("av s")} title={clean}>
+              <UserAvatar
+                className="community-dm-kit-avatar"
+                readyClassName="has-image"
+                name={clean}
+                imageUrl={person.avatarUrl ?? null}
+                alt=""
+                fallback={<span>{clean.charAt(0).toUpperCase() || "?"}</span>}
+                fallbackStyle={{ backgroundColor: faceColour(clean), color: "#fff" }}
+              />
+            </span>
+          );
+        })}
       </span>
       <span className={cx("t")}>{first.join(", ")}{more > 0 ? ` and ${more} more` : ""}</span>
     </div>

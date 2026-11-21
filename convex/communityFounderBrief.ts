@@ -13,7 +13,7 @@ import { resolveUserIdForAuthenticatedRequest } from "./authActor";
 import { listSharedChannelReadableRows } from "./communityChannelCore";
 import { readCanonicalUserIdentityProjection } from "./profileCore";
 import { communityIsActive, normalizeCommunityLifecycle } from "../shared/communityLifecycle";
-import { readCommunityActiveMemberCount, communityMembershipRowIsActive, requireCommunityChatAccess } from "./communityCore";
+import { readCommunityActiveMemberCount, communityMembershipRowIsActive, getUniqueCommunityMembershipByPair, requireCommunityChatAccess } from "./communityCore";
 import { resolveCommunityInferenceFundingForAction } from "./founderInferenceRuntime";
 import { startFundedInferenceRun } from "./fundedInferenceGateway";
 import { readCanonicalPublicAppOrigin } from "./publicAppUrl";
@@ -92,7 +92,14 @@ export async function displayName(ctx: any, userId: unknown, cache: Map<string, 
   return cache.get(key)!;
 }
 
-export async function buildSnapshot(ctx: any, community: any, windowStartMs: number, nowMs: number): Promise<FounderBriefSnapshot> {
+export async function buildSnapshot(
+  ctx: any,
+  community: any,
+  windowStartMs: number,
+  nowMs: number,
+  options?: { includeFounderOnly?: boolean },
+): Promise<FounderBriefSnapshot> {
+  const includeFounderOnly = options?.includeFounderOnly !== false;
   const names = new Map<string, string>();
   const ownerId = String(community.ownerId);
   const memberRows = (from: number, to: number) => ctx.db.query("communityMemberships")
@@ -104,11 +111,13 @@ export async function buildSnapshot(ctx: any, community: any, windowStartMs: num
     // Joins in the reporting window, and newcomers who joined 3 to 14 days ago,
     // read separately so a busy fortnight can't hide yesterday's joins.
     memberRows(windowStartMs, nowMs),
-    memberRows(nowMs - 14 * DAY_MS, nowMs - 3 * DAY_MS),
+    includeFounderOnly ? memberRows(nowMs - 14 * DAY_MS, nowMs - 3 * DAY_MS) : Promise.resolve([]),
     memberRows(nowMs - WEEK_MS, nowMs),
-    ctx.db.query("communityJoinRequests")
-      .withIndex("by_community_status_createdAt", (q: any) => q.eq("communityId", community._id).eq("status", "pending"))
-      .take(SCAN_LIMIT),
+    includeFounderOnly
+      ? ctx.db.query("communityJoinRequests")
+          .withIndex("by_community_status_createdAt", (q: any) => q.eq("communityId", community._id).eq("status", "pending"))
+          .take(SCAN_LIMIT)
+      : Promise.resolve([]),
     ctx.db.query("communityEvents")
       .withIndex("by_community_status_startsAt", (q: any) =>
         q.eq("communityId", community._id).eq("status", "live").gte("startsAt", nowMs).lt("startsAt", nowMs + 2 * DAY_MS))
@@ -196,11 +205,25 @@ export async function buildSnapshot(ctx: any, community: any, windowStartMs: num
     return list;
   };
 
+  const pendingJoinRequests = [];
+  if (includeFounderOnly) {
+    for (const request of joinRequests) {
+      if (String(request.userId) === ownerId) continue;
+      const membership = await getUniqueCommunityMembershipByPair({
+        ctx,
+        communityId: community._id,
+        userId: request.userId,
+      }).catch(() => null);
+      if (membership && communityMembershipRowIsActive(membership)) continue;
+      pendingJoinRequests.push(request);
+    }
+  }
+
   return {
     communityName: String(community.name ?? community.slug ?? "your community"),
     memberCount: readCommunityActiveMemberCount(community) ?? 0,
     windowHours: Math.max(1, Math.round((nowMs - windowStartMs) / HOUR_MS)),
-    newMembers: { count: joined.length, names: await nameList(joined) },
+    newMembers: { count: joined.length, names: includeFounderOnly ? await nameList(joined) : [] },
     activity: { posts: windowRoots.length, replies: windowReplies.length, activePeople: activePeople.size },
     week: {
       joined: weekJoins.filter(activeMember).length, activePeople: weekActivePeople.size,
@@ -210,8 +233,8 @@ export async function buildSnapshot(ctx: any, community: any, windowStartMs: num
     busiest,
     highlight,
     unanswered,
-    quietNewcomers: { count: quiet.length, names: await nameList(quiet) },
-    joinRequestsPending: joinRequests.length,
+    quietNewcomers: includeFounderOnly ? { count: quiet.length, names: await nameList(quiet) } : { count: 0, names: [] },
+    joinRequestsPending: pendingJoinRequests.length,
     upcomingEvents: communityWideEvents(events).map((event: any) => ({ title: clip(event.title, 120), startsAt: new Date(Number(event.startsAt)).toISOString() })),
   };
 }
@@ -411,13 +434,7 @@ export const getCommunityMemberHomeSnapshot = query({
     const { community } = await requireCommunityChatAccess({ ctx, communityId: args.communityId, userId });
     if (!communityIsActive(community as any)) return null;
     const nowMs = Date.now();
-    const snapshot = await buildSnapshot(ctx, community, nowMs - DAY_MS, nowMs);
-    return {
-      ...snapshot,
-      newMembers: { count: snapshot.newMembers.count, names: [] },
-      quietNewcomers: { count: 0, names: [] },
-      joinRequestsPending: 0,
-    };
+    return await buildSnapshot(ctx, community, nowMs - DAY_MS, nowMs, { includeFounderOnly: false });
   },
 });
 

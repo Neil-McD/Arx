@@ -4,8 +4,6 @@ import {
   type CommunityLike,
   type CommunityMembershipLike,
   communityMembershipRowIsActive,
-  countCanonicalCommunityMembersFromRows,
-  listCanonicalCommunityMemberMembershipRows,
   normalizeCommunityRoleForOutput,
   readCommunityActiveMemberCount,
   requireCommunityChatAccess,
@@ -260,16 +258,15 @@ export const searchCommunityMentionCandidates = query({
 
     pushAgentCandidate();
 
-    const canonicalRows = await listCanonicalCommunityMemberMembershipRows({
-      ctx,
-      communityId: args.communityId,
-      community,
-    });
-    await pushEverybodyCandidate(countCanonicalCommunityMembersFromRows(canonicalRows.rows));
+    const activeMemberCount = readCommunityActiveMemberCount(community) ?? 0;
+    await pushEverybodyCandidate(activeMemberCount);
 
+    const seenUserIds = new Set<string>([String(userId)]);
     const addUserCandidate = async (targetUserId: any, role: string) => {
       if (out.length >= limit) return;
-      if (String(targetUserId) === String(userId)) return;
+      const key = String(targetUserId);
+      if (seenUserIds.has(key)) return;
+      seenUserIds.add(key);
       const user = (await ctx.db.get(targetUserId)) as CommunityMentionUserRow | null;
       if (!user || !userMatchesMentionSearch(user, queryText)) return;
       const candidate = await mapCommunityMentionUserCandidate({
@@ -282,10 +279,119 @@ export const searchCommunityMentionCandidates = query({
       if (candidate) out.push(candidate);
     };
 
+    // Fast O(limit) path when the community's member search index is ready.
+    const isIndexed = typeof (community as any).memberSearchIndexedAt === "number";
+    if (isIndexed) {
+      const searchRows = queryText
+        ? await ctx.db
+            .query("communityMemberSearch")
+            .withSearchIndex("search_members", (q: any) =>
+              q.search("searchText", queryText).eq("communityId", args.communityId).eq("active", true),
+            )
+            .take(limit * 3)
+        : await ctx.db
+            .query("communityMemberSearch")
+            .withIndex("by_community_active_updatedAt", (q: any) =>
+              q.eq("communityId", args.communityId).eq("active", true),
+            )
+            .order("desc")
+            .take(limit + 3);
+      for (const row of searchRows) {
+        if (out.length >= limit) break;
+        if (String(row.userId) === String(community.ownerId)) {
+          await addUserCandidate(row.userId, "owner");
+          continue;
+        }
+        const mem = await ctx.db
+          .query("communityMemberships")
+          .withIndex("by_community_user", (q: any) =>
+            q.eq("communityId", args.communityId).eq("userId", row.userId),
+          )
+          .first();
+        if (!mem || !communityMembershipRowIsActive(mem as any)) continue;
+        await addUserCandidate(row.userId, normalizeCommunityRoleForOutput(mem.role) || "member");
+      }
+      // If a short/substring query didn't fill via full-text prefix tokens,
+      // check exact handle match in O(1) as well.
+      if (queryText && out.length < limit) {
+        const exactUser = await ctx.db
+          .query("users")
+          .withIndex("by_normalizedHandle", (q: any) => q.eq("normalizedHandle", queryText))
+          .first();
+        if (exactUser) {
+          if (String(exactUser._id) === String(community.ownerId)) {
+            await addUserCandidate(exactUser._id, "owner");
+          } else {
+            const mem = await ctx.db
+              .query("communityMemberships")
+              .withIndex("by_community_user", (q: any) =>
+                q.eq("communityId", args.communityId).eq("userId", exactUser._id),
+              )
+              .first();
+            if (mem && communityMembershipRowIsActive(mem as any)) {
+              await addUserCandidate(exactUser._id, normalizeCommunityRoleForOutput(mem.role) || "member");
+            }
+          }
+        }
+      }
+      return out;
+    }
+
+    // Bounded fallback while a legacy community's member search index backfills:
+    // check exact handle in O(1), then scan at most 300 memberships in parallel chunks.
+    if (queryText) {
+      const exactUser = await ctx.db
+        .query("users")
+        .withIndex("by_normalizedHandle", (q: any) => q.eq("normalizedHandle", queryText))
+        .first();
+      if (exactUser) {
+        if (String(exactUser._id) === String(community.ownerId)) {
+          await addUserCandidate(exactUser._id, "owner");
+        } else {
+          const mem = await ctx.db
+            .query("communityMemberships")
+            .withIndex("by_community_user", (q: any) =>
+              q.eq("communityId", args.communityId).eq("userId", exactUser._id),
+            )
+            .first();
+          if (mem && communityMembershipRowIsActive(mem as any)) {
+            await addUserCandidate(exactUser._id, normalizeCommunityRoleForOutput(mem.role) || "member");
+          }
+        }
+      }
+    }
+
     await addUserCandidate(community.ownerId, "owner");
-    for (const row of canonicalRows.rows) {
-      if (out.length >= limit) break;
-      await addUserCandidate(row.userId, normalizeCommunityRoleForOutput(row.role) || "member");
+    const boundedRows = (await ctx.db
+      .query("communityMemberships")
+      .withIndex("by_community_createdAt", (q: any) => q.eq("communityId", args.communityId))
+      .order("desc")
+      .take(300)) as CommunityMembershipLike[];
+    const activeRows = boundedRows.filter(
+      (row) =>
+        communityMembershipRowIsActive(row) &&
+        String(row.userId) !== String(community.ownerId) &&
+        !seenUserIds.has(String(row.userId)),
+    );
+    for (let i = 0; i < activeRows.length && out.length < limit; i += 25) {
+      const chunk = activeRows.slice(i, i + 25);
+      const users = await Promise.all(
+        chunk.map((row) => ctx.db.get(row.userId) as Promise<CommunityMentionUserRow | null>),
+      );
+      for (let j = 0; j < chunk.length && out.length < limit; j += 1) {
+        const row = chunk[j]!;
+        const user = users[j];
+        if (!user || !userMatchesMentionSearch(user, queryText)) continue;
+        seenUserIds.add(String(row.userId));
+        const candidate = await mapCommunityMentionUserCandidate({
+          ctx,
+          community,
+          user,
+          role: normalizeCommunityRoleForOutput(row.role) || "member",
+          userIdCache,
+        });
+        if (candidate) out.push(candidate);
+      }
     }
 
     return out;

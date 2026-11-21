@@ -3,6 +3,7 @@ import { useState } from "react";
 export function useWebCommunityJoinRequestsController<TCommunityJoinRequest>() {
   const [communityJoinRequests, setCommunityJoinRequests] = useState<TCommunityJoinRequest[]>([]);
   const [isLoadingCommunityJoinRequests, setIsLoadingCommunityJoinRequests] = useState(false);
+  const [hasLoadedCommunityJoinRequests, setHasLoadedCommunityJoinRequests] = useState(false);
   const [communityJoinRequestsError, setCommunityJoinRequestsError] = useState<string | null>(null);
   const [decidingCommunityJoinRequestId, setDecidingCommunityJoinRequestId] = useState<string | null>(null);
 
@@ -11,6 +12,8 @@ export function useWebCommunityJoinRequestsController<TCommunityJoinRequest>() {
     setCommunityJoinRequests,
     isLoadingCommunityJoinRequests,
     setIsLoadingCommunityJoinRequests,
+    hasLoadedCommunityJoinRequests,
+    setHasLoadedCommunityJoinRequests,
     communityJoinRequestsError,
     setCommunityJoinRequestsError,
     decidingCommunityJoinRequestId,

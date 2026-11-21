@@ -19,8 +19,9 @@ import { useLiveAnswer } from "../../../../shared/liveQuery";
 
 type Draft = { slug: string | null; title: string; text: string };
 
-export function KitPodKnowledge(props: { session: unknown; communityId: string; channelId: string }) {
+export function KitPodKnowledge(props: { session: unknown; communityId: string; channelId: string; asMember?: boolean }) {
   const [state, setState] = useState<CloudPodNotes | null>(null);
+  const [notesOpen, setNotesOpen] = useState(false);
   const [open, setOpen] = useState<string | null>(null);
   const [draft, setDraft] = useState<Draft | null>(null);
   const [filter, setFilter] = useState("");
@@ -28,6 +29,9 @@ export function KitPodKnowledge(props: { session: unknown; communityId: string; 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const call = { session: props.session, communityId: props.communityId, channelId: props.channelId };
+  useEffect(() => {
+    if (props.asMember) { setDraft(null); setConfirm(null); }
+  }, [props.asMember]);
 
   // Answers are kept only for the pod still on screen: switching pods clears
   // the list at once, and a late answer for the previous pod is dropped.
@@ -42,7 +46,7 @@ export function KitPodKnowledge(props: { session: unknown; communityId: string; 
     } catch { if (current.current === asked) setState(null); }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [props.session, props.communityId, props.channelId]);
-  useEffect(() => { setState(null); setOpen(null); setDraft(null); setFilter(""); setConfirm(null); setError(null); void load(); }, [load]);
+  useEffect(() => { setState(null); setNotesOpen(false); setOpen(null); setDraft(null); setFilter(""); setConfirm(null); setError(null); void load(); }, [load]);
 
   const run = async (work: () => Promise<void>, failed: string) => {
     if (busy) return;
@@ -63,15 +67,29 @@ export function KitPodKnowledge(props: { session: unknown; communityId: string; 
   const [now] = useState(() => Date.now());
 
   if (!state) return null;
+  const canWrite = state.can_write && !props.asMember;
+  const canPublish = state.can_publish && !props.asMember;
   const words = filter.trim().toLowerCase();
   const notes = words ? state.notes.filter((note) => `${note.title}\n${note.body_md}`.toLowerCase().includes(words)) : state.notes;
-  if (!state.notes.length && !state.can_write) return null;
+  if (!state.notes.length && !canWrite) return null;
+
+  const headerAction = !draft && (state.notes.length > 0 || canWrite) ? (
+    <span className={cx("la-group")}>
+      {state.notes.length > 0 ? (
+        <PanelAction expanded={notesOpen} onClick={() => setNotesOpen((shown) => !shown)}>
+          {notesOpen ? "Hide notes" : "View notes"}
+        </PanelAction>
+      ) : null}
+      {canWrite ? (
+        <PanelAction icon label="New note" onClick={() => { setDraft({ slug: null, title: "", text: "" }); setError(null); }}>
+          <Icon name="plus" />
+        </PanelAction>
+      ) : null}
+    </span>
+  ) : null;
 
   return (
-    <PanelPart label="What this pod knows" fact={state.notes.length ? String(state.notes.length) : null}
-      action={state.can_write && !draft ? (
-        <PanelAction icon label="New note" onClick={() => { setDraft({ slug: null, title: "", text: "" }); setError(null); }}><Icon name="plus" /></PanelAction>
-      ) : null}>
+    <PanelPart label="What this pod knows" fact={state.notes.length ? String(state.notes.length) : null} action={headerAction}>
       {draft ? (
         <div className={cx("podform")} style={{ marginTop: 0 }}>
           <input value={draft.title} onChange={(event) => setDraft({ ...draft, title: event.target.value })} placeholder="Title" aria-label="Note title" maxLength={120} autoFocus />
@@ -87,14 +105,21 @@ export function KitPodKnowledge(props: { session: unknown; communityId: string; 
         </div>
       ) : (
         <>
-          {brain ? <PanelBrainMap map={brain} now={now} /> : null}
+          {brain ? (
+            <PanelBrainMap
+              map={brain}
+              now={now}
+              onOpen={state.notes.length ? () => setNotesOpen((shown) => !shown) : undefined}
+              label={notesOpen ? "Hide pod notes" : "View pod notes"}
+            />
+          ) : null}
           {!state.notes.length ? <PanelLine dim>Nothing yet</PanelLine> : null}
-          {state.notes.length > 5 ? (
+          {notesOpen && state.notes.length > 5 ? (
             <div className={cx("podform")} style={{ marginTop: 0, marginBottom: 8 }}>
               <input value={filter} onChange={(event) => setFilter(event.target.value)} placeholder="Find in pod knowledge" aria-label="Find in pod knowledge" />
             </div>
           ) : null}
-          {notes.map((note) => (
+          {notesOpen ? notes.map((note) => (
             <div key={note.slug}>
               <PanelLearned title={note.title} when={formatPodDate(note.updated_at)} expanded={open === note.slug}
                 onOpen={() => { setOpen(open === note.slug ? null : note.slug); setConfirm(null); setError(null); }} />
@@ -127,18 +152,18 @@ export function KitPodKnowledge(props: { session: unknown; communityId: string; 
                         <Btn small txt onClick={() => setConfirm(null)}>Cancel</Btn>
                       </span>
                     </div>
-                  ) : state.can_write || state.can_publish ? (
+                  ) : canWrite || canPublish ? (
                     <div className={cx("acts")} style={{ marginTop: 6 }}>
-                      {state.can_write ? <Btn small txt onClick={() => setDraft({ slug: note.slug, title: note.title, text: note.body_md })}>Edit</Btn> : null}
-                      {state.can_publish ? <Btn small txt onClick={() => setConfirm({ slug: note.slug, what: "publish" })}>{note.published ? "Update shared copy" : "Share with community"}</Btn> : null}
-                      {state.can_write ? <Btn small txt onClick={() => setConfirm({ slug: note.slug, what: "delete" })}>Delete</Btn> : null}
+                      {canWrite ? <Btn small onClick={() => setDraft({ slug: note.slug, title: note.title, text: note.body_md })}>Edit</Btn> : null}
+                      {canPublish ? <Btn small onClick={() => setConfirm({ slug: note.slug, what: "publish" })}>{note.published ? "Update shared copy" : "Share with community"}</Btn> : null}
+                      {canWrite ? <Btn small onClick={() => setConfirm({ slug: note.slug, what: "delete" })}>Delete</Btn> : null}
                     </div>
                   ) : null}
                 </>
               ) : null}
             </div>
-          ))}
-          {words && !notes.length ? <p className={cx("sub")}>Nothing matches.</p> : null}
+          )) : null}
+          {notesOpen && words && !notes.length ? <p className={cx("sub")}>Nothing matches.</p> : null}
         </>
       )}
     </PanelPart>

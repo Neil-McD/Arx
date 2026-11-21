@@ -11,13 +11,15 @@ import { listAuthorizedCommunityChannelPage } from "./communityChannelCore";
 import { setChannelParticipantCore } from "./communityChannelParticipants";
 import { normalizeIdValue, requireCommunityChatAccess, requireCommunityManager } from "./communityCore";
 import { displayName } from "./communityFounderBrief";
+import { resolveUserProfileDisplayProjection } from "./userProfileProjection";
 import { notesByUpdated, podScopeKey } from "./communityNotesStore";
 import { podPaymentStateOf, podPriceOf } from "./communityPodPayments";
 import { nextPodCall } from "./communityEvents";
-import { canChangePlanHere, plansIncludingPod } from "./communityPlanChange";
+import { buildPlanNamesByPodMap, canChangePlanHere, plansIncludingPod } from "./communityPlanChange";
 
 const PODS_CAP = 50;
-const MEMBERS_CAP = 200;
+// Covers SEATS_MAX (500) + community_agent + buffer, querying active seats directly.
+const MEMBERS_CAP = 505;
 const REQUESTS_CAP = 100;
 const PURPOSE_MAX = 280;
 const SEATS_MAX = 500;
@@ -51,8 +53,16 @@ export async function podRecord(ctx: Ctx, communityId: any, channelId: any) {
 
 export async function memberGrants(ctx: Ctx, channelId: any) {
   return (await ctx.db.query("communityChannelParticipants")
-    .withIndex("by_channel_principal", (q: any) => q.eq("channelId", channelId)).take(MEMBERS_CAP))
-    .filter((row: any) => row.status === "active" && String(row.principalKey).startsWith("user:"));
+    .withIndex("by_channel_status", (q: any) => q.eq("channelId", channelId).eq("status", "active"))
+    .take(MEMBERS_CAP))
+    .filter((row: any) => String(row.principalKey).startsWith("user:"));
+}
+
+async function viewerHasPodSeat(ctx: Ctx, channelId: any, principalKey: string): Promise<boolean> {
+  const row = await ctx.db.query("communityChannelParticipants")
+    .withIndex("by_channel_principal", (q: any) => q.eq("channelId", channelId).eq("principalKey", principalKey))
+    .first();
+  return row?.status === "active";
 }
 
 const userIdOf = (principalKey: string) => principalKey.slice("user:".length);
@@ -75,18 +85,83 @@ export function isInPod(grants: any[], record: any, actor: { principalKey: strin
   return grants.some((row: any) => row.principalKey === actor.principalKey) || isHost(record, userId);
 }
 
-// Builders and admins manage every pod; a pod's hosts manage theirs.
+// Strip a user from hostUserIds on one pod (when their pod seat is revoked) or
+// every pod in a community (when they leave or are removed/banned).
+export async function removeUserFromPodHosts(
+  ctx: Ctx,
+  args: { communityId: any; userId: any; channelId?: any },
+): Promise<void> {
+  const target = String(args.userId);
+  const nowMs = Date.now();
+  const records = args.channelId
+    ? [await podRecord(ctx, args.communityId, args.channelId)].filter(Boolean)
+    : await ctx.db
+        .query("communityPods")
+        .withIndex("by_community_channel", (q: any) => q.eq("communityId", args.communityId))
+        .take(PODS_CAP);
+  for (const record of records) {
+    const existing: any[] = record?.hostUserIds ?? [];
+    if (!existing.some((id: any) => String(id) === target)) continue;
+    const hostUserIds = existing.filter((id: any) => String(id) !== target);
+    await ctx.db.patch(record._id, { hostUserIds, updatedAt: nowMs });
+  }
+}
+
+// Builders and admins manage every pod; a pod's hosts manage theirs only while
+// they still have active access to that pod room.
 async function requirePodManager(ctx: Ctx, authSubject: string | undefined, communityId: any, channelId: any) {
   const { userId, actor } = await viewerOf(ctx, authSubject, communityId);
   const channel = await activePodRoom(ctx, communityId, channelId);
   const record = await podRecord(ctx, communityId, channelId);
-  if (!actor.isManager && !isHost(record, userId)) throw new Error("community_pod_manager_required");
+  if (actor.isManager) return { userId, actor, channel, record };
+  if (!isHost(record, userId)) throw new Error("community_pod_manager_required");
+  if (!(await getCommunityChannelCapabilities({ ctx, channel, actor })).canRead) {
+    throw new Error("community_pod_manager_required");
+  }
   return { userId, actor, channel, record };
+}
+
+export function podVisibilityOf(record: { visibility?: string | null } | null | undefined): "listed" | "hidden" {
+  return record?.visibility === "hidden" ? "hidden" : "listed";
+}
+
+type PodPersonSummary = { user_id: string; name: string; avatar_url: string | null };
+
+async function personSummary(
+  ctx: Ctx,
+  userId: any,
+  names: Map<string, string>,
+  people: Map<string, PodPersonSummary>,
+): Promise<PodPersonSummary> {
+  const key = normalizeIdValue(userId);
+  if (!people.has(key)) {
+    const [name, profile] = await Promise.all([
+      displayName(ctx, userId, names),
+      resolveUserProfileDisplayProjection(ctx, userId).catch(() => null),
+    ]);
+    people.set(key, {
+      user_id: key,
+      name: profile?.display_name ?? name,
+      avatar_url: profile?.avatar_url ?? null,
+    });
+  }
+  return people.get(key)!;
 }
 
 export async function hostNames(ctx: Ctx, record: any, names: Map<string, string>) {
   const list: string[] = [];
   for (const id of (record?.hostUserIds ?? []).slice(0, 5)) list.push(await displayName(ctx, id, names));
+  return list;
+}
+
+async function hostPeople(
+  ctx: Ctx,
+  record: any,
+  names: Map<string, string>,
+  people: Map<string, PodPersonSummary>,
+): Promise<PodPersonSummary[]> {
+  const list: PodPersonSummary[] = [];
+  for (const id of (record?.hostUserIds ?? []).slice(0, 5)) list.push(await personSummary(ctx, id, names, people));
   return list;
 }
 
@@ -108,24 +183,31 @@ export const listCommunityPods = query({
     const pods = [];
     const inside = new Set<string>();
     for (const channel of page as any[]) {
-      const grants = await memberGrants(ctx, channel._id);
-      const isMember = grants.some((row: any) => row.principalKey === actor.principalKey);
-      const record = await podRecord(ctx, args.communityId, channel._id);
-      const hosting = isHost(record, userId);
-      if (!canManage && !isInPod(grants, record, actor, userId)) continue;
+      const [grants, isMember, record] = await Promise.all([
+        memberGrants(ctx, channel._id),
+        viewerHasPodSeat(ctx, channel._id, actor.principalKey),
+        podRecord(ctx, args.communityId, channel._id),
+      ]);
+      const hosting = isHost(record, userId) && (isMember || actor.isManager);
+      if (!canManage && !isMember && !hosting) continue;
       inside.add(normalizeIdValue(channel._id));
-      const latest = await ctx.db.query("communityInteractionRoots")
-        .withIndex("by_channel_updatedAt", (q: any) => q.eq("channelId", channel._id)).order("desc").first();
-      const waiting = canManage || hosting
-        ? (await ctx.db.query("communityPodRequests").withIndex("by_channel_status", (q: any) => q.eq("channelId", channel._id).eq("status", "pending")).take(REQUESTS_CAP)).length
-          + (await ctx.db.query("communityPodRequests").withIndex("by_channel_status", (q: any) => q.eq("channelId", channel._id).eq("status", "waitlist")).take(REQUESTS_CAP)).length
-        : 0;
+      const [latest, pendingReqs, waitlistReqs] = await Promise.all([
+        ctx.db.query("communityInteractionRoots")
+          .withIndex("by_channel_updatedAt", (q: any) => q.eq("channelId", channel._id)).order("desc").first(),
+        canManage || hosting
+          ? ctx.db.query("communityPodRequests").withIndex("by_channel_status", (q: any) => q.eq("channelId", channel._id).eq("status", "pending")).take(REQUESTS_CAP)
+          : Promise.resolve([]),
+        canManage || hosting
+          ? ctx.db.query("communityPodRequests").withIndex("by_channel_status", (q: any) => q.eq("channelId", channel._id).eq("status", "waitlist")).take(REQUESTS_CAP)
+          : Promise.resolve([]),
+      ]);
+      const waiting = pendingReqs.length + waitlistReqs.length;
       pods.push({
         channel_id: normalizeIdValue(channel._id),
         slug: String(channel.slug ?? ""),
         name: String(channel.name ?? ""),
         purpose: record?.purpose ?? "",
-        visibility: record?.visibility === "listed" ? "listed" as const : "hidden" as const,
+        visibility: podVisibilityOf(record),
         seats: typeof record?.seats === "number" ? record.seats : null,
         price: podPriceOf(record),
         members: grants.length,
@@ -137,29 +219,38 @@ export const listCommunityPods = query({
       });
     }
 
-    // Listed pods this person isn't in, from the outside only.
+    // Listed pods this person isn't in, from the outside only. Pods default
+    // to listed (outside visible, inside locked) unless explicitly hidden.
     const outside = [];
     if (!canManage) {
-      const records = await ctx.db.query("communityPods")
-        .withIndex("by_community_channel", (q: any) => q.eq("communityId", args.communityId)).take(PODS_CAP);
-      for (const record of records) {
-        if (record.visibility !== "listed" || inside.has(normalizeIdValue(record.channelId))) continue;
-        const channel = await ctx.db.get(record.channelId) as any;
-        if (!channel || channel.accessMode !== "restricted" || channel.status !== "active") continue;
-        const taken = typeof record.seats === "number" ? (await memberGrants(ctx, record.channelId)).length : 0;
-        const request = await ctx.db.query("communityPodRequests")
-          .withIndex("by_channel_user", (q: any) => q.eq("channelId", record.channelId).eq("userId", userId)).first();
+      const [restrictedChannels, plansByPod] = await Promise.all([
+        ctx.db.query("communityChannels")
+          .withIndex("by_community_access_status_position", (q: any) =>
+            q.eq("communityId", args.communityId).eq("accessMode", "restricted").eq("status", "active"))
+          .take(PODS_CAP),
+        buildPlanNamesByPodMap(ctx, args.communityId),
+      ]);
+      for (const channel of restrictedChannels as any[]) {
+        if (inside.has(normalizeIdValue(channel._id))) continue;
+        const record = await podRecord(ctx, args.communityId, channel._id);
+        if (podVisibilityOf(record) !== "listed") continue;
+        const [taken, request, hosts] = await Promise.all([
+          typeof record?.seats === "number" ? memberGrants(ctx, channel._id).then((g) => g.length) : Promise.resolve(0),
+          ctx.db.query("communityPodRequests")
+            .withIndex("by_channel_user", (q: any) => q.eq("channelId", channel._id).eq("userId", userId)).first(),
+          hostNames(ctx, record, names),
+        ]);
         outside.push({
-          channel_id: normalizeIdValue(record.channelId),
+          channel_id: normalizeIdValue(channel._id),
           slug: String(channel.slug ?? ""),
           name: String(channel.name ?? ""),
-          purpose: record.purpose,
-          hosts: await hostNames(ctx, record, names),
-          seats_left: typeof record.seats === "number" ? Math.max(0, record.seats - taken) : null,
+          purpose: record?.purpose ?? "",
+          hosts,
+          seats_left: typeof record?.seats === "number" ? Math.max(0, record.seats - taken) : null,
           price: podPriceOf(record),
           my_request: request && request.status !== "approved" ? request.status : null,
           // The plans that include it: the way in for a pod that comes with a plan.
-          included_with: (await plansIncludingPod(ctx, args.communityId, record.channelId)).map((plan) => plan.name),
+          included_with: plansByPod.get(String(channel._id)) ?? [],
         });
       }
     }
@@ -175,20 +266,36 @@ export const getPod = query({
     const { userId, actor } = await viewerOf(ctx, args.authSubject, args.communityId);
     const channel = await activePodRoom(ctx, args.communityId, args.channelId);
     if (!(await getCommunityChannelCapabilities({ ctx, channel, actor })).canRead) throw new Error("community_pod_not_found");
-    const record = await podRecord(ctx, args.communityId, args.channelId);
+    const [record, grants, viewerIn] = await Promise.all([
+      podRecord(ctx, args.communityId, args.channelId),
+      memberGrants(ctx, args.channelId),
+      viewerHasPodSeat(ctx, args.channelId, actor.principalKey),
+    ]);
     const canManage = actor.isManager || isHost(record, userId);
     const names = new Map<string, string>();
-    const members = [];
-    for (const grant of await memberGrants(ctx, args.channelId)) {
-      const memberId = userIdOf(String(grant.principalKey));
-      // How each member is in, for the people who manage the pod only.
-      const payment = canManage ? podPaymentStateOf(await paymentRows(ctx, args.channelId, memberId)) : null;
-      members.push({
-        user_id: memberId, name: await displayName(ctx, memberId, names), is_host: isHost(record, memberId),
-        ...(canManage ? { payment: payment ? { state: payment.state, until: payment.until } : { state: "added" as const, until: null } } : {}),
-      });
+    const people = new Map<string, PodPersonSummary>();
+    const members: any[] = [];
+    // Hydrate members in parallel batches instead of one sequential round-trip per member.
+    for (let i = 0; i < grants.length; i += 40) {
+      const slice = grants.slice(i, i + 40);
+      const batch = await Promise.all(
+        slice.map(async (grant: any) => {
+          const memberId = userIdOf(String(grant.principalKey));
+          const [payment, person] = await Promise.all([
+            canManage ? paymentRows(ctx, args.channelId, memberId).then(podPaymentStateOf) : Promise.resolve(null),
+            personSummary(ctx, memberId, names, people),
+          ]);
+          return {
+            user_id: memberId,
+            name: person.name,
+            avatar_url: person.avatar_url,
+            is_host: isHost(record, memberId),
+            ...(canManage ? { payment: payment ? { state: payment.state, until: payment.until } : { state: "added" as const, until: null } } : {}),
+          };
+        }),
+      );
+      members.push(...batch);
     }
-    const viewerIn = (await memberGrants(ctx, args.channelId)).some((row: any) => row.principalKey === actor.principalKey);
     const requests = [];
     if (canManage) {
       for (const status of ["pending", "waitlist"] as const) {
@@ -197,11 +304,12 @@ export const getPod = query({
         for (const row of rows) requests.push({ user_id: normalizeIdValue(row.userId), name: await displayName(ctx, row.userId, names), status, created_at: new Date(row.createdAt).toISOString() });
       }
     }
+    const hostsDetail = await hostPeople(ctx, record, names, people);
     return {
       channel_id: normalizeIdValue(channel._id),
       name: String(channel.name ?? ""),
       purpose: record?.purpose ?? "",
-      visibility: record?.visibility === "listed" ? "listed" as const : "hidden" as const,
+      visibility: podVisibilityOf(record),
       seats: typeof record?.seats === "number" ? record.seats : null,
       price: podPriceOf(record),
       what_you_get: record?.whatYouGet ?? [],
@@ -214,7 +322,8 @@ export const getPod = query({
         } : null;
       })(),
       slug: String(channel.slug ?? ""),
-      hosts: await hostNames(ctx, record, names),
+      hosts: hostsDetail.map((host) => host.name),
+      host_people: hostsDetail,
       members,
       // The viewer's own place in it: paying, leaving, a payment problem, or added.
       my_membership: viewerIn ? (podPaymentStateOf(await paymentRows(ctx, args.channelId, userId)) ?? { state: "added" as const, until: null, amount_base_units: 0, currency: "usd" }) : null,
@@ -249,7 +358,7 @@ export const savePodDetails = mutation({
     const nowMs = Date.now();
     const existing = await podRecord(ctx, args.communityId, args.channelId);
     if (existing) await ctx.db.patch(existing._id, { ...patch, updatedAt: nowMs });
-    else await ctx.db.insert("communityPods", { communityId: args.communityId, channelId: args.channelId, purpose: "", ...patch, createdAt: nowMs, updatedAt: nowMs } as any);
+    else await ctx.db.insert("communityPods", { communityId: args.communityId, channelId: args.channelId, purpose: "", visibility: "listed", ...patch, createdAt: nowMs, updatedAt: nowMs } as any);
     return null;
   },
 });
@@ -268,7 +377,7 @@ export const setPodHost = mutation({
     const current = (existing?.hostUserIds ?? []).filter((id: any) => String(id) !== String(args.userId));
     const hostUserIds = args.host ? [...current, args.userId] : current;
     if (existing) await ctx.db.patch(existing._id, { hostUserIds, updatedAt: nowMs });
-    else await ctx.db.insert("communityPods", { communityId: args.communityId, channelId: args.channelId, purpose: "", hostUserIds, createdAt: nowMs, updatedAt: nowMs });
+    else await ctx.db.insert("communityPods", { communityId: args.communityId, channelId: args.channelId, purpose: "", visibility: "listed", hostUserIds, createdAt: nowMs, updatedAt: nowMs });
     return null;
   },
 });
@@ -281,12 +390,12 @@ export const requestToJoinPod = mutation({
     await requireCommunityChatAccess({ ctx, communityId: args.communityId, userId });
     await activePodRoom(ctx, args.communityId, args.channelId);
     const record = await podRecord(ctx, args.communityId, args.channelId);
-    if (record?.visibility !== "listed") throw new Error("community_pod_not_found");
+    if (podVisibilityOf(record) !== "listed") throw new Error("community_pod_not_found");
     // A paid pod's gate is payment (communityPodPayments.startPodCheckout).
     if (podPriceOf(record)) throw new Error("community_pod_paid");
     const grants = await memberGrants(ctx, args.channelId);
     if (grants.some((row: any) => row.principalKey === `user:${normalizeIdValue(userId)}`)) return { status: "member" as const };
-    const status = typeof record.seats === "number" && grants.length >= record.seats ? "waitlist" as const : "pending" as const;
+    const status = typeof record?.seats === "number" && grants.length >= record.seats ? "waitlist" as const : "pending" as const;
     const nowMs = Date.now();
     const existing = await ctx.db.query("communityPodRequests")
       .withIndex("by_channel_user", (q: any) => q.eq("channelId", args.channelId).eq("userId", userId)).first();
@@ -329,13 +438,17 @@ export const getPodPage = query({
     if (!channel || channel.accessMode !== "restricted" || channel.status !== "active") return notFound;
     const record = await podRecord(ctx, args.communityId, channel._id);
     const grants = await memberGrants(ctx, channel._id);
-    const isIn = grants.some((row: any) => row.principalKey === actor.principalKey);
-    const hosting = isHost(record, userId);
+    const canReadRoom = (await getCommunityChannelCapabilities({ ctx, channel, actor })).canRead;
+    const isIn = !actor.isManager ? canReadRoom : grants.some((row: any) => row.principalKey === actor.principalKey);
+    const hosting = canReadRoom && isHost(record, userId);
     const manages = actor.isManager && !args.asMember;
     const canEnter = isIn || manages || hosting;
+    const visibility = podVisibilityOf(record);
     if (canEnter && !(args.preview && (manages || hosting))) return { kind: "inside" as const, slug: String(channel.slug) };
-    if (!canEnter && record?.visibility !== "listed") return notFound;
+    if (!canEnter && visibility !== "listed") return notFound;
     const names = new Map<string, string>();
+    const people = new Map<string, PodPersonSummary>();
+    const hostsDetail = await hostPeople(ctx, record, names, people);
     const price = podPriceOf(record);
     const request = await ctx.db.query("communityPodRequests")
       .withIndex("by_channel_user", (q: any) => q.eq("channelId", channel._id).eq("userId", userId)).first();
@@ -349,8 +462,9 @@ export const getPodPage = query({
       name: String(channel.name ?? ""),
       purpose: record?.purpose ?? "",
       what_you_get: record?.whatYouGet ?? [],
-      hosts: await hostNames(ctx, record, names),
-      visibility: record?.visibility === "listed" ? "listed" as const : "hidden" as const,
+      hosts: hostsDetail.map((host) => host.name),
+      host_people: hostsDetail,
+      visibility,
       price,
       seats_left: typeof record?.seats === "number" ? Math.max(0, record.seats - grants.length) : null,
       my_request: request && request.status !== "approved" ? request.status : null,

@@ -55,7 +55,7 @@ export function KitNextEvent(props: {
   return (
     <PanelPart label="Next up" fact={label.live ? null : label.text} action={<PanelAction onClick={props.onOpenEvents}>All events</PanelAction>}>
       {label.live ? <span className={cx("livepill")}><i />{label.text}</span> : null}
-      <PanelNext title={event.title} sub={sub}
+      <PanelNext title={event.title} sub={sub} onClick={props.onOpenEvents} ariaLabel={`Open ${event.title} in Events`}
         action={label.live && event.url ? <a className={cx("btn go")} href={event.url} target="_blank" rel="noreferrer">Join</a> : null} />
     </PanelPart>
   );

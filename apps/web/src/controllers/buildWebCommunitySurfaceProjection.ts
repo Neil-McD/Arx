@@ -86,6 +86,7 @@ type BuildWebCommunitySurfaceProjectionParams = {
   resourceModuleDeleteModalProps: WebCommunitySecondaryPanelsProps["resourceModuleDeleteModal"];
   podsProps: WebCommunitySecondaryPanelsProps["pods"];
   discoverProps: WebCommunitySecondaryPanelsProps["discover"];
+  memberPreview?: boolean;
   canPostMessagesActiveCommunity: WebCommunityChatPanelProps["canPostMessages"];
   isProfileSetupComplete: WebCommunityChatPanelProps["isProfileSetupComplete"];
   onCommunityTypingSignal: WebCommunityChatPanelProps["onCommunityTypingSignal"];
@@ -261,6 +262,7 @@ export function buildWebCommunitySurfaceProjection(
         }
       : null,
     session: params.session,
+    memberPreview: params.memberPreview,
     isResolvingSelectedCommunity:
       (!params.isAuthBootstrapComplete || params.hasAuthenticatedPresentation) &&
       params.activePage === "community" &&
