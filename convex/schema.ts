@@ -1314,6 +1314,16 @@ export default defineSchema({
     // cancellation, Polynet keeps asking; a renewal Stripe reports after this
     // time is re-cancelled instead of reopening billing.
     cancelRequestedAt: v.optional(v.number()),
+    // Latest Stripe event timestamp applied to this subscription so older
+    // out-of-order webhooks cannot overwrite newer states or reopen ended rows.
+    lastProviderEventCreatedAt: v.optional(v.number()),
+    // True only when Stripe terminally canceled/deleted the subscription (as
+    // opposed to recoverable provider states like paused/unpaid).
+    providerCanceled: v.optional(v.boolean()),
+    // Tracks refund/dispute payment holds so delayed or duplicate invoice.paid
+    // events from the refunded charge cannot lift the hold.
+    riskAccessState: v.optional(v.union(v.literal("clear"), v.literal("revoked"))),
+    riskStateChangedAt: v.optional(v.number()),
     endedAt: v.optional(v.number()),
     createdAt: v.number(),
     updatedAt: v.number(),
