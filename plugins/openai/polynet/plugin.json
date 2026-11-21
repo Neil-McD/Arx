@@ -1,7 +1,7 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "polynet",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Read and take part in your Polynet communities: catch up on channels, courses and events, post and reply as you, and help run the communities you host.",
   "author": {
     "name": "Polynet",
@@ -53,7 +53,7 @@
             },
             {
               "description": "Posts in a channel as the signed-in person.",
-              "prompt": "Post in Harbor Run Club's General channel: \"Reminder: Saturday's long run starts at 7am from the boathouse.\"",
+              "prompt": "Start a new post in Harbor Run Club's General channel: \"Reminder: Saturday's long run starts at 7am from the boathouse.\"",
               "tools_triggered": "polynet_list, polynet_read, polynet_post",
               "expected_behavior": "Posts the message in General under the signed-in person's name, marked as made through an AI, and says it is done. Asking for the same words again within a day is refused as a duplicate post, and the plugin says so instead of posting twice; the reset script removes the post between review runs."
             },
@@ -70,7 +70,7 @@
               "prompt": "Show me the newest posts in the Polynet community Ocean Swimmers Collective."
             },
             {
-              "description": "Buying or joining a paid community is not done through the plugin; it should explain that joining happens in Polynet and not show prices or checkout links.",
+              "description": "Buying or joining a paid community is not done through the plugin: it says joining and paying happen in Polynet, without quoting prices or pointing to a checkout or signup page.",
               "prompt": "Buy me a membership to a paid community on Polynet."
             },
             {
