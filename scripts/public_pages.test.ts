@@ -83,3 +83,16 @@ describe("public pages", () => {
     expect(text).toContain("security/advisories/new");
   });
 });
+
+describe("OpenAI domain proof", () => {
+  it("serves exactly the token, as plain text, from both hosts' configs", () => {
+    const token = read("apps/web/public/.well-known/openai-apps-challenge");
+    expect(token).toMatch(/^[A-Za-z0-9_-]{20,}$/);
+    for (const config of ["vercel.json", "apps/web/vercel.json"]) {
+      const routes = JSON.parse(read(config)).routes as Array<Record<string, any>>;
+      const route = routes.find((entry) => String(entry.src).includes("openai-apps-challenge"));
+      expect(route?.headers?.["Content-Type"], config).toBe("text/plain; charset=utf-8");
+      expect(route?.continue).toBe(true);
+    }
+  });
+});

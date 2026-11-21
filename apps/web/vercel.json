@@ -1,5 +1,6 @@
 {
   "routes": [
+    { "src": "/\\.well-known/openai-apps-challenge", "headers": { "Content-Type": "text/plain; charset=utf-8" }, "continue": true },
     { "src": "/(?:m/)?(ai|privacy|terms)/?", "dest": "/$1.html" },
     { "handle": "filesystem" },
     { "src": "/(.*\\..*)", "status": 404 },
