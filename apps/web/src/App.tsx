@@ -648,6 +648,8 @@ export default function App() {
     setCommunityJoinRequests,
     isLoadingCommunityJoinRequests,
     setIsLoadingCommunityJoinRequests,
+    hasLoadedCommunityJoinRequests,
+    setHasLoadedCommunityJoinRequests,
     communityJoinRequestsError,
     setCommunityJoinRequestsError,
     decidingCommunityJoinRequestId,
@@ -917,6 +919,7 @@ export default function App() {
     },
     setCommunityJoinRequests,
     setIsLoadingCommunityJoinRequests,
+    setHasLoadedCommunityJoinRequests,
     setCommunityJoinRequestsError,
     setDecidingCommunityJoinRequestId,
   });
@@ -1908,6 +1911,7 @@ export default function App() {
         roomAttention: communityChannelIndicators,
       },
       discoverProps: discoverPageProps,
+      memberPreview: memberPreview.active,
       canPostMessagesActiveCommunity: canPostMessagesActiveChannel,
       isProfileSetupComplete: isProfileSetupCompleteForPublicActions,
       onCommunityTypingSignal: signalCommunityTyping,
@@ -2348,7 +2352,9 @@ export default function App() {
 
   const handleToggleMemberPreview = (on: boolean) => {
     memberPreview.set(on);
-    if (on && activeCommunityChannel?.access_mode === "restricted") {
+    // In Design v1, private rooms are Pods — stay inside the Pod so hosts can
+    // inspect the enrolled-member experience directly without getting kicked out.
+    if (on && activeCommunityChannel?.access_mode === "restricted" && !isDesignV1Active()) {
       const path = buildCommunityTabPath(selectedActiveCommunitySlug, "chat");
       if (path) navigateTo(path);
     }
@@ -2428,6 +2434,7 @@ export default function App() {
     communityChannels: memberPreview.active ? memberPreviewChannels(activeCommunityChannels) : activeCommunityChannels,
     isLoadingCommunityChannels: isLoadingActiveCommunityChannels,
     selectedCommunityChannelSlug: activeCommunityChannelSlug,
+    isInPodRoom: activeCommunityChannel?.access_mode === "restricted",
     communityChannelIndicators,
     handleSelectCommunityChannel: (channel) => {
       const path = buildCommunityTabPath(
@@ -2553,7 +2560,13 @@ export default function App() {
                 firstName: displayName(canonicalSessionUserId).trim().split(/\s+/)[0] || "there",
                 // The host decides on the people waiting from Home itself.
                 joinReview: activeCommunityAccess.is_owner === true && canReviewJoinRequestsActiveCommunity
-                  ? { requests: communityContextJoinRequests, decidingId: decidingCommunityJoinRequestId, onApprove: (id: string) => void handleApproveCommunityJoinRequest(id), onDecline: (id: string) => void handleDenyCommunityJoinRequest(id) }
+                  ? {
+                      requests: communityContextJoinRequests,
+                      loaded: hasLoadedCommunityJoinRequests && !communityJoinRequestsError,
+                      decidingId: decidingCommunityJoinRequestId,
+                      onApprove: (id: string) => void handleApproveCommunityJoinRequest(id),
+                      onDecline: (id: string) => void handleDenyCommunityJoinRequest(id),
+                    }
                   : null,
                 // On a phone, what Home opens is in the community tab.
                 // Straight to the people waiting (/members/requests), not the

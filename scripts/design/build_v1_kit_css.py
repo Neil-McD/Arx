@@ -204,22 +204,31 @@ css += """
 .app .rz>.lab em{font-style:normal;font-weight:400;opacity:.8;min-width:0;overflow:hidden;text-overflow:ellipsis}
 .app .rz>.lab em::before{content:"·";margin-right:8px}
 .app .rz>.lab .la{margin-left:auto}
-.app button.la,.app a.la{font-size:12px;font-weight:500;letter-spacing:0;color:var(--ink2);cursor:pointer;display:inline-flex;align-items:center;text-decoration:none}
-.app button.la:hover,.app a.la:hover{color:var(--ink)}
-.app button.la.ico{width:22px;height:22px;justify-content:center;border-radius:6px;border:1px solid var(--line2)}
+.app .rz>.lab .la-group{margin-left:auto;display:inline-flex;align-items:center;gap:6px;flex:none}
+.app .rz>.lab .la-group .la{margin-left:0}
+.app button.la,.app a.la{height:24px;padding:0 9px;border-radius:6px;border:1px solid var(--line2);background:var(--s1);font-size:12px;font-weight:500;letter-spacing:0;color:var(--ink);cursor:pointer;display:inline-flex;align-items:center;gap:5px;text-decoration:none;transition:background .14s var(--ease),border-color .14s var(--ease),color .14s var(--ease)}
+.app button.la:hover:not(:disabled),.app a.la:hover{background:var(--s2);border-color:rgba(var(--w),.22);color:var(--ink)}
+.app button.la[aria-expanded="true"]{background:var(--s2);border-color:rgba(var(--w),.24);color:var(--ink)}
+.app button.la:disabled{opacity:.45;cursor:not-allowed}
+.app button.la.ico{width:24px;height:24px;padding:0;justify-content:center;border-radius:6px;border:1px solid var(--line2);background:var(--s1)}
 .app button.la.ico .ic{width:13px;height:13px}
 .app .ln{display:flex;align-items:center;gap:9px;min-height:28px;min-width:0;font-size:13.5px;color:var(--ink);white-space:nowrap}
 .app .ln>.t{min-width:0;overflow:hidden;text-overflow:ellipsis}
 .app .ln>.t.dim{color:var(--ink3)}
 .app .ln>em{margin-left:auto;padding-left:8px;font-style:normal;font-size:12.5px;color:var(--ink3);flex:none}
-.app .ln>.la{margin-left:auto}
+.app .ln>.la{margin-left:auto;flex:none;padding:0 8px}
 .app .ln>i.dot{width:6px;height:6px;border-radius:50%;background:rgb(var(--au));flex:none}
 .app .ln>i.dot.amber{background:#e0a84f}
 .app button.ln{width:100%;text-align:left;cursor:pointer}.app button.ln:hover>.t{text-decoration:underline;text-decoration-color:var(--line2);text-underline-offset:3px}
 .app .ln .stack .av{box-shadow:0 0 0 2px var(--panel,var(--bg))}
+.app .av.s .community-dm-kit-avatar{font-size:11px}
 /* The next thing to do: what, a small line under it, the way in on the right. */
 .app .nx{display:flex;align-items:center;gap:12px;min-width:0}
-.app .nx>div{min-width:0;display:flex;flex-direction:column;gap:1px}
+.app .nx>div,.app .nx .nx-go{flex:1;min-width:0;display:flex;flex-direction:column;gap:1px}
+.app .nx .nx-go{padding:6px 8px;margin:-6px -8px;border-radius:8px;text-align:left;cursor:pointer;transition:background .14s var(--ease)}
+.app .nx .nx-go:hover{background:var(--s1)}
+.app .nx .nx-go:hover b{text-decoration:underline;text-decoration-color:var(--line2);text-underline-offset:3px}
+.app .nx .nx-go:focus-visible{outline:2px solid var(--line2);outline-offset:1px}
 .app .nx b{font-size:15px;font-weight:600;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .app .nx small{font-size:12.5px;color:var(--ink3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .app .nx .btn{margin-left:auto;height:30px;padding:0 14px;border-radius:8px;flex:none;text-decoration:none}
@@ -230,8 +239,13 @@ css += """
 .app .need .btn{height:26px;padding:0 10px;font-size:12px}
 .app .needs{display:flex;flex-direction:column;gap:6px}
 /* What a panel keeps at its foot: things looked at rarely, opened in place. */
-.app .railfoot{margin-top:auto;display:flex;gap:18px}
-.app .railfoot button{font-size:12.5px;color:var(--ink3);cursor:pointer}.app .railfoot button:hover,.app .railfoot button[aria-expanded="true"]{color:var(--ink)}
+.app .railfoot{margin-top:auto;padding-top:12px;border-top:1px solid var(--line);display:flex;flex-wrap:wrap;gap:8px}
+.app .railfoot button{height:28px;padding:0 10px;border-radius:7px;border:1px solid var(--line2);background:var(--s1);font-size:12.5px;font-weight:500;color:var(--ink2);cursor:pointer;display:inline-flex;align-items:center;transition:background .14s var(--ease),border-color .14s var(--ease),color .14s var(--ease)}
+.app .railfoot button:hover{background:var(--s2);border-color:rgba(var(--w),.22);color:var(--ink)}
+.app .railfoot button[aria-expanded="true"]{background:var(--s2);border-color:rgba(var(--w),.26);color:var(--ink)}
+.app .rail .acts{flex-wrap:wrap}
+.app .rail .btn:not(.go):not(.txt){background:var(--s1)}
+.app .rail .btn:not(.go):not(.txt):hover:not(:disabled){background:var(--s2);border-color:rgba(var(--w),.22)}
 /* A pod's landing page, the Pods page's right panel. */
 .app .land{display:flex;flex-direction:column;gap:26px;flex:1;min-width:0;max-width:100%}
 .app .land>*{min-width:0;max-width:100%}
@@ -814,21 +828,24 @@ css += """
 .app .kunsaved .btn:disabled{opacity:.4;cursor:default}
 .app .btn.lg{height:40px;padding:0 16px;border-radius:10px;font-size:14px}
 .app .tag.live::before{content:"";width:6px;height:6px;margin-right:6px;border-radius:50%;background:#3fb76b}
-.app .khero{display:grid;grid-template-columns:minmax(0,460px) minmax(0,1fr);gap:32px;align-items:center;width:100%;margin-top:18px;padding:20px;border-radius:14px;background:var(--panel2);border:1px solid var(--line);box-shadow:0 18px 40px -26px rgba(0,0,0,.5);text-align:left;cursor:pointer;transition:border-color .16s var(--ease)}
+.app .khero-wrap{container-type:inline-size;width:100%}
+.app .khero{display:grid;grid-template-columns:minmax(0,min(44%,440px)) minmax(0,1fr);gap:28px;align-items:center;width:100%;margin-top:18px;padding:20px;border-radius:14px;background:var(--panel2);border:1px solid var(--line);box-shadow:0 18px 40px -26px rgba(0,0,0,.5);text-align:left;cursor:pointer;overflow:hidden;transition:border-color .16s var(--ease)}
 .app .khero:hover{border-color:var(--line2)}
 .app .khero-cover{display:grid;place-items:center;aspect-ratio:16/9;height:auto;border-radius:10px;color:var(--ink3)}
 .app .khero-cover .ic{width:28px;height:28px}
 .app .khero-body{display:flex;flex-direction:column;min-width:0}
 .app .khero-eye{font-size:12.5px;font-weight:500;color:var(--v1-accent-ink,var(--accent))}
-.app .khero-body>b{margin-top:6px;font-size:30px;font-weight:600;letter-spacing:-.02em;line-height:1.12}
+.app .khero-body>b{margin-top:6px;font-size:30px;font-weight:600;letter-spacing:-.02em;line-height:1.12;overflow-wrap:anywhere}
 .app .khero-body>.s{margin-top:8px;max-width:46ch;font-size:15px;line-height:1.5;color:var(--ink2)}
-.app .khero-next{display:flex;align-items:center;gap:12px;margin-top:18px;padding:10px 12px;border-radius:10px;background:var(--panel);border:1px solid var(--line)}
+.app .khero-next{display:flex;align-items:center;gap:12px;min-width:0;margin-top:18px;padding:10px 12px;border-radius:10px;background:var(--panel);border:1px solid var(--line)}
+.app .khero-next>span{min-width:0}
 .app .khero-next i{flex:none;display:grid;place-items:center;width:28px;height:28px;border-radius:50%;border:1.5px solid var(--accent);font-style:normal;font-size:12.5px;font-weight:600}
 .app .khero-next b{display:block;font-size:14.5px;font-weight:550}.app .khero-next em{font-style:normal;font-size:12.5px;color:var(--ink3)}
 .app .khero-prog{display:flex;align-items:center;gap:10px;margin-top:14px;font-size:12.5px;color:var(--ink3)}
 .app .khero-prog .kbar{flex:1;max-width:220px;margin-top:0}
 .app .khero .acts{margin-top:18px}
 .app .knum{margin-right:8px;font-style:normal;font-size:12.5px;font-weight:500;color:var(--ink3);font-variant-numeric:tabular-nums}
+@container (max-width:680px){.app .khero{grid-template-columns:minmax(0,1fr);gap:16px;padding:16px}.app .khero-body>b{font-size:24px}}
 @media (max-width:760px){.app .khero{grid-template-columns:minmax(0,1fr);gap:16px;padding:12px 12px 16px}.app .khero-body>b{font-size:24px}}
 .app .kcols{display:flex;gap:40px;max-width:860px;margin:22px auto 0;align-items:flex-start}
 .app .kcols.two{max-width:1216px}
@@ -1065,6 +1082,17 @@ css += """
 .app .kpeople-sub{margin-top:2px;font-size:12px;font-weight:400;color:var(--ink3)}
 .app .kpeople-note{padding:10px 8px;font-size:12.5px;line-height:1.4;color:var(--ink3)}
 .app .khost-sees{margin-top:8px}
+/* Courses shelf pager: real, clearly visible buttons when a catalog spans pages. */
+.app .kpager{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:20px;padding-top:14px;border-top:1px solid var(--line);font-size:13px;color:var(--ink2)}
+.app .kpager-acts{display:flex;align-items:center;gap:8px}
+.app .kpager .btn.kpager-btn{height:34px;padding:0 14px;border-radius:8px;border:1px solid rgba(var(--w),.18);background:var(--s2);color:var(--ink);font-size:13px;font-weight:550;gap:6px;cursor:pointer}
+.app .kpager .btn.kpager-btn:hover:not(:disabled){background:var(--s3);border-color:rgba(var(--w),.28)}
+.app .kpager .btn.kpager-btn:disabled{opacity:.38;cursor:not-allowed;background:var(--s1);border-color:var(--line)}
+.app .kpager .btn.kpager-btn .ic{width:14px;height:14px}
+/* Quiet host note under Member View when hidden pods exist. */
+.app .podhidden-note{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-top:20px;padding:12px 14px;border-radius:10px;border:1px dashed var(--line2);background:var(--s1);font-size:13px;color:var(--ink2)}
+.app .podhidden-note .acts{flex-wrap:wrap}
+.app .podhidden-note .btn.sm{background:var(--s2)}
 """
 header = "/* Generated by scripts/design/build_v1_kit_css.py from docs/design/hifi-mock/style.css.\n   Do not edit by hand: change the mock, then run the script. */\n"
 if "--stdout" in sys.argv:

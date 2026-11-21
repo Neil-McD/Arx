@@ -184,7 +184,10 @@ async function readActorResolutionState(args: {
   const avatarUrl = normalizeOptionalString(args.avatarUrl) ?? null;
 
   const subjectMatchUser = await getUserByResolvedSubject(args.ctx, args.authSubject);
-  const emailUsers = normalizedEmail ? await listUsersByNormalizedEmail(args.ctx, normalizedEmail) : [];
+  // Only query by normalizedEmail when the auth subject didn't already match.
+  const emailUsers = !subjectMatchUser && normalizedEmail
+    ? await listUsersByNormalizedEmail(args.ctx, normalizedEmail)
+    : [];
   const automaticEmailRelinkEnabled = allowAutomaticEmailRelink();
   const eligibleRelinkCandidates = normalizedEmail
     ? emailUsers.filter((user) => {
@@ -295,13 +298,10 @@ async function getUserByResolvedSubject(ctx: any, authSubject: string): Promise<
 async function listUsersByNormalizedEmail(ctx: any, normalizedEmail: string): Promise<UserRow[]> {
   const normalized = normalizeStoredEmail(normalizedEmail);
   if (!normalized) return [];
-  const indexed = (await ctx.db
+  return (await ctx.db
     .query("users")
     .withIndex("by_normalizedEmail", (q: any) => q.eq("normalizedEmail", normalized))
-    .collect()) as UserRow[];
-  if (indexed.length > 0) return indexed;
-  const scanned = (await ctx.db.query("users").collect()) as UserRow[];
-  return scanned.filter((user) => normalizeStoredEmail(user.email) === normalized);
+    .take(10)) as UserRow[];
 }
 
 function buildUserPatch(args: {
@@ -326,9 +326,14 @@ function buildUserPatch(args: {
   const normalizedEmailChanged =
     hasEmailUpdate &&
     normalizeStoredEmail(args.normalizedEmail) !== normalizeStoredEmail(args.existing.normalizedEmail ?? args.existing.email);
+  const repairedNormalizedEmail =
+    !normalizeStoredEmail(args.existing.normalizedEmail)
+      ? normalizeStoredEmail(args.normalizedEmail ?? args.existing.email)
+      : undefined;
 
   if (emailChanged) patch.email = args.email;
   if (normalizedEmailChanged) patch.normalizedEmail = args.normalizedEmail;
+  else if (repairedNormalizedEmail) patch.normalizedEmail = repairedNormalizedEmail;
 
   if (args.displayName !== undefined && args.displayName !== args.existing.displayName) {
     patch.displayName = args.displayName;
@@ -432,9 +437,10 @@ async function ensureActorByResolvedSubject(args: {
   displayName?: string | null;
   avatarUrl?: string | null;
   nowMs?: number;
+  resolvedState?: ActorResolutionState;
 }): Promise<AuthenticatedActor> {
   const nowMs = args.nowMs ?? Date.now();
-  const state = await readActorResolutionState({
+  const state = args.resolvedState ?? await readActorResolutionState({
     ctx: args.ctx,
     authSubject: args.authSubject,
     userId: args.userId,
@@ -559,7 +565,7 @@ export async function ensureAuthenticatedActorDetailed(args: {
     ctx: args.ctx,
     authSubject: args.authSubject ?? null,
   });
-  const continuity = await previewAuthenticatedActorResolutionBySubject({
+  const state = await readActorResolutionState({
     ctx: args.ctx,
     authSubject,
     userId: args.userId,
@@ -569,6 +575,7 @@ export async function ensureAuthenticatedActorDetailed(args: {
     displayName: args.displayName ?? null,
     avatarUrl: args.avatarUrl ?? null,
   });
+  const continuity = toAuthContinuityResolutionPreview(authSubject, state);
   const actor = await ensureActorByResolvedSubject({
     ctx: args.ctx,
     authSubject,
@@ -579,6 +586,7 @@ export async function ensureAuthenticatedActorDetailed(args: {
     displayName: args.displayName ?? null,
     avatarUrl: args.avatarUrl ?? null,
     nowMs: args.nowMs,
+    resolvedState: state,
   });
   return { actor, continuity };
 }

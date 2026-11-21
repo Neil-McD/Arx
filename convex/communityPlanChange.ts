@@ -80,6 +80,39 @@ export async function plansIncludingPod(ctx: any, communityId: any, channelId: a
     .map((plan) => ({ key: plan.key, name: plan.name, amount_base_units: plan.price.amountBaseUnits, currency: plan.price.currency, currency_decimals: plan.price.currencyDecimals ?? 2 }));
 }
 
+/** One-shot map of channelId -> plan names that include that pod (avoids per-pod N+1 tier/price scans). */
+export async function buildPlanNamesByPodMap(ctx: any, communityId: any): Promise<Map<string, string[]>> {
+  const result = new Map<string, string[]>();
+  const [prices, tiers] = await Promise.all([
+    ctx.db.query("communityPricePoints")
+      .withIndex("by_community_current", (q: any) => q.eq("communityId", communityId).eq("isCurrent", true)).collect(),
+    ctx.db.query("communityTiers")
+      .withIndex("by_community_key", (q: any) => q.eq("communityId", communityId)).collect(),
+  ]);
+  const monthlyPrices = prices
+    .filter((row: any) => !row.archivedAt && row.billingPeriod === "monthly")
+    .sort((a: any, b: any) => b.updatedAt - a.updatedAt);
+  const activeTiers = tiers
+    .filter((tier: any) => !tier.archivedAt)
+    .sort((a: any, b: any) => a.rank - b.rank);
+  const basePrice = monthlyPrices.find((row: any) => !row.tierKey);
+  for (const tier of activeTiers) {
+    const isBase = tier.key === BASE;
+    const hasSalePrice = isBase
+      ? Boolean(basePrice)
+      : PLAN_KEY.test(tier.key) && monthlyPrices.some((row: any) => row.tierKey === tier.key);
+    if (!hasSalePrice) continue;
+    const planName = isBase ? (tier.name || "Membership") : tier.name;
+    for (const channelId of tier.podChannelIds ?? []) {
+      const key = String(channelId);
+      const list = result.get(key) ?? [];
+      if (!list.includes(planName)) list.push(planName);
+      result.set(key, list);
+    }
+  }
+  return result;
+}
+
 /** Whether this member can change their plan here (they pay Polynet monthly for it). */
 export async function canChangePlanHere(ctx: any, communityId: any, userId: any): Promise<boolean> {
   return (await payingNow(ctx, communityId, userId)).reason === null;

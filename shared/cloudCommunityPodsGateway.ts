@@ -12,6 +12,8 @@ export function formatPodPrice(price: CloudPodPrice): string {
 
 export type CloudPodPaymentState = "paying" | "leaving" | "payment_problem";
 
+export type CloudPodPerson = { user_id: string; name: string; avatar_url?: string | null };
+
 // A pod's own page (/c/:slug/pods/:podSlug), as this viewer may see it.
 export type CloudPodPage =
   | { kind: "not_found" }
@@ -24,6 +26,7 @@ export type CloudPodPage =
     purpose: string;
     what_you_get: string[];
     hosts: string[];
+    host_people?: CloudPodPerson[];
     visibility: "listed" | "hidden";
     price: CloudPodPrice;
     seats_left: number | null;
@@ -83,8 +86,9 @@ export type CloudPodDetail = {
   next_call: { event_id: string; title: string; starts_at: string; url: string | null; recurrence_frequency: string } | null;
   slug: string;
   hosts: string[];
+  host_people?: CloudPodPerson[];
   // payment: how each member is in, for the people who manage the pod only.
-  members: Array<{ user_id: string; name: string; is_host: boolean; payment?: { state: CloudPodPaymentState | "added"; until: string | null } }>;
+  members: Array<{ user_id: string; name: string; avatar_url?: string | null; is_host: boolean; payment?: { state: CloudPodPaymentState | "added"; until: string | null } }>;
   // The viewer's own place in it, when they are in it.
   my_membership: { state: CloudPodPaymentState | "added"; until: string | null; amount_base_units: number; currency: string } | null;
   can_manage: boolean;

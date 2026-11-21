@@ -8,7 +8,7 @@ import type { WebCommunityShellProps } from "./webShellChromeShared";
 import { WebCommunityCommandPalette } from "./WebCommunityCommandPalette";
 import { SearchOrAskButton } from "./CommunityPageHeader";
 import { useCommunityAppLinks } from "../controllers/communityAppLinks";
-import { podsAttentionDot } from "../../../../shared/podsAttentionDot";
+import { selectNavPods } from "../../../../shared/podsAttentionDot";
 
 type WebCommunityNavSurfaceProps = {
   communityShell: WebCommunityShellProps;
@@ -34,7 +34,15 @@ export function WebCommunityNavSurface({
     ? communityShell.communityChannels.filter((channel) => channel.access_mode !== "restricted")
     : communityShell.communityChannels;
   const inPod = useV1Layout && communityShell.destination.kind === "community_chat"
-    && communityShell.communityChannels.some((channel) => channel.access_mode === "restricted" && channel.slug === communityShell.selectedCommunityChannelSlug);
+    && (Boolean(communityShell.isInPodRoom)
+      || communityShell.communityChannels.some((channel) => channel.access_mode === "restricted" && channel.slug === communityShell.selectedCommunityChannelSlug));
+  const navPods = useV1Layout
+    ? selectNavPods({
+        channels: communityShell.communityChannels,
+        indicators: communityShell.communityChannelIndicators,
+        openSlug: inPod ? communityShell.selectedCommunityChannelSlug : null,
+      })
+    : null;
   return (
     <>
     {useV1Layout && !isMobileHome ? <WebCommunityCommandPalette communityShell={communityShell} /> : null}
@@ -109,11 +117,10 @@ export function WebCommunityNavSurface({
       // Pods on phones too (design v1 on): the phone menu has no other way in.
       onOpenPods={useV1Layout ? () => selectTab("pods") : undefined}
       podsActive={inPod}
-      podsDot={useV1Layout ? podsAttentionDot({
-        channels: communityShell.communityChannels,
-        indicators: communityShell.communityChannelIndicators,
-        openSlug: inPod ? communityShell.selectedCommunityChannelSlug : null,
-      }) : "none"}
+      pods={navPods?.shown}
+      onSelectPod={useV1Layout ? communityShell.onSelectCommunityChannel : undefined}
+      podsDot={navPods?.allDot ?? "none"}
+      podsOverflowDot={navPods?.overflowDot ?? "none"}
       // One door: the community's own app, opened from here (design v1).
       appLinks={isDesignV1Active() ? appLinks : undefined}
       memberCount={communityShell.activeCommunityMemberCount}

@@ -236,6 +236,34 @@ function normalizeStoredCloudMessageAttachments(raw: unknown): StoredCloudMessag
   return out;
 }
 
+async function hasOwnedThreadStorageClaim(
+  ctx: any,
+  ownerId: any,
+  threadId: any,
+  storageId: string,
+): Promise<boolean> {
+  let metadata: any = null;
+  try {
+    metadata = await ctx.db.system.get(storageId as any);
+  } catch {
+    return false;
+  }
+  const normalizedStorageId =
+    metadata?._id &&
+    typeof metadata?.size === "number" &&
+    typeof metadata?.sha256 === "string"
+      ? metadata._id
+      : null;
+  if (!normalizedStorageId) return false;
+  const claim = await ctx.db
+    .query("cloudThreadAttachments")
+    .withIndex("by_owner_thread_storage", (q: any) =>
+      q.eq("ownerId", ownerId).eq("threadId", threadId).eq("storageId", normalizedStorageId),
+    )
+    .first();
+  return Boolean(claim);
+}
+
 async function normalizeCommunityAgentMessageContent(args: {
   ctx: any;
   ownerId: any;
@@ -245,6 +273,23 @@ async function normalizeCommunityAgentMessageContent(args: {
   contentJson: unknown;
 }): Promise<unknown> {
   if (args.role !== "user" || !isClaimedImageAttachmentThread(args.thread)) {
+    // Even on non-community threads or assistant/system messages, never accept
+    // an unowned storageId in contentJson.attachments (prevents signed-URL oracle).
+    if (args.contentJson && typeof args.contentJson === "object" && !Array.isArray(args.contentJson)) {
+      const attachments = normalizeStoredCloudMessageAttachments(
+        (args.contentJson as Record<string, unknown>).attachments,
+      );
+      for (const attachment of attachments) {
+        if (!attachment.storageId) continue;
+        const owned = await hasOwnedThreadStorageClaim(
+          args.ctx,
+          args.ownerId,
+          args.thread._id,
+          attachment.storageId,
+        );
+        if (!owned) throw new Error("member_agent_attachment_claim_missing");
+      }
+    }
     return args.contentJson;
   }
   const record =
@@ -377,26 +422,38 @@ async function deleteCommunityAgentClaimsForMessage(args: {
   }
 }
 
-async function mapCloudMessageContentJsonForRead(ctx: any, contentJson: unknown): Promise<unknown> {
+async function mapCloudMessageContentJsonForRead(
+  ctx: any,
+  ownerId: any,
+  threadId: any,
+  contentJson: unknown,
+): Promise<unknown> {
   if (!contentJson || typeof contentJson !== "object" || Array.isArray(contentJson)) return contentJson;
   const record = contentJson as Record<string, unknown>;
   const attachments = normalizeStoredCloudMessageAttachments(record.attachments);
   if (attachments.length === 0) return contentJson;
   const resolvedAttachments = await Promise.all(
-    attachments.map(async (attachment) => ({
-      id: attachment.id,
-      name: attachment.name,
-      type: attachment.type,
-      mime: attachment.mime,
-      size: attachment.size,
-      ...(attachment.storageId ? { storage_id: attachment.storageId } : null),
-      ...(attachment.storageId ? { url: await maybeResolveCloudMessageStorageUrl(ctx, attachment.storageId) } : null),
-      ...(attachment.dataUrl ? { data_url: attachment.dataUrl } : null),
-      ...(attachment.text ? { text: attachment.text } : null),
-      ...(attachment.truncated !== null && typeof attachment.truncated !== "undefined"
-        ? { truncated: attachment.truncated }
-        : null),
-    })),
+    attachments.map(async (attachment) => {
+      const url = attachment.storageId
+        ? (await hasOwnedThreadStorageClaim(ctx, ownerId, threadId, attachment.storageId))
+          ? await maybeResolveCloudMessageStorageUrl(ctx, attachment.storageId)
+          : null
+        : undefined;
+      return {
+        id: attachment.id,
+        name: attachment.name,
+        type: attachment.type,
+        mime: attachment.mime,
+        size: attachment.size,
+        ...(attachment.storageId ? { storage_id: attachment.storageId } : null),
+        ...(attachment.storageId ? { url: url ?? null } : null),
+        ...(attachment.dataUrl ? { data_url: attachment.dataUrl } : null),
+        ...(attachment.text ? { text: attachment.text } : null),
+        ...(attachment.truncated !== null && typeof attachment.truncated !== "undefined"
+          ? { truncated: attachment.truncated }
+          : null),
+      };
+    }),
   );
   return {
     ...record,
@@ -1349,7 +1406,7 @@ async function listNewestCloudThreadMessagesHandler(ctx: QueryCtx, args: ObjectT
     return await Promise.all(
       chronological.map(async (row) => ({
         ...row,
-        contentJson: await mapCloudMessageContentJsonForRead(ctx, row.contentJson),
+        contentJson: await mapCloudMessageContentJsonForRead(ctx, row.ownerId, row.threadId, row.contentJson),
       })),
     );
 }
@@ -1414,7 +1471,7 @@ export const listCommunityAgentRuntimeMessagesInternal = internalQuery({
         role: row.role,
         contentJson:
           row.messageKey === expectedUserMessageKey
-            ? await mapCloudMessageContentJsonForRead(ctx, row.contentJson)
+            ? await mapCloudMessageContentJsonForRead(ctx, row.ownerId, row.threadId, row.contentJson)
             : row.contentJson,
       })),
     );

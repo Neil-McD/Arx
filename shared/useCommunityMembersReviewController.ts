@@ -73,6 +73,7 @@ type UseCommunityMembersReviewControllerArgs<
   onJoinRequestApproved?: (params: { communityId: string; requestId: string }) => Promise<void> | void;
   setCommunityJoinRequests: Dispatch<SetStateAction<JoinRequestT[]>>;
   setIsLoadingCommunityJoinRequests: Dispatch<SetStateAction<boolean>>;
+  setHasLoadedCommunityJoinRequests?: Dispatch<SetStateAction<boolean>>;
   setCommunityJoinRequestsError: Dispatch<SetStateAction<string | null>>;
   setDecidingCommunityJoinRequestId: Dispatch<SetStateAction<string | null>>;
 };
@@ -100,6 +101,7 @@ export function useCommunityMembersReviewController<
     const current = argsRef.current;
     current.setCommunityJoinRequests([]);
     current.setIsLoadingCommunityJoinRequests(false);
+    current.setHasLoadedCommunityJoinRequests?.(false);
     current.setCommunityJoinRequestsError(null);
     current.setDecidingCommunityJoinRequestId(null);
   }, []);
@@ -125,6 +127,7 @@ export function useCommunityMembersReviewController<
       if (!isCurrentLoad()) return;
       const normalizedRows = Array.isArray(rows) ? rows : [];
       argsRef.current.setCommunityJoinRequests(normalizedRows);
+      argsRef.current.setHasLoadedCommunityJoinRequests?.(true);
       const userIds = Array.from(new Set(normalizedRows.map((row) => row.user_id)));
       try {
         await argsRef.current.loadUserProfiles(userIds, usableSession);
@@ -134,6 +137,7 @@ export function useCommunityMembersReviewController<
     } catch (error) {
       if (!isCurrentLoad()) return;
       argsRef.current.setCommunityJoinRequests([]);
+      argsRef.current.setHasLoadedCommunityJoinRequests?.(false);
       argsRef.current.setCommunityJoinRequestsError(
         formatCommunityJoinRequestError(error, "Failed to load join requests."),
       );

@@ -580,6 +580,10 @@ async function syncCommunitySubscriptionFromStripeSubscription(
   subscription: Stripe.Subscription | null,
   options?: {
     preserveRiskRevocation?: boolean;
+    allowRiskRestoration?: boolean;
+    isTerminalCancellation?: boolean;
+    forceStatus?: "active" | "past_due" | "cancel_at_period_end" | "ended";
+    providerEventCreatedAt?: number;
   },
 ): Promise<Record<string, unknown>> {
   const providerSubscriptionId = String(subscription?.id ?? "").trim();
@@ -603,11 +607,17 @@ async function syncCommunitySubscriptionFromStripeSubscription(
   }
   const providerPriceId = subscription.items.data[0]?.price?.id ?? null;
   const { cycleStartedAt, cycleEndsAt } = readStripeSubscriptionCycle(subscription);
-  const normalizedCommunityStatus = normalizeStripeCommunitySubscriptionStatus({
-    subscriptionStatus: subscription.status,
-    cancelAtPeriodEnd: (subscription as any)?.cancel_at_period_end,
-  });
-  await ctx.runMutation(
+  const normalizedCommunityStatus =
+    options?.forceStatus ??
+    normalizeStripeCommunitySubscriptionStatus({
+      subscriptionStatus: subscription.status,
+      cancelAtPeriodEnd: (subscription as any)?.cancel_at_period_end,
+    });
+  const providerEventCreatedAt =
+    typeof options?.providerEventCreatedAt === "number" && Number.isFinite(options.providerEventCreatedAt)
+      ? Math.floor(options.providerEventCreatedAt)
+      : readStripeEventCreatedAtMs(event);
+  const result = await ctx.runMutation(
     internal.communityCommerce.syncCommunitySubscriptionLifecycleInternal as any,
     {
       communityId: existingCommunitySubscription.communityId,
@@ -624,9 +634,15 @@ async function syncCommunitySubscriptionFromStripeSubscription(
       currentPeriodEndIso: toIsoStringOrUndefined(cycleEndsAt),
       cancelAtPeriodEnd: Boolean((subscription as any)?.cancel_at_period_end),
       preserveRiskRevocation: options?.preserveRiskRevocation === true,
-      nowMs: readStripeEventCreatedAtMs(event),
+      allowRiskRestoration: options?.allowRiskRestoration === true,
+      isTerminalCancellation:
+        options?.isTerminalCancellation === true ||
+        String(subscription.status ?? "").trim().toLowerCase() === "canceled",
+      providerEventCreatedAt,
+      nowMs: providerEventCreatedAt,
     },
   );
+  if (result?.ignored) return result;
   return {
     ok: true,
     subscription_status: normalizedCommunityStatus,
@@ -744,6 +760,7 @@ async function syncCommunitySubscriptionRiskStatus(
     }
     return { ok: true, ignored: true, reason: "community_subscription_not_found" };
   }
+  const eventCreatedAtMs = readStripeEventCreatedAtMs(event);
   await ctx.runMutation(
     internal.communityCommerce.syncCommunitySubscriptionLifecycleInternal as any,
     {
@@ -755,7 +772,9 @@ async function syncCommunitySubscriptionRiskStatus(
       providerSubscriptionId,
       status: args.status,
       revokedReason: args.revokedReason,
-      nowMs: readStripeEventCreatedAtMs(event),
+      isRiskRevocation: args.status === "ended" || args.status === "canceled",
+      providerEventCreatedAt: eventCreatedAtMs,
+      nowMs: eventCreatedAtMs,
     },
   );
   return {
@@ -856,7 +875,12 @@ async function syncCommunityAccessForDispute(
       { allowRiskRestoration: true },
     );
     if (!founderSubscriptionResult?.ignored) return founderSubscriptionResult;
-    const communityResult = await syncCommunitySubscriptionFromStripeSubscription(ctx, event, subscription);
+    const communityResult = await syncCommunitySubscriptionFromStripeSubscription(
+      ctx,
+      event,
+      subscription,
+      { allowRiskRestoration: true },
+    );
     // Paid before signing in and not granted yet: the dispute's block on the
     // checkout lifts, so the buyer gets in when they sign in.
     if ((communityResult as any)?.ignored && providerAccountId) {
@@ -1148,10 +1172,20 @@ export function registerRuntimeBillingRoutes(
               founderSubscriptionResult,
             });
           }
+          const rawEventAtMs = readStripeEventCreatedAtMs(event);
+          const paidAtSec = Number((invoice as any)?.status_transitions?.paid_at ?? 0);
+          const effectiveInvoiceEventAtMs =
+            Number.isFinite(paidAtSec) && paidAtSec > 0
+              ? Math.min(rawEventAtMs, Math.floor(paidAtSec * 1000))
+              : rawEventAtMs;
           const communityLifecycleResult = await syncCommunitySubscriptionFromStripeSubscription(
             ctx,
             event,
             subscription,
+            {
+              allowRiskRestoration: true,
+              providerEventCreatedAt: effectiveInvoiceEventAtMs,
+            },
           );
           return processedResponse({
             ok: true,
@@ -1484,7 +1518,12 @@ export function registerRuntimeBillingRoutes(
             ctx,
             event,
             subscription,
-            { preserveRiskRevocation: true },
+            {
+              preserveRiskRevocation: true,
+              ...(event.type === "customer.subscription.deleted"
+                ? { forceStatus: "ended" as const, isTerminalCancellation: true }
+                : {}),
+            },
           );
           if (!communityLifecycleResult.ignored) {
             return processedResponse({

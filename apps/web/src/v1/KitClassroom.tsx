@@ -31,7 +31,7 @@ import {
 } from "../../../../shared/cloudCommunityNotesGateway";
 import { getCloudCommunityHomeSnapshot } from "../../../../shared/cloudCommunityAdminGateway";
 import { downloadCloudLessonFile, uploadCloudLessonFile } from "../../../../shared/cloudCommunityChatGateway";
-import { courseLessons, courseProgress, lessonEnd, pageOf, coursePath, shelfStart } from "../../../../shared/communityClassroom";
+import { courseLessons, courseProgress, lessonEnd, pageOf, coursePath, shelfPageSize, shelfStart } from "../../../../shared/communityClassroom";
 import type { CommunityResource, CommunityResourceModule } from "../components/communityResourcesContracts";
 import { askGuide, openGuideFromSearch } from "../components/guideSearch";
 import { WebCommunityResourceViewerContent } from "../components/WebCommunityResourceViewerContent";
@@ -49,7 +49,11 @@ import { askInApp } from "../../../../shared/inAppConfirm";
 import { KitKnowledgeAddButtons, KitKnowledgeList, type KnowledgeAddResult } from "./KitKnowledgeList";
 import { useCommunityAgentOn } from "../controllers/communityAgentOn";
 
-const SHELF = 6;
+const DEFAULT_SHELF_SIZE = shelfPageSize(0);
+function initialShelfSize(): number {
+  if (typeof window === "undefined") return DEFAULT_SHELF_SIZE;
+  return shelfPageSize(Math.max(320, window.innerWidth - 580));
+}
 
 // The shelf's order after one book moves one place; null when it can't.
 export function courseOrderAfterMove(ids: string[], index: number, by: -1 | 1): string[] | null {
@@ -165,6 +169,23 @@ export function KitClassroom(props: {
   const [notesAnswered, setNotesAnswered] = useState(false);
   const [lessonId, setLessonId] = useState<string | null>(null);
   const [shelfPage, setShelfPage] = useState(0);
+  const [shelfSize, setShelfSize] = useState(initialShelfSize);
+  const [shelfGridEl, setShelfGridEl] = useState<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (!shelfGridEl) return;
+    const sync = (width: number) => {
+      const next = shelfPageSize(width);
+      setShelfSize((prev) => (prev === next ? prev : next));
+    };
+    sync(shelfGridEl.getBoundingClientRect().width);
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver((entries) => {
+      const width = entries[0]?.contentRect.width ?? shelfGridEl.getBoundingClientRect().width;
+      sync(width);
+    });
+    observer.observe(shelfGridEl);
+    return () => observer.disconnect();
+  }, [shelfGridEl]);
   // title: what a new note starts with (a question waiting on an answer).
   const [note, setNote] = useState<{ slug: string | null; mode: "read" | "edit" | "new"; title?: string } | null>(null);
   const [saving, setSaving] = useState(false);
@@ -870,9 +891,10 @@ export function KitClassroom(props: {
       </div>
     );
   } else {
-    // Adding a course is a button beside "Courses", so hosts' pages hold six too.
+    // Size each shelf page to complete rows for the current grid width so wide
+    // screens fill cleanly without leaving half-empty space after a single row.
     // While a card is in the air the shelf is drawn in the order it would be left in.
-    const shelf = pageOf(courseDrag.order.map((id) => courses.find((entry) => entry.course.id === id)).filter((entry): entry is NonNullable<typeof entry> => Boolean(entry)), shelfPage, SHELF);
+    const shelf = pageOf(courseDrag.order.map((id) => courses.find((entry) => entry.course.id === id)).filter((entry): entry is NonNullable<typeof entry> => Boolean(entry)), shelfPage, shelfSize);
     const learning = summary.reduce((total, row) => total + row.started, 0);
     // A member is shown where they are first (the first unfinished course,
     // in the host's order), then every course. Nothing is locked.
@@ -907,6 +929,7 @@ export function KitClassroom(props: {
         ) : null}
 
         {here ? (
+          <div className={cx("khero-wrap")}>
           <button type="button" className={cx("khero")} onClick={() => { props.onOpenCourse(here.course.id); if (here.nextLesson) chooseLesson(here.nextLesson.id); }}>
             <span className={cx("kcover", "khero-cover", here.course.banner_url ? "" : coverTint(here.course.id))} style={here.course.banner_url ? { backgroundImage: `url(${JSON.stringify(here.course.banner_url)})`, backgroundSize: "cover", backgroundPosition: `${(here.course.banner_focus_x ?? 0.5) * 100}% ${(here.course.banner_focus_y ?? 0.5) * 100}%` } : undefined}>
               {here.course.banner_url ? null : <Icon name="book" />}
@@ -927,6 +950,7 @@ export function KitClassroom(props: {
               <span className={cx("acts")}><span className={cx("btn go", "lg")}><Icon name="play" />{here.done > 0 ? "Continue" : "Start"}</span></span>
             </span>
           </button>
+          </div>
         ) : null}
 
         {/* One course: the block above is the whole shelf. */}
@@ -937,7 +961,7 @@ export function KitClassroom(props: {
           {props.canManage && props.onReorderCourses && courses.length > 1 ? <span className={cx("lab")} style={{ marginLeft: 10, fontWeight: 400 }}>Drag a course to change the order members see.</span> : null}
         </div>
         {newCourseError ? <p className={cx("sub")} role="alert" style={{ color: "var(--bad)", marginBottom: 10 }}>{newCourseError}</p> : null}
-        <div className={cx("kgrid")}>
+        <div ref={setShelfGridEl} className={cx("kgrid")}>
           {shelf.items.map(({ course, lessons }, position) => {
             const progress = courseProgress(lessons, done);
             const row = summaryBy.get(course.id);
@@ -977,8 +1001,10 @@ export function KitClassroom(props: {
         {shelf.pages > 1 ? (
           <div className={cx("kpager")}>
             <span>{shelf.from}–{shelf.to} of {courses.length} courses</span>
-            <button type="button" className={cx("btn sm")} disabled={shelf.page === 0} onClick={() => setShelfPage(shelf.page - 1)}>Previous</button>
-            <button type="button" className={cx("btn sm")} disabled={shelf.page >= shelf.pages - 1} onClick={() => setShelfPage(shelf.page + 1)}>Next</button>
+            <div className={cx("kpager-acts")}>
+              <button type="button" className={cx("btn sm kpager-btn")} disabled={shelf.page === 0} onClick={() => setShelfPage(shelf.page - 1)}><Icon name="back" />Previous</button>
+              <button type="button" className={cx("btn sm kpager-btn")} disabled={shelf.page >= shelf.pages - 1} onClick={() => setShelfPage(shelf.page + 1)}>Next<Icon name="arrow" /></button>
+            </div>
           </div>
         ) : null}
         </>) : null}

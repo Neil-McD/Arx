@@ -137,6 +137,18 @@ describe("founder brief delivery", () => {
     const t = convexTest(schema, modules);
     const f = await fixture(t, Date.now());
     const asOwner = t.withIdentity({ subject: "brief-Owner" });
+    const snap = await asOwner.query(api.communityFounderBrief.getCommunityHomeSnapshot, { communityId: f.communityId });
+    expect(snap?.joinRequestsPending).toBe(1);
+    // Once a pending requester is already an active member, they are no longer counted as waiting to join.
+    await t.run(async (ctx) => {
+      const cleo = (await ctx.db.query("users").withIndex("by_authSubject" as any, (q: any) => q.eq("authSubject", "brief-Cleo")).first())!;
+      await ctx.db.insert("communityMemberships", {
+        communityId: f.communityId, userId: cleo._id, role: "member", accessSource: "free_grant", state: "active",
+        createdAt: Date.now(), updatedAt: Date.now(),
+      } as any);
+    });
+    const afterJoin = await asOwner.query(api.communityFounderBrief.getCommunityHomeSnapshot, { communityId: f.communityId });
+    expect(afterJoin?.joinRequestsPending).toBe(0);
     await expect(asOwner.query(api.communityFounderBrief.getFounderBriefSettings, { communityId: f.communityId }))
       .resolves.toEqual({ enabled: false, local_hour: 8, time_zone: null });
     await expect(asOwner.mutation(api.communityFounderBrief.setFounderBriefSettings, {
@@ -500,16 +512,22 @@ describe("pods", () => {
 
     const owner = await list("brief-Owner");
     expect(owner.can_manage).toBe(true);
-    expect(owner.pods).toMatchObject([{ name: "Founders pod", members: 1, is_member: false }]);
+    expect(owner.pods).toMatchObject([{ name: "Founders pod", members: 1, is_member: false, visibility: "listed" }]);
     expect((await list("brief-Ana")).pods.map((pod: any) => pod.name)).toEqual(["Founders pod"]);
-    // Ben isn't in it, and a hidden pod (every room from before pods) isn't shown from outside either.
-    expect(await list("brief-Ben")).toEqual({ can_manage: false, pods: [], outside: [] });
-    // Viewing as a member, the builder sees only pods they are in.
+    // Pods default to visible from the outside (locked inside) unless explicitly hidden.
+    const defaultOutside = (await list("brief-Ben")).outside;
+    expect(defaultOutside).toMatchObject([{ channel_id: String(podId), slug: "founders-pod", name: "Founders pod", purpose: "", hosts: [], seats_left: null, price: null, my_request: null, included_with: [] }]);
+    expect(JSON.stringify(defaultOutside)).not.toContain("Ana");
+    // Viewing as a member, the builder sees only pods they are in (and listed pods outside).
     expect((await list("brief-Owner", true)).pods).toEqual([]);
 
     const asOwner = t.withIdentity({ subject: "brief-Owner" });
     const asAna = t.withIdentity({ subject: "brief-Ana" });
     const asBen = t.withIdentity({ subject: "brief-Ben" });
+    // Explicitly hiding a pod keeps it invisible to outside members.
+    await asOwner.mutation(api.communityPods.savePodDetails, { communityId: f.communityId, channelId: podId, visibility: "hidden" });
+    expect(await list("brief-Ben")).toEqual({ can_manage: false, pods: [], outside: [] });
+
     await asOwner.mutation(api.communityPods.savePodDetails, { communityId: f.communityId, channelId: podId, purpose: "  Weekly accountability for founders  " });
     expect((await list("brief-Ana")).pods[0].purpose).toBe("Weekly accountability for founders");
     await expect(asAna.mutation(api.communityPods.savePodDetails, { communityId: f.communityId, channelId: podId, purpose: "mine" })).rejects.toThrow();
@@ -746,6 +764,9 @@ describe("pods", () => {
     const page = (subject: string, preview?: boolean) => t.withIdentity({ subject })
       .query(api.communityPods.getPodPage, { communityId: f.communityId, podSlug: "Founders", ...(preview ? { preview } : {}) });
     const asOwner = t.withIdentity({ subject: "brief-Owner" });
+    // Default (listed): Ben sees the outside page; explicitly hidden hides it completely.
+    await expect(page("brief-Ben")).resolves.toMatchObject({ kind: "outside", visibility: "listed", name: "Founders" });
+    await asOwner.mutation(api.communityPods.savePodDetails, { communityId: f.communityId, channelId: ids.channelId, visibility: "hidden" });
     // Hidden: Ben (not in it) can't tell it exists; Ana goes into the room.
     await expect(page("brief-Ben")).resolves.toEqual({ kind: "not_found" });
     await expect(page("brief-Ana")).resolves.toEqual({ kind: "inside", slug: "founders" });

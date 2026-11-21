@@ -19,7 +19,9 @@ const limits = {
   // page, drag to reorder), which went 0.2 KiB over.
   // Nov 17: +15 KB for the host's "Needs you" list on Home (join requests
   // and waiting course changes decided in place), which went 5.3 KiB over.
-  maxTotalJsBytes: readLimit("WEB_BUNDLE_MAX_TOTAL_JS_BYTES", 3_480_000),
+  // Nov 20: +10 KB for responsive course shelf paging and automatic inline
+  // loading/caching of private pod chat images, which went 1.9 KiB over.
+  maxTotalJsBytes: readLimit("WEB_BUNDLE_MAX_TOTAL_JS_BYTES", 3_490_000),
   maxHostOnlyJsBytes: readLimit("WEB_BUNDLE_MAX_HOST_ONLY_JS_BYTES", 800_000),
 };
 

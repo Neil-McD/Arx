@@ -4,6 +4,7 @@ import { ensureAuthenticatedActor, resolveUserIdForAuthenticatedRequest } from "
 import { readAuthenticatedIdentityProfile } from "./authIdentity";
 import { validateProfileHandle } from "../shared/profileHandle";
 import {
+  assertUnclaimedPublicImageStorageId,
   communityMembershipRowIsActive,
   getUniqueCommunityMembershipByPair,
   normalizeCommunityRoleForOutput,
@@ -13,6 +14,7 @@ import { communityPresenceLeaseIsActive } from "./communityPresenceCore";
 import { resolveViewerProfileRelationship } from "./profileRelationshipCore";
 import { recordCurrentPlatformLegalAcceptance } from "./legalAcceptances";
 import { resolveUserProfileDisplayProjectionForUser } from "./userProfileProjection";
+import { syncUserMemberSearchEntries } from "./communityMemberSearch";
 import {
   SOCIAL_PROFILE_KINDS,
   normalizeSocialProfileLinks,
@@ -128,6 +130,7 @@ async function maybeResolveStorageUrl(ctx: any, storageId: unknown): Promise<str
 async function assertProfileAvatarStorageResolvable(ctx: any, storageId: unknown): Promise<void> {
   if (!storageId) return;
   try {
+    await assertUnclaimedPublicImageStorageId(ctx, storageId, "profile_avatar_invalid");
     const resolved = await maybeResolveStorageUrl(ctx, storageId);
     if (resolved) return;
   } catch {
@@ -568,7 +571,10 @@ async function writeProfileDetailForUser(
   await ctx.db.patch(actor.dbUserId, userPatch);
 
   const existingDetail = await findProfileDetailByUserId(ctx, actor.dbUserId);
-  if (args.avatarStorageId) {
+  if (
+    args.avatarStorageId &&
+    String(args.avatarStorageId) !== String(existingDetail?.avatarStorageId ?? "")
+  ) {
     await assertProfileAvatarStorageResolvable(ctx, args.avatarStorageId);
   }
   const termsOfServiceVersion = normalizeOptionalText(args.termsOfServiceVersion);
@@ -672,6 +678,10 @@ async function writeProfileDetailForUser(
   // a profile points at isn't proven to be the member's own upload, and
   // deleting it could remove someone else's file (another photo, a banner, an
   // attachment) that a member pointed their profile at.
+
+  if (args.displayName !== undefined || args.handle !== undefined) {
+    await syncUserMemberSearchEntries(ctx, { userId: actor.dbUserId, nowMs });
+  }
 
   const refreshedUser = (await ctx.db.get(actor.dbUserId)) as UserRow | null;
   const detail = await findProfileDetailByUserId(ctx, actor.dbUserId);

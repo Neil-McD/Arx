@@ -14,11 +14,13 @@ import { internalMutation } from "./_generated/server";
 import {
   communityMembershipRowIsActive,
   communityMembershipState,
+  getActiveCommunityBlock,
   getUniqueCommunityMembershipByPair,
   normalizeCommunitySubscriptionStatus,
   communitySubscriptionStatusGrantsAccess,
 } from "./communityCore";
 import { activateCommunityMembershipCore, endedCommunityMembershipFields } from "./communityMembershipLifecycle";
+import { syncCommunityMemberSearchEntry } from "./communityMemberSearch";
 import { memberAccessChanged } from "./communityPlanPods";
 import { schedulePodBillingCheck } from "./communityPodBillingCheck";
 import { adjustCommunityActiveMemberCountForMembershipTransition } from "./communityCore";
@@ -38,8 +40,7 @@ async function activeAppGrants(ctx: any, communityId: any, userId: any) {
 }
 
 async function blocked(ctx: any, communityId: any, userId: any): Promise<boolean> {
-  const rows = await ctx.db.query("communityBlocks").withIndex("by_community", (q: any) => q.eq("communityId", communityId)).take(500);
-  return rows.some((row: any) => String(row.userId) === String(userId) && !row.liftedAt);
+  return Boolean(await getActiveCommunityBlock({ ctx, communityId, userId }));
 }
 
 // Does anything other than an app sale still let this member in?
@@ -80,6 +81,13 @@ export async function applyAppGrants(ctx: any, communityId: any, userId: any, no
   const ending = endedCommunityMembershipFields({ membership, to: "lapsed", reason: "connected_app_sale_ended", nowMs });
   await ctx.db.patch(membership._id, ending);
   await adjustCommunityActiveMemberCountForMembershipTransition({ ctx, communityId, before: membership, after: { ...membership, ...ending } });
+  await syncCommunityMemberSearchEntry(ctx, {
+    communityId,
+    userId,
+    role: membership.role ?? "member",
+    active: false,
+    nowMs,
+  });
   await schedulePodBillingCheck(ctx, { communityId, userId });
   await memberAccessChanged(ctx, communityId, userId);
   return "ended";

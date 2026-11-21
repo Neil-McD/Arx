@@ -11,7 +11,7 @@ import {
   getCommunityAndMembership,
   mapCommunityResourceModuleRow,
   mapCommunityResourceRow,
-  maybeDeleteStorageAsset,
+  assertUnclaimedPublicImageStorageId,
   normalizeIdValue,
   normalizeBannerFocus,
   normalizeBannerZoom,
@@ -621,7 +621,9 @@ export const saveCommunityResourceModule = mutation({
 
     if (isPatch) {
       if (!moduleId) throw new Error("community_resource_module_id_required");
-      const existing = (await ctx.db.get(moduleId as any)) as CommunityResourceModuleLike | null;
+      const normalizedModuleId = ctx.db.normalizeId("communityResourceModules", moduleId);
+      if (!normalizedModuleId) throw new Error("community_resource_module_not_found");
+      const existing = (await ctx.db.get(normalizedModuleId)) as CommunityResourceModuleLike | null;
       if (!existing) throw new Error("community_resource_module_not_found");
       await requireCommunityManager({
         ctx,
@@ -635,10 +637,14 @@ export const saveCommunityResourceModule = mutation({
       const nextBannerUrlRaw = Object.prototype.hasOwnProperty.call(payload, "banner_url")
         ? payload.banner_url
         : existing.bannerUrl;
-      const nextBannerStorageId = Object.prototype.hasOwnProperty.call(payload, "banner_storage_id")
+      const rawNextBannerStorageId = Object.prototype.hasOwnProperty.call(payload, "banner_storage_id")
         ? (payload.banner_storage_id ?? undefined)
         : existing.bannerStorageId;
       const previousBannerStorageId = existing.bannerStorageId;
+      const nextBannerStorageId =
+        rawNextBannerStorageId && String(rawNextBannerStorageId) !== String(previousBannerStorageId ?? "")
+          ? await assertUnclaimedPublicImageStorageId(ctx, rawNextBannerStorageId, "community_resource_banner_invalid")
+          : rawNextBannerStorageId;
       const nextModuleStatus = Object.prototype.hasOwnProperty.call(payload, "module_status")
         ? requireResourceModuleStatusForWrite(payload.module_status)
         : normalizeResourceModuleStatus(existing.status);
@@ -659,9 +665,8 @@ export const saveCommunityResourceModule = mutation({
         bannerZoom: normalizeBannerZoom(payload.banner_zoom ?? existing.bannerZoom),
         updatedAt: nowMs,
       });
-      if (previousBannerStorageId && String(previousBannerStorageId) !== String(nextBannerStorageId ?? "")) {
-        await maybeDeleteStorageAsset(ctx, previousBannerStorageId);
-      }
+      // Replaced course banners are intentionally not deleted from _storage
+      // without server-bound upload ownership (matching profiles.ts).
       const updated = (await ctx.db.get(existing._id as any)) as CommunityResourceModuleLike | null;
       if (!updated) throw new Error("community_resource_module_not_found");
       return await mapCommunityResourceModuleRow(ctx, updated);
@@ -684,7 +689,9 @@ export const saveCommunityResourceModule = mutation({
       .withIndex("by_community", (q: any) => q.eq("communityId", community._id))
       .collect()) as CommunityResourceModuleLike[];
     const nextSortOrder = rows.reduce((max, row) => Math.max(max, Number(row.sortOrder) || 0), 0) + 1000;
-    const bannerStorageId = payload.banner_storage_id ?? undefined;
+    const bannerStorageId = payload.banner_storage_id
+      ? await assertUnclaimedPublicImageStorageId(ctx, payload.banner_storage_id, "community_resource_banner_invalid")
+      : undefined;
     const status = Object.prototype.hasOwnProperty.call(payload, "module_status")
       ? requireResourceModuleStatusForWrite(payload.module_status)
       : "draft";
@@ -777,7 +784,9 @@ export const deleteCommunityResourceModule = mutation({
       authSubject: args.authSubject ?? null,
     });
     (args as { userId?: any }).userId = userId;
-    const module = (await ctx.db.get(args.moduleId as any)) as CommunityResourceModuleLike | null;
+    const normalizedModuleId = ctx.db.normalizeId("communityResourceModules", args.moduleId);
+    if (!normalizedModuleId) return { ok: true, movedResources: 0 };
+    const module = (await ctx.db.get(normalizedModuleId)) as CommunityResourceModuleLike | null;
     if (!module) return { ok: true, movedResources: 0 };
 
     await requireCommunityManager({
@@ -817,9 +826,8 @@ async function deleteCourseCore(ctx: any, module: CommunityResourceModuleLike) {
       });
     }
 
-    if (module.bannerStorageId) {
-      await maybeDeleteStorageAsset(ctx, module.bannerStorageId);
-    }
+    // Course banner blobs are intentionally left un-deleted without server-bound
+    // upload ownership (matching profiles.ts).
     await ctx.db.delete(module._id as any);
     return {
       ok: true,
@@ -1336,7 +1344,9 @@ export const saveCommunityResource = mutation({
 
     if (isPatch) {
       if (!resourceId) throw new Error("community_resource_id_required");
-      const existing = (await ctx.db.get(resourceId as any)) as CommunityResourceLike | null;
+      const normalizedResourceId = ctx.db.normalizeId("communityResources", resourceId);
+      if (!normalizedResourceId) throw new Error("community_resource_not_found");
+      const existing = (await ctx.db.get(normalizedResourceId)) as CommunityResourceLike | null;
       if (!existing) throw new Error("community_resource_not_found");
       await requireCommunityManager({
         ctx,
@@ -1716,7 +1726,9 @@ export const moveCommunityResourceToModule = mutation({
       userId: args.userId,
     });
 
-    const resource = (await ctx.db.get(args.resourceId as any)) as CommunityResourceLike | null;
+    const normalizedResourceId = ctx.db.normalizeId("communityResources", args.resourceId);
+    if (!normalizedResourceId) throw new Error("community_resource_not_found");
+    const resource = (await ctx.db.get(normalizedResourceId)) as CommunityResourceLike | null;
     if (!resource || String(resource.communityId) !== String(args.communityId)) {
       throw new Error("community_resource_not_found");
     }
@@ -1790,7 +1802,9 @@ export const deleteCommunityResource = mutation({
       authSubject: args.authSubject ?? null,
     });
     (args as { userId?: any }).userId = userId;
-    const resource = (await ctx.db.get(args.resourceId as any)) as CommunityResourceLike | null;
+    const normalizedResourceId = ctx.db.normalizeId("communityResources", args.resourceId);
+    if (!normalizedResourceId) return { ok: true };
+    const resource = (await ctx.db.get(normalizedResourceId)) as CommunityResourceLike | null;
     if (!resource) return { ok: true };
     await requireCommunityManager({
       ctx,

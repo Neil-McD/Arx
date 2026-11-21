@@ -886,6 +886,78 @@
 }
 :root[data-design="v1"] .community-nav-section-add:disabled { cursor: default; opacity: 0.5; }
 
+/* Linear-style Pods dropdown in the left column: appears only when the
+   viewer is in at least one pod (capped at 3), with a quiet vertical thread
+   line connecting nested pods under the Pods row. */
+:root[data-design="v1"] .community-nav-pods-group {
+  display: flex;
+  flex-direction: column;
+}
+
+:root[data-design="v1"] .community-nav-pods-row {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+}
+
+:root[data-design="v1"] .community-nav-pods-trigger {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+:root[data-design="v1"] .community-nav-pods-toggle {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-faint);
+  cursor: pointer;
+  transition: background 140ms ease, color 140ms ease;
+}
+
+:root[data-design="v1"] .community-nav-pods-toggle svg {
+  transform: rotate(-90deg);
+  transition: transform 140ms ease;
+}
+
+:root[data-design="v1"] .community-nav-pods-toggle.is-open svg {
+  transform: rotate(0deg);
+}
+
+:root[data-design="v1"] .community-nav-pods-toggle:hover,
+:root[data-design="v1"] .community-nav-pods-toggle:focus-visible {
+  color: var(--text-ink-primary);
+  background: var(--hover-overlay);
+}
+
+:root[data-design="v1"] .community-nav-pods-tree {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  margin: 2px 0 4px 15px;
+  padding-left: 10px;
+  border-left: 1px solid var(--surface-raised-edge);
+}
+
+:root[data-design="v1"] .community-nav .nav-item.community-nav-pod-item {
+  width: 100%;
+  min-height: 26px;
+  padding: 3px 8px;
+  font-size: 13px;
+}
+
+:root[data-design="v1"] .community-nav-pod-item:has(.nav-item-dot) .nav-item-label {
+  color: var(--text-ink-primary);
+  font-weight: 500;
+}
+
 /* Inbox's unread count and the member count: ink, never colour. */
 :root[data-design="v1"] .nav-item-count,
 :root[data-design="v1"] .nav-item-hint {

@@ -225,7 +225,11 @@ export async function requireValidResourceModule(args: {
   moduleId: string | null;
 }): Promise<any | undefined> {
   if (!args.moduleId) return undefined;
-  const module = (await args.ctx.db.get(args.moduleId as any)) as CommunityResourceModuleLike | null;
+  const normalizedModuleId = args.ctx.db.normalizeId("communityResourceModules", args.moduleId);
+  if (!normalizedModuleId) {
+    throw new Error("community_resource_module_not_found");
+  }
+  const module = (await args.ctx.db.get(normalizedModuleId)) as CommunityResourceModuleLike | null;
   if (!module || String(module.communityId) !== String(args.communityId)) {
     throw new Error("community_resource_module_not_found");
   }

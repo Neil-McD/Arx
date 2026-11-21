@@ -82,16 +82,24 @@ export const getMemberHomeSteps = query({
   handler: async (ctx, args) => {
     const { userId } = await viewer(ctx, args.authSubject, args.communityId);
     const nowMs = Date.now();
-    const [roots, replies, membership, general] = await Promise.all([
-      listSharedChannelReadableRows<any>({ ctx, tableName: "communityInteractionRoots", communityId: args.communityId, limit: SCAN_LIMIT }),
-      listSharedChannelReadableRows<any>({ ctx, tableName: "communityInteractionReplies", communityId: args.communityId, limit: SCAN_LIMIT }),
+    const [myRoots, myReplies, membership, general] = await Promise.all([
+      ctx.db.query("communityInteractionRoots")
+        .withIndex("by_community_actorUser_createdAt", (q: any) =>
+          q.eq("communityId", args.communityId).eq("actorUserId", userId))
+        .order("desc")
+        .take(5),
+      ctx.db.query("communityInteractionReplies")
+        .withIndex("by_community_actorUser_createdAt", (q: any) =>
+          q.eq("communityId", args.communityId).eq("actorUserId", userId))
+        .order("desc")
+        .take(5),
       ctx.db.query("communityMemberships").withIndex("by_community_user", (q: any) => q.eq("communityId", args.communityId).eq("userId", userId)).first(),
       ctx.db.query("communityChannels").withIndex("by_community_systemRole", (q: any) => q.eq("communityId", args.communityId).eq("systemRole", "general")).first(),
     ]);
-    const mine = (row: any) => String(row.actorUserId ?? "") === String(userId);
+    const isLive = (row: any) => row.status === "live";
     return memberNextSteps({
       courseInProgress: await courseInProgress(ctx, args.communityId, userId),
-      hasPosted: roots.some(mine) || replies.some(mine),
+      hasPosted: myRoots.some(isLive) || myReplies.some(isLive),
       joinedRecently: Boolean(membership && nowMs - Number(membership.createdAt) < 14 * DAY_MS),
       generalChannel: general?.name ? String(general.name) : null,
       nextEvent: await nextEventFor(ctx, args.communityId, userId, nowMs),

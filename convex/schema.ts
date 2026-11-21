@@ -832,6 +832,9 @@ export default defineSchema({
       ),
     ),
     activeMemberCount: v.optional(v.number()),
+    // Set once communityMemberSearch contains all active members of this community.
+    memberSearchIndexedAt: v.optional(v.number()),
+    memberSearchBackfillStartedAt: v.optional(v.number()),
     // Durable activity marker for bounded memory metabolism. The revision is
     // incremented with each new canonical outcome; settlement clears pending
     // only when no newer outcome arrived during the sweep.
@@ -942,15 +945,20 @@ export default defineSchema({
     // Paid but never let in (or a second payment for the same pod): a full
     // refund is owed. Kept until Stripe has refunded, whatever the status.
     refundDue: v.optional(v.boolean()),
+    // Ended because the pod became unreachable; Stripe subscription cancel
+    // is retried by the hourly sweep until confirmed.
+    cancelDue: v.optional(v.boolean()),
     lastProviderEventAt: v.optional(v.number()),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
     .index("by_channel_user", ["channelId", "userId"])
+    .index("by_channel_status", ["channelId", "status"])
     .index("by_user", ["userId"])
     .index("by_provider_subscription", ["providerAccountId", "providerSubscriptionId"])
     .index("by_status", ["status"])
     .index("by_refundDue", ["refundDue"])
+    .index("by_cancelDue", ["cancelDue"])
     .index("by_community", ["communityId"]),
   // Asking to join a listed pod: the pod's hosts approve or decline; a full
   // pod puts the request on its waitlist.
@@ -983,7 +991,28 @@ export default defineSchema({
     updatedAt: v.number(),
   })
     .index("by_channel_principal", ["channelId", "principalKey"])
+    .index("by_channel_status", ["channelId", "status"])
     .index("by_community_principal_status", ["communityId", "principalKey", "status"]),
+
+  // Denormalized active-member search index for instant `@` mention autocomplete
+  // and author lookup at 10k+ member scale (convex/communityMemberSearch.ts).
+  communityMemberSearch: defineTable({
+    communityId: v.id("communities"),
+    userId: v.id("users"),
+    role: v.string(),
+    displayName: v.string(),
+    handle: v.optional(v.string()),
+    searchText: v.string(),
+    active: v.boolean(),
+    updatedAt: v.number(),
+  })
+    .index("by_community_user", ["communityId", "userId"])
+    .index("by_user", ["userId"])
+    .index("by_community_active_updatedAt", ["communityId", "active", "updatedAt"])
+    .searchIndex("search_members", {
+      searchField: "searchText",
+      filterFields: ["communityId", "active"],
+    }),
 
   communityMemberships: defineTable({
     communityId: v.id("communities"),
@@ -1309,6 +1338,16 @@ export default defineSchema({
     // cancellation, Polynet keeps asking; a renewal Stripe reports after this
     // time is re-cancelled instead of reopening billing.
     cancelRequestedAt: v.optional(v.number()),
+    // Latest Stripe event timestamp applied to this subscription so older
+    // out-of-order webhooks cannot overwrite newer states or reopen ended rows.
+    lastProviderEventCreatedAt: v.optional(v.number()),
+    // True only when Stripe terminally canceled/deleted the subscription (as
+    // opposed to recoverable provider states like paused/unpaid).
+    providerCanceled: v.optional(v.boolean()),
+    // Tracks refund/dispute payment holds so delayed or duplicate invoice.paid
+    // events from the refunded charge cannot lift the hold.
+    riskAccessState: v.optional(v.union(v.literal("clear"), v.literal("revoked"))),
+    riskStateChangedAt: v.optional(v.number()),
     endedAt: v.optional(v.number()),
     createdAt: v.number(),
     updatedAt: v.number(),
@@ -1782,6 +1821,10 @@ export default defineSchema({
     reviewedThrough: v.number(),
     dueAt: v.optional(v.number()),
     leaseUntil: v.optional(v.number()),
+    leaseToken: v.optional(v.string()),
+    // Flipped at most once per active lease window when new posts arrive mid-run,
+    // avoiding per-message OCC write storms on hot singleton agentWork rows.
+    dirtyWhileLeased: v.optional(v.boolean()),
     failures: v.number(),
     lastErrorCode: v.optional(v.string()),
     createdAt: v.number(),

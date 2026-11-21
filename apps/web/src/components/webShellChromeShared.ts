@@ -73,10 +73,12 @@ export type WebCommunityShellProps = {
     is_general: boolean;
     position: number;
     access_mode?: "all_members" | "restricted";
+    is_pod_member?: boolean;
     description?: string | null;
   }>;
   isLoadingCommunityChannels: boolean;
   selectedCommunityChannelSlug: string;
+  isInPodRoom?: boolean;
   communityChannelIndicators: Record<string, { chat: boolean; mentions: boolean }>;
   onSelectCommunityChannel: (channel: {
     id: string;
