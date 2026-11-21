@@ -13,7 +13,9 @@ import {
 import { getUniqueUserProfileDetailByUserId } from "./profileCore";
 
 const BACKFILL_BATCH_SIZE = 100;
-const USER_SYNC_CAP = 100;
+const USER_SYNC_BATCH_SIZE = 100;
+const SWEEP_COMMUNITIES_PAGE_SIZE = 50;
+const SWEEP_MAX_SCHEDULES_PER_RUN = 5;
 
 export function buildMemberSearchText(fields: {
   displayName?: string | null;
@@ -76,25 +78,38 @@ export async function syncCommunityMemberSearchEntry(
   }
 }
 
-export async function syncUserMemberSearchEntries(
-  ctx: any,
-  args: { userId: any; nowMs: number },
-): Promise<void> {
-  const [user, detail, entries] = await Promise.all([
-    ctx.db.get(args.userId) as Promise<any>,
-    getUniqueUserProfileDetailByUserId<any>(ctx, args.userId).catch(() => null),
-    ctx.db
-      .query("communityMemberSearch")
-      .withIndex("by_user", (q: any) => q.eq("userId", args.userId))
-      .take(USER_SYNC_CAP),
+async function resolveUserSearchFields(ctx: any, userId: any): Promise<{
+  displayName: string;
+  handle: string | undefined;
+  searchText: string;
+}> {
+  const [user, detail] = await Promise.all([
+    ctx.db.get(userId) as Promise<any>,
+    getUniqueUserProfileDetailByUserId<any>(ctx, userId).catch(() => null),
   ]);
-  if (!entries.length) return;
   const displayName =
     String(detail?.displayName ?? user?.displayName ?? "").trim() ||
     (user?.handle ? `@${String(user.handle).trim()}` : "Member");
   const handle = String(user?.normalizedHandle ?? user?.handle ?? "").trim().replace(/^@/, "") || undefined;
   const searchText = buildMemberSearchText({ displayName, handle });
-  for (const entry of entries) {
+  return { displayName, handle, searchText };
+}
+
+async function syncUserMemberSearchPage(
+  ctx: any,
+  args: { userId: any; cursor: string | null; nowMs: number; batchSize?: number },
+): Promise<{ updated: number; isDone: boolean; continueCursor: string | null }> {
+  const batchSize = Math.max(1, Math.min(USER_SYNC_BATCH_SIZE, Math.floor(args.batchSize ?? USER_SYNC_BATCH_SIZE)));
+  const page = await ctx.db
+    .query("communityMemberSearch")
+    .withIndex("by_user", (q: any) => q.eq("userId", args.userId))
+    .paginate({ cursor: args.cursor, numItems: batchSize });
+  if (!page.page.length) {
+    return { updated: 0, isDone: page.isDone, continueCursor: page.isDone ? null : page.continueCursor };
+  }
+  const { displayName, handle, searchText } = await resolveUserSearchFields(ctx, args.userId);
+  let updated = 0;
+  for (const entry of page.page) {
     if (
       entry.displayName === displayName &&
       entry.handle === handle &&
@@ -108,8 +123,47 @@ export async function syncUserMemberSearchEntries(
       searchText,
       updatedAt: args.nowMs,
     });
+    updated += 1;
   }
+  if (!page.isDone) {
+    await ctx.scheduler.runAfter(0, (internal as any).communityMemberSearch.syncUserMemberSearchEntriesBatchInternal, {
+      userId: args.userId,
+      cursor: page.continueCursor,
+      nowMs: args.nowMs,
+      batchSize,
+    });
+  }
+  return { updated, isDone: page.isDone, continueCursor: page.isDone ? null : page.continueCursor };
 }
+
+export async function syncUserMemberSearchEntries(
+  ctx: any,
+  args: { userId: any; nowMs: number; batchSize?: number },
+): Promise<void> {
+  await syncUserMemberSearchPage(ctx, {
+    userId: args.userId,
+    cursor: null,
+    nowMs: args.nowMs,
+    batchSize: args.batchSize,
+  });
+}
+
+export const syncUserMemberSearchEntriesBatchInternal = internalMutation({
+  args: {
+    userId: v.id("users"),
+    cursor: v.union(v.string(), v.null()),
+    nowMs: v.number(),
+    batchSize: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    return await syncUserMemberSearchPage(ctx, {
+      userId: args.userId,
+      cursor: args.cursor,
+      nowMs: args.nowMs,
+      batchSize: args.batchSize,
+    });
+  },
+});
 
 export async function maybeScheduleMemberSearchBackfill(
   ctx: any,
@@ -185,5 +239,39 @@ export const backfillCommunityMemberSearchBatchInternal = internalMutation({
       memberSearchBackfillStartedAt: undefined,
     });
     return { done: true, indexed };
+  },
+});
+
+export const sweepUnindexedCommunityMemberSearchInternal = internalMutation({
+  args: {
+    cursor: v.optional(v.union(v.string(), v.null())),
+    scheduledSoFar: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const nowMs = Date.now();
+    let scheduled = Math.max(0, Math.floor(args.scheduledSoFar ?? 0));
+    const page = await ctx.db
+      .query("communities")
+      .paginate({ cursor: args.cursor ?? null, numItems: SWEEP_COMMUNITIES_PAGE_SIZE });
+
+    for (const community of page.page) {
+      if (scheduled >= SWEEP_MAX_SCHEDULES_PER_RUN) break;
+      if (community.lifecycleStatus === "archived") continue;
+      if (typeof (community as any).memberSearchIndexedAt === "number") continue;
+      const startedAt = (community as any).memberSearchBackfillStartedAt;
+      if (typeof startedAt === "number" && nowMs - startedAt < 10 * 60_000) continue;
+      await maybeScheduleMemberSearchBackfill(ctx, community as any, nowMs);
+      scheduled += 1;
+    }
+
+    if (!page.isDone && scheduled < SWEEP_MAX_SCHEDULES_PER_RUN) {
+      await ctx.scheduler.runAfter(0, (internal as any).communityMemberSearch.sweepUnindexedCommunityMemberSearchInternal, {
+        cursor: page.continueCursor,
+        scheduledSoFar: scheduled,
+      });
+      return { done: false, scheduled };
+    }
+
+    return { done: page.isDone, scheduled };
   },
 });

@@ -1546,6 +1546,13 @@ export async function setCommunityMemberRoleForUser(ctx: any, args: {
         role,
         updatedAt: nowMs,
       });
+      await syncCommunityMemberSearchEntry(ctx, {
+        communityId: args.communityId,
+        userId: membership.userId,
+        role,
+        active: communityMembershipRowIsActive(membership),
+        nowMs,
+      });
       // The member's record shows who did this, and when.
       await recordCriticalAuditEvent(ctx, {
         eventKey: `community_member_role_set:${membership._id}:${nowMs}`, eventType: "community_member_role_set",
@@ -1941,6 +1948,13 @@ export const blockCommunityUserInternal = internalMutation({
       reason,
       createdAt: nowMs,
       updatedAt: nowMs,
+    });
+    await syncCommunityMemberSearchEntry(ctx, {
+      communityId: args.communityId,
+      userId: args.targetUserId,
+      role: targetMembership?.role ?? "member",
+      active: false,
+      nowMs,
     });
     await recordCriticalAuditEvent(ctx, {
       eventKey: `community_member_blocked:${args.targetUserId}:${nowMs}`, eventType: "community_member_blocked",

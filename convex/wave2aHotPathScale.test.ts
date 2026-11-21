@@ -298,4 +298,131 @@ describe("Wave 2A hot-path scalability hardening", () => {
     expect(memberSnap.quietNewcomers).toEqual({ count: 0, names: [] });
     expect(memberSnap.newMembers.names).toEqual([]);
   });
+
+  it("sweeps legacy communities, paginates profile sync, and excludes lapsed app-grant members from mention search", async () => {
+    const t = convexTest(schema, modules);
+    const w = await seedWorld(t);
+
+    // 1. Legacy community without memberSearchIndexedAt gets picked up by the independent sweep.
+    await t.run((ctx) => ctx.db.patch(w.communityId, { memberSearchIndexedAt: undefined }));
+    const sweepResult: any = await t.mutation(
+      internal.communityMemberSearch.sweepUnindexedCommunityMemberSearchInternal,
+      {},
+    );
+    expect(sweepResult.scheduled).toBeGreaterThanOrEqual(1);
+    const afterSweep: any = await t.run((ctx) => ctx.db.get(w.communityId));
+    expect(typeof afterSweep.memberSearchBackfillStartedAt).toBe("number");
+
+    // Run backfill batch directly to mark indexed.
+    await t.mutation(internal.communityMemberSearch.backfillCommunityMemberSearchBatchInternal, {
+      communityId: w.communityId,
+      cursor: null,
+    });
+    const indexedCommunity: any = await t.run((ctx) => ctx.db.get(w.communityId));
+    expect(typeof indexedCommunity.memberSearchIndexedAt).toBe("number");
+
+    // 2. Ending a connected-app grant deactivates the search entry and removes the member from mention search.
+    const appBuyerId = await t.run(async (ctx) => {
+      const uid = await ctx.db.insert("users", {
+        authSubject: "w2a-app-buyer",
+        displayName: "Zara Buyer",
+        handle: "zarabuyer",
+        normalizedHandle: "zarabuyer",
+        email: "zara@example.com",
+        normalizedEmail: "zara@example.com",
+        emailVerifiedAt: NOW,
+        createdAt: NOW,
+        updatedAt: NOW,
+      });
+      await ctx.db.patch(w.communityId, { entryPolicy: "paid_subscription" });
+      return uid;
+    });
+    await t.mutation(internal.communityAppSales.recordAppSaleInternal, {
+      appId: "app_test",
+      communityId: w.communityId,
+      email: "zara@example.com",
+      active: true,
+    });
+    const asOwner = t.withIdentity({ subject: "w2a-owner" });
+    const foundActive: any[] = await asOwner.query(api.communityDirectory.searchCommunityMentionCandidates, {
+      communityId: w.communityId,
+      query: "zara",
+    });
+    expect(foundActive.some((c) => c.handle === "zarabuyer")).toBe(true);
+
+    await t.mutation(internal.communityAppSales.recordAppSaleInternal, {
+      appId: "app_test",
+      communityId: w.communityId,
+      email: "zara@example.com",
+      active: false,
+    });
+    const searchRowAfterLapse: any = await t.run((ctx) =>
+      ctx.db
+        .query("communityMemberSearch")
+        .withIndex("by_community_user", (q: any) => q.eq("communityId", w.communityId).eq("userId", appBuyerId))
+        .first(),
+    );
+    expect(searchRowAfterLapse?.active).toBe(false);
+    const foundAfterLapse: any[] = await asOwner.query(api.communityDirectory.searchCommunityMentionCandidates, {
+      communityId: w.communityId,
+      query: "zara",
+    });
+    expect(foundAfterLapse.some((c) => c.handle === "zarabuyer")).toBe(false);
+
+    // 3. Profile sync paginates across multiple batches so users in many communities stay updated.
+    const extraCommunityIds = await t.run(async (ctx) => {
+      const ids: any[] = [];
+      for (let i = 0; i < 3; i += 1) {
+        const cid = await ctx.db.insert("communities", {
+          ownerId: w.ownerId,
+          slug: `w2a-extra-${i}`,
+          name: `Extra ${i}`,
+          visibility: "published",
+          inferenceFundingPolicy: "managed_required",
+          entryPolicy: "open",
+          activeMemberCount: 2,
+          memberSearchIndexedAt: NOW,
+          createdAt: NOW,
+          updatedAt: NOW,
+        });
+        await ctx.db.insert("communityMemberSearch", {
+          communityId: cid,
+          userId: w.memberId,
+          role: "member",
+          displayName: "Old Name",
+          handle: "w2amember",
+          searchText: "old name w2amember",
+          active: true,
+          updatedAt: NOW,
+        });
+        ids.push(cid);
+      }
+      await ctx.db.patch(w.memberId, { displayName: "Renamed Member", updatedAt: NOW + 5_000 });
+      return ids;
+    });
+    // Paginate with batchSize=2 to exercise continuation scheduling.
+    const firstPage: any = await t.mutation(
+      internal.communityMemberSearch.syncUserMemberSearchEntriesBatchInternal,
+      { userId: w.memberId, cursor: null, nowMs: NOW + 5_000, batchSize: 2 },
+    );
+    expect(firstPage.isDone).toBe(false);
+    expect(firstPage.continueCursor).toBeTruthy();
+    await t.mutation(internal.communityMemberSearch.syncUserMemberSearchEntriesBatchInternal, {
+      userId: w.memberId,
+      cursor: firstPage.continueCursor,
+      nowMs: NOW + 5_000,
+      batchSize: 2,
+    });
+    const allMemberSearchRows: any[] = await t.run((ctx) =>
+      ctx.db
+        .query("communityMemberSearch")
+        .withIndex("by_user", (q: any) => q.eq("userId", w.memberId))
+        .collect(),
+    );
+    expect(allMemberSearchRows.length).toBeGreaterThanOrEqual(extraCommunityIds.length + 1);
+    for (const row of allMemberSearchRows) {
+      expect(row.displayName).toBe("Renamed Member");
+      expect(row.searchText).toContain("renamed member");
+    }
+  });
 });

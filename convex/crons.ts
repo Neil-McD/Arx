@@ -61,4 +61,8 @@ crons.interval("send due founder briefs", { minutes: 15 },
 // re-schedules one whose job was lost (convex/agentWork.ts).
 crons.interval("repair lost memory reviews", { hours: 24 },
   (internal as any).agentWork.repairAgentWorkScheduleInternal, {});
+// Backfill legacy communities into the per-community member search index
+// independently of member administration actions (no-op once all are indexed).
+crons.interval("backfill community member search index", { minutes: 15 },
+  (internal as any).communityMemberSearch.sweepUnindexedCommunityMemberSearchInternal, {});
 export default crons;
