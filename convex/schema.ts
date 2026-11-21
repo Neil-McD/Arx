@@ -942,15 +942,20 @@ export default defineSchema({
     // Paid but never let in (or a second payment for the same pod): a full
     // refund is owed. Kept until Stripe has refunded, whatever the status.
     refundDue: v.optional(v.boolean()),
+    // Ended because the pod became unreachable; Stripe subscription cancel
+    // is retried by the hourly sweep until confirmed.
+    cancelDue: v.optional(v.boolean()),
     lastProviderEventAt: v.optional(v.number()),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
     .index("by_channel_user", ["channelId", "userId"])
+    .index("by_channel_status", ["channelId", "status"])
     .index("by_user", ["userId"])
     .index("by_provider_subscription", ["providerAccountId", "providerSubscriptionId"])
     .index("by_status", ["status"])
     .index("by_refundDue", ["refundDue"])
+    .index("by_cancelDue", ["cancelDue"])
     .index("by_community", ["communityId"]),
   // Asking to join a listed pod: the pod's hosts approve or decline; a full
   // pod puts the request on its waitlist.
@@ -1782,6 +1787,7 @@ export default defineSchema({
     reviewedThrough: v.number(),
     dueAt: v.optional(v.number()),
     leaseUntil: v.optional(v.number()),
+    leaseToken: v.optional(v.string()),
     failures: v.number(),
     lastErrorCode: v.optional(v.string()),
     createdAt: v.number(),

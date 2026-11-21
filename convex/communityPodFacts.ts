@@ -13,7 +13,7 @@ import { normalizeIdValue } from "./communityCore";
 import { displayName } from "./communityFounderBrief";
 import { nextPodCall } from "./communityEvents";
 import { podPriceOf } from "./communityPodPayments";
-import { hostNames, isHost, memberGrants, podRecord } from "./communityPods";
+import { hostNames, memberGrants, podRecord, podVisibilityOf } from "./communityPods";
 import { formatPrice } from "../shared/communityMemberRecords";
 import type { LensName } from "../shared/lens";
 
@@ -29,14 +29,14 @@ type PodSight = "inside" | "outside" | null;
 async function sightOf(ctx: any, args: { communityId: any; userId: any; lens: LensName; podRoomId?: string | null }, channel: any, record: any): Promise<PodSight> {
   if (!channel || channel.accessMode !== "restricted" || channel.status !== "active") return null;
   if (args.lens === "retired" || args.lens === "worker") return null;
-  const listed = record?.visibility === "listed";
+  const listed = podVisibilityOf(record) === "listed";
   if (args.lens === "builder_private" || args.lens === "builder_own_ai") return "inside";
   if (args.lens === "guide_public") {
     // The guide is inside only the pod it is working in right now.
     return args.podRoomId && String(args.podRoomId) === normalizeIdValue(channel._id) ? "inside" : listed ? "outside" : null;
   }
   const actor = await resolveCommunityChannelActor({ ctx, communityId: args.communityId, userId: args.userId });
-  const canRead = (await getCommunityChannelCapabilities({ ctx, channel, actor })).canRead || isHost(record, args.userId);
+  const canRead = (await getCommunityChannelCapabilities({ ctx, channel, actor })).canRead;
   return canRead ? "inside" : listed ? "outside" : null;
 }
 
