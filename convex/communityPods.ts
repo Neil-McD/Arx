@@ -15,10 +15,11 @@ import { resolveUserProfileDisplayProjection } from "./userProfileProjection";
 import { notesByUpdated, podScopeKey } from "./communityNotesStore";
 import { podPaymentStateOf, podPriceOf } from "./communityPodPayments";
 import { nextPodCall } from "./communityEvents";
-import { canChangePlanHere, plansIncludingPod } from "./communityPlanChange";
+import { buildPlanNamesByPodMap, canChangePlanHere, plansIncludingPod } from "./communityPlanChange";
 
 const PODS_CAP = 50;
-const MEMBERS_CAP = 200;
+// Covers SEATS_MAX (500) + community_agent + buffer, querying active seats directly.
+const MEMBERS_CAP = 505;
 const REQUESTS_CAP = 100;
 const PURPOSE_MAX = 280;
 const SEATS_MAX = 500;
@@ -52,8 +53,16 @@ export async function podRecord(ctx: Ctx, communityId: any, channelId: any) {
 
 export async function memberGrants(ctx: Ctx, channelId: any) {
   return (await ctx.db.query("communityChannelParticipants")
-    .withIndex("by_channel_principal", (q: any) => q.eq("channelId", channelId)).take(MEMBERS_CAP))
-    .filter((row: any) => row.status === "active" && String(row.principalKey).startsWith("user:"));
+    .withIndex("by_channel_status", (q: any) => q.eq("channelId", channelId).eq("status", "active"))
+    .take(MEMBERS_CAP))
+    .filter((row: any) => String(row.principalKey).startsWith("user:"));
+}
+
+async function viewerHasPodSeat(ctx: Ctx, channelId: any, principalKey: string): Promise<boolean> {
+  const row = await ctx.db.query("communityChannelParticipants")
+    .withIndex("by_channel_principal", (q: any) => q.eq("channelId", channelId).eq("principalKey", principalKey))
+    .first();
+  return row?.status === "active";
 }
 
 const userIdOf = (principalKey: string) => principalKey.slice("user:".length);
@@ -174,18 +183,25 @@ export const listCommunityPods = query({
     const pods = [];
     const inside = new Set<string>();
     for (const channel of page as any[]) {
-      const grants = await memberGrants(ctx, channel._id);
-      const isMember = grants.some((row: any) => row.principalKey === actor.principalKey);
-      const record = await podRecord(ctx, args.communityId, channel._id);
+      const [grants, isMember, record] = await Promise.all([
+        memberGrants(ctx, channel._id),
+        viewerHasPodSeat(ctx, channel._id, actor.principalKey),
+        podRecord(ctx, args.communityId, channel._id),
+      ]);
       const hosting = isHost(record, userId) && (isMember || actor.isManager);
-      if (!canManage && !isInPod(grants, record, actor, userId)) continue;
+      if (!canManage && !isMember && !hosting) continue;
       inside.add(normalizeIdValue(channel._id));
-      const latest = await ctx.db.query("communityInteractionRoots")
-        .withIndex("by_channel_updatedAt", (q: any) => q.eq("channelId", channel._id)).order("desc").first();
-      const waiting = canManage || hosting
-        ? (await ctx.db.query("communityPodRequests").withIndex("by_channel_status", (q: any) => q.eq("channelId", channel._id).eq("status", "pending")).take(REQUESTS_CAP)).length
-          + (await ctx.db.query("communityPodRequests").withIndex("by_channel_status", (q: any) => q.eq("channelId", channel._id).eq("status", "waitlist")).take(REQUESTS_CAP)).length
-        : 0;
+      const [latest, pendingReqs, waitlistReqs] = await Promise.all([
+        ctx.db.query("communityInteractionRoots")
+          .withIndex("by_channel_updatedAt", (q: any) => q.eq("channelId", channel._id)).order("desc").first(),
+        canManage || hosting
+          ? ctx.db.query("communityPodRequests").withIndex("by_channel_status", (q: any) => q.eq("channelId", channel._id).eq("status", "pending")).take(REQUESTS_CAP)
+          : Promise.resolve([]),
+        canManage || hosting
+          ? ctx.db.query("communityPodRequests").withIndex("by_channel_status", (q: any) => q.eq("channelId", channel._id).eq("status", "waitlist")).take(REQUESTS_CAP)
+          : Promise.resolve([]),
+      ]);
+      const waiting = pendingReqs.length + waitlistReqs.length;
       pods.push({
         channel_id: normalizeIdValue(channel._id),
         slug: String(channel.slug ?? ""),
@@ -207,28 +223,34 @@ export const listCommunityPods = query({
     // to listed (outside visible, inside locked) unless explicitly hidden.
     const outside = [];
     if (!canManage) {
-      const restrictedChannels = await ctx.db.query("communityChannels")
-        .withIndex("by_community_access_status_position", (q: any) =>
-          q.eq("communityId", args.communityId).eq("accessMode", "restricted").eq("status", "active"))
-        .take(PODS_CAP);
+      const [restrictedChannels, plansByPod] = await Promise.all([
+        ctx.db.query("communityChannels")
+          .withIndex("by_community_access_status_position", (q: any) =>
+            q.eq("communityId", args.communityId).eq("accessMode", "restricted").eq("status", "active"))
+          .take(PODS_CAP),
+        buildPlanNamesByPodMap(ctx, args.communityId),
+      ]);
       for (const channel of restrictedChannels as any[]) {
         if (inside.has(normalizeIdValue(channel._id))) continue;
         const record = await podRecord(ctx, args.communityId, channel._id);
         if (podVisibilityOf(record) !== "listed") continue;
-        const taken = typeof record?.seats === "number" ? (await memberGrants(ctx, channel._id)).length : 0;
-        const request = await ctx.db.query("communityPodRequests")
-          .withIndex("by_channel_user", (q: any) => q.eq("channelId", channel._id).eq("userId", userId)).first();
+        const [taken, request, hosts] = await Promise.all([
+          typeof record?.seats === "number" ? memberGrants(ctx, channel._id).then((g) => g.length) : Promise.resolve(0),
+          ctx.db.query("communityPodRequests")
+            .withIndex("by_channel_user", (q: any) => q.eq("channelId", channel._id).eq("userId", userId)).first(),
+          hostNames(ctx, record, names),
+        ]);
         outside.push({
           channel_id: normalizeIdValue(channel._id),
           slug: String(channel.slug ?? ""),
           name: String(channel.name ?? ""),
           purpose: record?.purpose ?? "",
-          hosts: await hostNames(ctx, record, names),
+          hosts,
           seats_left: typeof record?.seats === "number" ? Math.max(0, record.seats - taken) : null,
           price: podPriceOf(record),
           my_request: request && request.status !== "approved" ? request.status : null,
           // The plans that include it: the way in for a pod that comes with a plan.
-          included_with: (await plansIncludingPod(ctx, args.communityId, channel._id)).map((plan) => plan.name),
+          included_with: plansByPod.get(String(channel._id)) ?? [],
         });
       }
     }
@@ -244,23 +266,36 @@ export const getPod = query({
     const { userId, actor } = await viewerOf(ctx, args.authSubject, args.communityId);
     const channel = await activePodRoom(ctx, args.communityId, args.channelId);
     if (!(await getCommunityChannelCapabilities({ ctx, channel, actor })).canRead) throw new Error("community_pod_not_found");
-    const record = await podRecord(ctx, args.communityId, args.channelId);
+    const [record, grants, viewerIn] = await Promise.all([
+      podRecord(ctx, args.communityId, args.channelId),
+      memberGrants(ctx, args.channelId),
+      viewerHasPodSeat(ctx, args.channelId, actor.principalKey),
+    ]);
     const canManage = actor.isManager || isHost(record, userId);
     const names = new Map<string, string>();
     const people = new Map<string, PodPersonSummary>();
-    const members = [];
-    const grants = await memberGrants(ctx, args.channelId);
-    for (const grant of grants) {
-      const memberId = userIdOf(String(grant.principalKey));
-      // How each member is in, for the people who manage the pod only.
-      const payment = canManage ? podPaymentStateOf(await paymentRows(ctx, args.channelId, memberId)) : null;
-      const person = await personSummary(ctx, memberId, names, people);
-      members.push({
-        user_id: memberId, name: person.name, avatar_url: person.avatar_url, is_host: isHost(record, memberId),
-        ...(canManage ? { payment: payment ? { state: payment.state, until: payment.until } : { state: "added" as const, until: null } } : {}),
-      });
+    const members: any[] = [];
+    // Hydrate members in parallel batches instead of one sequential round-trip per member.
+    for (let i = 0; i < grants.length; i += 40) {
+      const slice = grants.slice(i, i + 40);
+      const batch = await Promise.all(
+        slice.map(async (grant: any) => {
+          const memberId = userIdOf(String(grant.principalKey));
+          const [payment, person] = await Promise.all([
+            canManage ? paymentRows(ctx, args.channelId, memberId).then(podPaymentStateOf) : Promise.resolve(null),
+            personSummary(ctx, memberId, names, people),
+          ]);
+          return {
+            user_id: memberId,
+            name: person.name,
+            avatar_url: person.avatar_url,
+            is_host: isHost(record, memberId),
+            ...(canManage ? { payment: payment ? { state: payment.state, until: payment.until } : { state: "added" as const, until: null } } : {}),
+          };
+        }),
+      );
+      members.push(...batch);
     }
-    const viewerIn = grants.some((row: any) => row.principalKey === actor.principalKey);
     const requests = [];
     if (canManage) {
       for (const status of ["pending", "waitlist"] as const) {

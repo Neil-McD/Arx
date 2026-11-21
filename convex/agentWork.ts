@@ -69,7 +69,12 @@ export const claimAgentWorkInternal = internalMutation({
       pod = { roomId: String(room._id), name: String(room.name ?? "") };
     }
     const leaseToken = `${args.nowMs}:${Math.random().toString(36).slice(2, 10)}`;
-    await ctx.db.patch(work._id, { leaseUntil: args.nowMs + LEASE_MS, leaseToken, updatedAt: args.nowMs });
+    await ctx.db.patch(work._id, {
+      leaseUntil: args.nowMs + LEASE_MS,
+      leaseToken,
+      dirtyWhileLeased: undefined,
+      updatedAt: args.nowMs,
+    });
     return {
       pod,
       leaseToken,
@@ -102,7 +107,7 @@ export const completeAgentWorkInternal = internalMutation({
     if (args.outcome === "reviewed" && args.nextDueAt && !args.backlog) {
       const dueAt = Math.max(args.nextDueAt, args.nowMs + 60_000);
       await ctx.db.patch(work._id, { reviewedThrough: args.windowEnd, pending: Math.max(1, work.pending - args.claimedPending), dueAt,
-        leaseUntil: undefined, leaseToken: undefined, failures: 0, lastErrorCode: undefined, updatedAt: args.nowMs });
+        leaseUntil: undefined, leaseToken: undefined, dirtyWhileLeased: undefined, failures: 0, lastErrorCode: undefined, updatedAt: args.nowMs });
       await scheduleAgentWork(ctx, work._id, dueAt);
       return { dueAt };
     }
@@ -117,18 +122,18 @@ export const completeAgentWorkInternal = internalMutation({
             // Posts written while a draft was made: look again when they are a day old.
             : work.kind === "reply_draft" ? args.nowMs + REPLY_DRAFT_WAIT_MS
             : nextMemoryReviewAtMs(args.nowMs, await communityTimeZone(ctx, work.communityId));
-      await ctx.db.patch(work._id, { reviewedThrough: args.windowEnd, pending, dueAt, leaseUntil: undefined, leaseToken: undefined, failures: 0, lastErrorCode: undefined, updatedAt: args.nowMs });
+      await ctx.db.patch(work._id, { reviewedThrough: args.windowEnd, pending, dueAt, leaseUntil: undefined, leaseToken: undefined, dirtyWhileLeased: undefined, failures: 0, lastErrorCode: undefined, updatedAt: args.nowMs });
       if (dueAt) await scheduleAgentWork(ctx, work._id, dueAt);
       return { dueAt: dueAt ?? null };
     }
     if (args.outcome === "skipped") {
       // AI is off: nothing runs. The next post after it's on makes it due again.
-      await ctx.db.patch(work._id, { dueAt: undefined, leaseUntil: undefined, leaseToken: undefined, updatedAt: args.nowMs });
+      await ctx.db.patch(work._id, { dueAt: undefined, leaseUntil: undefined, leaseToken: undefined, dirtyWhileLeased: undefined, updatedAt: args.nowMs });
       return { dueAt: null };
     }
     const failures = work.failures + 1;
     const dueAt = failures < MAX_FAILURES ? args.nowMs + RETRY_MS : undefined;
-    await ctx.db.patch(work._id, { failures, dueAt, leaseUntil: undefined, leaseToken: undefined, lastErrorCode: args.errorCode?.slice(0, 120), updatedAt: args.nowMs });
+    await ctx.db.patch(work._id, { failures, dueAt, leaseUntil: undefined, leaseToken: undefined, dirtyWhileLeased: undefined, lastErrorCode: args.errorCode?.slice(0, 120), updatedAt: args.nowMs });
     if (dueAt) await scheduleAgentWork(ctx, work._id, dueAt);
     return { dueAt: dueAt ?? null };
   },

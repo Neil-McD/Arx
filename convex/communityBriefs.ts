@@ -50,8 +50,11 @@ export async function markCommunityBriefDue(ctx: any, args: { communityId: any; 
   else if (channel.accessMode === "restricted" && await guideSeatedInPod(ctx, channel._id)) scope = podScopeKey(channel._id);
   else return;
   const work = await workFor(ctx, scope, "brief");
-  if (work?.dueAt) {
-    await ctx.db.patch(work._id, { pending: work.pending + 1, updatedAt: args.nowMs });
+  if (work?.dueAt && work.pending > 0) {
+    const leased = typeof work.leaseUntil === "number" && work.leaseUntil > args.nowMs;
+    if (leased && !work.dirtyWhileLeased) {
+      await ctx.db.patch(work._id, { pending: work.pending + 1, dirtyWhileLeased: true, updatedAt: args.nowMs });
+    }
     return;
   }
   if (work) {

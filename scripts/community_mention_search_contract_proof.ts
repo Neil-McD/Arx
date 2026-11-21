@@ -30,13 +30,13 @@ assert.match(
 );
 assert.match(
   communityDirectory,
-  /searchCommunityMentionCandidates[\s\S]*listCanonicalCommunityMemberMembershipRows\([\s\S]*communityId: args\.communityId/,
-  "mention search user candidates must come from canonical active community membership rows",
+  /searchCommunityMentionCandidates[\s\S]*\.query\("communityMemberSearch"\)[\s\S]*\.withSearchIndex\("search_members"[\s\S]*\.eq\("communityId", args\.communityId\)\.eq\("active", true\)/,
+  "mention search user candidates must query the community-scoped active member search index",
 );
 assert.match(
   communityDirectory,
-  /searchCommunityMentionCandidates[\s\S]*await addUserCandidate\(community\.ownerId, "owner"\)[\s\S]*for \(const row of canonicalRows\.rows\)/,
-  "mention search must include the scoped owner row plus canonical member rows",
+  /searchCommunityMentionCandidates[\s\S]*await addUserCandidate\(community\.ownerId, "owner"\)[\s\S]*\.query\("communityMemberships"\)[\s\S]*\.withIndex\("by_community_createdAt", \(q: any\) => q\.eq\("communityId", args\.communityId\)\)/,
+  "mention search fallback must stay scoped to the community owner plus active community memberships",
 );
 assert.match(
   communityDirectory,

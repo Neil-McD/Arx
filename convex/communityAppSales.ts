@@ -20,6 +20,7 @@ import {
   communitySubscriptionStatusGrantsAccess,
 } from "./communityCore";
 import { activateCommunityMembershipCore, endedCommunityMembershipFields } from "./communityMembershipLifecycle";
+import { syncCommunityMemberSearchEntry } from "./communityMemberSearch";
 import { memberAccessChanged } from "./communityPlanPods";
 import { schedulePodBillingCheck } from "./communityPodBillingCheck";
 import { adjustCommunityActiveMemberCountForMembershipTransition } from "./communityCore";
@@ -80,6 +81,13 @@ export async function applyAppGrants(ctx: any, communityId: any, userId: any, no
   const ending = endedCommunityMembershipFields({ membership, to: "lapsed", reason: "connected_app_sale_ended", nowMs });
   await ctx.db.patch(membership._id, ending);
   await adjustCommunityActiveMemberCountForMembershipTransition({ ctx, communityId, before: membership, after: { ...membership, ...ending } });
+  await syncCommunityMemberSearchEntry(ctx, {
+    communityId,
+    userId,
+    role: membership.role ?? "member",
+    active: false,
+    nowMs,
+  });
   await schedulePodBillingCheck(ctx, { communityId, userId });
   await memberAccessChanged(ctx, communityId, userId);
   return "ended";

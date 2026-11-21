@@ -84,6 +84,7 @@ import type * as communityLifecycle from "../communityLifecycle.js";
 import type * as communityMaintenance from "../communityMaintenance.js";
 import type * as communityMemberProfiles from "../communityMemberProfiles.js";
 import type * as communityMemberRecords from "../communityMemberRecords.js";
+import type * as communityMemberSearch from "../communityMemberSearch.js";
 import type * as communityMemberTimeline from "../communityMemberTimeline.js";
 import type * as communityMembershipContextCore from "../communityMembershipContextCore.js";
 import type * as communityMembershipLifecycle from "../communityMembershipLifecycle.js";
@@ -322,6 +323,7 @@ declare const fullApi: ApiFromModules<{
   communityMaintenance: typeof communityMaintenance;
   communityMemberProfiles: typeof communityMemberProfiles;
   communityMemberRecords: typeof communityMemberRecords;
+  communityMemberSearch: typeof communityMemberSearch;
   communityMemberTimeline: typeof communityMemberTimeline;
   communityMembershipContextCore: typeof communityMembershipContextCore;
   communityMembershipLifecycle: typeof communityMembershipLifecycle;

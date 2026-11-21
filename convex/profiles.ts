@@ -14,6 +14,7 @@ import { communityPresenceLeaseIsActive } from "./communityPresenceCore";
 import { resolveViewerProfileRelationship } from "./profileRelationshipCore";
 import { recordCurrentPlatformLegalAcceptance } from "./legalAcceptances";
 import { resolveUserProfileDisplayProjectionForUser } from "./userProfileProjection";
+import { syncUserMemberSearchEntries } from "./communityMemberSearch";
 import {
   SOCIAL_PROFILE_KINDS,
   normalizeSocialProfileLinks,
@@ -677,6 +678,10 @@ async function writeProfileDetailForUser(
   // a profile points at isn't proven to be the member's own upload, and
   // deleting it could remove someone else's file (another photo, a banner, an
   // attachment) that a member pointed their profile at.
+
+  if (args.displayName !== undefined || args.handle !== undefined) {
+    await syncUserMemberSearchEntries(ctx, { userId: actor.dbUserId, nowMs });
+  }
 
   const refreshedUser = (await ctx.db.get(actor.dbUserId)) as UserRow | null;
   const detail = await findProfileDetailByUserId(ctx, actor.dbUserId);

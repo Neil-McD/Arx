@@ -37,7 +37,8 @@ test("a person's post in an open channel makes the review due at the quiet hour;
   await t.run((ctx: any) => markCommunityMemoryReviewDue(ctx, { communityId: w.communityId, channelId: w.general, actorType: "human", nowMs: NOW + 1_000 }));
   const row: any = await work(t, w.communityId);
   // 3 am UTC the next day (no time zone set), and the first review reads the last day.
-  expect(row).toMatchObject({ pending: 2, dueAt: Date.UTC(2026, 10, 15, 3, 0, 0), reviewedThrough: NOW - 86_400_000, failures: 0 });
+  // Once already due and not leased, the second post is a zero-write fast path (pending stays 1).
+  expect(row).toMatchObject({ pending: 1, dueAt: Date.UTC(2026, 10, 15, 3, 0, 0), reviewedThrough: NOW - 86_400_000, failures: 0 });
   const scheduled = await t.run((ctx: any) => ctx.db.system.query("_scheduled_functions").collect());
   expect(scheduled).toHaveLength(1);
 });
