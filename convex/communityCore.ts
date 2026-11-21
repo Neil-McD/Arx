@@ -895,12 +895,34 @@ export async function adjustCommunityActiveMemberCountForMembershipTransition(ar
   communityId: any;
   before: CommunityMembershipLike | null | undefined;
   after: CommunityMembershipLike | null | undefined;
+  community?: CommunityLike | null;
 }): Promise<void> {
-  void args.before;
-  void args.after;
-  await syncCommunityActiveMemberCount({
-    ctx: args.ctx,
-    communityId: args.communityId,
+  const community =
+    args.community ??
+    ((await args.ctx.db.get(args.communityId as any)) as CommunityLike | null);
+  if (!community) throw new Error("community_not_found");
+  const countedBefore = communityMembershipCountsTowardActiveMemberCount({
+    community,
+    membership: args.before,
+  });
+  const countedAfter = communityMembershipCountsTowardActiveMemberCount({
+    community,
+    membership: args.after,
+  });
+  const delta = (countedAfter ? 1 : 0) - (countedBefore ? 1 : 0);
+  if (delta === 0) return;
+  const current = readCommunityActiveMemberCount(community);
+  if (current === null) {
+    await syncCommunityActiveMemberCount({
+      ctx: args.ctx,
+      communityId: args.communityId,
+      community,
+    });
+    return;
+  }
+  const nextCount = Math.max(1, current + delta);
+  await args.ctx.db.patch(community._id as any, {
+    activeMemberCount: nextCount,
   });
 }
 

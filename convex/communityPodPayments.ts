@@ -32,7 +32,8 @@ const RESERVATION_SHARED_MS = 3 * 60 * 1000;
 // $1 to $10,000 a month, in base units.
 const PRICE_MIN = 100;
 const PRICE_MAX = 1_000_000;
-const MEMBERS_CAP = 200;
+// Covers SEATS_MAX (500) + community_agent + buffer using by_channel_status directly.
+const MEMBERS_CAP = 505;
 
 export const POD_PAYMENT_METADATA_KEY = "pod_payment_id";
 
@@ -52,8 +53,9 @@ async function podRecord(ctx: any, communityId: any, channelId: any) {
 
 async function activeGrants(ctx: any, channelId: any) {
   return (await ctx.db.query("communityChannelParticipants")
-    .withIndex("by_channel_principal", (q: any) => q.eq("channelId", channelId)).take(MEMBERS_CAP))
-    .filter((row: any) => row.status === "active" && String(row.principalKey).startsWith("user:"));
+    .withIndex("by_channel_status", (q: any) => q.eq("channelId", channelId).eq("status", "active"))
+    .take(MEMBERS_CAP))
+    .filter((row: any) => String(row.principalKey).startsWith("user:"));
 }
 
 async function ownerRevenueAccount(ctx: any, community: any): Promise<string | null> {

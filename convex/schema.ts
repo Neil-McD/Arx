@@ -832,6 +832,9 @@ export default defineSchema({
       ),
     ),
     activeMemberCount: v.optional(v.number()),
+    // Set once communityMemberSearch contains all active members of this community.
+    memberSearchIndexedAt: v.optional(v.number()),
+    memberSearchBackfillStartedAt: v.optional(v.number()),
     // Durable activity marker for bounded memory metabolism. The revision is
     // incremented with each new canonical outcome; settlement clears pending
     // only when no newer outcome arrived during the sweep.
@@ -988,7 +991,28 @@ export default defineSchema({
     updatedAt: v.number(),
   })
     .index("by_channel_principal", ["channelId", "principalKey"])
+    .index("by_channel_status", ["channelId", "status"])
     .index("by_community_principal_status", ["communityId", "principalKey", "status"]),
+
+  // Denormalized active-member search index for instant `@` mention autocomplete
+  // and author lookup at 10k+ member scale (convex/communityMemberSearch.ts).
+  communityMemberSearch: defineTable({
+    communityId: v.id("communities"),
+    userId: v.id("users"),
+    role: v.string(),
+    displayName: v.string(),
+    handle: v.optional(v.string()),
+    searchText: v.string(),
+    active: v.boolean(),
+    updatedAt: v.number(),
+  })
+    .index("by_community_user", ["communityId", "userId"])
+    .index("by_user", ["userId"])
+    .index("by_community_active_updatedAt", ["communityId", "active", "updatedAt"])
+    .searchIndex("search_members", {
+      searchField: "searchText",
+      filterFields: ["communityId", "active"],
+    }),
 
   communityMemberships: defineTable({
     communityId: v.id("communities"),
@@ -1798,6 +1822,9 @@ export default defineSchema({
     dueAt: v.optional(v.number()),
     leaseUntil: v.optional(v.number()),
     leaseToken: v.optional(v.string()),
+    // Flipped at most once per active lease window when new posts arrive mid-run,
+    // avoiding per-message OCC write storms on hot singleton agentWork rows.
+    dirtyWhileLeased: v.optional(v.boolean()),
     failures: v.number(),
     lastErrorCode: v.optional(v.string()),
     createdAt: v.number(),

@@ -76,7 +76,7 @@ export async function podEventRecipientIds(ctx: any, row: any): Promise<Set<stri
   const channel = await openPodRoom(ctx, row.communityId, row.podChannelId);
   if (!channel) return new Set();
   const grants = await ctx.db.query("communityChannelParticipants")
-    .withIndex("by_channel_principal", (q: any) => q.eq("channelId", row.podChannelId)).take(500);
+    .withIndex("by_channel_status", (q: any) => q.eq("channelId", row.podChannelId).eq("status", "active")).take(505);
   const recipients = new Set<string>();
   for (const grant of grants) {
     if (grant.status !== "active" || !String(grant.principalKey).startsWith("user:") || !grant.membershipId) continue;

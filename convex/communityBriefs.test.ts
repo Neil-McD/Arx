@@ -77,8 +77,8 @@ test("a person's post in an open channel makes the brief due an hour later; a po
   expect(await briefWork(t, w.communityId)).toBeNull();
   await t.run((ctx: any) => markCommunityBriefDue(ctx, { communityId: w.communityId, channelId: w.general, actorType: "human", nowMs: NOW }));
   await t.run((ctx: any) => markCommunityBriefDue(ctx, { communityId: w.communityId, channelId: w.general, actorType: "human", nowMs: NOW + 5_000 }));
-  // A burst is read once: the second post joins the first, due an hour after it.
-  expect(await briefWork(t, w.communityId)).toMatchObject({ kind: "brief", pending: 2, dueAt: NOW + HOUR });
+  // A burst is read once: the second post joins the first as a zero-write fast path, due an hour after it.
+  expect(await briefWork(t, w.communityId)).toMatchObject({ kind: "brief", pending: 1, dueAt: NOW + HOUR });
 });
 
 test("one model request: the guide is shown who the community is and its threads by what matters, and writes a cited brief", async () => {
