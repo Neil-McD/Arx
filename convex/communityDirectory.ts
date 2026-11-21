@@ -298,7 +298,18 @@ export const searchCommunityMentionCandidates = query({
             .take(limit + 3);
       for (const row of searchRows) {
         if (out.length >= limit) break;
-        await addUserCandidate(row.userId, row.role);
+        if (String(row.userId) === String(community.ownerId)) {
+          await addUserCandidate(row.userId, "owner");
+          continue;
+        }
+        const mem = await ctx.db
+          .query("communityMemberships")
+          .withIndex("by_community_user", (q: any) =>
+            q.eq("communityId", args.communityId).eq("userId", row.userId),
+          )
+          .first();
+        if (!mem || !communityMembershipRowIsActive(mem as any)) continue;
+        await addUserCandidate(row.userId, normalizeCommunityRoleForOutput(mem.role) || "member");
       }
       // If a short/substring query didn't fill via full-text prefix tokens,
       // check exact handle match in O(1) as well.
