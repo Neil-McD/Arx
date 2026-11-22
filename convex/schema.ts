@@ -694,6 +694,8 @@ export default defineSchema({
       v.literal("failed"),
       v.literal("suppressed"),
     ),
+    // 0 = urgent/transactional, 1 = mention_notification, 2 = bulk (reminders/digests).
+    priorityRank: v.optional(v.number()),
     scheduledAt: v.number(),
     attemptCount: v.number(),
     lastAttemptAt: v.optional(v.number()),
@@ -703,8 +705,10 @@ export default defineSchema({
     updatedAt: v.number(),
   })
     .index("by_status_scheduledAt", ["status", "scheduledAt"])
+    .index("by_status_priority_scheduledAt", ["status", "priorityRank", "scheduledAt"])
     .index("by_dedupeKey", ["dedupeKey"])
     .index("by_recipientUserId", ["recipientUserId"])
+    .index("by_recipientUserId_kind_createdAt", ["recipientUserId", "kind", "createdAt"])
     .index("by_providerMessageId", ["providerMessageId"])
     .index("by_createdAt", ["createdAt"]),
 

@@ -40,24 +40,23 @@ export async function heldTiers(ctx: any, communityId: any, userId: any): Promis
   return { membership, tiers };
 }
 
-/** Everyone holding a plan now, by its key (Polynet's price or the app's sale). Bounded: most communities are small. */
-export async function tierHolderIds(ctx: any, communityId: any, key: string): Promise<string[]> {
-  const holders = new Set<string>();
-  const memberships = await ctx.db.query("communityMemberships")
-    .withIndex("by_community", (q: any) => q.eq("communityId", communityId)).take(2000);
-  const priceTier = new Map<string, string>();
-  for (const membership of memberships) {
-    if (!communityMembershipRowIsActive(membership) || membership.accessSource === "app_grant") continue;
-    let held = BASE_TIER_KEY;
-    if (membership.pricePointId) {
-      const id = String(membership.pricePointId);
-      if (!priceTier.has(id)) priceTier.set(id, ((await ctx.db.get(membership.pricePointId)) as any)?.tierKey ?? BASE_TIER_KEY);
-      held = priceTier.get(id)!;
-    }
-    if (held === key) holders.add(String(membership.userId));
+/** Whether an active non-app-grant membership currently holds the given plan key. */
+export async function membershipHoldsTierKey(
+  ctx: any,
+  membership: any,
+  key: string,
+  priceTierCache: Map<string, string>,
+): Promise<boolean> {
+  if (!communityMembershipRowIsActive(membership) || membership.accessSource === "app_grant") {
+    return false;
   }
-  const appSales = await ctx.db.query("communityAppGrants")
-    .withIndex("by_community_user", (q: any) => q.eq("communityId", communityId)).take(2000);
-  for (const sale of appSales) if (sale.active && sale.userId && (sale.tierKey ?? BASE_TIER_KEY) === key) holders.add(String(sale.userId));
-  return [...holders].slice(0, 2000);
+  let held = BASE_TIER_KEY;
+  if (membership.pricePointId) {
+    const id = String(membership.pricePointId);
+    if (!priceTierCache.has(id)) {
+      priceTierCache.set(id, ((await ctx.db.get(membership.pricePointId)) as any)?.tierKey ?? BASE_TIER_KEY);
+    }
+    held = priceTierCache.get(id)!;
+  }
+  return held === key;
 }

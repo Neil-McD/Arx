@@ -360,29 +360,31 @@ export const processDueCommunityWeeklyDigestsInternal = internalAction({
             ),
           })),
         };
-        for (const userId of page.recipientUserIds as any[]) {
-          const result = await ctx.runMutation(
-            (internal as any).email.enqueueEmailJobInternal,
+        if ((page.recipientUserIds as any[]).length > 0) {
+          const batchResult = await ctx.runMutation(
+            (internal as any).email.enqueueEmailJobsBatchInternal,
             {
-              kind: "weekly_member_digest",
-              communityId: claim.communityId,
-              communityLifecycleGeneration: claim.communityLifecycleGeneration,
-              recipientUserId: userId,
-              templateKey: "weekly_member_digest",
-              payload,
-              dedupeKey: buildCommunityWeeklyDigestDedupeKey({
+              jobs: (page.recipientUserIds as any[]).map((userId) => ({
+                kind: "weekly_member_digest",
                 communityId: claim.communityId,
-                userId,
-                periodStartDay: page.periodStartDay,
-                periodEndDay: page.periodEndDay,
-              }),
-              nowMs,
+                communityLifecycleGeneration: claim.communityLifecycleGeneration,
+                recipientUserId: userId,
+                templateKey: "weekly_member_digest",
+                payload,
+                dedupeKey: buildCommunityWeeklyDigestDedupeKey({
+                  communityId: claim.communityId,
+                  userId,
+                  periodStartDay: page.periodStartDay,
+                  periodEndDay: page.periodEndDay,
+                }),
+                nowMs,
+              })),
             },
-          ) as any;
-          recipients += 1;
-          if (result?.deduped) deduped += 1;
-          else if (result?.status === "suppressed") suppressed += 1;
-          else enqueued += 1;
+          ) as { enqueued?: number; deduped?: number; suppressed?: number } | null;
+          recipients += (page.recipientUserIds as any[]).length;
+          deduped += Number(batchResult?.deduped ?? 0);
+          suppressed += Number(batchResult?.suppressed ?? 0);
+          enqueued += Number(batchResult?.enqueued ?? 0);
         }
 
         const outcome = page.recipientsDone ? "complete" : "continue";
