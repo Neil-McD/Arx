@@ -503,6 +503,8 @@ export async function endPodPaymentForRisk(ctx: any, args: { providerAccountId: 
 }
 
 const SWEEP_PAGE = 100;
+const MAX_SWEEP_PAGES_PER_RUN = 10;
+const MAX_SWEEP_CONTINUATION_ROUNDS = 50;
 const GRANTING: PodPaymentStatus[] = ["active", "past_due", "cancel_at_period_end"];
 // An unpaid checkout row is kept a day past Stripe's own expiry, then marked.
 const ABANDONED_AFTER_MS = 24 * 60 * 60 * 1000;
@@ -701,37 +703,84 @@ async function stopBilling(ctx: any, targets: SweepTarget[]): Promise<number> {
 }
 
 // Run right after access may have ended (scheduled by the code that ended
-// it), and hourly over everything as the safety net.
+// it), and hourly over everything as the safety net. Self-continues across
+// bounded page slices so large sweeps never time out.
 export const sweepUnreachablePodPaymentsInternal = internalAction({
-  args: sweepScope,
-  handler: async (ctx, args): Promise<{ checked: number; stopped: number; expired: number }> => {
+  args: {
+    ...sweepScope,
+    statusIndex: v.optional(v.number()),
+    cursor: v.optional(v.union(v.string(), v.null())),
+    continuationRound: v.optional(v.number()),
+    maxPagesPerRun: v.optional(v.number()),
+  },
+  handler: async (ctx, args): Promise<{ checked: number; stopped: number; expired: number; continued?: boolean }> => {
     if (args.communityId || args.userId || args.channelId) {
-      const targets: SweepTarget[] = await ctx.runQuery(internal.communityPodPayments.listUnreachablePodPaymentsForScopeInternal, args);
+      const targets: SweepTarget[] = await ctx.runQuery(internal.communityPodPayments.listUnreachablePodPaymentsForScopeInternal, {
+        communityId: args.communityId,
+        userId: args.userId,
+        channelId: args.channelId,
+      });
       const stoppedNow = await stopBilling(ctx, targets);
       if (targets.some((target) => target.refund)) await ctx.runAction(internal.communityPodPayments.processPodRefundsInternal, {});
       return { checked: targets.length, stopped: stoppedNow, expired: 0 };
     }
+    const maxPagesPerRun = Math.max(1, Math.min(MAX_SWEEP_PAGES_PER_RUN, Math.floor(args.maxPagesPerRun ?? MAX_SWEEP_PAGES_PER_RUN)));
+    const continuationRound = Math.max(0, Math.floor(args.continuationRound ?? 0));
+    let statusIndex = Math.max(0, Math.floor(args.statusIndex ?? 0));
+    let cursor: string | null = args.cursor ?? null;
+    let pagesProcessed = 0;
     let checked = 0;
     let stopped = 0;
-    for (const status of GRANTING) {
-      let cursor: string | null = null;
-      for (;;) {
-        const page: { targets: SweepTarget[]; continueCursor: string; isDone: boolean } =
-          await ctx.runQuery(internal.communityPodPayments.listUnreachablePodPaymentsPageInternal, { status, cursor });
-        checked += page.targets.length;
-        stopped += await stopBilling(ctx, page.targets);
-        if (page.isDone) break;
+    let hasMoreStatuses = false;
+
+    while (statusIndex < GRANTING.length) {
+      if (pagesProcessed >= maxPagesPerRun) {
+        hasMoreStatuses = true;
+        break;
+      }
+      const status = GRANTING[statusIndex]!;
+      const page: { targets: SweepTarget[]; continueCursor: string; isDone: boolean } =
+        await ctx.runQuery(internal.communityPodPayments.listUnreachablePodPaymentsPageInternal, { status, cursor });
+      pagesProcessed += 1;
+      checked += page.targets.length;
+      stopped += await stopBilling(ctx, page.targets);
+      if (page.isDone) {
+        statusIndex += 1;
+        cursor = null;
+      } else {
         cursor = page.continueCursor;
       }
     }
+
+    if (hasMoreStatuses && continuationRound < MAX_SWEEP_CONTINUATION_ROUNDS) {
+      await ctx.scheduler.runAfter(1_000, internal.communityPodPayments.sweepUnreachablePodPaymentsInternal, {
+        statusIndex,
+        cursor,
+        continuationRound: continuationRound + 1,
+        maxPagesPerRun,
+      });
+      return { checked, stopped, expired: 0, continued: true };
+    }
+
     await ctx.runAction(internal.communityPodPayments.processPodRefundsInternal, {});
     let expired = 0;
-    for (let round = 0; round < 50; round += 1) {
+    let moreExpired = false;
+    for (let round = 0; round < 20; round += 1) {
       const result: { expired: number; more: boolean } = await ctx.runMutation(internal.communityPodPayments.expireAbandonedPodCheckoutsInternal, { nowMs: Date.now() });
       expired += result.expired;
+      moreExpired = result.more;
       if (!result.more) break;
     }
-    return { checked, stopped, expired };
+    if (moreExpired && continuationRound < MAX_SWEEP_CONTINUATION_ROUNDS) {
+      await ctx.scheduler.runAfter(1_000, internal.communityPodPayments.sweepUnreachablePodPaymentsInternal, {
+        statusIndex: GRANTING.length,
+        cursor: null,
+        continuationRound: continuationRound + 1,
+        maxPagesPerRun,
+      });
+      return { checked, stopped, expired, continued: true };
+    }
+    return { checked, stopped, expired, continued: false };
   },
 });
 

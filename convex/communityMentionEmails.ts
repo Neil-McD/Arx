@@ -27,6 +27,7 @@ const MENTION_EMAIL_GRACE_MS = 15 * 60 * 1000;
 const MENTION_EMAIL_RECIPIENT_COOLDOWN_MS = 60 * 60 * 1000;
 const MENTION_EMAIL_BATCH_LIMIT = 25;
 const MENTION_EMAIL_SCAN_LIMIT = 500;
+const MAX_MENTION_EMAIL_CONTINUATION_ROUNDS = 4;
 
 const internalRefs = internal as any;
 
@@ -151,16 +152,17 @@ export const listPendingMentionEmailJobsInternal = internalQuery({
       let collapsed = false;
       if (!suppressed) {
         if (!cooldownByRecipient.has(recipientKey)) {
-          const lastMentionEmail = (await ctx.db
+          const recentMentionEmail = (await ctx.db
             .query("emailOutbox" as any)
-            .withIndex("by_recipientUserId", (q: any) => q.eq("recipientUserId", mention.mentionedUserId))
+            .withIndex("by_recipientUserId_kind_createdAt", (q: any) =>
+              q
+                .eq("recipientUserId", mention.mentionedUserId)
+                .eq("kind", "mention_notification")
+                .gt("createdAt", nowMs - MENTION_EMAIL_RECIPIENT_COOLDOWN_MS),
+            )
             .order("desc")
-            .filter((q: any) => q.eq(q.field("kind"), "mention_notification"))
             .first()) as Record<string, any> | null;
-          cooldownByRecipient.set(
-            recipientKey,
-            Number(lastMentionEmail?.createdAt ?? 0) > nowMs - MENTION_EMAIL_RECIPIENT_COOLDOWN_MS,
-          );
+          cooldownByRecipient.set(recipientKey, Boolean(recentMentionEmail));
         }
         // In cooldown: leave the mention pending so it batches into the
         // recipient's next email instead of sending now.
@@ -214,8 +216,11 @@ export const markMentionNotifyStatesInternal = internalMutation({
 });
 
 export const processPendingMentionEmailsInternal = internalAction({
-  args: {},
-  handler: async (ctx) => {
+  args: {
+    continuationRound: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const continuationRound = Math.max(0, Math.floor(args.continuationRound ?? 0));
     const jobs = (await ctx.runQuery(internalRefs.communityMentionEmails.listPendingMentionEmailJobsInternal, {})) as Array<{
       mentionId: string;
       recipientUserId: string;
@@ -235,6 +240,7 @@ export const processPendingMentionEmailsInternal = internalAction({
       mentionId: string;
       notifyState: "sent" | "suppressed" | "read";
     }> = [];
+    const dispatchJobs: Array<typeof jobs[number]> = [];
     for (const job of jobs) {
       if (job.read) {
         read += 1;
@@ -258,29 +264,54 @@ export const processPendingMentionEmailsInternal = internalAction({
         updates.push({ mentionId: job.mentionId, notifyState: "sent" });
         continue;
       }
-      const result = await ctx.runMutation(internalRefs.email.enqueueEmailJobInternal, {
-        kind: "mention_notification",
-        recipientUserId: job.recipientUserId,
-        sourceMentionId: job.mentionId,
-        communityId: job.communityId,
-        communityLifecycleGeneration: job.communityLifecycleGeneration,
-        templateKey: "mention_notification",
-        payload: {},
-        dedupeKey: `mention_notification:${job.mentionId}`,
-      });
-      if (result.status === "suppressed") {
-        suppressed += 1;
-        updates.push({ mentionId: job.mentionId, notifyState: "suppressed" });
-        continue;
-      }
-      enqueued += 1;
-      updates.push({ mentionId: job.mentionId, notifyState: "sent" });
+      dispatchJobs.push(job);
     }
+
+    if (dispatchJobs.length > 0) {
+      const batchResult = (await ctx.runMutation(internalRefs.email.enqueueEmailJobsBatchInternal, {
+        jobs: dispatchJobs.map((job) => ({
+          kind: "mention_notification",
+          recipientUserId: job.recipientUserId,
+          sourceMentionId: job.mentionId,
+          communityId: job.communityId,
+          communityLifecycleGeneration: job.communityLifecycleGeneration,
+          templateKey: "mention_notification",
+          payload: {},
+          dedupeKey: `mention_notification:${job.mentionId}`,
+        })),
+      })) as { results: Array<{ status?: string }> };
+      for (let i = 0; i < dispatchJobs.length; i += 1) {
+        const job = dispatchJobs[i]!;
+        const result = batchResult.results[i];
+        if (result?.status === "suppressed") {
+          suppressed += 1;
+          updates.push({ mentionId: job.mentionId, notifyState: "suppressed" });
+          continue;
+        }
+        enqueued += 1;
+        updates.push({ mentionId: job.mentionId, notifyState: "sent" });
+      }
+    }
+
     if (updates.length > 0) {
       await ctx.runMutation(internalRefs.communityMentionEmails.markMentionNotifyStatesInternal, {
         updates: updates as any,
       });
     }
+
+    let continued = false;
+    if (
+      dispatchJobs.length >= MENTION_EMAIL_BATCH_LIMIT &&
+      continuationRound < MAX_MENTION_EMAIL_CONTINUATION_ROUNDS
+    ) {
+      await ctx.scheduler.runAfter(
+        2_000,
+        internalRefs.communityMentionEmails.processPendingMentionEmailsInternal,
+        { continuationRound: continuationRound + 1 },
+      );
+      continued = true;
+    }
+
     return {
       ok: true,
       considered: jobs.length,
@@ -289,6 +320,7 @@ export const processPendingMentionEmailsInternal = internalAction({
       collapsed,
       emailSkipped,
       read,
+      continued,
     };
   },
 });

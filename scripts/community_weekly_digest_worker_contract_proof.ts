@@ -69,7 +69,7 @@ assert.match(
 );
 assert.match(
   worker,
-  /enqueueEmailJobInternal[\s\S]*buildCommunityWeeklyDigestDedupeKey/,
+  /enqueueEmailJobsBatchInternal[\s\S]*buildCommunityWeeklyDigestDedupeKey/,
   "the worker must enqueue only through the canonical deduplicated outbox",
 );
 assert.match(

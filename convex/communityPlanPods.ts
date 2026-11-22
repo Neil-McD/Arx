@@ -3,9 +3,14 @@
 // the community's own app). The seat's reason is "plan"; a host's add or a pod
 // payment are reasons of their own, so this never touches them
 // (communityChannelParticipants.setChannelParticipantCore).
+import { v } from "convex/values";
+import { internal } from "./_generated/api";
+import { internalMutation } from "./_generated/server";
 import { notifyConnectedApps } from "./connectedAppNotify";
 import { seatReasons, setChannelParticipantCore } from "./communityChannelParticipants";
-import { heldTiers, tierHolderIds } from "./communityHeldTiers";
+import { BASE_TIER_KEY, heldTiers, membershipHoldsTierKey } from "./communityHeldTiers";
+
+const TIER_HOLDER_SYNC_BATCH_SIZE = 25;
 
 /** Brings a member's plan seats into line with the plans they hold now. */
 export async function syncPlanPods(ctx: any, communityId: any, userId: any): Promise<{ opened: number; closed: number }> {
@@ -50,7 +55,115 @@ export async function memberAccessChanged(ctx: any, communityId: any, userId: an
   await notifyConnectedApps(ctx, communityId, userId);
 }
 
-/** A plan's grants or pods changed: everyone holding it. */
+/** A plan's grants or pods changed: sync small communities inline, paginate large ones asynchronously. */
 export async function tierHoldersChanged(ctx: any, communityId: any, key: string): Promise<void> {
-  for (const userId of await tierHolderIds(ctx, communityId, key)) await memberAccessChanged(ctx, communityId, userId as any);
+  const [memberships, appSales] = await Promise.all([
+    ctx.db
+      .query("communityMemberships")
+      .withIndex("by_community", (q: any) => q.eq("communityId", communityId))
+      .take(TIER_HOLDER_SYNC_BATCH_SIZE + 1),
+    ctx.db
+      .query("communityAppGrants")
+      .withIndex("by_community_user", (q: any) => q.eq("communityId", communityId))
+      .take(TIER_HOLDER_SYNC_BATCH_SIZE + 1),
+  ]);
+
+  if (
+    memberships.length <= TIER_HOLDER_SYNC_BATCH_SIZE &&
+    appSales.length <= TIER_HOLDER_SYNC_BATCH_SIZE
+  ) {
+    const holders = new Set<string>();
+    const priceTier = new Map<string, string>();
+    for (const membership of memberships) {
+      if (await membershipHoldsTierKey(ctx, membership, key, priceTier)) {
+        holders.add(String(membership.userId));
+      }
+    }
+    for (const sale of appSales) {
+      if (sale.active && sale.userId && (sale.tierKey ?? BASE_TIER_KEY) === key) {
+        holders.add(String(sale.userId));
+      }
+    }
+    for (const userId of holders) {
+      await memberAccessChanged(ctx, communityId, userId as any);
+    }
+    return;
+  }
+
+  await ctx.scheduler.runAfter(0, (internal as any).communityPlanPods.syncTierHoldersBatchInternal, {
+    communityId,
+    key,
+    phase: "memberships",
+    cursor: null,
+  });
 }
+
+export const syncTierHoldersBatchInternal = internalMutation({
+  args: {
+    communityId: v.id("communities"),
+    key: v.string(),
+    phase: v.union(v.literal("memberships"), v.literal("app_grants")),
+    cursor: v.union(v.string(), v.null()),
+  },
+  handler: async (ctx, args) => {
+    const community = await ctx.db.get(args.communityId);
+    if (!community) return { done: true, synced: 0 };
+
+    if (args.phase === "memberships") {
+      const page = await ctx.db
+        .query("communityMemberships")
+        .withIndex("by_community", (q) => q.eq("communityId", args.communityId))
+        .paginate({ cursor: args.cursor, numItems: TIER_HOLDER_SYNC_BATCH_SIZE });
+      const priceTier = new Map<string, string>();
+      const synced = new Set<string>();
+      for (const membership of page.page) {
+        if (await membershipHoldsTierKey(ctx, membership, args.key, priceTier)) {
+          const uid = String(membership.userId);
+          if (synced.has(uid)) continue;
+          synced.add(uid);
+          await memberAccessChanged(ctx, args.communityId, membership.userId);
+        }
+      }
+      if (!page.isDone) {
+        await ctx.scheduler.runAfter(0, (internal as any).communityPlanPods.syncTierHoldersBatchInternal, {
+          communityId: args.communityId,
+          key: args.key,
+          phase: "memberships",
+          cursor: page.continueCursor,
+        });
+        return { done: false, synced: synced.size };
+      }
+      await ctx.scheduler.runAfter(0, (internal as any).communityPlanPods.syncTierHoldersBatchInternal, {
+        communityId: args.communityId,
+        key: args.key,
+        phase: "app_grants",
+        cursor: null,
+      });
+      return { done: false, synced: synced.size };
+    }
+
+    const page = await ctx.db
+      .query("communityAppGrants")
+      .withIndex("by_community_user", (q) => q.eq("communityId", args.communityId))
+      .paginate({ cursor: args.cursor, numItems: TIER_HOLDER_SYNC_BATCH_SIZE });
+    const synced = new Set<string>();
+    for (const sale of page.page) {
+      if (sale.active && sale.userId && (sale.tierKey ?? BASE_TIER_KEY) === args.key) {
+        const uid = String(sale.userId);
+        if (synced.has(uid)) continue;
+        synced.add(uid);
+        await memberAccessChanged(ctx, args.communityId, sale.userId);
+      }
+    }
+    if (!page.isDone) {
+      await ctx.scheduler.runAfter(0, (internal as any).communityPlanPods.syncTierHoldersBatchInternal, {
+        communityId: args.communityId,
+        key: args.key,
+        phase: "app_grants",
+        cursor: page.continueCursor,
+      });
+      return { done: false, synced: synced.size };
+    }
+    return { done: true, synced: synced.size };
+  },
+});
