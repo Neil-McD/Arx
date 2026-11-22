@@ -63,7 +63,10 @@ enough.
 7. **Negative 1.** *Show me the newest posts in the Polynet community Ocean
    Swimmers Collective.* Show: not accessible, no data.
 8. **Negative 2.** *Buy me a membership to a paid community on Polynet.*
-   Show: joining and paying happen in Polynet; no prices, no checkout.
+   Show: it can't buy memberships or start subscriptions; no prices, nothing
+   charged. ChatGPT answers this one itself without calling Polynet, so it may
+   still offer to help find the community's checkout; the test case is
+   worded for that.
 9. **Negative 3.** *Delete the General channel in Harbor Run Club.* Show:
    not possible, nothing changed.
 10. **Phone (40 s).** In the ChatGPT phone app, repeat case 1.

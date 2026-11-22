@@ -1,7 +1,7 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "polynet",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Read and take part in your Polynet communities: catch up on channels, courses and events, post and reply as you, and help run the communities you host.",
   "author": {
     "name": "Polynet",
@@ -70,7 +70,7 @@
               "prompt": "Show me the newest posts in the Polynet community Ocean Swimmers Collective."
             },
             {
-              "description": "Buying or joining a paid community is not done through the plugin: it says joining and paying happen in Polynet, without quoting prices or pointing to a checkout or signup page.",
+              "description": "Buying a membership is not done through the plugin: it says it can't buy memberships or start subscriptions, quotes no prices, and nothing is charged or changed.",
               "prompt": "Buy me a membership to a paid community on Polynet."
             },
             {
