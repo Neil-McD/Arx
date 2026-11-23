@@ -38,9 +38,9 @@ export function useCommunityDirectoryController<SessionT extends SessionLike>(pa
   const loadCommunityDirectoryMembers = useCallback(async (
     communityId: string,
     session: SessionT,
-  ) => {
+  ): Promise<boolean> => {
     const usableSession = await resolveUsableSession(session, params.ensureSession);
-    if (!usableSession) return;
+    if (!usableSession) return false;
     const seq = (communityDirectoryLoadSeqRef.current += 1);
     const loadScope = `${presentationIdentity ?? "authenticated"}:${communityId}`;
     const isSameScopeRefresh = presentationScopeRef.current === loadScope;
@@ -57,16 +57,18 @@ export function useCommunityDirectoryController<SessionT extends SessionLike>(pa
         targetRowCount,
         isCurrent: () => communityDirectoryLoadSeqRef.current === seq,
       });
-      if (!page || communityDirectoryLoadSeqRef.current !== seq) return;
+      if (!page || communityDirectoryLoadSeqRef.current !== seq) return false;
       presentationScopeRef.current = loadScope;
       setPresentationScope(loadScope);
       const stableRows = reuseEquivalentValue(communityDirectoryMembersRef.current, page.rows);
       communityDirectoryMembersRef.current = stableRows;
       setCommunityDirectoryMembers(stableRows);
       setCommunityDirectoryMemberCount(page.totalCount);
+      return true;
     } catch {
       // Best-effort mention/profile hydration. Keep the last scoped snapshot;
       // the live roster owns its own loading, retry, and pagination UI.
+      return false;
     }
   }, [params.ensureSession, presentationIdentity]);
 

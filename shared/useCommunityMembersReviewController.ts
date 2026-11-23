@@ -69,7 +69,7 @@ type UseCommunityMembersReviewControllerArgs<
   session: SessionT | null;
   ensureSession?: EnsureSessionFn<SessionT>;
   loadUserProfiles: (userIds: string[], session: SessionT) => Promise<void> | void;
-  reloadCommunityDirectoryMembers: (communityId: string, session: SessionT) => Promise<void> | void;
+  reloadCommunityDirectoryMembers: (communityId: string, session: SessionT) => Promise<unknown> | void;
   onJoinRequestApproved?: (params: { communityId: string; requestId: string }) => Promise<void> | void;
   setCommunityJoinRequests: Dispatch<SetStateAction<JoinRequestT[]>>;
   setIsLoadingCommunityJoinRequests: Dispatch<SetStateAction<boolean>>;
