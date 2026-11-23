@@ -1,3 +1,4 @@
+import { GuideVoice } from "../../../../shared/entityChipsUi";
 import { askInApp } from "../../../../shared/inAppConfirm";
 import { Fragment, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { enterSendsMessage, isImeComposing } from "../controllers/communityComposerTextEditing";
@@ -735,6 +736,8 @@ export type InteractionBodyProps = {
   text: string;
   renderTextWithLinks: (text: string) => ReactNode;
   mentionContext?: InteractionMentionContext;
+  // The community's guide wrote it: bold names may become chips.
+  fromGuide?: boolean;
 };
 
 export function InteractionBody(props: InteractionBodyProps) {
@@ -783,11 +786,12 @@ export function InteractionBody(props: InteractionBodyProps) {
       allowLabeledLinks: true,
     });
 
-  return (
+  const body = (
     <div className="community-interaction-body community-interaction-chat-markdown">
       <ChatBlockMarkdown text={text} renderInline={renderInline} />
     </div>
   );
+  return props.fromGuide ? <GuideVoice>{body}</GuideVoice> : body;
 }
 
 export function InteractionContent(
@@ -801,6 +805,7 @@ export function InteractionContent(
         text={props.text}
         renderTextWithLinks={props.renderTextWithLinks}
         mentionContext={props.mentionContext}
+        fromGuide={props.fromGuide}
       />
       <MessageLinkMedia text={props.text} />
       {props.afterBody}

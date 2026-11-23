@@ -94,6 +94,7 @@ import {
   communityInitials,
 } from "../../../shared/messageMetadataUi";
 import { renderTextWithLinks } from "../../../shared/linkEmbedUi";
+import { EntityNamesProvider } from "../../../shared/entityChipsUi";
 import { readBannerFileAsWideDataUrlWithinLimit } from "../../../shared/imageTransforms";
 import { resetWebSessionStateAfterSignOut } from "./auth/resetSessionState";
 import { usePointerSortableList } from "../../../shared/usePointerSortableList";
@@ -2099,6 +2100,7 @@ export default function App() {
   }
 
   return (
+    <EntityNamesProvider session={shownSession} communityId={activeCommunityId} communitySlug={selectedActiveCommunitySlug} navigate={navigateTo}>
     <WebAppCompositionRoot
       communityAgentOn={activeCommunityAgentOn}
       communityAppLinks={activeCommunityAppLinks}
@@ -2193,5 +2195,6 @@ export default function App() {
       mainSurfaceHostProps={mainSurfaceHostProps}
       shellChromeHostProps={shellChromeHostProps}
     />
+    </EntityNamesProvider>
   );
 }

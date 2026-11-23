@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { tokenizeChatInlineMarkdown } from "./chatInlineMarkdown";
 import { renderTextWithLinks } from "./linkEmbedUi";
+import { StrongOrChip } from "./entityChipsUi";
 
 type RenderChatInlineMarkdownOptions = {
   // Plain text runs (incl. URL auto-linking); defaults to renderTextWithLinks.
@@ -43,7 +44,7 @@ export function renderChatInlineMarkdown(
             );
           }
           case "bold":
-            return <strong key={index}>{renderFormattedRun(token.text)}</strong>;
+            return <StrongOrChip key={index} text={token.text}>{renderFormattedRun(token.text)}</StrongOrChip>;
           case "italic":
             return <em key={index}>{renderFormattedRun(token.text)}</em>;
           case "strike":

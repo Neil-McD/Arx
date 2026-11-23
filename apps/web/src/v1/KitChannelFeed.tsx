@@ -242,6 +242,7 @@ export function KitChannelFeed(props: CommunityInteractionFeedListProps) {
                       <>
                         <div className={`community-interaction-root-body${expansion && !expansion.expanded ? " is-mobile-collapsed" : ""}`}>
                           <InteractionContent
+                            fromGuide={root.actor_type === "community_agent"}
                             text={body}
                             renderTextWithLinks={props.renderTextWithLinks}
                             mentionContext={{

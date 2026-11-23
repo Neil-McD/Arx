@@ -6957,6 +6957,46 @@
   overflow-wrap: anywhere;
 }
 
+/* Chips: a thing the guide named, opened in place (shared/entityChipsUi.tsx,
+   docs/specs/guide-chips-end-state.md). Quiet graphite with a hairline and a
+   grey type icon; never purple, which is the guide's own colour. */
+.entity-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 100%;
+  height: 1.45em;
+  padding: 0 7px 0 5px;
+  margin: 0 1px;
+  border: 1px solid color-mix(in srgb, var(--text-primary) 12%, transparent);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--text-primary) 5%, transparent);
+  color: var(--text-primary);
+  font-weight: 550;
+  line-height: 1;
+  text-decoration: none;
+  vertical-align: -0.2em;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.entity-chip:hover,
+.entity-chip:focus-visible {
+  background: color-mix(in srgb, var(--text-primary) 10%, transparent);
+  border-color: color-mix(in srgb, var(--text-primary) 20%, transparent);
+  color: var(--text-primary);
+  text-decoration: none;
+}
+.entity-chip svg {
+  flex: none;
+  width: 0.82em;
+  height: 0.82em;
+  color: var(--text-muted);
+}
+.entity-chip-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 /* Callouts ("> [!TIP]" and friends), in a lesson and in its editor: a soft
    tint of one tone, the type's icon in its own column, then the author's
    title and the text. Neutral grey by default (design v1 is monochrome and
