@@ -1,7 +1,6 @@
 import { CommunityAvatar } from "../../../../shared/CommunityAvatar";
 import { CommunityNav } from "../../../../shared/CommunityNav";
 import { webDestinationHasCommunityNavSelection } from "../../../../shared/webAppRouteState";
-import { isDesignV1Active } from "../../../../shared/designSystem";
 import { WebAccountMenu } from "./WebAccountMenu";
 import { WebCommunitySwitcher } from "./WebCommunitySwitcher";
 import type { WebCommunityShellProps } from "./webShellChromeShared";
@@ -20,35 +19,29 @@ export function WebCommunityNavSurface({
   presentation,
 }: WebCommunityNavSurfaceProps) {
   const isMobileHome = presentation === "mobile-home";
-  // Design v1: a phone's community home is the same left column, full width.
-  const useV1Layout = isDesignV1Active();
   const selectTab = isMobileHome ? communityShell.onSelectCommunityTabFromMobile : communityShell.onSelectCommunityTab;
   const appLinks = useCommunityAppLinks();
   const hasDestinationSelection =
     !isMobileHome &&
     webDestinationHasCommunityNavSelection(communityShell.destination);
 
-  // Design system v1: private rooms are pods, reached from the Pods page,
-  // never listed down the left column.
-  const listedChannels = useV1Layout
-    ? communityShell.communityChannels.filter((channel) => channel.access_mode !== "restricted")
-    : communityShell.communityChannels;
-  const inPod = useV1Layout && communityShell.destination.kind === "community_chat"
+  // Private rooms are pods, reached from the Pods page, never listed down the
+  // channel list.
+  const listedChannels = communityShell.communityChannels.filter((channel) => channel.access_mode !== "restricted");
+  const inPod = communityShell.destination.kind === "community_chat"
     && (Boolean(communityShell.isInPodRoom)
       || communityShell.communityChannels.some((channel) => channel.access_mode === "restricted" && channel.slug === communityShell.selectedCommunityChannelSlug));
-  const navPods = useV1Layout
-    ? selectNavPods({
-        channels: communityShell.communityChannels,
-        indicators: communityShell.communityChannelIndicators,
-        openSlug: inPod ? communityShell.selectedCommunityChannelSlug : null,
-      })
-    : null;
+  const navPods = selectNavPods({
+    channels: communityShell.communityChannels,
+    indicators: communityShell.communityChannelIndicators,
+    openSlug: inPod ? communityShell.selectedCommunityChannelSlug : null,
+  });
   return (
     <>
-    {useV1Layout && !isMobileHome ? <WebCommunityCommandPalette communityShell={communityShell} /> : null}
+    {!isMobileHome ? <WebCommunityCommandPalette communityShell={communityShell} /> : null}
     <CommunityNav
       activeCommunity={communityShell.activeCommunity}
-      hideIdentitySettings={isMobileHome && !useV1Layout}
+      hideIdentitySettings={false}
       communityTab={communityShell.communityTab}
       activeSelectionMode={hasDestinationSelection ? "route" : "none"}
       tabIndicators={communityShell.communityTabIndicators}
@@ -74,14 +67,14 @@ export function WebCommunityNavSurface({
       isLoadingAccess={communityShell.isLoadingCommunityAccess}
       onCopyCommunityJoinLink={communityShell.onCopyCommunityJoinLink}
       onSelectTab={selectTab}
-      toolsSlot={useV1Layout ? <SearchOrAskButton /> : null}
-      layout={useV1Layout ? "v1" : "classic"}
-      identityIsCover={useV1Layout}
-      accountSlot={useV1Layout && communityShell.account
+      toolsSlot={<SearchOrAskButton />}
+      layout="v1"
+      identityIsCover
+      accountSlot={communityShell.account
         ? (communityItems) => <WebAccountMenu {...communityShell.account!} communityName={communityShell.activeCommunity?.name ?? null} communityItems={communityItems} />
         : null}
       identitySlot={
-        useV1Layout && communityShell.account && communityShell.activeCommunity ? (
+        communityShell.account && communityShell.activeCommunity ? (
           <WebCommunitySwitcher
             activeCommunityName={communityShell.activeCommunity.name}
             mark={
@@ -110,21 +103,19 @@ export function WebCommunityNavSurface({
           />
         ) : null
       }
-      onOpenInbox={useV1Layout && communityShell.canOpenDirectMessages ? communityShell.onToggleDirectMessages : undefined}
+      onOpenInbox={communityShell.canOpenDirectMessages ? communityShell.onToggleDirectMessages : undefined}
       isInboxOpen={communityShell.isDirectMessagesOpen}
       inboxUnreadCount={communityShell.directMessagesUnreadCount}
-      onOpenMembers={useV1Layout ? communityShell.onOpenMembers : undefined}
-      // Pods on phones too (design v1 on): the phone menu has no other way in.
-      onOpenPods={useV1Layout ? () => selectTab("pods") : undefined}
+      onOpenMembers={communityShell.onOpenMembers}
+      onOpenPods={() => selectTab("pods")}
       podsActive={inPod}
-      pods={navPods?.shown}
-      onSelectPod={useV1Layout ? communityShell.onSelectCommunityChannel : undefined}
-      podsDot={navPods?.allDot ?? "none"}
-      podsOverflowDot={navPods?.overflowDot ?? "none"}
-      // One door: the community's own app, opened from here (design v1).
-      appLinks={isDesignV1Active() ? appLinks : undefined}
+      pods={navPods.shown}
+      onSelectPod={communityShell.onSelectCommunityChannel}
+      podsDot={navPods.allDot}
+      podsOverflowDot={navPods.overflowDot}
+      appLinks={appLinks}
       memberCount={communityShell.activeCommunityMemberCount}
-      onOpenGuide={useV1Layout && communityShell.onOpenCommunitySettingsPane
+      onOpenGuide={communityShell.onOpenCommunitySettingsPane
         ? () => communityShell.onOpenCommunitySettingsPane?.("agent")
         : undefined}
     />

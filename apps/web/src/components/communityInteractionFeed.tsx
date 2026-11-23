@@ -38,7 +38,6 @@ import { CommunityChatMediaGrid, type CommunityChatMediaImage } from "../../../.
 import { CommunityChatMediaPlayers } from "../../../../shared/CommunityChatMediaPlayers";
 import type { CommunityTypingPresenceUser, UserProfile } from "../../../../shared/communityTypes";
 import { UserAvatar } from "../../../../shared/UserAvatar";
-import { isDesignV1Active } from "../../../../shared/designSystem";
 import { interactionMentionsViewer } from "../controllers/communityMentionAttention";
 import { resolveCommunityInteractionOverflowMenuPlacement } from "../controllers/resolveCommunityInteractionOverflowMenuPlacement";
 
@@ -77,18 +76,18 @@ export function kindChipLabel(kind: string): string | null {
   );
 }
 
-// Design system v1 calls the community's agent its guide.
+// The community's agent is tagged "guide".
 export function agentBadgeLabel(actorType: string): string | null {
-  if (actorType === "community_agent") return isDesignV1Active() ? "guide" : "Agent";
+  if (actorType === "community_agent") return "guide";
   return null;
 }
 
-// Design system v1: the owner's own posts carry a quiet "host" tag.
+// The owner's own posts carry a quiet "host" tag.
 export function hostBadgeLabel(
   root: { actor_type: string; actor_user_id: string | null },
   communityOwnerId: string | null | undefined,
 ): string | null {
-  if (!isDesignV1Active() || root.actor_type !== "human") return null;
+  if (root.actor_type !== "human") return null;
   return communityOwnerId && root.actor_user_id === communityOwnerId ? "host" : null;
 }
 

@@ -7,21 +7,9 @@ const assetsDir = join(appDir, "dist", "assets");
 const limits = {
   maxSingleJsBytes: readLimit("WEB_BUNDLE_MAX_SINGLE_JS_BYTES", 1_600_000),
   maxIndexJsBytes: readLimit("WEB_BUNDLE_MAX_INDEX_JS_BYTES", 1_000_000),
-  // Raised from 3_400_000 on Nov 13 2026: design v1 and the classic layout
-  // both ship until the classic layout is deleted (cleanup wave 2), which
-  // should take the total well under the old limit; lower it again then.
-  // Raised again from 3_420_000 on Nov 16 2026, for the same reason: main sat
-  // 0.4 KiB under it and each slice of the address, live-data and layout work
-  // added about 2 KiB. This is 20 KiB of room, not a new target.
-  // Nov 17: +10 KB for files in direct messages (upload, progress, retry,
-  // and drawing a sent file), which went 2 KiB over.
-  // Nov 17: +15 KB for editing a course in the page (the lesson editor as the
-  // page, drag to reorder), which went 0.2 KiB over.
-  // Nov 17: +15 KB for the host's "Needs you" list on Home (join requests
-  // and waiting course changes decided in place), which went 5.3 KiB over.
-  // Nov 20: +10 KB for responsive course shelf paging and automatic inline
-  // loading/caching of private pod chat images, which went 1.9 KiB over.
-  maxTotalJsBytes: readLimit("WEB_BUNDLE_MAX_TOTAL_JS_BYTES", 3_490_000),
+  // Tightened back to 3_400_000 on Nov 23 2026 after retiring the classic
+  // pre-redesign UI branches and feature flag (~67 KiB removed).
+  maxTotalJsBytes: readLimit("WEB_BUNDLE_MAX_TOTAL_JS_BYTES", 3_400_000),
   maxHostOnlyJsBytes: readLimit("WEB_BUNDLE_MAX_HOST_ONLY_JS_BYTES", 800_000),
 };
 

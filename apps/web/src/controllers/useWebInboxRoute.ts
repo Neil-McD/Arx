@@ -1,6 +1,5 @@
 import { useEffect, useRef } from "react";
 
-import { isDesignV1Active } from "../../../../shared/designSystem";
 import { readRouteDetail, useRouteDetail, writeRouteDetail } from "../../../../shared/routeDetails";
 import { buildCommunityHomePath, buildCommunityTabPath } from "../../../../shared/webAppRouteState";
 import type { AppPage, CommunityTab } from "../../../../shared/appShellNavigation";
@@ -19,7 +18,7 @@ export function useWebInboxRoute(params: {
   openConversationById: (conversationId: string) => void;
 }) {
   const { directMessages } = params;
-  const isInboxRoute = isDesignV1Active() && params.activePage === "community" && params.communityTab === "inbox";
+  const isInboxRoute = params.activePage === "community" && params.communityTab === "inbox";
   const isInboxRouteRef = useRef(isInboxRoute);
   isInboxRouteRef.current = isInboxRoute;
   const latest = useRef(params);
@@ -35,7 +34,7 @@ export function useWebInboxRoute(params: {
     openedFromRef.current = null;
   }
 
-  directMessages.addressRef.current = isDesignV1Active() ? {
+  directMessages.addressRef.current = {
     isOpen: () => isInboxRouteRef.current,
     open: () => {
       if (isInboxRouteRef.current) return true;
@@ -59,7 +58,7 @@ export function useWebInboxRoute(params: {
         : buildCommunityTabPath(latest.current.communitySlug, "chat");
       if (path) latest.current.navigateTo(path, { replace: true });
     },
-  } : null;
+  };
 
   // Arriving on Inbox with a conversation in the address (refresh, back, a
   // link): open that one, unless it is the one Inbox already shows.

@@ -175,12 +175,13 @@ try {
   await dmCard.click();
   await page.locator(".textLayer").getByText("Welcome to the community", { exact: true }).waitFor();
   await page.getByRole("button", { name: "Next", exact: true }).click();
-  assert.equal(await page.locator(".community-dm-panel").count(), 1, "Reader controls must not close the real DM host");
+  const dmConversationPanel = page.locator(".community-dm-panel:not(.community-dm-inbox-panel)");
+  assert.equal(await dmConversationPanel.count(), 1, "Reader controls must not close the real DM host");
   await page.locator(".textLayer").getByText("Your first useful contribution", { exact: true }).waitFor();
   // Next is now disabled on the final page. Browsers can move focus to body;
   // Escape must still belong to the open modal, regardless of its event target.
   await page.keyboard.press("Escape");
-  assert.equal(await page.locator(".community-dm-panel").count(), 1, "Escape after last-page Next must not close the DM host");
+  assert.equal(await dmConversationPanel.count(), 1, "Escape after last-page Next must not close the DM host");
   await dmCard.click();
   await page.locator(".textLayer").getByText("Welcome to the community", { exact: true }).waitFor();
   const dmDownload = page.waitForEvent("download");
@@ -191,14 +192,16 @@ try {
     await page.locator("dialog[open]").evaluate((element) => getComputedStyle(element).color), "Reader link uses its own surface contrast, not the message bubble's link color");
   await page.keyboard.press("Escape");
   assert.equal(await page.locator("dialog[open]").count(), 0);
-  assert.equal(await page.locator(".community-dm-panel").count(), 1, "Escape must close only the reader");
+  assert.equal(await dmConversationPanel.count(), 1, "Escape must close only the reader");
   assert(await dmCard.evaluate((element) => element === document.activeElement), "Focus returns to document card");
   await page.keyboard.press("Escape");
   assert.equal(await page.locator(".web-direct-messages-host").count(), 0, "Next Escape closes the DM host normally");
   await page.getByRole("button", { name: "Open conversation", exact: true }).click();
   await page.locator(".web-direct-messages-host").waitFor({ state: "attached" });
   await page.getByRole("button", { name: "Outside conversation", exact: true }).click();
-  assert.equal(await page.locator(".web-direct-messages-host").count(), 0, "Outside click still dismisses the DM host");
+  assert.equal(await page.locator(".web-direct-messages-host").count(), 1, "Inbox page does not race-dismiss on outside click");
+  await page.keyboard.press("Escape");
+  assert.equal(await page.locator(".web-direct-messages-host").count(), 0, "Escape dismisses reopened DM host");
 
   for (const width of [320, 390, 768, 1200]) {
     for (const theme of ["light", "dark"]) {

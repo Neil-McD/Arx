@@ -57,7 +57,7 @@ test("the feed's loading line and its posts are separate elements", () => {
 
 test("a channel's header row is held until its record arrives", () => {
   expect(read("apps/web/src/components/WebCommunityInteractionProjection.tsx"))
-    .toMatch(/\) : isDesignV1Active\(\) \? \([\s\S]{0,220}<header className="community-channel-header" aria-hidden="true" \/>/);
+    .toMatch(/\) : \([\s\S]{0,220}<header className="community-channel-header" aria-hidden="true" \/>/);
 });
 
 test("Knowledge holds its builder row and draws its right column as one piece", () => {

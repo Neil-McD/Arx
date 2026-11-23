@@ -1,4 +1,3 @@
-import { isDesignV1Active } from "../../../../shared/designSystem";
 import {
   useCallback,
   useEffect,
@@ -105,17 +104,8 @@ export function getWebCommunityEventsListRange(now: Date = new Date()): Communit
   return { startIso: start.toISOString(), endIso: new Date(start.getTime() + EVENTS_LIST_SPAN_MS).toISOString() };
 }
 
-export function getWebCommunityEventsMonthRange(monthIso: string): CommunityEventsRange {
-  if (isDesignV1Active()) return getWebCommunityEventsListRange();
-  const monthStart = new Date(normalizeEventsMonthIso(monthIso));
-  const start = new Date(monthStart);
-  start.setDate(monthStart.getDate() - monthStart.getDay());
-  const end = new Date(start);
-  end.setDate(start.getDate() + 42);
-  return {
-    startIso: start.toISOString(),
-    endIso: end.toISOString(),
-  };
+export function getWebCommunityEventsMonthRange(_monthIso: string): CommunityEventsRange {
+  return getWebCommunityEventsListRange();
 }
 
 function buildEventsCacheKey(

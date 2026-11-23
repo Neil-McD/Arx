@@ -3,9 +3,10 @@ import { expect, test } from "vitest";
 const read = (path: string) => readFileSync(new URL("../" + path, import.meta.url), "utf8");
 const roster = read("apps/web/src/components/ChannelRosterPanel.tsx");
 
-test("members popup reuses the roster renderer with community scope, not a second directory engine", () => {
+test("members page reuses the roster renderer with community scope, not a second directory engine", () => {
   expect(roster).toContain('channelId={undefined} narrowOpen={false}');
-  expect(roster).toContain('directory onCloseMembers=');
+  expect(roster).toContain('directory inline');
+  expect(roster).toContain('goToMembersPage()');
   expect(roster.match(/watchQuery\(api.communityChannelParticipants.listChannelRoster/g)).toHaveLength(1);
   expect(roster.match(/<UserAvatar\b/g)).toHaveLength(1);
   expect(roster.match(/<CommunityMemberSettingsDialog\b/g)).toHaveLength(1);

@@ -25,6 +25,7 @@ function DirectMessageReview() {
   </div>;
 }
 document.documentElement.dataset.theme = new URLSearchParams(location.search).get("theme") || "dark";
+document.documentElement.dataset.design = "v1";
 createRoot(document.getElementById("root")!).render(<>
   <style>{`
     html, body, #root { height:auto; min-height:100%; overflow:auto; }

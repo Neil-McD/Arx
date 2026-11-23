@@ -24,7 +24,6 @@ import {
   House,
   ArrowLeft,
 } from "lucide-react";
-import { isDesignV1Active } from "../../../../shared/designSystem";
 import { useRouteDetail, writeRouteDetail } from "../../../../shared/routeDetails";
 import { Chips, Dock, Icon, KitApp, Mine, Scroll, Talk, Theirs, Top, View, cx } from "../v1/kit";
 import { getAuthUrl, type AuthSession } from "../auth";
@@ -1119,8 +1118,7 @@ function WebCommunityAgentDock(props, ref) {
     props.surfaceContext,
     communityName,
   );
-  // Design system v1 calls it the guide, and its page is Home.
-  const guideWording = isDesignV1Active() && props.pageMode;
+  const guideWording = Boolean(props.pageMode);
   const presentation = guideWording
     ? { ...legacyPresentation, title: props.home ? "Home" : "Your guide", surfaceLabel: communityName, emptyLabel: "How can I help?", composerLabel: "Ask your guide anything", loadingLabel: "Loading conversation" }
     : { ...legacyPresentation, title: "Agent", surfaceLabel: communityName, emptyLabel: "How can I help?", composerLabel: "Message the community agent", loadingLabel: "Loading conversation" };

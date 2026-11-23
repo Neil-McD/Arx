@@ -35,7 +35,7 @@ test("opening the community is the one completion, with no resource build", () =
   expect(controller).toMatch(/if \(!result\.ok\) throw new Error\(/);
   // The community opens where the step says: Home in design v1.
   expect(controller).toMatch(/params\.enterCommunity\(\{[\s\S]*?communityTab: params\.tab,/);
-  expect(appSource).toContain('const launchTab = isDesignV1Active() ? "agent" as const : "chat" as const;');
+  expect(appSource).toContain('const launchTab = "agent" as const;');
 });
 
 test("a failure to save step 2's answers cannot trap the founder in setup", () => {

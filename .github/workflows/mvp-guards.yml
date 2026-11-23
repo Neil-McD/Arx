@@ -98,6 +98,7 @@ jobs:
 
   release-gate:
     name: Release Gate
+    if: always()
     needs:
       - typecheck-and-build
       - tests-and-invariants
@@ -105,6 +106,14 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 2
     steps:
-      - name: All required checks passed
+      - name: Verify all required checks passed
+        env:
+          TYPECHECK_RESULT: ${{ needs.typecheck-and-build.result }}
+          TESTS_RESULT: ${{ needs.tests-and-invariants.result }}
+          BROWSER_RESULT: ${{ needs.browser-checks.result }}
         run: |
+          if [ "$TYPECHECK_RESULT" != "success" ] || [ "$TESTS_RESULT" != "success" ] || [ "$BROWSER_RESULT" != "success" ]; then
+            echo "FAIL: Release Gate failed (typecheck=$TYPECHECK_RESULT, tests=$TESTS_RESULT, browser=$BROWSER_RESULT)"
+            exit 1
+          fi
           echo "PASS: Release Gate succeeded."

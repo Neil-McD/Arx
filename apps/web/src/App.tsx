@@ -10,7 +10,6 @@ import {
   useMemo,
   useRef,
 } from "react";
-import { isDesignV1Active } from "../../../shared/designSystem";
 import {
   beginBrowserSignedOutState,
   type AuthSession,
@@ -122,7 +121,6 @@ import {
 } from "./communityJoinPolicy";
 import { useWebAccountCommerceActions } from "./controllers/useWebAccountCommerceActions";
 import { useWebAccountCommerceStatus } from "./controllers/useWebAccountCommerceStatus";
-import { useWebDiscoverPreloadLifecycle } from "./controllers/useWebDiscoverPreloadLifecycle";
 import { useWebDiscoverAddress } from "./controllers/useWebDiscoverAddress";
 import type { WebCommunityDiscoverPageProps } from "./components/WebCommunityDiscoverPage";
 import { useWebBillingUiController } from "./controllers/useWebBillingUiController";
@@ -576,8 +574,8 @@ export default function App() {
     getSession: () => sessionRef.current ?? session,
     session,
   });
-  // A community just created opens on Home (design v1), behind its last step.
-  const launchTab = isDesignV1Active() ? "agent" as const : "chat" as const;
+  // A community just created opens on Home, behind its last step.
+  const launchTab = "agent" as const;
   const { pendingCommunity: pendingLaunchCommunity } = useWebPendingCommunityController({
     communities,
     activeCommunityId,
@@ -927,14 +925,8 @@ export default function App() {
       loadUserProfiles,
     });
 
-  useWebDiscoverPreloadLifecycle({
-    activePage,
-    isLoadingDiscover,
-    lastDiscoverLoadAttemptedAt,
-    loadDiscoverCommunities,
-  });
   // Join requests and the member tools load where they are shown: beside a
-  // channel, and on the Members page (design v1).
+  // channel, and on the Members page.
   const shouldHydrateCommunityContextPanel =
     activePage === "community" &&
     (communityTab === "chat" || communityTab === "members");
@@ -1026,8 +1018,8 @@ export default function App() {
     communities,
     canReviewJoinRequests: canReviewJoinRequestsActiveCommunity,
     activeCommunityMembersJoinReviewMode,
-    // Home's "Needs you" list (design v1) shows the people waiting too.
-    shouldLoad: shouldHydrateCommunityContextPanel || (activePage === "community" && communityTab === "agent" && isDesignV1Active()),
+    // Home's "Needs you" list shows the people waiting too.
+    shouldLoad: shouldHydrateCommunityContextPanel || (activePage === "community" && communityTab === "agent"),
     loadCommunityJoinRequests,
     resetCommunityJoinRequests,
   });
@@ -1897,7 +1889,7 @@ export default function App() {
   // The guide's page: desktop Home, and design v1's phone Home tab. On a v1
   // phone it stays one page across the tabs (hidden off Home), so a draft to
   // the guide survives a look at Inbox.
-  const communityAgentPageMode = !showMobileShell || isDesignV1Active();
+  const communityAgentPageMode = true;
   const leavePhoneHome = () => {
     if (showMobileShell && mobileRootPage === "agent") setMobileRootPage("community");
   };
@@ -1940,12 +1932,8 @@ export default function App() {
 
   const handleToggleMemberPreview = (on: boolean) => {
     memberPreview.set(on);
-    // In Design v1, private rooms are Pods — stay inside the Pod so hosts can
-    // inspect the enrolled-member experience directly without getting kicked out.
-    if (on && activeCommunityChannel?.access_mode === "restricted" && !isDesignV1Active()) {
-      const path = buildCommunityTabPath(selectedActiveCommunitySlug, "chat");
-      if (path) navigateTo(path);
-    }
+    // Private rooms are Pods — stay inside the Pod so hosts can inspect the
+    // enrolled-member experience directly without getting kicked out.
   };
   const shellChromeHostProps = buildWebShellChromeHostProps({
     account: buildWebShellAccountProps({
@@ -1960,11 +1948,8 @@ export default function App() {
       onSetAppTheme: setAppTheme,
       onSignOut: handleSignOut,
     }),
-    // Design v1: Members is a page of the community (/c/:slug/members).
-    // A page you choose, like any other: a history step, nothing when already there.
-    onOpenCommunityMembers: isDesignV1Active()
-      ? () => handleSelectCommunityTab("members")
-      : handleOpenCommunityMembers,
+    // Members is a page of the community (/c/:slug/members).
+    onOpenCommunityMembers: () => handleSelectCommunityTab("members"),
     onToggleDirectMessages: handleToggleDirectMessages,
     isDirectMessagesOpen,
     showMobileAppShell,
@@ -2047,9 +2032,9 @@ export default function App() {
     onCopyCommunityJoinLink: copyTextToClipboard,
     canOpenDirectMessages: Boolean(session),
     directMessagesUnreadCount,
-    // Design v1: Discover is a page of the community you are in.
+    // Discover is a page of the community you are in.
     handleOpenDiscover: () => {
-      if (isDesignV1Active() && selectedActiveCommunitySlug) handleSelectCommunityTab("discover");
+      if (selectedActiveCommunitySlug) handleSelectCommunityTab("discover");
       else handleOpenDiscover();
     },
     openMobileCreateCommunity,
@@ -2121,7 +2106,7 @@ export default function App() {
       communityAgentDockRef={communityAgentComposerApiRef}
       communityAgentDockProps={{
         home: buildWebCommunityAgentHomeProps({
-          designV1Active: isDesignV1Active(),
+          designV1Active: true,
           activeCommunity,
           canonicalSessionUserId,
           activeCommunityAccess,

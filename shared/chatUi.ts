@@ -1,4 +1,3 @@
-import { isDesignV1Active } from "./designSystem";
 export function shortId(id: string, currentUserId?: string, currentUserEmail?: string): string {
   if (currentUserId && id === currentUserId && currentUserEmail) {
     const prefix = currentUserEmail.split("@")[0];
@@ -22,37 +21,12 @@ function hashCode(str: string): number {
 export const DESIGN_V1_AVATAR_TINTS = 6;
 
 export function getAvatarColor(id: string): string {
-  if (isDesignV1Active()) {
-    return `var(--avatar-tint-${(Math.abs(hashCode(id)) % DESIGN_V1_AVATAR_TINTS) + 1})`;
-  }
-  const colors = [
-    "#e57373",
-    "#f06292",
-    "#ba68c8",
-    "#9575cd",
-    "#7986cb",
-    "#64b5f6",
-    "#4fc3f7",
-    "#4dd0e1",
-    "#4db6ac",
-    "#81c784",
-    "#aed581",
-    "#dce775",
-    "#fff176",
-    "#ffd54f",
-    "#ffb74d",
-    "#ff8a65",
-    "#a1887f",
-    "#90a4ae",
-  ];
-  const index = Math.abs(hashCode(id)) % colors.length;
-  return colors[index];
+  return `var(--avatar-tint-${(Math.abs(hashCode(id)) % DESIGN_V1_AVATAR_TINTS) + 1})`;
 }
 
 export function getInitials(id: string): string {
   // Design system v1: one letter, as in the mock ("J" for Jon).
-  if (isDesignV1Active()) return (id.trim().charAt(0) || "?").toUpperCase();
-  return id.slice(0, 2).toUpperCase();
+  return (id.trim().charAt(0) || "?").toUpperCase();
 }
 
 export function downloadTextFile(filename: string, content: string, mime = "text/csv;charset=utf-8"): void {
