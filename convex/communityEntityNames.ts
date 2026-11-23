@@ -12,7 +12,9 @@ import { resolveCommunityChannelActor } from "./communityChannelAccess";
 import { listAuthorizedCommunityChannels } from "./communityChannelCore";
 import { eventViewer, visibleEvents } from "./communityEventAudience";
 import { expandCommunityEventRows, listCommunityEventExpansionCandidates } from "./communityEvents";
-import { ENTITY_NAMES_MAX, type EntityNameRow } from "../shared/entityChips";
+import { ENTITY_NAMES_MAX, clipAbout, type EntityNameRow } from "../shared/entityChips";
+import { lessonVideoProvider } from "../shared/videoEmbed";
+import { podRecord } from "./communityPods";
 
 // The names of what this reader can open in a community: courses, lessons,
 // channels, pods and upcoming events (docs/specs/guide-chips-end-state.md,
@@ -45,19 +47,38 @@ export const listEntityNamesForViewer = query({
         .withIndex("by_community", (q: any) => q.eq("communityId", args.communityId)).collect() as Promise<any[]>,
     ]);
     const liveModuleIds = new Set(modules.filter(communityResourceModuleIsLive).map((row) => normalizeIdValue(row._id)));
-    const shownModuleIds = new Set<string>();
-    for (const module of modules) {
-      const id = normalizeIdValue(module._id);
-      if (!canManage && !liveModuleIds.has(id)) continue;
-      shownModuleIds.add(id);
-      rows.push({ kind: "course", name: String(module.name ?? ""), id });
-    }
+    // This reader's finished lessons, for progress on the cards.
+    const finished = new Set(((await ctx.db.query("communityLessonProgress" as any)
+      .withIndex("by_community_user", (q: any) => q.eq("communityId", args.communityId).eq("userId", userId))
+      .collect()) as any[]).map((row) => normalizeIdValue(row.resourceId)));
+    const shownModules = modules
+      .filter((module) => canManage || liveModuleIds.has(normalizeIdValue(module._id)))
+      .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
+    const moduleNames = new Map(shownModules.map((module) => [normalizeIdValue(module._id), String(module.name ?? "")]));
+    // Each course's lessons this reader can open, in course order.
+    const lessonsByModule = new Map<string, any[]>();
     for (const resource of resources) {
       if (resource.role !== "page" || !resource.moduleId) continue;
       const moduleId = normalizeIdValue(resource.moduleId);
-      if (!shownModuleIds.has(moduleId)) continue;
+      if (!moduleNames.has(moduleId)) continue;
       if (!canManage && !communityResourceIsLiveModulePage(resource, liveModuleIds)) continue;
-      rows.push({ kind: "lesson", name: String(resource.title ?? ""), id: normalizeIdValue(resource._id), parentId: moduleId });
+      lessonsByModule.set(moduleId, [...(lessonsByModule.get(moduleId) ?? []), resource]);
+    }
+    for (const module of shownModules) {
+      const id = normalizeIdValue(module._id);
+      const lessons = (lessonsByModule.get(id) ?? []).slice().sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
+      const done = lessons.filter((lesson) => finished.has(normalizeIdValue(lesson._id))).length;
+      const next = lessons.find((lesson) => !finished.has(normalizeIdValue(lesson._id))) ?? null;
+      rows.push({ kind: "course", name: String(module.name ?? ""), id, facts: {
+        about: clipAbout(module.descriptionMd), lessons: lessons.length, done,
+        nextLessonId: next ? normalizeIdValue(next._id) : null, nextLessonTitle: next ? String(next.title ?? "") : null,
+      } });
+      for (const lesson of lessons) {
+        const lessonId = normalizeIdValue(lesson._id);
+        rows.push({ kind: "lesson", name: String(lesson.title ?? ""), id: lessonId, parentId: id, facts: {
+          courseName: moduleNames.get(id) ?? null, finished: finished.has(lessonId), hasVideo: Boolean(lessonVideoProvider(lesson.url)),
+        } });
+      }
     }
 
     // Channels and pods (a pod is an invite-only channel): only those this
@@ -65,11 +86,16 @@ export const listEntityNamesForViewer = query({
     const actor = await resolveCommunityChannelActor({ ctx, communityId: args.communityId, userId });
     const channels = await listAuthorizedCommunityChannels({ ctx, communityId: args.communityId, actor });
     for (const channel of channels as any[]) {
+      const isPod = channel.accessMode === "restricted";
+      const pod = isPod ? await podRecord(ctx, args.communityId, channel._id) : null;
       rows.push({
-        kind: channel.accessMode === "restricted" ? "pod" : "channel",
+        kind: isPod ? "pod" : "channel",
         name: String(channel.name ?? ""),
         id: normalizeIdValue(channel._id),
         slug: String(channel.slug ?? ""),
+        facts: isPod
+          ? { about: clipAbout((pod as any)?.purpose), seats: typeof (pod as any)?.seats === "number" ? (pod as any).seats : null }
+          : { about: clipAbout(channel.description) },
       });
     }
 
@@ -87,7 +113,11 @@ export const listEntityNamesForViewer = query({
       const parent = String(event.parent_event_id ?? event.id);
       if (seenEvents.has(parent)) continue;
       seenEvents.add(parent);
-      rows.push({ kind: "event", name: String(event.title ?? ""), id: String(event.id), startsAt: event.starts_at ?? null });
+      const repeats = event.recurrence_frequency;
+      rows.push({ kind: "event", name: String(event.title ?? ""), id: String(event.id), startsAt: event.starts_at ?? null, facts: {
+        where: (event.location_type as any) ?? null, place: event.location_label ?? null,
+        repeats: repeats === "daily" || repeats === "weekly" || repeats === "monthly" ? repeats : null,
+      } });
     }
 
     return { entries: rows.filter((row) => row.name.trim()).slice(0, ENTITY_NAMES_MAX) };

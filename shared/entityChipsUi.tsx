@@ -1,7 +1,9 @@
 import { createContext, useContext, useMemo, type MouseEvent, type ReactNode } from "react";
+import type React from "react";
 import { resolveAuthSubject, type AuthSessionLike } from "./authSession";
 import { useLiveQuery } from "./liveQuery";
-import { buildEntityNameIndex, matchEntityName, type EntityKind, type EntityNameRow, type EntityTarget } from "./entityChips";
+import { buildEntityNameIndex, cardAction, cardLines, chipFact, matchEntityName, type EntityKind, type EntityNameRow, type EntityTarget } from "./entityChips";
+import { useHoverIntent } from "./useHoverIntent";
 
 // Chips in the guide's replies (docs/specs/guide-chips-end-state.md, slice 1).
 // The app holds one list of what the reader can open in the community they
@@ -65,18 +67,61 @@ const ICONS: Record<EntityKind, ReactNode> = {
 
 export function EntityChip(props: { target: EntityTarget; label: ReactNode; navigate: (path: string) => void }) {
   const { target } = props;
-  const onClick = (event: MouseEvent<HTMLAnchorElement>) => {
+  // Pages need no card: their name says it all.
+  const hasCard = target.kind !== "page";
+  const hover = useHoverIntent<HTMLSpanElement>({ enabled: hasCard, maxCardHeight: 220 });
+  const go = (path: string) => (event: MouseEvent<HTMLAnchorElement>) => {
     if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
     event.preventDefault();
-    props.navigate(target.path);
+    hover.closeNow();
+    props.navigate(path);
   };
+  const fact = chipFact(target);
+  const lines = hasCard ? cardLines(target) : [];
+  const action = cardAction(target);
+  const progress = target.kind === "course" && (target.facts?.lessons ?? 0) > 0
+    ? Math.round(100 * Math.min(target.facts?.done ?? 0, target.facts?.lessons ?? 0) / (target.facts?.lessons ?? 1))
+    : null;
   return (
-    <a className={`entity-chip is-${target.kind}`} href={target.path} onClick={onClick} data-entity-kind={target.kind}>
-      <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        {ICONS[target.kind]}
-      </svg>
-      <span className="entity-chip-name">{props.label}</span>
-    </a>
+    <span className="entity-chip-wrap" ref={hover.anchorRef} onMouseEnter={hover.openHover} onMouseLeave={hover.scheduleClose}>
+      <a
+        className={`entity-chip is-${target.kind}`}
+        href={target.path}
+        onClick={go(target.path)}
+        onFocus={hover.openHover}
+        onBlur={hover.scheduleClose}
+        onKeyDown={(event) => { if (event.key === "Escape") hover.closeNow(); }}
+        data-entity-kind={target.kind}
+      >
+        <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          {ICONS[target.kind]}
+        </svg>
+        <span className="entity-chip-name">{props.label}</span>
+        {target.kind === "lesson" && target.facts?.finished ? <span className="entity-chip-fact" aria-label="finished">✓</span> : null}
+        {fact ? <span className="entity-chip-fact">{fact}</span> : null}
+      </a>
+      {hasCard ? (
+        <span
+          ref={hover.cardRef as unknown as React.Ref<HTMLSpanElement>}
+          className={`entity-card${hover.open ? " is-open" : ""}`}
+          data-placement={hover.placement}
+          role="group"
+          aria-label={`${target.name} preview`}
+          onMouseEnter={hover.openHover}
+          onMouseLeave={hover.scheduleClose}
+        >
+          <span className="entity-card-name">{target.name}</span>
+          {lines.map((line, index) => <span key={index} className="entity-card-line">{line}</span>)}
+          {progress !== null ? (
+            <span className="entity-card-bar" aria-hidden="true"><span style={{ width: `${progress}%` }} /></span>
+          ) : null}
+          {target.kind === "course" && progress !== null ? (
+            <span className="entity-card-line">{`${Math.min(target.facts?.done ?? 0, target.facts?.lessons ?? 0)} of ${target.facts?.lessons} done`}</span>
+          ) : null}
+          <a className="entity-card-action" href={action.path} onClick={go(action.path)} tabIndex={hover.open ? 0 : -1}>{action.label} →</a>
+        </span>
+      ) : null}
+    </span>
   );
 }
 

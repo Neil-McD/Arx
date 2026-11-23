@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { buildEntityNameIndex, entityNameKey, entityPath, matchEntityName, type EntityNameRow } from "../shared/entityChips";
+import { buildEntityNameIndex, cardAction, cardLines, chipFact, clipAbout, entityNameKey, entityPath, matchEntityName, type EntityNameRow } from "../shared/entityChips";
+import { HOVER_CLOSE_MS, HOVER_OPEN_MS } from "../shared/useHoverIntent";
 
 const rows: EntityNameRow[] = [
   { kind: "course", name: "Start here", id: "m1" },
@@ -42,5 +43,47 @@ describe("chips: names in the guide's words", () => {
     expect(buildEntityNameIndex(null, rows).size).toBe(0);
     expect(entityPath("polynet", { kind: "lesson", name: "Orphan", id: "l9" })).toBeNull();
     expect(entityPath("polynet", { kind: "channel", name: "No slug", id: "c9" })).toBeNull();
+  });
+});
+
+describe("chips: the card and the fact on the chip (slice 3)", () => {
+  const rows: EntityNameRow[] = [
+    { kind: "course", name: "Start here", id: "m1", facts: { about: "Your first ten minutes.", lessons: 5, done: 2, nextLessonId: "l3", nextLessonTitle: "Meet the guide" } },
+    { kind: "course", name: "Build", id: "m2", facts: { lessons: 3, done: 0, nextLessonId: "l9", nextLessonTitle: "Start your community" } },
+    { kind: "course", name: "Finished one", id: "m3", facts: { lessons: 2, done: 2, nextLessonId: null, nextLessonTitle: null } },
+    { kind: "lesson", name: "A tour", id: "l2", parentId: "m1", facts: { courseName: "Start here", finished: true, hasVideo: true } },
+    { kind: "channel", name: "wins", id: "c2", slug: "wins", facts: { about: "What worked." } },
+    { kind: "pod", name: "Founders", id: "p1", slug: "founders", facts: { about: "Founders only.", seats: 12 } },
+    { kind: "event", name: "Group Call", id: "e1", startsAt: "2026-11-27T15:00:00.000Z", facts: { where: "online", repeats: "weekly" } },
+  ];
+  const index = buildEntityNameIndex("polynet", rows);
+  const get = (name: string) => matchEntityName(index, name)!;
+
+  it("shows progress on a course chip and the next time on an event chip, in the reader's zone", () => {
+    expect(chipFact(get("Start here"))).toBe("2 of 5");
+    expect(chipFact(get("Group Call"), "UTC")).toBe("Fri 3:00 PM");
+    expect(chipFact(get("Group Call"), "America/New_York")).toBe("Fri 10:00 AM");
+    expect(chipFact(get("wins"))).toBeNull();
+  });
+
+  it("each card says what the thing is and where you are with it", () => {
+    expect(cardLines(get("Start here"))).toEqual(["Your first ten minutes."]);
+    expect(cardLines(get("A tour"))).toEqual(["In Start here", "Finished · Video"]);
+    expect(cardLines(get("wins"))).toEqual(["What worked."]);
+    expect(cardLines(get("Founders"))).toEqual(["Founders only.", "12 seats"]);
+    expect(cardLines(get("Group Call"), "America/New_York")).toEqual(["Friday, Nov 27, 10:00 AM", "Online · Every week"]);
+  });
+
+  it("a course card continues, starts or reviews; others open the thing", () => {
+    expect(cardAction(get("Start here"))).toEqual({ label: "Continue: Meet the guide", path: "/c/polynet/knowledge/m1/l3" });
+    expect(cardAction(get("Build"))).toEqual({ label: "Start: Start your community", path: "/c/polynet/knowledge/m2/l9" });
+    expect(cardAction(get("Finished one"))).toEqual({ label: "Review the course", path: "/c/polynet/knowledge/m3" });
+    expect(cardAction(get("Group Call")).label).toBe("Open event");
+  });
+
+  it("descriptions are short, and the card keeps the profile card's timing", () => {
+    expect(clipAbout("x".repeat(300))?.length).toBe(140);
+    expect(clipAbout("   ")).toBeNull();
+    expect([HOVER_OPEN_MS, HOVER_CLOSE_MS]).toEqual([450, 140]);
   });
 });

@@ -64,3 +64,26 @@ test("someone outside the community gets nothing", async () => {
   const { read } = await fixture();
   await expect(read("outsider")).rejects.toThrow();
 });
+
+test("the card's facts are this reader's: progress, next lesson, video, description, when and where", async () => {
+  const { t, ids, read } = await fixture();
+  await t.run(async (ctx: any) => {
+    const member = (await ctx.db.query("users").collect()).find((row: any) => row.authSubject === "member");
+    const tour = (await ctx.db.query("communityResources").collect()).find((row: any) => row.title === "A tour");
+    const module = await ctx.db.get(tour.moduleId);
+    await ctx.db.patch(tour._id, { url: "https://youtu.be/dQw4w9WgXcQ" });
+    await ctx.db.patch(module._id, { descriptionMd: "Your first ten minutes." });
+    await ctx.db.insert("communityResources", { communityId: ids.communityId, createdByUserId: module.createdByUserId, moduleId: module._id, type: "post", role: "page", status: "draft",
+      title: "Meet the guide", bodyMd: "Words.", bodyChars: 6, pinned: false, sortOrder: 2, sourceIngestionStatus: "not_required", sourceIngestionKind: "manual", createdAt: NOW, updatedAt: NOW });
+    await ctx.db.patch(tour._id, { sortOrder: 1 });
+    await ctx.db.insert("communityLessonProgress", { communityId: ids.communityId, userId: member._id, resourceId: tour._id, completedAt: NOW });
+  });
+  const rows = (await read("member")).entries as any[];
+  const course = rows.find((row) => row.kind === "course" && row.name === "Start here");
+  expect(course.facts).toMatchObject({ about: "Your first ten minutes.", lessons: 2, done: 1, nextLessonTitle: "Meet the guide" });
+  expect(rows.find((row) => row.name === "A tour").facts).toMatchObject({ courseName: "Start here", finished: true, hasVideo: true });
+  expect(rows.find((row) => row.name === "Group Call").facts).toMatchObject({ where: "online", repeats: "weekly" });
+  // Someone else's progress is not this reader's.
+  const hostCourse = ((await read("owner")).entries as any[]).find((row) => row.kind === "course" && row.name === "Start here");
+  expect(hostCourse.facts.done).toBe(0);
+});

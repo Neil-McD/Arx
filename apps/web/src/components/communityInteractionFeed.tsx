@@ -1,4 +1,5 @@
 import { GuideVoice } from "../../../../shared/entityChipsUi";
+import { useHoverIntent } from "../../../../shared/useHoverIntent";
 import { askInApp } from "../../../../shared/inAppConfirm";
 import { Fragment, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { enterSendsMessage, isImeComposing } from "../controllers/communityComposerTextEditing";
@@ -445,63 +446,12 @@ export function ProfileHoverCard(props: {
   triggerClassName?: string;
   online?: boolean;
 }) {
-  const anchorRef = useRef<HTMLSpanElement | null>(null);
-  const cardRef = useRef<HTMLDivElement | null>(null);
-  const closeTimer = useRef<number | null>(null);
-  const openTimer = useRef<number | null>(null);
-  const [open, setOpen] = useState(false);
-  const [placement, setPlacement] = useState<"top" | "bottom">("top");
   const userId = props.userId;
-
-  const clearClose = () => {
-    if (closeTimer.current === null) return;
-    window.clearTimeout(closeTimer.current);
-    closeTimer.current = null;
-  };
-  const clearOpen = () => {
-    if (openTimer.current === null) return;
-    window.clearTimeout(openTimer.current);
-    openTimer.current = null;
-  };
-  const resolvePlacement = (): "top" | "bottom" => {
-    const anchor = anchorRef.current;
-    if (!anchor) return "top";
-    const rect = anchor.getBoundingClientRect();
-    const viewport = anchor.closest(
-      ".community-interaction-feed-scroll, .community-interaction-drawer-scroll",
-    );
-    const vRect = viewport instanceof HTMLElement ? viewport.getBoundingClientRect() : null;
-    const top = Math.max(0, vRect?.top ?? 0);
-    const bottom = Math.min(window.innerHeight, vRect?.bottom ?? window.innerHeight);
-    const cardHeight = Math.min(cardRef.current?.getBoundingClientRect().height || 188, 188);
-    const required = cardHeight + 10;
-    const spaceAbove = rect.top - top;
-    const spaceBelow = bottom - rect.bottom;
-    return spaceAbove < required && spaceBelow > spaceAbove ? "bottom" : "top";
-  };
-  const openHover = () => {
-    if (!userId) return;
-    clearClose();
-    if (open || openTimer.current !== null) return;
-    // Hover-intent delay so the card doesn't fire while sweeping past names/avatars.
-    openTimer.current = window.setTimeout(() => {
-      openTimer.current = null;
-      setPlacement(resolvePlacement());
-      setOpen(true);
-    }, 450);
-  };
-  const scheduleClose = () => {
-    clearOpen();
-    clearClose();
-    closeTimer.current = window.setTimeout(() => {
-      setOpen(false);
-      closeTimer.current = null;
-    }, 140);
-  };
-  useEffect(() => () => {
-    clearOpen();
-    clearClose();
-  }, []);
+  const { anchorRef, cardRef, open, placement, openHover, scheduleClose, closeNow } = useHoverIntent<HTMLSpanElement>({
+    enabled: Boolean(userId),
+    viewportSelector: ".community-interaction-feed-scroll, .community-interaction-drawer-scroll",
+    maxCardHeight: 188,
+  });
 
   const trigger = props.children ?? (
     <ActorAvatar
@@ -545,10 +495,7 @@ export function ProfileHoverCard(props: {
         onMouseEnter={openHover}
         onMouseLeave={scheduleClose}
         onKeyDown={(event) => {
-          if (event.key === "Escape") {
-            clearClose();
-            setOpen(false);
-          }
+          if (event.key === "Escape") closeNow();
         }}
       >
         <div className="chat-profile-hover-top">
@@ -582,8 +529,7 @@ export function ProfileHoverCard(props: {
               type="button"
               className="chat-profile-hover-name"
               onClick={() => {
-                clearClose();
-                setOpen(false);
+                closeNow();
                 props.onOpenProfile?.(userId);
               }}
             >
