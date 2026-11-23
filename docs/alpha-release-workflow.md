@@ -1,48 +1,41 @@
-# Alpha Release Workflow
+# Production Release Workflow
 
 ## Canonical Truths
 
-- Active development worktree: `/Users/neilmcdevitt/code/arx`
-- Legacy workspace worktree snapshots are historical only and are not part of active development or release truth
-- Canonical Git remote: `origin` -> `Neil-McD/Arx`
-- Canonical release branch: `main`
-- Canonical production web target: Vercel project `polynet`
+- Canonical Git release branch: `origin/main`
+- Canonical production web target: Vercel project `polynet` (`www.polynet.ai`)
 - Canonical production Convex target: `prod:wry-hawk-715`
 - Legacy Vercel project `arx` is not a live target
 
-## Default Release Model
+## Default Release Model (Main = Production)
 
-Production is released by one local command. Merging to `main` does not deploy:
-Vercel Git auto-deploy from `main` is disabled in `vercel.json`.
+Merging a pull request to `main` automatically deploys production through
+`.github/workflows/deploy-production.yml` (`scripts/deploy_production_ci.mjs`).
+Vercel Git auto-deploy from `main` stays disabled in `vercel.json` so Vercel
+never races ahead of the Convex backend deploy.
 
-1. Land the reviewed change on `main`.
-2. From a clean checkout at exactly `origin/main`:
-
-```bash
-npm run release:verify   # guards, release gate, preflight; deploys nothing
-npm run release:prod     # the same, then Convex, then web, then live proof, then the sites' edge
-```
-
-3. Commit the receipt the command writes to `docs/receipts/` and complete its
-   post-release smoke checklist.
-
-`release:prod` (`scripts/release_production.mjs`) fails closed at every stage:
+1. Open a pull request from a short branch. GitHub runs the parallel
+   `Release Gate`, `Secret Scan`, and Codex review (~2 minutes).
+2. Merge to `main` (Fast Lane merges when green; Protected Lane waits for
+   security review + Neil's explicit approval).
+3. GitHub Actions automatically deploys `main`:
 
 | Stage | Proves |
 |---|---|
-| Guards | `vercel.json` keeps `main` auto-deploy off; the worktree is clean; `HEAD` equals freshly fetched `origin/main`. |
-| No-regress | The live `version.json` build is a known ancestor of `HEAD` and not `HEAD` itself, so a stale checkout can never release over newer production. |
-| Release gate | `npm run release:gate -- --mode=ci --sha=<HEAD>` passes on that exact commit. |
-| Settings parity | Every backend setting the code reads that staging (`dev:quick-porcupine-949`) has also exists in production, unless `scripts/lib/convexEnvParity.mjs` names it staging-only with a reason; `POLYNET_ALLOW_SEED` is never in production. Names only, never values. Settings no code reads are listed in the stage for removal (production deletions need the owner's OK). Added Nov 5 after a missing `STRIPE_CONNECT_WEBHOOK_SECRET` on staging. |
-| Preflight | The pinned Vercel project exists; `VITE_CONVEX_URL`, `VITE_PUBLIC_APP_URL`, and `ARX_AUTH_BRIDGE_SECRET` exist exactly once for production; the read-only production accounting smoke passes; the current production deployment is recorded as the rollback target. |
-| Convex | `convex deploy --typecheck enable` to `prod:wry-hawk-715`. |
-| Web | `vercel deploy --prod --archive=tgz` to project `polynet`, with the commit SHA as build identity. |
-| Live proof | `www.polynet.ai/version.json` reports `HEAD` (one explicit promote is attempted if Vercel does not assign the domain), and the live bundle embeds the production Convex URL. |
-| Receipt | `docs/receipts/<date>-production-<sha>.md` and `artifacts/release-production.json`. |
+| Preflight | Required Vercel production env vars exist; no forbidden staging-only Convex env (`POLYNET_ALLOW_SEED`); records the prior production deployment ID for instant rollback. |
+| Convex | `npx convex deploy --yes --typecheck enable` to `prod:wry-hawk-715` via `CONVEX_DEPLOY_KEY`. |
+| Web | `vercel deploy --prod --archive=tgz` to project `polynet` with the exact commit SHA as build identity. |
+| Live check | `www.polynet.ai/version.json` reports the exact commit SHA and the live bundle embeds `wry-hawk-715.convex.cloud`. |
 
-Production authority (Convex deployment, Vercel team and project IDs, origin) is
-pinned in `scripts/lib/releaseProduction.mjs`. It is never read from local
-`.env` files or a `.vercel` link, which in this repository points at staging.
+Required GitHub Actions repository secrets (set once):
+- `CONVEX_DEPLOY_KEY` (production deploy key for `prod:wry-hawk-715`)
+- `VERCEL_TOKEN` (Vercel API token for team `team_TJvbi4UGtg62xteusiC1Cvxy`)
+
+Emergency rollback: one-click rollback in the Vercel dashboard or
+`npm run release:rollback -- <deployment-id>` (web only; Convex schema changes
+do not roll back automatically). Manual markdown receipt commits in
+`docs/receipts/` are retired—GitHub Actions, Vercel, and Convex retain the
+authoritative deploy log.
 
 For official Polynet MCP provider changes, treat Convex as required, not
 optional. If a change touches files like:
