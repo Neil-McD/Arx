@@ -77,4 +77,22 @@ describe("Mobile community page scroll, bottom bar, and one-step back contracts"
     unregister();
     expect(runActiveMobilePageBack()).toBe(false);
   });
+
+  it("fits the host course editor inside phone width and relies on the single canonical back button", () => {
+    const classroom = read("apps/web/src/v1/KitClassroom.tsx");
+    const kitCss = read("apps/web/src/v1/kit.module.css");
+    const designV1 = read("apps/web/src/styles/design-v1.css");
+
+    expect(classroom).not.toContain("knowledge-course-crumb");
+    expect(designV1).not.toContain(".knowledge-course-crumb");
+    expect(kitCss).toMatch(/\.app \.kedit-video\.zone\{[^}]*width:100%;max-width:100%;min-width:0;box-sizing:border-box/);
+    expect(kitCss).toMatch(/@media \(max-width:760px\)\{[^\n]*\.app \.kedit-video\.zone\{aspect-ratio:auto;min-height:132px;padding:16px\}/);
+    expect(kitCss).toContain(':where(:root[data-layout="phone"]) .app .kedit-video.zone{aspect-ratio:auto;min-height:132px;padding:16px}');
+    expect(designV1).toMatch(
+      /:root\[data-design="v1"\]:where\(\[data-layout="phone"\]\) \.community-page-body > \.community-tab-scroll\s*\{[\s\S]*?overflow-x:\s*hidden;/,
+    );
+    expect(designV1).toMatch(
+      /:root\[data-design="v1"\]:where\(\[data-layout="phone"\]\) :is\(\.kit-lesson, \.kit-lesson-video, \.kit-lesson-editor, \.kit-lesson-after\)\s*\{[\s\S]*?max-width:\s*100%;[\s\S]*?min-width:\s*0;[\s\S]*?box-sizing:\s*border-box;/,
+    );
+  });
 });

@@ -721,7 +721,7 @@
 .app .kl-move button:disabled{opacity:.3;cursor:default}
 .app .kedit-title{display:block;width:100%;box-sizing:border-box;margin:6px 0 0;padding:0;border:0;outline:0;background:transparent;color:var(--ink);font-family:var(--serif);font-weight:var(--serif-w);font-size:30px;letter-spacing:-.018em;line-height:1.15}
 .app .kedit-title::placeholder{color:var(--ink3)}
-.app .kedit-video{display:flex;align-items:center;gap:12px;margin-top:18px;padding:12px;border-radius:14px;border:1px dashed var(--line2);background:var(--s1)}
+.app .kedit-video{display:flex;align-items:center;gap:12px;width:100%;max-width:100%;min-width:0;box-sizing:border-box;margin-top:18px;padding:12px;border-radius:14px;border:1px dashed var(--line2);background:var(--s1)}
 .app .kedit-video.has{border-style:solid}
 .app .kedit-video>div{flex:1;min-width:0;display:flex;flex-direction:column;gap:4px}
 .app .kedit-video input{width:100%;padding:0;border:0;outline:0;background:transparent;color:var(--ink);font:inherit;font-size:14px}
@@ -1386,9 +1386,9 @@
 .app .kinline em{font-style:normal;font-size:12px;color:var(--ink3)}
 .app .kinline-input{width:100%;padding:1px 4px;margin:-1px -4px;border:0;border-radius:5px;outline:0;box-shadow:inset 0 0 0 1.5px var(--accent);background:transparent;color:var(--ink);font:inherit;font-size:13.5px}
 .app .kinline-cover{padding:0;border:0;cursor:pointer;transition:filter .16s var(--ease)}.app .kinline-cover:hover{filter:brightness(1.2)}
-.app .kedit-video.zone{flex-direction:column;justify-content:center;gap:12px;margin-top:0;aspect-ratio:16/5;min-height:150px;padding:20px;cursor:text;transition:border-color .16s var(--ease),background .16s var(--ease)}
+.app .kedit-video.zone{flex-direction:column;justify-content:center;gap:12px;width:100%;max-width:100%;min-width:0;box-sizing:border-box;margin-top:0;aspect-ratio:16/5;min-height:150px;padding:20px;cursor:text;transition:border-color .16s var(--ease),background .16s var(--ease)}
 .app .kedit-video.zone:hover,.app .kedit-video.zone:focus-within{border-color:var(--ink3)}
-.app .kedit-video.zone input{flex:none;width:100%;max-width:460px;text-align:center;font-size:14.5px}
+.app .kedit-video.zone input{flex:none;width:100%;max-width:460px;min-width:0;box-sizing:border-box;text-align:center;font-size:14.5px}
 .app .kresname{min-width:0;width:100%;padding:2px 4px;margin:-2px -4px;border:0;border-radius:5px;outline:0;background:transparent;color:var(--ink);font:inherit;font-size:13.5px;font-weight:550;text-overflow:ellipsis}
 .app .kresname:hover{background:var(--s2)}.app .kresname:focus{box-shadow:inset 0 0 0 1.5px var(--accent);background:transparent}
 .app .kresrow.edit{grid-template-columns:18px minmax(0,1fr) minmax(0,auto) auto}
@@ -1400,7 +1400,7 @@
 .app .kaddline input{flex:1;min-width:0;padding:0;border:0;outline:0;background:transparent;color:var(--ink);font:inherit;font-size:13.5px}
 .app .kaddline input::placeholder{color:var(--ink3)}
 .app .kedit-videorow{display:flex;align-items:center;gap:6px}
-.app .kunsaved{position:sticky;bottom:16px;z-index:5;align-self:center;display:flex;align-items:center;gap:10px;margin-top:24px;padding:8px 8px 8px 16px;border-radius:14px;background:var(--pop);border:1px solid var(--line2);box-shadow:0 24px 50px -18px rgba(0,0,0,.7);font-size:13.5px}
+.app .kunsaved{position:sticky;bottom:16px;z-index:5;align-self:center;display:flex;align-items:center;gap:10px;max-width:100%;box-sizing:border-box;margin-top:24px;padding:8px 8px 8px 16px;border-radius:14px;background:var(--pop);border:1px solid var(--line2);box-shadow:0 24px 50px -18px rgba(0,0,0,.7);font-size:13.5px}
 .app .kunsaved i{width:7px;height:7px;border-radius:50%;background:var(--accent)}
 .app .kunsaved span{margin-right:8px}
 .app .kunsaved .btn:disabled{opacity:.4;cursor:default}
@@ -1424,7 +1424,7 @@
 .app .khero .acts{margin-top:18px}
 .app .knum{margin-right:8px;font-style:normal;font-size:12.5px;font-weight:500;color:var(--ink3);font-variant-numeric:tabular-nums}
 @container (max-width:680px){.app .khero{grid-template-columns:minmax(0,1fr);gap:16px;padding:16px}.app .khero-body>b{font-size:24px}}
-@media (max-width:760px){.app .khero{grid-template-columns:minmax(0,1fr);gap:16px;padding:12px 12px 16px}.app .khero-body>b{font-size:24px}}
+@media (max-width:760px){.app .khero{grid-template-columns:minmax(0,1fr);gap:16px;padding:12px 12px 16px}.app .khero-body>b{font-size:24px}.app .kedit-video.zone{aspect-ratio:auto;min-height:132px;padding:16px}.app .kedit-video.zone input{font-size:13.5px}.app .kcols{gap:16px;margin-top:4px}.app .klist.solo{max-width:100%;box-sizing:border-box}.app .kresrow.edit em{max-width:110px}.app .kunsaved{flex-wrap:wrap;justify-content:flex-end}}
 .app .kcols{display:flex;gap:40px;max-width:860px;margin:22px auto 0;align-items:flex-start}
 .app .kcols.two{max-width:1216px}
 .app .kcols .kmainc{flex:1;min-width:0}
@@ -1513,6 +1513,12 @@
 :where(:root[data-layout="phone"]) .app .mrow .h b{flex:none;white-space:nowrap}
 :where(:root[data-layout="phone"]) .app .trow{grid-template-columns:28px minmax(0,1fr) auto auto;gap:0 12px}
 :where(:root[data-layout="phone"]) .app .trow>:nth-child(3){display:none}
+:where(:root[data-layout="phone"]) .app .kedit-video.zone{aspect-ratio:auto;min-height:132px;padding:16px}
+:where(:root[data-layout="phone"]) .app .kedit-video.zone input{font-size:13.5px}
+:where(:root[data-layout="phone"]) .app .kcols{gap:16px;margin-top:4px}
+:where(:root[data-layout="phone"]) .app .klist.solo{max-width:100%;box-sizing:border-box}
+:where(:root[data-layout="phone"]) .app .kresrow.edit em{max-width:110px}
+:where(:root[data-layout="phone"]) .app .kunsaved{flex-wrap:wrap;justify-content:flex-end}
 .app .disc{max-width:1120px}
 .app .discgrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:20px}
 .app .disccard{display:flex;flex-direction:column;text-align:left;padding:0;overflow:hidden;border-radius:10px;border:1px solid var(--line2);background:var(--s1);color:var(--ink);text-decoration:none;cursor:pointer;transition:border-color .16s var(--ease),background .16s var(--ease)}
@@ -1650,7 +1656,7 @@
 .app .kresacts .ic{width:15px;height:15px}
 .app .kresacts button{opacity:0;transition:opacity .15s var(--ease)}
 .app .kresrow:hover .kresacts button,.app .kresacts button:focus-visible{opacity:1}
-@media (hover:none){.app .kedit-videotools{opacity:1}}
+@media (hover:none){.app .kedit-videotools,.app .kresacts button{opacity:1}}
 /* A host opens who has started a course from its "started · finished" line;
    the people sit where the lessons were, in the same rows. */
 .app .kinline-stats{padding:1px 4px;margin:-1px -4px;border-radius:5px;font:inherit;color:inherit;text-align:left;cursor:pointer}

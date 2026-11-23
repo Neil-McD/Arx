@@ -4072,9 +4072,15 @@
 :root[data-design="v1"]:where([data-layout="phone"]) .community-page-body > .community-tab-scroll {
   flex: 1 1 auto;
   min-height: 0;
+  overflow-x: hidden;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
   overscroll-behavior-y: contain;
+}
+:root[data-design="v1"]:where([data-layout="phone"]) :is(.kit-lesson, .kit-lesson-video, .kit-lesson-editor, .kit-lesson-after) {
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
 }
 
 /* The page's header is in the flow here, so the room the classic layout
@@ -4160,10 +4166,6 @@
 :root[data-design="v1"] .community-page-header-back:hover {
   background: var(--hover-overlay);
   color: var(--text-primary);
-}
-
-:root[data-design="v1"] .app-root:not(.mobile-shell) .knowledge-course-crumb {
-  display: none;
 }
 
 /* A phone's top bar has its own arrow; the header's steps aside there. */
