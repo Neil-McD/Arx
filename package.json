@@ -73,7 +73,18 @@
     "check:polynet-harness-isolation-contract-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/polynet_harness_isolation_contract_proof.ts",
     "preflight:cached-production-client-compatibility:stage": "node scripts/cached_production_client_compatibility_preflight.mjs",
     "check:forbidden-patterns": "node scripts/forbidden_patterns_guard.mjs",
-    "check:invariants": "node scripts/run_invariants.mjs"
+    "check:invariants": "node scripts/run_invariants.mjs",
+    "check:runtime-context-integrity-proof": "tsx scripts/runtime_context_integrity_proof.ts",
+    "check:runtime-working-state-ledger-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/runtime_working_state_ledger_proof.ts",
+    "check:runtime-diagnostics-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/runtime_diagnostics_proof.ts",
+    "check:runtime-community-context-receipt-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/runtime_community_context_receipt_proof.ts",
+    "check:community-capability-contract-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_capability_contract_proof.ts",
+    "check:community-semantic-repository-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_semantic_repository_contract_proof.ts",
+    "check:runtime-persisted-history-pagination-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/runtime_persisted_history_pagination_contract_proof.ts",
+    "check:web-route-access-boundary-proof": "tsx scripts/web_route_access_boundary_contract_proof.ts",
+    "check:provider-cost-accounting-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/provider_cost_accounting_contract_proof.ts",
+    "check:community-tab-access-normalization-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_tab_access_normalization_contract_proof.ts",
+    "check:runtime-tool-policy-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/runtime_tool_policy_proof.ts"
   },
   "dependencies": {
     "@earendil-works/pi-agent-core": "1.4.0",

@@ -27,13 +27,18 @@ const INVARIANT_CHECKS = [
   "check:polynet-harness-isolation-contract-proof",
   "check:web-research-local-url-policy-proof",
   "check:community-source-url-policy-proof",
+  "check:web-route-access-boundary-proof",
+  "check:community-tab-access-normalization-proof",
+  "check:community-capability-contract-proof",
 
   // Money, audit & inference authority
   "check:stripe-customer-idempotency-proof",
   "check:critical-audit-events-proof",
   "check:single-inference-provider",
+  "check:provider-cost-accounting-proof",
 
-  // Runtime behavioral proofs
+  // Runtime & community-agent harness behavioral proofs
+  "check:community-semantic-repository-proof",
   "check:community-lineage-ontology-proof",
   "check:community-interaction-evidence-spine-proof",
   "check:community-resource-evidence-spine-proof",
@@ -43,7 +48,13 @@ const INVARIANT_CHECKS = [
   "check:mobile-reading-mode-policy-proof",
   "check:community-events-recurrence-proof",
   "check:runtime-tool-loop-proof",
+  "check:runtime-tool-policy-proof",
   "check:runtime-responses-tool-schema-proof",
+  "check:runtime-working-state-ledger-proof",
+  "check:runtime-diagnostics-proof",
+  "check:runtime-community-context-receipt-proof",
+  "check:runtime-persisted-history-pagination-proof",
+  "check:runtime-context-integrity-proof",
   "check:runtime-context-fragments-budget-proof",
   "check:runtime-context-fragments-ordering-proof",
   "check:runtime-context-fragments-redaction-proof",

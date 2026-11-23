@@ -1,9 +1,8 @@
 name: Release Gate
 
 # Fast, parallel pull-request gate:
-# - typecheck-and-build, unit-tests, and security-and-invariants run in parallel
-# - browser-checks runs in parallel only when web/shared/browser files change
-# - "Release Gate" aggregates the results under the required branch status name
+# - 3 parallel jobs: Typecheck & build, Tests & invariants, Browser checks (pre-baked container)
+# - "Release Gate" aggregates all 3 under the required branch status check name
 on:
   workflow_dispatch:
   pull_request:
@@ -16,32 +15,6 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  changes:
-    name: Detect changed surfaces
-    runs-on: ubuntu-24.04
-    timeout-minutes: 5
-    outputs:
-      web: ${{ steps.filter.outputs.web }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          fetch-depth: 0
-
-      - name: Check whether browser suite is needed
-        id: filter
-        run: |
-          if [ "${{ github.event_name }}" != "pull_request" ]; then
-            echo "web=true" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          CHANGED="$(git diff --name-only "origin/${{ github.base_ref }}...HEAD")"
-          if echo "$CHANGED" | grep -Eq '^(apps/web/|shared/|scripts/loading_correctness|scripts/media_reading|scripts/fixtures/|package(-lock)?\.json$)'; then
-            echo "web=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "web=false" >> "$GITHUB_OUTPUT"
-          fi
-
   typecheck-and-build:
     name: Typecheck & build
     runs-on: ${{ vars.CI_RUNS_ON || 'ubuntu-24.04' }}
@@ -62,11 +35,10 @@ jobs:
       - name: Install dependencies
         run: npm ci && npm --prefix apps/web ci
 
-      - name: Convex typecheck
-        run: npx tsc --noEmit -p convex/tsconfig.json --pretty false
-
-      - name: Web typecheck
-        run: npm run check:web-typecheck
+      - name: Convex & web typecheck
+        run: |
+          npx tsc --noEmit -p convex/tsconfig.json --pretty false
+          npm run check:web-typecheck
 
       - name: Production web build & bundle budget
         env:
@@ -74,8 +46,8 @@ jobs:
           POLYNET_RELEASE_GATE_BUILD_ID: ${{ github.sha }}
         run: npm run build && npm run check:web-bundle-budget
 
-  unit-tests:
-    name: Unit tests
+  tests-and-invariants:
+    name: Tests & invariants
     runs-on: ${{ vars.CI_RUNS_ON || 'ubuntu-24.04' }}
     timeout-minutes: 10
     steps:
@@ -97,27 +69,7 @@ jobs:
       - name: Run unit and behavior tests
         run: npm run test:unit
 
-  security-and-invariants:
-    name: Security & invariants
-    runs-on: ${{ vars.CI_RUNS_ON || 'ubuntu-24.04' }}
-    timeout-minutes: 10
-    steps:
-      - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
-      - name: Setup Node.js
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        with:
-          node-version: 22
-          cache: npm
-          cache-dependency-path: |
-            package-lock.json
-            apps/web/package-lock.json
-
-      - name: Install dependencies
-        run: npm ci && npm --prefix apps/web ci
-
-      - name: Run core security, auth, billing, and runtime invariants
+      - name: Run security, auth, billing, and runtime invariants
         run: npm run check:invariants
 
       - name: Dependency security checks
@@ -128,28 +80,16 @@ jobs:
 
   browser-checks:
     name: Browser checks
-    needs: changes
-    if: needs.changes.outputs.web == 'true'
     runs-on: ${{ vars.CI_RUNS_ON || 'ubuntu-24.04' }}
-    timeout-minutes: 15
+    container:
+      image: mcr.microsoft.com/playwright:v1.58.2-noble
+    timeout-minutes: 10
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - name: Setup Node.js
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        with:
-          node-version: 22
-          cache: npm
-          cache-dependency-path: |
-            package-lock.json
-            apps/web/package-lock.json
-
       - name: Install dependencies
         run: npm ci && npm --prefix apps/web ci
-
-      - name: Install Playwright Chromium
-        run: npx playwright install --with-deps chromium
 
       - name: Loading correctness & media reading browser tests
         run: |
@@ -160,30 +100,10 @@ jobs:
     name: Release Gate
     needs:
       - typecheck-and-build
-      - unit-tests
-      - security-and-invariants
+      - tests-and-invariants
       - browser-checks
-    if: always()
     runs-on: ubuntu-24.04
     timeout-minutes: 2
     steps:
-      - name: Verify all required checks passed
-        run: |
-          echo "typecheck-and-build: ${{ needs.typecheck-and-build.result }}"
-          echo "unit-tests: ${{ needs.unit-tests.result }}"
-          echo "security-and-invariants: ${{ needs.security-and-invariants.result }}"
-          echo "browser-checks: ${{ needs.browser-checks.result }}"
-          for status in \
-            "${{ needs.typecheck-and-build.result }}" \
-            "${{ needs.unit-tests.result }}" \
-            "${{ needs.security-and-invariants.result }}"; do
-            if [ "$status" != "success" ]; then
-              echo "FAIL: required check did not succeed ($status)"
-              exit 1
-            fi
-          done
-          if [ "${{ needs.browser-checks.result }}" != "success" ] && [ "${{ needs.browser-checks.result }}" != "skipped" ]; then
-            echo "FAIL: browser-checks did not succeed (${{ needs.browser-checks.result }})"
-            exit 1
-          fi
-          echo "PASS: Release Gate succeeded."
+      - name: All required checks passed
+        run: echo "PASS: Release Gate succeeded."
