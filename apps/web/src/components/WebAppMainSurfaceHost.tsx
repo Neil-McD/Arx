@@ -4,7 +4,6 @@ import type { WebCommunityHost as WebCommunityHostType } from "./WebCommunityHos
 import { WebDiscoverPanel } from "./WebDiscoverPanel";
 import { WebCommunityDiscoverPage, type WebCommunityDiscoverPageProps } from "./WebCommunityDiscoverPage";
 import { CommunityPageFrame } from "./CommunityPageHeader";
-import { isDesignV1Active } from "../../../../shared/designSystem";
 import type { WebProductDocsPanel as WebProductDocsPanelType } from "./WebProductDocsPanel";
 import type { WebSettingsSurfaceHost as WebSettingsSurfaceHostType } from "./WebSettingsSurfaceHost";
 import type { WebLandingPage as WebLandingPageType } from "./WebLandingPage";
@@ -93,12 +92,8 @@ export function WebAppMainSurfaceHost(props: WebAppMainSurfaceHostProps) {
           <WebCommunityHost {...props.communityHostProps} />
         ) : (
           <div className="community-body">
-            {props.showDiscoverPanel && isDesignV1Active() ? (
-              // Design v1: someone in no community yet gets the same Discover
-              // page a community shows (docs/specs/discover-v1.md).
+            {props.showDiscoverPanel ? (
               <CommunityPageFrame><WebCommunityDiscoverPage {...props.discoverPageProps} /></CommunityPageFrame>
-            ) : props.showDiscoverPanel ? (
-              <WebDiscoverPanel {...props.discoverPanelProps} />
             ) : props.showProductDocsPanel ? (
               <WebProductDocsPanel {...props.productDocsPanelProps} />
             ) : null}

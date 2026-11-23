@@ -40,6 +40,7 @@ const globalOverlayHost = read("apps/web/src/components/WebGlobalOverlayHost.tsx
 const globalOverlayPropsBuilder = read("apps/web/src/controllers/buildWebGlobalOverlayHostProps.ts");
 const createController = read("shared/useCommunityCreateController.ts");
 const createModal = read("apps/web/src/components/WebCreateCommunityModal.tsx");
+const createForm = read("apps/web/src/v1/KitStartCommunity.tsx");
 const webApp = read("apps/web/src/App.tsx");
 const historicalLegal = read("docs/legal/community-owner-inference-funding-v2.md");
 const activeLegal = read("docs/legal/terms-of-service-v5.md");
@@ -394,7 +395,7 @@ assert.doesNotMatch(globalOverlayPropsBuilder, /FounderInference|founderInferenc
 assert.doesNotMatch(webApp, /FounderInference|founderInference/);
 assert.match(createController, /visibility: "unlisted"/);
 assert.doesNotMatch(createModal, /option value="published"/);
-assert.match(createModal, /Create community/);
+assert.match(createForm, /Create community/);
 assert.doesNotMatch(webApp, /startCheckoutAfterCommunityCreated/);
 assert.match(historicalLegal, /status: superseded/);
 assert.match(historicalLegal, /superseded_by: terms_of_service_v3/);

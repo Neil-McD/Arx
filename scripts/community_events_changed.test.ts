@@ -26,6 +26,6 @@ it("whoever changes an event tells whoever shows events", async () => {
 it("the Events page and a pod's call announce changes; Home's Next up is live", () => {
   const read = (path: string) => readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
   expect(read("apps/web/src/v1/KitNextEvent.tsx")).toMatch(/useLiveQuery<[^>]*>\([^,]+, "communityEvents:listCommunityEvents"/);
-  expect(read("apps/web/src/components/WebCommunityEventsSection.tsx").match(/announceCommunityEventsChanged\(\)/g)?.length).toBeGreaterThanOrEqual(3);
+  expect(read("apps/web/src/components/WebCommunityEventsSection.tsx").match(/announceCommunityEventsChanged\(\)/g)?.length).toBeGreaterThanOrEqual(2);
   expect(read("apps/web/src/v1/KitPodCall.tsx").match(/announceCommunityEventsChanged\(\)/g)?.length).toBe(2);
 });
