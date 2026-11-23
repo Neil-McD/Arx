@@ -8,6 +8,8 @@ import {
 import { PRODUCTION_AUTHORITY } from "./lib/releaseProduction.mjs";
 
 const SHA = "a".repeat(40);
+const PREV_SHA = "b".repeat(40);
+const NEWER_SHA = "c".repeat(40);
 
 describe("cloud production deploy pipeline", () => {
   it("refuses to deploy any ref other than refs/heads/main", () => {
@@ -37,9 +39,87 @@ describe("cloud production deploy pipeline", () => {
     expect(() => assertNoForbiddenConvexProdEnv("OPENAI_API_KEY=redacted\n")).not.toThrow();
   });
 
+  it("rejects stale main commits (HEAD != origin/main) before any mutation", async () => {
+    let mutated = false;
+    await expect(
+      runCloudProductionDeploy({
+        env: {
+          GITHUB_REF: "refs/heads/main",
+          CONVEX_DEPLOY_KEY: "prod:wry-hawk-715|secret",
+          VERCEL_TOKEN: "vercel_secret",
+        },
+        sleep: async () => {},
+        log: () => {},
+        git: (args: string[]) => (args[1] === "HEAD" ? SHA : NEWER_SHA),
+        gitOk: () => true,
+        run: () => {
+          mutated = true;
+        },
+        capture: () => {
+          mutated = true;
+          return "";
+        },
+        fetchText: async () => JSON.stringify({ buildId: PREV_SHA }),
+      }),
+    ).rejects.toThrow(/production_release_requires_exact_origin_main/);
+    expect(mutated).toBe(false);
+  });
+
+  it("rejects commits that would regress the currently live production build", async () => {
+    let mutated = false;
+    await expect(
+      runCloudProductionDeploy({
+        env: {
+          GITHUB_REF: "refs/heads/main",
+          CONVEX_DEPLOY_KEY: "prod:wry-hawk-715|secret",
+          VERCEL_TOKEN: "vercel_secret",
+        },
+        sleep: async () => {},
+        log: () => {},
+        git: () => SHA,
+        gitOk: (args: string[]) => args[0] === "cat-file",
+        run: () => {
+          mutated = true;
+        },
+        capture: () => {
+          mutated = true;
+          return "";
+        },
+        fetchText: async () => JSON.stringify({ buildId: PREV_SHA }),
+      }),
+    ).rejects.toThrow(/production_release_would_regress/);
+    expect(mutated).toBe(false);
+  });
+
+  it("returns already_live without mutating production when HEAD is already live", async () => {
+    let mutated = false;
+    const result = await runCloudProductionDeploy({
+      env: {
+        GITHUB_REF: "refs/heads/main",
+        CONVEX_DEPLOY_KEY: "prod:wry-hawk-715|secret",
+        VERCEL_TOKEN: "vercel_secret",
+      },
+      sleep: async () => {},
+      log: () => {},
+      git: () => SHA,
+      gitOk: () => true,
+      run: () => {
+        mutated = true;
+      },
+      capture: () => {
+        mutated = true;
+        return "";
+      },
+      fetchText: async () => JSON.stringify({ buildId: SHA }),
+    });
+    expect(result.status).toBe("already_live");
+    expect(mutated).toBe(false);
+  });
+
   it("runs preflight, deploys Convex first, deploys Vercel second, and proves live build + backend host", async () => {
     const order: string[] = [];
     const convexHost = new URL(PRODUCTION_AUTHORITY.convexUrl).host;
+    let deployed = false;
 
     const result = await runCloudProductionDeploy({
       env: {
@@ -51,6 +131,7 @@ describe("cloud production deploy pipeline", () => {
       sleep: async () => {},
       log: (entry: { stage: string }) => order.push(entry.stage),
       git: () => SHA,
+      gitOk: () => true,
       run: (_cmd: string, args: string[]) => {
         order.push(`run:${args.slice(0, 2).join(" ")}`);
       },
@@ -71,13 +152,14 @@ describe("cloud production deploy pipeline", () => {
           return JSON.stringify({ id: "dpl_prev123" });
         }
         if (args.includes("deploy")) {
+          deployed = true;
           order.push("capture:vercel-deploy");
           return "https://polynet-abc123.vercel.app\n";
         }
         return "";
       },
       fetchText: async (url: string) => {
-        if (url.endsWith("/version.json")) return JSON.stringify({ buildId: SHA });
+        if (url.endsWith("/version.json")) return JSON.stringify({ buildId: deployed ? SHA : PREV_SHA });
         if (url.endsWith("/")) return `<script src="/assets/index-abc.js"></script>`;
         if (url.includes("/assets/index-abc.js")) return `const u = "https://${convexHost}";`;
         return "";

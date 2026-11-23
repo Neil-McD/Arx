@@ -13,6 +13,7 @@ import {
   PRODUCTION_AUTHORITY,
   VERCEL_CLI,
   ReleaseError,
+  assertExactOriginMain,
   assertForbiddenProductionEnvAbsent,
   assertRequiredProductionEnv,
   lastDeploymentUrl,
@@ -62,9 +63,29 @@ export function assertNoForbiddenConvexProdEnv(envListOutput) {
 export async function runCloudProductionDeploy(deps) {
   assertMainRef(deps.env);
   const { convexDeployKey, vercelToken } = requireDeploySecrets(deps.env);
-  const headSha = String(deps.env.GITHUB_SHA || deps.git(["rev-parse", "HEAD"])).trim().toLowerCase();
+
+  // Freshness & no-regression guard: reject stale/re-run commits before any mutation.
+  deps.git(["fetch", "origin", "refs/heads/main:refs/remotes/origin/main"]);
+  const headSha = String(deps.git(["rev-parse", "HEAD"])).trim().toLowerCase();
   if (!/^[0-9a-f]{40}$/.test(headSha)) {
     throw new ReleaseError("production_deploy_invalid_sha", headSha);
+  }
+  const originMainSha = String(deps.git(["rev-parse", "refs/remotes/origin/main"])).trim().toLowerCase();
+  assertExactOriginMain(headSha, originMainSha);
+
+  const liveSha = parseLiveBuildId(await deps.fetchText(`${PRODUCTION_AUTHORITY.productionOrigin}/version.json`));
+  if (!liveSha) {
+    throw new ReleaseError("production_release_live_build_unreadable");
+  }
+  if (!deps.gitOk(["cat-file", "-e", `${liveSha}^{commit}`])) {
+    throw new ReleaseError("production_release_live_build_unknown", liveSha);
+  }
+  if (liveSha === headSha) {
+    deps.log({ stage: "already_live", headSha });
+    return { status: "already_live", headSha, deploymentUrl: null, rollbackDeploymentId: null };
+  }
+  if (!deps.gitOk(["merge-base", "--is-ancestor", liveSha, headSha])) {
+    throw new ReleaseError("production_release_would_regress", JSON.stringify({ liveSha, headSha }));
   }
 
   const baseEnv = {
@@ -197,6 +218,7 @@ if (isDirectRun) {
     sleep: (ms) => new Promise((done) => setTimeout(done, ms)),
     log: (entry) => console.log(`[deploy] ${JSON.stringify(entry)}`),
     git: (args) => execFileSync("git", args, { cwd: root, encoding: "utf8" }).trim(),
+    gitOk: (args) => spawnSync("git", args, { cwd: root, stdio: "ignore" }).status === 0,
     run: (command, args, env) => {
       const result = spawnSync(command, args, { cwd: root, env, stdio: "inherit" });
       if (result.error) throw result.error;
@@ -217,6 +239,10 @@ if (isDirectRun) {
 
   runCloudProductionDeploy(deps)
     .then((result) => {
+      if (result.status === "already_live") {
+        console.log(`\nPASS: production already live at ${result.headSha} (nothing deployed)`);
+        return;
+      }
       const summary = [
         `### Production Deploy Live`,
         `- **Commit:** \`${result.headSha}\``,
