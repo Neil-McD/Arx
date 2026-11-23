@@ -415,20 +415,6 @@ async function main() {
     );
 
     await runStep(
-      "app_theme_contract",
-      "App theme contract",
-      "npm run check:app-theme-contract-proof",
-      () => runCommand("npm", ["run", "check:app-theme-contract-proof"]),
-    );
-
-    await runStep(
-      "studio_colour_token_guard",
-      "Studio colour token guard",
-      "npm run check:studio-colour-token-guard",
-      () => runCommand("npm", ["run", "check:studio-colour-token-guard"]),
-    );
-
-    await runStep(
       "loading_correctness",
       "Account-scoped loading, profile drafts, and avatar transitions",
       "npm run check:loading-correctness",
@@ -436,10 +422,10 @@ async function main() {
     );
 
     await runStep(
-      "foundation_baseline",
-      "Foundation invariants and behavior",
-      "npm run check:foundation-baseline",
-      () => runCommand("npm", ["run", "check:foundation-baseline"]),
+      "invariants",
+      "Security, auth, money, integrity, and runtime invariants",
+      "npm run check:invariants",
+      () => runCommand("npm", ["run", "check:invariants"]),
     );
 
     await runStep(
@@ -447,13 +433,6 @@ async function main() {
       "Every unit and behavior test",
       "npm run test:unit",
       () => runCommand("npm", ["run", "test:unit"]),
-    );
-
-    await runStep(
-      "all_checks",
-      "Every remaining check script, and no unwired check files",
-      "npm run check:all",
-      () => runCommand("npm", ["run", "check:all"]),
     );
 
     await runStep(

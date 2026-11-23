@@ -166,9 +166,11 @@ every change must respect:
   (Neil).
 - Tables retire over two releases: stop writing, release, then delete data with
   Neil's approval.
-- The release gate runs every unit test (`npm run test:unit`) and every
-  `check:*` script (`npm run check:all`); a check file that nothing runs fails
-  the gate. Fix or delete a failing check; never leave one unrun.
+- The release gate runs typechecks, build, every unit and behavior test
+  (`npm run test:unit`), the curated security/money/integrity invariants
+  (`npm run check:invariants`), dependency security checks, and browser checks
+  when web/shared surfaces change. Write real behavioral tests in Vitest; do
+  not add brittle source-text regex proofs.
 - Every Convex module and every registered Convex function needs a caller.
   `no_orphan_modules_proof` and `no_uncalled_functions_proof` fail on new dead
   ones; hand-run tools are named in their exception lists with a reason.

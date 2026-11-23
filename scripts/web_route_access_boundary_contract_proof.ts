@@ -251,7 +251,7 @@ const shellChromeProjection = read(
   "apps/web/src/controllers/buildWebShellChromeHostProps.ts",
 );
 const packageJson = read("package.json");
-const foundationGate = read("scripts/foundation_baseline_gate.sh");
+const invariantsRunner = read("scripts/run_invariants.mjs");
 
 assert.equal(
   existsSync(
@@ -376,8 +376,8 @@ assert.match(
 );
 assert.match(packageJson, /"check:web-route-access-boundary-proof"/);
 assert.match(
-  foundationGate,
-  /Web route access boundary proof" npm run check:web-route-access-boundary-proof/,
+  invariantsRunner,
+  /"check:web-route-access-boundary-proof"/,
 );
 
 console.log(

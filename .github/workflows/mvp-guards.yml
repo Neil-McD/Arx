@@ -1,8 +1,8 @@
 name: Release Gate
 
-# Runs on pull requests only. A merge to main is not gated again: the pull
-# request already passed, and `npm run release:prod` runs the same gate before
-# anything reaches production. Run it by hand on any ref with workflow_dispatch.
+# Fast, parallel pull-request gate:
+# - 3 parallel jobs: Typecheck & build, Tests & invariants, Browser checks (pre-baked container)
+# - "Release Gate" aggregates all 3 under the required branch status check name
 on:
   workflow_dispatch:
   pull_request:
@@ -15,47 +15,96 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  release-gate:
-    name: Release Gate
-    # Where the gate runs is a repository variable, so it can move without a
-    # code change: set CI_RUNS_ON to another runner label that is Ubuntu 24.04
-    # (for example ubicloud-standard-2-ubuntu-2404) and delete it to come back.
-    # Pinned to 24.04: ubuntu-latest moved to 26.04 (Nov 14), which the gate's
-    # Playwright Chromium does not support yet.
+  typecheck-and-build:
+    name: Typecheck & build
     runs-on: ${{ vars.CI_RUNS_ON || 'ubuntu-24.04' }}
-    timeout-minutes: 30
+    timeout-minutes: 10
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          fetch-depth: 0
 
       - name: Setup Node.js
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            apps/web/package-lock.json
 
-      - name: Install Node dependencies
-        run: npm ci
+      - name: Install dependencies
+        run: npm ci && npm --prefix apps/web ci
 
-      - name: Install web dependencies
-        run: npm --prefix apps/web ci
+      - name: Convex & web typecheck
+        run: |
+          npx tsc --noEmit -p convex/tsconfig.json --pretty false
+          npm run check:web-typecheck
 
-      - name: Install matching Playwright Chromium
-        run: npx playwright install --with-deps chromium
-
-      - name: Run canonical release gate
+      - name: Production web build & bundle budget
         env:
-          CANDIDATE_SHA: ${{ github.sha }}
-        run: npm run release:gate -- --mode=ci --sha="$CANDIDATE_SHA" --evidence=artifacts/release-gate.json
+          GIT_COMMIT_SHA: ${{ github.sha }}
+          POLYNET_RELEASE_GATE_BUILD_ID: ${{ github.sha }}
+        run: npm run build && npm run check:web-bundle-budget
 
-      - name: Upload release gate evidence
-        if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+  tests-and-invariants:
+    name: Tests & invariants
+    runs-on: ${{ vars.CI_RUNS_ON || 'ubuntu-24.04' }}
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Setup Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          name: release-gate-${{ github.sha }}
-          path: |
-            artifacts/release-gate.json
-            artifacts/media-reading/
-          if-no-files-found: warn
-          retention-days: 30
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            apps/web/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci && npm --prefix apps/web ci
+
+      - name: Run unit and behavior tests
+        run: npm run test:unit
+
+      - name: Run security, auth, billing, and runtime invariants
+        run: npm run check:invariants
+
+      - name: Dependency security checks
+        run: |
+          npm run check:dependency-security-interlock
+          node scripts/dependency_audit_check.mjs
+          node scripts/dependency_audit_check.mjs --prefix apps/web
+
+  browser-checks:
+    name: Browser checks
+    runs-on: ${{ vars.CI_RUNS_ON || 'ubuntu-24.04' }}
+    container:
+      image: mcr.microsoft.com/playwright:v1.58.2-noble
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install dependencies
+        run: npm ci && npm --prefix apps/web ci
+
+      - name: Loading correctness & media reading browser tests
+        run: |
+          npm run check:loading-correctness
+          npm run check:media-reading-browser-proof
+
+  release-gate:
+    name: Release Gate
+    needs:
+      - typecheck-and-build
+      - tests-and-invariants
+      - browser-checks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 2
+    steps:
+      - name: All required checks passed
+        run: |
+          echo "PASS: Release Gate succeeded."

@@ -155,4 +155,4 @@ and data are proven gone, following the two-release pattern in
 
 Safe deletions are dead code and duplicate or legacy paths outside this
 contract. Any change to a listed surface must update this document and keep
-`npm run check:foundation-baseline` passing.
+`npm run check:invariants` and `npm run test:unit` passing.
