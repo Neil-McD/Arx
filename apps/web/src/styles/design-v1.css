@@ -4220,7 +4220,7 @@
   line-height: 1.65;
 }
 /* Lines of words stop at about 70 characters; video and pictures keep the column. */
-:root[data-design="v1"] .kit-lesson .resource-viewer-prose :where(p, ul, ol, blockquote, h1, h2, h3, h4) {
+:root[data-design="v1"] .kit-lesson .resource-viewer-prose :where(p, ul, ol, blockquote, h1, h2, h3, h4, .md-callout) {
   max-width: 680px;
 }
 /* A course's tools, in the header. */

@@ -6999,6 +6999,15 @@
 }
 .md-callout-body > :first-child { margin-top: 0; }
 .md-callout-body > :last-child { margin-bottom: 0; }
+/* A lesson gives every paragraph space above it (the kit's lesson rule);
+   inside a callout the title sits level with the icon and the text follows
+   it closely. */
+.resource-viewer-prose .md-callout p.md-callout-title,
+.lesson-editor .md-callout .md-callout-title { margin: 0 0 2px; }
+.resource-viewer-prose .md-callout .md-callout-body > :first-child,
+.lesson-editor .md-callout .md-callout-body > :first-child { margin-top: 0; }
+.resource-viewer-prose .md-callout .md-callout-body > :last-child,
+.lesson-editor .md-callout .md-callout-body > :last-child { margin-bottom: 0; }
 
 .resource-viewer-prose .md-hr {
   border: 0;
