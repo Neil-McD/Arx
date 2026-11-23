@@ -956,6 +956,10 @@ export default function App() {
     [communities],
   );
   const {
+    events: communityEvents,
+    hasLoadedVisibleEventsRange: hasLoadedActiveCommunityEventsRange,
+  } = communityContent;
+  const {
     typingPresence: communityTypingUsers,
     signalTyping: signalCommunityTyping,
     clearTyping: clearCommunityTyping,
@@ -984,17 +988,12 @@ export default function App() {
     },
     events: {
       cacheKey: communityContent.eventsCacheKey,
-      hasLoadedVisibleRange: communityContent.hasLoadedVisibleEventsRange,
+      hasLoadedVisibleRange: hasLoadedActiveCommunityEventsRange,
       isLoading: communityContent.isLoadingEvents,
-      rows: communityContent.events,
+      rows: communityEvents,
     },
   });
-  const {
-    activeCommunityAttentionCount,
-    communityChannelIndicators,
-    communityTabIndicators,
-    communityRailAttentionById,
-  } = useMemo(
+  const { communityChannelIndicators } = useMemo(
     () =>
       buildWebCommunityAttentionView({
         activeCommunityId,
@@ -1752,6 +1751,13 @@ export default function App() {
     appTheme,
     setAppTheme,
   });
+  const activeCommunityAttentionSummary = activeCommunityId
+    ? (attentionByCommunityId[activeCommunityId] ?? { chat: false, resources: false, events: false, mentions: false, channels: [] })
+    : { chat: false, resources: false, events: false, mentions: false, channels: [] };
+  const activeCommunityAttentionCount =
+    Number(Boolean(activeCommunityAttentionSummary.chat)) +
+    Number(Boolean(activeCommunityAttentionSummary.resources)) +
+    Number(Boolean(activeCommunityAttentionSummary.events));
   const {
     notifications: directMessageWebNotifications,
     button: directMessagesButton,
@@ -1916,6 +1922,19 @@ export default function App() {
     communityAgentVoiceUiState: communityVoice.communityAgentVoiceUiState,
     cancelVoiceInput: communityVoice.cancelVoiceInput,
   });
+  const activeIndicators = activeCommunityAttentionSummary;
+  const communityTabIndicators = {
+    chat: Boolean(activeIndicators.chat),
+    resources: Boolean(activeIndicators.resources),
+    events: Boolean(activeIndicators.events),
+    mentions: Boolean(activeIndicators.mentions),
+  };
+  const communityRailAttentionById: Record<string, boolean> = {};
+  for (const [communityId, indicators] of Object.entries(attentionByCommunityId)) {
+    if (indicators.chat || indicators.resources || indicators.events || indicators.mentions) {
+      communityRailAttentionById[communityId] = true;
+    }
+  }
   // A member has no restricted channel, so a preview leaves one for General.
   useCloseInboxOnSettings({
     isOnSettingsPage: activePage === "settings" || (activePage === "community" && communityTab === "settings"),
