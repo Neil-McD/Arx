@@ -6997,6 +6997,100 @@
   text-overflow: ellipsis;
 }
 
+/* A chip's card (slice 3): what the thing is and where you are with it,
+   opened by resting on the chip. Same timing and placement as the profile
+   card (shared/useHoverIntent.ts); no card on touch screens, where a tap
+   opens the thing. */
+.entity-chip-wrap {
+  position: relative;
+  display: inline-block;
+  max-width: 100%;
+  vertical-align: -0.2em;
+}
+.entity-chip-wrap > .entity-chip {
+  vertical-align: baseline;
+}
+.entity-chip-fact {
+  margin-left: 2px;
+  padding-left: 6px;
+  border-left: 1px solid color-mix(in srgb, var(--text-primary) 14%, transparent);
+  color: var(--text-muted);
+  font-weight: 400;
+  font-size: 0.88em;
+}
+.entity-card {
+  position: absolute;
+  z-index: 40;
+  left: 0;
+  bottom: calc(100% + 8px);
+  width: min(280px, calc(100vw - 48px));
+  box-sizing: border-box;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  border: 1px solid var(--web-context-panel-border, color-mix(in srgb, var(--text-primary) 12%, transparent));
+  border-radius: 10px;
+  background: var(--bg-card-solid, var(--web-popover-surface, #16171a));
+  box-shadow: var(--web-popover-shadow, 0 12px 32px rgba(0, 0, 0, 0.35));
+  color: var(--text-secondary, var(--text-muted));
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 1.45;
+  white-space: normal;
+  text-align: left;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(4px) scale(0.985);
+  transform-origin: 22px bottom;
+  visibility: hidden;
+  transition: opacity 130ms ease, transform 130ms ease, visibility 0s linear 130ms;
+}
+.entity-card[data-placement="bottom"] {
+  top: calc(100% + 8px);
+  bottom: auto;
+  transform-origin: 22px top;
+}
+.entity-card.is-open {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(0) scale(1);
+  visibility: visible;
+  transition: opacity 130ms ease, transform 130ms ease, visibility 0s linear 0s;
+}
+.entity-card-name {
+  color: var(--text-primary);
+  font-weight: 600;
+  font-size: 14px;
+}
+.entity-card-bar {
+  display: block;
+  height: 3px;
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--text-primary) 10%, transparent);
+  overflow: hidden;
+}
+.entity-card-bar > span {
+  display: block;
+  height: 100%;
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--text-primary) 72%, transparent);
+}
+.entity-card-action {
+  margin-top: 2px;
+  color: var(--text-primary);
+  font-weight: 500;
+  text-decoration: none;
+}
+.entity-card-action:hover {
+  text-decoration: underline;
+}
+@media (hover: none) and (pointer: coarse) {
+  .entity-card {
+    display: none;
+  }
+}
+
 /* Callouts ("> [!TIP]" and friends), in a lesson and in its editor: a soft
    tint of one tone, the type's icon in its own column, then the author's
    title and the text. Neutral grey by default (design v1 is monochrome and

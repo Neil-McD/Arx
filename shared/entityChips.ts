@@ -17,13 +17,46 @@ export type EntityNameRow = {
   slug?: string | null;
   // An event's next time, ISO.
   startsAt?: string | null;
+  // What the chip's card shows (slice 3), all for this reader.
+  facts?: EntityFacts;
 };
+
+export type EntityFacts = {
+  // A course's or channel's description, a pod's purpose (at most 140 characters).
+  about?: string | null;
+  // A course: its lessons, how many this reader finished, their next one.
+  lessons?: number;
+  done?: number;
+  nextLessonId?: string | null;
+  nextLessonTitle?: string | null;
+  // A lesson: its course, whether this reader finished it, whether it has a video.
+  courseName?: string | null;
+  finished?: boolean;
+  hasVideo?: boolean;
+  // A pod's seats, when it has a limit.
+  seats?: number | null;
+  // An event: where, and how often it repeats.
+  where?: "online" | "physical" | "tbd" | null;
+  place?: string | null;
+  repeats?: "daily" | "weekly" | "monthly" | null;
+};
+
+export const ENTITY_ABOUT_MAX = 140;
+
+export function clipAbout(raw: unknown): string | null {
+  const text = String(raw ?? "").replace(/\s+/g, " ").trim();
+  if (!text) return null;
+  return text.length > ENTITY_ABOUT_MAX ? `${text.slice(0, ENTITY_ABOUT_MAX - 1).trimEnd()}…` : text;
+}
 
 export type EntityTarget = {
   kind: EntityKind;
   name: string;
   path: string;
   startsAt?: string | null;
+  facts?: EntityFacts;
+  // A course's next lesson, opened by its card.
+  nextPath?: string | null;
 };
 
 export const ENTITY_NAMES_MAX = 500;
@@ -104,7 +137,10 @@ export function buildEntityNameIndex(communitySlug: string | null | undefined, r
   for (const row of (rows ?? []).slice(0, ENTITY_NAMES_MAX)) {
     const path = entityPath(slug, row);
     if (!path || !String(row.name ?? "").trim()) continue;
-    add({ kind: row.kind, name: row.name, path, startsAt: row.startsAt ?? null });
+    const nextPath = row.kind === "course" && row.facts?.nextLessonId
+      ? entityPath(slug, { kind: "lesson", name: "", id: row.facts.nextLessonId, parentId: row.id })
+      : null;
+    add({ kind: row.kind, name: row.name, path, startsAt: row.startsAt ?? null, facts: row.facts, nextPath });
   }
   return index;
 }
@@ -114,4 +150,59 @@ export function matchEntityName(index: ReadonlyMap<string, EntityTarget> | null 
   const key = entityNameKey(text);
   if (!key || key.length > 180) return null;
   return index.get(key) ?? null;
+}
+
+// The short fact on a chip: a course's progress, an event's next time.
+export function chipFact(target: EntityTarget, timeZone?: string): string | null {
+  if (target.kind === "course" && typeof target.facts?.lessons === "number" && target.facts.lessons > 0) {
+    return `${Math.min(target.facts.done ?? 0, target.facts.lessons)} of ${target.facts.lessons}`;
+  }
+  if (target.kind === "event" && target.startsAt) {
+    const at = new Date(target.startsAt);
+    if (Number.isNaN(at.getTime())) return null;
+    const options: Intl.DateTimeFormatOptions = { weekday: "short", hour: "numeric", minute: "2-digit", ...(timeZone ? { timeZone } : {}) };
+    return new Intl.DateTimeFormat("en-US", options).format(at).replace(/,/g, "");
+  }
+  return null;
+}
+
+// The card's lines under its name, in order.
+export function cardLines(target: EntityTarget, timeZone?: string): string[] {
+  const f = target.facts ?? {};
+  const lines: string[] = [];
+  if (target.kind === "event" && target.startsAt) {
+    const at = new Date(target.startsAt);
+    if (!Number.isNaN(at.getTime())) {
+      lines.push(new Intl.DateTimeFormat("en-US", {
+        weekday: "long", month: "short", day: "numeric", hour: "numeric", minute: "2-digit", ...(timeZone ? { timeZone } : {}),
+      }).format(at));
+    }
+    const where = f.where === "online" ? "Online" : f.where === "physical" ? (f.place || "In person") : f.where === "tbd" ? "Place to be decided" : null;
+    const repeats = f.repeats === "weekly" ? "Every week" : f.repeats === "daily" ? "Every day" : f.repeats === "monthly" ? "Every month" : null;
+    const tail = [where, repeats].filter(Boolean).join(" · ");
+    if (tail) lines.push(tail);
+    return lines;
+  }
+  if (target.kind === "lesson") {
+    if (f.courseName) lines.push(`In ${f.courseName}`);
+    const bits = [f.finished ? "Finished" : "Not finished yet", f.hasVideo ? "Video" : null].filter(Boolean).join(" · ");
+    lines.push(bits);
+    return lines;
+  }
+  if (f.about) lines.push(f.about);
+  if (target.kind === "pod" && typeof f.seats === "number") lines.push(`${f.seats} seats`);
+  return lines;
+}
+
+// The card's one action: where it goes and what it says.
+export function cardAction(target: EntityTarget): { label: string; path: string } {
+  if (target.kind === "course") {
+    const f = target.facts ?? {};
+    if (target.nextPath && f.nextLessonTitle) {
+      return { label: `${(f.done ?? 0) > 0 ? "Continue" : "Start"}: ${f.nextLessonTitle}`, path: target.nextPath };
+    }
+    return { label: (f.lessons ?? 0) > 0 && (f.done ?? 0) >= (f.lessons ?? 0) ? "Review the course" : "Open course", path: target.path };
+  }
+  const label = target.kind === "lesson" ? "Open lesson" : target.kind === "channel" ? "Open channel" : target.kind === "pod" ? "Open pod" : target.kind === "event" ? "Open event" : "Open";
+  return { label, path: target.path };
 }

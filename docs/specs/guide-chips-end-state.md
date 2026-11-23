@@ -209,3 +209,33 @@ Tests: `scripts/entity_chips.test.ts` (matching, addresses, ambiguity),
 Gives up, on purpose: links outside Polynet (later, the address-based slice if
 needed); things the guide names without bold; old replies naming something
 since renamed.
+
+## Slice 3 as built (Nov 23): cards on chips
+
+Same "delete parts" approach as slice 1:
+
+- **No second query.** `listEntityNamesForViewer` now also returns each
+  thing's card facts, for this reader: a course's description (140 characters),
+  lesson count, lessons this reader finished and their next lesson; a lesson's
+  course, whether this reader finished it and whether it has a video; a
+  channel's description; a pod's purpose and seats; an event's place (online,
+  in person, to be decided) and how often it repeats. Progress is one indexed
+  read (`communityLessonProgress.by_community_user`).
+- **Fact on the chip:** a course shows "2 of 5"; an event shows its next time in
+  the reader's own time zone ("Fri 10:00 AM"); a finished lesson shows ✓.
+- **The card** (`EntityChip` in `shared/entityChipsUi.tsx`, `.entity-card`):
+  name, the lines from `cardLines`, a progress bar for courses, and one action
+  from `cardAction` ("Continue: <next lesson>", "Start: …", "Review the course",
+  "Open lesson/channel/pod/event"). About 280 px wide.
+- **One hover behaviour:** `shared/useHoverIntent.ts` (open after 450 ms, close
+  140 ms after leaving, above unless there's no room, Escape closes), now used
+  by both the profile card and chip cards. The chip also opens its card on
+  keyboard focus.
+- **Left out on purpose:** no card for pages (Home, Events…); no card on touch
+  screens (a tap opens the thing, as with the profile card); no
+  last-active/unread on channels; person and community chips (not chips yet).
+
+Tests: `scripts/entity_chips.test.ts` (chip facts in two time zones, card
+lines, card actions, clipping, timing constants),
+`convex/communityEntityNames.test.ts` (this reader's progress, next lesson,
+video, description, event place and repeat; the host's progress differs).
