@@ -47,6 +47,8 @@ const CHANNELS_MAX = 50;
 const PER_CHANNEL_SCAN = 200;
 const COURSES_MAX = 30;
 const LESSONS_PER_COURSE = 60;
+const CHANNEL_SCAN_CONCURRENCY = 10;
+const LOOKUP_CONCURRENCY = 25;
 const MAX_OUTPUT_TOKENS = 700;
 const MAX_TOOL_STEPS = 2;
 
@@ -98,20 +100,36 @@ export const readReplyDraftInputInternal = internalQuery({
       .take(CHANNELS_MAX);
     const names = new Map<string, string>(channels.map((channel) => [String(channel._id), String(channel.name ?? "a channel")]));
     const roots: any[] = [];
-    for (const channel of channels) {
-      for (const visibility of ["community", "public"] as const) {
-        const band = (fromMs: number, toMs: number) => ctx.db.query("communityInteractionRoots")
-          .withIndex("by_community_channel_visibility_status_createdAt", (q: any) => q
-            .eq("communityId", args.communityId).eq("channelId", channel._id).eq("visibilityScope", visibility).eq("status", "live")
-            .gte("createdAt", fromMs).lt("createdAt", toMs)).order("asc").take(PER_CHANNEL_SCAN);
-        const dayAgo = args.nowMs - REPLY_DRAFT_WAIT_MS;
-        roots.push(...await band(args.nowMs - REPLY_DRAFT_MAX_AGE_MS, dayAgo + 1), ...await band(dayAgo + 1, args.nowMs + 1));
-      }
+    const dayAgo = args.nowMs - REPLY_DRAFT_WAIT_MS;
+    for (let start = 0; start < channels.length; start += CHANNEL_SCAN_CONCURRENCY) {
+      const chunk = channels.slice(start, start + CHANNEL_SCAN_CONCURRENCY);
+      const batch = await Promise.all(
+        chunk.flatMap((channel) =>
+          (["community", "public"] as const).flatMap((visibility) => {
+            const band = (fromMs: number, toMs: number) => ctx.db.query("communityInteractionRoots")
+              .withIndex("by_community_channel_visibility_status_createdAt", (q: any) => q
+                .eq("communityId", args.communityId).eq("channelId", channel._id).eq("visibilityScope", visibility).eq("status", "live")
+                .gte("createdAt", fromMs).lt("createdAt", toMs)).order("asc").take(PER_CHANNEL_SCAN);
+            return [band(args.nowMs - REPLY_DRAFT_MAX_AGE_MS, dayAgo + 1), band(dayAgo + 1, args.nowMs + 1)];
+          }),
+        ),
+      );
+      for (const found of batch) roots.push(...found);
     }
+    const candidates = roots
+      .filter((row) => stillWaiting(row) && row.actorUserId && asksSomething(row))
+      .sort((a, b) => Number(a.createdAt) - Number(b.createdAt));
     const open: any[] = [];
-    for (const root of roots.filter((row) => stillWaiting(row) && row.actorUserId && asksSomething(row)).sort((a, b) => Number(a.createdAt) - Number(b.createdAt))) {
-      const drafted = await ctx.db.query("communityReplyDrafts").withIndex("by_root", (q: any) => q.eq("rootId", root._id)).first();
-      if (!drafted) open.push(root);
+    for (let start = 0; start < candidates.length; start += LOOKUP_CONCURRENCY) {
+      const chunk = candidates.slice(start, start + LOOKUP_CONCURRENCY);
+      const draftedRows = await Promise.all(
+        chunk.map((root) =>
+          ctx.db.query("communityReplyDrafts").withIndex("by_root", (q: any) => q.eq("rootId", root._id)).first(),
+        ),
+      );
+      chunk.forEach((root, idx) => {
+        if (!draftedRows[idx]) open.push(root);
+      });
     }
     const ready = open.filter((root) => args.nowMs - Number(root.createdAt) >= REPLY_DRAFT_WAIT_MS);
     const notYet = open.filter((root) => args.nowMs - Number(root.createdAt) < REPLY_DRAFT_WAIT_MS);
@@ -120,11 +138,14 @@ export const readReplyDraftInputInternal = internalQuery({
     // Today's allowance: drafts written in the last 24 hours.
     // Read by status, so any number of questions no lesson could answer
     // never crowds the real drafts out of the count.
-    const today: any[] = [];
-    for (const status of ["waiting", "posted", "skipped"] as const) {
-      today.push(...await ctx.db.query("communityReplyDrafts").withIndex("by_community_status_createdAt", (q: any) => q
-        .eq("communityId", args.communityId).eq("status", status).gte("createdAt", args.nowMs - DAY_MS)).take(REPLY_DRAFTS_PER_DAY));
-    }
+    const today = (
+      await Promise.all(
+        (["waiting", "posted", "skipped"] as const).map((status) =>
+          ctx.db.query("communityReplyDrafts").withIndex("by_community_status_createdAt", (q: any) => q
+            .eq("communityId", args.communityId).eq("status", status).gte("createdAt", args.nowMs - DAY_MS)).take(REPLY_DRAFTS_PER_DAY),
+        ),
+      )
+    ).flat();
     if (ready.length && today.length >= REPLY_DRAFTS_PER_DAY) {
       const frees = Math.min(...today.map((row: any) => Number(row.createdAt))) + DAY_MS;
       return { ...none, nextDueAt: frees };
@@ -137,24 +158,41 @@ export const readReplyDraftInputInternal = internalQuery({
     const modules = ((await ctx.db.query("communityResourceModules")
       .withIndex("by_community", (q: any) => q.eq("communityId", args.communityId)).take(COURSES_MAX * 2)) as any[])
       .filter((module) => communityResourceModuleIsLive(module)).slice(0, COURSES_MAX);
+    const orderedPages: Array<{ moduleName: string; index: number; page: any }> = [];
+    for (let start = 0; start < modules.length; start += CHANNEL_SCAN_CONCURRENCY) {
+      const chunk = modules.slice(start, start + CHANNEL_SCAN_CONCURRENCY);
+      const resourcesByModule = await Promise.all(
+        chunk.map((module) =>
+          ctx.db.query("communityResources")
+            .withIndex("by_community_module", (q: any) => q.eq("communityId", args.communityId).eq("moduleId", module._id))
+            .take(LESSONS_PER_COURSE * 2),
+        ),
+      );
+      chunk.forEach((module, idx) => {
+        const live = new Set([normalizeIdValue(module._id)]);
+        const pages = (resourcesByModule[idx] as any[])
+          .filter((row) => communityResourceIsLiveModulePage(row, live))
+          .sort((a, b) => (a.sortOrder ?? Number.MAX_SAFE_INTEGER) - (b.sortOrder ?? Number.MAX_SAFE_INTEGER) || a.createdAt - b.createdAt)
+          .slice(0, LESSONS_PER_COURSE);
+        pages.forEach((page, index) => {
+          orderedPages.push({ moduleName: String(module.name ?? "a course"), index, page });
+        });
+      });
+    }
     const all: Array<{ ref: string; resourceId: string; label: string; title: string; text: string }> = [];
-    for (const module of modules) {
-      const live = new Set([normalizeIdValue(module._id)]);
-      const pages = ((await ctx.db.query("communityResources")
-        .withIndex("by_community_module", (q: any) => q.eq("communityId", args.communityId).eq("moduleId", module._id)).take(LESSONS_PER_COURSE * 2)) as any[])
-        .filter((row) => communityResourceIsLiveModulePage(row, live))
-        .sort((a, b) => (a.sortOrder ?? Number.MAX_SAFE_INTEGER) - (b.sortOrder ?? Number.MAX_SAFE_INTEGER) || a.createdAt - b.createdAt)
-        .slice(0, LESSONS_PER_COURSE);
-      for (const [index, page] of pages.entries()) {
-        const body = String((await hydrateCommunityResourceBody(ctx, page))?.bodyMd ?? "").replace(/\s+/g, " ").trim();
-        if (!body) continue;
+    for (let start = 0; start < orderedPages.length; start += LOOKUP_CONCURRENCY) {
+      const chunk = orderedPages.slice(start, start + LOOKUP_CONCURRENCY);
+      const hydrated = await Promise.all(chunk.map((entry) => hydrateCommunityResourceBody(ctx, entry.page)));
+      chunk.forEach(({ moduleName, index, page }, idx) => {
+        const body = String(hydrated[idx]?.bodyMd ?? "").replace(/\s+/g, " ").trim();
+        if (!body) return;
         const title = String(page.title ?? "").trim() || `Lesson ${index + 1}`;
         all.push({
           ref: `lesson:${String(page._id)}`, resourceId: String(page._id),
-          label: `${String(module.name ?? "a course")} · Lesson ${index + 1}: ${title}`, title,
+          label: `${moduleName} · Lesson ${index + 1}: ${title}`, title,
           text: body.length > REPLY_DRAFT_LESSON_CHARS ? `${body.slice(0, REPLY_DRAFT_LESSON_CHARS - 1)}…` : body,
         });
-      }
+      });
     }
     return {
       question: {
@@ -291,10 +329,16 @@ export const listReplyDrafts = query({
     const rows = await ctx.db.query("communityReplyDrafts")
       .withIndex("by_community_status_createdAt", (q: any) => q.eq("communityId", args.communityId).eq("status", "waiting")).order("desc").take(20);
     const names = new Map<string, string>();
+    const checked = await Promise.all(
+      (rows as any[]).map(async (draft) => ({ draft, live: await waitingDraft(ctx, draft, nowMs) })),
+    );
+    const liveDrafts = checked.filter((entry): entry is { draft: any; live: NonNullable<Awaited<ReturnType<typeof waitingDraft>>> } => Boolean(entry.live));
+    const uniqueAuthorIds = Array.from(
+      new Map(liveDrafts.map(({ live }) => [String(live.root.actorUserId), live.root.actorUserId])).values(),
+    );
+    await Promise.all(uniqueAuthorIds.map((userId) => displayName(ctx, userId, names)));
     const views: Array<ReplyDraftView & { askedAt: number }> = [];
-    for (const draft of rows as any[]) {
-      const live = await waitingDraft(ctx, draft, nowMs);
-      if (!live) continue;
+    for (const { draft, live } of liveDrafts) {
       views.push({
         id: String(draft._id), author: await displayName(ctx, live.root.actorUserId, names), question: questionText(live.root).slice(0, 400),
         channel: String(live.channel.name ?? "a channel"), hours_waiting: Math.floor((nowMs - Number(live.root.createdAt)) / 3_600_000),

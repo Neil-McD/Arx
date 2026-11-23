@@ -9,6 +9,8 @@ import {
   readCommunityActiveMemberCount,
 } from "./communityCore";
 import { BASE_TIER_KEY } from "./communityTiers";
+import { communityLooksFinished, computeCommunityDiscoverActivity } from "./communityPublic";
+import { communityIsActive } from "../shared/communityLifecycle";
 
 const ACTIVE_RECURRING_STATUSES = ["active", "past_due", "cancel_at_period_end"] as const;
 const BACKFILL_BATCH_SIZE = 200;
@@ -16,6 +18,7 @@ const SWEEP_COMMUNITIES_PAGE_SIZE = 50;
 const SWEEP_MAX_PER_RUN = 5;
 const OPERATOR_COMMUNITIES_BATCH_SIZE = 25;
 const OPERATOR_USERS_BATCH_SIZE = 200;
+const DISCOVER_ACTIVITY_BATCH_SIZE = 20;
 const STALE_COMMUNITY_ACTIVITY_AGE_MS = 14 * 24 * 60 * 60 * 1000;
 const SETUP_RISK_FLAGS = new Set([
   "no_members",
@@ -841,5 +844,43 @@ export const refreshPlatformOperatorSummaryBatchInternal = internalMutation({
       await ctx.db.insert("platformOperatorSummary", { key: "current", totals, computedAt: nowMs });
     }
     return { done: true, communities: acc.communities, users: acc.totalAccountUsers };
+  },
+});
+
+// Pre-computes Discover card 7-day activity stats for published, finished communities
+// in paginated batches so listPublicDiscoverCommunities runs in O(1) reads per card.
+export const refreshDiscoverActivityStatsBatchInternal = internalMutation({
+  args: {
+    cursor: v.optional(v.union(v.string(), v.null())),
+  },
+  handler: async (ctx, args) => {
+    const nowMs = Date.now();
+    const page = await ctx.db
+      .query("communities")
+      .withIndex("by_visibility_updatedAt", (q) => q.eq("visibility", "published"))
+      .order("desc")
+      .paginate({ cursor: args.cursor ?? null, numItems: DISCOVER_ACTIVITY_BATCH_SIZE });
+
+    let updated = 0;
+    for (const community of page.page) {
+      if (!communityIsActive(community as any) || !communityLooksFinished(community as any)) {
+        continue;
+      }
+      const stats = await computeCommunityDiscoverActivity(ctx, community._id, nowMs);
+      await ctx.db.patch(community._id, {
+        discoverLastActiveAt: stats.lastActiveAt ?? undefined,
+        discoverPosts7dCount: stats.postsThisWeek,
+        discoverActivityComputedAt: nowMs,
+      });
+      updated += 1;
+    }
+
+    if (!page.isDone) {
+      await ctx.scheduler.runAfter(0, (internal as any).communityAnalyticsRollups.refreshDiscoverActivityStatsBatchInternal, {
+        cursor: page.continueCursor,
+      });
+    }
+
+    return { done: page.isDone, updated };
   },
 });

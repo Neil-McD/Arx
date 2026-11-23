@@ -20,7 +20,7 @@ import { runAgentWork } from "./agentWork";
 import { getUniqueCommunityMembershipByPair, normalizeCommunityRoleForOutput, requireCommunityChatAccess } from "./communityCore";
 import { displayName } from "./communityFounderBrief";
 import { briefFor, communityScopeKey, insertWork, memoryIndexFor, podScopeKey, removeBrief, workFor, writeBrief, type ScopeKey } from "./communityNotesStore";
-import { evidenceFacts, guideSeatedInPod, openRun, podRoom, scheduleAgentWork } from "./communityMemory";
+import { docReader, evidenceFacts, guideSeatedInPod, openRun, podRoom, scheduleAgentWork } from "./communityMemory";
 import { communityAgentIsOn } from "./communityApps";
 import { memoryEvidenceRefusal, parseMemoryEvidenceRef } from "../shared/communityMemory";
 import { renderCommunityCard } from "../shared/communityOntology";
@@ -37,6 +37,8 @@ const POST_CHARS = 300;
 const REPLY_CHARS = 200;
 const PER_CHANNEL_SCAN = 60;
 const CHANNELS_MAX = 50;
+const CHANNEL_SCAN_CONCURRENCY = 10;
+const LOOKUP_CONCURRENCY = 25;
 
 // A person's post or reply makes its place's brief due; more activity before
 // then joins it. An open channel's post is the community's; a pod room's is
@@ -102,27 +104,50 @@ export const readCommunityBriefInputInternal = internalQuery({
     const channelNames = new Map<string, string>(channels.map((channel) => [String(channel._id), String(channel.name ?? "a channel")]));
     const recent = async (table: "communityInteractionRoots" | "communityInteractionReplies") => {
       const rows: any[] = [];
-      for (const channel of channels) {
-        for (const visibility of ["community", "public"] as const) {
-          rows.push(...await ctx.db.query(table).withIndex("by_community_channel_visibility_status_createdAt", (q: any) => q
-            .eq("communityId", args.communityId).eq("channelId", channel._id).eq("visibilityScope", visibility).eq("status", "live")
-            .gte("createdAt", sinceMs).lt("createdAt", args.untilMs)).order("desc").take(PER_CHANNEL_SCAN));
-        }
+      for (let start = 0; start < channels.length; start += CHANNEL_SCAN_CONCURRENCY) {
+        const chunk = channels.slice(start, start + CHANNEL_SCAN_CONCURRENCY);
+        const batch = await Promise.all(
+          chunk.flatMap((channel) =>
+            (["community", "public"] as const).map((visibility) =>
+              ctx.db.query(table).withIndex("by_community_channel_visibility_status_createdAt", (q: any) => q
+                .eq("communityId", args.communityId).eq("channelId", channel._id).eq("visibilityScope", visibility).eq("status", "live")
+                .gte("createdAt", sinceMs).lt("createdAt", args.untilMs)).order("desc").take(PER_CHANNEL_SCAN),
+            ),
+          ),
+        );
+        for (const found of batch) rows.push(...found);
       }
       return rows.filter((row) => row.actorType === "human" && row.actorUserId);
     };
-    const roots = await recent("communityInteractionRoots");
-    const replies = await recent("communityInteractionReplies");
+    const [roots, replies] = await Promise.all([
+      recent("communityInteractionRoots"),
+      recent("communityInteractionReplies"),
+    ]);
 
     // A thread: a person's live post in an open channel, with the replies
     // people wrote in the window. An older post people are still replying to
     // counts too.
     const threads = new Map<string, { root: any; replies: any[] }>();
     for (const root of roots) threads.set(String(root._id), { root, replies: [] });
+    const missingRootIds: any[] = [];
+    const seenMissingRoots = new Set<string>();
+    for (const reply of replies) {
+      const key = String(reply.rootId);
+      if (!threads.has(key) && !seenMissingRoots.has(key)) {
+        seenMissingRoots.add(key);
+        missingRootIds.push(reply.rootId);
+      }
+    }
+    const fetchedRoots = new Map<string, any>();
+    for (let start = 0; start < missingRootIds.length; start += LOOKUP_CONCURRENCY) {
+      const chunk = missingRootIds.slice(start, start + LOOKUP_CONCURRENCY);
+      const loaded = await Promise.all(chunk.map((rootId) => ctx.db.get(rootId)));
+      chunk.forEach((rootId, idx) => fetchedRoots.set(String(rootId), loaded[idx]));
+    }
     for (const reply of replies) {
       const key = String(reply.rootId);
       if (!threads.has(key)) {
-        const root: any = await ctx.db.get(reply.rootId);
+        const root: any = fetchedRoots.get(key);
         if (!root || root.status !== "live" || root.actorType !== "human" || !root.actorUserId || !channelNames.has(String(root.channelId ?? ""))
           || !(root.visibilityScope === "community" || root.visibilityScope === "public")) continue;
         threads.set(key, { root, replies: [] });
@@ -135,16 +160,34 @@ export const readCommunityBriefInputInternal = internalQuery({
     const podRecord: any = room ? await ctx.db.query("communityPods")
       .withIndex("by_community_channel", (q: any) => q.eq("communityId", args.communityId).eq("channelId", room._id)).first() : null;
     const hosts = new Map<string, boolean>(((podRecord?.hostUserIds ?? []) as any[]).map((id) => [String(id), true]));
+    const warmHosts = async (userIds: any[]) => {
+      const missing: any[] = [];
+      const seen = new Set<string>();
+      for (const userId of userIds) {
+        const key = String(userId ?? "");
+        if (!key || hosts.has(key) || seen.has(key)) continue;
+        seen.add(key);
+        missing.push(userId);
+      }
+      for (let start = 0; start < missing.length; start += LOOKUP_CONCURRENCY) {
+        const chunk = missing.slice(start, start + LOOKUP_CONCURRENCY);
+        await Promise.all(chunk.map(async (userId) => {
+          const key = String(userId);
+          const membership = key === String(community.ownerId) ? null
+            : await getUniqueCommunityMembershipByPair({ ctx, communityId: args.communityId, userId });
+          const role = normalizeCommunityRoleForOutput(membership?.role);
+          hosts.set(key, key === String(community.ownerId) || role === "admin" || role === "moderator");
+        }));
+      }
+    };
     const isHost = async (userId: any) => {
       const key = String(userId);
       if (!hosts.has(key)) {
-        const membership = key === String(community.ownerId) ? null
-          : await getUniqueCommunityMembershipByPair({ ctx, communityId: args.communityId, userId });
-        const role = normalizeCommunityRoleForOutput(membership?.role);
-        hosts.set(key, key === String(community.ownerId) || role === "admin" || role === "moderator");
+        await warmHosts([userId]);
       }
       return hosts.get(key)!;
     };
+    await warmHosts([...threads.values()].map((thread) => thread.root.actorUserId));
     const scored: Array<{ root: any; replies: any[]; host: boolean; unanswered: boolean; score: number }> = [];
     for (const thread of threads.values()) {
       const host = await isHost(thread.root.actorUserId);
@@ -157,10 +200,31 @@ export const readCommunityBriefInputInternal = internalQuery({
     }
     scored.sort((a, b) => b.score - a.score || Number(b.root.createdAt) - Number(a.root.createdAt));
 
+    const topThreads = scored.slice(0, THREADS_SHOWN).map((thread) => ({
+      thread,
+      shownReplies: [...thread.replies].sort((a, b) => Number(a.createdAt) - Number(b.createdAt)).slice(-REPLIES_PER_THREAD),
+    }));
+    const shownUserIds = topThreads.flatMap(({ thread, shownReplies }) => [
+      thread.root.actorUserId,
+      ...shownReplies.map((reply) => reply.actorUserId),
+    ]);
+    const uniqueShownUsers = Array.from(
+      new Map(shownUserIds.filter(Boolean).map((id) => [String(id), id])).values(),
+    );
     const names = new Map<string, string>();
+    const [memory] = await Promise.all([
+      memoryIndexFor(ctx, room ? podScopeKey(room._id) : communityScopeKey(args.communityId)),
+      warmHosts(uniqueShownUsers),
+      (async () => {
+        for (let start = 0; start < uniqueShownUsers.length; start += LOOKUP_CONCURRENCY) {
+          const chunk = uniqueShownUsers.slice(start, start + LOOKUP_CONCURRENCY);
+          await Promise.all(chunk.map((userId) => displayName(ctx, userId, names)));
+        }
+      })(),
+    ]);
     const refs: string[] = [];
     const blocks: string[] = [];
-    for (const thread of scored.slice(0, THREADS_SHOWN)) {
+    for (const { thread, shownReplies } of topThreads) {
       const rootRef = `post:${String(thread.root._id)}`;
       refs.push(rootRef);
       const author = await displayName(ctx, thread.root.actorUserId, names);
@@ -169,16 +233,14 @@ export const readCommunityBriefInputInternal = internalQuery({
         `### ${rootRef} · #${channelNames.get(String(thread.root.channelId)) ?? "a channel"} · ${author}${thread.host ? " (host)" : ""}${thread.unanswered ? " · a question nobody has answered" : ""}`,
         clip(text, POST_CHARS),
       ];
-      const shown = [...thread.replies].sort((a, b) => Number(a.createdAt) - Number(b.createdAt)).slice(-REPLIES_PER_THREAD);
-      if (thread.replies.length > shown.length) lines.push(`(${thread.replies.length - shown.length} earlier replies not shown)`);
-      for (const reply of shown) {
+      if (thread.replies.length > shownReplies.length) lines.push(`(${thread.replies.length - shownReplies.length} earlier replies not shown)`);
+      for (const reply of shownReplies) {
         const replyRef = `reply:${String(reply._id)}`;
         refs.push(replyRef);
         lines.push(`- ${replyRef} · ${await displayName(ctx, reply.actorUserId, names)}${(await isHost(reply.actorUserId)) ? " (host)" : ""}: ${clip(reply.contentSummary, REPLY_CHARS)}`);
       }
       blocks.push(lines.join("\n"));
     }
-    const memory: any = await memoryIndexFor(ctx, room ? podScopeKey(room._id) : communityScopeKey(args.communityId));
     const text = [
       `## memory.md (what this ${room ? "pod" : "community"} has settled; for context, not to repeat)`,
       memory?.bodyMd ? String(memory.bodyMd) : "(empty)",
@@ -280,17 +342,20 @@ export async function readPlaceBrief(ctx: any, args: { communityId: any; podRoom
   const stored: any = await briefFor(ctx, scope);
   if (!stored) return null;
   // Where each cited post is now; null once it is gone, hidden or moved out of the place.
+  const reader = docReader(ctx);
   const where = new Map<string, { slug: string; name: string } | null>();
-  for (const ref of new Set<string>(stored.refs as string[])) {
-    const parsed = parseMemoryEvidenceRef(ref);
-    if (!parsed || memoryEvidenceRefusal(await evidenceFacts(ctx, args.communityId, parsed, scope))) {
-      where.set(ref, null);
-      continue;
-    }
-    const row: any = await ctx.db.get(ctx.db.normalizeId(parsed.kind === "post" ? "communityInteractionRoots" : "communityInteractionReplies", parsed.id)!);
-    const channel: any = row?.channelId ? await ctx.db.get(row.channelId) : null;
-    where.set(ref, channel ? { slug: String(channel.slug ?? ""), name: String(channel.name ?? "") } : null);
-  }
+  await Promise.all(
+    [...new Set<string>(stored.refs as string[])].map(async (ref) => {
+      const parsed = parseMemoryEvidenceRef(ref);
+      if (!parsed || memoryEvidenceRefusal(await evidenceFacts(ctx, args.communityId, parsed, scope, reader))) {
+        where.set(ref, null);
+        return;
+      }
+      const row: any = await reader.get(ctx.db.normalizeId(parsed.kind === "post" ? "communityInteractionRoots" : "communityInteractionReplies", parsed.id)!);
+      const channel: any = row?.channelId ? await reader.get(row.channelId) : null;
+      where.set(ref, channel ? { slug: String(channel.slug ?? ""), name: String(channel.name ?? "") } : null);
+    }),
+  );
   const visible = visibleBrief(stored, args.nowMs, (ref) => Boolean(where.get(ref)));
   if (!visible) return null;
   return {

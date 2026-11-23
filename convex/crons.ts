@@ -77,4 +77,7 @@ crons.interval("refresh community analytics rollups", { minutes: 15 },
 // Refresh platform-wide operator summary in paginated batches.
 crons.interval("refresh platform operator summary", { minutes: 15 },
   (internal as any).communityAnalyticsRollups.refreshPlatformOperatorSummaryBatchInternal, {});
+// Refresh pre-computed Discover activity stats for published communities in paginated batches.
+crons.interval("refresh discover activity stats", { minutes: 15 },
+  (internal as any).communityAnalyticsRollups.refreshDiscoverActivityStatsBatchInternal, {});
 export default crons;

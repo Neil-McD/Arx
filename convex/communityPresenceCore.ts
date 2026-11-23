@@ -90,13 +90,18 @@ export async function deleteCommunityPresenceForUser(args: {
   return rows.length;
 }
 
+export const COMMUNITY_PRESENCE_HEARTBEAT_COALESCE_WINDOW_MS = 15_000;
+const PRESENCE_MEMBER_FETCH_CHUNK_SIZE = 16;
+
 export async function renewCommunityPresenceLease(args: {
   ctx: any;
   communityId: any;
   userId: any;
   nowMs?: number;
+  minRefreshIntervalMs?: number;
 }): Promise<{ activeUntil: number; lastSeenAt: number }> {
   const nowMs = args.nowMs ?? Date.now();
+  const minRefreshIntervalMs = Math.max(0, Math.floor(args.minRefreshIntervalMs ?? 0));
   const issuedLease = issueCommunityPresenceLease(nowMs);
   const existing = await args.ctx.db
     .query("communityPresence" as any)
@@ -107,6 +112,20 @@ export async function renewCommunityPresenceLease(args: {
   if (existing) {
     const currentLastSeenAt =
       normalizeCommunityPresenceTimestamp(existing.lastSeenAt) ?? 0;
+    const currentActiveUntil = normalizeCommunityPresenceTimestamp(
+      existing.activeUntil,
+    );
+    if (
+      minRefreshIntervalMs > 0
+      && currentActiveUntil !== null
+      && currentActiveUntil > issuedLease.lastSeenAt
+      && issuedLease.lastSeenAt - currentLastSeenAt < minRefreshIntervalMs
+    ) {
+      return {
+        lastSeenAt: currentLastSeenAt,
+        activeUntil: currentActiveUntil,
+      };
+    }
     const lease = issueCommunityPresenceLease(
       Math.max(currentLastSeenAt, issuedLease.lastSeenAt),
     );
@@ -140,7 +159,7 @@ export async function resolveCommunityPresenceAuthorization(args: {
     .withIndex("by_community_user", (q: any) =>
       q.eq("communityId", args.community._id).eq("userId", args.userId),
     )
-    .collect()) as CommunityMembershipLike[];
+    .take(2)) as CommunityMembershipLike[];
   const membership = pickMostRelevantCommunityMembership(membershipRows);
   const lens = await resolveCommunityLens({ ctx: args.ctx, community: args.community, membership, userId: args.userId });
   return { authorized: lens.entitled, membership: lens.operational ? membership : null };
@@ -237,13 +256,12 @@ export async function resolveMemberCommunityPresenceSummary(
     )
   ).filter(Boolean) as CommunityPresenceFace[];
 
-  const onlineUserIds: string[] = [];
-  for (const entry of onlineUserEntries) {
-    const publicUserId =
+  const onlineUserIds = await Promise.all(
+    onlineUserEntries.map(async (entry) =>
       (await resolvePublicUserId(ctx, entry.userId, userIdCache))
-      ?? String(entry.userId);
-    onlineUserIds.push(publicUserId);
-  }
+      ?? String(entry.userId),
+    ),
+  );
 
   const durableMemberCount = readCommunityActiveMemberCount(community);
   const memberCount =
@@ -277,18 +295,26 @@ export async function listCommunityOnlineMembers(
   members: Array<{ ref: string; name: string; handle: string | null; avatar_url: string | null }>;
 }> {
   const presenceWindow = await resolveAuthorizedCommunityPresenceWindow(ctx, community);
-  const members = [];
-  for (const { userId } of presenceWindow.entries) {
-    const user = await ctx.db.get(userId);
-    if (!user) continue;
-    const display = await resolveUserProfileDisplayProjection(ctx, user._id);
-    const handle = validateProfileHandle(user.normalizedHandle ?? user.handle);
-    members.push({
-      ref: `user:${String(user._id)}`,
-      name: display.display_name ?? "Member",
-      handle: handle.ok ? handle.normalizedHandle : null,
-      avatar_url: display.avatar_url,
-    });
+  const members: Array<{ ref: string; name: string; handle: string | null; avatar_url: string | null }> = [];
+  for (let start = 0; start < presenceWindow.entries.length; start += PRESENCE_MEMBER_FETCH_CHUNK_SIZE) {
+    const chunk = presenceWindow.entries.slice(start, start + PRESENCE_MEMBER_FETCH_CHUNK_SIZE);
+    const resolved = await Promise.all(
+      chunk.map(async ({ userId }) => {
+        const user = await ctx.db.get(userId);
+        if (!user) return null;
+        const display = await resolveUserProfileDisplayProjection(ctx, user._id);
+        const handle = validateProfileHandle(user.normalizedHandle ?? user.handle);
+        return {
+          ref: `user:${String(user._id)}`,
+          name: display.display_name ?? "Member",
+          handle: handle.ok ? handle.normalizedHandle : null,
+          avatar_url: display.avatar_url,
+        };
+      }),
+    );
+    for (const member of resolved) {
+      if (member) members.push(member);
+    }
   }
   return {
     online_count: presenceWindow.entries.length,
