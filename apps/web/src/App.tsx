@@ -1,4 +1,6 @@
+import "./index.css";
 import { useWebInboxRoute } from "./controllers/useWebInboxRoute";
+import { bootConvexProbe } from "../../../shared/convexRuntime";
 import { askInApp } from "../../../shared/inAppConfirm";
 import { useCommunityAppLinksState } from "./controllers/communityAppLinks";
 import { useGuideSearchShortcut } from "./controllers/useGuideSearchShortcut";
@@ -174,6 +176,7 @@ type UserProfileDetail = SharedUserProfileDetail;
 type CommunityJoinRequest = WebCommunityJoinRequest;
 
 export default function App() {
+  bootConvexProbe();
   const appActivity = useWebAppActivityController();
   const directMessages = useWebDirectMessagesController();
   const {
