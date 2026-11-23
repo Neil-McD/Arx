@@ -1,5 +1,4 @@
 import { useEffect, useRef, type DragEvent } from "react";
-import { isDesignV1Active } from "../../../../shared/designSystem";
 import { SettingsGroup, SettingsRow } from "./SettingsRows";
 import type { SocialProfileKind, SocialProfileLinks } from "../../../../shared/socialProfileLinks";
 import { UserAvatar } from "../../../../shared/UserAvatar";
@@ -52,32 +51,46 @@ type WebProfileSettingsSectionProps = {
   saveProfileToCloud: (options?: { socialLinks?: SocialProfileLinks }) => Promise<boolean | void> | boolean | void;
 };
 
+// Profile as rows, saving as you go (a field saves when you leave it; a photo when it changes).
 export function WebProfileSettingsSection(props: WebProfileSettingsSectionProps) {
-  return isDesignV1Active() ? <ProfileSettingsV1 {...props} /> : <ProfileSettingsClassic {...props} />;
-}
-
-// Design v1, one Settings page: Profile as rows, saving as you go (a field
-// saves when you leave it; a photo when it changes).
-function ProfileSettingsV1(props: WebProfileSettingsSectionProps) {
   const { session, cloudProfile, profileNeedsSave, isSavingProfile, saveProfileToCloud } = props;
   const rootRef = useRef<HTMLDivElement | null>(null);
   const isInitialLoad = Boolean(session && !cloudProfile && (props.profileLoadStatus === "idle" || props.profileLoadStatus === "loading"));
-  const latest = useRef({ profileNeedsSave, isSavingProfile, saveProfileToCloud });
-  latest.current = { profileNeedsSave, isSavingProfile, saveProfileToCloud };
-  const trySave = () => {
+  const latest = useRef({
+    profileNeedsSave,
+    isSavingProfile,
+    profileSaveError: props.profileSaveError,
+    saveProfileToCloud,
+  });
+  latest.current = {
+    profileNeedsSave,
+    isSavingProfile,
+    profileSaveError: props.profileSaveError,
+    saveProfileToCloud,
+  };
+  const trySave = (options?: { allowRetryAfterError?: boolean }) => {
     const now = latest.current;
     if (!session || !now.profileNeedsSave || now.isSavingProfile) return;
+    if (!options?.allowRetryAfterError && now.profileSaveError) return;
     const active = document.activeElement;
     if (active && rootRef.current?.contains(active) && (active.tagName === "INPUT" || active.tagName === "TEXTAREA") && (active as HTMLInputElement).type !== "file") return;
     void now.saveProfileToCloud();
   };
-  // A new or adjusted photo saves at once.
-  // ...and a save that finishes while edits are still unsaved goes again.
+  // A new or adjusted photo saves at once, and a save that finishes while edits
+  // are still unsaved goes again (unless the previous save failed).
   const photo = [props.profileAvatarUrl, props.profileAvatarFocusX, props.profileAvatarFocusY, props.profileAvatarZoom, props.isProfileAvatarFocusModalOpen, isSavingProfile].join("|");
-  useEffect(() => { if (!props.isProfileAvatarFocusModalOpen) window.setTimeout(trySave, 0); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [photo]);
+  const prevPhotoRef = useRef(photo);
+  useEffect(() => {
+    if (prevPhotoRef.current === photo) return;
+    prevPhotoRef.current = photo;
+    if (props.isProfileAvatarFocusModalOpen) return;
+    const timer = window.setTimeout(() => trySave(), 0);
+    return () => window.clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [photo, props.isProfileAvatarFocusModalOpen]);
   const name = (props.profileName || session?.user.email || "AR").replace(/^@/, "");
   return (
-    <div ref={rootRef} className="settings-v1-page-body" onBlur={() => window.setTimeout(trySave, 0)}>
+    <div ref={rootRef} className="settings-v1-page-body" onBlur={() => window.setTimeout(() => trySave({ allowRetryAfterError: true }), 0)}>
       <SettingsGroup>
         <SettingsRow label="Photo">
           <div
@@ -138,6 +151,9 @@ function ProfileSettingsV1(props: WebProfileSettingsSectionProps) {
       {props.profileLoadStatus === "error" ? (
         <p className="settings-v1-error" role="alert">Your profile couldn't be loaded. Your edits are kept. <button type="button" className="settings-v1-button is-quiet" onClick={props.reloadProfile}>Retry</button></p>
       ) : null}
+      {props.profileSaveError ? (
+        <p className="settings-v1-error" role="alert">{props.profileSaveError}</p>
+      ) : null}
       <WebUserAvatarEditorModal
         isOpen={props.isProfileAvatarFocusModalOpen}
         avatarUrl={props.profileAvatarUrl}
@@ -152,191 +168,6 @@ function ProfileSettingsV1(props: WebProfileSettingsSectionProps) {
         onChangeZoom={props.setProfileAvatarZoom}
         onDirty={() => undefined}
         onClose={() => props.setIsProfileAvatarFocusModalOpen(false)}
-      />
-    </div>
-  );
-}
-
-function ProfileSettingsClassic(props: WebProfileSettingsSectionProps) {
-  const {
-    session,
-    cloudProfile,
-    profileAvatarUrl,
-    profileAvatarFocusX,
-    profileAvatarFocusY,
-    profileAvatarZoom,
-    profileName,
-    profileHandle,
-    profileBio,
-    profileSocialLinks,
-    isProfileAvatarDragOver,
-    profileNeedsSave,
-    isSavingProfile,
-    isProfileDirty,
-    profileSaveError,
-    isProfileAvatarFocusModalOpen,
-    setIsProfileAvatarDragOver,
-    setProfileAvatarFocusX,
-    setProfileAvatarFocusY,
-    setProfileAvatarZoom,
-    setIsProfileAvatarFocusModalOpen,
-    handleProfileAvatarDrop,
-    handleProfileAvatarUpload,
-    onRemoveProfileAvatar,
-    getInitials,
-    setProfileName,
-    setProfileHandle,
-    setProfileBio,
-    setProfileSocialLink,
-    saveProfileToCloud,
-  } = props;
-  const isInitialLoad = Boolean(session && !cloudProfile && (props.profileLoadStatus === "idle" || props.profileLoadStatus === "loading"));
-  const syncLabel = !session ? "Sign in to sync" : isSavingProfile ? "Saving…" : props.profileLoadStatus === "error" ? "Could not refresh profile" : isInitialLoad ? "Loading profile…" : isProfileDirty ? "Unsaved changes" : cloudProfile ? "Saved" : "Not saved yet";
-
-  return (
-    <div className="settings-section">
-      <div className="settings-section-title">
-        <svg viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" /></svg>
-        Profile
-      </div>
-      <div className="settings-section-desc">
-        {session
-          ? "Profile details shown in communities. Save to sync across devices."
-          : "Local profile details shown in communities on this device."}
-      </div>
-      <div className="profile-block">
-        <div
-          className={`profile-avatar-drop${isProfileAvatarDragOver ? " drag-over" : ""}`}
-          onDragOver={(event) => {
-            event.preventDefault();
-            setIsProfileAvatarDragOver(true);
-          }}
-          onDragLeave={() => setIsProfileAvatarDragOver(false)}
-          onDrop={handleProfileAvatarDrop}
-        >
-          {session ? (
-            <UserAvatar
-              identityPending={isInitialLoad && !profileAvatarUrl}
-              className="profile-avatar-drop-avatar"
-              readyClassName="has-image"
-              name={(profileName || session.user.email || "AR").replace(/^@/, "")}
-              imageUrl={profileAvatarUrl}
-              focusX={profileAvatarFocusX}
-              focusY={profileAvatarFocusY}
-              zoom={profileAvatarZoom}
-              alt="Profile avatar"
-              fallback={
-                <span>
-                  {getInitials(
-                    (profileName || session.user.email || "AR").replace(/^@/, ""),
-                  )}
-                </span>
-              }
-            />
-          ) : (
-            <span className="profile-avatar-placeholder" aria-hidden="true">
-              <svg viewBox="0 0 24 24">
-                <circle cx="12" cy="8" r="4.2" />
-                <path d="M4.5 20c1.8-4 5-6 7.5-6s5.7 2 7.5 6" />
-              </svg>
-            </span>
-          )}
-        </div>
-        <div className="profile-avatar-actions">
-          <label className="create-avatar-btn">
-            Upload photo
-            <input
-              type="file"
-              accept="image/*"
-              onChange={(event) => void handleProfileAvatarUpload(event.target.files?.[0] ?? null)}
-            />
-          </label>
-          {session && profileAvatarUrl && (
-            <>
-              <button
-                className="create-avatar-btn"
-                type="button"
-                onClick={() => setIsProfileAvatarFocusModalOpen(true)}
-              >
-                Adjust
-              </button>
-              <button className="create-avatar-remove" type="button" onClick={onRemoveProfileAvatar}>
-                Remove
-              </button>
-            </>
-          )}
-        </div>
-      </div>
-      <div className="profile-row">
-        <input
-          type="text"
-          placeholder="Name"
-          aria-label="Name"
-          value={profileName}
-          onChange={(event) => setProfileName(event.target.value)}
-          maxLength={PROFILE_DISPLAY_NAME_MAX_CHARS}
-        />
-      </div>
-      <div className="profile-row profile-handle-row">
-        <span className="profile-handle-prefix" aria-hidden="true">@</span>
-        <input
-          type="text"
-          placeholder="handle"
-          aria-label="Handle"
-          value={profileHandle}
-          onChange={(event) => setProfileHandle(event.target.value)}
-          autoCapitalize="none"
-          autoCorrect="off"
-        />
-      </div>
-      <textarea
-        className="profile-bio"
-        placeholder="Bio"
-        aria-label="Bio"
-        value={profileBio}
-        onChange={(event) => setProfileBio(event.target.value)}
-        rows={3}
-        maxLength={PROFILE_BIO_MAX_CHARS}
-      />
-      <div className="account-row">
-        <div className="account-identity">
-          <span>Sync</span>
-          <strong role="status">{syncLabel}</strong>
-        </div>
-        <div className="auth-actions">
-          <button
-            className={profileNeedsSave ? "platform-save-button needs-save" : "platform-save-button synced"}
-            type="button"
-            onClick={() => void saveProfileToCloud()}
-            disabled={!session || isSavingProfile || !profileNeedsSave}
-          >
-            {isSavingProfile ? "Saving…" : "Save"}
-          </button>
-        </div>
-      </div>
-      <WebSocialProfileLinksFields
-        values={profileSocialLinks}
-        disabled={!session || isSavingProfile || isInitialLoad || (!cloudProfile && props.profileLoadStatus === "error")}
-        variant="settings"
-        onChange={setProfileSocialLink}
-        onSave={(nextLinks) => saveProfileToCloud({ socialLinks: nextLinks })}
-      />
-      {props.profileLoadStatus === "error" && <div className="auth-error" role="alert">Your profile could not be loaded. Your edits are preserved. <button type="button" onClick={props.reloadProfile}>Retry</button></div>}
-      {profileSaveError && <div className="auth-error" role="alert">{profileSaveError}</div>}
-      <WebUserAvatarEditorModal
-        isOpen={isProfileAvatarFocusModalOpen}
-        avatarUrl={profileAvatarUrl}
-        focusX={profileAvatarFocusX}
-        focusY={profileAvatarFocusY}
-        zoom={profileAvatarZoom}
-        title="Adjust profile photo"
-        imageAlt="Profile photo preview"
-        hint="Drag the image to frame it inside your profile avatar."
-        onChangeFocusX={setProfileAvatarFocusX}
-        onChangeFocusY={setProfileAvatarFocusY}
-        onChangeZoom={setProfileAvatarZoom}
-        onDirty={() => undefined}
-        onClose={() => setIsProfileAvatarFocusModalOpen(false)}
       />
     </div>
   );

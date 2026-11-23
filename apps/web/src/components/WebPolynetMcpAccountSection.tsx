@@ -1,10 +1,7 @@
 import { useEffect, useState } from "react";
-import { Copy } from "lucide-react";
 
 import { tryCopyTextToClipboard } from "../../../../shared/chatUi";
 import { buildPolynetMcpSetupForOrigin } from "../../../../shared/polynetMcpSetup";
-import { DiscoverCatalogLogo } from "./DiscoverCatalogLogo";
-import { isDesignV1Active } from "../../../../shared/designSystem";
 import { SettingsGroup, SettingsRow } from "./SettingsRows";
 
 export type WebPolynetMcpAccountSectionProps = {
@@ -39,74 +36,30 @@ export function WebPolynetMcpAccountSection(
     }
   };
 
-  if (isDesignV1Active()) {
-    return (
-      <SettingsGroup label="Your AI">
-        <SettingsRow label="Connect your AI" help={props.session
-          ? "Paste the setup into Claude Code, Codex or another tool, then sign in once. It sees only communities you're in."
-          : "Sign in to connect your AI."}>
-          {props.session ? (
-            <button className="settings-v1-button" type="button" onClick={() => void handleCopySetup()}>
-              {copyState === "copied" ? "Copied" : copyState === "error" ? "Copy failed" : "Copy setup"}
-            </button>
-          ) : null}
-        </SettingsRow>
-      </SettingsGroup>
-    );
-  }
-
   return (
-    <div className="settings-section">
-      <div className="settings-section-title">External access</div>
-      <div className="settings-section-desc">
-        Connect an external AI harness through the official OAuth-protected
-        Polynet MCP.
-      </div>
-      {props.session ? (
-        <div className="integrations-app-list">
-          <div className="integration-mounted-row polymcp-access-row">
-            <div className="integration-mounted-top">
-              <div className="integration-mounted-identity">
-                <DiscoverCatalogLogo
-                  name="Polynet"
-                  logoUrl="/landing-polynet/logo.png"
-                />
-                <div className="integration-mounted-main">
-                  <div className="integration-mounted-title-row">
-                    <strong>Polynet MCP</strong>
-                    <span className="integration-status-pill">
-                      OAuth protected
-                    </span>
-                  </div>
-                  <div className="integration-mounted-detail">
-                    Copy one setup packet, paste it into Codex, Claude Code, or
-                    another compatible harness, then sign in once.
-                  </div>
-                </div>
-              </div>
-              <div className="integration-mounted-rail polymcp-access-actions">
-                <button
-                  type="button"
-                  className="settings-cta settings-primary-action polymcp-copy-action"
-                  onClick={() => void handleCopySetup()}
-                  aria-label="Copy Polynet setup"
-                >
-                  <Copy aria-hidden="true" />
-                  {copyState === "copied"
-                    ? "Copied"
-                    : copyState === "error"
-                      ? "Copy failed"
-                      : "Copy setup"}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      ) : (
-        <div className="model-note">
-          Sign in to connect an external harness to your authorized communities.
-        </div>
-      )}
-    </div>
+    <SettingsGroup label="Your AI">
+      <SettingsRow
+        label="Connect your AI"
+        help={
+          props.session
+            ? "Paste the setup into Claude Code, Codex or another tool, then sign in once. It sees only communities you're in."
+            : "Sign in to connect your AI."
+        }
+      >
+        {props.session ? (
+          <button
+            className="settings-v1-button"
+            type="button"
+            onClick={() => void handleCopySetup()}
+          >
+            {copyState === "copied"
+              ? "Copied"
+              : copyState === "error"
+                ? "Copy failed"
+                : "Copy setup"}
+          </button>
+        ) : null}
+      </SettingsRow>
+    </SettingsGroup>
   );
 }

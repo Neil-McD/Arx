@@ -11,11 +11,11 @@ const founderBilling = read("convex/founderBilling.ts");
 const httpBilling = read("convex/httpBilling.ts");
 const criticalAudit = read("convex/criticalAudit.ts");
 const settingsUi = read("apps/web/src/components/WebCommunitySettingsSection.tsx");
-const billingUi = read("apps/web/src/components/WebBillingSettingsSection.tsx");
+const billingUi = read("apps/web/src/components/WebCommunityAiAgentSection.tsx");
 const archivedUi = read("apps/web/src/components/WebArchivedCommunityList.tsx");
 const billingController = read("apps/web/src/controllers/useWebFounderBillingController.ts");
 const communityGateway = read("shared/cloudCommunityAdminGateway.ts");
-const accountUi = read("apps/web/src/components/WebAccountSettingsSection.tsx");
+const settingsPanels = read("apps/web/src/components/WebSettingsPanels.tsx");
 const app = read("apps/web/src/App.tsx");
 
 assert.match(
@@ -72,18 +72,13 @@ assert.match(
 );
 assert.match(
   archivedUi,
-  /cleanupStatus === "blocked"[\s\S]*Retry cleanup[\s\S]*cleanupStatus !== "complete"[\s\S]*restoreCommunityWithoutPayment/,
+  /cleanupStatus === "blocked"[\s\S]*retryCommunityArchive[\s\S]*cleanupStatus === "complete"[\s\S]*restoreCommunityWithoutPayment/,
   "Account archive management: retry a blocked cleanup, wait for a pending one, then restore for free",
-);
-assert.match(
-  billingUi,
-  /const activeCommunities[\s\S]*community\.lifecycle_status === "active"[\s\S]*activeCommunities\.map/,
-  "Billing must project active subscriptions only",
 );
 assert.doesNotMatch(
   billingUi,
   /restoreCommunityWithoutPayment|Retry cleanup|Finishing archive/,
-  "Billing must not retain duplicate archive management",
+  "Agent plan settings must not retain duplicate archive management",
 );
 assert.match(
   billingController,
@@ -106,8 +101,8 @@ assert.match(
   "archived communities must not block active Builder admission or creation",
 );
 assert.match(
-  accountUi,
-  /const activeCommunities[\s\S]*const archivedCommunities[\s\S]*WebArchivedCommunityList/,
+  settingsPanels,
+  /<WebArchivedCommunityList[\s\S]*community\.lifecycle_status === "archived"/,
   "Account must own archived community management without calling it active funding debt",
 );
 assert.match(

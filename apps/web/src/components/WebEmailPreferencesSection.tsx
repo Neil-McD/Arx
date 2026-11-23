@@ -1,4 +1,3 @@
-import { isDesignV1Active } from "../../../../shared/designSystem";
 import { SettingsGroup, SettingsRow, SettingsSwitch } from "./SettingsRows";
 
 export type WebEmailPreferencesSectionProps = {
@@ -17,43 +16,25 @@ export function WebEmailPreferencesSection(
   if (!props.isVisible) return null;
 
   const disabled = !props.hasLoaded || props.isLoading || props.isSaving;
-  if (isDesignV1Active()) {
-    return (
-      <SettingsGroup label="Email">
-        <SettingsRow label="Weekly digest" help={props.error ? <span className="settings-v1-error">{props.error}</span> : "A summary of what happened in your communities, once a week."}>
-          <SettingsSwitch label="Weekly digest" checked={props.hasLoaded && props.weeklyDigestEnabled} disabled={disabled}
-            onChange={(checked) => void props.onChangeWeeklyDigestEnabled(checked)} />
-        </SettingsRow>
-      </SettingsGroup>
-    );
-  }
   return (
-    <div className="settings-section email-preferences-section">
-      <div className="settings-section-title">Email</div>
-      <div className="settings-section-desc">
-        Choose which community emails Polynet sends you.
-      </div>
-      <div className="account-row email-preference-row">
-        <div className="account-identity">
-          <strong>Weekly community digest</strong>
-          <span>A weekly summary of activity from communities you belong to.</span>
-        </div>
-        <button
-          className={`settings-preference-switch${props.hasLoaded && props.weeklyDigestEnabled ? " is-on" : ""}`}
-          type="button"
-          role="switch"
-          aria-checked={props.hasLoaded ? props.weeklyDigestEnabled : false}
-          aria-busy={props.isLoading || props.isSaving || undefined}
-          aria-label="Weekly community digest"
+    <SettingsGroup label="Email">
+      <SettingsRow
+        label="Weekly digest"
+        help={
+          props.error ? (
+            <span className="settings-v1-error">{props.error}</span>
+          ) : (
+            "A summary of what happened in your communities, once a week."
+          )
+        }
+      >
+        <SettingsSwitch
+          label="Weekly digest"
+          checked={props.hasLoaded && props.weeklyDigestEnabled}
           disabled={disabled}
-          onClick={() => {
-            void props.onChangeWeeklyDigestEnabled(!props.weeklyDigestEnabled);
-          }}
-        >
-          <span className="settings-preference-switch-thumb" aria-hidden="true" />
-        </button>
-      </div>
-      {props.error ? <div className="key-error">{props.error}</div> : null}
-    </div>
+          onChange={(checked) => void props.onChangeWeeklyDigestEnabled(checked)}
+        />
+      </SettingsRow>
+    </SettingsGroup>
   );
 }

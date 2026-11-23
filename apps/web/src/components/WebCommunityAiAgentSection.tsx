@@ -1,5 +1,3 @@
-import type { ReactNode } from "react";
-
 import {
   WebCommunityAiAgentInstructionsEditor,
   type WebCommunityAiAgentInstructionsEditorProps,
@@ -7,10 +5,9 @@ import {
 import { WebCommunityHandbookEditor, type WebCommunityHandbookEditorProps } from "./WebCommunityHandbookEditor";
 import type { CloudFounderBillingCommunity } from "../../../../shared/cloudFounderBillingGateway";
 import { builderFundingActionLabel, builderFundingStateLabel, formatBuilderOfferPrice, resolveBuilderOfferPrimaryAction } from "../../../../shared/builderOffer";
-import { isDesignV1Active } from "../../../../shared/designSystem";
 import { SettingsButton, SettingsGroup, SettingsRow } from "./SettingsRows";
 
-// This community's Agent plan (design v1: it lives on Guide, not a Billing page).
+// This community's Agent plan lives on its Guide settings pane.
 export type WebCommunityAgentPlanProps = {
   community: CloudFounderBillingCommunity | null;
   isLoading: boolean;
@@ -44,14 +41,35 @@ function AgentPlanGroup({ plan }: { plan: WebCommunityAgentPlanProps }) {
       : `${builderFundingStateLabel(community.funding_state)}.`;
   return (
     <SettingsGroup label="Plan">
-      <SettingsRow label="Agent plan"
-        help={plan.error ? <span className="settings-v1-error">{plan.error}</span>
-          : comped ? "Included by Polynet. The community itself is free."
-          : `${state} ${formatBuilderOfferPrice(community.monthly_price_base_units)}; the community itself is free.`}>
+      <SettingsRow
+        label="Agent plan"
+        help={
+          plan.error ? (
+            <span className="settings-v1-error">{plan.error}</span>
+          ) : comped ? (
+            "Included by Polynet. The community itself is free."
+          ) : (
+            `${state} ${formatBuilderOfferPrice(community.monthly_price_base_units)}; the community itself is free.`
+          )
+        }
+      >
         {comped || !action ? null : (
-          <SettingsButton variant={action === "buy_builder" ? "primary" : "secondary"} disabled={plan.isActing}
-            onClick={() => (action === "manage_builder" ? void plan.openPortal(community.community_id) : plan.onOpenBuilderOffer(community))}>
-            {plan.isActing ? "Opening…" : builderFundingActionLabel({ action, state: community.funding_state, includePrice: false })}
+          <SettingsButton
+            variant={action === "buy_builder" ? "primary" : "secondary"}
+            disabled={plan.isActing}
+            onClick={() =>
+              action === "manage_builder"
+                ? void plan.openPortal(community.community_id)
+                : plan.onOpenBuilderOffer(community)
+            }
+          >
+            {plan.isActing
+              ? "Opening…"
+              : builderFundingActionLabel({
+                  action,
+                  state: community.funding_state,
+                  includePrice: false,
+                })}
           </SettingsButton>
         )}
       </SettingsRow>
@@ -82,69 +100,45 @@ export function WebCommunityAiAgentSection(props: WebCommunityAiAgentSectionProp
     onRequireSignIn,
     instructionsEditorProps,
     handbookEditorProps,
-    embedded = false,
   } = props;
 
-  let content: ReactNode = null;
-  if (!activeCommunity) {
-    content = <div className="chat-empty">Select a community to configure the community agent.</div>;
-  } else if (!hasSession) {
-    content = (
-      <div className="chat-empty">
-        <div>Sign in to configure the community agent.</div>
-        <button
-          className="secondary"
-          type="button"
-          onClick={onRequireSignIn}
-          style={{ marginTop: 12 }}
-        >
-          Sign in
-        </button>
-      </div>
-    );
-  } else if (!canManageMembersActiveCommunity) {
-    content = <div className="chat-empty">Only owners and admins can configure the community agent.</div>;
-  } else if (isLoadingCommunityAgentConfig) {
-    content = <div className="chat-empty">Loading…</div>;
-  } else if (communityAgentConfigError) {
-    content = <div className="auth-error">{communityAgentConfigError}</div>;
-  } else {
-    content = (
-      <>
-        <WebCommunityAiAgentInstructionsEditor {...instructionsEditorProps} />
-        {handbookEditorProps ? <WebCommunityHandbookEditor {...handbookEditorProps} /> : null}
-      </>
-    );
-  }
-
-  if (isDesignV1Active()) {
-    const ready = activeCommunity && hasSession && canManageMembersActiveCommunity && !isLoadingCommunityAgentConfig && !communityAgentConfigError;
-    return (
-      <>
-        {props.agentPlan ? <AgentPlanGroup plan={props.agentPlan} /> : null}
-        {ready ? (
-          <>
-            <WebCommunityAiAgentInstructionsEditor {...instructionsEditorProps} />
-            {handbookEditorProps ? <WebCommunityHandbookEditor {...handbookEditorProps} /> : null}
-          </>
-        ) : (
-          <SettingsGroup>
-            <SettingsRow label="The guide"
-              help={!activeCommunity ? "Pick a community first." : !hasSession ? "Sign in to set up the guide."
-                : !canManageMembersActiveCommunity ? "Only owners and admins set up the guide."
-                : isLoadingCommunityAgentConfig ? "Loading…" : <span className="settings-v1-error">{communityAgentConfigError}</span>}>
-              {!hasSession && activeCommunity ? <SettingsButton onClick={onRequireSignIn}>Sign in</SettingsButton> : null}
-            </SettingsRow>
-          </SettingsGroup>
-        )}
-      </>
-    );
-  }
+  const ready =
+    activeCommunity &&
+    hasSession &&
+    canManageMembersActiveCommunity &&
+    !isLoadingCommunityAgentConfig &&
+    !communityAgentConfigError;
 
   return (
-    <div className={embedded ? "community-settings-embedded-pane" : "settings-panel community-settings-panel"}>
-      <div className="settings-section-title">Community Agent</div>
-      {content}
-    </div>
+    <>
+      {props.agentPlan ? <AgentPlanGroup plan={props.agentPlan} /> : null}
+      {ready ? (
+        <>
+          <WebCommunityAiAgentInstructionsEditor {...instructionsEditorProps} />
+          {handbookEditorProps ? <WebCommunityHandbookEditor {...handbookEditorProps} /> : null}
+        </>
+      ) : (
+        <SettingsGroup>
+          <SettingsRow
+            label="The guide"
+            help={
+              !activeCommunity
+                ? "Pick a community first."
+                : !hasSession
+                  ? "Sign in to set up the guide."
+                  : !canManageMembersActiveCommunity
+                    ? "Only owners and admins set up the guide."
+                    : isLoadingCommunityAgentConfig
+                      ? "Loading…"
+                      : <span className="settings-v1-error">{communityAgentConfigError}</span>
+            }
+          >
+            {!hasSession && activeCommunity ? (
+              <SettingsButton onClick={onRequireSignIn}>Sign in</SettingsButton>
+            ) : null}
+          </SettingsRow>
+        </SettingsGroup>
+      )}
+    </>
   );
 }

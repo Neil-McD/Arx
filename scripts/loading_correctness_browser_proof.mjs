@@ -103,7 +103,7 @@ const server = await createServer({
           res.end(
             await server.transformIndexHtml(
               req.url,
-              `<!doctype html><html><body><div id="root"></div><script type="module" src="/@fs/${root}scripts/fixtures/loadingCorrectness.tsx"></script></body></html>`,
+              `<!doctype html><html data-design="v1"><body><div id="root"></div><script type="module" src="/@fs/${root}scripts/fixtures/loadingCorrectness.tsx"></script></body></html>`,
             ),
           );
         });
@@ -164,7 +164,7 @@ try {
     await page.evaluate(() =>
       window.showLoadingVisual("loading", "https://fixture.invalid/avatar.svg"),
     );
-    await page.getByRole("status").getByText("Loading profile…").waitFor();
+    await page.getByRole("status").getByText("Loading…").waitFor();
     const avatar = page.locator(".proof-avatar");
     const before = await avatar.boundingBox();
     const nameBefore = await page
@@ -174,11 +174,6 @@ try {
     assert.notEqual(
       await avatar.evaluate((el) => getComputedStyle(el).backgroundColor),
       "rgb(255, 255, 0)",
-    );
-    assert(
-      await page
-        .getByRole("button", { name: "Save", exact: true })
-        .isDisabled(),
     );
     await page.screenshot({ path: join(output, "profile-loading.png") });
     assert(pendingImage, "image request was not started");
@@ -212,20 +207,12 @@ try {
       ).y,
       "profile fields shifted after photo hydration",
     );
-    assert(
-      await page
-        .getByRole("button", { name: "Save", exact: true })
-        .isDisabled(),
-    );
     await page.screenshot({ path: join(output, "profile-ready.png") });
-    await page.getByPlaceholder("Bio", { exact: true }).fill("");
+    await page.getByLabel("Bio", { exact: true }).fill("");
     await page
       .getByRole("status")
-      .getByText("Unsaved changes", { exact: true })
+      .getByText("Unsaved", { exact: true })
       .waitFor();
-    assert(
-      await page.getByRole("button", { name: "Save", exact: true }).isEnabled(),
-    );
     await page.screenshot({ path: join(output, "profile-dirty.png") });
     await page.evaluate(() => window.showLoadingVisual("error", null));
     await page.getByRole("alert").waitFor();

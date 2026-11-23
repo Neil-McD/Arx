@@ -43,9 +43,9 @@ export function SettingsSwitch(props: { checked: boolean; label: string; disable
   );
 }
 
-// "Saving…" / "Saved" / an error, beside the page title.
-export function SettingsSaveStatus(props: { saving: boolean; dirty: boolean; error?: string | null }) {
-  const text = props.error ? props.error : props.saving ? "Saving…" : props.dirty ? "Unsaved" : "Saved";
+// "Loading…" / "Saving…" / "Saved" / an error, beside the page title.
+export function SettingsSaveStatus(props: { saving: boolean; dirty: boolean; loading?: boolean; error?: string | null }) {
+  const text = props.error ? props.error : props.saving ? "Saving…" : props.loading ? "Loading…" : props.dirty ? "Unsaved" : "Saved";
   return <span className={`settings-v1-status${props.error ? " is-error" : ""}`} role="status" aria-live="polite">{text}</span>;
 }
 

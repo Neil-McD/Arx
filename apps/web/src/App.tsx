@@ -1744,10 +1744,6 @@ export default function App() {
     handleSignOut,
     founderBilling,
     emailPreferences,
-    onOpenAccountBuilderOffer: (community) => builderOffer.open({ community }),
-    onOpenBillingBuilderOffer: (community) => builderOffer.open({ community }),
-    onOpenCommunityBilling: () => openGlobalSettings("billing"),
-    onOpenCreateCommunity: () => openNewCommunityPurchaseFlow(),
     appTheme,
     setAppTheme,
   });

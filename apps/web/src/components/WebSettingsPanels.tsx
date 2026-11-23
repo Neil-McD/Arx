@@ -1,6 +1,7 @@
 import type { DragEvent } from "react";
 
 import type { SettingsGroup } from "../../../../shared/appShellNavigation";
+import { settingsGroupLabel } from "../../../../shared/appShellNavigation";
 import type { SocialProfileLinks } from "../../../../shared/socialProfileLinks";
 import type { AppTheme } from "../../../../shared/theme";
 import type { useWebProfileSettingsUiController } from "../controllers/useWebProfileSettingsUiController";
@@ -14,16 +15,10 @@ import {
   WebEmailPreferencesSection,
   type WebEmailPreferencesSectionProps,
 } from "./WebEmailPreferencesSection";
-import {
-  WebBillingSettingsSection,
-  type WebBillingSettingsSectionProps,
-} from "./WebBillingSettingsSection";
 import { WebPolynetMcpAccountSection } from "./WebPolynetMcpAccountSection";
 import { WebProfileSettingsSection } from "./WebProfileSettingsSection";
 import { WebArchivedCommunityList } from "./WebArchivedCommunityList";
 import { SettingsPageHead, SettingsSaveStatus } from "./SettingsRows";
-import { isDesignV1Active } from "../../../../shared/designSystem";
-import { settingsGroupLabel } from "../../../../shared/appShellNavigation";
 
 type SessionLike = AuthSession | null;
 
@@ -43,7 +38,6 @@ export type WebSettingsPanelsProps = {
   };
   account: WebAccountSettingsSectionProps;
   emailPreferences: WebEmailPreferencesSectionProps;
-  billing: WebBillingSettingsSectionProps;
   appearance: {
     appTheme: AppTheme;
     setAppTheme: (value: AppTheme) => void;
@@ -95,56 +89,70 @@ export function WebSettingsPanels(props: WebSettingsPanelsProps) {
     saveProfileToCloud: props.profile.saveProfileToCloud,
   };
 
-  if (isDesignV1Active()) {
-    // Design v1 has no Billing page: each community's Agent plan is on its
-    // Guide. An old /settings/billing link opens Account.
-    if (props.settingsGroup === "billing") {
-      return (
-        <>
-          <SettingsPageHead title={settingsGroupLabel("account")} />
-          <WebSettingsPanelBody {...props} settingsGroup="account" profileSectionProps={profileSectionProps} />
-        </>
-      );
-    }
-    const p = profileSectionProps;
-    const status = props.settingsGroup === "profile" && p.session ? (
-      <SettingsSaveStatus saving={p.isSavingProfile} dirty={p.profileNeedsSave}
-        error={p.profileSaveError ?? (p.profileLoadStatus === "error" ? "Couldn't load your profile" : null)} />
-    ) : null;
-    return (
-      <>
-        <SettingsPageHead title={settingsGroupLabel(props.settingsGroup)} status={status} />
-        <WebSettingsPanelBody {...props} profileSectionProps={profileSectionProps} />
-      </>
-    );
-  }
-  return <WebSettingsPanelBody {...props} profileSectionProps={profileSectionProps} />;
+  // Each community's Agent plan lives on its Guide settings pane; legacy
+  // /settings/billing links open Account.
+  const effectiveGroup: Exclude<SettingsGroup, "billing"> =
+    props.settingsGroup === "billing" ? "account" : props.settingsGroup;
+  const p = profileSectionProps;
+  const isInitialProfileLoad = Boolean(
+    p.session &&
+      !p.cloudProfile &&
+      (p.profileLoadStatus === "idle" || p.profileLoadStatus === "loading"),
+  );
+  const status = effectiveGroup === "profile" && p.session ? (
+    <SettingsSaveStatus
+      loading={isInitialProfileLoad}
+      saving={p.isSavingProfile}
+      dirty={p.profileNeedsSave}
+      error={
+        p.profileSaveError ??
+        (p.profileLoadStatus === "error" ? "Couldn't load your profile" : null)
+      }
+    />
+  ) : null;
+
+  return (
+    <>
+      <SettingsPageHead title={settingsGroupLabel(effectiveGroup)} status={status} />
+      <WebSettingsPanelBody
+        {...props}
+        settingsGroup={effectiveGroup}
+        profileSectionProps={profileSectionProps}
+      />
+    </>
+  );
 }
 
-function WebSettingsPanelBody(props: WebSettingsPanelsProps & { profileSectionProps: Parameters<typeof WebProfileSettingsSection>[0] }) {
-  const profileSectionProps = props.profileSectionProps;
+function WebSettingsPanelBody(
+  props: Omit<WebSettingsPanelsProps, "settingsGroup"> & {
+    settingsGroup: Exclude<SettingsGroup, "billing">;
+    profileSectionProps: Parameters<typeof WebProfileSettingsSection>[0];
+  },
+) {
   switch (props.settingsGroup) {
     case "profile":
-      return <WebProfileSettingsSection {...profileSectionProps} />;
+      return <WebProfileSettingsSection {...props.profileSectionProps} />;
     case "account":
       return (
         <>
           <WebAccountSettingsSection {...props.account} />
           <WebEmailPreferencesSection {...props.emailPreferences} />
           <WebPolynetMcpAccountSection session={props.account.session} />
-          {isDesignV1Active() && props.account.session ? (
+          {props.account.session ? (
             <WebArchivedCommunityList
-              communities={props.account.founderBillingOverview.communities.filter((community) => community.lifecycle_status === "archived")}
+              communities={props.account.founderBillingOverview.communities.filter(
+                (community) => community.lifecycle_status === "archived",
+              )}
               actionCommunityId={props.account.founderBillingActionCommunityId}
               error={props.account.founderBillingError}
               retryCommunityArchive={props.account.retryCommunityArchive}
-              restoreCommunityWithoutPayment={props.account.restoreCommunityWithoutPayment}
+              restoreCommunityWithoutPayment={
+                props.account.restoreCommunityWithoutPayment
+              }
             />
           ) : null}
         </>
       );
-    case "billing":
-      return <WebBillingSettingsSection {...props.billing} />;
     case "appearance":
       return (
         <WebAppearanceSettingsSection

@@ -17,7 +17,7 @@ function read(relativePath: string): string {
 const packageJson = read("package.json");
 const schema = read("convex/schema.ts");
 const providerCostCore = read("convex/providerCostCore.ts");
-const billingSurface = read("apps/web/src/components/WebBillingSettingsSection.tsx");
+const billingSurface = read("apps/web/src/components/WebCommunityAiAgentSection.tsx");
 const voiceProviderCostAccounting = read("convex/voiceProviderCostAccounting.ts");
 
 assert.deepEqual(PROVIDER_COST_CATEGORIES, ["workspace", "web", "voice"]);
