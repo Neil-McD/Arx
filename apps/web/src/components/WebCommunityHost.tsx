@@ -1,8 +1,19 @@
+import { lazy, Suspense } from "react";
 import type { AppView, CommunityTab } from "../../../../shared/appShellNavigation";
 import { WebCommunityChatPanel, type WebCommunityChatPanelProps } from "./WebCommunityChatPanel";
 import type { CommunityAdmissionControl } from "./CommunityAutoJoinControl";
-import { WebCommunitySecondaryPanels, type WebCommunitySecondaryPanelsProps } from "./WebCommunitySecondaryPanels";
-import { WebCommunityMembersPage } from "./WebCommunityMembersPage";
+import type { WebCommunitySecondaryPanelsProps } from "./WebCommunitySecondaryPanels";
+
+const WebCommunitySecondaryPanels = lazy(() =>
+  import("./WebCommunitySecondaryPanels").then((module) => ({
+    default: module.WebCommunitySecondaryPanels,
+  })),
+);
+const WebCommunityMembersPage = lazy(() =>
+  import("./WebCommunityMembersPage").then((module) => ({
+    default: module.WebCommunityMembersPage,
+  })),
+);
 
 type WebCommunityHostProps = {
   admission?: CommunityAdmissionControl;
@@ -24,9 +35,13 @@ export function WebCommunityHost(props: WebCommunityHostProps) {
         // loads underneath it.
         null
       ) : communityTab === "members" ? (
-        <WebCommunityMembersPage chatPanelProps={chatPanelProps} admission={props.admission} />
+        <Suspense fallback={null}>
+          <WebCommunityMembersPage chatPanelProps={chatPanelProps} admission={props.admission} />
+        </Suspense>
       ) : (
-        <WebCommunitySecondaryPanels {...secondaryPanelsProps} />
+        <Suspense fallback={null}>
+          <WebCommunitySecondaryPanels {...secondaryPanelsProps} />
+        </Suspense>
       )}
     </div>
   );

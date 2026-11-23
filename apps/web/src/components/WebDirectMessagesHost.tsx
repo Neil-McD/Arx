@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
   DirectMessage,
   DirectMessageAttachment,
@@ -28,10 +28,19 @@ import { COMMUNITY_ATTACHMENT_MAX_COUNT, communityAttachmentByteLimit } from "..
 import { useDirectMessageTypingPresence } from "../../../../shared/useDirectMessageTypingPresence";
 import { useWebVoiceInputController } from "../../../../shared/useWebVoiceInputController";
 import { mergeVoiceTranscript } from "../../../../shared/voiceCapture";
-import { WebDirectMessageInboxPanel } from "./WebDirectMessageInboxPanel";
 import { isDesignV1Active } from "../../../../shared/designSystem";
-import { WebDirectMessagePanel } from "./WebDirectMessagePanel";
 import { fitComposerHeight } from "../../../../shared/composerHeight";
+
+const WebDirectMessageInboxPanel = lazy(() =>
+  import("./WebDirectMessageInboxPanel").then((module) => ({
+    default: module.WebDirectMessageInboxPanel,
+  })),
+);
+const WebDirectMessagePanel = lazy(() =>
+  import("./WebDirectMessagePanel").then((module) => ({
+    default: module.WebDirectMessagePanel,
+  })),
+);
 
 type DirectMessageAttachmentDraft = DirectMessageAttachment & {
   data_url?: string | null;
@@ -1795,6 +1804,7 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
 
   return (
     <div className={`web-direct-messages-host${props.mobileRoot ? " mobile-root" : ""}${inboxIsPage ? " is-page" : ""}${inboxIsPage ? " has-conversation" : ""}${directMessagePanel ? " has-open" : ""}`}>
+      <Suspense fallback={null}>
       {/* Design system v1: Inbox is a page. The list fills the main area and
           stays there; the open conversation sits beside it in the right column. */}
       {directMessagePanel ? (
@@ -1911,6 +1921,7 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
           kitPage={inboxIsPage || (props.mobileRoot && isDesignV1Active()) ? { activeCommunityId: props.activeCommunityId ?? null } : null}
         />
       ) : null}
+      </Suspense>
     </div>
   );
 }
