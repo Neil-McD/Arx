@@ -231,6 +231,9 @@ Same "delete parts" approach as slice 1:
   140 ms after leaving, above unless there's no room, Escape closes), now used
   by both the profile card and chip cards. The chip also opens its card on
   keyboard focus.
+- **The chip itself** is one whole box at the sentence's own weight; it moves to
+  the next line as a unit and carries no progress or time (those are in the
+  card).
 - **Pages** (Home, Inbox, Knowledge, Events, Pods, Members): each chip carries
   the icon that page has in the left column, and its card says what is there
   from the same per-reader list (`pageCard`): Events lists the next three

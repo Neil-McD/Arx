@@ -89,7 +89,6 @@ export function EntityChip(props: { target: EntityTarget; label: ReactNode; navi
     hover.closeNow();
     props.navigate(path);
   };
-  const fact = chipFact(target);
   const lines = cardLines(target);
   const PageIcon = target.kind === "page" && target.page ? PAGE_ICONS[target.page] : null;
   const action = cardAction(target);
@@ -122,8 +121,6 @@ export function EntityChip(props: { target: EntityTarget; label: ReactNode; navi
           </svg>
         )}
         <span className="entity-chip-name">{props.label}</span>
-        {target.kind === "lesson" && target.facts?.finished ? <span className="entity-chip-fact" aria-label="finished">✓</span> : null}
-        {fact ? <span className="entity-chip-fact">{fact}</span> : null}
       </a>
       <span
           ref={hover.cardRef as unknown as React.Ref<HTMLSpanElement>}
