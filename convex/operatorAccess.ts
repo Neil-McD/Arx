@@ -2,7 +2,6 @@ import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { resolveAuthenticatedActor } from "./authActor";
 import { recordCriticalAuditEventBestEffort } from "./criticalAudit";
-import { recordPlatformDiagnosticEventBestEffort } from "./platformDiagnostics";
 
 const OPERATOR_ROLE_VALIDATOR = v.union(v.literal("owner"), v.literal("operator"), v.literal("readonly"));
 
@@ -10,14 +9,6 @@ type OperatorRole = "owner" | "operator" | "readonly";
 
 function normalizeEmail(value: string | null | undefined): string {
   return String(value ?? "").trim().toLowerCase();
-}
-
-function normalizeAccessErrorCode(error: unknown): string {
-  const message = error instanceof Error ? error.message : String(error ?? "");
-  const normalized = message.trim().toLowerCase();
-  if (normalized.includes("operator_access_forbidden")) return "operator_access_forbidden";
-  if (normalized.includes("auth") || normalized.includes("identity")) return "auth_required";
-  return normalized.replace(/[^a-z0-9_.:-]+/g, "_").slice(0, 96) || "operator_access_failed";
 }
 
 function roleRank(role: OperatorRole): number {
@@ -77,17 +68,6 @@ async function readOperatorAccess(
   };
 }
 
-function toOperatorAccessSnapshot(operator: Awaited<ReturnType<typeof readOperatorAccess>>) {
-  if (!operator) return null;
-  return {
-    userId: operator.userId,
-    email: operator.email,
-    displayName: operator.displayName,
-    role: operator.role,
-    source: operator.source,
-  };
-}
-
 export async function requireOperatorRole(
   ctx: any,
   authSubject: string | null | undefined,
@@ -123,81 +103,6 @@ async function recordOperatorAudit(
     createdAt: nowMs,
   });
 }
-
-export const getMyOperatorAccessOptional = query({
-  args: {
-    authSubject: v.optional(v.string()),
-  },
-  handler: async (ctx, args) => {
-    try {
-      return toOperatorAccessSnapshot(await readOperatorAccess(ctx, args.authSubject, "readonly"));
-    } catch (error) {
-      const code = normalizeAccessErrorCode(error);
-      if (code === "auth_required" || code === "operator_access_forbidden") return null;
-      throw error;
-    }
-  },
-});
-
-export const recordOperatorDashboardAccess = mutation({
-  args: {
-    authSubject: v.optional(v.string()),
-    surface: v.optional(v.string()),
-  },
-  handler: async (ctx, args) => {
-    try {
-      const operator = await requireOperatorRole(ctx, args.authSubject, "readonly");
-      await recordOperatorAudit(ctx, {
-        eventType: "operator_dashboard_accessed",
-        status: "succeeded",
-        actorUserId: operator.dbUserId,
-        metadata: {
-          surface: args.surface ?? "operator_dashboard",
-          role: operator.role,
-          source: operator.source,
-        },
-      });
-      await recordPlatformDiagnosticEventBestEffort(ctx, {
-        eventKey: `access.operator_access_granted:${String(operator.dbUserId)}:${Date.now()}`,
-        eventType: "access.operator_access_granted",
-        subsystem: "access",
-        severity: "info",
-        status: "succeeded",
-        surface: args.surface ?? "operator_dashboard",
-        userId: operator.dbUserId,
-        metadata: {
-          role: operator.role,
-          source: operator.source,
-        },
-        createdAt: Date.now(),
-      });
-      return {
-        ok: true,
-        role: operator.role,
-      };
-    } catch (error) {
-      await recordOperatorAudit(ctx, {
-        eventType: "operator_dashboard_accessed",
-        status: "blocked",
-        metadata: {
-          surface: args.surface ?? "operator_dashboard",
-          error: error instanceof Error ? error.message : String(error),
-        },
-      });
-      await recordPlatformDiagnosticEventBestEffort(ctx, {
-        eventKey: `access.operator_access_denied:unknown:${Date.now()}`,
-        eventType: "access.operator_access_denied",
-        subsystem: "access",
-        severity: "warning",
-        status: "blocked",
-        surface: args.surface ?? "operator_dashboard",
-        errorCode: normalizeAccessErrorCode(error),
-        createdAt: Date.now(),
-      });
-      throw error;
-    }
-  },
-});
 
 export const listOperatorRoles = query({
   args: {
