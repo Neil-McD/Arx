@@ -16,7 +16,11 @@ const ACTIVE_RECURRING_STATUSES = ["active", "past_due", "cancel_at_period_end"]
 const BACKFILL_BATCH_SIZE = 200;
 const SWEEP_COMMUNITIES_PAGE_SIZE = 50;
 const SWEEP_MAX_PER_RUN = 5;
-const OPERATOR_COMMUNITIES_BATCH_SIZE = 25;
+// Bounded at 5 communities per scheduled mutation batch so even worst-case
+// fallback subscription scans (when billing summaries are absent or stale)
+// stay strictly under Convex's per-mutation read limit without skipping any
+// community's billing totals.
+const OPERATOR_COMMUNITIES_BATCH_SIZE = 5;
 const OPERATOR_USERS_BATCH_SIZE = 200;
 const DISCOVER_ACTIVITY_BATCH_SIZE = 20;
 const STALE_COMMUNITY_ACTIVITY_AGE_MS = 14 * 24 * 60 * 60 * 1000;
@@ -676,6 +680,7 @@ export const refreshPlatformOperatorSummaryBatchInternal = internalMutation({
       ? { ...args.acc, ownerIds: [...(args.acc.ownerIds ?? [])] }
       : {
           ownerIds: [] as string[],
+          communityCreators: 0,
           communities: 0,
           activeCommunities: 0,
           totalCommunityMembers: 0,
@@ -784,8 +789,8 @@ export const refreshPlatformOperatorSummaryBatchInternal = internalMutation({
         acc.riskItems += flags.length;
       }
 
-      acc.ownerIds = [...ownerSet];
       if (!page.isDone) {
+        acc.ownerIds = [...ownerSet];
         await ctx.scheduler.runAfter(0, (internal as any).communityAnalyticsRollups.refreshPlatformOperatorSummaryBatchInternal, {
           phase: "communities",
           cursor: page.continueCursor,
@@ -794,10 +799,16 @@ export const refreshPlatformOperatorSummaryBatchInternal = internalMutation({
         return { done: false };
       }
 
+      // Drop the raw ownerIds array before user pagination; only the unique count is needed.
+      const usersPhaseAcc = {
+        ...acc,
+        ownerIds: [] as string[],
+        communityCreators: ownerSet.size,
+      };
       await ctx.scheduler.runAfter(0, (internal as any).communityAnalyticsRollups.refreshPlatformOperatorSummaryBatchInternal, {
         phase: "users",
         cursor: null,
-        acc,
+        acc: usersPhaseAcc,
       });
       return { done: false };
     }
@@ -821,7 +832,7 @@ export const refreshPlatformOperatorSummaryBatchInternal = internalMutation({
     }
 
     const totals = {
-      communityCreators: (acc.ownerIds ?? []).length,
+      communityCreators: Number(acc.communityCreators ?? (acc.ownerIds ?? []).length),
       communities: acc.communities,
       activeCommunities: acc.activeCommunities,
       totalCommunityMembers: acc.totalCommunityMembers,

@@ -421,9 +421,22 @@ async function manager(ctx: any, args: { userId?: any; authSubject?: string; com
 
 // Who may correct a scope's memory: builders for every scope; a pod's hosts
 // for their own pod only while they still have active pod access.
-async function memoryEditor(ctx: any, args: { userId?: any; authSubject?: string; communityId: any }, scope: ScopeKey) {
+async function authenticateCommunityMember(
+  ctx: any,
+  args: { userId?: any; authSubject?: string; communityId: any },
+) {
   const userId = await resolveUserIdForAuthenticatedRequest({ ctx, userId: args.userId, authSubject: args.authSubject ?? null });
   await requireCommunityChatAccess({ ctx, communityId: args.communityId, userId });
+  return userId;
+}
+
+async function memoryEditor(
+  ctx: any,
+  args: { userId?: any; authSubject?: string; communityId: any },
+  scope: ScopeKey,
+  verifiedUserId?: any,
+) {
+  const userId = verifiedUserId ?? (await authenticateCommunityMember(ctx, args));
   const isBuilder = await requireCommunityManager({ ctx, communityId: args.communityId, userId }).then(() => true, () => false);
   if (isBuilder) return userId;
   const pod = parseScopeKey(scope);
@@ -459,9 +472,10 @@ const SOURCE_EXCERPT_CHARS = 240;
 export const listNoteSources = query({
   args: { ...viewerArgs, slug: v.string(), podRoomId: v.optional(v.string()) },
   handler: async (ctx, args) => {
+    const userId = await authenticateCommunityMember(ctx, args);
     const scope = await scopeFor(ctx, args.communityId, args.podRoomId);
     if (!scope) throw new Error("semantic_not_found");
-    await memoryEditor(ctx, args, scope);
+    await memoryEditor(ctx, args, scope, userId);
     const note = await noteBySlug(ctx, scope, args.slug);
     if (!note) throw new Error("semantic_not_found");
     const names = new Map<string, string | null>();
@@ -520,9 +534,10 @@ export const fileCommunityNote = mutation({
 export const undoLearnedNote = mutation({
   args: { ...viewerArgs, slug: v.string(), podRoomId: v.optional(v.string()) },
   handler: async (ctx, args) => {
+    const verifiedUserId = await authenticateCommunityMember(ctx, args);
     const scope = await scopeFor(ctx, args.communityId, args.podRoomId);
     if (!scope) throw new Error("semantic_not_found");
-    const userId = await memoryEditor(ctx, args, scope);
+    const userId = await memoryEditor(ctx, args, scope, verifiedUserId);
     const note = await noteBySlug(ctx, scope, args.slug);
     if (!note || noteAuthorKind(note) !== "guide") throw new Error("semantic_not_found");
     const nowMs = Date.now();
@@ -548,9 +563,10 @@ export const undoLearnedNote = mutation({
 export const undoMemoryRun = mutation({
   args: { ...viewerArgs, runId: v.id("agentWorkRuns") },
   handler: async (ctx, args) => {
+    const verifiedUserId = await authenticateCommunityMember(ctx, args);
     const run = await ctx.db.get(args.runId);
     if (!run || String(run.communityId) !== String(args.communityId)) throw new Error("semantic_not_found");
-    const userId = await memoryEditor(ctx, args, scopeOfRun(run));
+    const userId = await memoryEditor(ctx, args, scopeOfRun(run), verifiedUserId);
     if (run.status === "undone") return { undone: 0 };
     const nowMs = Date.now();
     // Newest first, in the order they were written (a review can change the

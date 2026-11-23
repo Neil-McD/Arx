@@ -1,15 +1,15 @@
-const SENSITIVE_ROUTE_SEARCH_PARAM_NAMES = new Set([
-  "access_token",
-  "app_oauth_finalize_token",
-  "claim_token",
-  "checkout_session_id",
-  "code",
-  "id_token",
-  "refresh_token",
-  "session_id",
-  "session_uri",
-  "state",
-  "token",
+const SAFE_ROUTE_SEARCH_PARAM_NAMES = new Set([
+  "error",
+  "intent",
+  "launch",
+  "ref",
+  "source",
+  "tab",
+  "utm_campaign",
+  "utm_content",
+  "utm_medium",
+  "utm_source",
+  "utm_term",
 ]);
 
 function normalizePathname(pathname: unknown): string {
@@ -24,8 +24,8 @@ function normalizeSearch(search: unknown): string {
   return value.startsWith("?") ? value.slice(1) : value;
 }
 
-function isSensitiveRouteSearchParam(name: string): boolean {
-  return SENSITIVE_ROUTE_SEARCH_PARAM_NAMES.has(name.trim().toLowerCase());
+function isSafeRouteSearchParam(name: string): boolean {
+  return SAFE_ROUTE_SEARCH_PARAM_NAMES.has(name.trim().toLowerCase());
 }
 
 export function buildTelemetryRouteLabel(input: {
@@ -35,7 +35,7 @@ export function buildTelemetryRouteLabel(input: {
   const pathname = normalizePathname(input.pathname);
   const params = new URLSearchParams(normalizeSearch(input.search));
   for (const key of Array.from(params.keys())) {
-    if (isSensitiveRouteSearchParam(key)) params.delete(key);
+    if (!isSafeRouteSearchParam(key)) params.delete(key);
   }
   const nextSearch = params.toString();
   return nextSearch ? `${pathname}?${nextSearch}` : pathname;

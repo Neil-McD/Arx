@@ -19,6 +19,8 @@ const BYPASS_QUERY_KEYS = [
   "connect",
 ] as const;
 
+const CANONICAL_COMMUNITY_SLUG_RE = /^[a-z0-9][a-z0-9-]{0,62}$/i;
+
 function splitNormalizedSegments(pathname: string): string[] {
   return String(pathname ?? "/")
     .split("/")
@@ -66,7 +68,7 @@ export function resolvePublicEntryRoute(params: {
     } catch {
       return null;
     }
-    if (slug && slug !== "preview") {
+    if (slug && slug !== "preview" && CANONICAL_COMMUNITY_SLUG_RE.test(slug)) {
       return { kind: "community_landing", slug };
     }
   }
