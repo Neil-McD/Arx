@@ -199,6 +199,18 @@ describe("a named tool is the call the executor already runs", () => {
   const now = 1_800_000_000_000;
   const run = (name: string, args: Record<string, unknown>, at = now) => translateActionTool(actionTool(name)!, args, at);
 
+  it("every course change carries a summary line: the engine refuses a batch without one", () => {
+    const summaryOf = (name: string, args: Record<string, unknown>) => (run(name, { community: "run-club", ...args }).input as any).content.summary;
+    expect(summaryOf("polynet_create_course", { name: "Your first 5k" })).toBe("Make a course: Your first 5k");
+    expect(summaryOf("polynet_add_lesson", { course: "m1", title: "Week 1" })).toBe("Add a lesson: Week 1");
+    expect(summaryOf("polynet_order_lessons", { course: "m1", lessons: ["a", "b"] })).toBe("Put a course's lessons in order");
+    expect(summaryOf("polynet_delete_draft", { course: "m1", updated_at: 1 })).toBe("Delete a draft course");
+    // The guide's batch keeps its own line, and gets one when it gave none.
+    expect(summaryOf("polynet_change_courses", { summary: "Tidy week 1.", operations: [{ op: "create_module", name: "X" }] })).toBe("Tidy week 1.");
+    expect(summaryOf("polynet_change_courses", { operations: [{ op: "create_module", name: "X" }, { op: "create_page", title: "Y" }] }))
+      .toBe("Change courses and lessons (2 changes)");
+  });
+
   it("writes are written out: a post, a reply, an edit, a delete, a message", () => {
     expect(run("polynet_post", { community: "Run-Club", channel: "general", text: "Hi" })).toMatchObject({ toolName: "polynet_write",
       input: { path: "/communities/run-club/channels/general/", mode: "create", content: { text: "Hi" } } });

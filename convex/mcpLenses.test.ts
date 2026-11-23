@@ -618,6 +618,58 @@ test("a builder's AI builds courses in draft; it can't publish them or delete wh
   expect(await courses()).toHaveLength(2);
 });
 
+// Each named course tool through the real door to the real engine: the tools
+// were once shaped right but sent an empty summary, which the engine refuses.
+test("an outside AI builds a course with the named course tools, each change saved with its own summary line", async () => {
+  const f = await fixture();
+  const courses = () => f.t.run(async (ctx: any) => (await ctx.db.query("communityResourceModules").collect())
+    .sort((a: any, b: any) => a.sortOrder - b.sortOrder).map((row: any) => ({ id: String(row._id), name: row.name, description: row.descriptionMd ?? null, status: row.status, updatedAt: row.updatedAt })));
+  const lessons = () => f.t.run(async (ctx: any) => (await ctx.db.query("communityResources").collect())
+    .sort((a: any, b: any) => a.sortOrder - b.sortOrder).map((row: any) => ({ id: String(row._id), title: row.title, body: row.bodyMd ?? null, links: row.lessonLinks ?? [], moduleId: String(row.moduleId), updatedAt: row.updatedAt })));
+  const ok = async (name: string, args: Record<string, unknown>) => {
+    const result = await f.call("owner", name, { community: "run-club", ...args }, "Claude");
+    expect(result?.isError, `${name}: ${JSON.stringify(result ?? f.lastError())}`).toBe(false);
+    return result;
+  };
+
+  const made = await ok("polynet_create_course", { name: "Your first 5k", description: "Eight weeks.", idempotency_key: "c1" });
+  const [firstCourse] = await courses();
+  expect(firstCourse).toMatchObject({ name: "Your first 5k", status: "draft" });
+  expect(JSON.stringify(made.structuredContent)).toContain(firstCourse.id);
+
+  await ok("polynet_add_lesson", { course: firstCourse.id, title: "Week 1", body: "Walk and run.", idempotency_key: "l1" });
+  await ok("polynet_add_lesson", { course: firstCourse.id, title: "Week 2", idempotency_key: "l2" });
+  let [week1, week2] = await lessons();
+  expect([week1.title, week2.title, week1.moduleId]).toEqual(["Week 1", "Week 2", firstCourse.id]);
+
+  await ok("polynet_edit_lesson", { lesson: week1.id, updated_at: week1.updatedAt, title: "Week 1: walk, then run",
+    lesson_links: [{ title: "The plan", url: "https://example.com/plan" }], idempotency_key: "e1" });
+  await ok("polynet_edit_course", { course: firstCourse.id, updated_at: (await courses())[0].updatedAt, name: "Couch to 5k", idempotency_key: "e2" });
+  [week1, week2] = await lessons();
+  expect(week1).toMatchObject({ title: "Week 1: walk, then run", links: [{ title: "The plan", url: "https://example.com/plan" }] });
+  expect((await courses())[0].name).toBe("Couch to 5k");
+
+  await ok("polynet_order_lessons", { course: firstCourse.id, lessons: [week2.id, week1.id], idempotency_key: "o1" });
+  expect((await lessons()).map((lesson: any) => lesson.title)).toEqual(["Week 2", "Week 1: walk, then run"]);
+  await ok("polynet_create_course", { name: "Race day", idempotency_key: "c2" });
+  await ok("polynet_order_courses", { courses: (await courses()).map((row: any) => row.id).reverse(), idempotency_key: "o2" });
+  expect((await courses()).map((row: any) => row.name)).toEqual(["Race day", "Couch to 5k"]);
+
+  const raceDay = (await courses()).find((row: any) => row.name === "Race day")!;
+  const doomed = (await lessons()).find((lesson: any) => lesson.title === "Week 2")!;
+  await ok("polynet_delete_draft", { lesson: doomed.id, updated_at: doomed.updatedAt, idempotency_key: "d1" });
+  await ok("polynet_delete_draft", { course: raceDay.id, updated_at: raceDay.updatedAt, idempotency_key: "d2" });
+  expect((await lessons()).map((lesson: any) => lesson.title)).toEqual(["Week 1: walk, then run"]);
+  expect((await courses()).map((row: any) => row.name)).toEqual(["Couch to 5k"]);
+
+  // Every change was kept with a summary that says what it was.
+  const summaries = await f.t.run(async (ctx: any) => (await ctx.db.query("communityResourceBuilderChangesets").collect()).map((row: any) => row.summary));
+  expect(summaries).toContain("Make a course: Your first 5k");
+  expect(summaries).toContain("Add a lesson: Week 1");
+  expect(summaries).toContain("Delete a draft course");
+  expect(summaries.every((summary: string) => summary.length > 0)).toBe(true);
+});
+
 test("an outside AI is offered only reading and the named actions: the generic write and call are not there", async () => {
   const f = await fixture();
   for (const name of ["polynet_write", "polynet_call"]) {
