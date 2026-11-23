@@ -111,7 +111,8 @@ function assertSourceAnchors() {
   const subscriptionLifecycle = readText(new URL("../convex/communitySubscriptionLifecycle.ts", import.meta.url));
   const communityResources = readCommunityResourceSources();
   const resourceViewer = readText(new URL("../apps/web/src/components/WebCommunityResourceViewerContent.tsx", import.meta.url));
-  const linkEmbedUi = readText(new URL("../shared/linkEmbedUi.tsx", import.meta.url));
+  // The web URL normalizer lives with the video-link parser (shared/videoEmbed.ts; linkEmbedUi.tsx re-exports it).
+  const webUrlNormalizer = readText(new URL("../shared/videoEmbed.ts", import.meta.url));
 
   assertIncludes(
     subscriptionLifecycle,
@@ -191,12 +192,12 @@ function assertSourceAnchors() {
     "server URL normalization rejects invalid URLs",
   );
   assertIncludes(
-    linkEmbedUi,
+    webUrlNormalizer,
     "export function normalizeExternalUrl",
     "shared web URL normalizer is exported",
   );
   assertIncludes(
-    linkEmbedUi,
+    webUrlNormalizer,
     "url.protocol !== \"http:\" && url.protocol !== \"https:\"",
     "client URL normalization rejects unsafe schemes",
   );
