@@ -10,6 +10,7 @@ export function useCommunityResourcesTabLifecycle<SessionT>(params: {
   loadCommunityResources: (communityId: string, session: SessionT) => Promise<void>;
   requireCommunityPage?: boolean;
   shouldLoad?: boolean;
+  skipInitialLoad?: boolean;
 }) {
   const sessionRef = useRef(params.session);
   sessionRef.current = params.session;
@@ -18,6 +19,7 @@ export function useCommunityResourcesTabLifecycle<SessionT>(params: {
   );
 
   useEffect(() => {
+    if (params.skipInitialLoad) return;
     if (!sessionIdentity || !params.activeCommunityId) return;
     if (!params.shouldLoad) {
       if ((params.requireCommunityPage ?? false) && params.activePage !== "community") return;
@@ -34,5 +36,6 @@ export function useCommunityResourcesTabLifecycle<SessionT>(params: {
     params.loadCommunityResources,
     params.requireCommunityPage,
     params.shouldLoad,
+    params.skipInitialLoad,
   ]);
 }

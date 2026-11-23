@@ -76,6 +76,7 @@ type UseCommunityMembersReviewControllerArgs<
   setHasLoadedCommunityJoinRequests?: Dispatch<SetStateAction<boolean>>;
   setCommunityJoinRequestsError: Dispatch<SetStateAction<string | null>>;
   setDecidingCommunityJoinRequestId: Dispatch<SetStateAction<string | null>>;
+  skipReloadAfterDecision?: boolean;
 };
 
 export function useCommunityMembersReviewController<
@@ -104,6 +105,43 @@ export function useCommunityMembersReviewController<
     current.setHasLoadedCommunityJoinRequests?.(false);
     current.setCommunityJoinRequestsError(null);
     current.setDecidingCommunityJoinRequestId(null);
+  }, []);
+
+  const applyLiveCommunityJoinRequestsLoading = useCallback((communityId: string) => {
+    if (argsRef.current.activeCommunityId !== communityId) return;
+    argsRef.current.setIsLoadingCommunityJoinRequests(true);
+    argsRef.current.setCommunityJoinRequestsError(null);
+  }, []);
+
+  const applyLiveCommunityJoinRequests = useCallback((
+    communityId: string,
+    rows: JoinRequestT[],
+    session: SessionT,
+  ) => {
+    if (argsRef.current.activeCommunityId !== communityId) return;
+    loadGenerationRef.current += 1;
+    const normalizedRows = Array.isArray(rows) ? rows : [];
+    argsRef.current.setCommunityJoinRequests(normalizedRows);
+    argsRef.current.setHasLoadedCommunityJoinRequests?.(true);
+    argsRef.current.setCommunityJoinRequestsError(null);
+    argsRef.current.setIsLoadingCommunityJoinRequests(false);
+    const userIds = Array.from(new Set(normalizedRows.map((row) => row.user_id)));
+    if (userIds.length > 0) {
+      void Promise.resolve(argsRef.current.loadUserProfiles(userIds, session)).catch(() => {
+        // Request review remains usable with the existing display-name fallback.
+      });
+    }
+  }, []);
+
+  const applyLiveCommunityJoinRequestsError = useCallback((communityId: string, error: unknown) => {
+    if (argsRef.current.activeCommunityId !== communityId) return;
+    loadGenerationRef.current += 1;
+    argsRef.current.setCommunityJoinRequests([]);
+    argsRef.current.setHasLoadedCommunityJoinRequests?.(false);
+    argsRef.current.setCommunityJoinRequestsError(
+      formatCommunityJoinRequestError(error, "Failed to load join requests."),
+    );
+    argsRef.current.setIsLoadingCommunityJoinRequests(false);
   }, []);
 
   const loadCommunityJoinRequests = useCallback(async (communityId: string, session: SessionT) => {
@@ -178,19 +216,21 @@ export function useCommunityMembersReviewController<
       if (decision === "approve") {
         await Promise.all([
           argsRef.current.reloadCommunityDirectoryMembers(communityId, session),
-          loadCommunityJoinRequests(communityId, session),
+          argsRef.current.skipReloadAfterDecision ? Promise.resolve() : loadCommunityJoinRequests(communityId, session),
           argsRef.current.onJoinRequestApproved?.({
             communityId,
             requestId,
           }),
         ]);
-      } else {
+      } else if (!argsRef.current.skipReloadAfterDecision) {
         await loadCommunityJoinRequests(communityId, session);
       }
     } catch (error) {
       if (!isCurrentDecision()) return;
       if (isCommunityJoinRequestAlreadyDecidedError(error) && session) {
-        await loadCommunityJoinRequests(communityId, session);
+        if (!argsRef.current.skipReloadAfterDecision) {
+          await loadCommunityJoinRequests(communityId, session);
+        }
       } else {
         argsRef.current.setCommunityJoinRequestsError(
           formatCommunityJoinRequestError(
@@ -228,6 +268,9 @@ export function useCommunityMembersReviewController<
   return {
     resetCommunityJoinRequests,
     loadCommunityJoinRequests,
+    applyLiveCommunityJoinRequestsLoading,
+    applyLiveCommunityJoinRequests,
+    applyLiveCommunityJoinRequestsError,
     handleApproveCommunityJoinRequest,
     handleDenyCommunityJoinRequest,
   };

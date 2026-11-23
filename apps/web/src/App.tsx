@@ -766,7 +766,9 @@ export default function App() {
   });
   const {
     resetCommunityJoinRequests,
-    loadCommunityJoinRequests,
+    applyLiveCommunityJoinRequestsLoading,
+    applyLiveCommunityJoinRequests,
+    applyLiveCommunityJoinRequestsError,
     handleApproveCommunityJoinRequest,
     handleDenyCommunityJoinRequest,
   } = useCommunityMembersReviewController<
@@ -789,6 +791,7 @@ export default function App() {
     setHasLoadedCommunityJoinRequests,
     setCommunityJoinRequestsError,
     setDecidingCommunityJoinRequestId,
+    skipReloadAfterDecision: true,
   });
   const communityMemberManagement =
     useWebCommunityMemberManagementController({
@@ -1012,7 +1015,8 @@ export default function App() {
 
   useCommunityMembersReviewLifecycle<
     AuthSession,
-    CommunityRecord
+    CommunityRecord,
+    CommunityJoinRequest
   >({
     ...sessionArg,
     activeCommunityId,
@@ -1021,7 +1025,9 @@ export default function App() {
     activeCommunityMembersJoinReviewMode,
     // Home's "Needs you" list shows the people waiting too.
     shouldLoad: shouldHydrateCommunityContextPanel || (activePage === "community" && communityTab === "agent"),
-    loadCommunityJoinRequests,
+    applyLiveCommunityJoinRequestsLoading,
+    applyLiveCommunityJoinRequests,
+    applyLiveCommunityJoinRequestsError,
     resetCommunityJoinRequests,
   });
 

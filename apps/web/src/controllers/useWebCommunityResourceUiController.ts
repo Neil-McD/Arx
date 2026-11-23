@@ -65,6 +65,7 @@ export type UseWebCommunityResourceUiControllerResult<
   setEditingResourceId: Dispatch<SetStateAction<string | null>>;
   resourceRead: ResourceReadState;
   moduleRead: ResourceReadState;
+  applyLiveResourceCollection: (collection: "resources" | "modules", communityId: string, rows: unknown[]) => void;
   refreshCommunityResources: (communityId: string, session: SessionT, collections?: ("resources" | "modules")[]) => Promise<void>;
   setResourceTitleInput: Dispatch<SetStateAction<string>>;
   setResourceUrlInput: Dispatch<SetStateAction<string>>;
@@ -158,6 +159,7 @@ export function useWebCommunityResourceUiController<
   const {
     resourceRead,
     moduleRead,
+    applyLiveResourceCollection,
     refreshCommunityResources,
     loadCommunityResourceModules,
     loadCommunityResources,
@@ -474,6 +476,7 @@ export function useWebCommunityResourceUiController<
     },
     resourceRead,
     moduleRead,
+    applyLiveResourceCollection,
     refreshCommunityResources,
     loadCommunityResourceModules,
     loadCommunityResources,
