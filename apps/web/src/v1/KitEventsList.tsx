@@ -9,13 +9,14 @@
 // Nobody is asked whether they are coming (Neil, Nov 14 and Nov 15: not
 // needed). Who came and recaps are not shown either: calls happen off
 // Polynet, so it can't know.
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { CalendarPlus, ChevronDown, ChevronRight, MapPin, Plus, Repeat, Video, X } from "lucide-react";
 import type { CloudCommunityEvent } from "../../../../shared/cloudCommunityEventsGateway";
 import { useRouteDetail, writeRouteDetail } from "../../../../shared/routeDetails";
 import { eventAddressKey, eventIdFromAddressKey } from "../../../../shared/webAppRouteState";
+import { registerMobilePageBack } from "../components/CommunityPageHeader";
 import { eventDateBlock, eventDayWord, eventRepeatWord, featuredEventLabel } from "../components/communityEventsList";
-import { Btn, cx, Icon, KitApp, Rail, useMinWidth } from "./kit";
+import { Btn, cx, Icon, KitApp, Rail, useMinWidth, usePhoneLayout } from "./kit";
 import { PanelPart } from "./KitPanel";
 
 // "1:00 pm", as the mock has it (the reader's own time).
@@ -58,6 +59,7 @@ export function KitEventsList(props: {
   calendarUrl: (event: CloudCommunityEvent) => string;
   // The add-or-change form while it is open, and which event it is changing.
   form: ReactNode | null;
+  onCloseForm?: () => void;
   editingId: string | null;
   onNew: () => void;
   onEdit: (event: CloudCommunityEvent) => void;
@@ -169,7 +171,21 @@ export function KitEventsList(props: {
   // event, else the event picked, else nothing. Narrower than 1024px there
   // is no column, so it takes the list's place, with a way back.
   const wide = useMinWidth(1024);
+  const isPhone = usePhoneLayout();
   const side = props.form ?? detail;
+  const hasNarrowSide = !wide && Boolean(side);
+  const narrowBackRef = useRef<() => void>(() => setPickedId(null));
+  narrowBackRef.current = () => {
+    if (props.form && props.onCloseForm) {
+      props.onCloseForm();
+      return;
+    }
+    setPickedId(null);
+  };
+  useEffect(() => {
+    if (!hasNarrowSide) return;
+    return registerMobilePageBack(() => narrowBackRef.current());
+  }, [hasNarrowSide]);
   const rail = side ? (
     <KitApp view="events" host={props.canManage} part="rail" className="kit-page-rail">
       <Rail index={4} label={props.form ? "Event" : "This event"}>{side}</Rail>
@@ -179,7 +195,7 @@ export function KitEventsList(props: {
     return (
       <KitApp view="events" host={props.canManage} part="flow">
         <div className={cx("page")} style={{ padding: 0, overflow: "visible" }}>
-          {props.form ? null : <button type="button" className={cx("btn sm txt")} style={{ marginLeft: -10 }} onClick={() => setPickedId(null)}><Icon name="back" />Events</button>}
+          {props.form || isPhone ? null : <button type="button" className={cx("btn sm txt")} style={{ marginLeft: -10 }} onClick={() => setPickedId(null)}><Icon name="back" />Events</button>}
           <div className={cx("evlayer")}>{side}</div>
         </div>
       </KitApp>
