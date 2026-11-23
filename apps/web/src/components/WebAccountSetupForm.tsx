@@ -1,4 +1,4 @@
-import { useId, useRef, useState } from "react";
+import { lazy, Suspense, useId, useRef, useState } from "react";
 import { Camera } from "lucide-react";
 
 import type { AccountSetupStatus } from "../../../../shared/accountSetup";
@@ -11,8 +11,13 @@ import {
   type LegalDocumentEntry,
 } from "../docs/legalDocumentsContent";
 import { formatProfileHandleAvailabilityHint } from "./profileHandleAvailabilityHint";
-import { WebPlatformLegalReaderModal } from "./WebPlatformLegalReaderModal";
 import { WebUserAvatarEditorModal } from "./WebUserAvatarEditorModal";
+
+const WebPlatformLegalReaderModal = lazy(() =>
+  import("./WebPlatformLegalReaderModal").then((module) => ({
+    default: module.WebPlatformLegalReaderModal,
+  })),
+);
 import type {
   PlatformLegalAcceptanceDraft,
   WebAccountSetupSurfaceModel,
@@ -253,10 +258,12 @@ export function WebAccountSetupForm(props: WebAccountSetupFormProps) {
       {props.trustCopy ? <p className="account-setup-trust">{props.trustCopy}</p> : null}
 
       {activeLegalDocument ? (
-        <WebPlatformLegalReaderModal
-          document={activeLegalDocument}
-          onClose={() => setActiveLegalDocument(null)}
-        />
+        <Suspense fallback={null}>
+          <WebPlatformLegalReaderModal
+            document={activeLegalDocument}
+            onClose={() => setActiveLegalDocument(null)}
+          />
+        </Suspense>
       ) : null}
       <WebUserAvatarEditorModal
         isOpen={isAvatarEditorOpen}

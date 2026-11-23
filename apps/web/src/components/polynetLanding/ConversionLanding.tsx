@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { lazy, Suspense, useEffect, useState, type ReactNode } from "react";
 import { Check, Copy } from "lucide-react";
 
 import { formatPlanPrice } from "../../../../../shared/accountCommerce";
@@ -12,7 +12,11 @@ import {
   TERMS_OF_SERVICE_ENTRY,
   type LegalDocumentEntry,
 } from "../../docs/legalDocumentsContent";
-import { WebPlatformLegalReaderModal } from "../WebPlatformLegalReaderModal";
+const WebPlatformLegalReaderModal = lazy(() =>
+  import("../WebPlatformLegalReaderModal").then((module) => ({
+    default: module.WebPlatformLegalReaderModal,
+  })),
+);
 
 type JoinProps = { onJoin: () => void };
 
@@ -209,10 +213,12 @@ export function PublicFrame(props: { onJoin: () => void; children: ReactNode }) 
         </footer>
       </div>
       {activeLegalDocument ? (
-        <WebPlatformLegalReaderModal
-          document={activeLegalDocument}
-          onClose={() => setActiveLegalDocument(null)}
-        />
+        <Suspense fallback={null}>
+          <WebPlatformLegalReaderModal
+            document={activeLegalDocument}
+            onClose={() => setActiveLegalDocument(null)}
+          />
+        </Suspense>
       ) : null}
     </div>
   );

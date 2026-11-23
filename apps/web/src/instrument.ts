@@ -1,4 +1,4 @@
-import * as Sentry from "@sentry/react";
+type SentryModule = typeof import("./sentryRuntime");
 
 declare const __SENTRY_RELEASE__: string | null;
 declare const __SENTRY_ENVIRONMENT__: string | null;
@@ -23,6 +23,10 @@ type SentryUiContext = {
   runId?: string | null;
 };
 
+type PendingSentryOperation =
+  | { kind: "context"; context: SentryUiContext }
+  | { kind: "exception"; error: unknown; options?: CaptureAppExceptionOptions };
+
 const sentryDsn = String(import.meta.env.VITE_SENTRY_DSN ?? "").trim();
 const sentryEnvironment = String(__SENTRY_ENVIRONMENT__ ?? import.meta.env.MODE ?? "").trim();
 const sentryEnabled = sentryDsn.length > 0;
@@ -36,7 +40,12 @@ const sentryTracePropagationTargets: Array<string | RegExp> = [
   /^http:\/\/127\.0\.0\.1(?::\d+)?(?:\/|$)/,
 ];
 
-if (sentryEnabled) {
+const MAX_QUEUED_OPERATIONS = 50;
+let sentryModule: SentryModule | null = null;
+let sentryLoadPromise: Promise<SentryModule | null> | null = null;
+const pendingOperations: PendingSentryOperation[] = [];
+
+function initSentryModule(Sentry: SentryModule): SentryModule {
   Sentry.init({
     dsn: sentryDsn,
     environment: sentryEnvironment || import.meta.env.MODE,
@@ -71,58 +80,10 @@ if (sentryEnabled) {
       return event;
     },
   });
+  return Sentry;
 }
 
-function resolveSentryTraceSampleRate(environment: string | null | undefined): number {
-  const normalized = String(environment ?? "").trim().toLowerCase();
-  if (normalized === "production") return 0.15;
-  if (normalized === "preview") return 0.35;
-  return 1.0;
-}
-
-function normalizeTransactionName(name: string | undefined): string {
-  const normalized = String(name ?? "").trim();
-  if (!normalized) return "/";
-  if (normalized.startsWith("/")) {
-    return normalized.split(/[?#]/, 1)[0] || "/";
-  }
-  if (/^https?:\/\//i.test(normalized)) {
-    try {
-      const parsed = new URL(normalized);
-      return parsed.pathname || "/";
-    } catch {
-      return normalized;
-    }
-  }
-  return normalized;
-}
-
-function normalizeTagValue(value: string | number | boolean | null | undefined): string {
-  if (typeof value === "boolean") return value ? "true" : "false";
-  if (typeof value === "number") return Number.isFinite(value) ? String(value) : "unknown";
-  const normalized = String(value ?? "").trim();
-  return normalized || "none";
-}
-
-export function captureAppException(error: unknown, options?: CaptureAppExceptionOptions): void {
-  if (!sentryEnabled) return;
-  Sentry.withScope((scope) => {
-    for (const [key, value] of Object.entries(options?.tags ?? {})) {
-      scope.setTag(key, normalizeTagValue(value));
-    }
-    for (const [key, value] of Object.entries(options?.contexts ?? {})) {
-      scope.setContext(key, value ?? null);
-    }
-    for (const [key, value] of Object.entries(options?.extras ?? {})) {
-      scope.setExtra(key, value);
-    }
-    Sentry.captureException(error);
-  });
-}
-
-export function updateSentryUiContext(context: SentryUiContext): void {
-  if (!sentryEnabled) return;
-
+function applySentryUiContext(Sentry: SentryModule, context: SentryUiContext): void {
   Sentry.setTag("auth_state", normalizeTagValue(context.authState));
   Sentry.setTag("account_tier", normalizeTagValue(context.accountTier));
   Sentry.setTag("route_kind", normalizeTagValue(context.publicRouteKind));
@@ -164,4 +125,116 @@ export function updateSentryUiContext(context: SentryUiContext): void {
         }
       : null,
   );
+}
+
+function sendExceptionToSentry(
+  Sentry: SentryModule,
+  error: unknown,
+  options?: CaptureAppExceptionOptions,
+): void {
+  Sentry.withScope((scope) => {
+    for (const [key, value] of Object.entries(options?.tags ?? {})) {
+      scope.setTag(key, normalizeTagValue(value));
+    }
+    for (const [key, value] of Object.entries(options?.contexts ?? {})) {
+      scope.setContext(key, value ?? null);
+    }
+    for (const [key, value] of Object.entries(options?.extras ?? {})) {
+      scope.setExtra(key, value);
+    }
+    Sentry.captureException(error);
+  });
+}
+
+function ensureSentryLoaded(): Promise<SentryModule | null> {
+  if (!sentryEnabled) return Promise.resolve(null);
+  if (sentryModule) return Promise.resolve(sentryModule);
+  if (!sentryLoadPromise) {
+    sentryLoadPromise = import("./sentryRuntime")
+      .then((loaded) => {
+        sentryModule = initSentryModule(loaded);
+        while (pendingOperations.length > 0) {
+          const op = pendingOperations.shift();
+          if (!op) continue;
+          if (op.kind === "context") {
+            applySentryUiContext(sentryModule, op.context);
+          } else {
+            sendExceptionToSentry(sentryModule, op.error, op.options);
+          }
+        }
+        return sentryModule;
+      })
+      .catch(() => null);
+  }
+  return sentryLoadPromise;
+}
+
+if (sentryEnabled && typeof window !== "undefined") {
+  const schedule = () => {
+    void ensureSentryLoaded();
+  };
+  if (typeof window.requestIdleCallback === "function") {
+    window.requestIdleCallback(schedule, { timeout: 2_000 });
+  } else {
+    window.setTimeout(schedule, 1_000);
+  }
+}
+
+function resolveSentryTraceSampleRate(environment: string | null | undefined): number {
+  const normalized = String(environment ?? "").trim().toLowerCase();
+  if (normalized === "production") return 0.15;
+  if (normalized === "preview") return 0.35;
+  return 1.0;
+}
+
+function normalizeTransactionName(name: string | undefined): string {
+  const normalized = String(name ?? "").trim();
+  if (!normalized) return "/";
+  if (normalized.startsWith("/")) {
+    return normalized.split(/[?#]/, 1)[0] || "/";
+  }
+  if (/^https?:\/\//i.test(normalized)) {
+    try {
+      const parsed = new URL(normalized);
+      return parsed.pathname || "/";
+    } catch {
+      return normalized;
+    }
+  }
+  return normalized;
+}
+
+function normalizeTagValue(value: string | number | boolean | null | undefined): string {
+  if (typeof value === "boolean") return value ? "true" : "false";
+  if (typeof value === "number") return Number.isFinite(value) ? String(value) : "unknown";
+  const normalized = String(value ?? "").trim();
+  return normalized || "none";
+}
+
+export function captureAppException(error: unknown, options?: CaptureAppExceptionOptions): void {
+  if (!sentryEnabled) return;
+  if (sentryModule) {
+    sendExceptionToSentry(sentryModule, error, options);
+    return;
+  }
+  if (pendingOperations.length < MAX_QUEUED_OPERATIONS) {
+    pendingOperations.push({ kind: "exception", error, options });
+  }
+  void ensureSentryLoaded();
+}
+
+export function updateSentryUiContext(context: SentryUiContext): void {
+  if (!sentryEnabled) return;
+  if (sentryModule) {
+    applySentryUiContext(sentryModule, context);
+    return;
+  }
+  const last = pendingOperations[pendingOperations.length - 1];
+  if (last?.kind === "context") {
+    last.context = context;
+  } else if (pendingOperations.length < MAX_QUEUED_OPERATIONS) {
+    pendingOperations.push({ kind: "context", context });
+  } else {
+    pendingOperations[pendingOperations.length - 1] = { kind: "context", context };
+  }
 }

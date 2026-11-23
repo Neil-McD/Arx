@@ -4,6 +4,7 @@ import type { CloudCommunityAppLink } from "../../../../shared/cloudConnectedApp
 import {
   lazy,
   Suspense,
+  type ComponentType,
   type Ref,
 } from "react";
 
@@ -14,7 +15,6 @@ import { WebAppMainSurfaceFallback } from "./WebAppMainSurfaceFallback";
 import type {
   WebDirectMessagesHostProps,
 } from "./WebDirectMessagesHost";
-import { WebDirectMessagesHost } from "./WebDirectMessagesHost";
 import { WebGlobalOverlayHost } from "./WebGlobalOverlayHost";
 import type { WebGlobalOverlayHostProps } from "./WebGlobalOverlayHost";
 import type {
@@ -33,6 +33,12 @@ const WebAppMainSurfaceHost = lazy(() =>
 const WebCommunityAgentDock = lazy(() =>
   import("./WebCommunityAgentDock").then((module) => ({
     default: module.WebCommunityAgentDock,
+  })),
+);
+
+const WebDirectMessagesHost = lazy<ComponentType<WebDirectMessagesHostProps<AuthSession>>>(() =>
+  import("./WebDirectMessagesHost").then((module) => ({
+    default: module.WebDirectMessagesHost as ComponentType<WebDirectMessagesHostProps<AuthSession>>,
   })),
 );
 
@@ -62,7 +68,11 @@ export function WebAppCompositionRoot(props: {
           {...props.communityAgentDockProps}
         />
       </Suspense>}
-      <WebDirectMessagesHost {...props.directMessagesHostProps} />
+      {props.directMessagesHostProps.session || props.directMessagesHostProps.isOpen ? (
+        <Suspense fallback={null}>
+          <WebDirectMessagesHost {...props.directMessagesHostProps} />
+        </Suspense>
+      ) : null}
     </>
   );
   const mainSurface = (

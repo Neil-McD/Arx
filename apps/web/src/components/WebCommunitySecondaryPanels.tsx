@@ -1,30 +1,49 @@
 import { CommunityPageFrame } from "./CommunityPageHeader";
-import type { ComponentProps, ReactNode } from "react";
+import { lazy, Suspense, type ComponentProps, type ReactNode } from "react";
 import type { CommunityTab } from "../../../../shared/appShellNavigation";
 import { communityInitials } from "../../../../shared/messageMetadataUi";
 import { slugifyCommunityName } from "../../../../shared/communitySlug";
-import { WebCommunityAnalyticsSection } from "./WebCommunityAnalyticsSection";
-import { WebCommunityAiAgentSection } from "./WebCommunityAiAgentSection";
+import type { WebCommunityAnalyticsSection as WebCommunityAnalyticsSectionType } from "./WebCommunityAnalyticsSection";
+import type { WebCommunityAiAgentSection as WebCommunityAiAgentSectionType } from "./WebCommunityAiAgentSection";
 import { WebCommunityAvatarEditorModal } from "./WebCommunityAvatarEditorModal";
 import { WebCommunityBannerEditorModal } from "./WebCommunityBannerEditorModal";
-import { WebCommunityEventsSection } from "./WebCommunityEventsSection";
-import { WebCommunityPodsSection, type WebCommunityPodsSectionProps } from "./WebCommunityPodsSection";
-import { WebCommunityDiscoverPage, type WebCommunityDiscoverPageProps } from "./WebCommunityDiscoverPage";
+import type { WebCommunityEventsSection as WebCommunityEventsSectionType } from "./WebCommunityEventsSection";
+import type { WebCommunityPodsSectionProps } from "./WebCommunityPodsSection";
+import type { WebCommunityDiscoverPageProps } from "./WebCommunityDiscoverPage";
 import { WebDeleteResourceModuleModal } from "./WebDeleteResourceModuleModal";
 import { WebCommunityResourceModuleModal } from "./WebCommunityResourceModuleModal";
-import { CommunityResourcesPanel } from "./CommunityResourcesPanel";
-import { WebCommunityKnowledgePanel } from "./WebCommunityKnowledgePanel";
-import { WebCommunitySettingsSection } from "./WebCommunitySettingsSection";
+import type { CommunityResourcesPanel as CommunityResourcesPanelType } from "./CommunityResourcesPanel";
+import type { WebCommunityKnowledgePanel as WebCommunityKnowledgePanelType } from "./WebCommunityKnowledgePanel";
+import type { WebCommunitySettingsSection as WebCommunitySettingsSectionType } from "./WebCommunitySettingsSection";
+
+const WebCommunityAnalyticsSection = lazy(() =>
+  import("./WebCommunityAnalyticsSection").then((module) => ({ default: module.WebCommunityAnalyticsSection })),
+);
+const WebCommunityEventsSection = lazy(() =>
+  import("./WebCommunityEventsSection").then((module) => ({ default: module.WebCommunityEventsSection })),
+);
+const WebCommunityPodsSection = lazy(() =>
+  import("./WebCommunityPodsSection").then((module) => ({ default: module.WebCommunityPodsSection })),
+);
+const WebCommunityDiscoverPage = lazy(() =>
+  import("./WebCommunityDiscoverPage").then((module) => ({ default: module.WebCommunityDiscoverPage })),
+);
+const WebCommunityKnowledgePanel = lazy(() =>
+  import("./WebCommunityKnowledgePanel").then((module) => ({ default: module.WebCommunityKnowledgePanel })),
+);
+const WebCommunitySettingsSection = lazy(() =>
+  import("./WebCommunitySettingsSection").then((module) => ({ default: module.WebCommunitySettingsSection })),
+);
 
 export type WebCommunitySecondaryPanelsProps = {
   communityTab: CommunityTab;
   settings: Omit<
-    ComponentProps<typeof WebCommunitySettingsSection>,
+    ComponentProps<typeof WebCommunitySettingsSectionType>,
     "state" | "actions" | "aiAgentProps" | "externalWebsite"
   > & {
-    state: ComponentProps<typeof WebCommunitySettingsSection>["state"];
+    state: ComponentProps<typeof WebCommunitySettingsSectionType>["state"];
     actions: Omit<
-      ComponentProps<typeof WebCommunitySettingsSection>["actions"],
+      ComponentProps<typeof WebCommunitySettingsSectionType>["actions"],
       | "openCommunityBannerFocusModal"
       | "closeCommunityBannerFocusModal"
       | "openCommunityAvatarFocusModal"
@@ -47,11 +66,11 @@ export type WebCommunitySecondaryPanelsProps = {
     markCommunitySettingsDirty: () => void;
     setIsCommunityBannerFocusModalOpen: (value: boolean) => void;
   };
-  aiAgent: ComponentProps<typeof WebCommunityAiAgentSection>;
-  analytics: ComponentProps<typeof WebCommunityAnalyticsSection>;
-  resources: ComponentProps<typeof CommunityResourcesPanel>;
-  knowledge: ComponentProps<typeof WebCommunityKnowledgePanel>["context"];
-  events: ComponentProps<typeof WebCommunityEventsSection>;
+  aiAgent: ComponentProps<typeof WebCommunityAiAgentSectionType>;
+  analytics: ComponentProps<typeof WebCommunityAnalyticsSectionType>;
+  resources: ComponentProps<typeof CommunityResourcesPanelType>;
+  knowledge: ComponentProps<typeof WebCommunityKnowledgePanelType>["context"];
+  events: ComponentProps<typeof WebCommunityEventsSectionType>;
   pods: WebCommunityPodsSectionProps;
   discover: WebCommunityDiscoverPageProps;
   resourceModuleModal: ComponentProps<typeof WebCommunityResourceModuleModal>;
@@ -59,11 +78,11 @@ export type WebCommunitySecondaryPanelsProps = {
 };
 
 function renderCenteredPane(children: ReactNode) {
-  return <CommunityPageFrame>{children}</CommunityPageFrame>;
+  return <CommunityPageFrame><Suspense fallback={null}>{children}</Suspense></CommunityPageFrame>;
 }
 
 export function WebCommunitySecondaryPanels(props: WebCommunitySecondaryPanelsProps) {
-  const settingsSectionProps: ComponentProps<typeof WebCommunitySettingsSection> = {
+  const settingsSectionProps: ComponentProps<typeof WebCommunitySettingsSectionType> = {
     ...props.settings,
     aiAgentProps: props.aiAgent,
     actions: {
