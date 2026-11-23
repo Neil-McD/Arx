@@ -147,8 +147,8 @@ assert.doesNotMatch(app, /claimFounderCheckoutReceipt|founderCheckoutBrowserStat
 assert.doesNotMatch(app, /createBlockingFundingCommunity/);
 assert.equal(
   (app.match(/builderOffer\.open\(\{ community/g) ?? []).length,
-  3,
-  "Billing, Account and Guide (design v1's Agent plan row) must call the same existing-community Builder offer controller",
+  1,
+  "Guide's Agent plan row must call the canonical existing-community Builder offer controller",
 );
 assert.doesNotMatch(offerController, /entrySurface|setEntrySurface/);
 
