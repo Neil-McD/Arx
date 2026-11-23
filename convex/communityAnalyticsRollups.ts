@@ -660,6 +660,9 @@ function addMoneyAcc(current: MoneyAccumulator, addition: MoneyAccumulator): Mon
   };
 }
 
+const MAX_OPERATOR_FALLBACK_SUB_READS_PER_BATCH = 4_000;
+const OPERATOR_FALLBACK_SUBS_PER_STATUS_LIMIT = 250;
+
 // Paginated platform-wide operator summary refresh (15-min cron): computes
 // overview totals across all communities without ever scanning the full DB
 // in a single query.
@@ -676,6 +679,7 @@ export const refreshPlatformOperatorSummaryBatchInternal = internalMutation({
       ? { ...args.acc, ownerIds: [...(args.acc.ownerIds ?? [])] }
       : {
           ownerIds: [] as string[],
+          communityCreators: 0,
           communities: 0,
           activeCommunities: 0,
           totalCommunityMembers: 0,
@@ -693,6 +697,7 @@ export const refreshPlatformOperatorSummaryBatchInternal = internalMutation({
         .query("communities")
         .paginate({ cursor: args.cursor ?? null, numItems: OPERATOR_COMMUNITIES_BATCH_SIZE });
       const ownerSet = new Set<string>(acc.ownerIds);
+      let fallbackSubReadsThisBatch = 0;
 
       for (const community of page.page) {
         acc.communities += 1;
@@ -730,16 +735,17 @@ export const refreshPlatformOperatorSummaryBatchInternal = internalMutation({
               mixedCurrency: false,
             };
           }
-        } else {
+        } else if (fallbackSubReadsThisBatch < MAX_OPERATOR_FALLBACK_SUB_READS_PER_BATCH) {
           const subsByStatus = await Promise.all(
             ACTIVE_RECURRING_STATUSES.map((status) =>
               ctx.db
                 .query("communitySubscriptions")
                 .withIndex("by_community_status", (q) => q.eq("communityId", community._id).eq("status", status))
-                .take(1_000),
+                .take(OPERATOR_FALLBACK_SUBS_PER_STATUS_LIMIT),
             ),
           );
           const recurring = subsByStatus.flat();
+          fallbackSubReadsThisBatch += recurring.length;
           activePaidMembers = recurring.length;
           const priceCache = new Map<string, any>();
           for (const sub of recurring) {
@@ -784,8 +790,8 @@ export const refreshPlatformOperatorSummaryBatchInternal = internalMutation({
         acc.riskItems += flags.length;
       }
 
-      acc.ownerIds = [...ownerSet];
       if (!page.isDone) {
+        acc.ownerIds = [...ownerSet];
         await ctx.scheduler.runAfter(0, (internal as any).communityAnalyticsRollups.refreshPlatformOperatorSummaryBatchInternal, {
           phase: "communities",
           cursor: page.continueCursor,
@@ -794,10 +800,16 @@ export const refreshPlatformOperatorSummaryBatchInternal = internalMutation({
         return { done: false };
       }
 
+      // Drop the raw ownerIds array before user pagination; only the unique count is needed.
+      const usersPhaseAcc = {
+        ...acc,
+        ownerIds: [] as string[],
+        communityCreators: ownerSet.size,
+      };
       await ctx.scheduler.runAfter(0, (internal as any).communityAnalyticsRollups.refreshPlatformOperatorSummaryBatchInternal, {
         phase: "users",
         cursor: null,
-        acc,
+        acc: usersPhaseAcc,
       });
       return { done: false };
     }
@@ -821,7 +833,7 @@ export const refreshPlatformOperatorSummaryBatchInternal = internalMutation({
     }
 
     const totals = {
-      communityCreators: (acc.ownerIds ?? []).length,
+      communityCreators: Number(acc.communityCreators ?? (acc.ownerIds ?? []).length),
       communities: acc.communities,
       activeCommunities: acc.activeCommunities,
       totalCommunityMembers: acc.totalCommunityMembers,

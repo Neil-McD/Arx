@@ -25,6 +25,7 @@ const posthogHost = String(import.meta.env.VITE_PUBLIC_POSTHOG_HOST ?? "").trim(
 const analyticsEnabled = posthogKey.length > 0 && posthogHost.length > 0;
 
 const MAX_QUEUED_OPERATIONS = 100;
+const POSTHOG_IDENTIFIED_MARKER_KEY = "polynet_posthog_identified_v1";
 let posthogClient: PosthogClient | null = null;
 let posthogLoadPromise: Promise<PosthogClient | null> | null = null;
 let lastIdentifiedUserId: string | null = null;
@@ -33,22 +34,45 @@ let currentUiContext: AnalyticsUiContext = {
 };
 const pendingOperations: PendingPosthogOperation[] = [];
 
+function readPersistedPosthogIdentified(): boolean {
+  try {
+    return typeof localStorage !== "undefined" && localStorage.getItem(POSTHOG_IDENTIFIED_MARKER_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function writePersistedPosthogIdentified(identified: boolean): void {
+  try {
+    if (typeof localStorage === "undefined") return;
+    if (identified) localStorage.setItem(POSTHOG_IDENTIFIED_MARKER_KEY, "1");
+    else localStorage.removeItem(POSTHOG_IDENTIFIED_MARKER_KEY);
+  } catch {
+    // Storage may be unavailable in hardened browser contexts.
+  }
+}
+
 function applyPosthogIdentity(
   posthog: PosthogClient,
   userId: string | null,
   accountTier: string | null,
 ): void {
   if (userId) {
+    if (lastIdentifiedUserId && lastIdentifiedUserId !== userId) {
+      posthog.reset();
+    }
     if (lastIdentifiedUserId !== userId) {
       posthog.identify(userId, compactProperties({ account_tier: accountTier }));
       lastIdentifiedUserId = userId;
+      writePersistedPosthogIdentified(true);
     }
     return;
   }
 
-  if (lastIdentifiedUserId) {
+  if (lastIdentifiedUserId || readPersistedPosthogIdentified()) {
     posthog.reset();
     lastIdentifiedUserId = null;
+    writePersistedPosthogIdentified(false);
   }
 }
 
@@ -83,7 +107,11 @@ function ensurePosthogLoaded(): Promise<PosthogClient | null> {
         replayPendingPosthogOperations(posthog);
         return posthog;
       })
-      .catch(() => null);
+      .catch(() => {
+        pendingOperations.length = 0;
+        posthogLoadPromise = null;
+        return null;
+      });
   }
   return posthogLoadPromise;
 }
@@ -147,7 +175,7 @@ export function updatePosthogUiContext(context: AnalyticsUiContext): void {
     return;
   }
   const last = pendingOperations[pendingOperations.length - 1];
-  if (last?.kind === "identity") {
+  if (last?.kind === "identity" && (last.userId === null) === (userId === null)) {
     last.userId = userId;
     last.accountTier = accountTier;
   } else if (pendingOperations.length < MAX_QUEUED_OPERATIONS) {
