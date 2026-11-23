@@ -194,45 +194,8 @@ export default defineConfig(({ mode }) => {
             if (normalizedId.includes("/node_modules/convex/")) {
               return "convex-vendor";
             }
-            if (normalizedId.includes("/node_modules/highlight.js/")) {
-              return "highlight-vendor";
-            }
             if (normalizedId.includes("/node_modules/lucide-react/")) {
               return "ui-vendor";
-            }
-            if (
-              normalizedId.includes("/node_modules/@sentry/") ||
-              normalizedId.includes("/node_modules/@sentry-internal/") ||
-              normalizedId.includes("/node_modules/posthog-js/")
-            ) {
-              return "analytics-vendor";
-            }
-            if (
-              normalizedId.includes("/node_modules/react-markdown/") ||
-              normalizedId.includes("/node_modules/remark-") ||
-              normalizedId.includes("/node_modules/rehype-") ||
-              normalizedId.includes("/node_modules/katex/") ||
-              normalizedId.includes("/node_modules/unified/") ||
-              normalizedId.includes("/node_modules/@ungap/structured-clone/") ||
-              normalizedId.includes("/node_modules/micromark") ||
-              normalizedId.includes("/node_modules/mdast-") ||
-              normalizedId.includes("/node_modules/hast-") ||
-              normalizedId.includes("/node_modules/hast-util-to-jsx-runtime/") ||
-              normalizedId.includes("/node_modules/html-url-attributes/") ||
-              normalizedId.includes("/node_modules/unist-") ||
-              normalizedId.includes("/node_modules/vfile") ||
-              normalizedId.includes("/node_modules/longest-streak/") ||
-              normalizedId.includes("/node_modules/style-to-js/") ||
-              normalizedId.includes("/node_modules/style-to-object/") ||
-              normalizedId.includes("/node_modules/inline-style-parser/") ||
-              normalizedId.includes("/node_modules/property-information/") ||
-              normalizedId.includes("/node_modules/comma-separated-tokens/") ||
-              normalizedId.includes("/node_modules/space-separated-tokens/") ||
-              normalizedId.includes("/node_modules/decode-named-character-reference/") ||
-              normalizedId.includes("/node_modules/character-entities") ||
-              normalizedId.includes("/node_modules/trim-lines/")
-            ) {
-              return "markdown-vendor";
             }
             return undefined;
           }

@@ -1,5 +1,11 @@
+import { lazy, Suspense } from "react";
 import type { WebCommunityModalHostPropsShape } from "../controllers/useWebCommunityUiController";
-import { WebCreateCommunityModal } from "./WebCreateCommunityModal";
+
+const WebCreateCommunityModal = lazy(() =>
+  import("./WebCreateCommunityModal").then((module) => ({
+    default: module.WebCreateCommunityModal,
+  })),
+);
 
 type WebCommunityModalHostProps = {
   modalHostProps: WebCommunityModalHostPropsShape;
@@ -11,7 +17,9 @@ export function WebCommunityModalHost(props: WebCommunityModalHostProps) {
   return (
     <>
       {createModal.isOpen ? (
-        <WebCreateCommunityModal {...createModal} />
+        <Suspense fallback={null}>
+          <WebCreateCommunityModal {...createModal} />
+        </Suspense>
       ) : null}
     </>
   );

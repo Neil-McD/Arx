@@ -1,12 +1,23 @@
-import type { ComponentProps } from "react";
+import { lazy, Suspense, type ComponentProps } from "react";
 import { WebCommunityModalHost } from "./WebCommunityModalHost";
-import { WebBuilderOfferModal } from "./WebBuilderOfferModal";
-import { WebCommunityLaunchStep } from "./WebCommunityLaunchStep";
+import type { WebBuilderOfferModal as WebBuilderOfferModalType } from "./WebBuilderOfferModal";
+import type { WebCommunityLaunchStep as WebCommunityLaunchStepType } from "./WebCommunityLaunchStep";
+
+const WebBuilderOfferModal = lazy(() =>
+  import("./WebBuilderOfferModal").then((module) => ({
+    default: module.WebBuilderOfferModal,
+  })),
+);
+const WebCommunityLaunchStep = lazy(() =>
+  import("./WebCommunityLaunchStep").then((module) => ({
+    default: module.WebCommunityLaunchStep,
+  })),
+);
 
 export type WebGlobalOverlayHostProps = {
   communityModalHostProps: ComponentProps<typeof WebCommunityModalHost>["modalHostProps"];
-  builderOfferProps: ComponentProps<typeof WebBuilderOfferModal>;
-  communityLaunchProps: ComponentProps<typeof WebCommunityLaunchStep> | null;
+  builderOfferProps: ComponentProps<typeof WebBuilderOfferModalType>;
+  communityLaunchProps: ComponentProps<typeof WebCommunityLaunchStepType> | null;
   appToast: string | null;
 };
 
@@ -15,11 +26,17 @@ export function WebGlobalOverlayHost(props: WebGlobalOverlayHostProps) {
     <>
       <WebCommunityModalHost modalHostProps={props.communityModalHostProps} />
 
-      <WebBuilderOfferModal {...props.builderOfferProps} />
+      {props.builderOfferProps.community ? (
+        <Suspense fallback={null}>
+          <WebBuilderOfferModal {...props.builderOfferProps} />
+        </Suspense>
+      ) : null}
 
 
       {props.communityLaunchProps ? (
-        <WebCommunityLaunchStep key={props.communityLaunchProps.community.id} {...props.communityLaunchProps} />
+        <Suspense fallback={null}>
+          <WebCommunityLaunchStep key={props.communityLaunchProps.community.id} {...props.communityLaunchProps} />
+        </Suspense>
       ) : null}
 
       {props.appToast ? (

@@ -9,7 +9,6 @@ import {
   useRef,
 } from "react";
 import { isDesignV1Active } from "../../../shared/designSystem";
-import "highlight.js/styles/github-dark.css";
 import {
   beginBrowserSignedOutState,
   type AuthSession,
@@ -96,7 +95,6 @@ import {
   communityInitials,
 } from "../../../shared/messageMetadataUi";
 import { renderTextWithLinks } from "../../../shared/linkEmbedUi";
-import { renderMarkdown } from "../../../shared/markdownUi";
 import { readBannerFileAsWideDataUrlWithinLimit } from "../../../shared/imageTransforms";
 import { resetWebSessionStateAfterSignOut } from "./auth/resetSessionState";
 import { usePointerSortableList } from "../../../shared/usePointerSortableList";
@@ -2300,7 +2298,6 @@ export default function App() {
           docsSlug: nextSlug,
         }) ?? "/docs");
       },
-      renderMarkdown,
     },
   });
   // The guide's page: desktop Home, and design v1's phone Home tab. On a v1

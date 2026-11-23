@@ -1,17 +1,48 @@
-import type { ComponentProps } from "react";
+import { lazy, Suspense, type ComponentProps } from "react";
 import type { AppPage } from "../../../../shared/appShellNavigation";
-import { WebCommunityHost } from "./WebCommunityHost";
-import { WebDiscoverPanel } from "./WebDiscoverPanel";
-import { WebCommunityDiscoverPage, type WebCommunityDiscoverPageProps } from "./WebCommunityDiscoverPage";
+import type { WebCommunityHost as WebCommunityHostType } from "./WebCommunityHost";
+import type { WebDiscoverPanel as WebDiscoverPanelType } from "./WebDiscoverPanel";
+import type { WebCommunityDiscoverPageProps } from "./WebCommunityDiscoverPage";
 import { CommunityPageFrame } from "./CommunityPageHeader";
 import { isDesignV1Active } from "../../../../shared/designSystem";
-import { WebProductDocsPanel } from "./WebProductDocsPanel";
-import { WebCommunityLandingPage } from "./WebCommunityLandingPage";
-import { WebSettingsSurfaceHost } from "./WebSettingsSurfaceHost";
-import { WebLandingPage } from "./WebLandingPage";
-import { PublicFindPage } from "./polynetLanding/PublicFindPage";
-import { WebOnboardingPage } from "./WebOnboardingPage";
-import { WebPlatformBridgePage } from "./WebPlatformBridgePage";
+import type { WebProductDocsPanel as WebProductDocsPanelType } from "./WebProductDocsPanel";
+import type { WebSettingsSurfaceHost as WebSettingsSurfaceHostType } from "./WebSettingsSurfaceHost";
+import type { WebLandingPage as WebLandingPageType } from "./WebLandingPage";
+import type { PublicFindPage as PublicFindPageType } from "./polynetLanding/PublicFindPage";
+import type { WebOnboardingPage as WebOnboardingPageType } from "./WebOnboardingPage";
+import type { WebPlatformBridgePage as WebPlatformBridgePageType } from "./WebPlatformBridgePage";
+import { WebAppMainSurfaceFallback } from "./WebAppMainSurfaceFallback";
+
+const WebCommunityHost = lazy(() =>
+  import("./WebCommunityHost").then((module) => ({ default: module.WebCommunityHost })),
+);
+const WebDiscoverPanel = lazy(() =>
+  import("./WebDiscoverPanel").then((module) => ({ default: module.WebDiscoverPanel })),
+);
+const WebCommunityDiscoverPage = lazy(() =>
+  import("./WebCommunityDiscoverPage").then((module) => ({ default: module.WebCommunityDiscoverPage })),
+);
+const WebProductDocsPanel = lazy(() =>
+  import("./WebProductDocsPanel").then((module) => ({ default: module.WebProductDocsPanel })),
+);
+const WebCommunityLandingPage = lazy(() =>
+  import("./WebCommunityLandingPage").then((module) => ({ default: module.WebCommunityLandingPage })),
+);
+const WebSettingsSurfaceHost = lazy(() =>
+  import("./WebSettingsSurfaceHost").then((module) => ({ default: module.WebSettingsSurfaceHost })),
+);
+const WebLandingPage = lazy(() =>
+  import("./WebLandingPage").then((module) => ({ default: module.WebLandingPage })),
+);
+const PublicFindPage = lazy(() =>
+  import("./polynetLanding/PublicFindPage").then((module) => ({ default: module.PublicFindPage })),
+);
+const WebOnboardingPage = lazy(() =>
+  import("./WebOnboardingPage").then((module) => ({ default: module.WebOnboardingPage })),
+);
+const WebPlatformBridgePage = lazy(() =>
+  import("./WebPlatformBridgePage").then((module) => ({ default: module.WebPlatformBridgePage })),
+);
 
 export type WebAppMainSurfaceHostProps = {
   activePage: AppPage;
@@ -20,24 +51,27 @@ export type WebAppMainSurfaceHostProps = {
   showDiscoverPanel: boolean;
   showProductDocsPanel: boolean;
   holdLandingForAuth: boolean;
-  landingPageProps: ComponentProps<typeof WebLandingPage>;
+  landingPageProps: ComponentProps<typeof WebLandingPageType>;
   showPublicFind: boolean;
-  publicFindProps: ComponentProps<typeof PublicFindPage>;
-  onboardingPageProps: ComponentProps<typeof WebOnboardingPage>;
-  platformBridgePageProps: ComponentProps<typeof WebPlatformBridgePage>;
+  publicFindProps: ComponentProps<typeof PublicFindPageType>;
+  onboardingPageProps: ComponentProps<typeof WebOnboardingPageType>;
+  platformBridgePageProps: ComponentProps<typeof WebPlatformBridgePageType>;
   showOnboardingModal: boolean;
-  settingsSurfaceHostProps: ComponentProps<typeof WebSettingsSurfaceHost>;
+  settingsSurfaceHostProps: ComponentProps<typeof WebSettingsSurfaceHostType>;
   // /c/<slug>: the community whose landing page this is, and the viewer's
   // session (null signed out) for where they stand and to join.
   publicCommunitySlug: string | null;
   publicCommunitySession: unknown | null;
-  communityHostProps: ComponentProps<typeof WebCommunityHost>;
-  discoverPanelProps: ComponentProps<typeof WebDiscoverPanel>;
+  communityHostProps: ComponentProps<typeof WebCommunityHostType>;
+  discoverPanelProps: ComponentProps<typeof WebDiscoverPanelType>;
   discoverPageProps: WebCommunityDiscoverPageProps;
-  productDocsPanelProps: ComponentProps<typeof WebProductDocsPanel>;
+  productDocsPanelProps: ComponentProps<typeof WebProductDocsPanelType>;
 };
 
 export function WebAppMainSurfaceHost(props: WebAppMainSurfaceHostProps) {
+  const surfaceFallback = props.showCommunitySurface
+    ? <WebAppMainSurfaceFallback {...props} />
+    : null;
   return (
     <main
       className={`workspace${
@@ -47,43 +81,45 @@ export function WebAppMainSurfaceHost(props: WebAppMainSurfaceHostProps) {
           : ""
       }`}
     >
-      {props.holdLandingForAuth ? (
-        <div className="landing-auth-hold" aria-hidden="true" />
-      ) : props.showPublicCommunityFunnel ? (
-        <div className="community-body">
-          {props.publicCommunitySlug ? <WebCommunityLandingPage communitySlug={props.publicCommunitySlug} session={props.publicCommunitySession} /> : null}
-        </div>
-      ) : props.showPublicFind ? (
-        <PublicFindPage {...props.publicFindProps} />
-      ) : props.activePage === "landing" ? (
-        <WebLandingPage {...props.landingPageProps} />
-      ) : props.activePage === "onboarding" ? (
-        <>
+      <Suspense fallback={surfaceFallback}>
+        {props.holdLandingForAuth ? (
+          <div className="landing-auth-hold" aria-hidden="true" />
+        ) : props.showPublicCommunityFunnel ? (
           <div className="community-body">
-            <WebDiscoverPanel {...props.discoverPanelProps} />
+            {props.publicCommunitySlug ? <WebCommunityLandingPage communitySlug={props.publicCommunitySlug} session={props.publicCommunitySession} /> : null}
           </div>
-          <WebPlatformBridgePage {...props.platformBridgePageProps} />
-        </>
-      ) : props.activePage === "settings" ? (
-        <WebSettingsSurfaceHost {...props.settingsSurfaceHostProps} />
-      ) : props.showCommunitySurface ? (
-        <WebCommunityHost {...props.communityHostProps} />
-      ) : (
-        <div className="community-body">
-          {props.showDiscoverPanel && isDesignV1Active() ? (
-            // Design v1: someone in no community yet gets the same Discover
-            // page a community shows (docs/specs/discover-v1.md).
-            <CommunityPageFrame><WebCommunityDiscoverPage {...props.discoverPageProps} /></CommunityPageFrame>
-          ) : props.showDiscoverPanel ? (
-            <WebDiscoverPanel {...props.discoverPanelProps} />
-          ) : props.showProductDocsPanel ? (
-            <WebProductDocsPanel {...props.productDocsPanelProps} />
-          ) : null}
-        </div>
-      )}
-      {props.showOnboardingModal ? (
-        <WebOnboardingPage {...props.onboardingPageProps} />
-      ) : null}
+        ) : props.showPublicFind ? (
+          <PublicFindPage {...props.publicFindProps} />
+        ) : props.activePage === "landing" ? (
+          <WebLandingPage {...props.landingPageProps} />
+        ) : props.activePage === "onboarding" ? (
+          <>
+            <div className="community-body">
+              <WebDiscoverPanel {...props.discoverPanelProps} />
+            </div>
+            <WebPlatformBridgePage {...props.platformBridgePageProps} />
+          </>
+        ) : props.activePage === "settings" ? (
+          <WebSettingsSurfaceHost {...props.settingsSurfaceHostProps} />
+        ) : props.showCommunitySurface ? (
+          <WebCommunityHost {...props.communityHostProps} />
+        ) : (
+          <div className="community-body">
+            {props.showDiscoverPanel && isDesignV1Active() ? (
+              // Design v1: someone in no community yet gets the same Discover
+              // page a community shows (docs/specs/discover-v1.md).
+              <CommunityPageFrame><WebCommunityDiscoverPage {...props.discoverPageProps} /></CommunityPageFrame>
+            ) : props.showDiscoverPanel ? (
+              <WebDiscoverPanel {...props.discoverPanelProps} />
+            ) : props.showProductDocsPanel ? (
+              <WebProductDocsPanel {...props.productDocsPanelProps} />
+            ) : null}
+          </div>
+        )}
+        {props.showOnboardingModal ? (
+          <WebOnboardingPage {...props.onboardingPageProps} />
+        ) : null}
+      </Suspense>
     </main>
   );
 }

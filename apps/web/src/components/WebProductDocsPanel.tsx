@@ -1,4 +1,5 @@
 import { useMemo, type ReactNode } from "react";
+import { renderMarkdown as defaultRenderMarkdown } from "../../../../shared/markdownUi";
 
 import {
   PRODUCT_DOCS,
@@ -12,7 +13,7 @@ import "./WebProductDocsPanel.css";
 type WebProductDocsPanelProps = {
   activeSlug: string | null;
   onSelectSlug: (slug: string) => void;
-  renderMarkdown: (text: string) => ReactNode;
+  renderMarkdown?: (text: string) => ReactNode;
 };
 
 function getActiveDoc(activeSlug: string | null): ProductDocEntry {
@@ -86,7 +87,7 @@ export function WebProductDocsPanel(props: WebProductDocsPanelProps) {
               </div>
             </div>
             <div className="product-docs-reader message-text">
-              {props.renderMarkdown(activeDoc.content)}
+              {(props.renderMarkdown ?? defaultRenderMarkdown)(activeDoc.content)}
             </div>
           </article>
         </div>

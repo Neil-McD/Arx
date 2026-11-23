@@ -612,7 +612,10 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
   removed): the owner's switch (`setCommunityMemberExperience`) is stored but
   no longer moves anyone, and Studio's member-to-site hand-off is gone. See
   the routing contract.
-- **Code:** `apps/web` (React, Vite: `App.tsx`, `components/`, `controllers/`),
+- **Code:** `apps/web` (React, Vite: `App.tsx`, `components/`, `controllers/`;
+  top-level pages, community secondary tabs, DM panels, legal/setup modals,
+  rich markdown/highlight assets, and Sentry/PostHog telemetry load on demand
+  outside the initial startup bundle),
   `shared/` (gateways and shared UI), `api/` (Vercel functions); backend helper
   `publicAppUrl`.
 - **Hosting:** Vercel `polynet` (production, www.polynet.ai) and `polynet-staging`.
