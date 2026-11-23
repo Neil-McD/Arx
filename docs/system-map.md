@@ -70,7 +70,8 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
   `communityPublicPage` (the retired public-page editor the cached production
   app still calls; its stored copy is the `communityPublicPages` table),
   `communityCore`, `communityLifecycle`, `communityMembershipLifecycle`,
-  `communityJoinRequestCore`, `communityAdmin`, `communityPublic`, `communityDirectory`,
+  `communityJoinRequestCore`, `communityAdmin`, `communityAdminAnalyticsCore`,
+  `communityAdminBillingHistoryCore`, `communityAdminAdmissionsCore`, `communityPublic`, `communityDirectory`,
   `communityMemberSearch` (per-community searchable member index for fast `@` mention autocomplete, synced on membership/profile writes and backfilled asynchronously),
   `communityColdArchive`, `communityCapabilityContext`, `communityPresenceCore` (90-second presence leases with 15-second server-side heartbeat write coalescing and parallel online-member resolution),
   `communityAccessAudit`, `communityAccessQueries`, `communityMembershipContextCore`,
@@ -118,7 +119,8 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
 
 - **Does:** channels, posts, replies, reactions, mentions, attachments, typing,
   read cursors. One canonical interaction substrate.
-- **Code:** `communityInteractions`, `communityChannels`, `communityChannelCore`,
+- **Code:** `communityInteractions`, `communityInteractionMentionsCore`,
+  `communityInteractionBundlesCore`, `communityChannels`, `communityChannelCore`,
   `communityChannelAccess`, `communityChannelParticipants`, `communityMention*`,
   `communityAttachmentUploads`, `communityAttachmentDownloads`,
   `communityInteractionAttachmentBridge`, `communityInteractionEvidence`, `communitySearchDocs`
@@ -304,7 +306,7 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
   site conversations; tools, streaming, model calls, receipts.
 - **Code:** `communityTurnContract` (shared: who speaks, who sees the answer, which layers that allows, and how many recent turns an Ask carries: 20, current turn included; older messages stay stored, unsummarized; and whether the agent may speak in channels: Ask and tag turns only draft posts, the member sends them), `communityNotes` (community notes under memory/: hosts write them in Knowledge, everyone reads them), `runtimeAgentLoop` (a private talk's context, then the run entry `communityAgentRun`), `runtimeKernel` (the loop rules, `RuntimeKernelRun`), `piRuntimeKernel` (the loop engine, on Pi), `runtimeTurn*`, `runtimeContextIntegrity`,
   `runtimeHarnessShaping`, `polynetCanonicalExecutor`,
-  `communityRepositorySearch`, `threads`, `communityAgent`, `communityAgentRuntime`,
+  `communityRepositorySearch`, `threads`, `threadAttachmentsCore`, `threadWorkingStateCore`, `communityAgent`, `communityAgentRuntime`,
   `communityAgentFilesystem`,
   `communityAgentContext`, `communityAgentChannelAccess`, `communityAgentConcierge*`,
   `communityAgentServeWorker`, `agentTools` (the one router for the guide's tools: a run gets its lens's tools, `LENS_TOOLS` in `shared/lens.ts`, and any other tool is refused), `stagingGuideEval` (staging only, hand-run: one request through a private talk's real loop with what the guide did handed back, for measuring a change to its instructions or tools; `scripts/guide_eval.mjs` holds the requests and their checks), `httpRuntimeRoutes`,
@@ -622,7 +624,7 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
   `shared/` (gateways and shared UI), `api/` (Vercel functions); backend helper
   `publicAppUrl`.
 - **Hosting:** Vercel `polynet` (production, www.polynet.ai) and `polynet-staging`.
-- **Known hot spot:** `App.tsx` (~2,200 lines; down from 3,100 after Wave 4A builder extraction).
+- **Known hot spot:** `App.tsx` (~1,792 lines; down from 3,100 after Wave 4A/4B shell controller and prop builder extractions).
 
 ### 18. Release, CI and the factory — Keep
 
