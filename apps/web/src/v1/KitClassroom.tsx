@@ -779,11 +779,6 @@ export function KitClassroom(props: {
 
     page = (
       <div className={cx("page")} style={{ padding: 0, overflow: "visible" }}>
-        {/* On a phone the top bar's arrow leaves the community page, so the course keeps its own way back here; on desktop it is the header's arrow. */}
-        <div className={`knowledge-course-crumb ${cx("kcrumb")}`} style={{ marginTop: 0 }}>
-          <button type="button" className={cx("kback")} onClick={() => props.onOpenCourse(null)} aria-label="Back to Knowledge"><Icon name="back" />Knowledge</button>
-          <span>›</span><span>{open.course.name}</span>
-        </div>
         {courseTools && headerToolbar ? createPortal(<KitApp view="know" host part="flow" className="kit-header-end"><div className={cx("ktools", "head")}>{courseTools}</div></KitApp>, headerToolbar) : null}
         {courseTools && !headerToolbar ? <div className={`knowledge-course-tools-inline ${cx("ktools")}`}>{courseTools}</div> : null}
         {courseError ? <p className={cx("sub")} role="alert" style={{ color: "var(--bad)", maxWidth: 1216, margin: "12px auto 0" }}>{courseError}</p> : null}
