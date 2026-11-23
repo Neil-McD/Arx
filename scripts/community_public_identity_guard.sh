@@ -9,6 +9,7 @@ cd "$ROOT_DIR"
 echo "== Community public identity guard =="
 
 COMMUNITY_INTERACTIONS_FILE="convex/communityInteractions.ts"
+COMMUNITY_INTERACTION_BUNDLES_FILE="convex/communityInteractionBundlesCore.ts"
 COMMUNITY_ADMIN_FILE="convex/communityAdmin.ts"
 COMMUNITY_CORE_FILE="convex/communityCore.ts"
 RETIRED_COMMUNITY_EXPERIENCE_FILE="convex/communityExperience.ts"
@@ -21,6 +22,10 @@ if [[ -f "convex/community.ts" ]]; then
 fi
 if [[ ! -f "$COMMUNITY_INTERACTIONS_FILE" ]]; then
   echo "FAIL: missing $COMMUNITY_INTERACTIONS_FILE"
+  exit 1
+fi
+if [[ ! -f "$COMMUNITY_INTERACTION_BUNDLES_FILE" ]]; then
+  echo "FAIL: missing $COMMUNITY_INTERACTION_BUNDLES_FILE"
   exit 1
 fi
 if [[ ! -f "$COMMUNITY_ADMIN_FILE" ]]; then
@@ -61,7 +66,7 @@ require_multiline_match "$COMMUNITY_CORE_FILE" \
   "resolvePublicUserId helper exists"
 
 echo "[2/9] Ensuring chat payloads resolve browser-facing IDs..."
-require_multiline_match "$COMMUNITY_INTERACTIONS_FILE" \
+require_multiline_match "$COMMUNITY_INTERACTION_BUNDLES_FILE" \
   'const publicActorUserId = root\.actorUserId\s*\?\s*await resolvePublicUserId\(ctx, root\.actorUserId, userIdCache\)' \
   "chat posts resolve public author IDs"
 
@@ -94,7 +99,7 @@ require_multiline_match "$COMMUNITY_CORE_FILE" \
   "resource rows resolve public creator IDs"
 
 echo "[8/9] Ensuring chat reply author IDs stay in the same public namespace..."
-require_multiline_match "$COMMUNITY_INTERACTIONS_FILE" \
+require_multiline_match "$COMMUNITY_INTERACTION_BUNDLES_FILE" \
   'const publicActorUserId = reply\.actorUserId\s*\?\s*await resolvePublicUserId\(ctx, reply\.actorUserId, userIdCache\)' \
   "chat replies resolve public author IDs"
 
