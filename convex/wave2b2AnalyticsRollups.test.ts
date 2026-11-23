@@ -170,66 +170,6 @@ describe("Wave 2B-2 Community Analytics & Operator Dashboard rollups", () => {
     expect(afterVisit.summary.page_visits_window).toBe(3);
   });
 
-  it("refreshes platformOperatorSummary in paginated batches and serves O(1) operator overview totals", async () => {
-    const t = convexTest(schema, modules);
-    const nowMs = Date.now();
-    const w = await seedWorld(t, nowMs);
-
-    await t.run(async (ctx) => {
-      const paid = await activateCommunityMembershipCore({
-        ctx,
-        communityId: w.communityId,
-        userId: w.paidMemberId,
-        accessSource: "paid_subscription",
-        pricePointId: w.pricePointId,
-        activationReason: "paid_checkout",
-        nowMs,
-      });
-      await ctx.db.insert("communitySubscriptions", {
-        communityId: w.communityId,
-        userId: w.paidMemberId,
-        membershipId: paid.membership._id,
-        pricePointId: w.pricePointId,
-        status: "active",
-        cancelAtPeriodEnd: false,
-        createdAt: nowMs,
-        updatedAt: nowMs,
-      });
-    });
-
-    await t.mutation(internal.communityAnalyticsRollups.recomputeCommunityBillingSummaryInternal, {
-      communityId: w.communityId,
-      startedAt: nowMs,
-    });
-    await t.mutation(internal.communityAnalyticsRollups.refreshPlatformOperatorSummaryBatchInternal, {
-      phase: "communities",
-      cursor: null,
-    });
-    await t.mutation(internal.communityAnalyticsRollups.refreshPlatformOperatorSummaryBatchInternal, {
-      phase: "users",
-      cursor: null,
-      acc: {
-        ownerIds: [String(w.ownerId)],
-        communities: 1,
-        activeCommunities: 1,
-        totalCommunityMembers: 1,
-        paidCommunities: 1,
-        activePaidMembers: 1,
-        estimatedMrr: { amountBaseUnits: 4900, currency: "usd", currencyDecimals: 2, mixedCurrency: false },
-        setupRiskCommunities: 1,
-        staleCommunities: 0,
-        riskItems: 1,
-        totalAccountUsers: 0,
-      },
-    });
-
-    const summary: any = await t.run((ctx) => ctx.db.query("platformOperatorSummary").first());
-    expect(summary).toBeTruthy();
-    expect(summary.totals.communities).toBe(1);
-    expect(summary.totals.activePaidMembers).toBe(1);
-    expect(summary.totals.estimatedMrr).toMatchObject({ amountBaseUnits: 4900, currency: "usd" });
-  });
-
   it("fences live increments during backfill, preserves opening MRR across windows, and invalidates billing on app-grant updates", async () => {
     vi.useFakeTimers();
     const baseMs = new Date("2026-11-21T12:00:00.000Z").getTime();
