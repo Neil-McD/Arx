@@ -25,6 +25,9 @@ const WEEK_MS = 7 * DAY_MS;
 const MAX_WINDOW_MS = 3 * DAY_MS;
 const CLAIM_LEASE_MS = 10 * 60 * 1000;
 const MAX_BRIEFS_PER_RUN = 25;
+const FOUNDER_BRIEF_CONCURRENCY = 5;
+const MAX_FOUNDER_BRIEF_CONTINUATION_ROUNDS = 4;
+const JOIN_REQUEST_CHECK_CONCURRENCY = 25;
 const SCAN_LIMIT = 200;
 const LIST_LIMIT = 5;
 const BRIEF_MAX_OUTPUT_TOKENS = 1_200;
@@ -155,13 +158,22 @@ export async function buildSnapshot(
     .sort((a: any, b: any) => Number(a.createdAt) - Number(b.createdAt))
     .slice(0, LIST_LIMIT);
   const channelNames = new Map<string, string>();
+  const uniqueUnansweredChannelIds = Array.from(
+    new Map(unansweredRows.filter((row: any) => row.channelId).map((row: any) => [String(row.channelId), row.channelId])).values(),
+  );
+  const uniqueUnansweredAuthors = Array.from(
+    new Map(unansweredRows.filter((row: any) => row.actorUserId).map((row: any) => [String(row.actorUserId), row.actorUserId])).values(),
+  );
+  await Promise.all([
+    ...uniqueUnansweredChannelIds.map(async (channelId) => {
+      const channel = await ctx.db.get(channelId);
+      channelNames.set(String(channelId), channel?.name ? String(channel.name) : "a channel");
+    }),
+    ...uniqueUnansweredAuthors.map((userId) => displayName(ctx, userId, names)),
+  ]);
   const unanswered = [];
   for (const row of unansweredRows) {
     const channelKey = String(row.channelId ?? "");
-    if (channelKey && !channelNames.has(channelKey)) {
-      const channel = await ctx.db.get(row.channelId);
-      channelNames.set(channelKey, channel?.name ? String(channel.name) : "a channel");
-    }
     unanswered.push({
       author: await displayName(ctx, row.actorUserId, names),
       channel: channelNames.get(channelKey) ?? "a channel",
@@ -186,44 +198,55 @@ export async function buildSnapshot(
     byChannel.set(key, entry);
   }
   const top = [...byChannel.values()].sort((a, b) => (b.posts + b.replies) - (a.posts + a.replies))[0] ?? null;
-  const topChannel = top ? await channelRow(top.channelId) : null;
-  const busiest = top && topChannel
-    ? { channel: topChannel.name, channelSlug: topChannel.slug, posts: top.posts, replies: top.replies, people: top.people.size }
-    : null;
   const liveRoots = roots.filter((row: any) => live(row) && Number(row.createdAt) >= nowMs - MAX_WINDOW_MS);
   const repliedTo = [...liveRoots]
     .filter((row: any) => Number(row.replyCount ?? 0) > 0 && String(row.title || row.contentSummary || "").trim())
     .sort((a: any, b: any) => Number(b.replyCount ?? 0) - Number(a.replyCount ?? 0) || Number(b.createdAt) - Number(a.createdAt))[0] ?? null;
-  const highlightChannel = repliedTo ? await channelRow(repliedTo.channelId) : null;
+  const [topChannel, highlightChannel] = await Promise.all([
+    top ? channelRow(top.channelId) : Promise.resolve(null),
+    repliedTo ? channelRow(repliedTo.channelId) : Promise.resolve(null),
+  ]);
+  const busiest = top && topChannel
+    ? { channel: topChannel.name, channelSlug: topChannel.slug, posts: top.posts, replies: top.replies, people: top.people.size }
+    : null;
   const highlight = repliedTo && highlightChannel
     ? { title: clip(repliedTo.title || repliedTo.contentSummary, 140), channel: highlightChannel.name, channelSlug: highlightChannel.slug, replies: Number(repliedTo.replyCount ?? 0) }
     : null;
 
-  const nameList = async (rows: any[]) => {
-    const list: string[] = [];
-    for (const row of rows.slice(0, LIST_LIMIT)) list.push(await displayName(ctx, row.userId, names));
-    return list;
-  };
+  const nameList = async (rows: any[]) =>
+    await Promise.all(rows.slice(0, LIST_LIMIT).map((row) => displayName(ctx, row.userId, names)));
 
-  const pendingJoinRequests = [];
+  const pendingJoinRequests: any[] = [];
   if (includeFounderOnly) {
-    for (const request of joinRequests) {
-      if (String(request.userId) === ownerId) continue;
-      const membership = await getUniqueCommunityMembershipByPair({
-        ctx,
-        communityId: community._id,
-        userId: request.userId,
-      }).catch(() => null);
-      if (membership && communityMembershipRowIsActive(membership)) continue;
-      pendingJoinRequests.push(request);
+    const nonOwnerRequests = joinRequests.filter((request: any) => String(request.userId) !== ownerId);
+    for (let start = 0; start < nonOwnerRequests.length; start += JOIN_REQUEST_CHECK_CONCURRENCY) {
+      const chunk = nonOwnerRequests.slice(start, start + JOIN_REQUEST_CHECK_CONCURRENCY);
+      const memberships = await Promise.all(
+        chunk.map((request: any) =>
+          getUniqueCommunityMembershipByPair({
+            ctx,
+            communityId: community._id,
+            userId: request.userId,
+          }).catch(() => null),
+        ),
+      );
+      chunk.forEach((request: any, idx: number) => {
+        const membership = memberships[idx];
+        if (membership && communityMembershipRowIsActive(membership)) return;
+        pendingJoinRequests.push(request);
+      });
     }
   }
+
+  const [newMemberNames, quietNewcomerNames] = includeFounderOnly
+    ? await Promise.all([nameList(joined), nameList(quiet)])
+    : [[], []];
 
   return {
     communityName: String(community.name ?? community.slug ?? "your community"),
     memberCount: readCommunityActiveMemberCount(community) ?? 0,
     windowHours: Math.max(1, Math.round((nowMs - windowStartMs) / HOUR_MS)),
-    newMembers: { count: joined.length, names: includeFounderOnly ? await nameList(joined) : [] },
+    newMembers: { count: joined.length, names: newMemberNames },
     activity: { posts: windowRoots.length, replies: windowReplies.length, activePeople: activePeople.size },
     week: {
       joined: weekJoins.filter(activeMember).length, activePeople: weekActivePeople.size,
@@ -233,7 +256,7 @@ export async function buildSnapshot(
     busiest,
     highlight,
     unanswered,
-    quietNewcomers: includeFounderOnly ? { count: quiet.length, names: await nameList(quiet) } : { count: 0, names: [] },
+    quietNewcomers: includeFounderOnly ? { count: quiet.length, names: quietNewcomerNames } : { count: 0, names: [] },
     joinRequestsPending: pendingJoinRequests.length,
     upcomingEvents: communityWideEvents(events).map((event: any) => ({ title: clip(event.title, 120), startsAt: new Date(Number(event.startsAt)).toISOString() })),
   };
@@ -672,14 +695,30 @@ async function writeAndDeliver(ctx: any, args: { communityId: any; briefDate: st
 }
 
 export const processDueFounderBriefsInternal = internalAction({
-  args: {},
-  handler: async (ctx) => {
+  args: {
+    continuationRound: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
     const nowMs = Date.now();
+    const round = Math.max(0, Math.floor(args.continuationRound ?? 0));
     const due = await ctx.runQuery(internalRefs.communityFounderBrief.listDueFounderBriefsInternal, { nowMs });
     const outcomes: Record<string, number> = {};
-    for (const item of due) {
-      const outcome = await writeAndDeliver(ctx, { communityId: item.communityId, briefDate: item.briefDate, nowMs });
-      outcomes[outcome] = (outcomes[outcome] ?? 0) + 1;
+    for (let start = 0; start < due.length; start += FOUNDER_BRIEF_CONCURRENCY) {
+      const chunk = due.slice(start, start + FOUNDER_BRIEF_CONCURRENCY);
+      const results = await Promise.all(
+        chunk.map((item: { communityId: any; briefDate: string }) =>
+          writeAndDeliver(ctx, { communityId: item.communityId, briefDate: item.briefDate, nowMs }),
+        ),
+      );
+      for (const outcome of results) {
+        outcomes[outcome] = (outcomes[outcome] ?? 0) + 1;
+      }
+    }
+    const madeProgress = Object.entries(outcomes).some(([outcome, count]) => outcome !== "skipped" && count > 0);
+    if (due.length >= MAX_BRIEFS_PER_RUN && madeProgress && round < MAX_FOUNDER_BRIEF_CONTINUATION_ROUNDS) {
+      await ctx.scheduler.runAfter(2_000, internalRefs.communityFounderBrief.processDueFounderBriefsInternal, {
+        continuationRound: round + 1,
+      });
     }
     return { due: due.length, outcomes };
   },

@@ -848,6 +848,10 @@ export default defineSchema({
     analyticsRollupIndexedAt: v.optional(v.number()),
     analyticsRollupBackfillStartedAt: v.optional(v.number()),
     analyticsRollupBackfillCutoffMs: v.optional(v.number()),
+    // Pre-computed Discover card activity stats, refreshed on a 15-minute cron.
+    discoverLastActiveAt: v.optional(v.number()),
+    discoverPosts7dCount: v.optional(v.number()),
+    discoverActivityComputedAt: v.optional(v.number()),
     // Durable activity marker for bounded memory metabolism. The revision is
     // incremented with each new canonical outcome; settlement clears pending
     // only when no newer outcome arrived during the sweep.

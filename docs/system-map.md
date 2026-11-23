@@ -72,7 +72,7 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
   `communityCore`, `communityLifecycle`, `communityMembershipLifecycle`,
   `communityJoinRequestCore`, `communityAdmin`, `communityPublic`, `communityDirectory`,
   `communityMemberSearch` (per-community searchable member index for fast `@` mention autocomplete, synced on membership/profile writes and backfilled asynchronously),
-  `communityColdArchive`, `communityCapabilityContext`, `communityPresenceCore`,
+  `communityColdArchive`, `communityCapabilityContext`, `communityPresenceCore` (90-second presence leases with 15-second server-side heartbeat write coalescing and parallel online-member resolution),
   `communityAccessAudit`, `communityAccessQueries`, `communityMembershipContextCore`,
   `communityNotificationAccess`, `communityRecipientCore`, `communitySemanticMembers`,
   `communityOntologyCards` (the community card the agent reads, shared/communityOntology.ts),
@@ -362,6 +362,8 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
 - **Does:** the founder's daily brief today; member outreach, journey board and
   programs next ([spec](specs/proactive-community-agent-v0.md)).
 - **Code:** `communityFounderBrief` (cron "send due founder briefs", every 15 minutes;
+  runs up to `25` due briefs per round in bounded parallel chunks of `5` and
+  self-continues up to `4` rounds when a batch fills with progress;
   the owner turns it on in Settings → Daily brief, `CommunityFounderBriefSection`);
   `stagingSeedBriefLab` and `stagingSeedPolynetDemo` (hand-run staging seeds; the demo
   community behind design v1); `reviewDemoSeed` (hand-run on production too, behind
@@ -568,7 +570,7 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
 
 - **Code:** `operatorAccess`, `operatorDashboard`, `operatorEntitlementsCore`,
   `operatorGrantUsageCore`, `operatorIntelligence`, `operatorSentryDiagnostics`,
-  `communityAnalyticsRollups` (daily community analytics rollups, live billing summaries, and paginated platform operator summaries),
+  `communityAnalyticsRollups` (daily community analytics rollups, live billing summaries, paginated platform operator summaries, and 15-minute paginated Discover activity stats refresh for published communities with a 25-minute read-cache TTL in `communityPublic.listPublicDiscoverCommunities`),
   `platformDiagnostics`, `businessAnalytics*`, `distributionAttribution*` (cron;
   kept on purpose, Nov 7: it forwards sign-ups that arrive from Distribution
   Engineer, Neil's own product, and has had none yet),
@@ -635,6 +637,7 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
 | Enqueue 24-hour event reminder emails | 15 min | `eventReminders` |
 | Process pending mention emails | 15 min | `communityMentionEmails` |
 | Send due founder briefs | 15 min | `communityFounderBrief` |
+| Refresh discover activity stats | 15 min | `communityAnalyticsRollups` |
 
 ## Cleanup plan this map drives
 

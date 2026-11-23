@@ -164,23 +164,35 @@ export const openMemoryReviewRunInternal = internalMutation({
 // The lessons a note can be filed under: every lesson of a course members can
 // take, in the builder's order.
 const LESSONS_LISTED_MAX = 200;
+const MEMORY_SCAN_CONCURRENCY = 10;
+const MEMORY_LOOKUP_CONCURRENCY = 25;
 // limits: the review is shown at most 200; the map reads every course whole.
 export async function liveLessons(ctx: any, communityId: any, limits: { total: number; perCourse: number } = { total: LESSONS_LISTED_MAX, perCourse: 100 }): Promise<Array<{ id: any; course: string; courseId: any; courseOrder: number; order: number; title: string }>> {
-  const modules: any[] = await ctx.db.query("communityResourceModules")
-    .withIndex("by_community_sortOrder", (q: any) => q.eq("communityId", communityId)).take(60);
+  const modules: any[] = (await ctx.db.query("communityResourceModules")
+    .withIndex("by_community_sortOrder", (q: any) => q.eq("communityId", communityId)).take(60))
+    .filter((module: any) => communityResourceModuleIsMemberLive(module));
   const lessons: Array<{ id: any; course: string; courseId: any; courseOrder: number; order: number; title: string }> = [];
-  for (const module of modules) {
-    if (!communityResourceModuleIsMemberLive(module)) continue;
-    const live = new Set([String(module._id)]);
-    const rows: any[] = await ctx.db.query("communityResources")
-      .withIndex("by_community_module_sortOrder", (q: any) => q.eq("communityId", communityId).eq("moduleId", module._id)).take(limits.perCourse);
-    let order = 0;
-    for (const row of rows) {
-      // The same rule as the lessons members are shown: a titled placeholder
-      // with nothing in it isn't one.
-      if (!communityResourceIsMemberVisiblePage(row, live)) continue;
-      lessons.push({ id: row._id, course: String(module.name ?? ""), courseId: module._id, courseOrder: Number(module.sortOrder ?? 0), order: ++order, title: String(row.title) });
-      if (lessons.length >= limits.total) return lessons;
+  for (let start = 0; start < modules.length; start += MEMORY_SCAN_CONCURRENCY) {
+    const chunk = modules.slice(start, start + MEMORY_SCAN_CONCURRENCY);
+    const rowsByModule = await Promise.all(
+      chunk.map((module) =>
+        ctx.db.query("communityResources")
+          .withIndex("by_community_module_sortOrder", (q: any) => q.eq("communityId", communityId).eq("moduleId", module._id))
+          .take(limits.perCourse),
+      ),
+    );
+    for (let idx = 0; idx < chunk.length; idx += 1) {
+      const module = chunk[idx];
+      const live = new Set([String(module._id)]);
+      const rows = rowsByModule[idx] as any[];
+      let order = 0;
+      for (const row of rows) {
+        // The same rule as the lessons members are shown: a titled placeholder
+        // with nothing in it isn't one.
+        if (!communityResourceIsMemberVisiblePage(row, live)) continue;
+        lessons.push({ id: row._id, course: String(module.name ?? ""), courseId: module._id, courseOrder: Number(module.sortOrder ?? 0), order: ++order, title: String(row.title) });
+        if (lessons.length >= limits.total) return lessons;
+      }
     }
   }
   return lessons;
@@ -646,22 +658,59 @@ export const readMemoryReviewInputInternal = internalQuery({
       .withIndex("by_community_access_status_position", (q) => q.eq("communityId", args.communityId).eq("accessMode", "all_members").eq("status", "active"))
       .take(100);
     const liveRoots = new Map<string, boolean>();
-    const inLiveThread = async (rootId: any) => {
-      const key = String(rootId);
-      if (!liveRoots.has(key)) liveRoots.set(key, ((await ctx.db.get(rootId)) as any)?.status === "live");
-      return liveRoots.get(key)!;
-    };
     const rows: Array<{ row: any; kind: "post" | "reply"; channelName: string; order: number }> = [];
-    for (const [order, channel] of channels.entries()) {
-      for (const table of ["communityInteractionRoots", "communityInteractionReplies"] as const) {
-        for (const scope of ["community", "public"] as const) {
-          const found = await ctx.db.query(table).withIndex("by_community_channel_visibility_status_createdAt", (q: any) => q
-            .eq("communityId", args.communityId).eq("channelId", channel._id).eq("visibilityScope", scope).eq("status", "live")
-            .gt("createdAt", args.sinceMs).lte("createdAt", args.untilMs)).take(MEMORY_REVIEW_POSTS_MAX + 1);
-          for (const row of found as any[]) {
-            if (table === "communityInteractionReplies" && !(await inLiveThread(row.rootId))) continue;
-            rows.push({ row, kind: table === "communityInteractionRoots" ? "post" : "reply", channelName: channel.name, order });
+    for (let start = 0; start < channels.length; start += MEMORY_SCAN_CONCURRENCY) {
+      const chunk = channels.slice(start, start + MEMORY_SCAN_CONCURRENCY);
+      const scanned = await Promise.all(
+        chunk.map(async (channel, offset) => {
+          const order = start + offset;
+          const [communityRoots, publicRoots, communityReplies, publicReplies] = await Promise.all([
+            ctx.db.query("communityInteractionRoots").withIndex("by_community_channel_visibility_status_createdAt", (q: any) => q
+              .eq("communityId", args.communityId).eq("channelId", channel._id).eq("visibilityScope", "community").eq("status", "live")
+              .gt("createdAt", args.sinceMs).lte("createdAt", args.untilMs)).take(MEMORY_REVIEW_POSTS_MAX + 1),
+            ctx.db.query("communityInteractionRoots").withIndex("by_community_channel_visibility_status_createdAt", (q: any) => q
+              .eq("communityId", args.communityId).eq("channelId", channel._id).eq("visibilityScope", "public").eq("status", "live")
+              .gt("createdAt", args.sinceMs).lte("createdAt", args.untilMs)).take(MEMORY_REVIEW_POSTS_MAX + 1),
+            ctx.db.query("communityInteractionReplies").withIndex("by_community_channel_visibility_status_createdAt", (q: any) => q
+              .eq("communityId", args.communityId).eq("channelId", channel._id).eq("visibilityScope", "community").eq("status", "live")
+              .gt("createdAt", args.sinceMs).lte("createdAt", args.untilMs)).take(MEMORY_REVIEW_POSTS_MAX + 1),
+            ctx.db.query("communityInteractionReplies").withIndex("by_community_channel_visibility_status_createdAt", (q: any) => q
+              .eq("communityId", args.communityId).eq("channelId", channel._id).eq("visibilityScope", "public").eq("status", "live")
+              .gt("createdAt", args.sinceMs).lte("createdAt", args.untilMs)).take(MEMORY_REVIEW_POSTS_MAX + 1),
+          ]);
+          return {
+            order,
+            channelName: channel.name,
+            roots: [...(communityRoots as any[]), ...(publicRoots as any[])],
+            replies: [...(communityReplies as any[]), ...(publicReplies as any[])],
+          };
+        }),
+      );
+      const missingRootIds: any[] = [];
+      const seenMissing = new Set<string>();
+      for (const entry of scanned) {
+        for (const reply of entry.replies) {
+          const key = String(reply.rootId);
+          if (!liveRoots.has(key) && !seenMissing.has(key)) {
+            seenMissing.add(key);
+            missingRootIds.push(reply.rootId);
           }
+        }
+      }
+      for (let rStart = 0; rStart < missingRootIds.length; rStart += MEMORY_LOOKUP_CONCURRENCY) {
+        const rootChunk = missingRootIds.slice(rStart, rStart + MEMORY_LOOKUP_CONCURRENCY);
+        const loaded = await Promise.all(rootChunk.map((rootId) => ctx.db.get(rootId)));
+        rootChunk.forEach((rootId, idx) => {
+          liveRoots.set(String(rootId), ((loaded[idx] as any)?.status) === "live");
+        });
+      }
+      for (const entry of scanned) {
+        for (const row of entry.roots) {
+          rows.push({ row, kind: "post", channelName: entry.channelName, order: entry.order });
+        }
+        for (const row of entry.replies) {
+          if (!liveRoots.get(String(row.rootId))) continue;
+          rows.push({ row, kind: "reply", channelName: entry.channelName, order: entry.order });
         }
       }
     }
@@ -675,17 +724,33 @@ export const readMemoryReviewInputInternal = internalQuery({
     if (read.length === 0) return { posts: 0, readUntil, text: "", rewritable: [] as string[] };
 
     const scope = room ? podScopeKey(room._id) : communityScopeKey(args.communityId);
-    const index = await memoryIndexFor(ctx, scope);
-    const notes = await notesByUpdated(ctx, scope).order("desc").take(NOTES_LISTED_MAX);
+    const names = new Map<string, string>();
+    const uniqueAuthors = Array.from(
+      new Map(
+        read
+          .filter(({ row }) => row.actorType === "human" && row.actorUserId)
+          .map(({ row }) => [String(row.actorUserId), row]),
+      ).values(),
+    );
+    const [index, notes, communityIndex, lessons] = await Promise.all([
+      memoryIndexFor(ctx, scope),
+      notesByUpdated(ctx, scope).order("desc").take(NOTES_LISTED_MAX),
+      room ? memoryIndexFor(ctx, communityScopeKey(args.communityId)) : Promise.resolve(null),
+      room ? Promise.resolve([]) : liveLessons(ctx, args.communityId),
+      (async () => {
+        for (let start = 0; start < uniqueAuthors.length; start += MEMORY_LOOKUP_CONCURRENCY) {
+          const chunk = uniqueAuthors.slice(start, start + MEMORY_LOOKUP_CONCURRENCY);
+          await Promise.all(chunk.map((row) => authorWord(ctx, row, names)));
+        }
+      })(),
+    ]);
     const lines: string[] = [];
     if (room) {
       // The community's memory, for context: the pod already knows it.
-      const community = await memoryIndexFor(ctx, communityScopeKey(args.communityId));
-      lines.push("# The community's memory.md (context only: never copy it into this pod's notes)", "", community?.bodyMd?.trim() || "_Nothing yet._", "");
+      lines.push("# The community's memory.md (context only: never copy it into this pod's notes)", "", communityIndex?.bodyMd?.trim() || "_Nothing yet._", "");
     }
     lines.push(room ? `# The ${String(room.name ?? "")} pod's memory.md` : "# memory.md", "", index?.bodyMd?.trim() || "_Nothing yet._", "");
     // Where notes are filed: the lessons (the community's only) and the subjects in use.
-    const lessons = room ? [] : await liveLessons(ctx, args.communityId);
     const lessonIds = new Set(lessons.map((lesson) => String(lesson.id)));
     if (lessons.length) {
       lines.push("# The lessons (file a note under the one it adds to)", "");
@@ -724,7 +789,6 @@ export const readMemoryReviewInputInternal = internalQuery({
       }
     });
     lines.push("", `# What people said, ${new Date(args.sinceMs).toISOString()} to ${new Date(readUntil).toISOString()}`);
-    const names = new Map<string, string>();
     let current = "";
     for (const { row, kind, channelName } of read) {
       if (channelName !== current) {
