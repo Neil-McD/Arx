@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import {
   advanceWebAppActivity,
   createWebAppActivityState,
+  WEB_APP_RESUME_COOLDOWN_MS,
 } from "../../../../shared/webAppActivity";
 
 function readIsWebAppActive(): boolean {
@@ -20,6 +21,8 @@ export function useWebAppActivityController(): { resumeEpoch: number } {
       const next = advanceWebAppActivity(previous, {
         isActive,
         forceResume: forceResume && isActive,
+        nowMs: Date.now(),
+        minInactiveDurationMs: WEB_APP_RESUME_COOLDOWN_MS,
       });
       if (next === previous) return;
       activityRef.current = next;

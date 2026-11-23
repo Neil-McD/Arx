@@ -319,6 +319,7 @@ function RosterSurface(props: RosterProps & {
                       <UserAvatar className="community-context-member-avatar-media" readyClassName="has-image"
                         name={name} imageUrl={member.profile.avatar_url}
                         focusX={member.profile.avatar_focus_x} focusY={member.profile.avatar_focus_y} zoom={member.profile.avatar_zoom}
+                        loading="lazy" fetchPriority="low"
                         alt="" aria-hidden={true} fallback={<span>{props.getInitials(name)}</span>} />
                       {group === "online" ? <span className="community-context-member-dot" aria-hidden="true" /> : null}
                     </span>
