@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  assertMainRef,
   assertNoForbiddenConvexProdEnv,
   requireDeploySecrets,
   runCloudProductionDeploy,
@@ -9,6 +10,14 @@ import { PRODUCTION_AUTHORITY } from "./lib/releaseProduction.mjs";
 const SHA = "a".repeat(40);
 
 describe("cloud production deploy pipeline", () => {
+  it("refuses to deploy any ref other than refs/heads/main", () => {
+    expect(() => assertMainRef({})).toThrow(/production_deploy_non_main_ref/);
+    expect(() => assertMainRef({ GITHUB_REF: "refs/heads/claude/feature" })).toThrow(
+      /production_deploy_non_main_ref/,
+    );
+    expect(() => assertMainRef({ GITHUB_REF: "refs/heads/main" })).not.toThrow();
+  });
+
   it("fails closed when required deploy secrets are missing or target the wrong Convex deployment", () => {
     expect(() => requireDeploySecrets({})).toThrow(/CONVEX_DEPLOY_KEY, VERCEL_TOKEN/);
     expect(() => requireDeploySecrets({ CONVEX_DEPLOY_KEY: "prod:wry-hawk-715|key" })).toThrow(/VERCEL_TOKEN/);
@@ -34,6 +43,7 @@ describe("cloud production deploy pipeline", () => {
 
     const result = await runCloudProductionDeploy({
       env: {
+        GITHUB_REF: "refs/heads/main",
         CONVEX_DEPLOY_KEY: "prod:wry-hawk-715|secret",
         VERCEL_TOKEN: "vercel_secret",
         GITHUB_SHA: SHA,

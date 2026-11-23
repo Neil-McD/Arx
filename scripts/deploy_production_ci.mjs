@@ -44,6 +44,13 @@ export function requireDeploySecrets(env) {
   return { convexDeployKey, vercelToken };
 }
 
+export function assertMainRef(env) {
+  const ref = String(env.GITHUB_REF ?? "").trim();
+  if (ref !== "refs/heads/main") {
+    throw new ReleaseError("production_deploy_non_main_ref", ref || "<missing>");
+  }
+}
+
 export function assertNoForbiddenConvexProdEnv(envListOutput) {
   const names = settingNames(envListOutput);
   const forbidden = FORBIDDEN_IN_PRODUCTION.filter((name) => names.has(name));
@@ -53,6 +60,7 @@ export function assertNoForbiddenConvexProdEnv(envListOutput) {
 }
 
 export async function runCloudProductionDeploy(deps) {
+  assertMainRef(deps.env);
   const { convexDeployKey, vercelToken } = requireDeploySecrets(deps.env);
   const headSha = String(deps.env.GITHUB_SHA || deps.git(["rev-parse", "HEAD"])).trim().toLowerCase();
   if (!/^[0-9a-f]{40}$/.test(headSha)) {
