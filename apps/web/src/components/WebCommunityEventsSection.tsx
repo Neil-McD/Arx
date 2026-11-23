@@ -586,7 +586,7 @@ export function WebCommunityEventsSection(props: WebCommunityEventsSectionProps)
       <KitEventsList featured={listParts.featured} comingUp={listParts.comingUp} past={listParts.past} now={listNow}
         canManage={capabilities.hasActiveCommunity && capabilities.canManageEvents} communityName={capabilities.activeCommunityName}
         timeLabel={formatEventTime} calendarUrl={buildGoogleCalendarUrl}
-        form={eventForm} editingId={editingEventId}
+        form={eventForm} onCloseForm={closeDraft} editingId={editingEventId}
         onNew={() => openNewEvent(null)} onEdit={openEditEvent}
         onCancel={async (event) => { if (await actions.cancelEvent(event.parent_event_id, currentRange)) announceCommunityEventsChanged(); }}
         onSetPublic={(event, isPublic) => saveEventDraft({ ...makeDraftFromEvent(event), visibility: isPublic ? "public" : "members" }, event.parent_event_id)}

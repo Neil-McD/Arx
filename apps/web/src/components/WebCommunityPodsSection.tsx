@@ -28,7 +28,7 @@ import {
   type CloudPodPrice,
 } from "../../../../shared/cloudCommunityPodsGateway";
 import { changeCloudMyCommunityPlan } from "../../../../shared/cloudCommunityPlanChangeGateway";
-import { Btn, cx, Icon, KitApp, Rail } from "../v1/kit";
+import { Btn, cx, Icon, KitApp, Rail, usePhoneLayout } from "../v1/kit";
 import { KitPodLanding } from "../v1/KitPodLanding";
 import { PanelLine, PanelPart, PanelPeople } from "../v1/KitPanel";
 import { podShown, recallPod, takePodPagePreview } from "../v1/podMemory";
@@ -172,7 +172,8 @@ function PodPitch(props: WebCommunityPodsSectionProps & { podSlug: string; inlin
   }, [props.communityId, props.podSlug, props.asMember]);
   useEffect(() => { setError(null); setNote(null); void load(); }, [load, props.reloadKey]);
 
-  const back = props.inline
+  const isPhone = usePhoneLayout();
+  const back = props.inline && !isPhone
     ? <button type="button" className={cx("link")} onClick={() => props.onNavigate({ kind: "pods" })}>← Pods</button>
     : null;
   if (!page) return null;
@@ -315,6 +316,7 @@ function PodsList(props: WebCommunityPodsSectionProps) {
   const [reloadKey, setReloadKey] = useState(0);
   // The right column exists only in design v1, and only on a wide screen.
   const wide = useWideRail() && isDesignV1Active();
+  const isPhone = usePhoneLayout();
   const now = Date.now();
 
   const load = useCallback(async () => {
@@ -448,13 +450,14 @@ function PodsList(props: WebCommunityPodsSectionProps) {
   if (props.podSlug && !wide) {
     return (
       <div className="community-panel community-pods-panel">
-        <CommunityPageHeader title="Pods"><div className="resources-header">Pods</div></CommunityPageHeader>
+        <CommunityPageHeader title="Pods" back={isPhone ? { label: "Back to Pods", onBack: () => props.onNavigate({ kind: "pods" }) } : null}><div className="resources-header">Pods</div></CommunityPageHeader>
         <KitApp view="events" host={canManage} part="flow">
           <div className={cx("page")} style={{ padding: 0, overflow: "visible" }}>
             {notice ? <p className={cx("sub")} role="status">{notice}</p> : null}
             {/* The pitch carries its own way back; the landing page and a
-                failed or loading list need one here. */}
-            {shown?.kind !== "pitch" ? <button type="button" className={cx("link")} onClick={() => props.onNavigate({ kind: "pods" })}>← Pods</button> : null}
+                failed or loading list need one here on narrow desktop (phones
+                use the top bar's Back arrow). */}
+            {!isPhone && shown?.kind !== "pitch" ? <button type="button" className={cx("link")} onClick={() => props.onNavigate({ kind: "pods" })}>← Pods</button> : null}
             {failed ? <p className={cx("sub")} role="alert">Pods couldn't load. <button type="button" className={cx("link")} onClick={() => void load()}>Try again</button></p> : null}
             {shownPage(true)}
           </div>
