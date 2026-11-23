@@ -65,11 +65,15 @@ const ICONS: Record<EntityKind, ReactNode> = {
   page: <path d="M9 18l6-6-6-6" />,
 };
 
+const CHIP_SCROLL_AREAS = ".community-interaction-feed-scroll, .community-interaction-drawer-scroll, .community-agent-dock-transcript";
+
 export function EntityChip(props: { target: EntityTarget; label: ReactNode; navigate: (path: string) => void }) {
   const { target } = props;
   // Pages need no card: their name says it all.
   const hasCard = target.kind !== "page";
-  const hover = useHoverIntent<HTMLSpanElement>({ enabled: hasCard, maxCardHeight: 220 });
+  // Placed against the scrolling area the reply sits in (channel feed, thread,
+  // Home chat), so the card never opens where that area cuts it off.
+  const hover = useHoverIntent<HTMLSpanElement>({ enabled: hasCard, maxCardHeight: 220, viewportSelector: CHIP_SCROLL_AREAS });
   const go = (path: string) => (event: MouseEvent<HTMLAnchorElement>) => {
     if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
     event.preventDefault();
@@ -83,14 +87,23 @@ export function EntityChip(props: { target: EntityTarget; label: ReactNode; navi
     ? Math.round(100 * Math.min(target.facts?.done ?? 0, target.facts?.lessons ?? 0) / (target.facts?.lessons ?? 1))
     : null;
   return (
-    <span className="entity-chip-wrap" ref={hover.anchorRef} onMouseEnter={hover.openHover} onMouseLeave={hover.scheduleClose}>
+    <span
+      className="entity-chip-wrap"
+      ref={hover.anchorRef}
+      onMouseEnter={hover.openHover}
+      onMouseLeave={hover.scheduleClose}
+      // Keyboard: the card stays open while focus is anywhere inside it (the
+      // chip or the card's action) and closes when focus leaves both.
+      onFocus={hover.openHover}
+      onBlur={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) hover.scheduleClose();
+      }}
+      onKeyDown={(event) => { if (event.key === "Escape") hover.closeNow(); }}
+    >
       <a
         className={`entity-chip is-${target.kind}`}
         href={target.path}
         onClick={go(target.path)}
-        onFocus={hover.openHover}
-        onBlur={hover.scheduleClose}
-        onKeyDown={(event) => { if (event.key === "Escape") hover.closeNow(); }}
         data-entity-kind={target.kind}
       >
         <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
