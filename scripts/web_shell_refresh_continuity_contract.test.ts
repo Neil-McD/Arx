@@ -86,9 +86,11 @@ describe("web shell refresh continuity contract", () => {
     expect(interaction).toMatch(
       /const reset = useCallback\(\(isNextBoundaryLoading = false\)[\s\S]*setIsLoadingRoots\(isNextBoundaryLoading\)[\s\S]*boundaryRef\.current = requestedBoundary;[\s\S]*reset\(true\)/,
     );
-    expect(app).toMatch(
-      /isAwaitingActiveCommunityInteractionScope = Boolean\([\s\S]*!activeCommunityChannelResolutionError &&[\s\S]*!isActiveCommunityChannelReady \|\| !activeChannelCommunityId[\s\S]*isLoadingRoots:[\s\S]*isAwaitingActiveCommunityInteractionScope/,
+    const projectionBuilder = read("apps/web/src/controllers/buildWebCommunityInteractionProjectionProps.ts");
+    expect(projectionBuilder).toMatch(
+      /isAwaitingActiveCommunityInteractionScope = Boolean\([\s\S]*!activeCommunityChannelResolutionError &&[\s\S]*!params\.isChannelContextReady \|\| !activeChannelCommunityId[\s\S]*isLoadingRoots:[\s\S]*isAwaitingActiveCommunityInteractionScope/,
     );
+    expect(app).toContain("buildWebCommunityInteractionProjectionProps(");
   });
 
   it("never presents an unresolved presence snapshot as offline truth", () => {

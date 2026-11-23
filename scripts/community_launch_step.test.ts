@@ -50,12 +50,14 @@ test("a failure to save step 2's answers cannot trap the founder in setup", () =
 });
 
 test("the launch step is projected through the canonical global overlay host", () => {
-  const projectionIndex = appSource.indexOf("communityLaunchProps:");
+  const hostPropsSource = read("apps/web/src/controllers/buildWebAppHostProps.ts");
+  const projectionIndex = appSource.indexOf("const globalOverlayHostProps = buildWebAppGlobalOverlayProps(");
   const routeHoldIndex = appSource.indexOf("if (shouldHoldRouteForAccess)");
   const workspaceIndex = appSource.lastIndexOf("<WebAppCompositionRoot");
   expect(projectionIndex).toBeGreaterThan(0);
   expect(projectionIndex).toBeLessThan(routeHoldIndex);
   expect(workspaceIndex).toBeGreaterThan(routeHoldIndex);
+  expect(hostPropsSource).toContain("communityLaunchProps:");
   expect(overlayHostSource).toContain("props.communityLaunchProps");
   expect(overlayHostSource).toContain("<WebCommunityLaunchStep");
   expect(appSource).not.toContain("<WebCommunityLaunchStep");
