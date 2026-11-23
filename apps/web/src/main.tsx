@@ -11,6 +11,7 @@ import { buildTelemetryRouteLabel } from "../../../shared/routePrivacy";
 import { resolvePublicEntryRoute } from "../../../shared/publicEntryRoute";
 import { CommunityVisualIdentityRegistryProvider } from "../../../shared/CommunityVisualIdentityRegistry";
 import { captureDistributionAttributionFromLocation } from '../../../shared/distributionAttribution';
+import { isLikelyModuleLoadFailure, readErrorMessage, resilientImport } from "./lib/resilientLazy";
 
 // Design system v1's second voice (the agent) is loaded only when the build
 // enabled v1, so the default app downloads nothing new.
@@ -28,28 +29,6 @@ type ErrorBoundaryState = {
 const APP_BUILD_ID = String(__POLYNET_BUILD_ID__ ?? "unknown").trim() || "unknown";
 const MODULE_LOAD_RECOVERY_KEY = "polynet-module-load-recovery";
 const MODULE_LOAD_RECOVERY_WINDOW_MS = 30_000;
-const MODULE_LOAD_ERROR_PATTERNS = [
-  "importing a module script failed",
-  "failed to fetch dynamically imported module",
-  "error loading dynamically imported module",
-  "failed to load module script",
-  "module script load",
-  "dynamically imported module",
-  "dynamic import",
-  "loading chunk",
-  "chunk load failed",
-  "loading css chunk",
-  "css chunk load failed",
-  // An old tab calling a backend function a newer release removed: reload onto the new build.
-  "could not find public function",
-  "unable to preload css",
-  "preloaderror",
-  "vite:preloaderror",
-  "network error",
-  "networkerror",
-  "load failed",
-  "chunkloaderror",
-];
 const IS_PRODUCTION_BUILD = String(import.meta.env.MODE ?? "").trim().toLowerCase() === "production";
 
 type ModuleLoadRecoveryMarker = {
@@ -61,44 +40,6 @@ type ModuleLoadRecoveryMarker = {
 type ServedVersionPayload = {
   buildId?: unknown;
 };
-
-function readErrorMessage(error: unknown): string {
-  return readErrorMessageAtDepth(error, 0);
-}
-
-function readErrorMessageAtDepth(error: unknown, depth: number): string {
-  if (depth > 2) return "";
-  if (error instanceof Error) {
-    return `${error.name}: ${error.message}`.trim();
-  }
-  if (typeof error === "string") return error.trim();
-  if (!error || typeof error !== "object") return "";
-  const record = error as Record<string, unknown>;
-  const messageParts = [
-    record.name,
-    record.message,
-    record.reason,
-    record.type,
-    record.href,
-    record.src,
-    record.url,
-  ]
-    .map((value) => String(value ?? "").trim())
-    .filter(Boolean);
-  const nestedPayloadMessage = readErrorMessageAtDepth(record.payload, depth + 1);
-  const nestedDetailMessage = readErrorMessageAtDepth(record.detail, depth + 1);
-  const nestedErrorMessage = readErrorMessageAtDepth(record.error, depth + 1);
-  return [...messageParts, nestedPayloadMessage, nestedDetailMessage, nestedErrorMessage]
-    .filter(Boolean)
-    .join(": ");
-}
-
-function isLikelyModuleLoadFailure(error: unknown, options?: { force?: boolean }): boolean {
-  if (options?.force) return true;
-  const message = readErrorMessage(error).toLowerCase();
-  if (!message) return false;
-  return MODULE_LOAD_ERROR_PATTERNS.some((pattern) => message.includes(pattern));
-}
 
 function currentRecoveryTarget(): string {
   return buildTelemetryRouteLabel({
@@ -185,7 +126,10 @@ async function reloadAfterVersionProbe(): Promise<void> {
   }, delayMs);
 }
 
-function attemptModuleLoadRecovery(error: unknown, options?: { force?: boolean }): boolean {
+function attemptModuleLoadRecovery(
+  error: unknown,
+  options?: { force?: boolean; strict?: boolean },
+): boolean {
   if (typeof window === "undefined") return false;
   if (!isLikelyModuleLoadFailure(error, options)) return false;
   if (!shouldAttemptModuleReload()) return false;
@@ -349,7 +293,7 @@ if (typeof window !== "undefined") {
   });
 
   window.addEventListener("unhandledrejection", (event) => {
-    if (attemptModuleLoadRecovery(event.reason)) {
+    if (attemptModuleLoadRecovery(event.reason, { strict: true })) {
       captureAppException(event.reason, {
         tags: {
           unhandled_rejection: true,
@@ -370,10 +314,10 @@ if (typeof window !== "undefined") {
 // with the design switch on (staging) only. It talks to no backend.
 const isDesignLab =
   document.documentElement.dataset.design === "v1" && window.location.pathname === "/design-lab";
-const DesignLab = React.lazy(() => import("./v1/DesignLab").then((m) => ({ default: m.DesignLab })));
-const App = React.lazy(() => import("./App"));
+const DesignLab = React.lazy(() => resilientImport(() => import("./v1/DesignLab")).then((m) => ({ default: m.DesignLab })));
+const App = React.lazy(() => resilientImport(() => import("./App")));
 const WebPublicVisitorShell = React.lazy(() =>
-  import("./components/WebPublicVisitorShell").then((m) => ({ default: m.WebPublicVisitorShell })),
+  resilientImport(() => import("./components/WebPublicVisitorShell")).then((m) => ({ default: m.WebPublicVisitorShell })),
 );
 
 const publicEntryRoute =

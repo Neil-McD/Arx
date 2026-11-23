@@ -1,4 +1,5 @@
 import {
+  startTransition,
   useCallback,
   useEffect,
   useMemo,
@@ -142,16 +143,19 @@ export function useWebShellNavigationController(params: {
 
   const applyLocationToState = useCallback(() => {
     const current = paramsRef.current;
-    current.setShellVariant(
-      isPhoneViewport()
-        ? "mobile"
-        : readShellVariantFromPathname(window.location.pathname || "/"),
-    );
+    const nextShellVariant = isPhoneViewport()
+      ? "mobile"
+      : readShellVariantFromPathname(window.location.pathname || "/");
     const nextPublicRoute = readPublicRouteFromLocation();
-    current.setPublicRoute(nextPublicRoute);
-    if (nextPublicRoute.kind === "app") {
-      applyAppRouteState(readAppRouteFromLocation());
-    }
+    const nextAppRoute =
+      nextPublicRoute.kind === "app" ? readAppRouteFromLocation() : null;
+    startTransition(() => {
+      current.setShellVariant(nextShellVariant);
+      current.setPublicRoute(nextPublicRoute);
+      if (nextAppRoute) {
+        applyAppRouteState(nextAppRoute);
+      }
+    });
     return nextPublicRoute;
   }, [applyAppRouteState]);
 

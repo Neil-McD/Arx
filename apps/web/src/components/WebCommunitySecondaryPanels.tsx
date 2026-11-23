@@ -15,24 +15,25 @@ import { WebCommunityResourceModuleModal } from "./WebCommunityResourceModuleMod
 import type { CommunityResourcesPanel as CommunityResourcesPanelType } from "./CommunityResourcesPanel";
 import type { WebCommunityKnowledgePanel as WebCommunityKnowledgePanelType } from "./WebCommunityKnowledgePanel";
 import type { WebCommunitySettingsSection as WebCommunitySettingsSectionType } from "./WebCommunitySettingsSection";
+import { resilientImport } from "../lib/resilientLazy";
 
 const WebCommunityAnalyticsSection = lazy(() =>
-  import("./WebCommunityAnalyticsSection").then((module) => ({ default: module.WebCommunityAnalyticsSection })),
+  resilientImport(() => import("./WebCommunityAnalyticsSection")).then((module) => ({ default: module.WebCommunityAnalyticsSection })),
 );
 const WebCommunityEventsSection = lazy(() =>
-  import("./WebCommunityEventsSection").then((module) => ({ default: module.WebCommunityEventsSection })),
+  resilientImport(() => import("./WebCommunityEventsSection")).then((module) => ({ default: module.WebCommunityEventsSection })),
 );
 const WebCommunityPodsSection = lazy(() =>
-  import("./WebCommunityPodsSection").then((module) => ({ default: module.WebCommunityPodsSection })),
+  resilientImport(() => import("./WebCommunityPodsSection")).then((module) => ({ default: module.WebCommunityPodsSection })),
 );
 const WebCommunityDiscoverPage = lazy(() =>
-  import("./WebCommunityDiscoverPage").then((module) => ({ default: module.WebCommunityDiscoverPage })),
+  resilientImport(() => import("./WebCommunityDiscoverPage")).then((module) => ({ default: module.WebCommunityDiscoverPage })),
 );
 const WebCommunityKnowledgePanel = lazy(() =>
-  import("./WebCommunityKnowledgePanel").then((module) => ({ default: module.WebCommunityKnowledgePanel })),
+  resilientImport(() => import("./WebCommunityKnowledgePanel")).then((module) => ({ default: module.WebCommunityKnowledgePanel })),
 );
 const WebCommunitySettingsSection = lazy(() =>
-  import("./WebCommunitySettingsSection").then((module) => ({ default: module.WebCommunitySettingsSection })),
+  resilientImport(() => import("./WebCommunitySettingsSection")).then((module) => ({ default: module.WebCommunitySettingsSection })),
 );
 
 export type WebCommunitySecondaryPanelsProps = {
