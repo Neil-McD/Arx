@@ -50,6 +50,14 @@ describe("Mobile community page scroll, bottom bar, and one-step back contracts"
     expect(bottomRail).not.toContain('destination.kind === "community_pods"');
     expect(agentDock).toContain("is-guide-talking");
     expect(designV1).toContain(".community-agent-dock-panel.is-guide-talking");
+    const phoneTabsHeightIndex = designV1.indexOf(
+      ':root[data-design="v1"] .app-root.mobile-shell:has(.mobile-bottom-rail.is-phone-tabs) {\n  --mobile-bottom-rail-height: 64px;',
+    );
+    const guideTalkingZeroHeightIndex = designV1.indexOf(
+      ':root[data-design="v1"] .app-root.mobile-shell:has(.community-agent-dock-panel.is-guide-talking) {\n  --mobile-bottom-rail-height: 0px;',
+    );
+    expect(phoneTabsHeightIndex).toBeGreaterThan(-1);
+    expect(guideTalkingZeroHeightIndex).toBeGreaterThan(phoneTabsHeightIndex);
   });
 
   it("steps back one level via registered mobile page back handlers before returning to community home", () => {
