@@ -6957,6 +6957,49 @@
   overflow-wrap: anywhere;
 }
 
+/* Callouts ("> [!TIP]" and friends), in a lesson and in its editor: a soft
+   tint of one tone, the type's icon in its own column, then the author's
+   title and the text. Neutral grey by default (design v1 is monochrome and
+   purple belongs to the AI), a community's own accent when it sets one,
+   amber for a warning; do-this gets a firmer left edge. These were
+   lost with the classic stylesheet; the editor's rules in lessonEditor.css
+   build on them. */
+.md-callout {
+  --md-callout-tone: var(--pn-accent, var(--text-muted, #8a8f98));
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  column-gap: 12px;
+  align-items: start;
+  margin: 1.5em 0;
+  padding: 14px 18px 16px 14px;
+  border: 1px solid color-mix(in srgb, var(--md-callout-tone) 24%, transparent);
+  border-radius: calc(10px * var(--pn-radius-scale, 1));
+  background: color-mix(in srgb, var(--md-callout-tone) 8%, transparent);
+  color: var(--text-primary);
+  overflow-wrap: anywhere;
+}
+.md-callout.is-warning { --md-callout-tone: #c27a12; }
+.md-callout.is-action {
+  border-left: 3px solid color-mix(in srgb, var(--md-callout-tone) 70%, transparent);
+  background: color-mix(in srgb, var(--md-callout-tone) 11%, transparent);
+}
+.md-callout-icon {
+  display: grid;
+  place-items: center;
+  height: 1.7em;
+  color: color-mix(in srgb, var(--md-callout-tone) 80%, var(--text-primary));
+}
+.md-callout-icon svg { width: 18px; height: 18px; }
+.md-callout-main { min-width: 0; }
+.md-callout-title {
+  margin: 0 0 2px;
+  color: var(--text-primary);
+  font-weight: 650;
+  line-height: 1.7;
+}
+.md-callout-body > :first-child { margin-top: 0; }
+.md-callout-body > :last-child { margin-bottom: 0; }
+
 .resource-viewer-prose .md-hr {
   border: 0;
   height: 1px;
