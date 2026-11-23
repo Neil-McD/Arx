@@ -4,11 +4,13 @@
 // The pinned post lives here on a wide window, not at the top of the feed;
 // where there is no right column (a narrow window, a phone) the feed keeps it.
 // Notes are the guide's memory, kept by builders in Knowledge, not listed here.
-import { useState } from "react";
+import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { Pin } from "lucide-react";
 import type { CommunityPresenceSummary } from "../../../../shared/communityTypes";
 import { UserAvatar } from "../../../../shared/UserAvatar";
 import { getAvatarColor, getInitials } from "../../../../shared/chatUi";
+import { ChatBlockMarkdown } from "../../../../shared/chatBlockMarkdownUi";
+import { renderChatInlineMarkdown } from "../../../../shared/chatInlineMarkdownUi";
 import { KitApp, Rail, cx } from "./kit";
 import { learnedWhen } from "./KitBrain";
 import { PanelAction, PanelPart } from "./KitPanel";
@@ -19,6 +21,8 @@ export type ChannelPinned = {
   at: string | null;
   title: string | null;
   excerpt: string;
+  // Formatted post preview matching the feed (falls back to rendering excerpt as markdown).
+  body?: ReactNode;
   onOpen: () => void;
   // The people who run the channel can take the pin off.
   onUnpin?: () => void;
@@ -57,6 +61,38 @@ export function KitChannelRail(props: {
   // The page hands in the description as it stands (it hears a host's change too).
   const description = (props.description ?? "").trim();
   const { pinned } = props;
+  const pinnedBodyRef = useRef<HTMLDivElement | null>(null);
+  const [pinnedOverflow, setPinnedOverflow] = useState(false);
+
+  const pinnedContent: ReactNode = pinned
+    ? (pinned.body ??
+      (pinned.excerpt ? (
+        <div className="community-interaction-body community-interaction-chat-markdown">
+          <ChatBlockMarkdown
+            text={pinned.excerpt}
+            renderInline={(segment) => renderChatInlineMarkdown(segment, { allowLabeledLinks: true })}
+          />
+        </div>
+      ) : null))
+    : null;
+
+  useLayoutEffect(() => {
+    const el = pinnedBodyRef.current;
+    if (!el) {
+      setPinnedOverflow(false);
+      return;
+    }
+    el.setAttribute("inert", "");
+    const measure = () => {
+      const next = el.scrollHeight > el.clientHeight + 1;
+      setPinnedOverflow((current) => (current === next ? current : next));
+    };
+    measure();
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(measure);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [pinned?.excerpt, pinned?.body]);
 
   return (
     <KitApp view="wins" part="rail" className={pinned ? "kit-channel-rail has-pinned" : "kit-channel-rail"}>
@@ -66,11 +102,21 @@ export function KitChannelRail(props: {
         ) : null}
         {pinned ? (
           <PanelPart label="Pinned" action={pinned.onUnpin ? <PanelAction disabled={pinned.unpinning} onClick={pinned.onUnpin}>{pinned.unpinning ? "Unpinning…" : "Unpin"}</PanelAction> : null}>
-            <button type="button" className={cx("chpin")} onClick={pinned.onOpen} aria-label={`Open the pinned post by ${pinned.author}`}>
-              <span className={cx("chpin-by")}><Pin size={13} aria-hidden="true" /><b>{pinned.author}</b>{pinned.at ? <em>{learnedWhen(pinned.at, now)}</em> : null}</span>
-              {pinned.title ? <strong>{pinned.title}</strong> : null}
-              {pinned.excerpt ? <span className={cx("chpin-text")}>{pinned.excerpt}</span> : null}
-            </button>
+            <div className={cx("chpin")}>
+              <button
+                type="button"
+                className={cx("chpin-hit")}
+                onClick={pinned.onOpen}
+                aria-label={`Open the pinned post by ${pinned.author}`}
+              />
+              <span className={cx("chpin-by")} aria-hidden="true"><Pin size={13} aria-hidden="true" /><b>{pinned.author}</b>{pinned.at ? <em>{learnedWhen(pinned.at, now)}</em> : null}</span>
+              {pinned.title ? <strong className={cx("chpin-title")} aria-hidden="true">{pinned.title}</strong> : null}
+              {pinnedContent ? (
+                <div ref={pinnedBodyRef} className={cx("chpin-body", pinnedOverflow && "over")} aria-hidden="true">
+                  {pinnedContent}
+                </div>
+              ) : null}
+            </div>
           </PanelPart>
         ) : null}
         <PanelPart label="Here" fact={typeof members === "number" && members > 0 ? `${members} ${members === 1 ? "member" : "members"}` : null}

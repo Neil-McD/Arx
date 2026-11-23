@@ -145,6 +145,7 @@ import {
   CommunityInteractionFeedList,
   EditForm,
   InteractionAttachments,
+  InteractionBody,
   InteractionContent,
   MessageActions,
   ProfileHoverCard,
@@ -1017,15 +1018,43 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
       {props.communityId && props.activeChannel ? <ChannelRosterPanel
         onCloseNarrow={closePeople}
         narrowOpen={peopleOpen}
-        pinned={props.pinnedRoot ? {
-          label: (props.pinnedRoot.root.title || props.pinnedRoot.root.content_summary || "Pinned post").trim().slice(0, 80),
-          author: actorLabel(props.pinnedRoot.root, props.displayName, props.activeCommunityName),
-          at: props.pinnedRoot.root.created_at ?? null,
-          title: props.pinnedRoot.root.title?.trim() || null,
-          excerpt: String(props.pinnedRoot.root.content_summary ?? "").trim().slice(0, 280),
-          onOpen: () => props.onSelectRoot(props.pinnedRoot!.root.id),
-          ...(props.canManagePinnedRoot && props.onSetPinnedRoot ? { onUnpin: () => void props.onSetPinnedRoot?.(null), unpinning: Boolean(props.isUpdatingPinnedRoot) } : {}),
-        } : null}
+        pinned={props.pinnedRoot ? (() => {
+          const pinnedText = stripSharedAttachmentSummary(
+            bundleText(props.pinnedRoot.content_blocks, props.pinnedRoot.root.content_summary),
+            props.pinnedRoot.attachments.length > 0,
+          );
+          const plainLabel = (props.pinnedRoot.root.title || pinnedText || props.pinnedRoot.root.content_summary || "Pinned post")
+            .replace(/^#{1,6}\s+/gm, "")
+            .replace(/(\*\*|__|~~|`)/g, "")
+            .replace(/^\s*[-*+]\s+/gm, "")
+            .replace(/\s+/g, " ")
+            .trim()
+            .slice(0, 80);
+          return {
+            label: plainLabel || "Pinned post",
+            author: actorLabel(props.pinnedRoot.root, props.displayName, props.activeCommunityName),
+            at: props.pinnedRoot.root.created_at ?? null,
+            title: props.pinnedRoot.root.title?.trim() || null,
+            excerpt: pinnedText || String(props.pinnedRoot.root.content_summary ?? "").trim().slice(0, 280),
+            body: pinnedText ? (
+              <InteractionBody
+                text={pinnedText}
+                renderTextWithLinks={props.renderTextWithLinks}
+                mentionContext={{
+                  mentions: props.pinnedRoot.mentions ?? [],
+                  displayName: props.displayName,
+                  profilesByUserId: props.profilesByUserId,
+                  currentUserId: props.currentUserId,
+                  getAvatarColor: props.getAvatarColor,
+                  getInitials: props.getInitials,
+                  communityAgentDisplayName: props.activeCommunityName,
+                }}
+              />
+            ) : null,
+            onOpen: () => props.onSelectRoot(props.pinnedRoot!.root.id),
+            ...(props.canManagePinnedRoot && props.onSetPinnedRoot ? { onUnpin: () => void props.onSetPinnedRoot?.(null), unpinning: Boolean(props.isUpdatingPinnedRoot) } : {}),
+          };
+        })() : null}
         channelDescription={channelDescription || null}
         {...communityRosterProps(props)}
         key={`${props.communityId}:${props.activeChannel?.id ?? "general"}`}

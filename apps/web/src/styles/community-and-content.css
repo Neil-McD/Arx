@@ -3042,9 +3042,11 @@
 
 .community-interaction-edit-input {
   width: 100%;
+  box-sizing: border-box;
   resize: vertical;
-  min-height: 38px;
-  padding: 8px 10px;
+  min-height: 88px;
+  padding: 10px 12px;
+  overflow-y: auto;
   border: 1px solid var(--border-default);
   border-radius: 10px;
   background: var(--bg-input);
