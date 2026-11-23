@@ -15,9 +15,10 @@ Vercel Git auto-deploy from `main` stays disabled in `vercel.json` so Vercel
 never races ahead of the Convex backend deploy.
 
 1. Open a pull request from a short branch. GitHub runs the parallel
-   `Release Gate`, `Secret Scan`, and Codex review (~2 minutes).
-2. Merge to `main` (Fast Lane merges when green; Protected Lane waits for
-   security review + Neil's explicit approval).
+   `Release Gate` and `Secret Scan` (~2 minutes).
+2. Merge to `main` (Fast Lane merges as soon as checks are green—no Codex
+   review loop; Protected Lane waits for one-shot security review + Neil's
+   explicit approval).
 3. GitHub Actions automatically deploys `main`:
 
 | Stage | Proves |
