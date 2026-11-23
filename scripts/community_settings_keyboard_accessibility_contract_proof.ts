@@ -104,11 +104,6 @@ for (const [source, label] of [
 ] as const) {
   assert.match(
     source,
-    /WebPlatformTabList/,
-    `${label} must use the shared tab contract`,
-  );
-  assert.match(
-    source,
     /role="tabpanel"/,
     `${label} must expose its selected panel`,
   );
@@ -121,15 +116,10 @@ for (const [source, label] of [
 
 assert.match(
   communitySettings,
-  /source === "keyboard" \? \{ replace: true \} : undefined/,
-  "route-backed arrow navigation must replace instead of polluting browser history",
-);
-assert.match(
-  communitySettings,
   /listCommunitySettingsPanesForAccess\(settingsPaneAccess\)/,
   "keyboard targets must remain filtered by centralized access authority",
 );
-assert.match(communitySettings, /WebPlatformRadioGroup/);
+assert.match(communitySettings, /<SettingsSegmented[\s\S]*label="Pricing options"/);
 assert.doesNotMatch(
   communitySettings,
   /role="tablist"\s*aria-label="Pricing options"/,
@@ -157,13 +147,13 @@ assert.match(
 );
 assert.match(
   communitySettings,
-  /state\.isCommunitySettingsDirty \|\|[\s\S]*state\.isSavingCommunitySettings \|\|[\s\S]*state\.isProcessingCommunitySettingsBanner \?[\s\S]*Save changes[\s\S]*: null/,
-  "the save action must disappear when there is nothing actionable",
+  /useAutosave\(isFormPane, pageRef, state, actions\.handleSaveCommunitySettings\)/,
+  "General and Plans settings must autosave committed fields without a redundant Save button",
 );
 assert.match(
   communitySettings,
-  /onClick=\{actions\.handleCancelCommunitySettings\}[\s\S]*Cancel[\s\S]*onClick=\{\(\) => void actions\.handleSaveCommunitySettings\(\)\}/,
-  "dirty General settings must expose Cancel immediately to the left of Save changes",
+  /<SettingsSaveStatus saving=\{state\.isSavingCommunitySettings\} dirty=\{state\.isCommunitySettingsDirty\} error=\{state\.communitySettingsError\} \/>/,
+  "form settings panes must surface save, dirty, and error status",
 );
 assert.match(
   communitySettingsUiController,

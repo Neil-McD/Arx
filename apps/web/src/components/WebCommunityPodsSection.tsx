@@ -10,7 +10,6 @@
 // /pods/<pod> is the pod's page.
 import { useCallback, useEffect, useState } from "react";
 import { CommunityPageHeader, CommunityPageRail } from "./CommunityPageHeader";
-import { isDesignV1Active } from "../../../../shared/designSystem";
 import { resolveAuthSubject, type AuthSessionLike } from "../../../../shared/authSession";
 import { useLiveQuery } from "../../../../shared/liveQuery";
 import {
@@ -314,8 +313,7 @@ function PodsList(props: WebCommunityPodsSectionProps) {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
-  // The right column exists only in design v1, and only on a wide screen.
-  const wide = useWideRail() && isDesignV1Active();
+  const wide = useWideRail();
   const isPhone = usePhoneLayout();
   const now = Date.now();
 

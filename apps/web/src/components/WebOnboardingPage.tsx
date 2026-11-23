@@ -1,4 +1,3 @@
-import { isDesignV1Active } from "../../../../shared/designSystem";
 import type { AccountSetupStatus } from "../../../../shared/accountSetup";
 import { WebAccountSetupForm } from "./WebAccountSetupForm";
 import { WebBlockingSetupModal } from "./WebBlockingSetupModal";
@@ -25,7 +24,7 @@ export function WebOnboardingPage(props: WebOnboardingPageProps) {
     >
       <div className="account-setup-heading is-platform">
         <div className="account-setup-brand">
-          <img src={isDesignV1Active() ? "/brand/polynet-app-icon.svg" : "/favicon.svg"} alt="" />
+          <img src="/brand/polynet-app-icon.svg" alt="" />
           <span>Polynet</span>
         </div>
         <h1 id="polynet-account-setup-title">Finish your profile</h1>
