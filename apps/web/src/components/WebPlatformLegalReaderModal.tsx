@@ -2,6 +2,7 @@
    that asks for Terms/Privacy consent (onboarding modal, bridge card). */
 import { renderMarkdown } from "../../../../shared/markdownUi";
 import type { LegalDocumentEntry } from "../docs/legalDocumentsContent";
+import "./WebPlatformLegalReaderModal.css";
 
 export function WebPlatformLegalReaderModal(props: {
   document: LegalDocumentEntry;

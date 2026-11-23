@@ -2,13 +2,13 @@ import { captureAppException } from "./instrument";
 import "./posthogAnalytics";
 import React from "react";
 import ReactDOM from "react-dom/client";
-import App from "./App";
 import "@fontsource-variable/geist/wght.css";
 import "@fontsource-variable/geist-mono/wght.css";
-import "./index.css";
+import "./base.css";
 import { isLoginTrampolinePathname, LoginTrampolineRoute } from "./auth/loginTrampoline";
-import { bootConvexProbe } from "../../../shared/convexRuntime";
+import { hasRecentAuthFlowPending } from "./authBrowserMarkers";
 import { buildTelemetryRouteLabel } from "../../../shared/routePrivacy";
+import { resolvePublicEntryRoute } from "../../../shared/publicEntryRoute";
 import { CommunityVisualIdentityRegistryProvider } from "../../../shared/CommunityVisualIdentityRegistry";
 import { captureDistributionAttributionFromLocation } from '../../../shared/distributionAttribution';
 
@@ -371,16 +371,27 @@ if (typeof window !== "undefined") {
 const isDesignLab =
   document.documentElement.dataset.design === "v1" && window.location.pathname === "/design-lab";
 const DesignLab = React.lazy(() => import("./v1/DesignLab").then((m) => ({ default: m.DesignLab })));
+const App = React.lazy(() => import("./App"));
+const WebPublicVisitorShell = React.lazy(() =>
+  import("./components/WebPublicVisitorShell").then((m) => ({ default: m.WebPublicVisitorShell })),
+);
 
-if (!isLoginTrampoline && !isDesignLab) {
-  bootConvexProbe();
-}
+const publicEntryRoute =
+  !isDesignLab && !isLoginTrampoline
+    ? resolvePublicEntryRoute({
+        pathname: window.location.pathname || "/",
+        search: window.location.search || "",
+        hasRecentAuthFlowPending: hasRecentAuthFlowPending(),
+      })
+    : null;
 
 const rootView = isDesignLab
   ? <React.Suspense fallback={null}><DesignLab /></React.Suspense>
   : isLoginTrampoline
     ? <LoginTrampolineRoute />
-    : <App />;
+    : publicEntryRoute
+      ? <React.Suspense fallback={null}><WebPublicVisitorShell initialRoute={publicEntryRoute} /></React.Suspense>
+      : <React.Suspense fallback={null}><App /></React.Suspense>;
 
 document.documentElement.setAttribute("data-polynet-build-id", APP_BUILD_ID);
 

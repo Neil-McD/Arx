@@ -1,0 +1,115 @@
+/* Self-contained styling for the lazy-loaded platform legal reader modal so it
+   renders cleanly on lightweight public routes before Studio CSS loads. */
+.polynet-onboarding-legal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background: rgba(0, 0, 0, 0.72);
+  backdrop-filter: blur(4px);
+}
+
+.polynet-onboarding-legal-modal {
+  width: min(680px, calc(100vw - 24px));
+  max-height: min(82vh, 720px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--border-default);
+  border-radius: 14px;
+  background: var(--bg-modal);
+  color: var(--text-primary);
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.45);
+}
+
+.polynet-onboarding-legal-modal .modal-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px;
+  border-bottom: 1px solid var(--border-default);
+}
+
+.polynet-onboarding-legal-modal .modal-title {
+  color: var(--text-primary);
+  font-size: 15px;
+  font-weight: 750;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.polynet-onboarding-legal-modal .modal-close {
+  border: 1px solid var(--border-default);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-muted);
+  width: 30px;
+  height: 30px;
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.polynet-onboarding-legal-modal .modal-close:hover {
+  color: var(--text-primary);
+  border-color: var(--border-strong);
+}
+
+.polynet-onboarding-legal-meta {
+  margin-top: 4px;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.polynet-onboarding-legal-body {
+  padding: 14px 16px;
+  overflow: hidden;
+}
+
+.polynet-onboarding-legal-reader {
+  height: min(46vh, 380px);
+  overflow: auto;
+  padding: 14px;
+  border: 1px solid var(--border-muted);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--bg-card-alt) 88%, transparent);
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.5;
+  scrollbar-width: thin;
+}
+
+.polynet-onboarding-legal-reader .md-header:first-child {
+  margin-top: 0;
+}
+
+.polynet-onboarding-legal-reader h1.md-header {
+  font-size: 17px;
+  line-height: 1.2;
+}
+
+.polynet-onboarding-legal-reader h2.md-header {
+  margin-top: 18px;
+  font-size: 14px;
+  line-height: 1.25;
+}
+
+.polynet-onboarding-legal-reader .md-paragraph,
+.polynet-onboarding-legal-reader .md-list {
+  margin: 8px 0;
+}
+
+@media (max-width: 640px) {
+  .polynet-onboarding-legal-modal {
+    width: calc(100vw - 20px);
+    max-height: 86vh;
+  }
+
+  .polynet-onboarding-legal-reader {
+    height: min(48vh, 360px);
+  }
+}
