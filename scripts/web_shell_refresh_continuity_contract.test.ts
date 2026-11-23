@@ -66,7 +66,7 @@ describe("web shell refresh continuity contract", () => {
     expect(composer).not.toContain("interaction.loadReplies");
   });
 
-  it("uses shape-stable loading states for unresolved shell resources", () => {
+  it("uses shape-stable loading states for unresolved shell resources", async () => {
     const nav = read("shared/CommunityNav.tsx");
     const context = read("apps/web/src/components/ChannelRosterPanel.tsx");
     expect(context).toContain("communityPresenceLeaseIsActive");
@@ -74,7 +74,6 @@ describe("web shell refresh continuity contract", () => {
     const facepile = read("apps/web/src/components/CommunityPresenceFacepile.tsx");
     const memberAvatarStack = read("apps/web/src/components/MemberAvatarStack.tsx");
     const interaction = read("apps/web/src/controllers/useWebCommunityInteractionProjection.ts");
-    const app = read("apps/web/src/App.tsx");
 
     expect(nav).toContain('className="community-channel-loading-row web-skeleton-row"');
     expect(nav).toContain('className="community-channel-loading-row is-short web-skeleton-row"');
@@ -86,9 +85,120 @@ describe("web shell refresh continuity contract", () => {
     expect(interaction).toMatch(
       /const reset = useCallback\(\(isNextBoundaryLoading = false\)[\s\S]*setIsLoadingRoots\(isNextBoundaryLoading\)[\s\S]*boundaryRef\.current = requestedBoundary;[\s\S]*reset\(true\)/,
     );
-    expect(app).toMatch(
-      /isAwaitingActiveCommunityInteractionScope = Boolean\([\s\S]*!activeCommunityChannelResolutionError &&[\s\S]*!isActiveCommunityChannelReady \|\| !activeChannelCommunityId[\s\S]*isLoadingRoots:[\s\S]*isAwaitingActiveCommunityInteractionScope/,
+
+    const { buildWebCommunityInteractionProjectionProps, deriveActiveChannelScope } = await import(
+      "../apps/web/src/controllers/buildWebCommunityInteractionProjectionProps"
     );
+    const makeProjection = (args: {
+      isChannelContextReady: boolean;
+      channelResolutionStatus: string;
+      channelsError?: string | null;
+      isLoadingRoots?: boolean;
+    }) => {
+      const channelScope = deriveActiveChannelScope({
+        activeCommunityId: "comm_1",
+        isChannelContextReady: args.isChannelContextReady,
+        channelResolutionStatus: args.channelResolutionStatus,
+        channelsError: args.channelsError ?? null,
+      });
+      return buildWebCommunityInteractionProjectionProps({
+        peopleOpen: false,
+        onPeopleOpenChange: () => {},
+        mobileThreadPage: false,
+        channels: {
+          isChannelContextReady: args.isChannelContextReady,
+          channelResolutionStatus: args.channelResolutionStatus,
+          selectedChannel: { id: "ch_1", slug: "general", name: "General", is_general: true },
+          managingChannelId: null,
+          manageChannelError: null,
+          clearManageChannelError: () => {},
+          renameChannel: async () => true,
+          deleteChannel: async () => true,
+          retryChannels: () => {},
+        } as any,
+        channelScope,
+        interaction: {
+          pinnedRoot: null,
+          isUpdatingPinnedRoot: false,
+          pinnedRootError: null,
+          visibleRoots: [{ root: { id: "root_1" } }],
+          activityEvents: [],
+          selectedRootId: null,
+          selectedRoot: null,
+          selectedReplies: [],
+          isLoadingRoots: args.isLoadingRoots ?? false,
+          isLoadingSelectedReplies: false,
+          error: null,
+          selectedRepliesError: null,
+          rootChangeReason: null,
+          canLoadOlderRoots: false,
+          isLoadingOlderRoots: false,
+          selectRoot: () => {},
+          closeDrawer: () => {},
+          toggleReaction: async () => {},
+          editMessage: async () => true,
+          deleteMessage: async () => true,
+          setPinnedRootId: async () => true,
+          loadOlderRoots: async () => {},
+          loadRoots: async () => {},
+          loadReplies: async () => {},
+          retryPending: () => {},
+          discardPending: () => {},
+        } as any,
+        session: null,
+        canonicalSessionUserId: "user_1",
+        chatDividerBoundary: null,
+        handleChatCaughtUp: () => {},
+        setCommunityChannelSlug: () => {},
+        mobileChromeScrollTrackingEnabled: false,
+        setMobileChromeReadingMode: () => {},
+        typingPresence: { users: [], total_count: 0 },
+        presenceSummary: null,
+        isLoadingCommunityPresence: false,
+        activeCommunityId: "comm_1",
+        communityOwnerId: "user_owner",
+        canManageCommunityMembers: false,
+        canReviewCommunityJoinRequests: false,
+        canModerateContent: false,
+        communityJoinReviewMode: null,
+        communityJoinRequests: [],
+        isLoadingCommunityJoinRequests: false,
+        communityJoinRequestsError: null,
+        decidingCommunityJoinRequestId: null,
+        onApproveCommunityJoinRequest: async () => {},
+        onDenyCommunityJoinRequest: async () => {},
+        canViewMemberPlanDetails: false,
+        isActiveCommunityOwner: false,
+        communityInitials: () => "H",
+        onSetCommunityMemberRole: async () => {},
+        onRemoveCommunityMember: async () => {},
+        onBanCommunityMember: async () => {},
+        loadMemberBillingHistory: async () => null,
+      });
+    };
+
+    const unresolved = makeProjection({ isChannelContextReady: false, channelResolutionStatus: "loading" });
+    expect(unresolved.isLoadingRoots).toBe(true);
+    expect(unresolved.roots).toEqual([]);
+    expect(unresolved.error).toBeNull();
+
+    const ready = makeProjection({ isChannelContextReady: true, channelResolutionStatus: "ready" });
+    expect(ready.isLoadingRoots).toBe(false);
+    expect(ready.roots).toHaveLength(1);
+    expect(ready.error).toBeNull();
+
+    const missing = makeProjection({ isChannelContextReady: false, channelResolutionStatus: "not_found" });
+    expect(missing.isLoadingRoots).toBe(false);
+    expect(missing.error).toContain("channel does not exist");
+    expect(missing.errorActionLabel).toBe("Return to General");
+
+    const failed = makeProjection({
+      isChannelContextReady: false,
+      channelResolutionStatus: "failed",
+      channelsError: "Channel load failed",
+    });
+    expect(failed.isLoadingRoots).toBe(false);
+    expect(failed.error).toBe("Channel load failed");
   });
 
   it("never presents an unresolved presence snapshot as offline truth", () => {
