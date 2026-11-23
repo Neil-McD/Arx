@@ -1,26 +1,20 @@
 import { lazy, Suspense, type ComponentProps } from "react";
 import type { AppPage } from "../../../../shared/appShellNavigation";
 import type { WebCommunityHost as WebCommunityHostType } from "./WebCommunityHost";
-import type { WebDiscoverPanel as WebDiscoverPanelType } from "./WebDiscoverPanel";
-import type { WebCommunityDiscoverPageProps } from "./WebCommunityDiscoverPage";
+import { WebDiscoverPanel } from "./WebDiscoverPanel";
+import { WebCommunityDiscoverPage, type WebCommunityDiscoverPageProps } from "./WebCommunityDiscoverPage";
 import { CommunityPageFrame } from "./CommunityPageHeader";
 import { isDesignV1Active } from "../../../../shared/designSystem";
 import type { WebProductDocsPanel as WebProductDocsPanelType } from "./WebProductDocsPanel";
 import type { WebSettingsSurfaceHost as WebSettingsSurfaceHostType } from "./WebSettingsSurfaceHost";
 import type { WebLandingPage as WebLandingPageType } from "./WebLandingPage";
 import type { PublicFindPage as PublicFindPageType } from "./polynetLanding/PublicFindPage";
-import type { WebOnboardingPage as WebOnboardingPageType } from "./WebOnboardingPage";
-import type { WebPlatformBridgePage as WebPlatformBridgePageType } from "./WebPlatformBridgePage";
+import { WebOnboardingPage } from "./WebOnboardingPage";
+import { WebPlatformBridgePage } from "./WebPlatformBridgePage";
 import { WebAppMainSurfaceFallback } from "./WebAppMainSurfaceFallback";
 
 const WebCommunityHost = lazy(() =>
   import("./WebCommunityHost").then((module) => ({ default: module.WebCommunityHost })),
-);
-const WebDiscoverPanel = lazy(() =>
-  import("./WebDiscoverPanel").then((module) => ({ default: module.WebDiscoverPanel })),
-);
-const WebCommunityDiscoverPage = lazy(() =>
-  import("./WebCommunityDiscoverPage").then((module) => ({ default: module.WebCommunityDiscoverPage })),
 );
 const WebProductDocsPanel = lazy(() =>
   import("./WebProductDocsPanel").then((module) => ({ default: module.WebProductDocsPanel })),
@@ -37,12 +31,6 @@ const WebLandingPage = lazy(() =>
 const PublicFindPage = lazy(() =>
   import("./polynetLanding/PublicFindPage").then((module) => ({ default: module.PublicFindPage })),
 );
-const WebOnboardingPage = lazy(() =>
-  import("./WebOnboardingPage").then((module) => ({ default: module.WebOnboardingPage })),
-);
-const WebPlatformBridgePage = lazy(() =>
-  import("./WebPlatformBridgePage").then((module) => ({ default: module.WebPlatformBridgePage })),
-);
 
 export type WebAppMainSurfaceHostProps = {
   activePage: AppPage;
@@ -54,8 +42,8 @@ export type WebAppMainSurfaceHostProps = {
   landingPageProps: ComponentProps<typeof WebLandingPageType>;
   showPublicFind: boolean;
   publicFindProps: ComponentProps<typeof PublicFindPageType>;
-  onboardingPageProps: ComponentProps<typeof WebOnboardingPageType>;
-  platformBridgePageProps: ComponentProps<typeof WebPlatformBridgePageType>;
+  onboardingPageProps: ComponentProps<typeof WebOnboardingPage>;
+  platformBridgePageProps: ComponentProps<typeof WebPlatformBridgePage>;
   showOnboardingModal: boolean;
   settingsSurfaceHostProps: ComponentProps<typeof WebSettingsSurfaceHostType>;
   // /c/<slug>: the community whose landing page this is, and the viewer's
@@ -63,7 +51,7 @@ export type WebAppMainSurfaceHostProps = {
   publicCommunitySlug: string | null;
   publicCommunitySession: unknown | null;
   communityHostProps: ComponentProps<typeof WebCommunityHostType>;
-  discoverPanelProps: ComponentProps<typeof WebDiscoverPanelType>;
+  discoverPanelProps: ComponentProps<typeof WebDiscoverPanel>;
   discoverPageProps: WebCommunityDiscoverPageProps;
   productDocsPanelProps: ComponentProps<typeof WebProductDocsPanelType>;
 };

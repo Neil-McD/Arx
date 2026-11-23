@@ -5,25 +5,19 @@ import { communityInitials } from "../../../../shared/messageMetadataUi";
 import { slugifyCommunityName } from "../../../../shared/communitySlug";
 import type { WebCommunityAnalyticsSection as WebCommunityAnalyticsSectionType } from "./WebCommunityAnalyticsSection";
 import type { WebCommunityAiAgentSection as WebCommunityAiAgentSectionType } from "./WebCommunityAiAgentSection";
-import type { WebCommunityAvatarEditorModal as WebCommunityAvatarEditorModalType } from "./WebCommunityAvatarEditorModal";
-import type { WebCommunityBannerEditorModal as WebCommunityBannerEditorModalType } from "./WebCommunityBannerEditorModal";
+import { WebCommunityAvatarEditorModal } from "./WebCommunityAvatarEditorModal";
+import { WebCommunityBannerEditorModal } from "./WebCommunityBannerEditorModal";
 import type { WebCommunityEventsSection as WebCommunityEventsSectionType } from "./WebCommunityEventsSection";
 import type { WebCommunityPodsSectionProps } from "./WebCommunityPodsSection";
 import type { WebCommunityDiscoverPageProps } from "./WebCommunityDiscoverPage";
-import type { WebDeleteResourceModuleModal as WebDeleteResourceModuleModalType } from "./WebDeleteResourceModuleModal";
-import type { WebCommunityResourceModuleModal as WebCommunityResourceModuleModalType } from "./WebCommunityResourceModuleModal";
+import { WebDeleteResourceModuleModal } from "./WebDeleteResourceModuleModal";
+import { WebCommunityResourceModuleModal } from "./WebCommunityResourceModuleModal";
 import type { CommunityResourcesPanel as CommunityResourcesPanelType } from "./CommunityResourcesPanel";
 import type { WebCommunityKnowledgePanel as WebCommunityKnowledgePanelType } from "./WebCommunityKnowledgePanel";
 import type { WebCommunitySettingsSection as WebCommunitySettingsSectionType } from "./WebCommunitySettingsSection";
 
 const WebCommunityAnalyticsSection = lazy(() =>
   import("./WebCommunityAnalyticsSection").then((module) => ({ default: module.WebCommunityAnalyticsSection })),
-);
-const WebCommunityAvatarEditorModal = lazy(() =>
-  import("./WebCommunityAvatarEditorModal").then((module) => ({ default: module.WebCommunityAvatarEditorModal })),
-);
-const WebCommunityBannerEditorModal = lazy(() =>
-  import("./WebCommunityBannerEditorModal").then((module) => ({ default: module.WebCommunityBannerEditorModal })),
 );
 const WebCommunityEventsSection = lazy(() =>
   import("./WebCommunityEventsSection").then((module) => ({ default: module.WebCommunityEventsSection })),
@@ -33,12 +27,6 @@ const WebCommunityPodsSection = lazy(() =>
 );
 const WebCommunityDiscoverPage = lazy(() =>
   import("./WebCommunityDiscoverPage").then((module) => ({ default: module.WebCommunityDiscoverPage })),
-);
-const WebDeleteResourceModuleModal = lazy(() =>
-  import("./WebDeleteResourceModuleModal").then((module) => ({ default: module.WebDeleteResourceModuleModal })),
-);
-const WebCommunityResourceModuleModal = lazy(() =>
-  import("./WebCommunityResourceModuleModal").then((module) => ({ default: module.WebCommunityResourceModuleModal })),
 );
 const WebCommunityKnowledgePanel = lazy(() =>
   import("./WebCommunityKnowledgePanel").then((module) => ({ default: module.WebCommunityKnowledgePanel })),
@@ -66,13 +54,13 @@ export type WebCommunitySecondaryPanelsProps = {
     setIsCommunityAvatarFocusModalOpen: (value: boolean) => void;
     setIsCommunityBannerFocusModalOpen: (value: boolean) => void;
   };
-  avatarEditor: Omit<ComponentProps<typeof WebCommunityAvatarEditorModalType>, "isOpen" | "onDirty" | "onClose"> & {
+  avatarEditor: Omit<ComponentProps<typeof WebCommunityAvatarEditorModal>, "isOpen" | "onDirty" | "onClose"> & {
     isSettingsTabActive: boolean;
     isCommunityAvatarFocusModalOpen: boolean;
     markCommunitySettingsDirty: () => void;
     setIsCommunityAvatarFocusModalOpen: (value: boolean) => void;
   };
-  bannerEditor: Omit<ComponentProps<typeof WebCommunityBannerEditorModalType>, "isOpen" | "onDirty" | "onClose"> & {
+  bannerEditor: Omit<ComponentProps<typeof WebCommunityBannerEditorModal>, "isOpen" | "onDirty" | "onClose"> & {
     isSettingsTabActive: boolean;
     isCommunityBannerFocusModalOpen: boolean;
     markCommunitySettingsDirty: () => void;
@@ -85,8 +73,8 @@ export type WebCommunitySecondaryPanelsProps = {
   events: ComponentProps<typeof WebCommunityEventsSectionType>;
   pods: WebCommunityPodsSectionProps;
   discover: WebCommunityDiscoverPageProps;
-  resourceModuleModal: ComponentProps<typeof WebCommunityResourceModuleModalType>;
-  resourceModuleDeleteModal: ComponentProps<typeof WebDeleteResourceModuleModalType>;
+  resourceModuleModal: ComponentProps<typeof WebCommunityResourceModuleModal>;
+  resourceModuleDeleteModal: ComponentProps<typeof WebDeleteResourceModuleModal>;
 };
 
 function renderCenteredPane(children: ReactNode) {
@@ -108,14 +96,14 @@ export function WebCommunitySecondaryPanels(props: WebCommunitySecondaryPanelsPr
     },
   };
 
-  const avatarEditorModalProps: ComponentProps<typeof WebCommunityAvatarEditorModalType> = {
+  const avatarEditorModalProps: ComponentProps<typeof WebCommunityAvatarEditorModal> = {
     ...props.avatarEditor,
     isOpen: props.avatarEditor.isSettingsTabActive && props.avatarEditor.isCommunityAvatarFocusModalOpen,
     onDirty: props.avatarEditor.markCommunitySettingsDirty,
     onClose: () => props.avatarEditor.setIsCommunityAvatarFocusModalOpen(false),
   };
 
-  const bannerEditorModalProps: ComponentProps<typeof WebCommunityBannerEditorModalType> = {
+  const bannerEditorModalProps: ComponentProps<typeof WebCommunityBannerEditorModal> = {
     ...props.bannerEditor,
     isOpen: props.bannerEditor.isSettingsTabActive && props.bannerEditor.isCommunityBannerFocusModalOpen,
     onDirty: props.bannerEditor.markCommunitySettingsDirty,
@@ -127,12 +115,8 @@ export function WebCommunitySecondaryPanels(props: WebCommunitySecondaryPanelsPr
       {props.communityTab === "settings" ? (
         <>
           {renderCenteredPane(<WebCommunitySettingsSection {...settingsSectionProps} />)}
-          {avatarEditorModalProps.isOpen ? (
-            <Suspense fallback={null}><WebCommunityAvatarEditorModal {...avatarEditorModalProps} /></Suspense>
-          ) : null}
-          {bannerEditorModalProps.isOpen ? (
-            <Suspense fallback={null}><WebCommunityBannerEditorModal {...bannerEditorModalProps} /></Suspense>
-          ) : null}
+          <WebCommunityAvatarEditorModal {...avatarEditorModalProps} />
+          <WebCommunityBannerEditorModal {...bannerEditorModalProps} />
         </>
       ) : null}
 
@@ -142,12 +126,8 @@ export function WebCommunitySecondaryPanels(props: WebCommunitySecondaryPanelsPr
       {props.communityTab === "resources" ? (
         <>
           {renderCenteredPane(<WebCommunityKnowledgePanel key={props.knowledge.communityId} context={props.knowledge} resources={props.resources} />)}
-          {props.resourceModuleModal.isOpen ? (
-            <Suspense fallback={null}><WebCommunityResourceModuleModal {...props.resourceModuleModal} /></Suspense>
-          ) : null}
-          {props.resourceModuleDeleteModal.isOpen ? (
-            <Suspense fallback={null}><WebDeleteResourceModuleModal {...props.resourceModuleDeleteModal} /></Suspense>
-          ) : null}
+          <WebCommunityResourceModuleModal {...props.resourceModuleModal} />
+          <WebDeleteResourceModuleModal {...props.resourceModuleDeleteModal} />
         </>
       ) : null}
 

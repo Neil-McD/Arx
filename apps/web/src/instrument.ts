@@ -1,4 +1,4 @@
-type SentryModule = typeof import("@sentry/react");
+type SentryModule = typeof import("./sentryRuntime");
 
 declare const __SENTRY_RELEASE__: string | null;
 declare const __SENTRY_ENVIRONMENT__: string | null;
@@ -23,6 +23,10 @@ type SentryUiContext = {
   runId?: string | null;
 };
 
+type PendingSentryOperation =
+  | { kind: "context"; context: SentryUiContext }
+  | { kind: "exception"; error: unknown; options?: CaptureAppExceptionOptions };
+
 const sentryDsn = String(import.meta.env.VITE_SENTRY_DSN ?? "").trim();
 const sentryEnvironment = String(__SENTRY_ENVIRONMENT__ ?? import.meta.env.MODE ?? "").trim();
 const sentryEnabled = sentryDsn.length > 0;
@@ -36,11 +40,10 @@ const sentryTracePropagationTargets: Array<string | RegExp> = [
   /^http:\/\/127\.0\.0\.1(?::\d+)?(?:\/|$)/,
 ];
 
-const MAX_QUEUED_EXCEPTIONS = 25;
+const MAX_QUEUED_OPERATIONS = 50;
 let sentryModule: SentryModule | null = null;
 let sentryLoadPromise: Promise<SentryModule | null> | null = null;
-let latestUiContext: SentryUiContext | null = null;
-const pendingExceptions: Array<{ error: unknown; options?: CaptureAppExceptionOptions }> = [];
+const pendingOperations: PendingSentryOperation[] = [];
 
 function initSentryModule(Sentry: SentryModule): SentryModule {
   Sentry.init({
@@ -147,15 +150,17 @@ function ensureSentryLoaded(): Promise<SentryModule | null> {
   if (!sentryEnabled) return Promise.resolve(null);
   if (sentryModule) return Promise.resolve(sentryModule);
   if (!sentryLoadPromise) {
-    sentryLoadPromise = import("@sentry/react")
+    sentryLoadPromise = import("./sentryRuntime")
       .then((loaded) => {
         sentryModule = initSentryModule(loaded);
-        if (latestUiContext) {
-          applySentryUiContext(sentryModule, latestUiContext);
-        }
-        while (pendingExceptions.length > 0) {
-          const item = pendingExceptions.shift();
-          if (item) sendExceptionToSentry(sentryModule, item.error, item.options);
+        while (pendingOperations.length > 0) {
+          const op = pendingOperations.shift();
+          if (!op) continue;
+          if (op.kind === "context") {
+            applySentryUiContext(sentryModule, op.context);
+          } else {
+            sendExceptionToSentry(sentryModule, op.error, op.options);
+          }
         }
         return sentryModule;
       })
@@ -212,16 +217,24 @@ export function captureAppException(error: unknown, options?: CaptureAppExceptio
     sendExceptionToSentry(sentryModule, error, options);
     return;
   }
-  if (pendingExceptions.length < MAX_QUEUED_EXCEPTIONS) {
-    pendingExceptions.push({ error, options });
+  if (pendingOperations.length < MAX_QUEUED_OPERATIONS) {
+    pendingOperations.push({ kind: "exception", error, options });
   }
   void ensureSentryLoaded();
 }
 
 export function updateSentryUiContext(context: SentryUiContext): void {
   if (!sentryEnabled) return;
-  latestUiContext = context;
   if (sentryModule) {
     applySentryUiContext(sentryModule, context);
+    return;
+  }
+  const last = pendingOperations[pendingOperations.length - 1];
+  if (last?.kind === "context") {
+    last.context = context;
+  } else if (pendingOperations.length < MAX_QUEUED_OPERATIONS) {
+    pendingOperations.push({ kind: "context", context });
+  } else {
+    pendingOperations[pendingOperations.length - 1] = { kind: "context", context };
   }
 }
