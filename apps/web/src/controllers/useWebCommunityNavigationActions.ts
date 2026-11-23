@@ -1,4 +1,5 @@
 import {
+  startTransition,
   useCallback,
   useEffect,
   type MutableRefObject,
@@ -143,7 +144,9 @@ export function useWebCommunityNavigationActions(params: {
         });
         return;
       }
-      params.applyCommunityShellState({ communityTab: tab });
+      startTransition(() => {
+        params.applyCommunityShellState({ communityTab: tab });
+      });
     },
     [
       params.activeCommunity?.slug,

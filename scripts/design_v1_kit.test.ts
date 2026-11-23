@@ -48,5 +48,5 @@ test("nothing in the kit's stylesheet can style the rest of the app", () => {
 test("the design lab is reachable only on design v1 builds", () => {
   const main = readFileSync(new URL("apps/web/src/main.tsx", root), "utf8");
   expect(main).toMatch(/document\.documentElement\.dataset\.design === "v1" && window\.location\.pathname === "\/design-lab"/);
-  expect(main).toMatch(/React\.lazy\(\(\) => import\("\.\/v1\/DesignLab"\)/);
+  expect(main).toMatch(/React\.lazy\(\(\) => (?:resilientImport\(\(\) => )?import\("\.\/v1\/DesignLab"\)/);
 });

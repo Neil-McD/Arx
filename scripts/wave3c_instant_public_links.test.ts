@@ -54,7 +54,7 @@ describe("Wave 3C: instant public links and lightweight visitor entry", () => {
     const legalModal = read("apps/web/src/components/WebPlatformLegalReaderModal.tsx");
 
     expect(main).not.toMatch(/^import\s+App\s+from\s+["']\.\/App["']/m);
-    expect(main).toMatch(/React\.lazy\(\(\) => import\("\.\/App"\)\)/);
+    expect(main).toMatch(/React\.lazy\(\(\) => (?:resilientImport\(\(\) => )?import\("\.\/App"\)\)?\)/);
     expect(main).not.toMatch(/^import\s+["']\.\/index\.css["']/m);
     expect(main).toMatch(/^import\s+["']\.\/base\.css["']/m);
     expect(main).not.toContain("bootConvexProbe");

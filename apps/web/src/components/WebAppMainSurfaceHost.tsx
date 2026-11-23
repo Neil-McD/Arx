@@ -11,24 +11,26 @@ import type { PublicFindPage as PublicFindPageType } from "./polynetLanding/Publ
 import { WebOnboardingPage } from "./WebOnboardingPage";
 import { WebPlatformBridgePage } from "./WebPlatformBridgePage";
 import { WebAppMainSurfaceFallback } from "./WebAppMainSurfaceFallback";
+import { SurfaceErrorBoundary } from "./SurfaceErrorBoundary";
+import { resilientImport } from "../lib/resilientLazy";
 
 const WebCommunityHost = lazy(() =>
-  import("./WebCommunityHost").then((module) => ({ default: module.WebCommunityHost })),
+  resilientImport(() => import("./WebCommunityHost")).then((module) => ({ default: module.WebCommunityHost })),
 );
 const WebProductDocsPanel = lazy(() =>
-  import("./WebProductDocsPanel").then((module) => ({ default: module.WebProductDocsPanel })),
+  resilientImport(() => import("./WebProductDocsPanel")).then((module) => ({ default: module.WebProductDocsPanel })),
 );
 const WebCommunityLandingPage = lazy(() =>
-  import("./WebCommunityLandingPage").then((module) => ({ default: module.WebCommunityLandingPage })),
+  resilientImport(() => import("./WebCommunityLandingPage")).then((module) => ({ default: module.WebCommunityLandingPage })),
 );
 const WebSettingsSurfaceHost = lazy(() =>
-  import("./WebSettingsSurfaceHost").then((module) => ({ default: module.WebSettingsSurfaceHost })),
+  resilientImport(() => import("./WebSettingsSurfaceHost")).then((module) => ({ default: module.WebSettingsSurfaceHost })),
 );
 const WebLandingPage = lazy(() =>
-  import("./WebLandingPage").then((module) => ({ default: module.WebLandingPage })),
+  resilientImport(() => import("./WebLandingPage")).then((module) => ({ default: module.WebLandingPage })),
 );
 const PublicFindPage = lazy(() =>
-  import("./polynetLanding/PublicFindPage").then((module) => ({ default: module.PublicFindPage })),
+  resilientImport(() => import("./polynetLanding/PublicFindPage")).then((module) => ({ default: module.PublicFindPage })),
 );
 
 export type WebAppMainSurfaceHostProps = {
@@ -59,6 +61,7 @@ export function WebAppMainSurfaceHost(props: WebAppMainSurfaceHostProps) {
   const surfaceFallback = props.showCommunitySurface
     ? <WebAppMainSurfaceFallback {...props} />
     : null;
+  const surfaceResetKey = `${props.activePage}:${props.communityHostProps.communityTab}:${props.publicCommunitySlug ?? ""}`;
   return (
     <main
       className={`workspace${
@@ -68,7 +71,8 @@ export function WebAppMainSurfaceHost(props: WebAppMainSurfaceHostProps) {
           : ""
       }`}
     >
-      <Suspense fallback={surfaceFallback}>
+      <SurfaceErrorBoundary resetKey={surfaceResetKey}>
+        <Suspense fallback={surfaceFallback}>
         {props.holdLandingForAuth ? (
           <div className="landing-auth-hold" aria-hidden="true" />
         ) : props.showPublicCommunityFunnel ? (
@@ -102,7 +106,8 @@ export function WebAppMainSurfaceHost(props: WebAppMainSurfaceHostProps) {
         {props.showOnboardingModal ? (
           <WebOnboardingPage {...props.onboardingPageProps} />
         ) : null}
-      </Suspense>
+        </Suspense>
+      </SurfaceErrorBoundary>
     </main>
   );
 }

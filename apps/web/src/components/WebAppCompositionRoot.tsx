@@ -23,21 +23,23 @@ import type {
 } from "./WebCommunityAgentDock";
 import { WebShellChromeHost } from "./WebShellChromeHost";
 import type { WebShellChromeHostProps } from "./WebShellChromeHost";
+import { SurfaceErrorBoundary } from "./SurfaceErrorBoundary";
+import { resilientImport } from "../lib/resilientLazy";
 
 const WebAppMainSurfaceHost = lazy(() =>
-  import("./WebAppMainSurfaceHost").then((module) => ({
+  resilientImport(() => import("./WebAppMainSurfaceHost")).then((module) => ({
     default: module.WebAppMainSurfaceHost,
   })),
 );
 
 const WebCommunityAgentDock = lazy(() =>
-  import("./WebCommunityAgentDock").then((module) => ({
+  resilientImport(() => import("./WebCommunityAgentDock")).then((module) => ({
     default: module.WebCommunityAgentDock,
   })),
 );
 
 const WebDirectMessagesHost = lazy<ComponentType<WebDirectMessagesHostProps<AuthSession>>>(() =>
-  import("./WebDirectMessagesHost").then((module) => ({
+  resilientImport(() => import("./WebDirectMessagesHost")).then((module) => ({
     default: module.WebDirectMessagesHost as ComponentType<WebDirectMessagesHostProps<AuthSession>>,
   })),
 );
@@ -69,25 +71,31 @@ export function WebAppCompositionRoot(props: {
         />
       </Suspense>}
       {props.directMessagesHostProps.session || props.directMessagesHostProps.isOpen ? (
-        <Suspense fallback={null}>
-          <WebDirectMessagesHost {...props.directMessagesHostProps} />
-        </Suspense>
+        <SurfaceErrorBoundary resetKey={`dm:${props.directMessagesHostProps.isOpen ? "open" : "closed"}`}>
+          <Suspense fallback={null}>
+            <WebDirectMessagesHost {...props.directMessagesHostProps} />
+          </Suspense>
+        </SurfaceErrorBoundary>
       ) : null}
     </>
   );
   const mainSurface = (
     <>
     <div className="web-main-surface-slot" style={{ display: showAgentWorkspace ? "none" : "contents" }}>
-    <Suspense
-      fallback={<WebAppMainSurfaceFallback {...props.mainSurfaceHostProps} />}
-    >
-      <WebAppMainSurfaceHost {...props.mainSurfaceHostProps} />
-    </Suspense>
+    <SurfaceErrorBoundary resetKey={`main:${props.mainSurfaceHostProps.activePage}:${props.mainSurfaceHostProps.communityHostProps.communityTab}`}>
+      <Suspense
+        fallback={<WebAppMainSurfaceFallback {...props.mainSurfaceHostProps} />}
+      >
+        <WebAppMainSurfaceHost {...props.mainSurfaceHostProps} />
+      </Suspense>
+    </SurfaceErrorBoundary>
     </div>
     {props.communityAgentDockProps.pageMode && <main className="workspace community-mode community-agent-workspace" style={{ display: showAgentWorkspace ? undefined : "none" }}>
-      <Suspense fallback={<div role="status">Loading agent…</div>}>
-        <WebCommunityAgentDock key={agentSessionKey} ref={props.communityAgentDockRef} {...props.communityAgentDockProps} />
-      </Suspense>
+      <SurfaceErrorBoundary resetKey={`agent:${agentSessionKey}:${showAgentWorkspace ? "shown" : "hidden"}`}>
+        <Suspense fallback={<div role="status">Loading agent…</div>}>
+          <WebCommunityAgentDock key={agentSessionKey} ref={props.communityAgentDockRef} {...props.communityAgentDockProps} />
+        </Suspense>
+      </SurfaceErrorBoundary>
     </main>}
     </>
   );
