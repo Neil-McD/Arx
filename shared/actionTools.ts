@@ -113,9 +113,27 @@ function tool(name: string, catalog: string, title: string, description: string,
 // A post's words, and the pictures when the guide was given some. The
 // pictures go through to the executor from either door; it refuses them from
 // anyone but the guide in a private talk.
-// A course change as the one-change batch the executor already runs.
+// A course change as the one-change batch the executor already runs. Every
+// batch carries a one-line summary (the engine refuses one without), so each
+// named tool says what its one change is.
+const COURSE_CHANGE_SUMMARY: Record<string, string> = {
+  create_module: "Make a course", create_page: "Add a lesson", edit_page: "Change a lesson", edit_module: "Change a course",
+  reorder_pages: "Put a course's lessons in order", reorder_modules: "Put courses in order",
+  delete_page: "Delete a draft lesson", delete_category: "Delete a draft course",
+};
+export function courseChangeSummary(operation: Record<string, unknown>): string {
+  const what = COURSE_CHANGE_SUMMARY[String(operation.op)] ?? "Change courses";
+  const named = String(operation.name ?? operation.title ?? "").trim();
+  return named ? `${what}: ${named}` : what;
+}
 const course = (a: Args, operation: Record<string, unknown>): Translated =>
-  write(`${root(a.community)}builder/resources/`, "create", { summary: "", operations: [operation] });
+  write(`${root(a.community)}builder/resources/`, "create", { summary: courseChangeSummary(operation), operations: [operation] });
+// The guide's batch: its own line when it gave one, otherwise how many changes.
+const batchSummary = (a: Args): string => {
+  const given = typeof a.summary === "string" ? a.summary.trim() : "";
+  const count = Array.isArray(a.operations) ? a.operations.length : 0;
+  return given || `Change courses and lessons (${count} ${count === 1 ? "change" : "changes"})`;
+};
 const descriptionOf = (a: Args) => (a.description !== undefined ? { description_md: a.description } : {});
 const bodyOf = (a: Args) => (a.body !== undefined ? { body_md: a.body } : {});
 const COURSE: PlatformOperationJsonSchema = { type: "string", minLength: 1, maxLength: 180, description: "The course's id from builder/resources/." };
@@ -290,7 +308,7 @@ export const ACTION_TOOLS: ActionTool[] = [
     "reorder_pages (module_id, resource_ids: every lesson of that course in order); reorder_modules (module_ids: every course in order); " +
     "delete_page (resource_id, expected_updated_at) and delete_category (module_id, expected_updated_at), only in a draft course." } },
     ["community", "operations"],
-    (a) => write(`${root(a.community)}builder/resources/`, "create", { summary: a.summary ?? "", operations: a.operations }), "guide"),
+    (a) => write(`${root(a.community)}builder/resources/`, "create", { summary: batchSummary(a), operations: a.operations }), "guide"),
   // A person's own AI gets one tool per job (OpenAI's plugin review asks that
   // every operation be its own tool). Each runs as a one-change batch through
   // the same path as polynet_change_courses, with the same checks.
