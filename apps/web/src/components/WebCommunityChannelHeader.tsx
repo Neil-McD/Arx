@@ -8,8 +8,7 @@ import {
   type FormEvent,
   type ReactNode,
 } from "react";
-import { ArrowLeft, ChevronDown, Ellipsis, Hash, LockKeyhole, Pencil, Trash2, X } from "lucide-react";
-import { isDesignV1Active } from "../../../../shared/designSystem";
+import { ArrowLeft, ChevronDown, Hash, LockKeyhole, Pencil, Trash2, X } from "lucide-react";
 import { setCloudCommunityChannelDescription } from "../../../../shared/cloudCommunityChannelsGateway";
 import { announceChannelDescription } from "../v1/KitChannelRail";
 import { ChannelAccessSettings } from "./ChannelAccessSettings";
@@ -203,7 +202,7 @@ export function WebCommunityChannelHeader({
     if (!normalizedName || !onRenameChannel || managingChannelId) return;
     clearManageChannelError?.();
     const nextDescription = editedDescription.replace(/\s+/g, " ").trim();
-    if (isDesignV1Active() && sessionScope?.session && nextDescription !== description) {
+    if (sessionScope?.session && nextDescription !== description) {
       try {
         await setCloudCommunityChannelDescription({
           session: sessionScope.session, communityId: sessionScope.communityId, channelId: channel.id, description: nextDescription,
@@ -264,9 +263,8 @@ export function WebCommunityChannelHeader({
       </div>
     ) : null;
 
-  // Design system v1: the mock's top bar has no menu button. The channel's
-  // name opens its menu instead (a small chevron shows it can).
-  const v1Title = isDesignV1Active() && canOpenChannelMenu;
+  // The top bar has no separate menu button: the channel's name opens its menu
+  // (a small chevron shows it can).
   const identity = (
     <>
       {channel.access_mode === "restricted" ? <LockKeyhole size={17} strokeWidth={1.9} aria-hidden="true" /> : <Hash size={17} strokeWidth={1.9} aria-hidden="true" />}
@@ -277,11 +275,11 @@ export function WebCommunityChannelHeader({
   return (
     <>
       <header className="community-channel-header" aria-label={`Channel ${channel.name}`}>
-        {isDesignV1Active() && channel.access_mode === "restricted" ? (
+        {channel.access_mode === "restricted" ? (
           <button type="button" className="community-channel-header-back community-page-header-back" aria-label="All pods" title="All pods"
             onClick={() => goToPodsPath(channel.slug)}><ArrowLeft size={16} strokeWidth={1.8} aria-hidden="true" /></button>
         ) : null}
-        {v1Title ? (
+        {canOpenChannelMenu ? (
           <div className="community-channel-header-actions is-title" ref={menuRef}>
             <button
               ref={menuTriggerRef}
@@ -302,23 +300,6 @@ export function WebCommunityChannelHeader({
           <div className="community-channel-header-identity" title={channel.name}>{identity}</div>
         )}
         {trailingAction}
-        {canOpenChannelMenu && !v1Title ? (
-          <div className="community-channel-header-actions" ref={menuRef}>
-            <button
-              ref={menuTriggerRef}
-              className="community-channel-header-menu-trigger"
-              type="button"
-              aria-label={`Channel options for ${channel.name}`}
-              aria-haspopup="menu"
-              aria-expanded={isMenuOpen}
-              disabled={Boolean(managingChannelId)}
-              onClick={() => setIsMenuOpen((open) => !open)}
-            >
-              <Ellipsis size={19} strokeWidth={1.9} aria-hidden="true" />
-            </button>
-            {menuPopover}
-          </div>
-        ) : null}
       </header>
 
       {managementMode ? (
@@ -369,7 +350,7 @@ export function WebCommunityChannelHeader({
                   disabled={Boolean(managingChannelId)}
                 />
               </label>
-              {isDesignV1Active() && sessionScope ? (
+              {sessionScope ? (
                 <label className="community-channel-modal-field">
                   <span>Description</span>
                   <input
@@ -400,7 +381,7 @@ export function WebCommunityChannelHeader({
                   className="is-primary"
                   disabled={Boolean(managingChannelId) || !renamedChannelName.trim()}
                 >
-                  {managingChannelId ? "Saving…" : sessionScope ? (isDesignV1Active() ? "Save" : "Save name") : "Save"}
+                  {managingChannelId ? "Saving…" : "Save"}
                 </button>
               </div>
             </form>

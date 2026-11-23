@@ -1,4 +1,3 @@
-import { isDesignV1Active } from "../../../../shared/designSystem";
 import { Bell, BellOff, MessageCircle, MessageCirclePlus, Search, UsersRound } from "lucide-react";
 import { formatRelativeTimeFromIso } from "../../../../shared/contentFormatting";
 import type {
@@ -151,8 +150,8 @@ export function WebDirectMessageInboxPanel(props: WebDirectMessageInboxPanelProp
     <aside className="community-dm-panel community-dm-inbox-panel" role="dialog" aria-label="Direct messages">
       <div className="community-dm-inbox-header">
         <div>
-          <div className="community-dm-inbox-title">{isDesignV1Active() ? "Inbox" : "Messages"}</div>
-          <div className="community-dm-inbox-subtitle">{isDesignV1Active() ? "Across your communities" : "People from your communities"}</div>
+          <div className="community-dm-inbox-title">Inbox</div>
+          <div className="community-dm-inbox-subtitle">Across your communities</div>
         </div>
         {props.notificationsState && props.notificationsState !== "hidden" && props.onToggleNotifications ? (
           <button
@@ -189,7 +188,7 @@ export function WebDirectMessageInboxPanel(props: WebDirectMessageInboxPanelProp
             value={props.searchValue}
             onChange={(event) => props.onSearchValueChange(event.target.value)}
             aria-label="Search people and messages"
-            placeholder={isDesignV1Active() ? "Find someone" : "Search people and messages"}
+            placeholder="Find someone"
           />
         </label>
       ) : null}
@@ -219,7 +218,7 @@ export function WebDirectMessageInboxPanel(props: WebDirectMessageInboxPanelProp
           <div className="community-dm-panel-empty">Loading messages...</div>
         ) : null}
 
-        {isDesignV1Active() && filteredConversations.length > 0 ? (
+        {filteredConversations.length > 0 ? (
           <div className="community-dm-inbox-label">Messages</div>
         ) : null}
         {filteredConversations.map((conversation) => {
@@ -273,7 +272,7 @@ export function WebDirectMessageInboxPanel(props: WebDirectMessageInboxPanelProp
                 <span className="community-dm-inbox-row-top">
                   <span className="community-dm-inbox-row-name-line">
                     <span className="community-dm-inbox-row-name">{peerLabel}</span>
-                    {isDesignV1Active() ? <span className="community-dm-inbox-row-kind">Direct message</span> : null}
+                    <span className="community-dm-inbox-row-kind">Direct message</span>
                   </span>
                   <span className="community-dm-inbox-row-meta-group">
                     {isMuted ? (
@@ -294,7 +293,7 @@ export function WebDirectMessageInboxPanel(props: WebDirectMessageInboxPanelProp
           );
         })}
 
-        {isDesignV1Active() && props.canBrowsePeople && !hasZeroCommunities && visiblePeople.length > 0 ? (
+        {props.canBrowsePeople && !hasZeroCommunities && visiblePeople.length > 0 ? (
           <div className="community-dm-inbox-label">People in your communities</div>
         ) : null}
         {props.canBrowsePeople && !hasZeroCommunities

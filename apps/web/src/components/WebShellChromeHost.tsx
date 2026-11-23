@@ -11,7 +11,6 @@ import { WebMobileCommunityShell } from "./WebMobileCommunityShell";
 import { WebMobileGlobalShell } from "./WebMobileGlobalShell";
 import { WebCommunityNavSurface } from "./WebCommunityNavSurface";
 import { WebSettingsSidebar } from "./WebSettingsSidebar";
-import { isDesignV1Active } from "../../../../shared/designSystem";
 import { KitConfirm } from "../v1/KitConfirm";
 import { WebGlobalNavV1 } from "./WebGlobalNavV1";
 import type {
@@ -69,7 +68,7 @@ export function WebShellChromeHost(props: WebShellChromeHostProps) {
   // is the Settings sidebar (the same one your own settings show). It doesn't
   // wait for your account to load (its footer does), or a refresh would show
   // the community's own column first.
-  const communitySettingsNav = props.communityShell.showDesktopCommunityNav && !props.showMobileAppShell && isDesignV1Active()
+  const communitySettingsNav = props.communityShell.showDesktopCommunityNav && !props.showMobileAppShell
     && props.communityShell.destination.kind === "community_settings";
   const desktopCommunityNav = props.communityShell.showDesktopCommunityNav ? (
     communitySettingsNav ? (
@@ -90,10 +89,9 @@ export function WebShellChromeHost(props: WebShellChromeHostProps) {
     />
     )
   ) : null;
-  // Design v1 on a phone: Settings' index is the same Settings sidebar as
-  // desktop, full width (you, then the community's sections); a section
-  // opens its page of rows.
-  const isPhoneV1 = isDesignV1Active() && props.showMobileAppShell;
+  // On a phone, Settings' index is the same Settings sidebar as desktop, full
+  // width (you, then the community's sections); a section opens its page.
+  const isPhoneV1 = props.showMobileAppShell;
   // Design v1: the phone's Home tab is the desktop Home page, drawn in the main
   // area (the guide's page lives there in page mode).
   const isPhoneHome = isPhoneV1 && props.communityShell.mobileRootPage === "agent";
@@ -150,7 +148,6 @@ export function WebShellChromeHost(props: WebShellChromeHostProps) {
   const destinationKind = props.communityShell.destination.kind;
   const globalNavMode =
     !props.showMobileAppShell &&
-    isDesignV1Active() &&
     !desktopCommunityNav &&
     props.communityShell.showDesktopCommunityRail &&
     // Settings doesn't wait for your account (the sidebar's footer does), or a
@@ -165,7 +162,7 @@ export function WebShellChromeHost(props: WebShellChromeHostProps) {
       : null;
   const showDesktopCommunityRail =
     props.communityShell.showDesktopCommunityRail &&
-    !((desktopCommunityNav || globalNavMode) && isDesignV1Active());
+    !(desktopCommunityNav || globalNavMode);
   const desktopFrameMode = desktopCommunityNav
     ? "community"
     : props.isGlobalSettings
@@ -193,7 +190,7 @@ export function WebShellChromeHost(props: WebShellChromeHostProps) {
   return (
     <div className={rootClassName}>
       {/* The app's own "are you sure?", on every screen of the shell. */}
-      {isDesignV1Active() ? <KitConfirm /> : null}
+      <KitConfirm />
       {shellHeader}
       <WebMobileCommunityShell communityShell={props.communityShell} />
 

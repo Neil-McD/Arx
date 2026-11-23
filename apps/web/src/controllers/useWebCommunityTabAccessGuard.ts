@@ -1,6 +1,5 @@
 import { useEffect } from "react";
 
-import { isDesignV1Active } from "../../../../shared/designSystem";
 import {
   normalizeCommunityTabForAccess,
   type AppPage,
@@ -31,20 +30,15 @@ export function useWebCommunityTabAccessGuard(params: {
     ) {
       return;
     }
-    // Pods are a design v1 page: the classic app has no way in, so an
-    // address that names them opens the community's chat instead.
-    // Members as a page is design v1 too; the classic app opens it from chat.
-    const normalizedTab = (params.communityTab === "pods" || params.communityTab === "members" || params.communityTab === "inbox" || params.communityTab === "discover") && !isDesignV1Active()
-      ? "chat"
-      : normalizeCommunityTabForAccess(
-        params.communityTab,
-        {
-          canViewSettings: params.canViewSettings,
-          canManageMembers: params.canManageMembers,
-          canViewAnalytics: params.canViewAnalytics,
-          canViewMembers: params.canViewMembers,
-        },
-      );
+    const normalizedTab = normalizeCommunityTabForAccess(
+      params.communityTab,
+      {
+        canViewSettings: params.canViewSettings,
+        canManageMembers: params.canManageMembers,
+        canViewAnalytics: params.canViewAnalytics,
+        canViewMembers: params.canViewMembers,
+      },
+    );
     if (normalizedTab === params.communityTab) return;
     params.setCommunityResourceModuleId(null);
     params.applyCommunityShellState({ communityTab: normalizedTab });

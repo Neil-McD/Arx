@@ -1,4 +1,3 @@
-import { isDesignV1Active } from "../../../../shared/designSystem";
 import type { WebAccountMenuProps } from "../components/WebAccountMenu";
 import type { ReactNode } from "react";
 import type {
@@ -254,11 +253,7 @@ export function buildWebShellChromeHostProps(params: {
       activeCommunityMemberCount: params.activeCommunityMemberCount,
       onOpenMembers: params.isPublicCommunityFunnel
         ? () => params.setMobileOverlay("members")
-        // A phone's community home: Members opens from the channel view, so
-        // go there first. Design v1: Members is a page of its own.
-        : isMobileCommunityHome && !isDesignV1Active()
-          ? () => { params.handleSelectCommunityTabFromMobile("chat"); params.onOpenCommunityMembers(); }
-          : params.onOpenCommunityMembers,
+        : params.onOpenCommunityMembers,
       canViewActiveCommunitySettings: params.canViewActiveCommunitySettings,
       canManageMembersActiveCommunity: params.canManageMembersActiveCommunity,
       canViewActiveCommunityAnalytics: params.canViewActiveCommunityAnalytics,

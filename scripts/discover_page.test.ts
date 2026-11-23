@@ -52,7 +52,7 @@ test("search appears only once there is enough to search", () => {
 });
 
 test("the switcher opens Discover inside the community; a signed-in visit to /discover is moved there", () => {
-  expect(read("apps/web/src/App.tsx")).toMatch(/if \(isDesignV1Active\(\) && selectedActiveCommunitySlug\) handleSelectCommunityTab\("discover"\);/);
+  expect(read("apps/web/src/App.tsx")).toMatch(/if \(selectedActiveCommunitySlug\) handleSelectCommunityTab\("discover"\);/);
   expect(read("apps/web/src/controllers/useWebDiscoverAddress.ts")).toMatch(/navigateTo\(path, \{ replace: true \}\);/);
 });
 

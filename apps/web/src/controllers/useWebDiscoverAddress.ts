@@ -1,6 +1,5 @@
 import { useEffect } from "react";
 
-import { isDesignV1Active } from "../../../../shared/designSystem";
 import type { AppPage } from "../../../../shared/appShellNavigation";
 import { buildCommunityTabPath } from "../../../../shared/webAppRouteState";
 
@@ -17,7 +16,7 @@ export function useWebDiscoverAddress(params: {
 }) {
   const { activePage, isSignedIn, communitySlug, navigateTo } = params;
   useEffect(() => {
-    if (!isDesignV1Active() || activePage !== "discover" || !isSignedIn || !communitySlug) return;
+    if (activePage !== "discover" || !isSignedIn || !communitySlug) return;
     const path = buildCommunityTabPath(communitySlug, "discover");
     if (path) navigateTo(path, { replace: true });
   }, [activePage, communitySlug, isSignedIn, navigateTo]);

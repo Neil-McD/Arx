@@ -38,7 +38,6 @@ import type {
   MobileRootPage,
 } from "../components/webShellChromeShared";
 import { phoneTabForRoute } from "../components/webShellChromeShared";
-import { isDesignV1Active } from "../../../../shared/designSystem";
 import { readFirstLocalStorageValue } from "../webAppRuntime";
 
 const ignorePhoneTab: Dispatch<SetStateAction<MobileRootPage>> = () => undefined;
@@ -123,11 +122,10 @@ export function useWebShellState() {
         ? initialAppRoute.communitySettingsPane ?? "community"
         : "community",
     );
-  const designV1 = isDesignV1Active();
-  const mobileRootPage = designV1 ? phoneTabForRoute(activePage, communityTab) : storedMobileRootPage;
-  // Design v1: the tab follows the address, so there is nothing to set; a tab
-  // is chosen by going to its address.
-  const setMobileRootPage = designV1 ? ignorePhoneTab : setStoredMobileRootPage;
+  const mobileRootPage = phoneTabForRoute(activePage, communityTab);
+  // The phone tab follows the address, so there is nothing to set; a tab is
+  // chosen by going to its address.
+  const setMobileRootPage = ignorePhoneTab;
   const [appTheme, setAppTheme] = useState<AppTheme>(() => {
     try {
       return parseAppTheme(readFirstLocalStorageValue([

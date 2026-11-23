@@ -6,8 +6,6 @@ const web = createRequire(new URL("../apps/web/package.json", import.meta.url));
 const root = createRequire(import.meta.url);
 if (web.resolve("react") !== root.resolve("react")) vi.doMock(web.resolve("react"), () => React);
 
-const design = { v1: true };
-vi.doMock("../shared/designSystem", () => ({ isDesignV1Active: () => design.v1 }));
 const { ChannelRosterPanel, CommunityMembersPagePanel } = await import("../apps/web/src/components/ChannelRosterPanel");
 
 const props = {
@@ -27,7 +25,6 @@ function labels(html: string): string[] {
 // No notes here: they are the guide's memory, kept by builders in Knowledge
 // (Neil, Nov 14), not something a channel lists.
 test("design v1: the channel panel is what it is for, its pinned post, then who is here; no notes, no summary", () => {
-  design.v1 = true;
   const html = renderToStaticMarkup(React.createElement(ChannelRosterPanel, { ...props, channelDescription: "Share what you sent this week." }));
   expect(labels(html)).toEqual(["About", "Pinned", "Here"]);
   expect(html).toContain("Share what you sent this week.");
@@ -50,7 +47,6 @@ test("design v1: the channel panel is what it is for, its pinned post, then who 
 });
 
 test("design v1: nothing pinned, no Pinned section", () => {
-  design.v1 = true;
   const html = renderToStaticMarkup(React.createElement(ChannelRosterPanel, { ...props, pinned: null }));
   // No description either: the panel is just who is here.
   expect(labels(html)).toEqual(["Here"]);
@@ -58,17 +54,8 @@ test("design v1: nothing pinned, no Pinned section", () => {
 });
 
 test("design v1: an open thread takes the panel's place", () => {
-  design.v1 = true;
   const html = renderToStaticMarkup(React.createElement(ChannelRosterPanel, { ...props, memberDetailOpen: true }));
   expect(html).toMatch(/<aside class="community-context-panel channel-roster-panel is-v1 is-kit"[^>]*style="display:none"/);
-});
-
-test("the classic panel is unchanged", () => {
-  design.v1 = false;
-  const html = renderToStaticMarkup(React.createElement(ChannelRosterPanel, props));
-  expect(html).not.toContain("channel-rail-label");
-  expect(html).toContain("community-context-members");
-  expect(html).toContain("Kiln");
 });
 
 test("design v1: a thread names itself and its channel, and has a close button", async () => {
@@ -81,7 +68,6 @@ test("design v1: a thread names itself and its channel, and has a close button",
 });
 
 test("design v1: the Members page draws the directory, with no channel around it", () => {
-  design.v1 = true;
   const html = renderToStaticMarkup(React.createElement(CommunityMembersPagePanel, props));
   // A member gets the kit directory (who is here, what they shared); the
   // person they open is the right column.
@@ -92,7 +78,6 @@ test("design v1: the Members page draws the directory, with no channel around it
 });
 
 test("design v1: beside a channel, asking for members never draws them over the channel", () => {
-  design.v1 = true;
   const html = renderToStaticMarkup(React.createElement(ChannelRosterPanel, { ...props, narrowOpen: true, onCloseNarrow: () => {} }));
   // The page is its own address now; the channel's panel stays the panel.
   expect(html).not.toContain("members-page");
@@ -100,7 +85,6 @@ test("design v1: beside a channel, asking for members never draws them over the 
 });
 
 test("design v1: people who manage members get the table and the record", () => {
-  design.v1 = true;
   const html = renderToStaticMarkup(React.createElement(CommunityMembersPagePanel, {
     ...props, memberSettings: { ...props.memberSettings, canManageMembers: true } }));
   // The host's page is fetched on demand: its place is held while it loads.

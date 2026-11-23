@@ -18,7 +18,6 @@ import {
   subscribeCloudDirectMessages,
 } from "../../../../shared/cloudDirectMessagesGateway";
 import { useDirectMessageTypingPresence } from "../../../../shared/useDirectMessageTypingPresence";
-import { isDesignV1Active } from "../../../../shared/designSystem";
 import { fitComposerHeight } from "../../../../shared/composerHeight";
 import {
   VIRTUAL_DM_CONVERSATION_ID_PREFIX,
@@ -501,9 +500,7 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
     [],
   );
 
-  // In design v1 the list stays beside an open conversation, so its people
-  // search keeps working there. Elsewhere the list is hidden behind it.
-  const listStaysVisible = !props.mobileRoot && isDesignV1Active();
+  const listStaysVisible = !props.mobileRoot;
   const inboxIsPage = listStaysVisible;
   // Opening Inbox shows your most recent conversation beside the list, once.
   // Closing it, or having none, leaves the column on its empty state.
@@ -545,9 +542,7 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
   }, [activeConversationId, isOpen, listStaysVisible, loadNetworkPeople, searchValue]);
 
   useEffect(() => {
-    // Design v1 counts conversations that need a reply, the same number the
-    // Inbox page shows; the default design counts unread messages.
-    onUnreadCountChange?.(countDirectInboxUnread(conversations, isDesignV1Active()));
+    onUnreadCountChange?.(countDirectInboxUnread(conversations, true));
   }, [conversations, onUnreadCountChange]);
 
   const markConversationRead = useCallback(
@@ -1385,8 +1380,7 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
           activeConversationId={activeConversationId}
           onSelectConversation={openConversation}
           onSelectPerson={openPersonConversation}
-          // Design v1: the same Inbox page on a phone's Inbox tab as on desktop.
-          kitPage={inboxIsPage || (props.mobileRoot && isDesignV1Active()) ? { activeCommunityId: props.activeCommunityId ?? null } : null}
+          kitPage={{ activeCommunityId: props.activeCommunityId ?? null }}
         />
       ) : null}
       </Suspense>

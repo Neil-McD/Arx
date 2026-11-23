@@ -21,7 +21,6 @@ import { partitionCommunityAttachments } from "../../../../shared/communityAttac
 import { parseMessageAttachments } from "../../../../shared/communityMessageParsing";
 import { UserAvatar } from "../../../../shared/UserAvatar";
 import { VoiceInputButton } from "../../../../shared/VoiceInputButton";
-import { isDesignV1Active } from "../../../../shared/designSystem";
 import { Icon, KitApp, Rail, cx } from "../v1/kit";
 import { inboxTimeFor } from "./WebDirectMessageInboxPanel";
 import { fitComposerHeight } from "../../../../shared/composerHeight";
@@ -735,7 +734,7 @@ export function WebDirectMessagePanel(props: WebDirectMessagePanelProps) {
 
   // Design system v1 beside the Inbox: the mock's conversation column
   // (docs/design/hifi-mock .rail.r3), drawn from the kit. Same behaviour.
-  if (props.besideInbox && isDesignV1Active()) {
+  if (props.besideInbox) {
     return (
       <aside
         className={`community-dm-panel is-kit community-dm-attachment-drop-surface${isAttachmentDragOver ? " drag-over" : ""}`}

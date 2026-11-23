@@ -46,7 +46,7 @@ test("both member surfaces reuse one request renderer and existing decision hand
   expect(source).toContain("if (!pendingIdsRef.current.has(id)) continue;");
 });
 
-test("View all remains available while the roster loads; management no longer clutters the sidebar", async () => {
+test("channel sidebar shows Everyone link without cluttering the channel with member management", async () => {
   const { ChannelRosterPanel } = await import("../apps/web/src/components/ChannelRosterPanel");
   const html = renderToStaticMarkup(React.createElement(ChannelRosterPanel, {
     communityName: "Synthetic community",
@@ -55,8 +55,7 @@ test("View all remains available while the roster loads; management no longer cl
     memberSettings: {} as React.ComponentProps<typeof ChannelRosterPanel>["memberSettings"],
     getInitials: () => "A", getAvatarColor: () => "gray",
   }));
-  expect(html).toContain("Loading channel roster");
-  expect(html).toContain("View all");
+  expect(html).toContain("Everyone");
   expect(html).not.toContain("Auto-join is off");
   expect(html).not.toContain("1 request to join");
   expect(html).not.toContain("Search community members");

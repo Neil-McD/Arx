@@ -5,7 +5,6 @@ import {
   Users,
 } from "lucide-react";
 import { CommunityThreadHeader } from "./CommunityThreadHeader";
-import { isDesignV1Active } from "../../../../shared/designSystem";
 import { KitApp, usePhoneLayout } from "../v1/kit";
 import { KitChannelFeed } from "../v1/KitChannelFeed";
 import {
@@ -516,7 +515,7 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
   const isMobileThreadPage = Boolean(props.mobileThreadPage && selectedRoot && !props.profilePanel);
   const ThreadSurface = isMobileThreadPage ? "section" : "aside";
   const hasDetailPanel = Boolean(selectedRoot || props.profilePanel);
-  const kitFeed = isDesignV1Active() && isDesktopWidth && !props.mobileThreadPage;
+  const kitFeed = isDesktopWidth && !props.mobileThreadPage;
   // The right column is for something you picked (Neil, Nov 14: question
   // every requirement). An ordinary channel has nothing picked, so the feed
   // takes the room; a thread still opens there, and a pod's room keeps its
@@ -529,12 +528,12 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
   const channelDescription = (describedNow && describedNow.channelId === props.activeChannel?.id ? describedNow.description : props.activeChannel?.description ?? "").trim();
   // An ordinary channel's pin is shown in its right column (a pod's column has
   // no pin, so a pod's room keeps it in the feed).
-  const pinLivesInPanel = isDesignV1Active() && Boolean(props.pinnedRoot) && props.activeChannel?.access_mode !== "restricted";
+  const pinLivesInPanel = Boolean(props.pinnedRoot) && props.activeChannel?.access_mode !== "restricted";
   // Decided from the channel's own record, which the page has before it draws,
   // so the column is there from the first frame instead of appearing when the
   // pinned post arrives and squeezing the feed.
   const hasPin = Boolean(props.pinnedRoot || props.activeChannel?.has_pinned_root);
-  const openChannelNoColumn = isDesignV1Active() && props.activeChannel?.access_mode !== "restricted" && !hasPin && !channelDescription;
+  const openChannelNoColumn = props.activeChannel?.access_mode !== "restricted" && !hasPin && !channelDescription;
 
   return (
     <>
@@ -556,11 +555,11 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
             onRenameChannel={props.onRenameChannel}
             onDeleteChannel={props.onDeleteChannel}
           />
-        ) : isDesignV1Active() ? (
+        ) : (
           // Layout before data: the header's row is held until the channel's
           // record arrives, so the feed under it doesn't move down.
           <header className="community-channel-header" aria-hidden="true" />
-        ) : null}
+        )}
         {props.pinnedRoot ? (
           <CommunityPinnedRootSurface
             hasRichContent={communityInteractionRootHasRichContent(props.pinnedRoot)}
@@ -705,7 +704,7 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
           onKeyDown={(event) => {
             // Esc closes the thread, unless something inside (a menu, the
             // mention picker) already used the key.
-            if (event.key !== "Escape" || event.defaultPrevented || isMobileThreadPage || !isDesignV1Active()) return;
+            if (event.key !== "Escape" || event.defaultPrevented || isMobileThreadPage) return;
             // An open picker or menu in the thread (emoji, mentions) closes
             // itself on Esc from its own listener; this press belongs to it.
             if (event.currentTarget.querySelector('[aria-expanded="true"]')) return;
@@ -713,21 +712,9 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
             props.onCloseDrawer();
           }}
         >
-          {!isMobileThreadPage && isDesignV1Active() ? (
+          {!isMobileThreadPage ? (
             <CommunityThreadHeader channelName={props.activeChannel?.name} onClose={props.onCloseDrawer} />
-          ) : !isMobileThreadPage ? <div className="community-interaction-drawer-back">
-            <button
-              className="back-to-workspace"
-              type="button"
-              onClick={props.onCloseDrawer}
-              title="Back to channel"
-            >
-              <svg viewBox="0 0 24 24" className="back-icon" aria-hidden="true">
-                <path d="M19 12H5M12 19l-7-7 7-7" />
-              </svg>
-              <span className="back-path">thread</span>
-            </button>
-          </div> : null}
+          ) : null}
           <div className="community-interaction-drawer-scroll" ref={drawerScrollRef}>
             <div className="community-interaction-drawer-root">
               <div className="community-interaction-thread-anchor">

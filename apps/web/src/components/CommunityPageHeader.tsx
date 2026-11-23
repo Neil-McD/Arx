@@ -1,7 +1,6 @@
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { ArrowLeft, Search } from "lucide-react";
-import { isDesignV1Active } from "../../../../shared/designSystem";
 import { openGuideFromSearch } from "./guideSearch";
 import { useCommunityAgentOn } from "../controllers/communityAgentOn";
 
@@ -57,16 +56,14 @@ export function CommunityPageFrame(props: { children: ReactNode }) {
   const [slot, setSlot] = useState<HTMLElement | null>(null);
   const [rail, setRail] = useState<HTMLElement | null>(null);
   const [toolbar, setToolbar] = useState<HTMLElement | null>(null);
-  const v1 = isDesignV1Active();
   const body = (
     <div className="community-tab-scroll">
       <div className="web-community-centered-pane">
-        {v1 ? <div className="community-page-toolbar" ref={setToolbar} /> : null}
+        <div className="community-page-toolbar" ref={setToolbar} />
         {props.children}
       </div>
     </div>
   );
-  if (!v1) return body;
   // The right column is a slot too: a page that has one fills it with
   // <CommunityPageRail>; an empty slot takes no room.
   return (
@@ -93,22 +90,21 @@ export function CommunityPageRail(props: { label: string; children: ReactNode })
 }
 
 // The header's right side, for a page that fills it from deeper in the tree
-// (a course's tools). Null where there is no header to fill (phone, classic).
+// (a course's tools). Null where there is no header to fill (phone).
 export function usePageHeaderToolbar(): HTMLElement | null {
   const toolbar = useContext(ToolbarSlotContext);
-  return isDesignV1Active() && toolbar ? toolbar : null;
+  return toolbar ?? null;
 }
 
 // The header's own right end, for the one thing a page keeps there: a
 // course's publish switch and its menu (Neil's host mock, Nov 17). Null where
-// there is no header (phone, classic).
+// there is no header (phone).
 export function usePageHeaderEnd(): HTMLElement | null {
   const slot = useContext(HeaderSlotContext);
-  return isDesignV1Active() && slot ? slot : null;
+  return slot ?? null;
 }
 
-// `children` is the page's classic title row, shown when v1 is off (and where
-// a page is used outside the frame, as on mobile).
+// `children` is rendered only where a page is used outside the frame.
 // One level in (a course inside Knowledge, a pod's room): the header is an
 // arrow back and the name of what you're in, nothing else (Neil, Nov 14). No
 // word beside the arrow, and no second line under the header.
@@ -127,7 +123,7 @@ export function CommunityPageHeader(props: {
     if (!hasBack) return;
     return registerMobilePageBack(() => backRef.current?.());
   }, [hasBack]);
-  if (!isDesignV1Active() || slot === undefined) return <>{props.children}</>;
+  if (slot === undefined) return <>{props.children}</>;
   if (!slot) return null;
   return (
     <>

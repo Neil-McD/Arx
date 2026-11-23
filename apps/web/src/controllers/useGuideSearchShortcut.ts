@@ -1,5 +1,4 @@
 import { useEffect, type MutableRefObject } from "react";
-import { isDesignV1Active } from "../../../../shared/designSystem";
 import { ASK_GUIDE_EVENT, OPEN_GUIDE_EVENT, isGuideSearchShortcut, openGuideFromSearch, type AskGuideRequest } from "../components/guideSearch";
 
 // Design system v1: ⌘K opens the command palette (or, where there is none,
@@ -14,7 +13,6 @@ export function useGuideSearchShortcut(
   } | null>,
 ): void {
   useEffect(() => {
-    if (!isDesignV1Active()) return;
     // Home draws a moment after the switch, so each step is tried for up to
     // three seconds until Home is ready.
     // One pending attempt at a time; a new one, or leaving, cancels it.

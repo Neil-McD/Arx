@@ -1,6 +1,5 @@
 import { Fragment, useContext, useEffect, useRef, useState, type ComponentProps, type KeyboardEvent, type CSSProperties, lazy, Suspense } from "react";
 import { ArrowRight, MessageCircle, MoreHorizontal, Pin, Search, X } from "lucide-react";
-import { isDesignV1Active } from "../../../../shared/designSystem";
 import { createPortal } from "react-dom";
 import { useWebMemberDirectorySearch } from "../controllers/useWebMemberDirectorySearch";
 import { CommunityMemberSettingsDialog } from "./CommunityMemberSettingsDialog";
@@ -71,28 +70,16 @@ export function ChannelRosterPanel(props: RosterProps) {
 }
 
 function ChannelRosterWorkspace(props: RosterProps) {
-  const [membersOpen, setMembersOpen] = useState(false);
-  const [channel, setChannel] = useState(props.channelId);
-  if (channel !== props.channelId) {
-    setChannel(props.channelId);
-    setMembersOpen(false);
-  }
-  // Design system v1: Members is a page of its own (/c/:slug/members). The
-  // channel's column links to it, and the people button on a phone goes there.
-  const asksForMembers = isDesignV1Active() && Boolean(props.narrowOpen);
+  // Members is a page of its own (/c/:slug/members). The channel's column
+  // links to it, and the people button on a phone goes there.
+  const asksForMembers = Boolean(props.narrowOpen);
   useEffect(() => {
     if (!asksForMembers) return;
     props.onCloseNarrow?.();
     goToMembersPage();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [asksForMembers]);
-  if (isDesignV1Active()) return <RosterSurface {...props} narrowOpen={false} onOpenMembers={() => goToMembersPage()} />;
-  return <>
-    <RosterSurface {...props} onOpenMembers={() => setMembersOpen(true)} />
-    {membersOpen ? <RosterSurface {...props} channelId={undefined} narrowOpen={false}
-      onCloseNarrow={undefined} directory onCloseMembers={() => setMembersOpen(false)}
-      onMessageUser={props.onMessageUser ? id => { setMembersOpen(false); props.onMessageUser?.(id); } : undefined} /> : null}
-  </>;
+  return <RosterSurface {...props} narrowOpen={false} onOpenMembers={() => goToMembersPage()} />;
 }
 
 
@@ -114,7 +101,7 @@ function RosterSurface(props: RosterProps & {
 }) {
   const scope = useContext(CommunityChannelSessionContext);
   // A pod's room has the pod's own column (docs/specs/pods-v0.md).
-  const { pod, reload: reloadPod } = useCloudPod(isDesignV1Active() ? scope?.session ?? null : null, scope?.communityId ?? null, props.channelId);
+  const { pod, reload: reloadPod } = useCloudPod(scope?.session ?? null, scope?.communityId ?? null, props.channelId);
   const dialogRef = useRef<HTMLElement | null>(null);
   const settingsRef = useRef<HTMLDivElement | null>(null);
   const searchRef = useRef<HTMLInputElement | null>(null);
@@ -234,7 +221,7 @@ function RosterSurface(props: RosterProps & {
   // Design system v1, for the people who run it: the Members table holds
   // people the paged roster may not have loaded, so the dialog takes its member
   // from the table, and every action refreshes the page.
-  const kitMembers = Boolean(props.inline && isDesignV1Active() && props.memberSettings.canManageMembers);
+  const kitMembers = Boolean(props.inline && props.memberSettings.canManageMembers);
   const after = <A extends unknown[]>(run: (...args: A) => Promise<void> | void, close = false) => async (...args: A) => {
     try { await run(...args); if (close) setKitTarget(null); } finally { setKitVersion(version => version + 1); }
   };
@@ -349,7 +336,7 @@ function RosterSurface(props: RosterProps & {
   // is here as faces; the full list, with its member tools, is one click away.
   const onlineCount = props.presenceSummary?.online_count;
   const kitRail = !props.onCloseNarrow || !props.narrowOpen;
-  const v1Rail = !props.directory && isDesignV1Active() ? <aside className={`community-context-panel channel-roster-panel is-v1${kitRail ? " is-kit" : ""}`} aria-label="About this channel"
+  const v1Rail = !props.directory ? <aside className={`community-context-panel channel-roster-panel is-v1${kitRail ? " is-kit" : ""}`} aria-label="About this channel"
     style={props.memberDetailOpen ? { display: "none" } : undefined}
     onKeyDown={event => {
       if (event.key === "Escape" && !event.defaultPrevented && props.narrowOpen) {
@@ -423,7 +410,7 @@ function RosterSurface(props: RosterProps & {
   </>;
   }
   // Design system v1, for a member: who is here and what each person shared.
-  if (props.inline && isDesignV1Active()) return <>
+  if (props.inline) return <>
     <KitMembersDirectory onMessage={props.onMessageUser} profileContainer={recordEl}
       getAvatarColor={props.getAvatarColor} getInitials={props.getInitials} />
     <aside ref={setRecordEl} className="community-context-panel members-page-record" aria-label="Member" />

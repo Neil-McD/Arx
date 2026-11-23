@@ -1,7 +1,6 @@
 // Design system v1: the command palette's places and communities, taken from
 // the community's left column, so the palette goes exactly where the column
 // does and shows what the column shows (and nothing the lens hides).
-import { isDesignV1Active } from "../../../../shared/designSystem";
 import { useMemo } from "react";
 import type { PaletteCommunity, PalettePlace } from "../../../../shared/commandPalette";
 import { KitCommandPalette } from "../v1/KitCommandPalette";
@@ -55,26 +54,22 @@ export function WebCommunityCommandPalette({ communityShell }: { communityShell:
 
   const actions = useMemo(() => ({
     openPlace: (id: string) => {
-      // Design v1: Inbox is a page with its own address, so going anywhere
-      // else leaves it; the classic layout closes it first.
-      const leaveInbox = () => { if (shell.isDirectMessagesOpen && !isDesignV1Active()) shell.onToggleDirectMessages(); };
       if (id === "inbox") { if (!shell.isDirectMessagesOpen) shell.onToggleDirectMessages(); return; }
       if (id.startsWith("channel:")) {
         const channel = shell.communityChannels.find((entry) => `channel:${entry.id}` === id);
-        if (channel) { leaveInbox(); shell.onSelectCommunityChannel(channel); }
+        if (channel) shell.onSelectCommunityChannel(channel);
         return;
       }
-      if (id === "members") { leaveInbox(); shell.onOpenMembers(); return; }
-      if (id === "guide") { leaveInbox(); shell.onOpenCommunitySettingsPane?.("agent"); return; }
+      if (id === "members") { shell.onOpenMembers(); return; }
+      if (id === "guide") { shell.onOpenCommunitySettingsPane?.("agent"); return; }
       const tab = id === "home" ? "agent" : id === "knowledge" ? "resources" : id === "events" ? "events" : id === "pods" ? "pods" : null;
-      if (tab) { leaveInbox(); shell.onSelectCommunityTab(tab); }
+      if (tab) shell.onSelectCommunityTab(tab);
     },
     openCommunity: (id: string) => {
       const community = shell.railCommunities.find((entry) => entry.id === id);
       if (!community) return;
       const changed = shell.onSelectActiveCommunity(community);
       const slug = String(community.slug ?? "").trim();
-      if (changed && shell.isDirectMessagesOpen && !isDesignV1Active()) shell.onToggleDirectMessages();
       if (changed && slug) shell.onOpenCommunityHome(slug);
     },
   }), [shell]);
