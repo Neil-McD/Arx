@@ -21,7 +21,7 @@ import {
   useCommunityEventsController,
   type CommunityEventsRange,
 } from "../../../../shared/useCommunityEventsController";
-import { useLiveChange, useLiveQuery } from "../../../../shared/liveQuery";
+import { useLiveQuery } from "../../../../shared/liveQuery";
 import { coerceGatewayRows } from "../../../../shared/cloudGateway";
 import { useCommunityResourcesTabLifecycle } from "../../../../shared/useCommunityResourcesTabLifecycle";
 import { useWebCommunityResourceUiController } from "./useWebCommunityResourceUiController";
@@ -270,6 +270,79 @@ export function useWebCommunityContentController(
     skipReloadAfterMutation: Boolean(eventsLiveArgs),
   });
 
+  // Live (shared/liveQuery.ts): while Knowledge is open, courses and lessons
+  // commit straight from the live stream (with the 201-row overflow sentinel)
+  // — no throw-away stringify-and-refetch on live changes, and zero initial
+  // HTTP fetch when returning within the 30s linger window.
+  const knowledgeLiveArgs = useMemo(
+    () =>
+      activePage === "community" && communityTab === "resources" && activeCommunityId && eventsSubject
+        ? { authSubject: eventsSubject, communityId: activeCommunityId, limit: 201 }
+        : null,
+    [activeCommunityId, activePage, communityTab, eventsSubject],
+  );
+  const liveResources = useLiveQuery<unknown>(
+    session,
+    "communityResources:listCommunityResources",
+    knowledgeLiveArgs,
+  );
+  const liveModules = useLiveQuery<unknown>(
+    session,
+    "communityResources:listCommunityResourceModules",
+    knowledgeLiveArgs,
+  );
+  const hasWarmLiveKnowledge = Boolean(
+    knowledgeLiveArgs
+    && liveResources.data !== undefined && !liveResources.error
+    && liveModules.data !== undefined && !liveModules.error,
+  );
+
+  useEffect(() => {
+    if (!activeCommunityId || !knowledgeLiveArgs) return;
+    if (liveResources.error) {
+      if (liveResources.data !== undefined) {
+        resourceUi.applyLiveResourceCollectionError("resources", activeCommunityId, liveResources.error);
+      }
+      return;
+    }
+    if (liveResources.data === undefined) return;
+    resourceUi.applyLiveResourceCollection(
+      "resources",
+      activeCommunityId,
+      coerceGatewayRows<WebCommunityResource>(liveResources.data),
+    );
+  }, [
+    activeCommunityId,
+    knowledgeLiveArgs,
+    liveResources.data,
+    liveResources.error,
+    resourceUi.applyLiveResourceCollection,
+    resourceUi.applyLiveResourceCollectionError,
+  ]);
+
+  useEffect(() => {
+    if (!activeCommunityId || !knowledgeLiveArgs) return;
+    if (liveModules.error) {
+      if (liveModules.data !== undefined) {
+        resourceUi.applyLiveResourceCollectionError("modules", activeCommunityId, liveModules.error);
+      }
+      return;
+    }
+    if (liveModules.data === undefined) return;
+    resourceUi.applyLiveResourceCollection(
+      "modules",
+      activeCommunityId,
+      coerceGatewayRows<WebCommunityResourceModule>(liveModules.data),
+    );
+  }, [
+    activeCommunityId,
+    knowledgeLiveArgs,
+    liveModules.data,
+    liveModules.error,
+    resourceUi.applyLiveResourceCollection,
+    resourceUi.applyLiveResourceCollectionError,
+  ]);
+
   useCommunityResourcesTabLifecycle<AuthSession>({
     activePage,
     communityTab,
@@ -277,21 +350,8 @@ export function useWebCommunityContentController(
     activeCommunityId,
     loadCommunityResources: resourceUi.loadCommunityResources,
     requireCommunityPage: true,
+    skipInitialLoad: hasWarmLiveKnowledge,
   });
-
-  // Live: while Knowledge is open, a course or lesson someone else adds,
-  // changes or publishes shows without a reload (the same refresh an edit
-  // of your own makes).
-  const knowledgeLiveArgs = activePage === "community" && communityTab === "resources" && activeCommunityId && eventsSubject
-    ? { authSubject: eventsSubject, communityId: activeCommunityId }
-    : null;
-  const reloadKnowledge = () => {
-    const activeSession = getSessionRef.current();
-    if (!activeCommunityId || !activeSession) return;
-    void resourceUi.loadCommunityResources(activeCommunityId, activeSession).catch(() => undefined);
-  };
-  useLiveChange(session, "communityResources:listCommunityResources", knowledgeLiveArgs, reloadKnowledge);
-  useLiveChange(session, "communityResources:listCommunityResourceModules", knowledgeLiveArgs, reloadKnowledge);
 
   useEffect(() => {
     const handleResourcesMutated = (event: Event) => {

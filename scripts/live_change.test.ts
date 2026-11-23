@@ -37,8 +37,8 @@ test("join requests, Members, Knowledge and pods watch their reads", () => {
   expect(read("shared/useCommunityMembersReviewLifecycle.ts")).toContain('"communityAdmin:listCommunityJoinRequests"');
   expect(read("apps/web/src/v1/KitMembersPage.tsx")).toContain('"communityMemberRecords:getCommunityMemberSummary"');
   const content = read("apps/web/src/controllers/useWebCommunityContentController.ts");
-  expect(content).toContain('useLiveChange(session, "communityResources:listCommunityResources", knowledgeLiveArgs, reloadKnowledge);');
-  expect(content).toContain('useLiveChange(session, "communityResources:listCommunityResourceModules", knowledgeLiveArgs, reloadKnowledge);');
+  expect(content).toContain('"communityResources:listCommunityResources"');
+  expect(content).toContain('"communityResources:listCommunityResourceModules"');
   // Pods and the guide's notes show the live answer itself.
   expect(read("apps/web/src/v1/KitClassroom.tsx")).toContain('useLiveAnswer<{ can_manage: boolean; notes: CommunityNoteView[] }>(props.session, "communityNotes:listCommunityNotes"');
   expect(read("apps/web/src/v1/KitPodRail.tsx")).toContain('useLiveAnswer<CloudPodDetail>(session, "communityPods:getPod"');

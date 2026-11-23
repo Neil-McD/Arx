@@ -1,8 +1,9 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo } from "react";
 import { toCanonicalCommunityVisibility } from "./communityVisibility";
 import { deriveCommunityMembersJoinReviewMode, type CommunityMembersJoinReviewMode } from "./communityJoinPolicy";
 import { resolveAuthSubject, type AuthSessionLike } from "./authSession";
-import { useLiveChange } from "./liveQuery";
+import { coerceGatewayRows } from "./cloudGateway";
+import { useLiveQuery } from "./liveQuery";
 
 type CommunityLike = {
   id: string;
@@ -13,6 +14,7 @@ type CommunityLike = {
 type LifecycleParams<
   SessionT,
   CommunityT extends CommunityLike,
+  JoinRequestT = unknown,
 > = {
   session: SessionT | null;
   activeCommunityId: string | null;
@@ -20,22 +22,19 @@ type LifecycleParams<
   canReviewJoinRequests: boolean;
   activeCommunityMembersJoinReviewMode: CommunityMembersJoinReviewMode | null;
   shouldLoad?: boolean;
-  loadCommunityJoinRequests: (communityId: string, session: SessionT) => Promise<void> | void;
+  applyLiveCommunityJoinRequestsLoading: (communityId: string) => void;
+  applyLiveCommunityJoinRequests: (communityId: string, rows: JoinRequestT[], session: SessionT) => void;
+  applyLiveCommunityJoinRequestsError: (communityId: string, error: unknown) => void;
   resetCommunityJoinRequests: () => void;
 };
 
 export function useCommunityMembersReviewLifecycle<
   SessionT,
   CommunityT extends CommunityLike,
+  JoinRequestT = unknown,
 >(
-  params: LifecycleParams<SessionT, CommunityT>,
+  params: LifecycleParams<SessionT, CommunityT, JoinRequestT>,
 ) {
-  const loadCommunityJoinRequestsRef = useRef(params.loadCommunityJoinRequests);
-
-  useEffect(() => {
-    loadCommunityJoinRequestsRef.current = params.loadCommunityJoinRequests;
-  }, [params.loadCommunityJoinRequests]);
-
   useEffect(() => {
     params.resetCommunityJoinRequests();
   }, [params.activeCommunityId, params.resetCommunityJoinRequests]);
@@ -43,34 +42,53 @@ export function useCommunityMembersReviewLifecycle<
   // The community whose join requests this person may review here, or null.
   const reviewCommunityId = joinRequestsCommunityToLoad(params);
 
+  // Single live stream (shared/liveQuery.ts): pending join requests draw
+  // directly from the live subscription with 30s linger across switches — no
+  // duplicate HTTP fetch on mount or on live changes.
+  const subject = params.session ? resolveAuthSubject(params.session as AuthSessionLike) : null;
+  const liveArgs = useMemo(
+    () =>
+      subject && reviewCommunityId
+        ? { authSubject: subject, communityId: reviewCommunityId, limit: 201, includeStatuses: ["pending"] }
+        : null,
+    [reviewCommunityId, subject],
+  );
+  const liveJoinRequests = useLiveQuery<unknown>(
+    params.session,
+    "communityAdmin:listCommunityJoinRequests",
+    liveArgs,
+  );
+
   useEffect(() => {
     const session = params.session;
-    if (!session || !reviewCommunityId) {
+    if (!session || !reviewCommunityId || !liveArgs) {
       params.resetCommunityJoinRequests();
       return;
     }
-    const communityId = reviewCommunityId;
-
-    void loadCommunityJoinRequestsRef.current(communityId, session);
+    if (liveJoinRequests.error) {
+      params.applyLiveCommunityJoinRequestsError(reviewCommunityId, liveJoinRequests.error);
+      return;
+    }
+    if (liveJoinRequests.data !== undefined) {
+      params.applyLiveCommunityJoinRequests(
+        reviewCommunityId,
+        coerceGatewayRows<JoinRequestT>(liveJoinRequests.data),
+        session,
+      );
+      return;
+    }
+    params.applyLiveCommunityJoinRequestsLoading(reviewCommunityId);
   }, [
+    liveArgs,
+    liveJoinRequests.data,
+    liveJoinRequests.error,
+    params.applyLiveCommunityJoinRequests,
+    params.applyLiveCommunityJoinRequestsError,
+    params.applyLiveCommunityJoinRequestsLoading,
+    params.resetCommunityJoinRequests,
     params.session,
     reviewCommunityId,
-    params.resetCommunityJoinRequests,
   ]);
-
-  // Live (shared/liveQuery.ts): someone asking to join, or another host
-  // answering, shows without a reload. The same read the load makes.
-  const subject = params.session ? resolveAuthSubject(params.session as AuthSessionLike) : null;
-  useLiveChange(
-    params.session,
-    "communityAdmin:listCommunityJoinRequests",
-    subject && reviewCommunityId
-      ? { authSubject: subject, communityId: reviewCommunityId, limit: 201, includeStatuses: ["pending"] }
-      : null,
-    () => {
-      if (params.session && reviewCommunityId) void loadCommunityJoinRequestsRef.current(reviewCommunityId, params.session);
-    },
-  );
 }
 
 // Join requests are loaded only where they can be reviewed: on a surface

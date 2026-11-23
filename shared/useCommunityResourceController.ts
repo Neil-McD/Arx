@@ -247,6 +247,77 @@ export function useCommunityResourceController<
     }
   }, []);
 
+  const applyLiveResourceCollection = useCallback((
+    collection: ResourceCollection,
+    communityId: string,
+    rows: unknown[],
+  ) => {
+    const current = argsRef.current;
+    if (!communityId || communityId !== current.activeCommunityId) return;
+    const requestScope = scopeRef.current;
+    const ref = collection === "resources" ? resourceLoadGenerationRef : moduleLoadGenerationRef;
+    ref.current += 1;
+    const normalized = Array.isArray(rows) ? rows : [];
+    const overflow = normalized.length > RESOURCE_DISPLAY_LIMIT;
+    if (overflow) {
+      if (collection === "modules") {
+        current.setCommunityResourceModules([]);
+      } else {
+        current.setCommunityResources([]);
+      }
+      setReads((previous) => {
+        if (scopeRef.current !== requestScope) return previous;
+        const owned = previous.scope === requestScope ? previous : { scope: requestScope, resources: emptyRead(), modules: emptyRead() };
+        return {
+          ...owned,
+          [collection]: {
+            status: "error",
+            error:
+              collection === "modules"
+                ? "This community exceeds the 200-course display limit. Contact the community team."
+                : "This community exceeds the 200-resource display limit. Contact the community team.",
+            hasData: false,
+          },
+        };
+      });
+      return;
+    }
+    if (collection === "modules") {
+      current.setCommunityResourceModules(normalized as ResourceModuleT[]);
+    } else {
+      current.setCommunityResources(normalized as ResourceT[]);
+    }
+    setReads((previous) => {
+      if (scopeRef.current !== requestScope) return previous;
+      const owned = previous.scope === requestScope ? previous : { scope: requestScope, resources: emptyRead(), modules: emptyRead() };
+      return {
+        ...owned,
+        [collection]: { status: "ready", error: null, hasData: true },
+      };
+    });
+  }, []);
+
+  const applyLiveResourceCollectionError = useCallback((
+    collection: ResourceCollection,
+    communityId: string,
+    error: unknown,
+  ) => {
+    const current = argsRef.current;
+    if (!communityId || communityId !== current.activeCommunityId) return;
+    const requestScope = scopeRef.current;
+    const message =
+      (error instanceof Error && error.message.trim())
+      || "Could not refresh community resources. Try again.";
+    setReads((previous) => {
+      if (scopeRef.current !== requestScope) return previous;
+      const owned = previous.scope === requestScope ? previous : { scope: requestScope, resources: emptyRead(), modules: emptyRead() };
+      return {
+        ...owned,
+        [collection]: { ...owned[collection], status: "error", error: message },
+      };
+    });
+  }, []);
+
   const refreshCommunityResources = useCallback(async (
     communityId: string, session: SessionT, collections: ResourceCollection[] = ["modules", "resources"],
   ): Promise<void> => {
@@ -846,6 +917,8 @@ export function useCommunityResourceController<
   return {
     resourceRead: scopedReads.resources,
     moduleRead: scopedReads.modules,
+    applyLiveResourceCollection,
+    applyLiveResourceCollectionError,
     refreshCommunityResources,
     loadCommunityResourceModules,
     loadCommunityResources,
