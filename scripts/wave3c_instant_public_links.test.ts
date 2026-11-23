@@ -40,6 +40,8 @@ describe("Wave 3C: instant public links and lightweight visitor entry", () => {
     expect(resolvePublicEntryRoute({ pathname: "/c/builders/chat" })).toBeNull();
     expect(resolvePublicEntryRoute({ pathname: "/c/builders/preview" })).toBeNull();
     expect(resolvePublicEntryRoute({ pathname: "/c/preview" })).toBeNull();
+    expect(resolvePublicEntryRoute({ pathname: "/c/100%" })).toBeNull();
+    expect(resolvePublicEntryRoute({ pathname: "/c/%E0%A4%A" })).toBeNull();
     expect(resolvePublicEntryRoute({ pathname: "/settings" })).toBeNull();
     expect(resolvePublicEntryRoute({ pathname: "/docs" })).toBeNull();
     expect(resolvePublicEntryRoute({ pathname: "/m/" })).toBeNull();
