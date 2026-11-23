@@ -17,7 +17,11 @@ import {
 } from "../../../../shared/cloudCommunityLandingGateway";
 import "./WebCommunityLandingPage.css";
 
-type Props = { communitySlug: string; session: unknown | null };
+type Props = {
+  communitySlug: string;
+  session: unknown | null;
+  sessionCheckPending?: boolean;
+};
 
 type Phase =
   | { kind: "idle" }
@@ -123,10 +127,11 @@ export function WebCommunityLandingPage(props: Props) {
   // A visit, for the founder's Analytics (not members, not the owner).
   const countedVisit = useRef(false);
   useEffect(() => {
+    if (props.sessionCheckPending) return;
     if (!data || countedVisit.current || data.is_owner || data.viewer?.state === "member") return;
     countedVisit.current = true;
     void recordCommunityLandingVisit(slug, visitorKey()).catch(() => undefined);
-  }, [data, slug]);
+  }, [data, props.sessionCheckPending, slug]);
 
   const openCommunity = useCallback(() => {
     window.location.assign(`/c/${encodeURIComponent(slug)}/home`);
@@ -190,7 +195,7 @@ export function WebCommunityLandingPage(props: Props) {
   }, [props.session, slug, load, data?.community.name]);
 
   const checkout = useCallback(async () => {
-    if (!data) return;
+    if (!data || props.sessionCheckPending) return;
     const plan = data.plans[planIndex] ?? data.plans[0];
     if (!plan) return;
     setPhase({ kind: "busy" }); setError(null);
@@ -206,7 +211,7 @@ export function WebCommunityLandingPage(props: Props) {
       setError(joinErrorText(checkoutError, data.community.name));
       setPhase({ kind: "idle" });
     }
-  }, [data, planIndex, props.session, slug]);
+  }, [data, planIndex, props.session, props.sessionCheckPending, slug]);
 
   // Signed in to join (intent=join): do it once they're back.
   useEffect(() => {

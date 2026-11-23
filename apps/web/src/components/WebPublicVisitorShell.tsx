@@ -3,6 +3,7 @@ import {
   beginOAuthSignIn,
   bootstrapSessionDetailed,
   clearAuthFlowPending,
+  hasRecentAuthFlowPending,
   markAuthFlowPending,
 } from "../auth";
 import { captureProductAnalyticsEvent } from "../posthogAnalytics";
@@ -31,21 +32,27 @@ const WebCommunityLandingPage = lazy(() =>
 export function WebPublicVisitorShell(props: { initialRoute: PublicEntryRoute }) {
   const [route, setRoute] = useState<PublicEntryRoute>(props.initialRoute);
   const [handoffToStudioApp, setHandoffToStudioApp] = useState(false);
+  const [sessionCheckPending, setSessionCheckPending] = useState(true);
 
   // Check for an existing browser session in the background without blocking
-  // first paint. Returning signed-in members hand off seamlessly to the full
-  // Studio app so redirects, account setup, and owner/member states stay exact.
+  // first paint. Returning signed-in members — and transient session-check
+  // failures — hand off cleanly to the full Studio app so membership state,
+  // redirects, and auth recovery stay authoritative.
   useEffect(() => {
     let cancelled = false;
     void bootstrapSessionDetailed()
       .then((result) => {
-        if (!cancelled && result.session) {
+        if (cancelled) return;
+        if (result.session) {
           setHandoffToStudioApp(true);
+          return;
         }
+        setSessionCheckPending(false);
       })
       .catch(() => {
-        // Signed-out public visitors stay on the lightweight page if the
-        // background session check is unavailable.
+        if (!cancelled) {
+          setHandoffToStudioApp(true);
+        }
       });
     return () => {
       cancelled = true;
@@ -60,6 +67,7 @@ export function WebPublicVisitorShell(props: { initialRoute: PublicEntryRoute })
       const next = resolvePublicEntryRoute({
         pathname: window.location.pathname || "/",
         search: window.location.search || "",
+        hasRecentAuthFlowPending: hasRecentAuthFlowPending(),
       });
       if (!next) {
         setHandoffToStudioApp(true);
@@ -108,7 +116,11 @@ export function WebPublicVisitorShell(props: { initialRoute: PublicEntryRoute })
   return (
     <Suspense fallback={null}>
       {route.kind === "community_landing" ? (
-        <WebCommunityLandingPage communitySlug={route.slug} session={null} />
+        <WebCommunityLandingPage
+          communitySlug={route.slug}
+          session={null}
+          sessionCheckPending={sessionCheckPending}
+        />
       ) : route.kind === "discover" ? (
         <PublicFindPage onJoin={handleStartBuilderPurchase} />
       ) : (

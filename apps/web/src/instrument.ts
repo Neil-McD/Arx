@@ -164,7 +164,11 @@ function ensureSentryLoaded(): Promise<SentryModule | null> {
         }
         return sentryModule;
       })
-      .catch(() => null);
+      .catch(() => {
+        pendingOperations.length = 0;
+        sentryLoadPromise = null;
+        return null;
+      });
   }
   return sentryLoadPromise;
 }
