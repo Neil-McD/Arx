@@ -3,6 +3,7 @@ import {
   normalizeIdValue,
   requireCommunityChatAccess,
 } from "./communityCore";
+import { heldTiers } from "./communityHeldTiers";
 
 export type ChannelActorKind = "human" | "community_agent_for_member" | "external_mcp" | "community_agent";
 export type ChannelCapabilities = { canRead: boolean; canPost: boolean; canReply: boolean; canManage: boolean };
@@ -21,6 +22,7 @@ export type ChannelActor = {
   communityId: any;
   kind: ChannelActorKind;
   principalKey: string;
+  userId?: any;
   isManager: boolean;
   membershipId?: string;
   membershipActivationSequence?: number;
@@ -46,6 +48,7 @@ export async function resolveCommunityChannelActor(args: {
     communityId: community._id,
     kind,
     principalKey: `user:${normalizeIdValue(args.userId)}`,
+    userId: args.userId,
     isManager: normalizeIdValue(community.ownerId) === normalizeIdValue(args.userId) || membership?.role === "admin",
     ...(membership ? {
       membershipId: normalizeIdValue(membership._id),
@@ -102,6 +105,32 @@ export async function getCommunityChannelCapabilities(args: {
           normalizeIdValue(grant.membershipId) === args.actor.membershipId &&
           grant.membershipActivationSequence === args.actor.membershipActivationSequence
         ));
+      // Plan-derived seats synchronize asynchronously for large communities;
+      // revalidate plan-only seats against live held tiers so removing a pod
+      // from a tier revokes access immediately (fail closed).
+      if (
+        hasGrant &&
+        args.actor.kind !== "community_agent" &&
+        Array.isArray(grant?.reasons) &&
+        grant.reasons.length > 0 &&
+        grant.reasons.every((reason: string) => reason === "plan")
+      ) {
+        const actorUserId =
+          args.actor.userId ??
+          (args.actor.principalKey.startsWith("user:")
+            ? args.ctx.db.normalizeId("users", args.actor.principalKey.slice("user:".length))
+            : null);
+        const held = actorUserId
+          ? await heldTiers(args.ctx, args.channel.communityId, actorUserId)
+          : null;
+        hasGrant = Boolean(
+          held?.tiers.some((tier) =>
+            tier.podChannelIds.some(
+              (channelId: any) => normalizeIdValue(channelId) === normalizeIdValue(args.channel._id),
+            ),
+          ),
+        );
+      }
     }
   }
   return evaluateCommunityChannelCapabilities({ ...args, hasGrant });

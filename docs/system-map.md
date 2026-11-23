@@ -386,7 +386,12 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
   holds now, from Polynet's price and the app's sales; read by grants and by
   pods so they can't disagree), `communityPlanPods` (a plan's pods: seats with
   the reason "plan" follow the plans held; `memberAccessChanged` is the one call
-  wherever access changes, then connected apps are told).
+  wherever access changes, then connected apps are told; `tierHoldersChanged`
+  syncs inline for communities with `<= 25` memberships and app grants and
+  schedules paginated `syncTierHoldersBatchInternal` batches of `25` for larger
+  communities, while `communityChannelAccess.getCommunityChannelCapabilities`
+  revalidates plan-only seats live against `heldTiers` so pod revocations fail
+  closed immediately before async sync finishes).
 - **Changing plan:** `communityPlanChange` (a member paying Polynet monthly
   moves their Stripe subscription to another plan's price; Stripe's notice
   records it, and pods and grants follow).
@@ -414,7 +419,10 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
   code that ends access calls, so pod billing stops at once) (a pod's price on top of membership, its
   Stripe checkout and subscription, and the grant that follows payment; notices
   routed from `httpBilling` by the `pod_payment_id` metadata; refunds and disputes
-  end a pod payment; an hourly cron stops billing for pods someone can't reach).
+  end a pod payment; an hourly cron `sweepUnreachablePodPaymentsInternal` stops
+  billing for pods someone can't reach and self-continues across bounded slices
+  of `10` pages per run, up to `50` rounds, before draining refunds and
+  abandoned checkouts).
   Table: `communityPodPayments`.
 - **Home moments:** `communityHomeMoments` ("since you were last here" from the
   visit before this one, and a member's next step; ranked in
@@ -536,8 +544,20 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
 - **Code:** `email`, `emailCore`, `emailEvents`, `emailDiagnostics`, `httpEmail`
   (Resend webhook),
   `communityWeeklyDigest*`, `communityMentionEmails`, `communityMentionEmailDelivery`.
-- **Crons:** "process pending email outbox" (5 min), "process pending mention
-  emails" (15 min). The weekly digest has no cron (see below).
+- **Crons:** "process pending email outbox" (5 min, batch limit `25`), "process
+  pending mention emails" (15 min). The weekly digest has no cron (see below).
+- **Delivery and scaling contract:** `emailOutbox` assigns `priorityRank` (`0`
+  urgent/transactional, `1` mention notifications, `2` bulk event reminders and
+  weekly digests) and claims due jobs in strict priority order via
+  `by_status_priority_scheduledAt` (with legacy unranked fallback).
+  `processPendingEmailOutboxInternal` sends claimed rows in bounded parallel
+  chunks of `5` and self-continues at 2-second intervals for up to `10` rounds
+  per trigger (backing off to the 5-minute cron on a 100%-failed batch).
+  `enqueueEmailJobsBatchInternal` batches up to `100` outbox inserts per
+  mutation for `eventReminders`, `communityMentionEmails`, and
+  `communityWeeklyDigestWorker`. `communityMentionEmails` checks its 1-hour
+  per-recipient cooldown in O(1) via `by_recipientUserId_kind_createdAt` and
+  self-continues up to `4` rounds when a 25-recipient batch fills.
 - **Tables:** `emailOutbox`, `emailDeliveries`, `emailPreferences`,
   `communityWeeklyDigestSchedules`.
 - **Dormant by design:** the weekly digest worker

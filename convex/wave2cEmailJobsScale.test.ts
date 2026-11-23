@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import { internal } from "./_generated/api";
 import schema from "./schema";
 import { tierHoldersChanged } from "./communityPlanPods";
+import { getCommunityChannelCapabilities, resolveCommunityChannelActor } from "./communityChannelAccess";
 
 const modules = import.meta.glob(["./*.ts", "!./*.test.ts", "./_generated/**/*.*s"]);
 const HOUR = 60 * 60 * 1000;
@@ -209,6 +210,36 @@ describe("Wave 2C Email Priority Lanes & Heavy Background Jobs", () => {
           .collect(),
       );
       expect(seats).toHaveLength(memberIds.length);
+
+      // Removing the pod from the tier must revoke access IMMEDIATELY at the
+      // channel authorization boundary, even before async sync batches run.
+      await t.run(async (ctx) => {
+        const tier = await ctx.db
+          .query("communityTiers")
+          .withIndex("by_community_key", (q) => q.eq("communityId", communityId).eq("key", "member"))
+          .first();
+        await ctx.db.patch(tier!._id, { podChannelIds: [] });
+        await tierHoldersChanged(ctx, communityId, "member");
+      });
+
+      const capsBeforeAsyncDrain = await t.run(async (ctx) => {
+        const channel = await ctx.db.get(podChannelId);
+        const actor = await resolveCommunityChannelActor({ ctx, communityId, userId: memberIds[0] });
+        return await getCommunityChannelCapabilities({ ctx, channel: channel as any, actor });
+      });
+      expect(capsBeforeAsyncDrain.canRead).toBe(false);
+      expect(capsBeforeAsyncDrain.canPost).toBe(false);
+      expect(capsBeforeAsyncDrain.canReply).toBe(false);
+
+      // Once scheduled batches drain, every stored plan seat is revoked cleanly.
+      await t.finishAllScheduledFunctions(() => vi.runAllTimers());
+      const seatsAfterRevoke = await t.run(async (ctx) =>
+        ctx.db
+          .query("communityChannelParticipants")
+          .withIndex("by_channel_status", (q) => q.eq("channelId", podChannelId).eq("status", "active"))
+          .collect(),
+      );
+      expect(seatsAfterRevoke).toHaveLength(0);
     } finally {
       vi.useRealTimers();
     }
