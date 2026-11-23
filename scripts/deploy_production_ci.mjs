@@ -24,6 +24,8 @@ import { FORBIDDEN_IN_PRODUCTION, settingNames } from "./lib/convexEnvParity.mjs
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const LIVE_POLL_INTERVAL_MS = 10_000;
 const LIVE_POLL_ATTEMPTS = 18;
+const LIVE_BUNDLE_VERIFY_INTERVAL_MS = 3_000;
+const LIVE_BUNDLE_VERIFY_ATTEMPTS = 6;
 const MAX_BUNDLE_CHUNKS_SCANNED = 40;
 
 export function requireDeploySecrets(env) {
@@ -183,27 +185,40 @@ export async function runCloudProductionDeploy(deps) {
 
   const origin = PRODUCTION_AUTHORITY.productionOrigin;
   const expectedConvexHost = new URL(PRODUCTION_AUTHORITY.convexUrl).host;
-  const html = await deps.fetchText(`${origin}/`);
-  const entry = html.match(/\/assets\/index-[A-Za-z0-9_-]+\.js/)?.[0];
   let backendMatched = false;
-  if (entry) {
-    const entryText = await deps.fetchText(`${origin}${entry}`);
-    if (entryText.includes(expectedConvexHost)) {
-      backendMatched = true;
-    } else {
-      const chunks = [...new Set(entryText.match(/assets\/[A-Za-z0-9_-]+\.js/g) ?? [])].slice(
-        0,
-        MAX_BUNDLE_CHUNKS_SCANNED,
-      );
-      for (const chunk of chunks) {
-        if ((await deps.fetchText(`${origin}/${chunk}`)).includes(expectedConvexHost)) {
+  let lastVerifyError = null;
+  for (let attempt = 0; attempt < LIVE_BUNDLE_VERIFY_ATTEMPTS; attempt += 1) {
+    lastVerifyError = null;
+    try {
+      const html = await deps.fetchText(`${origin}/`);
+      const entry = html.match(/\/assets\/index-[A-Za-z0-9_-]+\.js/)?.[0];
+      if (entry) {
+        const entryText = await deps.fetchText(`${origin}${entry}`);
+        if (entryText.includes(expectedConvexHost)) {
           backendMatched = true;
           break;
         }
+        const chunks = [...new Set(entryText.match(/assets\/[A-Za-z0-9_-]+\.js/g) ?? [])].slice(
+          0,
+          MAX_BUNDLE_CHUNKS_SCANNED,
+        );
+        for (const chunk of chunks) {
+          if ((await deps.fetchText(`${origin}/${chunk}`)).includes(expectedConvexHost)) {
+            backendMatched = true;
+            break;
+          }
+        }
+        if (backendMatched) break;
       }
+    } catch (error) {
+      lastVerifyError = error;
+    }
+    if (attempt + 1 < LIVE_BUNDLE_VERIFY_ATTEMPTS) {
+      await deps.sleep(LIVE_BUNDLE_VERIFY_INTERVAL_MS);
     }
   }
   if (!backendMatched) {
+    if (lastVerifyError) throw lastVerifyError;
     throw new ReleaseError("production_release_backend_mismatch", expectedConvexHost);
   }
 
