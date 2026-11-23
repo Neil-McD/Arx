@@ -31,6 +31,9 @@ async function fixture() {
     await ctx.db.insert("communityPods", { communityId, channelId: pod, purpose: "Founders.", visibility: "listed", createdAt: NOW, updatedAt: NOW });
     await ctx.db.insert("communityEvents", { communityId, createdByUserId: ownerId, title: "Group Call", startsAt: NOW + 86400000,
       timezone: "UTC", locationType: "online", visibility: "members", status: "live", recurrenceFrequency: "weekly", recurrenceInterval: 1, createdAt: NOW, updatedAt: NOW } as any);
+    // Past the Events page's range: no chip.
+    await ctx.db.insert("communityEvents", { communityId, createdByUserId: ownerId, title: "Far away", startsAt: NOW + 50 * 86400000,
+      timezone: "UTC", locationType: "online", visibility: "members", status: "live", createdAt: NOW, updatedAt: NOW } as any);
     return { communityId };
   });
   const read = (who: string) => t.withIdentity({ subject: who }).query((api as any).communityEntityNames.listEntityNamesForViewer, { authSubject: who, communityId: ids.communityId });

@@ -185,7 +185,7 @@ no stored refs:
 - **One list per reader:** `communityEntityNames:listEntityNamesForViewer`
   returns the names of what this reader can open, each kind with its own
   page's rule: courses and lessons (published; hosts also drafts), channels and
-  pods (`listAuthorizedCommunityChannels`), upcoming events in the next 60 days
+  pods (`listAuthorizedCommunityChannels`), upcoming events in the next 35 days (inside the Events page's own range, so a chip always opens)
   (`visibleEvents`; a repeating event once, at its next time). At most 500.
   Read live (`shared/liveQuery.ts`).
 - **Matching** (`shared/entityChips.ts`): a whole bold phrase, ignoring case, a

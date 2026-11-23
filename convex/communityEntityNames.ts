@@ -20,7 +20,9 @@ import { ENTITY_NAMES_MAX, type EntityNameRow } from "../shared/entityChips";
 // when it is on this list, so a chip never points where the reader can't go.
 // Each kind uses the same visibility rule as its own page.
 
-const EVENTS_AHEAD_MS = 60 * 24 * 60 * 60 * 1000;
+// Inside what the Events page loads (today - 21 days to + 40,
+// getWebCommunityEventsListRange), so a chip always opens its event.
+const EVENTS_AHEAD_MS = 35 * 24 * 60 * 60 * 1000;
 const EVENTS_MAX = 100;
 
 export const listEntityNamesForViewer = query({
