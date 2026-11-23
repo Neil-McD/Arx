@@ -25,6 +25,7 @@ type UseCommunityEventsControllerArgs<SessionT extends SessionLike> = {
   setIsLoadingCommunityEvents: Dispatch<SetStateAction<boolean>>;
   setCommunityEventsError: Dispatch<SetStateAction<string | null>>;
   invalidateCommunityEventsCache?: (communityId: string) => void;
+  skipReloadAfterMutation?: boolean;
 };
 
 export function useCommunityEventsController<SessionT extends SessionLike>(
@@ -105,8 +106,10 @@ export function useCommunityEventsController<SessionT extends SessionLike>(
           ...payload,
         },
       });
-      current.invalidateCommunityEventsCache?.(current.activeCommunityId);
-      await loadCommunityEvents(current.activeCommunityId, session, range);
+      if (!current.skipReloadAfterMutation) {
+        current.invalidateCommunityEventsCache?.(current.activeCommunityId);
+        await loadCommunityEvents(current.activeCommunityId, session, range);
+      }
       return true;
     } catch (error) {
       current.setCommunityEventsError(error instanceof Error ? error.message : "Could not save community event.");
@@ -127,8 +130,10 @@ export function useCommunityEventsController<SessionT extends SessionLike>(
         session,
         eventId,
       });
-      current.invalidateCommunityEventsCache?.(current.activeCommunityId);
-      await loadCommunityEvents(current.activeCommunityId, session, range);
+      if (!current.skipReloadAfterMutation) {
+        current.invalidateCommunityEventsCache?.(current.activeCommunityId);
+        await loadCommunityEvents(current.activeCommunityId, session, range);
+      }
       return true;
     } catch (error) {
       current.setCommunityEventsError(error instanceof Error ? error.message : "Could not cancel community event.");

@@ -3,13 +3,13 @@
 // parts (the guide's brief, the next call, what the pod knows, who is in it)
 // and the way in. A pod they are not in shows its pitch instead
 // (WebCommunityPodsSection's PodPitch).
-import { useEffect, useState } from "react";
-import { fetchCloudPod, fetchCloudPodNotes, type CloudPodDetail, type CloudPodNote } from "../../../../shared/cloudCommunityPodsGateway";
+import { useState } from "react";
+import type { CloudPodDetail, CloudPodNote } from "../../../../shared/cloudCommunityPodsGateway";
 import { formatMomentWhen } from "../../../../shared/communityHomeMoments";
 import { Btn, cx } from "./kit";
 import { BriefPart, usePlaceBriefRead } from "./KitBrief";
 import { resolveAuthSubject, type AuthSessionLike } from "../../../../shared/authSession";
-import { useLiveAnswer } from "../../../../shared/liveQuery";
+import { useLiveQuery } from "../../../../shared/liveQuery";
 import { PanelLine, PanelNext, PanelPart, PanelPeople, usePanelSettled } from "./KitPanel";
 
 const REPEATS: Record<string, string> = { daily: "every day", weekly: "every week", monthly: "every month" };
@@ -20,31 +20,20 @@ export function KitPodLanding(props: {
   pod: { channel_id: string; name: string; purpose: string };
   onOpen: () => void;
 }) {
-  const [detail, setDetail] = useState<CloudPodDetail | null>(null);
-  const [notes, setNotes] = useState<CloudPodNote[]>([]);
   const [now] = useState(() => Date.now());
   const channelId = props.pod.channel_id;
   const { brief, settled: briefSettled } = usePlaceBriefRead(props.session, props.communityId, channelId);
-  // How many of the pod's two reads (its detail, its notes) have answered.
-  const [answered, setAnswered] = useState(0);
-  // Another pod starts empty.
-  useEffect(() => { setDetail(null); setNotes([]); setAnswered(0); }, [props.communityId, channelId]);
-  useEffect(() => {
-    if (!props.session) return;
-    let live = true;
-    const call = { session: props.session, communityId: props.communityId, channelId };
-    const done = () => { if (live) setAnswered((count) => count + 1); };
-    // Each part is drawn from what loads; one that doesn't is simply absent.
-    fetchCloudPod(call).then((next) => { if (live) setDetail(next); }).catch(() => undefined).finally(done);
-    fetchCloudPodNotes(call).then((next) => { if (live) setNotes(next.notes); }).catch(() => undefined).finally(done);
-    return () => { live = false; };
-  }, [props.session, props.communityId, channelId]);
-  // Live (shared/liveQuery.ts): the pod and its notes are shown from the
-  // live answer too, so a change by anyone shows without a reload.
+  // Single live stream (shared/liveQuery.ts): the pod detail and its notes
+  // draw straight from the live subscription with 30s linger across switches.
   const subject = props.session ? resolveAuthSubject(props.session as AuthSessionLike) : null;
   const liveArgs = subject ? { authSubject: subject, communityId: props.communityId, channelId } : null;
-  useLiveAnswer<CloudPodDetail>(props.session, "communityPods:getPod", liveArgs, (next) => setDetail(next));
-  useLiveAnswer<{ notes: CloudPodNote[] }>(props.session, "communityPodNotes:listPodNotes", liveArgs, (next) => setNotes(next.notes));
+  const detailRead = useLiveQuery<CloudPodDetail>(props.session, "communityPods:getPod", liveArgs);
+  const notesRead = useLiveQuery<{ notes: CloudPodNote[] }>(props.session, "communityPodNotes:listPodNotes", liveArgs);
+  const detail = detailRead.data ?? null;
+  const notes = notesRead.data?.notes ?? [];
+  const answered =
+    (!liveArgs || detailRead.data !== undefined || Boolean(detailRead.error) ? 1 : 0)
+    + (!liveArgs || notesRead.data !== undefined || Boolean(notesRead.error) ? 1 : 0);
   // Layout before data: the parts draw as one piece once they have all
   // answered, so none is drawn and then pushed down by one above it.
   const settled = usePanelSettled(briefSettled && answered >= 2);

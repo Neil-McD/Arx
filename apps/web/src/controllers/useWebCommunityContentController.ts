@@ -21,7 +21,6 @@ import {
   useCommunityEventsController,
   type CommunityEventsRange,
 } from "../../../../shared/useCommunityEventsController";
-import { useCommunityEventsTabLifecycle } from "../../../../shared/useCommunityEventsTabLifecycle";
 import { useLiveChange, useLiveQuery } from "../../../../shared/liveQuery";
 import { coerceGatewayRows } from "../../../../shared/cloudGateway";
 import { useCommunityResourcesTabLifecycle } from "../../../../shared/useCommunityResourcesTabLifecycle";
@@ -160,14 +159,53 @@ export function useWebCommunityContentController(
         : null,
     [activeCommunityId, eventsVisibleRange, session?.user.id],
   );
+  const eventsSubject = resolveAuthSubject(session);
+  const eventsLiveArgs = useMemo(
+    () =>
+      activePage === "community" && communityTab === "events" && activeCommunityId && eventsSubject
+        ? {
+            authSubject: eventsSubject,
+            communityId: activeCommunityId,
+            startIso: eventsVisibleRange.startIso,
+            endIso: eventsVisibleRange.endIso,
+            includeCancelled: false,
+            overlap: true,
+            limit: 500,
+          }
+        : null,
+    [activeCommunityId, activePage, communityTab, eventsSubject, eventsVisibleRange.endIso, eventsVisibleRange.startIso],
+  );
+  // Single live stream (shared/liveQuery.ts): opening Events subscribes once
+  // and keeps the last answer warm for 30s across tab switches — no duplicate
+  // one-shot HTTP read on tab entry.
+  const liveEvents = useLiveQuery<unknown>(
+    session,
+    "communityEvents:listCommunityEvents",
+    eventsLiveArgs,
+  );
+  const liveEventsRows = useMemo(
+    () => (liveEvents.data !== undefined ? coerceGatewayRows<CloudCommunityEvent>(liveEvents.data) : null),
+    [liveEvents.data],
+  );
   const events = useMemo(
-    () => (eventsCacheKey ? eventsByCacheKey[eventsCacheKey] ?? [] : []),
-    [eventsByCacheKey, eventsCacheKey],
+    () => {
+      if (eventsLiveArgs && liveEventsRows !== null) return liveEventsRows;
+      return eventsCacheKey ? eventsByCacheKey[eventsCacheKey] ?? [] : [];
+    },
+    [eventsByCacheKey, eventsCacheKey, eventsLiveArgs, liveEventsRows],
   );
   const hasLoadedVisibleEventsRange = Boolean(
-    eventsCacheKey
-    && Object.prototype.hasOwnProperty.call(eventsByCacheKey, eventsCacheKey),
+    (eventsLiveArgs && liveEventsRows !== null)
+    || (eventsCacheKey && Object.prototype.hasOwnProperty.call(eventsByCacheKey, eventsCacheKey)),
   );
+  const liveEventsErrorMessage =
+    eventsLiveArgs && liveEvents.error
+      ? (liveEvents.error instanceof Error ? liveEvents.error.message : "Could not load community events.")
+      : null;
+  const effectiveEventsError = eventsError ?? (!hasLoadedVisibleEventsRange ? liveEventsErrorMessage : null);
+  const effectiveIsLoadingEvents =
+    isLoadingEvents
+    || Boolean(eventsLiveArgs && liveEventsRows === null && !liveEvents.error && !eventsError && !hasLoadedVisibleEventsRange);
   const setEvents = useCallback<Dispatch<SetStateAction<CloudCommunityEvent[]>>>(
     (nextEvents) => {
       setEventsByCacheKey((current) => {
@@ -229,6 +267,7 @@ export function useWebCommunityContentController(
     setIsLoadingCommunityEvents: setIsLoadingEvents,
     setCommunityEventsError: setEventsError,
     invalidateCommunityEventsCache: invalidateEventsCacheForCommunity,
+    skipReloadAfterMutation: Boolean(eventsLiveArgs),
   });
 
   useCommunityResourcesTabLifecycle<AuthSession>({
@@ -239,33 +278,6 @@ export function useWebCommunityContentController(
     loadCommunityResources: resourceUi.loadCommunityResources,
     requireCommunityPage: true,
   });
-  // Live (shared/liveQuery.ts): while Events is open, an event added, moved or
-  // cancelled anywhere shows at once, the same read the next-event card uses.
-  // The first answer still comes from the load below, with its loading and
-  // error states; this keeps it true afterwards.
-  const eventsSubject = resolveAuthSubject(session);
-  const liveEvents = useLiveQuery<unknown>(
-    session,
-    "communityEvents:listCommunityEvents",
-    activePage === "community" && communityTab === "events" && activeCommunityId && eventsSubject
-      ? {
-          authSubject: eventsSubject,
-          communityId: activeCommunityId,
-          startIso: eventsVisibleRange.startIso,
-          endIso: eventsVisibleRange.endIso,
-          includeCancelled: false,
-          overlap: true,
-          limit: 500,
-        }
-      : null,
-  );
-  useEffect(() => {
-    if (liveEvents.data === undefined) return;
-    setEvents(coerceGatewayRows<CloudCommunityEvent>(liveEvents.data));
-    // setEvents writes the open range's cache entry, so it is deliberately
-    // not a dependency: a new range waits for its own answer.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [liveEvents.data]);
 
   // Live: while Knowledge is open, a course or lesson someone else adds,
   // changes or publishes shows without a reload (the same refresh an edit
@@ -280,16 +292,6 @@ export function useWebCommunityContentController(
   };
   useLiveChange(session, "communityResources:listCommunityResources", knowledgeLiveArgs, reloadKnowledge);
   useLiveChange(session, "communityResources:listCommunityResourceModules", knowledgeLiveArgs, reloadKnowledge);
-
-  useCommunityEventsTabLifecycle<AuthSession>({
-    activePage,
-    communityTab,
-    session,
-    activeCommunityId,
-    range: eventsVisibleRange,
-    loadCommunityEvents,
-    requireCommunityPage: true,
-  });
 
   useEffect(() => {
     const handleResourcesMutated = (event: Event) => {
@@ -356,8 +358,8 @@ export function useWebCommunityContentController(
     },
     events,
     hasLoadedVisibleEventsRange,
-    isLoadingEvents,
-    eventsError,
+    isLoadingEvents: effectiveIsLoadingEvents,
+    eventsError: effectiveEventsError,
     eventsVisibleMonthIso,
     setEventsVisibleMonthIso,
     eventsVisibleRange,

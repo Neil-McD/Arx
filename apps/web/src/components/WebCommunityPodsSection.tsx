@@ -300,16 +300,17 @@ export function WebCommunityPodsSection(props: WebCommunityPodsSectionProps) {
 }
 
 function PodsList(props: WebCommunityPodsSectionProps) {
-  const [state, setState] = useState<{ canManage: boolean; pods: CloudCommunityPod[]; outside: CloudOutsidePod[] } | null>(null);
-  // Hosts in "View as a member" always see the outside-member Pods page, and
-  // can click straight into any of their pods to inspect the inside member view.
-  const [previewPods, setPreviewPods] = useState<CloudCommunityPod[]>([]);
-  const [failed, setFailed] = useState(false);
+  const [fallbackState, setFallbackState] = useState<{
+    scope: string;
+    canManage: boolean;
+    pods: CloudCommunityPod[];
+    outside: CloudOutsidePod[];
+    previewPods: CloudCommunityPod[];
+  } | null>(null);
+  const [retryFailedScope, setRetryFailedScope] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [draft, setDraft] = useState({ name: "", purpose: "", listed: true, seats: "" });
   const [saving, setSaving] = useState(false);
-  // The session the lists loaded with, for the panel.
-  const [liveSession, setLiveSession] = useState<unknown>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
@@ -317,7 +318,49 @@ function PodsList(props: WebCommunityPodsSectionProps) {
   const isPhone = usePhoneLayout();
   const now = Date.now();
 
-  const load = useCallback(async () => {
+  // Single live stream (shared/liveQuery.ts): pods, outside offers, and
+  // host-preview pods draw directly from the live subscription with 30s
+  // linger across tab switches — no duplicate one-shot HTTP read on mount.
+  const podsSubject = props.session ? resolveAuthSubject(props.session as AuthSessionLike) : null;
+  const scopeKey = `${podsSubject ?? ""}:${props.communityId ?? ""}:${props.asMember ? "member" : "default"}`;
+  const livePods = useLiveQuery<{ can_manage?: boolean; pods?: CloudCommunityPod[]; outside?: CloudOutsidePod[] }>(
+    props.session,
+    "communityPods:listCommunityPods",
+    props.communityId && podsSubject
+      ? { authSubject: podsSubject, communityId: props.communityId, ...(props.asMember ? { asMember: true } : {}) }
+      : null,
+  );
+  // Hosts in "View as a member" always see the outside-member Pods page, and
+  // can click straight into any of their pods to inspect the inside member view.
+  const liveManagerPods = useLiveQuery<{ can_manage?: boolean; pods?: CloudCommunityPod[]; outside?: CloudOutsidePod[] }>(
+    props.session,
+    "communityPods:listCommunityPods",
+    props.asMember && props.communityId && podsSubject
+      ? { authSubject: podsSubject, communityId: props.communityId }
+      : null,
+  );
+
+  const liveState = livePods.data !== undefined
+    ? {
+        canManage: Boolean(livePods.data?.can_manage),
+        pods: Array.isArray(livePods.data?.pods) ? livePods.data.pods : [],
+        outside: Array.isArray(livePods.data?.outside) ? livePods.data.outside : [],
+      }
+    : null;
+  const scopedFallback = fallbackState && fallbackState.scope === scopeKey ? fallbackState : null;
+  const state = liveState ?? scopedFallback;
+  const previewPods = liveManagerPods.data !== undefined
+    ? (props.asMember && liveManagerPods.data?.can_manage && Array.isArray(liveManagerPods.data?.pods)
+        ? liveManagerPods.data.pods.map((pod) => ({ ...pod, can_manage: false, waiting: 0 }))
+        : [])
+    : (scopedFallback?.previewPods ?? []);
+  const failed = Boolean(!state && (retryFailedScope === scopeKey || livePods.error));
+
+  const bumpPitchReload = useCallback(async () => {
+    setReloadKey((key) => key + 1);
+  }, []);
+
+  const retryLoad = useCallback(async () => {
     if (!props.communityId) return;
     try {
       const session = await props.ensureSession(props.session);
@@ -328,41 +371,23 @@ function PodsList(props: WebCommunityPodsSectionProps) {
           ? fetchCloudCommunityPods({ session, communityId: props.communityId, asMember: false }).catch(() => null)
           : Promise.resolve(null),
       ]);
-      setLiveSession(session);
-      setState({ canManage: result.can_manage, pods: result.pods, outside: result.outside });
-      setPreviewPods(
-        props.asMember && managerResult?.can_manage
-          ? managerResult.pods.map((pod) => ({ ...pod, can_manage: false, waiting: 0 }))
-          : [],
-      );
-      setFailed(false);
+      setFallbackState({
+        scope: scopeKey,
+        canManage: result.can_manage,
+        pods: result.pods,
+        outside: result.outside,
+        previewPods:
+          props.asMember && managerResult?.can_manage
+            ? managerResult.pods.map((pod) => ({ ...pod, can_manage: false, waiting: 0 }))
+            : [],
+      });
+      setRetryFailedScope(null);
       setReloadKey((key) => key + 1);
-    } catch { setFailed(true); }
+    } catch { setRetryFailedScope(scopeKey); }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [props.communityId, props.asMember]);
-  useEffect(() => { void load(); }, [load]);
-  // Live (shared/liveQuery.ts): a pod started, joined, left or asked about
-  // anywhere shows on this page at once. The load above draws it first.
-  const podsSubject = props.session ? resolveAuthSubject(props.session as AuthSessionLike) : null;
-  const livePods = useLiveQuery<{ can_manage?: boolean; pods?: CloudCommunityPod[]; outside?: CloudOutsidePod[] }>(
-    props.session,
-    "communityPods:listCommunityPods",
-    props.communityId && podsSubject
-      ? { authSubject: podsSubject, communityId: props.communityId, ...(props.asMember ? { asMember: true } : {}) }
-      : null,
-  );
-  useEffect(() => {
-    const payload = livePods.data;
-    if (payload === undefined) return;
-    setState({
-      canManage: Boolean(payload?.can_manage),
-      pods: Array.isArray(payload?.pods) ? payload.pods : [],
-      outside: Array.isArray(payload?.outside) ? payload.outside : [],
-    });
-    setFailed(false);
-  }, [livePods.data]);
+  }, [props.communityId, props.asMember, scopeKey]);
 
-  usePodPaymentReturn(props, setNotice, load);
+  usePodPaymentReturn(props, setNotice, bumpPitchReload);
 
   // The pod they were last in is the one shown first (read once per visit),
   // and a builder's "see it as members do" is for the pod in the address.
@@ -434,11 +459,11 @@ function PodsList(props: WebCommunityPodsSectionProps) {
     && previewPods.some((p) => p.slug === shown.slug),
   );
   const shownPage = (inline: boolean) => !shown ? null : selectedMine && props.communityId ? (
-    <KitPodLanding session={liveSession} communityId={props.communityId} pod={selectedMine}
+    <KitPodLanding session={props.session} communityId={props.communityId} pod={selectedMine}
       onOpen={() => props.onNavigate({ kind: "room", slug: selectedMine.slug })} />
   ) : (
     <PodPitch {...props} podSlug={shown.slug} inline={inline} reloadKey={reloadKey} preview={shown.kind === "pitch" && previewSlug === shown.slug}
-      onChanged={() => void load()} onPreviewInside={canPreviewShownInside ? () => props.onNavigate({ kind: "room", slug: shown.slug }) : undefined} />
+      onChanged={() => void bumpPitchReload()} onPreviewInside={canPreviewShownInside ? () => props.onNavigate({ kind: "room", slug: shown.slug }) : undefined} />
   );
   const lead = !state ? " " : canManage
     ? (pods.length ? `${pods.length} ${pods.length === 1 ? "pod" : "pods"} in ${props.communityName}.` : "Start your first pod.")
@@ -456,7 +481,7 @@ function PodsList(props: WebCommunityPodsSectionProps) {
                 failed or loading list need one here on narrow desktop (phones
                 use the top bar's Back arrow). */}
             {!isPhone && shown?.kind !== "pitch" ? <button type="button" className={cx("link")} onClick={() => props.onNavigate({ kind: "pods" })}>← Pods</button> : null}
-            {failed ? <p className={cx("sub")} role="alert">Pods couldn't load. <button type="button" className={cx("link")} onClick={() => void load()}>Try again</button></p> : null}
+            {failed ? <p className={cx("sub")} role="alert">Pods couldn't load. <button type="button" className={cx("link")} onClick={() => void retryLoad()}>Try again</button></p> : null}
             {shownPage(true)}
           </div>
         </KitApp>
@@ -471,7 +496,7 @@ function PodsList(props: WebCommunityPodsSectionProps) {
         <div className={cx("page")} style={{ padding: 0, overflow: "visible" }}>
           <p className={cx("lead")} style={{ marginTop: 0 }}>{lead}</p>
           {notice ? <p className={cx("sub")} role="status">{notice}</p> : null}
-          {failed ? <p className={cx("sub")} role="alert">Pods couldn't load. <button type="button" className={cx("link")} onClick={() => void load()}>Try again</button></p> : null}
+          {failed ? <p className={cx("sub")} role="alert">Pods couldn't load. <button type="button" className={cx("link")} onClick={() => void retryLoad()}>Try again</button></p> : null}
           {pods.length || canManage ? (
             <div className={cx("podgrid")}>
               {pods.map((pod) => (
