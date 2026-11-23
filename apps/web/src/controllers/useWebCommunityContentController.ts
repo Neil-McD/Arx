@@ -292,26 +292,56 @@ export function useWebCommunityContentController(
     knowledgeLiveArgs,
   );
   const hasWarmLiveKnowledge = Boolean(
-    knowledgeLiveArgs && liveResources.data !== undefined && liveModules.data !== undefined,
+    knowledgeLiveArgs
+    && liveResources.data !== undefined && !liveResources.error
+    && liveModules.data !== undefined && !liveModules.error,
   );
 
   useEffect(() => {
-    if (!activeCommunityId || !knowledgeLiveArgs || liveResources.data === undefined) return;
+    if (!activeCommunityId || !knowledgeLiveArgs) return;
+    if (liveResources.error) {
+      if (liveResources.data !== undefined) {
+        resourceUi.applyLiveResourceCollectionError("resources", activeCommunityId, liveResources.error);
+      }
+      return;
+    }
+    if (liveResources.data === undefined) return;
     resourceUi.applyLiveResourceCollection(
       "resources",
       activeCommunityId,
       coerceGatewayRows<WebCommunityResource>(liveResources.data),
     );
-  }, [activeCommunityId, knowledgeLiveArgs, liveResources.data, resourceUi.applyLiveResourceCollection]);
+  }, [
+    activeCommunityId,
+    knowledgeLiveArgs,
+    liveResources.data,
+    liveResources.error,
+    resourceUi.applyLiveResourceCollection,
+    resourceUi.applyLiveResourceCollectionError,
+  ]);
 
   useEffect(() => {
-    if (!activeCommunityId || !knowledgeLiveArgs || liveModules.data === undefined) return;
+    if (!activeCommunityId || !knowledgeLiveArgs) return;
+    if (liveModules.error) {
+      if (liveModules.data !== undefined) {
+        resourceUi.applyLiveResourceCollectionError("modules", activeCommunityId, liveModules.error);
+      }
+      return;
+    }
+    if (liveModules.data === undefined) return;
     resourceUi.applyLiveResourceCollection(
       "modules",
       activeCommunityId,
       coerceGatewayRows<WebCommunityResourceModule>(liveModules.data),
     );
-  }, [activeCommunityId, knowledgeLiveArgs, liveModules.data, resourceUi.applyLiveResourceCollection]);
+  }, [
+    activeCommunityId,
+    knowledgeLiveArgs,
+    liveModules.data,
+    liveModules.error,
+    resourceUi.applyLiveResourceCollection,
+    resourceUi.applyLiveResourceCollectionError,
+  ]);
 
   useCommunityResourcesTabLifecycle<AuthSession>({
     activePage,

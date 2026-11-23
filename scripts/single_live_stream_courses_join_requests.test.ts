@@ -153,4 +153,50 @@ describe("Slice 3: Join Requests and Courses/Knowledge draw directly from live q
       args: { authSubject: "user_host", communityId: "comm_1", limit: 201 },
     });
   });
+
+  it("does not treat a failed Knowledge live subscription with retained data as warm", async () => {
+    let observedSkipInitialLoad: boolean | undefined;
+
+    vi.doMock(web.resolve("react"), () => ({ ...React, default: React }));
+    vi.doMock("../shared/useCommunityResourcesTabLifecycle", () => ({
+      useCommunityResourcesTabLifecycle: (params: { skipInitialLoad?: boolean }) => {
+        observedSkipInitialLoad = params.skipInitialLoad;
+      },
+    }));
+    vi.doMock("../shared/liveQuery", () => ({
+      useLiveQuery: (_session: unknown, name: string, args: Record<string, unknown> | null) => {
+        if (name === "communityResources:listCommunityResourceModules" && args) {
+          return { data: [{ id: "mod_1", name: "Onboarding" }], error: null };
+        }
+        if (name === "communityResources:listCommunityResources" && args) {
+          return {
+            data: [{ id: "res_1", title: "Cached Lesson" }],
+            error: new Error("Subscription disconnected"),
+          };
+        }
+        return { data: undefined, error: null };
+      },
+      useLiveAnswer: vi.fn(),
+      useLiveChange: vi.fn(),
+    }));
+
+    const { useWebCommunityContentController } = await import(
+      "../apps/web/src/controllers/useWebCommunityContentController"
+    );
+
+    function Harness() {
+      useWebCommunityContentController({
+        activeCommunityId: "comm_1",
+        activePage: "community",
+        communityTab: "resources",
+        ensureSession: async () => SESSION as any,
+        getSession: () => SESSION as any,
+        session: SESSION as any,
+      });
+      return React.createElement("div", null, "knowledge-error");
+    }
+
+    expect(renderToStaticMarkup(React.createElement(Harness))).toContain("knowledge-error");
+    expect(observedSkipInitialLoad).toBe(false);
+  });
 });

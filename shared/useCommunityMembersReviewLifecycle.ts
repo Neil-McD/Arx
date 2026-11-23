@@ -65,16 +65,16 @@ export function useCommunityMembersReviewLifecycle<
       params.resetCommunityJoinRequests();
       return;
     }
+    if (liveJoinRequests.error) {
+      params.applyLiveCommunityJoinRequestsError(reviewCommunityId, liveJoinRequests.error);
+      return;
+    }
     if (liveJoinRequests.data !== undefined) {
       params.applyLiveCommunityJoinRequests(
         reviewCommunityId,
         coerceGatewayRows<JoinRequestT>(liveJoinRequests.data),
         session,
       );
-      return;
-    }
-    if (liveJoinRequests.error) {
-      params.applyLiveCommunityJoinRequestsError(reviewCommunityId, liveJoinRequests.error);
       return;
     }
     params.applyLiveCommunityJoinRequestsLoading(reviewCommunityId);

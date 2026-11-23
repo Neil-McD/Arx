@@ -297,6 +297,27 @@ export function useCommunityResourceController<
     });
   }, []);
 
+  const applyLiveResourceCollectionError = useCallback((
+    collection: ResourceCollection,
+    communityId: string,
+    error: unknown,
+  ) => {
+    const current = argsRef.current;
+    if (!communityId || communityId !== current.activeCommunityId) return;
+    const requestScope = scopeRef.current;
+    const message =
+      (error instanceof Error && error.message.trim())
+      || "Could not refresh community resources. Try again.";
+    setReads((previous) => {
+      if (scopeRef.current !== requestScope) return previous;
+      const owned = previous.scope === requestScope ? previous : { scope: requestScope, resources: emptyRead(), modules: emptyRead() };
+      return {
+        ...owned,
+        [collection]: { ...owned[collection], status: "error", error: message },
+      };
+    });
+  }, []);
+
   const refreshCommunityResources = useCallback(async (
     communityId: string, session: SessionT, collections: ResourceCollection[] = ["modules", "resources"],
   ): Promise<void> => {
@@ -897,6 +918,7 @@ export function useCommunityResourceController<
     resourceRead: scopedReads.resources,
     moduleRead: scopedReads.modules,
     applyLiveResourceCollection,
+    applyLiveResourceCollectionError,
     refreshCommunityResources,
     loadCommunityResourceModules,
     loadCommunityResources,
