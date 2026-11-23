@@ -1,5 +1,4 @@
 import { APP_THEME_OPTIONS, type AppTheme } from "../../../../shared/theme";
-import { isDesignV1Active } from "../../../../shared/designSystem";
 import { SettingsGroup, SettingsRow, SettingsSegmented } from "./SettingsRows";
 
 type WebAppearanceSettingsSectionProps = {
@@ -9,52 +8,19 @@ type WebAppearanceSettingsSectionProps = {
 
 export function WebAppearanceSettingsSection(props: WebAppearanceSettingsSectionProps) {
   const { appTheme, setAppTheme } = props;
-  if (isDesignV1Active()) {
-    return (
-      <SettingsGroup>
-        <SettingsRow label="Theme" help="How Polynet looks on this device.">
-          <SettingsSegmented label="Theme" value={appTheme} onChange={setAppTheme}
-            options={APP_THEME_OPTIONS.filter((theme) => !theme.disabled).map((theme) => ({ id: theme.id, label: theme.label }))} />
-        </SettingsRow>
-      </SettingsGroup>
-    );
-  }
-
   return (
-    <>
-      <div className="panel-title">Appearance</div>
-      <div className="appearance-panel">
-        <div className="appearance-selector">
-          <div className="appearance-title">Theme</div>
-          <div className="appearance-options" role="group" aria-label="Theme">
-            {APP_THEME_OPTIONS.map((theme) => (
-              <button
-                key={theme.id}
-                className={`appearance-option${appTheme === theme.id ? " active" : ""}${theme.disabled ? " disabled" : ""}`}
-                type="button"
-                aria-pressed={appTheme === theme.id}
-                onClick={() => {
-                  if (!theme.disabled) {
-                    setAppTheme(theme.id);
-                  }
-                }}
-                disabled={theme.disabled}
-              >
-                <div className="appearance-option-preview" data-preview-theme={theme.id}>
-                  <div className="preview-header" />
-                  <div className="preview-sidebar" />
-                  <div className="preview-content">
-                    <div className="preview-line" />
-                    <div className="preview-line short" />
-                  </div>
-                </div>
-                <div className="appearance-option-label">{theme.label}</div>
-                <div className="appearance-option-desc">{theme.description}</div>
-              </button>
-            ))}
-          </div>
-        </div>
-      </div>
-    </>
+    <SettingsGroup>
+      <SettingsRow label="Theme" help="How Polynet looks on this device.">
+        <SettingsSegmented
+          label="Theme"
+          value={appTheme}
+          onChange={setAppTheme}
+          options={APP_THEME_OPTIONS.filter((theme) => !theme.disabled).map((theme) => ({
+            id: theme.id,
+            label: theme.label,
+          }))}
+        />
+      </SettingsRow>
+    </SettingsGroup>
   );
 }

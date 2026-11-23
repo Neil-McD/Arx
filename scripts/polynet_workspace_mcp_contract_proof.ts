@@ -114,7 +114,8 @@ assert.doesNotMatch(
   /polynet_workspace_|polynet_get_my_profile|polynet_confirm_my_profile_facts|workspace_context_id/,
   "setup packets must teach only the canonical repository contract",
 );
-assert.match(mcpAccountSource, /OAuth protected/);
+assert.match(mcpAccountSource, /Connect your AI/);
+assert.match(mcpAccountSource, /sign in once\. It sees only communities you're in/);
 assert.doesNotMatch(mcpAccountSource, /\b26\b|Polynet tools/);
 
 console.log("polynet_workspace_mcp_contract_proof: ok");

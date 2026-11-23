@@ -11,6 +11,7 @@ import { useWebCommunityContentController } from "../../apps/web/src/controllers
 import { UserAvatar } from "../../shared/UserAvatar";
 import { useCommunityAdminController } from "../../shared/useCommunityAdminController";
 import { WebProfileSettingsSection } from "../../apps/web/src/components/WebProfileSettingsSection";
+import { SettingsPageHead, SettingsSaveStatus } from "../../apps/web/src/components/SettingsRows";
 import { WebCommunityEventsSection } from "../../apps/web/src/components/WebCommunityEventsSection";
 import type { CommunityEvent } from "../../apps/web/src/components/communityEventsContracts";
 import { CommunityResourcesPanel } from "../../apps/web/src/components/CommunityResourcesPanel";
@@ -198,8 +199,20 @@ function renderResources(value: any) {
 }
 
 function renderProfile(value: any) {
+  const isInitialLoad = Boolean(!value.cloudProfile && (value.ui.profileLoadStatus === "idle" || value.ui.profileLoadStatus === "loading"));
   return (
     <main className="settings-panel" style={{ padding: 40 }}>
+      <SettingsPageHead
+        title="Profile"
+        status={
+          <SettingsSaveStatus
+            loading={isInitialLoad}
+            saving={value.ui.isSavingProfile}
+            dirty={value.ui.profileNeedsSave}
+            error={value.ui.profileSaveError ?? (value.ui.profileLoadStatus === "error" ? "Couldn't load your profile" : null)}
+          />
+        }
+      />
       <WebProfileSettingsSection
         {...value.ui}
         session={session("a")}
@@ -846,15 +859,8 @@ function useProfileHarness(props: any) {
           hook.value.ui.profileSaveError,
         "save error not rendered",
       );
-      const saveButton = document.querySelector(
-        ".platform-save-button",
-      ) as HTMLButtonElement | null;
       assert(
-        saveButton && !saveButton.disabled,
-        "save retry disabled after failure",
-      );
-      assert(
-        !hook.value.ui.isSavingProfile && hook.value.ui.isProfileDirty,
+        !hook.value.ui.isSavingProfile && hook.value.ui.isProfileDirty && hook.value.ui.profileNeedsSave,
         "failed save stranded or cleared draft",
       );
       assert(
@@ -880,7 +886,7 @@ function useProfileHarness(props: any) {
       const statuses = document.querySelectorAll('[role="status"]');
       assert(statuses.length === 1 && statuses[0].textContent === "Saved", "Profile has duplicate or missing saved feedback");
       flushSync(() => hook.value.ui.setProfileBio("A newer edit"));
-      assert(document.querySelector('[role="status"]')?.textContent === "Unsaved changes", "new edit retained stale saved feedback");
+      assert(document.querySelector('[role="status"]')?.textContent === "Unsaved", "new edit retained stale saved feedback");
     });
   }
   await test("obsolete Events session failures cannot interrupt a newer request", async () => {
@@ -1119,6 +1125,17 @@ function ProfileVisual({
       style={{ width: "100%", minHeight: "100vh", padding: 40 }}
     >
       <div style={{ width: 760, margin: "0 auto" }}>
+        <SettingsPageHead
+          title="Profile"
+          status={
+            <SettingsSaveStatus
+              loading={Boolean(!cloudProfile && (ui.profileLoadStatus === "idle" || ui.profileLoadStatus === "loading"))}
+              saving={ui.isSavingProfile}
+              dirty={ui.profileNeedsSave}
+              error={ui.profileSaveError ?? (ui.profileLoadStatus === "error" ? "Couldn't load your profile" : null)}
+            />
+          }
+        />
         <WebProfileSettingsSection
           {...ui}
           session={session("visual-fixture")}

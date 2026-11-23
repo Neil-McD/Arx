@@ -13,7 +13,7 @@ const worker = read("convex/communityAgentServeWorker.ts");
 const billing = read("convex/founderBilling.ts");
 const builderFunding = read("shared/builderFunding.ts");
 const billingGateway = read("shared/cloudFounderBillingGateway.ts");
-const billingUi = read("apps/web/src/components/WebBillingSettingsSection.tsx");
+const billingUi = read("apps/web/src/components/WebCommunityAiAgentSection.tsx");
 const billingController = read("apps/web/src/controllers/useWebFounderBillingController.ts");
 const auth = read("convex/auth.ts");
 const schema = read("convex/schema.ts");
@@ -90,7 +90,7 @@ assert.match(
 );
 assert.match(
   billingUi,
-  /Operator access included[\s\S]*isOperatorComped \? null/,
+  /comped = community\.funding_mode === "operator_comp"[\s\S]*Included by Polynet[\s\S]*comped \|\| !action \? null/,
   "the billing UI must explain operator access without showing a checkout action",
 );
 assert.doesNotMatch(
@@ -101,7 +101,7 @@ assert.doesNotMatch(
 assert.equal(existsSync("convex/premiumBilling.ts"), false);
 assert.match(
   billingUi,
-  /community\.funding_mode === "operator_comp"[\s\S]*Operator access included[\s\S]*isOperatorComped \? null/,
+  /community\.funding_mode === "operator_comp"[\s\S]*Included by Polynet\. The community itself is free\.[\s\S]*comped \|\| !action \? null/,
   "community funding must project operator access without a checkout",
 );
 assert.match(

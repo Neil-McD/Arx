@@ -140,7 +140,7 @@ assert.equal(
 );
 
 assert.match(settings, /WebCommunitySettingsSection/, "community settings must remain available");
-assert.match(agent, /Community Agent/, "Community Agent instructions must remain available");
+assert.match(agent, /WebCommunityAiAgentInstructionsEditor/, "Community Agent instructions must remain available");
 assert.match(resources, /CommunityResourcesPanel/, "community resources must remain available");
 
 assert.match(

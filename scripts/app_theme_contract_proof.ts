@@ -510,8 +510,10 @@ assert.doesNotMatch(
   "the retired overloaded glass background and border roles must not reappear",
 );
 
-assert.match(appearance, /role="group" aria-label="Theme"/);
-assert.match(appearance, /aria-pressed=\{appTheme === theme\.id\}/);
+const settingsRows = read("apps/web/src/components/SettingsRows.tsx");
+assert.match(appearance, /<SettingsSegmented[\s\S]*label="Theme"/);
+assert.match(settingsRows, /role="radiogroup" aria-label=\{props\.label\}/);
+assert.match(settingsRows, /aria-checked=\{props\.value === option\.id\}/);
 assert.match(baseCss, /grid-template-columns:\s*repeat\(auto-fit,\s*minmax\(180px,\s*1fr\)\);/);
 assert.match(baseCss, /data-preview-theme="light"/);
 assert.match(baseCss, /data-preview-theme="dark"/);

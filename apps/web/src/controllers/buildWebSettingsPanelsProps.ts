@@ -24,10 +24,6 @@ export function buildWebSettingsPanelsProps(params: {
   handleSignOut: WebSettingsPanelsProps["account"]["handleSignOut"];
   founderBilling: FounderBillingController;
   emailPreferences: EmailPreferencesController;
-  onOpenAccountBuilderOffer: WebSettingsPanelsProps["account"]["onOpenBuilderOffer"];
-  onOpenBillingBuilderOffer: WebSettingsPanelsProps["billing"]["onOpenBuilderOffer"];
-  onOpenCommunityBilling: () => void;
-  onOpenCreateCommunity: () => void;
   appTheme: WebSettingsPanelsProps["appearance"]["appTheme"];
   setAppTheme: WebSettingsPanelsProps["appearance"]["setAppTheme"];
 }): WebSettingsPanelsProps {
@@ -53,12 +49,8 @@ export function buildWebSettingsPanelsProps(params: {
       requireSignIn: params.requireSignIn,
       handleSignOut: params.handleSignOut,
       founderBillingOverview: founderBilling.overview,
-      isLoadingFounderBilling: founderBilling.isLoading,
       founderBillingActionCommunityId: founderBilling.actionCommunityId,
       founderBillingError: founderBilling.error,
-      onOpenBuilderOffer: params.onOpenAccountBuilderOffer,
-      onOpenCommunityBilling: params.onOpenCommunityBilling,
-      onOpenCreateCommunity: params.onOpenCreateCommunity,
       retryCommunityArchive: founderBilling.retryArchiveCleanup,
       restoreCommunityWithoutPayment: founderBilling.restoreCommunityWithoutPayment,
     },
@@ -70,17 +62,6 @@ export function buildWebSettingsPanelsProps(params: {
       isSaving: emailPreferences.isSaving,
       error: emailPreferences.error,
       onChangeWeeklyDigestEnabled: emailPreferences.updateWeeklyDigestEnabled,
-    },
-    billing: {
-      session: params.session,
-      founderBillingOverview: founderBilling.overview,
-      isLoadingFounderBilling: founderBilling.isLoading,
-      founderBillingActionCommunityId: founderBilling.actionCommunityId,
-      founderBillingError: founderBilling.error,
-      openFounderBillingPortal: founderBilling.openPortal,
-      refreshFounderBilling: founderBilling.refresh,
-      onOpenBuilderOffer: params.onOpenBillingBuilderOffer,
-      onOpenCreateCommunity: params.onOpenCreateCommunity,
     },
     appearance: {
       appTheme: params.appTheme,

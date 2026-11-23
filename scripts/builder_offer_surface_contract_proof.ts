@@ -17,7 +17,7 @@ const offer = read("shared/builderOffer.ts");
 const createModal = read("apps/web/src/components/WebCreateCommunityModal.tsx");
 const createForm = read("apps/web/src/v1/KitStartCommunity.tsx");
 const createController = read("shared/useCommunityCreateController.ts");
-const billing = read("apps/web/src/components/WebBillingSettingsSection.tsx");
+const billing = read("apps/web/src/components/WebCommunityAiAgentSection.tsx");
 const account = read("apps/web/src/components/WebAccountSettingsSection.tsx");
 const offerModal = read("apps/web/src/components/WebBuilderOfferModal.tsx");
 const offerSummary = read("apps/web/src/components/WebBuilderOfferSummary.tsx");
@@ -75,14 +75,13 @@ assert.match(
 assert.match(createController, /createInFlightRef\.current/);
 assert.match(createController, /founderSubscriptionId/);
 
-for (const surface of [billing, account]) {
-  assert.match(surface, /shared\/builderOffer/);
-  assert.match(surface, /onOpenBuilderOffer/);
-  assert.doesNotMatch(surface, /startCloudFounderSubscriptionCheckout/);
-}
+assert.match(billing, /shared\/builderOffer/);
+assert.match(billing, /onOpenBuilderOffer/);
+assert.doesNotMatch(billing, /startCloudFounderSubscriptionCheckout/);
+assert.doesNotMatch(account, /startCloudFounderSubscriptionCheckout/);
 assert.doesNotMatch(billing, /Member purchase recovery|Claim access/);
 assert.doesNotMatch(billing, /Switch to managed|Managed plan|required managed/i);
-assert.match(account, /The Agent plan is attached to a community, not your account/);
+assert.match(billing, /the community itself is free/);
 assert.doesNotMatch(account, /Legacy API funding|Personal AI connection|API key/i);
 assert.doesNotMatch(account, /Free account|Paid account|account tier/i);
 
@@ -148,8 +147,8 @@ assert.doesNotMatch(app, /claimFounderCheckoutReceipt|founderCheckoutBrowserStat
 assert.doesNotMatch(app, /createBlockingFundingCommunity/);
 assert.equal(
   (app.match(/builderOffer\.open\(\{ community/g) ?? []).length,
-  3,
-  "Billing, Account and Guide (design v1's Agent plan row) must call the same existing-community Builder offer controller",
+  1,
+  "Guide's Agent plan row must call the canonical existing-community Builder offer controller",
 );
 assert.doesNotMatch(offerController, /entrySurface|setEntrySurface/);
 

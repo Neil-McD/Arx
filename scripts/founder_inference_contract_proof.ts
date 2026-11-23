@@ -33,7 +33,7 @@ const usageCollector = read("convex/founderInferenceUsage.ts");
 const communityAdminGateway = read("shared/cloudCommunityAdminGateway.ts");
 const modelCatalog = read("shared/modelCatalog.ts");
 const settings = read("apps/web/src/components/WebAccountSettingsSection.tsx");
-const billingSettings = read("apps/web/src/components/WebBillingSettingsSection.tsx");
+const billingSettings = read("apps/web/src/components/WebCommunityAiAgentSection.tsx");
 const billingGateway = read("shared/cloudFounderBillingGateway.ts");
 const billingController = read("apps/web/src/controllers/useWebFounderBillingController.ts");
 const globalOverlayHost = read("apps/web/src/components/WebGlobalOverlayHost.tsx");
@@ -369,8 +369,9 @@ assert.doesNotMatch(communityAdminGateway, /draftCommunityResourceContentFromSou
 
 assert.doesNotMatch(settings, /Legacy API funding|legacy-eligible|Activate for eligible|Personal AI connection|API key/i);
 assert.doesNotMatch(settings, /GPT 5\.6|\bLuna\b/i);
-assert.match(billingSettings, /Builder/);
-assert.match(billingSettings, /Polynet-hosted community AI/);
+assert.equal(existsSync(join(root, "apps/web/src/components/WebBillingSettingsSection.tsx")), false);
+assert.match(billingSettings, /Agent plan/);
+assert.match(billingSettings, /the community itself is free/);
 assert.doesNotMatch(billingSettings, /GPT 5\.6|\bLuna\b|\$20/i);
 assert.doesNotMatch(billingSettings, /Personal tools|Premium|tool balance|Add credits/i);
 assert.doesNotMatch(billingSettings, /label: "Communities"/);

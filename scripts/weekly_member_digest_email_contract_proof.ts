@@ -85,10 +85,16 @@ assert.match(
   /hasLoaded[\s\S]*setHasLoaded\(false\)[\s\S]*loadCloudEmailPreferences[\s\S]*setHasLoaded\(true\)[\s\S]*!hasLoaded[\s\S]*updateCloudWeeklyDigestPreference/,
   "the settings controller must load and save through the canonical gateway without enabling unresolved state",
 );
+const settingsRows = read("apps/web/src/components/SettingsRows.tsx");
 assert.match(
   section,
-  /!props\.hasLoaded \|\| props\.isLoading \|\| props\.isSaving[\s\S]*Weekly community digest[\s\S]*role="switch"[\s\S]*aria-checked=\{props\.hasLoaded \? props\.weeklyDigestEnabled : false\}/,
+  /!props\.hasLoaded \|\| props\.isLoading \|\| props\.isSaving[\s\S]*<SettingsSwitch[\s\S]*label="Weekly digest"[\s\S]*checked=\{props\.hasLoaded && props\.weeklyDigestEnabled\}[\s\S]*disabled=\{disabled\}/,
   "Account settings must expose one accessible switch that stays disabled and false while unresolved",
+);
+assert.match(
+  settingsRows,
+  /export function SettingsSwitch[\s\S]*role="switch"[\s\S]*aria-checked=\{props\.checked\}/,
+  "SettingsSwitch must preserve switch ARIA semantics",
 );
 assert.match(
   snapshotValidators,

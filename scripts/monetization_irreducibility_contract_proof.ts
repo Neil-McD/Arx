@@ -26,7 +26,7 @@ const runtimeTurnHandlers = read("convex/runtimeTurnHandlers.ts");
 const voice = read("convex/httpVoice.ts");
 const crons = read("convex/crons.ts");
 const schema = read("convex/schema.ts");
-const billingUi = read("apps/web/src/components/WebBillingSettingsSection.tsx");
+const billingUi = read("apps/web/src/components/WebCommunityAiAgentSection.tsx");
 const accountUi = read("apps/web/src/components/WebAccountSettingsSection.tsx");
 const founderBillingGateway = read("shared/cloudFounderBillingGateway.ts");
 const publicLanding = read("apps/web/src/components/polynetLanding/ConversionLanding.tsx");
@@ -148,7 +148,7 @@ assert.match(httpBilling, /syncCommunitySubscriptionFromStripeSubscription/);
 
 assert.equal(existsSync(resolve(root, "convex/premiumBilling.ts")), false);
 assert.doesNotMatch(billingUi, /Premium|tool balance|auto recharge|Add credits/i);
-assert.match(billingUi, /Polynet-hosted community AI/);
+assert.match(billingUi, /Agent plan/);
 const founderCustomerSurface = [
   billingUi,
   accountUi,
