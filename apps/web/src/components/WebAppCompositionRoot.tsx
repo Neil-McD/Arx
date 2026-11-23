@@ -82,7 +82,7 @@ export function WebAppCompositionRoot(props: {
   const mainSurface = (
     <>
     <div className="web-main-surface-slot" style={{ display: showAgentWorkspace ? "none" : "contents" }}>
-    <SurfaceErrorBoundary resetKey={`main:${props.mainSurfaceHostProps.activePage}:${props.mainSurfaceHostProps.communityHostProps.communityTab}`}>
+    <SurfaceErrorBoundary resetKey={`main:${props.mainSurfaceHostProps.activePage}:${props.mainSurfaceHostProps.communityHostProps.secondaryPanelsProps.knowledge.communityId ?? ""}:${props.mainSurfaceHostProps.communityHostProps.communityTab}`}>
       <Suspense
         fallback={<WebAppMainSurfaceFallback {...props.mainSurfaceHostProps} />}
       >

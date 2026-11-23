@@ -44,9 +44,11 @@ export function WebCommunityHost(props: WebCommunityHostProps) {
 
   useEffect(() => scheduleIdlePrefetch(COMMUNITY_TAB_PREFETCH_LOADERS), []);
 
+  const communityKey = secondaryPanelsProps.knowledge.communityId ?? "";
+
   return (
     <div className="community-body">
-      <SurfaceErrorBoundary resetKey={communityTab}>
+      <SurfaceErrorBoundary resetKey={`${communityKey}:${communityTab}`}>
         {communityTab === "chat" ? (
           <WebCommunityChatPanel {...chatPanelProps} interactionProjection={chatPanelProps.interactionProjection
             ? { ...chatPanelProps.interactionProjection, admission: props.admission } : undefined} />

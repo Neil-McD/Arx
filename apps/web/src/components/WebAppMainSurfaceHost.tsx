@@ -61,7 +61,8 @@ export function WebAppMainSurfaceHost(props: WebAppMainSurfaceHostProps) {
   const surfaceFallback = props.showCommunitySurface
     ? <WebAppMainSurfaceFallback {...props} />
     : null;
-  const surfaceResetKey = `${props.activePage}:${props.communityHostProps.communityTab}:${props.publicCommunitySlug ?? ""}`;
+  const activeCommunityKey = props.communityHostProps.secondaryPanelsProps.knowledge.communityId ?? "";
+  const surfaceResetKey = `${props.activePage}:${activeCommunityKey}:${props.communityHostProps.communityTab}:${props.publicCommunitySlug ?? ""}`;
   return (
     <main
       className={`workspace${
