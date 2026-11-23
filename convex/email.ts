@@ -17,6 +17,37 @@ const EMAIL_TEMPLATE_VALIDATOR = v.union(
   ...EMAIL_TEMPLATE_KEYS.map((value) => v.literal(value)),
 );
 
+const EMAIL_PRIORITY_URGENT = 0;
+const EMAIL_PRIORITY_MENTION = 1;
+const EMAIL_PRIORITY_BULK = 2;
+const EMAIL_SEND_CONCURRENCY = 5;
+const MAX_EMAIL_OUTBOX_CONTINUATION_ROUNDS = 10;
+const MAX_EMAIL_ENQUEUE_BATCH_SIZE = 100;
+
+export function emailPriorityRankForTemplate(templateKey: EmailTemplateKey): number {
+  if (templateKey === "event_reminder" || templateKey === "weekly_member_digest") {
+    return EMAIL_PRIORITY_BULK;
+  }
+  if (templateKey === "mention_notification") {
+    return EMAIL_PRIORITY_MENTION;
+  }
+  return EMAIL_PRIORITY_URGENT;
+}
+
+const ENQUEUE_EMAIL_JOB_FIELDS = {
+  kind: v.string(),
+  sourceMentionId: v.optional(v.id("communityInteractionMentions")),
+  communityId: v.optional(v.id("communities")),
+  communityLifecycleGeneration: v.optional(v.number()),
+  recipientUserId: v.optional(v.id("users")),
+  recipientEmail: v.optional(v.string()),
+  templateKey: EMAIL_TEMPLATE_VALIDATOR,
+  payload: v.any(),
+  dedupeKey: v.optional(v.string()),
+  scheduledAt: v.optional(v.number()),
+  nowMs: v.optional(v.number()),
+};
+
 type EmailOutboxStatus = "pending" | "sending" | "sent" | "failed" | "suppressed";
 
 function asRecord(value: unknown): Record<string, unknown> {
@@ -166,135 +197,191 @@ async function weeklyDigestRecipientHasCommunityAccess(
 }
 
 export const enqueueEmailJobInternal = internalMutation({
+  args: ENQUEUE_EMAIL_JOB_FIELDS,
+  handler: async (ctx, args) => enqueueSingleEmailJob(ctx, args),
+});
+
+export const enqueueEmailJobsBatchInternal = internalMutation({
   args: {
-    kind: v.string(),
-    sourceMentionId: v.optional(v.id("communityInteractionMentions")),
-    communityId: v.optional(v.id("communities")),
-    communityLifecycleGeneration: v.optional(v.number()),
-    recipientUserId: v.optional(v.id("users")),
-    recipientEmail: v.optional(v.string()),
-    templateKey: EMAIL_TEMPLATE_VALIDATOR,
-    payload: v.any(),
-    dedupeKey: v.optional(v.string()),
-    scheduledAt: v.optional(v.number()),
-    nowMs: v.optional(v.number()),
+    jobs: v.array(v.object(ENQUEUE_EMAIL_JOB_FIELDS)),
   },
   handler: async (ctx, args) => {
-    const nowMs = args.nowMs ?? Date.now();
-    if (Boolean(args.communityId) !== (args.communityLifecycleGeneration !== undefined)) {
-      throw new Error("email_community_lifecycle_scope_invalid");
+    if (args.jobs.length > MAX_EMAIL_ENQUEUE_BATCH_SIZE) {
+      throw new Error("email_enqueue_batch_too_large");
     }
-    if (args.communityId) {
-      const community = await ctx.db.get(args.communityId);
-      if (
-        !community ||
-        !communityIsActive(community) ||
-        !communityLifecycleGenerationMatches(
-          community,
-          args.communityLifecycleGeneration,
-        )
-      ) {
-        return {
-          ok: true,
-          deduped: false,
-          status: "suppressed" as const,
-          reason: "community_inactive",
-        };
-      }
+    const communityCache = new Map<string, any>();
+    let enqueued = 0;
+    let deduped = 0;
+    let suppressed = 0;
+    const results: Array<{
+      ok: true;
+      deduped: boolean;
+      outboxId?: any;
+      status: EmailOutboxStatus;
+      reason?: string;
+    }> = [];
+    for (const job of args.jobs) {
+      const result = await enqueueSingleEmailJob(ctx, job, communityCache);
+      results.push(result);
+      if (result.deduped) deduped += 1;
+      else if (result.status === "suppressed") suppressed += 1;
+      else enqueued += 1;
     }
-    const dedupeKey = readString(args.dedupeKey) || null;
-    if (dedupeKey) {
-      const existing = await findExistingDedupeRow(ctx, dedupeKey);
-      if (
-        existing &&
-        ["pending", "sending", "sent", "failed", "suppressed"].includes(existing.status)
-      ) {
-        return {
-          ok: true,
-          deduped: true,
-          outboxId: existing._id,
-          status: normalizeStatus(existing.status),
-        };
-      }
-    }
-
-    const recipientUserId = args.recipientUserId ?? null;
-    const rawRecipientEmail = readString(args.recipientEmail);
-    if (recipientUserId && rawRecipientEmail) {
-      throw new Error("email_recipient_ambiguous");
-    }
-    if (!recipientUserId && !rawRecipientEmail) {
-      throw new Error("email_recipient_missing");
-    }
-
-    const templateKey = args.templateKey as EmailTemplateKey;
-    if (args.sourceMentionId && templateKey !== "mention_notification") throw new Error("email_mention_template_invalid");
-    let recipientEmail: string;
-    let suppressionReason: string | null = null;
-    if (recipientUserId) {
-      const deliveryState = await getUserEmailDeliveryState(ctx, recipientUserId);
-      if (deliveryState.verifiedEmail) {
-        recipientEmail = deliveryState.verifiedEmail;
-      } else {
-        suppressionReason = deliveryState.userExists
-          ? "email_recipient_unverified"
-          : "email_recipient_missing";
-        recipientEmail =
-          deliveryState.recordEmail || `suppressed+${String(recipientUserId)}@invalid.local`;
-      }
-    } else {
-      recipientEmail = normalizeRecipientEmail(rawRecipientEmail);
-    }
-
-    if (
-      !suppressionReason &&
-      templateKey === "weekly_member_digest" &&
-      args.communityId &&
-      recipientUserId &&
-      !(await weeklyDigestRecipientHasCommunityAccess(
-        ctx,
-        args.communityId,
-        recipientUserId,
-      ))
-    ) {
-      suppressionReason = "community_membership_inactive";
-    }
-
-    const preferences =
-      !suppressionReason && recipientUserId && isPreferenceControlledTemplate(templateKey)
-        ? await getEmailPreferencesByUserId(ctx, recipientUserId)
-        : null;
-    if (!suppressionReason && preferences && !preferenceAllowsTemplate(preferences, templateKey)) {
-      suppressionReason = "email_preference_disabled";
-    }
-    if (!suppressionReason && templateKey === "mention_notification" &&
-      !(await resolveMentionEmailDelivery({ ctx, ...args }))) {
-      suppressionReason = "mention_source_unavailable";
-    }
-    const suppressed = Boolean(suppressionReason);
-    const status: EmailOutboxStatus = suppressed ? "suppressed" : "pending";
-
-    const outboxId = await ctx.db.insert("emailOutbox", {
-      kind: readString(args.kind) || templateKey,
-      sourceMentionId: args.sourceMentionId,
-      communityId: args.communityId,
-      communityLifecycleGeneration: args.communityLifecycleGeneration,
-      recipientUserId: recipientUserId ?? undefined,
-      recipientEmail,
-      templateKey,
-      payload: templateKey === "mention_notification" ? {} : args.payload ?? {},
-      dedupeKey: dedupeKey ?? undefined,
-      provider: "resend",
-      status,
-      scheduledAt: Math.max(nowMs, Math.floor(args.scheduledAt ?? nowMs)),
-      attemptCount: 0,
-      ...(suppressed ? { failureReason: suppressionReason as string } : null),
-      createdAt: nowMs,
-      updatedAt: nowMs,
-    });
-    return { ok: true, deduped: false, outboxId, status };
+    return {
+      ok: true as const,
+      enqueued,
+      deduped,
+      suppressed,
+      results,
+    };
   },
 });
+
+async function enqueueSingleEmailJob(
+  ctx: any,
+  args: {
+    kind: string;
+    sourceMentionId?: any;
+    communityId?: any;
+    communityLifecycleGeneration?: number;
+    recipientUserId?: any;
+    recipientEmail?: string;
+    templateKey: EmailTemplateKey;
+    payload: any;
+    dedupeKey?: string;
+    scheduledAt?: number;
+    nowMs?: number;
+  },
+  communityCache?: Map<string, any>,
+): Promise<{
+  ok: true;
+  deduped: boolean;
+  outboxId?: any;
+  status: EmailOutboxStatus;
+  reason?: string;
+}> {
+  const nowMs = args.nowMs ?? Date.now();
+  if (Boolean(args.communityId) !== (args.communityLifecycleGeneration !== undefined)) {
+    throw new Error("email_community_lifecycle_scope_invalid");
+  }
+  if (args.communityId) {
+    const cacheKey = String(args.communityId);
+    let community: any;
+    if (communityCache && communityCache.has(cacheKey)) {
+      community = communityCache.get(cacheKey);
+    } else {
+      community = await ctx.db.get(args.communityId);
+      if (communityCache) communityCache.set(cacheKey, community);
+    }
+    if (
+      !community ||
+      !communityIsActive(community) ||
+      !communityLifecycleGenerationMatches(
+        community,
+        args.communityLifecycleGeneration,
+      )
+    ) {
+      return {
+        ok: true,
+        deduped: false,
+        status: "suppressed" as const,
+        reason: "community_inactive",
+      };
+    }
+  }
+  const dedupeKey = readString(args.dedupeKey) || null;
+  if (dedupeKey) {
+    const existing = await findExistingDedupeRow(ctx, dedupeKey);
+    if (
+      existing &&
+      ["pending", "sending", "sent", "failed", "suppressed"].includes(existing.status)
+    ) {
+      return {
+        ok: true,
+        deduped: true,
+        outboxId: existing._id,
+        status: normalizeStatus(existing.status),
+      };
+    }
+  }
+
+  const recipientUserId = args.recipientUserId ?? null;
+  const rawRecipientEmail = readString(args.recipientEmail);
+  if (recipientUserId && rawRecipientEmail) {
+    throw new Error("email_recipient_ambiguous");
+  }
+  if (!recipientUserId && !rawRecipientEmail) {
+    throw new Error("email_recipient_missing");
+  }
+
+  const templateKey = args.templateKey as EmailTemplateKey;
+  if (args.sourceMentionId && templateKey !== "mention_notification") throw new Error("email_mention_template_invalid");
+  let recipientEmail: string;
+  let suppressionReason: string | null = null;
+  if (recipientUserId) {
+    const deliveryState = await getUserEmailDeliveryState(ctx, recipientUserId);
+    if (deliveryState.verifiedEmail) {
+      recipientEmail = deliveryState.verifiedEmail;
+    } else {
+      suppressionReason = deliveryState.userExists
+        ? "email_recipient_unverified"
+        : "email_recipient_missing";
+      recipientEmail =
+        deliveryState.recordEmail || `suppressed+${String(recipientUserId)}@invalid.local`;
+    }
+  } else {
+    recipientEmail = normalizeRecipientEmail(rawRecipientEmail);
+  }
+
+  if (
+    !suppressionReason &&
+    templateKey === "weekly_member_digest" &&
+    args.communityId &&
+    recipientUserId &&
+    !(await weeklyDigestRecipientHasCommunityAccess(
+      ctx,
+      args.communityId,
+      recipientUserId,
+    ))
+  ) {
+    suppressionReason = "community_membership_inactive";
+  }
+
+  const preferences =
+    !suppressionReason && recipientUserId && isPreferenceControlledTemplate(templateKey)
+      ? await getEmailPreferencesByUserId(ctx, recipientUserId)
+      : null;
+  if (!suppressionReason && preferences && !preferenceAllowsTemplate(preferences, templateKey)) {
+    suppressionReason = "email_preference_disabled";
+  }
+  if (!suppressionReason && templateKey === "mention_notification" &&
+    !(await resolveMentionEmailDelivery({ ctx, ...args }))) {
+    suppressionReason = "mention_source_unavailable";
+  }
+  const suppressed = Boolean(suppressionReason);
+  const status: EmailOutboxStatus = suppressed ? "suppressed" : "pending";
+
+  const outboxId = await ctx.db.insert("emailOutbox", {
+    kind: readString(args.kind) || templateKey,
+    sourceMentionId: args.sourceMentionId,
+    communityId: args.communityId,
+    communityLifecycleGeneration: args.communityLifecycleGeneration,
+    recipientUserId: recipientUserId ?? undefined,
+    recipientEmail,
+    templateKey,
+    payload: templateKey === "mention_notification" ? {} : args.payload ?? {},
+    dedupeKey: dedupeKey ?? undefined,
+    provider: "resend",
+    status,
+    priorityRank: emailPriorityRankForTemplate(templateKey),
+    scheduledAt: Math.max(nowMs, Math.floor(args.scheduledAt ?? nowMs)),
+    attemptCount: 0,
+    ...(suppressed ? { failureReason: suppressionReason as string } : null),
+    createdAt: nowMs,
+    updatedAt: nowMs,
+  });
+  return { ok: true, deduped: false, outboxId, status };
+}
 
 async function prepareMentionJob(ctx: any, row: any, nowMs: number, sealContent = false) {
   const payload = await resolveMentionEmailDelivery({ ctx, ...row });
@@ -327,21 +414,45 @@ export const claimDueEmailOutboxBatchInternal = internalMutation({
   handler: async (ctx, args) => {
     const nowMs = args.nowMs ?? Date.now();
     const limit = Math.max(1, Math.min(25, Math.floor(args.limit ?? 10)));
-    const pendingRows = await ctx.db
-      .query("emailOutbox")
-      .withIndex("by_status_scheduledAt", (q: any) => q.eq("status", "pending").lte("scheduledAt", nowMs))
-      .take(limit);
-    const staleSendingRows = await ctx.db
-      .query("emailOutbox")
-      .withIndex("by_status_scheduledAt", (q: any) => q.eq("status", "sending"))
-      .take(limit * 5);
-    const rows = [...pendingRows];
-    for (const row of staleSendingRows) {
-      if (rows.length >= limit) break;
-      if (isStaleSendingRow(row, nowMs)) rows.push(row);
+    const candidateCap = limit * 2;
+    const rows: any[] = [];
+    const seenIds = new Set<string>();
+    const appendRows = (batch: any[]) => {
+      for (const item of batch) {
+        if (rows.length >= candidateCap) break;
+        const key = String(item._id);
+        if (seenIds.has(key)) continue;
+        seenIds.add(key);
+        rows.push(item);
+      }
+    };
+
+    // Priority lanes: urgent (0) -> mentions (1) -> bulk reminders/digests (2) -> legacy unranked.
+    for (const rank of [EMAIL_PRIORITY_URGENT, EMAIL_PRIORITY_MENTION, EMAIL_PRIORITY_BULK, undefined] as const) {
+      if (rows.length >= candidateCap) break;
+      const laneRows = await ctx.db
+        .query("emailOutbox")
+        .withIndex("by_status_priority_scheduledAt", (q: any) =>
+          q.eq("status", "pending").eq("priorityRank", rank).lte("scheduledAt", nowMs),
+        )
+        .take(candidateCap - rows.length);
+      appendRows(laneRows);
     }
+
+    if (rows.length < candidateCap) {
+      const staleSendingRows = await ctx.db
+        .query("emailOutbox")
+        .withIndex("by_status_scheduledAt", (q: any) => q.eq("status", "sending"))
+        .take(limit * 5);
+      for (const row of staleSendingRows) {
+        if (rows.length >= candidateCap) break;
+        if (isStaleSendingRow(row, nowMs)) appendRows([row]);
+      }
+    }
+
     const claimedRows = [];
     for (const row of rows) {
+      if (claimedRows.length >= limit) break;
       if (row.templateKey === "mention_notification") {
         const payload = await prepareMentionJob(ctx, row, nowMs);
         if (!payload) continue;
@@ -349,7 +460,7 @@ export const claimDueEmailOutboxBatchInternal = internalMutation({
         row.payload = payload;
       }
       if (row.communityId) {
-        const community = await ctx.db.get(row.communityId);
+        const community = (await ctx.db.get(row.communityId)) as any;
         if (
           !community ||
           !communityIsActive(community) ||
@@ -511,11 +622,14 @@ export const processPendingEmailOutboxInternal = internalAction({
   args: {
     limit: v.optional(v.number()),
     nowMs: v.optional(v.number()),
+    continuationRound: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
     const nowMs = args.nowMs ?? Date.now();
+    const limit = Math.max(1, Math.min(25, Math.floor(args.limit ?? 25)));
+    const continuationRound = Math.max(0, Math.floor(args.continuationRound ?? 0));
     const claimed = (await ctx.runMutation((internal as any).email.claimDueEmailOutboxBatchInternal, {
-      limit: args.limit ?? 10,
+      limit,
       nowMs,
     })) as Array<{
       _id: any;
@@ -529,45 +643,75 @@ export const processPendingEmailOutboxInternal = internalAction({
     let sent = 0;
     let failed = 0;
     let suppressed = 0;
-    for (const job of claimed) {
-      try {
-        if (job.templateKey === "mention_notification") {
-          const prepared = await ctx.runMutation((internal as any).email.prepareMentionEmailDispatchInternal, {
-            outboxId: job._id, attemptCount: job.attemptCount,
-          });
-          if (!prepared) { suppressed += 1; continue; }
-          job.recipientEmail = prepared.recipientEmail;
-          job.payload = prepared.payload;
-        }
-        const response = await sendRenderedEmail({
-          to: job.recipientEmail,
-          templateKey: job.templateKey,
-          payload: job.payload,
-          idempotencyKey: readString(job.dedupeKey) || String(job._id),
-        });
-        await ctx.runMutation((internal as any).email.markEmailJobSentInternal, {
-          outboxId: job._id,
-          providerMessageId: response.providerMessageId,
-          nowMs: Date.now(),
-        });
-        sent += 1;
-      } catch (error) {
-        const reason =
-          error instanceof Error && error.message.trim() ? error.message.trim() : "email_send_failed";
-        await ctx.runMutation((internal as any).email.markEmailJobFailedInternal, {
-          outboxId: job._id,
-          reason,
-          nowMs: Date.now(),
-        });
-        failed += 1;
+    for (let start = 0; start < claimed.length; start += EMAIL_SEND_CONCURRENCY) {
+      const chunk = claimed.slice(start, start + EMAIL_SEND_CONCURRENCY);
+      const outcomes = await Promise.all(
+        chunk.map(async (job) => {
+          try {
+            let recipientEmail = job.recipientEmail;
+            let payload = job.payload;
+            if (job.templateKey === "mention_notification") {
+              const prepared = await ctx.runMutation((internal as any).email.prepareMentionEmailDispatchInternal, {
+                outboxId: job._id,
+                attemptCount: job.attemptCount,
+              });
+              if (!prepared) return "suppressed" as const;
+              recipientEmail = prepared.recipientEmail;
+              payload = prepared.payload;
+            }
+            const response = await sendRenderedEmail({
+              to: recipientEmail,
+              templateKey: job.templateKey,
+              payload,
+              idempotencyKey: readString(job.dedupeKey) || String(job._id),
+            });
+            await ctx.runMutation((internal as any).email.markEmailJobSentInternal, {
+              outboxId: job._id,
+              providerMessageId: response.providerMessageId,
+              nowMs: Date.now(),
+            });
+            return "sent" as const;
+          } catch (error) {
+            const reason =
+              error instanceof Error && error.message.trim() ? error.message.trim() : "email_send_failed";
+            await ctx.runMutation((internal as any).email.markEmailJobFailedInternal, {
+              outboxId: job._id,
+              reason,
+              nowMs: Date.now(),
+            });
+            return "failed" as const;
+          }
+        }),
+      );
+      for (const outcome of outcomes) {
+        if (outcome === "sent") sent += 1;
+        else if (outcome === "suppressed") suppressed += 1;
+        else failed += 1;
       }
     }
+
+    let continued = false;
+    // Back off to the 5-minute cron if the entire batch failed (provider outage).
+    if (
+      claimed.length >= limit &&
+      sent + suppressed > 0 &&
+      continuationRound < MAX_EMAIL_OUTBOX_CONTINUATION_ROUNDS
+    ) {
+      await ctx.scheduler.runAfter(2_000, (internal as any).email.processPendingEmailOutboxInternal, {
+        limit,
+        continuationRound: continuationRound + 1,
+        ...(args.nowMs !== undefined ? { nowMs: args.nowMs } : {}),
+      });
+      continued = true;
+    }
+
     return {
       ok: true,
       claimed: claimed.length,
       sent,
       failed,
       suppressed,
+      continued,
     };
   },
 });

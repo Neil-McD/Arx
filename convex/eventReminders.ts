@@ -18,6 +18,7 @@ const DEFAULT_LOOKAHEAD_MS = 20 * 60 * 1000;
 const DEFAULT_EVENT_SCAN_LIMIT = 2000;
 // Every member is reminded: recipients go out in batches of this many.
 const RECIPIENTS_PER_BATCH = 500;
+const ENQUEUE_CHUNK_SIZE = 100;
 
 type EventReminderBatch = {
   communityId: string;
@@ -168,14 +169,12 @@ export const buildEventReminderBatchesInternal = internalQuery({
       });
       // A pod's call reminds the pod only.
       const podRecipients = isPodEvent(event) ? await podEventRecipientIds(ctx, event) : null;
-      if (podRecipients) {
-        for (let index = recipientUserIds.length - 1; index >= 0; index -= 1) {
-          if (!podRecipients.has(String(recipientUserIds[index]))) recipientUserIds.splice(index, 1);
-        }
-      }
-      if (recipientUserIds.length === 0) continue;
+      const eligibleRecipientUserIds = podRecipients
+        ? recipientUserIds.filter((userId) => podRecipients.has(String(userId)))
+        : recipientUserIds;
+      if (eligibleRecipientUserIds.length === 0) continue;
 
-      for (const occurrenceStartsAt of occurrenceStarts) for (let first = 0; first < recipientUserIds.length; first += RECIPIENTS_PER_BATCH) {
+      for (const occurrenceStartsAt of occurrenceStarts) for (let first = 0; first < eligibleRecipientUserIds.length; first += RECIPIENTS_PER_BATCH) {
         batches.push({
           communityId: String(community._id),
           communityName: String(community.name ?? communitySlug).trim() || "your community",
@@ -184,7 +183,7 @@ export const buildEventReminderBatchesInternal = internalQuery({
           eventTitle: String(event.title ?? "").trim() || "Your event",
           eventTimezone: String(event.timezone ?? "").trim() || "UTC",
           occurrenceStartsAt,
-          recipientUserIds: recipientUserIds.slice(first, first + RECIPIENTS_PER_BATCH),
+          recipientUserIds: eligibleRecipientUserIds.slice(first, first + RECIPIENTS_PER_BATCH),
         });
       }
     }
@@ -226,25 +225,24 @@ export const enqueueEventReminderEmailsInternal = internalAction({
         actionUrl: buildEventsActionUrl(batch.communitySlug),
         footerNote: "You can change event reminder emails from account settings.",
       };
-      for (const userId of batch.recipientUserIds) {
-        const result = (await ctx.runMutation(
-          (internal as any).email.enqueueEmailJobInternal,
+      for (let start = 0; start < batch.recipientUserIds.length; start += ENQUEUE_CHUNK_SIZE) {
+        const chunk = batch.recipientUserIds.slice(start, start + ENQUEUE_CHUNK_SIZE);
+        const batchResult = (await ctx.runMutation(
+          (internal as any).email.enqueueEmailJobsBatchInternal,
           {
-            kind: "event_reminder_24h",
-            recipientUserId: userId,
-            templateKey: "event_reminder",
-            payload,
-            dedupeKey: `event_reminder_24h:${batch.eventId}:${batch.occurrenceStartsAt}:${String(userId)}`,
-            nowMs,
+            jobs: chunk.map((userId) => ({
+              kind: "event_reminder_24h",
+              recipientUserId: userId,
+              templateKey: "event_reminder",
+              payload,
+              dedupeKey: `event_reminder_24h:${batch.eventId}:${batch.occurrenceStartsAt}:${String(userId)}`,
+              nowMs,
+            })),
           },
-        )) as { deduped?: boolean; status?: string } | null;
-        if (result?.deduped) {
-          deduped += 1;
-        } else if (result?.status === "suppressed") {
-          suppressed += 1;
-        } else {
-          enqueued += 1;
-        }
+        )) as { enqueued?: number; deduped?: number; suppressed?: number } | null;
+        enqueued += Number(batchResult?.enqueued ?? 0);
+        deduped += Number(batchResult?.deduped ?? 0);
+        suppressed += Number(batchResult?.suppressed ?? 0);
       }
     }
 

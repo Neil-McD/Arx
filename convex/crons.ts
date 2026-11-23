@@ -8,7 +8,7 @@ crons.interval(
   { minutes: 5 },
   (internal as any).email.processPendingEmailOutboxInternal,
   {
-    limit: 10,
+    limit: 25,
   },
 );
 

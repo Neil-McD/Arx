@@ -243,7 +243,7 @@ assert.match(
 assert.match(notificationAccess, /resolveCommunityChannelActor\(args\)[\s\S]*resolveCommunityInteractionEvidenceSource[\s\S]*communityInteractionEvidenceSourceIsReadable[\s\S]*requireCommunityChannelCapability/, "notification authority must reuse community and channel access and live-source checks");
 assert.match(emailModule, /sourceMentionId: v.optional\(v.id\("communityInteractionMentions"\)\)/, "outbox must retain typed mention lineage");
 assert.match(emailModule, /prepareMentionEmailDispatchInternal[\s\S]*row.attemptCount !== args.attemptCount/, "dispatch must fence superseded attempts");
-assert.match(emailModule, /job.templateKey === "mention_notification"[\s\S]*prepareMentionEmailDispatchInternal[\s\S]*if \(!prepared\)[\s\S]*continue[\s\S]*sendRenderedEmail/, "mention delivery must reauthorize immediately before provider dispatch");
+assert.match(emailModule, /job\.templateKey === "mention_notification"[\s\S]*prepareMentionEmailDispatchInternal[\s\S]*if \(!prepared\)[\s\S]*(?:continue|return "suppressed")[\s\S]*sendRenderedEmail/, "mention delivery must reauthorize immediately before provider dispatch");
 assert.match(
   mentionEmails,
   /MENTION_EMAIL_RECIPIENT_COOLDOWN_MS = 60 \* 60 \* 1000/,
@@ -251,7 +251,7 @@ assert.match(
 );
 assert.match(
   mentionEmails,
-  /withIndex\("by_recipientUserId"[\s\S]*?"mention_notification"/,
+  /withIndex\("by_recipientUserId_kind_createdAt"[\s\S]*?"mention_notification"/,
   "the cooldown derives from the recipient's latest mention email in the outbox",
 );
 assert.match(
