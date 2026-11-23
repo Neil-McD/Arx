@@ -15,7 +15,7 @@ function assertContains(haystack: string, needle: string, label: string): void {
 }
 
 const schema = readText("convex/schema.ts");
-const threads = readText("convex/threads.ts");
+const threads = `${readText("convex/threads.ts")}\n${readText("convex/threadWorkingStateCore.ts")}`;
 const resolution = readText("convex/runtimeTurnResolution.ts");
 const handlers = readText("convex/runtimeTurnHandlers.ts");
 const prompt = readText("shared/runtimePrompt.ts");

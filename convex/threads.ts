@@ -16,20 +16,31 @@ import {
   isReadOnlyLegacyCommunityAgentThreadKey,
 } from "../shared/runtimeInvocationSurface";
 import { COMMUNITY_AGENT_CONTEXT_PAGE_SIZE } from "../shared/communityAgentConversationContext";
-import {
-  COMMUNITY_AGENT_MAX_IMAGE_ATTACHMENTS,
-  COMMUNITY_AGENT_MAX_IMAGE_BYTES,
-  COMMUNITY_AGENT_MAX_IMAGE_TOTAL_BYTES,
-  isAllowedCommunityAgentImageMime,
-  normalizeCommunityAgentImageMime,
-  normalizeCommunityAgentImageName,
-} from "../shared/communityAgentAttachments";
 import { projectRuntimeCommunityContextEventPayload } from "../shared/runtimeCommunityContextReceipt";
 import {
   RUNTIME_PROVIDER_CONTEXT_ATTESTATION_EVENT_TYPE,
   canonicalRuntimeProviderContextJson,
   parseRuntimeProviderContextAttestation,
 } from "../shared/runtimeProviderContextAttestation";
+import {
+  COMMUNITY_AGENT_ATTACHMENT_PENDING_TTL_MS,
+  type CloudThreadAttachmentClaimLike,
+  type CloudThreadAttachmentUploadTicketLike,
+  attachCommunityAgentClaimsToMessage,
+  claimStoredCloudCommunityAgentAttachmentCore,
+  deleteCloudStorageObjectIfPresent,
+  deleteCommunityAgentClaimsForMessage,
+  listStoredCloudMessageStorageIds,
+  mapCloudMessageContentJsonForRead,
+  normalizeCommunityAgentMessageContent,
+  prepareCloudCommunityAgentAttachmentUploadCore,
+} from "./threadAttachmentsCore";
+import {
+  type ThreadWorkingStateLike,
+  buildRunStartedWorkingState,
+  compactThreadWorkingState,
+  extractThreadMessageText,
+} from "./threadWorkingStateCore";
 
 type ThreadLike = {
   _id: any;
@@ -87,51 +98,6 @@ type CommunityAgentEpisodeLike = {
   updatedAt: number;
 };
 
-type StoredCloudMessageAttachment = {
-  id: string;
-  name: string;
-  type: "image" | "file";
-  mime: string | null;
-  size: number;
-  storageId?: string | null;
-  dataUrl?: string | null;
-  text?: string | null;
-  truncated?: boolean | null;
-};
-
-type CloudThreadAttachmentClaimLike = {
-  _id: any;
-  ownerId: any;
-  threadId: any;
-  storageId: any;
-  messageKey: string;
-  status: "pending" | "attached";
-  attachedMessageId?: any;
-  name: string;
-  mime: string;
-  size: number;
-  createdAt: number;
-};
-
-type CloudThreadAttachmentUploadTicketLike = {
-  _id: any;
-  ownerId: any;
-  threadId: any;
-  ticketKey: string;
-  messageKey: string;
-  claimedStorageId?: any;
-  createdAt: number;
-  expiresAt: number;
-  claimedAt?: number;
-};
-
-const COMMUNITY_AGENT_ATTACHMENT_UPLOAD_RATE_WINDOW_MS = 60_000;
-const COMMUNITY_AGENT_ATTACHMENT_UPLOAD_RATE_LIMIT = 16;
-const COMMUNITY_AGENT_ATTACHMENT_UPLOAD_TICKET_TTL_MS = 10 * 60_000;
-const COMMUNITY_AGENT_ATTACHMENT_PENDING_TTL_MS = 60 * 60_000;
-const COMMUNITY_AGENT_ATTACHMENT_MAX_PENDING_COUNT = 8;
-const COMMUNITY_AGENT_ATTACHMENT_MAX_PENDING_BYTES = 50 * 1024 * 1024;
-
 type RuntimeRunLike = {
   _id: any;
   ownerId: any;
@@ -172,295 +138,6 @@ type RuntimeRunLike = {
   updatedAt: number;
 };
 
-function createAttachmentId(): string {
-  return `attachment-${Math.random().toString(36).slice(2, 10)}`;
-}
-
-async function maybeResolveCloudMessageStorageUrl(ctx: any, storageId: unknown): Promise<string | null> {
-  const resolvedStorageId = String(storageId ?? "").trim();
-  if (!resolvedStorageId) return null;
-  const resolved = await ctx.storage.getUrl(resolvedStorageId as any);
-  return typeof resolved === "string" && resolved.trim() ? resolved.trim() : null;
-}
-
-async function deleteCloudStorageObjectIfPresent(ctx: any, storageId: unknown): Promise<void> {
-  const resolvedStorageId = String(storageId ?? "").trim();
-  if (!resolvedStorageId) return;
-  const metadata = await ctx.db.system.get("_storage", resolvedStorageId as any);
-  if (metadata) await ctx.storage.delete(resolvedStorageId as any);
-}
-
-function normalizeStoredCloudMessageAttachment(raw: unknown): StoredCloudMessageAttachment | null {
-  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
-  const record = raw as Record<string, unknown>;
-  const id = typeof record.id === "string" && record.id.trim() ? record.id.trim() : createAttachmentId();
-  const name = typeof record.name === "string" && record.name.trim() ? record.name.trim().slice(0, 256) : "attachment";
-  const type = record.type === "image" ? "image" : "file";
-  const mime = typeof record.mime === "string" && record.mime.trim() ? record.mime.trim().slice(0, 160) : null;
-  const sizeRaw = Number(record.size);
-  const size = Number.isFinite(sizeRaw) ? Math.max(0, Math.floor(sizeRaw)) : 0;
-  const storageIdRaw =
-    typeof record.storageId === "string"
-      ? record.storageId
-      : typeof record.storage_id === "string"
-        ? record.storage_id
-        : "";
-  const storageId = storageIdRaw.trim() ? storageIdRaw.trim() : null;
-  const dataUrl =
-    typeof record.data_url === "string" && record.data_url.trim().startsWith("data:")
-      ? record.data_url.trim()
-      : null;
-  const text = typeof record.text === "string" && record.text.trim() ? record.text.slice(0, 20_000) : null;
-  const truncated = typeof record.truncated === "boolean" ? record.truncated : null;
-  if (!storageId && !dataUrl && !text) return null;
-  return {
-    id,
-    name,
-    type,
-    mime,
-    size,
-    ...(storageId ? { storageId } : null),
-    ...(dataUrl ? { dataUrl } : null),
-    ...(text ? { text } : null),
-    ...(truncated !== null ? { truncated } : null),
-  };
-}
-
-function normalizeStoredCloudMessageAttachments(raw: unknown): StoredCloudMessageAttachment[] {
-  if (!Array.isArray(raw)) return [];
-  const out: StoredCloudMessageAttachment[] = [];
-  for (const item of raw) {
-    const normalized = normalizeStoredCloudMessageAttachment(item);
-    if (normalized) out.push(normalized);
-  }
-  return out;
-}
-
-async function hasOwnedThreadStorageClaim(
-  ctx: any,
-  ownerId: any,
-  threadId: any,
-  storageId: string,
-): Promise<boolean> {
-  let metadata: any = null;
-  try {
-    metadata = await ctx.db.system.get(storageId as any);
-  } catch {
-    return false;
-  }
-  const normalizedStorageId =
-    metadata?._id &&
-    typeof metadata?.size === "number" &&
-    typeof metadata?.sha256 === "string"
-      ? metadata._id
-      : null;
-  if (!normalizedStorageId) return false;
-  const claim = await ctx.db
-    .query("cloudThreadAttachments")
-    .withIndex("by_owner_thread_storage", (q: any) =>
-      q.eq("ownerId", ownerId).eq("threadId", threadId).eq("storageId", normalizedStorageId),
-    )
-    .first();
-  return Boolean(claim);
-}
-
-async function normalizeCommunityAgentMessageContent(args: {
-  ctx: any;
-  ownerId: any;
-  thread: ThreadLike;
-  messageKey: string;
-  role: "user" | "assistant" | "system";
-  contentJson: unknown;
-}): Promise<unknown> {
-  if (args.role !== "user" || !isClaimedImageAttachmentThread(args.thread)) {
-    // Even on non-community threads or assistant/system messages, never accept
-    // an unowned storageId in contentJson.attachments (prevents signed-URL oracle).
-    if (args.contentJson && typeof args.contentJson === "object" && !Array.isArray(args.contentJson)) {
-      const attachments = normalizeStoredCloudMessageAttachments(
-        (args.contentJson as Record<string, unknown>).attachments,
-      );
-      for (const attachment of attachments) {
-        if (!attachment.storageId) continue;
-        const owned = await hasOwnedThreadStorageClaim(
-          args.ctx,
-          args.ownerId,
-          args.thread._id,
-          attachment.storageId,
-        );
-        if (!owned) throw new Error("member_agent_attachment_claim_missing");
-      }
-    }
-    return args.contentJson;
-  }
-  const record =
-    args.contentJson && typeof args.contentJson === "object" && !Array.isArray(args.contentJson)
-      ? (args.contentJson as Record<string, unknown>)
-      : {};
-  const text = String(record.text ?? "").trim();
-  const rawAttachments = Array.isArray(record.attachments) ? record.attachments : [];
-  if (rawAttachments.length > COMMUNITY_AGENT_MAX_IMAGE_ATTACHMENTS) {
-    throw new Error("member_agent_attachment_limit_exceeded");
-  }
-  const attachments: StoredCloudMessageAttachment[] = [];
-  const storageIds = new Set<string>();
-  let totalBytes = 0;
-  for (const raw of rawAttachments) {
-    if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
-      throw new Error("member_agent_attachment_invalid");
-    }
-    const attachment = raw as Record<string, unknown>;
-    const storageId = String(attachment.storage_id ?? attachment.storageId ?? "").trim();
-    if (!storageId || storageIds.has(storageId)) {
-      throw new Error("member_agent_attachment_invalid");
-    }
-    storageIds.add(storageId);
-    const claim = (await args.ctx.db
-      .query("cloudThreadAttachments")
-      .withIndex("by_owner_thread_storage", (q: any) =>
-        q
-          .eq("ownerId", args.ownerId)
-          .eq("threadId", args.thread._id)
-          .eq("storageId", storageId as any),
-      )
-      .unique()) as CloudThreadAttachmentClaimLike | null;
-    if (!claim) throw new Error("member_agent_attachment_claim_required");
-    if (claim.messageKey !== args.messageKey) {
-      throw new Error("member_agent_attachment_message_mismatch");
-    }
-    if (claim.status !== "pending" && claim.status !== "attached") {
-      throw new Error("member_agent_attachment_claim_invalid");
-    }
-    if (!isAllowedCommunityAgentImageMime(claim.mime)) {
-      throw new Error("member_agent_attachment_type_not_supported");
-    }
-    if (claim.size <= 0 || claim.size > COMMUNITY_AGENT_MAX_IMAGE_BYTES) {
-      throw new Error("member_agent_attachment_too_large");
-    }
-    totalBytes += claim.size;
-    if (totalBytes > COMMUNITY_AGENT_MAX_IMAGE_TOTAL_BYTES) {
-      throw new Error("member_agent_attachment_total_too_large");
-    }
-    attachments.push({
-      id: String(attachment.id ?? "").trim() || createAttachmentId(),
-      name: claim.name,
-      type: "image",
-      mime: claim.mime,
-      size: claim.size,
-      storageId: String(claim.storageId),
-    });
-  }
-  if (!text && attachments.length === 0) {
-    throw new Error("member_agent_message_empty");
-  }
-  return {
-    text,
-    ...(attachments.length > 0 ? { attachments } : null),
-  };
-}
-
-function listStoredCloudMessageStorageIds(contentJson: unknown): string[] {
-  if (!contentJson || typeof contentJson !== "object" || Array.isArray(contentJson)) return [];
-  const record = contentJson as Record<string, unknown>;
-  return normalizeStoredCloudMessageAttachments(record.attachments)
-    .map((attachment) => String(attachment.storageId ?? "").trim())
-    .filter(Boolean);
-}
-
-async function attachCommunityAgentClaimsToMessage(args: {
-  ctx: any;
-  ownerId: any;
-  threadId: any;
-  messageId: any;
-  messageKey: string;
-  contentJson: unknown;
-}): Promise<void> {
-  for (const storageId of listStoredCloudMessageStorageIds(args.contentJson)) {
-    const claim = (await args.ctx.db
-      .query("cloudThreadAttachments")
-      .withIndex("by_owner_thread_storage", (q: any) =>
-        q
-          .eq("ownerId", args.ownerId)
-          .eq("threadId", args.threadId)
-          .eq("storageId", storageId as any),
-      )
-      .unique()) as CloudThreadAttachmentClaimLike | null;
-    if (!claim || claim.messageKey !== args.messageKey) {
-      throw new Error("member_agent_attachment_claim_required");
-    }
-    if (
-      claim.status === "attached" &&
-      claim.attachedMessageId &&
-      String(claim.attachedMessageId) !== String(args.messageId)
-    ) {
-      throw new Error("member_agent_attachment_reuse_rejected");
-    }
-    await args.ctx.db.patch(claim._id, {
-      status: "attached",
-      attachedMessageId: args.messageId,
-    });
-  }
-}
-
-async function deleteCommunityAgentClaimsForMessage(args: {
-  ctx: any;
-  ownerId: any;
-  threadId: any;
-  messageKey: string;
-  exceptStorageIds?: ReadonlySet<string>;
-}): Promise<void> {
-  const claims = (await args.ctx.db
-    .query("cloudThreadAttachments")
-    .withIndex("by_owner_messageKey", (q: any) =>
-      q.eq("ownerId", args.ownerId).eq("messageKey", args.messageKey),
-    )
-    .collect()) as CloudThreadAttachmentClaimLike[];
-  for (const claim of claims) {
-    if (String(claim.threadId) !== String(args.threadId)) continue;
-    if (args.exceptStorageIds?.has(String(claim.storageId))) continue;
-    await deleteCloudStorageObjectIfPresent(args.ctx, claim.storageId);
-    await args.ctx.db.delete(claim._id);
-  }
-}
-
-async function mapCloudMessageContentJsonForRead(
-  ctx: any,
-  ownerId: any,
-  threadId: any,
-  contentJson: unknown,
-): Promise<unknown> {
-  if (!contentJson || typeof contentJson !== "object" || Array.isArray(contentJson)) return contentJson;
-  const record = contentJson as Record<string, unknown>;
-  const attachments = normalizeStoredCloudMessageAttachments(record.attachments);
-  if (attachments.length === 0) return contentJson;
-  const resolvedAttachments = await Promise.all(
-    attachments.map(async (attachment) => {
-      const url = attachment.storageId
-        ? (await hasOwnedThreadStorageClaim(ctx, ownerId, threadId, attachment.storageId))
-          ? await maybeResolveCloudMessageStorageUrl(ctx, attachment.storageId)
-          : null
-        : undefined;
-      return {
-        id: attachment.id,
-        name: attachment.name,
-        type: attachment.type,
-        mime: attachment.mime,
-        size: attachment.size,
-        ...(attachment.storageId ? { storage_id: attachment.storageId } : null),
-        ...(attachment.storageId ? { url: url ?? null } : null),
-        ...(attachment.dataUrl ? { data_url: attachment.dataUrl } : null),
-        ...(attachment.text ? { text: attachment.text } : null),
-        ...(attachment.truncated !== null && typeof attachment.truncated !== "undefined"
-          ? { truncated: attachment.truncated }
-          : null),
-      };
-    }),
-  );
-  return {
-    ...record,
-    attachments: resolvedAttachments,
-  };
-}
-
 type RuntimeRunEventLike = {
   _id: any;
   ownerId: any;
@@ -471,29 +148,6 @@ type RuntimeRunEventLike = {
   eventKey?: string;
   payload: unknown;
   createdAt: number;
-};
-
-type ThreadWorkingStateLike = {
-  version?: number;
-  goal?: string;
-  status?: "idle" | "in_progress" | "blocked" | "needs_verification" | "complete";
-  currentStep?: string;
-  plan?: string[];
-  completedSteps?: string[];
-  decisions?: string[];
-  openQuestions?: string[];
-  focusFiles?: string[];
-  lastResult?: string;
-  verificationStatus?: "not_needed" | "needed" | "passed" | "failed";
-  filesTouched?: string[];
-  filesChanged: string[];
-  verifiedFindings: string[];
-  recentActions?: string[];
-  lastDiagnostic?: string;
-  openIssue?: string;
-  blocker?: string;
-  nextAction?: string;
-  updatedAt: number;
 };
 
 const RUNTIME_RUN_STALE_AFTER_MS = 8 * 60 * 1000;
@@ -645,289 +299,6 @@ function assertRuntimeRunMatchesRequestedCommunityLens(args: {
       throw new Error("runtime_run_community_context_version_conflict");
     }
   }
-}
-
-function normalizeOptionalSummaryText(raw: unknown, maxLen = 240): string | null {
-  const value = String(raw ?? "")
-    .replace(/\s+/g, " ")
-    .trim();
-  if (!value) return null;
-  return value.slice(0, maxLen);
-}
-
-function normalizeWorkingStateText(raw: unknown, maxLen = 240): string | undefined {
-  const value = normalizeOptionalSummaryText(raw, maxLen);
-  return value ?? undefined;
-}
-
-function normalizeWorkingStateList(raw: string[], maxItems = 6, maxLen = 180): string[] {
-  const out: string[] = [];
-  for (const value of raw) {
-    const normalized = normalizeWorkingStateText(value, maxLen);
-    if (!normalized) continue;
-    if (out.includes(normalized)) continue;
-    out.push(normalized);
-    if (out.length >= maxItems) break;
-  }
-  return out;
-}
-
-const TASK_PIVOT_PATTERN =
-  /^(new task|new topic|switch(ing)? to|change topic|different task|ignore that|forget that|now let's|let's move to|moving on|separate question|unrelated|actually|instead)\b/i;
-
-const TASK_PIVOT_STOP_WORDS = new Set([
-  "the",
-  "and",
-  "for",
-  "with",
-  "that",
-  "this",
-  "from",
-  "have",
-  "what",
-  "when",
-  "where",
-  "into",
-  "onto",
-  "then",
-  "than",
-  "your",
-  "our",
-  "can",
-  "you",
-  "lets",
-  "let",
-  "now",
-]);
-
-function tokenizeTaskGoal(value: unknown): string[] {
-  return String(value ?? "")
-    .toLowerCase()
-    .replace(/[^a-z0-9_./-]+/g, " ")
-    .split(/\s+/)
-    .map((token) => token.trim())
-    .filter((token) => token.length >= 3 && !TASK_PIVOT_STOP_WORDS.has(token));
-}
-
-function shouldPreserveActiveTaskLedger(args: {
-  previous: ThreadWorkingStateLike | null;
-  latestUserText?: string | null;
-}): boolean {
-  const previous = args.previous;
-  if (!previous || previous.status === "complete") return false;
-  const latest = normalizeWorkingStateText(args.latestUserText, 240);
-  const previousGoal = normalizeWorkingStateText(previous.goal, 240);
-  if (!latest || !previousGoal) return true;
-  if (TASK_PIVOT_PATTERN.test(latest)) return false;
-  if (latest.length < 28) return true;
-  const latestLower = latest.toLowerCase();
-  const previousLower = previousGoal.toLowerCase();
-  if (latestLower.includes(previousLower) || previousLower.includes(latestLower)) {
-    return true;
-  }
-  const latestTokens = tokenizeTaskGoal(latest);
-  const previousTokens = new Set(tokenizeTaskGoal(previousGoal));
-  if (latestTokens.length < 4 || previousTokens.size < 4) return true;
-  const overlap = latestTokens.filter((token) => previousTokens.has(token)).length;
-  const overlapRatio = overlap / Math.min(latestTokens.length, previousTokens.size);
-  return overlapRatio >= 0.25;
-}
-
-function normalizePreviousWorkingState(raw: unknown): ThreadWorkingStateLike | null {
-  const record = asRecord(raw);
-  if (!record) return null;
-  const filesChanged = Array.isArray(record.filesChanged)
-    ? normalizeWorkingStateList(
-        record.filesChanged.map((value) => String(value ?? "")),
-        8,
-        180,
-      )
-    : [];
-  const filesTouched = Array.isArray(record.filesTouched)
-    ? normalizeWorkingStateList(
-        record.filesTouched.map((value) => String(value ?? "")),
-        10,
-        180,
-      )
-    : filesChanged;
-  const verifiedFindings = Array.isArray(record.verifiedFindings)
-    ? normalizeWorkingStateList(
-        record.verifiedFindings.map((value) => String(value ?? "")),
-        4,
-        220,
-      )
-    : [];
-  const recentActions = Array.isArray(record.recentActions)
-    ? normalizeWorkingStateList(
-        record.recentActions.map((value) => String(value ?? "")),
-        6,
-        180,
-      )
-    : [];
-  const plan = Array.isArray(record.plan)
-    ? normalizeWorkingStateList(
-        record.plan.map((value) => String(value ?? "")),
-        5,
-        180,
-      )
-    : [];
-  const completedSteps = Array.isArray(record.completedSteps)
-    ? normalizeWorkingStateList(
-        record.completedSteps.map((value) => String(value ?? "")),
-        8,
-        180,
-      )
-    : [];
-  const decisions = Array.isArray(record.decisions)
-    ? normalizeWorkingStateList(
-        record.decisions.map((value) => String(value ?? "")),
-        5,
-        200,
-      )
-    : [];
-  const openQuestions = Array.isArray(record.openQuestions)
-    ? normalizeWorkingStateList(
-        record.openQuestions.map((value) => String(value ?? "")),
-        4,
-        200,
-      )
-    : [];
-  const focusFiles = Array.isArray(record.focusFiles)
-    ? normalizeWorkingStateList(
-        record.focusFiles.map((value) => String(value ?? "")),
-        8,
-        180,
-      )
-    : [];
-  const statusRaw = String(record.status ?? "").trim();
-  const status =
-    statusRaw === "idle" ||
-    statusRaw === "in_progress" ||
-    statusRaw === "blocked" ||
-    statusRaw === "needs_verification" ||
-    statusRaw === "complete"
-      ? statusRaw
-      : undefined;
-  const verificationStatusRaw = String(record.verificationStatus ?? "").trim();
-  const verificationStatus =
-    verificationStatusRaw === "not_needed" ||
-    verificationStatusRaw === "needed" ||
-    verificationStatusRaw === "passed" ||
-    verificationStatusRaw === "failed"
-      ? verificationStatusRaw
-      : undefined;
-  return {
-    version: Number.isFinite(Number(record.version)) ? Math.max(1, Math.floor(Number(record.version))) : 1,
-    goal: normalizeWorkingStateText(record.goal, 240),
-    status,
-    currentStep: normalizeWorkingStateText(record.currentStep, 180),
-    plan,
-    completedSteps,
-    decisions,
-    openQuestions,
-    focusFiles,
-    lastResult: normalizeWorkingStateText(record.lastResult, 240),
-    verificationStatus,
-    filesTouched,
-    filesChanged,
-    verifiedFindings,
-    recentActions,
-    lastDiagnostic: normalizeWorkingStateText(record.lastDiagnostic, 240),
-    openIssue: normalizeWorkingStateText(record.openIssue, 240),
-    blocker: normalizeWorkingStateText(record.blocker ?? record.openIssue, 240),
-    nextAction: normalizeWorkingStateText(record.nextAction, 200),
-    updatedAt: Number.isFinite(Number(record.updatedAt)) ? Math.floor(Number(record.updatedAt)) : Date.now(),
-  };
-}
-
-function compactThreadWorkingState(state: ThreadWorkingStateLike): ThreadWorkingStateLike {
-  const out: Partial<ThreadWorkingStateLike> = {
-    version: Number.isFinite(Number(state.version)) ? Math.floor(Number(state.version)) : undefined,
-    status: state.status,
-    verificationStatus: state.verificationStatus,
-    plan: Array.isArray(state.plan) && state.plan.length > 0 ? state.plan : undefined,
-    completedSteps: Array.isArray(state.completedSteps) && state.completedSteps.length > 0 ? state.completedSteps : undefined,
-    decisions: Array.isArray(state.decisions) && state.decisions.length > 0 ? state.decisions : undefined,
-    openQuestions: Array.isArray(state.openQuestions) && state.openQuestions.length > 0 ? state.openQuestions : undefined,
-    focusFiles: Array.isArray(state.focusFiles) && state.focusFiles.length > 0 ? state.focusFiles : undefined,
-    filesTouched: Array.isArray(state.filesTouched) ? state.filesTouched : undefined,
-    filesChanged: Array.isArray(state.filesChanged) ? state.filesChanged : [],
-    verifiedFindings: Array.isArray(state.verifiedFindings) ? state.verifiedFindings : [],
-    recentActions: Array.isArray(state.recentActions) ? state.recentActions : undefined,
-    updatedAt: Number.isFinite(Number(state.updatedAt)) ? Math.floor(Number(state.updatedAt)) : Date.now(),
-  };
-  for (const key of [
-    "goal",
-    "currentStep",
-    "lastResult",
-    "lastDiagnostic",
-    "openIssue",
-    "blocker",
-    "nextAction",
-  ] as const) {
-    const value = normalizeWorkingStateText(state[key], key === "goal" ? 240 : 260);
-    if (value) out[key] = value;
-  }
-  for (const key of Object.keys(out) as Array<keyof ThreadWorkingStateLike>) {
-    if (out[key] === undefined || out[key] === null) {
-      delete out[key];
-    }
-  }
-  return out as ThreadWorkingStateLike;
-}
-
-function buildRunStartedWorkingState(args: {
-  previous: unknown;
-  latestUserText?: string | null;
-  nowMs: number;
-}): ThreadWorkingStateLike {
-  const previous = normalizePreviousWorkingState(args.previous);
-  const goal = normalizeWorkingStateText(args.latestUserText, 240) ?? previous?.goal;
-  const taskStillActive = shouldPreserveActiveTaskLedger({
-    previous,
-    latestUserText: args.latestUserText,
-  });
-  return compactThreadWorkingState({
-    version: 3,
-    goal,
-    status: "in_progress",
-    currentStep: "Run is in progress.",
-    plan: taskStillActive ? previous?.plan : undefined,
-    completedSteps: taskStillActive ? previous?.completedSteps : undefined,
-    decisions: taskStillActive ? previous?.decisions : undefined,
-    openQuestions: taskStillActive ? previous?.openQuestions : undefined,
-    focusFiles: taskStillActive ? previous?.focusFiles : undefined,
-    lastResult: previous?.lastResult,
-    verificationStatus: "not_needed",
-    filesTouched: [],
-    filesChanged: [],
-    verifiedFindings: [],
-    lastDiagnostic: undefined,
-    recentActions: normalizeWorkingStateList(
-      ["Started a new workspace run.", ...(previous?.recentActions ?? [])],
-      6,
-      180,
-    ),
-    openIssue: undefined,
-    blocker: undefined,
-    nextAction: "Wait for the current run to finish or inspect the latest runtime events.",
-    updatedAt: args.nowMs,
-  });
-}
-
-function extractThreadMessageText(contentJson: unknown): string | null {
-  if (typeof contentJson === "string") {
-    return normalizeOptionalSummaryText(contentJson, 400);
-  }
-  const record = asRecord(contentJson);
-  if (!record) return null;
-  const textCandidate =
-    typeof record.text === "string"
-      ? record.text
-      : typeof record.content === "string"
-        ? record.content
-        : null;
-  return normalizeOptionalSummaryText(textCandidate, 400);
 }
 
 function normalizeRunId(raw: unknown): string {
@@ -1279,10 +650,6 @@ async function requireWritableCommunityAgentThread(args: {
   }
 }
 
-function isClaimedImageAttachmentThread(thread: ThreadLike): boolean {
-  return Boolean(communityConversationScope(thread));
-}
-
 async function requireWritableClaimedImageAttachmentThread(args: {
   ctx: any;
   ownerId: any;
@@ -1502,46 +869,12 @@ export const prepareCloudCommunityAgentAttachmentUploadInternal = internalMutati
       ownerId: args.ownerId,
       thread,
     });
-    const messageKey = String(args.messageKey ?? "").trim();
-    if (!messageKey) throw new Error("member_agent_attachment_message_key_required");
-    const nowMs = Date.now();
-    const ownerTickets = (await ctx.db
-      .query("cloudThreadAttachmentUploadTickets")
-      .withIndex("by_owner_createdAt", (q) => q.eq("ownerId", args.ownerId))
-      .collect()) as CloudThreadAttachmentUploadTicketLike[];
-    for (const ticket of ownerTickets) {
-      if (ticket.expiresAt < nowMs) {
-        await ctx.db.delete(ticket._id);
-      }
-    }
-    const recentTickets = (await ctx.db
-      .query("cloudThreadAttachmentUploadTickets")
-      .withIndex("by_owner_createdAt", (q) =>
-        q
-          .eq("ownerId", args.ownerId)
-          .gte("createdAt", nowMs - COMMUNITY_AGENT_ATTACHMENT_UPLOAD_RATE_WINDOW_MS),
-      )
-      .collect()) as CloudThreadAttachmentUploadTicketLike[];
-    if (recentTickets.length >= COMMUNITY_AGENT_ATTACHMENT_UPLOAD_RATE_LIMIT) {
-      throw new Error("member_agent_attachment_upload_rate_limited");
-    }
-    const ticketKey = crypto.randomUUID();
-    const ticketId = await ctx.db.insert("cloudThreadAttachmentUploadTickets", {
+    return await prepareCloudCommunityAgentAttachmentUploadCore({
+      ctx,
       ownerId: args.ownerId,
       threadId: thread._id,
-      ticketKey,
-      messageKey,
-      createdAt: nowMs,
-      expiresAt: nowMs + COMMUNITY_AGENT_ATTACHMENT_UPLOAD_TICKET_TTL_MS,
+      messageKey: args.messageKey,
     });
-    await ctx.scheduler.runAfter(
-      COMMUNITY_AGENT_ATTACHMENT_UPLOAD_TICKET_TTL_MS,
-      (internal as any).threads.cleanupCloudMemberAgentAttachmentUploadTicket,
-      { ticketId },
-    );
-    return {
-      ticketKey,
-    };
   },
 });
 
@@ -1565,91 +898,15 @@ export const claimStoredCloudCommunityAgentAttachmentInternal = internalMutation
       ownerId: args.ownerId,
       thread,
     });
-    const ticketKey = String(args.ticketKey ?? "").trim();
-    const messageKey = String(args.messageKey ?? "").trim();
-    const ticket = (await ctx.db
-      .query("cloudThreadAttachmentUploadTickets")
-      .withIndex("by_owner_ticketKey", (q) =>
-        q.eq("ownerId", args.ownerId).eq("ticketKey", ticketKey),
-      )
-      .unique()) as CloudThreadAttachmentUploadTicketLike | null;
-    const nowMs = Date.now();
-    if (
-      !ticket ||
-      ticket.threadId !== thread._id ||
-      ticket.messageKey !== messageKey ||
-      ticket.expiresAt < nowMs
-    ) {
-      throw new Error("member_agent_attachment_upload_ticket_invalid");
-    }
-    const existingStorageClaim = (await ctx.db
-      .query("cloudThreadAttachments")
-      .withIndex("by_storage", (q) => q.eq("storageId", args.storageId))
-      .first()) as CloudThreadAttachmentClaimLike | null;
-    if (existingStorageClaim) {
-      throw new Error("member_agent_attachment_reuse_rejected");
-    }
-    const metadata = await ctx.db.system.get("_storage", args.storageId);
-    if (!metadata) {
-      throw new Error("member_agent_attachment_upload_missing");
-    }
-    const mime = normalizeCommunityAgentImageMime(metadata.contentType);
-    const size = Number(metadata.size);
-    if (!isAllowedCommunityAgentImageMime(mime)) {
-      throw new Error("member_agent_attachment_type_not_supported");
-    }
-    if (!Number.isFinite(size) || size <= 0 || size > COMMUNITY_AGENT_MAX_IMAGE_BYTES) {
-      throw new Error("member_agent_attachment_too_large");
-    }
-    const recentClaims = (await ctx.db
-      .query("cloudThreadAttachments")
-      .withIndex("by_owner_createdAt", (q) =>
-        q
-          .eq("ownerId", args.ownerId)
-          .gte("createdAt", nowMs - COMMUNITY_AGENT_ATTACHMENT_PENDING_TTL_MS),
-      )
-      .collect()) as CloudThreadAttachmentClaimLike[];
-    const pendingClaims = recentClaims.filter((claim) => claim.status === "pending");
-    const pendingBytes = pendingClaims.reduce(
-      (total, claim) => total + Math.max(0, Number(claim.size) || 0),
-      0,
-    );
-    if (
-      pendingClaims.length >= COMMUNITY_AGENT_ATTACHMENT_MAX_PENDING_COUNT ||
-      pendingBytes + size > COMMUNITY_AGENT_ATTACHMENT_MAX_PENDING_BYTES
-    ) {
-      throw new Error("member_agent_attachment_pending_limit_exceeded");
-    }
-    const existing = (await ctx.db
-      .query("cloudThreadAttachments")
-      .withIndex("by_owner_thread_storage", (q) =>
-        q.eq("ownerId", args.ownerId).eq("threadId", thread._id).eq("storageId", args.storageId),
-      )
-      .unique()) as CloudThreadAttachmentClaimLike | null;
-    if (existing) throw new Error("member_agent_attachment_reuse_rejected");
-    const id = await ctx.db.insert("cloudThreadAttachments", {
+    return await claimStoredCloudCommunityAgentAttachmentCore({
+      ctx,
       ownerId: args.ownerId,
       threadId: thread._id,
       storageId: args.storageId,
-      messageKey,
-      status: "pending",
-      name: normalizeCommunityAgentImageName(args.name),
-      mime,
-      size: Math.floor(size),
-      createdAt: nowMs,
+      ticketKey: args.ticketKey,
+      messageKey: args.messageKey,
+      name: args.name,
     });
-    await ctx.db.patch(ticket._id, {
-      claimedStorageId: args.storageId,
-      claimedAt: nowMs,
-    });
-    await ctx.scheduler.runAfter(
-      COMMUNITY_AGENT_ATTACHMENT_PENDING_TTL_MS,
-      (internal as any).threads.cleanupPendingCloudThreadAttachment,
-      { attachmentId: id },
-    );
-    const claimed = (await ctx.db.get(id)) as CloudThreadAttachmentClaimLike | null;
-    if (!claimed) throw new Error("member_agent_attachment_claim_failed");
-    return claimed;
   },
 });
 
