@@ -181,4 +181,60 @@ describe("cloud production deploy pipeline", () => {
       "live_verified",
     ]);
   });
+
+  it("retries live bundle verification across transient edge switchover 404s", async () => {
+    const convexHost = new URL(PRODUCTION_AUTHORITY.convexUrl).host;
+    let deployed = false;
+    let htmlFetches = 0;
+
+    const result = await runCloudProductionDeploy({
+      env: {
+        GITHUB_REF: "refs/heads/main",
+        CONVEX_DEPLOY_KEY: "prod:wry-hawk-715|secret",
+        VERCEL_TOKEN: "vercel_secret",
+      },
+      sleep: async () => {},
+      log: () => {},
+      git: () => SHA,
+      gitOk: () => true,
+      run: () => {},
+      capture: (_cmd: string, args: string[]) => {
+        if (args.includes("env") && args.includes("ls")) {
+          return JSON.stringify({
+            envs: [
+              { key: "VITE_CONVEX_URL", target: ["production"] },
+              { key: "VITE_PUBLIC_APP_URL", target: ["production"] },
+              { key: "ARX_AUTH_BRIDGE_SECRET", target: ["production"] },
+            ],
+          });
+        }
+        if (args[0] === "convex" && args[1] === "env") return "OPENAI_API_KEY=redacted\n";
+        if (args.includes("inspect")) return JSON.stringify({ id: "dpl_prev123" });
+        if (args.includes("deploy")) {
+          deployed = true;
+          return "https://polynet-abc123.vercel.app\n";
+        }
+        return "";
+      },
+      fetchText: async (url: string) => {
+        if (url.endsWith("/version.json")) return JSON.stringify({ buildId: deployed ? SHA : PREV_SHA });
+        if (url.endsWith("/")) {
+          htmlFetches += 1;
+          return htmlFetches === 1
+            ? `<script src="/assets/index-stale.js"></script>`
+            : `<script src="/assets/index-fresh.js"></script>`;
+        }
+        if (url.includes("/assets/index-stale.js")) {
+          throw new Error("production_deploy_fetch_failed: 404");
+        }
+        if (url.includes("/assets/index-fresh.js")) {
+          return `const u = "https://${convexHost}";`;
+        }
+        return "";
+      },
+    });
+
+    expect(htmlFetches).toBe(2);
+    expect(result.status).toBe("released");
+  });
 });
