@@ -1,5 +1,5 @@
 import { askInApp } from "../../../../shared/inAppConfirm";
-import { Fragment, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Fragment, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { enterSendsMessage, isImeComposing } from "../controllers/communityComposerTextEditing";
 import { CommunityChannelSessionContext } from "./CommunityChannelSessionContext";
 import { downloadCloudCommunityChatAttachment } from "../../../../shared/cloudCommunityChatGateway";
@@ -248,9 +248,41 @@ export function EditForm(props: {
   onSave: () => void;
   onCancel: () => void;
 }) {
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+
+  const syncHeight = useCallback(() => {
+    const el = textareaRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    const viewportCap =
+      typeof window !== "undefined" && Number.isFinite(window.innerHeight) && window.innerHeight > 0
+        ? Math.round(window.innerHeight * 0.45)
+        : 360;
+    const maxHeight = Math.min(Math.max(240, viewportCap), 480);
+    const nextHeight = Math.max(88, Math.min(el.scrollHeight + 2, maxHeight));
+    el.style.height = `${nextHeight}px`;
+  }, []);
+
+  useLayoutEffect(() => {
+    syncHeight();
+  }, [props.value, syncHeight]);
+
+  useEffect(() => {
+    const el = textareaRef.current;
+    if (el) {
+      el.focus();
+      const end = el.value.length;
+      el.setSelectionRange(end, end);
+    }
+    if (typeof window === "undefined") return;
+    window.addEventListener("resize", syncHeight);
+    return () => window.removeEventListener("resize", syncHeight);
+  }, [syncHeight]);
+
   return (
     <div className="community-interaction-edit">
       <textarea
+        ref={textareaRef}
         className="community-interaction-edit-input"
         value={props.value}
         onChange={(event) => props.onChange(event.target.value)}
@@ -264,7 +296,7 @@ export function EditForm(props: {
             props.onCancel();
           }
         }}
-        rows={2}
+        rows={3}
         autoFocus
       />
       <div className="community-interaction-edit-actions">

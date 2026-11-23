@@ -501,14 +501,28 @@ css += """
 .app .kaddbox textarea{font-size:15px;line-height:1.6;min-height:48px;max-height:260px;overflow-y:auto}
 /* The channel's panel (KitChannelRail): what it is for, and its pinned post as a card. */
 .app .chabout{margin:0;font-size:14px;line-height:1.5;color:var(--ink2);overflow-wrap:anywhere}
-.app .chpin{display:flex;flex-direction:column;gap:6px;width:100%;padding:12px 14px;border-radius:10px;border:1px solid var(--line2);background:var(--s1);text-align:left;cursor:pointer;transition:border-color .12s}
-.app .chpin:hover{border-color:rgba(var(--w),.22)}
-.app .chpin-by{display:flex;align-items:center;gap:7px;min-width:0;font-size:12.5px;color:var(--ink3)}
+.app .chpin{position:relative;display:flex;flex-direction:column;gap:6px;width:100%;padding:12px 14px;border-radius:10px;border:1px solid var(--line2);background:var(--s1);text-align:left;cursor:pointer;transition:border-color .12s}
+.app .chpin:hover,.app .chpin:has(.chpin-hit:focus-visible){border-color:rgba(var(--w),.22)}
+.app .chpin-hit{position:absolute;inset:0;width:100%;height:100%;border:0;border-radius:10px;background:transparent;cursor:pointer}
+.app .chpin-hit:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
+.app .chpin-by{position:relative;pointer-events:none;display:flex;align-items:center;gap:7px;min-width:0;font-size:12.5px;color:var(--ink3)}
 .app .chpin-by svg{flex:none}
 .app .chpin-by b{font-weight:550;color:var(--ink2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .app .chpin-by em{margin-left:auto;font-style:normal;white-space:nowrap}
-.app .chpin strong{font-size:14px;font-weight:600;color:var(--ink);overflow-wrap:anywhere}
-.app .chpin-text{display:-webkit-box;-webkit-line-clamp:5;-webkit-box-orient:vertical;overflow:hidden;font-size:13.5px;line-height:1.5;color:var(--ink2);overflow-wrap:anywhere}
+.app .chpin-title{position:relative;pointer-events:none;font-size:14px;font-weight:600;color:var(--ink);overflow-wrap:anywhere}
+.app .chpin-body{position:relative;pointer-events:none;max-height:176px;overflow:hidden;font-size:13px;line-height:1.48;color:var(--ink2);overflow-wrap:anywhere}
+.app .chpin-body.over{-webkit-mask-image:linear-gradient(180deg,#000 72%,transparent 100%);mask-image:linear-gradient(180deg,#000 72%,transparent 100%)}
+.app .chpin-body strong{font-weight:600;color:var(--ink)}
+.app .chpin-body :is(h2,h3,h4){margin:6px 0 3px;font-size:13.5px;font-weight:650;line-height:1.3;color:var(--ink)}
+.app .chpin-body :is(h2,h3,h4):first-child{margin-top:0}
+.app .chpin-body p{margin:0 0 5px}
+.app .chpin-body p:last-child,.app .chpin-body ul:last-child,.app .chpin-body ol:last-child{margin-bottom:0}
+.app .chpin-body :is(ul,ol){margin:3px 0 5px;padding-left:16px}
+.app .chpin-body li{margin:2px 0}
+.app .chpin-body code{font-family:var(--mono);font-size:12px;padding:1px 4px;border-radius:4px;background:var(--s2);color:var(--ink)}
+.app .chpin-body pre{margin:4px 0;padding:6px 8px;border-radius:6px;background:var(--s2);overflow:hidden;font-size:12px}
+.app .chpin-body pre code{padding:0;background:transparent}
+.app .chpin-body a{color:var(--blue-ink);text-decoration:none}
 /* The members' directory fits the room it has: a profile open beside it
    narrows it, so it shows fewer across, never cut names. */
 .app .page:has(>.ppl){container-type:inline-size}
