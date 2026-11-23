@@ -106,4 +106,5 @@ jobs:
     timeout-minutes: 2
     steps:
       - name: All required checks passed
-        run: echo "PASS: Release Gate succeeded."
+        run: |
+          echo "PASS: Release Gate succeeded."
