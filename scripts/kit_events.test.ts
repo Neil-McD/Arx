@@ -48,8 +48,8 @@ test("nothing in the app asks who is going", () => {
 });
 
 // The event form opens in the page; cancelling asks in the row.
-test("the v1 page has no pop-up and no browser confirm", () => {
+test("the Events page has no pop-up and no browser confirm", () => {
   const section = readFileSync(new URL("../apps/web/src/components/WebCommunityEventsSection.tsx", import.meta.url), "utf8");
-  expect(section).toMatch(/draft && !isDesignV1Active\(\) \? \(\s*<EventModal/);
+  expect(section).not.toMatch(/EventModal|window\.confirm/);
   expect(readFileSync(new URL("../apps/web/src/v1/KitEventsList.tsx", import.meta.url), "utf8")).not.toMatch(/window\.confirm|modal/);
 });

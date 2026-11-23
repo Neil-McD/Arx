@@ -15,6 +15,7 @@ const read = (path: string) => readFileSync(resolve(root, path), "utf8");
 const app = read("apps/web/src/App.tsx");
 const offer = read("shared/builderOffer.ts");
 const createModal = read("apps/web/src/components/WebCreateCommunityModal.tsx");
+const createForm = read("apps/web/src/v1/KitStartCommunity.tsx");
 const createController = read("shared/useCommunityCreateController.ts");
 const billing = read("apps/web/src/components/WebBillingSettingsSection.tsx");
 const account = read("apps/web/src/components/WebAccountSettingsSection.tsx");
@@ -58,13 +59,15 @@ for (const forbidden of [/GPT 5\.6/i, /\bLuna\b/i, /\$20\b/, /credits?/i, /token
 }
 
 assert.doesNotMatch(createModal, /WebBuilderOfferSummary/);
-assert.match(createModal, /Add the identity members will see/);
-assert.match(createModal, /Community name/);
-assert.match(createModal, /One-liner/);
-assert.match(createModal, /Community handle/);
-assert.match(createModal, /Upload banner/);
-assert.match(createModal, /Upload avatar/);
-assert.match(createModal, /Create community/);
+assert.doesNotMatch(createForm, /WebBuilderOfferSummary/);
+assert.match(createModal, /<KitStartCommunity/);
+assert.match(createForm, /Start a community/);
+assert.match(createForm, /<span>Name<\/span>/);
+assert.match(createForm, /Who it's for, in one line/);
+assert.match(createForm, /<span>Address<\/span>/);
+assert.match(createForm, /Add a banner/);
+assert.match(createForm, /Add a picture/);
+assert.match(createForm, /Create community/);
 assert.match(
   createController,
   /prepareCloudCommunityBrandingField[\s\S]*kind: "avatar"[\s\S]*kind: "banner"[\s\S]*createCloudCommunity<[\s\S]*visibility: "unlisted"[\s\S]*avatarStorageId: avatarField\.storageId[\s\S]*oneLiner: current\.createCommunityOneLiner[\s\S]*bannerStorageId: bannerField\.storageId/,
@@ -120,7 +123,7 @@ assert.match(
   /pendingSubscriptionId[\s\S]*openRequiredCreateCommunityModal\(params\.pendingSubscriptionId/,
   "a canonical unassigned subscription must open required identity setup directly",
 );
-assert.match(createModal, /props\.isDismissible \? \([\s\S]*Close community setup/);
+assert.match(createForm, /props\.isDismissible \? <Btn onClick=\{props\.onClose\}>Cancel<\/Btn> : null/);
 assert.match(
   createModal,
   /<WebBlockingSetupModal[\s\S]*dismissible=\{props\.isDismissible\}[\s\S]*onDismiss=\{props\.onClose\}/,
@@ -131,7 +134,7 @@ assert.match(
   /createInFlightRef\.current \|\| !current\.isCreateCommunityDismissible/,
   "required setup must reject both backdrop and controller-level dismissal",
 );
-assert.match(createModal, /Community handle/);
+assert.match(createForm, /<span>Address<\/span>/);
 assert.doesNotMatch(createModal, /Customize community URL/);
 assert.match(
   builderSetupFlowController,

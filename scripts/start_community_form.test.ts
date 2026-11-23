@@ -50,10 +50,10 @@ test("step 3 gives the invite link and the way in", () => {
   expect(form).toMatch(/forward=\{<Btn go disabled=\{props\.saving \|\| props\.opening\} onClick=\{props\.onOpen\}>/);
 });
 
-test("design v1 draws the new form in the same blocking modal; the classic form stays", () => {
+test("WebCreateCommunityModal draws KitStartCommunity directly inside the blocking setup modal", () => {
   const modal = read("apps/web/src/components/WebCreateCommunityModal.tsx");
-  expect(modal).toMatch(/if \(isDesignV1Active\(\)\) \{[\s\S]*?<KitStartCommunity/);
-  expect(modal).toContain("Set up your community");
+  expect(modal).toMatch(/<WebBlockingSetupModal[\s\S]*?<KitStartCommunity/);
+  expect(modal).not.toContain("Set up your community");
 });
 
 test("the dialog's Tab stops leave out anything inside an inert part", () => {

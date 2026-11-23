@@ -31,6 +31,7 @@ const pendingAuthIntent = read(
 );
 const routeLifecycle = read("apps/web/src/controllers/useWebPathRouteLifecycle.ts");
 const createModal = read("apps/web/src/components/WebCreateCommunityModal.tsx");
+const createForm = read("apps/web/src/v1/KitStartCommunity.tsx");
 const webCreateController = read("apps/web/src/controllers/useWebCommunityUiController.ts");
 const createController = read("shared/useCommunityCreateController.ts");
 const settings = read("apps/web/src/components/WebCommunitySettingsSection.tsx");
@@ -86,16 +87,21 @@ assert.doesNotMatch(
 
 assert.match(
   createModal,
-  /Add the identity members will see[\s\S]*Community name[\s\S]*Community handle[\s\S]*Create community/,
+  /<WebBlockingSetupModal[\s\S]*<KitStartCommunity/,
+  "community creation should render the unified start-community flow inside the blocking modal",
+);
+assert.match(
+  createForm,
+  /Start a community[\s\S]*<span>Name<\/span>[\s\S]*<span>Address<\/span>/,
   "community creation should remain one identity form (free; a plan bought first attaches)",
 );
 assert.match(
-  createModal,
-  /props\.isDismissible \? \([\s\S]*Close community setup/,
+  createForm,
+  /props\.isDismissible \? <Btn onClick=\{props\.onClose\}>Cancel<\/Btn> : null/,
   "required paid setup must not expose the optional creation close action",
 );
 assert.doesNotMatch(
-  createModal,
+  createModal + createForm,
   /WebBuilderOfferSummary|Buy Builder/,
   "post-payment setup must not repeat the purchase offer",
 );

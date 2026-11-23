@@ -282,43 +282,38 @@ assert.doesNotMatch(
 
 assert.match(
   bottomRail,
-  /import \{ House, Inbox, MessageCircle, Sparkles \} from "lucide-react";/,
-  "the rail should use the shared icon library",
+  /import \{ House, Inbox \} from "lucide-react";/,
+  "the phone tabs should use the shared icon library",
 );
 assert.match(
   bottomRail,
-  /<House className="mobile-bottom-rail-community-base" aria-hidden="true" \/>[\s\S]*mobile-bottom-rail-ai\$\{activeRoot === "agent" \? " active" : ""\}[\s\S]*aria-current=\{activeRoot === "agent" \? "page" : undefined\}[\s\S]*onClick=\{\(\) => communityShell\.onSelectMobileRootPage\("agent"\)\}[\s\S]*<Sparkles aria-hidden="true" \/>[\s\S]*<MessageCircle aria-hidden="true" \/>/,
-  "Community, centered AI, and Messages should render in that order",
+  /tab\("agent", "Home", <House[\s\S]*tab\(\s*"community",\s*communityName[\s\S]*tab\("messages", "Inbox", <Inbox/,
+  "Home, Community, and Inbox phone tabs should render in that order",
 );
 assert.match(
   bottomRail,
-  /aria-label=\{[\s\S]*hasCommunityAttention \? "Community, updates available" : "Community"[\s\S]*\}[\s\S]*aria-label="Open Polynet AI"[\s\S]*: "Messages"/,
-  "the icon-only rail should retain accessible names for all three actions",
-);
-assert.doesNotMatch(
-  bottomRail,
-  /<span>Community<\/span>|<span>AI<\/span>|<span>Messages<\/span>/,
-  "the mobile rail should not render visible text labels",
+  /ariaLabel: hasCommunityAttention \? `\$\{communityName\}, updates available` : communityName[\s\S]*ariaLabel: unread > 0 \? `Inbox, \$\{unreadDisplay\} unread` : "Inbox"/,
+  "the phone tabs should retain accessible names and attention/unread announcements",
 );
 assert.match(
   bottomRail,
-  /activeRoot === "agent"|aria-current=\{activeRoot === "agent"/,
-  "AI should own the selected page state while its root is active",
+  /activeRoot === root/,
+  "the active phone tab should own the selected page state",
 );
 assert.doesNotMatch(
   bottomRail,
   /function RailIcon|<svg/,
-  "the rail should not maintain a parallel handcrafted icon system",
+  "the phone tabs should not maintain a parallel handcrafted icon system",
 );
 assert.match(
   bottomRail,
-  /disabled=\{!communityShell\.canOpenDirectMessages\}[\s\S]*onClick=\{\(\) => communityShell\.onSelectMobileRootPage\("messages"\)\}/,
-  "Messages should expose signed-out unavailability",
+  /disabled: !communityShell\.canOpenDirectMessages/,
+  "Inbox should expose signed-out unavailability",
 );
 assert.doesNotMatch(
   bottomRail,
   /name="discover"|name="more"|>Discover<|>More</,
-  "Discover and Settings should not consume primary rail slots",
+  "Discover and Settings should not consume primary phone tab slots",
 );
 
 assert.match(
@@ -342,9 +337,14 @@ assert.doesNotMatch(
   "the community directory should no longer be duplicated inside a drawer",
 );
 assert.match(
-  mobileGlobalShell + shellHost + communityNavSurface + communityRail,
-  /mobile-global-shell[\s\S]*WebCommunityRail[\s\S]*presentation="mobile-shell"[\s\S]*WebCommunityNavSurface[\s\S]*presentation="mobile-home"[\s\S]*<CommunityNav/,
-  "one global mobile frame should compose the canonical community rail and CommunityNav adapter",
+  mobileGlobalShell + shellHost + communityNavSurface,
+  /mobile-global-shell[\s\S]*WebCommunityNavSurface[\s\S]*presentation="mobile-home"[\s\S]*<CommunityNav/,
+  "one global mobile frame should compose the CommunityNav adapter without the retired phone rail strip",
+);
+assert.doesNotMatch(
+  mobileGlobalShell,
+  /WebCommunityRail/,
+  "mobile global shell must not render the retired phone community rail strip",
 );
 assert.match(
   communityRail,
@@ -490,8 +490,8 @@ assert.match(
 );
 assert.match(
   bottomRail,
-  /<House className="mobile-bottom-rail-community-base" aria-hidden="true" \/>[\s\S]*<House className="mobile-bottom-rail-community-cutout" aria-hidden="true" \/>/,
-  "the active Home state should reuse canonical House geometry with a dedicated cutout layer",
+  /<nav className="mobile-bottom-rail is-phone-tabs" aria-label="Primary navigation">[\s\S]*<House size=\{22\} strokeWidth=\{1\.7\} aria-hidden="true" \/>[\s\S]*mobile-phone-tab-logo/,
+  "the phone tabs bar should render the Home House mark and community logo mark inside the canonical mobile bottom rail",
 );
 assert.match(
   indexCss,

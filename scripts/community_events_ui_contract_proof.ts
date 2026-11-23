@@ -11,6 +11,8 @@ const webContentController = read(
 );
 const controller = read("shared/useCommunityEventsController.ts");
 const eventsPanel = read("apps/web/src/components/WebCommunityEventsSection.tsx");
+const eventsList = read("apps/web/src/v1/KitEventsList.tsx");
+const eventForm = read("apps/web/src/v1/KitEventForm.tsx");
 const styles = [read("apps/web/src/base.css"), read("apps/web/src/styles/shell-and-onboarding.css"), read("apps/web/src/styles/community-and-content.css"), read("apps/web/src/styles/settings-runtime-and-theme-overrides.css")].join("\n");
 
 assert.match(
@@ -63,26 +65,14 @@ assert.match(
 
 assert.match(
   eventsPanel,
-  /const visibleMonthEvents = useMemo\([\s\S]*\.filter\(\(event\) =>[\s\S]*isSameLocalMonth\(startsAt, monthDate\)[\s\S]*\.sort\(\(a, b\) => Date\.parse\(a\.starts_at\) - Date\.parse\(b\.starts_at\)/,
-  "the visible projection must be one chronological ledger restricted to the viewer-local month",
+  /splitCommunityEvents\(state\.events, listNow\)[\s\S]*<KitEventsList[\s\S]*featured=\{listParts\.featured\}[\s\S]*comingUp=\{listParts\.comingUp\}[\s\S]*past=\{listParts\.past\}/,
+  "the visible projection must render the unified v1 events list split into featured, coming up, and past",
 );
 
 assert.match(
   eventsPanel,
-  /const eventDayGroups = useMemo\([\s\S]*new Map<string, EventDayGroup>\(\)[\s\S]*grouped\.set\(key, \{ key, date, events: \[event\] \}\)[\s\S]*Array\.from\(grouped\.values\(\)\)/,
-  "chronological rows must be grouped by viewer-local date without a parallel calendar model",
-);
-
-assert.match(
-  eventsPanel,
-  /aria-label="Previous month"[\s\S]*formatMonthLabel\(monthDate\)[\s\S]*aria-label="Next month"/,
-  "month navigation must remain compact and accessible",
-);
-
-assert.match(
-  eventsPanel,
-  /capabilities\.hasActiveCommunity && capabilities\.canManageEvents[\s\S]*community-events-new-btn[\s\S]*New event/,
-  "event creation must remain visible only to authorized community managers",
+  /canManage=\{capabilities\.hasActiveCommunity && capabilities\.canManageEvents\}/,
+  "event management controls must remain visible only to authorized community managers",
 );
 
 assert.match(
@@ -93,68 +83,50 @@ assert.match(
 
 assert.match(
   eventsPanel,
-  /showInitialEventsLoading[\s\S]*role="status">Loading events…[\s\S]*eventDayGroups\.length === 0[\s\S]*No events in \{formatMonthLabel\(monthDate\)\}/,
-  "the ledger must distinguish initial loading from a month-specific empty state",
+  /showInitialEventsLoading[\s\S]*role="status">Loading events…/,
+  "events must distinguish initial loading cleanly before showing the list",
 );
 
 assert.match(
   eventsPanel,
-  /<time className="community-events-date" dateTime=\{toLocalDateKey\(group\.date\)\}>[\s\S]*dayLabel\.weekday[\s\S]*dayLabel\.day[\s\S]*group\.events\.map/,
-  "each chronological group must expose a semantic date before its event rows",
+  /timeLabel=\{formatEventTime\}[\s\S]*calendarUrl=\{buildGoogleCalendarUrl\}/,
+  "events list must wire viewer-local time formatting and Google Calendar export",
 );
 
 assert.match(
   eventsPanel,
-  /const editLabel = isRecurring \? "Edit series" : "Edit event";[\s\S]*const cancelLabel = isRecurring \? "Cancel series" : "Cancel event";[\s\S]*aria-label=\{editLabel\}[\s\S]*>\s*Edit\s*<\/button>[\s\S]*aria-label=\{cancelLabel\}[\s\S]*>\s*Cancel\s*<\/button>/,
-  "event controls must keep compact visible labels while preserving series-aware accessible labels",
-);
-
-assert.match(
-  eventsPanel,
-  /formatEventTime\(event\)[\s\S]*community-events-time[\s\S]*eventTimeLabel\.primary[\s\S]*eventTimeLabel\.secondary/,
-  "event rows must expose viewer-local time and event timezone context",
-);
-
-assert.match(
-  eventsPanel,
-  /formatRecurrenceLabel\(event\)[\s\S]*community-events-meta[\s\S]*event\.location_label[\s\S]*recurrenceLabel[\s\S]*community-events-description/,
-  "event rows must preserve recurrence, location, and description context",
-);
-
-assert.match(
-  eventsPanel,
-  /event\.url[\s\S]*community-events-primary-link[\s\S]*eventLinkLabel[\s\S]*buildGoogleCalendarUrl\(event\)[\s\S]*Add to calendar/,
-  "event rows must preserve the event destination and calendar export actions",
-);
-
-assert.match(
-  eventsPanel,
-  /const timezone = normalizeCommunityEventTimeZone\(draft\.timezone\);[\s\S]*communityEventDateTimeInputToIso\(draft\.starts_at, timezone\)[\s\S]*timezone,/,
+  /const timezone = normalizeCommunityEventTimeZone\(nextDraft\.timezone\);[\s\S]*communityEventDateTimeInputToIso\(nextDraft\.starts_at, timezone\)[\s\S]*timezone,/,
   "event saves must parse datetime-local inputs against the selected event timezone",
 );
 
 assert.match(
-  eventsPanel,
-  /<span>Event timezone<\/span>[\s\S]*normalizeCommunityEventTimeZone\(draft\.timezone\)/,
-  "event editor must expose the event timezone anchor",
+  eventForm,
+  /<span>Time zone<\/span>[\s\S]*<select value=\{draft\.timezone\}/,
+  "event editor must expose the event timezone selector",
 );
 
 assert.match(
-  eventsPanel,
-  /role="dialog"[\s\S]*aria-modal="true"[\s\S]*aria-labelledby="community-event-modal-title"[\s\S]*aria-busy=\{isSaving\}/,
-  "event editor must expose a labelled modal boundary and saving state",
+  eventForm,
+  /<form className=\{cx\("evp"\)\} aria-label=\{heading\} aria-busy=\{props\.isSaving\}/,
+  "event editor must expose an accessible form label and saving state",
 );
 
 assert.match(
-  eventsPanel,
-  /draft\.recurrence_frequency !== "none" \? \([\s\S]*<span>Repeats until<\/span>/,
+  eventForm,
+  /draft\.recurrence_frequency !== "none" \? \([\s\S]*<span>Last date/,
   "the recurrence end field must stay absent until recurrence is enabled",
+);
+
+assert.match(
+  eventsList,
+  /Add an event/,
+  "v1 events list must retain the manager event creation action",
 );
 
 assert.doesNotMatch(
   eventsPanel,
-  /selectedDayKey|buildCalendarDays|community-events-grid|community-events-agenda|feed-header-badge|>\s*Refresh\s*</,
-  "the canonical projection must not retain the calendar selector, parallel agenda, ambiguous count, or manual refresh control",
+  /selectedDayKey|buildCalendarDays|community-events-grid|community-events-agenda|community-events-month-nav|EventModal|feed-header-badge|>\s*Refresh\s*</,
+  "the canonical projection must not retain the classic month nav, event modal, calendar selector, parallel agenda, ambiguous count, or manual refresh control",
 );
 
 const eventsStylesStart = styles.indexOf(".community-events-panel {");
