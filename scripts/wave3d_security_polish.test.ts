@@ -63,7 +63,7 @@ describe("Wave 3D: pre-release security and telemetry polish", () => {
     expect(memory).toMatch(/export const undoLearnedNote = mutation\(\{[\s\S]{0,200}authenticateCommunityMember\(ctx, args\)/);
     expect(memory).toMatch(/export const undoMemoryRun = mutation\(\{[\s\S]{0,200}authenticateCommunityMember\(ctx, args\)/);
 
-    expect(rollups).toContain("MAX_OPERATOR_FALLBACK_SUB_READS_PER_BATCH");
+    expect(rollups).toContain("const OPERATOR_COMMUNITIES_BATCH_SIZE = 5;");
     expect(rollups).toContain("communityCreators: ownerSet.size");
   });
 });
