@@ -190,6 +190,7 @@ const DOMAIN_REFUSAL_MESSAGES: Record<string, string> = {
   community_forbidden: "You don't have permission to do that here.",
   profile_setup_required: "Finish setting up your Polynet profile first.",
   lesson_resources_limit: "A lesson can have 12 resources at most, links and files together. Remove one first.",
+  lesson_video_unplayable: "That link isn't a video we can play. Use YouTube, Loom, Vimeo or Wistia.",
 };
 
 // A refusal never carries a raw server error or stack trace: a thrown domain

@@ -27,6 +27,7 @@ export const COURSE_BUILDING_SKILL_MD = [
   "- Write a lesson from what they gave you, from what the community already has (its lessons, notes, posts), or from a source they added that is ready. If they ask you to draft from your own knowledge, do it, and say it is your draft for them to check. Never state something about this community that you have not read.",
   "- Make the whole change in one polynet_change_courses call (up to 25 changes; it is saved as a whole or not at all).",
   "- Publishing or unpublishing a course is polynet_publish_course; deleting a published course or a lesson in one is polynet_delete_published. Each asks them first, with Yes and No. Delete only when they clearly ask; drafts are deleted in a polynet_change_courses batch.",
+  "- A lesson's video is its url (a YouTube, Loom, Vimeo or Wistia link; any other link is refused). Set it when they give you one; a lesson's video field in builder/resources/ shows what it has. Files under a lesson are added by a person in the app.",
   "- Sources: the host adds a link or a file as a source in Knowledge. Use only sources marked ready. Never move or delete a source.",
   "- In your reply use titles, not ids: what changed, which courses are still drafts, what members can see.",
 ].join("\n");

@@ -211,6 +211,18 @@ describe("a named tool is the call the executor already runs", () => {
       .toBe("Change courses and lessons (2 changes)");
   });
 
+  it("a lesson's video goes to the engine as its url; null or empty removes it; left out, nothing", () => {
+    const op = (name: string, args: Record<string, unknown>) => (run(name, { community: "run-club", ...args }).input as any).content.operations[0];
+    expect(op("polynet_add_lesson", { course: "m1", title: "Week 1", video: " https://youtu.be/dQw4w9WgXcQ ", lesson_links: [{ title: "Plan", url: "https://example.com/plan" }] }))
+      .toEqual({ op: "create_page", module_id: "m1", title: "Week 1", url: "https://youtu.be/dQw4w9WgXcQ", lesson_links: [{ title: "Plan", url: "https://example.com/plan" }] });
+    expect(op("polynet_edit_lesson", { lesson: "l1", updated_at: 1, video: null })).toMatchObject({ op: "edit_page", url: "" });
+    expect(op("polynet_edit_lesson", { lesson: "l1", updated_at: 1, video: "" })).toMatchObject({ url: "" });
+    expect(op("polynet_edit_lesson", { lesson: "l1", updated_at: 1, title: "New" })).not.toHaveProperty("url");
+    // The guide's batch: a null url (no video) goes as "", so the executor doesn't drop it.
+    expect(op("polynet_change_courses", { operations: [{ op: "edit_page", resource_id: "l1", expected_updated_at: 1, url: null }] }))
+      .toEqual({ op: "edit_page", resource_id: "l1", expected_updated_at: 1, url: "" });
+  });
+
   it("writes are written out: a post, a reply, an edit, a delete, a message", () => {
     expect(run("polynet_post", { community: "Run-Club", channel: "general", text: "Hi" })).toMatchObject({ toolName: "polynet_write",
       input: { path: "/communities/run-club/channels/general/", mode: "create", content: { text: "Hi" } } });

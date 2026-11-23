@@ -41,6 +41,7 @@ import {
   normalizeCommunityResourceBodyMd,
   writeCommunityResourceBodyContent,
 } from "./communityResourceContent";
+import { lessonVideoProblem } from "../shared/videoEmbed";
 import { recordCommunityActivityEventBestEffort } from "./communityActivity";
 import { resolveExactCommunityResourceEvidenceSelector } from "./communityResourceEvidenceCore";
 import {
@@ -1399,6 +1400,12 @@ export const saveCommunityResource = mutation({
       const nextFileKey = normalizeOptionalFileKey(nextFileKeyRaw);
       const urlChanged = Object.prototype.hasOwnProperty.call(payload, "url") &&
         String(nextUrl ?? "") !== String(existing.url ?? "");
+      // A lesson's url is its video: a new or changed one must play; a page
+      // link an older lesson already has stays (docs/specs/lesson-video-v0.md).
+      if (nextRole === "page" && urlChanged) {
+        const videoProblem = lessonVideoProblem(nextUrl, existing.url);
+        if (videoProblem) throw new Error(videoProblem);
+      }
       const fileChanged = Object.prototype.hasOwnProperty.call(payload, "file_key") &&
         String(nextFileKey ?? "") !== String(existing.fileKey ?? "");
       const nextSourceIngestionStatus = Object.prototype.hasOwnProperty.call(payload, "source_ingestion_status")
@@ -1572,6 +1579,11 @@ export const saveCommunityResource = mutation({
           ? "file"
           : "manual";
     const pinned = Boolean(payload.pinned);
+    // A lesson's url is its video: it must be one the lesson can play.
+    if (role === "page") {
+      const videoProblem = lessonVideoProblem(url, null);
+      if (videoProblem) throw new Error(videoProblem);
+    }
     const moduleId = await requireResourceModuleForRole({
       ctx,
       communityId: community._id,

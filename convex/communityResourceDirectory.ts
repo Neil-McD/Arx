@@ -26,6 +26,7 @@ import {
 import {
   hydrateCommunityResourceBody,
 } from "./communityResourceContent";
+import { lessonVideoProvider } from "../shared/videoEmbed";
 import { readCourseProgressPeople } from "./communityLessonProgress";
 import {
   COMMUNITY_RESOURCE_SOURCE_INBOX_SEGMENT,
@@ -302,11 +303,20 @@ function buildResourceDirectoryFieldsForTool(
   });
 }
 
+// A lesson's url is its video (docs/specs/lesson-video-v0.md): named as one
+// when it plays, so an AI knows what the lesson already has.
+function lessonVideoFields(row: CommunityResourceLike): { video: string | null; video_provider: string | null } | Record<string, never> {
+  if (normalizeResourceRole(row.role) !== "page") return {};
+  const provider = lessonVideoProvider(row.url);
+  return { video: provider ? String(row.url).trim() : null, video_provider: provider };
+}
+
 function compactResourceSummary(row: CommunityResourceLike): string | null {
   const body = String(row.bodyMd ?? "").replace(/\s+/g, " ").trim();
   if (body) return body.slice(0, 220);
   if (communityResourceBodyChars(row) > 0) return "Readable resource content stored.";
   const url = String(row.url ?? "").trim();
+  if (url && normalizeResourceRole(row.role) === "page" && lessonVideoProvider(url)) return `Video: ${url.slice(0, 180)}`;
   if (url) return `External resource: ${url.slice(0, 180)}`;
   if (row.fileKey) return "Uploaded resource without parsed text.";
   return null;
@@ -331,6 +341,7 @@ function mapCompactCommunityResourceBuilderListRow(
     title: row.title,
     type: String(row.type ?? "").trim().toLowerCase() || "post",
     url: row.url ?? null,
+    ...lessonVideoFields(row),
     source_resource_id: row.sourceResourceId ? normalizeIdValue(row.sourceResourceId) : null,
     source_ingestion_status: normalizeResourceSourceIngestionStatus(row),
     source_ingestion_kind: normalizeResourceSourceIngestionKind(row),
@@ -547,6 +558,7 @@ export async function buildCommunityResourceDirectoryReadPayload(args: {
     // "Resources for this lesson": its links, and its files by name, type
     // and size. A file is downloaded by a person in the app; no address here.
     ...(isLesson ? {
+      ...lessonVideoFields(row),
       lesson_links: normalizeLessonLinks(row.lessonLinks),
       lesson_files: (await listAttachedLessonFiles(args.ctx, row._id)).map(lessonFileForAi),
     } : {}),
@@ -1203,6 +1215,7 @@ export async function readCommunityResourceBuilderResourceCore(args: {
       resource: withMembersCanSee(
         {
           ...(await mapCommunityResourceRowWithBody(args.ctx, resolved.resource)),
+          ...lessonVideoFields(resolved.resource),
           // Files by name, type and size; the app's ids stay in the app.
           lesson_files: normalizeResourceRole(resolved.resource.role) === "page"
             ? (await listAttachedLessonFiles(args.ctx, resolved.resource._id)).map(lessonFileForAi) : [],

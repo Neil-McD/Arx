@@ -128,6 +128,12 @@ export function courseChangeSummary(operation: Record<string, unknown>): string 
 }
 const course = (a: Args, operation: Record<string, unknown>): Translated =>
   write(`${root(a.community)}builder/resources/`, "create", { summary: courseChangeSummary(operation), operations: [operation] });
+// A lesson's url set to null means "no video"; the executor drops null
+// fields, so it is sent as "", which the engine reads the same way.
+const batchOperations = (a: Args): unknown => (Array.isArray(a.operations)
+  ? a.operations.map((operation: unknown) => (operation && typeof operation === "object" && (operation as Record<string, unknown>).url === null
+    ? { ...(operation as Record<string, unknown>), url: "" } : operation))
+  : a.operations);
 // The guide's batch: its own line when it gave one, otherwise how many changes.
 const batchSummary = (a: Args): string => {
   const given = typeof a.summary === "string" ? a.summary.trim() : "";
@@ -136,6 +142,12 @@ const batchSummary = (a: Args): string => {
 };
 const descriptionOf = (a: Args) => (a.description !== undefined ? { description_md: a.description } : {});
 const bodyOf = (a: Args) => (a.body !== undefined ? { body_md: a.body } : {});
+// A lesson's video is the engine's url. null or "" removes it, sent as "":
+// the executor drops null fields, and the engine reads "" as no video.
+const videoOf = (a: Args) => (a.video !== undefined ? { url: typeof a.video === "string" ? a.video.trim() : "" } : {});
+const LESSON_LINKS: PlatformOperationJsonSchema = { type: "array", maxItems: 12, items: { type: "object", additionalProperties: false, required: ["title", "url"],
+  properties: { title: { type: "string", minLength: 1, maxLength: 120 }, url: { type: "string", minLength: 1, maxLength: 2_048 } } } };
+const LESSON_VIDEO_WORDS = "A YouTube, Loom, Vimeo or Wistia link; any other link is refused.";
 const COURSE: PlatformOperationJsonSchema = { type: "string", minLength: 1, maxLength: 180, description: "The course's id from builder/resources/." };
 const LESSON: PlatformOperationJsonSchema = { type: "string", minLength: 1, maxLength: 180, description: "The lesson's id from builder/resources/." };
 const UPDATED_AT: PlatformOperationJsonSchema = { type: "number", minimum: 0, description: "Its updated_at from builder/resources/, so a change made since is not overwritten." };
@@ -301,14 +313,14 @@ export const ACTION_TOOLS: ActionTool[] = [
     { community: COMMUNITY, summary: { type: "string", maxLength: 1_000, description: "One line on what this batch does." },
       operations: { type: "array", minItems: 1, maxItems: 25, items: RESOURCE_CHANGESET_OPERATION_SCHEMA, description: "The changes, in order. Each is one of: " +
     "create_module (a course: name, description_md, and a module_key you make up if lessons in this batch go in it); " +
-    "create_page (a lesson: title, body_md, and module_id of an existing course or module_key of one made in this batch); " +
-    "edit_page (resource_id, expected_updated_at, then what changes: title, body_md, module_id, lesson_links, which sets the links only: a lesson's files are added and removed by a person in the app); " +
+    "create_page (a lesson: title, body_md, url for its video (a YouTube, Loom, Vimeo or Wistia link), lesson_links, and module_id of an existing course or module_key of one made in this batch); " +
+    "edit_page (resource_id, expected_updated_at, then what changes: title, body_md, url (the video; an empty string removes it), module_id, lesson_links, which sets the links only: a lesson's files are added and removed by a person in the app); " +
     "edit_module (module_id, expected_updated_at, then name or description_md); " +
     "move_resource (resource_id, expected_updated_at, module_id); " +
     "reorder_pages (module_id, resource_ids: every lesson of that course in order); reorder_modules (module_ids: every course in order); " +
     "delete_page (resource_id, expected_updated_at) and delete_category (module_id, expected_updated_at), only in a draft course." } },
     ["community", "operations"],
-    (a) => write(`${root(a.community)}builder/resources/`, "create", { summary: batchSummary(a), operations: a.operations }), "guide"),
+    (a) => write(`${root(a.community)}builder/resources/`, "create", { summary: batchSummary(a), operations: batchOperations(a) }), "guide"),
   // A person's own AI gets one tool per job (OpenAI's plugin review asks that
   // every operation be its own tool). Each runs as a one-change batch through
   // the same path as polynet_change_courses, with the same checks.
@@ -317,19 +329,21 @@ export const ACTION_TOOLS: ActionTool[] = [
     { community: COMMUNITY, name: TEXT("The course's name.", 180), description: { type: ["string", "null"], maxLength: 1_200, description: "What the course is for, in markdown." } },
     ["community", "name"], (a) => course(a, { op: "create_module", name: a.name, ...descriptionOf(a) }), "own_ai"),
   tool("polynet_add_lesson", "polynet_write:builder", "Add a lesson",
-    "Add a lesson to a course. In a published course members see it at once; the answer says whether they can.",
-    { community: COMMUNITY, course: COURSE, title: TEXT("The lesson's title.", 180), body: { type: ["string", "null"], maxLength: 20_000, description: "The lesson, in markdown." } },
-    ["community", "course", "title"], (a) => course(a, { op: "create_page", module_id: a.course, title: a.title, ...bodyOf(a) }), "own_ai"),
+    "Add a lesson to a course: its title, words, video and links. In a published course members see it at once; the answer says whether they can.",
+    { community: COMMUNITY, course: COURSE, title: TEXT("The lesson's title.", 180), body: { type: ["string", "null"], maxLength: 20_000, description: "The lesson, in markdown." },
+      video: { type: ["string", "null"], maxLength: 2_048, description: `The video members watch at the top of the lesson. ${LESSON_VIDEO_WORDS}` },
+      lesson_links: { ...LESSON_LINKS, description: "Links members open from the lesson (its resources). A lesson's files are added by a person in the app." } },
+    ["community", "course", "title"], (a) => course(a, { op: "create_page", module_id: a.course, title: a.title, ...bodyOf(a), ...videoOf(a),
+      ...(Array.isArray(a.lesson_links) && a.lesson_links.length ? { lesson_links: a.lesson_links } : {}) }), "own_ai"),
   tool("polynet_edit_lesson", "polynet_write:builder", "Change a lesson",
-    "Change a lesson's title, words or links, or move it to another course. Give only what changes.",
+    "Change a lesson's title, words, video or links, or move it to another course. Give only what changes.",
     { community: COMMUNITY, lesson: LESSON, updated_at: UPDATED_AT, title: TEXT("The new title.", 180),
       body: { type: ["string", "null"], maxLength: 20_000, description: "The new words, in markdown." },
+      video: { type: ["string", "null"], maxLength: 2_048, description: `The lesson's new video. ${LESSON_VIDEO_WORDS} null or "" removes it.` },
       course: { ...COURSE, description: "Move it to this course: the course's id from builder/resources/." },
-      lesson_links: { type: "array", maxItems: 12, items: { type: "object", additionalProperties: false, required: ["title", "url"],
-        properties: { title: { type: "string", minLength: 1, maxLength: 120 }, url: { type: "string", minLength: 1, maxLength: 2_048 } } },
-        description: "The lesson's links, replacing the ones it has. A lesson's files are added and removed by a person in the app." } },
+      lesson_links: { ...LESSON_LINKS, description: "The lesson's links, replacing the ones it has. A lesson's files are added and removed by a person in the app." } },
     ["community", "lesson", "updated_at"], (a) => course(a, { op: "edit_page", resource_id: a.lesson, expected_updated_at: a.updated_at,
-      ...only(a, ["title", "lesson_links"]), ...bodyOf(a), ...(a.course !== undefined ? { module_id: a.course } : {}) }), "own_ai"),
+      ...only(a, ["title", "lesson_links"]), ...bodyOf(a), ...videoOf(a), ...(a.course !== undefined ? { module_id: a.course } : {}) }), "own_ai"),
   tool("polynet_edit_course", "polynet_write:builder", "Change a course",
     "Change a course's name or description. Give only what changes.",
     { community: COMMUNITY, course: COURSE, updated_at: UPDATED_AT, name: TEXT("The new name.", 180),
