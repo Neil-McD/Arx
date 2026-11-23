@@ -60,7 +60,12 @@ export function resolvePublicEntryRoute(params: {
     return { kind: "discover" };
   }
   if (segments.length === 2 && segments[0].toLowerCase() === "c") {
-    const slug = decodeURIComponent(segments[1]).trim();
+    let slug = "";
+    try {
+      slug = decodeURIComponent(segments[1]).trim();
+    } catch {
+      return null;
+    }
     if (slug && slug !== "preview") {
       return { kind: "community_landing", slug };
     }
