@@ -13,13 +13,15 @@ describe("Wave 3A: fast first load & on-demand screen boundaries", () => {
     expect(markdownUi).toContain('import "highlight.js/styles/github-dark.css";');
   });
 
-  it("defers Sentry and PostHog off the critical startup path via dynamic imports", () => {
+  it("defers Sentry and PostHog off the critical startup path via tree-shakable dynamic imports", () => {
     const instrument = read("apps/web/src/instrument.ts");
     const posthog = read("apps/web/src/posthogAnalytics.ts");
     expect(instrument).not.toMatch(/^import\s+\*\s+as\s+Sentry\s+from\s+["']@sentry\/react["']/m);
-    expect(instrument).toContain('import("@sentry/react")');
+    expect(instrument).toContain('import("./sentryRuntime")');
+    expect(instrument).toContain("pendingOperations");
     expect(posthog).not.toMatch(/^import\s+posthog\s+from\s+["']posthog-js["']/m);
-    expect(posthog).toContain('import("posthog-js")');
+    expect(posthog).toContain('import("./posthogRuntime")');
+    expect(posthog).toContain("replayPendingPosthogOperations");
   });
 
   it("lazy-loads top-level routes, community secondary tabs, DM panels, and legal modals", () => {
