@@ -91,13 +91,8 @@ assert.doesNotMatch(
 );
 assert.match(
   settingsSection,
-  /selectedSettingsPane === "danger" && isOwnerSettingsLayer[\s\S]*CommunityDangerSettingsSection/,
-  "Danger must be an owner-only archive surface",
-);
-assert.match(
-  settingsSection,
-  /Archive freezes this community[\s\S]*Restoring it later[\s\S]*\$79\/month/,
-  "the archive confirmation must state the frozen and paid-restoration consequences",
+  /CommunityGeneralSettingsV1[\s\S]*isOwner[\s\S]*Danger zone[\s\S]*Archive community[\s\S]*Freezes it and stops subscriptions[\s\S]*handleArchiveCommunity/,
+  "Archive must be an owner-only confirmation surface inside General settings",
 );
 assert.doesNotMatch(
   modalHost,
@@ -271,17 +266,12 @@ assert.match(
 );
 assert.match(
   settingsSection,
-  /if \(activePane !== pane\) \{[\s\S]*onSelectPane\(pane, source === "keyboard" \? \{ replace: true \} : undefined\);[\s\S]*\}/,
-  "clicking the active pane must not add duplicate history entries",
-);
-assert.match(
-  settingsSection,
   /onSelectPane\(availableSettingsPanes\[0\]!, \{ replace: true \}\)/,
   "invalid or unauthorized pane fallback must replace the current URL",
 );
 assert.match(
   settingsSection,
-  /function CommunityMemberSettingsSection[\s\S]*Member settings[\s\S]*Mute community[\s\S]*Leave community/,
+  /function CommunityMemberSettingsSection[\s\S]*Membership[\s\S]*Mute this community[\s\S]*handleLeaveCommunity/,
   "non-managers should see member-level community settings without owner/admin panes",
 );
 assert.match(

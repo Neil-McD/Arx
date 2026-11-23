@@ -13,6 +13,6 @@ test("the daily brief switch says what it does and waits for the saved settings 
   }));
   expect(html).toContain("Daily brief");
   expect(html).toContain("Send me a daily brief");
-  expect(html).toContain("it never messages your members");
-  expect(html).toMatch(/type="checkbox"[^>]*disabled/);
+  expect(html).toContain("it never messages members");
+  expect(html).toMatch(/role="switch"[^>]*disabled/);
 });

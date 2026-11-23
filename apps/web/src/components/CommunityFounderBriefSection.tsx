@@ -8,7 +8,6 @@ import {
   setCloudFounderBriefSettings,
   type CloudFounderBriefSettings,
 } from "../../../../shared/cloudCommunityAdminGateway";
-import { isDesignV1Active } from "../../../../shared/designSystem";
 import { SettingsGroup, SettingsRow, SettingsSelect, SettingsSwitch } from "./SettingsRows";
 
 const HOURS = Array.from({ length: 24 }, (_, hour) => hour);
@@ -78,61 +77,22 @@ export function CommunityFounderBriefSection(props: {
 
   const enabled = Boolean(settings?.enabled);
   const localHour = settings?.local_hour ?? 8;
-  if (isDesignV1Active()) {
-    return (
-      <SettingsGroup label="Daily brief">
-        <SettingsRow label="Send me a daily brief"
-          help={error ? <span className="settings-v1-error" role="alert">{error}</span>
-            : "Each morning: who joined, posts nobody answered, newcomers gone quiet, what's coming up. In your guide conversation and by email; it never messages members."}>
-          <SettingsSwitch label="Send me a daily brief" checked={enabled} disabled={!settings || saving}
-            onChange={(checked) => void save({ enabled: checked, localHour })} />
-        </SettingsRow>
-        {enabled ? (
-          <SettingsRow label="Time" htmlFor="brief-hour" help={settings?.time_zone ? `${settings.time_zone} time.` : "Your time."}>
-            <SettingsSelect id="brief-hour" value={localHour} disabled={saving}
-              onChange={(event) => void save({ enabled: true, localHour: Number(event.target.value) })}>
-              {HOURS.map((hour) => <option key={hour} value={hour}>{hourLabel(hour)}</option>)}
-            </SettingsSelect>
-          </SettingsRow>
-        ) : null}
-      </SettingsGroup>
-    );
-  }
   return (
-    <div className="settings-section community-founder-brief-section">
-      <div className="settings-section-title">Daily brief</div>
-      <div className="settings-section-desc">
-        Each morning your agent sums up the last day: who joined, posts nobody has answered, newcomers who've gone quiet
-        and what's coming up. It arrives in your agent conversation and by email, and it never messages your members.
-      </div>
-      <label className={`community-member-experience-option${enabled ? " is-selected" : ""}`}>
-        <input
-          type="checkbox"
-          checked={enabled}
-          disabled={!settings || saving}
-          onChange={(event) => void save({ enabled: event.target.checked, localHour })}
-        />
-        <span>
-          <strong>Send me a daily brief</strong>
-          <span className="settings-section-desc">
-            {settings?.time_zone ? `At ${hourLabel(localHour)}, ${settings.time_zone} time.` : `At ${hourLabel(localHour)} your time.`}
-          </span>
-        </span>
-      </label>
+    <SettingsGroup label="Daily brief">
+      <SettingsRow label="Send me a daily brief"
+        help={error ? <span className="settings-v1-error" role="alert">{error}</span>
+          : "Each morning: who joined, posts nobody answered, newcomers gone quiet, what's coming up. In your guide conversation and by email; it never messages members."}>
+        <SettingsSwitch label="Send me a daily brief" checked={enabled} disabled={!settings || saving}
+          onChange={(checked) => void save({ enabled: checked, localHour })} />
+      </SettingsRow>
       {enabled ? (
-        <label className="create-community-field" style={{ marginTop: 10 }}>
-          <span>Time</span>
-          <select
-            className="select-styled"
-            value={localHour}
-            disabled={saving}
-            onChange={(event) => void save({ enabled: true, localHour: Number(event.target.value) })}
-          >
+        <SettingsRow label="Time" htmlFor="brief-hour" help={settings?.time_zone ? `${settings.time_zone} time.` : "Your time."}>
+          <SettingsSelect id="brief-hour" value={localHour} disabled={saving}
+            onChange={(event) => void save({ enabled: true, localHour: Number(event.target.value) })}>
             {HOURS.map((hour) => <option key={hour} value={hour}>{hourLabel(hour)}</option>)}
-          </select>
-        </label>
+          </SettingsSelect>
+        </SettingsRow>
       ) : null}
-      {error ? <div className="settings-section-desc" role="alert">{error}</div> : null}
-    </div>
+    </SettingsGroup>
   );
 }

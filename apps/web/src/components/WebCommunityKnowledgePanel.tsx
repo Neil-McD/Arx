@@ -1,5 +1,4 @@
 import { CommunityPageHeader, CommunityPageRail } from "./CommunityPageHeader";
-import { isDesignV1Active } from "../../../../shared/designSystem";
 import { askInApp } from "../../../../shared/inAppConfirm";
 import { KitClassroom } from "../v1/KitClassroom";
 import { KitBrainPage, takeOpenBrain } from "../v1/KitBrainPage";
@@ -27,9 +26,7 @@ type Props = {
 };
 
 export function WebCommunityKnowledgePanel(props: Props) {
-  // Design system v1: what the community has learned is the page; courses and
-  // documents are one click away (Resources), still in their own layout.
-  if (isDesignV1Active() && props.context.communityId && props.context.canViewGraph) return <KnowledgeV1 {...props} />;
+  if (props.context.communityId && props.context.canViewGraph) return <KnowledgeV1 {...props} />;
   return <KnowledgeClassic {...props} />;
 }
 

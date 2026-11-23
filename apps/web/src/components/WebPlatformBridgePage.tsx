@@ -1,4 +1,3 @@
-import { isDesignV1Active } from "../../../../shared/designSystem";
 import {
   WebCommunityBridgeCard,
   type WebCommunityBridgeCardProps,
@@ -17,7 +16,7 @@ export function WebPlatformBridgePage(props: {
     >
       <div className="account-setup-heading is-platform">
         <div className="account-setup-brand">
-          <img src={isDesignV1Active() ? "/brand/polynet-app-icon.svg" : "/favicon.svg"} alt="" />
+          <img src="/brand/polynet-app-icon.svg" alt="" />
           <span>Polynet</span>
         </div>
         <h1 id="polynet-platform-bridge-title">Finish your profile</h1>

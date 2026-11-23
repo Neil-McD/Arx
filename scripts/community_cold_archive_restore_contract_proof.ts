@@ -57,7 +57,7 @@ assert.match(
 );
 assert.match(
   settingsUi,
-  /CommunityDangerSettingsSection[\s\S]*Archive freezes this community[\s\S]*handleArchiveCommunity/,
+  /CommunityGeneralSettingsV1[\s\S]*Archive community[\s\S]*Freezes it and stops subscriptions[\s\S]*handleArchiveCommunity/,
   "active owners must receive one explicit archive confirmation surface",
 );
 assert.match(
