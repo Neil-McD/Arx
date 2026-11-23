@@ -46,7 +46,6 @@ describe("Wave 3D: pre-release security and telemetry polish", () => {
     const landingPage = read("apps/web/src/components/WebCommunityLandingPage.tsx");
     const posthog = read("apps/web/src/posthogAnalytics.ts");
     const memory = read("convex/communityMemory.ts");
-    const rollups = read("convex/communityAnalyticsRollups.ts");
 
     expect(publicShell).toContain("sessionCheckPending={sessionCheckPending}");
     expect(publicShell).toMatch(/\.catch\(\(\) => \{\s*if \(!cancelled\) \{\s*setHandoffToStudioApp\(true\);/);
@@ -62,8 +61,5 @@ describe("Wave 3D: pre-release security and telemetry polish", () => {
     expect(memory).toMatch(/export const listNoteSources = query\(\{[\s\S]{0,200}authenticateCommunityMember\(ctx, args\)/);
     expect(memory).toMatch(/export const undoLearnedNote = mutation\(\{[\s\S]{0,200}authenticateCommunityMember\(ctx, args\)/);
     expect(memory).toMatch(/export const undoMemoryRun = mutation\(\{[\s\S]{0,200}authenticateCommunityMember\(ctx, args\)/);
-
-    expect(rollups).toContain("const OPERATOR_COMMUNITIES_BATCH_SIZE = 5;");
-    expect(rollups).toContain("communityCreators: ownerSet.size");
   });
 });
