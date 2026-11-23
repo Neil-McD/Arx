@@ -16,7 +16,11 @@ const ACTIVE_RECURRING_STATUSES = ["active", "past_due", "cancel_at_period_end"]
 const BACKFILL_BATCH_SIZE = 200;
 const SWEEP_COMMUNITIES_PAGE_SIZE = 50;
 const SWEEP_MAX_PER_RUN = 5;
-const OPERATOR_COMMUNITIES_BATCH_SIZE = 25;
+// Bounded at 5 communities per scheduled mutation batch so even worst-case
+// fallback subscription scans (when billing summaries are absent or stale)
+// stay strictly under Convex's per-mutation read limit without skipping any
+// community's billing totals.
+const OPERATOR_COMMUNITIES_BATCH_SIZE = 5;
 const OPERATOR_USERS_BATCH_SIZE = 200;
 const DISCOVER_ACTIVITY_BATCH_SIZE = 20;
 const STALE_COMMUNITY_ACTIVITY_AGE_MS = 14 * 24 * 60 * 60 * 1000;
@@ -660,9 +664,6 @@ function addMoneyAcc(current: MoneyAccumulator, addition: MoneyAccumulator): Mon
   };
 }
 
-const MAX_OPERATOR_FALLBACK_SUB_READS_PER_BATCH = 4_000;
-const OPERATOR_FALLBACK_SUBS_PER_STATUS_LIMIT = 250;
-
 // Paginated platform-wide operator summary refresh (15-min cron): computes
 // overview totals across all communities without ever scanning the full DB
 // in a single query.
@@ -697,7 +698,6 @@ export const refreshPlatformOperatorSummaryBatchInternal = internalMutation({
         .query("communities")
         .paginate({ cursor: args.cursor ?? null, numItems: OPERATOR_COMMUNITIES_BATCH_SIZE });
       const ownerSet = new Set<string>(acc.ownerIds);
-      let fallbackSubReadsThisBatch = 0;
 
       for (const community of page.page) {
         acc.communities += 1;
@@ -735,17 +735,16 @@ export const refreshPlatformOperatorSummaryBatchInternal = internalMutation({
               mixedCurrency: false,
             };
           }
-        } else if (fallbackSubReadsThisBatch < MAX_OPERATOR_FALLBACK_SUB_READS_PER_BATCH) {
+        } else {
           const subsByStatus = await Promise.all(
             ACTIVE_RECURRING_STATUSES.map((status) =>
               ctx.db
                 .query("communitySubscriptions")
                 .withIndex("by_community_status", (q) => q.eq("communityId", community._id).eq("status", status))
-                .take(OPERATOR_FALLBACK_SUBS_PER_STATUS_LIMIT),
+                .take(1_000),
             ),
           );
           const recurring = subsByStatus.flat();
-          fallbackSubReadsThisBatch += recurring.length;
           activePaidMembers = recurring.length;
           const priceCache = new Map<string, any>();
           for (const sub of recurring) {
