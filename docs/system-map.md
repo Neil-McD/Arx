@@ -622,7 +622,7 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
   `shared/` (gateways and shared UI), `api/` (Vercel functions); backend helper
   `publicAppUrl`.
 - **Hosting:** Vercel `polynet` (production, www.polynet.ai) and `polynet-staging`.
-- **Known hot spot:** `App.tsx` (3,100 lines).
+- **Known hot spot:** `App.tsx` (~2,200 lines; down from 3,100 after Wave 4A builder extraction).
 
 ### 18. Release, CI and the factory — Keep
 

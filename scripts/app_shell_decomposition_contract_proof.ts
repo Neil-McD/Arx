@@ -56,7 +56,7 @@ assert.doesNotMatch(
 );
 
 assert.ok(
-  app.split("\n").length <= 3_250,
+  app.split("\n").length <= 2_350,
   "App.tsx must remain within its post-decomposition structural budget",
 );
 assert.doesNotMatch(

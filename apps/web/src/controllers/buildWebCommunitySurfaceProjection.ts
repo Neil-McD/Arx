@@ -18,7 +18,7 @@ type CommunitySurfaceCommunityLike =
       })
   | null;
 
-type BuildWebCommunitySurfaceProjectionParams = {
+export type BuildWebCommunitySurfaceProjectionParams = {
   activePage: AppPage;
   communityTab: CommunityTab;
   activeCommunity: CommunitySurfaceCommunityLike | null;
