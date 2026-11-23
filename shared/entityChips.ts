@@ -57,12 +57,21 @@ export type EntityTarget = {
   facts?: EntityFacts;
   // A course's next lesson, opened by its card.
   nextPath?: string | null;
+  // A page's card: which page, a line about it, and the first few things on it
+  // the reader can open (the next events, the courses, their pods).
+  page?: PageId;
+  summary?: string | null;
+  items?: EntityTarget[];
 };
+
+export type PageId = "home" | "inbox" | "knowledge" | "events" | "pods" | "members";
+
+export const PAGE_CARD_ITEMS_MAX = 3;
 
 export const ENTITY_NAMES_MAX = 500;
 
 // The pages everyone has, by the names the guide uses for them.
-const PAGES: ReadonlyArray<{ name: string; segment: string }> = [
+const PAGES: ReadonlyArray<{ name: string; segment: PageId }> = [
   { name: "Home", segment: "home" },
   { name: "Inbox", segment: "inbox" },
   { name: "Knowledge", segment: "knowledge" },
@@ -70,6 +79,40 @@ const PAGES: ReadonlyArray<{ name: string; segment: string }> = [
   { name: "Pods", segment: "pods" },
   { name: "Members", segment: "members" },
 ];
+
+function plural(count: number, one: string, many: string): string {
+  return `${count} ${count === 1 ? one : many}`;
+}
+
+// What a page's card says, from the same list the chips come from.
+export function pageCard(page: PageId, targets: readonly EntityTarget[]): { summary: string; items: EntityTarget[] } {
+  if (page === "events") {
+    const events = targets
+      .filter((t) => t.kind === "event" && t.startsAt && !Number.isNaN(new Date(t.startsAt).getTime()))
+      .sort((a, b) => new Date(a.startsAt as string).getTime() - new Date(b.startsAt as string).getTime());
+    return {
+      summary: events.length ? `${plural(events.length, "event", "events")} in the next five weeks` : "Nothing on the calendar in the next five weeks",
+      items: events.slice(0, PAGE_CARD_ITEMS_MAX),
+    };
+  }
+  if (page === "knowledge") {
+    const courses = targets.filter((t) => t.kind === "course");
+    return {
+      summary: courses.length ? plural(courses.length, "course", "courses") : "No courses yet",
+      items: courses.slice(0, PAGE_CARD_ITEMS_MAX),
+    };
+  }
+  if (page === "pods") {
+    const pods = targets.filter((t) => t.kind === "pod");
+    return {
+      summary: pods.length ? `${plural(pods.length, "pod", "pods")} open to you` : "Small groups inside the community",
+      items: pods.slice(0, PAGE_CARD_ITEMS_MAX),
+    };
+  }
+  if (page === "home") return { summary: "Talk with the guide and see what's new", items: [] };
+  if (page === "inbox") return { summary: "Your direct messages", items: [] };
+  return { summary: "Everyone in the community", items: [] };
+}
 
 // How a bold phrase is compared: case, surrounding space and punctuation, and
 // a leading # (channels) do not matter.
@@ -131,17 +174,25 @@ export function buildEntityNameIndex(communitySlug: string | null | undefined, r
     }
     index.set(key, target);
   };
-  for (const page of PAGES) {
-    add({ kind: "page", name: page.name, path: `/c/${encodeURIComponent(slug)}/${page.segment}` });
-  }
+  const pages: EntityTarget[] = PAGES.map((page) => ({
+    kind: "page",
+    name: page.name,
+    page: page.segment,
+    path: `/c/${encodeURIComponent(slug)}/${page.segment}`,
+  }));
+  for (const page of pages) add(page);
+  const things: EntityTarget[] = [];
   for (const row of (rows ?? []).slice(0, ENTITY_NAMES_MAX)) {
     const path = entityPath(slug, row);
     if (!path || !String(row.name ?? "").trim()) continue;
     const nextPath = row.kind === "course" && row.facts?.nextLessonId
       ? entityPath(slug, { kind: "lesson", name: "", id: row.facts.nextLessonId, parentId: row.id })
       : null;
-    add({ kind: row.kind, name: row.name, path, startsAt: row.startsAt ?? null, facts: row.facts, nextPath });
+    const target: EntityTarget = { kind: row.kind, name: row.name, path, startsAt: row.startsAt ?? null, facts: row.facts, nextPath };
+    things.push(target);
+    add(target);
   }
+  for (const page of pages) Object.assign(page, pageCard(page.page as PageId, things));
   return index;
 }
 
@@ -189,6 +240,7 @@ export function cardLines(target: EntityTarget, timeZone?: string): string[] {
     lines.push(bits);
     return lines;
   }
+  if (target.kind === "page") return target.summary ? [target.summary] : [];
   if (f.about) lines.push(f.about);
   if (target.kind === "pod" && typeof f.seats === "number") lines.push(`${f.seats} seats`);
   return lines;
@@ -203,6 +255,6 @@ export function cardAction(target: EntityTarget): { label: string; path: string 
     }
     return { label: (f.lessons ?? 0) > 0 && (f.done ?? 0) >= (f.lessons ?? 0) ? "Review the course" : "Open course", path: target.path };
   }
-  const label = target.kind === "lesson" ? "Open lesson" : target.kind === "channel" ? "Open channel" : target.kind === "pod" ? "Open pod" : target.kind === "event" ? "Open event" : "Open";
+  const label = target.kind === "lesson" ? "Open lesson" : target.kind === "channel" ? "Open channel" : target.kind === "pod" ? "Open pod" : target.kind === "event" ? "Open event" : `Open ${target.name}`;
   return { label, path: target.path };
 }

@@ -1,8 +1,9 @@
 import { createContext, useContext, useMemo, type MouseEvent, type ReactNode } from "react";
 import type React from "react";
+import { Boxes, CalendarDays, House, Inbox, Library, Users } from "lucide-react";
 import { resolveAuthSubject, type AuthSessionLike } from "./authSession";
 import { useLiveQuery } from "./liveQuery";
-import { buildEntityNameIndex, cardAction, cardLines, chipFact, matchEntityName, type EntityKind, type EntityNameRow, type EntityTarget } from "./entityChips";
+import { buildEntityNameIndex, cardAction, cardLines, chipFact, matchEntityName, type EntityKind, type EntityNameRow, type EntityTarget, type PageId } from "./entityChips";
 import { useHoverIntent } from "./useHoverIntent";
 
 // Chips in the guide's replies (docs/specs/guide-chips-end-state.md, slice 1).
@@ -65,15 +66,23 @@ const ICONS: Record<EntityKind, ReactNode> = {
   page: <path d="M9 18l6-6-6-6" />,
 };
 
+// A page's chip carries the icon that page has in the left column.
+const PAGE_ICONS: Record<PageId, typeof House> = {
+  home: House,
+  inbox: Inbox,
+  knowledge: Library,
+  events: CalendarDays,
+  pods: Boxes,
+  members: Users,
+};
+
 const CHIP_SCROLL_AREAS = ".community-interaction-feed-scroll, .community-interaction-drawer-scroll, .community-agent-dock-transcript";
 
 export function EntityChip(props: { target: EntityTarget; label: ReactNode; navigate: (path: string) => void }) {
   const { target } = props;
-  // Pages need no card: their name says it all.
-  const hasCard = target.kind !== "page";
   // Placed against the scrolling area the reply sits in (channel feed, thread,
   // Home chat), so the card never opens where that area cuts it off.
-  const hover = useHoverIntent<HTMLSpanElement>({ enabled: hasCard, maxCardHeight: 220, viewportSelector: CHIP_SCROLL_AREAS });
+  const hover = useHoverIntent<HTMLSpanElement>({ enabled: true, maxCardHeight: 240, viewportSelector: CHIP_SCROLL_AREAS });
   const go = (path: string) => (event: MouseEvent<HTMLAnchorElement>) => {
     if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
     event.preventDefault();
@@ -81,7 +90,8 @@ export function EntityChip(props: { target: EntityTarget; label: ReactNode; navi
     props.navigate(path);
   };
   const fact = chipFact(target);
-  const lines = hasCard ? cardLines(target) : [];
+  const lines = cardLines(target);
+  const PageIcon = target.kind === "page" && target.page ? PAGE_ICONS[target.page] : null;
   const action = cardAction(target);
   const progress = target.kind === "course" && (target.facts?.lessons ?? 0) > 0
     ? Math.round(100 * Math.min(target.facts?.done ?? 0, target.facts?.lessons ?? 0) / (target.facts?.lessons ?? 1))
@@ -106,18 +116,20 @@ export function EntityChip(props: { target: EntityTarget; label: ReactNode; navi
         onClick={go(target.path)}
         data-entity-kind={target.kind}
       >
-        <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          {ICONS[target.kind]}
-        </svg>
+        {PageIcon ? <PageIcon aria-hidden="true" strokeWidth={2} /> : (
+          <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            {ICONS[target.kind]}
+          </svg>
+        )}
         <span className="entity-chip-name">{props.label}</span>
         {target.kind === "lesson" && target.facts?.finished ? <span className="entity-chip-fact" aria-label="finished">✓</span> : null}
         {fact ? <span className="entity-chip-fact">{fact}</span> : null}
       </a>
-      {hasCard ? (
-        <span
+      <span
           ref={hover.cardRef as unknown as React.Ref<HTMLSpanElement>}
           className={`entity-card${hover.open ? " is-open" : ""}`}
           data-placement={hover.placement}
+          style={{ left: hover.shift }}
           role="group"
           aria-label={`${target.name} preview`}
           onMouseEnter={hover.openHover}
@@ -131,9 +143,21 @@ export function EntityChip(props: { target: EntityTarget; label: ReactNode; navi
           {target.kind === "course" && progress !== null ? (
             <span className="entity-card-line">{`${Math.min(target.facts?.done ?? 0, target.facts?.lessons ?? 0)} of ${target.facts?.lessons} done`}</span>
           ) : null}
+          {target.items?.length ? (
+            <span className="entity-card-items">
+              {target.items.map((item) => {
+                const itemFact = chipFact(item);
+                return (
+                  <a key={item.path} className="entity-card-item" href={item.path} onClick={go(item.path)} tabIndex={hover.open ? 0 : -1}>
+                    <span className="entity-card-item-name">{item.name}</span>
+                    {itemFact ? <span className="entity-card-item-fact">{itemFact}</span> : null}
+                  </a>
+                );
+              })}
+            </span>
+          ) : null}
           <a className="entity-card-action" href={action.path} onClick={go(action.path)} tabIndex={hover.open ? 0 : -1}>{action.label} →</a>
-        </span>
-      ) : null}
+      </span>
     </span>
   );
 }
