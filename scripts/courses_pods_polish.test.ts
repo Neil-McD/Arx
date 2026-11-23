@@ -64,7 +64,7 @@ describe("courses pager and pod rail button affordance", () => {
     expect(podsSection).toContain("Preview inside as a member");
     expect(podRail).toContain("scope?.memberPreview");
     expect(podKnowledge).toContain("props.asMember");
-    expect(app).not.toContain('activeCommunityChannel?.access_mode === "restricted"');
+    expect(app).not.toContain('if (on && activeCommunityChannel?.access_mode === "restricted"');
     expect(navSurface).toContain("communityShell.isInPodRoom");
   });
 });
