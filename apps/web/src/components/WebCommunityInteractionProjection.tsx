@@ -778,6 +778,7 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
                     <div className="community-interaction-title">{selectedRoot.root.title}</div>
                   ) : null}
                   <InteractionContent
+                    fromGuide={selectedRoot.root.actor_type === "community_agent"}
                     text={selectedRootText}
                     renderTextWithLinks={props.renderTextWithLinks}
                     mentionContext={{
@@ -932,6 +933,7 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
                         ) : (
                           <>
                             <InteractionContent
+                              fromGuide={reply.actor_type === "community_agent"}
                               text={body}
                               renderTextWithLinks={props.renderTextWithLinks}
                               mentionContext={{
@@ -1038,6 +1040,7 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
             excerpt: pinnedText || String(props.pinnedRoot.root.content_summary ?? "").trim().slice(0, 280),
             body: pinnedText ? (
               <InteractionBody
+                fromGuide={props.pinnedRoot.root.actor_type === "community_agent"}
                 text={pinnedText}
                 renderTextWithLinks={props.renderTextWithLinks}
                 mentionContext={{

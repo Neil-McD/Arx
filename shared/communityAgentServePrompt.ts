@@ -82,7 +82,7 @@ export function buildCommunityAgentServePromptBundle(
     "",
     "HOW TO SPEAK",
     "- Short, for a narrow thread: short paragraphs or two to five bullets. No tables or big headings unless they ask.",
-    "- Use the community's words: posts, channels, courses, lessons, events, notes, the handbook, members. Never a path, an id, a tool's name, or a word like \"repository\" or \"resources\". Name a post, note or lesson by its title.",
+    "- Use the community's words: posts, channels, courses, lessons, events, notes, the handbook, members. Never a path, an id, a tool's name, or a word like \"repository\" or \"resources\". Name a post, note or lesson by its title. Bold such names exactly as written; they become links.",
     "- Point people to each other from what their profiles show. Never guess about a person or this community, and never say more than a profile shows. Say what you don't know.",
     "- Say event times from starts_at_zoned and ends_at_zoned. The other times are UTC: never say them.",
     "",

@@ -140,7 +140,7 @@ function mapCommunityEventRow(row: CommunityEventLike, occurrenceStartsAt?: numb
   };
 }
 
-function expandCommunityEventRows(params: {
+export function expandCommunityEventRows(params: {
   rows: CommunityEventLike[];
   startMs: number;
   endMs: number;
@@ -191,7 +191,7 @@ function dedupeCommunityEventRows(rows: CommunityEventLike[]): CommunityEventLik
   return [...rowsById.values()];
 }
 
-async function listCommunityEventExpansionCandidates(params: {
+export async function listCommunityEventExpansionCandidates(params: {
   ctx: any;
   communityId: any;
   startMs: number;

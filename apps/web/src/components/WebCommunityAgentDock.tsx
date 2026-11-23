@@ -1,3 +1,4 @@
+import { GuideVoice } from "../../../../shared/entityChipsUi";
 import { useCommunityAgentOn } from "../controllers/communityAgentOn";
 import { enterSendsMessage, isImeComposing } from "../controllers/communityComposerTextEditing";
 import {
@@ -1138,7 +1139,7 @@ function WebCommunityAgentDock(props, ref) {
             if (kit) {
               return message.role === "assistant" ? (
                 <Theirs key={message.id}>
-                  {text ? renderMarkdown(text) : null}
+                  {text ? <GuideVoice>{renderMarkdown(text)}</GuideVoice> : null}
                   <CommunityAgentAttachmentViews attachments={messageAttachments} />
                 </Theirs>
               ) : (
@@ -1155,7 +1156,7 @@ function WebCommunityAgentDock(props, ref) {
               >
                 {text
                   ? message.role === "assistant"
-                    ? renderMarkdown(text)
+                    ? <GuideVoice>{renderMarkdown(text)}</GuideVoice>
                     : <p>{text}</p>
                   : null}
                 <CommunityAgentAttachmentViews attachments={messageAttachments} />
@@ -1195,12 +1196,12 @@ function WebCommunityAgentDock(props, ref) {
               ) : null}
               {shouldRenderStreamedText && kit ? (
                 <Theirs>
-                  {renderMarkdown(streamedText)}
+                  <GuideVoice>{renderMarkdown(streamedText)}</GuideVoice>
                   {turnIsActive ? <span className="community-agent-dock-caret" aria-hidden="true" /> : null}
                 </Theirs>
               ) : shouldRenderStreamedText ? (
                 <article className="community-agent-dock-message is-assistant is-streaming">
-                  {renderMarkdown(streamedText)}
+                  <GuideVoice>{renderMarkdown(streamedText)}</GuideVoice>
                   {turnIsActive ? <span className="community-agent-dock-caret" aria-hidden="true" /> : null}
                 </article>
               ) : null}

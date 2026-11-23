@@ -9,6 +9,7 @@ import "highlight.js/styles/github-dark.css";
 import { parseEmbedUrl, StableMediaEmbedFrame, type ParsedEmbed } from "./linkEmbedUi";
 import { lessonCallout, lessonCalloutType, LESSON_CALLOUT_MARKER } from "./lessonCallouts";
 import { LessonCalloutIcon } from "./lessonCalloutUi";
+import { StrongOrChip, plainTextOf } from "./entityChipsUi";
 import hljs from "highlight.js/lib/core";
 import bash from "highlight.js/lib/languages/bash";
 import css from "highlight.js/lib/languages/css";
@@ -681,6 +682,10 @@ function buildMarkdownComponents(headingLevelOffset: number, options?: MarkdownR
     <MarkdownHeading level={Math.min(6, level + headingLevelOffset)}>{children}</MarkdownHeading>
   );
   const components: Components = {
+    // A bold name in the guide's words may be a chip (shared/entityChipsUi.tsx).
+    strong({ children }) {
+      return <StrongOrChip text={plainTextOf(children)}>{children}</StrongOrChip>;
+    },
     a({ href, children }) {
       const safeHref =
         typeof href === "string" &&
