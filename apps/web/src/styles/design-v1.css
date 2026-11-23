@@ -3892,20 +3892,24 @@
   background: var(--accent-act, var(--accent));
 }
 
-/* In a channel, a thread or a conversation: no tabs, the composer at the
-   bottom; back is the arrow at the top. */
-:root[data-design="v1"] .app-root.mobile-shell:not(:has(.mobile-bottom-rail)),
-:root[data-design="v1"] .app-root.mobile-shell:has(.web-direct-messages-host.mobile-root.has-open) {
-  --mobile-bottom-rail-height: 0px;
-}
-
-:root[data-design="v1"] .app-root.mobile-shell:has(.web-direct-messages-host.mobile-root.has-open) .mobile-bottom-rail.is-phone-tabs {
-  display: none;
-}
-
 /* With the tabs: everything above them clears their height. */
 :root[data-design="v1"] .app-root.mobile-shell:has(.mobile-bottom-rail.is-phone-tabs) {
   --mobile-bottom-rail-height: 64px;
+}
+
+/* In a channel, a thread, a conversation, or talking to the guide on Home:
+   no tabs, the composer at the bottom; back is the arrow at the top. Placed
+   after the 64px phone-tabs height rule so hiding mounted tabs also clears
+   their reserved space. */
+:root[data-design="v1"] .app-root.mobile-shell:not(:has(.mobile-bottom-rail)),
+:root[data-design="v1"] .app-root.mobile-shell:has(.web-direct-messages-host.mobile-root.has-open),
+:root[data-design="v1"] .app-root.mobile-shell:has(.community-agent-dock-panel.is-guide-talking) {
+  --mobile-bottom-rail-height: 0px;
+}
+
+:root[data-design="v1"] .app-root.mobile-shell:has(.web-direct-messages-host.mobile-root.has-open) .mobile-bottom-rail.is-phone-tabs,
+:root[data-design="v1"] .app-root.mobile-shell:has(.community-agent-dock-panel.is-guide-talking) .mobile-bottom-rail.is-phone-tabs {
+  display: none;
 }
 
 /* Home and Inbox are tabs on a phone, so the community's menu leaves them out. */
@@ -4004,12 +4008,12 @@
   --kit-top-inset: 52px;
 }
 
-/* Members on a phone: the page, full screen over the channel it opened from,
+/* Members on a phone: the page, full screen above the bottom tabs,
    with the arrow back; the channel's name steps aside. */
 /* phone layout */
 :root[data-design="v1"]:where([data-layout="phone"]) .app-root.mobile-shell .members-page {
   position: fixed;
-  inset: env(safe-area-inset-top, 0px) 0 0 0;
+  inset: env(safe-area-inset-top, 0px) 0 calc(env(safe-area-inset-bottom, 0px) + var(--mobile-bottom-rail-height, 0px)) 0;
   z-index: 25;
   display: flex;
   flex-direction: column;
@@ -4043,10 +4047,41 @@
   padding-right: 16px;
 }
 
+/* Phone layout: keep the mobile shell height chain and CommunityPageFrame
+   strictly bounded inside the viewport so .community-tab-scroll overflows and
+   scrolls smoothly on mobile across Knowledge, Events, Pods, Settings,
+   Analytics, and Discover. */
+:root[data-design="v1"]:where([data-layout="phone"]) .app-root.mobile-shell .app-shell {
+  grid-template-rows: minmax(0, 1fr);
+}
+:root[data-design="v1"]:where([data-layout="phone"]) .app-root.mobile-shell .workspace.community-mode {
+  height: 100%;
+  min-height: 0;
+}
+:root[data-design="v1"]:where([data-layout="phone"]) .community-page-body {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+}
+:root[data-design="v1"]:where([data-layout="phone"]) .community-page-body > .community-page-header {
+  flex: 0 0 auto;
+}
+:root[data-design="v1"]:where([data-layout="phone"]) .community-page-body > .community-tab-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-y: contain;
+}
+
 /* The page's header is in the flow here, so the room the classic layout
    left for a floating bar is just a blank band above the page. */
 :root[data-design="v1"]:where([data-layout="phone"]) .app-root.mobile-shell .community-page-body > .community-tab-scroll {
   padding-top: 0;
+  padding-bottom: calc(env(safe-area-inset-bottom, 0px) + var(--mobile-bottom-rail-height, 0px) + 16px);
 }
 :root[data-design="v1"]:where([data-layout="phone"]) .app-root.mobile-shell .community-page-body > .community-tab-scroll > .web-community-centered-pane {
   padding-top: 12px;
@@ -4071,7 +4106,7 @@
 
 :root[data-design="v1"]:where([data-layout="phone"]) .app-root.mobile-shell:has(.members-page.has-picked) .members-page-record {
   position: fixed;
-  inset: env(safe-area-inset-top, 0px) 0 0 0;
+  inset: env(safe-area-inset-top, 0px) 0 calc(env(safe-area-inset-bottom, 0px) + var(--mobile-bottom-rail-height, 0px)) 0;
   z-index: 25;
   display: flex;
   flex-direction: column;

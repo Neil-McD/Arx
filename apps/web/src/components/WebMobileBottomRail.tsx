@@ -94,14 +94,13 @@ export function WebMobileBottomRail({
 // step aside for the composer (design-v1.css).
 function PhoneTabs({ communityShell }: WebMobileBottomRailProps) {
   const activeRoot = communityShell.mobileRootPage;
-  // In a channel (and its threads) or a pod's room, the composer has the
-  // bottom of the screen; the arrow at the top goes back. A conversation in
-  // Inbox does the same in CSS (design-v1.css).
+  // In a channel (and its threads) or a pod's chat room (`community_chat`),
+  // the composer has the bottom of the screen; the arrow at the top goes back.
+  // Pod preview/join pages (`community_pods`) have no composer and keep the
+  // bottom tabs. An open DM conversation or Home guide talk hides the tabs in
+  // CSS (design-v1.css).
   const destination = communityShell.destination;
-  const inConversation = activeRoot === "community" && (
-    destination.kind === "community_chat" ||
-    (destination.kind === "community_pods" && Boolean(destination.podSlug))
-  );
+  const inConversation = activeRoot === "community" && destination.kind === "community_chat";
   if (inConversation) return null;
   const community = communityShell.activeCommunity;
   const communityName = String(community?.name ?? "").trim() || "Community";

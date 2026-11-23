@@ -1,9 +1,29 @@
-import { createContext, useContext, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { ArrowLeft, Search } from "lucide-react";
 import { isDesignV1Active } from "../../../../shared/designSystem";
 import { openGuideFromSearch } from "./guideSearch";
 import { useCommunityAgentOn } from "../controllers/communityAgentOn";
+
+// On phones, the top bar owns the Back arrow while nested pages (a course in
+// Knowledge, a pod preview, an event detail) register a one-step back handler
+// so Back returns to the parent page instead of jumping to the community menu.
+let activeMobilePageBackHandler: (() => void) | null = null;
+
+export function registerMobilePageBack(handler: (() => void) | null): () => void {
+  activeMobilePageBackHandler = handler;
+  return () => {
+    if (activeMobilePageBackHandler === handler) {
+      activeMobilePageBackHandler = null;
+    }
+  };
+}
+
+export function runActiveMobilePageBack(): boolean {
+  if (!activeMobilePageBackHandler) return false;
+  activeMobilePageBackHandler();
+  return true;
+}
 
 // The mock's "Search or ask", the same on every page's top bar. Until search
 // exists it asks your guide (⌘K does the same).
@@ -100,6 +120,13 @@ export function CommunityPageHeader(props: {
 }) {
   const slot = useContext(HeaderSlotContext);
   const toolbar = useContext(ToolbarSlotContext);
+  const backRef = useRef(props.back?.onBack ?? null);
+  backRef.current = props.back?.onBack ?? null;
+  const hasBack = Boolean(props.back?.onBack);
+  useEffect(() => {
+    if (!hasBack) return;
+    return registerMobilePageBack(() => backRef.current?.());
+  }, [hasBack]);
   if (!isDesignV1Active() || slot === undefined) return <>{props.children}</>;
   if (!slot) return null;
   return (

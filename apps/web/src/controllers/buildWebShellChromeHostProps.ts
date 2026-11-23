@@ -10,6 +10,7 @@ import {
   type WebDestination,
 } from "../../../../shared/webAppRouteState";
 import type { WebShellChromeHostProps } from "../components/WebShellChromeHost";
+import { runActiveMobilePageBack } from "../components/CommunityPageHeader";
 import { goToPodsPath } from "../v1/podMemory";
 import type { MobileMemberFace, MobileOverlay } from "../components/webShellChromeShared";
 import type { CommunityShellCommunity } from "../../../../shared/communityTypes";
@@ -196,6 +197,7 @@ export function buildWebShellChromeHostProps(params: {
             ? () => goToPodsPath()
           : isMobileCommunityDetail
             ? () => {
+                if (runActiveMobilePageBack()) return;
                 const slug = String(params.activeCommunity?.slug ?? "").trim();
                 if (slug) params.openCommunityHome(slug);
               }

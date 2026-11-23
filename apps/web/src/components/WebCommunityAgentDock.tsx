@@ -1262,7 +1262,7 @@ function WebCommunityAgentDock(props, ref) {
   };
   sendSuggestionRef.current = sendSuggestion;
   const kitBody = kitHome && props.home ? (
-    <section className="community-agent-dock-panel has-home-rail is-kit-home" aria-label={presentation.title}>
+    <section className={`community-agent-dock-panel has-home-rail is-kit-home${kitTalking || conversationNeedsYou ? " is-guide-talking" : ""}`} aria-label={presentation.title}>
       <KitApp view="home" host={kitHomeIsHost} part="main" talking={kitTalking || conversationNeedsYou}>
         <View index={0}>
           {/* In the conversation the top row stays put and is the way back to Home. */}
