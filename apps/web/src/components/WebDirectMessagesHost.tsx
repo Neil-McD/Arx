@@ -7,29 +7,45 @@ import type {
   DirectMessageNetworkPerson,
 } from "../../../../shared/communityTypes";
 import {
-  blockCloudDirectMessageUser,
   createCloudDirectMessagesLiveClient,
   ensureCloudDirectConversationFromCommunity,
-  listCloudDirectMessagePeerPresence,
   listCloudNetworkPeople,
-  setCloudDirectConversationMuted,
-  unblockCloudDirectMessageUser,
   listCloudDirectConversations,
   markCloudDirectConversationRead,
   subscribeCloudDirectConversations,
   sendCloudDirectMessage,
   sendCloudDirectMessageToUser,
   subscribeCloudDirectMessages,
-  discardCloudDirectMessageAttachment,
-  downloadCloudDirectMessageAttachment,
-  uploadCloudDirectMessageAttachmentFile,
 } from "../../../../shared/cloudDirectMessagesGateway";
-import { COMMUNITY_ATTACHMENT_MAX_COUNT, communityAttachmentByteLimit } from "../../../../shared/communityAttachmentPolicy";
 import { useDirectMessageTypingPresence } from "../../../../shared/useDirectMessageTypingPresence";
-import { useWebVoiceInputController } from "../../../../shared/useWebVoiceInputController";
-import { mergeVoiceTranscript } from "../../../../shared/voiceCapture";
 import { isDesignV1Active } from "../../../../shared/designSystem";
 import { fitComposerHeight } from "../../../../shared/composerHeight";
+import {
+  VIRTUAL_DM_CONVERSATION_ID_PREFIX,
+  buildLocalEchoContentJson,
+  buildVirtualConversationForPerson,
+  collectIncomingDirectMessageEvents,
+  countDirectInboxUnread,
+  createLocalDirectMessageId,
+  findConversationPeerUserId,
+  friendlyDirectMessageReadError,
+  friendlyDirectMessageSendError,
+  getDirectAttachmentUploadStatus,
+  hasUnreadyDirectAttachments,
+  isVirtualDirectConversationId,
+  mergeDirectPanelMessages,
+  resolveDirectMessageSession,
+  toErrorMessage,
+  virtualPeerUserIdFromConversationId,
+  type DirectMessageDraft,
+  type DirectMessageLocalEcho,
+  type DirectMessagePanelState,
+} from "../controllers/directMessages/directMessageHostHelpers";
+import { useDirectMessageAttachmentsController } from "../controllers/directMessages/useDirectMessageAttachmentsController";
+import { useDirectMessageDismissLifecycle } from "../controllers/directMessages/useDirectMessageDismissLifecycle";
+import { useDirectMessageModerationActions } from "../controllers/directMessages/useDirectMessageModerationActions";
+import { useDirectMessagePeerPresence } from "../controllers/directMessages/useDirectMessagePeerPresence";
+import { useDirectMessageVoiceBridge } from "../controllers/directMessages/useDirectMessageVoiceBridge";
 
 const WebDirectMessageInboxPanel = lazy(() =>
   import("./WebDirectMessageInboxPanel").then((module) => ({
@@ -47,35 +63,6 @@ type DirectMessageAttachmentDraft = DirectMessageAttachment & {
   file?: File | null;
   uploadStatus?: "queued" | "uploading" | "ready" | "failed";
   uploadError?: string | null;
-};
-
-type DirectMessageLocalEcho = DirectMessage & {
-  local_id: string;
-  local_status: "sending" | "sent" | "failed";
-  local_error?: string | null;
-  local_payload: {
-    text: string;
-    attachments: DirectMessageAttachmentDraft[];
-  };
-};
-
-type DirectMessageDraft = {
-  input: string;
-  attachments: DirectMessageAttachmentDraft[];
-};
-
-type DirectMessagePanelState = {
-  conversation: DirectMessageConversation;
-  messages: DirectMessage[];
-  localEchoes: DirectMessageLocalEcho[];
-  input: string;
-  attachments: DirectMessageAttachmentDraft[];
-  isLoading: boolean;
-  isSending: boolean;
-  error: string | null;
-  // Opened for you when Inbox opened (design v1): it stays unread until you
-  // touch it, so it doesn't drop out of "Needs a reply" unseen.
-  deferRead?: boolean;
 };
 
 export type DirectMessageOpenRequest = {
@@ -131,59 +118,6 @@ export type WebDirectMessagesHostProps<SessionT> = {
   activeCommunityId?: string | null;
 };
 
-function toErrorMessage(error: unknown, fallback: string): string {
-  if (error instanceof Error && error.message.trim()) return error.message;
-  if (typeof error === "string" && error.trim()) return error.trim();
-  return fallback;
-}
-
-function friendlyDirectMessageSendError(error: unknown, fallback: string): string {
-  const raw = toErrorMessage(error, fallback);
-  const normalized = raw.toLowerCase();
-  if (normalized.includes("dm_rate_limited")) {
-    return "You're sending messages too quickly. Give it a minute and try again.";
-  }
-  if (normalized.includes("dm_conversation_access_required")) {
-    return "You can't message this person right now.";
-  }
-  if (normalized.includes("dm_target_not_found")) {
-    return "That person is no longer available.";
-  }
-  if (normalized.includes("dm_message_payload_required")) {
-    return "Write a message first.";
-  }
-  const looksLikeRawServerError =
-    normalized.includes("server error") ||
-    normalized.includes("uncaught error") ||
-    normalized.startsWith("dm_") ||
-    normalized.startsWith("convex_");
-  return looksLikeRawServerError ? fallback : raw;
-}
-
-function friendlyDirectMessageReadError(error: unknown, fallback: string): string {
-  const raw = toErrorMessage(error, fallback);
-  const normalized = raw.toLowerCase();
-  const isRecoverableConnectionError =
-    normalized.includes("verified_identity_required") ||
-    normalized.includes("server error") ||
-    normalized.includes("uncaught error") ||
-    normalized.includes("[convex") ||
-    normalized.startsWith("convex_");
-  return isRecoverableConnectionError
-    ? "Messages temporarily disconnected. Reconnecting…"
-    : raw;
-}
-
-async function resolveDirectMessageSession<SessionT>(
-  session: SessionT | null,
-  ensureSession: WebDirectMessagesHostProps<SessionT>["ensureSession"],
-  source: string,
-): Promise<SessionT | null> {
-  if (!session) return null;
-  if (!ensureSession) return session;
-  return ensureSession(session, source);
-}
-
 const DIRECT_MESSAGE_COMPOSER_FOCUS_MEDIA_QUERY = "(min-width: 901px)";
 
 function isDirectMessageComposerEditableElement(element: Element | null): boolean {
@@ -214,116 +148,6 @@ function shouldPreserveDirectMessageComposerFocus(activeElement: Element | null,
       ].join(","),
     ),
   );
-}
-
-function createLocalDirectMessageId(): string {
-  if (typeof globalThis.crypto?.randomUUID === "function") {
-    return `local-${globalThis.crypto.randomUUID()}`;
-  }
-  return `local-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
-}
-
-const VIRTUAL_DM_CONVERSATION_ID_PREFIX = "virtual:";
-
-function isVirtualDirectConversationId(conversationId: string | null | undefined): boolean {
-  return String(conversationId ?? "").startsWith(VIRTUAL_DM_CONVERSATION_ID_PREFIX);
-}
-
-function virtualPeerUserIdFromConversationId(conversationId: string): string {
-  return conversationId.slice(VIRTUAL_DM_CONVERSATION_ID_PREFIX.length);
-}
-
-// A local-only stand-in conversation for first contact with a person; the real
-// conversation row is created server-side on first send, never on open.
-function buildVirtualConversationForPerson(
-  person: DirectMessageNetworkPerson,
-  sessionUserId: string | null,
-): DirectMessageConversation {
-  const nowIso = new Date().toISOString();
-  return {
-    id: `${VIRTUAL_DM_CONVERSATION_ID_PREFIX}${person.user_id}`,
-    kind: "direct",
-    created_from_community: {
-      id: person.community_id,
-      slug: "",
-      name: person.community_name,
-    },
-    last_seq: 0,
-    viewer_last_read_seq: 0,
-    unread_count: 0,
-    has_unread: false,
-    last_message_preview: null,
-    last_message_at: null,
-    created_at: nowIso,
-    updated_at: nowIso,
-    participants: [
-      {
-        id: "virtual-self",
-        participant_type: "user",
-        user_id: sessionUserId,
-        display_name: null,
-        avatar_url: null,
-        status: "active",
-        last_read_seq: 0,
-      },
-      {
-        id: "virtual-peer",
-        participant_type: "user",
-        user_id: person.user_id,
-        display_name: person.display_name,
-        avatar_url: person.avatar_url,
-        avatar_focus_x: person.avatar_focus_x ?? 0.5,
-        avatar_focus_y: person.avatar_focus_y ?? 0.5,
-        avatar_zoom: person.avatar_zoom ?? 1,
-        status: "active",
-        last_read_seq: 0,
-      },
-    ],
-  };
-}
-
-function findConversationPeerUserId(
-  conversation: DirectMessageConversation,
-  sessionUserId: string | null,
-): string {
-  const peer = conversation.participants.find(
-    (participant) =>
-      participant.status === "active" &&
-      participant.participant_type === "user" &&
-      participant.user_id &&
-      participant.user_id !== sessionUserId,
-  );
-  return String(peer?.user_id ?? "").trim();
-}
-
-function buildLocalEchoContentJson(
-  text: string,
-  attachments: DirectMessageAttachmentDraft[],
-): unknown {
-  if (attachments.length === 0) return { text };
-  return {
-    text,
-    attachments: attachments.map((attachment) => ({
-      id: attachment.id,
-      name: attachment.name,
-      type: attachment.type,
-      mime: attachment.mime ?? null,
-      size: attachment.size,
-      // The picture the sender picked, shown until the sent message replaces this one.
-      url: attachment.data_url ?? null,
-    })),
-  };
-}
-
-function getDirectAttachmentUploadStatus(attachment: DirectMessageAttachmentDraft): "queued" | "uploading" | "ready" | "failed" {
-  if (String(attachment.attachment_id ?? "").trim()) return "ready";
-  if (attachment.uploadStatus) return attachment.uploadStatus;
-  if (attachment.file instanceof File) return "queued";
-  return "failed";
-}
-
-function hasUnreadyDirectAttachments(attachments: DirectMessageAttachmentDraft[]): boolean {
-  return attachments.some((attachment) => getDirectAttachmentUploadStatus(attachment) !== "ready");
 }
 
 // A send names each file by the server's reservation id and nothing else: the
@@ -368,8 +192,6 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
   const [sourceCommunityCount, setSourceCommunityCount] = useState<number | null>(null);
   const [hasMorePeople, setHasMorePeople] = useState(false);
   const isLoadingMorePeopleRef = useRef(false);
-  const [peerPresenceByUserId, setPeerPresenceByUserId] = useState<Record<string, string | null>>({});
-  const peerPresenceFetchRef = useRef<{ key: string; atMs: number }>({ key: "", atMs: 0 });
   const inboxLoadRequestRef = useRef(0);
   const peopleLoadRequestRef = useRef(0);
   const hasInboxLiveSubscriptionRef = useRef(false);
@@ -388,8 +210,6 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
   const sessionRef = useRef<SessionT | null>(session);
   const directMessageInputRef = useRef<HTMLTextAreaElement | null>(null);
   const lastDirectMessageFocusConversationRef = useRef<string | null>(null);
-  const voiceConversationIdRef = useRef<string | null>(null);
-  const pendingVoiceTranscriptConversationIdRef = useRef<string | null>(null);
   const [isDesktopDirectMessageFocusViewport, setIsDesktopDirectMessageFocusViewport] = useState(() =>
     typeof window === "undefined" ? false : window.matchMedia(DIRECT_MESSAGE_COMPOSER_FOCUS_MEDIA_QUERY).matches,
   );
@@ -418,43 +238,6 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
     return () => {
       mediaQuery.removeEventListener("change", listener);
     };
-  }, []);
-
-  const showDirectVoiceMessage = useCallback(
-    (message: string) => {
-      const normalized = message.trim() || "Voice transcription failed.";
-      if (showAppToastMessage) {
-        showAppToastMessage(normalized);
-        return;
-      }
-      setDirectMessagePanel((previous) =>
-        previous
-          ? {
-              ...previous,
-              error: normalized,
-            }
-          : previous,
-      );
-    },
-    [showAppToastMessage],
-  );
-
-  const appendDirectMessageTranscript = useCallback((transcript: string) => {
-    const normalized = transcript.trim();
-    if (!normalized) return;
-    const targetConversationId = pendingVoiceTranscriptConversationIdRef.current;
-    if (!targetConversationId) return;
-    pendingVoiceTranscriptConversationIdRef.current = null;
-    setDirectMessagePanel((previous) => {
-      if (!previous) return previous;
-      if (previous.conversation.id !== targetConversationId) return previous;
-      const input = mergeVoiceTranscript(previous.input, normalized);
-      return {
-        ...previous,
-        input,
-        error: null,
-      };
-    });
   }, []);
 
   const focusDirectMessageInput = useCallback((options?: { force?: boolean }) => {
@@ -507,42 +290,20 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
   const {
     directMessageVoiceIntent,
     directMessageVoiceUiState,
-    handleVoiceInputClick: handleDirectMessageVoiceInputClick,
-    cancelVoiceInput: cancelDirectMessageVoiceInput,
-  } = useWebVoiceInputController<SessionT>({
+    handleDirectMessageVoiceInputClick,
+    showDirectVoiceMessage,
+    pendingVoiceTranscriptConversationIdRef,
+  } = useDirectMessageVoiceBridge({
+    isOpen,
+    activeConversationId,
     session,
     sessionRef,
-    ensureSession: ensureSession
-      ? (currentSession) => ensureSession(currentSession, "direct_messages_voice")
-      : undefined,
-    activeCommunity: null,
-    activeCommunityFunnelAction: null,
-    canPostMessagesActiveCommunity: true,
-    requireSignIn: () => {
-      if (requireSignIn) {
-        requireSignIn();
-        return;
-      }
-      showDirectVoiceMessage("Sign in to use voice input in direct messages.");
-    },
-    showAppToastMessage: showDirectVoiceMessage,
-    appendDirectMessageTranscript,
+    ensureSession,
+    requireSignIn,
+    showAppToastMessage,
+    setDirectMessagePanel,
     focusDirectMessageInput,
   });
-
-  useEffect(() => {
-    const previousConversationId = voiceConversationIdRef.current;
-    voiceConversationIdRef.current = activeConversationId;
-    if (!isOpen || !activeConversationId) {
-      pendingVoiceTranscriptConversationIdRef.current = null;
-      cancelDirectMessageVoiceInput();
-      return;
-    }
-    if (previousConversationId && previousConversationId !== activeConversationId) {
-      pendingVoiceTranscriptConversationIdRef.current = null;
-      cancelDirectMessageVoiceInput();
-    }
-  }, [activeConversationId, cancelDirectMessageVoiceInput, isOpen]);
 
   const liveActiveConversationId =
     activeConversationId && !isVirtualDirectConversationId(activeConversationId)
@@ -640,67 +401,14 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
     [ensureSession, session],
   );
 
-  useEffect(() => {
-    if (networkPeople.length === 0) return;
-    setPeerPresenceByUserId((previous) => {
-      const next = { ...previous };
-      for (const person of networkPeople) {
-        const userId = String(person.user_id ?? "").trim();
-        if (userId) next[userId] = person.last_active_at ?? null;
-      }
-      return next;
-    });
-  }, [networkPeople]);
-
-  useEffect(() => {
-    if (!isOpen || !session) return;
-    const peerUserIds = Array.from(
-      new Set(
-        conversations
-          .map((conversation) => findConversationPeerUserId(conversation, sessionUserId))
-          .filter(Boolean),
-      ),
-    ).slice(0, 50);
-    if (peerUserIds.length === 0) return;
-    const fetchKey = [...peerUserIds].sort().join(",");
-    const nowMs = Date.now();
-    if (
-      peerPresenceFetchRef.current.key === fetchKey &&
-      nowMs - peerPresenceFetchRef.current.atMs < 60_000
-    ) {
-      return;
-    }
-    peerPresenceFetchRef.current = { key: fetchKey, atMs: nowMs };
-
-    let isDisposed = false;
-    void (async () => {
-      try {
-        const usableSession = await resolveDirectMessageSession(
-          session,
-          ensureSession,
-          "direct_messages_peer_presence",
-        );
-        if (!usableSession || isDisposed) return;
-        const peers = await listCloudDirectMessagePeerPresence({
-          session: usableSession,
-          targetUserIds: peerUserIds,
-        });
-        if (isDisposed) return;
-        setPeerPresenceByUserId((previous) => {
-          const next = { ...previous };
-          for (const peer of peers) {
-            next[peer.user_id] = peer.last_active_at;
-          }
-          return next;
-        });
-      } catch {
-        // Presence is decorative; rows fall back to no dot.
-      }
-    })();
-    return () => {
-      isDisposed = true;
-    };
-  }, [conversations, ensureSession, isOpen, session, sessionUserId]);
+  const peerPresenceByUserId = useDirectMessagePeerPresence({
+    isOpen,
+    session,
+    ensureSession,
+    sessionUserId,
+    conversations,
+    networkPeople,
+  });
 
   const loadMoreNetworkPeople = useCallback(async () => {
     if (!session || !hasMorePeople || searchValue.trim()) return;
@@ -822,6 +530,7 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
     if (typeof window !== "undefined" && window.matchMedia("(max-width: 1023px)").matches) return;
     if (first) openConversationRef.current?.(first, { deferRead: true });
   }, [activeConversationId, conversations, inboxIsPage, isLoadingInbox, isOpen, openConversationRequest, openRequest, props.addressConversationId]);
+
   useEffect(() => {
     if (!isOpen || (activeConversationId && !listStaysVisible)) return;
     const timeoutId = window.setTimeout(
@@ -833,20 +542,12 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
     return () => {
       window.clearTimeout(timeoutId);
     };
-  }, [activeConversationId, isOpen, loadNetworkPeople, searchValue]);
+  }, [activeConversationId, isOpen, listStaysVisible, loadNetworkPeople, searchValue]);
 
   useEffect(() => {
     // Design v1 counts conversations that need a reply, the same number the
     // Inbox page shows; the default design counts unread messages.
-    const countConversations = isDesignV1Active();
-    const unreadCount = conversations.reduce((total, conversation) => {
-      if (conversation.viewer_muted) return total;
-      const count = Number(conversation.unread_count ?? 0);
-      if (!Number.isFinite(count)) return total;
-      if (countConversations) return total + (conversation.has_unread || count > 0 ? 1 : 0);
-      return total + Math.max(0, Math.floor(count));
-    }, 0);
-    onUnreadCountChange?.(unreadCount);
+    onUnreadCountChange?.(countDirectInboxUnread(conversations, isDesignV1Active()));
   }, [conversations, onUnreadCountChange]);
 
   const markConversationRead = useCallback(
@@ -985,43 +686,22 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
           limit: 30,
           onUpdate: (rows) => {
             if (isDisposed) return;
-            const previousSeqByConversation = inboxLastSeqByConversationRef.current;
             const isFirstSnapshot = !hasSeededInboxSeqRef.current;
-            const nextSeqByConversation: Record<string, number> = {};
-            for (const row of rows) {
-              nextSeqByConversation[row.id] = Math.max(0, Math.floor(Number(row.last_seq ?? 0)));
-            }
+            const { nextSeqByConversation, events } = collectIncomingDirectMessageEvents({
+              rows,
+              previousSeqByConversation: inboxLastSeqByConversationRef.current,
+              sessionUserId,
+              isReadingConversation: (conversationId) =>
+                isOpenRef.current &&
+                directMessagePanelRef.current?.conversation.id === conversationId &&
+                typeof document !== "undefined" &&
+                document.visibilityState === "visible" &&
+                document.hasFocus(),
+            });
             // The first snapshot is history, not news — seed silently.
             if (!isFirstSnapshot && onIncomingDirectMessageRef.current) {
-              for (const row of rows) {
-                const seq = nextSeqByConversation[row.id] ?? 0;
-                const previousSeq = previousSeqByConversation[row.id] ?? 0;
-                if (seq <= previousSeq) continue;
-                if (row.last_message_from_viewer) continue;
-                if (row.viewer_muted) continue;
-                const isReadingThread =
-                  isOpenRef.current &&
-                  directMessagePanelRef.current?.conversation.id === row.id &&
-                  typeof document !== "undefined" &&
-                  document.visibilityState === "visible" &&
-                  document.hasFocus();
-                if (isReadingThread) continue;
-                const peer =
-                  row.participants.find(
-                    (participant) =>
-                      participant.status === "active" &&
-                      participant.participant_type === "user" &&
-                      participant.user_id &&
-                      participant.user_id !== sessionUserId,
-                  ) ?? null;
-                onIncomingDirectMessageRef.current({
-                  conversationId: row.id,
-                  peerDisplayName:
-                    String(peer?.display_name ?? "").trim() || "New message",
-                  peerAvatarUrl: peer?.avatar_url ?? null,
-                  previewText: String(row.last_message_preview ?? "").trim() || "New message",
-                  lastSeq: seq,
-                });
+              for (const event of events) {
+                onIncomingDirectMessageRef.current(event);
               }
             }
             inboxLastSeqByConversationRef.current = nextSeqByConversation;
@@ -1051,7 +731,7 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
       unsubscribe();
       liveClient?.close();
     };
-  }, [ensureSession, loadInbox, session]);
+  }, [ensureSession, loadInbox, session, sessionUserId]);
 
   useEffect(() => {
     if (!isOpen || !openRequest) return;
@@ -1215,35 +895,12 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
     };
   }, [activeConversationId, ensureSession, isOpen, session, updateConversationEchoes]);
 
-  useEffect(() => {
-    if (!isOpen || props.mobileRoot) return;
-
-    const handlePointerDown = (event: PointerEvent) => {
-      // A page is left by going somewhere else (that page's address closes
-      // it), not by a click beside it; closing here would race that click.
-      if (inboxIsPage) return;
-      const target = event.target;
-      if (!(target instanceof Node)) return;
-      const host = document.querySelector(".web-direct-messages-host");
-      if (host?.contains(target)) return;
-      if (target instanceof Element && target.closest(".direct-messages-topbar-button, .community-nav-inbox")) return;
-      onClose();
-    };
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return;
-      // A control disabling itself (for example Next on the last PDF page) can
-      // move focus to body. The native modal still owns this Escape's default action.
-      if (document.querySelector(".web-direct-messages-host dialog[open]")) return;
-      onClose();
-    };
-
-    document.addEventListener("pointerdown", handlePointerDown, true);
-    document.addEventListener("keydown", handleKeyDown);
-    return () => {
-      document.removeEventListener("pointerdown", handlePointerDown, true);
-      document.removeEventListener("keydown", handleKeyDown);
-    };
-  }, [inboxIsPage, isOpen, onClose, props.mobileRoot]);
+  useDirectMessageDismissLifecycle({
+    isOpen,
+    mobileRoot: props.mobileRoot,
+    inboxIsPage,
+    onClose,
+  });
 
   const openConversation = useCallback(
     (conversation: DirectMessageConversation, options?: { deferRead?: boolean }) => {
@@ -1535,107 +1192,18 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
     updateConversationEchoes,
   ]);
 
-  // ---- files: picked, dropped or pasted into the reply box
-  const patchConversationAttachments = useCallback((
-    conversationId: string,
-    change: (list: DirectMessageAttachmentDraft[]) => DirectMessageAttachmentDraft[],
-    error?: string | null,
-  ) => {
-    setDirectMessagePanel((previous) => previous?.conversation.id === conversationId
-      ? { ...previous, attachments: change(previous.attachments), ...(error !== undefined ? { error } : null) }
-      : previous);
-    // Uploads finish after you move to another conversation too.
-    const draft = draftsByConversationRef.current[conversationId];
-    if (draft) draftsByConversationRef.current[conversationId] = { ...draft, attachments: change(draft.attachments) };
-  }, []);
-
-  // Drafts taken out while still uploading: their reservation is freed when the upload lands.
-  const removedAttachmentDraftsRef = useRef<Set<string>>(new Set());
-  const discardDirectAttachmentReservation = useCallback(async (attachmentId: string) => {
-    try {
-      const usableSession = await resolveDirectMessageSession(session, ensureSession, "direct_messages_send");
-      if (usableSession) await discardCloudDirectMessageAttachment({ session: usableSession, attachmentId });
-    } catch {
-      // The server clears an unsent upload after 30 minutes anyway.
-    }
-  }, [ensureSession, session]);
-
-  const uploadDirectAttachmentDraft = useCallback(async (conversation: DirectMessageConversation, draft: DirectMessageAttachmentDraft) => {
-    const conversationId = conversation.id;
-    const file = draft.file;
-    if (!(file instanceof File)) return;
-    patchConversationAttachments(conversationId, (list) => list.map((item) => item.id === draft.id ? { ...item, uploadStatus: "uploading" as const, uploadError: null } : item));
-    try {
-      const usableSession = await resolveDirectMessageSession(session, ensureSession, "direct_messages_send");
-      if (!usableSession) throw new Error("Sign in to attach files.");
-      // A first message has no conversation yet: the file is reserved for the person.
-      const virtual = isVirtualDirectConversationId(conversationId);
-      const uploaded = await uploadCloudDirectMessageAttachmentFile({
-        session: usableSession,
-        conversationId: virtual ? null : conversationId,
-        targetUserId: virtual ? virtualPeerUserIdFromConversationId(conversationId) : null,
-        communityId: virtual ? conversation.created_from_community?.id ?? null : null,
-        messageKey: `dm:${conversationId}`.slice(0, 150),
-        file,
-      });
-      if (removedAttachmentDraftsRef.current.delete(draft.id)) {
-        void discardDirectAttachmentReservation(uploaded.attachmentId);
-        return;
-      }
-      patchConversationAttachments(conversationId, (list) => list.map((item) => item.id === draft.id
-        ? { ...item, attachment_id: uploaded.attachmentId, mime: uploaded.mime, size: uploaded.size, type: uploaded.type === "image" ? "image" as const : "file" as const, uploadStatus: "ready" as const, uploadError: null }
-        : item));
-    } catch (error) {
-      const message = error instanceof Error && error.message ? error.message : "That file couldn't be attached.";
-      patchConversationAttachments(conversationId, (list) => list.map((item) => item.id === draft.id ? { ...item, uploadStatus: "failed" as const, uploadError: message } : item), message);
-    }
-  }, [discardDirectAttachmentReservation, ensureSession, patchConversationAttachments, session]);
-
-  const addDirectAttachmentFiles = useCallback((files: FileList | readonly File[]) => {
-    const current = directMessagePanel;
-    if (!current) return;
-    // Read the list now: a drop's or a paste's files are gone once its event ends.
-    const picked = Array.from(files).filter((file): file is File => file instanceof File);
-    const room = Math.max(0, COMMUNITY_ATTACHMENT_MAX_COUNT - current.attachments.length);
-    let error: string | null = picked.length > room ? `You can attach up to ${COMMUNITY_ATTACHMENT_MAX_COUNT} files to a message.` : null;
-    const drafts: DirectMessageAttachmentDraft[] = [];
-    for (const file of picked.slice(0, room)) {
-      const isImage = /^image\/(png|jpeg|gif|webp)$/.test(file.type);
-      const name = file.name || (isImage ? "Pasted image" : "Attachment");
-      if (file.size > communityAttachmentByteLimit(file.type || "")) { error = `${name} is too large.`; continue; }
-      drafts.push({
-        id: createLocalDirectMessageId(), name, type: isImage ? "image" : "file", mime: file.type || null, size: file.size, file,
-        data_url: isImage ? URL.createObjectURL(file) : null, uploadStatus: "queued", uploadError: null,
-      });
-    }
-    if (drafts.length === 0 && !error) return;
-    patchConversationAttachments(current.conversation.id, (list) => [...list, ...drafts], error);
-    for (const draft of drafts) void uploadDirectAttachmentDraft(current.conversation, draft);
-  }, [directMessagePanel, patchConversationAttachments, uploadDirectAttachmentDraft]);
-
-  const retryDirectAttachment = useCallback((attachmentId: string) => {
-    const current = directMessagePanel;
-    const draft = current?.attachments.find((item) => item.id === attachmentId);
-    if (current && draft) void uploadDirectAttachmentDraft(current.conversation, draft);
-  }, [directMessagePanel, uploadDirectAttachmentDraft]);
-
-  const removeDirectAttachment = useCallback((attachmentId: string) => {
-    const current = directMessagePanel;
-    if (!current) return;
-    const draft = current.attachments.find((item) => item.id === attachmentId);
-    if (draft?.data_url?.startsWith("blob:")) URL.revokeObjectURL(draft.data_url);
-    // Free the server's reservation, so a replacement can be attached.
-    const reservationId = String(draft?.attachment_id ?? "").trim();
-    if (reservationId) void discardDirectAttachmentReservation(reservationId);
-    else if (draft && getDirectAttachmentUploadStatus(draft) === "uploading") removedAttachmentDraftsRef.current.add(draft.id);
-    patchConversationAttachments(current.conversation.id, (list) => list.filter((item) => item.id !== attachmentId), null);
-  }, [directMessagePanel, discardDirectAttachmentReservation, patchConversationAttachments]);
-
-  const loadDirectAttachment = useCallback(async (attachmentId: string) => {
-    const usableSession = await resolveDirectMessageSession(session, ensureSession, "direct_messages_read");
-    if (!usableSession) throw new Error("Sign in to open this file.");
-    return downloadCloudDirectMessageAttachment({ session: usableSession, attachmentId });
-  }, [ensureSession, session]);
+  const {
+    addDirectAttachmentFiles,
+    retryDirectAttachment,
+    removeDirectAttachment,
+    loadDirectAttachment,
+  } = useDirectMessageAttachmentsController({
+    session,
+    ensureSession,
+    directMessagePanel,
+    setDirectMessagePanel,
+    draftsByConversationRef,
+  });
 
   const retryDirectMessageEcho = useCallback(
     (localId: string) => {
@@ -1682,123 +1250,23 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
     [directMessagePanel, updateConversationEchoes],
   );
 
-  const toggleMuteForActiveConversation = useCallback(async () => {
-    const current = directMessagePanelRef.current;
-    if (!current || !session) return;
-    const conversation = current.conversation;
-    if (isVirtualDirectConversationId(conversation.id)) return;
-    const nextMuted = !conversation.viewer_muted;
-    try {
-      const usableSession = await resolveDirectMessageSession(
-        session,
-        ensureSession,
-        "direct_messages_mute",
-      );
-      if (!usableSession) throw new Error("Sign in to mute conversations.");
-      const updated = await setCloudDirectConversationMuted({
-        session: usableSession,
-        conversationId: conversation.id,
-        muted: nextMuted,
-      });
-      setConversations((previous) =>
-        previous.map((row) => (row.id === updated.id ? updated : row)),
-      );
-      setDirectMessagePanel((previous) =>
-        previous?.conversation.id === updated.id
-          ? {
-              ...previous,
-              conversation: updated,
-              error: null,
-            }
-          : previous,
-      );
-    } catch (error) {
-      setDirectMessagePanel((previous) =>
-        previous?.conversation.id === conversation.id
-          ? {
-              ...previous,
-              error: toErrorMessage(error, "Failed to update the conversation."),
-            }
-          : previous,
-      );
-    }
-  }, [ensureSession, session]);
+  const {
+    toggleMuteForActiveConversation,
+    toggleBlockForActivePeer,
+  } = useDirectMessageModerationActions({
+    session,
+    ensureSession,
+    sessionUserId,
+    directMessagePanelRef,
+    setConversations,
+    setDirectMessagePanel,
+    setNetworkPeople,
+  });
 
-  const toggleBlockForActivePeer = useCallback(async () => {
-    const current = directMessagePanelRef.current;
-    if (!current || !session) return;
-    const conversation = current.conversation;
-    if (isVirtualDirectConversationId(conversation.id)) return;
-    const peer =
-      conversation.participants.find(
-        (participant) =>
-          participant.status === "active" &&
-          participant.participant_type === "user" &&
-          participant.user_id &&
-          participant.user_id !== sessionUserId,
-      ) ?? null;
-    const targetUserId = String(peer?.user_id ?? "").trim();
-    if (!targetUserId) return;
-    const nextBlocked = !conversation.viewer_has_blocked_peer;
-    try {
-      const usableSession = await resolveDirectMessageSession(
-        session,
-        ensureSession,
-        "direct_messages_block",
-      );
-      if (!usableSession) throw new Error("Sign in to manage blocked people.");
-      if (nextBlocked) {
-        await blockCloudDirectMessageUser({ session: usableSession, targetUserId });
-      } else {
-        await unblockCloudDirectMessageUser({ session: usableSession, targetUserId });
-      }
-      setConversations((previous) =>
-        previous.map((row) =>
-          row.id === conversation.id ? { ...row, viewer_has_blocked_peer: nextBlocked } : row,
-        ),
-      );
-      setDirectMessagePanel((previous) =>
-        previous?.conversation.id === conversation.id
-          ? {
-              ...previous,
-              conversation: {
-                ...previous.conversation,
-                viewer_has_blocked_peer: nextBlocked,
-              },
-              error: null,
-            }
-          : previous,
-      );
-      if (nextBlocked) {
-        setNetworkPeople((previous) => previous.filter((person) => person.user_id !== targetUserId));
-      }
-    } catch (error) {
-      setDirectMessagePanel((previous) =>
-        previous?.conversation.id === conversation.id
-          ? {
-              ...previous,
-              error: toErrorMessage(error, "Failed to update blocked people."),
-            }
-          : previous,
-      );
-    }
-  }, [ensureSession, session, sessionUserId]);
-
-  const mergedPanelMessages = useMemo(() => {
-    if (!directMessagePanel) return [] as DirectMessage[];
-    const { messages, localEchoes } = directMessagePanel;
-    if (localEchoes.length === 0) return messages;
-    const messageIds = new Set(messages.map((message) => message.id));
-    const clientMessageIds = new Set(
-      messages.map((message) => String(message.client_message_id ?? "").trim()).filter(Boolean),
-    );
-    return [
-      ...messages,
-      ...localEchoes.filter(
-        (echo) => !messageIds.has(echo.id) && !clientMessageIds.has(echo.local_id),
-      ),
-    ];
-  }, [directMessagePanel]);
+  const mergedPanelMessages = useMemo(
+    () => (directMessagePanel ? mergeDirectPanelMessages(directMessagePanel.messages, directMessagePanel.localEchoes) : []),
+    [directMessagePanel],
+  );
 
   if (!isOpen) return null;
 
