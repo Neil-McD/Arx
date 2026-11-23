@@ -98,13 +98,10 @@ document in the same PR.
 - Channel-based Chat.
 - Resources.
 - Events.
-- Member context in the community right rail; there is no standalone Members
-  tab or page in Studio. Exception, while design system v1 is on (the
-  `VITE_DESIGN_V1` build switch, staging only until accepted): on desktop the
-  member list is shown as a page inside the channel surface, with the opened
-  profile in the right rail. It is the same authorized roster and the same
-  member tools as the right-rail list, has no route of its own, and mobile and
-  the classic layout keep the right-rail list. See
+- Member context in Studio uses the same authorized roster and member tools
+  everywhere: on desktop the member list is shown as a page inside the
+  community frame with the opened profile in the right rail, and on mobile it
+  uses the compact right-rail/member panel list. See
   docs/specs/design-system-v1-implementation-plan.md.
 - The member's private conversation under the selected community context uses
   the desktop Agent page and mobile Agent root. The floating launcher is retired;

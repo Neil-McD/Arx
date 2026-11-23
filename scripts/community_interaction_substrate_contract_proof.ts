@@ -86,7 +86,7 @@ assertIncludes(corePath, core, "- Events.");
 assertIncludes(
   corePath,
   core,
-  "Member context in the community right rail; there is no standalone Members",
+  "Member context in Studio uses the same authorized roster and member tools",
 );
 assertIncludes(
   corePath,

@@ -12,7 +12,6 @@ import {
   parseAppTheme,
   type AppTheme,
 } from "../shared/theme.ts";
-import { applyDesignAttribute, isDesignV1Enabled } from "../apps/web/designSystemFlag.ts";
 
 function read(path: string): string {
   return readFileSync(path, "utf8");
@@ -523,7 +522,7 @@ assert.doesNotMatch(
   "theme family must not survive as a second styling authority",
 );
 assert.match(indexHtml, /<meta name="theme-color" content="#08090A"/);
-assert.match(indexHtml, /manifest\.webmanifest\?v=20261105b/);
+assert.match(indexHtml, /manifest\.webmanifest\?v=20261123a/);
 assert.match(manifest, /"start_url": "\/m\?launch=app"/);
 assert.match(manifest, /"background_color": "#08090A"/);
 assert.match(manifest, /"theme_color": "#08090A"/);
@@ -765,21 +764,11 @@ for (const [label, foreground, background] of accessiblePairs) {
   );
 }
 
-// Design system v1 (docs/specs/design-system-v1.md) ships behind a build-time
-// switch. Without it the app must render exactly as before: nothing in the v1
-// stylesheet may apply unless the root carries data-design="v1".
-assert.equal(isDesignV1Enabled("1"), true);
-for (const off of [undefined, null, "", "0", "true", "v1", " 2 "]) {
-  assert.equal(isDesignV1Enabled(off), false, `VITE_DESIGN_V1=${String(off)} must leave v1 off`);
-}
+// Design system v1 (docs/specs/design-system-v1.md) is permanently active on
+// every build: apps/web/index.html stamps data-design="v1" directly on <html>,
+// and design-v1.css remains explicitly scoped until Step 3 folds the stylesheets.
 const sourceIndexHtml = read("apps/web/index.html");
-assert.doesNotMatch(sourceIndexHtml, /data-design=/, "only the build may stamp data-design");
-assert.equal(applyDesignAttribute(sourceIndexHtml, false), sourceIndexHtml);
-assert.match(applyDesignAttribute('<html lang="en">', true), /^<html lang="en" data-design="v1">$/);
-assert.equal(
-  applyDesignAttribute('<html lang="en" data-design="v1">', true),
-  '<html lang="en" data-design="v1">',
-);
+assert.match(sourceIndexHtml, /<html lang="en" data-design="v1">/, "apps/web/index.html must statically enable design v1");
 
 const designV1Css = read("apps/web/src/styles/design-v1.css");
 const indexCssImports = [...read("apps/web/src/index.css").matchAll(/^@import "([^"]+)";$/gm)].map((m) => m[1]);
