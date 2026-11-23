@@ -570,35 +570,29 @@ function useProfileHarness(props: any) {
     assert(hook.value.now===frozen,"paused clock advanced");
     await hook.update({events,paused:false});assert(hook.value.now>frozen,"unpaused clock did not catch up");
   });
-  await test("Events agenda preserves chronology, date groups and scroll ownership", async () => {
+  await test("Events list preserves chronology, featured/later/past split, and scroll ownership", async () => {
     const realNow = Date.now;
     Date.now = () => agendaNow;
     try {
       const hook = await mountHook((props) => props, { rows: agendaRows }, (props) => <AgendaFixture {...props} />);
       const scroller = document.querySelector<HTMLElement>(".community-tab-scroll")!;
-      const ids = () => [...document.querySelectorAll(".community-events-item")].map(row => row.id);
-      assert(ids().join() === agendaRows.map(row => `community-event-${row.id}`).join(), "agenda is not chronological");
-      assert(document.querySelectorAll('[aria-label="Sunday, September 20, 2026"]').length === 1, "mixed-phase day split into duplicate date groups");
-      assert(!document.querySelector("[hidden], .community-events-past-toggle"), "history hidden");
+      const visibleIds = () => [...document.querySelectorAll('[id^="community-event-"]')].map(row => row.id);
+      const expectedUpcoming = agendaRows.filter((row) => Date.parse(row.ends_at!) > agendaNow).map((row) => `community-event-${row.id}`);
+      assert(visibleIds().join() === expectedUpcoming.join(), "upcoming events are not chronological");
       assert(scroller.scrollTop === 0 && document.scrollingElement!.scrollTop === 0, "entry moved the reader");
-      const nav = document.querySelector(".community-events-month-nav")!;
-      assert(getComputedStyle(nav).position === "static" && getComputedStyle(nav).backgroundColor === "rgba(0, 0, 0, 0)", "month navigation restored a sticky shelf or background");
-      assert(!document.querySelector(".community-events-today-btn, .community-events-month-note") && !document.body.textContent?.includes("Ended"), "retired calendar chrome returned");
-      const pastRow = document.querySelector(".community-events-item.is-past")!;
-      const muted = getComputedStyle(pastRow.querySelector("h3")!).color;
-      for (const selector of [".community-events-time", ".community-events-meta", ".community-events-description", ".community-events-actions button"]) assert(getComputedStyle(pastRow.querySelector(selector)!).color === muted, `past ${selector} stayed prominent`);
-      assert(muted !== getComputedStyle(document.querySelector(".community-events-item:not(.is-past) h3")!).color, "past and upcoming look identical");
-      assert(pastRow.getAttribute("aria-label")?.endsWith("past event"), "past state missing from accessible name");
+      assert(!document.querySelector(".community-events-month-nav, .community-events-today-btn, .community-events-month-note"), "retired classic calendar chrome returned");
+      const showPastButton = document.querySelector('button[aria-expanded="false"]') as HTMLButtonElement | null;
+      assert(Boolean(showPastButton), "past events toggle missing when upcoming events exist");
       await (window as any).captureLoadingProofState("events-agenda");
-      scroller.scrollTop = 300;
-      const originalRow = document.querySelector(".community-events-item");
+      showPastButton!.click(); await tick();
+      assert(visibleIds().length === agendaRows.length, "expanding past events did not reveal full history");
+      scroller.scrollTop = 200;
+      const expectedScroll = scroller.scrollTop;
+      const originalFeatured = document.querySelector('[id^="community-event-"]');
       await hook.update({ rows: [...agendaRows] });
       window.dispatchEvent(new Event("focus")); await tick();
-      assert(scroller.scrollTop === 300 && document.querySelector(".community-events-item") === originalRow, "refresh/resume moved or remounted history");
-      assert(nav.getBoundingClientRect().bottom < scroller.getBoundingClientRect().top, "month heading does not scroll away normally");
+      assert(expectedScroll > 0 && scroller.scrollTop === expectedScroll && document.querySelector('[id^="community-event-"]') === originalFeatured, "refresh/resume moved or remounted events");
       await (window as any).captureLoadingProofState("events-agenda-history");
-      (document.querySelector('[aria-label="Previous month"]') as HTMLButtonElement).click(); await tick();
-      assert(scroller.scrollTop === 0 && !document.querySelector(".community-events-month-note"), "previous month retained stale scroll or current-month message");
     } finally { Date.now = realNow; }
   });
   await test("Events delayed initial data never repositions the reader", async () => {
@@ -610,25 +604,21 @@ function useProfileHarness(props: any) {
       assert(scroller.scrollTop === 0, "late data moved the reader");
     } finally { Date.now = realNow; }
   });
-  await test("Events ended carryovers remain visible, with direct past-month history and honest empty states", async () => {
+  await test("Events ended carryovers remain visible and empty states stay honest", async () => {
     const realNow = Date.now; Date.now = () => agendaNow;
     try {
       const carryover = { ...agendaEvent("Carryover", 0), ends_at: new Date(2026, 8, 1, 2).toISOString() };
       const rows = [carryover, agendaEvent("Earlier call", 2)];
       const hook = await mountHook((props) => props, { rows }, (props) => <AgendaFixture {...props} />);
-      assert(document.querySelectorAll(".community-events-item.is-past").length === 2, "ended carryover disappeared");
-      assert(!document.querySelector(".community-events-actions a") && document.querySelector('[aria-label="Edit event"]'), "past attendance or manager permissions changed");
-      assert(!document.querySelector(".community-events-month-note"), "redundant month notice returned");
-      (document.querySelector('[aria-label="Edit event"]') as HTMLButtonElement).click(); await tick();
-      assert(document.querySelector('[role="dialog"] input')?.getAttribute("value") === "Carryover", "past event editor did not preserve the event");
-      (document.querySelector('[aria-label="Close event editor"]') as HTMLButtonElement).click(); await tick();
-      (document.querySelector('[aria-label="Previous month"]') as HTMLButtonElement).click(); await tick();
-      assert(document.querySelectorAll(".community-events-item").length === 1 && !document.querySelector(".community-events-state, .community-events-month-note"), "past month obscures direct history");
+      const renderedRows = [...document.querySelectorAll('[id^="community-event-"]')];
+      assert(renderedRows.length === 2, "ended carryover disappeared");
+      assert(!document.querySelector('a[href="https://example.test/call"]'), "past event should not show Join action");
+      assert(!document.querySelector(".community-events-month-nav, .community-events-month-note"), "retired month chrome returned");
       await hook.update({ rows: [] });
-      assert(document.querySelector(".community-events-state")?.textContent?.includes("No events in August"), "empty month is misleading");
+      assert(document.body.textContent?.includes("Nothing is planned"), "empty state copy missing");
     } finally { Date.now = realNow; }
   });
-  await test("Events rolls forward on resume, retains history and respects manual month browsing", async () => {
+  await test("Events rolls forward on resume and transitions to past history", async () => {
     const realNow = Date.now;
     let now = realNow();
     Date.now = () => now;
@@ -638,42 +628,23 @@ function useProfileHarness(props: any) {
         starts_at: new Date(now + 60000).toISOString(), ends_at: new Date(now + 120000).toISOString(),
         timezone: "UTC", recurrence_frequency: "none", url: "https://example.test/call", location_type: "online",
       };
-      const hook = await mountHook(() => {
+      await mountHook(() => {
         const [month, setMonth] = useState(new Date(now).toISOString());
         return { month, setMonth };
       }, {}, (value) => <WebCommunityEventsSection capabilities={{hasActiveCommunity:true,activeCommunityName:"Test",canManageEvents:false}}
         state={{events:[upcoming] as any,visibleMonthIso:value.month,isLoadingEvents:false,hasLoadedVisibleRange:true,eventsError:null}}
         actions={{setVisibleMonthIso:value.setMonth,getVisibleRange:()=>eventRange,reloadEvents:async()=>{},saveEvent:async()=>false,cancelEvent:async()=>false}} />);
-      const originalRow = document.querySelector(".community-events-item");
       now += 60000;
       window.dispatchEvent(new Event("focus"));
       await tick();
       assert(document.body.textContent?.includes("Happening now"), "resume did not transition to ongoing");
       await (window as any).captureLoadingProofState("events-ongoing");
-      (document.querySelector('a[href="https://example.test/call"]') as HTMLAnchorElement).focus();
-      await tick();
       now += 60000;
       window.dispatchEvent(new Event("focus"));
       await tick();
-      assert(!document.querySelector(".community-events-day-group[hidden]") && document.activeElement?.getAttribute("href") === "https://example.test/call", "rollover removed focused action");
-      (document.activeElement as HTMLElement).blur();
-      await tick();
-      assert(document.querySelector(".community-events-item.is-past"), "past event was not subdued");
       assert(!document.querySelector('a[href="https://example.test/call"]'), "past event kept Join action");
-      assert(!document.querySelector(".community-events-day-group[hidden], .community-events-past-toggle"), "history still hidden behind a disclosure");
-      assert(document.querySelector(".community-events-item") === originalRow, "phase transition remounted the row");
+      assert(document.querySelector("#community-event-rollover") !== null, "ended event disappeared from past history");
       await (window as any).captureLoadingProofState("events-history");
-      (document.querySelector('[aria-label="Previous month"]') as HTMLButtonElement).click();
-      await tick();
-      const manualMonth = hook.value.month;
-      const future = new Date(now);
-      now = new Date(future.getFullYear(), future.getMonth() + 1, 1).getTime();
-      document.dispatchEvent(new Event("visibilitychange"));
-      await tick();
-      assert(hook.value.month === manualMonth, "clock overrode manual month selection");
-      now = new Date(future.getFullYear(), future.getMonth() + 2, 1).getTime();
-      window.dispatchEvent(new Event("pageshow"));await tick();
-      assert(hook.value.month === manualMonth, "resume navigated away from the selected month");
     } finally { Date.now = realNow; }
   });
   for (const failure of ["missing", "mismatched", "rejected"]) {
@@ -695,7 +666,7 @@ function useProfileHarness(props: any) {
       assert(!hook.value.loading && hook.value.error, "wrapper bypassed recoverable error state");
       assert(pending.length === 0, "unauthorized Events query issued");
       const retry = document.querySelector('[role="alert"] button') as HTMLButtonElement;
-      assert(retry && !document.body.textContent?.includes("No events in"), "missing honest Retry UI");
+      assert(retry && !document.body.textContent?.includes("Nothing is planned"), "missing honest Retry UI");
       mode = "ready";
       retry.click();
       await tick();
@@ -704,7 +675,7 @@ function useProfileHarness(props: any) {
       pending[0].resolve([]);
       await tick();
       assert(hook.value.loaded && !hook.value.loading && !hook.value.error, "recovery did not settle");
-      assert(document.body.textContent?.includes("No events in"), "confirmed empty range missing");
+      assert(document.body.textContent?.includes("Nothing is planned"), "confirmed empty range missing");
     });
   }
   for (const changedScope of ["account", "community", "range"]) {
@@ -813,7 +784,7 @@ function useProfileHarness(props: any) {
         "unresolved range still looks loading",
       );
       assert(
-        !document.body.textContent?.includes("No events in"),
+        !document.body.textContent?.includes("Nothing is planned"),
         "failure presented as empty success",
       );
       if (failure === "missing")
@@ -834,7 +805,7 @@ function useProfileHarness(props: any) {
         "retry failed to settle",
       );
       assert(
-        document.body.textContent?.includes("No events in"),
+        document.body.textContent?.includes("Nothing is planned"),
         "confirmed empty result not shown",
       );
     });

@@ -338,7 +338,7 @@ export function WebCommunityEventsSection(props: WebCommunityEventsSectionProps)
       <div className="community-events-content" aria-busy={state.isLoadingEvents}>
         {showInitialEventsLoading ? (
           <div className="community-events-state" role="status">Loading events…</div>
-        ) : (
+        ) : state.eventsError && state.events.length === 0 ? null : (
           <KitEventsList
             featured={listParts.featured}
             comingUp={listParts.comingUp}
