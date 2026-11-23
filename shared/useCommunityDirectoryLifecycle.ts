@@ -3,6 +3,8 @@ import type { AppPage, CommunityTab } from "./appShellNavigation";
 import { resolveAuthPresentationIdentity, type AuthSessionLike } from "./authSession";
 import { useResumeEpochEffect } from "./useResumeEpochEffect";
 
+export const DIRECTORY_TAB_FRESHNESS_MS = 60_000;
+
 function needsCommunityDirectory(
   activePage: AppPage,
   communityTab: CommunityTab,
@@ -21,6 +23,7 @@ export function useCommunityDirectoryLifecycle<SessionT>(params: {
 }) {
   const sessionRef = useRef(params.session);
   sessionRef.current = params.session;
+  const lastLoadedRef = useRef<{ scope: string; at: number } | null>(null);
   const sessionIdentity = resolveAuthPresentationIdentity(
     params.session as AuthSessionLike,
   );
@@ -31,6 +34,16 @@ export function useCommunityDirectoryLifecycle<SessionT>(params: {
     const communityId = params.activeCommunityId;
     const currentSession = sessionRef.current;
     if (!currentSession) return;
+    const scope = `${sessionIdentity}:${communityId}`;
+    const nowMs = Date.now();
+    if (
+      lastLoadedRef.current
+      && lastLoadedRef.current.scope === scope
+      && nowMs - lastLoadedRef.current.at < DIRECTORY_TAB_FRESHNESS_MS
+    ) {
+      return;
+    }
+    lastLoadedRef.current = { scope, at: nowMs };
     void params.loadCommunityDirectoryMembers(communityId, currentSession);
   }, [
     sessionIdentity,
@@ -45,6 +58,10 @@ export function useCommunityDirectoryLifecycle<SessionT>(params: {
     if (!needsCommunityDirectory(params.activePage, params.communityTab)) return;
     const currentSession = sessionRef.current;
     if (!currentSession) return;
+    lastLoadedRef.current = {
+      scope: `${sessionIdentity}:${params.activeCommunityId}`,
+      at: Date.now(),
+    };
     void params.loadCommunityDirectoryMembers(params.activeCommunityId, currentSession);
   });
 }

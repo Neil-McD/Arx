@@ -82,7 +82,7 @@ export function useWebCommunityProfileHydrationController(
       }
     }
     if (params.canonicalSessionUserId) ids.delete(params.canonicalSessionUserId);
-    return Array.from(ids);
+    return Array.from(ids).sort();
   }, [
     params.activePage,
     params.canonicalSessionUserId,
@@ -91,6 +91,11 @@ export function useWebCommunityProfileHydrationController(
     params.communityInteractionRepliesByRootId,
     params.communityInteractionRoots,
   ]);
+  const visibleProfileIdsKey = visibleProfileIds.join("\u0000");
+  const stableVisibleProfileIds = useMemo(
+    () => (visibleProfileIdsKey ? visibleProfileIdsKey.split("\u0000") : []),
+    [visibleProfileIdsKey],
+  );
 
   const profilesByUserId = useMemo(() => {
     const userId = params.canonicalSessionUserId;
@@ -160,20 +165,20 @@ export function useWebCommunityProfileHydrationController(
   );
 
   useEffect(() => {
-    if (!params.canonicalSessionUserId || !sessionRef.current || visibleProfileIds.length === 0) return;
+    if (!params.canonicalSessionUserId || !sessionRef.current || stableVisibleProfileIds.length === 0) return;
     const currentSession = sessionRef.current;
     if (!currentSession) return;
-    void params.loadUserProfiles(visibleProfileIds, currentSession);
+    void params.loadUserProfiles(stableVisibleProfileIds, currentSession);
   }, [
     params.loadUserProfiles,
     params.canonicalSessionUserId,
-    visibleProfileIds,
+    stableVisibleProfileIds,
   ]);
 
   useResumeEpochEffect(params.resumeEpoch, () => {
     const currentSession = sessionRef.current;
-    if (!params.canonicalSessionUserId || !currentSession || visibleProfileIds.length === 0) return;
-    void params.loadUserProfiles(visibleProfileIds, currentSession, {
+    if (!params.canonicalSessionUserId || !currentSession || stableVisibleProfileIds.length === 0) return;
+    void params.loadUserProfiles(stableVisibleProfileIds, currentSession, {
       force: true,
     });
   });
