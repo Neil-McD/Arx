@@ -218,6 +218,9 @@ describe("a named tool is the call the executor already runs", () => {
     expect(op("polynet_edit_lesson", { lesson: "l1", updated_at: 1, video: null })).toMatchObject({ op: "edit_page", url: "" });
     expect(op("polynet_edit_lesson", { lesson: "l1", updated_at: 1, video: "" })).toMatchObject({ url: "" });
     expect(op("polynet_edit_lesson", { lesson: "l1", updated_at: 1, title: "New" })).not.toHaveProperty("url");
+    // The guide's batch: a null url (no video) goes as "", so the executor doesn't drop it.
+    expect(op("polynet_change_courses", { operations: [{ op: "edit_page", resource_id: "l1", expected_updated_at: 1, url: null }] }))
+      .toEqual({ op: "edit_page", resource_id: "l1", expected_updated_at: 1, url: "" });
   });
 
   it("writes are written out: a post, a reply, an edit, a delete, a message", () => {

@@ -722,6 +722,17 @@ test("an outside AI sets, changes and removes a lesson's video; a link that can'
   [week1] = await lessons();
   expect(week1.url).toBe(null);
 
+  // The guide's batch path (the executor's write): a video set, then removed with "" as its tool sends it.
+  const batch = (key: string, operations: unknown[]) => f.raw("owner", "polynet_write", {
+    path: "/communities/run-club/builder/resources/", mode: "create", content: { summary: "Video.", operations }, idempotency_key: key });
+  expect((await batch("g1", [{ op: "edit_page", resource_id: week1.id, expected_updated_at: week1.updatedAt, url: "https://vimeo.com/123456789" }])).isError).toBe(false);
+  [week1] = await lessons();
+  expect(week1.url).toBe("https://vimeo.com/123456789");
+  const removed = await batch("g2", [{ op: "edit_page", resource_id: week1.id, expected_updated_at: week1.updatedAt, url: "" }]);
+  expect(removed.isError, JSON.stringify(removed)).toBe(false);
+  [week1] = await lessons();
+  expect(week1.url).toBe(null);
+
   // An older lesson whose link is a page, not a video, keeps it when only its title changes.
   await f.t.run(async (ctx: any) => ctx.db.patch(ctx.db.normalizeId("communityResources", week1.id), { url: "https://example.com/old-page" }));
   [week1] = await lessons();
