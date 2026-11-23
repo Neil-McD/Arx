@@ -815,6 +815,11 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
               <div className="community-interaction-drawer-empty">No replies yet.</div>
             ) : (
               <div className="community-interaction-reply-list">
+                {/* The post above, its replies below: a centred count on a hairline
+                    that fades out both ways, like the line under every page title. */}
+                <div className="community-interaction-thread-divider" role="separator">
+                  <span>{props.replies.length === 1 ? "1 reply" : `${props.replies.length} replies`}</span>
+                </div>
                 {props.replies.map((bundle) => {
                   const reply = bundle.reply;
                   const label = actorLabel(reply, props.displayName, props.activeCommunityName);

@@ -1424,9 +1424,54 @@
   font-weight: 600;
   color: var(--text-primary);
 }
+/* A thread reads at the channel's own size, in a column short enough to read. */
 :root[data-design="v1"] .community-interaction-thread-drawer .community-interaction-body {
-  font-size: 15px;
-  line-height: 22.2px;
+  font-size: 14px;
+  line-height: 21.7px;
+  max-width: 62ch;
+}
+
+/* Between the post and its replies: the reply count, centred, on a hairline
+   that is brightest beside the words and fades out to both sides (the same
+   line as under a page title). */
+:root[data-design="v1"] .community-interaction-thread-divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 4px 12px 6px;
+  color: var(--text-faint);
+  font-size: 12px;
+  line-height: 18px;
+}
+:root[data-design="v1"] .community-interaction-thread-divider::before,
+:root[data-design="v1"] .community-interaction-thread-divider::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  pointer-events: none;
+}
+:root[data-design="v1"] .community-interaction-thread-divider::before {
+  background: linear-gradient(90deg, transparent, var(--header-line-glow, var(--header-hairline, var(--border-default))));
+}
+:root[data-design="v1"] .community-interaction-thread-divider::after {
+  background: linear-gradient(90deg, var(--header-line-glow, var(--header-hairline, var(--border-default))), transparent);
+}
+
+/* The guide's replies carry a thin purple edge, so the AI reads apart from
+   people at a glance. */
+:root[data-design="v1"] .community-interaction-thread-drawer .community-interaction-reply[data-actor-type="community_agent"] {
+  position: relative;
+}
+:root[data-design="v1"] .community-interaction-thread-drawer .community-interaction-reply[data-actor-type="community_agent"]::before {
+  content: "";
+  position: absolute;
+  top: 10px;
+  bottom: 10px;
+  left: 2px;
+  width: 2px;
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--accent-agent, #a78bfa) 55%, transparent);
+  pointer-events: none;
 }
 
 /* The reply box names who you are answering; in a narrow thread that line
