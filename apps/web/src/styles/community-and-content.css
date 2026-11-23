@@ -6969,7 +6969,10 @@
   color: var(--accent-agent-foreground, #c4b2fc);
   font-weight: 500;
   text-decoration: none;
-  white-space: nowrap;
+  /* A long name wraps like the words around it; the tint carries onto each
+     line (box-decoration-break), so nothing runs past a narrow column. */
+  white-space: normal;
+  overflow-wrap: anywhere;
   cursor: pointer;
   -webkit-box-decoration-break: clone;
   box-decoration-break: clone;
@@ -6988,7 +6991,7 @@
   opacity: 0.8;
 }
 .entity-chip-name {
-  white-space: nowrap;
+  white-space: normal;
 }
 
 /* A chip's card (slice 3): what the thing is and where you are with it,
@@ -7005,6 +7008,7 @@
   border-left: 1px solid color-mix(in srgb, var(--accent-agent, #a78bfa) 30%, transparent);
   opacity: 0.8;
   font-weight: 400;
+  white-space: nowrap;
 }
 .entity-card {
   position: absolute;
