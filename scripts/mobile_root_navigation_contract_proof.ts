@@ -46,6 +46,9 @@ const communityAgentDockCss = read(
 const directMessagesHost = read(
   "apps/web/src/components/WebDirectMessagesHost.tsx",
 );
+const directMessageDismissLifecycle = read(
+  "apps/web/src/controllers/directMessages/useDirectMessageDismissLifecycle.ts",
+);
 const chatPanel = read("apps/web/src/components/WebCommunityChatPanel.tsx");
 const communityHost = read("apps/web/src/components/WebCommunityHost.tsx");
 const rosterPanel = read("apps/web/src/components/ChannelRosterPanel.tsx");
@@ -419,8 +422,13 @@ assert.match(
 );
 assert.match(
   directMessagesHost,
-  /mobileRoot\?: boolean;[\s\S]*if \(!isOpen \|\| props\.mobileRoot\) return;[\s\S]*web-direct-messages-host\$\{props\.mobileRoot \? " mobile-root" : ""\}/,
-  "DM root presentation should preserve the desktop host while disabling popover dismissal",
+  /mobileRoot\?: boolean;[\s\S]*useDirectMessageDismissLifecycle\(\{[\s\S]*mobileRoot: props\.mobileRoot,[\s\S]*\}\);[\s\S]*web-direct-messages-host\$\{props\.mobileRoot \? " mobile-root" : ""\}/,
+  "DM root presentation should preserve the desktop host while wiring mobileRoot into dismiss lifecycle",
+);
+assert.match(
+  directMessageDismissLifecycle,
+  /if \(!isOpen \|\| mobileRoot\) return;/,
+  "DM dismiss lifecycle should disable popover dismissal when mounted as mobile root",
 );
 assert.match(rosterPanel, /useWebMemberDirectorySearch/, "right panel preserves community-wide search");
 
