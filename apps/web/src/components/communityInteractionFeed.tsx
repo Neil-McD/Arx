@@ -415,6 +415,8 @@ export function ActorAvatar(props: {
       zoom={props.profile?.avatar_zoom ?? 1}
       fallback={<span>{props.getInitials(props.label)}</span>}
       fallbackStyle={{ backgroundColor: props.getAvatarColor(props.seed || props.label) }}
+      loading="lazy"
+      fetchPriority="low"
       alt=""
       aria-hidden={true}
     />

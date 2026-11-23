@@ -18,6 +18,7 @@ export function Face(props: Avatars & { name: string; url: string | null; seed: 
   return (
     <span className={cx("av", props.size)} style={props.style}>
       <UserAvatar className="community-dm-kit-avatar" readyClassName="has-image" name={props.name} imageUrl={props.url} alt=""
+        loading="lazy" fetchPriority="low"
         fallback={<span>{props.getInitials(props.name)}</span>} fallbackStyle={{ backgroundColor: props.getAvatarColor(props.seed) }} />
     </span>
   );
