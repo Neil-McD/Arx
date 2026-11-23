@@ -670,6 +670,65 @@ test("an outside AI builds a course with the named course tools, each change sav
   expect(summaries.every((summary: string) => summary.length > 0)).toBe(true);
 });
 
+// docs/specs/lesson-video-v0.md: a lesson's video through the named tools,
+// checked on the server, and read back as a video.
+test("an outside AI sets, changes and removes a lesson's video; a link that can't play is refused", async () => {
+  const f = await fixture();
+  const lessons = () => f.t.run(async (ctx: any) => (await ctx.db.query("communityResources").collect())
+    .map((row: any) => ({ id: String(row._id), title: row.title, url: row.url ?? null, links: row.lessonLinks ?? [], updatedAt: row.updatedAt })));
+  const run = (name: string, args: Record<string, unknown>) => f.call("owner", name, { community: "run-club", ...args }, "Claude");
+  const ok = async (name: string, args: Record<string, unknown>) => {
+    const result = await run(name, args);
+    expect(result?.isError, `${name}: ${JSON.stringify(result ?? f.lastError())}`).toBe(false);
+    return result;
+  };
+  await ok("polynet_create_course", { name: "Your first 5k", idempotency_key: "c1" });
+  const courseId = await f.t.run(async (ctx: any) => String((await ctx.db.query("communityResourceModules").first())._id));
+
+  // A whole lesson in one call: words, a video and links.
+  await ok("polynet_add_lesson", { course: courseId, title: "Week 1", body: "Walk and run.", video: "https://youtu.be/dQw4w9WgXcQ",
+    lesson_links: [{ title: "The plan", url: "https://example.com/plan" }, { title: "Shoes", url: "https://example.com/shoes" }], idempotency_key: "l1" });
+  let [week1] = await lessons();
+  expect(week1).toMatchObject({ title: "Week 1", url: "https://youtu.be/dQw4w9WgXcQ" });
+  expect(week1.links.map((link: any) => link.title)).toEqual(["The plan", "Shoes"]);
+
+  // Read back as a video, in the lesson and in builder/resources/.
+  const look = async (name: string, path: string) => {
+    const result = await f.call("owner", name, { path }, "Claude");
+    expect(result?.isError, JSON.stringify(result)).toBe(false);
+    return result;
+  };
+  const read = await look("polynet_read", `/communities/run-club/builder/resources/${week1.id}.json`);
+  expect(read.structuredContent.body).toContain('"video_provider": "youtube"');
+  const listed = await look("polynet_list", "/communities/run-club/builder/resources/");
+  expect(listed.structuredContent.entries.find((entry: any) => entry.id === week1.id)).toMatchObject({ video: "https://youtu.be/dQw4w9WgXcQ", video_provider: "youtube" });
+
+  // Changed to Loom, then a page link is refused and nothing changes.
+  await ok("polynet_edit_lesson", { lesson: week1.id, updated_at: week1.updatedAt, video: "https://www.loom.com/share/abcdef123456", idempotency_key: "e1" });
+  [week1] = await lessons();
+  expect(week1.url).toBe("https://www.loom.com/share/abcdef123456");
+  const refused = await run("polynet_edit_lesson", { lesson: week1.id, updated_at: week1.updatedAt, video: "https://example.com/my-page", idempotency_key: "e2" });
+  expect(refused.isError).toBe(true);
+  expect(refused.structuredContent.code).toBe("lesson_video_unplayable");
+  expect(JSON.stringify(refused.structuredContent)).toContain("That link isn't a video we can play");
+  expect((await lessons())[0].url).toBe("https://www.loom.com/share/abcdef123456");
+  // A new lesson with a page link is refused too, and not made.
+  expect((await run("polynet_add_lesson", { course: courseId, title: "Week 2", video: "not a link at all", idempotency_key: "l2" })).structuredContent.code)
+    .toBe("lesson_video_unplayable");
+  expect(await lessons()).toHaveLength(1);
+
+  // Removed with null; left out, nothing changes.
+  await ok("polynet_edit_lesson", { lesson: week1.id, updated_at: week1.updatedAt, video: null, idempotency_key: "e3" });
+  [week1] = await lessons();
+  expect(week1.url).toBe(null);
+
+  // An older lesson whose link is a page, not a video, keeps it when only its title changes.
+  await f.t.run(async (ctx: any) => ctx.db.patch(ctx.db.normalizeId("communityResources", week1.id), { url: "https://example.com/old-page" }));
+  [week1] = await lessons();
+  await ok("polynet_edit_lesson", { lesson: week1.id, updated_at: week1.updatedAt, title: "Week 1: walk, then run", idempotency_key: "e4" });
+  expect((await lessons())[0]).toMatchObject({ title: "Week 1: walk, then run", url: "https://example.com/old-page" });
+});
+
 test("an outside AI is offered only reading and the named actions: the generic write and call are not there", async () => {
   const f = await fixture();
   for (const name of ["polynet_write", "polynet_call"]) {

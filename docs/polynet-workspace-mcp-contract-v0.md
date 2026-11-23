@@ -55,7 +55,11 @@ draft: a person's own AI gets one tool per job (`polynet_create_course`,
 `polynet_order_lessons`, `polynet_order_courses`, `polynet_delete_draft`),
 because OpenAI's plugin review requires every operation to be its own tool;
 the guide keeps the one-batch `polynet_change_courses`. Each job runs through
-the same batch path with the same checks. Everything else is the AI app's own call, by its approval settings
+the same batch path with the same checks, and carries a one-line summary. A
+lesson's video is its `url` (`video` on `polynet_add_lesson` and
+`polynet_edit_lesson`; empty removes it): the server accepts only a link the
+lesson can play (YouTube, Loom, Vimeo, Wistia) and refuses anything else with
+`lesson_video_unplayable`, through every door (docs/specs/lesson-video-v0.md). Everything else is the AI app's own call, by its approval settings
 and each tool's labels; a person's own posts, replies, direct-message replies
 and deleting their own posts included. This is asked by Polynet itself, not
 trusted to the AI app. The tool

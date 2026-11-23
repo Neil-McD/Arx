@@ -50,6 +50,7 @@ import {
   resourceModuleIdentity,
 } from "./communityResourceShared";
 import { deleteLessonFilesForLesson, requireLessonResourcesWithinLimit } from "./communityLessonFiles";
+import { lessonVideoProblem } from "../shared/videoEmbed";
 
 function requireExpectedUpdatedAt(args: {
   expectedUpdatedAt: unknown;
@@ -95,6 +96,25 @@ function normalizeChangesetSummary(raw: unknown): string {
   const summary = normalizeOptionalText(raw, COMMUNITY_RESOURCE_BUILDER_CHANGESET_SUMMARY_MAX_CHARS);
   if (!summary) throw new Error("community_resource_changeset_summary_required");
   return summary;
+}
+
+// A lesson's url is its video (docs/specs/lesson-video-v0.md). Text that isn't
+// a web link at all is refused with the video message, not the generic one.
+function normalizeLessonVideoInput(raw: unknown): string | null {
+  try {
+    return normalizeOptionalUrl(raw) ?? null;
+  } catch {
+    throw new Error("lesson_video_unplayable");
+  }
+}
+
+// A new lesson's video must be a link it can play, or nothing. A changed one
+// is checked against the lesson's current link in preflight.
+function requirePlayableNewLessonVideo(raw: unknown): string | null {
+  const url = normalizeLessonVideoInput(raw);
+  const problem = lessonVideoProblem(url, null);
+  if (problem) throw new Error(problem);
+  return url;
 }
 
 function normalizeChangesetOperationKey(raw: unknown): string | null {
@@ -209,7 +229,7 @@ export function normalizeCommunityResourceBuilderChangesetOperations(
           : null,
         source_resource_id: normalizeOptionalModuleId(record.source_resource_id),
         ...(hasOwnField(record, "type") ? { type: normalizeResourceType(record.type) } : null),
-        ...(hasOwnField(record, "url") ? { url: normalizeOptionalUrl(record.url) ?? null } : null),
+        ...(hasOwnField(record, "url") ? { url: requirePlayableNewLessonVideo(record.url) } : null),
         ...(hasOwnField(record, "resource_status")
           ? { resource_status: normalizeChangesetPageStatus(record.resource_status) }
           : null),
@@ -239,7 +259,7 @@ export function normalizeCommunityResourceBuilderChangesetOperations(
         next.source_resource_id = normalizeOptionalModuleId(record.source_resource_id);
       }
       if (hasOwnField(record, "type")) next.type = normalizeResourceType(record.type);
-      if (hasOwnField(record, "url")) next.url = normalizeOptionalUrl(record.url) ?? null;
+      if (hasOwnField(record, "url")) next.url = normalizeLessonVideoInput(record.url);
       if (hasOwnField(record, "resource_status")) next.resource_status = normalizeChangesetPageStatus(record.resource_status);
       if (hasOwnField(record, "pinned")) next.pinned = Boolean(record.pinned);
       if (hasOwnField(record, "lesson_links")) next.lesson_links = normalizeLessonLinks(record.lesson_links);
@@ -593,13 +613,18 @@ export async function buildCommunityResourceBuilderChangesetPreflight(args: {
     }
 
     if (operation.op === "edit_page") {
-      await requireChangesetResourceRef({
+      const lesson = await requireChangesetResourceRef({
         ctx: args.ctx,
         communityId: args.communityId,
         resourceId: operation.resource_id,
         role: "page",
         expectedUpdatedAt: operation.expected_updated_at,
       });
+      // A lesson's url is its video: a new or changed one must play.
+      if (hasOwnField(operation as any, "url")) {
+        const problem = lessonVideoProblem(operation.url, lesson.url);
+        if (problem) throw new Error(problem);
+      }
       if (hasOwnField(operation as any, "module_id")) {
         await requireChangesetModuleRef({
           ctx: args.ctx,

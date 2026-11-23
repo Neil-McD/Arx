@@ -48,6 +48,7 @@ export function lessonFileProblem(code: string, name: string): string {
 // A save refused, in plain words.
 export function lessonSaveProblem(message: string): string {
   if (message.includes("lesson_resources_limit")) return TOO_MANY_RESOURCES;
+  if (message.includes("lesson_video_unplayable")) return "That link isn't a video we can play. Use YouTube, Loom, Vimeo or Wistia.";
   if (message.includes("lesson_file_unavailable")) return "A file was removed, or waited too long to be saved. Add it again.";
   return "The lesson couldn't be saved. Try again.";
 }
