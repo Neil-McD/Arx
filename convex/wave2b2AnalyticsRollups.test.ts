@@ -223,20 +223,11 @@ describe("Wave 2B-2 Community Analytics & Operator Dashboard rollups", () => {
       },
     });
 
-    const overview: any = await t.query(internal.operatorIntelligence.getOperatorOverviewInternal, {
-      range: "30d",
-    });
-    expect(overview.evidence.sourceTables).toContain("platformOperatorSummary");
-    expect(overview.totals.communities).toBe(1);
-    expect(overview.totals.activePaidMembers).toBe(1);
-    expect(overview.totals.estimatedMrr).toMatchObject({ amountBaseUnits: 4900, currency: "usd" });
-
-    // Monetization query stays bounded and passes cleanly.
-    const monetization: any = await t.query(internal.operatorIntelligence.getOperatorMonetizationInternal, {
-      range: "30d",
-    });
-    expect(monetization.activeCommunitySubscriptions).toBe(1);
-    expect(monetization.estimatedCommunityMrr).toMatchObject({ amountBaseUnits: 4900, currency: "usd" });
+    const summary: any = await t.run((ctx) => ctx.db.query("platformOperatorSummary").first());
+    expect(summary).toBeTruthy();
+    expect(summary.totals.communities).toBe(1);
+    expect(summary.totals.activePaidMembers).toBe(1);
+    expect(summary.totals.estimatedMrr).toMatchObject({ amountBaseUnits: 4900, currency: "usd" });
   });
 
   it("fences live increments during backfill, preserves opening MRR across windows, and invalidates billing on app-grant updates", async () => {

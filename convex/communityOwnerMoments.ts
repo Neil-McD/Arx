@@ -16,7 +16,6 @@ import {
   COURSE_STALL_MIN,
   OWNER_MOMENT_KEYS,
   ownerNoticed,
-  pickOwnerMoment,
   type OwnerMomentFacts,
 } from "../shared/communityOwnerMoments";
 
@@ -99,36 +98,6 @@ export const listOwnerNoticed = query({
     if (!communityIsActive(community)) return [];
     const nowMs = Date.now();
     return ownerNoticed({ ...(await ownerFactsAndRecords(ctx, community, nowMs)), nowMs });
-  },
-});
-
-// The older one-card Home (web apps still open on the previous build read
-// this and mark the card shown; delete both after the next production release).
-export const getOwnerMoment = query({
-  args: { authSubject: v.optional(v.string()), communityId: v.id("communities") },
-  handler: async (ctx, args) => {
-    const community = await requireOwner(ctx, args.authSubject, args.communityId);
-    if (!communityIsActive(community)) return null;
-    const nowMs = Date.now();
-    return pickOwnerMoment({ ...(await ownerFactsAndRecords(ctx, community, nowMs)), nowMs });
-  },
-});
-
-// The card was shown: it starts its week (shown again while this week's card
-// is open, nothing changes).
-export const markOwnerMomentShown = mutation({
-  args: { authSubject: v.optional(v.string()), communityId: v.id("communities"), key: v.string() },
-  handler: async (ctx, args) => {
-    await requireOwner(ctx, args.authSubject, args.communityId);
-    if (!MOMENT_KEYS.has(args.key)) throw new Error("community_owner_moment_unknown");
-    const nowMs = Date.now();
-    const find = (key: string) => ctx.db.query("communityOwnerMoments")
-      .withIndex("by_community_key", (q: any) => q.eq("communityId", args.communityId).eq("key", key)).first();
-    const existing = await find(args.key);
-    if (existing && existing.dismissedAt === undefined && nowMs - existing.shownAt < 7 * DAY_MS) return null;
-    if (existing) await ctx.db.patch(existing._id, { shownAt: nowMs, dismissedAt: undefined, updatedAt: nowMs });
-    else await ctx.db.insert("communityOwnerMoments", { communityId: args.communityId, key: args.key, shownAt: nowMs, createdAt: nowMs, updatedAt: nowMs });
-    return null;
   },
 });
 

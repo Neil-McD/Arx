@@ -2,29 +2,98 @@
   "contract_id": "cached_production_client_compatibility_v1",
   "version": 1,
   "production_origin": "https://polynet.ai",
-  "production_build_id": "0897be83c4d85789221a68cc55d25386b74a02d1",
+  "production_build_id": "89890adbafa9cd726e4e626244c0ed95ce32c110",
   "staging_deployment": "quick-porcupine-949",
   "production_asset_paths": [
     "/",
-    "/assets/CommunityComposerControls-Dkz81PEb.js",
-    "/assets/PdfReader-Dq5eHh8q.js",
-    "/assets/VoiceInputButton-DcCsXltz.js",
-    "/assets/WebAnalyticsScopeSwitcher-Beoh-D7E.js",
-    "/assets/WebAppMainSurfaceHost-B4p014me.js",
-    "/assets/WebCommunityAgentDock-C06yf1ka.js",
-    "/assets/WebOperatorDashboardHost-CD8OJRQ1.js",
-    "/assets/analytics-vendor-eCb6grUE.js",
-    "/assets/appShellNavigation-CaOTpRvg.js",
-    "/assets/convex-vendor-NNU2Z59c.js",
-    "/assets/convexAuthenticatedClient-BY6O4Flk.js",
-    "/assets/highlight-vendor-D0hP4Aji.js",
-    "/assets/index-P6OTfTdr.js",
-    "/assets/legalDocumentsContent-BgZsNQjw.js",
-    "/assets/markdown-vendor-BMcSo5TE.js",
-    "/assets/preload-helper-Otfru5aP.js",
-    "/assets/react-vendor-EMOXQOeQ.js",
-    "/assets/rolldown-runtime-Cahbk8mE.js",
-    "/assets/ui-vendor-C_YkLo3P.js"
+    "/assets/App-BuKl-ubg.js",
+    "/assets/CommunityAvatar-aVVlr2-k.js",
+    "/assets/CommunityChatMediaPlayers-BiP82-LW.js",
+    "/assets/CommunityComposerControls-DCSq8YS3.js",
+    "/assets/CommunityPresenceFacepile-CnZMiX2I.js",
+    "/assets/ConversionLanding-BRfIt-nl.js",
+    "/assets/DesignLab-DKKor10a.js",
+    "/assets/KitBrainPage-C2PtUbe7.js",
+    "/assets/KitDiscover-C_OLaAq4.js",
+    "/assets/KitEventForm-BkrMKuqf.js",
+    "/assets/KitEventsList-CMIXPjJ6.js",
+    "/assets/KitHomeRail-BFWgpa-t.js",
+    "/assets/KitMembersPage-CfwwijfE.js",
+    "/assets/KitStartCommunity-D6kHL7hf.js",
+    "/assets/LessonEditor-LeorNrUn.js",
+    "/assets/PdfReader-pBTo8oFa.js",
+    "/assets/PublicFindPage-DdESmQmJ.js",
+    "/assets/SettingsNavList-B-zij8Og.js",
+    "/assets/SettingsRows-Bogyovxc.js",
+    "/assets/SocialProfileIcon-B4yTttN2.js",
+    "/assets/StableAvatar-BJxKs9Tq.js",
+    "/assets/StableFramedMedia-CCPqMKgx.js",
+    "/assets/SurfaceErrorBoundary-CM26tbk9.js",
+    "/assets/VoiceInputButton-DAvIToKa.js",
+    "/assets/WebAppMainSurfaceFallback-B0hvNqNw.js",
+    "/assets/WebAppMainSurfaceHost-gf0CXt21.js",
+    "/assets/WebBlockingSetupModal-DpaMqkPm.js",
+    "/assets/WebCommunityAgentDock-DkFKHQCg.js",
+    "/assets/WebCommunityAnalyticsSection-b_1Ozc_G.js",
+    "/assets/WebCommunityDiscoverPage-CsPVoQ1D.js",
+    "/assets/WebCommunityEventsSection-BdvRQzI2.js",
+    "/assets/WebCommunityHost-B3cvyDuh.js",
+    "/assets/WebCommunityInteractionProjection-C5z8xpdg.js",
+    "/assets/WebCommunityKnowledgePanel-DS8yR1T0.js",
+    "/assets/WebCommunityLandingPage-O1OYeOVF.js",
+    "/assets/WebCommunityMembersPage-BDkGSsrt.js",
+    "/assets/WebCommunityPodsSection-Bw3Ow1M_.js",
+    "/assets/WebCommunitySecondaryPanels-CUSxaIB-.js",
+    "/assets/WebCommunitySettingsSection-OvqvLKfM.js",
+    "/assets/WebCreateCommunityModal-hGHSyEkP.js",
+    "/assets/WebDirectMessageInboxPanel-BOJNKyTw.js",
+    "/assets/WebDirectMessagePanel-eoUa0ENf.js",
+    "/assets/WebDirectMessagesHost-DwDBzkO7.js",
+    "/assets/WebLandingPage-zIIcDKxA.js",
+    "/assets/WebPlatformChoiceControls-CE41r_tv.js",
+    "/assets/WebPlatformLegalReaderModal-UNXSnW_J.js",
+    "/assets/WebProductDocsPanel-4YTdmCub.js",
+    "/assets/WebPublicVisitorShell-C_UQdpas.js",
+    "/assets/WebSettingsSurfaceHost-Bhhw21sO.js",
+    "/assets/WebUserAvatarEditorModal-CfCdOm73.js",
+    "/assets/appShellNavigation-CtL857yv.js",
+    "/assets/authResumeState-CoheykMT.js",
+    "/assets/builderOffer-BTvyDg2F.js",
+    "/assets/cloudBusinessAnalyticsGateway-BGzVl_Uf.js",
+    "/assets/cloudCommunityMemberRecordsGateway-CinjISnW.js",
+    "/assets/cloudCommunityPlanChangeGateway-C3PwCgG3.js",
+    "/assets/cloudDiscoverGateway-Dy0UUPbO.js",
+    "/assets/cloudGuideQuestionsGateway-HAiJljTP.js",
+    "/assets/cloudProfilesGateway-D_NSwjkk.js",
+    "/assets/communityAgentPageState-CJqKnAlm.js",
+    "/assets/communityAttachmentUi-Ddx8MoOv.js",
+    "/assets/communityEventsChanged-Bd8j8E-8.js",
+    "/assets/communityInteractionRowParts-DejCc3So.js",
+    "/assets/communityMemberWords-CCpk6ryv.js",
+    "/assets/communityMessageParsing-DEfQA5-D.js",
+    "/assets/composerHeight-xOeydc2i.js",
+    "/assets/contentFormatting-DFL70UXe.js",
+    "/assets/convex-vendor-BsLkaG1u.js",
+    "/assets/ensureUsableSession-oRTbXNgI.js",
+    "/assets/entityChipsUi-DhU56bYF.js",
+    "/assets/imageTransforms-Bp0NeG9o.js",
+    "/assets/index-CWN4IwI8.js",
+    "/assets/kit-NFsM24xy.js",
+    "/assets/legalDocumentsContent-DifJ-1D7.js",
+    "/assets/liveQuery-KilxSVbF.js",
+    "/assets/markdownUi-CaOOCVK8.js",
+    "/assets/messageMetadataUi-JTS-LtVd.js",
+    "/assets/podMemory-DVQ4BiXs.js",
+    "/assets/podsAttentionDot-CoFaEKia.js",
+    "/assets/polynetMcpSetup-gkFQD81f.js",
+    "/assets/productDocsMeta-Cu8ZUdJg.js",
+    "/assets/react-vendor-DsV8aQKc.js",
+    "/assets/rolldown-runtime-CxwYkIGG.js",
+    "/assets/sentryRuntime-BmNOATjP.js",
+    "/assets/socialProfileLinks-DABOH7-G.js",
+    "/assets/ui-vendor-B4Wvf1MB.js",
+    "/assets/useWebVoiceInputController-UstPSMiV.js",
+    "/assets/voiceCapture-7i3xhv6t.js"
   ],
   "supplemental_operation_sources": {
     "communityInteractions:createCommunityInteractionComposerMessage": "shared/cloudCommunityInteractionsGateway.ts"
@@ -55,9 +124,15 @@
     "communityAdmin:syncCommunityMembershipCount",
     "communityAgent:getCommunityAgentConfig",
     "communityAgent:saveCommunityAgentConfig",
+    "communityAiRules:getCommunityAiRulesForManager",
+    "communityAiRules:saveCommunityAiRules",
+    "communityAiRules:setCommunityAiPosting",
     "communityAttention:acknowledgeCommunityChatRead",
+    "communityAttention:listMyHomeTags",
     "communityAttention:markCommunitySurfaceSeen",
-    "communityBuilderKnowledgeSetup:buildBuilderKnowledgeResources",
+    "communityBrain:getBrainMap",
+    "communityBrain:getBrainNote",
+    "communityBriefs:getPlaceBrief",
     "communityBuilderKnowledgeSetup:completeBuilderKnowledgeSetup",
     "communityChannelParticipants:listMemberAccess",
     "communityChannelParticipants:setParticipant",
@@ -66,6 +141,7 @@
     "communityChannels:moveCommunityChannel",
     "communityChannels:renameCommunityChannel",
     "communityChannels:setChannelAccess",
+    "communityChannels:setCommunityChannelDescription",
     "communityChannels:setCommunityChannelPinnedRoot",
     "communityChat:clearCommunityTyping",
     "communityChat:setCommunityTyping",
@@ -73,55 +149,107 @@
     "communityColdArchive:restoreCommunityWithoutPayment",
     "communityDirectory:listCommunityDirectoryPage",
     "communityDirectory:searchCommunityMentionCandidates",
+    "communityEntityNames:listEntityNamesForViewer",
     "communityEvents:cancelCommunityEvent",
     "communityEvents:listCommunityEvents",
     "communityEvents:saveCommunityEvent",
+    "communityFounderBrief:getCommunityHomeSnapshot",
+    "communityFounderBrief:getCommunityMemberHomeSnapshot",
+    "communityFounderBrief:getFounderBriefSettings",
+    "communityFounderBrief:setFounderBriefSettings",
+    "communityGuideQuestions:answerGuideQuestion",
+    "communityGuideQuestions:getGuideAlwaysAllowed",
+    "communityGuideQuestions:listGuideQuestions",
+    "communityGuideQuestions:setGuideAlwaysAllowed",
     "communityHandbook:approveCommunityHandbook",
     "communityHandbook:getCommunityHandbookForManager",
     "communityHandbook:requestCommunityHandbookDraft",
     "communityHandbook:saveCommunityHandbookDraft",
+    "communityHomeMoments:getMemberHomeSteps",
     "communityInteractions:createCommunityInteractionComposerMessage",
     "communityInteractions:deleteCommunityInteractionMessage",
     "communityInteractions:editCommunityInteractionMessage",
     "communityInteractions:listCommunityInteractionReplies",
     "communityInteractions:listCommunityInteractionRoots",
     "communityInteractions:toggleCommunityInteractionReaction",
+    "communityLanding:cancelCommunityJoinRequestFromLanding",
+    "communityLanding:finishCommunityLandingCheckout",
+    "communityLanding:getCommunityLandingPage",
+    "communityLanding:joinCommunityFromLanding",
+    "communityLanding:recordCommunityLandingVisit",
+    "communityLanding:startCommunityLandingCheckout",
+    "communityLessonProgress:getCourseProgressPeople",
+    "communityLessonProgress:getCourseProgressSummary",
+    "communityLessonProgress:getMyLessonProgress",
+    "communityLessonProgress:setMyLessonDone",
     "communityLifecycle:createCommunity",
     "communityLifecycle:generateCommunityBrandingUploadUrl",
     "communityLifecycle:getCommunitySettings",
     "communityLifecycle:saveCommunitySettings",
-    "communityLifecycle:setCommunityMemberExperience",
+    "communityMemberProfiles:getCommunityMemberProfile",
+    "communityMemberProfiles:listCommunityMemberDirectory",
+    "communityMemberRecords:addCommunityMemberNote",
+    "communityMemberRecords:deleteCommunityMemberNote",
+    "communityMemberRecords:getCommunityMemberRecord",
+    "communityMemberRecords:getCommunityMemberSummary",
+    "communityMemberRecords:listCommunityMemberRecordsPage",
+    "communityMemory:fileCommunityNote",
+    "communityMemory:listNoteSources",
+    "communityMemory:undoLearnedNote",
+    "communityNotes:createCommunityNote",
     "communityNotes:deleteCommunityNote",
     "communityNotes:listCommunityNotes",
     "communityNotes:updateCommunityNote",
-    "communityOwnerApprovals:decideMemberExperienceRequest",
-    "communityOwnerApprovals:getMyPendingMemberExperienceRequest",
+    "communityOwnerMoments:dismissOwnerMoment",
+    "communityOwnerMoments:listOwnerNoticed",
+    "communityPlanChange:changeMyCommunityPlan",
+    "communityPlanChange:getMyCommunityPlan",
+    "communityPodNotes:deletePodNote",
+    "communityPodNotes:listPodNotes",
+    "communityPodNotes:publishPodNote",
+    "communityPodNotes:savePodNote",
+    "communityPodPayments:confirmPodCheckout",
+    "communityPodPayments:leavePod",
+    "communityPodPayments:savePodPrice",
+    "communityPodPayments:startPodCheckout",
+    "communityPods:decidePodRequest",
+    "communityPods:getPod",
+    "communityPods:getPodPage",
+    "communityPods:listCommunityPods",
+    "communityPods:requestToJoinPod",
+    "communityPods:savePodDetails",
+    "communityPods:setPodHost",
     "communityPublic:getCommunityPresenceSummary",
     "communityPublic:heartbeatCommunityPresence",
     "communityPublic:listPublicDiscoverCommunities",
-    "communityPublic:resolvePublicFunnelBySlug",
-    "communityPublicPage:getMyCommunityPublicPage",
-    "communityPublicPage:requestMyCommunityPublicPageDraft",
-    "communityPublicPage:saveMyCommunityPublicPage",
-    "communityResources:applyCommunityResourceBuilderChangeset",
+    "communityReplyDrafts:listReplyDrafts",
+    "communityReplyDrafts:postReplyDraft",
+    "communityReplyDrafts:skipReplyDraft",
     "communityResources:deleteCommunityResource",
     "communityResources:deleteCommunityResourceModule",
     "communityResources:generateCommunityResourceSourceUploadUrl",
-    "communityResources:getCommunityResourceBuilderChangesetStatus",
     "communityResources:ingestCommunitySources",
     "communityResources:listCommunityResourceModules",
     "communityResources:listCommunityResources",
-    "communityResources:listPendingCommunityResourceBuilderChangesets",
     "communityResources:moveCommunityResourceToModule",
-    "communityResources:rejectCommunityResourceBuilderChangeset",
     "communityResources:reorderCommunityResourceModules",
     "communityResources:reorderCommunityResources",
     "communityResources:saveCommunityResource",
     "communityResources:saveCommunityResourceModule",
+    "communityTiers:archiveCommunityTier",
+    "communityTiers:listCommunityTiers",
+    "communityTiers:saveCommunityTier",
+    "connectedApps:listCommunityAppLinks",
+    "connectedApps:listConnectedApps",
+    "connectedApps:registerConnectedApp",
+    "connectedApps:revokeConnectedApp",
+    "connectedApps:rotateConnectedAppSecret",
+    "connectedApps:updateConnectedApp",
     "creatorCommerce:refreshMyStripeConnectAccount",
     "creatorCommerce:startConnectOnboarding",
     "directMessages:blockDirectMessageUser",
     "directMessages:clearDirectTyping",
+    "directMessages:discardDirectMessageAttachment",
     "directMessages:ensureDirectConversationFromCommunity",
     "directMessages:listDirectMessagePeerPresenceForViewer",
     "directMessages:listDirectMessages",
@@ -134,26 +262,12 @@
     "directMessages:setDirectConversationMuted",
     "directMessages:setDirectTyping",
     "directMessages:unblockDirectMessageUser",
-    "emailDiagnostics:getOperatorEmailAuthDiagnostic",
     "emailPreferences:getMyEmailPreferences",
     "emailPreferences:updateMyEmailPreferences",
     "founderBilling:getFounderBillingOverview",
     "founderBilling:startFounderBillingPortal",
     "founderBilling:startFounderSubscriptionCheckout",
     "memberEntryDestination:resolveMemberEntryDestination",
-    "operatorAccess:getMyOperatorAccessOptional",
-    "operatorAccess:recordOperatorDashboardAccess",
-    "operatorDashboard:getOperatorAccountSetupSnapshot",
-    "operatorDashboard:getOperatorAuthAccessDiagnostics",
-    "operatorDashboard:getOperatorMonetization",
-    "operatorDashboard:getOperatorOverview",
-    "operatorDashboard:getOperatorRuntimeToolDiagnostics",
-    "operatorDashboard:getOperatorSecurityAuditDiagnostics",
-    "operatorDashboard:getOperatorWebDeployDiagnostics",
-    "operatorDashboard:listOperatorCommunities",
-    "operatorDashboard:listOperatorEvents",
-    "operatorDashboard:listOperatorRisks",
-    "operatorSentryDiagnostics:getOperatorFrontendErrorDiagnostics",
     "probe:health",
     "profiles:checkHandleAvailability",
     "profiles:generateProfileAvatarUploadUrl",
@@ -1161,6 +1275,102 @@
       },
       "functionType": "Mutation"
     },
+    "communityAiRules:getCommunityAiRulesForManager": {
+      "args": {
+        "type": "object",
+        "value": {
+          "authSubject": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": true
+          },
+          "communityId": {
+            "fieldType": {
+              "tableName": "communities",
+              "type": "id"
+            },
+            "optional": false
+          },
+          "userId": {
+            "fieldType": {
+              "tableName": "users",
+              "type": "id"
+            },
+            "optional": true
+          }
+        }
+      },
+      "functionType": "Query"
+    },
+    "communityAiRules:saveCommunityAiRules": {
+      "args": {
+        "type": "object",
+        "value": {
+          "authSubject": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": true
+          },
+          "communityId": {
+            "fieldType": {
+              "tableName": "communities",
+              "type": "id"
+            },
+            "optional": false
+          },
+          "text": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": false
+          },
+          "userId": {
+            "fieldType": {
+              "tableName": "users",
+              "type": "id"
+            },
+            "optional": true
+          }
+        }
+      },
+      "functionType": "Mutation"
+    },
+    "communityAiRules:setCommunityAiPosting": {
+      "args": {
+        "type": "object",
+        "value": {
+          "allowed": {
+            "fieldType": {
+              "type": "boolean"
+            },
+            "optional": false
+          },
+          "authSubject": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": true
+          },
+          "communityId": {
+            "fieldType": {
+              "tableName": "communities",
+              "type": "id"
+            },
+            "optional": false
+          },
+          "userId": {
+            "fieldType": {
+              "tableName": "users",
+              "type": "id"
+            },
+            "optional": true
+          }
+        }
+      },
+      "functionType": "Mutation"
+    },
     "communityAttention:acknowledgeCommunityChatRead": {
       "args": {
         "type": "object",
@@ -1201,6 +1411,27 @@
         }
       },
       "functionType": "Mutation"
+    },
+    "communityAttention:listMyHomeTags": {
+      "args": {
+        "type": "object",
+        "value": {
+          "authSubject": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": true
+          },
+          "communityId": {
+            "fieldType": {
+              "tableName": "communities",
+              "type": "id"
+            },
+            "optional": false
+          }
+        }
+      },
+      "functionType": "Query"
     },
     "communityAttention:markCommunitySurfaceSeen": {
       "args": {
@@ -1266,7 +1497,7 @@
       },
       "functionType": "Mutation"
     },
-    "communityBuilderKnowledgeSetup:buildBuilderKnowledgeResources": {
+    "communityBrain:getBrainMap": {
       "args": {
         "type": "object",
         "value": {
@@ -1282,10 +1513,72 @@
               "type": "id"
             },
             "optional": false
+          },
+          "podChannelId": {
+            "fieldType": {
+              "tableName": "communityChannels",
+              "type": "id"
+            },
+            "optional": true
           }
         }
       },
-      "functionType": "Action"
+      "functionType": "Query"
+    },
+    "communityBrain:getBrainNote": {
+      "args": {
+        "type": "object",
+        "value": {
+          "authSubject": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": true
+          },
+          "communityId": {
+            "fieldType": {
+              "tableName": "communities",
+              "type": "id"
+            },
+            "optional": false
+          },
+          "noteId": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": false
+          }
+        }
+      },
+      "functionType": "Query"
+    },
+    "communityBriefs:getPlaceBrief": {
+      "args": {
+        "type": "object",
+        "value": {
+          "authSubject": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": true
+          },
+          "communityId": {
+            "fieldType": {
+              "tableName": "communities",
+              "type": "id"
+            },
+            "optional": false
+          },
+          "podChannelId": {
+            "fieldType": {
+              "tableName": "communityChannels",
+              "type": "id"
+            },
+            "optional": true
+          }
+        }
+      },
+      "functionType": "Query"
     },
     "communityBuilderKnowledgeSetup:completeBuilderKnowledgeSetup": {
       "args": {
@@ -1753,6 +2046,47 @@
       },
       "functionType": "Mutation"
     },
+    "communityChannels:setCommunityChannelDescription": {
+      "args": {
+        "type": "object",
+        "value": {
+          "authSubject": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": true
+          },
+          "channelId": {
+            "fieldType": {
+              "tableName": "communityChannels",
+              "type": "id"
+            },
+            "optional": false
+          },
+          "communityId": {
+            "fieldType": {
+              "tableName": "communities",
+              "type": "id"
+            },
+            "optional": false
+          },
+          "description": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": false
+          },
+          "userId": {
+            "fieldType": {
+              "tableName": "users",
+              "type": "id"
+            },
+            "optional": true
+          }
+        }
+      },
+      "functionType": "Mutation"
+    },
     "communityChannels:setCommunityChannelPinnedRoot": {
       "args": {
         "type": "object",
@@ -2043,6 +2377,27 @@
       },
       "functionType": "Query"
     },
+    "communityEntityNames:listEntityNamesForViewer": {
+      "args": {
+        "type": "object",
+        "value": {
+          "authSubject": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": true
+          },
+          "communityId": {
+            "fieldType": {
+              "tableName": "communities",
+              "type": "id"
+            },
+            "optional": false
+          }
+        }
+      },
+      "functionType": "Query"
+    },
     "communityEvents:cancelCommunityEvent": {
       "args": {
         "type": "object",
@@ -2185,6 +2540,241 @@
       },
       "functionType": "Mutation"
     },
+    "communityFounderBrief:getCommunityHomeSnapshot": {
+      "args": {
+        "type": "object",
+        "value": {
+          "authSubject": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": true
+          },
+          "communityId": {
+            "fieldType": {
+              "tableName": "communities",
+              "type": "id"
+            },
+            "optional": false
+          }
+        }
+      },
+      "functionType": "Query"
+    },
+    "communityFounderBrief:getCommunityMemberHomeSnapshot": {
+      "args": {
+        "type": "object",
+        "value": {
+          "authSubject": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": true
+          },
+          "communityId": {
+            "fieldType": {
+              "tableName": "communities",
+              "type": "id"
+            },
+            "optional": false
+          }
+        }
+      },
+      "functionType": "Query"
+    },
+    "communityFounderBrief:getFounderBriefSettings": {
+      "args": {
+        "type": "object",
+        "value": {
+          "authSubject": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": true
+          },
+          "communityId": {
+            "fieldType": {
+              "tableName": "communities",
+              "type": "id"
+            },
+            "optional": false
+          }
+        }
+      },
+      "functionType": "Query"
+    },
+    "communityFounderBrief:setFounderBriefSettings": {
+      "args": {
+        "type": "object",
+        "value": {
+          "authSubject": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": true
+          },
+          "communityId": {
+            "fieldType": {
+              "tableName": "communities",
+              "type": "id"
+            },
+            "optional": false
+          },
+          "enabled": {
+            "fieldType": {
+              "type": "boolean"
+            },
+            "optional": false
+          },
+          "localHour": {
+            "fieldType": {
+              "type": "number"
+            },
+            "optional": false
+          },
+          "timeZone": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": false
+          }
+        }
+      },
+      "functionType": "Mutation"
+    },
+    "communityGuideQuestions:answerGuideQuestion": {
+      "args": {
+        "type": "object",
+        "value": {
+          "answer": {
+            "fieldType": {
+              "type": "union",
+              "value": [
+                {
+                  "type": "literal",
+                  "value": "yes"
+                },
+                {
+                  "type": "literal",
+                  "value": "no"
+                },
+                {
+                  "type": "literal",
+                  "value": "always"
+                }
+              ]
+            },
+            "optional": false
+          },
+          "authSubject": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": true
+          },
+          "communityId": {
+            "fieldType": {
+              "tableName": "communities",
+              "type": "id"
+            },
+            "optional": false
+          },
+          "questionId": {
+            "fieldType": {
+              "tableName": "communityGuideQuestions",
+              "type": "id"
+            },
+            "optional": false
+          }
+        }
+      },
+      "functionType": "Action"
+    },
+    "communityGuideQuestions:getGuideAlwaysAllowed": {
+      "args": {
+        "type": "object",
+        "value": {
+          "authSubject": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": true
+          },
+          "communityId": {
+            "fieldType": {
+              "tableName": "communities",
+              "type": "id"
+            },
+            "optional": false
+          }
+        }
+      },
+      "functionType": "Query"
+    },
+    "communityGuideQuestions:listGuideQuestions": {
+      "args": {
+        "type": "object",
+        "value": {
+          "authSubject": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": true
+          },
+          "communityId": {
+            "fieldType": {
+              "tableName": "communities",
+              "type": "id"
+            },
+            "optional": false
+          }
+        }
+      },
+      "functionType": "Query"
+    },
+    "communityGuideQuestions:setGuideAlwaysAllowed": {
+      "args": {
+        "type": "object",
+        "value": {
+          "authSubject": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": true
+          },
+          "communityId": {
+            "fieldType": {
+              "tableName": "communities",
+              "type": "id"
+            },
+            "optional": false
+          },
+          "kind": {
+            "fieldType": {
+              "type": "union",
+              "value": [
+                {
+                  "type": "literal",
+                  "value": "post"
+                },
+                {
+                  "type": "literal",
+                  "value": "message"
+                }
+              ]
+            },
+            "optional": false
+          },
+          "on": {
+            "fieldType": {
+              "type": "boolean"
+            },
+            "optional": false
+          }
+        }
+      },
+      "functionType": "Mutation"
+    },
     "communityHandbook:approveCommunityHandbook": {
       "args": {
         "type": "object",
@@ -2308,6 +2898,27 @@
         }
       },
       "functionType": "Mutation"
+    },
+    "communityHomeMoments:getMemberHomeSteps": {
+      "args": {
+        "type": "object",
+        "value": {
+          "authSubject": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": true
+          },
+          "communityId": {
+            "fieldType": {
+              "tableName": "communities",
+              "type": "id"
+            },
+            "optional": false
+          }
+        }
+      },
+      "functionType": "Query"
     },
     "communityInteractions:createCommunityInteractionComposerMessage": {
       "args": {
@@ -2704,6 +3315,291 @@
                   "value": "reply"
                 }
               ]
+            },
+            "optional": false
+          },
+          "userId": {
+            "fieldType": {
+              "tableName": "users",
+              "type": "id"
+            },
+            "optional": true
+          }
+        }
+      },
+      "functionType": "Mutation"
+    },
+    "communityLanding:cancelCommunityJoinRequestFromLanding": {
+      "args": {
+        "type": "object",
+        "value": {
+          "authSubject": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": true
+          },
+          "communitySlug": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": false
+          }
+        }
+      },
+      "functionType": "Mutation"
+    },
+    "communityLanding:finishCommunityLandingCheckout": {
+      "args": {
+        "type": "object",
+        "value": {
+          "authSubject": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": true
+          },
+          "buyerSecret": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": true
+          },
+          "communitySlug": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": false
+          },
+          "sessionId": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": false
+          }
+        }
+      },
+      "functionType": "Action"
+    },
+    "communityLanding:getCommunityLandingPage": {
+      "args": {
+        "type": "object",
+        "value": {
+          "authSubject": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": true
+          },
+          "communitySlug": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": false
+          }
+        }
+      },
+      "functionType": "Query"
+    },
+    "communityLanding:joinCommunityFromLanding": {
+      "args": {
+        "type": "object",
+        "value": {
+          "authSubject": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": true
+          },
+          "communitySlug": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": false
+          }
+        }
+      },
+      "functionType": "Mutation"
+    },
+    "communityLanding:recordCommunityLandingVisit": {
+      "args": {
+        "type": "object",
+        "value": {
+          "communitySlug": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": false
+          },
+          "visitorKey": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": false
+          }
+        }
+      },
+      "functionType": "Mutation"
+    },
+    "communityLanding:startCommunityLandingCheckout": {
+      "args": {
+        "type": "object",
+        "value": {
+          "authSubject": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": false
+          },
+          "billingPeriod": {
+            "fieldType": {
+              "type": "union",
+              "value": [
+                {
+                  "type": "literal",
+                  "value": "monthly"
+                },
+                {
+                  "type": "literal",
+                  "value": "annual"
+                }
+              ]
+            },
+            "optional": false
+          },
+          "communitySlug": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": false
+          },
+          "plan": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": true
+          }
+        }
+      },
+      "functionType": "Action"
+    },
+    "communityLessonProgress:getCourseProgressPeople": {
+      "args": {
+        "type": "object",
+        "value": {
+          "authSubject": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": true
+          },
+          "communityId": {
+            "fieldType": {
+              "tableName": "communities",
+              "type": "id"
+            },
+            "optional": false
+          },
+          "moduleId": {
+            "fieldType": {
+              "tableName": "communityResourceModules",
+              "type": "id"
+            },
+            "optional": false
+          },
+          "userId": {
+            "fieldType": {
+              "tableName": "users",
+              "type": "id"
+            },
+            "optional": true
+          }
+        }
+      },
+      "functionType": "Query"
+    },
+    "communityLessonProgress:getCourseProgressSummary": {
+      "args": {
+        "type": "object",
+        "value": {
+          "authSubject": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": true
+          },
+          "communityId": {
+            "fieldType": {
+              "tableName": "communities",
+              "type": "id"
+            },
+            "optional": false
+          },
+          "userId": {
+            "fieldType": {
+              "tableName": "users",
+              "type": "id"
+            },
+            "optional": true
+          }
+        }
+      },
+      "functionType": "Query"
+    },
+    "communityLessonProgress:getMyLessonProgress": {
+      "args": {
+        "type": "object",
+        "value": {
+          "authSubject": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": true
+          },
+          "communityId": {
+            "fieldType": {
+              "tableName": "communities",
+              "type": "id"
+            },
+            "optional": false
+          },
+          "userId": {
+            "fieldType": {
+              "tableName": "users",
+              "type": "id"
+            },
+            "optional": true
+          }
+        }
+      },
+      "functionType": "Query"
+    },
+    "communityLessonProgress:setMyLessonDone": {
+      "args": {
+        "type": "object",
+        "value": {
+          "authSubject": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": true
+          },
+          "communityId": {
+            "fieldType": {
+              "tableName": "communities",
+              "type": "id"
+            },
+            "optional": false
+          },
+          "done": {
+            "fieldType": {
+              "type": "boolean"
+            },
+            "optional": false
+          },
+          "resourceId": {
+            "fieldType": {
+              "type": "string"
             },
             "optional": false
           },
@@ -3150,7 +4046,7 @@
       },
       "functionType": "Mutation"
     },
-    "communityLifecycle:setCommunityMemberExperience": {
+    "communityMemberProfiles:getCommunityMemberProfile": {
       "args": {
         "type": "object",
         "value": {
@@ -3167,21 +4063,440 @@
             },
             "optional": false
           },
-          "experience": {
+          "membershipId": {
             "fieldType": {
-              "type": "union",
-              "value": [
-                {
-                  "type": "literal",
-                  "value": "app"
-                },
-                {
-                  "type": "literal",
-                  "value": "site"
-                }
-              ]
+              "tableName": "communityMemberships",
+              "type": "id"
+            },
+            "optional": true
+          },
+          "userId": {
+            "fieldType": {
+              "tableName": "users",
+              "type": "id"
+            },
+            "optional": true
+          }
+        }
+      },
+      "functionType": "Query"
+    },
+    "communityMemberProfiles:listCommunityMemberDirectory": {
+      "args": {
+        "type": "object",
+        "value": {
+          "authSubject": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": true
+          },
+          "communityId": {
+            "fieldType": {
+              "tableName": "communities",
+              "type": "id"
             },
             "optional": false
+          },
+          "userId": {
+            "fieldType": {
+              "tableName": "users",
+              "type": "id"
+            },
+            "optional": true
+          }
+        }
+      },
+      "functionType": "Query"
+    },
+    "communityMemberRecords:addCommunityMemberNote": {
+      "args": {
+        "type": "object",
+        "value": {
+          "authSubject": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": true
+          },
+          "body": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": false
+          },
+          "communityId": {
+            "fieldType": {
+              "tableName": "communities",
+              "type": "id"
+            },
+            "optional": false
+          },
+          "membershipId": {
+            "fieldType": {
+              "tableName": "communityMemberships",
+              "type": "id"
+            },
+            "optional": true
+          },
+          "userId": {
+            "fieldType": {
+              "tableName": "users",
+              "type": "id"
+            },
+            "optional": true
+          }
+        }
+      },
+      "functionType": "Mutation"
+    },
+    "communityMemberRecords:deleteCommunityMemberNote": {
+      "args": {
+        "type": "object",
+        "value": {
+          "authSubject": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": true
+          },
+          "communityId": {
+            "fieldType": {
+              "tableName": "communities",
+              "type": "id"
+            },
+            "optional": false
+          },
+          "noteId": {
+            "fieldType": {
+              "tableName": "communityMemberNotes",
+              "type": "id"
+            },
+            "optional": false
+          },
+          "userId": {
+            "fieldType": {
+              "tableName": "users",
+              "type": "id"
+            },
+            "optional": true
+          }
+        }
+      },
+      "functionType": "Mutation"
+    },
+    "communityMemberRecords:getCommunityMemberRecord": {
+      "args": {
+        "type": "object",
+        "value": {
+          "authSubject": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": true
+          },
+          "communityId": {
+            "fieldType": {
+              "tableName": "communities",
+              "type": "id"
+            },
+            "optional": false
+          },
+          "membershipId": {
+            "fieldType": {
+              "tableName": "communityMemberships",
+              "type": "id"
+            },
+            "optional": true
+          },
+          "userId": {
+            "fieldType": {
+              "tableName": "users",
+              "type": "id"
+            },
+            "optional": true
+          }
+        }
+      },
+      "functionType": "Query"
+    },
+    "communityMemberRecords:getCommunityMemberSummary": {
+      "args": {
+        "type": "object",
+        "value": {
+          "authSubject": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": true
+          },
+          "communityId": {
+            "fieldType": {
+              "tableName": "communities",
+              "type": "id"
+            },
+            "optional": false
+          },
+          "userId": {
+            "fieldType": {
+              "tableName": "users",
+              "type": "id"
+            },
+            "optional": true
+          }
+        }
+      },
+      "functionType": "Query"
+    },
+    "communityMemberRecords:listCommunityMemberRecordsPage": {
+      "args": {
+        "type": "object",
+        "value": {
+          "authSubject": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": true
+          },
+          "communityId": {
+            "fieldType": {
+              "tableName": "communities",
+              "type": "id"
+            },
+            "optional": false
+          },
+          "paginationOpts": {
+            "fieldType": {
+              "type": "object",
+              "value": {
+                "cursor": {
+                  "fieldType": {
+                    "type": "union",
+                    "value": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "optional": false
+                },
+                "endCursor": {
+                  "fieldType": {
+                    "type": "union",
+                    "value": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "optional": true
+                },
+                "id": {
+                  "fieldType": {
+                    "type": "number"
+                  },
+                  "optional": true
+                },
+                "maximumBytesRead": {
+                  "fieldType": {
+                    "type": "number"
+                  },
+                  "optional": true
+                },
+                "maximumRowsRead": {
+                  "fieldType": {
+                    "type": "number"
+                  },
+                  "optional": true
+                },
+                "numItems": {
+                  "fieldType": {
+                    "type": "number"
+                  },
+                  "optional": false
+                }
+              }
+            },
+            "optional": false
+          },
+          "userId": {
+            "fieldType": {
+              "tableName": "users",
+              "type": "id"
+            },
+            "optional": true
+          },
+          "view": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": false
+          }
+        }
+      },
+      "functionType": "Query"
+    },
+    "communityMemory:fileCommunityNote": {
+      "args": {
+        "type": "object",
+        "value": {
+          "about": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": false
+          },
+          "authSubject": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": true
+          },
+          "communityId": {
+            "fieldType": {
+              "tableName": "communities",
+              "type": "id"
+            },
+            "optional": false
+          },
+          "slug": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": false
+          },
+          "userId": {
+            "fieldType": {
+              "tableName": "users",
+              "type": "id"
+            },
+            "optional": true
+          }
+        }
+      },
+      "functionType": "Mutation"
+    },
+    "communityMemory:listNoteSources": {
+      "args": {
+        "type": "object",
+        "value": {
+          "authSubject": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": true
+          },
+          "communityId": {
+            "fieldType": {
+              "tableName": "communities",
+              "type": "id"
+            },
+            "optional": false
+          },
+          "podRoomId": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": true
+          },
+          "slug": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": false
+          },
+          "userId": {
+            "fieldType": {
+              "tableName": "users",
+              "type": "id"
+            },
+            "optional": true
+          }
+        }
+      },
+      "functionType": "Query"
+    },
+    "communityMemory:undoLearnedNote": {
+      "args": {
+        "type": "object",
+        "value": {
+          "authSubject": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": true
+          },
+          "communityId": {
+            "fieldType": {
+              "tableName": "communities",
+              "type": "id"
+            },
+            "optional": false
+          },
+          "podRoomId": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": true
+          },
+          "slug": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": false
+          },
+          "userId": {
+            "fieldType": {
+              "tableName": "users",
+              "type": "id"
+            },
+            "optional": true
+          }
+        }
+      },
+      "functionType": "Mutation"
+    },
+    "communityNotes:createCommunityNote": {
+      "args": {
+        "type": "object",
+        "value": {
+          "authSubject": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": true
+          },
+          "communityId": {
+            "fieldType": {
+              "tableName": "communities",
+              "type": "id"
+            },
+            "optional": false
+          },
+          "text": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": false
+          },
+          "title": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": false
+          },
+          "userId": {
+            "fieldType": {
+              "tableName": "users",
+              "type": "id"
+            },
+            "optional": true
           }
         }
       },
@@ -3301,7 +4616,7 @@
       },
       "functionType": "Mutation"
     },
-    "communityOwnerApprovals:decideMemberExperienceRequest": {
+    "communityOwnerMoments:dismissOwnerMoment": {
       "args": {
         "type": "object",
         "value": {
@@ -3318,26 +4633,9 @@
             },
             "optional": false
           },
-          "decision": {
+          "key": {
             "fieldType": {
-              "type": "union",
-              "value": [
-                {
-                  "type": "literal",
-                  "value": "approve"
-                },
-                {
-                  "type": "literal",
-                  "value": "decline"
-                }
-              ]
-            },
-            "optional": false
-          },
-          "requestId": {
-            "fieldType": {
-              "tableName": "communityOwnerApprovals",
-              "type": "id"
+              "type": "string"
             },
             "optional": false
           }
@@ -3345,7 +4643,7 @@
       },
       "functionType": "Mutation"
     },
-    "communityOwnerApprovals:getMyPendingMemberExperienceRequest": {
+    "communityOwnerMoments:listOwnerNoticed": {
       "args": {
         "type": "object",
         "value": {
@@ -3365,6 +4663,595 @@
         }
       },
       "functionType": "Query"
+    },
+    "communityPlanChange:changeMyCommunityPlan": {
+      "args": {
+        "type": "object",
+        "value": {
+          "authSubject": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": true
+          },
+          "communityId": {
+            "fieldType": {
+              "tableName": "communities",
+              "type": "id"
+            },
+            "optional": false
+          },
+          "plan": {
+            "fieldType": {
+              "type": "union",
+              "value": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "optional": false
+          }
+        }
+      },
+      "functionType": "Action"
+    },
+    "communityPlanChange:getMyCommunityPlan": {
+      "args": {
+        "type": "object",
+        "value": {
+          "authSubject": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": true
+          },
+          "communityId": {
+            "fieldType": {
+              "tableName": "communities",
+              "type": "id"
+            },
+            "optional": false
+          }
+        }
+      },
+      "functionType": "Query"
+    },
+    "communityPodNotes:deletePodNote": {
+      "args": {
+        "type": "object",
+        "value": {
+          "authSubject": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": true
+          },
+          "channelId": {
+            "fieldType": {
+              "tableName": "communityChannels",
+              "type": "id"
+            },
+            "optional": false
+          },
+          "communityId": {
+            "fieldType": {
+              "tableName": "communities",
+              "type": "id"
+            },
+            "optional": false
+          },
+          "slug": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": false
+          }
+        }
+      },
+      "functionType": "Mutation"
+    },
+    "communityPodNotes:listPodNotes": {
+      "args": {
+        "type": "object",
+        "value": {
+          "authSubject": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": true
+          },
+          "channelId": {
+            "fieldType": {
+              "tableName": "communityChannels",
+              "type": "id"
+            },
+            "optional": false
+          },
+          "communityId": {
+            "fieldType": {
+              "tableName": "communities",
+              "type": "id"
+            },
+            "optional": false
+          }
+        }
+      },
+      "functionType": "Query"
+    },
+    "communityPodNotes:publishPodNote": {
+      "args": {
+        "type": "object",
+        "value": {
+          "authSubject": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": true
+          },
+          "channelId": {
+            "fieldType": {
+              "tableName": "communityChannels",
+              "type": "id"
+            },
+            "optional": false
+          },
+          "communityId": {
+            "fieldType": {
+              "tableName": "communities",
+              "type": "id"
+            },
+            "optional": false
+          },
+          "slug": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": false
+          }
+        }
+      },
+      "functionType": "Mutation"
+    },
+    "communityPodNotes:savePodNote": {
+      "args": {
+        "type": "object",
+        "value": {
+          "authSubject": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": true
+          },
+          "channelId": {
+            "fieldType": {
+              "tableName": "communityChannels",
+              "type": "id"
+            },
+            "optional": false
+          },
+          "communityId": {
+            "fieldType": {
+              "tableName": "communities",
+              "type": "id"
+            },
+            "optional": false
+          },
+          "slug": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": true
+          },
+          "text": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": false
+          },
+          "title": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": false
+          }
+        }
+      },
+      "functionType": "Mutation"
+    },
+    "communityPodPayments:confirmPodCheckout": {
+      "args": {
+        "type": "object",
+        "value": {
+          "authSubject": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": true
+          },
+          "paymentId": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": false
+          }
+        }
+      },
+      "functionType": "Action"
+    },
+    "communityPodPayments:leavePod": {
+      "args": {
+        "type": "object",
+        "value": {
+          "authSubject": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": true
+          },
+          "channelId": {
+            "fieldType": {
+              "tableName": "communityChannels",
+              "type": "id"
+            },
+            "optional": false
+          },
+          "communityId": {
+            "fieldType": {
+              "tableName": "communities",
+              "type": "id"
+            },
+            "optional": false
+          }
+        }
+      },
+      "functionType": "Action"
+    },
+    "communityPodPayments:savePodPrice": {
+      "args": {
+        "type": "object",
+        "value": {
+          "amountBaseUnits": {
+            "fieldType": {
+              "type": "number"
+            },
+            "optional": false
+          },
+          "authSubject": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": true
+          },
+          "channelId": {
+            "fieldType": {
+              "tableName": "communityChannels",
+              "type": "id"
+            },
+            "optional": false
+          },
+          "communityId": {
+            "fieldType": {
+              "tableName": "communities",
+              "type": "id"
+            },
+            "optional": false
+          }
+        }
+      },
+      "functionType": "Mutation"
+    },
+    "communityPodPayments:startPodCheckout": {
+      "args": {
+        "type": "object",
+        "value": {
+          "authSubject": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": true
+          },
+          "cancelUrl": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": false
+          },
+          "channelId": {
+            "fieldType": {
+              "tableName": "communityChannels",
+              "type": "id"
+            },
+            "optional": false
+          },
+          "communityId": {
+            "fieldType": {
+              "tableName": "communities",
+              "type": "id"
+            },
+            "optional": false
+          },
+          "successUrl": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": false
+          }
+        }
+      },
+      "functionType": "Action"
+    },
+    "communityPods:decidePodRequest": {
+      "args": {
+        "type": "object",
+        "value": {
+          "approve": {
+            "fieldType": {
+              "type": "boolean"
+            },
+            "optional": false
+          },
+          "authSubject": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": true
+          },
+          "channelId": {
+            "fieldType": {
+              "tableName": "communityChannels",
+              "type": "id"
+            },
+            "optional": false
+          },
+          "communityId": {
+            "fieldType": {
+              "tableName": "communities",
+              "type": "id"
+            },
+            "optional": false
+          },
+          "userId": {
+            "fieldType": {
+              "tableName": "users",
+              "type": "id"
+            },
+            "optional": false
+          }
+        }
+      },
+      "functionType": "Mutation"
+    },
+    "communityPods:getPod": {
+      "args": {
+        "type": "object",
+        "value": {
+          "authSubject": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": true
+          },
+          "channelId": {
+            "fieldType": {
+              "tableName": "communityChannels",
+              "type": "id"
+            },
+            "optional": false
+          },
+          "communityId": {
+            "fieldType": {
+              "tableName": "communities",
+              "type": "id"
+            },
+            "optional": false
+          }
+        }
+      },
+      "functionType": "Query"
+    },
+    "communityPods:getPodPage": {
+      "args": {
+        "type": "object",
+        "value": {
+          "asMember": {
+            "fieldType": {
+              "type": "boolean"
+            },
+            "optional": true
+          },
+          "authSubject": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": true
+          },
+          "communityId": {
+            "fieldType": {
+              "tableName": "communities",
+              "type": "id"
+            },
+            "optional": false
+          },
+          "podSlug": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": false
+          },
+          "preview": {
+            "fieldType": {
+              "type": "boolean"
+            },
+            "optional": true
+          }
+        }
+      },
+      "functionType": "Query"
+    },
+    "communityPods:listCommunityPods": {
+      "args": {
+        "type": "object",
+        "value": {
+          "asMember": {
+            "fieldType": {
+              "type": "boolean"
+            },
+            "optional": true
+          },
+          "authSubject": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": true
+          },
+          "communityId": {
+            "fieldType": {
+              "tableName": "communities",
+              "type": "id"
+            },
+            "optional": false
+          }
+        }
+      },
+      "functionType": "Query"
+    },
+    "communityPods:requestToJoinPod": {
+      "args": {
+        "type": "object",
+        "value": {
+          "authSubject": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": true
+          },
+          "channelId": {
+            "fieldType": {
+              "tableName": "communityChannels",
+              "type": "id"
+            },
+            "optional": false
+          },
+          "communityId": {
+            "fieldType": {
+              "tableName": "communities",
+              "type": "id"
+            },
+            "optional": false
+          }
+        }
+      },
+      "functionType": "Mutation"
+    },
+    "communityPods:savePodDetails": {
+      "args": {
+        "type": "object",
+        "value": {
+          "authSubject": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": true
+          },
+          "channelId": {
+            "fieldType": {
+              "tableName": "communityChannels",
+              "type": "id"
+            },
+            "optional": false
+          },
+          "communityId": {
+            "fieldType": {
+              "tableName": "communities",
+              "type": "id"
+            },
+            "optional": false
+          },
+          "purpose": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": true
+          },
+          "seats": {
+            "fieldType": {
+              "type": "number"
+            },
+            "optional": true
+          },
+          "visibility": {
+            "fieldType": {
+              "type": "union",
+              "value": [
+                {
+                  "type": "literal",
+                  "value": "listed"
+                },
+                {
+                  "type": "literal",
+                  "value": "hidden"
+                }
+              ]
+            },
+            "optional": true
+          },
+          "whatYouGet": {
+            "fieldType": {
+              "type": "array",
+              "value": {
+                "type": "string"
+              }
+            },
+            "optional": true
+          }
+        }
+      },
+      "functionType": "Mutation"
+    },
+    "communityPods:setPodHost": {
+      "args": {
+        "type": "object",
+        "value": {
+          "authSubject": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": true
+          },
+          "channelId": {
+            "fieldType": {
+              "tableName": "communityChannels",
+              "type": "id"
+            },
+            "optional": false
+          },
+          "communityId": {
+            "fieldType": {
+              "tableName": "communities",
+              "type": "id"
+            },
+            "optional": false
+          },
+          "host": {
+            "fieldType": {
+              "type": "boolean"
+            },
+            "optional": false
+          },
+          "userId": {
+            "fieldType": {
+              "tableName": "users",
+              "type": "id"
+            },
+            "optional": false
+          }
+        }
+      },
+      "functionType": "Mutation"
     },
     "communityPublic:getCommunityPresenceSummary": {
       "args": {
@@ -3436,21 +5323,7 @@
       },
       "functionType": "Query"
     },
-    "communityPublic:resolvePublicFunnelBySlug": {
-      "args": {
-        "type": "object",
-        "value": {
-          "communitySlug": {
-            "fieldType": {
-              "type": "string"
-            },
-            "optional": false
-          }
-        }
-      },
-      "functionType": "Query"
-    },
-    "communityPublicPage:getMyCommunityPublicPage": {
+    "communityReplyDrafts:listReplyDrafts": {
       "args": {
         "type": "object",
         "value": {
@@ -3471,7 +5344,7 @@
       },
       "functionType": "Query"
     },
-    "communityPublicPage:requestMyCommunityPublicPageDraft": {
+    "communityReplyDrafts:postReplyDraft": {
       "args": {
         "type": "object",
         "value": {
@@ -3487,12 +5360,25 @@
               "type": "id"
             },
             "optional": false
+          },
+          "draftId": {
+            "fieldType": {
+              "tableName": "communityReplyDrafts",
+              "type": "id"
+            },
+            "optional": false
+          },
+          "text": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": true
           }
         }
       },
       "functionType": "Mutation"
     },
-    "communityPublicPage:saveMyCommunityPublicPage": {
+    "communityReplyDrafts:skipReplyDraft": {
       "args": {
         "type": "object",
         "value": {
@@ -3509,165 +5395,12 @@
             },
             "optional": false
           },
-          "expectedRevision": {
+          "draftId": {
             "fieldType": {
-              "type": "number"
-            },
-            "optional": false
-          },
-          "page": {
-            "fieldType": {
-              "type": "object",
-              "value": {
-                "first_steps": {
-                  "fieldType": {
-                    "type": "array",
-                    "value": {
-                      "type": "object",
-                      "value": {
-                        "text": {
-                          "fieldType": {
-                            "type": "string"
-                          },
-                          "optional": false
-                        },
-                        "title": {
-                          "fieldType": {
-                            "type": "string"
-                          },
-                          "optional": false
-                        }
-                      }
-                    }
-                  },
-                  "optional": false
-                },
-                "for_you": {
-                  "fieldType": {
-                    "type": "array",
-                    "value": {
-                      "type": "string"
-                    }
-                  },
-                  "optional": false
-                },
-                "founder_bio": {
-                  "fieldType": {
-                    "type": "string"
-                  },
-                  "optional": false
-                },
-                "guarantee": {
-                  "fieldType": {
-                    "type": "string"
-                  },
-                  "optional": false
-                },
-                "not_for": {
-                  "fieldType": {
-                    "type": "array",
-                    "value": {
-                      "type": "string"
-                    }
-                  },
-                  "optional": false
-                },
-                "objections": {
-                  "fieldType": {
-                    "type": "array",
-                    "value": {
-                      "type": "object",
-                      "value": {
-                        "answer": {
-                          "fieldType": {
-                            "type": "string"
-                          },
-                          "optional": false
-                        },
-                        "question": {
-                          "fieldType": {
-                            "type": "string"
-                          },
-                          "optional": false
-                        }
-                      }
-                    }
-                  },
-                  "optional": false
-                },
-                "results": {
-                  "fieldType": {
-                    "type": "array",
-                    "value": {
-                      "type": "object",
-                      "value": {
-                        "name": {
-                          "fieldType": {
-                            "type": "string"
-                          },
-                          "optional": false
-                        },
-                        "quote": {
-                          "fieldType": {
-                            "type": "string"
-                          },
-                          "optional": false
-                        },
-                        "role": {
-                          "fieldType": {
-                            "type": "string"
-                          },
-                          "optional": false
-                        }
-                      }
-                    }
-                  },
-                  "optional": false
-                },
-                "video_url": {
-                  "fieldType": {
-                    "type": "string"
-                  },
-                  "optional": false
-                }
-              }
-            },
-            "optional": false
-          }
-        }
-      },
-      "functionType": "Mutation"
-    },
-    "communityResources:applyCommunityResourceBuilderChangeset": {
-      "args": {
-        "type": "object",
-        "value": {
-          "authSubject": {
-            "fieldType": {
-              "type": "string"
-            },
-            "optional": true
-          },
-          "changesetId": {
-            "fieldType": {
-              "tableName": "communityResourceBuilderChangesets",
+              "tableName": "communityReplyDrafts",
               "type": "id"
             },
             "optional": false
-          },
-          "communityId": {
-            "fieldType": {
-              "tableName": "communities",
-              "type": "id"
-            },
-            "optional": false
-          },
-          "userId": {
-            "fieldType": {
-              "tableName": "users",
-              "type": "id"
-            },
-            "optional": true
           }
         }
       },
@@ -3754,41 +5487,6 @@
         }
       },
       "functionType": "Mutation"
-    },
-    "communityResources:getCommunityResourceBuilderChangesetStatus": {
-      "args": {
-        "type": "object",
-        "value": {
-          "authSubject": {
-            "fieldType": {
-              "type": "string"
-            },
-            "optional": true
-          },
-          "changesetId": {
-            "fieldType": {
-              "tableName": "communityResourceBuilderChangesets",
-              "type": "id"
-            },
-            "optional": false
-          },
-          "communityId": {
-            "fieldType": {
-              "tableName": "communities",
-              "type": "id"
-            },
-            "optional": false
-          },
-          "userId": {
-            "fieldType": {
-              "tableName": "users",
-              "type": "id"
-            },
-            "optional": true
-          }
-        }
-      },
-      "functionType": "Query"
     },
     "communityResources:ingestCommunitySources": {
       "args": {
@@ -3898,40 +5596,6 @@
       },
       "functionType": "Query"
     },
-    "communityResources:listPendingCommunityResourceBuilderChangesets": {
-      "args": {
-        "type": "object",
-        "value": {
-          "authSubject": {
-            "fieldType": {
-              "type": "string"
-            },
-            "optional": true
-          },
-          "communityId": {
-            "fieldType": {
-              "tableName": "communities",
-              "type": "id"
-            },
-            "optional": false
-          },
-          "limit": {
-            "fieldType": {
-              "type": "number"
-            },
-            "optional": true
-          },
-          "userId": {
-            "fieldType": {
-              "tableName": "users",
-              "type": "id"
-            },
-            "optional": true
-          }
-        }
-      },
-      "functionType": "Query"
-    },
     "communityResources:moveCommunityResourceToModule": {
       "args": {
         "type": "object",
@@ -3983,47 +5647,6 @@
                   "type": "null"
                 }
               ]
-            },
-            "optional": true
-          },
-          "userId": {
-            "fieldType": {
-              "tableName": "users",
-              "type": "id"
-            },
-            "optional": true
-          }
-        }
-      },
-      "functionType": "Mutation"
-    },
-    "communityResources:rejectCommunityResourceBuilderChangeset": {
-      "args": {
-        "type": "object",
-        "value": {
-          "authSubject": {
-            "fieldType": {
-              "type": "string"
-            },
-            "optional": true
-          },
-          "changesetId": {
-            "fieldType": {
-              "tableName": "communityResourceBuilderChangesets",
-              "type": "id"
-            },
-            "optional": false
-          },
-          "communityId": {
-            "fieldType": {
-              "tableName": "communities",
-              "type": "id"
-            },
-            "optional": false
-          },
-          "reason": {
-            "fieldType": {
-              "type": "string"
             },
             "optional": true
           },
@@ -4237,6 +5860,292 @@
       },
       "functionType": "Mutation"
     },
+    "communityTiers:archiveCommunityTier": {
+      "args": {
+        "type": "object",
+        "value": {
+          "authSubject": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": true
+          },
+          "communityId": {
+            "fieldType": {
+              "tableName": "communities",
+              "type": "id"
+            },
+            "optional": false
+          },
+          "key": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": false
+          }
+        }
+      },
+      "functionType": "Mutation"
+    },
+    "communityTiers:listCommunityTiers": {
+      "args": {
+        "type": "object",
+        "value": {
+          "authSubject": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": true
+          },
+          "communityId": {
+            "fieldType": {
+              "tableName": "communities",
+              "type": "id"
+            },
+            "optional": false
+          }
+        }
+      },
+      "functionType": "Query"
+    },
+    "communityTiers:saveCommunityTier": {
+      "args": {
+        "type": "object",
+        "value": {
+          "authSubject": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": true
+          },
+          "communityId": {
+            "fieldType": {
+              "tableName": "communities",
+              "type": "id"
+            },
+            "optional": false
+          },
+          "grants": {
+            "fieldType": {
+              "type": "array",
+              "value": {
+                "type": "string"
+              }
+            },
+            "optional": false
+          },
+          "key": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": true
+          },
+          "monthlyAmountBaseUnits": {
+            "fieldType": {
+              "type": "number"
+            },
+            "optional": true
+          },
+          "name": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": false
+          },
+          "podChannelIds": {
+            "fieldType": {
+              "type": "array",
+              "value": {
+                "tableName": "communityChannels",
+                "type": "id"
+              }
+            },
+            "optional": true
+          }
+        }
+      },
+      "functionType": "Mutation"
+    },
+    "connectedApps:listCommunityAppLinks": {
+      "args": {
+        "type": "object",
+        "value": {
+          "authSubject": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": true
+          },
+          "communityId": {
+            "fieldType": {
+              "tableName": "communities",
+              "type": "id"
+            },
+            "optional": false
+          }
+        }
+      },
+      "functionType": "Query"
+    },
+    "connectedApps:listConnectedApps": {
+      "args": {
+        "type": "object",
+        "value": {
+          "authSubject": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": true
+          },
+          "communityId": {
+            "fieldType": {
+              "tableName": "communities",
+              "type": "id"
+            },
+            "optional": false
+          }
+        }
+      },
+      "functionType": "Query"
+    },
+    "connectedApps:registerConnectedApp": {
+      "args": {
+        "type": "object",
+        "value": {
+          "appUrl": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": true
+          },
+          "authSubject": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": true
+          },
+          "communityId": {
+            "fieldType": {
+              "tableName": "communities",
+              "type": "id"
+            },
+            "optional": false
+          },
+          "name": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": false
+          },
+          "webhookUrl": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": true
+          }
+        }
+      },
+      "functionType": "Mutation"
+    },
+    "connectedApps:revokeConnectedApp": {
+      "args": {
+        "type": "object",
+        "value": {
+          "appId": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": false
+          },
+          "authSubject": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": true
+          },
+          "communityId": {
+            "fieldType": {
+              "tableName": "communities",
+              "type": "id"
+            },
+            "optional": false
+          }
+        }
+      },
+      "functionType": "Mutation"
+    },
+    "connectedApps:rotateConnectedAppSecret": {
+      "args": {
+        "type": "object",
+        "value": {
+          "appId": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": false
+          },
+          "authSubject": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": true
+          },
+          "communityId": {
+            "fieldType": {
+              "tableName": "communities",
+              "type": "id"
+            },
+            "optional": false
+          }
+        }
+      },
+      "functionType": "Mutation"
+    },
+    "connectedApps:updateConnectedApp": {
+      "args": {
+        "type": "object",
+        "value": {
+          "appId": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": false
+          },
+          "appUrl": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": true
+          },
+          "authSubject": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": true
+          },
+          "communityId": {
+            "fieldType": {
+              "tableName": "communities",
+              "type": "id"
+            },
+            "optional": false
+          },
+          "name": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": true
+          },
+          "webhookUrl": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": true
+          }
+        }
+      },
+      "functionType": "Mutation"
+    },
     "creatorCommerce:refreshMyStripeConnectAccount": {
       "args": {
         "type": "object",
@@ -4336,6 +6245,26 @@
               "type": "id"
             },
             "optional": false
+          }
+        }
+      },
+      "functionType": "Mutation"
+    },
+    "directMessages:discardDirectMessageAttachment": {
+      "args": {
+        "type": "object",
+        "value": {
+          "attachmentId": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": false
+          },
+          "authSubject": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": true
           }
         }
       },
@@ -4693,44 +6622,6 @@
       },
       "functionType": "Mutation"
     },
-    "emailDiagnostics:getOperatorEmailAuthDiagnostic": {
-      "args": {
-        "type": "object",
-        "value": {
-          "authSubject": {
-            "fieldType": {
-              "type": "string"
-            },
-            "optional": true
-          },
-          "deliverySampleLimit": {
-            "fieldType": {
-              "type": "number"
-            },
-            "optional": true
-          },
-          "includeWorkosUserLookup": {
-            "fieldType": {
-              "type": "boolean"
-            },
-            "optional": true
-          },
-          "outboxPerStatusLimit": {
-            "fieldType": {
-              "type": "number"
-            },
-            "optional": true
-          },
-          "userSampleLimit": {
-            "fieldType": {
-              "type": "number"
-            },
-            "optional": true
-          }
-        }
-      },
-      "functionType": "Action"
-    },
     "emailPreferences:getMyEmailPreferences": {
       "args": {
         "type": "object",
@@ -4872,474 +6763,6 @@
           "communitySlug": {
             "fieldType": {
               "type": "string"
-            },
-            "optional": true
-          }
-        }
-      },
-      "functionType": "Action"
-    },
-    "operatorAccess:getMyOperatorAccessOptional": {
-      "args": {
-        "type": "object",
-        "value": {
-          "authSubject": {
-            "fieldType": {
-              "type": "string"
-            },
-            "optional": true
-          }
-        }
-      },
-      "functionType": "Query"
-    },
-    "operatorAccess:recordOperatorDashboardAccess": {
-      "args": {
-        "type": "object",
-        "value": {
-          "authSubject": {
-            "fieldType": {
-              "type": "string"
-            },
-            "optional": true
-          },
-          "surface": {
-            "fieldType": {
-              "type": "string"
-            },
-            "optional": true
-          }
-        }
-      },
-      "functionType": "Mutation"
-    },
-    "operatorDashboard:getOperatorAccountSetupSnapshot": {
-      "args": {
-        "type": "object",
-        "value": {
-          "authSubject": {
-            "fieldType": {
-              "type": "string"
-            },
-            "optional": true
-          },
-          "completed": {
-            "fieldType": {
-              "type": "boolean"
-            },
-            "optional": true
-          },
-          "currentStep": {
-            "fieldType": {
-              "type": "union",
-              "value": [
-                {
-                  "type": "literal",
-                  "value": "identity"
-                },
-                {
-                  "type": "literal",
-                  "value": "complete"
-                }
-              ]
-            },
-            "optional": true
-          },
-          "limit": {
-            "fieldType": {
-              "type": "number"
-            },
-            "optional": true
-          },
-          "query": {
-            "fieldType": {
-              "type": "string"
-            },
-            "optional": true
-          }
-        }
-      },
-      "functionType": "Query"
-    },
-    "operatorDashboard:getOperatorAuthAccessDiagnostics": {
-      "args": {
-        "type": "object",
-        "value": {
-          "authSubject": {
-            "fieldType": {
-              "type": "string"
-            },
-            "optional": true
-          },
-          "range": {
-            "fieldType": {
-              "type": "union",
-              "value": [
-                {
-                  "type": "literal",
-                  "value": "7d"
-                },
-                {
-                  "type": "literal",
-                  "value": "30d"
-                },
-                {
-                  "type": "literal",
-                  "value": "90d"
-                },
-                {
-                  "type": "literal",
-                  "value": "all"
-                }
-              ]
-            },
-            "optional": true
-          }
-        }
-      },
-      "functionType": "Query"
-    },
-    "operatorDashboard:getOperatorMonetization": {
-      "args": {
-        "type": "object",
-        "value": {
-          "authSubject": {
-            "fieldType": {
-              "type": "string"
-            },
-            "optional": true
-          },
-          "range": {
-            "fieldType": {
-              "type": "union",
-              "value": [
-                {
-                  "type": "literal",
-                  "value": "7d"
-                },
-                {
-                  "type": "literal",
-                  "value": "30d"
-                },
-                {
-                  "type": "literal",
-                  "value": "90d"
-                },
-                {
-                  "type": "literal",
-                  "value": "all"
-                }
-              ]
-            },
-            "optional": true
-          }
-        }
-      },
-      "functionType": "Query"
-    },
-    "operatorDashboard:getOperatorOverview": {
-      "args": {
-        "type": "object",
-        "value": {
-          "authSubject": {
-            "fieldType": {
-              "type": "string"
-            },
-            "optional": true
-          },
-          "range": {
-            "fieldType": {
-              "type": "union",
-              "value": [
-                {
-                  "type": "literal",
-                  "value": "7d"
-                },
-                {
-                  "type": "literal",
-                  "value": "30d"
-                },
-                {
-                  "type": "literal",
-                  "value": "90d"
-                },
-                {
-                  "type": "literal",
-                  "value": "all"
-                }
-              ]
-            },
-            "optional": true
-          }
-        }
-      },
-      "functionType": "Query"
-    },
-    "operatorDashboard:getOperatorRuntimeToolDiagnostics": {
-      "args": {
-        "type": "object",
-        "value": {
-          "authSubject": {
-            "fieldType": {
-              "type": "string"
-            },
-            "optional": true
-          },
-          "range": {
-            "fieldType": {
-              "type": "union",
-              "value": [
-                {
-                  "type": "literal",
-                  "value": "7d"
-                },
-                {
-                  "type": "literal",
-                  "value": "30d"
-                },
-                {
-                  "type": "literal",
-                  "value": "90d"
-                },
-                {
-                  "type": "literal",
-                  "value": "all"
-                }
-              ]
-            },
-            "optional": true
-          }
-        }
-      },
-      "functionType": "Query"
-    },
-    "operatorDashboard:getOperatorSecurityAuditDiagnostics": {
-      "args": {
-        "type": "object",
-        "value": {
-          "authSubject": {
-            "fieldType": {
-              "type": "string"
-            },
-            "optional": true
-          },
-          "range": {
-            "fieldType": {
-              "type": "union",
-              "value": [
-                {
-                  "type": "literal",
-                  "value": "7d"
-                },
-                {
-                  "type": "literal",
-                  "value": "30d"
-                },
-                {
-                  "type": "literal",
-                  "value": "90d"
-                },
-                {
-                  "type": "literal",
-                  "value": "all"
-                }
-              ]
-            },
-            "optional": true
-          }
-        }
-      },
-      "functionType": "Query"
-    },
-    "operatorDashboard:getOperatorWebDeployDiagnostics": {
-      "args": {
-        "type": "object",
-        "value": {
-          "authSubject": {
-            "fieldType": {
-              "type": "string"
-            },
-            "optional": true
-          },
-          "range": {
-            "fieldType": {
-              "type": "union",
-              "value": [
-                {
-                  "type": "literal",
-                  "value": "7d"
-                },
-                {
-                  "type": "literal",
-                  "value": "30d"
-                },
-                {
-                  "type": "literal",
-                  "value": "90d"
-                },
-                {
-                  "type": "literal",
-                  "value": "all"
-                }
-              ]
-            },
-            "optional": true
-          }
-        }
-      },
-      "functionType": "Query"
-    },
-    "operatorDashboard:listOperatorCommunities": {
-      "args": {
-        "type": "object",
-        "value": {
-          "authSubject": {
-            "fieldType": {
-              "type": "string"
-            },
-            "optional": true
-          },
-          "limit": {
-            "fieldType": {
-              "type": "number"
-            },
-            "optional": true
-          },
-          "query": {
-            "fieldType": {
-              "type": "string"
-            },
-            "optional": true
-          }
-        }
-      },
-      "functionType": "Query"
-    },
-    "operatorDashboard:listOperatorEvents": {
-      "args": {
-        "type": "object",
-        "value": {
-          "authSubject": {
-            "fieldType": {
-              "type": "string"
-            },
-            "optional": true
-          },
-          "eventType": {
-            "fieldType": {
-              "type": "string"
-            },
-            "optional": true
-          },
-          "limit": {
-            "fieldType": {
-              "type": "number"
-            },
-            "optional": true
-          },
-          "severity": {
-            "fieldType": {
-              "type": "union",
-              "value": [
-                {
-                  "type": "literal",
-                  "value": "info"
-                },
-                {
-                  "type": "literal",
-                  "value": "warning"
-                },
-                {
-                  "type": "literal",
-                  "value": "error"
-                }
-              ]
-            },
-            "optional": true
-          }
-        }
-      },
-      "functionType": "Query"
-    },
-    "operatorDashboard:listOperatorRisks": {
-      "args": {
-        "type": "object",
-        "value": {
-          "authSubject": {
-            "fieldType": {
-              "type": "string"
-            },
-            "optional": true
-          },
-          "limit": {
-            "fieldType": {
-              "type": "number"
-            },
-            "optional": true
-          },
-          "severity": {
-            "fieldType": {
-              "type": "union",
-              "value": [
-                {
-                  "type": "literal",
-                  "value": "warning"
-                },
-                {
-                  "type": "literal",
-                  "value": "error"
-                }
-              ]
-            },
-            "optional": true
-          }
-        }
-      },
-      "functionType": "Query"
-    },
-    "operatorSentryDiagnostics:getOperatorFrontendErrorDiagnostics": {
-      "args": {
-        "type": "object",
-        "value": {
-          "authSubject": {
-            "fieldType": {
-              "type": "string"
-            },
-            "optional": true
-          },
-          "currentBuildId": {
-            "fieldType": {
-              "type": "string"
-            },
-            "optional": true
-          },
-          "frontendSentryRelease": {
-            "fieldType": {
-              "type": "string"
-            },
-            "optional": true
-          },
-          "range": {
-            "fieldType": {
-              "type": "union",
-              "value": [
-                {
-                  "type": "literal",
-                  "value": "7d"
-                },
-                {
-                  "type": "literal",
-                  "value": "30d"
-                },
-                {
-                  "type": "literal",
-                  "value": "90d"
-                },
-                {
-                  "type": "literal",
-                  "value": "all"
-                }
-              ]
             },
             "optional": true
           }
