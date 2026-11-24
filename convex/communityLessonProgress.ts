@@ -233,13 +233,138 @@ export const setMyLessonDone = mutation({
   },
 });
 
+// Match shared/communityClassroom.ts (`courseLessons`): missing sortOrder goes last.
+function classroomSortOrder(value: unknown): number {
+  return typeof value === "number" && Number.isFinite(value) ? value : Number.MAX_SAFE_INTEGER;
+}
+
 // A course's lessons as members see them, in the host's order.
 async function memberVisibleLessons(ctx: any, communityId: any, module: any) {
   if (!module || !communityResourceModuleIsLive(module)) return [];
   const live = new Set([normalizeIdValue(module._id)]);
   return (await ctx.db.query("communityResources")
     .withIndex("by_community_module", (q: any) => q.eq("communityId", communityId).eq("moduleId", module._id)).take(LESSONS_PER_COURSE_CAP * 2))
-    .filter((row: any) => communityResourceIsLiveModulePage(row, live)).slice(0, LESSONS_PER_COURSE_CAP);
+    .filter((row: any) => communityResourceIsLiveModulePage(row, live))
+    .sort((a: any, b: any) =>
+      classroomSortOrder(a.sortOrder) - classroomSortOrder(b.sortOrder) ||
+      Number(a.createdAt ?? 0) - Number(b.createdAt ?? 0) ||
+      String(a._id).localeCompare(String(b._id)),
+    )
+    .slice(0, LESSONS_PER_COURSE_CAP);
+}
+
+export type MemberCourseProgressSummary = {
+  course_id: string;
+  title: string;
+  done: number;
+  of: number;
+  finished: boolean;
+  next_lesson: { id: string; title: string } | null;
+  last_done_at: string | null;
+};
+
+// One member's live course progress across this community's published courses.
+// Callers must enforce lens authorization (only the member themselves, or a
+// community owner/admin — never other members, moderators, or public rooms).
+export async function readMemberCourseProgress(
+  ctx: any,
+  communityId: any,
+  userId: any,
+): Promise<MemberCourseProgressSummary[]> {
+  const [modules, doneRows] = await Promise.all([
+    ctx.db.query("communityResourceModules")
+      .withIndex("by_community", (q: any) => q.eq("communityId", communityId))
+      .take(COURSES_CAP * 2),
+    ctx.db.query("communityLessonProgress")
+      .withIndex("by_community_user", (q: any) => q.eq("communityId", communityId).eq("userId", userId))
+      .take(MY_PROGRESS_CAP),
+  ]);
+  const liveModules = modules
+    .filter((module: any) => communityResourceModuleIsLive(module))
+    .sort((a: any, b: any) =>
+      classroomSortOrder(a.sortOrder) - classroomSortOrder(b.sortOrder) ||
+      Number(a.createdAt ?? 0) - Number(b.createdAt ?? 0) ||
+      String(a._id).localeCompare(String(b._id)),
+    )
+    .slice(0, COURSES_CAP);
+  if (!liveModules.length) return [];
+
+  const completedAtByResourceId = new Map<string, number>();
+  for (const row of doneRows) {
+    const id = normalizeIdValue(row.resourceId);
+    const at = Number(row.completedAt ?? 0);
+    if (id && (!completedAtByResourceId.has(id) || at > completedAtByResourceId.get(id)!)) {
+      completedAtByResourceId.set(id, at);
+    }
+  }
+
+  const summaries: MemberCourseProgressSummary[] = [];
+  for (const module of liveModules) {
+    const lessons = await memberVisibleLessons(ctx, communityId, module);
+    if (!lessons.length) continue;
+    let done = 0;
+    let lastDoneMs = -1;
+    let nextLesson: { id: string; title: string } | null = null;
+    for (const lesson of lessons) {
+      const lessonId = normalizeIdValue(lesson._id);
+      const completedAt = completedAtByResourceId.get(lessonId);
+      if (completedAt !== undefined) {
+        done += 1;
+        if (completedAt > lastDoneMs) lastDoneMs = completedAt;
+      } else if (!nextLesson) {
+        nextLesson = { id: lessonId, title: String(lesson.title ?? "").trim() || "Untitled lesson" };
+      }
+    }
+    summaries.push({
+      course_id: normalizeIdValue(module._id),
+      title: String(module.name ?? "").trim() || "Untitled course",
+      done,
+      of: lessons.length,
+      finished: done >= lessons.length,
+      next_lesson: nextLesson,
+      last_done_at: lastDoneMs >= 0 ? new Date(lastDoneMs).toISOString() : null,
+    });
+  }
+  return summaries;
+}
+
+export type CommunityCourseProgressSummaryRow = {
+  module_id: string;
+  title: string;
+  lessons: number;
+  started: number;
+  finished: number;
+};
+
+// Community-wide per-course completion roll-up for owners/admins.
+// Uses the O(students) communityCourseProgress projection when indexed.
+export async function readCommunityCourseProgressSummary(
+  ctx: any,
+  community: any,
+): Promise<CommunityCourseProgressSummaryRow[]> {
+  const modules = (await ctx.db.query("communityResourceModules")
+    .withIndex("by_community", (q: any) => q.eq("communityId", community._id)).take(COURSES_CAP * 2))
+    .filter((module: any) => communityResourceModuleIsLive(module))
+    .sort((a: any, b: any) =>
+      classroomSortOrder(a.sortOrder) - classroomSortOrder(b.sortOrder) ||
+      Number(a.createdAt ?? 0) - Number(b.createdAt ?? 0) ||
+      String(a._id).localeCompare(String(b._id)),
+    )
+    .slice(0, COURSES_CAP);
+  const courses: CommunityCourseProgressSummaryRow[] = [];
+  const state = createMemberKeysContext();
+  for (const module of modules) {
+    const lessons = await memberVisibleLessons(ctx, community._id, module);
+    const rows = await courseProgressRows(ctx, community, module, lessons, state);
+    courses.push({
+      module_id: normalizeIdValue(module._id),
+      title: String(module.name ?? "").trim() || "Untitled course",
+      lessons: lessons.length,
+      started: rows.length,
+      finished: lessons.length ? rows.filter((row) => row.done >= lessons.length).length : 0,
+    });
+  }
+  return courses;
 }
 
 // The key a member's record opens by in Members ("owner", or their current
@@ -468,20 +593,10 @@ export const getCourseProgressSummary = query({
   handler: async (ctx, args) => {
     const userId = await resolveUserIdForAuthenticatedRequest({ ctx, userId: args.userId, authSubject: args.authSubject ?? null });
     const { community } = await requireCommunityManager({ ctx, communityId: args.communityId, userId });
-    const modules = (await ctx.db.query("communityResourceModules")
-      .withIndex("by_community", (q) => q.eq("communityId", args.communityId)).take(COURSES_CAP * 2))
-      .filter((module) => communityResourceModuleIsLive(module)).slice(0, COURSES_CAP);
-    const courses: Array<{ module_id: string; lessons: number; started: number; finished: number }> = [];
-    const state = createMemberKeysContext();
-    for (const module of modules) {
-      const lessons = await memberVisibleLessons(ctx, args.communityId, module);
-      const rows = await courseProgressRows(ctx, community, module, lessons, state);
-      courses.push({
-        module_id: normalizeIdValue(module._id), lessons: lessons.length, started: rows.length,
-        finished: lessons.length ? rows.filter((row) => row.done >= lessons.length).length : 0,
-      });
-    }
-    return { courses };
+    const summary = await readCommunityCourseProgressSummary(ctx, community);
+    return {
+      courses: summary.map(({ module_id, lessons, started, finished }) => ({ module_id, lessons, started, finished })),
+    };
   },
 });
 

@@ -15,6 +15,29 @@ export type CommunityMemberContextFact = {
   updated_at: string;
 };
 
+export type CommunityMemberCourseProgress = {
+  course_id: string;
+  title: string;
+  done: number;
+  of: number;
+  finished: boolean;
+  next_lesson: { id: string; title: string } | null;
+  last_done_at: string | null;
+};
+
+export type CommunityMemberPodSummary = {
+  slug: string;
+  name: string;
+  is_host: boolean;
+  next_call: { title: string; starts_at: string } | null;
+};
+
+export type CommunityMemberUpcomingEvent = {
+  title: string;
+  starts_at: string;
+  timezone: string;
+};
+
 export type CommunityMemberSelfContext = {
   read_at: string;
   user_id: string;
@@ -25,6 +48,9 @@ export type CommunityMemberSelfContext = {
   joined_at: string | null;
   approved_community_context: CommunityMemberContextFact[];
   facts_truncated: boolean;
+  course_progress?: CommunityMemberCourseProgress[];
+  pods?: CommunityMemberPodSummary[];
+  upcoming_events?: CommunityMemberUpcomingEvent[];
 };
 
 export function renderCommunityMemberSelfContext(
@@ -39,6 +65,36 @@ export function renderCommunityMemberSelfContext(
     approved_community_context: context.approved_community_context
       .slice(0, 12)
       .map((fact) => ({ ...fact, body: bounded(fact.body, 400) })),
+    ...(context.course_progress !== undefined
+      ? {
+          course_progress: context.course_progress.slice(0, 20).map((course) => ({
+            ...course,
+            title: bounded(course.title, 140) ?? "",
+            next_lesson: course.next_lesson
+              ? { id: course.next_lesson.id, title: bounded(course.next_lesson.title, 140) ?? "" }
+              : null,
+          })),
+        }
+      : {}),
+    ...(context.pods !== undefined
+      ? {
+          pods: context.pods.slice(0, 16).map((pod) => ({
+            ...pod,
+            name: bounded(pod.name, 120) ?? "",
+            next_call: pod.next_call
+              ? { title: bounded(pod.next_call.title, 140) ?? "", starts_at: pod.next_call.starts_at }
+              : null,
+          })),
+        }
+      : {}),
+    ...(context.upcoming_events !== undefined
+      ? {
+          upcoming_events: context.upcoming_events.slice(0, 5).map((event) => ({
+            ...event,
+            title: bounded(event.title, 140) ?? "",
+          })),
+        }
+      : {}),
   };
   const preamble = [
     "# My context in this community",
@@ -52,8 +108,17 @@ export function renderCommunityMemberSelfContext(
   let body = render();
   while (body.length > 24_000) {
     data.projection_truncated = true;
-    if (!data.approved_community_context.length) throw new Error("member_self_context_exceeds_document_bound");
-    data.approved_community_context.pop();
+    if (data.approved_community_context.length) {
+      data.approved_community_context.pop();
+    } else if (data.upcoming_events?.length) {
+      data.upcoming_events.pop();
+    } else if (data.pods?.length) {
+      data.pods.pop();
+    } else if (data.course_progress?.length) {
+      data.course_progress.pop();
+    } else {
+      throw new Error("member_self_context_exceeds_document_bound");
+    }
     body = render();
   }
   return { body, truncated: data.projection_truncated };

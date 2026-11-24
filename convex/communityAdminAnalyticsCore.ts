@@ -336,6 +336,7 @@ export function communityAnalyticsDocument(args: {
   communityCreatedAt: number;
   last30Days: CommunityAnalyticsSnapshot;
   last7Days: CommunityAnalyticsSnapshot;
+  courses?: Array<{ module_id: string; title: string; lessons: number; started: number; finished: number }>;
 }) {
   const current = args.last30Days.summary;
   const money = (value: number | null) => formatMoneyBaseUnits(value, current.currency, current.currency_decimals);
@@ -370,6 +371,17 @@ export function communityAnalyticsDocument(args: {
     })),
     last_30_days: window(args.last30Days),
     last_7_days: window(args.last7Days),
+    ...(args.courses
+      ? {
+          courses: args.courses.map((course) => ({
+            id: course.module_id,
+            title: course.title,
+            lessons: course.lessons,
+            started: course.started,
+            finished: course.finished,
+          })),
+        }
+      : {}),
   };
 }
 

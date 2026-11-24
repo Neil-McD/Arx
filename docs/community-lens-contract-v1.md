@@ -93,8 +93,8 @@ of the slices that follow.
 - Pods (proposed): see `specs/pods-v0.md` (a paid, higher-touch group that replaces private channels).
 
 ### 4. Learning
-- Member: R courses and lessons. A: mark a lesson done (private to them).
-- Admin: W courses, lessons and their order.
+- Member: R courses and lessons, plus their own live progress (in `members/me/context.md` and their own `members/<handle>.json`). A: mark a lesson done (private to them and hosts; never visible to other members, moderators, or the public community agent).
+- Admin: W courses, lessons and their order. R community-wide course completion pulse (`builder/analytics.json`) and each current member's course progress (`members/<handle>.json`, `builder/resources/<courseId>.json`).
 - MCP now: member reads and lesson progress; builders stage course changes
   for approval. Planned: direct course writes; a course for a tag.
 
