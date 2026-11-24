@@ -24,6 +24,7 @@ import { VoiceInputButton } from "../../../../shared/VoiceInputButton";
 import { Icon, KitApp, Rail, cx } from "../v1/kit";
 import { inboxTimeFor } from "./WebDirectMessageInboxPanel";
 import { fitComposerHeight } from "../../../../shared/composerHeight";
+import { ChannelFeedSkeleton } from "./WebLoadingSkeleton";
 
 type DirectMessageComposerAttachment = DirectMessageAttachment & {
   data_url?: string | null;
@@ -795,7 +796,7 @@ export function WebDirectMessagePanel(props: WebDirectMessagePanelProps) {
               if (isNearBottom && lastMessageSeq > 0) void props.onReadThroughSeq?.(lastMessageSeq);
             }}>
               {props.isLoading ? (
-                <span className={cx("sub")}>Loading messages…</span>
+                <ChannelFeedSkeleton rows={3} />
               ) : props.messages.length === 0 ? (
                 <span className={cx("sub")}>Say hello to {peerLabel}.</span>
               ) : (
@@ -993,7 +994,7 @@ export function WebDirectMessagePanel(props: WebDirectMessagePanelProps) {
         }}
       >
         {props.isLoading ? (
-          <div className="community-dm-panel-empty">Loading messages...</div>
+          <ChannelFeedSkeleton rows={3} />
         ) : props.messages.length === 0 ? (
           <div className="community-dm-panel-empty">
             <MessageCircle aria-hidden="true" />

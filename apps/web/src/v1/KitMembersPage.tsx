@@ -28,6 +28,7 @@ import type { CommunityAdmissionControl } from "../components/CommunityAutoJoinC
 import { matchesMemberSearch, memberKey, membersCsv, toggleAllShown } from "../../../../shared/communityMembersTable";
 import { Btn, cx, Icon, KitApp, Rail, Sep, Sec, Top, View } from "./kit";
 import { Face, WhoCanJoinLine, JoinRequestsDrawer, JoinRequestsLine, MembersBulkBar, MembersTable, MembersToolbar, type MembersFilter, type MembersSortKey } from "./KitMembersTable";
+import { TableRowsSkeleton } from "../components/WebLoadingSkeleton";
 
 type MembersView = "everyone" | `price:${string}` | "on_hold" | "cancelling" | "know_little" | "past";
 
@@ -275,13 +276,15 @@ export function KitMembersPage(props: {
             <JoinRequestsLine count={waiting} open={side === "requests"} onOpen={() => setSide(side === "requests" ? null : "requests")} />
             <MembersToolbar search={search} onSearch={setSearch} filters={filters} filter={view} onFilter={(id) => setView(id as MembersView)}
               onExport={() => void exportCsv()} exporting={exporting} canExport={Boolean(summary)} />
-            {loaded && view !== "past" ? (
+            {(!loaded && loading) || (loaded && view !== "past" && loading && rows.length === 0) ? (
+              <TableRowsSkeleton />
+            ) : loaded && view !== "past" ? (
               <MembersTable rows={rows} avatarOf={(row) => (row as CloudMemberRecordRow).avatar_url} now={now} timeFor={memberTimeFor} dayFor={shortDay}
                 sort={sort} onSort={(key) => setSort((current) => ({ key, desc: current?.key === key ? !current.desc : key === "active" || key === "joined" }))}
                 selected={selected} onToggle={(key) => setSelected((last) => { const next = new Set(last); if (next.has(key)) next.delete(key); else next.add(key); return next; })}
                 onToggleAll={() => setSelected((last) => toggleAllShown(last, rows.map(keyOf)))}
                 openKey={side === "record" ? openKey : null} onOpen={openRecord}
-                empty={loading ? "Loading…" : search.trim() ? `No one matches "${search.trim()}".` : "No one here."}
+                empty={search.trim() ? `No one matches "${search.trim()}".` : "No one here."}
                 getAvatarColor={props.getAvatarColor} getInitials={props.getInitials} />
             ) : null}
             {loaded && view === "past" ? (
@@ -303,7 +306,7 @@ export function KitMembersPage(props: {
               <MembersBulkBar count={chosen.length} onExport={() => download(membersCsv(chosen), "selected")} onClear={() => setSelected(new Set())} />
             ) : null}
             <div ref={sentinelRef} aria-hidden="true" style={{ height: 1 }} />
-            {loading ? <p className={cx("none")} style={{ marginTop: 14, fontSize: 13 }}>Loading more…</p> : null}
+            {loading && rows.length > 0 ? <p className={cx("none")} style={{ marginTop: 14, fontSize: 13 }}>Loading more…</p> : null}
             {summary?.capped ? <p className={cx("none")} style={{ marginTop: 14, fontSize: 13 }}>Counts cover the first 5,000 people.</p> : null}
           </div>
         </View>

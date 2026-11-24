@@ -5,6 +5,14 @@ import type { CommunityAdmissionControl } from "./CommunityAutoJoinControl";
 import type { WebCommunitySecondaryPanelsProps } from "./WebCommunitySecondaryPanels";
 import { SurfaceErrorBoundary } from "./SurfaceErrorBoundary";
 import { resilientImport, scheduleIdlePrefetch } from "../lib/resilientLazy";
+import {
+  CourseCatalogSkeleton,
+  EventListSkeleton,
+  FormGroupsSkeleton,
+  PanelBlockSkeleton,
+  PodGridSkeleton,
+  TableRowsSkeleton,
+} from "./WebLoadingSkeleton";
 
 const loadSecondaryPanels = () => import("./WebCommunitySecondaryPanels");
 const loadMembersPage = () => import("./WebCommunityMembersPage");
@@ -57,11 +65,19 @@ export function WebCommunityHost(props: WebCommunityHostProps) {
           // loads underneath it.
           null
         ) : communityTab === "members" ? (
-          <Suspense fallback={null}>
+          <Suspense fallback={<div className="web-skeleton-route-fallback"><TableRowsSkeleton label="Loading members…" /></div>}>
             <WebCommunityMembersPage chatPanelProps={chatPanelProps} admission={props.admission} />
           </Suspense>
         ) : (
-          <Suspense fallback={null}>
+          <Suspense fallback={
+            <div className="web-skeleton-route-fallback">
+              {communityTab === "events" ? <EventListSkeleton />
+                : communityTab === "pods" ? <PodGridSkeleton />
+                : communityTab === "resources" ? <CourseCatalogSkeleton />
+                : communityTab === "settings" ? <FormGroupsSkeleton />
+                : <PanelBlockSkeleton label={null} />}
+            </div>
+          }>
             <WebCommunitySecondaryPanels {...secondaryPanelsProps} />
           </Suspense>
         )}
