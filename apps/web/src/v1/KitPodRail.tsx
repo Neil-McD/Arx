@@ -4,7 +4,7 @@
 // is in, for the people who manage it). What the pod is for and the viewer's own
 // membership (paying, leaving, a payment problem, Leave pod) open from two
 // links at the foot.
-import { Fragment, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
+import { Fragment, lazy, Suspense, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
 import { CommunityChannelSessionContext } from "../components/CommunityChannelSessionContext";
 import {
   decideCloudPodRequest,
@@ -26,13 +26,10 @@ import { KitPodCall } from "./KitPodCall";
 import { KitPodKnowledge } from "./KitPodKnowledge";
 import { PanelAction, PanelLine, PanelPart, PanelPeople, usePanelSettled } from "./KitPanel";
 import { askForPodPagePreview, forgetPod, goToPodsPath, rememberPod } from "./podMemory";
-import { readBannerFileAsWideDataUrlWithinLimit } from "../../../../shared/imageTransforms";
-import { prepareCloudCommunityBrandingField } from "../../../../shared/cloudCommunityAdminGateway";
+// Only the pod's hosts and the builder open its settings: loaded on demand.
+const KitPodSettings = lazy(() => import("./KitPodSettings").then((module) => ({ default: module.KitPodSettings })));
+import { podSettingsTabsFor, usePodSettingsTab } from "./podSettingsTabs";
 
-// cover: keep the one it has, take it away, or a new image read from a file.
-type CoverDraft = { kind: "keep" } | { kind: "remove" } | { kind: "new"; dataUrl: string };
-type Draft = { purpose: string; whatYouGet: string; about: string; cover: CoverDraft; listed: boolean; seats: string; price: string };
-const POD_COVER_CHAR_LIMIT = 1_200_000;
 
 function memberTag(payment: NonNullable<CloudPodDetail["members"][number]["payment"]>): string {
   if (payment.state === "paying") return "Paying";
@@ -55,16 +52,15 @@ export function KitPodRail(props: { session: unknown; communityId: string; pod: 
     : props.pod;
   const [busy, setBusy] = useState<string | null>(null);
   const [actionError, setActionError] = useState<{ scope: "requests" | "people"; message: string } | null>(null);
-  const [editing, setEditing] = useState<Draft | null>(null);
-  const [editError, setEditError] = useState<string | null>(null);
   const [confirmLeave, setConfirmLeave] = useState(false);
   const [leaveError, setLeaveError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
-  // The people part, opened to how each person is in.
-  const [managing, setManaging] = useState(false);
+  // The pod's settings window: open on a tab from the address (?settings=).
+  const settings = usePodSettingsTab();
+  const settingsTabs = podSettingsTabsFor(pod);
   useEffect(() => {
-    if (asMember) { setEditing(null); setManaging(false); setActionError(null); }
-  }, [asMember]);
+    if (asMember) { setActionError(null); if (settings.tab) settings.close(); }
+  }, [asMember]); // eslint-disable-line react-hooks/exhaustive-deps
   // Your membership (paying, leaving, payment problem) starts open when a
   // payment needs attention, and toggles from the foot for enrolled members.
   const [membershipOpen, setMembershipOpen] = useState(() => pod.my_membership?.state === "payment_problem");
@@ -78,36 +74,6 @@ export function KitPodRail(props: { session: unknown; communityId: string; pod: 
         scope,
         message: scope === "requests" ? "Couldn't update that request. Try again." : "Couldn't update host status. Try again.",
       });
-    } finally { setBusy(null); }
-  };
-
-  const save = async () => {
-    if (!editing || busy) return;
-    setBusy("edit");
-    setEditError(null);
-    try {
-      // A new cover goes up first; the pod then points at it.
-      const cover = editing.cover.kind === "new"
-        ? (await prepareCloudCommunityBrandingField({ session: props.session, kind: "banner", nextValue: editing.cover.dataUrl })).storageId ?? null
-        : editing.cover.kind === "remove" ? null : undefined;
-      await saveCloudPodDetails({
-        session: props.session, communityId: props.communityId, channelId: pod.channel_id,
-        purpose: editing.purpose, visibility: editing.listed ? "listed" : "hidden", seats: Number(editing.seats) || 0,
-        whatYouGet: editing.whatYouGet.split("\n"), about: editing.about,
-        ...(cover !== undefined ? { bannerStorageId: cover } : {}),
-      });
-      const cents = (Number(editing.price) || 0) * 100;
-      if (cents !== (pod.price?.amount_base_units ?? 0)) {
-        await saveCloudPodPrice({ session: props.session, communityId: props.communityId, channelId: pod.channel_id, amountBaseUnits: cents });
-      }
-      setEditing(null);
-      props.onChanged();
-    } catch (error) {
-      const code = String((error as Error)?.message ?? "");
-      setEditError(code.includes("community_checkout_unavailable")
-        ? "To charge for a pod, connect Stripe in Manage first."
-        : code.includes("community_pod_price_invalid") ? "Use a price from $1 to $10,000 a month."
-          : code.includes("community_pod_cover_invalid") ? "That image couldn't be used. Try another." : "Couldn't save. Try again.");
     } finally { setBusy(null); }
   };
 
@@ -162,108 +128,34 @@ export function KitPodRail(props: { session: unknown; communityId: string; pod: 
     ) : null],
     ["knowledge", <KitPodKnowledge session={props.session} communityId={props.communityId} channelId={pod.channel_id} asMember={asMember} />],
     ["people", (
-      // Everyone sees who is in it. Those who manage it open how each person
-      // is in (paying, leaving, a payment problem) and, to edit, the host switch.
+      // Everyone sees who is in it. Those who manage it open the pod's
+      // settings on People: how each person is in, hosts, adding and removing.
       <PanelPart label="In this pod" fact={String(pod.members.length)}
-        action={pod.can_manage && pod.members.length ? <PanelAction expanded={managing} onClick={() => { setActionError(null); setManaging(!managing); }}>{managing ? "Done" : "Manage"}</PanelAction> : null}>
-        {!pod.members.length ? <PanelLine dim>No one yet</PanelLine> : managing ? pod.members.map((member) => (
-          <div key={member.user_id} className={cx("ln")}>
-            <span className={cx("av s")} title={member.name}>
-              <UserAvatar
-                className="community-dm-kit-avatar"
-                readyClassName="has-image"
-                name={member.name}
-                imageUrl={member.avatar_url ?? null}
-                alt=""
-                fallback={<span>{member.name.trim().charAt(0).toUpperCase() || "?"}</span>}
-              />
-            </span>
-            <span className={cx("t")}>{member.name}{member.is_host ? " · host" : ""}</span>
-            {member.payment ? <em>{memberTag(member.payment)}</em> : null}
-            {pod.can_edit ? (
-              <PanelAction disabled={Boolean(busy)} onClick={() => void act(`host:${member.user_id}`, "people", () => setCloudPodHost({ session: props.session, communityId: props.communityId, channelId: pod.channel_id, userId: member.user_id, host: !member.is_host }))}>
-                {member.is_host ? "Not host" : "Make host"}
-              </PanelAction>
-            ) : null}
-          </div>
-        )) : <PanelPeople people={people} max={5} />}
-        {actionError?.scope === "people" ? <p className={cx("bad")} role="alert">{actionError.message}</p> : null}
+        action={settingsTabs.includes("people") ? <PanelAction onClick={() => settings.open("people")}>Manage</PanelAction> : null}>
+        {pod.members.length ? <PanelPeople people={people} max={5} /> : <PanelLine dim>No one yet</PanelLine>}
       </PanelPart>
     )],
     ["about", (
       <Sec label="About this pod">
-        {editing ? (
-          <div className={cx("podform")} style={{ marginTop: 0 }}>
-            <textarea value={editing.purpose} onChange={(event) => setEditing({ ...editing, purpose: event.target.value })} placeholder="What is this pod for? One sentence." aria-label="What the pod is for" rows={3} maxLength={280} autoFocus />
-            <textarea value={editing.whatYouGet} onChange={(event) => setEditing({ ...editing, whatYouGet: event.target.value })} placeholder={"What you get, one per line\nWeekly call with the host\nFeedback on your work"} aria-label="What you get, one per line" rows={4} />
-            <textarea value={editing.about} onChange={(event) => setEditing({ ...editing, about: event.target.value })}
-              placeholder={"About: a few short paragraphs for members deciding whether to join.\nWho it's for, what happens inside, what they'll leave with."}
-              aria-label="About this pod, for members deciding whether to join" rows={6} maxLength={1500} />
-            <div className={cx("podform-cover")}>
-              {editing.cover.kind === "new" ? <img src={editing.cover.dataUrl} alt="" /> : editing.cover.kind === "keep" && pod.cover?.url ? <img src={pod.cover.url} alt="" /> : null}
-              <label className={cx("btn small")}>
-                {(editing.cover.kind === "keep" && pod.cover) || editing.cover.kind === "new" ? "Change cover" : "Add a cover"}
-                <input type="file" accept="image/*" hidden onChange={(event) => {
-                  const file = event.target.files?.[0];
-                  event.target.value = "";
-                  if (!file) return;
-                  if (!file.type.toLowerCase().startsWith("image/")) { setEditError("A cover is an image file."); return; }
-                  void readBannerFileAsWideDataUrlWithinLimit(file, POD_COVER_CHAR_LIMIT)
-                    .then((dataUrl) => setEditing((current) => current ? { ...current, cover: { kind: "new", dataUrl } } : current))
-                    .catch(() => setEditError("That image couldn't be used. Try another."));
-                }} />
-              </label>
-              {(editing.cover.kind === "keep" && pod.cover) || editing.cover.kind === "new"
-                ? <Btn txt small onClick={() => setEditing({ ...editing, cover: { kind: "remove" } })}>Remove cover</Btn> : null}
-            </div>
-            <label className={cx("podform-check")}>
-              <input type="checkbox" checked={editing.listed} onChange={(event) => setEditing({ ...editing, listed: event.target.checked })} />
-              Listed: members can see it and join or ask to
-            </label>
-            <label className={cx("podform-seats")}>
-              Seats
-              <input value={editing.seats} onChange={(event) => setEditing({ ...editing, seats: event.target.value.replace(/[^0-9]/g, "") })} placeholder="No limit" aria-label="Seats" inputMode="numeric" />
-            </label>
-            <label className={cx("podform-seats")}>
-              Price $
-              <input value={editing.price} onChange={(event) => setEditing({ ...editing, price: event.target.value.replace(/[^0-9]/g, "") })} placeholder="Free" aria-label="Monthly price in dollars" inputMode="numeric" />
-              <span>/month, on top of membership</span>
-            </label>
-            {editError ? <p className={cx("bad")} role="alert">{editError}</p> : null}
-            <div className={cx("acts")}>
-              <Btn go small disabled={Boolean(busy)} onClick={() => void save()}>{busy === "edit" ? "Saving…" : "Save"}</Btn>
-              <Btn txt small onClick={() => { setEditing(null); setEditError(null); }}>Cancel</Btn>
-            </div>
+        <p className={cx("sub")}>{pod.purpose || (pod.can_manage ? "Add what this pod is for." : "A small group with closer time with its hosts.")}</p>
+        {pod.what_you_get.length ? (
+          <ul className={cx("podget")}>{pod.what_you_get.map((line) => <li key={line}>{line}</li>)}</ul>
+        ) : null}
+        <span className={cx("sub2")}>
+          {[pod.visibility === "listed" ? (pod.price ? "Listed: members can join" : "Listed: members can ask to join") : "Hidden: only its members know it's here",
+            pod.price ? `${formatPodPrice(pod.price)} on top of membership` : null,
+            pod.seats ? `${pod.members.length} of ${pod.seats} seats` : `${pod.members.length} ${pod.members.length === 1 ? "member" : "members"}`].filter(Boolean).join(" · ")}
+        </span>
+        {settingsTabs.length || (pod.can_manage && pod.visibility === "listed") ? (
+          <div className={cx("acts")} style={{ marginTop: 10 }}>
+            {settingsTabs.length ? <Btn small onClick={() => settings.open("pitch")}>Pod settings</Btn> : null}
+            {pod.visibility === "listed" && pod.slug ? (
+              <Btn small onClick={() => {
+                void navigator.clipboard?.writeText(podLink(pod.slug)).then(() => { setCopied(true); window.setTimeout(() => setCopied(false), 1500); }, () => undefined);
+              }}>{copied ? "Copied" : "Copy link"}</Btn>
+            ) : null}
           </div>
-        ) : (
-          <>
-            <p className={cx("sub")}>{pod.purpose || (pod.can_edit ? "Add what this pod is for." : "A small group with closer time with its hosts.")}</p>
-            {pod.what_you_get.length ? (
-              <ul className={cx("podget")}>{pod.what_you_get.map((line) => <li key={line}>{line}</li>)}</ul>
-            ) : null}
-            <span className={cx("sub2")}>
-              {[pod.visibility === "listed" ? (pod.price ? "Listed: members can join" : "Listed: members can ask to join") : "Hidden: only its members know it's here",
-                pod.price ? `${formatPodPrice(pod.price)} on top of membership` : null,
-                pod.seats ? `${pod.members.length} of ${pod.seats} seats` : `${pod.members.length} ${pod.members.length === 1 ? "member" : "members"}`].filter(Boolean).join(" · ")}
-            </span>
-            {pod.can_edit || (pod.can_manage && pod.visibility === "listed") ? (
-              <div className={cx("acts")} style={{ marginTop: 10 }}>
-                {pod.can_edit ? (
-                  <Btn small onClick={() => setEditing({
-                    purpose: pod.purpose, whatYouGet: pod.what_you_get.join("\n"), about: pod.about_md ?? "", cover: { kind: "keep" }, listed: pod.visibility === "listed",
-                    seats: pod.seats ? String(pod.seats) : "", price: pod.price ? String(Math.round(pod.price.amount_base_units / 100)) : "",
-                  })}>Edit</Btn>
-                ) : null}
-                {pod.visibility === "listed" && pod.slug ? (
-                  <Btn small onClick={() => {
-                    void navigator.clipboard?.writeText(podLink(pod.slug)).then(() => { setCopied(true); window.setTimeout(() => setCopied(false), 1500); }, () => undefined);
-                  }}>{copied ? "Copied" : "Copy link"}</Btn>
-                ) : null}
-                {pod.slug ? <Btn small onClick={() => { askForPodPagePreview(pod.slug); goToPodsPath(pod.slug); }}>See it as members do</Btn> : null}
-              </div>
-            ) : null}
-          </>
-        )}
+        ) : null}
       </Sec>
     )],
     ["membership", membershipOpen && mine ? (
@@ -296,6 +188,12 @@ export function KitPodRail(props: { session: unknown; communityId: string; pod: 
 
   return (
     <KitApp view="wins" part="rail">
+      {settings.tab && settingsTabs.length ? (
+        <Suspense fallback={null}>
+          <KitPodSettings session={props.session} communityId={props.communityId} pod={pod} tab={settings.tab}
+            onTab={(tab) => settings.open(tab)} onClose={settings.close} onChanged={props.onChanged} />
+        </Suspense>
+      ) : null}
       <Rail index={1} label="About this pod">
         {settled ? parts.map(([key, part]) => <Fragment key={key}>{part}</Fragment>) : null}
         {mine ? (

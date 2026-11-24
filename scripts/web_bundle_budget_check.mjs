@@ -15,9 +15,9 @@ const limits = {
 
 // Chunks only hosts load, on demand (the lesson editor, the host's Members
 // table, "Your guide suggests" on a host's Home, and owner member-coach
-// settings). Members never fetch them, so they have their own budget and the
+// settings, a pod's settings window). Members never fetch them, so they have their own budget and the
 // total stays what a member can download. (From Rashid's PR #290.)
-const HOST_ONLY_CHUNK = /^(LessonEditor|KitMembersPage|KitGuideSuggests|WebCommunityAnalyticsSection|CommunityFounderBriefSection|CommunityMemberCoachSettingsSection|communityMemberCoachTypes)-/;
+const HOST_ONLY_CHUNK = /^(LessonEditor|KitMembersPage|KitGuideSuggests|WebCommunityAnalyticsSection|CommunityFounderBriefSection|CommunityMemberCoachSettingsSection|communityMemberCoachTypes|KitPodSettings)-/;
 // The design lab: loaded on demand at /design-lab on staging only, never by a
 // member or a host, so it counts toward neither budget; it is listed so it
 // can't grow unseen.

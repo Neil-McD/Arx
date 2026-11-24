@@ -96,12 +96,14 @@ export type CloudPodDetail = {
   hosts: string[];
   host_people?: CloudPodPerson[];
   // payment: how each member is in, for the people who manage the pod only.
-  members: Array<{ user_id: string; name: string; avatar_url?: string | null; is_host: boolean; payment?: { state: CloudPodPaymentState | "added"; until: string | null } }>;
+  members: Array<{ user_id: string; name: string; avatar_url?: string | null; is_host: boolean; from_plan?: boolean; public_id?: string; payment?: { state: CloudPodPaymentState | "added"; until: string | null } }>;
   // The viewer's own place in it, when they are in it.
   my_membership: { state: CloudPodPaymentState | "added"; until: string | null; amount_base_units: number; currency: string } | null;
   can_manage: boolean;
   can_edit: boolean;
   requests: Array<{ user_id: string; name: string; status: "pending" | "waitlist"; created_at: string }>;
+  // The plans that include this pod (the builder's view; empty for hosts).
+  included_with?: CloudPlanOffer[];
 };
 
 async function client(session: unknown) {
@@ -213,4 +215,19 @@ export async function deleteCloudPodNote(params: PodNotesCall & { slug: string }
 export async function publishCloudPodNote(params: PodNotesCall & { slug: string }): Promise<void> {
   const { client: convex, authSubject } = await client(params.session);
   await convex.mutation("communityPodNotes:publishPodNote" as any, { authSubject, communityId: params.communityId, channelId: params.channelId, slug: params.slug });
+}
+
+// A host or the builder adds a community member to the pod directly.
+export async function addCloudPodMember(params: { session: unknown; communityId: string; channelId: string; userId: string }): Promise<void> {
+  const { client: convex, authSubject } = await client(params.session);
+  await convex.mutation("communityPods:addPodMember" as any, { authSubject, communityId: params.communityId, channelId: params.channelId, userId: params.userId });
+}
+
+// The builder takes someone off the pod (their pod billing stops). A seat their
+// plan gives can't be taken away: community_pod_seat_from_plan.
+export async function removeCloudPodMember(params: { session: unknown; communityId: string; channelId: string; userId: string }): Promise<void> {
+  const { client: convex, authSubject } = await client(params.session);
+  await convex.mutation("communityChannelParticipants:setParticipant" as any, {
+    authSubject, communityId: params.communityId, channelId: params.channelId, target: { kind: "member", userId: params.userId }, active: false,
+  });
 }

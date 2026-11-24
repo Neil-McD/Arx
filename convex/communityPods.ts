@@ -8,8 +8,8 @@ import { mutation, query } from "./_generated/server";
 import { resolveUserIdForAuthenticatedRequest } from "./authActor";
 import { getCommunityChannelCapabilities, resolveCommunityChannelActor } from "./communityChannelAccess";
 import { listAuthorizedCommunityChannelPage } from "./communityChannelCore";
-import { setChannelParticipantCore } from "./communityChannelParticipants";
-import { assertUnclaimedPublicImageStorageId, normalizeIdValue, requireCommunityChatAccess, requireCommunityManager } from "./communityCore";
+import { seatReasons, setChannelParticipantCore } from "./communityChannelParticipants";
+import { assertUnclaimedPublicImageStorageId, normalizeIdValue, requireCommunityChatAccess, requireCommunityManager, resolvePublicUserId } from "./communityCore";
 import { displayName } from "./communityFounderBrief";
 import { resolveUserProfileDisplayProjection } from "./userProfileProjection";
 import { notesByUpdated, podScopeKey } from "./communityNotesStore";
@@ -310,6 +310,10 @@ export const getPod = query({
             name: person.name,
             avatar_url: person.avatar_url,
             is_host: isHost(record, memberId),
+            // A seat their plan gives follows the plan: it can't be taken away here.
+            // public_id: how the member directory names them, so "Add someone"
+            // can leave out who is already in.
+            ...(canManage ? { from_plan: seatReasons(grant).includes("plan"), public_id: (await resolvePublicUserId(ctx, memberId)) ?? memberId } : {}),
             ...(canManage ? { payment: payment ? { state: payment.state, until: payment.until } : { state: "added" as const, until: null } } : {}),
           };
         }),
@@ -352,6 +356,8 @@ export const getPod = query({
       can_manage: canManage,
       can_edit: actor.isManager,
       requests,
+      // The plans that include this pod, for its settings (the builder's view).
+      included_with: actor.isManager ? await plansIncludingPod(ctx, args.communityId, args.channelId) : [],
     };
   },
 });
@@ -374,9 +380,11 @@ export const savePodDetails = mutation({
     bannerFocusY: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
-    const userId = await resolveUserIdForAuthenticatedRequest({ ctx, authSubject: args.authSubject ?? null });
-    await requireCommunityManager({ ctx, communityId: args.communityId, userId });
-    await activePodRoom(ctx, args.communityId, args.channelId);
+    // The pitch (purpose, what you get, About, cover) is the pod's hosts' as
+    // well as the builder's. Who can get in (listed or hidden, seats) is the
+    // builder's: it touches the community's money and who sees what.
+    const { actor } = await requirePodManager(ctx, args.authSubject, args.communityId, args.channelId);
+    if ((args.visibility !== undefined || args.seats !== undefined) && !actor.isManager) throw new Error("community_manager_required");
     const patch: Record<string, unknown> = {};
     if (args.about !== undefined) patch.aboutMd = cleanPodAbout(args.about) || undefined;
     if (args.bannerFocusX !== undefined) patch.bannerFocusX = focusOf(args.bannerFocusX);
@@ -413,6 +421,33 @@ export const setPodHost = mutation({
     const hostUserIds = args.host ? [...current, args.userId] : current;
     if (existing) await ctx.db.patch(existing._id, { hostUserIds, updatedAt: nowMs });
     else await ctx.db.insert("communityPods", { communityId: args.communityId, channelId: args.channelId, purpose: "", visibility: "listed", hostUserIds, createdAt: nowMs, updatedAt: nowMs });
+    return null;
+  },
+});
+
+// A host or the builder adds a member of the community to the pod directly
+// (no request, no payment: "added by a host"). Taking someone off a pod stays
+// the builder's (communityChannelParticipants.setParticipant).
+export const addPodMember = mutation({
+  // userId: the person as the member directory names them (their public id),
+  // or their user id.
+  args: { authSubject: v.optional(v.string()), communityId: v.id("communities"), channelId: v.id("communityChannels"), userId: v.string() },
+  handler: async (ctx, args) => {
+    const { userId: adderId } = await requirePodManager(ctx, args.authSubject, args.communityId, args.channelId);
+    const asId = ctx.db.normalizeId("users", args.userId);
+    const person: any = asId ? await ctx.db.get(asId)
+      : await ctx.db.query("users").withIndex("by_authSubject", (q: any) => q.eq("authSubject", args.userId.trim())).first();
+    if (!person) throw new Error("community_member_not_found");
+    const userId = person._id;
+    // Only someone in the community can be added.
+    await requireCommunityChatAccess({ ctx, communityId: args.communityId, userId });
+    await setChannelParticipantCore(ctx, { communityId: args.communityId, channelId: args.channelId, createdByUserId: adderId, active: true, target: { kind: "member", userId } });
+    // A request they had is answered by this.
+    const request = await ctx.db.query("communityPodRequests")
+      .withIndex("by_channel_user", (q: any) => q.eq("channelId", args.channelId).eq("userId", userId)).first();
+    if (request && (request.status === "pending" || request.status === "waitlist")) {
+      await ctx.db.patch(request._id, { status: "approved", decidedByUserId: adderId, updatedAt: Date.now() });
+    }
     return null;
   },
 });
