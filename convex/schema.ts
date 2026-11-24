@@ -925,6 +925,7 @@ export default defineSchema({
     bannerStorageId: v.optional(v.id("_storage")),
     bannerFocusX: v.optional(v.number()),
     bannerFocusY: v.optional(v.number()),
+    bannerZoom: v.optional(v.number()),
     // Paid pods (slice 2b): the monthly price charged on top of membership.
     // Missing means not paid. The Stripe product and price on the builder's
     // account are made on first checkout; a new amount clears the price, so

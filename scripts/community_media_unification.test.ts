@@ -13,6 +13,8 @@ const { WebMobileBottomRail } = await import("../apps/web/src/components/WebMobi
 const { WebAccountMenu } = await import("../apps/web/src/components/WebAccountMenu");
 const { MentionAutocompleteMenu } = await import("../apps/web/src/components/communityMentionAutocomplete");
 const { PanelPeople } = await import("../apps/web/src/v1/KitPanel");
+const { CourseCover } = await import("../apps/web/src/v1/KitClassroom");
+const { KitCourseInline } = await import("../apps/web/src/v1/KitCourseEdit");
 import { computeCoverFrameLayout, measureFramedMediaViewport } from "../shared/coverFrameUi";
 import type { DiscoverCommunitySnapshot } from "../shared/communityTypes";
 import type { WebCommunityShellProps } from "../apps/web/src/components/webShellChromeShared";
@@ -276,5 +278,46 @@ describe("canonical community logos, banners, and user avatars", () => {
       }),
     );
     expect(html).toContain("stable-framed-media community-dm-kit-avatar");
+  });
+
+  it("renders CourseCover and KitCourseInline through StableFramedMedia instead of CSS background-image", () => {
+    const course = {
+      id: "mod_1",
+      community_id: "comm_sunrise",
+      name: "Foundations",
+      description_md: "Start here.",
+      banner_url: "https://cdn.example.com/course-cover.png",
+      banner_focus_x: 0.3,
+      banner_focus_y: 0.7,
+      banner_zoom: 1.6,
+      sort_order: 0,
+      module_status: "published" as const,
+      created_at: "2026-01-01T00:00:00.000Z",
+      updated_at: "2026-01-01T00:00:00.000Z",
+    };
+
+    const coverHtml = renderToStaticMarkup(
+      React.createElement(CourseCover, { course }),
+    );
+    expect(coverHtml).toContain("stable-framed-media");
+    expect(coverHtml).not.toContain("background-image");
+    expect(coverHtml).not.toContain('src="https://cdn.example.com/course-cover.png"');
+
+    const emptyCoverHtml = renderToStaticMarkup(
+      React.createElement(CourseCover, { course: { ...course, banner_url: null } }),
+    );
+    expect(emptyCoverHtml).not.toContain("stable-framed-media");
+    expect(emptyCoverHtml).toContain("<svg");
+
+    const inlineHtml = renderToStaticMarkup(
+      React.createElement(KitCourseInline, {
+        course,
+        coverClassName: "kcover klist-cover",
+        stats: "2 of 4 done",
+        onSave: async () => ({ ok: true as const }),
+      }),
+    );
+    expect(inlineHtml).toContain("stable-framed-media");
+    expect(inlineHtml).not.toContain("background-image");
   });
 });

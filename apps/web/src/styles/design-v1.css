@@ -4678,7 +4678,6 @@
 
 /* A pod's outside page: its cover over the name, and its About under the bullets. */
 :root[data-design="v1"] .pod-cover { position: relative; display: block; width: 100%; aspect-ratio: 16 / 7; overflow: hidden; border-radius: 10px; margin: 0 0 14px; background: var(--bg-card, #16171a); }
-:root[data-design="v1"] .pod-cover-img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
 :root[data-design="v1"] .pod-about { display: flex; flex-direction: column; gap: 10px; margin: 2px 0 16px; color: var(--text-secondary, #a3a6ad); font-size: 14px; line-height: 1.6; white-space: pre-line; }
 :root[data-design="v1"] .pod-about p { margin: 0; }
 :root[data-design="v1"] .pod-card-cover { position: relative; display: block; width: calc(100% + 32px); margin: -16px -16px 10px; aspect-ratio: 16 / 6; overflow: hidden; border-radius: 9px 9px 0 0; }

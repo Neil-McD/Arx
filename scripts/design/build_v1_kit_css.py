@@ -359,7 +359,7 @@ css += """
 .app .brainside{position:absolute;top:0;right:0;bottom:0;width:380px;max-width:100%;box-sizing:border-box;overflow-y:auto;overflow-x:hidden;padding:20px 24px 24px;background:var(--bg);border-left:1px solid var(--line2);display:flex;flex-direction:column;gap:14px;animation:brainside .18s ease-out}
 @keyframes brainside{from{transform:translateX(24px)}to{transform:none}}
 /* The side panel's course: its cover, and how far you are. */
-.app .brain-cover{display:block;width:100%;aspect-ratio:16/7;object-fit:cover;border-radius:10px;margin:0 0 14px}
+.app .brain-cover{display:block;width:100%;aspect-ratio:16/7;overflow:hidden;border-radius:10px;margin:0 0 14px;background:var(--s2)}
 .app .brain-progress{display:flex;flex-direction:column;gap:6px;margin:4px 0 14px;font-size:12.5px;color:var(--ink3)}
 .app .brain-progress-bar{display:block;height:3px;border-radius:2px;background:rgba(var(--w),.1);overflow:hidden}
 .app .brain-progress-bar>span{display:block;height:100%;border-radius:2px;background:var(--ink)}
@@ -396,7 +396,7 @@ css += """
 .app .podset-price{display:flex;align-items:center;gap:6px;color:var(--ink3)}.app .podset-price input{width:120px}
 .app .podset-preview{display:flex;flex-direction:column;gap:10px;padding:14px;border-radius:12px;border:1px solid var(--line);background:var(--bg);align-self:start}
 .app .podset-preview .land{padding:0}
-.app .podset-cover{display:block;width:100%;aspect-ratio:16/7;object-fit:cover;border-radius:9px;margin:0 0 12px}
+.app .podset-cover{display:block;width:100%;aspect-ratio:16/7;overflow:hidden;border-radius:9px;margin:0 0 12px;background:var(--s2)}
 .app .podset-people{display:flex;flex-direction:column;gap:22px}
 .app .podset-people section{display:flex;flex-direction:column;gap:2px}
 .app .podset-people .lab em{font-style:normal;margin-left:6px;color:var(--ink3)}
@@ -900,7 +900,8 @@ css += """
 .app .kinline-name:hover,.app .kinline-about:hover{background:var(--s2)}
 .app .kinline em{font-style:normal;font-size:12px;color:var(--ink3)}
 .app .kinline-input{width:100%;padding:1px 4px;margin:-1px -4px;border:0;border-radius:5px;outline:0;box-shadow:inset 0 0 0 1.5px var(--accent);background:transparent;color:var(--ink);font:inherit;font-size:13.5px}
-.app .kinline-cover{padding:0;border:0;cursor:pointer;transition:filter .16s var(--ease)}.app .kinline-cover:hover{filter:brightness(1.2)}
+.app .kinline-cover{position:relative;overflow:hidden;padding:0;border:0;cursor:pointer;transition:filter .16s var(--ease)}.app .kinline-cover:hover{filter:brightness(1.2)}
+.app .kinline-cover-media{position:absolute;inset:0;width:100%;height:100%}
 .app .kedit-video.zone{flex-direction:column;justify-content:center;gap:12px;width:100%;max-width:100%;min-width:0;box-sizing:border-box;margin-top:0;aspect-ratio:16/5;min-height:150px;padding:20px;cursor:text;transition:border-color .16s var(--ease),background .16s var(--ease)}
 .app .kedit-video.zone:hover,.app .kedit-video.zone:focus-within{border-color:var(--ink3)}
 .app .kedit-video.zone input{flex:none;width:100%;max-width:460px;min-width:0;box-sizing:border-box;text-align:center;font-size:14.5px}
@@ -924,7 +925,7 @@ css += """
 .app .khero-wrap{container-type:inline-size;width:100%}
 .app .khero{display:grid;grid-template-columns:minmax(0,min(44%,440px)) minmax(0,1fr);gap:28px;align-items:center;width:100%;margin-top:18px;padding:20px;border-radius:14px;background:var(--panel2);border:1px solid var(--line);box-shadow:0 18px 40px -26px rgba(0,0,0,.5);text-align:left;cursor:pointer;overflow:hidden;transition:border-color .16s var(--ease)}
 .app .khero:hover{border-color:var(--line2)}
-.app .khero-cover{display:grid;place-items:center;aspect-ratio:16/9;height:auto;border-radius:10px;color:var(--ink3)}
+.app .khero-cover{display:grid;place-items:center;width:100%;padding:0;aspect-ratio:16/9;height:auto;border-radius:10px;color:var(--ink3)}
 .app .khero-cover .ic{width:28px;height:28px}
 .app .khero-body{display:flex;flex-direction:column;min-width:0}
 .app .khero-eye{font-size:12.5px;font-weight:500;color:var(--v1-accent-ink,var(--accent))}
@@ -947,7 +948,7 @@ css += """
 .app .klist{position:sticky;top:8px;flex:none;width:304px;max-height:calc(100vh - 150px);overflow-y:auto;border-radius:14px;background:var(--panel2);border:1px solid var(--line);box-shadow:0 18px 40px -26px rgba(0,0,0,.5)}
 .app .klist.solo{position:static;width:auto;max-width:420px;max-height:none;margin-bottom:14px;box-shadow:none}
 .app .klist-top{display:grid;grid-template-columns:72px minmax(0,1fr);gap:12px;align-items:center;padding:14px 14px 12px}
-.app .klist-cover{display:grid;place-items:center;height:auto;aspect-ratio:16/9;border-radius:6px;color:var(--ink3)}
+.app .klist-cover{display:grid;place-items:center;width:100%;padding:0;height:auto;aspect-ratio:16/9;border-radius:6px;color:var(--ink3)}
 .app .klist-cover .ic{width:16px;height:16px}
 .app .klist-top b{display:block;font-size:14.5px;font-weight:600;line-height:1.25}.app .klist-top em{font-style:normal;font-size:12.5px;color:var(--ink3)}
 .app .klist>.kbar{margin:0 14px 10px}

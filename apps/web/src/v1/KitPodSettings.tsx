@@ -20,6 +20,7 @@ import { listCloudCommunityMemberDirectory, type CloudMemberDirectoryRow } from 
 import { prepareCloudCommunityBrandingField } from "../../../../shared/cloudCommunityAdminGateway";
 import { readBannerFileAsWideDataUrlWithinLimit } from "../../../../shared/imageTransforms";
 import { askInApp } from "../../../../shared/inAppConfirm";
+import { StableFramedMedia } from "../../../../shared/StableFramedMedia";
 import { UserAvatar } from "../../../../shared/UserAvatar";
 import { Btn, cx, Icon, KitApp } from "./kit";
 import { askForPodPagePreview, goToPodsPath } from "./podMemory";
@@ -177,7 +178,17 @@ function PitchTab(props: Props) {
       <aside className={cx("podset-preview")} aria-label="What members see">
         <span className={cx("lab")}>What members see</span>
         <div className={cx("land")}>
-          {coverUrl ? <img className={cx("podset-cover")} src={coverUrl} alt="" /> : null}
+          {coverUrl ? (
+            <StableFramedMedia
+              className={cx("podset-cover")}
+              imageUrl={coverUrl}
+              frame={cover.kind === "keep" && pod.cover
+                ? { focusX: pod.cover.focus_x, focusY: pod.cover.focus_y, zoom: pod.cover.zoom ?? 1 }
+                : { focusX: 0.5, focusY: 0.5, zoom: 1 }}
+              alt=""
+              aria-hidden
+            />
+          ) : null}
           <header>
             <h2>{pod.name}</h2>
             {purpose.trim() ? <p className={cx("land-p")}>{purpose.trim()}</p> : <p className={cx("land-p dim")}>Add what it's for.</p>}

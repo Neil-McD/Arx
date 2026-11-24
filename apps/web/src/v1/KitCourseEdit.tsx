@@ -2,8 +2,8 @@
 // cover are changed in the page. No pop-up, and no crop step: a new cover is
 // centred.
 import { useRef, useState } from "react";
-import type * as React from "react";
 import { readBannerFileAsWideDataUrlWithinLimit } from "../../../../shared/imageTransforms";
+import { StableFramedMedia } from "../../../../shared/StableFramedMedia";
 import { cx, Icon } from "./kit";
 
 const COVER_DATA_URL_CHAR_LIMIT = 1_200_000;
@@ -23,9 +23,15 @@ export function courseEditPatch(draft: { name: string; description: string; cove
 // pick a picture; click the name or the line and type. Enter or clicking away
 // saves; Escape puts it back.
 export function KitCourseInline(props: {
-  course: { name: string; description_md: string | null; banner_url: string | null };
+  course: {
+    name: string;
+    description_md: string | null;
+    banner_url: string | null;
+    banner_focus_x?: number | null;
+    banner_focus_y?: number | null;
+    banner_zoom?: number | null;
+  };
   coverClassName: string;
-  coverStyle?: React.CSSProperties;
   stats: string;
   // With this, the stats line opens who has started the course (hosts).
   onOpenStats?: () => void;
@@ -90,9 +96,21 @@ export function KitCourseInline(props: {
   return (
     <>
       <input ref={fileInput} type="file" accept="image/*" hidden onChange={(event) => { void choose(event.target.files?.[0] ?? null); event.target.value = ""; }} />
-      <button type="button" className={`${props.coverClassName} ${cx("kinline-cover")}`} style={props.coverStyle} disabled={busy}
+      <button type="button" className={`${props.coverClassName} ${cx("kinline-cover")}`} disabled={busy}
         onClick={() => fileInput.current?.click()} aria-label={course.banner_url ? "Change the cover" : "Add a cover"} title={course.banner_url ? "Change the cover" : "Add a cover"}>
-        {course.banner_url ? null : <Icon name="image" />}
+        {course.banner_url ? (
+          <StableFramedMedia
+            className={cx("kinline-cover-media")}
+            imageUrl={course.banner_url}
+            frame={{
+              focusX: course.banner_focus_x,
+              focusY: course.banner_focus_y,
+              zoom: course.banner_zoom,
+            }}
+            alt=""
+            aria-hidden
+          />
+        ) : <Icon name="image" />}
       </button>
       <span className={cx("kinline")} aria-busy={busy}>
         {field === "name" ? input("Course name", 80) : <button type="button" className={cx("kinline-name")} onClick={() => start("name")} title="Rename the course">{course.name}</button>}
