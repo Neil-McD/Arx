@@ -4048,15 +4048,22 @@
 }
 
 /* Phone layout: keep the mobile shell height chain and CommunityPageFrame
-   strictly bounded inside the viewport so .community-tab-scroll overflows and
-   scrolls smoothly on mobile across Knowledge, Events, Pods, Settings,
-   Analytics, and Discover. */
+   strictly bounded inside the viewport so short channels still anchor their
+   composer to the bottom and long tabs (.community-tab-scroll) scroll
+   smoothly on mobile across Knowledge, Events, Pods, Settings, Analytics,
+   and Discover. */
+:root[data-design="v1"]:where([data-layout="phone"]) .app-root.mobile-shell {
+  grid-template-rows: minmax(0, 1fr);
+}
 :root[data-design="v1"]:where([data-layout="phone"]) .app-root.mobile-shell .app-shell {
   grid-template-rows: minmax(0, 1fr);
 }
 :root[data-design="v1"]:where([data-layout="phone"]) .app-root.mobile-shell .workspace.community-mode {
   height: 100%;
   min-height: 0;
+}
+:root[data-design="v1"]:where([data-layout="phone"]) .app-root.mobile-shell .community-interaction-projection {
+  grid-template-rows: minmax(0, 1fr);
 }
 :root[data-design="v1"]:where([data-layout="phone"]) .community-page-body {
   display: flex;

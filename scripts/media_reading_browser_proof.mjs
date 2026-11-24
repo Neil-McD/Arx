@@ -267,6 +267,132 @@ try {
   await resource.locator("iframe").waitFor();
   assert.equal(new URL(await resource.locator("iframe").getAttribute("src")).searchParams.get("start"), "12");
   await page.screenshot({ path: join(out, "shared-surfaces.png"), fullPage: true });
+  // Phone shell height chain: short channels must anchor the composer to the
+  // bottom of the viewport while long channels and page tabs stay bounded and scrollable.
+  const phonePage = await browser.newPage({ viewport: { width: 390, height: 844 } });
+  try {
+    await phonePage.goto(`${baseUrl}?mode=surfaces`);
+    const styleHrefOrTags = await phonePage.evaluate(() =>
+      Array.from(document.querySelectorAll('link[rel="stylesheet"], style')).map((node) => node.outerHTML).join("\n"),
+    );
+    const measurePhoneShell = async (bodyHtml) => {
+      await phonePage.setContent(`<!doctype html>
+        <html data-design="v1" data-layout="phone" data-theme="dark">
+          <head>${styleHrefOrTags}</head>
+          <body>${bodyHtml}</body>
+        </html>`);
+      return await phonePage.evaluate(() => {
+        const box = (sel) => {
+          const el = document.querySelector(sel);
+          if (!el) return null;
+          const r = el.getBoundingClientRect();
+          return { top: Math.round(r.top), bottom: Math.round(r.bottom), height: Math.round(r.height), scrollHeight: el.scrollHeight, clientHeight: el.clientHeight };
+        };
+        return {
+          main: box(".community-interaction-main"),
+          feedScroll: box(".community-interaction-feed-scroll"),
+          composer: box(".community-interaction-main-composer"),
+          tabScroll: box(".community-tab-scroll"),
+        };
+      });
+    };
+    const shortChannel = await measurePhoneShell(`
+      <div class="app-root mobile-shell mobile-chrome-auto-hide">
+        <header class="mobile-topbar"></header>
+        <div class="app-shell no-left no-right community-layout">
+          <div class="web-main-surface-slot" style="display: contents">
+            <main class="workspace community-mode">
+              <div class="community-body">
+                <div class="community-chat community-member-chat">
+                  <div class="workspace-body chat-feed">
+                    <div class="community-interaction-scroll">
+                      <div class="community-interaction-projection">
+                        <div class="community-interaction-main">
+                          <header class="community-channel-header"></header>
+                          <div class="community-channel-pinned-root" style="height: 60px">Pinned</div>
+                          <div class="community-interaction-feed-scroll">
+                            <div class="community-interaction-feed">
+                              <div style="height: 60px">Msg 1</div>
+                              <div style="height: 60px">Msg 2</div>
+                            </div>
+                          </div>
+                          <div class="community-interaction-main-composer">
+                            <div class="chat-input-bar" style="height: 52px">Message #wins</div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </main>
+          </div>
+        </div>
+      </div>
+    `);
+    assert.equal(shortChannel.main.height, 844, "Short phone channel main container fills the full viewport");
+    assert.equal(shortChannel.composer.bottom, 844, "Short phone channel composer anchors to the viewport bottom");
+    assert(shortChannel.composer.top >= 700, "Short phone channel composer does not float mid-screen");
+
+    const longChannel = await measurePhoneShell(`
+      <div class="app-root mobile-shell mobile-chrome-auto-hide">
+        <header class="mobile-topbar"></header>
+        <div class="app-shell no-left no-right community-layout">
+          <div class="web-main-surface-slot" style="display: contents">
+            <main class="workspace community-mode">
+              <div class="community-body">
+                <div class="community-chat community-member-chat">
+                  <div class="workspace-body chat-feed">
+                    <div class="community-interaction-scroll">
+                      <div class="community-interaction-projection">
+                        <div class="community-interaction-main">
+                          <header class="community-channel-header"></header>
+                          <div class="community-interaction-feed-scroll">
+                            <div class="community-interaction-feed">
+                              ${Array.from({ length: 40 }, (_, i) => `<div style="height: 60px">Msg ${i}</div>`).join("")}
+                            </div>
+                          </div>
+                          <div class="community-interaction-main-composer">
+                            <div class="chat-input-bar" style="height: 52px">Message #general</div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </main>
+          </div>
+        </div>
+      </div>
+    `);
+    assert.equal(longChannel.composer.bottom, 844, "Long phone channel composer stays anchored to the bottom");
+    assert(longChannel.feedScroll.scrollHeight > longChannel.feedScroll.clientHeight, "Long phone channel feed scrolls inside the viewport");
+
+    const longTab = await measurePhoneShell(`
+      <div class="app-root mobile-shell">
+        <header class="mobile-topbar"></header>
+        <div class="app-shell no-left no-right community-layout">
+          <div class="web-main-surface-slot" style="display: contents">
+            <main class="workspace community-mode">
+              <div class="community-body">
+                <div class="community-page-body">
+                  <header class="community-page-header" style="height: 56px">Knowledge</header>
+                  <div class="community-tab-scroll">
+                    <div style="height: 2400px">Long tab</div>
+                  </div>
+                </div>
+              </div>
+            </main>
+          </div>
+        </div>
+      </div>
+    `);
+    assert.equal(longTab.tabScroll.bottom, 844, "Phone tab scroll container stays bounded to the viewport");
+    assert(longTab.tabScroll.scrollHeight > longTab.tabScroll.clientHeight, "Long phone tab scrolls smoothly");
+  } finally {
+    await phonePage.close();
+  }
   assert.deepEqual(errors, []);
   console.log(JSON.stringify({ success: true, screenshots: out, checks: "desktop/mobile media grid, five images, native YouTube layout and deferred stable playback, lazy PDF loading, pages and scroll, zoom, selectable text, download, error/timeout retry, close cancellation and reopen, real DM host reader ownership, Escape, focus restoration and outside dismissal" }));
 } catch (error) {
