@@ -285,7 +285,9 @@ export function layoutBrain(map: BrainMap, nowMs: number): BrainLayout {
   for (const link of map.mentions ?? []) {
     const a = index.get(link.from), b = index.get(link.to);
     if (a === undefined || b === undefined || a === b) continue;
-    springs.push({ a, b, len: 90, k: 0.035 });
+    // Gently: a mention leans two clusters toward each other; it must not
+    // fold the map in on itself when there are many.
+    springs.push({ a, b, len: 150, k: 0.012 });
     mentioned.push(link);
   }
 
