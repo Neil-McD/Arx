@@ -26,6 +26,8 @@ import { Icon, KitApp, Rail, cx } from "../v1/kit";
 import { inboxTimeFor } from "./WebDirectMessageInboxPanel";
 import { fitComposerHeight } from "../../../../shared/composerHeight";
 import { ChannelFeedSkeleton } from "./WebLoadingSkeleton";
+import { CommunityChannelSessionContext } from "./CommunityChannelSessionContext";
+import { KitProfileFor } from "../v1/KitProfile";
 
 type DirectMessageComposerAttachment = DirectMessageAttachment & {
   data_url?: string | null;
@@ -57,6 +59,9 @@ type WebDirectMessagePanelProps = {
   onToggleMuteConversation?: () => void | Promise<void>;
   peerLastActiveAt?: string | null;
   sessionUserId: string | null;
+  // The signed-in session: the person's profile opens here, read in the
+  // community the conversation started in.
+  session?: unknown;
   getInitials: (value: string) => string;
   getAvatarColor: (seed: string) => string;
   renderTextWithLinks: (text: string) => ReactNode;
@@ -482,9 +487,14 @@ export function WebDirectMessagePanel(props: WebDirectMessagePanelProps) {
   const canSendDirectMessage =
     !props.isSending && hasComposerPayload && !hasAttachmentBlockers && !isPeerBlocked;
 
+  // The person's profile in place of the conversation (their face or name).
+  const [showingProfile, setShowingProfile] = useState(false);
   useEffect(() => {
     setIsMenuOpen(false);
+    setShowingProfile(false);
   }, [props.conversation.id]);
+  const profileCommunityId = props.conversation.created_from_community?.id ?? null;
+  const canShowProfile = Boolean(props.session && profileCommunityId && peer?.user_id);
 
   useEffect(() => {
     if (!isMenuOpen) return;
@@ -727,7 +737,23 @@ export function WebDirectMessagePanel(props: WebDirectMessagePanelProps) {
         </div>
       ) : null}
       <KitApp view="inbox" part="rail">
-        <Rail index={3} label={`Conversation with ${peerLabel}`} className="community-dm-kit-rail">
+        <Rail index={3} label={showingProfile ? `${peerLabel}'s profile` : `Conversation with ${peerLabel}`}
+          className={`community-dm-kit-rail${showingProfile ? " is-showing-profile" : ""}`}>
+          {/* Their profile takes the column; the conversation stays mounted
+              underneath (its draft, its scroll), hidden until you go back. */}
+          {showingProfile && canShowProfile ? (
+            <div className="community-dm-kit-profile">
+              <button type="button" className="community-dm-kit-profile-back" onClick={() => setShowingProfile(false)}>
+                <ArrowLeft aria-hidden="true" />Back to conversation
+              </button>
+              <CommunityChannelSessionContext.Provider value={{ session: props.session, communityId: profileCommunityId! }}>
+                <KitProfileFor target={{ userId: peer?.user_id ?? "" }}
+                  communityName={props.conversation.created_from_community?.name ?? null}
+                  fallback={<p className={cx("sub")}>{peerLabel} is no longer in {communityName}, so there is no profile to show.</p>}
+                  getAvatarColor={props.getAvatarColor} getInitials={props.getInitials} />
+              </CommunityChannelSessionContext.Provider>
+            </div>
+          ) : null}
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
             {/* Narrower windows and phones show Inbox as layers: back to the list. */}
             {props.onBackToInbox ? (
@@ -741,32 +767,66 @@ export function WebDirectMessagePanel(props: WebDirectMessagePanelProps) {
                 <ArrowLeft aria-hidden="true" />
               </button>
             ) : null}
-            <span className="community-dm-kit-avatar-wrap">
-              <span className={cx("av")}>
-                <UserAvatar
-                  className="community-dm-kit-avatar"
-                  readyClassName="has-image"
-                  name={peerLabel}
-                  imageUrl={peer?.avatar_url ?? null}
-                  focusX={peer?.avatar_focus_x ?? 0.5}
-                  focusY={peer?.avatar_focus_y ?? 0.5}
-                  zoom={peer?.avatar_zoom ?? 1}
-                  alt=""
-                  fallback={<span>{props.getInitials(peerLabel)}</span>}
-                  fallbackStyle={{ backgroundColor: props.getAvatarColor(peerAvatarSeed) }}
-                />
+            {canShowProfile ? (
+              <button type="button" className="community-dm-kit-peer" onClick={() => setShowingProfile(true)}
+                aria-label={`${peerLabel}'s profile`} title="Profile">
+              <span className="community-dm-kit-avatar-wrap">
+                <span className={cx("av")}>
+                  <UserAvatar
+                    className="community-dm-kit-avatar"
+                    readyClassName="has-image"
+                    name={peerLabel}
+                    imageUrl={peer?.avatar_url ?? null}
+                    focusX={peer?.avatar_focus_x ?? 0.5}
+                    focusY={peer?.avatar_focus_y ?? 0.5}
+                    zoom={peer?.avatar_zoom ?? 1}
+                    alt=""
+                    fallback={<span>{props.getInitials(peerLabel)}</span>}
+                    fallbackStyle={{ backgroundColor: props.getAvatarColor(peerAvatarSeed) }}
+                  />
+                </span>
+                {peerPresenceKnown ? (
+                  <span
+                    className={`community-dm-inbox-presence-dot${peerActiveNow ? " is-active-now" : ""}`}
+                    aria-hidden="true"
+                  />
+                ) : null}
               </span>
-              {peerPresenceKnown ? (
-                <span
-                  className={`community-dm-inbox-presence-dot${peerActiveNow ? " is-active-now" : ""}`}
-                  aria-hidden="true"
-                />
-              ) : null}
-            </span>
-            <div style={{ minWidth: 0, flex: 1 }}>
-              <div style={{ fontSize: 15, fontWeight: 600 }}>{peerLabel}</div>
-              <div className={cx("sub")}>{peerPresenceText}</div>
-            </div>
+              <div style={{ minWidth: 0, flex: 1, textAlign: "left" }}>
+                <div style={{ fontSize: 15, fontWeight: 600 }}>{peerLabel}</div>
+                <div className={cx("sub")}>{peerPresenceText}</div>
+              </div>
+              </button>
+            ) : (
+              <>
+              <span className="community-dm-kit-avatar-wrap">
+                <span className={cx("av")}>
+                  <UserAvatar
+                    className="community-dm-kit-avatar"
+                    readyClassName="has-image"
+                    name={peerLabel}
+                    imageUrl={peer?.avatar_url ?? null}
+                    focusX={peer?.avatar_focus_x ?? 0.5}
+                    focusY={peer?.avatar_focus_y ?? 0.5}
+                    zoom={peer?.avatar_zoom ?? 1}
+                    alt=""
+                    fallback={<span>{props.getInitials(peerLabel)}</span>}
+                    fallbackStyle={{ backgroundColor: props.getAvatarColor(peerAvatarSeed) }}
+                  />
+                </span>
+                {peerPresenceKnown ? (
+                  <span
+                    className={`community-dm-inbox-presence-dot${peerActiveNow ? " is-active-now" : ""}`}
+                    aria-hidden="true"
+                  />
+                ) : null}
+              </span>
+              <div style={{ minWidth: 0, flex: 1 }}>
+                <div style={{ fontSize: 15, fontWeight: 600 }}>{peerLabel}</div>
+                <div className={cx("sub")}>{peerPresenceText}</div>
+              </div>
+              </>
+            )}
             {optionsMenu}
           </div>
           <div className={cx("sep")} style={{ marginTop: -8 }} />

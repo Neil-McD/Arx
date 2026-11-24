@@ -4688,3 +4688,47 @@
   line-height: 1.5;
   color: var(--text-ink-tertiary, rgba(238, 240, 244, 0.52));
 }
+
+/* Inbox: the person's face and name open their profile in the same column. */
+:root[data-design="v1"] .community-dm-kit-peer {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1;
+  min-width: 0;
+  margin: -4px -6px;
+  padding: 4px 6px;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+:root[data-design="v1"] .community-dm-kit-peer:hover { background: var(--surface-hover, rgba(255, 255, 255, 0.04)); }
+:root[data-design="v1"] .community-dm-kit-peer:focus-visible { outline: 2px solid var(--accent, #6f78d8); outline-offset: 2px; }
+:root[data-design="v1"] .community-dm-kit-rail.is-showing-profile > :not(.community-dm-kit-profile) { display: none !important; }
+:root[data-design="v1"] .community-dm-kit-profile {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  min-height: 0;
+  overflow-y: auto;
+}
+:root[data-design="v1"] .community-dm-kit-profile-back {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  padding: 0 2px;
+  border: 0;
+  background: none;
+  color: var(--text-ink-secondary, rgba(238, 240, 244, 0.66));
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+:root[data-design="v1"] .community-dm-kit-profile-back:hover { color: var(--text-ink-primary, #eef0f4); }
+:root[data-design="v1"] .community-dm-kit-profile-back svg { width: 14px; height: 14px; }
+

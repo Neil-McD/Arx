@@ -124,3 +124,26 @@ test("WebDirectMessagePanel uses the unified Kit conversation view on phones wit
   expect(html).toContain('<div class="community-dm-panel-message-text">Hey there!\nSecond line</div>');
   expect(html).toContain('<div class="community-dm-panel-message-text">Hello back!</div>');
 });
+
+test("the person's face and name in a conversation open their profile, when there is a community to read it in", () => {
+  const base = {
+    besideInbox: true, messages: [], input: "", isLoading: false, isSending: false, error: null, attachments: [],
+    typingPresence: { users: [], total_count: 0 }, sessionUserId: "me",
+    getInitials: (value: string) => value.slice(0, 1), getAvatarColor: () => "#555",
+    renderTextWithLinks: (text: string) => text, onInputChange: () => {}, onSend: () => {},
+  };
+  const withCommunity = renderToStaticMarkup(React.createElement(WebDirectMessagePanel, {
+    ...base, conversation: conversation("a", "Jon", false, { id: "polynet", name: "Polynet" }), session: { token: "t" },
+  } as any));
+  expect(withCommunity).toContain('class="community-dm-kit-peer"');
+  expect(withCommunity).toContain('aria-label="Jon&#x27;s profile"');
+  // Not signed in here, or no community the conversation came from: just the name.
+  for (const props of [
+    { conversation: conversation("a", "Jon", false, { id: "polynet", name: "Polynet" }) },
+    { conversation: { ...conversation("a", "Jon", false, { id: "polynet", name: "Polynet" }), created_from_community: null }, session: { token: "t" } },
+  ]) {
+    const html = renderToStaticMarkup(React.createElement(WebDirectMessagePanel, { ...base, ...props } as any));
+    expect(html).not.toContain("community-dm-kit-peer");
+    expect(html).toContain("Jon");
+  }
+});

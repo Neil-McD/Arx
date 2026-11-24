@@ -1295,6 +1295,7 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
             })()
           }
           sessionUserId={sessionUserId}
+          session={session}
           getInitials={getInitials}
           getAvatarColor={getAvatarColor}
           renderTextWithLinks={renderTextWithLinks}
