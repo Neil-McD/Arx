@@ -211,6 +211,9 @@ export function KitProfile(props: Avatars & {
 export function KitProfileFor(props: Avatars & {
   target: { membershipId: string | null } | { userId: string };
   communityName?: string | null;
+  // The community the profile is read in, when it is not the one in the
+  // address bar (a conversation from another community): where Members opens.
+  communitySlug?: string | null;
   fallback?: ReactNode;
   onMessage?: (userId: string, communityId: string | null) => void;
   onLoaded?: (profile: CloudMemberProfile | null) => void;
@@ -260,7 +263,7 @@ export function KitProfileFor(props: Avatars & {
         await addCloudCommunityMemberNote({ session, communityId, membershipId: profile.membership_id, body });
         setTurn((value) => value + 1);
       } : undefined}
-      onOpenMembers={hostView ? () => goToMembersPage(profile.membership_id ?? "owner") : undefined} />
+      onOpenMembers={hostView ? () => goToMembersPage(profile.membership_id ?? "owner", props.communitySlug ?? null) : undefined} />
   );
 }
 
