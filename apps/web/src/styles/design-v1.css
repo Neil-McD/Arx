@@ -260,8 +260,9 @@
   --composer-radius: 14px;
 }
 
-/* The agent's voice: same visual size as a person's 15px text. */
-:root[data-design="v1"] [data-actor-type="community_agent"] .community-interaction-body,
+/* The agent's voice in the private guide dock. In channels and threads the
+   guide reads in the same clean sans type and size as members, distinguished
+   by its badge, spark avatar, and subtle purple edge. */
 :root[data-design="v1"] .community-agent-dock-message.is-assistant {
   font-family: var(--font-voice);
   font-size: 17px;
@@ -1424,9 +1425,90 @@
   font-weight: 600;
   color: var(--text-primary);
 }
+/* A thread reads at the channel's own size and font, in a column short enough to read. */
 :root[data-design="v1"] .community-interaction-thread-drawer .community-interaction-body {
-  font-size: 15px;
-  line-height: 22.2px;
+  font-family: inherit;
+  font-size: 14px;
+  line-height: 1.55;
+  max-width: 62ch;
+}
+
+/* Glowing spark avatar for the community guide in threads and non-kit feeds,
+   matching the channel feed's .av.guide treatment. */
+:root[data-design="v1"] .community-interaction-guide-avatar {
+  flex: none;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: radial-gradient(circle at 30% 25%, rgba(167, 139, 250, 0.28), rgba(167, 139, 250, 0.08));
+  border: 1px solid rgba(167, 139, 250, 0.34);
+  color: var(--accent-agent, #c4b5fd);
+}
+:root[data-design="v1"] .community-interaction-guide-avatar svg {
+  width: 16px;
+  height: 16px;
+}
+
+/* Between the post and its replies: the reply count, centred, on a hairline
+   that is brightest beside the words and fades out to both sides (the same
+   line as under a page title). */
+:root[data-design="v1"] .community-interaction-thread-divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 4px 12px 6px;
+  color: var(--text-faint);
+  font-size: 12px;
+  line-height: 18px;
+}
+:root[data-design="v1"] .community-interaction-thread-divider::before,
+:root[data-design="v1"] .community-interaction-thread-divider::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  pointer-events: none;
+}
+:root[data-design="v1"] .community-interaction-thread-divider::before {
+  background: linear-gradient(90deg, transparent, var(--header-line-glow, var(--header-hairline, var(--border-default))));
+}
+:root[data-design="v1"] .community-interaction-thread-divider::after {
+  background: linear-gradient(90deg, var(--header-line-glow, var(--header-hairline, var(--border-default))), transparent);
+}
+
+/* The guide's replies carry a thin purple edge, so the AI reads apart from
+   people at a glance without switching font family or size. */
+:root[data-design="v1"] .community-interaction-thread-drawer .community-interaction-reply[data-actor-type="community_agent"],
+:root[data-design="v1"] .community-interaction-thread-drawer .community-interaction-thread-anchor[data-actor-type="community_agent"] {
+  position: relative;
+}
+:root[data-design="v1"] .community-interaction-thread-drawer .community-interaction-reply[data-actor-type="community_agent"]::before,
+:root[data-design="v1"] .community-interaction-thread-drawer .community-interaction-thread-anchor[data-actor-type="community_agent"]::before {
+  content: "";
+  position: absolute;
+  top: 10px;
+  bottom: 10px;
+  left: 2px;
+  width: 2px;
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--accent-agent, #a78bfa) 55%, transparent);
+  pointer-events: none;
+}
+:root[data-design="v1"] .community-interaction-thread-drawer .community-interaction-thread-anchor[data-actor-type="community_agent"]::before {
+  left: -10px;
+}
+
+:root[data-design="v1"] .community-interaction-reply-reactions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+:root[data-design="v1"] .community-interaction-reply-reactions > .community-interaction-reactions {
+  margin-top: 0;
 }
 
 /* The reply box names who you are answering; in a narrow thread that line
@@ -2049,21 +2131,18 @@
 }
 
 :root[data-design="v1"] .community-chat .community-interaction-author {
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 600;
 }
 
-:root[data-design="v1"] .community-chat [data-actor-type="human"] .community-interaction-body {
-  margin-top: 2px;
-  color: var(--text-ink-primary);
-  font-size: 15px;
-  line-height: 1.55;
-}
-
+:root[data-design="v1"] .community-chat .community-interaction-body,
+:root[data-design="v1"] .community-chat [data-actor-type="human"] .community-interaction-body,
 :root[data-design="v1"] .community-chat [data-actor-type="community_agent"] .community-interaction-body {
   margin-top: 2px;
-  font-size: 17px;
-  line-height: 1.45;
+  color: var(--text-ink-primary);
+  font-family: inherit;
+  font-size: 14px;
+  line-height: 1.55;
 }
 
 /* Day dividers: a word on a hairline (8px 12px 10px). */

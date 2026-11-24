@@ -6,7 +6,7 @@ import {
 } from "lucide-react";
 import { CommunityThreadHeader } from "./CommunityThreadHeader";
 import { ThreadRepliesSkeleton } from "./WebLoadingSkeleton";
-import { KitApp, usePhoneLayout } from "../v1/kit";
+import { Icon, KitApp, usePhoneLayout } from "../v1/kit";
 import { KitChannelFeed } from "../v1/KitChannelFeed";
 import {
   EmojiPickerButton,
@@ -153,11 +153,23 @@ import {
   actorLabel,
   agentBadgeLabel,
   bundleText,
+  hostBadgeLabel,
   kindChipLabel,
   stripSharedAttachmentSummary,
 } from "./communityInteractionFeed";
 import { interactionMentionsViewer } from "../controllers/communityMentionAttention";
 import { CommunityPinnedRootSurface } from "./CommunityPinnedRootSurface";
+
+export function formatThreadReplyDividerLabel(
+  loadedRepliesCount: number,
+  rootReplyCount?: number | null,
+): string {
+  const total = Math.max(
+    loadedRepliesCount,
+    typeof rootReplyCount === "number" && Number.isFinite(rootReplyCount) ? rootReplyCount : 0,
+  );
+  return total === 1 ? "1 reply" : `${total} replies`;
+}
 
 export function resolveSelectedCommunityInteractionRoot(
   roots: CommunityInteractionRootBundle[],
@@ -718,22 +730,26 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
           ) : null}
           <div className="community-interaction-drawer-scroll" ref={drawerScrollRef}>
             <div className="community-interaction-drawer-root">
-              <div className="community-interaction-thread-anchor">
-                <ProfileHoverCard
-                  userId={selectedRoot.root.actor_user_id}
-                  label={selectedRootLabel}
-                  seed={selectedRoot.root.actor_user_id ?? selectedRoot.root.actor_agent_key ?? selectedRoot.root.id}
-                  profile={
-                    selectedRoot.root.actor_user_id
-                      ? props.profilesByUserId[selectedRoot.root.actor_user_id] ?? null
-                      : null
-                  }
-                  getAvatarColor={props.getAvatarColor}
-                  getInitials={props.getInitials}
-                  currentUserId={props.currentUserId}
-                  onOpenProfile={props.onOpenProfile}
-                  onMessageUser={props.onMessageUser}
-                />
+              <div className="community-interaction-thread-anchor" data-actor-type={selectedRoot.root.actor_type}>
+                {selectedRoot.root.actor_type === "community_agent" ? (
+                  <span className="community-interaction-guide-avatar" aria-hidden="true"><Icon name="spark" /></span>
+                ) : (
+                  <ProfileHoverCard
+                    userId={selectedRoot.root.actor_user_id}
+                    label={selectedRootLabel}
+                    seed={selectedRoot.root.actor_user_id ?? selectedRoot.root.actor_agent_key ?? selectedRoot.root.id}
+                    profile={
+                      selectedRoot.root.actor_user_id
+                        ? props.profilesByUserId[selectedRoot.root.actor_user_id] ?? null
+                        : null
+                    }
+                    getAvatarColor={props.getAvatarColor}
+                    getInitials={props.getInitials}
+                    currentUserId={props.currentUserId}
+                    onOpenProfile={props.onOpenProfile}
+                    onMessageUser={props.onMessageUser}
+                  />
+                )}
                 <div className="community-interaction-thread-anchor-content">
                   <div className="community-interaction-meta-row">
                     <ProfileHoverCard
@@ -756,6 +772,9 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
                     </ProfileHoverCard>
                     {selectedRootBadge ? (
                       <span className="community-interaction-badge">{selectedRootBadge}</span>
+                    ) : null}
+                    {hostBadgeLabel(selectedRoot.root, props.communityOwnerId) ? (
+                      <span className="community-interaction-badge is-host">host</span>
                     ) : null}
                     {selectedRootChip ? (
                       <span className="community-interaction-kind">{selectedRootChip}</span>
@@ -813,6 +832,11 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
               <div className="community-interaction-drawer-empty">No replies yet.</div>
             ) : (
               <div className="community-interaction-reply-list">
+                {/* The post above, its replies below: a centred count on a hairline
+                    that fades out both ways, like the line under every page title. */}
+                <div className="community-interaction-thread-divider" role="separator">
+                  <span>{formatThreadReplyDividerLabel(props.replies.length, selectedRoot.root.reply_count)}</span>
+                </div>
                 {props.replies.map((bundle) => {
                   const reply = bundle.reply;
                   const label = actorLabel(reply, props.displayName, props.activeCommunityName);
@@ -878,17 +902,21 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
                           }
                         />
                       )}
-                      <ProfileHoverCard
-                        userId={reply.actor_user_id}
-                        label={label}
-                        seed={reply.actor_user_id ?? reply.actor_agent_key ?? reply.id}
-                        profile={profile}
-                        getAvatarColor={props.getAvatarColor}
-                        getInitials={props.getInitials}
-                        currentUserId={props.currentUserId}
-                        onOpenProfile={props.onOpenProfile}
-                        onMessageUser={props.onMessageUser}
-                      />
+                      {reply.actor_type === "community_agent" ? (
+                        <span className="community-interaction-guide-avatar" aria-hidden="true"><Icon name="spark" /></span>
+                      ) : (
+                        <ProfileHoverCard
+                          userId={reply.actor_user_id}
+                          label={label}
+                          seed={reply.actor_user_id ?? reply.actor_agent_key ?? reply.id}
+                          profile={profile}
+                          getAvatarColor={props.getAvatarColor}
+                          getInitials={props.getInitials}
+                          currentUserId={props.currentUserId}
+                          onOpenProfile={props.onOpenProfile}
+                          onMessageUser={props.onMessageUser}
+                        />
+                      )}
                       <div className="community-interaction-reply-content">
                         <div className="community-interaction-meta-row">
                           <ProfileHoverCard
@@ -906,6 +934,9 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
                             <span className="community-interaction-author">{label}</span>
                           </ProfileHoverCard>
                           {badge ? <span className="community-interaction-badge">{badge}</span> : null}
+                          {hostBadgeLabel(reply, props.communityOwnerId) ? (
+                            <span className="community-interaction-badge is-host">host</span>
+                          ) : null}
                           <span>{props.formatChatTime(reply.created_at)}</span>
                         </div>
                         {isEditingReply ? (
@@ -959,13 +990,22 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
                               Discard
                             </button>
                           </div>
-                        ) : (
-                          <ReactionSummary
-                            rows={reply.reaction_summary}
-                            viewerEmojis={reply.viewer_emojis}
-                            onToggle={(emoji) => props.onToggleReaction?.("reply", reply.id, emoji)}
-                          />
-                        )}
+                        ) : reply.reaction_summary.length > 0 ? (
+                          <div className="community-interaction-reply-reactions">
+                            <ReactionSummary
+                              rows={reply.reaction_summary}
+                              viewerEmojis={reply.viewer_emojis}
+                              onToggle={(emoji) => props.onToggleReaction?.("reply", reply.id, emoji)}
+                            />
+                            {props.onToggleReaction ? (
+                              <EmojiPickerButton
+                                className="community-interaction-reaction-add"
+                                label="Add reaction"
+                                onPick={(emoji) => props.onToggleReaction?.("reply", reply.id, emoji)}
+                              />
+                            ) : null}
+                          </div>
+                        ) : null}
                       </div>
                     </div>
                   );

@@ -438,6 +438,85 @@ try {
         await dialogPage.close();
       }
     }
+
+    // Behavioral typography check: channel feed and thread drawer/page render
+    // human and community-agent messages at the same 14px sans reading scale
+    // and 13px author names across both phone and desktop viewports.
+    const designV1Css = await readFile(join(root, "apps/web/src/styles/design-v1.css"), "utf8");
+    for (const [label, vw, vh] of [["phone", 390, 844], ["desktop", 1440, 900]]) {
+      const typoPage = await browser.newPage({ viewport: { width: vw, height: vh } });
+      try {
+        await typoPage.setContent(`<!doctype html>
+          <html data-design="v1" data-layout="${label}"><head><style>
+            :root { --font-sans: "Geist", system-ui, sans-serif; }
+            body { margin: 0; font-family: var(--font-sans); }
+            ${contentCss}
+            ${kitCss}
+            ${designV1Css}
+          </style></head>
+          <body>
+            <div class="community-chat community-member-chat">
+              <div class="app part flow-part">
+                <div class="feed">
+                  <div class="msg" id="kit-human"><div class="b"><div class="h"><b>Alex</b></div><p>Channel human text</p></div></div>
+                  <div class="msg g" id="kit-guide"><div class="b"><div class="h"><b>Guide</b></div><p>Channel guide text</p></div></div>
+                </div>
+              </div>
+              <div class="community-interaction-group" data-actor-type="human" id="feed-human">
+                <div class="community-interaction-author">Alex</div>
+                <div class="community-interaction-body">Mobile channel human text</div>
+              </div>
+              <div class="community-interaction-group" data-actor-type="community_agent" id="feed-guide">
+                <div class="community-interaction-author">Guide</div>
+                <div class="community-interaction-body">Mobile channel guide text</div>
+              </div>
+              <aside class="community-interaction-drawer community-interaction-thread-drawer${label === "phone" ? " community-interaction-thread-page" : ""}">
+                <div class="community-interaction-thread-anchor" data-actor-type="human" id="thread-root">
+                  <div class="community-interaction-author">Alex</div>
+                  <div class="community-interaction-body">Thread root text</div>
+                </div>
+                <div class="community-interaction-reply" data-actor-type="human" id="thread-human">
+                  <div class="community-interaction-author">Sam</div>
+                  <div class="community-interaction-body">Thread human reply</div>
+                </div>
+                <div class="community-interaction-reply" data-actor-type="community_agent" id="thread-guide">
+                  <div class="community-interaction-author">Guide</div>
+                  <div class="community-interaction-body">Thread guide reply</div>
+                </div>
+              </aside>
+            </div>
+          </body></html>`);
+        const styles = await typoPage.evaluate(() => {
+          const read = (sel) => {
+            const el = document.querySelector(sel);
+            if (!el) return null;
+            const cs = getComputedStyle(el);
+            return { fontSize: cs.fontSize, fontFamily: cs.fontFamily };
+          };
+          return {
+            kitHumanBody: read("#kit-human p"),
+            kitGuideBody: read("#kit-guide p"),
+            kitAuthor: read("#kit-human .h b"),
+            feedHumanBody: read("#feed-human .community-interaction-body"),
+            feedGuideBody: read("#feed-guide .community-interaction-body"),
+            feedAuthor: read("#feed-human .community-interaction-author"),
+            threadRootBody: read("#thread-root .community-interaction-body"),
+            threadHumanBody: read("#thread-human .community-interaction-body"),
+            threadGuideBody: read("#thread-guide .community-interaction-body"),
+            threadAuthor: read("#thread-human .community-interaction-author"),
+          };
+        });
+        for (const key of ["kitHumanBody", "kitGuideBody", "feedHumanBody", "feedGuideBody", "threadRootBody", "threadHumanBody", "threadGuideBody"]) {
+          assert.equal(styles[key]?.fontSize, "14px", `${label} ${key} should be 14px (got ${styles[key]?.fontSize})`);
+          assert(!String(styles[key]?.fontFamily ?? "").toLowerCase().includes("newsreader"), `${label} ${key} should not switch to serif`);
+        }
+        for (const key of ["kitAuthor", "feedAuthor", "threadAuthor"]) {
+          assert.equal(styles[key]?.fontSize, "13px", `${label} ${key} should be 13px (got ${styles[key]?.fontSize})`);
+        }
+      } finally {
+        await typoPage.close();
+      }
+    }
   } finally {
     await phonePage.close();
   }
