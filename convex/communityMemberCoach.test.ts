@@ -317,11 +317,12 @@ test("deterministic signals pick course_stall, quiet_newcomer, and quiet_member 
   const w = await seedCoachWorld(t, nowMs);
 
   // Priority 1: Rashid's stalled course (never includes SECRET HOST NOTE!).
-  const first: any = await t.query(internal.communityMemberCoach.readNextMemberCoachCandidateInternal, {
+  const firstScan: any = await t.query(internal.communityMemberCoach.readNextMemberCoachCandidateInternal, {
     communityId: w.communityId,
     autoReasons: [],
     nowMs,
   });
+  const first = firstScan.candidate;
   expect(first).toMatchObject({
     memberUserId: w.rashidId,
     reason: "course_stall",
@@ -344,11 +345,12 @@ test("deterministic signals pick course_stall, quiet_newcomer, and quiet_member 
     nowMs,
   });
 
-  const second: any = await t.query(internal.communityMemberCoach.readNextMemberCoachCandidateInternal, {
+  const secondScan: any = await t.query(internal.communityMemberCoach.readNextMemberCoachCandidateInternal, {
     communityId: w.communityId,
     autoReasons: [],
     nowMs,
   });
+  const second = secondScan.candidate;
   expect(second).toMatchObject({
     memberUserId: w.mayaId,
     reason: "quiet_newcomer",
@@ -368,11 +370,12 @@ test("deterministic signals pick course_stall, quiet_newcomer, and quiet_member 
     nowMs,
   });
 
-  const third: any = await t.query(internal.communityMemberCoach.readNextMemberCoachCandidateInternal, {
+  const thirdScan: any = await t.query(internal.communityMemberCoach.readNextMemberCoachCandidateInternal, {
     communityId: w.communityId,
     autoReasons: [],
     nowMs,
   });
+  const third = thirdScan.candidate;
   expect(third).toMatchObject({
     memberUserId: w.samId,
     reason: "quiet_member",
@@ -385,11 +388,12 @@ test("owner approval delivers check-in atomically into member's private Agent th
   const nowMs = Date.now();
   const w = await seedCoachWorld(t, nowMs);
 
-  const candidate: any = await t.query(internal.communityMemberCoach.readNextMemberCoachCandidateInternal, {
+  const candidateScan: any = await t.query(internal.communityMemberCoach.readNextMemberCoachCandidateInternal, {
     communityId: w.communityId,
     autoReasons: [],
     nowMs,
   });
+  const candidate = candidateScan.candidate;
   const saved: any = await t.mutation(internal.communityMemberCoach.recordMemberCoachJudgeOutcomeInternal, {
     communityId: w.communityId,
     memberUserId: w.rashidId,
@@ -447,11 +451,12 @@ test("owner approval delivers check-in atomically into member's private Agent th
 
   // Now test member opt-out: Maya pauses guide check-ins -> draft waiting for Maya cannot be sent.
   const asMaya = t.withIdentity({ subject: "maya" });
-  const mayaCand: any = await t.query(internal.communityMemberCoach.readNextMemberCoachCandidateInternal, {
+  const mayaScan: any = await t.query(internal.communityMemberCoach.readNextMemberCoachCandidateInternal, {
     communityId: w.communityId,
     autoReasons: [],
     nowMs,
   });
+  const mayaCand = mayaScan.candidate;
   const mayaDraft: any = await t.mutation(internal.communityMemberCoach.recordMemberCoachJudgeOutcomeInternal, {
     communityId: w.communityId,
     memberUserId: w.mayaId,
@@ -540,4 +545,145 @@ test("auto-send delivers during daytime, downgrades to draft in quiet hours, and
     nowMs: noonUtc + DAY_MS,
   });
   expect(due.some((row: any) => String(row.communityId) === String(w.communityId))).toBe(false);
+});
+
+test("approved draft send revalidates mid-conversation guard; roster scan rotates past 60 rows; subscription discovery paginates", async () => {
+  const t = convexTest(schema, modules);
+  const nowMs = Date.now();
+  const w = await seedCoachWorld(t, nowMs);
+  const asOwner = t.withIdentity({ subject: "owner" });
+
+  // 1. Mid-conversation guard revalidated on owner approval send.
+  const saved: any = await t.mutation(internal.communityMemberCoach.recordMemberCoachJudgeOutcomeInternal, {
+    communityId: w.communityId,
+    memberUserId: w.rashidId,
+    reason: "course_stall",
+    dedupeKey: `course_stall:${String(w.courseId)}:${String(w.l2)}`,
+    signalSummary: "Paused before Lesson 2",
+    decision: "send",
+    text: "Hey Rashid, want to pick up Lesson 2?",
+    requestedMode: "draft",
+    nowMs,
+  });
+  // Rashid starts talking to the guide right now (user message in active thread).
+  const conv: any = await t.mutation(internal.threads.ensureCommunityAgentConversationForTrustedUserInternal, {
+    communityId: w.communityId,
+    trustedUserId: w.rashidId,
+  });
+  await t.mutation(internal.threads.addCloudThreadMessageForTrustedOwnerInternal, {
+    trustedOwnerId: w.rashidId,
+    threadId: conv.thread_id,
+    messageKey: "user-msg-active-chat",
+    role: "user",
+    contentJson: { text: "Quick question about Lesson 2" },
+    createdAt: nowMs,
+  });
+  await expect(
+    asOwner.mutation(api.communityMemberCoach.sendMemberCoachDraft, {
+      communityId: w.communityId,
+      draftId: saved.draftId as any,
+    }),
+  ).rejects.toThrow(/active_conversation/);
+
+  // 2. Rotating membership scan reaches older active members past 60 newer inactive rows.
+  await t.run(async (ctx: any) => {
+    for (let i = 0; i < 65; i += 1) {
+      const uid = await ctx.db.insert("users", {
+        authSubject: `left-${i}`,
+        displayName: `Left ${i}`,
+        createdAt: nowMs - DAY_MS + i,
+        updatedAt: nowMs - DAY_MS + i,
+      });
+      await ctx.db.insert("communityMemberships", {
+        communityId: w.communityId,
+        userId: uid,
+        role: "member",
+        accessSource: "free_grant",
+        state: "left",
+        activationSequence: 1,
+        createdAt: nowMs - DAY_MS + i * 10,
+        updatedAt: nowMs - DAY_MS + i * 10,
+      });
+    }
+  });
+  // First scan reads the 60 newest (all left) and advances nextScanCursorCreatedAt.
+  const scan1: any = await t.query(internal.communityMemberCoach.readNextMemberCoachCandidateInternal, {
+    communityId: w.communityId,
+    autoReasons: [],
+    nowMs,
+    scanCursorCreatedAt: null,
+  });
+  expect(scan1.nextScanCursorCreatedAt).not.toBeNull();
+  // Second scan using the persisted cursor reaches Sam (older active member) and wraps cursor to null.
+  const scan2: any = await t.query(internal.communityMemberCoach.readNextMemberCoachCandidateInternal, {
+    communityId: w.communityId,
+    autoReasons: [],
+    nowMs,
+    scanCursorCreatedAt: scan1.nextScanCursorCreatedAt,
+  });
+  expect(scan2.candidate).toBeTruthy();
+  expect(scan2.nextScanCursorCreatedAt).toBeNull();
+
+  // 3. Paginated founder subscription enrollment discovers communities across multiple pages.
+  const extraIds = await t.run(async (ctx: any) => {
+    const ids: any[] = [];
+    for (let i = 0; i < 3; i += 1) {
+      const uid = await ctx.db.insert("users", {
+        authSubject: `founder-${i}`,
+        displayName: `Founder ${i}`,
+        createdAt: nowMs,
+        updatedAt: nowMs,
+      });
+      const cid = await ctx.db.insert("communities", {
+        ownerId: uid,
+        slug: `sub-club-${i}`,
+        name: `Sub Club ${i}`,
+        visibility: "published",
+        inferenceFundingPolicy: "managed_required",
+        entryPolicy: "open",
+        activeMemberCount: 1,
+        createdAt: nowMs,
+        updatedAt: nowMs,
+      });
+      await ctx.db.insert("founderSubscriptions", {
+        ownerUserId: uid,
+        communityId: cid,
+        provider: "stripe",
+        providerCustomerId: `cus_${i}`,
+        providerSubscriptionId: `sub_${i}`,
+        providerPriceId: "price_agent",
+        status: "active",
+        currentPeriodStartAt: nowMs - DAY_MS,
+        currentPeriodEndAt: nowMs + 29 * DAY_MS,
+        cancelAtPeriodEnd: false,
+        lastProviderEventCreatedAt: nowMs,
+        createdAt: nowMs,
+        updatedAt: nowMs,
+      });
+      ids.push(cid);
+    }
+    return ids;
+  });
+  // Page size 1 forces 3+ pages — confirm all 3 subscriptions get enrolled cleanly.
+  let cursor: string | null = null;
+  let totalEnrolled = 0;
+  for (let p = 0; p < 10; p += 1) {
+    const res: any = await t.mutation(internal.communityMemberCoach.enrollFounderSubscriptionsPageInternal, {
+      nowMs,
+      cursor,
+      pageSize: 1,
+    });
+    totalEnrolled += res.enrolled;
+    if (res.isDone || !res.continueCursor) break;
+    cursor = res.continueCursor;
+  }
+  expect(totalEnrolled).toBe(3);
+  const enrolledSettings = await t.run(async (ctx: any) =>
+    await Promise.all(
+      extraIds.map((cid: any) =>
+        ctx.db.query("communityMemberCoachSettings").withIndex("by_community", (q: any) => q.eq("communityId", cid)).first(),
+      ),
+    ),
+  );
+  expect(enrolledSettings.every((row: any) => row?.enabled === true)).toBe(true);
 });

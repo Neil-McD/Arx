@@ -21,10 +21,12 @@ import { WebCommunityAiAgentSection } from "./WebCommunityAiAgentSection";
 import { WebCommunityAiRulesEditor } from "./WebCommunityAiRulesEditor";
 import { GuideAllowedSettings } from "./GuideAllowedSettings";
 import { platformTabId, platformTabPanelId } from "./WebPlatformChoiceControls";
-import { CommunityFounderBriefSection } from "./CommunityFounderBriefSection";
 import { getMyMemberCoachPreference, setMyMemberCoachPreference } from "../../../../shared/cloudCommunityMemberCoachGateway";
 import type { MemberCoachPreferenceView } from "../../../../shared/communityMemberCoachTypes";
 
+const CommunityFounderBriefSection = lazy(() =>
+  import("./CommunityFounderBriefSection").then((m) => ({ default: m.CommunityFounderBriefSection })),
+);
 const CommunityMemberCoachSettingsSection = lazy(() =>
   import("./CommunityMemberCoachSettingsSection").then((m) => ({ default: m.CommunityMemberCoachSettingsSection })),
 );
@@ -751,20 +753,18 @@ export function WebCommunitySettingsSection(props: WebCommunitySettingsSectionPr
               />
             ) : null}
             {selectedSettingsPane === "agent" && isOwnerSettingsLayer ? (
-              <>
+              <Suspense fallback={null}>
                 <CommunityFounderBriefSection
                   communityId={resolvedActiveCommunity.id}
                   session={props.session}
                   ensureSession={props.ensureSession}
                 />
-                <Suspense fallback={null}>
-                  <CommunityMemberCoachSettingsSection
-                    communityId={resolvedActiveCommunity.id}
-                    session={props.session}
-                    ensureSession={props.ensureSession}
-                  />
-                </Suspense>
-              </>
+                <CommunityMemberCoachSettingsSection
+                  communityId={resolvedActiveCommunity.id}
+                  session={props.session}
+                  ensureSession={props.ensureSession}
+                />
+              </Suspense>
             ) : null}
           </div>
         </div>

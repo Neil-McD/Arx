@@ -142,6 +142,7 @@ async function readRecentCoachHistoryForMember(
   ctx: any,
   communityId: Id<"communities">,
   memberUserId: Id<"users">,
+  excludeDraftId?: Id<"communityMemberCoachDrafts">,
 ): Promise<MemberCoachHistoryRow[]> {
   const rows = await ctx.db
     .query("communityMemberCoachDrafts")
@@ -150,13 +151,15 @@ async function readRecentCoachHistoryForMember(
     )
     .order("desc")
     .take(25);
-  return rows.map((row: any) => ({
-    status: row.status,
-    reason: row.reason,
-    dedupeKey: String(row.dedupeKey ?? ""),
-    createdAt: Number(row.createdAt ?? 0),
-    ...(typeof row.sentAt === "number" ? { sentAt: row.sentAt } : {}),
-  }));
+  return rows
+    .filter((row: any) => !excludeDraftId || String(row._id) !== String(excludeDraftId))
+    .map((row: any) => ({
+      status: row.status,
+      reason: row.reason,
+      dedupeKey: String(row.dedupeKey ?? ""),
+      createdAt: Number(row.createdAt ?? 0),
+      ...(typeof row.sentAt === "number" ? { sentAt: row.sentAt } : {}),
+    }));
 }
 
 async function countCommunityCoachTouchesToday(
@@ -208,19 +211,48 @@ function monthKey(nowMs: number): string {
 
 // ---------- cron enrollment & scan lifecycle ----------
 
-// Enrolls funded active communities in Draft mode (enabled: true, autoReasons: [])
-// on first encounter, and returns communities whose coach scan is due.
+// Enrolls one bounded page of active founderSubscriptions in Draft mode
+// (enabled: true, autoReasons: []) and returns the next pagination cursor.
+export const enrollFounderSubscriptionsPageInternal = internalMutation({
+  args: { nowMs: v.number(), cursor: v.optional(v.union(v.string(), v.null())), pageSize: v.optional(v.number()) },
+  handler: async (ctx, args) => {
+    const numItems = Math.max(1, Math.min(100, Math.floor(args.pageSize ?? 100)));
+    const page = await ctx.db
+      .query("founderSubscriptions")
+      .withIndex("by_status", (q) => q.eq("status", "active"))
+      .paginate({ numItems, cursor: args.cursor ?? null });
+    let enrolled = 0;
+    for (const sub of page.page) {
+      if (!sub.communityId) continue;
+      const existing = await ctx.db
+        .query("communityMemberCoachSettings")
+        .withIndex("by_community", (q) => q.eq("communityId", sub.communityId!))
+        .first();
+      if (!existing) {
+        await ctx.db.insert("communityMemberCoachSettings", {
+          communityId: sub.communityId,
+          enabled: true,
+          autoReasons: [],
+          nextScanAt: args.nowMs,
+          createdAt: args.nowMs,
+          updatedAt: args.nowMs,
+        });
+        enrolled += 1;
+      }
+    }
+    return {
+      enrolled,
+      isDone: page.isDone,
+      continueCursor: page.isDone ? null : page.continueCursor,
+    };
+  },
+});
+
+// Enrolls operator-owned communities in Draft mode and returns communities
+// whose coach scan is due now.
 export const enrollAndListDueMemberCoachCommunitiesInternal = internalMutation({
   args: { nowMs: v.number() },
   handler: async (ctx, args) => {
-    const candidateCommunityIds = new Set<string>();
-    const activeSubs = await ctx.db
-      .query("founderSubscriptions")
-      .withIndex("by_status", (q) => q.eq("status", "active"))
-      .take(50);
-    for (const sub of activeSubs) {
-      if (sub.communityId) candidateCommunityIds.add(String(sub.communityId));
-    }
     const opOwners = await ctx.db
       .query("operatorRoles")
       .withIndex("by_active_role", (q) => q.eq("active", true).eq("role", "owner"))
@@ -231,26 +263,21 @@ export const enrollAndListDueMemberCoachCommunitiesInternal = internalMutation({
         .withIndex("by_owner", (q) => q.eq("ownerId", op.userId))
         .take(20);
       for (const comm of owned) {
-        if (communityIsActive(comm)) candidateCommunityIds.add(String(comm._id));
-      }
-    }
-
-    for (const rawId of candidateCommunityIds) {
-      const communityId = ctx.db.normalizeId("communities", rawId);
-      if (!communityId) continue;
-      const existing = await ctx.db
-        .query("communityMemberCoachSettings")
-        .withIndex("by_community", (q) => q.eq("communityId", communityId))
-        .first();
-      if (!existing) {
-        await ctx.db.insert("communityMemberCoachSettings", {
-          communityId,
-          enabled: true,
-          autoReasons: [],
-          nextScanAt: args.nowMs,
-          createdAt: args.nowMs,
-          updatedAt: args.nowMs,
-        });
+        if (!communityIsActive(comm)) continue;
+        const existing = await ctx.db
+          .query("communityMemberCoachSettings")
+          .withIndex("by_community", (q) => q.eq("communityId", comm._id))
+          .first();
+        if (!existing) {
+          await ctx.db.insert("communityMemberCoachSettings", {
+            communityId: comm._id,
+            enabled: true,
+            autoReasons: [],
+            nextScanAt: args.nowMs,
+            createdAt: args.nowMs,
+            updatedAt: args.nowMs,
+          });
+        }
       }
     }
 
@@ -291,47 +318,74 @@ export const claimCommunityMemberCoachScanInternal = internalMutation({
       communityOneLiner: String(community.oneLiner ?? "").trim() || null,
       ownerUserId: community.ownerId,
       autoReasons: normalizeMemberCoachReasons(settings.autoReasons),
+      scanCursorCreatedAt: typeof settings.scanCursorCreatedAt === "number" ? settings.scanCursorCreatedAt : null,
     };
   },
 });
 
 export const finishCommunityMemberCoachScanInternal = internalMutation({
-  args: { settingsId: v.id("communityMemberCoachSettings"), nowMs: v.number() },
+  args: {
+    settingsId: v.id("communityMemberCoachSettings"),
+    nowMs: v.number(),
+    nextScanCursorCreatedAt: v.optional(v.union(v.number(), v.null())),
+  },
   handler: async (ctx, args) => {
     const settings = await ctx.db.get(args.settingsId);
     if (!settings) return;
     await ctx.db.patch(settings._id, {
       leaseUntil: undefined,
       nextScanAt: args.nowMs + MEMBER_COACH_SCAN_INTERVAL_MS,
+      ...(args.nextScanCursorCreatedAt !== undefined
+        ? { scanCursorCreatedAt: args.nextScanCursorCreatedAt ?? undefined }
+        : {}),
       updatedAt: args.nowMs,
     });
   },
 });
 
-// Deterministic candidate selector + gate: finds the single highest-priority
-// member signal for this community that passes every interruption-budget cap.
+// Deterministic candidate selector + gate: rotates through the full membership
+// roster in bounded batches (persisting scanCursorCreatedAt) while also checking
+// recent newcomers so large communities never starve older members or newcomers.
 export const readNextMemberCoachCandidateInternal = internalQuery({
   args: {
     communityId: v.id("communities"),
     autoReasons: v.array(reasonValidator),
     nowMs: v.number(),
+    scanCursorCreatedAt: v.optional(v.union(v.number(), v.null())),
   },
   handler: async (ctx, args) => {
     const community: any = await ctx.db.get(args.communityId);
-    if (!community || !communityIsActive(community)) return null;
+    if (!community || !communityIsActive(community)) return { candidate: null, nextScanCursorCreatedAt: null as number | null };
     const touchedToday = await countCommunityCoachTouchesToday(ctx, args.communityId, args.nowMs);
-    if (touchedToday >= MEMBER_COACH_DAILY_COMMUNITY_CAP) return null;
+    if (touchedToday >= MEMBER_COACH_DAILY_COMMUNITY_CAP) {
+      return { candidate: null, nextScanCursorCreatedAt: args.scanCursorCreatedAt ?? null };
+    }
 
     const tz = await communityTimeZone(ctx, args.communityId);
     const autoSet = new Set<MemberCoachReason>(normalizeMemberCoachReasons(args.autoReasons));
+    const cursorMs = typeof args.scanCursorCreatedAt === "number" ? args.scanCursorCreatedAt : null;
 
-    // Read up to 60 recent memberships plus upcoming community-wide events (7d horizon).
-    const [memberships, eventCandidates] = await Promise.all([
+    // Rotating bounded scan of the full roster (oldest-past-cursor, wrapping back
+    // to newest when the tail is reached) plus a small recent-newcomers window.
+    const [rotatingBatch, recentNewcomerBatch, eventCandidates] = await Promise.all([
       ctx.db
         .query("communityMemberships")
-        .withIndex("by_community_createdAt", (q) => q.eq("communityId", args.communityId))
+        .withIndex("by_community_createdAt", (q) =>
+          cursorMs !== null
+            ? q.eq("communityId", args.communityId).lt("createdAt", cursorMs)
+            : q.eq("communityId", args.communityId),
+        )
         .order("desc")
         .take(CANDIDATE_MEMBERS_SCAN),
+      cursorMs !== null
+        ? ctx.db
+            .query("communityMemberships")
+            .withIndex("by_community_createdAt", (q) =>
+              q.eq("communityId", args.communityId).gte("createdAt", args.nowMs - QUIET_NEWCOMER_MAX_AGE_MS),
+            )
+            .order("desc")
+            .take(20)
+        : Promise.resolve([]),
       listCommunityEventExpansionCandidates({
         ctx,
         communityId: args.communityId,
@@ -340,6 +394,20 @@ export const readNextMemberCoachCandidateInternal = internalQuery({
         includeCancelled: false,
       }),
     ]);
+
+    const nextScanCursorCreatedAt =
+      rotatingBatch.length >= CANDIDATE_MEMBERS_SCAN
+        ? Number(rotatingBatch[rotatingBatch.length - 1]!.createdAt)
+        : null;
+
+    const seenMembershipIds = new Set<string>();
+    const memberships: any[] = [];
+    for (const row of [...rotatingBatch, ...recentNewcomerBatch]) {
+      const id = String(row._id);
+      if (seenMembershipIds.has(id)) continue;
+      seenMembershipIds.add(id);
+      memberships.push(row);
+    }
 
     const upcomingCommunityEvent = eventCandidates
       .filter((row) => !row.podChannelId)
@@ -496,7 +564,7 @@ export const readNextMemberCoachCandidateInternal = internalQuery({
       }
     }
 
-    if (candidates.length === 0) return null;
+    if (candidates.length === 0) return { candidate: null, nextScanCursorCreatedAt };
     candidates.sort((a, b) => a.priority - b.priority);
     const chosen = candidates[0]!;
 
@@ -507,18 +575,21 @@ export const readNextMemberCoachCandidateInternal = internalQuery({
       subjectUserId: chosen.memberUserId,
       lens: "self",
     });
-    if (!person) return null;
+    if (!person) return { candidate: null, nextScanCursorCreatedAt };
 
     return {
-      memberUserId: chosen.memberUserId,
-      memberName: person.name || (person.handle ? `@${person.handle}` : "Member"),
-      memberBio: person.bio,
-      memberSharedFacts: person.shared.slice(0, 6).map((fact) => `${fact.label}: ${fact.body}`),
-      reason: chosen.reason,
-      dedupeKey: chosen.dedupeKey,
-      signalSummary: chosen.signalSummary,
-      signalDetail: chosen.signalDetail,
-      mode: chosen.mode,
+      nextScanCursorCreatedAt,
+      candidate: {
+        memberUserId: chosen.memberUserId,
+        memberName: person.name || (person.handle ? `@${person.handle}` : "Member"),
+        memberBio: person.bio,
+        memberSharedFacts: person.shared.slice(0, 6).map((fact) => `${fact.label}: ${fact.body}`),
+        reason: chosen.reason,
+        dedupeKey: chosen.dedupeKey,
+        signalSummary: chosen.signalSummary,
+        signalDetail: chosen.signalDetail,
+        mode: chosen.mode,
+      },
     };
   },
 });
@@ -652,12 +723,16 @@ async function runCoachForCommunity(
   });
   if (!claim) return "skipped";
 
+  let nextScanCursorCreatedAt: number | null | undefined = undefined;
   try {
-    const candidate = await ctx.runQuery(internalRefs.communityMemberCoach.readNextMemberCoachCandidateInternal, {
+    const scanResult = await ctx.runQuery(internalRefs.communityMemberCoach.readNextMemberCoachCandidateInternal, {
       communityId: claim.communityId,
       autoReasons: claim.autoReasons,
       nowMs,
+      scanCursorCreatedAt: claim.scanCursorCreatedAt,
     });
+    nextScanCursorCreatedAt = scanResult?.nextScanCursorCreatedAt ?? null;
+    const candidate = scanResult?.candidate ?? null;
     if (!candidate) return "no_candidate";
 
     const funding = await resolveCommunityInferenceFundingForAction(ctx, claim.communityId);
@@ -746,14 +821,29 @@ async function runCoachForCommunity(
     await ctx.runMutation(internalRefs.communityMemberCoach.finishCommunityMemberCoachScanInternal, {
       settingsId: item.settingsId,
       nowMs: Date.now(),
+      ...(nextScanCursorCreatedAt !== undefined ? { nextScanCursorCreatedAt } : {}),
     });
   }
 }
+
+const MAX_ENROLLMENT_PAGES_PER_RUN = 25;
 
 export const processDueMemberCoachScansInternal = internalAction({
   args: {},
   handler: async (ctx) => {
     const nowMs = Date.now();
+    // Paginate through all active founder subscriptions in bounded pages so
+    // every funded community is discovered regardless of total subscription count.
+    let cursor: string | null = null;
+    for (let page = 0; page < MAX_ENROLLMENT_PAGES_PER_RUN; page += 1) {
+      const res: { enrolled: number; isDone: boolean; continueCursor: string | null } = await ctx.runMutation(
+        internalRefs.communityMemberCoach.enrollFounderSubscriptionsPageInternal,
+        { nowMs, cursor },
+      );
+      if (res.isDone || !res.continueCursor) break;
+      cursor = res.continueCursor;
+    }
+
     const due = await ctx.runMutation(
       internalRefs.communityMemberCoach.enrollAndListDueMemberCoachCommunitiesInternal,
       { nowMs },
@@ -843,6 +933,29 @@ export const sendMemberCoachDraft = mutation({
         updatedAt: nowMs,
       });
       throw new Error("community_member_coach_no_longer_needed");
+    }
+    // Revalidate the interruption budget right at delivery time (excluding this
+    // draft itself) so an owner never sends into an active member conversation
+    // or over the weekly/cooldown caps.
+    const [lastUserAgentAt, recentHistory] = await Promise.all([
+      readLastUserAgentMessageAt(ctx, args.communityId, draft.memberUserId),
+      readRecentCoachHistoryForMember(ctx, args.communityId, draft.memberUserId, draft._id),
+    ]);
+    const deliveryGate = evaluateMemberCoachGate({
+      nowMs,
+      isOwner: false,
+      memberMuted: false,
+      reason: draft.reason,
+      dedupeKey: `approved-delivery:${String(draft._id)}`,
+      lastUserThreadMessageAt: lastUserAgentAt,
+      recentHistory,
+      autoReasonEnabled: false,
+    });
+    if (!deliveryGate.allowed) {
+      if (deliveryGate.blockReason === "mid_conversation") {
+        throw new Error("community_member_coach_active_conversation");
+      }
+      throw new Error("community_member_coach_cap_reached");
     }
     const finalText = (args.text !== undefined ? args.text : draft.text ?? "").replace(/\r\n/g, "\n").trim();
     if (!finalText) throw new Error("community_member_coach_empty_text");

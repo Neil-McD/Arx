@@ -2006,6 +2006,7 @@ export default defineSchema({
       ),
     ),
     nextScanAt: v.optional(v.number()),
+    scanCursorCreatedAt: v.optional(v.number()),
     leaseUntil: v.optional(v.number()),
     updatedByUserId: v.optional(v.id("users")),
     createdAt: v.number(),

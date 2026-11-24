@@ -344,6 +344,12 @@ export function WebCommunityHomeSection(props: WebCommunityHomeSectionProps) {
         setCoachDrafts((current) => (current ?? []).filter((draft) => draft.id !== id));
         return null;
       }
+      if (raw.includes("active_conversation")) {
+        return "They're chatting with the guide right now — try again later.";
+      }
+      if (raw.includes("cap_reached")) {
+        return "They've already received a recent check-in. Try again later.";
+      }
       return raw.includes("too_long") ? "That's too long to send. Shorten it and try again." : "That didn't send. Try again.";
     }
   };
