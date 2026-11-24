@@ -10,6 +10,7 @@
 // /pods/<pod> is the pod's page.
 import { useCallback, useEffect, useState } from "react";
 import { CommunityPageHeader, CommunityPageRail } from "./CommunityPageHeader";
+import { PanelBlockSkeleton, PodGridSkeleton } from "./WebLoadingSkeleton";
 import { resolveAuthSubject, type AuthSessionLike } from "../../../../shared/authSession";
 import { useLiveQuery } from "../../../../shared/liveQuery";
 import {
@@ -175,7 +176,7 @@ function PodPitch(props: WebCommunityPodsSectionProps & { podSlug: string; inlin
   const back = props.inline && !isPhone
     ? <button type="button" className={cx("link")} onClick={() => props.onNavigate({ kind: "pods" })}>← Pods</button>
     : null;
-  if (!page) return null;
+  if (!page) return <PanelBlockSkeleton label="Loading pod…" />;
   // Someone who can enter it (it joined them since the list loaded): the way in.
   if (page.kind === "inside") {
     return (
@@ -482,6 +483,7 @@ function PodsList(props: WebCommunityPodsSectionProps) {
                 use the top bar's Back arrow). */}
             {!isPhone && shown?.kind !== "pitch" ? <button type="button" className={cx("link")} onClick={() => props.onNavigate({ kind: "pods" })}>← Pods</button> : null}
             {failed ? <p className={cx("sub")} role="alert">Pods couldn't load. <button type="button" className={cx("link")} onClick={() => void retryLoad()}>Try again</button></p> : null}
+            {!state && !failed && !shown ? <PanelBlockSkeleton label="Loading pod…" /> : null}
             {shownPage(true)}
           </div>
         </KitApp>
@@ -497,6 +499,7 @@ function PodsList(props: WebCommunityPodsSectionProps) {
           <p className={cx("lead")} style={{ marginTop: 0 }}>{lead}</p>
           {notice ? <p className={cx("sub")} role="status">{notice}</p> : null}
           {failed ? <p className={cx("sub")} role="alert">Pods couldn't load. <button type="button" className={cx("link")} onClick={() => void retryLoad()}>Try again</button></p> : null}
+          {!state && !failed ? <PodGridSkeleton /> : null}
           {pods.length || canManage ? (
             <div className={cx("podgrid")}>
               {pods.map((pod) => (

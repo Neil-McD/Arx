@@ -1,4 +1,5 @@
 import { CommunityPageHeader, CommunityPageRail } from "./CommunityPageHeader";
+import { EventListSkeleton } from "./WebLoadingSkeleton";
 import { KitEventsList } from "../v1/KitEventsList";
 import { KitEventForm } from "../v1/KitEventForm";
 import { announceCommunityEventsChanged } from "../../../../shared/communityEventsChanged";
@@ -337,7 +338,7 @@ export function WebCommunityEventsSection(props: WebCommunityEventsSectionProps)
 
       <div className="community-events-content" aria-busy={state.isLoadingEvents}>
         {showInitialEventsLoading ? (
-          <div className="community-events-state" role="status">Loading events…</div>
+          <EventListSkeleton />
         ) : state.eventsError && state.events.length === 0 ? null : (
           <KitEventsList
             featured={listParts.featured}
