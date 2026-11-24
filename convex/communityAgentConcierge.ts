@@ -58,6 +58,7 @@ export const getMyLatestCommunityAgentServeIssue = query({
 
     const issue = rows.find((row) => {
       if (row.agentKey !== CANONICAL_COMMUNITY_AGENT_KEY) return false;
+      if ((row as any).triggerKind === "thread_followup") return false;
       if (row.status !== "skipped" && row.status !== "error") return false;
       const issueCode = row.status === "skipped" ? row.intakeReason : row.errorCode;
       if (

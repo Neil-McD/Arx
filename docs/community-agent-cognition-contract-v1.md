@@ -1798,9 +1798,19 @@ Rules:
   signals for that same intake, not separate jobs. A direct agent target is
   either `targetReplyId` pointing to a live reply authored by the canonical
   community-agent identity or an untargeted reply under a root authored by
-  that canonical identity. Targeting a human,
-  a general comment under a human-authored root, or prior agent participation
-  elsewhere in the thread does not invoke the agent without an explicit mention.
+  that canonical identity. Targeting a human or mentioning another member/role
+  without mentioning the agent never invokes the agent. For untargeted human
+  replies without other mentions in a thread where the canonical community
+  agent already posted a live reply, bounded `thread_followup` admission
+  (enabled by default via `communityMemberCoachSettings.threadFollowupEnabled`)
+  may enqueue a silence-by-default turn within 2 hours of the agent's last live
+  reply and up to 4 consecutive automatic follow-ups (reset by a fresh
+  `mention` or `direct_reply`); silent `[[SILENT]]` outcomes settle usage and
+  mark the request `skipped` (`thread_followup_silent`) without posting a reply
+  or advancing the 4-reply cap, and suppress unsolicited rate-limit apology
+  replies or error banners. Outside these bounds—or when the owner disables
+  thread follow-up—a general comment under a human-authored root requires an
+  explicit mention or direct agent target.
 - Community-agent mention intake has no polling repair drain. The canonical
   human composer creates the mention row and enters source-turn intake in the
   same atomic mutation; a scheduling failure rolls the write back instead of

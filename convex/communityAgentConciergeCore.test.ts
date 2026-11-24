@@ -201,13 +201,13 @@ describe("community-agent canonical source-turn admission", () => {
     expect(await requests(t)).toHaveLength(1);
   });
 
-  test("prior community-agent participation does not wake the agent", async () => {
+  test("prior community-agent participation wakes as thread_followup within the active window unless disabled", async () => {
     const t = convexTest(schema, modules);
     const fixture = await createFixture(t, "participating");
     await insertReply(t, fixture, { seq: 1, actorType: "community_agent" });
     const humanReplyId = await insertReply(t, fixture, { seq: 2, actorType: "human" });
 
-    const result = await t.run(async (ctx) => await intakeCommunityAgentTurn({
+    const activeResult = await t.run(async (ctx) => await intakeCommunityAgentTurn({
       ctx,
       communityId: fixture.communityId,
       rootId: fixture.rootId,
@@ -215,8 +215,30 @@ describe("community-agent canonical source-turn admission", () => {
       nowMs: 3_000,
     }));
 
-    expect(result).toMatchObject({ status: "ignored", intake_reason: "not_addressed" });
-    expect(await requests(t)).toHaveLength(0);
+    expect(activeResult).toMatchObject({ status: "queued", trigger_kind: "thread_followup" });
+    expect(await requests(t)).toHaveLength(1);
+
+    await t.run(async (ctx) => {
+      await ctx.db.insert("communityMemberCoachSettings", {
+        communityId: fixture.communityId,
+        enabled: true,
+        autoReasons: [],
+        threadFollowupEnabled: false,
+        createdAt: 3_000,
+        updatedAt: 3_000,
+      });
+    });
+    const nextHumanReplyId = await insertReply(t, fixture, { seq: 3, actorType: "human" });
+    const disabledResult = await t.run(async (ctx) => await intakeCommunityAgentTurn({
+      ctx,
+      communityId: fixture.communityId,
+      rootId: fixture.rootId,
+      replyId: nextHumanReplyId,
+      nowMs: 4_000,
+    }));
+
+    expect(disabledResult).toMatchObject({ status: "ignored", intake_reason: "not_addressed" });
+    expect(await requests(t)).toHaveLength(1);
   });
 
   test("a human reply continues an agent-authored root without another mention", async () => {
