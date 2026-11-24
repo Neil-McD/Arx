@@ -2833,15 +2833,33 @@
   box-shadow: inset 0 0 0 1px rgba(13, 17, 23, 0.08);
 }
 
-/* The channel's right column on the kit (KitChannelRail): the kit pads it. */
+/* The channel's right column on the kit (KitChannelRail / KitPodRail): the kit pads it. */
 :root[data-design="v1"] .channel-roster-panel.is-v1.is-kit {
   padding: 0;
   gap: 0;
   overflow-y: auto;
 }
 
-:root[data-design="v1"] .channel-roster-panel.is-v1.is-kit > * {
-  min-height: 100%;
+:root[data-design="v1"] .channel-roster-panel.is-v1.is-kit > :not(.channel-people-back) {
+  flex: 1 0 auto;
+  min-height: 0;
+}
+
+:root[data-design="v1"] .channel-roster-panel.is-v1.is-kit > .channel-people-back {
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px 6px 10px;
+  border-bottom: 1px solid var(--border-default);
+}
+
+:root[data-design="v1"] .channel-roster-panel.is-v1.is-kit .channel-people-back-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-ink-primary);
 }
 
 /* The channel's top bar, as in the mock: the line about the channel after
@@ -3639,6 +3657,10 @@
    that sat beside it (Inbox, the guide, the top bar, the bottom tabs) sits on
    the screen's own edge inset instead. */
 :root[data-design="v1"] { --mobile-community-rail-width: var(--community-shell-inset); }
+:root[data-design="v1"][data-layout="phone"] .community-channel-header .channel-people-trigger { display: inline-flex; margin-left: auto; }
+:root[data-design="v1"][data-layout="phone"] .community-interaction-projection.people-panel-open > .community-interaction-main { display: none; }
+:root[data-design="v1"][data-layout="phone"] .community-interaction-projection.people-panel-open > .channel-roster-panel { display: flex; min-height: 0; border-left: 0; }
+:root[data-design="v1"][data-layout="phone"] .community-interaction-projection.people-panel-open .channel-people-back { display: flex; flex-shrink: 0; }
 
 /* ---------- The desktop shell: the right column stays open (Nov 13, Neil) ----------
    The window's width picks one of three shapes, and nothing in between
@@ -3664,6 +3686,10 @@
   :root[data-design="v1"]:where(:not([data-layout="phone"])) .community-interaction-projection:has(> .members-page-record) { grid-template-columns: minmax(0, 1fr); }
   :root[data-design="v1"]:where(:not([data-layout="phone"])) .community-interaction-projection.has-channel-context > .channel-roster-panel,
   :root[data-design="v1"]:where(:not([data-layout="phone"])) .community-interaction-projection > .members-page-record { display: none; }
+  :root[data-design="v1"]:where(:not([data-layout="phone"])) .community-interaction-projection:has(> .channel-roster-panel.is-pod-rail) .community-channel-header .channel-people-trigger { display: inline-flex; margin-left: auto; }
+  :root[data-design="v1"]:where(:not([data-layout="phone"])) .community-interaction-projection.people-panel-open:has(> .channel-roster-panel.is-pod-rail) > .community-interaction-main { display: none; }
+  :root[data-design="v1"]:where(:not([data-layout="phone"])) .community-interaction-projection.people-panel-open > .channel-roster-panel.is-pod-rail { display: flex; min-height: 0; border-left: 0; }
+  :root[data-design="v1"]:where(:not([data-layout="phone"])) .community-interaction-projection.people-panel-open > .channel-roster-panel.is-pod-rail > .channel-people-back { display: flex; flex-shrink: 0; }
 
   /* Inbox: the list takes the page; an open conversation replaces it. */
   :root[data-design="v1"]:where(:not([data-layout="phone"])) .web-direct-messages-host.is-page .community-dm-inbox-panel { padding-right: var(--inbox-gutter); }

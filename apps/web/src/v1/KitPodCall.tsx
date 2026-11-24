@@ -7,6 +7,7 @@ import { cancelCloudCommunityEvent, saveCloudCommunityEvent } from "../../../../
 import type { CloudPodDetail } from "../../../../shared/cloudCommunityPodsGateway";
 import { formatMomentWhen } from "../../../../shared/communityHomeMoments";
 import { announceCommunityEventsChanged } from "../../../../shared/communityEventsChanged";
+import { askInApp } from "../../../../shared/inAppConfirm";
 import { Btn, cx } from "./kit";
 import { PanelAction, PanelLine, PanelNext, PanelPart } from "./KitPanel";
 
@@ -18,6 +19,20 @@ export function podRhythmText(rhythm: { recurrence_frequency: string; next_start
   const when = formatMomentWhen(rhythm.next_starts_at);
   const repeats = REPEAT_WORD[rhythm.recurrence_frequency];
   return repeats ? `Meets ${repeats.toLowerCase()} · next ${when}` : `Next call ${when}`;
+}
+
+export async function confirmAndCancelPodCall(input: {
+  session: unknown;
+  call: { event_id: string; title: string };
+}): Promise<"dismissed" | "canceled"> {
+  if (!(await askInApp({
+    message: `Cancel "${input.call.title}"? Members will no longer see it on the schedule.`,
+    yes: "Cancel call",
+    no: "Keep call",
+    danger: true,
+  }))) return "dismissed";
+  await cancelCloudCommunityEvent({ session: input.session, eventId: input.call.event_id });
+  return "canceled";
 }
 
 export function KitPodCall(props: { session: unknown; communityId: string; pod: CloudPodDetail; onChanged: () => void }) {
@@ -58,8 +73,14 @@ export function KitPodCall(props: { session: unknown; communityId: string; pod: 
   const cancel = async () => {
     if (!call || busy) return;
     setBusy(true);
-    try { await cancelCloudCommunityEvent({ session: props.session, eventId: call.event_id }); props.onChanged(); announceCommunityEventsChanged(); }
-    catch { /* stays */ } finally { setBusy(false); }
+    setError(null);
+    try {
+      const outcome = await confirmAndCancelPodCall({ session: props.session, call });
+      if (outcome === "canceled") {
+        props.onChanged();
+        announceCommunityEventsChanged();
+      }
+    } catch { setError("Couldn't cancel the call. Try again."); } finally { setBusy(false); }
   };
 
   // No call and nobody here to plan one: the part is not drawn.
@@ -70,11 +91,12 @@ export function KitPodCall(props: { session: unknown; communityId: string; pod: 
         action={pod.can_manage ? <PanelAction disabled={busy} onClick={() => void cancel()}>Cancel call</PanelAction> : null}>
         <PanelNext title={formatMomentWhen(call.starts_at)} sub={call.title}
           action={call.url ? <a className={cx("btn go")} href={call.url} target="_blank" rel="noreferrer noopener">Join</a> : null} />
+        {error ? <p className={cx("bad")} role="alert">{error}</p> : null}
       </PanelPart>
     );
   }
   return (
-    <PanelPart label="Next call" action={scheduling ? null : <PanelAction onClick={() => setScheduling(true)}>Schedule a call</PanelAction>}>
+    <PanelPart label="Next call" action={scheduling ? null : <PanelAction onClick={() => { setError(null); setScheduling(true); }}>Schedule a call</PanelAction>}>
       {scheduling ? (
         <div className={cx("podform")} style={{ marginTop: 0 }}>
           <input value={draft.title} onChange={(event) => setDraft({ ...draft, title: event.target.value })} placeholder={`${pod.name} call`} aria-label="Call title" maxLength={80} />

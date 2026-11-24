@@ -7,6 +7,7 @@ import { useState } from "react";
 import type { CloudPodDetail, CloudPodNote } from "../../../../shared/cloudCommunityPodsGateway";
 import { formatMomentWhen } from "../../../../shared/communityHomeMoments";
 import { Btn, cx } from "./kit";
+import { PanelBrainMap, useBrainMap } from "./KitBrain";
 import { BriefPart, usePlaceBriefRead } from "./KitBrief";
 import { resolveAuthSubject, type AuthSessionLike } from "../../../../shared/authSession";
 import { useLiveQuery } from "../../../../shared/liveQuery";
@@ -24,6 +25,7 @@ export function KitPodLanding(props: {
   const [now] = useState(() => Date.now());
   const channelId = props.pod.channel_id;
   const { brief, settled: briefSettled } = usePlaceBriefRead(props.session, props.communityId, channelId);
+  const { map: brain } = useBrainMap(props.session, props.communityId, channelId);
   // Single live stream (shared/liveQuery.ts): the pod detail and its notes
   // draw straight from the live subscription with 30s linger across switches.
   const subject = props.session ? resolveAuthSubject(props.session as AuthSessionLike) : null;
@@ -56,6 +58,7 @@ export function KitPodLanding(props: {
       ) : null}
       {notes.length ? (
         <PanelPart label="What this pod knows" fact={String(notes.length)}>
+          {brain ? <PanelBrainMap map={brain} now={now} onOpen={props.onOpen} label={`Open ${props.pod.name}`} /> : null}
           <PanelLine>{notes.length} {notes.length === 1 ? "note" : "notes"} learned</PanelLine>
         </PanelPart>
       ) : null}
