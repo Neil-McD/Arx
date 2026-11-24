@@ -4,6 +4,7 @@ import { convexTest } from "convex-test";
 import { describe, expect, test } from "vitest";
 import schema from "./schema";
 import { api, internal } from "./_generated/api";
+import type { Id } from "./_generated/dataModel";
 import { intakeCommunityAgentTurn } from "./communityAgentConciergeCore";
 import {
   THREAD_FOLLOWUP_MAX_CONSECUTIVE,
@@ -368,16 +369,17 @@ describe("smart thread follow-up without re-tagging", () => {
     expect(afterReset.trigger_kind).toBe("thread_followup");
 
     // Finalizing that request with silent: true marks it skipped and writes zero replies.
+    const followupRequestId = afterReset.request_id as Id<"communityAgentServeRequests">;
     const claim = await t.mutation(
       internal.communityAgentServeWorker.claimNextCommunityAgentServeRequestInternal,
-      { requestId: afterReset.request_id as any, nowMs: agentAt + 31_000 },
+      { requestId: followupRequestId, nowMs: agentAt + 31_000 },
     );
-    expect(claim?.requestId).toBe(afterReset.request_id);
+    expect(claim?.requestId).toBe(followupRequestId);
     const silentResult = await t.mutation(
       internal.communityAgentServeWorker.finalizeCommunityAgentServeReplyInternal,
       {
-        requestId: afterReset.request_id as any,
-        expectedAttempt: claim.attempt,
+        requestId: followupRequestId,
+        expectedAttempt: Number(claim?.attempt ?? 1),
         content: "",
         silent: true,
         nowMs: agentAt + 32_000,
@@ -385,7 +387,7 @@ describe("smart thread follow-up without re-tagging", () => {
     );
     expect(silentResult).toMatchObject({ ok: true, silent: true, responseReplyId: null });
 
-    const storedReq = await t.run(async (ctx) => await ctx.db.get(afterReset.request_id as any));
+    const storedReq = await t.run(async (ctx) => await ctx.db.get(followupRequestId));
     expect(storedReq?.status).toBe("skipped");
     expect(storedReq?.skipReason).toBe("thread_followup_silent");
 
