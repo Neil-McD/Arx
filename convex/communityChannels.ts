@@ -311,6 +311,13 @@ export const deleteCommunityChannel = mutation({
       communityId: args.communityId,
       userId,
     });
+    // A pod people still pay for can't go: their billing would keep running.
+    // The builder takes them off first (that stops it), then deletes.
+    for (const status of ["active", "past_due", "cancel_at_period_end", "pending"] as const) {
+      const paying = await ctx.db.query("communityPodPayments")
+        .withIndex("by_channel_status", (q: any) => q.eq("channelId", args.channelId).eq("status", status)).first();
+      if (paying) throw new Error("community_pod_has_payments");
+    }
     const archived = await archiveActiveCommunityChannel({
       ctx,
       communityId: args.communityId,

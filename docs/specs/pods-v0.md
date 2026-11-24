@@ -325,3 +325,23 @@ automations, and the agents' table.
   or someone outside the community, gets nothing; the full pod map still needs
   a seat in the pod.
 
+## Pod settings (Nov 24)
+
+One window over the pod, opened from its right column ("Pod settings" under
+About this pod, "Manage" on the people part, or `?settings=<tab>` in the
+address, so Back closes it). The right column itself only shows the pod.
+
+- **Pitch** (the pod's hosts and the builder): what it's for, what you get,
+  About and cover, with the page members outside the pod see beside it.
+- **People** (hosts and the builder): join requests (Add, Decline), everyone in
+  the pod and how they're in (paying, added, leaving, payment problem, from
+  their plan), and adding a community member directly (`addPodMember`). The
+  builder also turns hosts on and off and takes people off (their pod billing
+  stops); a seat their plan gives can't be taken away here.
+- **Access** (the builder): listed or hidden, seats, price, and the plans that
+  include the pod.
+- **Pod** (the builder): rename, the link, delete. A pod people still pay for
+  can't be deleted (`community_pod_has_payments`): take them off first.
+
+Later, community settings gets a Pods section that opens this same window.
+
