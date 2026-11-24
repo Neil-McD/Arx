@@ -106,7 +106,9 @@ export function CommunityMemberCoachSettingsSection(props: {
     : null;
   const winBackSummary = impact
     ? impact.contacted_30d > 0
-      ? `${impact.reengaged_30d} of ${impact.contacted_30d} members checked in came back in the last 30 days.`
+      ? impact.reengagement_truncated
+        ? `${impact.reengaged_30d} of ${impact.contacted_30d} sampled members checked in came back in the last 30 days.`
+        : `${impact.reengaged_30d} of ${impact.contacted_30d} members checked in came back in the last 30 days.`
       : "No proactive check-ins sent in the last 30 days yet."
     : null;
 

@@ -231,6 +231,76 @@ describe("zero-AI system re-engagement & founder spend/win-back visibility (Slic
       percent_used: 9,
       reengaged_30d: 1,
       contacted_30d: 2,
+      reengagement_truncated: false,
+    });
+
+    // When an open Stripe billing cycle exists, allowance & spend align to that active cycle.
+    await t.run(async (ctx) => {
+      const comm = await ctx.db.get(fx.communityId);
+      const subId = await ctx.db.insert("founderSubscriptions", {
+        ownerUserId: comm!.ownerId,
+        communityId: fx.communityId,
+        provider: "stripe",
+        providerCustomerId: "cus_test",
+        providerSubscriptionId: "sub_test",
+        providerPriceId: "price_founder_79_monthly",
+        status: "active",
+        currentPeriodStartAt: nowMs - 10 * DAY_MS,
+        currentPeriodEndAt: nowMs + 20 * DAY_MS,
+        cancelAtPeriodEnd: false,
+        lastProviderEventCreatedAt: nowMs,
+        createdAt: nowMs - 10 * DAY_MS,
+        updatedAt: nowMs - 10 * DAY_MS,
+      });
+      const cycleId = await ctx.db.insert("founderUsageCycles", {
+        founderSubscriptionId: subId,
+        communityId: fx.communityId,
+        cycleKey: "cycle-active",
+        cycleStartAt: nowMs - 10 * DAY_MS,
+        cycleEndAt: nowMs + 20 * DAY_MS,
+        includedCostMicros: 25_000_000,
+        reservedCostMicros: 0,
+        settledCostMicros: 5_000_000,
+        pricingVersion: "v1",
+        inputCostMicrosPerMillionTokens: 1_000_000,
+        outputCostMicrosPerMillionTokens: 2_000_000,
+        maxRunReservationCostMicros: 1_000_000,
+        status: "open",
+        createdAt: nowMs - 10 * DAY_MS,
+        updatedAt: nowMs - 10 * DAY_MS,
+      });
+      await ctx.db.insert("communityInferenceReceipts", {
+        communityId: fx.communityId,
+        actorUserId: comm!.ownerId,
+        payerUserId: comm!.ownerId,
+        fundingMode: "platform_subscription",
+        founderSubscriptionId: subId,
+        usageCycleId: cycleId,
+        receiptKey: "r-cycle-1",
+        sourceRunId: "run-cycle-1",
+        surface: "community_autonomous_cognition",
+        provider: "openai",
+        modelId: "gpt-6-luna",
+        status: "settled",
+        settledCostMicros: 5_000_000,
+        claimToken: "claim",
+        leaseExpiresAt: nowMs + HOUR_MS,
+        authorizedAt: nowMs - HOUR_MS,
+        createdAt: nowMs - HOUR_MS,
+        updatedAt: nowMs - HOUR_MS,
+      });
+    });
+
+    const cycleView = await owner.query(api.communityMemberCoach.getMemberCoachSettings, {
+      authSubject: "owner-roi",
+      communityId: fx.communityId,
+    });
+    expect(cycleView.impact).toMatchObject({
+      total_micros: 5_000_000,
+      proactive_micros: 5_000_000,
+      live_chat_micros: 0,
+      allowance_micros: 25_000_000,
+      percent_used: 20,
     });
 
     // Turning weekly digest off suppresses weekly digest worker cleanly.

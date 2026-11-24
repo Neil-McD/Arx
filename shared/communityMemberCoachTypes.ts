@@ -73,6 +73,7 @@ export type MemberCoachImpactSummary = {
   spend_truncated: boolean;
   reengaged_30d: number;
   contacted_30d: number;
+  reengagement_truncated: boolean;
 };
 
 export type MemberCoachSettingsView = {

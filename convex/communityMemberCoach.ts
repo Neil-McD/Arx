@@ -1405,6 +1405,7 @@ export const skipMemberCoachDraft = mutation({
 });
 
 const MONTHLY_SPEND_RECEIPT_SCAN_LIMIT = 400;
+const REENGAGEMENT_DRAFT_SCAN_LIMIT = 100;
 const REENGAGEMENT_MEMBER_CHECK_CAP = 40;
 const REENGAGEMENT_WINDOW_MS = 30 * DAY_MS;
 
@@ -1413,9 +1414,8 @@ async function buildCoachSettingsView(
   communityId: Id<"communities">,
 ): Promise<MemberCoachSettingsView> {
   const nowMs = Date.now();
-  const monthStartMs = utcMonthWindow(nowMs).startAt;
   const reengageCutoffMs = nowMs - REENGAGEMENT_WINDOW_MS;
-  const [row, sentWeek, waiting, monthReceipts, sent30d] = await Promise.all([
+  const [row, sentWeek, waiting, openFounderCycle, sent30d] = await Promise.all([
     ctx.db
       .query("communityMemberCoachSettings")
       .withIndex("by_community", (q: any) => q.eq("communityId", communityId))
@@ -1433,27 +1433,65 @@ async function buildCoachSettingsView(
       )
       .take(25),
     ctx.db
-      .query("communityInferenceReceipts")
-      .withIndex("by_community_createdAt", (q: any) =>
-        q.eq("communityId", communityId).gte("createdAt", monthStartMs),
+      .query("founderUsageCycles")
+      .withIndex("by_community_status", (q: any) =>
+        q.eq("communityId", communityId).eq("status", "open"),
       )
-      .take(MONTHLY_SPEND_RECEIPT_SCAN_LIMIT + 1),
+      .order("desc")
+      .first(),
     ctx.db
       .query("communityMemberCoachDrafts")
       .withIndex("by_community_status_sentAt", (q: any) =>
         q.eq("communityId", communityId).eq("status", "sent").gte("sentAt", reengageCutoffMs),
       )
-      .take(100),
+      .order("desc")
+      .take(REENGAGEMENT_DRAFT_SCAN_LIMIT + 1),
   ]);
 
-  const spendTruncated = monthReceipts.length > MONTHLY_SPEND_RECEIPT_SCAN_LIMIT;
+  // Align allowance & spend window with the active Stripe billing cycle when
+  // present, falling back to the UTC calendar month for operator-funded or free communities.
+  const activeCycle =
+    openFounderCycle &&
+    typeof openFounderCycle.cycleEndAt === "number" &&
+    openFounderCycle.cycleEndAt > nowMs
+      ? openFounderCycle
+      : null;
+  const cycleStartMs = activeCycle ? Number(activeCycle.cycleStartAt) : utcMonthWindow(nowMs).startAt;
+  const allowanceMicros = activeCycle
+    ? Number(activeCycle.includedCostMicros ?? POLYNET_FOUNDER_PLAN_INCLUDED_COST_MICROS)
+    : POLYNET_FOUNDER_PLAN_INCLUDED_COST_MICROS;
+
+  const rawCycleReceipts = await ctx.db
+    .query("communityInferenceReceipts")
+    .withIndex("by_community_createdAt", (q: any) =>
+      q.eq("communityId", communityId).gte("createdAt", cycleStartMs),
+    )
+    .take(MONTHLY_SPEND_RECEIPT_SCAN_LIMIT + 1);
+  const spendTruncated = rawCycleReceipts.length > MONTHLY_SPEND_RECEIPT_SCAN_LIMIT;
+  const boundedReceipts = spendTruncated
+    ? rawCycleReceipts.slice(0, MONTHLY_SPEND_RECEIPT_SCAN_LIMIT)
+    : rawCycleReceipts;
+  const scopedReceipts = activeCycle
+    ? boundedReceipts.filter((receipt: any) => String(receipt.usageCycleId ?? "") === String(activeCycle._id))
+    : boundedReceipts;
   const spend = summarizeCommunityAiSpend({
-    receipts: spendTruncated ? monthReceipts.slice(0, MONTHLY_SPEND_RECEIPT_SCAN_LIMIT) : monthReceipts,
-    allowanceMicros: POLYNET_FOUNDER_PLAN_INCLUDED_COST_MICROS,
+    receipts: scopedReceipts,
+    allowanceMicros,
     truncated: spendTruncated,
   });
+  // When an active billing cycle ledger exists, use its authoritative settled total
+  // for total_micros & percent_used so the headline never drifts on busy communities.
+  const authoritativeTotalMicros = activeCycle
+    ? Math.max(spend.totalMicros, Math.floor(Number(activeCycle.settledCostMicros ?? 0)))
+    : spend.totalMicros;
+  const authoritativePercentUsed =
+    allowanceMicros > 0
+      ? Math.min(100, Math.round((authoritativeTotalMicros / allowanceMicros) * 100))
+      : 0;
 
-  const sentChecks = sent30d
+  const draftsTruncated = sent30d.length > REENGAGEMENT_DRAFT_SCAN_LIMIT;
+  const boundedSent30d = draftsTruncated ? sent30d.slice(0, REENGAGEMENT_DRAFT_SCAN_LIMIT) : sent30d;
+  const sentChecks = boundedSent30d
     .map((draft: any) => ({
       memberUserId: String(draft.memberUserId),
       rawMemberUserId: draft.memberUserId as Id<"users">,
@@ -1461,11 +1499,16 @@ async function buildCoachSettingsView(
     }))
     .filter((entry: any) => entry.sentAt > 0);
   const uniqueMembers = new Map<string, Id<"users">>();
+  let membersTruncated = false;
   for (const check of sentChecks) {
-    if (!uniqueMembers.has(check.memberUserId) && uniqueMembers.size < REENGAGEMENT_MEMBER_CHECK_CAP) {
+    if (uniqueMembers.has(check.memberUserId)) continue;
+    if (uniqueMembers.size < REENGAGEMENT_MEMBER_CHECK_CAP) {
       uniqueMembers.set(check.memberUserId, check.rawMemberUserId);
+    } else {
+      membersTruncated = true;
     }
   }
+  const reengagementTruncated = draftsTruncated || membersTruncated;
   const latestActivityByMember = new Map<string, number | null>();
   await Promise.all(
     [...uniqueMembers.entries()].map(async ([memberKey, memberUserId]) => {
@@ -1514,15 +1557,16 @@ async function buildCoachSettingsView(
       sampled_at: typeof row?.temperatureSnapshot?.sampledAt === "number" ? row.temperatureSnapshot.sampledAt : null,
     },
     impact: {
-      total_micros: spend.totalMicros,
+      total_micros: authoritativeTotalMicros,
       live_chat_micros: spend.liveChatMicros,
       proactive_micros: spend.proactiveMicros,
       brief_micros: spend.briefMicros,
-      allowance_micros: spend.allowanceMicros,
-      percent_used: spend.percentUsed,
+      allowance_micros: allowanceMicros,
+      percent_used: authoritativePercentUsed,
       spend_truncated: spend.truncated,
       reengaged_30d: reengagement.reengagedCount,
       contacted_30d: reengagement.contactedCount,
+      reengagement_truncated: reengagementTruncated,
     },
   };
 }
