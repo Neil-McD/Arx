@@ -265,8 +265,9 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
   and what is answered together; `communityBrain` (`getBrainMap`) reads it all
   into one map per viewer: courses and lessons, what was learned and where it
   is filed, the pods they can enter, and what is answered together, with the
-  same naming rules; `shared/communityBrainLayout.ts` places it by fixed
-  rules so it keeps its shape as it grows, and `KitBrainMap` draws it;
+  same naming rules; `shared/communityBrainLayout.ts` places it by its links (a
+  course is a loose cluster of its lessons; what is answered together pulls
+  together; the same map always gives the same picture), and `KitBrainMap` draws it;
   the panels' "community brain" (`PanelBrain` in `KitBrain`: a count, a small
   map with no words once at least three total nodes exist across published
   lessons, notes, and pods, and the latest names) reads the same map: counts
