@@ -179,22 +179,22 @@ export function layoutBrain(map: BrainMap, nowMs: number): BrainLayout {
   const courseReach = Math.max(Math.max(0, ...rings) + 64, around / (2 * Math.PI));
   let turned = 0;
   map.courses.forEach((course, i) => {
-    const angle = -90 + ((turned + widths[i] / 2) / Math.max(1, around)) * 360;
+    // Loose on purpose: each course sits a little off its even share of the
+    // circle and at its own distance, and each lesson hangs at its own length
+    // from its course, all from their ids, so the map reads as grown, not drawn.
+    const angle = -90 + ((turned + widths[i] / 2) / Math.max(1, around)) * 360 + (hashUnit(`${course.id}:turn`) - 0.5) * 26;
     turned += widths[i];
-    const at = polar(angle, courseReach);
+    const reach = courseReach * (0.72 + hashUnit(`${course.id}:reach`) * 0.56);
+    const at = polar(angle, reach);
     const hub = add({ id: course.id, ...at, r: 9 });
-    springs.push({ a: 0, b: hub, len: courseReach, k: 0.06 });
-    const n = course.lessons.length;
-    // The ring starts beside the line in from the centre and runs round,
-    // leaving a gap there between the last lesson and the first.
-    const sweep = n > 1 ? 360 * (n / (n + 1)) : 0;
-    const chord = n > 1 ? 2 * rings[i] * Math.sin(((sweep / (n - 1)) * Math.PI) / 360) : 0;
+    springs.push({ a: 0, b: hub, len: reach, k: 0.05 });
     course.lessons.forEach((lesson, j) => {
-      const turn = angle + 180 + (n > 1 ? 360 / (n + 1) / 2 + (sweep * j) / (n - 1) : 180);
       const r = sizeFor(lesson.use, 4.6, 0.8, 8);
-      const node = add({ id: lesson.id, ...polar(turn, rings[i], at), r: r + 4 });
-      springs.push({ a: hub, b: node, len: rings[i], k: 0.14 });
-      if (j > 0) springs.push({ a: node - 1, b: node, len: chord, k: 0.05 });
+      const len = rings[i] * (0.45 + hashUnit(`${lesson.id}:len`) * 0.95);
+      const node = add({ id: lesson.id, ...polar(hashUnit(`${lesson.id}:turn`) * 360, len, at), r: r + 4 });
+      springs.push({ a: hub, b: node, len, k: 0.1 });
+      // A lesson stays loosely near the one before it.
+      if (j > 0) springs.push({ a: node - 1, b: node, len: LESSON_GAP * 1.2, k: 0.012 });
     });
   });
 
@@ -256,7 +256,6 @@ export function layoutBrain(map: BrainMap, nowMs: number): BrainLayout {
         fibres.push({ key: `${hub.key}|${lesson.id}`, kind: "spoke", path: [at, spot] });
       }
       fibres.push({ key: `${hub.key}|trunk`, kind: "trunk", path: [center, at] });
-      if (path.length > 1) fibres.push({ key: `${hub.key}|order`, kind: "order", path });
       courses.push({ ...at, key: hub.key });
       // The course's name sits just outside its ring, on the far side from the centre.
       hubs.push({ ...hub, ...polar(angle, far + 18, at), angle });
