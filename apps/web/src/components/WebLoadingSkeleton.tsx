@@ -185,3 +185,96 @@ export function PanelBlockSkeleton(props: {
     </SkeletonShell>
   );
 }
+
+const TABLE_ROW_PATTERNS: ReadonlyArray<{ nameW: string; metaW: string; extraW: string }> = [
+  { nameW: "128px", metaW: "72px", extraW: "64px" },
+  { nameW: "152px", metaW: "60px", extraW: "82px" },
+  { nameW: "112px", metaW: "84px", extraW: "56px" },
+  { nameW: "140px", metaW: "66px", extraW: "74px" },
+  { nameW: "120px", metaW: "76px", extraW: "60px" },
+];
+
+export function TableRowsSkeleton(props: { label?: string | null; rows?: number }) {
+  const rows = TABLE_ROW_PATTERNS.slice(0, props.rows ?? 5);
+  return (
+    <SkeletonShell
+      className="web-skeleton-table"
+      label={props.label === undefined ? "Loading members…" : props.label}
+    >
+      {rows.map((row, index) => (
+        <div className="web-skeleton-table-row" key={index} aria-hidden="true">
+          <span className="web-skeleton-avatar is-compact web-skeleton-block" />
+          <div className="web-skeleton-table-main">
+            <span className="web-skeleton-pill web-skeleton-line" style={{ width: row.nameW }} />
+            <span className="web-skeleton-pill web-skeleton-line-xs" style={{ width: row.metaW }} />
+          </div>
+          <span className="web-skeleton-pill web-skeleton-line-sm web-skeleton-table-col-extra" style={{ width: row.extraW }} />
+          <span className="web-skeleton-pill web-skeleton-line-xs" style={{ width: "52px" }} />
+        </div>
+      ))}
+    </SkeletonShell>
+  );
+}
+
+const CONVERSATION_ROW_PATTERNS: ReadonlyArray<{ nameW: string; previewW: string }> = [
+  { nameW: "108px", previewW: "78%" },
+  { nameW: "132px", previewW: "62%" },
+  { nameW: "94px", previewW: "84%" },
+  { nameW: "118px", previewW: "56%" },
+];
+
+export function ConversationListSkeleton(props: {
+  label?: string | null;
+  rows?: number;
+  compact?: boolean;
+}) {
+  const rows = CONVERSATION_ROW_PATTERNS.slice(0, props.rows ?? 4);
+  return (
+    <SkeletonShell
+      className={`web-skeleton-conversations${props.compact ? " is-compact" : ""}`}
+      label={props.label === undefined ? "Loading messages…" : props.label}
+    >
+      {rows.map((row, index) => (
+        <div className="web-skeleton-conversation-row" key={index} aria-hidden="true">
+          <span className={`web-skeleton-avatar${props.compact ? " is-compact" : ""} web-skeleton-block`} />
+          <div className="web-skeleton-message-body">
+            <div className="web-skeleton-conversation-head">
+              <span className="web-skeleton-pill web-skeleton-line" style={{ width: row.nameW }} />
+              {!props.compact ? <span className="web-skeleton-pill web-skeleton-line-xs" style={{ width: "36px" }} /> : null}
+            </div>
+            {!props.compact ? (
+              <span className="web-skeleton-pill web-skeleton-line-sm" style={{ width: row.previewW }} />
+            ) : null}
+          </div>
+        </div>
+      ))}
+    </SkeletonShell>
+  );
+}
+
+export function FormGroupsSkeleton(props: { label?: string | null; groups?: number }) {
+  const count = props.groups ?? 2;
+  return (
+    <SkeletonShell
+      className="web-skeleton-form-groups"
+      label={props.label === undefined ? "Loading settings…" : props.label}
+    >
+      {Array.from({ length: count }).map((_, groupIndex) => (
+        <div className="web-skeleton-form-group" key={groupIndex} aria-hidden="true">
+          <span className="web-skeleton-pill web-skeleton-line-xs" style={{ width: groupIndex === 0 ? "92px" : "116px" }} />
+          <div className="web-skeleton-form-card">
+            {[0, 1, 2].map((rowIndex) => (
+              <div className="web-skeleton-form-row" key={rowIndex}>
+                <div className="web-skeleton-form-copy">
+                  <span className="web-skeleton-pill web-skeleton-line" style={{ width: rowIndex === 1 ? "118px" : "148px" }} />
+                  <span className="web-skeleton-pill web-skeleton-line-xs" style={{ width: rowIndex === 2 ? "160px" : "210px" }} />
+                </div>
+                <span className="web-skeleton-form-control web-skeleton-block" />
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
+    </SkeletonShell>
+  );
+}

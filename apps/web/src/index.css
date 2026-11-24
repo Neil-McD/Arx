@@ -667,6 +667,138 @@
   border-top: 0;
 }
 
+.web-skeleton-route-fallback {
+  width: 100%;
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 28px 24px;
+  box-sizing: border-box;
+}
+
+:where(:root[data-layout="phone"]) .web-skeleton-route-fallback {
+  padding: 18px 16px;
+}
+
+.web-skeleton-table {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  margin-top: 12px;
+  box-sizing: border-box;
+}
+
+.web-skeleton-table-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 4px;
+  border-bottom: 1px solid color-mix(in srgb, var(--border-default) 56%, transparent);
+}
+
+.web-skeleton-table-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+:where(:root[data-layout="phone"]) .web-skeleton-table-col-extra {
+  display: none;
+}
+
+.web-skeleton-conversations {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+  padding: 6px 0;
+  box-sizing: border-box;
+}
+
+.web-skeleton-conversation-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 8px;
+  border-radius: 10px;
+}
+
+.web-skeleton-conversations.is-compact .web-skeleton-conversation-row {
+  padding: 8px 6px;
+}
+
+.web-skeleton-conversation-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+}
+
+.web-skeleton-form-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  width: 100%;
+  max-width: 720px;
+  padding: 8px 0 24px;
+  box-sizing: border-box;
+}
+
+.web-skeleton-form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.web-skeleton-form-card {
+  display: flex;
+  flex-direction: column;
+  border-radius: 12px;
+  border: 1px solid color-mix(in srgb, var(--border-default) 72%, transparent);
+  background: color-mix(in srgb, var(--bg-card) 22%, transparent);
+  overflow: hidden;
+}
+
+.web-skeleton-form-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 16px;
+  border-top: 1px solid color-mix(in srgb, var(--border-default) 56%, transparent);
+}
+
+.web-skeleton-form-row:first-child {
+  border-top: 0;
+}
+
+.web-skeleton-form-copy {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.web-skeleton-form-control {
+  flex: none;
+  width: 92px;
+  height: 28px;
+  border-radius: 8px;
+}
+
+:where(:root[data-layout="phone"]) .web-skeleton-form-row {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+:where(:root[data-layout="phone"]) .web-skeleton-form-control {
+  width: 100%;
+}
+
 /* Web: discovery page skeleton cards (nicer than the generic spinner). */
 
 .system-prompt-input {

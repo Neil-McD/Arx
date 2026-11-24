@@ -8,6 +8,7 @@ import type {
 import { UserAvatar } from "../../../../shared/UserAvatar";
 import { useState } from "react";
 import { Icon, KitApp, Top, View, cx } from "../v1/kit";
+import { ConversationListSkeleton } from "./WebLoadingSkeleton";
 
 type WebDirectMessageInboxPanelProps = {
   conversations: DirectMessageConversation[];
@@ -215,7 +216,7 @@ export function WebDirectMessageInboxPanel(props: WebDirectMessageInboxPanelProp
         ) : null}
 
         {isInitialInboxLoad ? (
-          <div className="community-dm-panel-empty">Loading messages...</div>
+          <ConversationListSkeleton />
         ) : null}
 
         {filteredConversations.length > 0 ? (
@@ -411,7 +412,7 @@ function KitInboxPage(props: WebDirectMessageInboxPanelProps & { kitPage: { acti
             <p className={cx("lead")}>
               <span className={cx("aura")}><Icon name="spark" /></span>
               {props.isLoading && props.conversations.length === 0
-                ? "Loading your messages."
+                ? " "
                 : inboxLeadFor(needsReply, (() => {
                     const newest = props.conversations.find(isUnread);
                     return newest ? resolveDirectMessagePeer(newest, props.sessionUserId)?.display_name ?? null : null;
@@ -463,12 +464,13 @@ function KitInboxPage(props: WebDirectMessageInboxPanelProps & { kitPage: { acti
                       </button>
                     );
                   })}
-                  {props.isLoadingPeople && people.length === 0 ? <p className={cx("sub")}>Finding people…</p> : null}
+                  {props.isLoadingPeople && people.length === 0 ? <ConversationListSkeleton label="Finding people…" rows={3} compact /> : null}
                   {!props.isLoadingPeople && people.length === 0 ? <p className={cx("sub")}>No one found.</p> : null}
                 </div>
               </>
             ) : (
               <div className={cx("list")} style={{ marginTop: 14 }}>
+                {props.isLoading && rows.length === 0 ? <ConversationListSkeleton /> : null}
                 {rows.map((conversation) => {
                   const peer = resolveDirectMessagePeer(conversation, props.sessionUserId);
                   const name = String(peer?.display_name ?? "Direct message").trim() || "Direct message";

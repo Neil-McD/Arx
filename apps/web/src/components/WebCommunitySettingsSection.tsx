@@ -23,6 +23,7 @@ import { GuideAllowedSettings } from "./GuideAllowedSettings";
 import { platformTabId, platformTabPanelId } from "./WebPlatformChoiceControls";
 import { CommunityFounderBriefSection } from "./CommunityFounderBriefSection";
 import { discoverListingGap } from "../../../../shared/communityDiscoverListing";
+import { FormGroupsSkeleton } from "./WebLoadingSkeleton";
 
 type CommunityPricingMode = "free" | "monthly" | "annual";
 
@@ -568,7 +569,9 @@ export function WebCommunitySettingsSection(props: WebCommunitySettingsSectionPr
           </button>
         </div>
       ) : accessPresentationState === "resolving" ? (
-        <div className="chat-empty">Loading community settings...</div>
+        <div className="create-community-form community-settings-form settings-page-v1">
+          <FormGroupsSkeleton label="Loading community settings…" />
+        </div>
       ) : accessPresentationState === "failed" ? (
         <div className="chat-empty">
           <div>{communityAccessLoadError}</div>
@@ -613,7 +616,7 @@ export function WebCommunitySettingsSection(props: WebCommunitySettingsSectionPr
               ) : null}
             </div>
             {isFormPane && state.isLoadingCommunitySettings ? (
-              <div className="chat-empty">Loading community settings...</div>
+              <FormGroupsSkeleton label="Loading community settings…" />
             ) : null}
             {isFormPane &&
             !state.isLoadingCommunitySettings &&
