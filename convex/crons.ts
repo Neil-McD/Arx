@@ -61,6 +61,10 @@ crons.interval("send due founder briefs", { minutes: 15 },
 // course learners, and quiet members (draft mode by default, auto per reason).
 crons.interval("process due member coach scans", { minutes: 60 },
   (internal as any).communityMemberCoach.processDueMemberCoachScansInternal, {});
+// Zero-AI weekly community digest emails: keeps quiet and Cold handed-off
+// members in the loop with recent posts and lessons at $0 AI spend.
+crons.interval("process due weekly community digests", { minutes: 30 },
+  (internal as any).communityWeeklyDigestWorker.processDueCommunityWeeklyDigestsInternal, {});
 // The guide's memory reviews schedule themselves per community; this only
 // re-schedules one whose job was lost (convex/agentWork.ts).
 crons.interval("repair lost memory reviews", { hours: 24 },

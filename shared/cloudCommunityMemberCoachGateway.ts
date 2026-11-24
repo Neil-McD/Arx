@@ -52,6 +52,7 @@ export async function setCloudMemberCoachSettings(
     autoReasons: MemberCoachReason[];
     autoReplyEnabled?: boolean;
     threadFollowupEnabled?: boolean;
+    weeklyDigestEnabled?: boolean;
   },
 ): Promise<MemberCoachSettingsView> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session as any);
@@ -63,6 +64,9 @@ export async function setCloudMemberCoachSettings(
     ...(params.autoReplyEnabled !== undefined ? { autoReplyEnabled: params.autoReplyEnabled } : {}),
     ...(params.threadFollowupEnabled !== undefined
       ? { threadFollowupEnabled: params.threadFollowupEnabled }
+      : {}),
+    ...(params.weeklyDigestEnabled !== undefined
+      ? { weeklyDigestEnabled: params.weeklyDigestEnabled }
       : {}),
   });
 }

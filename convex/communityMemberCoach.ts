@@ -22,12 +22,19 @@ import { resolveCommunityInferenceFundingForAction } from "./founderInferenceRun
 import { startFundedInferenceRun } from "./fundedInferenceGateway";
 import { deliverAssistantMessageToMemberCommunityThread } from "./threads";
 import { enqueueSingleEmailJob } from "./email";
+import { syncCommunityWeeklyDigestScheduleForCommunity } from "./communityWeeklyDigestSchedule";
 import { resolveUserProfileDisplayProjection } from "./userProfileProjection";
 import { readCanonicalPublicAppOrigin } from "./publicAppUrl";
 import { communityIsActive, normalizeCommunityLifecycle } from "../shared/communityLifecycle";
 import { renderCommunityHandbook } from "../shared/communityHandbook";
 import { DEFAULT_PERSONAL_SOUL_MD, cleanAgentSoulText } from "../shared/agentSoul";
 import { renderPersonalMemory } from "../shared/personalMemory";
+import { utcMonthWindow } from "../shared/founderInference";
+import { POLYNET_FOUNDER_PLAN_INCLUDED_COST_MICROS } from "../shared/founderPlan";
+import {
+  countReengagedMembersFromSentChecks,
+  summarizeCommunityAiSpend,
+} from "../shared/agentRoiSummary";
 import {
   COMMITMENT_FOLLOWUP_MAX_AGE_MS,
   COMMITMENT_FOLLOWUP_MIN_AGE_MS,
@@ -270,6 +277,12 @@ export const enrollFounderSubscriptionsPageInternal = internalMutation({
         });
         enrolled += 1;
       }
+      if (existing?.weeklyDigestEnabled !== false) {
+        await syncCommunityWeeklyDigestScheduleForCommunity(ctx, {
+          communityId: sub.communityId,
+          nowMs: args.nowMs,
+        });
+      }
     }
     return {
       enrolled,
@@ -307,6 +320,12 @@ export const enrollAndListDueMemberCoachCommunitiesInternal = internalMutation({
             nextScanAt: args.nowMs,
             createdAt: args.nowMs,
             updatedAt: args.nowMs,
+          });
+        }
+        if (existing?.weeklyDigestEnabled !== false) {
+          await syncCommunityWeeklyDigestScheduleForCommunity(ctx, {
+            communityId: comm._id,
+            nowMs: args.nowMs,
           });
         }
       }
@@ -1385,12 +1404,18 @@ export const skipMemberCoachDraft = mutation({
   },
 });
 
+const MONTHLY_SPEND_RECEIPT_SCAN_LIMIT = 400;
+const REENGAGEMENT_MEMBER_CHECK_CAP = 40;
+const REENGAGEMENT_WINDOW_MS = 30 * DAY_MS;
+
 async function buildCoachSettingsView(
   ctx: any,
   communityId: Id<"communities">,
 ): Promise<MemberCoachSettingsView> {
   const nowMs = Date.now();
-  const [row, sentWeek, waiting] = await Promise.all([
+  const monthStartMs = utcMonthWindow(nowMs).startAt;
+  const reengageCutoffMs = nowMs - REENGAGEMENT_WINDOW_MS;
+  const [row, sentWeek, waiting, monthReceipts, sent30d] = await Promise.all([
     ctx.db
       .query("communityMemberCoachSettings")
       .withIndex("by_community", (q: any) => q.eq("communityId", communityId))
@@ -1407,12 +1432,73 @@ async function buildCoachSettingsView(
         q.eq("communityId", communityId).eq("status", "waiting"),
       )
       .take(25),
+    ctx.db
+      .query("communityInferenceReceipts")
+      .withIndex("by_community_createdAt", (q: any) =>
+        q.eq("communityId", communityId).gte("createdAt", monthStartMs),
+      )
+      .take(MONTHLY_SPEND_RECEIPT_SCAN_LIMIT + 1),
+    ctx.db
+      .query("communityMemberCoachDrafts")
+      .withIndex("by_community_status_sentAt", (q: any) =>
+        q.eq("communityId", communityId).eq("status", "sent").gte("sentAt", reengageCutoffMs),
+      )
+      .take(100),
   ]);
+
+  const spendTruncated = monthReceipts.length > MONTHLY_SPEND_RECEIPT_SCAN_LIMIT;
+  const spend = summarizeCommunityAiSpend({
+    receipts: spendTruncated ? monthReceipts.slice(0, MONTHLY_SPEND_RECEIPT_SCAN_LIMIT) : monthReceipts,
+    allowanceMicros: POLYNET_FOUNDER_PLAN_INCLUDED_COST_MICROS,
+    truncated: spendTruncated,
+  });
+
+  const sentChecks = sent30d
+    .map((draft: any) => ({
+      memberUserId: String(draft.memberUserId),
+      rawMemberUserId: draft.memberUserId as Id<"users">,
+      sentAt: Number(draft.sentAt ?? draft.createdAt ?? 0),
+    }))
+    .filter((entry: any) => entry.sentAt > 0);
+  const uniqueMembers = new Map<string, Id<"users">>();
+  for (const check of sentChecks) {
+    if (!uniqueMembers.has(check.memberUserId) && uniqueMembers.size < REENGAGEMENT_MEMBER_CHECK_CAP) {
+      uniqueMembers.set(check.memberUserId, check.rawMemberUserId);
+    }
+  }
+  const latestActivityByMember = new Map<string, number | null>();
+  await Promise.all(
+    [...uniqueMembers.entries()].map(async ([memberKey, memberUserId]) => {
+      const [lastChannelAt, lastAgentAt, latestLesson] = await Promise.all([
+        readLatestMemberChannelActivityAt(ctx, communityId, memberUserId),
+        readLastUserAgentMessageAt(ctx, communityId, memberUserId),
+        ctx.db
+          .query("communityLessonProgress")
+          .withIndex("by_community_user_completedAt", (q: any) =>
+            q.eq("communityId", communityId).eq("userId", memberUserId),
+          )
+          .order("desc")
+          .first(),
+      ]);
+      const best = Math.max(
+        lastChannelAt ?? 0,
+        lastAgentAt ?? 0,
+        Number(latestLesson?.completedAt ?? 0),
+      );
+      latestActivityByMember.set(memberKey, best > 0 ? best : null);
+    }),
+  );
+  const reengagement = countReengagedMembersFromSentChecks({
+    sentChecks: sentChecks.filter((c: any) => uniqueMembers.has(c.memberUserId)),
+    latestActivityByMember,
+  });
+
   return {
     enabled: row ? Boolean(row.enabled) : true,
     auto_reasons: normalizeMemberCoachReasons(row?.autoReasons ?? []),
     auto_reply_enabled: Boolean(row?.autoReplyEnabled),
     thread_followup_enabled: row?.threadFollowupEnabled !== false,
+    weekly_digest_enabled: row?.weeklyDigestEnabled !== false,
     sent_this_week: sentWeek.length,
     waiting_count: waiting.filter((item: any) => nowMs - item.createdAt <= MEMBER_COACH_DRAFT_MAX_AGE_MS).length,
     heartbeat: {
@@ -1426,6 +1512,17 @@ async function buildCoachSettingsView(
           }
         : null,
       sampled_at: typeof row?.temperatureSnapshot?.sampledAt === "number" ? row.temperatureSnapshot.sampledAt : null,
+    },
+    impact: {
+      total_micros: spend.totalMicros,
+      live_chat_micros: spend.liveChatMicros,
+      proactive_micros: spend.proactiveMicros,
+      brief_micros: spend.briefMicros,
+      allowance_micros: spend.allowanceMicros,
+      percent_used: spend.percentUsed,
+      spend_truncated: spend.truncated,
+      reengaged_30d: reengagement.reengagedCount,
+      contacted_30d: reengagement.contactedCount,
     },
   };
 }
@@ -1446,6 +1543,7 @@ export const setMemberCoachSettings = mutation({
     autoReasons: v.array(reasonValidator),
     autoReplyEnabled: v.optional(v.boolean()),
     threadFollowupEnabled: v.optional(v.boolean()),
+    weeklyDigestEnabled: v.optional(v.boolean()),
   },
   handler: async (ctx, args): Promise<MemberCoachSettingsView> => {
     const { userId } = await requireOwner(ctx, args.authSubject, args.communityId);
@@ -1461,12 +1559,17 @@ export const setMemberCoachSettings = mutation({
       args.threadFollowupEnabled !== undefined
         ? args.threadFollowupEnabled
         : existing?.threadFollowupEnabled !== false;
+    const nextWeeklyDigest =
+      args.weeklyDigestEnabled !== undefined
+        ? args.weeklyDigestEnabled
+        : existing?.weeklyDigestEnabled !== false;
     if (existing) {
       await ctx.db.patch(existing._id, {
         enabled: args.enabled,
         autoReasons,
         autoReplyEnabled: nextAutoReply,
         threadFollowupEnabled: nextThreadFollowup,
+        weeklyDigestEnabled: nextWeeklyDigest,
         ...(args.enabled && !existing.nextScanAt ? { nextScanAt: nowMs } : {}),
         updatedByUserId: userId,
         updatedAt: nowMs,
@@ -1478,10 +1581,17 @@ export const setMemberCoachSettings = mutation({
         autoReasons,
         autoReplyEnabled: nextAutoReply,
         threadFollowupEnabled: nextThreadFollowup,
+        weeklyDigestEnabled: nextWeeklyDigest,
         ...(args.enabled ? { nextScanAt: nowMs } : {}),
         updatedByUserId: userId,
         createdAt: nowMs,
         updatedAt: nowMs,
+      });
+    }
+    if (nextWeeklyDigest) {
+      await syncCommunityWeeklyDigestScheduleForCommunity(ctx, {
+        communityId: args.communityId,
+        nowMs,
       });
     }
     return await buildCoachSettingsView(ctx, args.communityId);

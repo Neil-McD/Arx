@@ -63,14 +63,28 @@ export type MemberCoachHeartbeatSummary = {
   sampled_at: number | null;
 };
 
+export type MemberCoachImpactSummary = {
+  total_micros: number;
+  live_chat_micros: number;
+  proactive_micros: number;
+  brief_micros: number;
+  allowance_micros: number;
+  percent_used: number;
+  spend_truncated: boolean;
+  reengaged_30d: number;
+  contacted_30d: number;
+};
+
 export type MemberCoachSettingsView = {
   enabled: boolean;
   auto_reasons: MemberCoachReason[];
   auto_reply_enabled: boolean;
   thread_followup_enabled: boolean;
+  weekly_digest_enabled: boolean;
   sent_this_week: number;
   waiting_count: number;
   heartbeat?: MemberCoachHeartbeatSummary;
+  impact?: MemberCoachImpactSummary;
 };
 
 export type MemberCoachPreferenceView = {

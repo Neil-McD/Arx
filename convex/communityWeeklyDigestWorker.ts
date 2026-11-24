@@ -217,6 +217,13 @@ export const readCommunityWeeklyDigestPageInternal = internalQuery({
     ) {
       return { status: "community_inactive" as const };
     }
+    const coachSettings = await ctx.db
+      .query("communityMemberCoachSettings")
+      .withIndex("by_community", (q: any) => q.eq("communityId", args.communityId))
+      .first();
+    if (coachSettings?.weeklyDigestEnabled === false) {
+      return { status: "digest_disabled" as const };
+    }
     const period = args.periodStartDay && args.periodEndDay
       ? readCommunityWeeklyDigestPeriod({
           periodStartDay: args.periodStartDay,
