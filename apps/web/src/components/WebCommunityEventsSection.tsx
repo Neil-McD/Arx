@@ -1,10 +1,14 @@
 import { CommunityPageHeader, CommunityPageRail } from "./CommunityPageHeader";
 import { EventListSkeleton } from "./WebLoadingSkeleton";
 import { KitEventsList } from "../v1/KitEventsList";
-import { KitEventForm } from "../v1/KitEventForm";
+import { resilientImport } from "../lib/resilientLazy";
 import { announceCommunityEventsChanged } from "../../../../shared/communityEventsChanged";
 import { splitCommunityEvents } from "./communityEventsList";
-import { useEffect, useMemo, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useState } from "react";
+
+const KitEventForm = lazy(() =>
+  resilientImport(() => import("../v1/KitEventForm")).then((module) => ({ default: module.KitEventForm })),
+);
 import { DEFAULT_COMMUNITY_EVENT_DURATION_MS } from "../../../../shared/communityEventLifecycle";
 import { useCommunityEventClock } from "../../../../shared/useCommunityEventClock";
 import {
@@ -297,23 +301,25 @@ export function WebCommunityEventsSection(props: WebCommunityEventsSectionProps)
 
   const listParts = splitCommunityEvents(state.events, listNow);
   const eventForm = draft ? (
-    <KitEventForm
-      key={editingEventId ?? "new"}
-      draft={draft}
-      isNew={!editingEventId}
-      isSeries={isRecurringCommunityEvent(editingSourceEvent)}
-      canBePublic={!editingSourceEvent?.pod_channel_id}
-      communityName={capabilities.activeCommunityName}
-      isSaving={isSaving}
-      error={localError ?? (isSaving ? null : state.eventsError)}
-      timeZones={getUniqueTimeZoneOptions(draft.timezone).map((zone) => ({
-        value: zone,
-        label: formatTimeZoneLabel(zone),
-      }))}
-      onChange={setDraft}
-      onClose={closeDraft}
-      onSubmit={() => void submitDraft()}
-    />
+    <Suspense fallback={null}>
+      <KitEventForm
+        key={editingEventId ?? "new"}
+        draft={draft}
+        isNew={!editingEventId}
+        isSeries={isRecurringCommunityEvent(editingSourceEvent)}
+        canBePublic={!editingSourceEvent?.pod_channel_id}
+        communityName={capabilities.activeCommunityName}
+        isSaving={isSaving}
+        error={localError ?? (isSaving ? null : state.eventsError)}
+        timeZones={getUniqueTimeZoneOptions(draft.timezone).map((zone) => ({
+          value: zone,
+          label: formatTimeZoneLabel(zone),
+        }))}
+        onChange={setDraft}
+        onClose={closeDraft}
+        onSubmit={() => void submitDraft()}
+      />
+    </Suspense>
   ) : null;
 
   return (

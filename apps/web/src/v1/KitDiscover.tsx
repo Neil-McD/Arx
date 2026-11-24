@@ -6,7 +6,10 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { formatPlanPrice } from "../../../../shared/accountCommerce";
 import { listCloudDiscoverCommunities } from "../../../../shared/cloudDiscoverGateway";
+import { CommunityAvatar } from "../../../../shared/CommunityAvatar";
 import type { DiscoverCommunitySnapshot } from "../../../../shared/communityTypes";
+import type { CommunityVisualIdentity } from "../../../../shared/communityVisualIdentity";
+import { StableFramedMedia } from "../../../../shared/StableFramedMedia";
 import { Btn, cx, Icon, KitApp } from "./kit";
 
 // Search is clutter until there is something to search.
@@ -14,7 +17,16 @@ export const DISCOVER_SEARCH_FROM = 8;
 const JOINED_SHOWN = 8;
 const DAY_MS = 86_400_000;
 
-export type DiscoverJoined = { slug: string; name: string; avatarUrl: string | null };
+export type DiscoverJoined = {
+  id?: string;
+  slug: string;
+  name: string;
+  avatarUrl: string | null;
+  avatarFocusX?: number | null;
+  avatarFocusY?: number | null;
+  avatarZoom?: number | null;
+  visualIdentity?: CommunityVisualIdentity | null;
+};
 
 const initialsOf = (name: string) => name.trim().split(/\s+/).slice(0, 2).map((word) => word[0] ?? "").join("").toUpperCase();
 
@@ -61,9 +73,33 @@ export function DiscoverCard(props: { community: DiscoverCommunitySnapshot; now:
         event.preventDefault();
         props.onOpen(c);
       }}>
-      <span className={cx("discban")}>{c.banner_url ? <img src={c.banner_url} alt="" loading="lazy" /> : null}</span>
-      <span className={cx("discbody")}>
-        <span className={cx("discmark")}>{c.avatar_url ? <img src={c.avatar_url} alt="" loading="lazy" /> : initialsOf(c.name)}</span>
+      <div className={cx("discban")}>
+        {c.banner_url ? (
+          <StableFramedMedia
+            className={cx("discban-media")}
+            imageUrl={c.banner_url}
+            frame={{ focusX: c.banner_focus_x, focusY: c.banner_focus_y, zoom: c.banner_zoom }}
+            alt=""
+            loading="lazy"
+            aria-hidden
+          />
+        ) : null}
+      </div>
+      <div className={cx("discbody")}>
+        <CommunityAvatar
+          communityId={c.id}
+          visualIdentity={c.visual_identity}
+          name={c.name}
+          imageUrl={c.avatar_url}
+          focusX={c.avatar_focus_x}
+          focusY={c.avatar_focus_y}
+          zoom={c.avatar_zoom}
+          className={cx("discmark")}
+          fallbackClassName={cx("discmark-fb")}
+          loading="lazy"
+          alt=""
+          aria-hidden
+        />
         <span className={cx("dischead")}><b>{c.name}</b><span className={cx("tag")}>{discoverPriceWord(c)}</span></span>
         <span className={cx("discline")}>{c.one_liner}</span>
         <span className={cx("discmeta")}>
@@ -76,7 +112,7 @@ export function DiscoverCard(props: { community: DiscoverCommunitySnapshot; now:
           {members ? <span>{c.host ? "· " : ""}{members.toLocaleString("en-US")} {members === 1 ? "member" : "members"}</span> : null}
           {life ? <span className={cx("disclife")}><i />{life}</span> : null}
         </span>
-      </span>
+      </div>
     </a>
   );
 }
@@ -150,7 +186,19 @@ export function KitDiscover(props: {
             <div className={cx("discin")}>
               {joined.map((community) => (
                 <button key={community.slug} type="button" className={cx("chip")} onClick={() => props.onOpenJoined?.(community.slug)}>
-                  <span>{community.avatarUrl ? <img src={community.avatarUrl} alt="" /> : initialsOf(community.name)}</span>
+                  <CommunityAvatar
+                    communityId={community.id}
+                    visualIdentity={community.visualIdentity}
+                    name={community.name}
+                    imageUrl={community.avatarUrl}
+                    focusX={community.avatarFocusX}
+                    focusY={community.avatarFocusY}
+                    zoom={community.avatarZoom}
+                    className={cx("discchip-mark")}
+                    fallbackClassName={cx("discchip-mark-fb")}
+                    alt=""
+                    aria-hidden
+                  />
                   {community.name}
                 </button>
               ))}

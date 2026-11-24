@@ -671,6 +671,10 @@
 .app.part.flow-part .feed{padding:0}
 /* The banner card on its own in the app's left column; its menu may overflow. */
 .app.part.cover-part{height:auto;display:block;overflow:visible;flex:none}
+.app .cover .cover-bg{position:absolute;inset:0;width:100%;height:100%;z-index:0;pointer-events:none;background:var(--s2)}
+.app .cover::before{z-index:1;pointer-events:none;border-radius:inherit;box-shadow:inset 0 0 0 1px rgba(var(--w),.10);transition:box-shadow .18s var(--ease)}
+.app .cover:hover::before{box-shadow:inset 0 0 0 1px rgba(255,255,255,.22)}
+.app .cover>:not(.cover-bg){position:relative;z-index:2}
 /* The reply box with a growing textarea where the mock has a one-line input. */
 .app .ask textarea{flex:1;min-width:0;align-self:center;padding:12px 0;max-height:148px;resize:none;background:transparent;border:0;outline:0;color:var(--ink);font:inherit;font-size:15px;line-height:22px}
 .app .ask textarea::placeholder{color:var(--ink3)}
@@ -1601,11 +1605,11 @@
 .app .disccard{display:flex;flex-direction:column;text-align:left;padding:0;overflow:hidden;border-radius:10px;border:1px solid var(--line2);background:var(--s1);color:var(--ink);text-decoration:none;cursor:pointer;transition:border-color .16s var(--ease),background .16s var(--ease)}
 .app .disccard:hover{border-color:rgba(var(--w),.22);background:var(--s2)}
 .app .discban{position:relative;display:block;width:100%;aspect-ratio:16/6.4;overflow:hidden;border-bottom:1px solid var(--line);background:var(--s2)}
-.app .discban img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;transition:transform .3s var(--ease)}
-.app .disccard:hover .discban img{transform:scale(1.03)}
+.app .discban-media{position:absolute;inset:0;width:100%;height:100%;transition:transform .3s var(--ease)}
+.app .disccard:hover .discban-media{transform:scale(1.03)}
 .app .discbody{position:relative;display:flex;flex-direction:column;gap:6px;padding:30px 16px 16px;min-width:0}
 .app .discmark{position:absolute;top:-20px;left:16px;width:40px;height:40px;border-radius:10px;overflow:hidden;border:2px solid var(--bg);box-shadow:0 0 0 1px var(--line2);background:var(--s3);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:var(--ink)}
-.app .discmark img{width:100%;height:100%;object-fit:cover}
+.app .discmark.discmark-fb{background:var(--s3);color:var(--ink);font-family:inherit;font-size:13px;font-weight:700;letter-spacing:normal}
 .app .dischead{display:flex;align-items:center;gap:10px;min-width:0}
 .app .dischead b{flex:1;min-width:0;font-size:15px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .app .dischead .tag{flex:none;transform:none;color:var(--ink2);white-space:nowrap}
@@ -1621,8 +1625,8 @@
 .app .discskel::after{content:"";display:block;height:130px}
 .app .discin{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
 .app .discin .chip{gap:8px;height:32px;cursor:pointer;background:none}
-.app .discin .chip span{width:18px;height:18px;flex:none;border-radius:5px;overflow:hidden;background:var(--s3);display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;color:var(--ink2)}
-.app .discin .chip span img{width:100%;height:100%;object-fit:cover}
+.app .discin .chip .discchip-mark{width:18px;height:18px;flex:none;border-radius:5px;overflow:hidden;background:var(--s3);display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;color:var(--ink2)}
+.app .discin .chip .discchip-mark.discchip-mark-fb{background:var(--s3);color:var(--ink2);font-family:inherit;font-size:9px;font-weight:700;letter-spacing:normal}
 .app .discfoot{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:36px;padding-top:20px;border-top:1px solid var(--line);font-size:13px;color:var(--ink2)}
 .app .discfind{display:flex;margin:0;width:264px;height:32px}
 @media (max-width:1100px){.app .discgrid{grid-template-columns:repeat(2,minmax(0,1fr))}}

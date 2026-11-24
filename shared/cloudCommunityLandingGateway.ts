@@ -26,13 +26,20 @@ export type CommunityLandingViewer = {
 export type CommunityLandingPage = {
   ok: true;
   community: {
+    id?: string;
     slug: string;
     name: string;
     one_liner: string | null;
     about: string | null;
     member_count: number;
     avatar_url: string | null;
+    avatar_focus_x?: number | null;
+    avatar_focus_y?: number | null;
+    avatar_zoom?: number | null;
     banner_url: string | null;
+    banner_focus_x?: number | null;
+    banner_focus_y?: number | null;
+    banner_zoom?: number | null;
     courses: Array<{ title: string; summary: string | null; lessons: number }>;
   };
   gate: "join" | "request_access" | "checkout" | string;

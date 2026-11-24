@@ -5,6 +5,8 @@
 // out. The join card is the only thing that acts: Join (open), Ask to join
 // (approval), or a plan, paid cash first (Stripe, then one sign-in).
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { CommunityAvatar } from "../../../../shared/CommunityAvatar";
+import { StableFramedMedia } from "../../../../shared/StableFramedMedia";
 import {
   cancelCommunityJoinRequestFromLanding,
   fetchCommunityLanding,
@@ -358,12 +360,29 @@ export function WebCommunityLandingPage(props: Props) {
       </header>
 
       <section className="cl-cover">
-        <div className={`cl-banner${c.banner_url ? "" : " is-plain"}`}>
-          {c.banner_url ? <img src={c.banner_url} alt="" /> : null}
-        </div>
-        <div className="cl-logo">
-          {c.avatar_url ? <img src={c.avatar_url} alt="" /> : <span>{initials(c.name)}</span>}
-        </div>
+        {c.banner_url ? (
+          <StableFramedMedia
+            className="cl-banner"
+            imageUrl={c.banner_url}
+            frame={{ focusX: c.banner_focus_x, focusY: c.banner_focus_y, zoom: c.banner_zoom }}
+            alt=""
+            aria-hidden
+          />
+        ) : (
+          <div className="cl-banner is-plain" aria-hidden="true" />
+        )}
+        <CommunityAvatar
+          communityId={c.id}
+          name={c.name}
+          imageUrl={c.avatar_url}
+          focusX={c.avatar_focus_x}
+          focusY={c.avatar_focus_y}
+          zoom={c.avatar_zoom}
+          className="cl-logo"
+          fallbackClassName="cl-logo-fallback"
+          alt=""
+          aria-hidden
+        />
       </section>
 
       <main className="cl-main">

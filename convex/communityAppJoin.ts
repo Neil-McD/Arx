@@ -199,13 +199,20 @@ export async function communityAppJoinProjection(ctx: any, community: CommunityL
   const text = (value: unknown, max: number) => (typeof value === "string" && value.trim() ? value.trim().slice(0, max) : null);
   return {
     community: {
+      id: String(community._id),
       slug: String(community.slug ?? ""),
       name: text(community.name, 120) ?? String(community.slug ?? ""),
       one_liner: text((community as any).oneLiner, 500),
       about: text((community as any).about, 4000),
       member_count: Math.max(0, Math.floor(Number((community as any).activeMemberCount) || 0)),
       avatar_url: branding.avatar_url ?? null,
+      avatar_focus_x: branding.avatar_focus_x,
+      avatar_focus_y: branding.avatar_focus_y,
+      avatar_zoom: branding.avatar_zoom,
       banner_url: branding.banner_url ?? null,
+      banner_focus_x: branding.banner_focus_x,
+      banner_focus_y: branding.banner_focus_y,
+      banner_zoom: branding.banner_zoom,
       host,
       courses,
       // The sales sections the owner filled in (empty ones don't show).
