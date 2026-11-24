@@ -40,8 +40,6 @@ export type LayoutFibre = { key: string; kind: "trunk" | "spoke" | "order"; path
 // A course's own node, in the middle of its lessons (its hub entry is where its name goes).
 export type LayoutCourse = Placed & { key: string };
 export type LayoutArc = { a: Placed; b: Placed; count: number; ids: [string, string] };
-// A lesson that names another lesson or a course.
-export type LayoutLink = { a: Placed; b: Placed; ids: [string, string] };
 export type BrainLayout = {
   center: Placed;
   hubs: LayoutHub[];
@@ -50,7 +48,6 @@ export type BrainLayout = {
   lessons: LayoutLesson[];
   points: LayoutPoint[];
   arcs: LayoutArc[];
-  links: LayoutLink[];
   bounds: { minX: number; minY: number; maxX: number; maxY: number };
   // Where things are, with no room for names: what a view frames.
   extent: { minX: number; minY: number; maxX: number; maxY: number };
@@ -280,17 +277,6 @@ export function layoutBrain(map: BrainMap, nowMs: number): BrainLayout {
     if (a !== undefined && b !== undefined) springs.push({ a, b, len: 60, k: 0.03 * Math.min(3, arc.count) });
   }
 
-  // A lesson that names another lesson or a course is drawn toward it.
-  const mentioned: Array<{ from: string; to: string }> = [];
-  for (const link of map.mentions ?? []) {
-    const a = index.get(link.from), b = index.get(link.to);
-    if (a === undefined || b === undefined || a === b) continue;
-    // Gently: a mention leans two clusters toward each other; it must not
-    // fold the map in on itself when there are many.
-    springs.push({ a, b, len: 150, k: 0.012 });
-    mentioned.push(link);
-  }
-
   settle(nodes, springs);
 
   const placed = (id: string): Placed => { const node = nodes[index.get(id)!]; return { x: node.x, y: node.y }; };
@@ -351,12 +337,6 @@ export function layoutBrain(map: BrainMap, nowMs: number): BrainLayout {
     return a && b ? [{ a, b, count: arc.count, ids: [arc.a, arc.b] as [string, string] }] : [];
   });
 
-  const spot = new Map<string, Placed>([...lessons.map((l) => [l.id, l] as const), ...courses.map((c) => [c.key, c] as const)]);
-  const links: LayoutLink[] = mentioned.flatMap((link) => {
-    const a = spot.get(link.from), b = spot.get(link.to);
-    return a && b ? [{ a: { x: a.x, y: a.y }, b: { x: b.x, y: b.y }, ids: [link.from, link.to] as [string, string] }] : [];
-  });
-
   const all: Placed[] = [center, ...hubs, ...courses, ...lessons, ...points];
   const extent = {
     minX: Math.min(...all.map((p) => p.x)), minY: Math.min(...all.map((p) => p.y)),
@@ -374,7 +354,7 @@ export function layoutBrain(map: BrainMap, nowMs: number): BrainLayout {
     minX: Math.min(...all.map((p) => p.x)) - pad, minY: Math.min(...all.map((p) => p.y)) - pad,
     maxX: Math.max(...all.map((p) => p.x)) + pad, maxY: Math.max(...all.map((p) => p.y)) + pad,
   };
-  return { center, hubs, courses, fibres, lessons, points, arcs, links, bounds, extent };
+  return { center, hubs, courses, fibres, lessons, points, arcs, bounds, extent };
 }
 
 // Which learned things get a name on the full page: what the viewer may read,
@@ -535,7 +515,6 @@ export function scaleLayout(layout: BrainLayout, k: number): BrainLayout {
     lessons: layout.lessons.map(at),
     points: layout.points.map((p) => ({ ...at(p), anchor: at(p.anchor) })),
     arcs: layout.arcs.map((arc) => ({ ...arc, a: at(arc.a), b: at(arc.b) })),
-    links: layout.links.map((link) => ({ ...link, a: at(link.a), b: at(link.b) })),
     bounds: box(layout.bounds),
     extent: box(layout.extent),
   };
@@ -581,7 +560,6 @@ export function lensLayout(layout: BrainLayout, box: BrainStage, opts: { power?:
     lessons: layout.lessons.map(at),
     points: layout.points.map((p) => ({ ...at(p), anchor: at(p.anchor) })),
     arcs: layout.arcs.map((arc) => ({ ...arc, a: at(arc.a), b: at(arc.b) })),
-    links: layout.links.map((link) => ({ ...link, a: at(link.a), b: at(link.b) })),
     bounds: { minX: 0, minY: 0, maxX: box.w, maxY: box.h },
     extent: { minX: minX * scale + ox, minY: minY * scale + oy, maxX: maxX * scale + ox, maxY: maxY * scale + oy },
   };

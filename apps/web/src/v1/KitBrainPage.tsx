@@ -9,6 +9,7 @@ import { brainCanDrawMap, type BrainMap, type BrainPoint } from "../../../../sha
 import { fetchBrainNote, moveBrainNote, type BrainNoteView } from "../../../../shared/cloudCommunityBrainGateway";
 import { deleteCommunityNote, fetchNoteSources, updateCommunityNote, type NoteSourceView } from "../../../../shared/cloudCommunityNotesGateway";
 import { askGuide } from "../components/guideSearch";
+import { goToCourseLesson } from "../../../../shared/routeDetails";
 import { Btn, cx, KitApp, useMinWidth } from "./kit";
 import { PanelBlockSkeleton } from "../components/WebLoadingSkeleton";
 import { KitBrainMap, type BrainReading } from "./KitBrainMap";
@@ -99,7 +100,10 @@ function PickedDetail(props: { map: BrainMap; id: string; session: unknown; comm
           <p className={cx("land-p")}>{lesson.done ? "You finished it." : "Not finished yet."}</p>
         </header>
         <BrainPointList label="What the community added" points={filed} now={props.now} />
-        <div className={cx("joinbar")}><Btn go onClick={() => props.onOpenCourse(course.id.replace(/^course:/, ""))}>Open the course</Btn></div>
+        <div className={cx("joinbar")}>
+          <Btn go onClick={() => goToCourseLesson(course.id.replace(/^course:/, ""), lesson.id.replace(/^resource:/, ""))}>Open the lesson</Btn>
+          <Btn onClick={() => props.onOpenCourse(course.id.replace(/^course:/, ""))}>Open the course</Btn>
+        </div>
       </div>
     );
   }
