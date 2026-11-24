@@ -113,3 +113,32 @@ test("adding someone works with the id the member directory gives (their public 
   expect(ola.public_id).toBe("user_01OLA");
   await expect(as("host").mutation((api as any).communityPods.addPodMember, { communityId: ids.communityId, channelId: ids.channelId, userId: "user_NOBODY" })).rejects.toThrow();
 });
+
+test("pod cover framing saves clamped focus and zoom and defaults zoom to 1", async () => {
+  const { t, ids, as, read } = await world();
+  const storageId = await t.run(async (ctx: any) => {
+    const id = await ctx.storage.store(new Blob([new Uint8Array([137, 80, 78, 71])], { type: "image/png" }));
+    const row = await ctx.db.query("communityPods").withIndex("by_community_channel", (q: any) => q.eq("communityId", ids.communityId).eq("channelId", ids.channelId)).first();
+    await ctx.db.patch(row._id, { bannerStorageId: id });
+    return id;
+  });
+  expect((await read("host")).cover).toMatchObject({ focus_x: 0.5, focus_y: 0.5, zoom: 1 });
+  await as("host").mutation((api as any).communityPods.savePodDetails, {
+    communityId: ids.communityId,
+    channelId: ids.channelId,
+    bannerStorageId: storageId,
+    bannerFocusX: 0.25,
+    bannerFocusY: 0.75,
+    bannerZoom: 1.8,
+  });
+  expect((await read("host")).cover).toMatchObject({ focus_x: 0.25, focus_y: 0.75, zoom: 1.8 });
+  // Out-of-range values clamp cleanly.
+  await as("host").mutation((api as any).communityPods.savePodDetails, {
+    communityId: ids.communityId,
+    channelId: ids.channelId,
+    bannerFocusX: -2,
+    bannerFocusY: 4,
+    bannerZoom: 9,
+  });
+  expect((await read("host")).cover).toMatchObject({ focus_x: 0, focus_y: 1, zoom: 2.5 });
+});

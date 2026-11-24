@@ -21,8 +21,8 @@ export type CloudPodPerson = {
   avatar_zoom?: number | null;
 };
 
-// A pod's cover image and its focus point (0 to 1).
-export type CloudPodCover = { url: string; focus_x: number; focus_y: number } | null;
+// A pod's cover image, its focus point (0 to 1), and its zoom (1 to 2.5).
+export type CloudPodCover = { url: string; focus_x: number; focus_y: number; zoom?: number | null } | null;
 
 // A pod's own page (/c/:slug/pods/:podSlug), as this viewer may see it.
 export type CloudPodPage =
@@ -147,7 +147,7 @@ export async function fetchCloudPod(params: { session: unknown; communityId: str
 
 // bannerStorageId: a cover just uploaded, or null to take it away.
 export async function saveCloudPodDetails(params: { session: unknown; communityId: string; channelId: string; purpose?: string; visibility?: "listed" | "hidden"; seats?: number; whatYouGet?: string[];
-  about?: string; bannerStorageId?: string | null; bannerFocusX?: number; bannerFocusY?: number }): Promise<void> {
+  about?: string; bannerStorageId?: string | null; bannerFocusX?: number; bannerFocusY?: number; bannerZoom?: number }): Promise<void> {
   const { client: convex, authSubject } = await client(params.session);
   const { session: _session, ...rest } = params;
   await convex.mutation("communityPods:savePodDetails" as any, { authSubject, ...rest });

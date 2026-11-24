@@ -274,8 +274,8 @@ function PodPitch(props: WebCommunityPodsSectionProps & { podSlug: string; inlin
     <div className={cx(props.inline ? "podpage land" : "land")}>
       {back}
       {page.cover?.url ? (
-        <StableFramedMedia className="pod-cover" imageClassName="pod-cover-img" imageUrl={page.cover.url}
-          frame={{ focusX: page.cover.focus_x, focusY: page.cover.focus_y, zoom: 1 }} alt="" aria-hidden />
+        <StableFramedMedia className="pod-cover" imageUrl={page.cover.url}
+          frame={{ focusX: page.cover.focus_x, focusY: page.cover.focus_y, zoom: page.cover.zoom ?? 1 }} alt="" aria-hidden />
       ) : null}
       <header>
         <h2>{page.name}</h2>
@@ -591,8 +591,8 @@ function PodsList(props: WebCommunityPodsSectionProps) {
                     <button key={pod.channel_id} type="button" className={cx(selected === pod.slug ? "podcard podout podsel" : "podcard podout")} aria-current={selected === pod.slug ? "true" : undefined}
                       onClick={() => { if (props.podSlug !== pod.slug) props.onNavigate({ kind: "pod", slug: pod.slug }); }}>
                       {pod.cover?.url ? (
-                        <StableFramedMedia className="pod-card-cover" imageClassName="pod-cover-img" imageUrl={pod.cover.url}
-                          frame={{ focusX: pod.cover.focus_x, focusY: pod.cover.focus_y, zoom: 1 }} alt="" aria-hidden loading="lazy" />
+                        <StableFramedMedia className="pod-card-cover" imageUrl={pod.cover.url}
+                          frame={{ focusX: pod.cover.focus_x, focusY: pod.cover.focus_y, zoom: pod.cover.zoom ?? 1 }} alt="" aria-hidden loading="lazy" />
                       ) : null}
                       <span className={cx("podname")}><Icon name="lock" />{pod.name}</span>
                       <span className={cx("podpurpose")}>{pod.purpose}</span>

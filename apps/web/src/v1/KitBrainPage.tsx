@@ -88,7 +88,19 @@ function PickedDetail(props: { map: BrainMap; id: string; session: unknown; comm
     const courseId = pickedCourse.id.replace(/^course:/, "");
     return (
       <div className={cx("land")}>
-        {module?.banner_url ? <img className={cx("brain-cover")} src={module.banner_url} alt="" /> : null}
+        {module?.banner_url ? (
+          <StableFramedMedia
+            className={cx("brain-cover")}
+            imageUrl={module.banner_url}
+            frame={{
+              focusX: module.banner_focus_x,
+              focusY: module.banner_focus_y,
+              zoom: module.banner_zoom,
+            }}
+            alt=""
+            aria-hidden
+          />
+        ) : null}
         <header>
           <span className={cx("lab")}>Course · {total} {total === 1 ? "lesson" : "lessons"}</span>
           <h2>{pickedCourse.name}</h2>

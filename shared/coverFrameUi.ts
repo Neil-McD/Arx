@@ -23,12 +23,14 @@ export type CoverFrameLayout = {
 };
 
 export function clampCoverFocus(raw: unknown): number {
+  if (raw === null || raw === undefined || raw === "") return DEFAULT_COVER_FOCUS;
   const parsed = Number(raw);
   if (!Number.isFinite(parsed)) return DEFAULT_COVER_FOCUS;
   return Math.max(0, Math.min(1, parsed));
 }
 
 export function clampCoverZoom(raw: unknown): number {
+  if (raw === null || raw === undefined || raw === "") return DEFAULT_COVER_ZOOM;
   const parsed = Number(raw);
   if (!Number.isFinite(parsed)) return DEFAULT_COVER_ZOOM;
   return Math.max(MIN_COVER_ZOOM, Math.min(MAX_COVER_ZOOM, parsed));

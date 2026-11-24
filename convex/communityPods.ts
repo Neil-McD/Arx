@@ -38,11 +38,23 @@ function focusOf(raw: unknown): number {
   return Number.isFinite(n) ? Math.min(1, Math.max(0, n)) : 0.5;
 }
 
+function zoomOf(raw: unknown): number {
+  const n = Number(raw);
+  return Number.isFinite(n) ? Math.min(2.5, Math.max(1, n)) : 1;
+}
+
 // A pod's cover, as the outside page and the cards draw it.
-async function podCover(ctx: Ctx, record: any): Promise<{ url: string; focus_x: number; focus_y: number } | null> {
+async function podCover(ctx: Ctx, record: any): Promise<{ url: string; focus_x: number; focus_y: number; zoom: number } | null> {
   if (!record?.bannerStorageId) return null;
   const url = await ctx.storage.getUrl(record.bannerStorageId);
-  return url ? { url, focus_x: focusOf(record.bannerFocusX), focus_y: focusOf(record.bannerFocusY) } : null;
+  return url
+    ? {
+        url,
+        focus_x: focusOf(record.bannerFocusX),
+        focus_y: focusOf(record.bannerFocusY),
+        zoom: zoomOf(record.bannerZoom),
+      }
+    : null;
 }
 
 function cleanWhatYouGet(lines: string[]): string[] {
@@ -391,6 +403,7 @@ export const savePodDetails = mutation({
     bannerStorageId: v.optional(v.union(v.id("_storage"), v.null())),
     bannerFocusX: v.optional(v.number()),
     bannerFocusY: v.optional(v.number()),
+    bannerZoom: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
     // The pitch (purpose, what you get, About, cover) is the pod's hosts' as
@@ -402,6 +415,7 @@ export const savePodDetails = mutation({
     if (args.about !== undefined) patch.aboutMd = cleanPodAbout(args.about) || undefined;
     if (args.bannerFocusX !== undefined) patch.bannerFocusX = focusOf(args.bannerFocusX);
     if (args.bannerFocusY !== undefined) patch.bannerFocusY = focusOf(args.bannerFocusY);
+    if (args.bannerZoom !== undefined) patch.bannerZoom = zoomOf(args.bannerZoom);
     if (args.purpose !== undefined) patch.purpose = args.purpose.replace(/\s+/g, " ").trim().slice(0, PURPOSE_MAX);
     if (args.visibility !== undefined) patch.visibility = args.visibility;
     if (args.seats !== undefined) patch.seats = args.seats > 0 ? Math.min(SEATS_MAX, Math.floor(args.seats)) : undefined;

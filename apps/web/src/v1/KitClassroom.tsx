@@ -32,6 +32,7 @@ import {
 import { getCloudCommunityHomeSnapshot } from "../../../../shared/cloudCommunityAdminGateway";
 import { downloadCloudLessonFile, uploadCloudLessonFile } from "../../../../shared/cloudCommunityChatGateway";
 import { courseLessons, courseProgress, lessonEnd, pageOf, coursePath, shelfPageSize, shelfStart } from "../../../../shared/communityClassroom";
+import { StableFramedMedia } from "../../../../shared/StableFramedMedia";
 import type { CommunityResource, CommunityResourceModule } from "../components/communityResourcesContracts";
 import { askGuide, openGuideFromSearch } from "../components/guideSearch";
 import { WebCommunityResourceViewerContent } from "../components/WebCommunityResourceViewerContent";
@@ -91,17 +92,28 @@ function coverTint(id: string): (typeof COVER_TINTS)[number] {
   return COVER_TINTS[hash % COVER_TINTS.length];
 }
 
-function coverStyle(course: Pick<CommunityResourceModule, "banner_url" | "banner_focus_x" | "banner_focus_y"> | null | undefined) {
-  return course?.banner_url
-    ? { backgroundImage: `url(${JSON.stringify(course.banner_url)})`, backgroundSize: "cover", backgroundPosition: `${(course.banner_focus_x ?? 0.5) * 100}% ${(course.banner_focus_y ?? 0.5) * 100}%` }
-    : undefined;
-}
-
-function CourseCover(props: { course: CommunityResourceModule; extra?: string }) {
+export function CourseCover(props: { course: CommunityResourceModule; extra?: string; loading?: "eager" | "lazy" }) {
+  const className = cx("kcover", props.extra ?? "", props.course.banner_url ? "" : coverTint(props.course.id));
+  if (!props.course.banner_url) {
+    return (
+      <span className={className}>
+        <Icon name="book" />
+      </span>
+    );
+  }
   return (
-    <span className={cx("kcover", props.extra ?? "", props.course.banner_url ? "" : coverTint(props.course.id))} style={coverStyle(props.course)}>
-      {props.course.banner_url ? null : <Icon name="book" />}
-    </span>
+    <StableFramedMedia
+      className={className}
+      imageUrl={props.course.banner_url}
+      frame={{
+        focusX: props.course.banner_focus_x,
+        focusY: props.course.banner_focus_y,
+        zoom: props.course.banner_zoom,
+      }}
+      alt=""
+      loading={props.loading ?? "lazy"}
+      aria-hidden
+    />
   );
 }
 
@@ -732,7 +744,6 @@ export function KitClassroom(props: {
     </>
   ) : null;
   const togglePeople = open && props.canManage ? () => setPeopleFor(peopleCourse ? null : open.course.id) : undefined;
-  const openCoverStyle = coverStyle(open?.course);
   // The floating lesson panel: the course, how far along, its lessons.
   // The top of the lesson panel: the course's cover, name and where things
   // stand. A host changes them here, in place.
@@ -740,11 +751,11 @@ export function KitClassroom(props: {
       <div className={cx("klist-top")}>
         {props.canManage && props.onSaveCourse ? (
           <KitCourseInline key={open.course.id} course={open.course} stats={courseProgressWords} onOpenStats={togglePeople} statsOpen={Boolean(peopleCourse)} startRenaming={renameNextCourseRef.current || namingCourseId === open.course.id} onRenameEnd={() => setNamingCourseId(null)}
-            coverClassName={cx("kcover", "klist-cover", open.course.banner_url ? "" : "knocover")} coverStyle={openCoverStyle}
+            coverClassName={cx("kcover", "klist-cover", open.course.banner_url ? "" : "knocover")}
             onSave={(patch) => props.onSaveCourse!(open.course.id, patch)} />
         ) : (
           <>
-            <CourseCover course={open.course} extra="klist-cover" />
+            <CourseCover course={open.course} extra="klist-cover" loading="eager" />
             <span><b>{open.course.name}</b><em>{togglePeople ? <StatsButton stats={courseProgressWords} open={Boolean(peopleCourse)} onClick={togglePeople} /> : courseProgressWords}</em></span>
           </>
         )}
@@ -971,7 +982,7 @@ export function KitClassroom(props: {
         {here ? (
           <div className={cx("khero-wrap")}>
           <button type="button" className={cx("khero")} onClick={() => { props.onOpenCourse(here.course.id); if (here.nextLesson) chooseLesson(here.nextLesson.id); }}>
-            <CourseCover course={here.course} extra="khero-cover" />
+            <CourseCover course={here.course} extra="khero-cover" loading="eager" />
             <span className={cx("khero-body")}>
               <span className={cx("khero-eye")}>{here.done > 0 ? "Continue" : "Start here"}{courses.length > 1 ? ` · Course ${hereAt + 1} of ${courses.length}` : ""}</span>
               <b>{here.course.name}</b>
