@@ -94,8 +94,8 @@ async function readProactiveGuideSummary(
       .take(25),
     ctx.db
       .query("communityMemberCoachDrafts")
-      .withIndex("by_community_status_createdAt", (q: any) =>
-        q.eq("communityId", communityId).eq("status", "sent").gte("createdAt", windowStartMs),
+      .withIndex("by_community_status_sentAt", (q: any) =>
+        q.eq("communityId", communityId).eq("status", "sent").gte("sentAt", windowStartMs),
       )
       .take(50),
     ctx.db
@@ -109,7 +109,7 @@ async function readProactiveGuideSummary(
   return {
     coachDraftsWaiting: waitingCoach.filter((row: any) => nowMs - Number(row.createdAt ?? 0) <= MEMBER_COACH_DRAFT_MAX_AGE_MS).length,
     replyDraftsWaiting: waitingReplies.filter((row: any) => nowMs - Number(row.createdAt ?? 0) <= REPLY_DRAFT_MAX_AGE_MS).length,
-    coachSentInWindow: sentCoach.filter((row: any) => Number(row.sentAt ?? row.createdAt ?? 0) >= windowStartMs).length,
+    coachSentInWindow: sentCoach.length,
     repliesAutoPostedInWindow: postedReplies.filter((row: any) => row.deliveryMode === "auto").length,
   };
 }
@@ -229,7 +229,7 @@ async function readQuietPayingMembers(
 
   const quietIds: any[] = [];
   for (const row of paidActive) {
-    const [latestRoot, latestReply, lessonRows] = await Promise.all([
+    const [latestRoot, latestReply, latestLesson] = await Promise.all([
       ctx.db
         .query("communityInteractionRoots")
         .withIndex("by_community_actorUser_createdAt", (q: any) =>
@@ -246,12 +246,15 @@ async function readQuietPayingMembers(
         .first(),
       ctx.db
         .query("communityLessonProgress")
-        .withIndex("by_community_user", (q: any) => q.eq("communityId", community._id).eq("userId", row.userId))
-        .take(25),
+        .withIndex("by_community_user_completedAt", (q: any) =>
+          q.eq("communityId", community._id).eq("userId", row.userId),
+        )
+        .order("desc")
+        .first(),
     ]);
     const latestRootAt = latestRoot?.status === "live" ? Number(latestRoot.createdAt ?? 0) : 0;
     const latestReplyAt = latestReply?.status === "live" ? Number(latestReply.createdAt ?? 0) : 0;
-    const latestLessonAt = lessonRows.reduce((best: number, item: any) => Math.max(best, Number(item.completedAt ?? 0)), 0);
+    const latestLessonAt = Number(latestLesson?.completedAt ?? 0);
     const lastActiveAt = Math.max(latestRootAt, latestReplyAt, latestLessonAt);
     if (lastActiveAt < cutoffMs) quietIds.push(row.userId);
   }
@@ -323,7 +326,7 @@ async function readPodHealthSummary(
   const weekCutoff = nowMs - WEEK_MS;
   return await Promise.all(
     pods.map(async (pod) => {
-      const [participants, recentRoots] = await Promise.all([
+      const [participants, recentRoots, recentReplies] = await Promise.all([
         ctx.db
           .query("communityChannelParticipants")
           .withIndex("by_channel_status", (q: any) => q.eq("channelId", pod._id).eq("status", "active"))
@@ -339,12 +342,20 @@ async function readPodHealthSummary(
               .gte("createdAt", weekCutoff),
           )
           .take(POD_MESSAGES_SCAN_CAP),
+        ctx.db
+          .query("communityInteractionReplies")
+          .withIndex("by_community_channel_visibility_status_createdAt", (q: any) =>
+            q
+              .eq("communityId", communityId)
+              .eq("channelId", pod._id)
+              .eq("visibilityScope", "community")
+              .eq("status", "live")
+              .gte("createdAt", weekCutoff),
+          )
+          .take(POD_MESSAGES_SCAN_CAP),
       ]);
       const humanSeats = participants.filter((row: any) => String(row.principalKey ?? "").startsWith("user:")).length;
-      const messages7d = recentRoots.reduce(
-        (sum: number, root: any) => sum + 1 + Math.max(0, Number(root.replyCount ?? 0)),
-        0,
-      );
+      const messages7d = recentRoots.length + recentReplies.length;
       return {
         name: String(pod.name ?? pod.slug ?? "Pod").trim() || "Pod",
         seats: humanSeats,

@@ -110,8 +110,8 @@ async function seedChiefOfStaffWorld(t: any, nowMs: number) {
       createdAt: nowMs - 10 * DAY_MS,
       updatedAt: nowMs - 10 * DAY_MS,
     });
-    // Private pod post with secret content — counts toward messages7d, text must NEVER leak!
-    await ctx.db.insert("communityInteractionRoots", {
+    // Private pod post with secret content + 2 replies — counts toward messages7d, text must NEVER leak!
+    const podRootId = await ctx.db.insert("communityInteractionRoots", {
       communityId,
       channelId: podId,
       actorType: "human",
@@ -126,6 +126,23 @@ async function seedChiefOfStaffWorld(t: any, nowMs: number) {
       createdAt: nowMs - 2 * DAY_MS,
       updatedAt: nowMs - 2 * DAY_MS,
     });
+    for (let r = 1; r <= 2; r += 1) {
+      await ctx.db.insert("communityInteractionReplies", {
+        communityId,
+        channelId: podId,
+        rootId: podRootId,
+        seq: r,
+        actorType: "human",
+        actorUserId: rashidId,
+        visibilityScope: "community",
+        status: "live",
+        contentSummary: `PRIVATE POD REPLY SECRET ${r}`,
+        reactionSummary: [],
+        idempotencyKey: `pod-secret-reply-${r}`,
+        createdAt: nowMs - DAY_MS,
+        updatedAt: nowMs - DAY_MS,
+      });
+    }
 
     // Rashid posts 3 times in General this week -> rising contributor!
     for (let i = 0; i < 3; i += 1) {
@@ -329,4 +346,195 @@ test("Chief of Staff signals populate Founder Brief and builder analytics withou
       userId: w.rashidId,
     }),
   ).rejects.toThrow(/community_forbidden/);
+});
+
+test("Chief of Staff counts approved check-ins by sentAt, checks completions past 25 rows, and counts recent replies on older pod threads", async () => {
+  const t = convexTest(schema, modules);
+  const nowMs = Date.now();
+  const seeded = await t.run(async (ctx: any) => {
+    const insertUser = (subject: string, name: string, handle: string) =>
+      ctx.db.insert("users", {
+        authSubject: subject,
+        displayName: name,
+        handle,
+        normalizedHandle: handle,
+        createdAt: nowMs - 90 * DAY_MS,
+        updatedAt: nowMs - 90 * DAY_MS,
+      });
+    const ownerId = await insertUser("owner2", "Neil", "neil2");
+    const activeLearnerId = await insertUser("elena", "Elena", "elena");
+
+    const communityId = await ctx.db.insert("communities", {
+      ownerId,
+      slug: "deep-learners",
+      name: "Deep Learners",
+      visibility: "published",
+      inferenceFundingPolicy: "managed_required",
+      entryPolicy: "open",
+      activeMemberCount: 2,
+      createdAt: nowMs - 90 * DAY_MS,
+      updatedAt: nowMs - 90 * DAY_MS,
+    });
+    await ctx.db.insert("communityMemberships", {
+      communityId,
+      userId: activeLearnerId,
+      role: "member",
+      accessSource: "paid_subscription",
+      state: "active",
+      activationSequence: 1,
+      activatedAt: nowMs - 60 * DAY_MS,
+      createdAt: nowMs - 60 * DAY_MS,
+      updatedAt: nowMs - 60 * DAY_MS,
+    });
+
+    // 1) Coach draft created 3 days ago (outside 24h window), approved & sent 2 hours ago (inside window).
+    await ctx.db.insert("communityMemberCoachDrafts", {
+      communityId,
+      memberUserId: activeLearnerId,
+      reason: "quiet_member",
+      dedupeKey: "quiet_member:approved-later",
+      signalSummary: "Quiet",
+      status: "sent",
+      deliveryMode: "approved",
+      text: "Checking in!",
+      sentText: "Checking in!",
+      decidedByUserId: ownerId,
+      decidedAt: nowMs - 2 * HOUR_MS,
+      sentAt: nowMs - 2 * HOUR_MS,
+      createdAt: nowMs - 3 * DAY_MS,
+      updatedAt: nowMs - 2 * HOUR_MS,
+    });
+
+    // 2) Paying member completed 27 old lessons (30 days ago) plus 1 new lesson yesterday -> NOT quiet!
+    const courseId = await ctx.db.insert("communityResourceModules", {
+      communityId,
+      createdByUserId: ownerId,
+      status: "live",
+      name: "Mastery Track",
+      sortOrder: 1,
+      createdAt: nowMs - 80 * DAY_MS,
+      updatedAt: nowMs - 80 * DAY_MS,
+    });
+    for (let i = 1; i <= 28; i += 1) {
+      const lessonId = await ctx.db.insert("communityResources", {
+        communityId,
+        moduleId: courseId,
+        createdByUserId: ownerId,
+        type: "post",
+        role: "page",
+        status: "published",
+        title: `Lesson ${i}`,
+        bodyChars: 40,
+        pinned: false,
+        sortOrder: i,
+        createdAt: nowMs - 80 * DAY_MS,
+        updatedAt: nowMs - 80 * DAY_MS,
+      });
+      await ctx.db.insert("communityLessonProgress", {
+        communityId,
+        userId: activeLearnerId,
+        resourceId: lessonId,
+        completedAt: i === 28 ? nowMs - DAY_MS : nowMs - 30 * DAY_MS,
+      });
+    }
+
+    // 3) Pod thread created 20 days ago, with 1 old reply (15d ago) and 2 recent replies (2d & 1d ago) -> messages7d = 2.
+    await ctx.db.insert("communityChannels", {
+      communityId,
+      systemRole: "general",
+      slug: "general",
+      name: "General",
+      accessMode: "all_members",
+      postingPolicy: "members",
+      status: "active",
+      position: 0,
+      createdByUserId: ownerId,
+      createdAt: nowMs - 90 * DAY_MS,
+      updatedAt: nowMs - 90 * DAY_MS,
+    });
+    const podId = await ctx.db.insert("communityChannels", {
+      communityId,
+      slug: "alumni",
+      name: "Alumni Pod",
+      accessMode: "restricted",
+      postingPolicy: "members",
+      status: "active",
+      position: 1,
+      createdByUserId: ownerId,
+      createdAt: nowMs - 60 * DAY_MS,
+      updatedAt: nowMs - 60 * DAY_MS,
+    });
+    await ctx.db.insert("communityChannelParticipants", {
+      communityId,
+      channelId: podId,
+      principalKey: `user:${String(activeLearnerId)}`,
+      status: "active",
+      createdByUserId: ownerId,
+      createdAt: nowMs - 40 * DAY_MS,
+      updatedAt: nowMs - 40 * DAY_MS,
+    });
+    const oldRootId = await ctx.db.insert("communityInteractionRoots", {
+      communityId,
+      channelId: podId,
+      actorType: "human",
+      actorUserId: ownerId,
+      kind: "discussion",
+      visibilityScope: "community",
+      status: "live",
+      contentSummary: "OLD POD ROOT SECRET",
+      replyCount: 3,
+      reactionSummary: [],
+      idempotencyKey: "old-pod-root",
+      createdAt: nowMs - 20 * DAY_MS,
+      updatedAt: nowMs - DAY_MS,
+    });
+    await ctx.db.insert("communityInteractionReplies", {
+      communityId,
+      channelId: podId,
+      rootId: oldRootId,
+      seq: 1,
+      actorType: "human",
+      actorUserId: ownerId,
+      visibilityScope: "community",
+      status: "live",
+      contentSummary: "OLD REPLY SECRET",
+      reactionSummary: [],
+      idempotencyKey: "old-pod-reply-1",
+      createdAt: nowMs - 15 * DAY_MS,
+      updatedAt: nowMs - 15 * DAY_MS,
+    });
+    for (let seq = 2; seq <= 3; seq += 1) {
+      await ctx.db.insert("communityInteractionReplies", {
+        communityId,
+        channelId: podId,
+        rootId: oldRootId,
+        seq,
+        actorType: "human",
+        actorUserId: ownerId,
+        visibilityScope: "community",
+        status: "live",
+        contentSummary: `RECENT POD REPLY SECRET ${seq}`,
+        reactionSummary: [],
+        idempotencyKey: `recent-pod-reply-${seq}`,
+        createdAt: nowMs - (4 - seq) * DAY_MS,
+        updatedAt: nowMs - (4 - seq) * DAY_MS,
+      });
+    }
+
+    return { communityId };
+  });
+
+  const briefRead: any = await t.query(internal.communityFounderBrief.readFounderBriefSnapshotInternal, {
+    communityId: seeded.communityId,
+    windowStartMs: nowMs - DAY_MS,
+    nowMs,
+  });
+  expect(briefRead.snapshot.chiefOfStaff).toMatchObject({
+    proactiveGuide: {
+      coachSentInWindow: 1,
+    },
+    quietPayingMembers: { count: 0, names: [] },
+    podHealth: [{ name: "Alumni Pod", seats: 1, messages7d: 2 }],
+  });
+  expect(JSON.stringify(briefRead)).not.toContain("SECRET");
 });

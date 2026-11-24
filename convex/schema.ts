@@ -1733,6 +1733,7 @@ export default defineSchema({
   })
     .index("by_user_resource", ["userId", "resourceId"])
     .index("by_community_user", ["communityId", "userId"])
+    .index("by_community_user_completedAt", ["communityId", "userId", "completedAt"])
     .index("by_resource", ["resourceId"]),
 
   // Per-student per-course progress projection (communityLessonProgress.ts):
@@ -2054,6 +2055,7 @@ export default defineSchema({
     updatedAt: v.number(),
   })
     .index("by_community_status_createdAt", ["communityId", "status", "createdAt"])
+    .index("by_community_status_sentAt", ["communityId", "status", "sentAt"])
     .index("by_community_member_createdAt", ["communityId", "memberUserId", "createdAt"])
     .index("by_community_member_dedupe", ["communityId", "memberUserId", "dedupeKey"]),
 
