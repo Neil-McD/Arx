@@ -267,8 +267,8 @@ css += """
 .app svg.brain-panel .brain-spoke{stroke-width:.7;stroke:rgba(var(--w),.1)}
 .app svg.brain-panel .brain-branch{stroke:rgba(var(--w),.13)}
 .app svg.brain-panel .brain-arc{stroke-width:.6;stroke:rgba(var(--au),.18)}
-.app svg.brain-panel .brain-lesson{stroke-width:1.1;stroke:rgba(var(--w),.55)}
-.app svg.brain-panel .brain-lesson.done{stroke:none}
+.app svg.brain-panel .brain-lesson{stroke:none;fill:rgba(var(--w),.42)}
+.app svg.brain-panel .brain-lesson.done{fill:var(--ink)}
 .app svg.brain-panel .brain-cell{stroke-width:.9;stroke:rgba(var(--w),.4)}
 .app svg.brain-panel .brain-nucleus{fill:rgba(var(--w),.4)}
 .app svg.brain-panel .brain-dot.taught{stroke-width:1}
@@ -288,12 +288,12 @@ css += """
 .app .brain-arc{fill:none;stroke:rgba(var(--au),.28);stroke-width:.9;stroke-linecap:round}
 .app .brain-arc.hot{stroke:rgba(var(--au),.75);stroke-width:1.3}
 /* A course: a line in from the centre (trunk) and a faint line to each lesson (spoke). */
-.app .brain-fibre.trunk{stroke-width:1.4;stroke:rgba(var(--w),.3)}
-.app .brain-fibre.spoke{stroke-width:1;stroke:rgba(var(--w),.16)}
-.app .brain-course{fill:#aeb2ba}
+.app .brain-fibre.trunk{stroke-width:1.2;stroke:rgba(var(--w),.2)}
+.app .brain-fibre.spoke{stroke-width:1;stroke:rgba(var(--w),.22)}
+.app .brain-course{fill:#d3d6dc}
 .app .brain-course.dim{fill:rgba(var(--w),.2)}
-.app svg.brain-panel .brain-fibre.trunk{stroke-width:.9;stroke:rgba(var(--w),.24)}
-.app svg.brain-panel .brain-fibre.spoke{stroke-width:.6;stroke:rgba(var(--w),.12)}
+.app svg.brain-panel .brain-fibre.trunk{stroke-width:.8;stroke:rgba(var(--w),.16)}
+.app svg.brain-panel .brain-fibre.spoke{stroke-width:.7;stroke:rgba(var(--w),.24)}
 .app .brain-fibre.dim,.app .brain-spoke.dim{stroke:rgba(var(--w),.1)}
 .app .brain-branch.dim,.app .brain-arc.dim{stroke:rgba(var(--w),.05)}
 .app .brain-dot{fill:#8b8f98}
@@ -301,10 +301,11 @@ css += """
 .app .brain-dot.taught{fill:var(--bg);stroke:#aeb2ba;stroke-width:1.5}
 .app .brain-dot.mine{fill:#8a91e3}
 .app .brain-dot.dim{fill:#34363c;stroke:none}
-.app .brain-lesson{fill:var(--bg);stroke:#aeb2ba;stroke-width:1.7}
+/* A lesson is a solid dot: grey until this reader has finished it, then bright. */
+.app .brain-lesson{fill:#7c818b;stroke:none}
 .app .brain-lesson.done{fill:var(--ink);stroke:none}
 .app .brain-lesson.mine{fill:#8a91e3;stroke:none}
-.app .brain-lesson.dim{fill:var(--bg);stroke:#34363c}
+.app .brain-lesson.dim{fill:#34363c;stroke:none}
 .app .brain-cell{fill:var(--bg);stroke:var(--ink);stroke-width:1.6}
 .app .brain-cell.other{stroke-dasharray:2.4 2.2;stroke:#aeb2ba}
 .app .brain-cell.closed{stroke:#6b6e76;stroke-width:1.3}
