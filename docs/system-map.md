@@ -258,7 +258,7 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
   enforces interruption-budget caps and quiet hours, runs a silence-by-default
   judge on consented self facts only, queues drafts in "Your guide suggests" by
   default or auto-sends per reason into the member's private Agent thread, and
-  honors per-member opt-out on `communityMemberSettings.coachMuted`); `communityGuidePictures` (the pictures a person attached in their talk, found again from the guide's run so a post or reply can carry them: only this person's, this talk's, images within the limits, copied into files of the post's own); `communityGuideQuestions` (tables
+  honors per-member opt-out on `communityMemberSettings.coachMuted`); `communityChiefOfStaff` (Founder Chief of Staff signals, slice 3 of `proactive-community-agent-v0.md`: waiting approvals, proactive guide outcomes, stalled course learners, quiet paying members, rising contributors, and pod health counts — fed into both the daily Founder Brief and owner/admin `builder/analytics.json`, never exposing private member chats or private pod message text); `communityGuidePictures` (the pictures a person attached in their talk, found again from the guide's run so a post or reply can carry them: only this person's, this talk's, images within the limits, copied into files of the post's own); `communityGuideQuestions` (tables
   `communityGuideQuestions`, `communityGuideAlwaysAllowed`: what the guide
   asks a person before doing something for them in their private talk. The
   executor saves a channel write or a removal instead of running it and

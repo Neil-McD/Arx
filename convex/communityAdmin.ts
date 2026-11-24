@@ -3,6 +3,7 @@ import { action, internalAction, internalMutation, internalQuery, mutation, quer
 import { schedulePodBillingCheck } from "./communityPodBillingCheck";
 import { removeUserFromPodHosts } from "./communityPods";
 import { readCommunityCourseProgressSummary } from "./communityLessonProgress";
+import { readFounderChiefOfStaffSignals } from "./communityChiefOfStaff";
 import {
   maybeScheduleMemberSearchBackfill,
   syncCommunityMemberSearchEntry,
@@ -1784,10 +1785,11 @@ export const readCommunityAnalyticsForTrustedManagerInternal = internalQuery({
   handler: async (ctx, args) => {
     const { community } = await requireCommunityManager({ ctx, communityId: args.communityId, userId: args.userId });
     const nowMs = Date.now();
-    const [rolled30, rolled7, courses] = await Promise.all([
+    const [rolled30, rolled7, courses, chiefOfStaff] = await Promise.all([
       tryComputeCommunityAnalyticsFromRollups(ctx, { communityId: args.communityId, community, range: "30d", nowMs }),
       tryComputeCommunityAnalyticsFromRollups(ctx, { communityId: args.communityId, community, range: "7d", nowMs }),
       readCommunityCourseProgressSummary(ctx, community),
+      readFounderChiefOfStaffSignals(ctx, { community, windowStartMs: nowMs - 7 * 24 * 60 * 60 * 1000, nowMs }),
     ]);
     if (rolled30 && rolled7) {
       return communityAnalyticsDocument({
@@ -1796,6 +1798,7 @@ export const readCommunityAnalyticsForTrustedManagerInternal = internalQuery({
         last30Days: rolled30,
         last7Days: rolled7,
         courses,
+        chiefOfStaff,
       });
     }
     const { rows } = await listCanonicalCommunityMemberMembershipRows({ ctx, communityId: args.communityId, community });
@@ -1807,6 +1810,7 @@ export const readCommunityAnalyticsForTrustedManagerInternal = internalQuery({
       last30Days: rolled30 ?? await snapshot("30d"),
       last7Days: rolled7 ?? await snapshot("7d"),
       courses,
+      chiefOfStaff,
     });
   },
 });

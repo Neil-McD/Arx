@@ -81,7 +81,7 @@ export function CommunityFounderBriefSection(props: {
     <SettingsGroup label="Daily brief">
       <SettingsRow label="Send me a daily brief"
         help={error ? <span className="settings-v1-error" role="alert">{error}</span>
-          : "Each morning: who joined, posts nobody answered, newcomers gone quiet, what's coming up. In your guide conversation and by email; it never messages members."}>
+          : "Each morning: what your guide sent and drafted, join requests, stalled learners, quiet paying members, rising contributors, pod pulse, and upcoming events — in your guide chat and by email; it never messages members."}>
         <SettingsSwitch label="Send me a daily brief" checked={enabled} disabled={!settings || saving}
           onChange={(checked) => void save({ enabled: checked, localHour })} />
       </SettingsRow>
