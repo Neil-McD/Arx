@@ -43,7 +43,7 @@ import { KitEventForm } from "./KitEventForm";
 import { JoinRequestsDrawer, JoinRequestsLine, MembersBulkBar, MembersTable, MembersToolbar, type MembersSortKey } from "./KitMembersTable";
 import { memberTimeFor, shortDay } from "./KitMembersPage";
 import { matchesMemberSearch, memberKey, toggleAllShown } from "../../../../shared/communityMembersTable";
-import { fullExample, middlingExample, sunriseExample } from "./brainExamples";
+import { coursesExample, fullExample, middlingExample, sunriseExample } from "./brainExamples";
 import { CommunityPageFrame, CommunityPageRail } from "../components/CommunityPageHeader";
 import { KitHomeRail } from "./KitHomeRail";
 import { KitPodRail } from "./KitPodRail";
@@ -399,13 +399,13 @@ function KnowShell(props: { builder: boolean }) {
 
 // The community brain: Sunrise as it is on staging, a middling community and
 // a full one; each at page size in a reading, and at panel size in all three.
-// ?example=sunrise|middling|full  ?reading=community|yours|gaps
+// ?example=sunrise|middling|full|courses  ?reading=community|yours|gaps
 function BrainLab() {
   const params = new URLSearchParams(window.location.search);
   const now = Date.now();
   const example = params.get("example") ?? "sunrise";
   const reading = (params.get("reading") ?? "community") as BrainReading;
-  const map = example === "full" ? fullExample(now) : example === "middling" ? middlingExample(now) : sunriseExample(now);
+  const map = example === "courses" ? coursesExample(now) : example === "full" ? fullExample(now) : example === "middling" ? middlingExample(now) : sunriseExample(now);
   const [picked, setPicked] = useStateLab<string | null>("note:v5");
   const memberView = { ...map, can_manage: false, points: map.points.map((p) => (p.kind === "taught" ? { ...p, title: null } : p)) };
   return (
@@ -437,7 +437,7 @@ function BrainPageLab() {
   const params = new URLSearchParams(window.location.search);
   const now = Date.now();
   const example = params.get("example") ?? "sunrise";
-  const map = example === "full" ? fullExample(now) : example === "middling" ? middlingExample(now) : sunriseExample(now);
+  const map = example === "courses" ? coursesExample(now) : example === "full" ? fullExample(now) : example === "middling" ? middlingExample(now) : sunriseExample(now);
   return (
     <div style={{ height: "100vh", display: "grid" }}>
       <CommunityPageFrame>

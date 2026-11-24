@@ -54,6 +54,11 @@ export type BrainMap = {
   points: BrainPoint[];
   pods: BrainPod[];
   arcs: BrainArc[];
+  // Lessons that name another lesson or a course (shared/communityLessonMentions.ts):
+  // from a lesson, to a lesson or a course. stale: the list is behind what
+  // the lessons say now, and the app should ask for it to be worked out again.
+  mentions?: Array<{ from: string; to: string }>;
+  mentions_stale?: boolean;
   // Learned things not drawn, by where they hang (attachKey).
   hidden: Record<string, number>;
 };

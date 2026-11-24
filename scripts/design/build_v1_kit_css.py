@@ -294,6 +294,11 @@ css += """
 .app .brain-course.dim{fill:rgba(var(--w),.2)}
 .app svg.brain-panel .brain-fibre.trunk{stroke-width:.8;stroke:rgba(var(--w),.16)}
 .app svg.brain-panel .brain-fibre.spoke{stroke-width:.7;stroke:rgba(var(--w),.24)}
+/* A lesson that names another lesson or a course: a thin line between them. */
+.app .brain-mention{fill:none;stroke:rgba(var(--w),.3);stroke-width:1;stroke-linecap:round}
+.app .brain-mention.hot{stroke:rgba(var(--w),.75);stroke-width:1.4}
+.app .brain-mention.dim{stroke:rgba(var(--w),.08)}
+.app svg.brain-panel .brain-mention{stroke-width:.7;stroke:rgba(var(--w),.26)}
 .app .brain-fibre.dim,.app .brain-spoke.dim{stroke:rgba(var(--w),.1)}
 .app .brain-branch.dim,.app .brain-arc.dim{stroke:rgba(var(--w),.05)}
 .app .brain-dot{fill:#8b8f98}

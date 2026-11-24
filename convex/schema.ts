@@ -1887,6 +1887,18 @@ export default defineSchema({
     pairs: v.array(v.object({ a: v.string(), b: v.string(), count: v.number() })),
   }).index("by_community_day", ["communityId", "day"]),
 
+  // Lessons that name another lesson or a course (shared/communityLessonMentions.ts):
+  // one row per community, worked out again when a name or a lesson's words
+  // change. fingerprint says what it was worked out from; building marks a
+  // rebuild under way so two don't run at once.
+  communityLessonMentions: defineTable({
+    communityId: v.id("communities"),
+    fingerprint: v.string(),
+    links: v.array(v.object({ from: v.string(), to: v.string() })),
+    builtAt: v.number(),
+    building: v.optional(v.object({ fingerprint: v.string(), startedAt: v.number() })),
+  }).index("by_community", ["communityId"]),
+
   // A place's brief (shared/communityBriefs.ts): what's happening there,
   // rewritten by the guide after new activity. One per scope, read by
   // everyone who can enter the place: a short summary and the posts it drew

@@ -167,11 +167,11 @@ const LESSONS_LISTED_MAX = 200;
 const MEMORY_SCAN_CONCURRENCY = 10;
 const MEMORY_LOOKUP_CONCURRENCY = 25;
 // limits: the review is shown at most 200; the map reads every course whole.
-export async function liveLessons(ctx: any, communityId: any, limits: { total: number; perCourse: number } = { total: LESSONS_LISTED_MAX, perCourse: 100 }): Promise<Array<{ id: any; course: string; courseId: any; courseOrder: number; order: number; title: string }>> {
+export async function liveLessons(ctx: any, communityId: any, limits: { total: number; perCourse: number } = { total: LESSONS_LISTED_MAX, perCourse: 100 }): Promise<Array<{ id: any; course: string; courseId: any; courseOrder: number; order: number; title: string; stamp: string }>> {
   const modules: any[] = (await ctx.db.query("communityResourceModules")
     .withIndex("by_community_sortOrder", (q: any) => q.eq("communityId", communityId)).take(60))
     .filter((module: any) => communityResourceModuleIsMemberLive(module));
-  const lessons: Array<{ id: any; course: string; courseId: any; courseOrder: number; order: number; title: string }> = [];
+  const lessons: Array<{ id: any; course: string; courseId: any; courseOrder: number; order: number; title: string; stamp: string }> = [];
   for (let start = 0; start < modules.length; start += MEMORY_SCAN_CONCURRENCY) {
     const chunk = modules.slice(start, start + MEMORY_SCAN_CONCURRENCY);
     const rowsByModule = await Promise.all(
@@ -190,7 +190,7 @@ export async function liveLessons(ctx: any, communityId: any, limits: { total: n
         // The same rule as the lessons members are shown: a titled placeholder
         // with nothing in it isn't one.
         if (!communityResourceIsMemberVisiblePage(row, live)) continue;
-        lessons.push({ id: row._id, course: String(module.name ?? ""), courseId: module._id, courseOrder: Number(module.sortOrder ?? 0), order: ++order, title: String(row.title) });
+        lessons.push({ id: row._id, course: String(module.name ?? ""), courseId: module._id, courseOrder: Number(module.sortOrder ?? 0), order: ++order, title: String(row.title), stamp: String(row.bodyHash ?? row.updatedAt ?? "") });
         if (lessons.length >= limits.total) return lessons;
       }
     }
