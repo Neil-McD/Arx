@@ -4,6 +4,8 @@ import { convexTest } from "convex-test";
 import { describe, expect, test } from "vitest";
 import { internal } from "./_generated/api";
 import schema from "./schema";
+import { claimInteractionAttachmentsForTarget } from "./communityInteractionAttachmentBridge";
+import { PLATFORM_LEGAL_DOCUMENTS } from "../shared/legalDocuments";
 import { buildCommunityAgentServePromptBundle } from "../shared/communityAgentServePrompt";
 import {
   compileCommunityAgentThreadContext,
@@ -30,9 +32,21 @@ describe("Community guide vision in channels and threads", () => {
         displayName: "Rashid",
         handle: "rashid",
         normalizedHandle: "rashid",
+        email: "rashid@example.com",
+        emailVerifiedAt: nowMs,
         createdAt: nowMs,
         updatedAt: nowMs,
       });
+      for (const doc of PLATFORM_LEGAL_DOCUMENTS) {
+        await ctx.db.insert("legalAcceptances", {
+          userId,
+          documentKey: doc.key,
+          documentVersion: doc.version,
+          acceptedAt: nowMs,
+          source: "test",
+          createdAt: nowMs,
+        });
+      }
       await ctx.db.insert("operatorRoles", {
         userId,
         role: "owner",
@@ -132,17 +146,26 @@ describe("Community guide vision in channels and threads", () => {
         updatedAt: nowMs + 200,
       });
 
+      await ctx.db.insert("userProfileDetails", {
+        userId,
+        displayName: "Rashid",
+        avatarUrl: "https://example.com/rashid.png",
+        createdAt: nowMs,
+        updatedAt: nowMs,
+      });
       const rootPhotoStorageId = await ctx.storage.store(new Blob([PNG_BYTES], { type: "image/png" }));
       const calendarStorageId = await ctx.storage.store(new Blob([PNG_BYTES], { type: "image/png" }));
       const ignoredStorageId = await ctx.storage.store(new Blob([PNG_BYTES], { type: "image/png" }));
 
-      // Valid uploaded image on root post.
-      await ctx.db.insert("communityInteractionAttachments", {
+      // Claim root & reply attachments through the real production claim path
+      // (reply attachments store `replyId` + `uploadRootId` with `rootId` absent).
+      const rootPendingId = await ctx.db.insert("communityInteractionAttachments", {
         communityId,
         channelId: generalId,
-        rootId,
+        uploadMessageKey: "vision-root",
+        uploadExpiresAt: nowMs + 60_000,
         attachmentKind: "image",
-        status: "uploaded",
+        status: "pending",
         name: "whiteboard.png",
         mimeType: "image/png",
         sizeBytes: PNG_BYTES.byteLength,
@@ -152,14 +175,31 @@ describe("Community guide vision in channels and threads", () => {
         createdAt: nowMs,
         updatedAt: nowMs,
       });
-      // Valid uploaded image on reply #1 (earlier reply in thread).
-      await ctx.db.insert("communityInteractionAttachments", {
+      await claimInteractionAttachmentsForTarget({
+        ctx,
+        communityId,
+        rootId,
+        attachments: [{
+          id: String(rootPendingId),
+          attachmentId: rootPendingId,
+          name: "whiteboard.png",
+          attachmentKind: "image",
+          mimeType: "image/png",
+          sizeBytes: PNG_BYTES.byteLength,
+        }],
+        actorUserId: userId,
+        nowMs,
+        messageKey: "vision-root",
+      });
+
+      const replyPendingId = await ctx.db.insert("communityInteractionAttachments", {
         communityId,
         channelId: generalId,
-        rootId,
-        replyId: calendarReplyId,
+        uploadRootId: rootId,
+        uploadMessageKey: "vision-reply-1",
+        uploadExpiresAt: nowMs + 60_000,
         attachmentKind: "image",
-        status: "uploaded",
+        status: "pending",
         name: "calendar.png",
         mimeType: "image/png",
         sizeBytes: PNG_BYTES.byteLength,
@@ -169,11 +209,31 @@ describe("Community guide vision in channels and threads", () => {
         createdAt: nowMs + 100,
         updatedAt: nowMs + 100,
       });
+      await claimInteractionAttachmentsForTarget({
+        ctx,
+        communityId,
+        replyId: calendarReplyId,
+        attachments: [{
+          id: String(replyPendingId),
+          attachmentId: replyPendingId,
+          name: "calendar.png",
+          attachmentKind: "image",
+          mimeType: "image/png",
+          sizeBytes: PNG_BYTES.byteLength,
+        }],
+        actorUserId: userId,
+        nowMs: nowMs + 100,
+        messageKey: "vision-reply-1",
+      });
+      const claimedReplyAttachment = await ctx.db.get(replyPendingId);
+      if (claimedReplyAttachment?.rootId !== undefined) {
+        throw new Error("expected canonical reply attachment to omit rootId");
+      }
+
       // Must be ignored: SVG image.
       await ctx.db.insert("communityInteractionAttachments", {
         communityId,
         channelId: generalId,
-        rootId,
         replyId: calendarReplyId,
         attachmentKind: "image",
         status: "uploaded",
@@ -190,7 +250,6 @@ describe("Community guide vision in channels and threads", () => {
       await ctx.db.insert("communityInteractionAttachments", {
         communityId,
         channelId: generalId,
-        rootId,
         replyId: calendarReplyId,
         attachmentKind: "image",
         status: "pending",
@@ -206,7 +265,6 @@ describe("Community guide vision in channels and threads", () => {
       await ctx.db.insert("communityInteractionAttachments", {
         communityId,
         channelId: generalId,
-        rootId,
         replyId: calendarReplyId,
         attachmentKind: "image",
         status: "deleted",
@@ -222,7 +280,6 @@ describe("Community guide vision in channels and threads", () => {
       await ctx.db.insert("communityInteractionAttachments", {
         communityId,
         channelId: generalId,
-        rootId,
         replyId: calendarReplyId,
         attachmentKind: "file",
         status: "uploaded",
@@ -238,7 +295,6 @@ describe("Community guide vision in channels and threads", () => {
       await ctx.db.insert("communityInteractionAttachments", {
         communityId,
         channelId: secretChannelId,
-        rootId,
         replyId: calendarReplyId,
         attachmentKind: "image",
         status: "uploaded",

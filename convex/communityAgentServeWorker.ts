@@ -675,9 +675,15 @@ async function listUploadedImagesForInteraction(args: {
     if (!row || row.status !== "uploaded" || row.attachmentKind !== "image") continue;
     if (normalizeIdValue(row.communityId) !== expectedCommunityId) continue;
     if (row.channelId && normalizeIdValue(row.channelId) !== expectedChannelId) continue;
-    if (normalizeIdValue(row.rootId) !== expectedRootId) continue;
     const rowReplyId = row.replyId ? normalizeIdValue(row.replyId) : "";
-    if (expectedReplyId ? rowReplyId !== expectedReplyId : Boolean(rowReplyId)) continue;
+    if (expectedReplyId) {
+      // Production reply attachments set `replyId` (and `uploadRootId`), leaving `rootId` absent.
+      if (rowReplyId !== expectedReplyId) continue;
+      if (row.rootId && normalizeIdValue(row.rootId) !== expectedRootId) continue;
+      if (row.uploadRootId && normalizeIdValue(row.uploadRootId) !== expectedRootId) continue;
+    } else {
+      if (rowReplyId || normalizeIdValue(row.rootId) !== expectedRootId) continue;
+    }
     const storageId = normalizeIdValue(row.storageId);
     const mimeType = normalizeCommunityAgentImageMime(row.mimeType);
     const sizeBytes = Number(row.sizeBytes);
