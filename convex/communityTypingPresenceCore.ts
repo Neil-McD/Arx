@@ -215,6 +215,9 @@ export async function resolveCommunityTypingPresence(args: {
     canonical_user_id: string;
     display_name: string | null;
     avatar_url: string | null;
+    avatar_focus_x: number;
+    avatar_focus_y: number;
+    avatar_zoom: number;
     root_id: string | null;
     display_until_ms: number;
     updated_at: string;

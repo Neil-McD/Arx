@@ -17,12 +17,18 @@ async function fixture(entryPolicy: "open" | "approval") {
     const ownerId = await ctx.db.insert("users", {
       authSubject: "owner-subject", displayName: "Maya", handle: "maya", normalizedHandle: "maya", createdAt: NOW, updatedAt: NOW,
     } as any);
-    await ctx.db.insert("userProfileDetails", { userId: ownerId, displayName: "Maya Chen", bio: "Route setter and coach.", createdAt: NOW, updatedAt: NOW } as any);
+    await ctx.db.insert("userProfileDetails", {
+      userId: ownerId, displayName: "Maya Chen", bio: "Route setter and coach.",
+      avatarUrl: "https://cdn.example.com/maya.png", avatarFocusX: 0.4, avatarFocusY: 0.2, avatarZoom: 1.6,
+      createdAt: NOW, updatedAt: NOW,
+    } as any);
     await ctx.db.insert("users", {
       authSubject: "visitor-subject", displayName: "Sam", handle: "sam", normalizedHandle: "sam", createdAt: NOW, updatedAt: NOW,
     } as any);
     const communityId = await ctx.db.insert("communities", {
       ownerId, slug: "sunrise", name: "Sunrise Climbing Club", oneLiner: "Early sessions.", about: "We climb at 6:30.",
+      avatarUrl: "https://cdn.example.com/sunrise-logo.png", avatarFocusX: 0.25, avatarFocusY: 0.75, avatarZoom: 1.4,
+      bannerUrl: "https://cdn.example.com/sunrise-banner.png", bannerFocusX: 0.3, bannerFocusY: 0.8, bannerZoom: 1.8,
       visibility: "published", inferenceFundingPolicy: "managed_required", entryPolicy, activeMemberCount: 148, createdAt: NOW, updatedAt: NOW,
     } as any);
     const event = (title: string, startsAt: number, visibility: "public" | "members") => ctx.db.insert("communityEvents", {
@@ -45,12 +51,33 @@ test("signed out, the page shows the community, its public upcoming events, its 
   const f = await fixture("open");
   const page = (await f.t.query(api.communityLanding.getCommunityLandingPage, { communitySlug: "Sunrise" })) as any;
   expect(page.ok).toBe(true);
-  expect(page.community).toMatchObject({ slug: "sunrise", name: "Sunrise Climbing Club", one_liner: "Early sessions.", member_count: 148 });
+  expect(page.community).toMatchObject({
+    id: String(f.communityId),
+    slug: "sunrise",
+    name: "Sunrise Climbing Club",
+    one_liner: "Early sessions.",
+    member_count: 148,
+    avatar_url: "https://cdn.example.com/sunrise-logo.png",
+    avatar_focus_x: 0.25,
+    avatar_focus_y: 0.75,
+    avatar_zoom: 1.4,
+    banner_url: "https://cdn.example.com/sunrise-banner.png",
+    banner_focus_x: 0.3,
+    banner_focus_y: 0.8,
+    banner_zoom: 1.8,
+  });
   expect(page.gate).toBe("join");
   expect(page.viewer).toBeNull();
   expect(page.signed_in).toBe(false);
   expect(page.is_owner).toBe(false);
-  expect(page.host).toMatchObject({ name: "Maya Chen", bio: "Route setter and coach." });
+  expect(page.host).toMatchObject({
+    name: "Maya Chen",
+    bio: "Route setter and coach.",
+    avatar_url: "https://cdn.example.com/maya.png",
+    avatar_focus_x: 0.4,
+    avatar_focus_y: 0.2,
+    avatar_zoom: 1.6,
+  });
   expect(page.events.map((event: any) => event.title)).toEqual(["Sunrise session"]);
   expect(page.app).toEqual({ name: "Sunrise Log", url: "https://sunriselog.app", host: "sunriselog.app" });
   expect(await f.t.query(api.communityLanding.getCommunityLandingPage, { communitySlug: "nobody-here" })).toEqual({ ok: false });

@@ -169,13 +169,22 @@ function KitInboxPage(props: WebDirectMessageInboxPanelProps & { kitPage: { acti
       </button>
     ) : null;
 
-  const avatar = (name: string, seed: string, imageUrl: string | null | undefined, badge?: { label: string; name: string } | null) => (
+  const avatar = (
+    name: string,
+    seed: string,
+    imageUrl: string | null | undefined,
+    frame?: { focusX?: number | null; focusY?: number | null; zoom?: number | null } | null,
+    badge?: { label: string; name: string } | null,
+  ) => (
     <span className={cx("av", badge && "has")} title={badge ? `From ${badge.name}` : undefined}>
       <UserAvatar
         className="community-dm-kit-avatar"
         readyClassName="has-image"
         name={name}
         imageUrl={imageUrl ?? null}
+        focusX={frame?.focusX}
+        focusY={frame?.focusY}
+        zoom={frame?.zoom}
         alt=""
         fallback={<span>{props.getInitials(name)}</span>}
         fallbackStyle={{ backgroundColor: props.getAvatarColor(seed) }}
@@ -274,7 +283,11 @@ function KitInboxPage(props: WebDirectMessageInboxPanelProps & { kitPage: { acti
                           }}
                           aria-label={`Message ${name}`}
                         >
-                          {avatar(name, person.user_id ?? name, person.avatar_url)}
+                          {avatar(name, person.user_id ?? name, person.avatar_url, {
+                            focusX: person.avatar_focus_x,
+                            focusY: person.avatar_focus_y,
+                            zoom: person.avatar_zoom,
+                          })}
                           <div><div className={cx("h")}><b>{name}</b><span>{formatPersonPresenceLabel(person)}</span></div></div>
                           <span />
                         </button>
@@ -310,7 +323,13 @@ function KitInboxPage(props: WebDirectMessageInboxPanelProps & { kitPage: { acti
                       aria-label={`${name}, ${unread ? "unread, " : ""}${preview}`}
                       onClick={() => props.onSelectConversation(conversation)}
                     >
-                      {avatar(name, peer?.user_id ?? name, peer?.avatar_url, elsewhere ? { label: communityInitials(elsewhere.name), name: elsewhere.name } : null)}
+                      {avatar(
+                        name,
+                        peer?.user_id ?? name,
+                        peer?.avatar_url,
+                        { focusX: peer?.avatar_focus_x, focusY: peer?.avatar_focus_y, zoom: peer?.avatar_zoom },
+                        elsewhere ? { label: communityInitials(elsewhere.name), name: elsewhere.name } : null,
+                      )}
                       <div>
                         <div className={cx("h")}>
                           <b>{name}</b>

@@ -23,12 +23,14 @@ export type CoverFrameLayout = {
 };
 
 export function clampCoverFocus(raw: unknown): number {
+  if (raw === null || raw === undefined || raw === "") return DEFAULT_COVER_FOCUS;
   const parsed = Number(raw);
   if (!Number.isFinite(parsed)) return DEFAULT_COVER_FOCUS;
   return Math.max(0, Math.min(1, parsed));
 }
 
 export function clampCoverZoom(raw: unknown): number {
+  if (raw === null || raw === undefined || raw === "") return DEFAULT_COVER_ZOOM;
   const parsed = Number(raw);
   if (!Number.isFinite(parsed)) return DEFAULT_COVER_ZOOM;
   return Math.max(MIN_COVER_ZOOM, Math.min(MAX_COVER_ZOOM, parsed));
@@ -64,6 +66,23 @@ export function focusFromCoverFramePosition(layout: CoverFrameLayout, left: numb
   return {
     focusX: clampCoverFocus((layout.viewportWidth / 2 - left) / layout.renderWidth),
     focusY: clampCoverFocus((layout.viewportHeight / 2 - top) / layout.renderHeight),
+  };
+}
+
+export function measureFramedMediaViewport(element: {
+  clientWidth?: number;
+  clientHeight?: number;
+  getBoundingClientRect: () => { width: number; height: number };
+}): { width: number; height: number } {
+  const clientWidth = Math.max(0, Number(element.clientWidth) || 0);
+  const clientHeight = Math.max(0, Number(element.clientHeight) || 0);
+  if (clientWidth > 0 && clientHeight > 0) {
+    return { width: clientWidth, height: clientHeight };
+  }
+  const rect = element.getBoundingClientRect();
+  return {
+    width: Math.max(0, rect.width),
+    height: Math.max(0, rect.height),
   };
 }
 

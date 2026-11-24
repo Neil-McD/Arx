@@ -135,6 +135,7 @@ export function KitProfile(props: Avatars & {
       <div className={cx("pf-top")}>
         <span className={cx("av", "pf-face")}>
           <UserAvatar className="community-dm-kit-avatar" readyClassName="has-image" name={profile.name} imageUrl={profile.avatar_url} alt=""
+            focusX={profile.avatar_focus_x ?? 0.5} focusY={profile.avatar_focus_y ?? 0.5} zoom={profile.avatar_zoom ?? 1}
             fallback={<span>{props.getInitials(profile.name)}</span>} fallbackStyle={{ backgroundColor: props.getAvatarColor(profile.user_id) }} />
           {profile.here_now && !profile.you ? <i role="img" aria-label="Here now" /> : null}
         </span>

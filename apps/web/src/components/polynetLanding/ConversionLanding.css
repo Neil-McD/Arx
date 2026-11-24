@@ -273,8 +273,9 @@
 
 .pn-landing .showcase-banner {
   display: block;
+  width: 100%;
   aspect-ratio: 16 / 7;
-  background: var(--surface-raised) center / cover no-repeat;
+  background: var(--surface-raised);
 }
 
 .pn-landing .showcase-body { display: flex; flex-direction: column; gap: 6px; padding: 18px; }

@@ -90,6 +90,9 @@ export const getCommunityLandingPage = query({
       ? {
         name: join.community.host.name,
         avatar_url: (hostFace as any)?.avatar_url ?? null,
+        avatar_focus_x: (hostFace as any)?.avatar_focus_x ?? 0.5,
+        avatar_focus_y: (hostFace as any)?.avatar_focus_y ?? 0.5,
+        avatar_zoom: (hostFace as any)?.avatar_zoom ?? 1,
         bio: typeof (hostDetail as any)?.bio === "string" && (hostDetail as any).bio.trim() ? (hostDetail as any).bio.trim().slice(0, 400) : null,
       }
       : null;

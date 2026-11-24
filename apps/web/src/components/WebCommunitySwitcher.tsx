@@ -2,6 +2,9 @@ import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent as Reac
 import { createPortal } from "react-dom";
 import { Check, ChevronsUpDown, Compass, Plus, Search } from "lucide-react";
 import { CommunityAvatar } from "../../../../shared/CommunityAvatar";
+import { useCommunityVisualIdentity } from "../../../../shared/CommunityVisualIdentityRegistry";
+import type { CommunityVisualIdentity } from "../../../../shared/communityVisualIdentity";
+import { StableFramedMedia } from "../../../../shared/StableFramedMedia";
 import type { CommunityLike } from "./webShellChromeShared";
 import { Icon, KitApp, cx } from "../v1/kit";
 import { isImeComposing } from "../controllers/communityComposerTextEditing";
@@ -20,7 +23,14 @@ export type WebCommunitySwitcherProps = {
   // Design system v1, a community's own left column: the switcher is the
   // mock's banner card (docs/design/hifi-mock .cover), the banner behind the
   // name with the dark fade. Without a banner it is the mock's bare card.
-  cover?: { bannerUrl: string | null; focusX?: number | null; focusY?: number | null } | null;
+  cover?: {
+    communityId?: string | null;
+    visualIdentity?: CommunityVisualIdentity | null;
+    bannerUrl: string | null;
+    focusX?: number | null;
+    focusY?: number | null;
+    zoom?: number | null;
+  } | null;
 };
 
 // Design system v1: the community's name on its banner is also how you move
@@ -159,11 +169,20 @@ export function WebCommunitySwitcher(props: WebCommunitySwitcherProps) {
   };
 
   const cover = props.cover ?? null;
-  const percent = (value: number | null | undefined) => `${Math.round((Number.isFinite(value) ? Number(value) : 0.5) * 100)}%`;
+  const coverIdentity = useCommunityVisualIdentity(
+    cover?.communityId,
+    cover?.visualIdentity,
+  );
+  const coverBannerUrl = cover
+    ? (coverIdentity ? coverIdentity.banner.url : (cover.bannerUrl ?? null))
+    : null;
+  const coverFocusX = cover ? (coverIdentity?.banner.focus_x ?? cover.focusX) : null;
+  const coverFocusY = cover ? (coverIdentity?.banner.focus_y ?? cover.focusY) : null;
+  const coverZoom = cover ? (coverIdentity?.banner.zoom ?? cover.zoom) : null;
   const trigger = cover ? (
     <button
       ref={triggerRef}
-      className={`${cx("cover", !cover.bannerUrl && "bare")} community-switcher-cover${isOpen ? " is-open" : ""}`}
+      className={`${cx("cover", !coverBannerUrl && "bare")} community-switcher-cover${isOpen ? " is-open" : ""}`}
       type="button"
       aria-haspopup="menu"
       aria-expanded={isOpen}
@@ -171,6 +190,16 @@ export function WebCommunitySwitcher(props: WebCommunitySwitcherProps) {
       title="Switch community"
       onClick={() => setIsOpen((open) => !open)}
     >
+      {coverBannerUrl ? (
+        <StableFramedMedia
+          className={cx("cover-bg")}
+          imageUrl={coverBannerUrl}
+          frame={{ focusX: coverFocusX, focusY: coverFocusY, zoom: coverZoom }}
+          alt=""
+          quietLoading
+          aria-hidden
+        />
+      ) : null}
       {props.mark ? <span className={cx("mark")} aria-hidden="true">{props.mark}</span> : null}
       <span className="community-switcher-name">{props.activeCommunityName}</span>
       <span className={cx("sw")}><Icon name="updown" /></span>
@@ -210,12 +239,7 @@ export function WebCommunitySwitcher(props: WebCommunitySwitcherProps) {
 
   if (cover) {
     return (
-      <KitApp
-        view="home"
-        part="cover"
-        banner={cover.bannerUrl}
-        bannerPosition={`${percent(cover.focusX)} ${percent(cover.focusY)}`}
-      >
+      <KitApp view="home" part="cover">
         <div className="community-switcher is-cover" ref={rootRef}>
           {trigger}
           {menu}

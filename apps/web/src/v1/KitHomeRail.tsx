@@ -57,7 +57,8 @@ export function KitHomeRail(props: {
             <span className={cx("stack")}>
               {faces.slice(0, 5).map((face) => (
                 <span key={face.user_id} className={cx("av s")} title={face.display_name ?? undefined}>
-                  <UserAvatar className="community-dm-kit-avatar" readyClassName="has-image" name={face.display_name ?? "Member"} imageUrl={face.avatar_url} alt=""
+                  <UserAvatar className="community-dm-kit-avatar" readyClassName="has-image" name={face.display_name ?? "Member"} imageUrl={face.avatar_url}
+                    focusX={face.avatar_focus_x} focusY={face.avatar_focus_y} zoom={face.avatar_zoom} alt=""
                     fallback={<span>{(face.initials ?? face.display_name ?? "?").charAt(0).toUpperCase()}</span>}
                     fallbackStyle={face.avatar_color ? { backgroundColor: face.avatar_color } : undefined} />
                 </span>

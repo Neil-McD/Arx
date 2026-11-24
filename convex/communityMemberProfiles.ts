@@ -68,6 +68,9 @@ export type MemberDirectoryRow = {
   user_id: string;
   name: string;
   avatar_url: string | null;
+  avatar_focus_x: number;
+  avatar_focus_y: number;
+  avatar_zoom: number;
   role: "owner" | "admin" | "moderator" | "member";
   working_on: string | null;
   here_now: boolean;
@@ -91,6 +94,9 @@ export const listCommunityMemberDirectory = query({
         user_id: (await resolvePublicUserId(ctx, subjectId, ids)) ?? String(subjectId),
         name: profile.display_name ?? user?.displayName ?? user?.handle ?? "Member",
         avatar_url: profile.avatar_url ?? null,
+        avatar_focus_x: profile.avatar_focus_x,
+        avatar_focus_y: profile.avatar_focus_y,
+        avatar_zoom: profile.avatar_zoom,
         role: membership ? membership.role : "owner",
         working_on: goal ? goal.body.slice(0, 140) : null,
         here_now: communityPresenceLeaseIsActive(presence ? { lastSeenAt: presence.lastSeenAt, activeUntil: presence.activeUntil } : null, now),
@@ -181,6 +187,9 @@ export const getCommunityMemberProfile = query({
       avatar_url: profile.avatar_url ?? null,
       bio: bio || null,
       links: normalizeSocialProfileLinks(detail?.socialLinks ?? {}),
+      avatar_focus_x: profile.avatar_focus_x,
+      avatar_focus_y: profile.avatar_focus_y,
+      avatar_zoom: profile.avatar_zoom,
       role,
       here_now: communityPresenceLeaseIsActive(presence ? { lastSeenAt: presence.lastSeenAt, activeUntil: presence.activeUntil } : null, Date.now()),
       you: mine,

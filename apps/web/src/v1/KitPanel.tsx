@@ -78,7 +78,14 @@ function faceColour(name: string): string {
   return FACE_COLOURS[sum % FACE_COLOURS.length];
 }
 
-export type PanelPerson = { id?: string; name: string; avatarUrl?: string | null };
+export type PanelPerson = {
+  id?: string;
+  name: string;
+  avatarUrl?: string | null;
+  avatarFocusX?: number | null;
+  avatarFocusY?: number | null;
+  avatarZoom?: number | null;
+};
 
 // People, as real profile photos (or initials when none is set) and names:
 // one in full, several by first name ("Maya, Priya and 3 more").
@@ -104,6 +111,9 @@ export function PanelPeople(props: { names?: string[]; people?: PanelPerson[]; m
                 readyClassName="has-image"
                 name={clean}
                 imageUrl={person.avatarUrl ?? null}
+                focusX={person.avatarFocusX}
+                focusY={person.avatarFocusY}
+                zoom={person.avatarZoom}
                 alt=""
                 fallback={<span>{clean.charAt(0).toUpperCase() || "?"}</span>}
                 fallbackStyle={{ backgroundColor: faceColour(clean), color: "#fff" }}

@@ -1,11 +1,15 @@
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { ChevronsUpDown, Eye, LogOut, Moon, Settings, Sun } from "lucide-react";
 import type { AppTheme } from "../../../../shared/theme";
+import { UserAvatar } from "../../../../shared/UserAvatar";
 import { WebSignOutConfirmModal } from "./WebSignOutConfirmModal";
 
 export type WebAccountMenuProps = {
   name: string;
   avatarUrl: string | null;
+  avatarFocusX?: number | null;
+  avatarFocusY?: number | null;
+  avatarZoom?: number | null;
   roleLabel: string;
   // The community this menu is opened in, for "Host of <name>".
   communityName?: string | null;
@@ -81,9 +85,17 @@ export function WebAccountMenu(props: WebAccountMenuProps) {
       {isOpen ? (
         <div className="account-menu-popover" id={menuId} role="menu" aria-label="Account">
           <div className="account-menu-head" role="presentation">
-            <span className="account-menu-avatar" aria-hidden="true">
-              {props.avatarUrl ? <img src={props.avatarUrl} alt="" /> : initial}
-            </span>
+            <UserAvatar
+              className="account-menu-avatar"
+              name={props.name}
+              imageUrl={props.avatarUrl}
+              focusX={props.avatarFocusX}
+              focusY={props.avatarFocusY}
+              zoom={props.avatarZoom}
+              fallback={initial}
+              alt=""
+              aria-hidden
+            />
             <span className="account-menu-identity">
               <span className="account-menu-name">{props.name}</span>
               {roleLine ? <span className="account-menu-role">{roleLine}</span> : null}
@@ -177,9 +189,17 @@ export function WebAccountMenu(props: WebAccountMenuProps) {
         aria-controls={isOpen ? menuId : undefined}
         onClick={() => setIsOpen((open) => !open)}
       >
-        <span className="account-menu-avatar" aria-hidden="true">
-          {props.avatarUrl ? <img src={props.avatarUrl} alt="" /> : initial}
-        </span>
+        <UserAvatar
+          className="account-menu-avatar"
+          name={props.name}
+          imageUrl={props.avatarUrl}
+          focusX={props.avatarFocusX}
+          focusY={props.avatarFocusY}
+          zoom={props.avatarZoom}
+          fallback={initial}
+          alt=""
+          aria-hidden
+        />
         <span className="account-menu-identity">
           <span className="account-menu-name">{props.name}</span>
           {props.roleLabel ? <span className="account-menu-role">{props.roleLabel}</span> : null}

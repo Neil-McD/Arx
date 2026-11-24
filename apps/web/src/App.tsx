@@ -1269,7 +1269,16 @@ export default function App() {
   const discoverPageProps: WebCommunityDiscoverPageProps = {
     joined: railCommunities.flatMap((community) => {
       const slug = String(community.slug ?? "").trim();
-      return slug ? [{ slug, name: community.name, avatarUrl: community.avatar_url ?? null }] : [];
+      return slug ? [{
+        id: community.id,
+        slug,
+        name: community.name,
+        avatarUrl: community.avatar_url ?? null,
+        avatarFocusX: community.avatar_focus_x,
+        avatarFocusY: community.avatar_focus_y,
+        avatarZoom: community.avatar_zoom,
+        visualIdentity: community.visual_identity,
+      }] : [];
     }),
     onOpenCommunity: (community) => activateDiscoverCommunityCard({ canActivate: Boolean(community.slug), community }),
     onOpenJoined: (slug) => openCommunityChat(slug),

@@ -12,10 +12,17 @@ export function formatPodPrice(price: CloudPodPrice): string {
 
 export type CloudPodPaymentState = "paying" | "leaving" | "payment_problem";
 
-export type CloudPodPerson = { user_id: string; name: string; avatar_url?: string | null };
+export type CloudPodPerson = {
+  user_id: string;
+  name: string;
+  avatar_url?: string | null;
+  avatar_focus_x?: number | null;
+  avatar_focus_y?: number | null;
+  avatar_zoom?: number | null;
+};
 
-// A pod's cover image and its focus point (0 to 1).
-export type CloudPodCover = { url: string; focus_x: number; focus_y: number } | null;
+// A pod's cover image, its focus point (0 to 1), and its zoom (1 to 2.5).
+export type CloudPodCover = { url: string; focus_x: number; focus_y: number; zoom?: number | null } | null;
 
 // A pod's own page (/c/:slug/pods/:podSlug), as this viewer may see it.
 export type CloudPodPage =
@@ -96,7 +103,18 @@ export type CloudPodDetail = {
   hosts: string[];
   host_people?: CloudPodPerson[];
   // payment: how each member is in, for the people who manage the pod only.
-  members: Array<{ user_id: string; name: string; avatar_url?: string | null; is_host: boolean; from_plan?: boolean; public_id?: string; payment?: { state: CloudPodPaymentState | "added"; until: string | null } }>;
+  members: Array<{
+    user_id: string;
+    name: string;
+    avatar_url?: string | null;
+    avatar_focus_x?: number | null;
+    avatar_focus_y?: number | null;
+    avatar_zoom?: number | null;
+    is_host: boolean;
+    from_plan?: boolean;
+    public_id?: string;
+    payment?: { state: CloudPodPaymentState | "added"; until: string | null };
+  }>;
   // The viewer's own place in it, when they are in it.
   my_membership: { state: CloudPodPaymentState | "added"; until: string | null; amount_base_units: number; currency: string } | null;
   can_manage: boolean;
@@ -129,7 +147,7 @@ export async function fetchCloudPod(params: { session: unknown; communityId: str
 
 // bannerStorageId: a cover just uploaded, or null to take it away.
 export async function saveCloudPodDetails(params: { session: unknown; communityId: string; channelId: string; purpose?: string; visibility?: "listed" | "hidden"; seats?: number; whatYouGet?: string[];
-  about?: string; bannerStorageId?: string | null; bannerFocusX?: number; bannerFocusY?: number }): Promise<void> {
+  about?: string; bannerStorageId?: string | null; bannerFocusX?: number; bannerFocusY?: number; bannerZoom?: number }): Promise<void> {
   const { client: convex, authSubject } = await client(params.session);
   const { session: _session, ...rest } = params;
   await convex.mutation("communityPods:savePodDetails" as any, { authSubject, ...rest });

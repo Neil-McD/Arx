@@ -247,11 +247,25 @@ export const listPublicDiscoverCommunities = query({
 });
 
 // The host on a card: the owner's name and face, nothing else.
-async function discoverHost(ctx: QueryCtx, community: CommunityLike): Promise<{ name: string; avatar_url: string | null } | null> {
+async function discoverHost(ctx: QueryCtx, community: CommunityLike): Promise<{
+  name: string;
+  avatar_url: string | null;
+  avatar_focus_x: number;
+  avatar_focus_y: number;
+  avatar_zoom: number;
+} | null> {
   const ownerId = (community as any).ownerId;
   const face = ownerId ? await resolveUserProfileDisplayProjection(ctx, ownerId) : null;
   const name = String((face as any)?.display_name ?? "").trim();
-  return name ? { name, avatar_url: (face as any)?.avatar_url ?? null } : null;
+  return name
+    ? {
+        name,
+        avatar_url: (face as any)?.avatar_url ?? null,
+        avatar_focus_x: (face as any)?.avatar_focus_x ?? 0.5,
+        avatar_focus_y: (face as any)?.avatar_focus_y ?? 0.5,
+        avatar_zoom: (face as any)?.avatar_zoom ?? 1,
+      }
+    : null;
 }
 
 const DISCOVER_WEEK_MS = 7 * 86_400_000;

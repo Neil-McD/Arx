@@ -22,6 +22,9 @@ export type CloudCommunityMentionCandidateRow = {
   display_name?: string | null;
   handle?: string | null;
   avatar_url?: string | null;
+  avatar_focus_x?: number | null;
+  avatar_focus_y?: number | null;
+  avatar_zoom?: number | null;
   role?: string | null;
   agent_key?: string | null;
   role_key?: "everybody" | string | null;
