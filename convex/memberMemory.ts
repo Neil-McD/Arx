@@ -284,14 +284,38 @@ export const saveMyGuideMemory = mutation({
   args: {
     authSubject: v.optional(v.string()),
     communityId: v.id("communities"),
-    entries: v.array(
-      v.object({
-        text: v.string(),
-        category: v.optional(
-          v.union(v.literal("fact"), v.literal("preference"), v.literal("commitment")),
-        ),
-      }),
+    // Atomic single-item operations apply against the latest stored row so
+    // concurrent guide updates in another tab are never overwritten.
+    operation: v.optional(
+      v.union(
+        v.object({
+          action: v.literal("add"),
+          text: v.string(),
+          category: v.optional(
+            v.union(v.literal("fact"), v.literal("preference"), v.literal("commitment")),
+          ),
+        }),
+        v.object({
+          action: v.literal("remove"),
+          text: v.string(),
+        }),
+        v.object({
+          action: v.literal("clear"),
+        }),
+      ),
     ),
+    // Optional full-snapshot replacement (guarded by expectedUpdatedAt when provided).
+    entries: v.optional(
+      v.array(
+        v.object({
+          text: v.string(),
+          category: v.optional(
+            v.union(v.literal("fact"), v.literal("preference"), v.literal("commitment")),
+          ),
+        }),
+      ),
+    ),
+    expectedUpdatedAt: v.optional(v.union(v.number(), v.null())),
   },
   handler: async (ctx, args) => {
     const userId = await resolveUserIdForAuthenticatedRequest({
@@ -301,16 +325,40 @@ export const saveMyGuideMemory = mutation({
     await requireCommunityChatAccess({ ctx, communityId: args.communityId, userId });
     const nowMs = Date.now();
     const current = await row(ctx, args.communityId, userId);
-    const cleaned: PersonalMemoryEntry[] = [];
-    const seen = new Set<string>();
-    for (const item of args.entries) {
-      const text = cleanAgentSoulText(item.text).replace(/\s+/g, " ");
-      if (!text) continue;
-      if (text.length > PERSONAL_MEMORY_ENTRY_MAX_CHARS) throw new Error("entry_too_long");
-      if (seen.has(text)) continue;
-      seen.add(text);
-      const category = normalizePersonalMemoryCategory(item.category) ?? "fact";
-      cleaned.push({ text, category, sourceRef: "member:settings", at: nowMs });
+
+    let cleaned: PersonalMemoryEntry[];
+    if (args.operation) {
+      const existing: PersonalMemoryEntry[] = [...(current?.entries ?? [])];
+      if (args.operation.action === "clear") {
+        cleaned = [];
+      } else if (args.operation.action === "remove") {
+        const target = cleanAgentSoulText(args.operation.text).replace(/\s+/g, " ");
+        cleaned = existing.filter((entry) => entry.text !== target);
+      } else {
+        const text = cleanAgentSoulText(args.operation.text).replace(/\s+/g, " ");
+        if (!text) throw new Error("entry_empty");
+        if (text.length > PERSONAL_MEMORY_ENTRY_MAX_CHARS) throw new Error("entry_too_long");
+        const category = normalizePersonalMemoryCategory(args.operation.category) ?? "fact";
+        cleaned = existing.some((entry) => entry.text === text)
+          ? existing
+          : [...existing, { text, category, sourceRef: "member:settings", at: nowMs }];
+      }
+    } else {
+      const currentUpdatedAt = current?.updatedAt ?? null;
+      if (args.expectedUpdatedAt !== undefined && args.expectedUpdatedAt !== currentUpdatedAt) {
+        throw new Error("memory_stale");
+      }
+      cleaned = [];
+      const seen = new Set<string>();
+      for (const item of args.entries ?? []) {
+        const text = cleanAgentSoulText(item.text).replace(/\s+/g, " ");
+        if (!text) continue;
+        if (text.length > PERSONAL_MEMORY_ENTRY_MAX_CHARS) throw new Error("entry_too_long");
+        if (seen.has(text)) continue;
+        seen.add(text);
+        const category = normalizePersonalMemoryCategory(item.category) ?? "fact";
+        cleaned.push({ text, category, sourceRef: "member:settings", at: nowMs });
+      }
     }
     if (personalMemoryChars(cleaned) > PERSONAL_MEMORY_MAX_CHARS) {
       throw new Error("memory_full");

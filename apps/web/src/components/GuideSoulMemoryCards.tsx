@@ -106,7 +106,12 @@ export function GuideSoulMemoryCards(props: Props) {
     }
   };
 
-  const commitPersonalEntries = async (nextEntries: Array<{ text: string; category: PersonalMemoryCategory }>) => {
+  const runPersonalMemoryOp = async (
+    operation:
+      | { action: "add"; text: string; category: PersonalMemoryCategory }
+      | { action: "remove"; text: string }
+      | { action: "clear" },
+  ) => {
     if (busy) return;
     setBusy(true);
     setError(null);
@@ -116,10 +121,10 @@ export function GuideSoulMemoryCards(props: Props) {
       const updated = await saveCloudMyGuideMemory({
         session,
         communityId: props.communityId,
-        entries: nextEntries,
+        operation,
       });
       setPersonal(updated);
-      setNewEntryText("");
+      if (operation.action === "add") setNewEntryText("");
     } catch (failure) {
       const msg = String((failure as Error)?.message ?? "");
       setError(msg.includes("memory_full") ? "Memory is full — remove or shorten an item first." : "That didn't save. Try again.");
@@ -228,11 +233,7 @@ export function GuideSoulMemoryCards(props: Props) {
                             disabled={busy}
                             aria-label={`Remove ${item.text}`}
                             onClick={() =>
-                              void commitPersonalEntries(
-                                personal.entries
-                                  .filter((_, idx) => idx !== item.index)
-                                  .map(({ text, category }) => ({ text, category })),
-                              )
+                              void runPersonalMemoryOp({ action: "remove", text: item.text })
                             }
                           >
                             ×
@@ -267,20 +268,22 @@ export function GuideSoulMemoryCards(props: Props) {
                 onKeyDown={(event) => {
                   if (event.key === "Enter" && newEntryText.trim()) {
                     event.preventDefault();
-                    void commitPersonalEntries([
-                      ...personal.entries.map(({ text, category }) => ({ text, category })),
-                      { text: newEntryText.trim(), category: newEntryCategory },
-                    ]);
+                    void runPersonalMemoryOp({
+                      action: "add",
+                      text: newEntryText.trim(),
+                      category: newEntryCategory,
+                    });
                   }
                 }}
               />
               <SettingsButton
                 disabled={busy || !newEntryText.trim()}
                 onClick={() =>
-                  void commitPersonalEntries([
-                    ...personal.entries.map(({ text, category }) => ({ text, category })),
-                    { text: newEntryText.trim(), category: newEntryCategory },
-                  ])
+                  void runPersonalMemoryOp({
+                    action: "add",
+                    text: newEntryText.trim(),
+                    category: newEntryCategory,
+                  })
                 }
               >
                 Add
@@ -289,7 +292,7 @@ export function GuideSoulMemoryCards(props: Props) {
             <div className="guide-sm-actions">
               <span className="guide-sm-count">{personal.memory_chars}/{personal.memory_max_chars} chars</span>
               {personal.entries.length > 0 ? (
-                <SettingsButton disabled={busy} onClick={() => void commitPersonalEntries([])}>Clear all</SettingsButton>
+                <SettingsButton disabled={busy} onClick={() => void runPersonalMemoryOp({ action: "clear" })}>Clear all</SettingsButton>
               ) : null}
             </div>
           </div>

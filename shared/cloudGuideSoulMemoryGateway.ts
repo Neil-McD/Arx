@@ -45,14 +45,19 @@ export async function saveCloudMyGuideSoul(
   });
 }
 
+export type MyGuideMemoryOperation =
+  | { action: "add"; text: string; category: PersonalMemoryCategory }
+  | { action: "remove"; text: string }
+  | { action: "clear" };
+
 export async function saveCloudMyGuideMemory(
-  params: BaseParams & { entries: Array<{ text: string; category: PersonalMemoryCategory }> },
+  params: BaseParams & { operation: MyGuideMemoryOperation },
 ): Promise<MyGuideSoulMemoryView> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session as any);
   return await client.mutation("memberMemory:saveMyGuideMemory" as any, {
     authSubject,
     communityId: params.communityId,
-    entries: params.entries,
+    operation: params.operation,
   });
 }
 

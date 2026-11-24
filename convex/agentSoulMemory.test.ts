@@ -170,13 +170,33 @@ describe("living Soul & structured Memory across lenses", () => {
     const afterMemory = await alice.mutation(api.memberMemory.saveMyGuideMemory, {
       authSubject: fx.memberASubject,
       communityId: fx.community1Id,
-      entries: [
-        { text: "Launching beta next Tuesday.", category: "commitment" },
-        { text: "Prefer bullet lists.", category: "preference" },
-      ],
+      operation: { action: "add", text: "Launching beta next Tuesday.", category: "commitment" },
     });
-    expect(afterMemory.entries).toHaveLength(2);
-    expect(afterMemory.entries[0]?.category).toBe("commitment");
+    const afterPref = await alice.mutation(api.memberMemory.saveMyGuideMemory, {
+      authSubject: fx.memberASubject,
+      communityId: fx.community1Id,
+      operation: { action: "add", text: "Prefer bullet lists.", category: "preference" },
+    });
+    expect(afterMemory.entries).toHaveLength(1);
+    expect(afterPref.entries).toHaveLength(2);
+    expect(afterPref.entries[0]?.category).toBe("commitment");
+    expect(afterPref.entries[1]?.category).toBe("preference");
+
+    // Atomic remove preserves entries added concurrently; stale snapshot is rejected.
+    await expect(
+      alice.mutation(api.memberMemory.saveMyGuideMemory, {
+        authSubject: fx.memberASubject,
+        communityId: fx.community1Id,
+        entries: [{ text: "Stale snapshot", category: "fact" }],
+        expectedUpdatedAt: 1,
+      }),
+    ).rejects.toThrow("memory_stale");
+    const afterRemove = await alice.mutation(api.memberMemory.saveMyGuideMemory, {
+      authSubject: fx.memberASubject,
+      communityId: fx.community1Id,
+      operation: { action: "remove", text: "Prefer bullet lists." },
+    });
+    expect(afterRemove.entries.map((e: any) => e.text)).toEqual(["Launching beta next Tuesday."]);
 
     // Bob in Community 1 sees NONE of Alice's Soul or Memory.
     const bobView = await bob.query(api.memberMemory.getMyGuideSoulAndMemory, {

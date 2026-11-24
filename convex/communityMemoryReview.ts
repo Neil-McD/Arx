@@ -72,16 +72,27 @@ export const runMemoryReviewInternal = internalAction({
     maxToolSteps: REVIEW_MAX_TOOL_STEPS,
     done: "reviewed",
     prepare: async (claim, runId) => {
-      const input = await ctx.runQuery(internalRefs.communityMemory.readMemoryReviewInputInternal, {
-        communityId: claim.communityId, sinceMs: claim.windowStart, untilMs: claim.windowEnd,
-        ...(claim.pod ? { podRoomId: claim.pod.roomId } : {}) });
+      const [input, currentSoul] = await Promise.all([
+        ctx.runQuery(internalRefs.communityMemory.readMemoryReviewInputInternal, {
+          communityId: claim.communityId, sinceMs: claim.windowStart, untilMs: claim.windowEnd,
+          ...(claim.pod ? { podRoomId: claim.pod.roomId } : {}),
+        }),
+        claim.pod
+          ? Promise.resolve(null)
+          : ctx.runQuery(internalRefs.communityAgent.readCommunitySoulInternal, {
+              communityId: claim.communityId,
+            }),
+      ]);
+      const userContent = currentSoul?.body
+        ? `${input.text}\n\n## Current Community Soul (soul.md)\n${currentSoul.body}`
+        : input.text;
       return {
         empty: input.posts === 0,
         readThrough: input.readUntil,
         backlog: input.readUntil < claim.windowEnd,
         messages: [
           { role: "system", content: `${MEMORY_REVIEW_INSTRUCTIONS}\n\nThis community: ${claim.communityName}.${claim.pod ? `\n\n${podReviewInstructions(claim.pod.name)}` : ""}` },
-          { role: "user", content: input.text },
+          { role: "user", content: userContent },
         ],
         write: async (rawArguments) => {
           const apply = parseMemoryApplyCall(rawArguments);
