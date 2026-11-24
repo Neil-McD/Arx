@@ -157,6 +157,16 @@ export function useRouteDetail(key: RouteDetailKey): string | null {
   return useSyncExternalStore(subscribe, () => readRouteDetail(key), () => null);
 }
 
+// One of the community's pages (events, pods), for the community in the
+// address bar. The app follows the address on popstate.
+export function goToCommunityPage(page: "events" | "pods"): void {
+  if (typeof window === "undefined") return;
+  const match = window.location.pathname.match(/^(\/m)?\/c\/([^/]+)/);
+  if (!match) return;
+  window.history.pushState({}, "", `${match[1] ?? ""}/c/${match[2]}/${page}`);
+  window.dispatchEvent(new PopStateEvent("popstate"));
+}
+
 // One lesson of a course in Knowledge, for the community in the address bar
 // (the brain map's "Open the lesson"). The app follows the address on popstate.
 export function goToCourseLesson(courseId: string, lessonId: string): void {

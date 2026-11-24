@@ -338,6 +338,11 @@ css += """
 .app .seg button.on{background:rgba(var(--w),.09);color:var(--ink)}
 .app .brainside{position:absolute;top:0;right:0;bottom:0;width:380px;max-width:100%;box-sizing:border-box;overflow-y:auto;overflow-x:hidden;padding:20px 24px 24px;background:var(--bg);border-left:1px solid var(--line2);display:flex;flex-direction:column;gap:14px;animation:brainside .18s ease-out}
 @keyframes brainside{from{transform:translateX(24px)}to{transform:none}}
+/* The side panel's course: its cover, and how far you are. */
+.app .brain-cover{display:block;width:100%;aspect-ratio:16/7;object-fit:cover;border-radius:10px;margin:0 0 14px}
+.app .brain-progress{display:flex;flex-direction:column;gap:6px;margin:4px 0 14px;font-size:12.5px;color:var(--ink3)}
+.app .brain-progress-bar{display:block;height:3px;border-radius:2px;background:rgba(var(--w),.1);overflow:hidden}
+.app .brain-progress-bar>span{display:block;height:100%;border-radius:2px;background:var(--ink)}
 @media (prefers-reduced-motion:reduce){.app .brainside{animation:none}}
 .app .brainside .sub2{white-space:normal;line-height:1.45}
 .app .brainside .acts{margin-top:2px;flex-wrap:wrap}

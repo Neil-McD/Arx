@@ -1,6 +1,7 @@
 // Example maps for the design lab (staging only): Sunrise as it is on
 // staging today, a middling community, and a full one.
 import type { BrainAttach, BrainMap, BrainPoint } from "../../../../shared/communityBrain";
+import type { CommunityResource, CommunityResourceModule } from "../components/communityResourcesContracts";
 
 const DAY = 86_400_000;
 
@@ -109,4 +110,20 @@ export function fullExample(now: number): BrainMap {
   grow(m, now, 150, [...lessons, ...subjects, ...subjects, { kind: "pod", id: "pod:a" }, { kind: "pod", id: "pod:b" }, { kind: "other" }], 11);
   m.hidden = { "subject:Tools": 14, other: 3 };
   return finish(m, now);
+}
+
+// What Knowledge would hand the brain page for an example map: a short
+// description per course and a few paragraphs per lesson, so every side
+// panel can be looked at in the lab.
+export function labBrainContent(map: BrainMap): { courses: CommunityResourceModule[]; lessons: CommunityResource[]; community: { oneLiner: string | null; about: string | null } } {
+  const courses = map.courses.map((course, index) => ({
+    id: course.id.replace(/^course:/, ""), directory_uri: "", directory_path: "", module_status: "live" as const, name: course.name,
+    description_md: `Everything you need for ${course.name.toLowerCase()}, one short lesson at a time. Work through it in order, or jump to what you need today.`,
+    banner_url: null, banner_focus_x: null, banner_focus_y: null, banner_zoom: null, sort_order: index,
+  }));
+  const lessons = map.courses.flatMap((course) => course.lessons.map((lesson) => ({
+    id: lesson.id.replace(/^resource:/, ""), title: lesson.title, url: null, module_id: course.id.replace(/^course:/, ""),
+    body_md: `This lesson walks through **${lesson.title}**.\n\n## What you'll do\n\n- Read the short overview\n- Try it on your own community\n- Post what you made in #wins\n\n> [!TIP] Keep it small\n> One change you can finish today beats a plan you never start.\n\nWhen you're done, mark it finished and move to the next lesson.`,
+  }) as unknown as CommunityResource));
+  return { courses, lessons, community: { oneLiner: "Where founders build their first paid community, together.", about: `${map.center.name} is a place to learn by doing: short courses, weekly calls, and a guide that remembers what everyone is working on.\n\nStart with the first course, say hello in #general, and come to Friday's call.` } };
 }

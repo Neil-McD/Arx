@@ -4620,3 +4620,10 @@
 :root[data-design="v1"] .community-dm-standalone-media .community-dm-sent-image img {
   border-radius: 14px;
 }
+
+/* A lesson read in the community brain's side panel: the lesson reader at
+   the panel's width, under the panel's own title (the reader's is hidden). */
+:root[data-design="v1"] .brain-lesson-read { margin: 4px 0 14px; }
+:root[data-design="v1"] .brain-lesson-read .resource-viewer-header { display: none; }
+:root[data-design="v1"] .brain-lesson-read .resource-viewer-prose { font-size: 14px; line-height: 1.6; }
+:root[data-design="v1"] .brain-lesson-read .resource-viewer-embed { margin: 0 0 12px; border-radius: 10px; overflow: hidden; }
