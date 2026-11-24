@@ -26,8 +26,13 @@ import { KitPodCall } from "./KitPodCall";
 import { KitPodKnowledge } from "./KitPodKnowledge";
 import { PanelAction, PanelLine, PanelPart, PanelPeople, usePanelSettled } from "./KitPanel";
 import { askForPodPagePreview, forgetPod, goToPodsPath, rememberPod } from "./podMemory";
+import { readBannerFileAsWideDataUrlWithinLimit } from "../../../../shared/imageTransforms";
+import { prepareCloudCommunityBrandingField } from "../../../../shared/cloudCommunityAdminGateway";
 
-type Draft = { purpose: string; whatYouGet: string; listed: boolean; seats: string; price: string };
+// cover: keep the one it has, take it away, or a new image read from a file.
+type CoverDraft = { kind: "keep" } | { kind: "remove" } | { kind: "new"; dataUrl: string };
+type Draft = { purpose: string; whatYouGet: string; about: string; cover: CoverDraft; listed: boolean; seats: string; price: string };
+const POD_COVER_CHAR_LIMIT = 1_200_000;
 
 function memberTag(payment: NonNullable<CloudPodDetail["members"][number]["payment"]>): string {
   if (payment.state === "paying") return "Paying";
@@ -81,10 +86,15 @@ export function KitPodRail(props: { session: unknown; communityId: string; pod: 
     setBusy("edit");
     setEditError(null);
     try {
+      // A new cover goes up first; the pod then points at it.
+      const cover = editing.cover.kind === "new"
+        ? (await prepareCloudCommunityBrandingField({ session: props.session, kind: "banner", nextValue: editing.cover.dataUrl })).storageId ?? null
+        : editing.cover.kind === "remove" ? null : undefined;
       await saveCloudPodDetails({
         session: props.session, communityId: props.communityId, channelId: pod.channel_id,
         purpose: editing.purpose, visibility: editing.listed ? "listed" : "hidden", seats: Number(editing.seats) || 0,
-        whatYouGet: editing.whatYouGet.split("\n"),
+        whatYouGet: editing.whatYouGet.split("\n"), about: editing.about,
+        ...(cover !== undefined ? { bannerStorageId: cover } : {}),
       });
       const cents = (Number(editing.price) || 0) * 100;
       if (cents !== (pod.price?.amount_base_units ?? 0)) {
@@ -96,7 +106,8 @@ export function KitPodRail(props: { session: unknown; communityId: string; pod: 
       const code = String((error as Error)?.message ?? "");
       setEditError(code.includes("community_checkout_unavailable")
         ? "To charge for a pod, connect Stripe in Manage first."
-        : code.includes("community_pod_price_invalid") ? "Use a price from $1 to $10,000 a month." : "Couldn't save. Try again.");
+        : code.includes("community_pod_price_invalid") ? "Use a price from $1 to $10,000 a month."
+          : code.includes("community_pod_cover_invalid") ? "That image couldn't be used. Try another." : "Couldn't save. Try again.");
     } finally { setBusy(null); }
   };
 
@@ -185,6 +196,26 @@ export function KitPodRail(props: { session: unknown; communityId: string; pod: 
           <div className={cx("podform")} style={{ marginTop: 0 }}>
             <textarea value={editing.purpose} onChange={(event) => setEditing({ ...editing, purpose: event.target.value })} placeholder="What is this pod for? One sentence." aria-label="What the pod is for" rows={3} maxLength={280} autoFocus />
             <textarea value={editing.whatYouGet} onChange={(event) => setEditing({ ...editing, whatYouGet: event.target.value })} placeholder={"What you get, one per line\nWeekly call with the host\nFeedback on your work"} aria-label="What you get, one per line" rows={4} />
+            <textarea value={editing.about} onChange={(event) => setEditing({ ...editing, about: event.target.value })}
+              placeholder={"About: a few short paragraphs for members deciding whether to join.\nWho it's for, what happens inside, what they'll leave with."}
+              aria-label="About this pod, for members deciding whether to join" rows={6} maxLength={1500} />
+            <div className={cx("podform-cover")}>
+              {editing.cover.kind === "new" ? <img src={editing.cover.dataUrl} alt="" /> : editing.cover.kind === "keep" && pod.cover?.url ? <img src={pod.cover.url} alt="" /> : null}
+              <label className={cx("btn small")}>
+                {(editing.cover.kind === "keep" && pod.cover) || editing.cover.kind === "new" ? "Change cover" : "Add a cover"}
+                <input type="file" accept="image/*" hidden onChange={(event) => {
+                  const file = event.target.files?.[0];
+                  event.target.value = "";
+                  if (!file) return;
+                  if (!file.type.toLowerCase().startsWith("image/")) { setEditError("A cover is an image file."); return; }
+                  void readBannerFileAsWideDataUrlWithinLimit(file, POD_COVER_CHAR_LIMIT)
+                    .then((dataUrl) => setEditing((current) => current ? { ...current, cover: { kind: "new", dataUrl } } : current))
+                    .catch(() => setEditError("That image couldn't be used. Try another."));
+                }} />
+              </label>
+              {(editing.cover.kind === "keep" && pod.cover) || editing.cover.kind === "new"
+                ? <Btn txt small onClick={() => setEditing({ ...editing, cover: { kind: "remove" } })}>Remove cover</Btn> : null}
+            </div>
             <label className={cx("podform-check")}>
               <input type="checkbox" checked={editing.listed} onChange={(event) => setEditing({ ...editing, listed: event.target.checked })} />
               Listed: members can see it and join or ask to
@@ -219,7 +250,7 @@ export function KitPodRail(props: { session: unknown; communityId: string; pod: 
               <div className={cx("acts")} style={{ marginTop: 10 }}>
                 {pod.can_edit ? (
                   <Btn small onClick={() => setEditing({
-                    purpose: pod.purpose, whatYouGet: pod.what_you_get.join("\n"), listed: pod.visibility === "listed",
+                    purpose: pod.purpose, whatYouGet: pod.what_you_get.join("\n"), about: pod.about_md ?? "", cover: { kind: "keep" }, listed: pod.visibility === "listed",
                     seats: pod.seats ? String(pod.seats) : "", price: pod.price ? String(Math.round(pod.price.amount_base_units / 100)) : "",
                   })}>Edit</Btn>
                 ) : null}

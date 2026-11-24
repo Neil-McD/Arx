@@ -259,3 +259,47 @@ test("a builder moves a learned thing on the map; a member can't; the filing rul
   await expect(as(t, "stranger").mutation(api.communityMemory.fileCommunityNote, { communityId: w.communityId, slug: "loose", about: "Gym logistics" })).rejects.toThrow();
   await expect(as(t, "owner").mutation(api.communityMemory.fileCommunityNote, { communityId: w.communityId, slug: "nope", about: "Gym logistics" })).rejects.toThrow();
 });
+
+test("a listed pod's shape for a member outside it: dots and nothing they say; a hidden pod or a stranger gets nothing", async () => {
+  const t = convexTest(schema, modules);
+  const w = await world(t);
+  // The member is not in the scouts pod (listed).
+  const shape: any = await as(t, "member").query((api as any).communityBrain.getPodBrainShape, { communityId: w.communityId, podChannelId: w.scouts });
+  expect(shape.points).toHaveLength(1);
+  expect(shape.points[0]).toMatchObject({ title: null, mine: false });
+  expect(shape.points[0].id).toMatch(/^note:p\d+$/);
+  expect(shape.courses).toEqual([]);
+  expect(shape.can_manage).toBe(false);
+  expect(JSON.stringify(shape)).not.toMatch(/SCOUTS NOTE|scouting|TEXT OF/);
+  // The climbers pod's subject ("Resets") never travels as words.
+  const climbers: any = await as(t, "owner").query((api as any).communityBrain.getPodBrainShape, { communityId: w.communityId, podChannelId: w.climbers });
+  expect(JSON.stringify(climbers)).not.toMatch(/Resets|Reset rota/);
+  expect(climbers.subjects.map((s: any) => s.name)).toEqual(["s1"]);
+  // A hidden pod: nothing, even its shape.
+  await expect(as(t, "member").query((api as any).communityBrain.getPodBrainShape, { communityId: w.communityId, podChannelId: w.secret })).rejects.toThrow();
+  // Someone not in the community: nothing.
+  await expect(as(t, "stranger").query((api as any).communityBrain.getPodBrainShape, { communityId: w.communityId, podChannelId: w.scouts })).rejects.toThrow();
+  // The full map of a pod they're not in is still refused.
+  await expect(as(t, "member").query(api.communityBrain.getBrainMap, { communityId: w.communityId, podChannelId: w.scouts })).rejects.toThrow();
+});
+
+test("a pod's About and cover: a builder saves them, the outside page carries them, a member can't", async () => {
+  const t = convexTest(schema, modules);
+  const w = await world(t);
+  const image = await t.run(async (ctx: any) => await ctx.storage.store(new Blob([new Uint8Array([137, 80, 78, 71])], { type: "image/png" })));
+  await as(t, "owner").mutation((api as any).communityPods.savePodDetails, { communityId: w.communityId, channelId: w.scouts,
+    about: "Who it's for.   \n\n\n\nWhat happens inside.", bannerStorageId: image, bannerFocusX: 0.2, bannerFocusY: 2 });
+  const page: any = await as(t, "member").query((api as any).communityPods.getPodPage, { communityId: w.communityId, podSlug: "scouts" });
+  expect(page.kind).toBe("outside");
+  expect(page.about_md).toBe("Who it's for.\n\nWhat happens inside.");
+  expect(page.cover).toMatchObject({ focus_x: 0.2, focus_y: 1 });
+  expect(page.cover.url).toEqual(expect.any(String));
+  // The pods list's outside cards carry the cover too.
+  const list: any = await as(t, "member").query((api as any).communityPods.listCommunityPods, { communityId: w.communityId });
+  expect(list.outside.find((pod: any) => pod.slug === "scouts").cover.url).toEqual(expect.any(String));
+  // Taking the cover away.
+  await as(t, "owner").mutation((api as any).communityPods.savePodDetails, { communityId: w.communityId, channelId: w.scouts, bannerStorageId: null });
+  expect((await as(t, "member").query((api as any).communityPods.getPodPage, { communityId: w.communityId, podSlug: "scouts" }) as any).cover).toBeNull();
+  // A member can't change the pitch.
+  await expect(as(t, "member").mutation((api as any).communityPods.savePodDetails, { communityId: w.communityId, channelId: w.scouts, about: "Mine now" })).rejects.toThrow();
+});

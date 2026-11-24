@@ -26,6 +26,7 @@ const LINGER_MS = 30_000;
 export type LiveQueryName =
   | "communityBriefs:getPlaceBrief"
   | "communityBrain:getBrainMap"
+  | "communityBrain:getPodBrainShape"
   | "communityEvents:listCommunityEvents"
   | "communityPods:listCommunityPods"
   | "communityPods:getPod"

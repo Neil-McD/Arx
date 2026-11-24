@@ -13,10 +13,11 @@ import { requireCommunityChatAccess, requireCommunityManager } from "./community
 import { MAP_LESSONS, docReader, evidenceFacts, liveLessons, podRoom, type DocReader } from "./communityMemory";
 import { communityScopeKey, notesByUpdated, podScopeKey, type ScopeKey } from "./communityNotesStore";
 import { knowledgeUseFor } from "./communityKnowledgeUse";
+import { podRecord, podVisibilityOf } from "./communityPods";
 import { COMMUNITY_NOTES_MAX_PER_COMMUNITY } from "../shared/communityNotes";
 import { memoryEvidenceRefusal, noteAuthorKind, parseMemoryAbout, parseMemoryEvidenceRef } from "../shared/communityMemory";
 import {
-  BRAIN_FRESH_MS, attachKey, brainTitleFor, chooseArcs, choosePoints, subjectsOf,
+  BRAIN_FRESH_MS, attachKey, brainShapeOf, brainTitleFor, chooseArcs, choosePoints, subjectsOf,
   type BrainAttach, type BrainCourse, type BrainMap, type BrainNoteInput, type BrainPod,
 } from "../shared/communityBrain";
 
@@ -75,7 +76,9 @@ async function lessonsDone(ctx: any, userId: any, lessonIds: any[]): Promise<Set
   return done;
 }
 
-async function brainMap(ctx: any, args: { communityId: any; userId: any; podChannelId?: any }): Promise<BrainMap> {
+// outsideShape: a listed pod's map for someone not in it, which the caller
+// turns into its nameless shape (getPodBrainShape) before it leaves here.
+async function brainMap(ctx: any, args: { communityId: any; userId: any; podChannelId?: any; outsideShape?: boolean }): Promise<BrainMap> {
   const community: any = await ctx.db.get(args.communityId);
   const canManage = await requireCommunityManager({ ctx, communityId: args.communityId, userId: args.userId }).then(() => true, () => false);
   const viewerId = String(args.userId);
@@ -89,7 +92,7 @@ async function brainMap(ctx: any, args: { communityId: any; userId: any; podChan
     room = await podRoom(ctx, args.communityId, args.podChannelId);
     if (!room) throw new Error("community_pod_not_found");
     const actor = await resolveCommunityChannelActor({ ctx, communityId: args.communityId, userId: args.userId });
-    if (!(await getCommunityChannelCapabilities({ ctx, channel: room, actor })).canRead) throw new Error("community_pod_not_found");
+    if (!args.outsideShape && !(await getCommunityChannelCapabilities({ ctx, channel: room, actor })).canRead) throw new Error("community_pod_not_found");
   }
 
   const inputs: BrainNoteInput[] = [];
@@ -185,6 +188,20 @@ export const getBrainMap = query({
     const userId = await resolveUserIdForAuthenticatedRequest({ ctx, authSubject: args.authSubject ?? null });
     await requireCommunityChatAccess({ ctx, communityId: args.communityId, userId });
     return await brainMap(ctx, { communityId: args.communityId, userId, podChannelId: args.podChannelId });
+  },
+});
+
+// A listed pod's map for a member outside it: its shape only (shared/communityBrain.ts
+// brainShapeOf), never a name or a word of what it knows. A hidden pod, or
+// someone not in the community, gets nothing.
+export const getPodBrainShape = query({
+  args: { authSubject: v.optional(v.string()), communityId: v.id("communities"), podChannelId: v.id("communityChannels") },
+  handler: async (ctx, args) => {
+    const userId = await resolveUserIdForAuthenticatedRequest({ ctx, authSubject: args.authSubject ?? null });
+    await requireCommunityChatAccess({ ctx, communityId: args.communityId, userId });
+    const record = await podRecord(ctx, args.communityId, args.podChannelId);
+    if (podVisibilityOf(record) !== "listed") throw new Error("community_pod_not_found");
+    return brainShapeOf(await brainMap(ctx, { communityId: args.communityId, userId, podChannelId: args.podChannelId, outsideShape: true }));
   },
 });
 
