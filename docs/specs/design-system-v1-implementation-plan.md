@@ -123,6 +123,7 @@ Shipped behind the switch: #427 to #452. Production: none of it.
 | 2026-11-10 | Inbox and Members are pages, with the selected item in the right column (Members recorded as an exception in `docs/core-contract.md`) |
 | 2026-11-10 | Events is a list; the month calendar goes |
 | 2026-11-10 | Logo: the flat two-tone network mark with a slight lift; the favicon fills its tile |
+| 2026-11-24 | Logo: light through stone. The same network, cut into graphite and lit violet from inside (violet is the community's AI). The shape never changes; only how much of the tile it fills (72 large, 80 icons, 92 favicons) and how much stone detail survives. One source: `npm run brand:icons` |
 
 ## 5. What is next, in order
 
