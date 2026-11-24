@@ -1894,6 +1894,16 @@ export default defineSchema({
     pairs: v.array(v.object({ a: v.string(), b: v.string(), count: v.number() })),
   }).index("by_community_day", ["communityId", "day"]),
 
+  // No longer used (mention links were taken off the community brain's map,
+  // Nov 24) and empty. It stays defined: dropping a table needs a deploy key
+  // that can read production data, which the release key deliberately can't.
+  communityLessonMentions: defineTable({
+    communityId: v.id("communities"),
+    fingerprint: v.string(),
+    links: v.array(v.object({ from: v.string(), to: v.string() })),
+    builtAt: v.number(),
+    building: v.optional(v.object({ fingerprint: v.string(), startedAt: v.number() })),
+  }).index("by_community", ["communityId"]),
 
   // A place's brief (shared/communityBriefs.ts): what's happening there,
   // rewritten by the guide after new activity. One per scope, read by
