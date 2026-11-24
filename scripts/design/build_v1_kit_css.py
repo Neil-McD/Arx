@@ -215,7 +215,8 @@ css += """
    secondary button (Edit, Copy link, See it as members do, Leave pod) is
    accent text. The main action (go) keeps its button; Cancel stays quiet text. */
 .app .rail .btn.sm:not(.go),.app .brainside .btn.sm:not(.go){height:24px;padding:0 2px;border:0;border-radius:4px;background:none;box-shadow:none;font-size:12.5px;font-weight:500}
-.app .rail .btn.sm:not(.go):not(.txt),.app .brainside .btn.sm:not(.go):not(.txt){color:var(--accent,var(--blue-ink))}
+.app .rail .btn.sm:not(.go):not(.txt),.app .brainside .btn.sm:not(.go):not(.txt){color:var(--accent,var(--blue-ink));background:none}
+.app .rail .btn.sm:not(.go):not(.txt):hover:not(:disabled),.app .brainside .btn.sm:not(.go):not(.txt):hover:not(:disabled){color:var(--ink);background:none}
 .app .rail .btn.sm:not(.go):hover:not(:disabled),.app .brainside .btn.sm:not(.go):hover:not(:disabled){color:var(--ink);background:none}
 .app .rail .btn.sm:not(.go):focus-visible,.app .brainside .btn.sm:not(.go):focus-visible{outline:2px solid var(--blue);outline-offset:2px}
 .app .rail .acts:has(>.btn.sm:not(.go)),.app .brainside .acts:has(>.btn.sm:not(.go)){gap:4px 16px}
