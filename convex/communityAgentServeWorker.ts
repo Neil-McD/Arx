@@ -31,7 +31,16 @@ import {
   nextCommunityAgentServeAttempt,
   normalizeCommunityAgentServeAttempt,
 } from "../shared/communityAgentServeContract";
-import { buildCommunityAgentServePromptBundle } from "../shared/communityAgentServePrompt";
+import {
+  buildCommunityAgentServePromptBundle,
+  type CommunityAgentServeResolvedImage,
+} from "../shared/communityAgentServePrompt";
+import {
+  COMMUNITY_AGENT_MAX_IMAGE_BYTES,
+  isAllowedCommunityAgentImageMime,
+  normalizeCommunityAgentImageMime,
+  normalizeCommunityAgentImageName,
+} from "../shared/communityAgentAttachments";
 import { readCanonicalCommunityAgentContext } from "./communityAgentContext";
 import { scheduleCommunityInteractionEvidenceSync } from "./communityInteractionEvidence";
 import {
@@ -55,6 +64,7 @@ import {
   COMMUNITY_AGENT_THREAD_CONTEXT_MAX_TURNS,
   compileCommunityAgentThreadContext,
   type CommunityAgentThreadActorType,
+  type CommunityAgentThreadImageInput,
   type CommunityAgentThreadParticipantInput,
   type CommunityAgentThreadTurnInput,
 } from "../shared/communityAgentThreadContext";
@@ -643,6 +653,60 @@ function normalizeThreadActorType(
     : "system";
 }
 
+async function listUploadedImagesForInteraction(args: {
+  ctx: any;
+  communityId: any;
+  channelId: any;
+  rootId: any;
+  replyId: any | null;
+}): Promise<CommunityAgentThreadImageInput[]> {
+  const rows = (await args.ctx.db
+    .query("communityInteractionAttachments" as any)
+    .withIndex(args.replyId ? "by_reply" : "by_root", (q: any) =>
+      q.eq(args.replyId ? "replyId" : "rootId", args.replyId ?? args.rootId),
+    )
+    .take(16)) as any[];
+  const expectedCommunityId = normalizeIdValue(args.communityId);
+  const expectedChannelId = normalizeIdValue(args.channelId);
+  const expectedRootId = normalizeIdValue(args.rootId);
+  const expectedReplyId = args.replyId ? normalizeIdValue(args.replyId) : "";
+  const images: CommunityAgentThreadImageInput[] = [];
+  for (const row of rows) {
+    if (!row || row.status !== "uploaded" || row.attachmentKind !== "image") continue;
+    if (normalizeIdValue(row.communityId) !== expectedCommunityId) continue;
+    if (row.channelId && normalizeIdValue(row.channelId) !== expectedChannelId) continue;
+    const rowReplyId = row.replyId ? normalizeIdValue(row.replyId) : "";
+    if (expectedReplyId) {
+      // Production reply attachments set `replyId` (and `uploadRootId`), leaving `rootId` absent.
+      if (rowReplyId !== expectedReplyId) continue;
+      if (row.rootId && normalizeIdValue(row.rootId) !== expectedRootId) continue;
+      if (row.uploadRootId && normalizeIdValue(row.uploadRootId) !== expectedRootId) continue;
+    } else {
+      if (rowReplyId || normalizeIdValue(row.rootId) !== expectedRootId) continue;
+    }
+    const storageId = normalizeIdValue(row.storageId);
+    const mimeType = normalizeCommunityAgentImageMime(row.mimeType);
+    const sizeBytes = Number(row.sizeBytes);
+    if (
+      !storageId ||
+      !isAllowedCommunityAgentImageMime(mimeType) ||
+      !Number.isFinite(sizeBytes) ||
+      sizeBytes <= 0 ||
+      sizeBytes > COMMUNITY_AGENT_MAX_IMAGE_BYTES
+    ) {
+      continue;
+    }
+    images.push({
+      attachmentId: normalizeIdValue(row._id),
+      storageId,
+      name: normalizeCommunityAgentImageName(row.name),
+      mimeType,
+      sizeBytes: Math.floor(sizeBytes),
+    });
+  }
+  return images;
+}
+
 async function loadCommunityAgentThreadContext(args: {
   ctx: any;
   request: ServeRequestRow;
@@ -767,6 +831,13 @@ async function loadCommunityAgentThreadContext(args: {
       await listContentBlocksForRoot(args.ctx, args.root._id),
       args.root.contentSummary,
     ),
+    images: await listUploadedImagesForInteraction({
+      ctx: args.ctx,
+      communityId: args.request.communityId,
+      channelId: args.root.channelId,
+      rootId: args.root._id,
+      replyId: null,
+    }),
   };
   const replyTurns = await Promise.all(
     contextReplies.map(async (row): Promise<CommunityAgentThreadTurnInput> => {
@@ -795,6 +866,13 @@ async function loadCommunityAgentThreadContext(args: {
         await listContentBlocksForReply(args.ctx, row._id),
         row.contentSummary,
       ),
+      images: await listUploadedImagesForInteraction({
+        ctx: args.ctx,
+        communityId: args.request.communityId,
+        channelId: args.root.channelId,
+        rootId: args.root._id,
+        replyId: row._id,
+      }),
     };
     }),
   );
@@ -1813,6 +1891,24 @@ export const processQueuedCommunityAgentServeRequestsInternal = internalAction({
         requestId,
         attempt: context.request.attempt,
       });
+      // Resolve short-lived HTTPS storage URLs ONLY for the live model call,
+      // keeping persisted audit snapshots completely free of signed URLs.
+      const resolvedThreadImages: CommunityAgentServeResolvedImage[] = [];
+      for (const img of context.threadContext.images ?? []) {
+        const resolvedUrl = await ctx.storage.getUrl(img.storageId as any).catch(() => null);
+        const url = typeof resolvedUrl === "string" ? resolvedUrl.trim() : "";
+        if (!/^https:\/\//i.test(url)) continue;
+        resolvedThreadImages.push({
+          attachmentId: img.attachmentId,
+          name: img.name,
+          speaker: img.speaker,
+          turnLabel: img.turnLabel,
+          imageUrl: url,
+        });
+      }
+      const liveMessages = resolvedThreadImages.length > 0
+        ? buildCommunityAgentServePromptBundle({ ...context, resolvedThreadImages }).messages
+        : initialMessages;
       const run = await runFundedCommunityAgent({
         lens: "guide_public",
         ctx,
@@ -1822,7 +1918,7 @@ export const processQueuedCommunityAgentServeRequestsInternal = internalAction({
         receiptKey: communityAgentMentionReceiptKey(requestId),
         sourceRunId: `community-agent-serve:${normalizeIdValue(requestId)}`,
         admission: context.funding,
-        messages: initialMessages,
+        messages: liveMessages,
         maxOutputTokens: SERVE_REPLY_MAX_TOKENS,
         maxToolSteps: SERVE_TOOL_LOOP_MAX_STEPS,
         promptCacheKey: turnContract?.cacheKey ?? `pn:${normalizeIdValue(context.request.communityId)}:serve`,
