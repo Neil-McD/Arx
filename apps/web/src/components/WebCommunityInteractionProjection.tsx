@@ -717,18 +717,11 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
 
       {props.profilePanel ? (
         <aside className="community-interaction-drawer" aria-label="Profile">
-          <header className="community-thread-header">
-            <h2 className="community-thread-title">Profile</h2>
-            <button
-              className="community-thread-close"
-              type="button"
-              onClick={props.onCloseProfile}
-              aria-label="Close profile"
-              title="Close profile"
-            >
-              ×
-            </button>
-          </header>
+          <CommunityThreadHeader
+            title="Profile"
+            closeLabel="Close profile"
+            onClose={() => props.onCloseProfile?.()}
+          />
           <div className="community-interaction-drawer-scroll">{props.profilePanel}</div>
         </aside>
       ) : selectedRoot ? (
