@@ -311,7 +311,6 @@
   .community-context-section,
   .community-interaction-badge,
   .community-interaction-unread-divider > span,
-  .community-profile-panel-section-label,
   .resources-header,
   .resource-delete-label,
   .resource-field-label,
@@ -4682,3 +4681,11 @@
 :root[data-design="v1"] .pod-about { display: flex; flex-direction: column; gap: 10px; margin: 2px 0 16px; color: var(--text-secondary, #a3a6ad); font-size: 14px; line-height: 1.6; white-space: pre-line; }
 :root[data-design="v1"] .pod-about p { margin: 0; }
 :root[data-design="v1"] .pod-card-cover { position: relative; display: block; width: calc(100% + 32px); margin: -16px -16px 10px; aspect-ratio: 16 / 6; overflow: hidden; border-radius: 9px 9px 0 0; }
+
+/* The channel's profile drawer when the person has left the community. */
+:root[data-design="v1"] .kit-profile-gone {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-ink-tertiary, rgba(238, 240, 244, 0.52));
+}

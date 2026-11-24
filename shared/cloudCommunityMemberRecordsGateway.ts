@@ -114,12 +114,24 @@ export type CloudMemberProfile = {
   user_id: string;
   name: string;
   avatar_url: string | null;
+  // The person's own handle, bio and links (their account, the same everywhere).
+  handle: string | null;
+  bio: string | null;
+  links: Partial<Record<"youtube" | "x" | "instagram", string>>;
   role: string;
   here_now: boolean;
   you: boolean;
   facts: Array<{ kind: string; label: string; body: string }>;
   in_common: string[];
+  // Other communities: ones they host that you may see, ones you are both in.
+  hosts: CloudMemberProfileCommunity[];
+  shared: CloudMemberProfileCommunity[];
+  can_message: boolean;
+  message_community_id: string | null;
+  // The reader manages members here (they may open the person's record).
+  viewer_can_manage: boolean;
 };
+export type CloudMemberProfileCommunity = { id: string; slug: string; name: string; avatar_url: string | null };
 
 export async function listCloudCommunityMemberDirectory<SessionT>(params: { session: SessionT; communityId: string }): Promise<CloudMemberDirectoryRow[]> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
@@ -127,10 +139,12 @@ export async function listCloudCommunityMemberDirectory<SessionT>(params: { sess
   return result.rows;
 }
 
-export async function getCloudCommunityMemberProfile<SessionT>(params: { session: SessionT; communityId: string; membershipId: string | null }): Promise<CloudMemberProfile | null> {
+// One person's profile here, named by their membership (Members) or by their
+// user id (a name in a channel). Neither: the host.
+export async function getCloudCommunityMemberProfile<SessionT>(params: { session: SessionT; communityId: string; membershipId: string | null; targetUserId?: string | null }): Promise<CloudMemberProfile | null> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
   return await client.query("communityMemberProfiles:getCommunityMemberProfile" as any, {
     authSubject, communityId: params.communityId,
-    ...(params.membershipId ? { membershipId: params.membershipId } : {}),
+    ...(params.membershipId ? { membershipId: params.membershipId } : params.targetUserId ? { targetUserId: params.targetUserId } : {}),
   }) as CloudMemberProfile | null;
 }

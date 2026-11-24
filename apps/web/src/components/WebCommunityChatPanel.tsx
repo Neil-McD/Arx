@@ -15,10 +15,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CommunityChannelSessionContext } from "./CommunityChannelSessionContext";
 import type { CommunityChatMediaImage } from "../../../../shared/CommunityChatMediaGrid";
 import type {
-  ProfileCommunityContext as SharedProfileCommunityContext,
   UserProfile as SharedUserProfile,
 } from "../../../../shared/communityTypes";
-import { fetchCloudProfileCommunityContext } from "../../../../shared/cloudProfilesGateway";
 import {
   searchCloudCommunityMentionCandidates,
   type CloudCommunityMentionCandidateRow,
@@ -35,7 +33,7 @@ import {
   WebCommunityInteractionProjection,
   type WebCommunityInteractionProjectionProps,
 } from "./WebCommunityInteractionProjection";
-import { WebCommunityProfilePanel } from "./WebCommunityProfilePanel";
+import { KitProfileDrawer } from "../v1/KitProfile";
 import { CommunityComposerControls } from "./CommunityComposerControls";
 import { resolveWebCommunityChatPresentationMode } from "../controllers/resolveWebCommunityChatPresentationMode";
 import {
@@ -62,13 +60,11 @@ import {
 import type { CloudCommunityAgentServeIssue } from "../../../../shared/cloudCommunityAgentConciergeGateway";
 import { useCommunityVisualIdentityRegistryActions } from "../../../../shared/CommunityVisualIdentityRegistry";
 import {
-  coerceCommunityVisualIdentity,
   type CommunityVisualIdentity,
 } from "../../../../shared/communityVisualIdentity";
 import { fitComposerHeight, resetComposerHeight } from "../../../../shared/composerHeight";
 
 type UserProfile = SharedUserProfile;
-type ProfileCommunityContext = SharedProfileCommunityContext;
 type CommunityMentionMember = {
   user_id?: string | null;
 };
@@ -89,14 +85,6 @@ type CommunityVoiceTranscriptTarget = {
 
 type CommunityVoiceButtonOwner = "main" | "drawer";
 
-const EMPTY_PROFILE_COMMUNITY_CONTEXT: ProfileCommunityContext = {
-  owned_communities: [],
-  mutual_communities: [],
-  is_self: false,
-  can_message: false,
-  message_context_community_id: null,
-  message_unavailable_reason: "no_mutual_community",
-};
 const EMPTY_MENTION_CANDIDATES: MentionCandidate[] = [];
 
 const COMMUNITY_ATTACHMENT_ACCEPT =
@@ -165,7 +153,6 @@ function shouldPreserveCommunityComposerFocus(activeElement: Element | null, inp
         "[role='dialog']",
         ".chat-edit-form",
         ".community-interaction-edit",
-        ".community-profile-panel",
       ].join(","),
     ),
   );
@@ -382,9 +369,6 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
   const canUseComposer = canPresentComposer;
   const canUseCommunityAttachments = canUseComposer;
   const [profilePanelUserId, setProfilePanelUserId] = useState<string | null>(null);
-  const [profileCommunityContextByUserId, setProfileCommunityContextByUserId] = useState<
-    Record<string, ProfileCommunityContext>
-  >({});
   const [drawerReplyTarget, setDrawerReplyTarget] = useState<CommunityReplyTarget | null>(null);
   const [drawerReplyInput, setDrawerReplyInput] = useState("");
   const [drawerReplyMentions, setDrawerReplyMentions] = useState<CommittedMention[]>([]);
@@ -718,15 +702,6 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
   ]);
 
   const profilePanelProfile = profilePanelUserId ? profilesByUserId[profilePanelUserId] ?? null : null;
-  const profilePanelDisplayName = profilePanelUserId
-    ? String(profilePanelProfile?.display_name ?? displayName(profilePanelUserId) ?? "").trim() ||
-      displayName(profilePanelUserId)
-    : "";
-  const profilePanelAvatarColor = profilePanelUserId ? getAvatarColor(profilePanelUserId) : "transparent";
-  const loadedProfilePanelCommunityContext = profilePanelUserId
-    ? profileCommunityContextByUserId[profilePanelUserId] ?? null
-    : null;
-  const profilePanelCommunityContext = loadedProfilePanelCommunityContext ?? EMPTY_PROFILE_COMMUNITY_CONTEXT;
   const canOpenDirectMessageFromCommunity = Boolean(
     hasSession && activeCommunity?.id && onOpenDirectMessageFromCommunity,
   );
@@ -768,7 +743,6 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
 
   useEffect(() => {
     setProfilePanelUserId(null);
-    setProfileCommunityContextByUserId({});
   }, [activeCommunity?.id]);
 
   useEffect(() => {
@@ -799,72 +773,6 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
     }
   }, [activeCommunity?.id, rootReplyTarget, setDrawerReplyAttachmentsAndRef]);
 
-  useEffect(() => {
-    setProfileCommunityContextByUserId({});
-  }, [sessionUserId]);
-
-  useEffect(() => {
-    const targetUserId = profilePanelUserId;
-    if (!targetUserId || !session || profileCommunityContextByUserId[targetUserId]) return;
-    let cancelled = false;
-    void fetchCloudProfileCommunityContext({
-      session,
-      targetUserId,
-      preferredCommunityId: activeCommunity?.id ?? null,
-    })
-      .then((context) => {
-        if (cancelled) return;
-        upsertCommunityVisualIdentities(
-          [...context.owned_communities, ...context.mutual_communities]
-            .map((community) => coerceCommunityVisualIdentity(
-              community.visual_identity,
-              community,
-            ))
-            .filter((identity): identity is CommunityVisualIdentity => Boolean(identity)),
-        );
-        setProfileCommunityContextByUserId((previous) => ({
-          ...previous,
-          [targetUserId]: context,
-        }));
-      })
-      .catch(() => {
-        if (cancelled) return;
-        setProfileCommunityContextByUserId((previous) => ({
-          ...previous,
-          [targetUserId]: EMPTY_PROFILE_COMMUNITY_CONTEXT,
-        }));
-      })
-    return () => {
-      cancelled = true;
-    };
-  }, [
-    activeCommunity?.id,
-    profileCommunityContextByUserId,
-    profilePanelUserId,
-    session,
-    upsertCommunityVisualIdentities,
-  ]);
-
-  useEffect(() => {
-    if (!profilePanelUserId) return;
-    // The canonical chat docks the profile into the right panel (closed via the back
-    // button), so click-outside-to-close only applies to the legacy floating card.
-    if (showInteractionProjection) return;
-
-    const handleProfilePanelPointerDown = (event: PointerEvent) => {
-      const target = event.target;
-      if (!(target instanceof Node)) return;
-      const panel = document.querySelector(".community-profile-panel");
-      if (panel?.contains(target)) return;
-      setProfilePanelUserId(null);
-    };
-
-    document.addEventListener("pointerdown", handleProfilePanelPointerDown, true);
-    return () => {
-      document.removeEventListener("pointerdown", handleProfilePanelPointerDown, true);
-    };
-  }, [profilePanelUserId, showInteractionProjection]);
-
   const openDirectMessage = useCallback((targetUserId: string, sourceCommunityIdOverride?: string | null) => {
     const normalizedTargetUserId = String(targetUserId ?? "").trim();
     const sourceCommunityId = String(sourceCommunityIdOverride ?? activeCommunity?.id ?? "").trim();
@@ -874,21 +782,15 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
     onOpenDirectMessageFromCommunity(normalizedTargetUserId, sourceCommunityId);
   }, [activeCommunity?.id, onOpenDirectMessageFromCommunity, sessionUserId]);
 
+  // Someone who has left has no profile here: only their name is said.
   const profilePanelElement = profilePanelUserId ? (
-    <WebCommunityProfilePanel
-      profile={profilePanelProfile}
-      displayName={profilePanelDisplayName}
-      avatarColor={profilePanelAvatarColor}
-      communityContext={profilePanelCommunityContext}
-      isSelfProfile={profilePanelCommunityContext.is_self || Boolean(profilePanelUserId && sessionUserId && profilePanelUserId === sessionUserId)}
-      isMessageDisabled={!canOpenDirectMessageFromCommunity || !profilePanelCommunityContext.can_message}
-      onMessage={
-        profilePanelUserId && profilePanelUserId !== sessionUserId && profilePanelCommunityContext.message_context_community_id
-          ? () => openDirectMessage(profilePanelUserId, profilePanelCommunityContext.message_context_community_id)
-          : undefined
-      }
+    <KitProfileDrawer
+      target={{ userId: profilePanelUserId }}
+      communityName={activeCommunity?.name ?? null}
+      fallback={<p className="kit-profile-gone">{String(profilePanelProfile?.display_name ?? "").trim() || displayName(profilePanelUserId)} is no longer a member here.</p>}
+      getAvatarColor={getAvatarColor}
       getInitials={getInitials}
-      docked={showInteractionProjection}
+      onMessage={canOpenDirectMessageFromCommunity ? (userId, communityId) => openDirectMessage(userId, communityId) : undefined}
     />
   ) : null;
 

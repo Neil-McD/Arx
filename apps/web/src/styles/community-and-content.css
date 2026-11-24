@@ -3280,7 +3280,6 @@
 }
 
 .chat-profile-hover-name-row,
-.community-profile-panel-name-row,
 .mention-autocomplete-name-row {
   min-width: 0;
   max-width: 100%;
@@ -3309,7 +3308,6 @@
 }
 
 .chat-profile-hover-name-row .chat-profile-hover-name,
-.community-profile-panel-name-row .community-profile-panel-name,
 .mention-autocomplete-name-row .mention-autocomplete-name,
 .member-settings-summary-name-row .member-settings-summary-name {
   min-width: 0;
@@ -3394,193 +3392,28 @@
   }
 }
 
-/* Docked variant — fills the right panel slot (the drawer provides the surface + back header). */
-.community-profile-panel.community-profile-panel--docked {
-  position: static;
-  inset: auto;
-  width: 100%;
-  max-width: none;
-  max-height: none;
-  z-index: auto;
-  padding: 0 16px 16px;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-  box-shadow: none;
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
-}
 
-.community-profile-panel {
-  position: fixed;
-  top: 64px;
-  right: 18px;
-  bottom: auto;
-  z-index: 48;
-  width: min(340px, calc(100vw - 36px));
-  max-height: min(560px, calc(100vh - 96px));
-  padding: 16px;
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  overflow: auto;
-  border: 1px solid var(--web-context-panel-border);
-  border-radius: 16px;
-  background: var(--web-context-panel-surface);
-  box-shadow: var(--web-context-panel-shadow);
-  color: var(--text-primary);
-}
 
-.community-profile-panel-top {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
-}
 
-/* Profile presentation scales the canonical holder; framing stays shared. */
-.community-profile-panel-top .community-interaction-avatar {
-  width: 64px;
-  height: 64px;
-  font-size: 18px;
-}
 
-.community-profile-panel-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
 
-.community-profile-panel-message {
-  min-height: 34px;
-}
 
-.community-profile-panel-identity {
-  min-width: 0;
-}
 
-.community-profile-panel-name {
-  overflow: hidden;
-  color: var(--text-primary);
-  font-size: 18px;
-  font-weight: 700;
-  line-height: 1.2;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
 
-.community-profile-panel-name-row {
-  display: flex;
-}
 
-.community-profile-panel-handle {
-  overflow: hidden;
-  margin-top: 3px;
-  color: var(--text-muted);
-  font-size: 13px;
-  line-height: 1.25;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
 
-.community-profile-panel-bio {
-  display: -webkit-box;
-  overflow: hidden;
-  color: color-mix(in srgb, var(--text-primary) 86%, var(--text-muted) 14%);
-  font-size: 14px;
-  line-height: 1.42;
-  overflow-wrap: anywhere;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 4;
-}
 
-.community-profile-panel-bio.is-empty {
-  color: var(--text-faint);
-}
 
-.community-profile-panel-links {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px 16px;
-}
 
-.community-profile-panel-link {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  min-height: 28px;
-  padding: 0;
-  border: 0;
-  border-radius: 0;
-  color: var(--text-muted);
-  background: transparent;
-  font-size: 12px;
-  font-weight: 650;
-  text-decoration: none;
-}
 
-.community-profile-panel-link:hover {
-  color: var(--text-primary);
-  background: transparent;
-  text-decoration: underline;
-  text-underline-offset: 3px;
-}
 
-.community-profile-panel-link:focus-visible {
-  outline: 2px solid var(--focus-ring);
-  outline-offset: 3px;
-  border-radius: 3px;
-}
 
-.community-profile-panel-link svg {
-  width: 14px;
-  height: 14px;
-  flex: 0 0 auto;
-}
 
-.community-profile-panel-divider {
-  height: 1px;
-  background: color-mix(in srgb, var(--border-default) 62%, transparent);
-}
 
-.community-profile-panel-section {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
 
-.community-profile-panel-section-label {
-  color: var(--text-faint);
-  font-size: 11px;
-  font-weight: 700;
-  line-height: 1;
-  text-transform: uppercase;
-  letter-spacing: 0;
-}
 
-.community-profile-panel-community-strip {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-height: 40px;
-  max-width: 100%;
-  overflow-x: auto;
-  overflow-y: hidden;
-  padding: 1px 0 3px;
-  scrollbar-width: none;
-}
 
-.community-profile-panel-community-strip::-webkit-scrollbar {
-  display: none;
-}
 
-.community-profile-panel-community-avatar {
-  display: grid;
-  place-items: center;
-  flex: 0 0 38px;
-  width: 38px;
-  height: 38px;
-}
 
 .community-dm-panel {
   position: fixed;
@@ -4693,7 +4526,6 @@
 }
 
 @media (max-width: 760px) {
-  .community-profile-panel,
   .community-dm-panel {
     top: auto;
     right: 12px;

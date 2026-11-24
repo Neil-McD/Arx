@@ -175,3 +175,44 @@ test("free access a host once gave by hand reads as free, like any other", async
   const record = await asOwner.query(api.communityMemberRecords.getCommunityMemberRecord, { communityId, membershipId: freeby.membershipId });
   expect(record?.plan).toMatchObject({ kind: "free", label: "Free" });
 });
+
+test("a person opened by name gets one profile: who they are, who they are here, and nothing of the host's", async () => {
+  const t = convexTest(schema, modules);
+  const { communityId, tanya, martin } = await seed(t);
+  await t.run(async (ctx) => {
+    await ctx.db.patch(tanya.userId, { handle: "tanya", normalizedHandle: "tanya" });
+    await ctx.db.insert("userProfileDetails", { userId: tanya.userId, bio: "Runs a supper club.", socialLinks: { youtube: "https://youtube.com/@tanya" },
+      createdAt: NOW, updatedAt: NOW } as any);
+  });
+  const asJon = t.withIdentity({ subject: "jon" });
+  const byName = await asJon.query(api.communityMemberProfiles.getCommunityMemberProfile, { communityId, targetUserId: "tanya" });
+  expect(byName).toMatchObject({
+    membership_id: String(tanya.membershipId), user_id: "tanya", name: "Tanya", handle: "tanya", bio: "Runs a supper club.",
+    role: "member", you: false, viewer_can_manage: false,
+    facts: [{ kind: "goal", label: "Working on", body: "Finding her first ten members" }],
+  });
+  expect(byName?.links.youtube).toBe("https://youtube.com/@tanya");
+  // The same person by membership is the same profile.
+  expect(await asJon.query(api.communityMemberProfiles.getCommunityMemberProfile, { communityId, membershipId: tanya.membershipId })).toEqual(byName);
+  // Nothing of the host's, and nothing she has not approved.
+  expect(JSON.stringify(byName)).not.toMatch(/Member · \$27|on_hold|joined_at|last_active|Restaurant owners|Watches what others post/);
+
+  // The host by name; yourself. Only those who manage members may open records.
+  expect(await asJon.query(api.communityMemberProfiles.getCommunityMemberProfile, { communityId, targetUserId: "owner" })).toMatchObject({ role: "owner", membership_id: null });
+  expect(await asJon.query(api.communityMemberProfiles.getCommunityMemberProfile, { communityId, targetUserId: "jon" })).toMatchObject({ you: true, can_message: false });
+  expect(await t.withIdentity({ subject: "owner" }).query(api.communityMemberProfiles.getCommunityMemberProfile, { communityId, targetUserId: "tanya" }))
+    .toMatchObject({ viewer_can_manage: true });
+  expect(await t.withIdentity({ subject: "martin" }).query(api.communityMemberProfiles.getCommunityMemberProfile, { communityId, targetUserId: "tanya" }))
+    .toMatchObject({ viewer_can_manage: false });
+  // Messaging follows the rule direct messages already have (Tanya's card is on hold).
+  expect(byName?.can_message).toBe(false);
+  expect(await asJon.query(api.communityMemberProfiles.getCommunityMemberProfile, { communityId, membershipId: martin.membershipId }))
+    .toMatchObject({ role: "moderator", can_message: true });
+
+  // Someone who left, was blocked, or was never here has no profile here.
+  for (const gone of ["ana", "lee", "dana", "nobody"]) {
+    expect(await asJon.query(api.communityMemberProfiles.getCommunityMemberProfile, { communityId, targetUserId: gone })).toBeNull();
+  }
+  // Someone outside the community cannot read it at all.
+  await expect(t.withIdentity({ subject: "dana" }).query(api.communityMemberProfiles.getCommunityMemberProfile, { communityId, targetUserId: "tanya" })).rejects.toThrow();
+});

@@ -2,9 +2,9 @@
 // hifi-mock, Members, member view). Who is here and what each person chose to
 // share; never plan, payment, notes or where a fact came from (the server
 // sends none of it: convex/communityMemberProfiles.ts).
-import { memberRoleLine, memberRoleTag } from "../../../../shared/communityMemberWords";
+import { memberRoleTag } from "../../../../shared/communityMemberWords";
 import { ArrowLeft } from "lucide-react";
-import { Fragment, useContext, useEffect, useMemo, useState, type CSSProperties } from "react";
+import { useContext, useEffect, useMemo, useState, type CSSProperties } from "react";
 import { createPortal } from "react-dom";
 import { UserAvatar } from "../../../../shared/UserAvatar";
 import { useRouteDetail, writeRouteDetail } from "../../../../shared/routeDetails";
@@ -15,7 +15,8 @@ import {
   type CloudMemberProfile,
 } from "../../../../shared/cloudCommunityMemberRecordsGateway";
 import { CommunityChannelSessionContext } from "../components/CommunityChannelSessionContext";
-import { Btn, cx, Icon, KitApp, Rail, Sep, Sec, Top, View } from "./kit";
+import { cx, Icon, KitApp, Rail, Top, View } from "./kit";
+import { KitProfile } from "./KitProfile";
 
 type Filter = "everyone" | "here" | "hosts";
 const keyOf = (row: { membership_id: string | null }) => row.membership_id ?? "owner";
@@ -131,44 +132,10 @@ export function KitMembersDirectory(props: {
         <ArrowLeft size={14} strokeWidth={1.8} aria-hidden="true" />Members
       </button>
       <Rail index={5} label={profile ? profile.name : "Member"}>
-        {profile ? <MemberProfileView profile={profile} onMessage={props.onMessage} getAvatarColor={props.getAvatarColor} getInitials={props.getInitials} /> : null}
+        {profile ? <KitProfile profile={profile} getAvatarColor={props.getAvatarColor} getInitials={props.getInitials}
+          onMessage={props.onMessage ? (userId) => props.onMessage?.(userId) : undefined} /> : null}
       </Rail>
     </KitApp>
   );
   return <>{page}{props.profileContainer ? createPortal(rail, props.profileContainer) : null}</>;
-}
-
-function MemberProfileView(props: { profile: CloudMemberProfile; onMessage?: (userId: string) => void; getAvatarColor: (id: string) => string; getInitials: (name: string) => string }) {
-  const { profile } = props;
-  return (
-    <>
-      <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-        <Face name={profile.name} url={profile.avatar_url} seed={profile.user_id} getAvatarColor={props.getAvatarColor} getInitials={props.getInitials} style={{ width: 56, height: 56, fontSize: 18 }} />
-        <div>
-          <div style={{ fontSize: 20, fontWeight: 600, letterSpacing: "-.015em" }}>{profile.name}</div>
-          <div className={cx("sub")} style={{ marginTop: 2 }}>{profile.you ? "This is what other members see about you" : memberRoleLine(profile.role, profile.here_now)}</div>
-        </div>
-        {!profile.you && props.onMessage ? <div style={{ display: "flex", gap: 8 }}><Btn small go onClick={() => props.onMessage?.(profile.user_id)}>Message</Btn></div> : null}
-      </div>
-      {profile.facts.length || profile.you ? <Sep /> : null}
-      {profile.facts.length ? (
-        <div className={cx("kv")}>
-          {profile.facts.map((fact, index) => <Fragment key={index}><span>{fact.label}</span><p>{fact.body}</p></Fragment>)}
-        </div>
-      ) : profile.you ? (
-        // Only your own empty record says anything: it tells you how to fill it.
-        <Sec label="Working on"><p>Tell your guide what you're working on and it can show here, once you approve it.</p></Sec>
-      ) : null}
-      {profile.in_common.length ? (
-        <>
-          <Sep />
-          <Sec label="In common with you">
-            {profile.in_common.map((text, index) => (
-              <div key={index} className={cx("src")} style={index ? { marginTop: -8 } : undefined}><Icon name="users" />{text}<em>you both said</em></div>
-            ))}
-          </Sec>
-        </>
-      ) : null}
-    </>
-  );
 }

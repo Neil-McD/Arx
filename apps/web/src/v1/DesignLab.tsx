@@ -47,6 +47,8 @@ import { coursesExample, fullExample, labBrainContent, middlingExample, sunriseE
 import { CommunityPageFrame, CommunityPageRail } from "../components/CommunityPageHeader";
 import { KitHomeRail } from "./KitHomeRail";
 import { KitPodRail } from "./KitPodRail";
+import { KitProfile } from "./KitProfile";
+import type { CloudMemberProfile, CloudMemberRecord } from "../../../../shared/cloudCommunityMemberRecordsGateway";
 
 const BANNER = "/design-lab/polynet-earth.webp";
 const SMALL_BUTTON = { height: 32, fontSize: 13 } as const;
@@ -573,7 +575,52 @@ function labScale(): number {
   return Number.isFinite(value) && value >= 0.75 && value <= 2 ? value : 1;
 }
 
+// One person's profile in its four states, each in a right-hand column.
+// ?page=profile
+const LAB_PROFILE: CloudMemberProfile = {
+  membership_id: "m1", user_id: "maya", name: "Maya Alvarez", handle: "maya", avatar_url: null,
+  bio: "I help freelance designers turn one-off projects into a studio with recurring clients.",
+  links: { youtube: "https://youtube.com/@maya", x: "https://x.com/maya" },
+  role: "moderator", here_now: true, you: false,
+  facts: [
+    { kind: "goal", label: "Working on", body: "Launching a paid cohort for freelance designers by January" },
+    { kind: "skill", label: "Can help with", body: "Pricing, brand identity, running live sessions" },
+    { kind: "availability", label: "Available", body: "Weekday mornings, UK time" },
+  ],
+  in_common: ["Launching a paid cohort for freelance designers by January"],
+  hosts: [{ id: "c2", slug: "studio-method", name: "Studio Method", avatar_url: null }],
+  shared: [{ id: "c3", slug: "ai-employee-builders", name: "AI Employee Builders", avatar_url: null }],
+  can_message: true, message_community_id: "c1", viewer_can_manage: false,
+};
+const LAB_RECORD: CloudMemberRecord = {
+  membership_id: "m1", user_id: "maya", name: "Maya Alvarez", handle: "maya", avatar_url: null, role: "moderator",
+  joined_at: "2026-05-15T12:00:00Z", last_active_at: new Date().toISOString(), out: null,
+  plan: { kind: "paid", label: "Pro · $49/mo", price_point_id: "p1" }, money: null, facts: [], events: [],
+  notes: [{ id: "n1", body: "Asked about group calls. Good fit to lead a session on pricing.", author: "you", at: "2026-11-20T12:00:00Z", can_delete: true }],
+};
+function ProfileLab() {
+  const avatars = { getAvatarColor: () => "#7A4E9E", getInitials: (name: string) => name.split(/\s+/).map((part) => part[0]).join("").slice(0, 2).toUpperCase() };
+  const column = (title: string, node: JSX.Element) => (
+    <div style={{ width: 360, flex: "none" }}>
+      <p style={{ margin: "0 0 10px", font: "500 12px system-ui", color: "#8A8F98" }}>{title}</p>
+      <div style={{ border: "1px solid rgba(255,255,255,.08)", borderRadius: 10, background: "#0f1011" }}>
+        <KitApp view="members" part="rail"><Rail index={5} label={title}>{node}</Rail></KitApp>
+      </div>
+    </div>
+  );
+  const empty: CloudMemberProfile = { ...LAB_PROFILE, name: "Tom Reyes", handle: "tom-reyes", user_id: "tom", bio: null, links: {}, role: "member", here_now: false, facts: [], in_common: [], hosts: [] };
+  return (
+    <div style={{ minHeight: "100vh", padding: 32, background: "#08090a", display: "flex", gap: 28, alignItems: "flex-start", flexWrap: "wrap" }}>
+      {column("A member opens a member", <KitProfile profile={LAB_PROFILE} communityName="Polynet" onMessage={() => undefined} {...avatars} />)}
+      {column("Nothing shared yet", <KitProfile profile={empty} communityName="Polynet" onMessage={() => undefined} {...avatars} />)}
+      {column("Your own", <KitProfile profile={{ ...LAB_PROFILE, you: true, in_common: [], can_message: false }} communityName="Polynet" {...avatars} />)}
+      {column("As the host sees it", <KitProfile profile={{ ...LAB_PROFILE, viewer_can_manage: true }} communityName="Polynet" record={LAB_RECORD}
+        onMessage={() => undefined} onAddNote={async () => undefined} onOpenMembers={() => undefined} {...avatars} />)}
+    </div>
+  );
+}
+
 export function DesignLab() {
   const page = typeof window === "undefined" ? "" : new URLSearchParams(window.location.search).get("page");
-  return page === "channel" ? <HostChannel /> : page === "brief" ? <BriefPanels /> : page === "brain" ? <BrainLab /> : page === "events" ? <EventsLab /> : page === "members" ? <MembersLab /> : page === "brain-actions" ? <BrainActionsLab /> : page === "brain-page" ? <BrainPageLab /> : page === "pods-shell" ? <PodsShell /> : page === "know-panel" ? <KnowShell builder={false} /> : page === "know-panel-builder" ? <KnowShell builder /> : page === "pods" ? <PodsPage join={false} /> : page === "home-panel" ? <RealPanels pod={false} /> : page === "pod-panel" ? <RealPanels pod /> : page === "pods-join" ? <PodsPage join /> : <HostHomeQuiet />;
+  return page === "profile" ? <ProfileLab /> : page === "channel" ? <HostChannel /> : page === "brief" ? <BriefPanels /> : page === "brain" ? <BrainLab /> : page === "events" ? <EventsLab /> : page === "members" ? <MembersLab /> : page === "brain-actions" ? <BrainActionsLab /> : page === "brain-page" ? <BrainPageLab /> : page === "pods-shell" ? <PodsShell /> : page === "know-panel" ? <KnowShell builder={false} /> : page === "know-panel-builder" ? <KnowShell builder /> : page === "pods" ? <PodsPage join={false} /> : page === "home-panel" ? <RealPanels pod={false} /> : page === "pod-panel" ? <RealPanels pod /> : page === "pods-join" ? <PodsPage join /> : <HostHomeQuiet />;
 }
