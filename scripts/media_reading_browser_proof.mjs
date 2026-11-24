@@ -229,7 +229,9 @@ try {
   const dmBubbleTypography = await page.evaluate(() => {
     const theirs = document.querySelector(".community-dm-panel-message:not(.is-own) [class*='_bub_']");
     const mine = document.querySelector(".community-dm-panel-message.is-own [class*='_mine_']");
-    if (!theirs || !mine) return null;
+    const theirsText = theirs?.querySelector(".community-dm-panel-message-text");
+    const mineText = mine?.querySelector(".community-dm-panel-message-text");
+    if (!theirs || !mine || !theirsText || !mineText) return null;
     const t = getComputedStyle(theirs);
     const m = getComputedStyle(mine);
     return {
@@ -239,6 +241,8 @@ try {
       mineLineHeight: m.lineHeight,
       theirsTopRadius: t.borderTopLeftRadius,
       mineTopRadius: m.borderTopLeftRadius,
+      theirsWhiteSpace: getComputedStyle(theirsText).whiteSpace,
+      mineWhiteSpace: getComputedStyle(mineText).whiteSpace,
     };
   });
   assert(dmBubbleTypography, "Both DM message sides rendered");
@@ -246,6 +250,8 @@ try {
   assert.equal(dmBubbleTypography.mineSize, "14px", "Outgoing DM bubble body is 14px");
   assert.equal(dmBubbleTypography.theirsLineHeight, dmBubbleTypography.mineLineHeight, "Incoming and outgoing DM bubbles share line-height");
   assert.equal(dmBubbleTypography.theirsTopRadius, dmBubbleTypography.mineTopRadius, "Incoming and outgoing DM bubbles share corner radius");
+  assert.equal(dmBubbleTypography.theirsWhiteSpace, "pre-wrap", "Incoming DM text preserves authored line breaks");
+  assert.equal(dmBubbleTypography.mineWhiteSpace, "pre-wrap", "Outgoing DM text preserves authored line breaks");
   await page.setViewportSize({ width: 220, height: 900 });
   await page.locator(".deferred-youtube.is-too-narrow a").first().waitFor({ timeout: 3000 });
   await page.setViewportSize({ width: 320, height: 900 });

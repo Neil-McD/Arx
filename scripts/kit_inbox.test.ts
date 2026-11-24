@@ -100,7 +100,7 @@ test("WebDirectMessagePanel uses the unified Kit conversation view on phones wit
     messages: [
       {
         id: "m1", conversation_id: "a", seq: 1, sender_type: "user", sender_user_id: "u-a",
-        content_json: { text: "Hey there!" }, via_ai: true, created_at: nowIso, updated_at: nowIso,
+        content_json: { text: "Hey there!\nSecond line" }, via_ai: true, created_at: nowIso, updated_at: nowIso,
       },
       {
         id: "m2", conversation_id: "a", seq: 2, sender_type: "user", sender_user_id: "me",
@@ -121,6 +121,6 @@ test("WebDirectMessagePanel uses the unified Kit conversation view on phones wit
   expect(html).toContain("community-dm-inbox-presence-dot is-active-now");
   expect(html).toContain("Active now · Polynet");
   expect(html).toContain("via AI");
-  expect(html).toContain("Hey there!");
-  expect(html).toContain("Hello back!");
+  expect(html).toContain('<div class="community-dm-panel-message-text">Hey there!\nSecond line</div>');
+  expect(html).toContain('<div class="community-dm-panel-message-text">Hello back!</div>');
 });

@@ -803,7 +803,7 @@ export function WebDirectMessagePanel(props: WebDirectMessagePanelProps) {
                       ) : null}
                       {text || otherFiles.length ? (
                         <div className={`${cx(isOwn ? "mine" : "bub")}${message.local_status === "sending" ? " is-sending" : ""}`}>
-                          {text ? renderChatInlineMarkdown(text, { renderTextRun: props.renderTextWithLinks }) : null}
+                          {text ? <div className="community-dm-panel-message-text">{renderChatInlineMarkdown(text, { renderTextRun: props.renderTextWithLinks })}</div> : null}
                           {text ? <MessageLinkMedia text={text} /> : null}
                           {otherFiles.length ? <MessageAttachments attachments={otherFiles} onLoad={props.onLoadAttachment} /> : null}
                         </div>
