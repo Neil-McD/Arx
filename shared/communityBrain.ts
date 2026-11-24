@@ -107,6 +107,31 @@ export function subjectsOf(notes: Array<Pick<BrainNoteInput, "at" | "createdAt">
     .sort((a, b) => a.first_at.localeCompare(b.first_at) || a.name.localeCompare(b.name));
 }
 
+// A pod's map as someone outside the pod may see it: its shape and nothing
+// it says. No note's name, no subject's name (the words of a subject can say
+// what members talked about), no "mine", no names anywhere; the dots, where
+// they hang (as blank keys), how much each is used and what is used together
+// stay. The count is the same number the pod's outside page already shows.
+export function brainShapeOf(map: BrainMap): BrainMap {
+  const subjectKey = new Map<string, string>();
+  map.subjects.forEach((subject, index) => subjectKey.set(subject.name, `s${index + 1}`));
+  const pointKey = new Map<string, string>();
+  map.points.forEach((point, index) => pointKey.set(point.id, `note:p${index + 1}`));
+  const blankAt = (at: BrainAttach): BrainAttach => at.kind === "subject" ? { kind: "subject", name: subjectKey.get(at.name) ?? "s0" } : at.kind === "lesson" ? { kind: "other" } : at;
+  return {
+    center: { name: map.center.name, kind: map.center.kind },
+    counts: { courses: 0, lessons: 0, learned: map.counts.learned, this_week: map.counts.this_week },
+    can_manage: false,
+    courses: [],
+    subjects: map.subjects.map((subject) => ({ name: subjectKey.get(subject.name)!, first_at: subject.first_at, size: subject.size })),
+    points: map.points.map((point) => ({ id: pointKey.get(point.id)!, title: null, kind: "learned" as const, at: blankAt(point.at),
+      learned_at: point.learned_at, fresh: point.fresh, use: point.use, mine: false })),
+    pods: [],
+    arcs: map.arcs.flatMap((arc) => pointKey.has(arc.a) && pointKey.has(arc.b) ? [{ a: pointKey.get(arc.a)!, b: pointKey.get(arc.b)!, count: arc.count }] : []),
+    hidden: {},
+  };
+}
+
 // Total drawable knowledge nodes on a map: learned/taught notes, published
 // course lessons, and visible pods.
 export function brainNodeCount(map: BrainMap): number {

@@ -9,7 +9,7 @@ import { resolveUserIdForAuthenticatedRequest } from "./authActor";
 import { getCommunityChannelCapabilities, resolveCommunityChannelActor } from "./communityChannelAccess";
 import { listAuthorizedCommunityChannelPage } from "./communityChannelCore";
 import { setChannelParticipantCore } from "./communityChannelParticipants";
-import { normalizeIdValue, requireCommunityChatAccess, requireCommunityManager } from "./communityCore";
+import { assertUnclaimedPublicImageStorageId, normalizeIdValue, requireCommunityChatAccess, requireCommunityManager } from "./communityCore";
 import { displayName } from "./communityFounderBrief";
 import { resolveUserProfileDisplayProjection } from "./userProfileProjection";
 import { notesByUpdated, podScopeKey } from "./communityNotesStore";
@@ -25,6 +25,25 @@ const PURPOSE_MAX = 280;
 const SEATS_MAX = 500;
 const WHAT_YOU_GET_LINES = 4;
 const WHAT_YOU_GET_MAX = 80;
+export const POD_ABOUT_MAX = 1500;
+
+// A pod's About: paragraphs kept, runs of spaces and blank lines folded.
+export function cleanPodAbout(raw: string): string {
+  return String(raw ?? "").replace(/\r/g, "").split(/\n{2,}/).map((part) => part.replace(/[ \t]+/g, " ").replace(/ *\n */g, "\n").trim())
+    .filter(Boolean).join("\n\n").slice(0, POD_ABOUT_MAX).trim();
+}
+
+function focusOf(raw: unknown): number {
+  const n = Number(raw);
+  return Number.isFinite(n) ? Math.min(1, Math.max(0, n)) : 0.5;
+}
+
+// A pod's cover, as the outside page and the cards draw it.
+async function podCover(ctx: Ctx, record: any): Promise<{ url: string; focus_x: number; focus_y: number } | null> {
+  if (!record?.bannerStorageId) return null;
+  const url = await ctx.storage.getUrl(record.bannerStorageId);
+  return url ? { url, focus_x: focusOf(record.bannerFocusX), focus_y: focusOf(record.bannerFocusY) } : null;
+}
 
 function cleanWhatYouGet(lines: string[]): string[] {
   return lines.map((line) => line.replace(/\s+/g, " ").trim().slice(0, WHAT_YOU_GET_MAX)).filter(Boolean).slice(0, WHAT_YOU_GET_LINES);
@@ -245,6 +264,7 @@ export const listCommunityPods = query({
           slug: String(channel.slug ?? ""),
           name: String(channel.name ?? ""),
           purpose: record?.purpose ?? "",
+          cover: await podCover(ctx, record),
           hosts,
           seats_left: typeof record?.seats === "number" ? Math.max(0, record.seats - taken) : null,
           price: podPriceOf(record),
@@ -313,6 +333,8 @@ export const getPod = query({
       seats: typeof record?.seats === "number" ? record.seats : null,
       price: podPriceOf(record),
       what_you_get: record?.whatYouGet ?? [],
+      about_md: record?.aboutMd ?? "",
+      cover: await podCover(ctx, record),
       // The pod's next call, with its link (this viewer can read the pod).
       next_call: await (async () => {
         const call = await nextPodCall(ctx, args.channelId, Date.now());
@@ -345,18 +367,31 @@ export const savePodDetails = mutation({
     // 0 or less clears the limit.
     seats: v.optional(v.number()),
     whatYouGet: v.optional(v.array(v.string())),
+    about: v.optional(v.string()),
+    // A new cover (an uploaded image), or null to take it away.
+    bannerStorageId: v.optional(v.union(v.id("_storage"), v.null())),
+    bannerFocusX: v.optional(v.number()),
+    bannerFocusY: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
     const userId = await resolveUserIdForAuthenticatedRequest({ ctx, authSubject: args.authSubject ?? null });
     await requireCommunityManager({ ctx, communityId: args.communityId, userId });
     await activePodRoom(ctx, args.communityId, args.channelId);
     const patch: Record<string, unknown> = {};
+    if (args.about !== undefined) patch.aboutMd = cleanPodAbout(args.about) || undefined;
+    if (args.bannerFocusX !== undefined) patch.bannerFocusX = focusOf(args.bannerFocusX);
+    if (args.bannerFocusY !== undefined) patch.bannerFocusY = focusOf(args.bannerFocusY);
     if (args.purpose !== undefined) patch.purpose = args.purpose.replace(/\s+/g, " ").trim().slice(0, PURPOSE_MAX);
     if (args.visibility !== undefined) patch.visibility = args.visibility;
     if (args.seats !== undefined) patch.seats = args.seats > 0 ? Math.min(SEATS_MAX, Math.floor(args.seats)) : undefined;
     if (args.whatYouGet !== undefined) patch.whatYouGet = cleanWhatYouGet(args.whatYouGet);
     const nowMs = Date.now();
     const existing = await podRecord(ctx, args.communityId, args.channelId);
+    if (args.bannerStorageId === null) patch.bannerStorageId = undefined;
+    else if (args.bannerStorageId !== undefined && String(args.bannerStorageId) !== String(existing?.bannerStorageId ?? "")) {
+      // An image someone uploaded just now, not one already used elsewhere.
+      patch.bannerStorageId = await assertUnclaimedPublicImageStorageId(ctx, args.bannerStorageId, "community_pod_cover_invalid");
+    }
     if (existing) await ctx.db.patch(existing._id, { ...patch, updatedAt: nowMs });
     else await ctx.db.insert("communityPods", { communityId: args.communityId, channelId: args.channelId, purpose: "", visibility: "listed", ...patch, createdAt: nowMs, updatedAt: nowMs } as any);
     return null;
@@ -462,6 +497,8 @@ export const getPodPage = query({
       name: String(channel.name ?? ""),
       purpose: record?.purpose ?? "",
       what_you_get: record?.whatYouGet ?? [],
+      about_md: record?.aboutMd ?? "",
+      cover: await podCover(ctx, record),
       hosts: hostsDetail.map((host) => host.name),
       host_people: hostsDetail,
       visibility,

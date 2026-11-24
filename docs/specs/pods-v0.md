@@ -310,3 +310,18 @@ membership); one branch in the Stripe notice handler routes anything carrying
 
 Pods on community sites, pod-level
 automations, and the agents' table.
+
+## The outside page sells the pod (Nov 24)
+
+- **Cover and About.** A builder adds a cover image (uploaded like a course
+  cover, with its focus point) and an About of a few short paragraphs (up to
+  1,500 characters) in the pod's right column. The outside page shows the
+  cover over the name and the About under "What you get"; the Pods page's
+  cards for pods you can join show the cover.
+- **What this pod knows, as a shape.** A member outside a listed pod sees the
+  pod's map as a small drawing with no words (`communityBrain:getPodBrainShape`,
+  `brainShapeOf`): dots, how they cluster and what is used together. No note's
+  name or text, no subject's name, nothing about who said what. A hidden pod,
+  or someone outside the community, gets nothing; the full pod map still needs
+  a seat in the pod.
+

@@ -918,6 +918,12 @@ export default defineSchema({
     hostUserIds: v.optional(v.array(v.id("users"))),
     // "What you get": up to four short lines on the pod's outside page.
     whatYouGet: v.optional(v.array(v.string())),
+    // The outside page's sales words (a few short paragraphs) and its cover,
+    // with the cover's focus point (0 to 1).
+    aboutMd: v.optional(v.string()),
+    bannerStorageId: v.optional(v.id("_storage")),
+    bannerFocusX: v.optional(v.number()),
+    bannerFocusY: v.optional(v.number()),
     // Paid pods (slice 2b): the monthly price charged on top of membership.
     // Missing means not paid. The Stripe product and price on the builder's
     // account are made on first checkout; a new amount clears the price, so
