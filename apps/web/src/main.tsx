@@ -7,11 +7,19 @@ import "@fontsource-variable/geist-mono/wght.css";
 import "./base.css";
 import { isLoginTrampolinePathname, LoginTrampolineRoute } from "./auth/loginTrampoline";
 import { hasRecentAuthFlowPending } from "./authBrowserMarkers";
-import { buildTelemetryRouteLabel } from "../../../shared/routePrivacy";
 import { resolvePublicEntryRoute } from "../../../shared/publicEntryRoute";
 import { CommunityVisualIdentityRegistryProvider } from "../../../shared/CommunityVisualIdentityRegistry";
 import { captureDistributionAttributionFromLocation } from '../../../shared/distributionAttribution';
-import { isLikelyModuleLoadFailure, readErrorMessage, resilientImport } from "./lib/resilientLazy";
+import {
+  attemptModuleLoadRecovery,
+  buildModuleLoadRecoveryExtras,
+  canAttemptModuleReload,
+  clearModuleReloadAttempt,
+  configureAppUpdateRecovery,
+  installAppUpdateWakeupListeners,
+} from "./lib/appUpdateRecovery";
+import { RecoveryCard } from "./components/SurfaceErrorBoundary";
+import { isLikelyModuleLoadFailure, resilientImport } from "./lib/resilientLazy";
 
 // Design system v1's second voice (the agent) is loaded only when the build
 // enabled v1, so the default app downloads nothing new.
@@ -24,135 +32,53 @@ captureDistributionAttributionFromLocation();
 type ErrorBoundaryState = {
   error: Error | null;
   isRecoveringModuleLoad: boolean;
+  isAutoReloading: boolean;
 };
 
 const APP_BUILD_ID = String(__POLYNET_BUILD_ID__ ?? "unknown").trim() || "unknown";
-const MODULE_LOAD_RECOVERY_KEY = "polynet-module-load-recovery";
-const MODULE_LOAD_RECOVERY_WINDOW_MS = 30_000;
-const IS_PRODUCTION_BUILD = String(import.meta.env.MODE ?? "").trim().toLowerCase() === "production";
+const AUTO_RELOAD_FALLBACK_TIMEOUT_MS = 3_500;
 
-type ModuleLoadRecoveryMarker = {
-  target?: unknown;
-  at?: unknown;
-  buildId?: unknown;
-};
-
-type ServedVersionPayload = {
-  buildId?: unknown;
-};
-
-function currentRecoveryTarget(): string {
-  return buildTelemetryRouteLabel({
-    pathname: window.location.pathname,
-    search: window.location.search,
-  });
-}
-
-function buildModuleLoadRecoveryExtras(error: unknown): Record<string, unknown> {
-  return {
-    recoveryTarget: currentRecoveryTarget(),
-    appBuildId: APP_BUILD_ID,
-    errorMessage: readErrorMessage(error) || null,
-  };
-}
-
-function shouldAttemptModuleReload(): boolean {
-  try {
-    const raw = sessionStorage.getItem(MODULE_LOAD_RECOVERY_KEY);
-    if (!raw) return true;
-    const parsed = JSON.parse(raw) as ModuleLoadRecoveryMarker | null;
-    const target = String(parsed?.target ?? "").trim();
-    const buildId = String(parsed?.buildId ?? "").trim();
-    const at = Number(parsed?.at ?? 0);
-    if (!target || !Number.isFinite(at)) return true;
-    if (buildId !== APP_BUILD_ID) return true;
-    if (target !== currentRecoveryTarget()) return true;
-    return Math.max(0, Date.now() - at) > MODULE_LOAD_RECOVERY_WINDOW_MS;
-  } catch {
-    return true;
-  }
-}
-
-function markModuleReloadAttempt(): void {
-  try {
-    sessionStorage.setItem(
-      MODULE_LOAD_RECOVERY_KEY,
-      JSON.stringify({
-        target: currentRecoveryTarget(),
-        at: Date.now(),
-        buildId: APP_BUILD_ID,
-      }),
-    );
-  } catch {
-    // Best-effort recovery marker only.
-  }
-}
-
-function clearModuleReloadAttempt(): void {
-  try {
-    sessionStorage.removeItem(MODULE_LOAD_RECOVERY_KEY);
-  } catch {
-    // Best-effort recovery marker only.
-  }
-}
-
-function buildVersionProbeUrl(): string {
-  const base = String(import.meta.env.BASE_URL ?? "/").replace(/\/?$/, "/");
-  const url = new URL(`${base}version.json`, window.location.origin);
-  url.searchParams.set("t", String(Date.now()));
-  return url.toString();
-}
-
-async function readServedBuildId(): Promise<string | null> {
-  try {
-    const response = await fetch(buildVersionProbeUrl(), {
-      cache: "no-store",
-      credentials: "same-origin",
-    });
-    if (!response.ok) return null;
-    const payload = (await response.json()) as ServedVersionPayload;
-    const buildId = String(payload?.buildId ?? "").trim();
-    return buildId || null;
-  } catch {
-    return null;
-  }
-}
-
-async function reloadAfterVersionProbe(): Promise<void> {
-  const servedBuildId = await readServedBuildId();
-  const delayMs = servedBuildId && servedBuildId !== APP_BUILD_ID ? 0 : 100;
-  window.setTimeout(() => {
-    window.location.reload();
-  }, delayMs);
-}
-
-function attemptModuleLoadRecovery(
-  error: unknown,
-  options?: { force?: boolean; strict?: boolean },
-): boolean {
-  if (typeof window === "undefined") return false;
-  if (!isLikelyModuleLoadFailure(error, options)) return false;
-  if (!shouldAttemptModuleReload()) return false;
-  markModuleReloadAttempt();
-  void reloadAfterVersionProbe();
-  return true;
-}
+configureAppUpdateRecovery({
+  buildId: APP_BUILD_ID,
+  baseUrl: String(import.meta.env.BASE_URL ?? "/"),
+  isProduction: import.meta.env.PROD,
+});
 
 class ErrorBoundary extends React.Component<
   { children: React.ReactNode },
   ErrorBoundaryState
 > {
-  state: ErrorBoundaryState = { error: null, isRecoveringModuleLoad: false };
+  private fallbackTimer: ReturnType<typeof setTimeout> | null = null;
+
+  state: ErrorBoundaryState = {
+    error: null,
+    isRecoveringModuleLoad: false,
+    isAutoReloading: false,
+  };
 
   static getDerivedStateFromError(error: Error): ErrorBoundaryState {
+    const isRecoveringModuleLoad = isLikelyModuleLoadFailure(error);
     return {
       error,
-      isRecoveringModuleLoad: isLikelyModuleLoadFailure(error),
+      isRecoveringModuleLoad,
+      isAutoReloading: isRecoveringModuleLoad && canAttemptModuleReload(),
     };
+  }
+
+  componentWillUnmount() {
+    if (this.fallbackTimer !== null) {
+      clearTimeout(this.fallbackTimer);
+      this.fallbackTimer = null;
+    }
   }
 
   componentDidCatch(error: Error, info: React.ErrorInfo) {
     if (attemptModuleLoadRecovery(error)) {
+      if (this.fallbackTimer !== null) clearTimeout(this.fallbackTimer);
+      this.fallbackTimer = setTimeout(() => {
+        this.fallbackTimer = null;
+        this.setState((prev) => (prev.isAutoReloading ? { isAutoReloading: false } : null));
+      }, AUTO_RELOAD_FALLBACK_TIMEOUT_MS);
       captureAppException(error, {
         tags: {
           error_boundary: true,
@@ -166,6 +92,9 @@ class ErrorBoundary extends React.Component<
         },
       });
       return;
+    }
+    if (this.state.isAutoReloading) {
+      this.setState({ isAutoReloading: false });
     }
     captureAppException(error, {
       tags: {
@@ -183,15 +112,35 @@ class ErrorBoundary extends React.Component<
   render() {
     if (!this.state.error) return this.props.children;
 
+    if (this.state.isAutoReloading) {
+      return (
+        <div
+          aria-busy="true"
+          style={{
+            minHeight: "100vh",
+            background: "var(--bg-app, #08090a)",
+          }}
+        />
+      );
+    }
+
     const message = this.state.error?.message ?? "Unknown error";
     const stack = this.state.error?.stack ?? "";
-    const title = this.state.isRecoveringModuleLoad ? "Updating Polynet" : "Refresh Polynet";
+    const title = this.state.isRecoveringModuleLoad ? "Polynet just updated" : "Refresh Polynet";
     const copy = this.state.isRecoveringModuleLoad
-      ? "The app loaded stale files from a previous deploy. Refreshing should restore the latest version."
-      : "Something interrupted the web app. Refreshing usually restores the current session.";
+      ? "Refresh to load the latest version."
+      : "Something interrupted Polynet. Refresh to pick up where you left off.";
 
-    if (IS_PRODUCTION_BUILD || this.state.isRecoveringModuleLoad) {
-      return <CrashRecoveryScreen title={title} copy={copy} buttonLabel="Refresh" />;
+    if (import.meta.env.PROD || this.state.isRecoveringModuleLoad) {
+      return (
+        <RecoveryCard
+          fullScreen
+          title={title}
+          copy={copy}
+          buttonLabel="Refresh"
+          onAction={() => window.location.reload()}
+        />
+      );
     }
 
     return (
@@ -229,47 +178,11 @@ class ErrorBoundary extends React.Component<
   }
 }
 
-function CrashRecoveryScreen(props: { title: string; copy: string; buttonLabel: string }) {
-  return (
-    <div
-      style={{
-        display: "grid",
-        placeItems: "center",
-        minHeight: "100vh",
-        background: "#111113",
-        color: "rgba(245,245,247,0.92)",
-        fontFamily: "ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, sans-serif",
-        padding: 24,
-      }}
-    >
-      <div style={{ maxWidth: 360 }}>
-        <div style={{ fontSize: 15, fontWeight: 650 }}>{props.title}</div>
-        <p style={{ margin: "8px 0 0", color: "rgba(245,245,247,0.62)", lineHeight: 1.45 }}>
-          {props.copy}
-        </p>
-        <button
-          style={{
-            marginTop: 16,
-            padding: "8px 12px",
-            borderRadius: 10,
-            border: "1px solid rgba(255,255,255,0.12)",
-            background: "rgba(255,255,255,0.08)",
-            color: "rgba(245,245,247,0.92)",
-            cursor: "pointer",
-          }}
-          onClick={() => window.location.reload()}
-          type="button"
-        >
-          {props.buttonLabel}
-        </button>
-      </div>
-    </div>
-  );
-}
-
 const isLoginTrampoline = isLoginTrampolinePathname(window.location.pathname || "/");
 
 if (typeof window !== "undefined") {
+  installAppUpdateWakeupListeners();
+
   window.addEventListener("vite:preloadError", (event) => {
     const preloadEvent = event as Event & {
       payload?: unknown;

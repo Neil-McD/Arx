@@ -44,6 +44,7 @@ const telemetryLifecycleSource = readText(
   ),
 );
 const mainSource = readText(new URL("../apps/web/src/main.tsx", import.meta.url));
+const appUpdateRecoverySource = readText(new URL("../apps/web/src/lib/appUpdateRecovery.ts", import.meta.url));
 const billingCoreSource = readText(new URL("../convex/billingCore.ts", import.meta.url));
 const communityCommerceSource = readText(new URL("../convex/communityCommerce.ts", import.meta.url));
 const publicAppUrlSource = readText(new URL("../convex/publicAppUrl.ts", import.meta.url));
@@ -62,7 +63,8 @@ assert.ok(
   "expected App telemetry context to avoid full URL search/hash capture",
 );
 assert.ok(
-  mainSource.includes("buildTelemetryRouteLabel({"),
+  appUpdateRecoverySource.includes("buildTelemetryRouteLabel({") &&
+    mainSource.includes('from "./lib/appUpdateRecovery"'),
   "expected module-load recovery target to use sanitized route labels",
 );
 

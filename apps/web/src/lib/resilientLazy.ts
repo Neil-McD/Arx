@@ -71,6 +71,12 @@ function defaultSleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+let globalSkipRetryWhen: (() => boolean) | null = null;
+
+export function setResilientImportSkipRetry(predicate: (() => boolean) | null): void {
+  globalSkipRetryWhen = predicate;
+}
+
 /**
  * Retries a dynamic module import once on transient/chunk-load errors before
  * letting React.lazy cache a failure. Keeps rapid tab switching resilient to
@@ -82,17 +88,19 @@ export async function resilientImport<T>(
     retries?: number;
     retryDelayMs?: number;
     sleep?: (ms: number) => Promise<void>;
+    skipRetryWhen?: () => boolean;
   },
 ): Promise<T> {
   const retries = options?.retries ?? 1;
   const retryDelayMs = options?.retryDelayMs ?? 250;
   const sleep = options?.sleep ?? defaultSleep;
+  const skipRetry = options?.skipRetryWhen ?? globalSkipRetryWhen;
   let attempt = 0;
   while (true) {
     try {
       return await importer();
     } catch (error) {
-      if (attempt >= retries || !isLikelyModuleLoadFailure(error)) {
+      if (attempt >= retries || !isLikelyModuleLoadFailure(error) || skipRetry?.()) {
         throw error;
       }
       attempt += 1;
