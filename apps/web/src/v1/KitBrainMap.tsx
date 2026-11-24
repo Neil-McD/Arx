@@ -10,7 +10,7 @@
 // Readings: community (everything), yours (your lessons and your things lit),
 // gaps (for builders: the biggest subjects, which no course teaches, lit).
 import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
-import type { BrainMap } from "../../../../shared/communityBrain";
+import { BRAIN_MAP_MIN_NODES, type BrainMap } from "../../../../shared/communityBrain";
 import { chooseLabels, fitStage, fitView, isFitView, layoutBrain, lensLayout, panBy, revealPoint, scaleLayout, stageWindow, zoomAt, type BrainView, type LabelBox, type LayoutPoint } from "../../../../shared/communityBrainLayout";
 import { cx } from "./kit";
 
@@ -19,8 +19,8 @@ import { cx } from "./kit";
 const PANEL_BOX = { w: 240, h: 200 };
 
 export type BrainReading = "community" | "yours" | "gaps";
-// The fewest learned things worth a map; fewer, and a list says more.
-export const BRAIN_MAP_MIN_POINTS = 5;
+// The fewest drawable nodes worth a map; fewer, and a list says more.
+export const BRAIN_MAP_MIN_POINTS = BRAIN_MAP_MIN_NODES;
 
 function curve(a: { x: number; y: number }, b: { x: number; y: number }, bend: number): string {
   const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2, dx = b.x - a.x, dy = b.y - a.y;
@@ -191,6 +191,13 @@ export function KitBrainMap(props: {
   const lit = (p: LayoutPoint) => reading === "yours" ? p.point.mine : reading === "gaps" ? p.point.at.kind === "subject" && gapKeys.has(`subject:${p.point.at.name}`) : true;
   const dimAll = reading !== "community";
   const pick = (id: string) => props.onSelect?.(id);
+  const pickProps = (id: string, label: string) => ({
+    tabIndex: 0,
+    role: "button" as const,
+    "aria-label": label,
+    onClick: () => pick(id),
+    onKeyDown: (e: any) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); pick(id); } },
+  });
 
   const drawing = (
     <svg ref={svgRef} {...handlers} className={cx(page ? "brain brain-page" : "brain brain-panel")} viewBox={`${win.x.toFixed(1)} ${win.y.toFixed(1)} ${win.w.toFixed(0)} ${win.h.toFixed(0)}`}
@@ -231,7 +238,7 @@ export function KitBrainMap(props: {
         const name = p.point.title ?? (p.point.kind === "taught" ? "Taught by a host" : "Something the community learned");
         return (
           <g key={p.id} className={cx(page ? "brain-node pickable" : "brain-node")}
-            {...(page ? { tabIndex: 0, role: "button", "aria-label": name, onClick: () => pick(p.id), onKeyDown: (e: any) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); pick(p.id); } } } : {})}>
+            {...(page ? pickProps(p.id, name) : {})}>
             {page ? <title>{name}</title> : null}
             {p.point.fresh && on && reading !== "yours" ? <circle cx={p.x} cy={p.y} r={pr(p) + size.fresh} fill={`url(#${glow})`} /> : null}
             {reading === "yours" && p.point.mine ? <circle cx={p.x} cy={p.y} r={pr(p) + 9} fill={`url(#${mineGlow})`} /> : null}
@@ -249,7 +256,7 @@ export function KitBrainMap(props: {
         const cls = mine ? "brain-lesson mine" : dimAll ? "brain-lesson dim" : lesson.done ? "brain-lesson done" : "brain-lesson";
         return (
           <g key={lesson.id} className={cx(page ? "brain-node pickable" : "brain-node")}
-            {...(page ? { tabIndex: 0, role: "button", "aria-label": `Lesson ${lesson.order}: ${lesson.title}`, onClick: () => pick(lesson.id), onKeyDown: (e: any) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); pick(lesson.id); } } } : {})}>
+            {...(page ? pickProps(lesson.id, `Lesson ${lesson.order}: ${lesson.title}`) : {})}>
             {page ? <title>{`${lesson.order}. ${lesson.title}`}</title> : null}
             {mine ? <circle cx={lesson.x} cy={lesson.y} r={15} fill={`url(#${mineGlow})`} /> : null}
             <circle className={cx(cls)} cx={lesson.x} cy={lesson.y} r={lessonR(lesson)} />
@@ -264,10 +271,10 @@ export function KitBrainMap(props: {
       {layout.hubs.map((hub) => {
         const gap = reading === "gaps" && gapKeys.has(hub.key);
         const right = Math.cos((hub.angle * Math.PI) / 180) >= -0.2;
-        const pickable = page && hub.kind === "subject";
+        const pickable = page && (hub.kind === "subject" || hub.kind === "course");
         return (
           <g key={hub.key} className={cx(pickable ? "brain-node pickable" : "brain-node")}
-            {...(pickable ? { tabIndex: 0, role: "button", "aria-label": `Subject: ${hub.label}`, onClick: () => pick(hub.key), onKeyDown: (e: any) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); pick(hub.key); } } } : {})}>
+            {...(pickable ? pickProps(hub.key, `${hub.kind === "course" ? "Course" : "Subject"}: ${hub.label}`) : {})}>
             {pickable ? <circle className={cx("brain-hit")} cx={hub.x} cy={hub.y} r={14} /> : null}
             {props.selectedId === hub.key ? <circle className={cx("brain-ring")} cx={hub.x} cy={hub.y} r={11} /> : null}
             {hub.kind === "pod" ? (

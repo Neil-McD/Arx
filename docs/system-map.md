@@ -268,9 +268,10 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
   same naming rules; `shared/communityBrainLayout.ts` places it by fixed
   rules so it keeps its shape as it grows, and `KitBrainMap` draws it;
   the panels' "community brain" (`PanelBrain` in `KitBrain`: a count, a small
-  map with no words, the latest names) reads the same map: counts for everyone
-  in the community, every title for a builder, and for a member only titles
-  learned from posts they can read;
+  map with no words once at least three total nodes exist across published
+  lessons, notes, and pods, and the latest names) reads the same map: counts
+  for everyone in the community, every title for a builder, and for a member
+  only titles learned from posts they can read;
   `KitBrainPage` is the map as a page in Knowledge, and `getBrainNote` reads
   one picked thing with the same rules: a member never gets a note's text),
   `communityEvidence*`,

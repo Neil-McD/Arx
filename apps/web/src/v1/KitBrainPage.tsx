@@ -5,13 +5,13 @@
 // Readings: Community and Yours for everyone, Gaps for builders. With fewer
 // than five learned things a list says more than a map, so the page is a list.
 import { useEffect, useState, type ReactNode } from "react";
-import type { BrainMap } from "../../../../shared/communityBrain";
+import { brainCanDrawMap, type BrainMap, type BrainPoint } from "../../../../shared/communityBrain";
 import { fetchBrainNote, moveBrainNote, type BrainNoteView } from "../../../../shared/cloudCommunityBrainGateway";
 import { deleteCommunityNote, fetchNoteSources, updateCommunityNote, type NoteSourceView } from "../../../../shared/cloudCommunityNotesGateway";
 import { askGuide } from "../components/guideSearch";
 import { Btn, cx, KitApp, useMinWidth } from "./kit";
 import { PanelBlockSkeleton } from "../components/WebLoadingSkeleton";
-import { BRAIN_MAP_MIN_POINTS, KitBrainMap, type BrainReading } from "./KitBrainMap";
+import { KitBrainMap, type BrainReading } from "./KitBrainMap";
 import { learnedWhen, useBrainMap } from "./KitBrain";
 import { PanelAction, PanelLine, PanelPart } from "./KitPanel";
 
@@ -26,6 +26,17 @@ export function takeOpenBrain(): boolean {
     window.sessionStorage.removeItem(OPEN_KEY);
     return asked;
   } catch { return false; }
+}
+
+function BrainPointList(props: { label: string; points: BrainPoint[]; now: number; empty?: string }) {
+  if (!props.points.length && !props.empty) return null;
+  return (
+    <PanelPart label={props.label} fact={String(props.points.length)}>
+      {props.points.length
+        ? props.points.map((point) => <PanelLine key={point.id} fact={learnedWhen(point.learned_at, props.now)}>{point.title ?? "Something the community learned"}</PanelLine>)
+        : <PanelLine dim>{props.empty}</PanelLine>}
+    </PanelPart>
+  );
 }
 
 // What a picked point is, from the map itself (lessons, subjects, pods) or
@@ -54,6 +65,28 @@ function PickedDetail(props: { map: BrainMap; id: string; session: unknown; comm
     return () => { live = false; };
   }, [props.session, props.communityId, props.id, isNote, props.version]);
 
+  const pickedCourse = props.map.courses.find((entry) => entry.id === props.id);
+  if (pickedCourse) {
+    const lessonIds = new Set(pickedCourse.lessons.map((entry) => entry.id));
+    const filed = props.map.points.filter((point) => point.at.kind === "lesson" && lessonIds.has(point.at.id));
+    const doneCount = pickedCourse.lessons.filter((entry) => entry.done).length;
+    return (
+      <div className={cx("land")}>
+        <header>
+          <span className={cx("lab")}>Course · {pickedCourse.lessons.length} {pickedCourse.lessons.length === 1 ? "lesson" : "lessons"}</span>
+          <h2>{pickedCourse.name}</h2>
+          <p className={cx("land-p")}>{doneCount > 0 ? `${doneCount} of ${pickedCourse.lessons.length} finished.` : "Open a lesson on the map or jump into the course."}</p>
+        </header>
+        {pickedCourse.lessons.length ? (
+          <PanelPart label="Lessons" fact={String(pickedCourse.lessons.length)}>
+            {pickedCourse.lessons.map((entry) => <PanelLine key={entry.id} fact={entry.done ? "Done" : null}>{`${entry.order}. ${entry.title}`}</PanelLine>)}
+          </PanelPart>
+        ) : null}
+        <BrainPointList label="What the community added" points={filed} now={props.now} />
+        <div className={cx("joinbar")}><Btn go onClick={() => props.onOpenCourse(pickedCourse.id.replace(/^course:/, ""))}>Open the course</Btn></div>
+      </div>
+    );
+  }
   const course = props.map.courses.find((entry) => entry.lessons.some((lesson) => lesson.id === props.id));
   const lesson = course?.lessons.find((entry) => entry.id === props.id);
   if (lesson && course) {
@@ -65,11 +98,7 @@ function PickedDetail(props: { map: BrainMap; id: string; session: unknown; comm
           <h2>{lesson.title}</h2>
           <p className={cx("land-p")}>{lesson.done ? "You finished it." : "Not finished yet."}</p>
         </header>
-        {filed.length ? (
-          <PanelPart label="What the community added" fact={String(filed.length)}>
-            {filed.map((point) => <PanelLine key={point.id} fact={learnedWhen(point.learned_at, props.now)}>{point.title ?? "Something the community learned"}</PanelLine>)}
-          </PanelPart>
-        ) : null}
+        <BrainPointList label="What the community added" points={filed} now={props.now} />
         <div className={cx("joinbar")}><Btn go onClick={() => props.onOpenCourse(course.id.replace(/^course:/, ""))}>Open the course</Btn></div>
       </div>
     );
@@ -120,9 +149,7 @@ function PickedDetail(props: { map: BrainMap; id: string; session: unknown; comm
     return (
       <div className={cx("land")}>
         <header><span className={cx("lab")}>A subject · no course teaches it</span><h2>{subject.name}</h2></header>
-        <PanelPart label="What the community knows" fact={String(filed.length)}>
-          {filed.map((point) => <PanelLine key={point.id} fact={learnedWhen(point.learned_at, props.now)}>{point.title ?? "Something the community learned"}</PanelLine>)}
-        </PanelPart>
+        <BrainPointList label="What the community knows" points={filed} now={props.now} />
       </div>
     );
   }
@@ -232,7 +259,7 @@ export function KitBrainPage(props: PageProps) {
   const [version, setVersion] = useState(0);
   const { map, failed } = useBrainMap(props.session, props.communityId, null);
   return (
-    <KitBrainPageFrame canManage={props.canManage} fill={!!map && map.points.length >= BRAIN_MAP_MIN_POINTS}>
+    <KitBrainPageFrame canManage={props.canManage} fill={brainCanDrawMap(map)}>
       {failed ? <p className={cx("sub")}>The map couldn't load. Try again in a moment.</p> : map ? <KitBrainPageView {...props} map={map} version={version} onChanged={() => setVersion((last) => last + 1)} /> : <PanelBlockSkeleton label="Loading community brain…" />}
     </KitBrainPageFrame>
   );
@@ -254,32 +281,40 @@ export function KitBrainPageView(props: PageProps & { map: BrainMap; version?: n
   const [now] = useState(() => Date.now());
   const wide = useMinWidth(1024);
   useEffect(() => { setPicked(null); setReading("community"); }, [props.communityId]);
-
-  const readings: Array<[BrainReading, string]> = [["community", "Community"], ["yours", "Yours"], ...(props.canManage ? [["gaps", "Gaps"] as [BrainReading, string]] : [])];
-  const counts = `${map.counts.courses} ${map.counts.courses === 1 ? "course" : "courses"} · ${map.counts.lessons} lessons · ${map.counts.learned} learned · ${map.counts.this_week} this week`;
-  const detail = picked ? <PickedDetail map={map} id={picked} session={props.session} communityId={props.communityId} now={now} onOpenCourse={props.onOpenCourse}
-    version={props.version ?? 0} onChanged={(removed) => { if (removed) setPicked(null); props.onChanged?.(); }} /> : null;
-
-  // Too little for a map: the list.
-  if (map.points.length < BRAIN_MAP_MIN_POINTS) {
-    return (
-      <div className={cx("page")} style={{ padding: 0, overflow: "visible" }}>
-        <p className={cx("sub")} style={{ marginTop: 0 }}>{counts}</p>
-        <PanelPart label="What the community knows" fact={String(map.points.length)}>
-          {map.points.length ? map.points.map((point) => <PanelLine key={point.id} fact={learnedWhen(point.learned_at, now)}>{point.title ?? "Something the community learned"}</PanelLine>)
-            : <PanelLine dim>Nothing yet. The guide learns from what's said in open channels.</PanelLine>}
-        </PanelPart>
-      </div>
-    );
-  }
-
-  // Escape puts down what was picked.
+  // Escape puts down what was picked (registered before any early return so
+  // live threshold crossings keep hook order stable).
   useEffect(() => {
     if (!picked) return;
     const onKey = (event: KeyboardEvent) => { if (event.key === "Escape") setPicked(null); };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [picked]);
+
+  const readings: Array<[BrainReading, string]> = [["community", "Community"], ["yours", "Yours"], ...(props.canManage ? [["gaps", "Gaps"] as [BrainReading, string]] : [])];
+  const counts = `${map.counts.courses} ${map.counts.courses === 1 ? "course" : "courses"} · ${map.counts.lessons} ${map.counts.lessons === 1 ? "lesson" : "lessons"} · ${map.counts.learned} learned · ${map.counts.this_week} this week`;
+  const detail = picked ? <PickedDetail map={map} id={picked} session={props.session} communityId={props.communityId} now={now} onOpenCourse={props.onOpenCourse}
+    version={props.version ?? 0} onChanged={(removed) => { if (removed) setPicked(null); props.onChanged?.(); }} /> : null;
+
+  // Too little for a map: the list.
+  if (!brainCanDrawMap(map)) {
+    return (
+      <div className={cx("page")} style={{ padding: 0, overflow: "visible" }}>
+        <p className={cx("sub")} style={{ marginTop: 0 }}>{counts}</p>
+        {map.courses.length ? (
+          <PanelPart label="Courses" fact={String(map.courses.length)}>
+            {map.courses.map((entry) => (
+              <PanelLine key={entry.id} fact={`${entry.lessons.length} ${entry.lessons.length === 1 ? "lesson" : "lessons"}`}
+                action={<PanelAction onClick={() => props.onOpenCourse(entry.id.replace(/^course:/, ""))}>Open</PanelAction>}>
+                {entry.name}
+              </PanelLine>
+            ))}
+          </PanelPart>
+        ) : null}
+        <BrainPointList label="What the community knows" points={map.points} now={now}
+          empty={map.courses.length ? "No learned notes yet. The guide learns from what's said in open channels." : "Nothing yet. The guide learns from what's said in open channels."} />
+      </div>
+    );
+  }
 
   return (
     <div className={cx("brainpage")}>
