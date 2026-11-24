@@ -9,7 +9,7 @@ test("index.html permanently activates design v1 and serves the default colour i
     .map((match) => match[0].match(/href="([^"]+)"/)![1]);
   expect(hrefs.length).toBeGreaterThanOrEqual(7);
   for (const href of hrefs) {
-    expect(href).toMatch(/^%BASE_URL%[^/]+\?v=20261123a$/);
+    expect(href).toMatch(/^%BASE_URL%[^/]+\?v=20261124a$/);
     const file = href.replace("%BASE_URL%", "").split("?")[0];
     expect(() => readFileSync(new URL(`../apps/web/public/${file}`, import.meta.url))).not.toThrow();
   }
@@ -21,7 +21,7 @@ test("the root manifest points only at colour icons that exist", () => {
   const manifest = JSON.parse(readFileSync(new URL("../apps/web/public/manifest.webmanifest", import.meta.url), "utf8"));
   expect(manifest.icons.length).toBeGreaterThanOrEqual(5);
   for (const icon of manifest.icons) {
-    expect(icon.src).toMatch(/^\/[^/]+\?v=20261123a$/);
+    expect(icon.src).toMatch(/^\/[^/]+\?v=20261124a$/);
     const file = icon.src.split("?")[0];
     expect(() => readFileSync(new URL(`../apps/web/public${file}`, import.meta.url))).not.toThrow();
   }
