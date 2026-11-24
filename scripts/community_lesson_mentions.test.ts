@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { lessonLinksFingerprint, lessonMentions, lessonNameIndex, type CourseName, type LessonName } from "../shared/communityLessonLinks";
+import { lessonMentionsFingerprint, lessonMentions, lessonNameIndex, type CourseName, type LessonName } from "../shared/communityLessonMentions";
 
 const courses: CourseName[] = [
   { ref: "course:start", name: "Start here" },
@@ -44,9 +44,9 @@ test("a longer name uses up its words: a shorter name inside it is not also name
 
 test("the fingerprint changes with a name, the words, or the set of lessons, and not otherwise", () => {
   const withBody = (body: string) => lessons.map((lesson) => ({ ...lesson, body }));
-  const base = lessonLinksFingerprint(withBody("h1"), courses);
-  expect(lessonLinksFingerprint(withBody("h1"), courses)).toBe(base);
-  expect(lessonLinksFingerprint(withBody("h2"), courses)).not.toBe(base);
-  expect(lessonLinksFingerprint(withBody("h1").slice(1), courses)).not.toBe(base);
-  expect(lessonLinksFingerprint(withBody("h1"), [{ ...courses[0], name: "Begin" }, ...courses.slice(1)])).not.toBe(base);
+  const base = lessonMentionsFingerprint(withBody("h1"), courses);
+  expect(lessonMentionsFingerprint(withBody("h1"), courses)).toBe(base);
+  expect(lessonMentionsFingerprint(withBody("h2"), courses)).not.toBe(base);
+  expect(lessonMentionsFingerprint(withBody("h1").slice(1), courses)).not.toBe(base);
+  expect(lessonMentionsFingerprint(withBody("h1"), [{ ...courses[0], name: "Begin" }, ...courses.slice(1)])).not.toBe(base);
 });

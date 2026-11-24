@@ -2,15 +2,15 @@
 // another lesson or a course, that is a link on the community brain's map.
 // Exact names only, no model: a link is drawn because the builder wrote the
 // name. These are the rules, free of the database so they can be tested
-// alone; convex/communityLessonLinks.ts reads the lessons and keeps the list.
+// alone; convex/communityLessonMentions.ts reads the lessons and keeps the list.
 
 export type LessonName = { ref: string; title: string; courseRef: string };
 export type CourseName = { ref: string; name: string };
 // from: a lesson. to: a lesson or a course.
 export type LessonLink = { from: string; to: string };
 
-export const LESSON_LINKS_MAX = 600;
-export const LESSON_LINKS_PER_LESSON = 8;
+export const LESSON_MENTIONS_MAX = 600;
+export const LESSON_MENTIONS_PER_LESSON = 8;
 
 function key(raw: string): string {
   return String(raw ?? "").toLowerCase().replace(/[’‘]/g, "'").replace(/\s+/g, " ").trim().replace(/[.,:;!?]+$/, "");
@@ -72,12 +72,12 @@ export function lessonMentions(lesson: LessonName, bodyMd: string, index: NameIn
     // Its words are spent: a shorter name inside it is not also named.
     rest = rest.replace(new RegExp(esc(name), "g"), " ");
   }
-  return found.slice(0, LESSON_LINKS_PER_LESSON);
+  return found.slice(0, LESSON_MENTIONS_PER_LESSON);
 }
 
 // What changes when the links need working out again: any lesson's or
 // course's name, any lesson's words, or which lessons there are.
-export function lessonLinksFingerprint(lessons: ReadonlyArray<LessonName & { body: string }>, courses: readonly CourseName[]): string {
+export function lessonMentionsFingerprint(lessons: ReadonlyArray<LessonName & { body: string }>, courses: readonly CourseName[]): string {
   let h = 2166136261;
   const eat = (text: string) => { for (let i = 0; i < text.length; i++) { h ^= text.charCodeAt(i); h = Math.imul(h, 16777619); } h ^= 124; h = Math.imul(h, 16777619); };
   for (const course of courses) { eat(course.ref); eat(course.name); }

@@ -268,8 +268,8 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
   same naming rules; `shared/communityBrainLayout.ts` places it by its links (a
   course is a loose cluster of its lessons; what is answered together pulls
   together; the same map always gives the same picture), and `KitBrainMap` draws it;
-  `communityLessonLinks` keeps, per community, which lessons name another
-  lesson or a course (exact names, no model; `shared/communityLessonLinks.ts`),
+  `communityLessonMentions` keeps, per community, which lessons name another
+  lesson or a course (exact names, no model; `shared/communityLessonMentions.ts`),
   rebuilt in the background when the map reports it stale, and the map draws
   those as links;
   the panels' "community brain" (`PanelBrain` in `KitBrain`: a count, a small

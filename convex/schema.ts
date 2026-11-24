@@ -1887,11 +1887,11 @@ export default defineSchema({
     pairs: v.array(v.object({ a: v.string(), b: v.string(), count: v.number() })),
   }).index("by_community_day", ["communityId", "day"]),
 
-  // Lessons that name another lesson or a course (shared/communityLessonLinks.ts):
+  // Lessons that name another lesson or a course (shared/communityLessonMentions.ts):
   // one row per community, worked out again when a name or a lesson's words
   // change. fingerprint says what it was worked out from; building marks a
   // rebuild under way so two don't run at once.
-  communityLessonLinks: defineTable({
+  communityLessonMentions: defineTable({
     communityId: v.id("communities"),
     fingerprint: v.string(),
     links: v.array(v.object({ from: v.string(), to: v.string() })),

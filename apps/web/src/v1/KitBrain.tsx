@@ -10,7 +10,7 @@ import { useEffect, type ReactNode } from "react";
 import { brainCanDrawMap, brainFact, brainHasContent, latestLearned, type BrainMap } from "../../../../shared/communityBrain";
 import { resolveAuthSubject, type AuthSessionLike } from "../../../../shared/authSession";
 import { useLiveQuery } from "../../../../shared/liveQuery";
-import { refreshBrainLessonLinks } from "../../../../shared/cloudCommunityBrainGateway";
+import { refreshBrainLessonMentions } from "../../../../shared/cloudCommunityBrainGateway";
 import { cx } from "./kit";
 import { KitBrainMap } from "./KitBrainMap";
 import { PanelAction, PanelLearned, PanelPart } from "./KitPanel";
@@ -44,10 +44,18 @@ export function useBrainMap(session: unknown, communityId: string | null, podCha
   const stale = !lab && !podChannelId && Boolean(data?.mentions_stale);
   useEffect(() => {
     if (!stale || !communityId) return;
-    const last = linkRefreshAsked.get(communityId) ?? 0;
-    if (Date.now() - last < LINK_REFRESH_EVERY_MS) return;
-    linkRefreshAsked.set(communityId, Date.now());
-    void refreshBrainLessonLinks({ session, communityId }).catch(() => undefined);
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const ask = () => {
+      const wait = (linkRefreshAsked.get(communityId) ?? 0) + LINK_REFRESH_EVERY_MS - Date.now();
+      // Asked a moment ago (here or from another panel): try again once the
+      // minute is up, for as long as the map stays stale.
+      if (wait > 0) { timer = setTimeout(ask, wait); return; }
+      linkRefreshAsked.set(communityId, Date.now());
+      void refreshBrainLessonMentions({ session, communityId }).catch(() => undefined);
+      timer = setTimeout(ask, LINK_REFRESH_EVERY_MS);
+    };
+    ask();
+    return () => { if (timer) clearTimeout(timer); };
   }, [stale, communityId, session]);
   if (lab) return { map: labMaps.get(`${communityId ?? ""}:${podChannelId ?? ""}`) ?? null, failed: false, settled: true };
   // settled: it has answered (a map, or the news that it can't be read).
