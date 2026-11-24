@@ -179,7 +179,7 @@ describe("next slice: pods dropdown, pod knowledge cleanup, real avatars, clicka
     expect(channelRail).toContain('cx("av s")');
   });
 
-  it("supports one-tap step reordering for courses and lessons on touch screens", async () => {
+  it("computes single-step course and lesson order transitions cleanly at boundaries", async () => {
     const { courseOrderAfterMove } = await import("../apps/web/src/v1/KitClassroom");
     expect(courseOrderAfterMove(["a", "b", "c"], 1, -1)).toEqual(["b", "a", "c"]);
     expect(courseOrderAfterMove(["a", "b", "c"], 1, 1)).toEqual(["a", "c", "b"]);

@@ -1007,20 +1007,14 @@ export function KitClassroom(props: {
             const at = courses.findIndex((entry) => entry.course.id === course.id);
             return (
               <div key={course.id} className={cx("kcard", courseDrag.held === course.id && "gap")} {...(canDrag ? courseDrag.item(course.id) : null)}>
-              {/* Held by its grip and dropped where it should go; on touch/narrow screens, simple one-tap move buttons replace drag. */}
+              {/* Held by its grip (instant drag) or tap-and-hold on the card to drag around. */}
               {canDrag ? (
-                <>
-                  <button type="button" className={cx("kgrip", "oncard")} aria-label={`Move ${course.name}. Drag, or use the arrow keys.`} title="Drag to reorder" disabled={movingCourse}
-                    onKeyDown={(event) => { if (event.key === "ArrowLeft" || event.key === "ArrowUp") { event.preventDefault(); void moveCourse(at, -1); } else if (event.key === "ArrowRight" || event.key === "ArrowDown") { event.preventDefault(); void moveCourse(at, 1); } }}
-                    {...courseDrag.grip(course.id)}><GripDots /></button>
-                  <div className={cx("kcard-order")} role="group" aria-label={`Reorder ${course.name}`}>
-                    <button type="button" aria-label={`Move ${course.name} earlier`} disabled={movingCourse || at <= 0} onClick={() => void moveCourse(at, -1)}>↑</button>
-                    <button type="button" aria-label={`Move ${course.name} later`} disabled={movingCourse || at >= courses.length - 1} onClick={() => void moveCourse(at, 1)}>↓</button>
-                  </div>
-                </>
+                <button type="button" className={cx("kgrip", "oncard")} aria-label={`Move ${course.name}. Drag, or use the arrow keys.`} title="Drag to reorder" disabled={movingCourse}
+                  onKeyDown={(event) => { if (event.key === "ArrowLeft" || event.key === "ArrowUp") { event.preventDefault(); void moveCourse(at, -1); } else if (event.key === "ArrowRight" || event.key === "ArrowDown") { event.preventDefault(); void moveCourse(at, 1); } }}
+                  {...courseDrag.grip(course.id)}><GripDots /></button>
               ) : null}
               {props.canManage && course.module_status === "draft" ? <span className={cx("kdraft")}>Draft</span> : null}
-              <button type="button" className={cx("kcourse")} onClick={() => props.onOpenCourse(course.id)}>
+              <button type="button" className={cx("kcourse")} {...(canDrag ? courseDrag.hold(course.id) : null)} onClick={() => props.onOpenCourse(course.id)}>
                 <CourseCover course={course} />
                 <b><i className={cx("knum")}>{shelf.from + position}</i><span>{course.name}</span></b>
                 {/* One line: where it stands on the left, how long it is on the right. */}
