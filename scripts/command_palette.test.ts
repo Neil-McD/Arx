@@ -69,4 +69,50 @@ describe("command palette", () => {
     expect(showsMobileTopBarSearch({ mode: "settings", rootPage: "community", hasActiveCommunity: true })).toBe(false);
     expect(showsMobileTopBarSearch({ mode: "community", rootPage: "community", hasActiveCommunity: true, canOpenCommunitySelector: false })).toBe(false);
   });
+
+  it("mounts the command palette across desktop and mobile community shells and routes mobile picks cleanly", async () => {
+    const { vi } = await import("vitest");
+    const { shouldMountCommunityCommandPalette } = await import("../apps/web/src/components/WebShellChromeHost");
+    const { openCommunityPalettePlace } = await import("../apps/web/src/components/WebCommunityCommandPalette");
+
+    expect(shouldMountCommunityCommandPalette({ hasActiveCommunity: true, showMobilePublicFunnel: false, isPublicCommunityFunnel: false })).toBe(true);
+    expect(shouldMountCommunityCommandPalette({ hasActiveCommunity: false, showMobilePublicFunnel: false, isPublicCommunityFunnel: false })).toBe(false);
+    expect(shouldMountCommunityCommandPalette({ hasActiveCommunity: true, showMobilePublicFunnel: true, isPublicCommunityFunnel: false })).toBe(false);
+    expect(shouldMountCommunityCommandPalette({ hasActiveCommunity: true, showMobilePublicFunnel: false, isPublicCommunityFunnel: true })).toBe(false);
+
+    const mobileShell: any = {
+      showMobileShell: true,
+      isDirectMessagesOpen: false,
+      communityChannels: [],
+      onSelectMobileRootPage: vi.fn(),
+      onSelectCommunityTab: vi.fn(),
+      onSelectCommunityTabFromMobile: vi.fn(),
+      onToggleDirectMessages: vi.fn(),
+      onSelectCommunityChannel: vi.fn(),
+      onOpenMembers: vi.fn(),
+      onOpenCommunitySettingsPane: vi.fn(),
+    };
+    openCommunityPalettePlace(mobileShell, "home");
+    openCommunityPalettePlace(mobileShell, "inbox");
+    openCommunityPalettePlace(mobileShell, "knowledge");
+    expect(mobileShell.onSelectMobileRootPage).toHaveBeenNthCalledWith(1, "agent");
+    expect(mobileShell.onSelectMobileRootPage).toHaveBeenNthCalledWith(2, "messages");
+    expect(mobileShell.onSelectCommunityTabFromMobile).toHaveBeenCalledWith("resources");
+    expect(mobileShell.onSelectCommunityTab).not.toHaveBeenCalled();
+
+    const desktopShell: any = {
+      ...mobileShell,
+      showMobileShell: false,
+      onSelectMobileRootPage: vi.fn(),
+      onSelectCommunityTab: vi.fn(),
+      onSelectCommunityTabFromMobile: vi.fn(),
+      onToggleDirectMessages: vi.fn(),
+    };
+    openCommunityPalettePlace(desktopShell, "home");
+    openCommunityPalettePlace(desktopShell, "inbox");
+    openCommunityPalettePlace(desktopShell, "pods");
+    expect(desktopShell.onSelectCommunityTab).toHaveBeenNthCalledWith(1, "agent");
+    expect(desktopShell.onToggleDirectMessages).toHaveBeenCalledOnce();
+    expect(desktopShell.onSelectCommunityTab).toHaveBeenNthCalledWith(2, "pods");
+  });
 });
