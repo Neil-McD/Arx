@@ -63,7 +63,24 @@ const MAX_TOOL_STEPS = 2;
 
 const asksSomething = (row: any) => row.kind === "question" || String(row.title ?? row.contentSummary ?? "").includes("?");
 const questionText = (row: any) => (row.title ? `${row.title}. ${row.contentSummary ?? ""}` : String(row.contentSummary ?? "")).replace(/\s+/g, " ").trim();
-const stillWaiting = (row: any) => Boolean(row) && row.status === "live" && row.actorType === "human" && Number(row.replyCount ?? 0) === 0;
+const stillWaiting = (row: any) =>
+  Boolean(row) &&
+  row.status === "live" &&
+  !row.lockedAt &&
+  row.actorType === "human" &&
+  Number(row.replyCount ?? 0) === 0;
+
+// Matches evaluateCommunityChannelCapabilities for community_agent replies:
+// disabled replyPolicy never accepts replies; restricted rooms or managers-only
+// replyPolicy require an active community_agent seat grant.
+async function canGuideReplyInChannel(ctx: any, channel: any): Promise<boolean> {
+  if (!channel || channel.status !== "active") return false;
+  if (channel.replyPolicy === "disabled") return false;
+  if (channel.accessMode === "restricted" || channel.replyPolicy === "managers") {
+    return await guideSeatedInPod(ctx, channel._id);
+  }
+  return channel.accessMode === "all_members";
+}
 
 function allowedNoteScopesFor(communityId: any, podChannelId?: any): ScopeKey[] {
   const communityScope = communityScopeKey(communityId);
@@ -75,15 +92,11 @@ function allowedNoteScopesFor(communityId: any, podChannelId?: any): ScopeKey[] 
 export async function markReplyDraftDue(ctx: any, args: { communityId: any; channelId: any; actorType: string; nowMs: number }) {
   if (args.actorType !== "human" || !args.channelId) return;
   const channel = await ctx.db.get(args.channelId);
-  if (!channel || channel.status !== "active" || String(channel.communityId) !== String(args.communityId)) return;
-  let scope: ScopeKey;
-  if (channel.accessMode === "all_members") {
-    scope = communityScopeKey(args.communityId);
-  } else if (channel.accessMode === "restricted" && (await guideSeatedInPod(ctx, channel._id))) {
-    scope = podScopeKey(channel._id);
-  } else {
-    return;
-  }
+  if (!channel || String(channel.communityId) !== String(args.communityId)) return;
+  if (!(await canGuideReplyInChannel(ctx, channel))) return;
+  const scope: ScopeKey = channel.accessMode === "restricted"
+    ? podScopeKey(channel._id)
+    : communityScopeKey(args.communityId);
   const work = await workFor(ctx, scope, "reply_draft");
   if (work?.dueAt && work.pending > 0) {
     const leased = typeof work.leaseUntil === "number" && work.leaseUntil > args.nowMs;
@@ -133,13 +146,17 @@ export const readReplyDraftInputInternal = internalQuery({
     let activePod: any = null;
     if (args.podRoomId) {
       activePod = await podRoom(ctx, args.communityId, args.podRoomId);
-      if (!activePod || !(await guideSeatedInPod(ctx, activePod._id))) return none;
+      if (!activePod || !(await canGuideReplyInChannel(ctx, activePod))) return none;
       channels = [activePod];
     } else {
-      channels = await ctx.db.query("communityChannels")
+      const openChannels = await ctx.db.query("communityChannels")
         .withIndex("by_community_access_status_position", (q: any) =>
           q.eq("communityId", args.communityId).eq("accessMode", "all_members").eq("status", "active"))
         .take(CHANNELS_MAX);
+      const replyable = await Promise.all(
+        openChannels.map(async (channel: any) => ((await canGuideReplyInChannel(ctx, channel)) ? channel : null)),
+      );
+      channels = replyable.filter(Boolean);
     }
     const names = new Map<string, string>(channels.map((channel) => [String(channel._id), String(channel.name ?? "a channel")]));
     const roots: any[] = [];
@@ -326,13 +343,13 @@ export const saveReplyDraftInternal = internalMutation({
     }
 
     const channel: any = root.channelId ? await ctx.db.get(root.channelId) : null;
-    if (!channel || channel.status !== "active" || String(channel.communityId) !== String(args.communityId)) {
+    if (!channel || String(channel.communityId) !== String(args.communityId)) {
       return { ok: false as const, code: "channel_unavailable" };
     }
-    const isPod = channel.accessMode === "restricted";
-    if (isPod && !(await guideSeatedInPod(ctx, channel._id))) {
-      return { ok: false as const, code: "guide_not_seated" };
+    if (!(await canGuideReplyInChannel(ctx, channel))) {
+      return { ok: false as const, code: "channel_unreplyable" };
     }
+    const isPod = channel.accessMode === "restricted";
 
     // Validate the cited lesson or scoped note at write time (fail closed).
     let validResourceId: any = null;
@@ -542,13 +559,9 @@ async function waitingDraft(ctx: any, draft: any, nowMs: number) {
   const root: any = await ctx.db.get(draft.rootId);
   if (!stillWaiting(root) || nowMs - Number(root.createdAt) > REPLY_DRAFT_MAX_AGE_MS) return null;
   const channel: any = root.channelId ? await ctx.db.get(root.channelId) : null;
-  if (!channel || channel.status !== "active" || String(channel.communityId) !== String(draft.communityId)) return null;
+  if (!channel || String(channel.communityId) !== String(draft.communityId)) return null;
+  if (!(await canGuideReplyInChannel(ctx, channel))) return null;
   const isPod = channel.accessMode === "restricted";
-  if (isPod) {
-    if (!(await guideSeatedInPod(ctx, channel._id))) return null;
-  } else if (channel.accessMode !== "all_members") {
-    return null;
-  }
 
   if (draft.sourceResourceId) {
     const lesson: any = await ctx.db.get(draft.sourceResourceId);

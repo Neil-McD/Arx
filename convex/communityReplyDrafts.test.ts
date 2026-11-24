@@ -496,3 +496,60 @@ test("auto-reply trust ramp posts cited replies during daytime, downgrades to dr
   const nightDraft = (await drafts(t)).find((row: any) => String(row.rootId) === String(rootNight));
   expect(nightDraft).toMatchObject({ status: "waiting" });
 });
+
+test("locked questions and channels with disabled replies are skipped so they never stall auto-reply", async () => {
+  stubProvider();
+  const t = convexTest(schema, modules);
+  const w = await world(t);
+
+  // Create a read-only/announcements channel with replyPolicy: "disabled".
+  const announcements = await t.run((ctx: any) =>
+    ctx.db.insert("communityChannels", {
+      communityId: w.communityId,
+      slug: "announcements",
+      name: "Announcements",
+      accessMode: "all_members",
+      postingPolicy: "members",
+      replyPolicy: "disabled",
+      status: "active",
+      position: 3,
+      createdByUserId: w.ownerId,
+      createdAt: NOW,
+      updatedAt: NOW,
+    } as any),
+  );
+  // Seed older unreplyable questions: one in disabled-replies channel, one locked in General.
+  await ask(t, w, {
+    channelId: announcements,
+    contentSummary: "How do I price a first client in announcements?",
+    createdAt: NOW - 48 * HOUR,
+    updatedAt: NOW - 48 * HOUR,
+  });
+  await ask(t, w, {
+    channelId: w.general,
+    contentSummary: "Locked pricing question?",
+    lockedAt: NOW - 30 * HOUR,
+    createdAt: NOW - 40 * HOUR,
+    updatedAt: NOW - 40 * HOUR,
+  });
+  // Seed a newer eligible question in General — this is the one that MUST be selected!
+  const eligibleRoot = await ask(t, w, {
+    channelId: w.general,
+    contentSummary: "How do I price a first client?",
+    createdAt: NOW - 26 * HOUR,
+    updatedAt: NOW - 26 * HOUR,
+  });
+
+  // Enable auto-reply and verify the run skips the unreplyable questions and auto-posts on the eligible one!
+  await t.withIdentity({ subject: "owner" }).mutation(api.communityMemberCoach.setMemberCoachSettings, {
+    communityId: w.communityId,
+    enabled: true,
+    autoReasons: [],
+    autoReplyEnabled: true,
+  });
+  fakeModel([writeCall("c1", { text: "Maya, price on hours saved.", source: `lesson:${String(w.pricing)}` })]);
+  expect(await run(t, w)).toMatchObject({ status: "drafted" });
+  const replies: any[] = await t.run((ctx: any) => ctx.db.query("communityInteractionReplies").collect());
+  expect(replies).toHaveLength(1);
+  expect(replies[0]).toMatchObject({ rootId: eligibleRoot, actorType: "community_agent", status: "live" });
+});
