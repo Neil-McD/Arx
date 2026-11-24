@@ -1,6 +1,6 @@
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
-import { mkdtemp, mkdir } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import assert from "node:assert/strict";
@@ -390,6 +390,54 @@ try {
     `);
     assert.equal(longTab.tabScroll.bottom, 844, "Phone tab scroll container stays bounded to the viewport");
     assert(longTab.tabScroll.scrollHeight > longTab.tabScroll.clientHeight, "Long phone tab scrolls smoothly");
+
+    // Behavioral layout check: confirmation dialog (.askcard) and floating
+    // jump-to-latest pill stay horizontally centered inside the viewport even
+    // while/after transform-based entrance animations run on phone and desktop.
+    const kitCss = await readFile(join(root, "apps/web/src/v1/kit.module.css"), "utf8");
+    const contentCss = await readFile(join(root, "apps/web/src/styles/community-and-content.css"), "utf8");
+    for (const [label, vw, vh] of [["phone", 390, 844], ["desktop", 1440, 900]]) {
+      const dialogPage = await browser.newPage({ viewport: { width: vw, height: vh } });
+      try {
+        await dialogPage.setContent(`<!doctype html>
+          <html data-design="v1" data-layout="${label}"><head><style>body{margin:0}${kitCss}${contentCss}</style></head>
+          <body>
+            <div style="position:relative;width:${vw}px;height:${vh}px">
+              <button type="button" class="community-interaction-jump-latest">Jump to latest</button>
+            </div>
+            <div class="app part palette-part">
+              <div class="veil askveil">
+                <div class="askcard" role="alertdialog">
+                  <p>Delete "Untitled course" and its 1 lesson? This can't be undone.</p>
+                  <div class="askacts">
+                    <button type="button" class="btn sm">Keep</button>
+                    <button type="button" class="btn sm no">Delete course</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </body></html>`);
+        // Check jump-to-latest pill mid-animation (when transform animation is active).
+        const pillMid = await dialogPage.locator(".community-interaction-jump-latest").boundingBox();
+        assert(pillMid, `${label} jump-to-latest pill should render`);
+        assert(Math.abs((pillMid.x + pillMid.width / 2) - vw / 2) <= 2, `${label} jump-to-latest pill stays centered mid-animation`);
+        // Wait for @keyframes pop (.2s, fill-mode: both) to finish.
+        await dialogPage.waitForTimeout(300);
+        const card = await dialogPage.locator(".askcard").boundingBox();
+        assert(card, `${label} confirm card should render`);
+        assert(card.x >= 14 && card.x + card.width <= vw - 14, `${label} confirm card stays inside viewport (${JSON.stringify(card)})`);
+        assert(Math.abs((card.x + card.width / 2) - vw / 2) <= 2, `${label} confirm card stays centered after pop animation`);
+        const buttonBoxes = await dialogPage.locator(".askacts button").evaluateAll((els) =>
+          els.map((el) => el.getBoundingClientRect().toJSON()),
+        );
+        assert.equal(buttonBoxes.length, 2, `${label} confirm card has both action buttons`);
+        for (const box of buttonBoxes) {
+          assert(box.left >= card.x && box.right <= card.x + card.width, `${label} confirm button stays inside card`);
+        }
+      } finally {
+        await dialogPage.close();
+      }
+    }
   } finally {
     await phonePage.close();
   }

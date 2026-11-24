@@ -2821,9 +2821,11 @@
 /* Floating "jump to latest" pill — shown when new messages land while scrolled up. */
 .community-interaction-jump-latest {
   position: absolute;
-  left: 50%;
+  left: 0;
+  right: 0;
   bottom: 84px;
-  transform: translateX(-50%);
+  width: fit-content;
+  margin-inline: auto;
   z-index: 6;
   display: inline-flex;
   align-items: center;
@@ -2848,7 +2850,7 @@
 }
 
 .community-interaction-jump-latest:active {
-  transform: translateX(-50%) scale(0.96);
+  transform: scale(0.96);
 }
 
 .community-interaction-message.selected {
