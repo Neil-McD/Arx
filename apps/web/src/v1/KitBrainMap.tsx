@@ -17,6 +17,8 @@ import { cx } from "./kit";
 // A panel's map is drawn in a box this size (pixels at about 240 wide; the
 // drawing scales a little with the panel).
 const PANEL_BOX = { w: 240, h: 200 };
+// Clusters are compact, so the panel pulls far things in only a little.
+const PANEL_LENS = 0.85;
 
 export type BrainReading = "community" | "yours" | "gaps";
 // The fewest drawable nodes worth a map; fewer, and a list says more.
@@ -77,7 +79,7 @@ export function KitBrainMap(props: {
   useEffect(() => { setView((current) => current.k === 1 ? fitView(bounds) : current); }, [bounds]); // eslint-disable-line react-hooks/exhaustive-deps
   const scale = page ? fit * view.k : 1;
   // The panel's map is the same layout through the small-size lens, in pixels.
-  const layout = useMemo(() => page ? scaleLayout(base, scale) : lensLayout(base, PANEL_BOX), [base, scale, page]);
+  const layout = useMemo(() => page ? scaleLayout(base, scale) : lensLayout(base, PANEL_BOX, { power: PANEL_LENS }), [base, scale, page]);
   // On the page, dots are a little larger: they are read, not glanced at.
   const dot = page ? Math.min(1.5, Math.max(0.7, 0.45 + scale * 0.55)) : 1;
   // In a panel sizes are screen pixels: a dot that reads, smaller as there are more of them.
@@ -213,7 +215,7 @@ export function KitBrainMap(props: {
       </defs>
 
       {/* Fibres: the courses. */}
-      {layout.fibres.map((fibre) => <path key={fibre.key} className={cx(dimAll ? "brain-fibre dim" : "brain-fibre")} d={fibrePath(fibre.path)} />)}
+      {layout.fibres.map((fibre) => <path key={fibre.key} className={cx(`brain-fibre ${fibre.kind}${dimAll ? " dim" : ""}`)} d={fibrePath(fibre.path)} />)}
       {/* Spokes to subjects and pods. */}
       {layout.hubs.filter((hub) => hub.kind !== "course").map((hub) => {
         const gap = reading === "gaps" && gapKeys.has(hub.key);
@@ -267,7 +269,10 @@ export function KitBrainMap(props: {
         );
       })}
 
-      {/* Hubs: subjects and pods are cells; a course is named at its fibre's end. */}
+      {/* A course's own node, in the middle of its lessons. */}
+      {layout.courses.map((course) => <circle key={`c-${course.key}`} className={cx(dimAll ? "brain-course dim" : "brain-course")} cx={course.x} cy={course.y} r={page ? 4.2 * dot : Math.max(1.6, smallDot * 0.8)} />)}
+
+      {/* Hubs: subjects and pods are cells; a course is named outside its ring. */}
       {layout.hubs.map((hub) => {
         const gap = reading === "gaps" && gapKeys.has(hub.key);
         const right = Math.cos((hub.angle * Math.PI) / 180) >= -0.2;

@@ -2,18 +2,18 @@
 // is what it holds). Fixed rules, not a simulation: each thing's place comes
 // from itself alone, so the map keeps its shape as it grows and people learn
 // their way around it.
-// - Hubs (courses, subjects, pods) sit around the centre by the golden angle,
-//   in a fixed order: a new hub takes the next angle and moves none before it.
-// - A course is a fibre out from the centre with its lessons along it, in
-//   order; subjects and pods sit on rings outside the longest fibre, a core
-//   and a cortex, so a fibre never runs through a subject.
-// - A learned thing branches off its lesson, subject or pod: its angle comes
-//   from its own id, its reach from its age (newer reaches further).
+// - Links decide: every thing is a node, what joins two things is a spring,
+//   and nodes push apart. The same rounds run from the same seed every time,
+//   so one map always gives one picture; it shifts a little when the map changes.
+// - A course is a node with its lessons in a ring round it, a faint path
+//   through them in order. Courses share the circle round the centre.
+// - Subjects and pods start on rings outside the courses.
+// - A learned thing hangs off its lesson, subject or pod (newer reaches
+//   further); what answers read together pulls together.
 // Units are layout units; the drawing scales the whole to fit its box.
 import type { BrainAttach, BrainMap, BrainPoint } from "./communityBrain";
 
 export const GOLDEN_ANGLE = 137.50776405003785;
-const COURSE_INNER = 64;
 // Subjects sit this far outside the longest fibre (so no fibre crosses
 // them), and pods this far outside the subjects. A small community's map is
 // small; the rings only widen when its longest course does.
@@ -22,8 +22,6 @@ const SUBJECT_RING_MIN = 150;
 const POD_GAP = 84;
 // With many subjects or pods, every other one sits this much further out.
 const RING_STAGGER = 34;
-const LESSON_STEP = 64;
-const FIBRE_MAX = 300;
 // A hub's name, roughly, so the map makes room for it.
 const HUB_CHAR_W = 8.2;
 // A learned thing's reach from its anchor: newest, and settled.
@@ -36,11 +34,16 @@ export type Placed = { x: number; y: number };
 export type LayoutHub = Placed & { key: string; kind: "course" | "subject" | "pod" | "other"; label: string; angle: number; inside: boolean; count: number };
 export type LayoutLesson = Placed & { id: string; courseKey: string; order: number; title: string; done: boolean; use: number; r: number };
 export type LayoutPoint = Placed & { id: string; anchor: Placed; point: BrainPoint; r: number };
-export type LayoutFibre = { key: string; path: Placed[] };
+// trunk: the centre to a course. spoke: a course to one of its lessons.
+// order: through a course's lessons, first to last.
+export type LayoutFibre = { key: string; kind: "trunk" | "spoke" | "order"; path: Placed[] };
+// A course's own node, in the middle of its lessons (its hub entry is where its name goes).
+export type LayoutCourse = Placed & { key: string };
 export type LayoutArc = { a: Placed; b: Placed; count: number; ids: [string, string] };
 export type BrainLayout = {
   center: Placed;
   hubs: LayoutHub[];
+  courses: LayoutCourse[];
   fibres: LayoutFibre[];
   lessons: LayoutLesson[];
   points: LayoutPoint[];
@@ -89,68 +92,183 @@ function hubOrder(map: BrainMap): Array<Omit<LayoutHub, "x" | "y" | "angle">> {
   return hubs;
 }
 
+// ---------- where things go: links decide
+//
+// Every thing is a node; what joins two things is a spring with a length it
+// wants to be. Nodes push each other apart and never overlap. Starting from a
+// tidy seed (courses spaced round the centre, each course's lessons in a ring
+// round its node) the same fixed number of rounds runs every time, with no
+// randomness: one map, one picture.
+type Node = Placed & { id: string; r: number; fixed?: boolean };
+type Spring = { a: number; b: number; len: number; k: number };
+
+const ROUNDS = 260;
+// Lessons round a course: this far apart along their ring, which is never
+// tighter than RING_MIN.
+const LESSON_GAP = 30;
+const RING_MIN = 26;
+// Room between one course's ring and the next.
+const CLUSTER_GAP = 46;
+const PUSH = 1100;
+const PUSH_REACH = 150;
+
+export function courseRing(lessonCount: number): number {
+  return Math.max(RING_MIN, (Math.max(1, lessonCount) * LESSON_GAP) / (2 * Math.PI));
+}
+
+function settle(nodes: Node[], springs: Spring[]): void {
+  for (let round = 0; round < ROUNDS; round++) {
+    const heat = 1 - round / ROUNDS;
+    const move = nodes.map(() => ({ x: 0, y: 0 }));
+    for (const s of springs) {
+      const a = nodes[s.a], b = nodes[s.b];
+      let dx = b.x - a.x, dy = b.y - a.y;
+      let d = Math.hypot(dx, dy);
+      if (d < 1e-6) { const t = hashUnit(`${a.id}|${b.id}`) * Math.PI * 2; dx = Math.cos(t); dy = Math.sin(t); d = 1; }
+      const f = (s.k * (d - s.len)) / d;
+      move[s.a].x += dx * f; move[s.a].y += dy * f;
+      move[s.b].x -= dx * f; move[s.b].y -= dy * f;
+    }
+    for (let i = 0; i < nodes.length; i++) {
+      for (let j = i + 1; j < nodes.length; j++) {
+        const a = nodes[i], b = nodes[j];
+        let dx = b.x - a.x, dy = b.y - a.y;
+        let d = Math.hypot(dx, dy);
+        if (d > PUSH_REACH) continue;
+        if (d < 1e-6) { const t = hashUnit(`${a.id}|${b.id}`) * Math.PI * 2; dx = Math.cos(t); dy = Math.sin(t); d = 1; }
+        const f = Math.min(5, PUSH / (d * d)) / d;
+        move[i].x -= dx * f; move[i].y -= dy * f;
+        move[j].x += dx * f; move[j].y += dy * f;
+      }
+    }
+    for (let i = 0; i < nodes.length; i++) {
+      if (nodes[i].fixed) continue;
+      const step = Math.hypot(move[i].x, move[i].y);
+      const cap = step > 14 ? 14 / step : 1;
+      nodes[i].x += move[i].x * cap * (0.25 + heat * 0.75);
+      nodes[i].y += move[i].y * cap * (0.25 + heat * 0.75);
+    }
+    // Nothing sits on anything else.
+    for (let i = 0; i < nodes.length; i++) {
+      for (let j = i + 1; j < nodes.length; j++) {
+        const a = nodes[i], b = nodes[j];
+        let dx = b.x - a.x, dy = b.y - a.y;
+        let d = Math.hypot(dx, dy);
+        const need = a.r + b.r;
+        if (d >= need) continue;
+        if (d < 1e-6) { const t = hashUnit(`${a.id}|${b.id}`) * Math.PI * 2; dx = Math.cos(t); dy = Math.sin(t); d = 1; }
+        const push = (need - d) / d / (a.fixed || b.fixed ? 1 : 2);
+        if (!a.fixed) { a.x -= dx * push; a.y -= dy * push; }
+        if (!b.fixed) { b.x += dx * push; b.y += dy * push; }
+      }
+    }
+  }
+}
+
 export function layoutBrain(map: BrainMap, nowMs: number): BrainLayout {
   const center = { x: 0, y: 0 };
-  const hubs: LayoutHub[] = [];
-  const fibres: LayoutFibre[] = [];
-  const lessons: LayoutLesson[] = [];
-  const anchors = new Map<string, { at: Placed; out: number }>();
+  const nodes: Node[] = [{ id: "center", x: 0, y: 0, r: 16, fixed: true }];
+  const springs: Spring[] = [];
+  const index = new Map<string, number>([["center", 0]]);
+  const add = (node: Node): number => { index.set(node.id, nodes.length); nodes.push(node); return nodes.length - 1; };
 
-  const fibreEnd = (lessonCount: number) => {
-    const n = Math.max(1, lessonCount);
-    return COURSE_INNER + (n - 1) * Math.min(LESSON_STEP, (FIBRE_MAX - COURSE_INNER) / n);
-  };
-  const subjectRing = Math.max(SUBJECT_RING_MIN, Math.max(0, ...map.courses.map((course) => fibreEnd(course.lessons.length))) + SUBJECT_GAP);
-  const podRing = subjectRing + POD_GAP;
-  // Each kind keeps its own run of the golden angle, so a new hub of one kind
-  // moves no hub of another (they sit on different rings).
-  const seen: Record<string, number> = {};
-  const KIND_OFFSET: Record<string, number> = { course: 200, subject: 250, pod: 300, other: 160 };
-  hubOrder(map).forEach((hub, index) => {
-    const slot = seen[hub.kind] = (seen[hub.kind] ?? -1) + 1;
-    const angle = (slot * GOLDEN_ANGLE + KIND_OFFSET[hub.kind]) % 360;
-    if (hub.kind === "course") {
-      const course = map.courses.find((entry) => entry.id === hub.key)!;
-      const n = Math.max(1, course.lessons.length);
-      // A long course packs its lessons closer; it never reaches past the core.
-      const step = Math.min(LESSON_STEP, (FIBRE_MAX - COURSE_INNER) / n);
-      // A fibre bends a little, the same way every time.
-      const bend = (hashUnit(hub.key) - 0.5) * 16;
-      const path: Placed[] = [center];
-      course.lessons.forEach((lesson, i) => {
-        const at = polar(angle + bend * (i / n), COURSE_INNER + i * step);
-        path.push(at);
-        lessons.push({ ...at, id: lesson.id, courseKey: hub.key, order: lesson.order, title: lesson.title, done: lesson.done, use: lesson.use, r: Math.min(sizeFor(lesson.use, 4.6, 0.8, 8), Math.max(1.6, step / 2.4)) });
-        anchors.set(`lesson:${lesson.id}`, { at, out: angle + bend * (i / n) });
-      });
-      const end = polar(angle + bend, COURSE_INNER + n * step - step / 2);
-      fibres.push({ key: hub.key, path });
-      hubs.push({ ...hub, ...end, angle });
-      return;
-    }
-    // Subjects on their ring, pods outside them; with many, alternate rings so neighbours don't touch.
-    const base = hub.kind === "pod" ? podRing : subjectRing;
-    const r = base + (slot % 2 === 0 ? 0 : RING_STAGGER);
-    const at = polar(angle, r);
-    hubs.push({ ...hub, ...at, angle });
-    const key = hub.kind === "subject" ? hub.key : hub.kind === "pod" ? `pod:${hub.key.replace(/^pod:/, "")}` : "other";
-    anchors.set(key, { at, out: angle });
+  // Courses round the centre, each given the share of the circle its ring needs.
+  const rings = map.courses.map((course) => courseRing(course.lessons.length));
+  const widths = rings.map((ring) => ring * 2 + CLUSTER_GAP);
+  const around = widths.reduce((sum, w) => sum + w, 0);
+  const courseReach = Math.max(Math.max(0, ...rings) + 64, around / (2 * Math.PI));
+  let turned = 0;
+  map.courses.forEach((course, i) => {
+    const angle = -90 + ((turned + widths[i] / 2) / Math.max(1, around)) * 360;
+    turned += widths[i];
+    const at = polar(angle, courseReach);
+    const hub = add({ id: course.id, ...at, r: 9 });
+    springs.push({ a: 0, b: hub, len: courseReach, k: 0.06 });
+    const n = course.lessons.length;
+    // The ring starts beside the line in from the centre and runs round,
+    // leaving a gap there between the last lesson and the first.
+    const sweep = n > 1 ? 360 * (n / (n + 1)) : 0;
+    const chord = n > 1 ? 2 * rings[i] * Math.sin(((sweep / (n - 1)) * Math.PI) / 360) : 0;
+    course.lessons.forEach((lesson, j) => {
+      const turn = angle + 180 + (n > 1 ? 360 / (n + 1) / 2 + (sweep * j) / (n - 1) : 180);
+      const r = sizeFor(lesson.use, 4.6, 0.8, 8);
+      const node = add({ id: lesson.id, ...polar(turn, rings[i], at), r: r + 4 });
+      springs.push({ a: hub, b: node, len: rings[i], k: 0.14 });
+      if (j > 0) springs.push({ a: node - 1, b: node, len: chord, k: 0.05 });
+    });
   });
 
-  const anchorFor = (at: BrainAttach) => anchors.get(at.kind === "lesson" ? `lesson:${at.id}` : at.kind === "subject" ? `subject:${at.name}` : at.kind === "pod" ? `pod:${at.id.replace(/^pod:/, "")}` : "other");
-  const points: LayoutPoint[] = [];
-  for (const point of map.points) {
-    const anchor = anchorFor(point.at) ?? anchors.get("other");
-    if (!anchor) continue;
-    // A lesson's things fan to either side of its fibre; a subject's or pod's outward.
-    const lessonSide = point.at.kind === "lesson" ? (hashUnit(`${point.id}:side`) < 0.5 ? -1 : 1) : 0;
-    const spread = point.at.kind === "lesson" ? 70 : 150;
-    const centreAngle = point.at.kind === "lesson" ? anchor.out + lessonSide * 90 : anchor.out;
-    const angle = centreAngle + (hashUnit(point.id) - 0.5) * spread;
-    const reach = reachFor(point.learned_at, nowMs) * (0.85 + hashUnit(`${point.id}:reach`) * 0.3);
-    const at = polar(angle, reach, anchor.at);
-    points.push({ ...at, id: point.id, anchor: anchor.at, point, r: sizeFor(point.use) });
+  // Subjects, pods and "not filed yet" start on rings outside the courses.
+  const subjectRing = Math.max(SUBJECT_RING_MIN, map.courses.length ? courseReach + Math.max(0, ...rings) + SUBJECT_GAP : 0);
+  const podRing = subjectRing + POD_GAP;
+  const seen: Record<string, number> = {};
+  const KIND_OFFSET: Record<string, number> = { subject: 250, pod: 300, other: 160 };
+  const outer = hubOrder(map).filter((hub) => hub.kind !== "course");
+  for (const hub of outer) {
+    const slot = seen[hub.kind] = (seen[hub.kind] ?? -1) + 1;
+    const angle = (slot * GOLDEN_ANGLE + KIND_OFFSET[hub.kind]) % 360;
+    const reach = (hub.kind === "pod" ? podRing : subjectRing) + (slot % 2 === 0 ? 0 : RING_STAGGER);
+    const id = hub.kind === "subject" ? hub.key : hub.kind === "pod" ? `pod:${hub.key.replace(/^pod:/, "")}` : "other";
+    const node = add({ id, ...polar(angle, reach), r: hub.kind === "pod" ? 14 : 11 });
+    springs.push({ a: 0, b: node, len: reach, k: 0.05 });
   }
+
+  // Learned things hang off where they are filed: the newer, the further.
+  const anchorId = (at: BrainAttach) => at.kind === "lesson" ? at.id : at.kind === "subject" ? `subject:${at.name}` : at.kind === "pod" ? `pod:${at.id.replace(/^pod:/, "")}` : "other";
+  const hung: Array<{ point: BrainPoint; node: number; anchor: number }> = [];
+  for (const point of map.points) {
+    const anchor = index.get(anchorId(point.at)) ?? index.get("other");
+    if (anchor === undefined) continue;
+    const from = nodes[anchor];
+    const out = (Math.atan2(from.y, from.x) * 180) / Math.PI;
+    const reach = reachFor(point.learned_at, nowMs) * (0.85 + hashUnit(`${point.id}:reach`) * 0.3);
+    const r = sizeFor(point.use);
+    const node = add({ id: point.id, ...polar(out + (hashUnit(point.id) - 0.5) * 150, reach, from), r: r + 3 });
+    springs.push({ a: anchor, b: node, len: reach, k: 0.1 });
+    hung.push({ point, node, anchor });
+  }
+
+  // What answers read together pulls together.
+  for (const arc of map.arcs) {
+    const a = index.get(arc.a), b = index.get(arc.b);
+    if (a !== undefined && b !== undefined) springs.push({ a, b, len: 60, k: 0.03 * Math.min(3, arc.count) });
+  }
+
+  settle(nodes, springs);
+
+  const placed = (id: string): Placed => { const node = nodes[index.get(id)!]; return { x: node.x, y: node.y }; };
+  const hubs: LayoutHub[] = [];
+  const courses: LayoutCourse[] = [];
+  const fibres: LayoutFibre[] = [];
+  const lessons: LayoutLesson[] = [];
+  for (const hub of hubOrder(map)) {
+    if (hub.kind === "course") {
+      const course = map.courses.find((entry) => entry.id === hub.key)!;
+      const at = placed(hub.key);
+      const angle = (Math.atan2(at.y, at.x) * 180) / Math.PI;
+      const path: Placed[] = [];
+      let far = 0;
+      for (const lesson of course.lessons) {
+        const spot = placed(lesson.id);
+        far = Math.max(far, Math.hypot(spot.x - at.x, spot.y - at.y));
+        path.push(spot);
+        lessons.push({ ...spot, id: lesson.id, courseKey: hub.key, order: lesson.order, title: lesson.title, done: lesson.done, use: lesson.use, r: sizeFor(lesson.use, 4.6, 0.8, 8) });
+        fibres.push({ key: `${hub.key}|${lesson.id}`, kind: "spoke", path: [at, spot] });
+      }
+      fibres.push({ key: `${hub.key}|trunk`, kind: "trunk", path: [center, at] });
+      if (path.length > 1) fibres.push({ key: `${hub.key}|order`, kind: "order", path });
+      courses.push({ ...at, key: hub.key });
+      // The course's name sits just outside its ring, on the far side from the centre.
+      hubs.push({ ...hub, ...polar(angle, far + 18, at), angle });
+      continue;
+    }
+    const id = hub.kind === "subject" ? hub.key : hub.kind === "pod" ? `pod:${hub.key.replace(/^pod:/, "")}` : "other";
+    const at = placed(id);
+    hubs.push({ ...hub, ...at, angle: (Math.atan2(at.y, at.x) * 180) / Math.PI });
+  }
+  const points: LayoutPoint[] = hung.map(({ point, node, anchor }) => ({
+    x: nodes[node].x, y: nodes[node].y, id: point.id, anchor: { x: nodes[anchor].x, y: nodes[anchor].y }, point, r: sizeFor(point.use),
+  }));
 
   const where = new Map<string, Placed>([...points.map((p) => [p.id, p] as const), ...lessons.map((l) => [l.id, l] as const)]);
   const arcs: LayoutArc[] = map.arcs.flatMap((arc) => {
@@ -159,12 +277,12 @@ export function layoutBrain(map: BrainMap, nowMs: number): BrainLayout {
     return a && b ? [{ a, b, count: arc.count, ids: [arc.a, arc.b] as [string, string] }] : [];
   });
 
-  const all: Placed[] = [center, ...hubs, ...lessons, ...points];
+  const all: Placed[] = [center, ...hubs, ...courses, ...lessons, ...points];
   const extent = {
     minX: Math.min(...all.map((p) => p.x)), minY: Math.min(...all.map((p) => p.y)),
     maxX: Math.max(...all.map((p) => p.x)), maxY: Math.max(...all.map((p) => p.y)),
   };
-  // Room for each hub's name: a course's runs on from its fibre's end; a
+  // Room for each hub's name: a course's runs on outward from its ring; a
   // subject's or pod's sits centred on it.
   for (const hub of hubs) {
     const w = hub.label.length * HUB_CHAR_W;
@@ -176,7 +294,7 @@ export function layoutBrain(map: BrainMap, nowMs: number): BrainLayout {
     minX: Math.min(...all.map((p) => p.x)) - pad, minY: Math.min(...all.map((p) => p.y)) - pad,
     maxX: Math.max(...all.map((p) => p.x)) + pad, maxY: Math.max(...all.map((p) => p.y)) + pad,
   };
-  return { center, hubs, fibres, lessons, points, arcs, bounds, extent };
+  return { center, hubs, courses, fibres, lessons, points, arcs, bounds, extent };
 }
 
 // Which learned things get a name on the full page: what the viewer may read,
@@ -332,7 +450,8 @@ export function scaleLayout(layout: BrainLayout, k: number): BrainLayout {
   return {
     center: at(layout.center),
     hubs: layout.hubs.map(at),
-    fibres: layout.fibres.map((fibre) => ({ key: fibre.key, path: fibre.path.map(at) })),
+    courses: layout.courses.map(at),
+    fibres: layout.fibres.map((fibre) => ({ ...fibre, path: fibre.path.map(at) })),
     lessons: layout.lessons.map(at),
     points: layout.points.map((p) => ({ ...at(p), anchor: at(p.anchor) })),
     arcs: layout.arcs.map((arc) => ({ ...arc, a: at(arc.a), b: at(arc.b) })),
@@ -357,7 +476,7 @@ export function lensLayout(layout: BrainLayout, box: BrainStage, opts: { power?:
   const power = opts.power ?? BRAIN_LENS_POWER;
   const pad = opts.pad ?? 14;
   const c = layout.center;
-  const things: Placed[] = [...layout.hubs, ...layout.lessons, ...layout.points];
+  const things: Placed[] = [...layout.hubs, ...layout.courses, ...layout.lessons, ...layout.points];
   const far = Math.max(1, ...things.map((p) => Math.hypot(p.x - c.x, p.y - c.y)));
   const pull = (p: Placed): Placed => {
     const dx = p.x - c.x, dy = p.y - c.y;
@@ -376,7 +495,8 @@ export function lensLayout(layout: BrainLayout, box: BrainStage, opts: { power?:
   return {
     center: at(c),
     hubs: layout.hubs.map(at),
-    fibres: layout.fibres.map((fibre) => ({ key: fibre.key, path: fibre.path.map(at) })),
+    courses: layout.courses.map(at),
+    fibres: layout.fibres.map((fibre) => ({ ...fibre, path: fibre.path.map(at) })),
     lessons: layout.lessons.map(at),
     points: layout.points.map((p) => ({ ...at(p), anchor: at(p.anchor) })),
     arcs: layout.arcs.map((arc) => ({ ...arc, a: at(arc.a), b: at(arc.b) })),
