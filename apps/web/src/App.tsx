@@ -792,6 +792,7 @@ export default function App() {
     handleChatCaughtUp,
   } = useWebCommunityAttentionModel({
     activeCommunityId: activeChannelCommunityId,
+    detailCommunityId: activePage === "community" ? activeCommunityId : null,
     activeChannelId,
     activeChannelSlug: activeCommunityChannelSlug,
     activePage,

@@ -19,12 +19,14 @@ export type CommunityAttentionIndicators = {
   // Unseen mention-of-me: rides the chat surface visually as the accent dot.
   mentions: boolean;
   chat_last_seen_at?: number | null;
+  is_rail_summary?: boolean;
   channels: NonNullable<CloudCommunityAttentionRow["channels"]>;
 };
 
 type UseCommunityAttentionControllerArgs<SessionT extends SessionLike> = {
   session: SessionT | null;
   communityIds: string[];
+  activeCommunityId?: string | null;
   ensureSession?: EnsureSessionFn<SessionT>;
 };
 
@@ -54,10 +56,29 @@ function buildAttentionMap(
       events: Boolean(row.events),
       mentions: Boolean(row.mentions),
       chat_last_seen_at: typeof row.chat_last_seen_at === "number" ? row.chat_last_seen_at : null,
+      ...(row.is_rail_summary ? { is_rail_summary: true } : null),
       channels: Array.isArray(row.channels) ? row.channels : [],
     };
   }
   return next;
+}
+
+export function retainCommunityAttentionAcrossScopeChange(
+  previousMap: Record<string, CommunityAttentionIndicators>,
+  communityIds: string[],
+  activeCommunityId?: string | null,
+): Record<string, CommunityAttentionIndicators> {
+  const allowed = new Set(communityIds);
+  const activeKey = String(activeCommunityId ?? "").trim();
+  const retained: Record<string, CommunityAttentionIndicators> = {};
+  for (const [id, indicators] of Object.entries(previousMap)) {
+    if (!allowed.has(id)) continue;
+    // Never carry a short-circuited rail summary into the newly active community:
+    // its divider boundary and per-surface/channel dots must wait for full pages.
+    if (activeKey && id === activeKey && indicators.is_rail_summary) continue;
+    retained[id] = indicators;
+  }
+  return retained;
 }
 
 export function applyInFlightCommunityAttentionClears(
@@ -88,7 +109,12 @@ export function useCommunityAttentionController<SessionT extends SessionLike>(
   >({});
   const inFlightMarksRef = useRef<Map<string, InFlightCommunityAttentionMark>>(new Map());
   const latestServerAttentionMapRef = useRef<Record<string, CommunityAttentionIndicators>>({});
+  const lastSessionIdentityRef = useRef<string | null>(null);
   const sessionIdentity = resolveAuthPresentationIdentity(args.session as AuthSessionLike);
+  const normalizedActiveCommunityId =
+    args.activeCommunityId === undefined
+      ? undefined
+      : String(args.activeCommunityId ?? "").trim() || null;
 
   const normalizedCommunityIds = useMemo(
     () =>
@@ -170,6 +196,7 @@ export function useCommunityAttentionController<SessionT extends SessionLike>(
       ? normalizedCommunityIdsKey.split("\u0000")
       : [];
     if (!sessionIdentity || communityIds.length === 0) {
+      lastSessionIdentityRef.current = sessionIdentity ?? null;
       latestServerAttentionMapRef.current = {};
       setAttentionByCommunityId({});
       return;
@@ -178,7 +205,23 @@ export function useCommunityAttentionController<SessionT extends SessionLike>(
     let cancelled = false;
     let unsubscribe: (() => void) | null = null;
     let liveClient: ReturnType<typeof createCloudCommunityChatLiveClient> | null = null;
-    applyServerRows(communityIds, []);
+    if (lastSessionIdentityRef.current !== sessionIdentity) {
+      lastSessionIdentityRef.current = sessionIdentity;
+      applyServerRows(communityIds, []);
+    } else {
+      const retained = retainCommunityAttentionAcrossScopeChange(
+        latestServerAttentionMapRef.current,
+        communityIds,
+        normalizedActiveCommunityId,
+      );
+      latestServerAttentionMapRef.current = retained;
+      setAttentionByCommunityId((previous) =>
+        reuseEquivalentValue(
+          previous,
+          applyInFlightCommunityAttentionClears(retained, inFlightMarksRef.current.values()),
+        ),
+      );
+    }
     void (async () => {
       const current = argsRef.current;
       const usableSession = await resolveUsableSession(current.session, current.ensureSession);
@@ -191,6 +234,7 @@ export function useCommunityAttentionController<SessionT extends SessionLike>(
         unsubscribe = subscribeCloudCommunityAttentionRows({
           liveClient,
           communityIds,
+          activeCommunityId: normalizedActiveCommunityId,
           onUpdate: (rows) => {
             if (cancelled) return;
             applyServerRows(communityIds, rows);
@@ -206,7 +250,7 @@ export function useCommunityAttentionController<SessionT extends SessionLike>(
       unsubscribe?.();
       liveClient?.close();
     };
-  }, [applyServerRows, args.ensureSession, normalizedCommunityIdsKey, sessionIdentity]);
+  }, [applyServerRows, args.ensureSession, normalizedActiveCommunityId, normalizedCommunityIdsKey, sessionIdentity]);
 
   return {
     attentionByCommunityId,

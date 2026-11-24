@@ -26,11 +26,17 @@ import {
   listChannelReadableRows,
   listAuthorizedCommunityChannels,
   listAuthorizedCommunityChannelPage,
+  listSharedCommunityChannels,
   resolveAuthorizedCommunityChannel,
   resolveRequestedCommunityChannel,
 } from "./communityChannelCore";
-import { resolveCommunityChannelActor, type ChannelActor } from "./communityChannelAccess";
+import {
+  getCommunityChannelCapabilities,
+  resolveCommunityChannelActor,
+  type ChannelActor,
+} from "./communityChannelAccess";
 import { isInPod, podRecord } from "./communityPods";
+import { MAX_PRIVATE_COMMUNITY_CHANNELS } from "../shared/communityChannelCapacity";
 import { canManageCommunityResources } from "./communityResourceShared";
 
 type CommunityAttentionSurface = "chat" | "resources" | "events" | "mentions";
@@ -620,6 +626,265 @@ export const listMyCommunityAttentionPage = query({
       section: args.section, paginationOpts: { ...args.paginationOpts, numItems: Math.min(10, args.paginationOpts.numItems) } });
     const attention = await getCommunityAttentionRow(ctx, args.communityId, userId, result.page);
     return { ...result, page: attention.channels, attention };
+  },
+});
+
+const MAX_COMMUNITY_RAIL_ATTENTION_BATCH = 25;
+
+type CommunityRailAttentionRow = {
+  community_id: string;
+  chat: boolean;
+  resources: boolean;
+  events: boolean;
+  mentions: boolean;
+};
+
+async function hasUnreadCommunityMention(
+  ctx: any,
+  communityId: any,
+  userId: any,
+): Promise<boolean> {
+  const rows = (
+    await Promise.all(
+      (["pending", "sent", "read"] as const).map(async (notifyState) =>
+        (await ctx.db
+          .query("communityInteractionMentions" as any)
+          .withIndex("by_mentionedUser_community_notifyState_createdAt", (q: any) =>
+            q.eq("mentionedUserId", userId).eq("communityId", communityId).eq("notifyState", notifyState),
+          )
+          .order("desc")
+          .take(HOME_TAGS_SCAN_LIMIT)) as Array<Record<string, any>>,
+      ),
+    )
+  )
+    .flat()
+    .sort((a, b) => Number(b.createdAt) - Number(a.createdAt))
+    .slice(0, HOME_TAGS_SCAN_LIMIT);
+  if (rows.length === 0) return false;
+  const positions = new Map<string, number>();
+  const positionOf = async (channel: CommunityChannelLike) => {
+    const key = communityAttentionChannelKey(channel);
+    if (!positions.has(key)) {
+      positions.set(
+        key,
+        (await readCommunityChannelReadState(ctx, communityId, userId, channel)).mentionSeenThroughAt,
+      );
+    }
+    return positions.get(key)!;
+  };
+  for (const mention of rows) {
+    if (mention.notifyState === "suppressed") continue;
+    const createdAt = normalizeCommunityReadPosition(mention.createdAt);
+    if (createdAt <= 0) continue;
+    if (mention.channelId) {
+      const known = positions.get(normalizeIdValue(mention.channelId));
+      if (known !== undefined && createdAt <= known) continue;
+    }
+    const resolved = await resolveMentionRecipientSource({ ctx, mention, userId });
+    if (!resolved) continue;
+    if (createdAt > (await positionOf(resolved.channel as CommunityChannelLike))) {
+      return true;
+    }
+  }
+  return false;
+}
+
+async function listSharedChannelsForRailAttention(
+  ctx: any,
+  communityId: any,
+  actor: ChannelActor,
+): Promise<CommunityChannelLike[]> {
+  let shared: CommunityChannelLike[];
+  try {
+    shared = await listSharedCommunityChannels({ ctx, communityId });
+  } catch (error) {
+    if (error instanceof Error && error.message === "community_general_channel_missing") {
+      shared = [await resolveRequestedCommunityChannel({ ctx, communityId })];
+    } else {
+      throw error;
+    }
+  }
+  const readable = await Promise.all(
+    shared.map(async (channel) =>
+      (await getCommunityChannelCapabilities({ ctx, channel, actor })).canRead ? channel : null,
+    ),
+  );
+  return readable.filter((channel): channel is CommunityChannelLike => channel !== null);
+}
+
+async function listReadableActiveRestrictedChannelsForRailAttention(
+  ctx: any,
+  communityId: any,
+  actor: ChannelActor,
+): Promise<CommunityChannelLike[]> {
+  // Capacity bounds active restricted rooms (<= MAX_PRIVATE_COMMUNITY_CHANNELS),
+  // not historical participant grants on archived rooms. Reading active rooms
+  // directly avoids archived-grant starvation while staying strictly bounded.
+  const activeRestricted = (await ctx.db
+    .query("communityChannels" as any)
+    .withIndex("by_community_access_status_position", (q: any) =>
+      q.eq("communityId", communityId).eq("accessMode", "restricted").eq("status", "active"),
+    )
+    .take(MAX_PRIVATE_COMMUNITY_CHANNELS)) as CommunityChannelLike[];
+  if (activeRestricted.length === 0) return [];
+  const readable = await Promise.all(
+    activeRestricted.map(async (channel) =>
+      (await getCommunityChannelCapabilities({ ctx, channel, actor })).canRead ? channel : null,
+    ),
+  );
+  return readable.filter((channel): channel is CommunityChannelLike => channel !== null);
+}
+
+async function channelHasUnreadRailSignal(args: {
+  ctx: any;
+  communityId: any;
+  channel: CommunityChannelLike;
+  actor: ChannelActor;
+  userId: any;
+  checkChatDot: boolean;
+}): Promise<{ chat: boolean; mentions: boolean }> {
+  const [readState, latestMentionsByChannel, activity] = await Promise.all([
+    readCommunityChatReadState(args.ctx, args.communityId, args.userId, args.channel._id),
+    getLatestCommunityMentionsByChannel({
+      ctx: args.ctx,
+      communityId: args.communityId,
+      userId: args.userId,
+      channels: [args.channel],
+    }),
+    args.checkChatDot
+      ? getCommunityChannelActivityMarkers(
+          args.ctx,
+          args.communityId,
+          args.channel,
+          args.actor,
+          args.userId,
+        )
+      : Promise.resolve(null),
+  ]);
+  const latestMentionAt = latestMentionsByChannel.get(communityAttentionChannelKey(args.channel));
+  const mentions =
+    typeof latestMentionAt === "number" && latestMentionAt > readState.mentionSeenThroughAt;
+  const chat =
+    Boolean(activity) &&
+    typeof activity?.latestFromOthersAt === "number" &&
+    activity.latestFromOthersAt > readState.chatSeenThroughAt;
+  return { chat, mentions };
+}
+
+async function getCommunityRailAttentionSummary(
+  ctx: any,
+  communityId: any,
+  userId: any,
+): Promise<CommunityRailAttentionRow | null> {
+  let actor: ChannelActor;
+  try {
+    actor = await resolveCommunityChannelActor({ ctx, communityId, userId });
+  } catch {
+    // Fail closed: unauthorized or revoked communities are omitted cleanly
+    // instead of breaking rail indicators for the rest of the sidebar.
+    return null;
+  }
+  const communityIdStr = String(communityId);
+  const [settingsRow, editsCourses, latestEventsUpdatedAt] = await Promise.all([
+    getCommunityMemberSettingsRow(ctx, communityId, userId),
+    canManageCommunityResources({ ctx, communityId, userId }),
+    getLatestCommunityEventsUpdatedAt(ctx, communityId),
+  ]);
+  const events =
+    typeof latestEventsUpdatedAt === "number" &&
+    latestEventsUpdatedAt > Math.max(0, Math.floor(settingsRow?.eventsLastSeenAt ?? 0));
+  if (events) {
+    return { community_id: communityIdStr, chat: false, resources: false, events: true, mentions: false };
+  }
+  const latestKnowledgeVisibleAt = editsCourses
+    ? null
+    : await getLatestCommunityKnowledgeVisibleAt(ctx, communityId);
+  const resources =
+    typeof latestKnowledgeVisibleAt === "number" &&
+    latestKnowledgeVisibleAt > Math.max(0, Math.floor(settingsRow?.resourcesLastSeenAt ?? 0));
+  if (resources) {
+    return { community_id: communityIdStr, chat: false, resources: true, events: false, mentions: false };
+  }
+  if (await hasUnreadCommunityMention(ctx, communityId, userId)) {
+    return { community_id: communityIdStr, chat: false, resources: false, events: false, mentions: true };
+  }
+  const sharedChannels = await listSharedChannelsForRailAttention(ctx, communityId, actor);
+  for (const channel of sharedChannels) {
+    const signal = await channelHasUnreadRailSignal({
+      ctx,
+      communityId,
+      channel,
+      actor,
+      userId,
+      checkChatDot: true,
+    });
+    if (signal.chat || signal.mentions) {
+      return {
+        community_id: communityIdStr,
+        chat: signal.chat,
+        resources: false,
+        events: false,
+        mentions: signal.mentions,
+      };
+    }
+  }
+  const restrictedChannels = await listReadableActiveRestrictedChannelsForRailAttention(
+    ctx,
+    communityId,
+    actor,
+  );
+  for (const channel of restrictedChannels) {
+    const checkChatDot = await viewerGetsRoomChatDot(ctx, communityId, channel, actor, userId);
+    const signal = await channelHasUnreadRailSignal({
+      ctx,
+      communityId,
+      channel,
+      actor,
+      userId,
+      checkChatDot,
+    });
+    if (signal.chat || signal.mentions) {
+      return {
+        community_id: communityIdStr,
+        chat: signal.chat,
+        resources: false,
+        events: false,
+        mentions: signal.mentions,
+      };
+    }
+  }
+  return { community_id: communityIdStr, chat: false, resources: false, events: false, mentions: false };
+}
+
+// Single shared sidebar rail attention query for non-active communities.
+// Replaces 2+ per-community paginated watches with one bounded multi-community
+// read that short-circuits as soon as any unread signal is detected.
+export const listMyCommunityRailAttention = query({
+  args: {
+    authSubject: v.optional(v.string()),
+    communityIds: v.array(v.id("communities")),
+  },
+  handler: async (ctx, args): Promise<CommunityRailAttentionRow[]> => {
+    const userId = await resolveUserIdForAuthenticatedRequest({
+      ctx,
+      authSubject: args.authSubject ?? null,
+    });
+    const uniqueCommunityIds: Array<typeof args.communityIds[number]> = [];
+    const seen = new Set<string>();
+    for (const communityId of args.communityIds) {
+      const key = normalizeIdValue(communityId);
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      uniqueCommunityIds.push(communityId);
+      if (uniqueCommunityIds.length >= MAX_COMMUNITY_RAIL_ATTENTION_BATCH) break;
+    }
+    if (uniqueCommunityIds.length === 0) return [];
+    const rows = await Promise.all(
+      uniqueCommunityIds.map((communityId) =>
+        getCommunityRailAttentionSummary(ctx, communityId, userId),
+      ),
+    );
+    return rows.filter((row): row is CommunityRailAttentionRow => row !== null);
   },
 });
 
