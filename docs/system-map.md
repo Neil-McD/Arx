@@ -79,7 +79,7 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
   `communityOntologyCards` (the community card the agent reads, shared/communityOntology.ts),
   `communityMemberRecords` (Members for people who manage members: plan and price per person, money states,
   past members, one member's record with host-only notes and who did what; docs/design/members-invariants.md),
-  `communityMemberProfiles` (Members for members: who is here and what each person approved sharing),
+  `communityMemberProfiles` (Members for members: who is here, and the one profile of a person that channels and Members both open, `apps/web/src/v1/KitProfile.tsx`),
   `memberEntryDestination`, `platformHomeCommunity`, `communityPeople` (one person, one action, from someone's
   own AI).
 - **Reached by:** community sites' `/join` (their private twin); Studio's `/c/<slug>` hands over to it.
