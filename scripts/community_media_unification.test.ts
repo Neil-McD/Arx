@@ -15,7 +15,7 @@ const { MentionAutocompleteMenu } = await import("../apps/web/src/components/com
 const { PanelPeople } = await import("../apps/web/src/v1/KitPanel");
 const { CourseCover } = await import("../apps/web/src/v1/KitClassroom");
 const { KitCourseInline } = await import("../apps/web/src/v1/KitCourseEdit");
-import { computeCoverFrameLayout, measureFramedMediaViewport } from "../shared/coverFrameUi";
+import { clampCoverFocus, clampCoverZoom, computeCoverFrameLayout, measureFramedMediaViewport } from "../shared/coverFrameUi";
 import type { DiscoverCommunitySnapshot } from "../shared/communityTypes";
 import type { WebCommunityShellProps } from "../apps/web/src/components/webShellChromeShared";
 
@@ -64,6 +64,28 @@ describe("canonical community logos, banners, and user avatars", () => {
       zoom: 1,
     });
     expect(layout).toMatchObject({ renderWidth: 50, renderHeight: 50, left: 0, top: 0 });
+  });
+
+  it("treats null, undefined, and blank focus or zoom metadata as centered defaults instead of top-left 0", () => {
+    expect(clampCoverFocus(null)).toBe(0.5);
+    expect(clampCoverFocus(undefined)).toBe(0.5);
+    expect(clampCoverFocus("")).toBe(0.5);
+    expect(clampCoverFocus(0)).toBe(0);
+    expect(clampCoverZoom(null)).toBe(1);
+    expect(clampCoverZoom(undefined)).toBe(1);
+    expect(clampCoverZoom("")).toBe(1);
+
+    // Wide cover inside a 16:9 box with null focus stays centered horizontally, not pinned at left: 0.
+    const layout = computeCoverFrameLayout({
+      viewportWidth: 160,
+      viewportHeight: 90,
+      naturalWidth: 320,
+      naturalHeight: 90,
+      focusX: null,
+      focusY: null,
+      zoom: null,
+    });
+    expect(layout).toMatchObject({ renderWidth: 320, renderHeight: 90, left: -80, top: 0 });
   });
 
   it("renders DiscoverCard banner, community logo, and host avatar through canonical framed media", () => {
