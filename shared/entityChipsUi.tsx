@@ -18,6 +18,12 @@ type EntityIndexValue = {
 
 const EntityIndexContext = createContext<EntityIndexValue | null>(null);
 const GuideVoiceContext = createContext(false);
+// Whether a chip may open its card here. Off where the text around it clips
+// what sticks out (a folded brief), so a card is never shown cut off.
+const ChipCardsContext = createContext(true);
+export function ChipCards(props: { on: boolean; children: ReactNode }) {
+  return <ChipCardsContext.Provider value={props.on}>{props.children}</ChipCardsContext.Provider>;
+}
 
 export function EntityNamesProvider(props: {
   session: unknown;
@@ -38,6 +44,13 @@ export function EntityNamesProvider(props: {
     const index = buildEntityNameIndex(props.communitySlug, data?.entries);
     return index.size ? { index, navigate } : null;
   }, [data, props.communitySlug, navigate]);
+  return <EntityIndexContext.Provider value={value}>{props.children}</EntityIndexContext.Provider>;
+}
+
+// The same, for an index already in hand (tests, the design lab).
+export function EntityIndexProvider(props: { index: ReadonlyMap<string, EntityTarget>; navigate: (path: string) => void; children: ReactNode }) {
+  const { index, navigate } = props;
+  const value = useMemo<EntityIndexValue | null>(() => (index.size ? { index, navigate } : null), [index, navigate]);
   return <EntityIndexContext.Provider value={value}>{props.children}</EntityIndexContext.Provider>;
 }
 
@@ -82,7 +95,8 @@ export function EntityChip(props: { target: EntityTarget; label: ReactNode; navi
   const { target } = props;
   // Placed against the scrolling area the reply sits in (channel feed, thread,
   // Home chat), so the card never opens where that area cuts it off.
-  const hover = useHoverIntent<HTMLSpanElement>({ enabled: true, maxCardHeight: 240, viewportSelector: CHIP_SCROLL_AREAS });
+  const cards = useContext(ChipCardsContext);
+  const hover = useHoverIntent<HTMLSpanElement>({ enabled: cards, maxCardHeight: 240, viewportSelector: CHIP_SCROLL_AREAS });
   const go = (path: string) => (event: MouseEvent<HTMLAnchorElement>) => {
     if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
     event.preventDefault();

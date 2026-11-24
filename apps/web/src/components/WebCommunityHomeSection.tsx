@@ -20,7 +20,7 @@
 import { Suspense, lazy, useEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { KitHomeRail } from "../v1/KitHomeRail";
-import { usePlaceBriefRead } from "../v1/KitBrief";
+import { BriefText, usePlaceBriefRead } from "../v1/KitBrief";
 import { dismissOwnerMoment, fetchOwnerNoticed } from "../../../../shared/cloudCommunityOwnerMomentsGateway";
 import type { OwnerNoticed } from "../../../../shared/communityOwnerMoments";
 import { fetchMemberHomeSteps } from "../../../../shared/cloudCommunityHomeMomentsGateway";
@@ -419,7 +419,7 @@ export function WebCommunityHomeSection(props: WebCommunityHomeSectionProps) {
         {!ready && !failed ? <PanelBlockSkeleton label="Loading home…" rows={2} compact /> : null}
         {ready && brief ? (
           <div className={cx("hbrief")}>
-            <p>{brief.summary}</p>
+            <p><BriefText summary={brief.summary} /></p>
             {age || brief.channels.length ? (
               <span>
                 {age ? <em>Written {age}</em> : null}
