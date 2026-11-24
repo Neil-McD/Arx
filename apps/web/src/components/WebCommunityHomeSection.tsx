@@ -43,7 +43,7 @@ import {
   skipMemberCoachDraft,
 } from "../../../../shared/cloudCommunityMemberCoachGateway";
 import type { MemberCoachDraftView } from "../../../../shared/communityMemberCoachTypes";
-import { Eyebrow, Hello, HomeBody, KitApp, Rail, TextLink, cx } from "../v1/kit";
+import { Eyebrow, Hello, HomeBody, KitApp, Rail, TextLink, cx, useMinWidth } from "../v1/kit";
 import type { HomeTags } from "../../../../shared/communityHomeTags";
 import { useLiveQuery } from "../../../../shared/liveQuery";
 import { resolveAuthSubject, type AuthSessionLike } from "../../../../shared/authSession";
@@ -211,6 +211,13 @@ export function offersConversation(args: { agentOn: boolean; talking: boolean; h
   return args.agentOn && !args.talking && args.hasConversation && args.drawn;
 }
 
+// Below 1024px Home has no right-hand column, so the glanceable "Today"
+// panels (Next Event, Community Brain, Who's here) flow cleanly under Home's
+// brief and action rows, stepping aside the moment you enter a guide chat.
+export function showsInlineHomeRail(args: { wide: boolean; ready: boolean; talking: boolean; hasSnapshot: boolean }): boolean {
+  return !args.wide && args.ready && !args.talking && args.hasSnapshot;
+}
+
 export function WebCommunityHomeSection(props: WebCommunityHomeSectionProps) {
   const [snapshot, setSnapshot] = useState<CloudCommunityHomeSnapshot | null>(null);
   const [failed, setFailed] = useState(false);
@@ -361,6 +368,7 @@ export function WebCommunityHomeSection(props: WebCommunityHomeSectionProps) {
     })();
   };
 
+  const wide = useMinWidth(1024);
   if (!props.kit) return null;
   const kit = props.kit;
   const now = props.now ?? new Date();
@@ -386,14 +394,16 @@ export function WebCommunityHomeSection(props: WebCommunityHomeSectionProps) {
   // -end-state.md: nothing moves after it is drawn).
   const ready = Boolean(snapshot) && briefSettled && tagsSettled && (isHost ? noticed !== null && drafts !== null && coachDrafts !== null : steps !== null);
 
-  const panel = snapshot ? (
+  const showDesktopRail = wide && Boolean(props.asideContainer);
+  const showInlineRail = showsInlineHomeRail({ wide, ready, talking: kit.talking, hasSnapshot: Boolean(snapshot) });
+  const panel = (showDesktopRail || showInlineRail) ? (snapshot ? (
     <KitHomeRail session={props.session} communityId={props.communityId} snapshot={snapshot}
       presence={props.presence} now={now.getTime()} onOpenEvents={props.onOpenEvents}
       onOpenKnowledge={props.onOpenKnowledge} />
   ) : !failed ? (
     <PanelBlockSkeleton label={null} rows={2} compact />
-  ) : null;
-  const rail = panel ? (
+  ) : null) : null;
+  const rail = showDesktopRail && panel ? (
     <KitApp view="home" host={isHost} part="rail">
       <Rail index={0} label="The community today">{panel}</Rail>
     </KitApp>
@@ -442,6 +452,11 @@ export function WebCommunityHomeSection(props: WebCommunityHomeSectionProps) {
         ) : null}
         {offersConversation({ agentOn, talking: kit.talking, hasConversation: Boolean(kit.hasConversation), drawn: ready || failed }) ? (
           <TextLink style={{ marginTop: 20 }} onClick={kit.onTalkItOver}>Continue your conversation</TextLink>
+        ) : null}
+        {showInlineRail && panel ? (
+          <section className={cx("hmobile-rail")} aria-label="The community today">
+            {panel}
+          </section>
         ) : null}
         {kit.talk}
       </HomeBody>

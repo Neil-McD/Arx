@@ -11,7 +11,7 @@
 // gaps (for builders: the biggest subjects, which no course teaches, lit).
 import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { BRAIN_MAP_MIN_NODES, type BrainMap } from "../../../../shared/communityBrain";
-import { chooseLabels, fitStage, fitView, isFitView, layoutBrain, lensLayout, panBy, revealPoint, scaleLayout, stageWindow, zoomAt, type BrainView, type LabelBox, type LayoutPoint } from "../../../../shared/communityBrainLayout";
+import { chooseCenterLabelPos, chooseLabels, chooseSubjectLabelPos, fitStage, fitView, isFitView, layoutBrain, lensLayout, panBy, revealPoint, scaleLayout, stageWindow, zoomAt, type BrainView, type LabelBox, type LayoutPoint, type PlacedLabel } from "../../../../shared/communityBrainLayout";
 import { cx } from "./kit";
 
 // A panel's map is drawn in a box this size (pixels at about 240 wide; the
@@ -72,8 +72,9 @@ export function KitBrainMap(props: {
   }, [page]);
   // The view (page only): how far in, and what is at its middle.
   // Pixels per layout unit: the whole map fits the stage with its names,
-  // and with room above and below for the controls over the map.
-  const { scale: fit, frame: bounds } = useMemo(() => page ? fitStage(base, stage, { inset: { x: Math.min(110, stage.w * 0.1), y: 64 }, hubCharW: 8.2, edge: 16 })
+  // and with room above and below for the controls over the map (phones wrap
+  // the top bar to two rows, so they get extra vertical breathing room).
+  const { scale: fit, frame: bounds } = useMemo(() => page ? fitStage(base, stage, { inset: { x: Math.min(110, stage.w * 0.1), y: stage.w < 640 ? 92 : 64 }, hubCharW: 8.2, edge: 16 })
     : { scale: 1, frame: base.extent }, [base, stage, page]);
   const [view, setView] = useState<BrainView>(() => fitView(bounds));
   // A new map, or a stage of another size while the whole map is shown: fit again.
@@ -112,16 +113,34 @@ export function KitBrainMap(props: {
   const gapKeys = useMemo(() => new Set(props.map.subjects.filter((s) => s.size >= 3).sort((a, b) => b.size - a.size).slice(0, 3).map((s) => `subject:${s.name}`)), [props.map]);
   // Names go where there is room on screen: only for what is in view, never
   // over a hub's name, and as many as the stage has space for.
-  const labels = useMemo(() => {
-    if (!page) return [];
+  const labelWindow: LabelBox = useMemo(
+    () => ({ x: win.x + 8, y: win.y + 8, w: Math.max(40, win.w - 16 - (props.coverRight ?? 0)), h: Math.max(40, win.h - 16) }),
+    [win.x, win.y, win.w, win.h, props.coverRight],
+  );
+  const { subjectLabels, centerLabel, labels } = useMemo(() => {
+    if (!page) return { subjectLabels: new Map<string, PlacedLabel>(), centerLabel: null as PlacedLabel | null, labels: [] as ReturnType<typeof chooseLabels> };
+    const subjects = new Map<string, PlacedLabel>();
+    for (const hub of layout.hubs) {
+      if (hub.kind === "subject" || hub.kind === "other") {
+        subjects.set(hub.key, chooseSubjectLabelPos(hub, layout, { charW: 8.2, dot, within: labelWindow }));
+      }
+    }
+    const centerPos = chooseCenterLabelPos(props.map.center.name || "Community", layout, { charW: 8.2, dot, within: labelWindow });
     const taken: LabelBox[] = layout.hubs.map((hub) => {
+      const placed = subjects.get(hub.key);
+      if (placed) return { x: placed.box.x - 4, y: placed.box.y - 3, w: placed.box.w + 8, h: placed.box.h + 6 };
       const w = hub.label.length * 8.2 + 12;
       if (hub.kind === "course") return { x: Math.cos((hub.angle * Math.PI) / 180) >= -0.2 ? hub.x : hub.x - w, y: hub.y - 10, w, h: 20 };
-      return { x: hub.x - w / 2, y: hub.kind === "pod" ? hub.y + (hub.inside ? podR : 16) : hub.y - 30, w, h: 26 };
+      return { x: hub.x - w / 2, y: hub.y + (hub.inside ? podR : 16), w, h: 26 };
     });
-    taken.push({ x: -70, y: -20, w: 140, h: 62 });
-    return chooseLabels(layout, { max: Math.max(6, Math.round((stage.w * stage.h) / 30_000)), charW: 6.9, lineH: 17, taken, dot, clearOfDots: true, within: { x: win.x + 8, y: win.y + 8, w: win.w - 16 - (props.coverRight ?? 0), h: win.h - 16 } });
-  }, [layout, page, stage, win.x, win.y, win.w, win.h, props.coverRight, podR, dot]);
+    taken.push({ x: mid.x - 18, y: mid.y - 18, w: 36, h: 36 });
+    taken.push({ x: centerPos.box.x - 6, y: centerPos.box.y - 4, w: centerPos.box.w + 12, h: centerPos.box.h + 8 });
+    return {
+      subjectLabels: subjects,
+      centerLabel: centerPos,
+      labels: chooseLabels(layout, { max: Math.max(6, Math.round((stage.w * stage.h) / 30_000)), charW: 6.9, lineH: 17, taken, dot, clearOfDots: true, within: labelWindow }),
+    };
+  }, [layout, page, stage, labelWindow, podR, dot, mid.x, mid.y, props.map.center.name]);
   const labelled = new Map(labels.map((label) => [label.id, label]));
 
   // Gestures (page only). Offsets from the middle of the drawing, in view units.
@@ -304,14 +323,22 @@ export function KitBrainMap(props: {
                 <circle className={cx(gap ? "brain-nucleus gap" : dimAll ? "brain-nucleus dim" : "brain-nucleus")} cx={hub.x} cy={hub.y} r={size.nucleus} />
               </>
             ) : null}
-            {page ? (
-              <text className={cx(gap ? "brain-hub gap" : dimAll ? "brain-hub dim" : hub.kind === "pod" && !hub.inside ? "brain-hub closed" : "brain-hub")}
-                x={hub.x} y={hub.kind === "course" ? hub.y + 4 : hub.kind === "pod" ? hub.y + (hub.inside ? podR + 16 : 32) : hub.y - 13}
-                textAnchor={hub.kind === "course" ? (right ? "start" : "end") : "middle"}>
-                {hub.kind === "pod" && !hub.inside ? `${hub.label} · ${hub.count}` : hub.label}
-              </text>
-            ) : null}
-            {page && gap ? <text className={cx("brain-gapnote")} x={hub.x} y={hub.y - 28} textAnchor="middle">No course teaches this</text> : null}
+            {page ? (() => {
+              const placed = subjectLabels.get(hub.key);
+              const tx = placed ? placed.x : hub.x;
+              const ty = placed ? placed.y : hub.kind === "course" ? hub.y + 4 : hub.kind === "pod" ? hub.y + (hub.inside ? podR + 16 : 32) : hub.y - 13;
+              const anchor = placed ? placed.anchor : hub.kind === "course" ? (right ? "start" : "end") : "middle";
+              const gapY = placed?.side === "below" ? ty + 15 : ty - 15;
+              return (
+                <>
+                  <text className={cx(gap ? "brain-hub gap" : dimAll ? "brain-hub dim" : hub.kind === "pod" && !hub.inside ? "brain-hub closed" : "brain-hub")}
+                    x={tx} y={ty} textAnchor={anchor}>
+                    {hub.kind === "pod" && !hub.inside ? `${hub.label} · ${hub.count}` : hub.label}
+                  </text>
+                  {gap ? <text className={cx("brain-gapnote")} x={tx} y={gapY} textAnchor={anchor}>No course teaches this</text> : null}
+                </>
+              );
+            })() : null}
           </g>
         );
       })}
@@ -344,7 +371,11 @@ export function KitBrainMap(props: {
         <circle className={cx("brain-core-ring")} cx={mid.x} cy={mid.y} r={size.coreRing} />
         {props.selectedId === BRAIN_CENTER_ID ? <circle className={cx("brain-ring")} cx={mid.x} cy={mid.y} r={size.coreRing + 5} /> : null}
       </g>
-      {page ? <text className={cx("brain-center")} x={0} y={33} textAnchor="middle">{props.map.center.name}</text> : null}
+      {page ? (
+        <text className={cx("brain-center")} x={centerLabel?.x ?? 0} y={centerLabel?.y ?? 33} textAnchor={centerLabel?.anchor ?? "middle"}>
+          {props.map.center.name}
+        </text>
+      ) : null}
     </svg>
   );
   if (!page) return drawing;
