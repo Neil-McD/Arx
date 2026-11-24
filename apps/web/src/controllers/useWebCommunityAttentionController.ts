@@ -39,6 +39,9 @@ type UpdatedRow = {
 
 type UseWebCommunityAttentionControllerParams = {
   activeCommunityId: string | null;
+  // Community currently open in Studio (across any tab) that receives full
+  // per-channel attention; all other sidebar communities share a rail batch.
+  detailCommunityId?: string | null;
   activeChannelId: string | null;
   activeChannelSlug: string;
   activePage: AppPage;
@@ -87,6 +90,7 @@ export function useWebCommunityAttentionModel(
     chat,
     communityIds,
     communityTab,
+    detailCommunityId,
     ensureSession,
     events,
     interactions,
@@ -115,6 +119,8 @@ export function useWebCommunityAttentionModel(
     session,
     ensureSession,
     communityIds,
+    activeCommunityId:
+      detailCommunityId !== undefined ? detailCommunityId : activeCommunityId,
   });
 
   const [chatDividerBoundary, setChatDividerBoundary] = useState<number | null>(null);

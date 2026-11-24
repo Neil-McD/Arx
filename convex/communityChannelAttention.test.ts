@@ -296,3 +296,147 @@ test("resource attention inspects only recent referenced modules and fails close
   expect(afterNewLivePage[0]?.resources).toBe(true);
   expect((await myAttention(asOwner, fixture.communityId))[0]?.resources).toBe(false);
 });
+
+test("listMyCommunityRailAttention batches communities, enforces fail-closed access, and matches pod/mention dot rules", async () => {
+  const t = convexTest(schema, modules);
+  const fixture = await t.run(async (ctx) => {
+    const createUser = async (subject: string) =>
+      await ctx.db.insert("users", {
+        authSubject: subject,
+        displayName: subject,
+        handle: subject,
+        normalizedHandle: subject,
+        createdAt: 1_000,
+        updatedAt: 1_000,
+      });
+    const ownerId = await createUser("rail-owner");
+    const memberId = await createUser("rail-member");
+    const outsiderId = await createUser("rail-outsider");
+
+    const createCommunity = async (slug: string, owner: any) => {
+      const communityId = await ctx.db.insert("communities", {
+        ownerId: owner,
+        slug,
+        name: slug,
+        visibility: "unlisted",
+        inferenceFundingPolicy: "managed_required",
+        entryPolicy: "open",
+        activeMemberCount: 2,
+        createdAt: 1_000,
+        updatedAt: 1_000,
+      });
+      const generalChannelId = await ctx.db.insert("communityChannels", {
+        communityId,
+        systemRole: "general",
+        slug: "general",
+        name: "General",
+        accessMode: "all_members",
+        postingPolicy: "members",
+        status: "active",
+        position: 0,
+        createdAt: 1_000,
+        updatedAt: 1_000,
+      });
+      return { communityId, generalChannelId };
+    };
+
+    // Community 1: unread chat in General for member.
+    const cChat = await createCommunity("rail-chat", ownerId);
+    await ctx.db.insert("communityMemberships", {
+      communityId: cChat.communityId, userId: memberId, role: "member", accessSource: "manual_grant",
+      state: "active", createdAt: 1_000, updatedAt: 1_000,
+    });
+    await ctx.db.insert("communityInteractionRoots", {
+      communityId: cChat.communityId, channelId: cChat.generalChannelId, actorType: "human", actorUserId: ownerId,
+      kind: "discussion", status: "live", visibilityScope: "community", contentSummary: "Hello",
+      replyCount: 0, reactionSummary: [], idempotencyKey: "rail-chat-1", createdAt: 2_000, updatedAt: 2_000,
+    });
+
+    // Community 2: quiet pod activity (owner NOT in pod -> false for owner; member IN pod -> true for member).
+    const cPod = await createCommunity("rail-pod", ownerId);
+    const podMembershipId = await ctx.db.insert("communityMemberships", {
+      communityId: cPod.communityId, userId: memberId, role: "member", accessSource: "manual_grant",
+      state: "active", activationSequence: 0, createdAt: 1_000, updatedAt: 1_000,
+    });
+    const podChannelId = await ctx.db.insert("communityChannels", {
+      communityId: cPod.communityId, slug: "founders-pod", name: "Founders pod",
+      accessMode: "restricted", postingPolicy: "members", status: "active", position: 1,
+      createdByUserId: ownerId, createdAt: 1_000, updatedAt: 1_000,
+    });
+    await ctx.db.insert("communityPods", {
+      communityId: cPod.communityId, channelId: podChannelId, purpose: "Founders", visibility: "listed",
+      hostUserIds: [], createdAt: 1_000, updatedAt: 1_000,
+    });
+    await ctx.db.insert("communityChannelParticipants", {
+      communityId: cPod.communityId, channelId: podChannelId,
+      principalKey: `user:${String(memberId)}`, membershipId: podMembershipId,
+      membershipActivationSequence: 0, status: "active",
+      createdByUserId: ownerId, createdAt: 1_000, updatedAt: 1_000,
+    });
+    const podRootId = await ctx.db.insert("communityInteractionRoots", {
+      communityId: cPod.communityId, channelId: podChannelId, actorType: "human", actorUserId: outsiderId,
+      kind: "discussion", status: "live", visibilityScope: "community", contentSummary: "Pod note",
+      replyCount: 0, reactionSummary: [], idempotencyKey: "rail-pod-1", createdAt: 2_500, updatedAt: 2_500,
+    });
+
+    // Community 3: all read for member, unread event for owner.
+    const cQuiet = await createCommunity("rail-quiet", ownerId);
+    await ctx.db.insert("communityMemberships", {
+      communityId: cQuiet.communityId, userId: memberId, role: "member", accessSource: "manual_grant",
+      state: "active", createdAt: 1_000, updatedAt: 1_000,
+    });
+
+    // Community 4: private to outsider (neither owner nor member belongs).
+    const cPrivate = await createCommunity("rail-private", outsiderId);
+
+    return { ownerId, memberId, cChat, cPod, podChannelId, podRootId, cQuiet, cPrivate };
+  });
+
+  const asMember = t.withIdentity({ subject: "rail-member" });
+  const asOwner = t.withIdentity({ subject: "rail-owner" });
+
+  // Member gets chat=true for cChat and cPod, false for cQuiet, and cPrivate is omitted (fail closed).
+  const memberRows = await asMember.query(api.communityAttention.listMyCommunityRailAttention, {
+    communityIds: [
+      fixture.cChat.communityId,
+      fixture.cPod.communityId,
+      fixture.cQuiet.communityId,
+      fixture.cPrivate.communityId,
+      fixture.cChat.communityId,
+    ],
+  });
+  expect(memberRows).toEqual([
+    { community_id: String(fixture.cChat.communityId), chat: true, resources: false, events: false, mentions: false },
+    { community_id: String(fixture.cPod.communityId), chat: true, resources: false, events: false, mentions: false },
+    { community_id: String(fixture.cQuiet.communityId), chat: false, resources: false, events: false, mentions: false },
+  ]);
+
+  // Owner posted the message in cChat (own message never lights own dot) and is not in cPod's pod.
+  const ownerRowsBeforeMention = await asOwner.query(api.communityAttention.listMyCommunityRailAttention, {
+    communityIds: [fixture.cChat.communityId, fixture.cPod.communityId, fixture.cPrivate.communityId],
+  });
+  expect(ownerRowsBeforeMention).toEqual([
+    { community_id: String(fixture.cChat.communityId), chat: false, resources: false, events: false, mentions: false },
+    { community_id: String(fixture.cPod.communityId), chat: false, resources: false, events: false, mentions: false },
+  ]);
+
+  // Mentioning owner inside cPod lights owner's rail dot even though owner isn't a pod member.
+  await t.run(async (ctx) => {
+    await ctx.db.insert("communityInteractionMentions", {
+      communityId: fixture.cPod.communityId,
+      channelId: fixture.podChannelId,
+      rootId: fixture.podRootId,
+      mentionKind: "user",
+      mentionedUserId: fixture.ownerId,
+      notifyState: "pending",
+      createdAt: 3_000,
+      updatedAt: 3_000,
+    });
+  });
+  const ownerRowsAfterMention = await asOwner.query(api.communityAttention.listMyCommunityRailAttention, {
+    communityIds: [fixture.cPod.communityId],
+  });
+  expect(ownerRowsAfterMention).toEqual([
+    { community_id: String(fixture.cPod.communityId), chat: false, resources: false, events: false, mentions: true },
+  ]);
+});
