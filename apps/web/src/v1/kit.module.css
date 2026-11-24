@@ -1474,7 +1474,8 @@
 .app .kisdone .ic{width:14px;height:14px}.app .kisdone:hover{background:var(--s2)}
 .app .kpct{height:auto;border-radius:0;background:none;overflow:visible}.app .kpct i{display:none}
 .app .kpct em{padding:0;font-size:12px;font-weight:400;line-height:1.4;color:var(--ink3)}
-.app .mine:not(.re){background:color-mix(in srgb,var(--accent) 26%,var(--panel2))}
+.app .mine:not(.re){background:color-mix(in srgb,var(--accent) 26%,var(--panel2));font-size:14px;line-height:1.5;padding:9px 13px;max-width:min(300px,100%);border-radius:14px 14px 4px 14px}
+.app .bub{font-size:14px;line-height:1.5;padding:9px 13px;max-width:min(300px,100%);border-radius:14px 14px 14px 4px}
 .app:is(.light:not(.on-mode-dark),.on-mode-light) .mine:not(.re){background:color-mix(in srgb,var(--accent) 14%,#fff);color:var(--ink)}
 .app .re.readd{padding:0 6px;color:var(--ink3);cursor:pointer}.app .re.readd:hover{color:var(--ink)}
 .app .rx :global(.community-interaction-emoji-popover){right:auto;left:0}

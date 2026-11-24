@@ -365,9 +365,9 @@ export function Ask(props: { placeholder: string; value?: string; onChange?: (va
 
 // ---------- the right column ----------
 
-export function Rail(props: { index: number | "T"; hostOnly?: boolean; memberOnly?: boolean; label: string; children: ReactNode }) {
+export function Rail(props: { index: number | "T"; hostOnly?: boolean; memberOnly?: boolean; label: string; className?: string; children: ReactNode }) {
   return (
-    <aside className={cx("rail", `r${props.index}`, props.hostOnly && "h-only", props.memberOnly && "m-only")} aria-label={props.label}>
+    <aside className={[cx("rail", `r${props.index}`, props.hostOnly && "h-only", props.memberOnly && "m-only"), props.className].filter(Boolean).join(" ")} aria-label={props.label}>
       {props.children}
     </aside>
   );

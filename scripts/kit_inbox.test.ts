@@ -7,6 +7,7 @@ if (web.resolve("react") !== root.resolve("react")) vi.doMock(web.resolve("react
 (globalThis as any).document ??= { documentElement: { dataset: { design: "v1" } } };
 const { renderToStaticMarkup } = await import("react-dom/server");
 const { WebDirectMessageInboxPanel, inboxLeadFor, inboxTimeFor } = await import("../apps/web/src/components/WebDirectMessageInboxPanel");
+const { WebDirectMessagePanel } = await import("../apps/web/src/components/WebDirectMessagePanel");
 
 const has = (html: string, ...names: string[]) =>
   new RegExp(`class="${names.map((name) => `_${name}_[^ "]*`).join(" ")}"`).test(html);
@@ -75,4 +76,51 @@ test("a row says where a conversation began only when that is somewhere else", (
   expect(html).not.toContain("Direct message");
   expect(html).toContain("<b>Jon</b><time>");
   expect(html).toContain("<b>Ray</b><span>Distribution Engineer</span>");
+});
+
+test("Inbox header renders the message notifications toggle when available", () => {
+  const html = renderToStaticMarkup(React.createElement(WebDirectMessageInboxPanel, {
+    conversations: [], isLoading: false, error: null, searchValue: "", people: [], isLoadingPeople: false, peopleError: null,
+    sourceCommunityCount: 1, canBrowsePeople: true, sessionUserId: "me",
+    notificationsState: "on", onToggleNotifications: () => {},
+    getInitials: (value: string) => value.slice(0, 1), getAvatarColor: () => "#555",
+    onSearchValueChange: () => {}, onSelectConversation: () => {}, onSelectPerson: () => {},
+    kitPage: { activeCommunityId: "polynet" },
+  } as any));
+  expect(html).toContain('aria-label="Turn off message notifications"');
+  expect(html).toContain('aria-pressed="true"');
+});
+
+test("WebDirectMessagePanel uses the unified Kit conversation view on phones with presence dot, via AI badge, and visible back button", () => {
+  const conv = conversation("a", "Jon", false, { id: "polynet", name: "Polynet" });
+  const nowIso = new Date().toISOString();
+  const html = renderToStaticMarkup(React.createElement(WebDirectMessagePanel, {
+    besideInbox: false,
+    conversation: conv,
+    messages: [
+      {
+        id: "m1", conversation_id: "a", seq: 1, sender_type: "user", sender_user_id: "u-a",
+        content_json: { text: "Hey there!\nSecond line" }, via_ai: true, created_at: nowIso, updated_at: nowIso,
+      },
+      {
+        id: "m2", conversation_id: "a", seq: 2, sender_type: "user", sender_user_id: "me",
+        content_json: { text: "Hello back!" }, via_ai: false, created_at: nowIso, updated_at: nowIso,
+      },
+    ],
+    input: "", isLoading: false, isSending: false, error: null, attachments: [],
+    typingPresence: { users: [], total_count: 0 },
+    peerLastActiveAt: nowIso,
+    sessionUserId: "me",
+    getInitials: (value: string) => value.slice(0, 1), getAvatarColor: () => "#555",
+    renderTextWithLinks: (text: string) => text,
+    onInputChange: () => {}, onSend: () => {}, onBackToInbox: () => {},
+  } as any));
+  expect(html).toContain("community-dm-panel is-kit");
+  expect(html).toContain('aria-label="Back to Inbox"');
+  expect(html).not.toContain("is-layered-only");
+  expect(html).toContain("community-dm-inbox-presence-dot is-active-now");
+  expect(html).toContain("Active now · Polynet");
+  expect(html).toContain("via AI");
+  expect(html).toContain('<div class="community-dm-panel-message-text">Hey there!\nSecond line</div>');
+  expect(html).toContain('<div class="community-dm-panel-message-text">Hello back!</div>');
 });
