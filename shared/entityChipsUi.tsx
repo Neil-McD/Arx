@@ -41,6 +41,13 @@ export function EntityNamesProvider(props: {
   return <EntityIndexContext.Provider value={value}>{props.children}</EntityIndexContext.Provider>;
 }
 
+// The same, for an index already in hand (tests, the design lab).
+export function EntityIndexProvider(props: { index: ReadonlyMap<string, EntityTarget>; navigate: (path: string) => void; children: ReactNode }) {
+  const { index, navigate } = props;
+  const value = useMemo<EntityIndexValue | null>(() => (index.size ? { index, navigate } : null), [index, navigate]);
+  return <EntityIndexContext.Provider value={value}>{props.children}</EntityIndexContext.Provider>;
+}
+
 // Wraps text the guide wrote. Only there do bold names become chips.
 export function GuideVoice(props: { children: ReactNode }) {
   return <GuideVoiceContext.Provider value>{props.children}</GuideVoiceContext.Provider>;

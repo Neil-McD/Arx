@@ -10,6 +10,8 @@ import type { PlaceBriefView } from "../../../../shared/cloudCommunityBriefsGate
 import { resolveAuthSubject, type AuthSessionLike } from "../../../../shared/authSession";
 import { useLiveQuery } from "../../../../shared/liveQuery";
 import { cx, Icon } from "./kit";
+import { GuideVoice } from "../../../../shared/entityChipsUi";
+import { renderChatInlineMarkdown } from "../../../../shared/chatInlineMarkdownUi";
 
 // The place's brief, live (shared/liveQuery.ts): it stays on screen across
 // pages and updates when the guide writes a new one. null: nothing to show;
@@ -25,6 +27,13 @@ export function usePlaceBriefRead(session: unknown, communityId: string | null, 
   const { data, error } = useLiveQuery<PlaceBriefView>(session, "communityBriefs:getPlaceBrief",
     subject && communityId && enabled ? { authSubject: subject, communityId, ...(podChannelId ? { podChannelId } : {}) } : null);
   return { brief: enabled ? data?.brief ?? null : null, settled: !enabled || data !== undefined || Boolean(error) };
+}
+
+// A brief's words, as the guide wrote them: a name it bolded becomes a chip
+// (shared/entityChipsUi.tsx) when the reader can open that thing; everything
+// else stays plain text, so the brief looks as it always has.
+export function BriefText(props: { summary: string }) {
+  return <GuideVoice>{renderChatInlineMarkdown(props.summary, { renderTextRun: (text) => text })}</GuideVoice>;
 }
 
 export function BriefPart(props: {
@@ -48,7 +57,7 @@ export function BriefPart(props: {
   return (
     <div className={cx("brief")}>
       <span className={cx("gl")}><Icon name="spark" />Your guide{age ? <em>{age}</em> : null}</span>
-      <p ref={text} className={open ? undefined : cx("fold")}>{props.brief.summary}</p>
+      <p ref={text} className={open ? undefined : cx("fold")}><BriefText summary={props.brief.summary} /></p>
       {long || open ? (
         <button type="button" className={cx("brief-more")} aria-expanded={open} onClick={() => setOpen(!open)}>{open ? "Less" : "More"}</button>
       ) : null}
