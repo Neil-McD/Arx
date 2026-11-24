@@ -115,6 +115,7 @@ The folder each lens sees, all drawn from records:
 ```
 /community.md            who the community is, its rules and plans
 /handbook.md             the builder's rules for the guide
+/soul.md                 the community guide's living persona and habits
 /memory.md               the community's short memory (capped), with links
 /memory/<topic>.md       one memory each, with its sources
 /brief.md                what's happening in the community, from the guide
@@ -123,7 +124,8 @@ The folder each lens sees, all drawn from records:
 /events/                 events, who came
 /people/<handle>.md      people facts this lens may see
 /pods/<pod>/             a pod: room, calls, members, memory.md, brief.md
-/me/memory.md            the person's own memory (their lenses only)
+/members/me/soul.md      the person's own living guide soul (their lenses only)
+/members/me/memory.md    the person's structured memory (Facts, Preferences, Commitments; their lenses only)
 /builder/                builder-only views and records
 ```
 
@@ -138,9 +140,12 @@ whatever started it. A run is:
 - **who:** the person it acts for, or none (the worker, the guide speaking as
   the community);
 - **lens:** what is mounted and which operations are allowed;
-- **context:** the guide's identity (`SOUL.md`), the lens's instructions, the
-  scope's `memory.md`, the request, and tool descriptions. Nothing else up
-  front;
+- **context:** the shared community identity (name, character, founder rules),
+  the living Soul (`/soul.md` for the community; `/members/me/soul.md` in
+  private talks with that person, updated transparently via `member.soul.update`
+  and editable or resettable anytime), the lens's instructions, the scope's
+  structured memory (`memory.md`), the request, and tool descriptions. Nothing
+  else up front;
 - **model and budget:** one model (`gpt-6-luna`) until cost says otherwise;
   steps, tokens and time are capped per lens;
 - **funding:** the owner's, through one admission check and one receipt;

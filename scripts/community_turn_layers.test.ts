@@ -12,10 +12,30 @@ test("the Ask and a tag load the same layers through their own readers", async (
     const asked: string[] = [];
     const layers = await loadCommunityTurnLayers({
       contract, communitySlug: "sunrise",
-      read: async (path, layer) => { asked.push(`${layer}:${path}`); return body(layer === "community_card" ? "# Sunrise" : layer === "community_memory" ? "- Refunds: memory/refunds.md" : "## Who runs what"); },
+      read: async (path, layer) => {
+        asked.push(`${layer}:${path}`);
+        if (layer === "community_card") return body("# Sunrise");
+        if (layer === "community_memory") return body("- Refunds: memory/refunds.md");
+        if (layer === "community_soul") return body("Warm and grounded.");
+        return body("## Who runs what");
+      },
     });
-    expect(asked).toEqual(["community_card:/communities/sunrise/community.md", "community_handbook:/communities/sunrise/handbook.md", "community_memory:/communities/sunrise/memory.md"]);
-    expect(layers).toEqual({ podMemoryMd: null, personalMemoryMd: null, communityCardMd: "# Sunrise", communityHandbookMd: "## Who runs what", communityMemoryMd: "- Refunds: memory/refunds.md", cardStatus: "loaded" });
+    expect(asked).toEqual([
+      "community_card:/communities/sunrise/community.md",
+      "community_handbook:/communities/sunrise/handbook.md",
+      "community_memory:/communities/sunrise/memory.md",
+      "community_soul:/communities/sunrise/soul.md",
+    ]);
+    expect(layers).toEqual({
+      podMemoryMd: null,
+      personalMemoryMd: null,
+      personalSoulMd: null,
+      communityCardMd: "# Sunrise",
+      communityHandbookMd: "## Who runs what",
+      communityMemoryMd: "- Refunds: memory/refunds.md",
+      communitySoulMd: "Warm and grounded.",
+      cardStatus: "loaded",
+    });
   }
 });
 
@@ -25,9 +45,27 @@ test("a missing handbook or a failing read is left out, never fatal; no contract
     contract, communitySlug: "sunrise",
     read: async (path) => (path.endsWith("community.md") ? body("# Sunrise") : { status: "error", outputText: "" }),
   });
-  expect(missingHandbook).toEqual({ podMemoryMd: null, personalMemoryMd: null, communityCardMd: "# Sunrise", communityHandbookMd: null, communityMemoryMd: null, cardStatus: "loaded" });
+  expect(missingHandbook).toEqual({
+    podMemoryMd: null,
+    personalMemoryMd: null,
+    personalSoulMd: null,
+    communityCardMd: "# Sunrise",
+    communityHandbookMd: null,
+    communityMemoryMd: null,
+    communitySoulMd: null,
+    cardStatus: "loaded",
+  });
   const throwing = await loadCommunityTurnLayers({ contract, communitySlug: "sunrise", read: async () => { throw new Error("down"); } });
-  expect(throwing).toEqual({ podMemoryMd: null, personalMemoryMd: null, communityCardMd: null, communityHandbookMd: null, communityMemoryMd: null, cardStatus: "error" });
+  expect(throwing).toEqual({
+    podMemoryMd: null,
+    personalMemoryMd: null,
+    personalSoulMd: null,
+    communityCardMd: null,
+    communityHandbookMd: null,
+    communityMemoryMd: null,
+    communitySoulMd: null,
+    cardStatus: "error",
+  });
   expect((await loadCommunityTurnLayers({ contract: null, communitySlug: "sunrise", read: async () => body("x") })).cardStatus).toBe("skipped");
   expect((await loadCommunityTurnLayers({ contract, communitySlug: " ", read: async () => body("x") })).cardStatus).toBe("skipped");
 });

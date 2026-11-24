@@ -35,6 +35,7 @@ import {
   POLYNET_PODS_DIRECTORY_PATH,
 } from "../shared/communitySemanticRepository.ts";
 import { PERSONAL_MEMORY_OPERATION, PERSONAL_MEMORY_PATH } from "../shared/personalMemory.ts";
+import { COMMUNITY_SOUL_PATH, PERSONAL_SOUL_OPERATION, PERSONAL_SOUL_PATH } from "../shared/agentSoul.ts";
 import { lensCalls, lensReads, resolveLens, type Lens, type LensView } from "../shared/lens.ts";
 import { askAt, guideAskFor, handedBackToPerson, operationFor } from "../shared/operationCatalog.ts";
 import { ACTION_TOOLS } from "../shared/actionTools.ts";
@@ -905,7 +906,9 @@ function capabilityDocument(args: {
   const isMarkReadCapability = args.operation === MARK_READ_OPERATION && lensCalls(lens, "mark_read");
   const isPresenceCapability = (args.operation === PRESENCE_HEARTBEAT_OPERATION || args.operation === TYPING_SET_OPERATION) &&
     lensCalls(lens, "presence");
-  const isPersonalMemoryCapability = args.operation === PERSONAL_MEMORY_OPERATION && lensCalls(lens, "personal_memory");
+  const isPersonalMemoryCapability =
+    (args.operation === PERSONAL_MEMORY_OPERATION || args.operation === PERSONAL_SOUL_OPERATION) &&
+    lensCalls(lens, "personal_memory");
   const isMembersCapability = MEMBERS_OPERATIONS.includes(args.operation) && lensCalls(lens, "builder_change");
   const isCommunityCapability = COMMUNITY_OPERATIONS.includes(args.operation) && lensCalls(lens, "builder_change");
   if (!isAdmissionCapability && !isRemovePostsCapability && !isCommunityCapability && !isMembersCapability && !isReactCapability && !isLessonDoneCapability &&
@@ -1201,6 +1204,7 @@ async function executeCanonicalList(args: {
         entries: [
           { path: mountedPath(target.communitySlug, COMMUNITY_MEMBER_SELF_CONTEXT_PATH), kind: "document", type: "member_self_context" },
           { path: mountedPath(target.communitySlug, PERSONAL_MEMORY_PATH), kind: "document", type: "personal_memory" },
+          { path: mountedPath(target.communitySlug, PERSONAL_SOUL_PATH), kind: "document", type: "personal_soul" },
         ],
         searchable: false, writable: false,
       }),
@@ -1831,6 +1835,12 @@ async function executeCanonicalRead(args: {
     return { ok: true, value: { ref: `note:${note.id}`, path, body: `# ${note.title}\n\n${note.bodyMd}`, writable: false } };
   }
 
+  if (target.localPath === COMMUNITY_SOUL_PATH) {
+    const soul = await args.ctx.runQuery((internal as any).communityAgent.readCommunitySoulInternal,
+      { communityId: target.communityId });
+    return { ok: true, value: { path: mountedPath(target.communitySlug, target.localPath), body: soul.body, writable: false } };
+  }
+
   if (target.localPath === PERSONAL_MEMORY_PATH) {
     // What the guide remembers about the member who is reading: theirs only.
     // A community agent's sponsor is not a self identity.
@@ -1840,6 +1850,15 @@ async function executeCanonicalRead(args: {
     const memory = await args.ctx.runQuery((internal as any).memberMemory.readMemberMemoryInternal,
       { communityId: target.communityId, userId: args.userId });
     return { ok: true, value: { path: mountedPath(target.communitySlug, target.localPath), body: memory.body, writable: false } };
+  }
+
+  if (target.localPath === PERSONAL_SOUL_PATH) {
+    if (!reads(args, target, "members_self")) {
+      return canonicalError("semantic_not_found", "Repository path not found or not accessible.");
+    }
+    const soul = await args.ctx.runQuery((internal as any).memberMemory.readMemberSoulInternal,
+      { communityId: target.communityId, userId: args.userId });
+    return { ok: true, value: { path: mountedPath(target.communitySlug, target.localPath), body: soul.body, writable: false } };
   }
 
   if (target.localPath.startsWith(COMMUNITY_MEMBER_SELF_DIRECTORY)) {
@@ -2844,6 +2863,17 @@ async function executeCanonicalCall(args: {
       value.current_entries ? { current_entries: value.current_entries, usage: value.usage } : undefined);
     return { ok: true, value: callAnswer({ operation, principalKind: args.principalKind, target, idempotencyKey,
       result: { changed: value.changed, entries: value.entries, usage: value.usage } }) };
+  }
+  if (operation === PERSONAL_SOUL_OPERATION) {
+    if (target.localPath !== `${POLYNET_CAPABILITIES_DIRECTORY_PATH}${operation}.json` || !args.runId || !idempotencyKey ||
+        idempotencyKey.length > 200 || typeof rawInput.soul !== "string" ||
+        Object.keys(rawInput).some(key => key !== "soul" && key !== "reason"))
+      return canonicalError("invalid_tool_args", "Give an idempotencyKey and input: { soul, reason? }, from the member's private talk.");
+    const value = await args.ctx.runMutation((internal as any).memberMemory.updateMemberSoulInternal,
+      { communityId: target.communityId, userId: args.userId, runId: args.runId, operationKey: idempotencyKey, soulMd: rawInput.soul, nowMs: Date.now() });
+    if (!value.ok) return canonicalError(value.code, value.message);
+    return { ok: true, value: callAnswer({ operation, principalKind: args.principalKind, target, idempotencyKey,
+      result: { changed: value.changed, soul: value.soul, usage: value.usage } }) };
   }
   if (operation === LESSON_DONE_OPERATION) {
     if (target.localPath !== `${POLYNET_CAPABILITIES_DIRECTORY_PATH}${operation}.json` || typeof rawInput.ref !== "string" ||

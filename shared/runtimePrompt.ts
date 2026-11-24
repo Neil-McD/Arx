@@ -4,6 +4,7 @@
 // role may do, how it speaks, a skill when one is loaded), then the
 // community's own material, then this person, then this moment.
 import { personalMemoryInstructions } from "./personalMemory.ts";
+import { buildCommunitySoulPromptBlock, buildPersonalSoulPromptBlock } from "./agentSoul.ts";
 import { type RetrievalToolName } from "./retrievalTools.ts";
 import {
   renderRuntimeTurnContextForPrompt,
@@ -122,7 +123,9 @@ export type RuntimePlatformHarnessPromptParams =
     communityAgentSurfaceContext?: CommunityAgentSurfaceContextV1 | null;
     memberIdentityContextMd?: string | null;
     communityMemoryMd?: string | null;
+    communitySoulMd?: string | null;
     personalMemoryMd?: string | null;
+    personalSoulMd?: string | null;
     communityCardMd?: string | null;
     communityHandbookMd?: string | null;
   };
@@ -589,6 +592,16 @@ export function buildPlatformHarnessRuntimePromptBundle(
       text: communityId ? buildCommunitySystemPromptBlock(params.communitySystemPrompt) : null,
     }),
     buildRuntimePromptSection({
+      id: "community_soul",
+      layer: "scoped",
+      slot: "context",
+      owner: "community",
+      authority: "community_policy",
+      source: "convex/communityAgent.ts#communitySoulMd",
+      reason: "soul.md: the community guide's living shared voice and habits",
+      text: communityId && params.communitySoulMd ? buildCommunitySoulPromptBlock(params.communitySoulMd) : null,
+    }),
+    buildRuntimePromptSection({
       id: "community_memory",
       layer: "scoped",
       slot: "context",
@@ -606,11 +619,21 @@ export function buildPlatformHarnessRuntimePromptBundle(
       authority: "evidence",
       source: "convex/memberMemory.ts#memberMemories",
       reason: "members/me/memory.md: what the guide remembers about this member from their private talks, and how to keep it",
-      text: params.personalMemoryMd !== undefined ? buildPersonalMemoryPromptBlock(params.personalMemoryMd, params.communitySlug) : null,
+      text: communityId && params.personalMemoryMd !== undefined ? buildPersonalMemoryPromptBlock(params.personalMemoryMd, params.communitySlug) : null,
     }),
   ];
   // This person's and this message's: after the conversation.
   const turnBlocks = [
+    buildRuntimePromptSection({
+      id: "personal_soul",
+      layer: "scoped",
+      slot: "context",
+      owner: "user",
+      authority: "community_policy",
+      source: "convex/memberMemory.ts#memberMemories.soulMd",
+      reason: "members/me/soul.md: the guide's evolving persona and habits with this person here",
+      text: communityId && params.personalSoulMd !== undefined ? buildPersonalSoulPromptBlock(params.personalSoulMd) : null,
+    }),
     buildRuntimePromptSection({
       id: "member_identity_context",
       layer: "scoped",

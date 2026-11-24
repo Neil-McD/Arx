@@ -25,7 +25,7 @@ const REVIEW_MAX_OUTPUT_TOKENS = 4_000;
 // Each item says what happened, so a refused one can be fixed.
 // A rewrite replaces a note whole, so only notes the guide was shown whole
 // can be rewritten.
-async function applyMemory(ctx: any, communityId: any, runId: any, rewritable: Set<string>, apply: { notes: Array<{ title: string; body: string; evidenceRefs: string[]; supersedes?: string; about?: string }>; filings: Array<{ slug: string; about: string }>; index: string | null }) {
+async function applyMemory(ctx: any, communityId: any, runId: any, rewritable: Set<string>, apply: { notes: Array<{ title: string; body: string; evidenceRefs: string[]; supersedes?: string; about?: string }>; filings: Array<{ slug: string; about: string }>; index: string | null; soulUpdate?: string | null }, isPod: boolean) {
   const results: Array<Record<string, unknown>> = [];
   for (const note of apply.notes) {
     if (note.supersedes && !rewritable.has(note.supersedes)) {
@@ -52,6 +52,12 @@ async function applyMemory(ctx: any, communityId: any, runId: any, rewritable: S
       communityId, runId, bodyMd: apply.index, nowMs: Date.now(),
     });
     results.push(answer?.ok ? { index: "written" } : { index: "refused", refused: String(answer?.code), why: MEMORY_REFUSAL_WORDS[String(answer?.code)] ?? "Refused." });
+  }
+  if (!isPod && apply.soulUpdate) {
+    const answer = await ctx.runMutation(internalRefs.communityAgent.updateCommunitySoulFromReviewInternal, {
+      communityId, soulMd: apply.soulUpdate, nowMs: Date.now(),
+    });
+    results.push(answer?.ok ? { soul: "updated" } : { soul: "refused", refused: String(answer?.code ?? "refused"), why: String(answer?.message ?? "Refused.") });
   }
   return results;
 }
@@ -82,7 +88,7 @@ export const runMemoryReviewInternal = internalAction({
           if ("error" in apply) {
             return { ok: false, code: apply.error, message: `Write with polynet_call { operation: "${MEMORY_APPLY_OPERATION}", input: { notes, file, index, summary } }.` };
           }
-          const results = await applyMemory(ctx, claim.communityId, runId, new Set<string>(input.rewritable), apply);
+          const results = await applyMemory(ctx, claim.communityId, runId, new Set<string>(input.rewritable), apply, Boolean(claim.pod));
           // Anything refused gets one more turn to fix it; otherwise the write is the whole answer.
           const ended = results.some((result) => "refused" in result) ? null
             : apply.summary ?? (results.length ? "Updated the memory from what was said." : "Nothing new worth keeping.");

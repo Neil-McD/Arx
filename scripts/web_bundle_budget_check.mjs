@@ -18,7 +18,7 @@ const limits = {
 // settings, a pod's settings window, event authoring, and community branding
 // crop modals). Members never fetch them, so they have their own budget and the
 // total stays what a member can download. (From Rashid's PR #290.)
-const HOST_ONLY_CHUNK = /^(LessonEditor|KitMembersPage|KitGuideSuggests|WebCommunityAnalyticsSection|CommunityFounderBriefSection|CommunityMemberCoachSettingsSection|communityMemberCoachTypes|KitPodSettings|KitEventForm|WebCommunityAvatarEditorModal|WebCommunityBannerEditorModal)-/;
+const HOST_ONLY_CHUNK = /^(LessonEditor|KitMembersPage|KitGuideSuggests|WebCommunityAnalyticsSection|WebCommunityAiAgentSection|WebCommunityAiRulesEditor|CommunityFounderBriefSection|CommunityMemberCoachSettingsSection|communityMemberCoachTypes|KitPodSettings|KitEventForm|WebCommunityAvatarEditorModal|WebCommunityBannerEditorModal)-/;
 // The design lab: loaded on demand at /design-lab on staging only, never by a
 // member or a host, so it counts toward neither budget; it is listed so it
 // can't grow unseen.

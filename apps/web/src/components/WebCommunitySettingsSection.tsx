@@ -17,18 +17,26 @@ import {
   type CommunitySettingsPane,
 } from "../../../../shared/appShellNavigation";
 import { buildStripeConnectPresentation } from "../controllers/buildStripeConnectPresentation";
-import { WebCommunityAiAgentSection } from "./WebCommunityAiAgentSection";
-import { WebCommunityAiRulesEditor } from "./WebCommunityAiRulesEditor";
+import type { WebCommunityAiAgentSection as WebCommunityAiAgentSectionType } from "./WebCommunityAiAgentSection";
 import { GuideAllowedSettings } from "./GuideAllowedSettings";
 import { platformTabId, platformTabPanelId } from "./WebPlatformChoiceControls";
 import { getMyMemberCoachPreference, setMyMemberCoachPreference } from "../../../../shared/cloudCommunityMemberCoachGateway";
 import type { MemberCoachPreferenceView } from "../../../../shared/communityMemberCoachTypes";
 
+const WebCommunityAiAgentSection = lazy(() =>
+  import("./WebCommunityAiAgentSection").then((m) => ({ default: m.WebCommunityAiAgentSection })),
+);
+const WebCommunityAiRulesEditor = lazy(() =>
+  import("./WebCommunityAiRulesEditor").then((m) => ({ default: m.WebCommunityAiRulesEditor })),
+);
 const CommunityFounderBriefSection = lazy(() =>
   import("./CommunityFounderBriefSection").then((m) => ({ default: m.CommunityFounderBriefSection })),
 );
 const CommunityMemberCoachSettingsSection = lazy(() =>
   import("./CommunityMemberCoachSettingsSection").then((m) => ({ default: m.CommunityMemberCoachSettingsSection })),
+);
+const GuideSoulMemoryCards = lazy(() =>
+  import("./GuideSoulMemoryCards").then((m) => ({ default: m.GuideSoulMemoryCards })),
 );
 
 function MemberCoachPreferenceRow(props: {
@@ -111,7 +119,7 @@ type WebCommunitySettingsSectionProps = {
   onSelectPane: (pane: CommunitySettingsPane, opts?: { replace?: boolean }) => void;
   canManageCommunitySettings: boolean;
   canManageMembersActiveCommunity: boolean;
-  aiAgentProps: ComponentProps<typeof WebCommunityAiAgentSection>;
+  aiAgentProps: ComponentProps<typeof WebCommunityAiAgentSectionType>;
   requireSignIn: () => void;
   accountCommerceStatus: AccountCommerceStatus | null;
   communityPlatformFeeBps: number | null;
@@ -528,6 +536,14 @@ function CommunityMemberSettingsSection({
           ensureSession={ensureSession}
         />
       </SettingsGroup>
+      <Suspense fallback={null}>
+        <GuideSoulMemoryCards
+          mode="personal"
+          communityId={activeCommunity.id}
+          session={session}
+          ensureSession={ensureSession}
+        />
+      </Suspense>
       <GuideAllowedSettings communityId={activeCommunity.id} session={session} />
       <CommunityMyPlanSection communityId={activeCommunity.id} session={session} ensureSession={ensureSession} />
       <SettingsGroup label="Danger zone" tone="danger">
@@ -738,22 +754,42 @@ export function WebCommunitySettingsSection(props: WebCommunitySettingsSectionPr
               </div>
             ) : null}
             {selectedSettingsPane === "agent" ? (
-              <WebCommunityAiAgentSection {...aiAgentProps} embedded />
+              <Suspense fallback={null}>
+                <WebCommunityAiAgentSection {...aiAgentProps} embedded />
+              </Suspense>
             ) : null}
             {/* What the guide does for this person without asking: theirs alone. */}
+            {selectedSettingsPane === "agent" ? (
+              <Suspense fallback={null}>
+                <GuideSoulMemoryCards
+                  mode="personal"
+                  communityId={resolvedActiveCommunity.id}
+                  session={props.session}
+                  ensureSession={props.ensureSession}
+                />
+              </Suspense>
+            ) : null}
             {selectedSettingsPane === "agent" ? (
               <GuideAllowedSettings communityId={resolvedActiveCommunity.id} session={props.session} />
             ) : null}
             {/* House rules for members' own AIs: free or paid, whether or not the guide is on. */}
             {selectedSettingsPane === "agent" ? (
-              <WebCommunityAiRulesEditor
-                communityId={resolvedActiveCommunity.id}
-                session={props.session}
-                ensureSession={props.ensureSession}
-              />
+              <Suspense fallback={null}>
+                <WebCommunityAiRulesEditor
+                  communityId={resolvedActiveCommunity.id}
+                  session={props.session}
+                  ensureSession={props.ensureSession}
+                />
+              </Suspense>
             ) : null}
             {selectedSettingsPane === "agent" && isOwnerSettingsLayer ? (
               <Suspense fallback={null}>
+                <GuideSoulMemoryCards
+                  mode="community"
+                  communityId={resolvedActiveCommunity.id}
+                  session={props.session}
+                  ensureSession={props.ensureSession}
+                />
                 <CommunityFounderBriefSection
                   communityId={resolvedActiveCommunity.id}
                   session={props.session}
