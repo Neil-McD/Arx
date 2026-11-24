@@ -33,6 +33,7 @@ import { KitPodLanding } from "../v1/KitPodLanding";
 import { PanelLine, PanelPart, PanelPeople } from "../v1/KitPanel";
 import { podShown, recallPod, takePodPagePreview } from "../v1/podMemory";
 import { podRhythmText } from "../v1/KitPodCall";
+import { askToOpenPodSettings } from "../v1/podSettingsTabs";
 import { KitBrainMap } from "../v1/KitBrainMap";
 import { brainCanDrawMap, type BrainMap } from "../../../../shared/communityBrain";
 import { StableFramedMedia } from "../../../../shared/StableFramedMedia";
@@ -435,6 +436,8 @@ function PodsList(props: WebCommunityPodsSectionProps) {
       }
       setCreating(false);
       setDraft({ name: "", purpose: "", listed: true, seats: "" });
+      // Straight on to the rest of its setup: what you get, About, cover, price.
+      askToOpenPodSettings(room.slug, "pitch");
       props.onNavigate({ kind: "room", slug: room.slug });
     } catch {
       setError("The pod couldn't be created. Try again.");
@@ -523,7 +526,8 @@ function PodsList(props: WebCommunityPodsSectionProps) {
           {pods.length || canManage ? (
             <div className={cx("podgrid")}>
               {pods.map((pod) => (
-                <button key={pod.channel_id} type="button" className={cx(selected === pod.slug ? "podcard podsel" : "podcard")} aria-current={selected === pod.slug ? "true" : undefined}
+                <div key={pod.channel_id} className={cx("podcard-wrap")}>
+                <button type="button" className={cx(selected === pod.slug ? "podcard podsel" : "podcard")} aria-current={selected === pod.slug ? "true" : undefined}
                   onClick={() => pick(pod)} onDoubleClick={() => props.onNavigate({ kind: "room", slug: pod.slug })}>
                   <span className={cx("podname")}><Icon name="users" />{pod.name}<PodDot attention={props.roomAttention?.[pod.slug]} /></span>
                   <span className={cx("podpurpose")}>{pod.purpose || (pod.can_manage ? "Add what this pod is for." : "")}</span>
@@ -532,6 +536,12 @@ function PodsList(props: WebCommunityPodsSectionProps) {
                     {[canManage ? (pod.visibility === "listed" ? "Listed" : "Hidden") : null, canManage && pod.price ? formatPodPrice(pod.price) : null, seatsLabel(pod), activeLabel(pod.last_active_at, now)].filter(Boolean).join(" · ")}
                   </span>
                 </button>
+                {/* The pod's hosts and the builder: its settings, without going in first. */}
+                {pod.can_manage ? (
+                  <button type="button" className={cx("la podcard-set")} aria-label={`${pod.name} settings`}
+                    onClick={() => { askToOpenPodSettings(pod.slug, "pitch"); props.onNavigate({ kind: "room", slug: pod.slug }); }}>Settings</button>
+                ) : null}
+                </div>
               ))}
               {canManage && !creating ? (
                 <button type="button" className={cx("podcard podnew")} onClick={() => setCreating(true)}><Icon name="plus" />New pod</button>

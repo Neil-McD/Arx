@@ -922,6 +922,11 @@
 /* The pod editor's cover: a small preview beside its buttons. */
 .app .podform-cover{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
 .app .podform-cover img{width:96px;aspect-ratio:16/7;object-fit:cover;border-radius:6px}
+/* A pod card with its Settings action in the top right corner. */
+.app .podcard-wrap{position:relative;display:flex;flex-direction:column;min-width:0}
+.app .podcard-wrap>.podcard{flex:1;width:100%}
+.app .podcard-wrap>.podcard-set{position:absolute;top:12px;right:12px}
+.app .podcard-wrap:has(>.podcard-set)>.podcard .podname{padding-right:60px}
 /* A pod's settings: one window over the whole app (the palette's veil). */
 .app.part.podsettings-part{position:fixed;inset:0;z-index:1000;width:auto;height:auto;display:block;overflow:visible;pointer-events:none}
 .app.podsettings-part .veil{display:flex;align-items:flex-start;justify-content:center;position:fixed;pointer-events:auto;padding:min(72px,8vh) 16px 24px;overflow-y:auto}

@@ -13,3 +13,11 @@ test("the open tab comes from the address, and only a real tab opens", () => {
   expect(podSettingsTabFrom("?settings=billing")).toBeNull();
   expect(podSettingsTabFrom("")).toBeNull();
 });
+
+test("an ask to open a pod's settings is for that pod only, and is taken once", async () => {
+  const { askToOpenPodSettings, takePodSettingsAsk } = await import("../apps/web/src/v1/podSettingsTabs");
+  askToOpenPodSettings("founders", "pitch");
+  expect(takePodSettingsAsk("setters")).toBeNull();
+  expect(takePodSettingsAsk("founders")).toBe("pitch");
+  expect(takePodSettingsAsk("founders")).toBeNull();
+});

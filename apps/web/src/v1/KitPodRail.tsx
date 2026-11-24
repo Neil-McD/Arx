@@ -28,7 +28,7 @@ import { PanelAction, PanelLine, PanelPart, PanelPeople, usePanelSettled } from 
 import { askForPodPagePreview, forgetPod, goToPodsPath, rememberPod } from "./podMemory";
 // Only the pod's hosts and the builder open its settings: loaded on demand.
 const KitPodSettings = lazy(() => import("./KitPodSettings").then((module) => ({ default: module.KitPodSettings })));
-import { podSettingsTabsFor, usePodSettingsTab } from "./podSettingsTabs";
+import { podSettingsTabsFor, takePodSettingsAsk, usePodSettingsTab } from "./podSettingsTabs";
 
 
 function memberTag(payment: NonNullable<CloudPodDetail["members"][number]["payment"]>): string {
@@ -61,6 +61,11 @@ export function KitPodRail(props: { session: unknown; communityId: string; pod: 
   useEffect(() => {
     if (asMember) { setActionError(null); if (settings.tab) settings.close(); }
   }, [asMember]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Asked for on the way in (a pod card's Settings, or a pod just made).
+  useEffect(() => {
+    const asked = pod.slug ? takePodSettingsAsk(pod.slug) : null;
+    if (asked && settingsTabs.includes(asked)) settings.open(asked);
+  }, [pod.slug]); // eslint-disable-line react-hooks/exhaustive-deps
   // Your membership (paying, leaving, payment problem) starts open when a
   // payment needs attention, and toggles from the foot for enrolled members.
   const [membershipOpen, setMembershipOpen] = useState(() => pod.my_membership?.state === "payment_problem");
