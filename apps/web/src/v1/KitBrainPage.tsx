@@ -14,6 +14,9 @@ import { getCloudCommunityHomeSnapshot } from "../../../../shared/cloudCommunity
 import type { CommunityResource, CommunityResourceModule } from "../components/communityResourcesContracts";
 import { WebCommunityResourceViewerContent } from "../components/WebCommunityResourceViewerContent";
 import { KitNextEvent } from "./KitNextEvent";
+import { CommunityAvatar } from "../../../../shared/CommunityAvatar";
+import { StableFramedMedia } from "../../../../shared/StableFramedMedia";
+import { useCommunityVisualIdentity } from "../../../../shared/CommunityVisualIdentityRegistry";
 import { BRAIN_CENTER_ID } from "./KitBrainMap";
 import { brainCourseAction, brainLessonOf, clipWords } from "./brainPanels";
 import { Btn, cx, KitApp, useMinWidth } from "./kit";
@@ -100,8 +103,8 @@ function PickedDetail(props: { map: BrainMap; id: string; session: unknown; comm
         {total ? (
           <PanelPart label="Lessons" fact={String(total)}>
             {pickedCourse.lessons.map((entry) => (
-              <PanelLine key={entry.id} fact={entry.done ? "✓" : null} action={<PanelAction label={`Show ${entry.title}`} onClick={() => props.onPick(entry.id)}>Show</PanelAction>}>
-                {`${entry.order}. ${entry.title}`}
+              <PanelLine key={entry.id} action={<PanelAction label={`Show ${entry.title}`} onClick={() => props.onPick(entry.id)}>Show</PanelAction>}>
+                <span className="brain-tick" aria-label={entry.done ? "Done" : undefined}>{entry.done ? "✓" : ""}</span>{`${entry.order}. ${entry.title}`}
               </PanelLine>
             ))}
           </PanelPart>
@@ -229,6 +232,8 @@ function CommunityDetail(props: { map: BrainMap; session: unknown; communityId: 
   }, [props.session, props.communityId, props.canManage]);
   const { map } = props;
   const words = props.content?.community;
+  // The community's own banner and logo, as the rest of the app shows them.
+  const identity = useCommunityVisualIdentity(props.communityId);
   const facts: Array<[string, string]> = [
     ["Courses", String(map.counts.courses)],
     ["Lessons", String(map.counts.lessons)],
@@ -237,6 +242,11 @@ function CommunityDetail(props: { map: BrainMap; session: unknown; communityId: 
   ];
   return (
     <div className={cx("land")}>
+      <div className="brain-card-top">
+        <StableFramedMedia className="brain-card-banner" imageClassName="brain-card-banner-img" imageUrl={identity?.banner.url ?? null}
+          frame={identity ? { focusX: identity.banner.focus_x, focusY: identity.banner.focus_y, zoom: identity.banner.zoom } : undefined} alt="" aria-hidden />
+        <CommunityAvatar communityId={props.communityId} name={map.center.name} className="brain-card-logo" aria-hidden />
+      </div>
       <header>
         <span className={cx("lab")}>The community</span>
         <h2>{map.center.name}</h2>
