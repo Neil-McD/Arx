@@ -4,10 +4,10 @@ import { expect, test } from "vitest";
 // Fixes from the first member feedback on design v1 in production (Nov 17).
 const read = (path: string) => readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
 
-test("a pasted screenshot is attached in a direct message, in both message boxes", () => {
+test("a pasted screenshot is attached in a direct message composer", () => {
   const panel = read("apps/web/src/components/WebDirectMessagePanel.tsx");
   expect(panel).toMatch(/const onAttachmentPaste = [\s\S]*?event\.clipboardData\?\.files;[\s\S]*?if \(!canAcceptAttachmentDrop \|\| !files \|\| files\.length === 0\) return;[\s\S]*?props\.onAttachmentFilesSelected\?\.\(files\);/);
-  expect(panel.match(/onPaste=\{onAttachmentPaste\}/g)).toHaveLength(2);
+  expect(panel.match(/onPaste=\{onAttachmentPaste\}/g)).toHaveLength(1);
 });
 
 test("Home's review button opens the people waiting, not the Members page", () => {

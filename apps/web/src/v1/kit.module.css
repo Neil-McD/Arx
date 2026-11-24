@@ -593,7 +593,8 @@
 .app .kback{display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 8px 0 6px;margin-left:-6px;border-radius:6px;color:var(--ink2);font-size:13px}
 .app .kback .ic{width:14px;height:14px}
 .app .kback:hover{background:var(--s2);color:var(--ink)}
-.app .mine{font-size:14px;border-radius:10px 10px 4px 10px}
+.app .mine{font-size:14px;line-height:1.5;padding:9px 13px;max-width:min(300px,100%);border-radius:14px 14px 4px 14px}
+.app .bub{font-size:14px;line-height:1.5;padding:9px 13px;max-width:min(300px,100%);border-radius:14px 14px 14px 4px}
 
 
 .app .dock{padding-bottom:18px}

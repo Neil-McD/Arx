@@ -225,8 +225,30 @@ try {
   assert((await imageGrid.boundingBox()).width > 168, "Sent image group uses message width");
   assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), "DM does not overflow at 320");
   const dmFrames = await page.locator(".deferred-youtube:not(.is-too-narrow)").evaluateAll((els) => els.map((el) => ({ width: el.clientWidth, height: el.clientHeight })));
-  assert(dmFrames.every((r) => r.width >= 200 && r.height >= 200), "Narrow DM preserves YouTube minimum size");
-  assert(await page.locator(".deferred-youtube.is-too-narrow a").count() > 0, "Too-narrow DM offers native YouTube link");
+  assert(dmFrames.length > 0 && dmFrames.every((r) => r.width >= 200 && r.height >= 200), "Narrow DM preserves YouTube minimum size");
+  const dmBubbleTypography = await page.evaluate(() => {
+    const theirs = document.querySelector(".community-dm-panel-message:not(.is-own) [class*='_bub_']");
+    const mine = document.querySelector(".community-dm-panel-message.is-own [class*='_mine_']");
+    if (!theirs || !mine) return null;
+    const t = getComputedStyle(theirs);
+    const m = getComputedStyle(mine);
+    return {
+      theirsSize: t.fontSize,
+      mineSize: m.fontSize,
+      theirsLineHeight: t.lineHeight,
+      mineLineHeight: m.lineHeight,
+      theirsTopRadius: t.borderTopLeftRadius,
+      mineTopRadius: m.borderTopLeftRadius,
+    };
+  });
+  assert(dmBubbleTypography, "Both DM message sides rendered");
+  assert.equal(dmBubbleTypography.theirsSize, "14px", "Incoming DM bubble body is 14px");
+  assert.equal(dmBubbleTypography.mineSize, "14px", "Outgoing DM bubble body is 14px");
+  assert.equal(dmBubbleTypography.theirsLineHeight, dmBubbleTypography.mineLineHeight, "Incoming and outgoing DM bubbles share line-height");
+  assert.equal(dmBubbleTypography.theirsTopRadius, dmBubbleTypography.mineTopRadius, "Incoming and outgoing DM bubbles share corner radius");
+  await page.setViewportSize({ width: 220, height: 900 });
+  await page.locator(".deferred-youtube.is-too-narrow a").first().waitFor({ timeout: 3000 });
+  await page.setViewportSize({ width: 320, height: 900 });
   const panelBox = await page.locator(".community-dm-panel").boundingBox();
   assert(panelBox.x >= 0 && panelBox.x + panelBox.width <= 320, "Real mobile DM host fits screen");
   const gridBox = await imageGrid.boundingBox();
