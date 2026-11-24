@@ -44,3 +44,17 @@ export function usePodSettingsTab(): { tab: PodSettingsTab | null; open: (tab: P
     close: () => go(null, false),
   };
 }
+
+// Asked for from outside the pod (a pod card's Settings, or a pod just made):
+// the pod's right column opens its settings on arrival. One ask at a time,
+// for one pod, taken once.
+let pendingAsk: { slug: string; tab: PodSettingsTab } | null = null;
+export function askToOpenPodSettings(slug: string, tab: PodSettingsTab): void {
+  pendingAsk = { slug, tab };
+}
+export function takePodSettingsAsk(slug: string): PodSettingsTab | null {
+  if (!pendingAsk || pendingAsk.slug !== slug) return null;
+  const { tab } = pendingAsk;
+  pendingAsk = null;
+  return tab;
+}
