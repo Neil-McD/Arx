@@ -7,6 +7,14 @@ import {
   resilientImport,
   shouldIdlePrefetch,
 } from "../apps/web/src/lib/resilientLazy";
+import {
+  attemptModuleLoadRecovery,
+  canAttemptModuleReload,
+  checkForAppUpdate,
+  configureAppUpdateRecovery,
+  isAppUpdateAvailable,
+  resetAppUpdateRecoveryForTests,
+} from "../apps/web/src/lib/appUpdateRecovery";
 
 const web = createRequire(new URL("../apps/web/package.json", import.meta.url));
 const root = createRequire(import.meta.url);
@@ -136,5 +144,118 @@ describe("resilient tab switching & lazy module recovery", () => {
     const html = renderToStaticMarkup(boundary.render() as React.ReactElement);
     expect(html).toContain("A newer version of Polynet is ready");
     expect(html).toContain("Refresh");
+  });
+
+  it("quietly checks /version.json with throttling, flags updates, and skips redundant retries when an update is known", async () => {
+    resetAppUpdateRecoveryForTests();
+    configureAppUpdateRecovery({ buildId: "build-old", baseUrl: "/", isProduction: true });
+
+    let fetchCount = 0;
+    const sameBuildFetch = (async () => {
+      fetchCount += 1;
+      return { ok: true, json: async () => ({ buildId: "build-old" }) } as Response;
+    }) as typeof fetch;
+
+    expect(await checkForAppUpdate({ now: 1_000, fetchImpl: sameBuildFetch })).toBe(false);
+    expect(fetchCount).toBe(1);
+    expect(isAppUpdateAvailable()).toBe(false);
+
+    // Within throttle window: skips duplicate probe.
+    expect(await checkForAppUpdate({ now: 30_000, fetchImpl: sameBuildFetch })).toBe(false);
+    expect(fetchCount).toBe(1);
+
+    // After throttle window with a newer buildId live: flags updateAvailable.
+    const newerBuildFetch = (async () => {
+      fetchCount += 1;
+      return { ok: true, json: async () => ({ buildId: "build-new" }) } as Response;
+    }) as typeof fetch;
+    expect(await checkForAppUpdate({ now: 200_000, fetchImpl: newerBuildFetch })).toBe(true);
+    expect(fetchCount).toBe(2);
+    expect(isAppUpdateAvailable()).toBe(true);
+
+    // Once updateAvailable is known, resilientImport fails immediately without wasting retry sleep.
+    let calls = 0;
+    let slept = 0;
+    await expect(
+      resilientImport(
+        async () => {
+          calls += 1;
+          throw new TypeError("Failed to fetch dynamically imported module: /assets/Pods-old.js");
+        },
+        {
+          retries: 1,
+          sleep: async () => {
+            slept += 1;
+          },
+          skipRetryWhen: isAppUpdateAvailable,
+        },
+      ),
+    ).rejects.toThrow("Failed to fetch dynamically imported module");
+    expect(calls).toBe(1);
+    expect(slept).toBe(0);
+    resetAppUpdateRecoveryForTests();
+  });
+
+  it("silently reloads once on chunk-load errors without flashing an error alert, then guards against reload loops", async () => {
+    resetAppUpdateRecoveryForTests();
+    const store = new Map<string, string>();
+    const reloads: number[] = [];
+    const prevWindow = (globalThis as Record<string, unknown>).window;
+    (globalThis as Record<string, unknown>).window = {
+      location: { origin: "https://www.polynet.ai", pathname: "/c/polynet/knowledge", search: "", reload: () => reloads.push(1) },
+      sessionStorage: {
+        getItem: (key: string) => store.get(key) ?? null,
+        setItem: (key: string, value: string) => store.set(key, value),
+        removeItem: (key: string) => store.delete(key),
+      },
+      setTimeout: (fn: () => void) => {
+        fn();
+        return 1;
+      },
+    };
+    try {
+      configureAppUpdateRecovery({ buildId: "build-old", baseUrl: "/", isProduction: true });
+      expect(canAttemptModuleReload()).toBe(true);
+
+      // First chunk-load error inside SurfaceErrorBoundary: stays calm (aria-busy) with no error alert flash.
+      const boundary = new SurfaceErrorBoundary({
+        resetKey: "knowledge",
+        children: React.createElement("div", null, "Knowledge"),
+      });
+      const derived = SurfaceErrorBoundary.getDerivedStateFromError(
+        new TypeError("Failed to fetch dynamically imported module: /assets/Knowledge-old.js"),
+      );
+      boundary.state = { ...boundary.state, ...derived };
+      expect(boundary.state.isAutoReloading).toBe(true);
+      const quietHtml = renderToStaticMarkup(boundary.render() as React.ReactElement);
+      expect(quietHtml).toContain('aria-busy="true"');
+      expect(quietHtml).not.toContain('role="alert"');
+
+      // Guarded reload triggers once and records session marker.
+      const started = attemptModuleLoadRecovery(
+        new TypeError("Failed to fetch dynamically imported module: /assets/Knowledge-old.js"),
+        { reloadImpl: () => reloads.push(1) },
+      );
+      expect(started).toBe(true);
+      await Promise.resolve();
+      expect(store.size).toBe(1);
+
+      // Fresh page load on the same build within 30s suppresses a second auto-reload and shows fallback UI.
+      resetAppUpdateRecoveryForTests();
+      configureAppUpdateRecovery({ buildId: "build-old", baseUrl: "/", isProduction: true });
+      expect(canAttemptModuleReload()).toBe(false);
+      const secondDerived = SurfaceErrorBoundary.getDerivedStateFromError(
+        new TypeError("Failed to fetch dynamically imported module: /assets/Knowledge-old.js"),
+      );
+      boundary.state = { ...boundary.state, ...secondDerived };
+      expect(boundary.state.isAutoReloading).toBe(false);
+      const fallbackHtml = renderToStaticMarkup(boundary.render() as React.ReactElement);
+      expect(fallbackHtml).toContain("A newer version of Polynet is ready");
+      expect(fallbackHtml).toContain("Refresh");
+    } finally {
+      if (prevWindow === undefined) delete (globalThis as Record<string, unknown>).window;
+      else (globalThis as Record<string, unknown>).window = prevWindow;
+      resetAppUpdateRecoveryForTests();
+    }
   });
 });
