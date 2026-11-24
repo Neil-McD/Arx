@@ -5,6 +5,7 @@
 // (convex/communityMemberProfiles.ts, convex/communityMemberRecords.ts).
 import { ExternalLink, Lock, MessageCircle } from "lucide-react";
 import { Fragment, useContext, useEffect, useState, type ReactNode } from "react";
+import { CommunityAvatar } from "../../../../shared/CommunityAvatar";
 import { memberRoleTag } from "../../../../shared/communityMemberWords";
 import { goToMembersPage } from "../../../../shared/routeDetails";
 import { SOCIAL_PROFILE_KINDS, type SocialProfileKind } from "../../../../shared/socialProfileLinks";
@@ -54,7 +55,17 @@ function Communities(props: { rows: CloudMemberProfileCommunity[]; note: string 
     <>
       {props.rows.map((row) => (
         <div key={`${props.note}:${row.id}`} className={cx("pfc")}>
-          <span className={cx("pfc-i")}>{row.avatar_url ? <img src={row.avatar_url} alt="" /> : row.name.slice(0, 1).toUpperCase()}</span>
+          <CommunityAvatar
+            className={cx("pfc-i")}
+            communityId={row.id}
+            name={row.name}
+            imageUrl={row.avatar_url}
+            focusX={row.avatar_focus_x}
+            focusY={row.avatar_focus_y}
+            zoom={row.avatar_zoom}
+            alt=""
+            aria-hidden
+          />
           <span className={cx("pfc-n")}>{row.name}</span><em>{props.note}</em>
         </div>
       ))}

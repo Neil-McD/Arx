@@ -1792,7 +1792,6 @@
 .app .pfcommon p{margin:0;font-size:13px;line-height:1.5;color:var(--ink)}
 .app .pfc{display:flex;align-items:center;gap:10px;min-width:0;font-size:13px}
 .app .pfc-i{width:26px;height:26px;flex:none;border-radius:7px;overflow:hidden;display:flex;align-items:center;justify-content:center;background:var(--s2);box-shadow:inset 0 0 0 1px var(--line);font-size:11.5px;font-weight:600;color:var(--ink2)}
-.app .pfc-i img{width:100%;height:100%;object-fit:cover;display:block}
 .app .pfc-n{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--ink)}
 .app .pfc em{flex:none;font-style:normal;color:var(--ink3)}
 .app .pfc em::before{content:"·";margin-right:8px}
