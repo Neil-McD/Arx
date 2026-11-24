@@ -201,17 +201,33 @@ export function layoutBrain(map: BrainMap, nowMs: number): BrainLayout {
   // Subjects, pods and "not filed yet" start on rings outside the courses.
   const subjectRing = Math.max(SUBJECT_RING_MIN, map.courses.length ? courseReach + Math.max(0, ...rings) + SUBJECT_GAP : 0);
   const podRing = subjectRing + POD_GAP;
+  // Each takes the middle of a gap between two courses (widest gap first),
+  // so its line from the centre runs between clusters, not through one.
+  // A gap is measured between the edges of two clusters, not their middles.
+  const spans = map.courses.map((course, i) => {
+    const n = nodes[index.get(course.id)!];
+    const half = (Math.atan2(rings[i] * 1.3, Math.hypot(n.x, n.y)) * 180) / Math.PI;
+    return { at: (Math.atan2(n.y, n.x) * 180) / Math.PI, half };
+  }).sort((x, y) => x.at - y.at);
+  const gaps = spans.map((from, i) => {
+    const to = i + 1 < spans.length ? spans[i + 1] : { at: spans[0].at + 360, half: spans[0].half };
+    const start = from.at + from.half, end = to.at - to.half;
+    return { mid: (start + end) / 2, size: end - start };
+  }).sort((x, y) => y.size - x.size || x.mid - y.mid);
   const seen: Record<string, number> = {};
   const KIND_OFFSET: Record<string, number> = { subject: 250, pod: 300, other: 160 };
   const outer = hubOrder(map).filter((hub) => hub.kind !== "course");
-  for (const hub of outer) {
+  outer.forEach((hub, place) => {
     const slot = seen[hub.kind] = (seen[hub.kind] ?? -1) + 1;
-    const angle = (slot * GOLDEN_ANGLE + KIND_OFFSET[hub.kind]) % 360;
-    const reach = (hub.kind === "pod" ? podRing : subjectRing) + (slot % 2 === 0 ? 0 : RING_STAGGER);
+    const gap = gaps.length > 1 ? gaps[place % gaps.length] : null;
+    // More of them than gaps: later ones sit a little to one side, further out.
+    const lap = gaps.length ? Math.floor(place / gaps.length) : 0;
+    const angle = gap ? gap.mid + (lap ? (lap % 2 ? 1 : -1) * Math.min(gap.size / 5, 9) * Math.ceil(lap / 2) : 0) : (slot * GOLDEN_ANGLE + KIND_OFFSET[hub.kind]) % 360;
+    const reach = (hub.kind === "pod" ? podRing : subjectRing) + (slot % 2 === 0 ? 0 : RING_STAGGER) + lap * RING_STAGGER;
     const id = hub.kind === "subject" ? hub.key : hub.kind === "pod" ? `pod:${hub.key.replace(/^pod:/, "")}` : "other";
     const node = add({ id, ...polar(angle, reach), r: hub.kind === "pod" ? 14 : 11 });
     springs.push({ a: 0, b: node, len: reach, k: 0.05 });
-  }
+  });
 
   // Learned things hang off where they are filed: the newer, the further.
   const anchorId = (at: BrainAttach) => at.kind === "lesson" ? at.id : at.kind === "subject" ? `subject:${at.name}` : at.kind === "pod" ? `pod:${at.id.replace(/^pod:/, "")}` : "other";
@@ -241,30 +257,48 @@ export function layoutBrain(map: BrainMap, nowMs: number): BrainLayout {
   const courses: LayoutCourse[] = [];
   const fibres: LayoutFibre[] = [];
   const lessons: LayoutLesson[] = [];
+  const named: Array<{ hub: Omit<LayoutHub, "x" | "y" | "angle">; at: Placed; angle: number; path: Placed[] }> = [];
   for (const hub of hubOrder(map)) {
     if (hub.kind === "course") {
       const course = map.courses.find((entry) => entry.id === hub.key)!;
       const at = placed(hub.key);
       const angle = (Math.atan2(at.y, at.x) * 180) / Math.PI;
       const path: Placed[] = [];
-      let far = 0;
       for (const lesson of course.lessons) {
         const spot = placed(lesson.id);
-        far = Math.max(far, Math.hypot(spot.x - at.x, spot.y - at.y));
         path.push(spot);
         lessons.push({ ...spot, id: lesson.id, courseKey: hub.key, order: lesson.order, title: lesson.title, done: lesson.done, use: lesson.use, r: sizeFor(lesson.use, 4.6, 0.8, 8) });
         fibres.push({ key: `${hub.key}|${lesson.id}`, kind: "spoke", path: [at, spot] });
       }
       fibres.push({ key: `${hub.key}|trunk`, kind: "trunk", path: [center, at] });
       courses.push({ ...at, key: hub.key });
-      // The course's name sits just outside its ring, on the far side from the centre.
-      hubs.push({ ...hub, ...polar(angle, far + 18, at), angle });
+      named.push({ hub, at, angle, path });
       continue;
     }
     const id = hub.kind === "subject" ? hub.key : hub.kind === "pod" ? `pod:${hub.key.replace(/^pod:/, "")}` : "other";
     const at = placed(id);
     hubs.push({ ...hub, ...at, angle: (Math.atan2(at.y, at.x) * 180) / Math.PI });
   }
+  // A course's name goes just past its outermost lesson, on the side away
+  // from the centre, and steps further out until it covers no dot.
+  const dots: Placed[] = nodes.slice(1).map((node) => ({ x: node.x, y: node.y }));
+  for (const { hub, at, angle, path } of named) {
+    const ux = Math.cos((angle * Math.PI) / 180), uy = Math.sin((angle * Math.PI) / 180);
+    const far = Math.max(0, ...path.map((p) => (p.x - at.x) * ux + (p.y - at.y) * uy));
+    const w = hub.label.length * HUB_CHAR_W;
+    const right = ux >= -0.2;
+    let spot = at;
+    for (let out = far + 20; out <= far + 20 + 16 * 6; out += 16) {
+      spot = { x: at.x + ux * out, y: at.y + uy * out };
+      // Straight up or down, the name is centred on its cluster.
+      if (Math.abs(ux) < 0.45) spot = { x: spot.x + (right ? -w / 2 : w / 2), y: spot.y };
+      const box = { x0: right ? spot.x - 6 : spot.x - w - 6, x1: right ? spot.x + w + 6 : spot.x + 6, y0: spot.y - 13, y1: spot.y + 11 };
+      if (!dots.some((d) => d.x > box.x0 && d.x < box.x1 && d.y > box.y0 && d.y < box.y1)) break;
+    }
+    hubs.push({ ...hub, ...spot, angle });
+  }
+  // Courses first, as before: the order hubs are listed in.
+  hubs.sort((a, b) => Number(b.kind === "course") - Number(a.kind === "course"));
   const points: LayoutPoint[] = hung.map(({ point, node, anchor }) => ({
     x: nodes[node].x, y: nodes[node].y, id: point.id, anchor: { x: nodes[anchor].x, y: nodes[anchor].y }, point, r: sizeFor(point.use),
   }));

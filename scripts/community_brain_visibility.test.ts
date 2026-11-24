@@ -141,7 +141,8 @@ describe("community brain visibility with published courses and pods", () => {
   test("layoutBrain, fitStage, and lensLayout produce finite geometry for courses-only maps with 0 notes", () => {
     const courseMap = makeCourseMap(4);
     const layout = layoutBrain(courseMap, NOW);
-    expect(layout.fibres).toHaveLength(1);
+    // One line in from the centre, and one to each of the four lessons.
+    expect(layout.fibres).toHaveLength(5);
     expect(layout.lessons).toHaveLength(4);
     expect(layout.hubs).toHaveLength(1);
 
