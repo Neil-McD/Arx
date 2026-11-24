@@ -206,17 +206,29 @@ css += """
 .app .rz>.lab .la{margin-left:auto}
 .app .rz>.lab .la-group{margin-left:auto;display:inline-flex;align-items:center;gap:6px;flex:none}
 .app .rz>.lab .la-group .la{margin-left:0}
-.app button.la,.app a.la{height:24px;padding:0 9px;border-radius:6px;border:1px solid var(--line2);background:var(--s1);font-size:12px;font-weight:500;letter-spacing:0;color:var(--ink);cursor:pointer;display:inline-flex;align-items:center;gap:5px;text-decoration:none;transition:background .14s var(--ease),border-color .14s var(--ease),color .14s var(--ease)}
-.app button.la:hover:not(:disabled),.app a.la:hover{background:var(--s2);border-color:rgba(var(--w),.22);color:var(--ink)}
-.app button.la[aria-expanded="true"]{background:var(--s2);border-color:rgba(var(--w),.24);color:var(--ink)}
+/* A panel's small action ("Open", "All events", "Show") is text in the accent colour, not a boxed button. */
+.app button.la,.app a.la{height:24px;padding:0 2px;border-radius:4px;border:0;background:none;font-size:12.5px;font-weight:500;letter-spacing:0;color:var(--accent,var(--blue-ink));cursor:pointer;display:inline-flex;align-items:center;gap:5px;text-decoration:none;transition:color .14s var(--ease),background .14s var(--ease)}
+.app button.la:hover:not(:disabled),.app a.la:hover{color:var(--ink);background:none}
+.app button.la:focus-visible,.app a.la:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
+.app button.la[aria-expanded="true"]{color:var(--ink);background:none}
+/* The same in every right-hand column and the brain's side panel: a small
+   secondary button (Edit, Copy link, See it as members do, Leave pod) is
+   accent text. The main action (go) keeps its button; Cancel stays quiet text. */
+.app .rail .btn.sm:not(.go),.app .brainside .btn.sm:not(.go){height:24px;padding:0 2px;border:0;border-radius:4px;background:none;box-shadow:none;font-size:12.5px;font-weight:500}
+.app .rail .btn.sm:not(.go):not(.txt),.app .brainside .btn.sm:not(.go):not(.txt){color:var(--accent,var(--blue-ink));background:none}
+.app .rail .btn.sm:not(.go):not(.txt):hover:not(:disabled),.app .brainside .btn.sm:not(.go):not(.txt):hover:not(:disabled){color:var(--ink);background:none}
+.app .rail .btn.sm:not(.go):hover:not(:disabled),.app .brainside .btn.sm:not(.go):hover:not(:disabled){color:var(--ink);background:none}
+.app .rail .btn.sm:not(.go):focus-visible,.app .brainside .btn.sm:not(.go):focus-visible{outline:2px solid var(--blue);outline-offset:2px}
+.app .rail .acts:has(>.btn.sm:not(.go)),.app .brainside .acts:has(>.btn.sm:not(.go)){gap:4px 16px}
 .app button.la:disabled{opacity:.45;cursor:not-allowed}
-.app button.la.ico{width:24px;height:24px;padding:0;justify-content:center;border-radius:6px;border:1px solid var(--line2);background:var(--s1)}
+.app button.la.ico{width:24px;height:24px;padding:0;justify-content:center;border-radius:6px;border:0;background:none;color:var(--ink3)}
+.app button.la.ico:hover:not(:disabled){background:var(--s2);color:var(--ink)}
 .app button.la.ico .ic{width:13px;height:13px}
 .app .ln{display:flex;align-items:center;gap:9px;min-height:28px;min-width:0;font-size:13.5px;color:var(--ink);white-space:nowrap}
 .app .ln>.t{min-width:0;overflow:hidden;text-overflow:ellipsis}
 .app .ln>.t.dim{color:var(--ink3)}
 .app .ln>em{margin-left:auto;padding-left:8px;font-style:normal;font-size:12.5px;color:var(--ink3);flex:none}
-.app .ln>.la{margin-left:auto;flex:none;padding:0 8px}
+.app .ln>.la{margin-left:auto;flex:none;padding:0 2px}
 .app .ln>i.dot{width:6px;height:6px;border-radius:50%;background:rgb(var(--au));flex:none}
 .app .ln>i.dot.amber{background:#e0a84f}
 .app button.ln{width:100%;text-align:left;cursor:pointer}.app button.ln:hover>.t{text-decoration:underline;text-decoration-color:var(--line2);text-underline-offset:3px}
@@ -239,10 +251,10 @@ css += """
 .app .need .btn{height:26px;padding:0 10px;font-size:12px}
 .app .needs{display:flex;flex-direction:column;gap:6px}
 /* What a panel keeps at its foot: things looked at rarely, opened in place. */
-.app .railfoot{margin-top:auto;padding-top:12px;border-top:1px solid var(--line);display:flex;flex-wrap:wrap;gap:8px}
-.app .railfoot button{height:28px;padding:0 10px;border-radius:7px;border:1px solid var(--line2);background:var(--s1);font-size:12.5px;font-weight:500;color:var(--ink2);cursor:pointer;display:inline-flex;align-items:center;transition:background .14s var(--ease),border-color .14s var(--ease),color .14s var(--ease)}
-.app .railfoot button:hover{background:var(--s2);border-color:rgba(var(--w),.22);color:var(--ink)}
-.app .railfoot button[aria-expanded="true"]{background:var(--s2);border-color:rgba(var(--w),.26);color:var(--ink)}
+.app .railfoot{margin-top:auto;padding-top:12px;border-top:1px solid var(--line);display:flex;flex-wrap:wrap;gap:4px 16px}
+.app .railfoot button{height:24px;padding:0 2px;border-radius:4px;border:0;background:none;font-size:12.5px;font-weight:500;color:var(--accent,var(--blue-ink));cursor:pointer;display:inline-flex;align-items:center;transition:color .14s var(--ease)}
+.app .railfoot button:hover{color:var(--ink);background:none}
+.app .railfoot button[aria-expanded="true"]{color:var(--ink);background:none}
 .app .rail .acts{flex-wrap:wrap}
 .app .rail .btn:not(.go):not(.txt){background:var(--s1)}
 .app .rail .btn:not(.go):not(.txt):hover:not(:disabled){background:var(--s2);border-color:rgba(var(--w),.22)}

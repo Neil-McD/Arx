@@ -32,12 +32,15 @@ describe("courses pager and pod rail button affordance", () => {
   const podKnowledge = readFileSync(new URL("../apps/web/src/v1/KitPodKnowledge.tsx", import.meta.url), "utf8");
   const classroom = readFileSync(new URL("../apps/web/src/v1/KitClassroom.tsx", import.meta.url), "utf8");
 
-  it("styles right-rail panel actions and footer toggles as visible bordered buttons", () => {
-    expect(kitCss).toMatch(/\.app button\.la,\.app a\.la\{[^}]*border:1px solid var\(--line2\);background:var\(--s1\)/);
-    expect(kitCss).toMatch(/\.app \.railfoot button\{[^}]*border:1px solid var\(--line2\);background:var\(--s1\)/);
+  // Neil, Nov 24: small actions in panels are text in the accent colour, not
+  // boxed buttons (the bordered style from the earlier polish is retired).
+  it("styles right-rail panel actions, small rail buttons and footer toggles as accent text", () => {
+    expect(kitCss).toMatch(/\.app button\.la,\.app a\.la\{[^}]*border:0;background:none;[^}]*color:var\(--accent/);
+    expect(kitCss).toMatch(/\.app \.railfoot button\{[^}]*border:0;background:none;[^}]*color:var\(--accent/);
+    expect(kitCss).toMatch(/\.app \.rail \.btn\.sm:not\(\.go\):not\(\.txt\)[^{]*\{color:var\(--accent[^}]*background:none\}/);
   });
 
-  it("renders Pod host actions as bordered buttons and shows About this pod inline by default", () => {
+  it("renders Pod host actions as real buttons (not the quiet txt kind) and shows About this pod inline by default", () => {
     expect(podRail).not.toMatch(/<Btn small txt[^>]*>Edit<\/Btn>/);
     expect(podRail).not.toMatch(/<Btn small txt[^>]*>\{copied \? "Copied" : "Copy link"\}<\/Btn>/);
     expect(podRail).not.toMatch(/<Btn small txt[^>]*>See it as members do<\/Btn>/);
