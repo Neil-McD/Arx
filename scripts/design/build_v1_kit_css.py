@@ -251,10 +251,10 @@ css += """
 .app .need .btn{height:26px;padding:0 10px;font-size:12px}
 .app .needs{display:flex;flex-direction:column;gap:6px}
 /* What a panel keeps at its foot: things looked at rarely, opened in place. */
-.app .railfoot{margin-top:auto;padding-top:12px;border-top:1px solid var(--line);display:flex;flex-wrap:wrap;gap:8px}
-.app .railfoot button{height:28px;padding:0 10px;border-radius:7px;border:1px solid var(--line2);background:var(--s1);font-size:12.5px;font-weight:500;color:var(--ink2);cursor:pointer;display:inline-flex;align-items:center;transition:background .14s var(--ease),border-color .14s var(--ease),color .14s var(--ease)}
-.app .railfoot button:hover{background:var(--s2);border-color:rgba(var(--w),.22);color:var(--ink)}
-.app .railfoot button[aria-expanded="true"]{background:var(--s2);border-color:rgba(var(--w),.26);color:var(--ink)}
+.app .railfoot{margin-top:auto;padding-top:12px;border-top:1px solid var(--line);display:flex;flex-wrap:wrap;gap:4px 16px}
+.app .railfoot button{height:24px;padding:0 2px;border-radius:4px;border:0;background:none;font-size:12.5px;font-weight:500;color:var(--accent,var(--blue-ink));cursor:pointer;display:inline-flex;align-items:center;transition:color .14s var(--ease)}
+.app .railfoot button:hover{color:var(--ink);background:none}
+.app .railfoot button[aria-expanded="true"]{color:var(--ink);background:none}
 .app .rail .acts{flex-wrap:wrap}
 .app .rail .btn:not(.go):not(.txt){background:var(--s1)}
 .app .rail .btn:not(.go):not(.txt):hover:not(:disabled){background:var(--s2);border-color:rgba(var(--w),.22)}
