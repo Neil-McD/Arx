@@ -91,8 +91,9 @@ export const CALL_OPERATIONS = {
   "community.channel.mark_read": entry("member", "write", "none"),
   "community.presence.heartbeat": entry("member", "write", "none"),
   "community.typing.set": entry("member", "write", "none"),
-  // What the guide remembers about a member, in their private talk with it.
+  // What the guide remembers about a member, and its personal Soul with them, in their private talk.
   "member.memory.remember": entry("member", "write", "none", { plan: "paid" }),
+  "member.soul.update": entry("member", "write", "none", { plan: "paid" }),
   "community.admission.approve": entry("moderator", "write", "builder_change"),
   "community.admission.deny": entry("moderator", "write", "builder_change"),
   "community.interaction.remove": entry("moderator", "destroy", "builder_change", { ask: "every_time" }),

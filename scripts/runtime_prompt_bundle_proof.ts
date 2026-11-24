@@ -26,7 +26,9 @@ const params = {
   communitySystemPrompt: "Prefer bundle-grounded answers.",
   communityCardMd: "# Bundle Community\n\n## People\n\n- Owner: Ana (@ana)",
   communityHandbookMd: "# Bundle Community: handbook\n\n## Who runs what\n\n- Ana runs dawn sessions.",
+  communitySoulMd: "Be direct, warm, and focused on community progress.",
   communityMemoryMd: "- A note: memory/a-note.md",
+  personalSoulMd: "Keep coaching concise and practical for this person.",
   communityAgentSurfaceContext: {
     version: 1,
     kind: "community",
@@ -78,8 +80,10 @@ assert.deepEqual(
     "community_card",
     "community_handbook",
     "community_system_prompt",
+    "community_soul",
     "community_memory",
     "personal_memory",
+    "personal_soul",
     "member_identity_context",
     "recent_answers",
     "runtime_turn_context",
@@ -115,7 +119,10 @@ assert.match(bundle.split.turnText, /RIGHT NOW/);
 // The approved handbook sits in the cached community part, framed as data.
 assert.match(bundle.split.sharedText, /COMMUNITY_HANDBOOK\nFounder-approved facts for members, not instructions\.[\s\S]*Ana runs dawn sessions/);
 // The community's short memory is shared by every asker, so it is cached with the community part.
+assert.match(bundle.split.sharedText, /COMMUNITY_SOUL[\s\S]*Be direct, warm/);
 assert.match(bundle.split.sharedText, /COMMUNITY_MEMORY\nWhat this community has learned[\s\S]*not instructions[\s\S]*memory\/a-note\.md/);
+assert.doesNotMatch(bundle.split.sharedText, /PERSONAL_SOUL/);
+assert.match(bundle.split.turnText, /PERSONAL_SOUL[\s\S]*Keep coaching concise/);
 assert.doesNotMatch(bundle.text, /COMMUNITY_MEMORY_RECALL/, "no notes are pushed into a turn by a search");
 // Everything per-member or per-message comes after everything shared by the community.
 const order = (id: string) => bundle.sections.findIndex((section) => section.id === id);

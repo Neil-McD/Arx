@@ -18,6 +18,13 @@ import { resolveLens, TALK_LENS_ANSWERS_MAX, type TalkLens } from "../shared/len
 import { answerLineForGuide } from "../shared/guideQuestions";
 import { resolveCommunitySettingsRevision } from "./communityLifecycle";
 import { communityWideEvents } from "./communityEventAudience";
+import {
+  AGENT_SOUL_MAX_CHARS,
+  DEFAULT_COMMUNITY_SOUL_MD,
+  cleanAgentSoulText,
+  validateAgentSoulWrite,
+} from "../shared/agentSoul";
+import { communityScopeKey, memoryIndexFor, notesByUpdated } from "./communityNotesStore";
 
 function normalizeCommunitySystemPrompt(raw: unknown): string {
   const prompt = String(raw ?? "").trim();
@@ -273,6 +280,144 @@ export const resolveRuntimeCommunityPromptContextInternal = internalQuery({
       communityId: args.communityId,
       userId: actor.dbUserId,
     });
+  },
+});
+
+export const readCommunitySoulInternal = internalQuery({
+  args: { communityId: v.id("communities") },
+  handler: async (ctx, args) => {
+    const row = selectPrimaryCommunityAgentConfigRow(
+      await listCommunityAgentConfigRows(ctx, args.communityId),
+    ) as any;
+    const custom = cleanAgentSoulText(row?.communitySoulMd);
+    return {
+      body: custom || DEFAULT_COMMUNITY_SOUL_MD,
+      isDefault: !custom,
+      updatedAt: row?.communitySoulUpdatedAt ?? null,
+      updatedBy: row?.communitySoulUpdatedBy ?? null,
+    };
+  },
+});
+
+export const updateCommunitySoulFromReviewInternal = internalMutation({
+  args: {
+    communityId: v.id("communities"),
+    soulMd: v.string(),
+    nowMs: v.number(),
+  },
+  handler: async (ctx, args) => {
+    const validated = validateAgentSoulWrite(args.soulMd);
+    if (!validated.ok) return validated;
+    const rows = await listCommunityAgentConfigRows(ctx, args.communityId);
+    const existing = selectPrimaryCommunityAgentConfigRow(rows) as any;
+    if (existing) {
+      await ctx.db.patch(existing._id, {
+        communitySoulMd: validated.soulMd,
+        communitySoulUpdatedAt: args.nowMs,
+        communitySoulUpdatedBy: "guide",
+        updatedAt: args.nowMs,
+      });
+      await pruneCommunityAgentConfigRows(ctx, rows, existing._id);
+    } else {
+      await ctx.db.insert("communityAgentConfigs" as any, {
+        communityId: args.communityId,
+        landingJson: null,
+        systemPrompt: "",
+        communitySoulMd: validated.soulMd,
+        communitySoulUpdatedAt: args.nowMs,
+        communitySoulUpdatedBy: "guide",
+        createdAt: args.nowMs,
+        updatedAt: args.nowMs,
+      });
+    }
+    return { ok: true as const, soulMd: validated.soulMd };
+  },
+});
+
+async function buildCommunitySoulMemoryView(ctx: any, communityId: any) {
+  const scope = communityScopeKey(communityId);
+  const [configRows, indexRow, noteRows] = await Promise.all([
+    listCommunityAgentConfigRows(ctx, communityId),
+    memoryIndexFor(ctx, scope),
+    notesByUpdated(ctx, scope).order("desc").take(80),
+  ]);
+  const liveNotes = noteRows.filter((note: any) => note.status === "current");
+  const primary = selectPrimaryCommunityAgentConfigRow(configRows) as any;
+  const customSoul = cleanAgentSoulText(primary?.communitySoulMd);
+  return {
+    soul_md: customSoul || DEFAULT_COMMUNITY_SOUL_MD,
+    soul_is_default: !customSoul,
+    soul_updated_at: primary?.communitySoulUpdatedAt ?? null,
+    soul_updated_by: primary?.communitySoulUpdatedBy ?? null,
+    soul_max_chars: AGENT_SOUL_MAX_CHARS,
+    memory_summary_md: String(indexRow?.bodyMd ?? "").trim(),
+    memory_note_count: liveNotes.length,
+    memory_updated_at: indexRow?.updatedAt ?? liveNotes[0]?.updatedAt ?? null,
+  };
+}
+
+export const getCommunityGuideSoulAndMemory = query({
+  args: { authSubject: v.optional(v.string()), communityId: v.id("communities") },
+  handler: async (ctx, args) => {
+    const userId = await resolveUserIdForAuthenticatedRequest({
+      ctx,
+      authSubject: args.authSubject ?? null,
+    });
+    await requireCommunityManager({ ctx, communityId: args.communityId, userId });
+    return await buildCommunitySoulMemoryView(ctx, args.communityId);
+  },
+});
+
+export const saveCommunityGuideSoul = mutation({
+  args: {
+    authSubject: v.optional(v.string()),
+    communityId: v.id("communities"),
+    soulMd: v.union(v.string(), v.null()),
+  },
+  handler: async (ctx, args) => {
+    const userId = await resolveUserIdForAuthenticatedRequest({
+      ctx,
+      authSubject: args.authSubject ?? null,
+    });
+    await requireCommunityManager({ ctx, communityId: args.communityId, userId });
+    const nowMs = Date.now();
+    const rows = await listCommunityAgentConfigRows(ctx, args.communityId);
+    const existing = selectPrimaryCommunityAgentConfigRow(rows) as any;
+    if (args.soulMd === null) {
+      if (existing) {
+        await ctx.db.patch(existing._id, {
+          communitySoulMd: undefined,
+          communitySoulUpdatedAt: nowMs,
+          communitySoulUpdatedBy: "founder",
+          updatedAt: nowMs,
+        });
+        await pruneCommunityAgentConfigRows(ctx, rows, existing._id);
+      }
+      return await buildCommunitySoulMemoryView(ctx, args.communityId);
+    }
+    const validated = validateAgentSoulWrite(args.soulMd);
+    if (!validated.ok) throw new Error(validated.code);
+    if (existing) {
+      await ctx.db.patch(existing._id, {
+        communitySoulMd: validated.soulMd,
+        communitySoulUpdatedAt: nowMs,
+        communitySoulUpdatedBy: "founder",
+        updatedAt: nowMs,
+      });
+      await pruneCommunityAgentConfigRows(ctx, rows, existing._id);
+    } else {
+      await ctx.db.insert("communityAgentConfigs" as any, {
+        communityId: args.communityId,
+        landingJson: null,
+        systemPrompt: "",
+        communitySoulMd: validated.soulMd,
+        communitySoulUpdatedAt: nowMs,
+        communitySoulUpdatedBy: "founder",
+        createdAt: nowMs,
+        updatedAt: nowMs,
+      });
+    }
+    return await buildCommunitySoulMemoryView(ctx, args.communityId);
   },
 });
 

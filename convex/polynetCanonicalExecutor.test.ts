@@ -66,7 +66,8 @@ test.each(["community_agent_for_member", "external_mcp"] as const)("%s discovers
   ]) } });
   expect(await execute("polynet_list", "/communities/canonical-community/members/me/")).toMatchObject({
     ok: true, value: { writable: false, entries: [expect.objectContaining({ path: selfContextPath }),
-      expect.objectContaining({ path: "/communities/canonical-community/members/me/memory.md", type: "personal_memory" })] },
+      expect.objectContaining({ path: "/communities/canonical-community/members/me/memory.md", type: "personal_memory" }),
+      expect.objectContaining({ path: "/communities/canonical-community/members/me/soul.md", type: "personal_soul" })] },
   });
   const read = await execute("polynet_read", selfContextPath);
   expect(read.ok).toBe(true);

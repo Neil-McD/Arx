@@ -13,13 +13,27 @@ export const PERSONAL_MEMORY_OPERATIONS_MAX = 10;
 export const PERSONAL_MEMORY_OPERATION = "member.memory.remember";
 export const PERSONAL_MEMORY_PATH = "/members/me/memory.md";
 
-export type PersonalMemoryEntry = { text: string; sourceRef: string; at: number };
+export const PERSONAL_MEMORY_CATEGORIES = ["fact", "preference", "commitment"] as const;
+export type PersonalMemoryCategory = (typeof PERSONAL_MEMORY_CATEGORIES)[number];
+
+export type PersonalMemoryEntry = {
+  text: string;
+  category?: PersonalMemoryCategory;
+  sourceRef: string;
+  at: number;
+};
 
 export type PersonalMemoryOperation =
-  | { action: "add"; content: string }
-  | { action: "patch"; oldText: string; content: string }
+  | { action: "add"; content: string; category?: PersonalMemoryCategory }
+  | { action: "patch"; oldText: string; content: string; category?: PersonalMemoryCategory }
   | { action: "remove"; oldText: string }
   | { action: "clear" };
+
+export function normalizePersonalMemoryCategory(raw: unknown): PersonalMemoryCategory | undefined {
+  const value = String(raw ?? "").trim().toLowerCase();
+  if (value === "fact" || value === "preference" || value === "commitment") return value;
+  return undefined;
+}
 
 export type PersonalMemoryRefusal = {
   code: "operations_invalid" | "entry_too_long" | "no_match" | "ambiguous_match" | "memory_full";
@@ -47,8 +61,9 @@ export function parsePersonalMemoryOperations(raw: unknown): PersonalMemoryOpera
     const op = item && typeof item === "object" ? item as Record<string, unknown> : {};
     const content = clean(op.content);
     const oldText = clean(op.old_text ?? op.oldText);
-    if (op.action === "add" && content) operations.push({ action: "add", content });
-    else if (op.action === "patch" && oldText && content) operations.push({ action: "patch", oldText, content });
+    const category = normalizePersonalMemoryCategory(op.category);
+    if (op.action === "add" && content) operations.push({ action: "add", content, ...(category ? { category } : {}) });
+    else if (op.action === "patch" && oldText && content) operations.push({ action: "patch", oldText, content, ...(category ? { category } : {}) });
     else if (op.action === "remove" && oldText) operations.push({ action: "remove", oldText });
     else if (op.action === "clear") operations.push({ action: "clear" });
     else return invalid;
@@ -94,7 +109,7 @@ export function applyPersonalMemoryOperations(
     if (op.action === "add") {
       // The same entry twice is one entry.
       if (next.some((entry) => entry.text === op.content)) continue;
-      next.push({ text: op.content, ...source });
+      next.push({ text: op.content, ...(op.category ? { category: op.category } : {}), ...source });
       changed = true;
       continue;
     }
@@ -107,7 +122,8 @@ export function applyPersonalMemoryOperations(
       const replaced = entry.text === op.oldText
         ? op.content
         : entry.text.replace(new RegExp(op.oldText.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i"), op.content);
-      next[at] = { text: clean(replaced), ...source };
+      const nextCategory = op.category ?? entry.category;
+      next[at] = { text: clean(replaced), ...(nextCategory ? { category: nextCategory } : {}), ...source };
     }
     changed = true;
   }
@@ -125,9 +141,28 @@ export function applyPersonalMemoryOperations(
 export function renderPersonalMemory(entries: PersonalMemoryEntry[]): string {
   const used = personalMemoryChars(entries);
   const lines = [`# What the guide remembers about you here (${used}/${PERSONAL_MEMORY_MAX_CHARS} characters)`, ""];
-  if (entries.length === 0) lines.push("_Nothing yet._");
-  for (const entry of entries) lines.push(`- ${entry.text}`);
-  return lines.join("\n");
+  if (entries.length === 0) {
+    lines.push("_Nothing yet._");
+    return lines.join("\n");
+  }
+  const hasCategories = entries.some((entry) => Boolean(entry.category));
+  if (!hasCategories) {
+    for (const entry of entries) lines.push(`- ${entry.text}`);
+    return lines.join("\n");
+  }
+  const groups: Array<{ key: PersonalMemoryCategory; label: string }> = [
+    { key: "fact", label: "Facts" },
+    { key: "preference", label: "Preferences" },
+    { key: "commitment", label: "Commitments" },
+  ];
+  for (const group of groups) {
+    const items = entries.filter((entry) => (entry.category ?? "fact") === group.key);
+    if (items.length === 0) continue;
+    lines.push(`## ${group.label}`);
+    for (const item of items) lines.push(`- ${item.text}`);
+    lines.push("");
+  }
+  return lines.join("\n").trimEnd();
 }
 
 // What the guide is told in a member's private talk.
@@ -136,9 +171,9 @@ export function personalMemoryInstructions(communitySlug: string): string {
   return [
     "PERSONAL_MEMORY",
     "What you remember about this member, from their own private talks with you. Only they see it: never repeat it in a channel or pod, and never treat it as something the community knows.",
-    "Save when they ask you to remember something, or tell you something clearly worth keeping for later talks (a goal, how they like answers, what they're working on). Not small talk, not what's already below, nothing they'd regret seeing written down.",
+    "Save durable Facts (who they are, what they are building), Preferences (how they like answers or coaching), and Commitments (goals or next steps they committed to). Not small talk, not what's already below, nothing they'd regret seeing written down.",
     "Write preferences as instructions (\"Keep answers short.\"); when one changes, patch it rather than adding a second. Keep entries short; when memory is full, merge or remove entries in the same batch.",
-    'Save with polynet_remember { operations: [{ action: "add", content } | { action: "patch", old_text, content } | { action: "remove", old_text } | { action: "clear" }] }.',
+    'Save with polynet_remember { operations: [{ action: "add", content, category?: "fact" | "preference" | "commitment" } | { action: "patch", old_text, content, category? } | { action: "remove", old_text } | { action: "clear" }] }.',
     "After saving, say in one short line what you remembered. If they ask what you remember, tell them plainly; if they say forget something (or everything), remove it (or clear) and say so.",
   ].join("\n");
 }

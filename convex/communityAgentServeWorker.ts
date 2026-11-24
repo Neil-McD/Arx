@@ -1853,6 +1853,7 @@ export const processQueuedCommunityAgentServeRequestsInternal = internalAction({
         context.communityCardMd = layers.communityCardMd;
         context.communityHandbookMd = layers.communityHandbookMd;
         context.communityMemoryMd = layers.communityMemoryMd;
+        context.communitySoulMd = layers.communitySoulMd;
       }
       const servePromptInput = {
         ...context,

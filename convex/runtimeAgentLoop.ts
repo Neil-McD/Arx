@@ -290,8 +290,10 @@ async function executeRetrievalAgentLoop(
   let communityCardMd: string | null = null;
   let communityHandbookMd: string | null = null;
   let communityMemoryMd: string | null = null;
-  // Undefined outside a private talk: the personal section isn't drawn at all.
+  let communitySoulMd: string | null = null;
+  // Undefined outside a private talk: the personal sections aren't drawn at all.
   let personalMemoryMd: string | null | undefined = undefined;
+  let personalSoulMd: string | null | undefined = undefined;
   const communityCardSlug = String(params.communitySlug ?? "").trim();
   if (
     turnContract?.uses.communityCard &&
@@ -321,7 +323,11 @@ async function executeRetrievalAgentLoop(
     communityCardMd = layers.communityCardMd;
     communityHandbookMd = layers.communityHandbookMd;
     communityMemoryMd = layers.communityMemoryMd;
-    if (params.invocationSurface === "member_agent_dock") personalMemoryMd = layers.personalMemoryMd;
+    communitySoulMd = layers.communitySoulMd;
+    if (params.invocationSurface === "member_agent_dock") {
+      personalMemoryMd = layers.personalMemoryMd;
+      personalSoulMd = layers.personalSoulMd;
+    }
     const cardStatus = layers.cardStatus;
     try {
       await params.appendRunEvent({
@@ -353,7 +359,9 @@ async function executeRetrievalAgentLoop(
     communityAgentSurfaceContext: params.communityAgentSurfaceContext,
     memberIdentityContextMd,
     communityMemoryMd,
+    communitySoulMd,
     personalMemoryMd,
+    personalSoulMd,
     communityCardMd,
     communityHandbookMd,
   });

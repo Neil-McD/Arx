@@ -1932,9 +1932,23 @@ export default defineSchema({
   memberMemories: defineTable({
     communityId: v.id("communities"),
     userId: v.id("users"),
-    entries: v.array(v.object({ text: v.string(), sourceRef: v.string(), at: v.number() })),
+    entries: v.array(
+      v.object({
+        text: v.string(),
+        category: v.optional(
+          v.union(v.literal("fact"), v.literal("preference"), v.literal("commitment")),
+        ),
+        sourceRef: v.string(),
+        at: v.number(),
+      }),
+    ),
     // The last write's retry key: a retried batch isn't applied twice.
     lastOperationKey: v.optional(v.string()),
+    // Personal Soul: living persona/habits for the guide with this member in this community.
+    soulMd: v.optional(v.string()),
+    soulUpdatedAt: v.optional(v.number()),
+    soulUpdatedBy: v.optional(v.union(v.literal("guide"), v.literal("member"))),
+    lastSoulOperationKey: v.optional(v.string()),
     updatedAt: v.number(),
   })
     .index("by_community_user", ["communityId", "userId"]),
@@ -2653,6 +2667,10 @@ export default defineSchema({
     // Owner off-switch for the memory agent. Absent means enabled; inference
     // admission is resolved through the canonical managed-funding policy.
     agentEnabled: v.optional(v.boolean()),
+    // Community Soul: living voice and habits for shared channels and pods.
+    communitySoulMd: v.optional(v.string()),
+    communitySoulUpdatedAt: v.optional(v.number()),
+    communitySoulUpdatedBy: v.optional(v.union(v.literal("guide"), v.literal("founder"))),
     createdAt: v.number(),
     updatedAt: v.number(),
   })

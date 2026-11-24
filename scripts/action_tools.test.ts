@@ -12,7 +12,7 @@ describe("one named tool per action", () => {
   // outside AI gets one tool per course job instead (OpenAI's plugin review
   // asks that every operation be its own tool). Removing posts and members,
   // and banning, are offered through both doors: Polynet asks first.
-  const GUIDE_ONLY = ["polynet_change_courses", "polynet_remember"];
+  const GUIDE_ONLY = ["polynet_change_courses", "polynet_remember", "polynet_update_soul"];
   const OWN_AI_ONLY = ["polynet_create_course", "polynet_add_lesson", "polynet_edit_lesson", "polynet_edit_course",
     "polynet_order_lessons", "polynet_order_courses", "polynet_delete_draft"];
 
@@ -78,11 +78,11 @@ describe("one named tool per action", () => {
       const builder = role === "builder";
       expect(ownAi.filter((name) => !guide.includes(name)).sort(), role).toEqual(builder ? [...OWN_AI_ONLY].sort() : []);
       expect(guide.filter((name) => !ownAi.includes(name)).sort(), role)
-        .toEqual(builder ? [...GUIDE_ONLY].sort() : ["polynet_remember"]);
+        .toEqual(builder ? [...GUIDE_ONLY].sort() : ["polynet_remember", "polynet_update_soul"]);
       expect(guide.filter((name) => !GUIDE_ONLY.includes(name)), role).toEqual(ownAi.filter((name) => !OWN_AI_ONLY.includes(name)));
     }
     expect(names("member", "guide")).toEqual(["polynet_post", "polynet_reply", "polynet_edit_post", "polynet_delete_post", "polynet_react",
-      "polynet_mark_lesson_done", "polynet_mark_channel_read", "polynet_reply_message", "polynet_remember"]);
+      "polynet_mark_lesson_done", "polynet_mark_channel_read", "polynet_reply_message", "polynet_remember", "polynet_update_soul"]);
     expect(names("moderator", "guide").filter((name) => !names("member", "guide").includes(name)))
       .toEqual(["polynet_approve_join_requests", "polynet_decline_join_requests", "polynet_remove_posts"]);
     expect(names("builder", "guide")).toEqual(ACTION_TOOLS.filter((tool) => tool.door !== "own_ai").map((tool) => tool.name));
@@ -148,7 +148,7 @@ describe("one named tool per action", () => {
     // Only adding or marking something for the person runs without care.
     expect(ACTION_TOOLS.filter((tool) => !actionToolDefinition(tool).annotations.destructiveHint).map((tool) => tool.name).sort()).toEqual([
       "polynet_create_channel", "polynet_create_course", "polynet_mark_channel_read", "polynet_mark_lesson_done", "polynet_move_channel",
-      "polynet_post", "polynet_react", "polynet_remember", "polynet_reply",
+      "polynet_post", "polynet_react", "polynet_remember", "polynet_reply", "polynet_update_soul",
     ]);
     // Everything that asks every time is among the careful ones.
     for (const tool of ACTION_TOOLS) {
@@ -171,7 +171,7 @@ describe("one named tool per action", () => {
 describe("a private talk's tools", () => {
   const read = ["polynet_list", "polynet_read", "polynet_search", "web_research"];
   const memberGuide = ["polynet_post", "polynet_reply", "polynet_edit_post", "polynet_delete_post", "polynet_react",
-    "polynet_mark_lesson_done", "polynet_mark_channel_read", "polynet_reply_message", "polynet_remember"];
+    "polynet_mark_lesson_done", "polynet_mark_channel_read", "polynet_reply_message", "polynet_remember", "polynet_update_soul"];
 
   it("reading, the web, then the named tools for that person's role in that community", () => {
     expect(talkToolNames({ lens: "member_private", relation: "member" })).toEqual([...read, ...memberGuide]);

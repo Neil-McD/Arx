@@ -60,7 +60,7 @@ test("the private talk's prompt holds the memory and how to keep it; no slug, no
   const block = buildPersonalMemoryPromptBlock("- Keep answers short.", "club")!;
   expect(block).toContain("PERSONAL_MEMORY");
   // It is kept with the guide's own named tool, never the general call or a capability path.
-  expect(block).toContain('Save with polynet_remember { operations: [{ action: "add", content }');
+  expect(block).toContain('Save with polynet_remember { operations: [{ action: "add", content, category?: "fact" | "preference" | "commitment" }');
   expect(block).not.toContain("polynet_call");
   expect(block).not.toContain("capabilities/");
   expect(block).toContain("- Keep answers short.");

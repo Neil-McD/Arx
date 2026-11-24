@@ -197,8 +197,8 @@ describe("the receipt", () => {
     const bundle = prompt(TALKS.owner, "resources");
     expect(bundle.sections.map((entry) => entry.id)).toEqual([
       "guide_identity", "community_map", "how_to_work", "what_you_may_do", "how_to_speak", "skill",
-      "community_identity", "community_card", "community_handbook", "community_system_prompt", "community_memory", "personal_memory",
-      "member_identity_context", "recent_answers", "runtime_turn_context", "right_now",
+      "community_identity", "community_card", "community_handbook", "community_system_prompt", "community_soul", "community_memory", "personal_memory",
+      "personal_soul", "member_identity_context", "recent_answers", "runtime_turn_context", "right_now",
     ]);
     const manifest = buildRuntimeContextManifest({ promptSections: bundle.sections, allowedToolNames: talkToolNames(TALKS.owner) });
     const drawn = bundle.sections.filter((entry) => entry.rendered).map((entry) => entry.id);

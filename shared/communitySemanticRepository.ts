@@ -13,6 +13,7 @@ import {
 
 import { COMMUNITY_MEMBER_SELF_DIRECTORY, COMMUNITY_MEMBER_SELF_CONTEXT_PATH } from "./communityMemberSelfContext.ts";
 import { PERSONAL_MEMORY_PATH } from "./personalMemory.ts";
+import { COMMUNITY_SOUL_PATH, PERSONAL_SOUL_PATH } from "./agentSoul.ts";
 import { GUIDE_SKILLS_DIRECTORY_PATH, guideSkillAt } from "./guideSkills.ts";
 
 export const POLYNET_SEMANTIC_ROOT_PATH = "/";
@@ -627,8 +628,9 @@ export function validatePolynetSemanticRepositoryOperationInput(args: {
       // A member's activity (members/<handle>/timeline.md) and the approved handbook too.
       MEMBER_TIMELINE_PATH.test(repositoryPath.localPath) || repositoryPath.localPath === COMMUNITY_HANDBOOK_PATH ||
       repositoryPath.localPath === COMMUNITY_AI_RULES_PATH ||
-      // The community's short memory (docs/specs/agent-system-slice-1.md) and its brief.
-      repositoryPath.localPath === COMMUNITY_MEMORY_INDEX_PATH || repositoryPath.localPath === COMMUNITY_BRIEF_PATH) {
+      // The community's short memory (docs/specs/agent-system-slice-1.md), its brief, and its Soul.
+      repositoryPath.localPath === COMMUNITY_MEMORY_INDEX_PATH || repositoryPath.localPath === COMMUNITY_BRIEF_PATH ||
+      repositoryPath.localPath === COMMUNITY_SOUL_PATH) {
       const validated = validateCommunitySemanticOperationInput({ ...args,
         path: "/community.md" });
       if (!validated.ok) return validated;
@@ -646,7 +648,7 @@ export function validatePolynetSemanticRepositoryOperationInput(args: {
     // skills/ and its documents (shared/guideSkills.ts) are the executor's too.
     const skills = repositoryPath.localPath === GUIDE_SKILLS_DIRECTORY_PATH;
     if (repositoryPath.localPath === COMMUNITY_MEMBER_SELF_DIRECTORY || repositoryPath.localPath === COMMUNITY_MEMBER_SELF_CONTEXT_PATH ||
-      repositoryPath.localPath === PERSONAL_MEMORY_PATH || podPath || skills || guideSkillAt(repositoryPath.localPath)) {
+      repositoryPath.localPath === PERSONAL_MEMORY_PATH || repositoryPath.localPath === PERSONAL_SOUL_PATH || podPath || skills || guideSkillAt(repositoryPath.localPath)) {
       const directory = skills || repositoryPath.localPath === COMMUNITY_MEMBER_SELF_DIRECTORY || podPath?.kind === "pods" || podPath?.kind === "pod" || podPath?.kind === "pod_memory";
       const validated = validateCommunitySemanticOperationInput({
         ...args,
