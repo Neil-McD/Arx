@@ -10,7 +10,7 @@ import type { PlaceBriefView } from "../../../../shared/cloudCommunityBriefsGate
 import { resolveAuthSubject, type AuthSessionLike } from "../../../../shared/authSession";
 import { useLiveQuery } from "../../../../shared/liveQuery";
 import { cx, Icon } from "./kit";
-import { GuideVoice } from "../../../../shared/entityChipsUi";
+import { ChipCards, GuideVoice } from "../../../../shared/entityChipsUi";
 import { renderChatInlineMarkdown } from "../../../../shared/chatInlineMarkdownUi";
 
 // The place's brief, live (shared/liveQuery.ts): it stays on screen across
@@ -45,19 +45,25 @@ export function BriefPart(props: {
 }) {
   const [open, setOpen] = useState(false);
   // Folded, the text is cut at three lines; More shows only when that cut
-  // actually hides something.
-  const [long, setLong] = useState(false);
+  // actually hides something. A brief that fits drops the fold altogether, so
+  // nothing clips a chip's card.
+  const [fit, setFit] = useState<"measuring" | "short" | "long">("measuring");
+  const long = fit === "long";
   const text = useRef<HTMLParagraphElement>(null);
+  useLayoutEffect(() => { setFit("measuring"); }, [props.brief.summary]);
   useLayoutEffect(() => {
     const node = text.current;
-    if (node && !open) setLong(node.scrollHeight > node.clientHeight + 1);
-  }, [props.brief.summary, open]);
+    if (node && fit === "measuring") setFit(node.scrollHeight > node.clientHeight + 1 ? "long" : "short");
+  }, [fit, props.brief.summary]);
   useEffect(() => { setOpen(false); }, [props.brief.summary]);
   const age = briefAge(props.brief.updated_at, props.now);
   return (
     <div className={cx("brief")}>
       <span className={cx("gl")}><Icon name="spark" />Your guide{age ? <em>{age}</em> : null}</span>
-      <p ref={text} className={open ? undefined : cx("fold")}><BriefText summary={props.brief.summary} /></p>
+      {/* Folded, a chip opens nothing but its link: its card would be cut off. */}
+      <p ref={text} className={open || fit === "short" ? undefined : cx("fold")}>
+        <ChipCards on={open || fit === "short"}><BriefText summary={props.brief.summary} /></ChipCards>
+      </p>
       {long || open ? (
         <button type="button" className={cx("brief-more")} aria-expanded={open} onClick={() => setOpen(!open)}>{open ? "Less" : "More"}</button>
       ) : null}
