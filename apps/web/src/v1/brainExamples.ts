@@ -90,18 +90,13 @@ export function middlingExample(now: number): BrainMap {
   return finish(m, now);
 }
 
-// Courses and nothing learned yet (the shape of a real eleven-course
-// community), with the lessons that name each other.
+// Courses and nothing learned yet: the shape of a real eleven-course community.
 export function coursesExample(now: number): BrainMap {
   const m = base("AI Employee Builders");
   const shape: Array<[string, string, number]> = [["p1", "Phase 1: Get set up", 7], ["p2", "Phase 2: Map the business", 4], ["p3", "Phase 3: Your first skill", 6],
     ["p4", "Phase 4: A skill system", 3], ["p5", "Phase 5: Make it reliable", 6], ["p6", "Phase 6: Your AI Employee", 4], ["cc", "Claude Code 101", 8],
     ["gh", "GitHub Basics", 1], ["xr", "Business X-Ray", 15], ["ws", "Workshops & live recordings", 9], ["sh", "Skill Handbook", 11]];
   m.courses = shape.map(([id, name, lessons], order) => course(id, name, order, lessons, 0));
-  m.mentions = [["p10", "course:cc"], ["p11", "resource:gh0"], ["p16", "course:p2"], ["p20", "resource:xr0"], ["p22", "resource:xr4"], ["p23", "course:p3"],
-    ["p30", "resource:sh0"], ["p32", "resource:sh3"], ["p35", "course:p4"], ["p41", "resource:sh6"], ["p42", "course:p5"], ["p50", "resource:cc5"], ["p55", "course:p6"],
-    ["p61", "resource:xr9"], ["p63", "resource:ws2"], ["ws4", "resource:p31"], ["ws7", "resource:sh9"], ["cc2", "resource:gh0"], ["sh1", "resource:cc3"], ["xr2", "resource:p21"],
-  ].map(([from, to]) => ({ from: `resource:${from}`, to }));
   return finish(m, now);
 }
 

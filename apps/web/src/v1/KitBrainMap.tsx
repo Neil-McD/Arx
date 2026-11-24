@@ -223,11 +223,6 @@ export function KitBrainMap(props: {
       })}
       {/* Branches: what was learned, off its lesson, subject or pod. */}
       {layout.points.map((p) => <path key={`b-${p.id}`} className={cx(dimAll && !lit(p) ? "brain-branch dim" : "brain-branch")} d={curve(p.anchor, p, hashBend(p.id))} strokeWidth={page ? 0.7 + Math.min(1, p.point.use / 10) * 0.8 : 0.7} />)}
-      {/* A lesson that names another lesson or a course. */}
-      {layout.links.map((link) => {
-        const hot = props.selectedId && link.ids.includes(props.selectedId);
-        return <path key={`m-${link.ids.join("|")}`} className={cx(hot ? "brain-mention hot" : dimAll ? "brain-mention dim" : "brain-mention")} d={curve(link.a, link.b, 0.16)} />;
-      })}
       {/* Synapses: what answers read together. */}
       {layout.arcs.map((arc) => {
         const hot = props.selectedId && arc.ids.includes(props.selectedId);
@@ -268,7 +263,6 @@ export function KitBrainMap(props: {
             {mine ? <circle cx={lesson.x} cy={lesson.y} r={15} fill={`url(#${mineGlow})`} /> : null}
             <circle className={cx(cls)} cx={lesson.x} cy={lesson.y} r={lessonR(lesson)} />
             {props.selectedId === lesson.id ? <circle className={cx("brain-ring")} cx={lesson.x} cy={lesson.y} r={lessonR(lesson) + 5} /> : null}
-            {page ? <text className={cx(dimAll && !mine ? "brain-num dim" : "brain-num")} x={lesson.x} y={lesson.y - lessonR(lesson) - 6} textAnchor="middle">{lesson.order}</text> : null}
             {page ? <circle className={cx("brain-hit")} cx={lesson.x} cy={lesson.y} r={12} /> : null}
           </g>
         );

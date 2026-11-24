@@ -117,3 +117,27 @@ describe("the conversation with the guide is part of Home's address", () => {
     expect(carryRouteDetails("/c/a/chat", "/c/a/home/talk")).toBe("/c/a/chat");
   });
 });
+
+it("the brain map's \"Open the lesson\" goes to that lesson in its course", async () => {
+  const { goToCourseLesson } = await import("../shared/routeDetails");
+  const { parseAppRouteFromPathname } = await import("../shared/webAppRouteState");
+  const pushed: string[] = [];
+  const popped: string[] = [];
+  const previous = (globalThis as any).window;
+  (globalThis as any).window = {
+    location: { pathname: "/c/kiln/knowledge/brain" },
+    history: { pushState: (_state: unknown, _title: string, path: string) => pushed.push(path) },
+    dispatchEvent: (event: Event) => popped.push(event.type),
+  };
+  (globalThis as any).PopStateEvent ??= class extends Event {};
+  try {
+    goToCourseLesson("mod1", "les2");
+  } finally {
+    (globalThis as any).window = previous;
+  }
+  expect(pushed).toEqual(["/c/kiln/knowledge/mod1/les2"]);
+  expect(popped).toEqual(["popstate"]);
+  const route: any = parseAppRouteFromPathname(pushed[0]);
+  expect(JSON.stringify(route)).toContain("mod1");
+  expect(JSON.stringify(route)).toContain("les2");
+});

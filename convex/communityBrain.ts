@@ -13,7 +13,6 @@ import { requireCommunityChatAccess, requireCommunityManager } from "./community
 import { MAP_LESSONS, docReader, evidenceFacts, liveLessons, podRoom, type DocReader } from "./communityMemory";
 import { communityScopeKey, notesByUpdated, podScopeKey, type ScopeKey } from "./communityNotesStore";
 import { knowledgeUseFor } from "./communityKnowledgeUse";
-import { lessonMentionsFor } from "./communityLessonMentions";
 import { COMMUNITY_NOTES_MAX_PER_COMMUNITY } from "../shared/communityNotes";
 import { memoryEvidenceRefusal, noteAuthorKind, parseMemoryAbout, parseMemoryEvidenceRef } from "../shared/communityMemory";
 import {
@@ -94,7 +93,6 @@ async function brainMap(ctx: any, args: { communityId: any; userId: any; podChan
   }
 
   const inputs: BrainNoteInput[] = [];
-  let mentions: { links: Array<{ from: string; to: string }>; stale: boolean } = { links: [], stale: false };
   const courses: BrainCourse[] = [];
   const pods: BrainPod[] = [];
   if (room) {
@@ -116,7 +114,6 @@ async function brainMap(ctx: any, args: { communityId: any; userId: any; podChan
     }
     courses.push(...[...byCourse.values()].sort((a, b) => a.order - b.order || a.name.localeCompare(b.name)));
     const lessonIds = new Set(lessons.map((lesson) => String(lesson.id)));
-    mentions = await lessonMentionsFor(ctx, args.communityId, lessons);
     const scope = communityScopeKey(args.communityId);
     for (const row of await notesByUpdated(ctx, scope).take(COMMUNITY_NOTES_MAX_PER_COMMUNITY)) {
       inputs.push(await noteInput(ctx, args.communityId, scope, row, viewerId, attachOf(row, lessonIds, null), { reader, checkSources: !canManage }));
@@ -178,8 +175,6 @@ async function brainMap(ctx: any, args: { communityId: any; userId: any; podChan
     points,
     pods,
     arcs: chooseArcs(use.together, drawn),
-    mentions: mentions.links,
-    mentions_stale: mentions.stale,
     hidden,
   };
 }

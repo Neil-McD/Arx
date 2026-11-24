@@ -157,6 +157,16 @@ export function useRouteDetail(key: RouteDetailKey): string | null {
   return useSyncExternalStore(subscribe, () => readRouteDetail(key), () => null);
 }
 
+// One lesson of a course in Knowledge, for the community in the address bar
+// (the brain map's "Open the lesson"). The app follows the address on popstate.
+export function goToCourseLesson(courseId: string, lessonId: string): void {
+  if (typeof window === "undefined") return;
+  const match = window.location.pathname.match(/^(\/m)?\/c\/([^/]+)/);
+  if (!match) return;
+  window.history.pushState({}, "", `${match[1] ?? ""}/c/${match[2]}/knowledge/${encodeURIComponent(courseId)}/${encodeURIComponent(lessonId)}`);
+  window.dispatchEvent(new PopStateEvent("popstate"));
+}
+
 // Members, or one member's record there (memberKey: "owner" or their
 // membership), for the community in the address bar. Another page, so the
 // address changes and the app follows it on popstate, as it does for Pods.
