@@ -219,6 +219,9 @@ export function buildWebCommunitySurfaceProjection(
     knowledge: {
       communityId: params.activeCommunity?.id ?? null,
       communityName: params.activeCommunity?.name ?? null,
+      // The community brain's middle shows these.
+      communityOneLiner: params.activeCommunity?.one_liner ?? null,
+      communityAbout: params.activeCommunity?.about ?? null,
       session: params.session,
       ensureSession: params.ensureSession,
       requireSignIn: params.requireSignIn,

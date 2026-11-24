@@ -21,6 +21,8 @@ const PANEL_BOX = { w: 240, h: 200 };
 const PANEL_LENS = 0.85;
 
 export type BrainReading = "community" | "yours" | "gaps";
+// What the middle of the map is picked as.
+export const BRAIN_CENTER_ID = "center";
 // The fewest drawable nodes worth a map; fewer, and a list says more.
 export const BRAIN_MAP_MIN_POINTS = BRAIN_MAP_MIN_NODES;
 
@@ -185,7 +187,7 @@ export function KitBrainMap(props: {
   // map the least it can.
   useEffect(() => {
     if (!page || !props.selectedId) return;
-    const at = [...base.points, ...base.lessons, ...base.hubs.map((hub) => ({ ...hub, id: hub.key }))].find((entry) => entry.id === props.selectedId);
+    const at = [...base.points, ...base.lessons, ...base.courses.map((course) => ({ ...course, id: course.key })), ...base.hubs.map((hub) => ({ ...hub, id: hub.key })), { ...base.center, id: BRAIN_CENTER_ID }].find((entry) => entry.id === props.selectedId);
     if (!at) return;
     setView((current) => revealPoint(current, at, fit * current.k, stage, { left: 70, right: (props.coverRight ?? 0) + 60, top: 80, bottom: 70 }, bounds));
   }, [props.selectedId, props.coverRight]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -269,16 +271,26 @@ export function KitBrainMap(props: {
       })}
 
       {/* A course's own node, in the middle of its lessons. */}
-      {layout.courses.map((course) => <circle key={`c-${course.key}`} className={cx(dimAll ? "brain-course dim" : "brain-course")} cx={course.x} cy={course.y} r={page ? 5.4 * dot : Math.max(2.2, smallDot * 1.15)} />)}
+      {layout.courses.map((course) => {
+        const r = page ? 5.4 * dot : Math.max(2.2, smallDot * 1.15);
+        const name = layout.hubs.find((hub) => hub.key === course.key)?.label ?? "Course";
+        return (
+          <g key={`c-${course.key}`} className={cx(page ? "brain-node pickable" : "brain-node")} {...(page ? pickProps(course.key, `Course: ${name}`) : {})}>
+            {page ? <circle className={cx("brain-hit")} cx={course.x} cy={course.y} r={14} /> : null}
+            {props.selectedId === course.key ? <circle className={cx("brain-ring")} cx={course.x} cy={course.y} r={r + 5} /> : null}
+            <circle className={cx(dimAll ? "brain-course dim" : "brain-course")} cx={course.x} cy={course.y} r={r} />
+          </g>
+        );
+      })}
 
       {/* Hubs: subjects and pods are cells; a course is named outside its ring. */}
       {layout.hubs.map((hub) => {
         const gap = reading === "gaps" && gapKeys.has(hub.key);
         const right = Math.cos((hub.angle * Math.PI) / 180) >= -0.2;
-        const pickable = page && (hub.kind === "subject" || hub.kind === "course");
+        const pickable = page && (hub.kind === "subject" || hub.kind === "course" || hub.kind === "pod");
         return (
           <g key={hub.key} className={cx(pickable ? "brain-node pickable" : "brain-node")}
-            {...(pickable ? pickProps(hub.key, `${hub.kind === "course" ? "Course" : "Subject"}: ${hub.label}`) : {})}>
+            {...(pickable ? pickProps(hub.key, `${hub.kind === "course" ? "Course" : hub.kind === "pod" ? "Pod" : "Subject"}: ${hub.label}`) : {})}>
             {pickable ? <circle className={cx("brain-hit")} cx={hub.x} cy={hub.y} r={14} /> : null}
             {props.selectedId === hub.key ? <circle className={cx("brain-ring")} cx={hub.x} cy={hub.y} r={11} /> : null}
             {hub.kind === "pod" ? (
@@ -325,8 +337,13 @@ export function KitBrainMap(props: {
         return <text className={cx("brain-name on")} x={p.x + (right ? pr(p) + 7 : -pr(p) - 7)} y={p.y + 4} textAnchor={right ? "start" : "end"}>{title}</text>;
       })() : null}
 
-      <circle className={cx("brain-core")} cx={mid.x} cy={mid.y} r={size.core} />
-      <circle className={cx("brain-core-ring")} cx={mid.x} cy={mid.y} r={size.coreRing} />
+      {/* The community itself, at the middle. */}
+      <g className={cx(page ? "brain-node pickable" : "brain-node")} {...(page ? pickProps(BRAIN_CENTER_ID, props.map.center.name || "The community") : {})}>
+        {page ? <circle className={cx("brain-hit")} cx={mid.x} cy={mid.y} r={size.coreRing + 8} /> : null}
+        <circle className={cx("brain-core")} cx={mid.x} cy={mid.y} r={size.core} />
+        <circle className={cx("brain-core-ring")} cx={mid.x} cy={mid.y} r={size.coreRing} />
+        {props.selectedId === BRAIN_CENTER_ID ? <circle className={cx("brain-ring")} cx={mid.x} cy={mid.y} r={size.coreRing + 5} /> : null}
+      </g>
       {page ? <text className={cx("brain-center")} x={0} y={33} textAnchor="middle">{props.map.center.name}</text> : null}
     </svg>
   );

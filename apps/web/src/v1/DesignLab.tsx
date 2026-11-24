@@ -43,7 +43,7 @@ import { KitEventForm } from "./KitEventForm";
 import { JoinRequestsDrawer, JoinRequestsLine, MembersBulkBar, MembersTable, MembersToolbar, type MembersSortKey } from "./KitMembersTable";
 import { memberTimeFor, shortDay } from "./KitMembersPage";
 import { matchesMemberSearch, memberKey, toggleAllShown } from "../../../../shared/communityMembersTable";
-import { coursesExample, fullExample, middlingExample, sunriseExample } from "./brainExamples";
+import { coursesExample, fullExample, labBrainContent, middlingExample, sunriseExample } from "./brainExamples";
 import { CommunityPageFrame, CommunityPageRail } from "../components/CommunityPageHeader";
 import { KitHomeRail } from "./KitHomeRail";
 import { KitPodRail } from "./KitPodRail";
@@ -441,7 +441,7 @@ function BrainPageLab() {
   return (
     <div style={{ height: "100vh", display: "grid" }}>
       <CommunityPageFrame>
-        <KitBrainPageFrame canManage fill><KitBrainPageView session={null} communityId="lab" canManage onOpenCourse={() => undefined} map={map} /></KitBrainPageFrame>
+        <KitBrainPageFrame canManage fill><KitBrainPageView session={null} communityId="lab" canManage onOpenCourse={() => undefined} map={map} content={labBrainContent(map)} /></KitBrainPageFrame>
       </CommunityPageFrame>
     </div>
   );

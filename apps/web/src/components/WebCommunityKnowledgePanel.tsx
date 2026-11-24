@@ -15,6 +15,8 @@ type Props = {
   context: {
     communityId: string | null;
     communityName: string | null;
+    communityOneLiner?: string | null;
+    communityAbout?: string | null;
     session: WebCommunityChatPanelProps["session"];
     ensureSession: ComponentProps<typeof WebCommunitySettingsSection>["ensureSession"];
     requireSignIn: () => void;
@@ -90,6 +92,8 @@ function KnowledgeV1({ resources, context }: Props) {
       </CommunityPageHeader>
         {inBrain ? (
           <KitBrainPage session={context.session} communityId={context.communityId!} canManage={canManage}
+            content={{ courses: resources.state.modules, lessons: resources.state.resources,
+              community: { oneLiner: context.communityOneLiner ?? null, about: context.communityAbout ?? null } }}
             onOpenCourse={(courseId) => { resources.actions.handleSelectModule(courseId); }} />
         ) : null}
         {inBrain ? null : <KitClassroom communityId={context.communityId!}
