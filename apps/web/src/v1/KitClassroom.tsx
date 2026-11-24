@@ -626,9 +626,13 @@ export function KitClassroom(props: {
     try { await editingTools.save(lesson.id, { title: next.slice(0, 160), url: lesson.url ?? null, body_md: lesson.body_md ?? "" }); } catch { setCourseError("The lesson couldn't be renamed. Try again."); }
   };
   // The course's lessons: pick one, and for a host put them in order.
+  const displayedLessons = open
+    ? lessonDrag.order.map((id) => open.lessons.find((entry) => entry.id === id)).filter((entry): entry is NonNullable<typeof entry> => Boolean(entry))
+    : [];
+  const displayedLessonIds = displayedLessons.map((entry) => entry.id);
   const lessonList = open ? (
     <div className={cx("klrows")}>
-      {lessonDrag.order.map((id) => open.lessons.find((entry) => entry.id === id)).filter((entry): entry is NonNullable<typeof entry> => Boolean(entry)).map((lesson, index) => (
+      {displayedLessons.map((lesson, index) => (
         <div key={lesson.id} className={cx("kl-row", editingTools && "host", lesson.id === lessonId && "on", lessonDrag.held === lesson.id && "gap")} {...(editingTools ? lessonDrag.item(lesson.id) : null)}>
           {/* Held by its grip and dropped where it should go; the arrow keys move it one place. */}
           {editingTools ? (
@@ -665,17 +669,17 @@ export function KitClassroom(props: {
               <summary aria-label={`More for ${lesson.title}`}><Icon name="more" /></summary>
               <div role="menu">
                 <button type="button" role="menuitem" onClick={(event) => { closeMenu(event); startRenamingLesson(lesson); }}><Icon name="pen" />Rename</button>
-                {open.lessons.length > 1 && index > 0 ? (
+                {displayedLessonIds.length > 1 && index > 0 ? (
                   <button type="button" role="menuitem" onClick={(event) => {
                     closeMenu(event);
-                    const next = courseOrderAfterMove(open.lessons.map((entry) => entry.id), index, -1);
+                    const next = courseOrderAfterMove(displayedLessonIds, index, -1);
                     if (next) void editingTools.reorder(open.course.id, next);
                   }}><Icon name="back" />Move up</button>
                 ) : null}
-                {open.lessons.length > 1 && index < open.lessons.length - 1 ? (
+                {displayedLessonIds.length > 1 && index < displayedLessonIds.length - 1 ? (
                   <button type="button" role="menuitem" onClick={(event) => {
                     closeMenu(event);
-                    const next = courseOrderAfterMove(open.lessons.map((entry) => entry.id), index, 1);
+                    const next = courseOrderAfterMove(displayedLessonIds, index, 1);
                     if (next) void editingTools.reorder(open.course.id, next);
                   }}><Icon name="arrow" />Move down</button>
                 ) : null}
