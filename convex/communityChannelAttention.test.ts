@@ -439,4 +439,177 @@ test("listMyCommunityRailAttention batches communities, enforces fail-closed acc
   expect(ownerRowsAfterMention).toEqual([
     { community_id: String(fixture.cPod.communityId), chat: false, resources: false, events: false, mentions: true },
   ]);
+
+  // Even after 45 newer read mentions in General, the older unread pod mention still lights the rail dot.
+  await t.run(async (ctx) => {
+    for (let index = 0; index < 45; index += 1) {
+      const createdAt = 4_000 + index * 10;
+      const rootId = await ctx.db.insert("communityInteractionRoots", {
+        communityId: fixture.cPod.communityId,
+        channelId: fixture.cPod.generalChannelId,
+        actorType: "human",
+        actorUserId: fixture.memberId,
+        kind: "discussion",
+        status: "live",
+        visibilityScope: "community",
+        contentSummary: `General ping ${index}`,
+        replyCount: 0,
+        reactionSummary: [],
+        idempotencyKey: `rail-general-ping-${index}`,
+        createdAt,
+        updatedAt: createdAt,
+      });
+      await ctx.db.insert("communityInteractionMentions", {
+        communityId: fixture.cPod.communityId,
+        channelId: fixture.cPod.generalChannelId,
+        rootId,
+        mentionKind: "user",
+        mentionedUserId: fixture.ownerId,
+        notifyState: "read",
+        createdAt,
+        updatedAt: createdAt,
+      });
+    }
+  });
+  await asOwner.mutation(api.communityAttention.acknowledgeCommunityChatRead, {
+    communityId: fixture.cPod.communityId,
+    channelId: fixture.cPod.generalChannelId,
+    throughAtMs: 5_000,
+  });
+  const ownerRowsWithOldPodMention = await asOwner.query(api.communityAttention.listMyCommunityRailAttention, {
+    communityIds: [fixture.cPod.communityId],
+  });
+  expect(ownerRowsWithOldPodMention).toEqual([
+    { community_id: String(fixture.cPod.communityId), chat: false, resources: false, events: false, mentions: true },
+  ]);
+});
+
+test("listMyCommunityRailAttention ignores archived private-room grants when checking active pod dots", async () => {
+  const t = convexTest(schema, modules);
+  const fixture = await t.run(async (ctx) => {
+    const createUser = async (subject: string) =>
+      await ctx.db.insert("users", {
+        authSubject: subject,
+        displayName: subject,
+        handle: subject,
+        normalizedHandle: subject,
+        createdAt: 1_000,
+        updatedAt: 1_000,
+      });
+    const ownerId = await createUser("archived-grants-owner");
+    const memberId = await createUser("archived-grants-member");
+    const communityId = await ctx.db.insert("communities", {
+      ownerId,
+      slug: "archived-grants",
+      name: "Archived grants",
+      visibility: "unlisted",
+      inferenceFundingPolicy: "managed_required",
+      entryPolicy: "open",
+      activeMemberCount: 2,
+      createdAt: 1_000,
+      updatedAt: 1_000,
+    });
+    const membershipId = await ctx.db.insert("communityMemberships", {
+      communityId,
+      userId: memberId,
+      role: "member",
+      accessSource: "manual_grant",
+      state: "active",
+      activationSequence: 0,
+      createdAt: 1_000,
+      updatedAt: 1_000,
+    });
+    await ctx.db.insert("communityChannels", {
+      communityId,
+      systemRole: "general",
+      slug: "general",
+      name: "General",
+      accessMode: "all_members",
+      postingPolicy: "members",
+      status: "active",
+      position: 0,
+      createdAt: 1_000,
+      updatedAt: 1_000,
+    });
+    // 105 historical archived rooms whose participant grants remained active.
+    for (let index = 0; index < 105; index += 1) {
+      const archivedChannelId = await ctx.db.insert("communityChannels", {
+        communityId,
+        slug: `archived-pod-${index}`,
+        name: `Archived pod ${index}`,
+        accessMode: "restricted",
+        postingPolicy: "members",
+        status: "archived",
+        position: index + 1,
+        createdByUserId: ownerId,
+        createdAt: 1_000,
+        updatedAt: 1_000,
+      });
+      await ctx.db.insert("communityChannelParticipants", {
+        communityId,
+        channelId: archivedChannelId,
+        principalKey: `user:${String(memberId)}`,
+        membershipId,
+        membershipActivationSequence: 0,
+        status: "active",
+        createdByUserId: ownerId,
+        createdAt: 1_000,
+        updatedAt: 1_000,
+      });
+    }
+    // One active pod created after all 105 archived grants.
+    const activePodId = await ctx.db.insert("communityChannels", {
+      communityId,
+      slug: "current-pod",
+      name: "Current pod",
+      accessMode: "restricted",
+      postingPolicy: "members",
+      status: "active",
+      position: 106,
+      createdByUserId: ownerId,
+      createdAt: 2_000,
+      updatedAt: 2_000,
+    });
+    await ctx.db.insert("communityChannelParticipants", {
+      communityId,
+      channelId: activePodId,
+      principalKey: `user:${String(memberId)}`,
+      membershipId,
+      membershipActivationSequence: 0,
+      status: "active",
+      createdByUserId: ownerId,
+      createdAt: 2_000,
+      updatedAt: 2_000,
+    });
+    await ctx.db.insert("communityInteractionRoots", {
+      communityId,
+      channelId: activePodId,
+      actorType: "human",
+      actorUserId: ownerId,
+      kind: "discussion",
+      status: "live",
+      visibilityScope: "community",
+      contentSummary: "Fresh active pod update",
+      replyCount: 0,
+      reactionSummary: [],
+      idempotencyKey: "active-pod-post-1",
+      createdAt: 3_000,
+      updatedAt: 3_000,
+    });
+    return { communityId };
+  });
+
+  const asMember = t.withIdentity({ subject: "archived-grants-member" });
+  const rows = await asMember.query(api.communityAttention.listMyCommunityRailAttention, {
+    communityIds: [fixture.communityId],
+  });
+  expect(rows).toEqual([
+    {
+      community_id: String(fixture.communityId),
+      chat: true,
+      resources: false,
+      events: false,
+      mentions: false,
+    },
+  ]);
 });

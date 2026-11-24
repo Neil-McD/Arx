@@ -35,7 +35,7 @@ import {
   resolveCommunityChannelActor,
   type ChannelActor,
 } from "./communityChannelAccess";
-import { isHost, isInPod, podRecord } from "./communityPods";
+import { isInPod, podRecord } from "./communityPods";
 import { MAX_PRIVATE_COMMUNITY_CHANNELS } from "../shared/communityChannelCapacity";
 import { canManageCommunityResources } from "./communityResourceShared";
 
@@ -712,70 +712,63 @@ async function listSharedChannelsForRailAttention(
   return readable.filter((channel): channel is CommunityChannelLike => channel !== null);
 }
 
-async function listViewerPodDotChannels(
+async function listReadableActiveRestrictedChannelsForRailAttention(
   ctx: any,
   communityId: any,
   actor: ChannelActor,
-  userId: any,
 ): Promise<CommunityChannelLike[]> {
-  const candidateIds = new Map<string, any>();
-  const grants = (await ctx.db
-    .query("communityChannelParticipants" as any)
-    .withIndex("by_community_principal_status", (q: any) =>
-      q.eq("communityId", communityId).eq("principalKey", actor.principalKey).eq("status", "active"),
+  // Capacity bounds active restricted rooms (<= MAX_PRIVATE_COMMUNITY_CHANNELS),
+  // not historical participant grants on archived rooms. Reading active rooms
+  // directly avoids archived-grant starvation while staying strictly bounded.
+  const activeRestricted = (await ctx.db
+    .query("communityChannels" as any)
+    .withIndex("by_community_access_status_position", (q: any) =>
+      q.eq("communityId", communityId).eq("accessMode", "restricted").eq("status", "active"),
     )
-    .take(MAX_PRIVATE_COMMUNITY_CHANNELS)) as Array<{ channelId: any }>;
-  for (const grant of grants) {
-    const key = normalizeIdValue(grant.channelId);
-    if (key) candidateIds.set(key, grant.channelId);
-  }
-  if (actor.isManager) {
-    const pods = (await ctx.db
-      .query("communityPods" as any)
-      .withIndex("by_community_channel", (q: any) => q.eq("communityId", communityId))
-      .take(MAX_PRIVATE_COMMUNITY_CHANNELS)) as Array<{ channelId: any; hostUserIds?: any[] }>;
-    for (const pod of pods) {
-      if (!isHost(pod, userId)) continue;
-      const key = normalizeIdValue(pod.channelId);
-      if (key) candidateIds.set(key, pod.channelId);
-    }
-  }
-  if (candidateIds.size === 0) return [];
-  const fetched = await Promise.all(
-    Array.from(candidateIds.values()).map(async (channelId) => (await ctx.db.get(channelId)) as CommunityChannelLike | null),
+    .take(MAX_PRIVATE_COMMUNITY_CHANNELS)) as CommunityChannelLike[];
+  if (activeRestricted.length === 0) return [];
+  const readable = await Promise.all(
+    activeRestricted.map(async (channel) =>
+      (await getCommunityChannelCapabilities({ ctx, channel, actor })).canRead ? channel : null,
+    ),
   );
-  const readable: CommunityChannelLike[] = [];
-  for (const channel of fetched) {
-    if (
-      !channel ||
-      normalizeIdValue(channel.communityId) !== normalizeIdValue(communityId) ||
-      channel.status !== "active" ||
-      channel.accessMode !== "restricted"
-    ) {
-      continue;
-    }
-    if ((await getCommunityChannelCapabilities({ ctx, channel, actor })).canRead) {
-      readable.push(channel);
-    }
-  }
-  return readable;
+  return readable.filter((channel): channel is CommunityChannelLike => channel !== null);
 }
 
-async function channelHasUnreadChatFromOthers(args: {
+async function channelHasUnreadRailSignal(args: {
   ctx: any;
   communityId: any;
   channel: CommunityChannelLike;
   actor: ChannelActor;
   userId: any;
-}): Promise<boolean> {
-  const [readState, activity] = await Promise.all([
+  checkChatDot: boolean;
+}): Promise<{ chat: boolean; mentions: boolean }> {
+  const [readState, latestMentionsByChannel, activity] = await Promise.all([
     readCommunityChatReadState(args.ctx, args.communityId, args.userId, args.channel._id),
-    getCommunityChannelActivityMarkers(args.ctx, args.communityId, args.channel, args.actor, args.userId),
+    getLatestCommunityMentionsByChannel({
+      ctx: args.ctx,
+      communityId: args.communityId,
+      userId: args.userId,
+      channels: [args.channel],
+    }),
+    args.checkChatDot
+      ? getCommunityChannelActivityMarkers(
+          args.ctx,
+          args.communityId,
+          args.channel,
+          args.actor,
+          args.userId,
+        )
+      : Promise.resolve(null),
   ]);
-  return (
-    typeof activity.latestFromOthersAt === "number" &&
-    activity.latestFromOthersAt > readState.chatSeenThroughAt
-  );
+  const latestMentionAt = latestMentionsByChannel.get(communityAttentionChannelKey(args.channel));
+  const mentions =
+    typeof latestMentionAt === "number" && latestMentionAt > readState.mentionSeenThroughAt;
+  const chat =
+    Boolean(activity) &&
+    typeof activity?.latestFromOthersAt === "number" &&
+    activity.latestFromOthersAt > readState.chatSeenThroughAt;
+  return { chat, mentions };
 }
 
 async function getCommunityRailAttentionSummary(
@@ -817,14 +810,47 @@ async function getCommunityRailAttentionSummary(
   }
   const sharedChannels = await listSharedChannelsForRailAttention(ctx, communityId, actor);
   for (const channel of sharedChannels) {
-    if (await channelHasUnreadChatFromOthers({ ctx, communityId, channel, actor, userId })) {
-      return { community_id: communityIdStr, chat: true, resources: false, events: false, mentions: false };
+    const signal = await channelHasUnreadRailSignal({
+      ctx,
+      communityId,
+      channel,
+      actor,
+      userId,
+      checkChatDot: true,
+    });
+    if (signal.chat || signal.mentions) {
+      return {
+        community_id: communityIdStr,
+        chat: signal.chat,
+        resources: false,
+        events: false,
+        mentions: signal.mentions,
+      };
     }
   }
-  const podDotChannels = await listViewerPodDotChannels(ctx, communityId, actor, userId);
-  for (const channel of podDotChannels) {
-    if (await channelHasUnreadChatFromOthers({ ctx, communityId, channel, actor, userId })) {
-      return { community_id: communityIdStr, chat: true, resources: false, events: false, mentions: false };
+  const restrictedChannels = await listReadableActiveRestrictedChannelsForRailAttention(
+    ctx,
+    communityId,
+    actor,
+  );
+  for (const channel of restrictedChannels) {
+    const checkChatDot = await viewerGetsRoomChatDot(ctx, communityId, channel, actor, userId);
+    const signal = await channelHasUnreadRailSignal({
+      ctx,
+      communityId,
+      channel,
+      actor,
+      userId,
+      checkChatDot,
+    });
+    if (signal.chat || signal.mentions) {
+      return {
+        community_id: communityIdStr,
+        chat: signal.chat,
+        resources: false,
+        events: false,
+        mentions: signal.mentions,
+      };
     }
   }
   return { community_id: communityIdStr, chat: false, resources: false, events: false, mentions: false };
