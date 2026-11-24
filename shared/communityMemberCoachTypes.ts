@@ -47,6 +47,7 @@ export type MemberCoachDraftView = {
 export type MemberCoachSettingsView = {
   enabled: boolean;
   auto_reasons: MemberCoachReason[];
+  auto_reply_enabled: boolean;
   sent_this_week: number;
   waiting_count: number;
 };

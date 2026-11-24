@@ -41,6 +41,14 @@ export async function noteBySlug(ctx: any, scopeKey: ScopeKey, slug: string) {
   return await ctx.db.query("communityNotes").withIndex("by_scope_slug", (q: any) => q.eq("scopeKey", scopeKey).eq("slug", slug)).first();
 }
 
+// Reads one note by id ONLY if it belongs to one of the caller's allowed scopes.
+export async function readScopedNoteById(ctx: any, allowedScopes: readonly ScopeKey[], noteId: any) {
+  const note: any = noteId ? await ctx.db.get(noteId) : null;
+  if (!note) return null;
+  const allowed = new Set<string>(allowedScopes);
+  return allowed.has(String(note.scopeKey ?? "")) ? note : null;
+}
+
 export function searchNotes(ctx: any, scopeKey: ScopeKey, searchQuery: string) {
   return ctx.db.query("communityNotes").withSearchIndex("search_text", (q: any) => q.search("searchText", searchQuery).eq("scopeKey", scopeKey));
 }

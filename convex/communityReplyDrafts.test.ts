@@ -268,3 +268,288 @@ test("lessons are picked by the question's words, the title counting double; the
   expect(replyDraftWaited(26)).toBe("26 hours");
   expect(replyDraftWaited(50)).toBe("2 days");
 });
+
+// ---- Slice 2: Proactive Community Participant (notes, seated pods, strict isolation, auto-reply trust ramp)
+
+async function seedNote(
+  t: any,
+  args: { communityId: any; scopeKey: string; slug: string; title: string; bodyMd: string },
+) {
+  return await t.run((ctx: any) =>
+    ctx.db.insert("communityNotes", {
+      communityId: args.communityId,
+      scopeKey: args.scopeKey,
+      slug: args.slug,
+      title: args.title,
+      bodyMd: args.bodyMd,
+      source: "learned",
+      searchText: `${args.title} ${args.bodyMd}`.toLowerCase(),
+      createdAt: NOW - DAY,
+      updatedAt: NOW - DAY,
+    }),
+  );
+}
+
+async function seatGuideInPod(t: any, communityId: any, channelId: any, ownerId: any) {
+  return await t.run((ctx: any) =>
+    ctx.db.insert("communityChannelParticipants", {
+      communityId,
+      channelId,
+      principalKey: "community_agent",
+      status: "active",
+      createdByUserId: ownerId,
+      createdAt: NOW - 2 * DAY,
+      updatedAt: NOW - 2 * DAY,
+    }),
+  );
+}
+
+test("open-channel questions can cite community notes and NEVER see any pod notes; deleting a cited note withdraws the draft", async () => {
+  stubProvider();
+  const t = convexTest(schema, modules);
+  const w = await world(t);
+  const communityNoteId = await seedNote(t, {
+    communityId: w.communityId,
+    scopeKey: `community:${String(w.communityId)}`,
+    slug: "onboarding-checklist",
+    title: "Onboarding checklist",
+    bodyMd: "Send a 3-minute welcome Loom video within 24 hours of onboarding a new client.",
+  });
+  await seedNote(t, {
+    communityId: w.communityId,
+    scopeKey: `pod:${String(w.pod)}`,
+    slug: "pod-secret-onboarding",
+    title: "Secret pod onboarding ritual",
+    bodyMd: "POD ONLY SECRET: onboarding gift box for VIP founders.",
+  });
+  await ask(t, w, { contentSummary: "What is the best onboarding step for a new client?" });
+
+  const bodies = fakeModel([
+    writeCall("c1", {
+      text: "Maya, the Onboarding checklist note recommends sending a 3-minute welcome Loom within 24 hours.",
+      source: `note:${String(communityNoteId)}`,
+    }),
+  ]);
+  expect(await run(t, w)).toMatchObject({ status: "drafted" });
+  expect(bodies).toHaveLength(1);
+  const promptText = JSON.stringify(bodies[0]);
+  expect(promptText).toContain("Onboarding checklist");
+  expect(promptText).not.toContain("POD ONLY SECRET");
+
+  const asOwner = t.withIdentity({ subject: "owner" });
+  const waiting = await asOwner.query(api.communityReplyDrafts.listReplyDrafts, { communityId: w.communityId });
+  expect(waiting).toHaveLength(1);
+  expect(waiting[0]).toMatchObject({ source: "Community note: Onboarding checklist" });
+  expect(waiting[0]?.is_pod).toBeUndefined();
+
+  // Deleting the cited note immediately withdraws the draft and refuses posting.
+  await t.run((ctx: any) => ctx.db.delete(communityNoteId));
+  expect(await asOwner.query(api.communityReplyDrafts.listReplyDrafts, { communityId: w.communityId })).toEqual([]);
+  await expect(
+    asOwner.mutation(api.communityReplyDrafts.postReplyDraft, { communityId: w.communityId, draftId: waiting[0]!.id as any }),
+  ).rejects.toThrow(/no_longer_needed/);
+});
+
+test("seated pod questions cite that pod's notes + community notes, NEVER another pod's notes, and withdraw if the guide is unseated", async () => {
+  stubProvider();
+  const t = convexTest(schema, modules);
+  const w = await world(t);
+  // Create a second pod (Pod B) with its own secret note.
+  const podB = await t.run((ctx: any) =>
+    ctx.db.insert("communityChannels", {
+      communityId: w.communityId,
+      slug: "pod-b",
+      name: "Pod B",
+      accessMode: "restricted",
+      postingPolicy: "members",
+      status: "active",
+      position: 2,
+      createdByUserId: w.ownerId,
+      createdAt: NOW,
+      updatedAt: NOW,
+    } as any),
+  );
+  const seatId = await seatGuideInPod(t, w.communityId, w.pod, w.ownerId);
+
+  // markReplyDraftDue schedules pod-scoped work for a seated pod!
+  await t.run((ctx: any) => markReplyDraftDue(ctx, { communityId: w.communityId, channelId: w.pod, actorType: "human", nowMs: NOW }));
+  const podWork: any = await t.run((ctx: any) =>
+    ctx.db.query("agentWork").withIndex("by_scope_kind", (q: any) => q.eq("scopeKey", `pod:${String(w.pod)}`).eq("kind", "reply_draft")).first(),
+  );
+  expect(podWork).toMatchObject({ kind: "reply_draft", scope: "pod", pending: 1 });
+
+  const podANoteId = await seedNote(t, {
+    communityId: w.communityId,
+    scopeKey: `pod:${String(w.pod)}`,
+    slug: "pod-a-retainer",
+    title: "Retainer structure",
+    bodyMd: "In this pod we structure monthly retainers with a 90-day minimum commitment.",
+  });
+  await seedNote(t, {
+    communityId: w.communityId,
+    scopeKey: `pod:${String(podB)}`,
+    slug: "pod-b-retainer",
+    title: "Pod B retainer secret",
+    bodyMd: "POD B CONFIDENTIAL: never share outside Pod B.",
+  });
+
+  await ask(t, w, { channelId: w.pod, contentSummary: "How should we structure monthly retainers?" });
+  const bodies = fakeModel([
+    writeCall("c1", {
+      text: "Maya, our Retainer structure note recommends a 90-day minimum commitment.",
+      source: `note:${String(podANoteId)}`,
+    }),
+  ]);
+
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(NOW);
+  const { workId } = await t.mutation(internal.communityReplyDrafts.requestReplyDraftNowInternal, {
+    communityId: w.communityId,
+    podRoomId: String(w.pod),
+  });
+  expect(await t.action(internal.communityReplyDrafts.runReplyDraftInternal, { workId })).toMatchObject({ status: "drafted" });
+  expect(bodies).toHaveLength(1);
+  const promptText = JSON.stringify(bodies[0]);
+  expect(promptText).toContain("Retainer structure");
+  expect(promptText).not.toContain("POD B CONFIDENTIAL");
+
+  const asOwner = t.withIdentity({ subject: "owner" });
+  const waiting = await asOwner.query(api.communityReplyDrafts.listReplyDrafts, { communityId: w.communityId });
+  expect(waiting).toHaveLength(1);
+  expect(waiting[0]).toMatchObject({ channel: "founders", is_pod: true, source: "founders note: Retainer structure" });
+
+  // Unseating the guide from the pod immediately withdraws the waiting draft and refuses posting.
+  await t.run((ctx: any) => ctx.db.patch(seatId, { status: "revoked", updatedAt: NOW }));
+  expect(await asOwner.query(api.communityReplyDrafts.listReplyDrafts, { communityId: w.communityId })).toEqual([]);
+  await expect(
+    asOwner.mutation(api.communityReplyDrafts.postReplyDraft, { communityId: w.communityId, draftId: waiting[0]!.id as any }),
+  ).rejects.toThrow(/no_longer_needed/);
+});
+
+test("auto-reply trust ramp posts cited replies during daytime, downgrades to draft in quiet hours, and enforces 1-per-pod daily cap", async () => {
+  stubProvider();
+  const t = convexTest(schema, modules);
+  const w = await world(t);
+  await seatGuideInPod(t, w.communityId, w.pod, w.ownerId);
+
+  // Set community timezone to UTC and enable autoReplyEnabled.
+  await t.run((ctx: any) =>
+    ctx.db.insert("communityFounderBriefSettings", {
+      communityId: w.communityId,
+      enabled: true,
+      localHour: 8,
+      timeZone: "UTC",
+      nextDueAt: NOW + DAY,
+      updatedByUserId: w.ownerId,
+      createdAt: NOW,
+      updatedAt: NOW,
+    }),
+  );
+  const asOwner = t.withIdentity({ subject: "owner" });
+  const settings = await asOwner.mutation(api.communityMemberCoach.setMemberCoachSettings, {
+    communityId: w.communityId,
+    enabled: true,
+    autoReasons: [],
+    autoReplyEnabled: true,
+  });
+  expect(settings.auto_reply_enabled).toBe(true);
+
+  // 1. Daytime (15:00 UTC = NOW): auto-posts straight into the thread!
+  const root1 = await ask(t, w, { channelId: w.pod, contentSummary: "How do I price a first client?" });
+  fakeModel([writeCall("c1", { text: "Maya, price on the hours you save them.", source: `lesson:${String(w.pricing)}` })]);
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(NOW);
+  const { workId: podWorkId } = await t.mutation(internal.communityReplyDrafts.requestReplyDraftNowInternal, {
+    communityId: w.communityId,
+    podRoomId: String(w.pod),
+  });
+  expect(await t.action(internal.communityReplyDrafts.runReplyDraftInternal, { workId: podWorkId })).toMatchObject({ status: "drafted" });
+  const replies: any[] = await t.run((ctx: any) => ctx.db.query("communityInteractionReplies").collect());
+  expect(replies).toHaveLength(1);
+  expect(replies[0]).toMatchObject({ actorType: "community_agent", rootId: root1, status: "live" });
+  expect(await drafts(t)).toMatchObject([{ rootId: root1, status: "posted", deliveryMode: "auto" }]);
+
+  // 2. Second unanswered question in the SAME pod within 24h is blocked by the 1-per-pod daily cap!
+  await ask(t, w, { channelId: w.pod, contentSummary: "Another pricing question for clients?" });
+  const podCapInput: any = await t.query(internal.communityReplyDrafts.readReplyDraftInputInternal, {
+    communityId: w.communityId,
+    nowMs: NOW + 1_000,
+    podRoomId: String(w.pod),
+  });
+  expect(podCapInput.question).toBeNull();
+  expect(podCapInput.nextDueAt).toBeGreaterThan(NOW);
+
+  // 3. Quiet hours (02:00 UTC): even with autoReplyEnabled true, open-channel reply safely queues as a draft!
+  const twoAmUtc = Date.UTC(2026, 10, 19, 2, 0, 0);
+  const rootNight = await ask(t, w, {
+    channelId: w.general,
+    contentSummary: "How do I price my first client retainer?",
+    createdAt: twoAmUtc - 25 * HOUR,
+    updatedAt: twoAmUtc - 25 * HOUR,
+  });
+  vi.setSystemTime(twoAmUtc);
+  fakeModel([writeCall("c2", { text: "Maya, start with hours saved.", source: `lesson:${String(w.pricing)}` })]);
+  const { workId: nightWorkId } = await t.mutation(internal.communityReplyDrafts.requestReplyDraftNowInternal, {
+    communityId: w.communityId,
+  });
+  await t.action(internal.communityReplyDrafts.runReplyDraftInternal, { workId: nightWorkId });
+  const nightDraft = (await drafts(t)).find((row: any) => String(row.rootId) === String(rootNight));
+  expect(nightDraft).toMatchObject({ status: "waiting" });
+});
+
+test("locked questions and channels with disabled replies are skipped so they never stall auto-reply", async () => {
+  stubProvider();
+  const t = convexTest(schema, modules);
+  const w = await world(t);
+
+  // Create a read-only/announcements channel with replyPolicy: "disabled".
+  const announcements = await t.run((ctx: any) =>
+    ctx.db.insert("communityChannels", {
+      communityId: w.communityId,
+      slug: "announcements",
+      name: "Announcements",
+      accessMode: "all_members",
+      postingPolicy: "members",
+      replyPolicy: "disabled",
+      status: "active",
+      position: 3,
+      createdByUserId: w.ownerId,
+      createdAt: NOW,
+      updatedAt: NOW,
+    } as any),
+  );
+  // Seed older unreplyable questions: one in disabled-replies channel, one locked in General.
+  await ask(t, w, {
+    channelId: announcements,
+    contentSummary: "How do I price a first client in announcements?",
+    createdAt: NOW - 48 * HOUR,
+    updatedAt: NOW - 48 * HOUR,
+  });
+  await ask(t, w, {
+    channelId: w.general,
+    contentSummary: "Locked pricing question?",
+    lockedAt: NOW - 30 * HOUR,
+    createdAt: NOW - 40 * HOUR,
+    updatedAt: NOW - 40 * HOUR,
+  });
+  // Seed a newer eligible question in General — this is the one that MUST be selected!
+  const eligibleRoot = await ask(t, w, {
+    channelId: w.general,
+    contentSummary: "How do I price a first client?",
+    createdAt: NOW - 26 * HOUR,
+    updatedAt: NOW - 26 * HOUR,
+  });
+
+  // Enable auto-reply and verify the run skips the unreplyable questions and auto-posts on the eligible one!
+  await t.withIdentity({ subject: "owner" }).mutation(api.communityMemberCoach.setMemberCoachSettings, {
+    communityId: w.communityId,
+    enabled: true,
+    autoReasons: [],
+    autoReplyEnabled: true,
+  });
+  fakeModel([writeCall("c1", { text: "Maya, price on hours saved.", source: `lesson:${String(w.pricing)}` })]);
+  expect(await run(t, w)).toMatchObject({ status: "drafted" });
+  const replies: any[] = await t.run((ctx: any) => ctx.db.query("communityInteractionReplies").collect());
+  expect(replies).toHaveLength(1);
+  expect(replies[0]).toMatchObject({ rootId: eligibleRoot, actorType: "community_agent", status: "live" });
+});

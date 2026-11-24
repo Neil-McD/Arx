@@ -243,13 +243,15 @@ same authorization ([core-contract.md](core-contract.md), invariant 3).
   `brief.md` and `pods/<pod>/brief.md` through one reader, `readPlaceBrief`;
   the same reader feeds Home's middle column and the first part of a pod's
   right panel, `getPlaceBrief`; `communityReplyDrafts` (table
-  `communityReplyDrafts`: the guide's first proposal. A post in an open
-  channel makes the community's row due a day later; the run takes the oldest
-  question that has waited a day with no reply, shows the guide the lessons
-  that share its words, and with one `reply.draft` it writes a reply and the
-  lesson it rests on, or that no lesson answers it. The draft waits on the
-  host's Home, "Your guide suggests"; `postReplyDraft` puts it in the thread
-  as the guide, `skipReplyDraft` drops it. At most three in 24 hours); `communityMemberCoach` (tables
+  `communityReplyDrafts`: proactive community participant replies. A post in an
+  open channel, or in a pod where the guide is seated, makes that scope's row
+  due a day later; the run takes the oldest unanswered question, shows the guide
+  matching published lessons and strictly scoped notes (community notes in open
+  channels; community notes plus that pod's own notes in a seated pod — never
+  another pod's notes or private member data), and with one `reply.draft` writes
+  a cited reply or nothing. Draft mode by default in Home's "Your guide
+  suggests"; when the owner turns on `autoReplyEnabled`, daytime cited replies
+  post automatically within caps: 3/day community-wide, 1/day per pod); `communityMemberCoach` (tables
   `communityMemberCoachSettings`, `communityMemberCoachDrafts`: Proactive Member
   Coach, slice 1 of `proactive-community-agent-v0.md`. Hourly bounded scan spots
   quiet newcomers, stalled course learners, and quiet members before an event,

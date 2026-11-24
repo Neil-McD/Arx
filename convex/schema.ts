@@ -1978,9 +1978,13 @@ export default defineSchema({
     channelId: v.optional(v.id("communityChannels")),
     status: v.union(v.literal("waiting"), v.literal("posted"), v.literal("skipped"), v.literal("no_source")),
     text: v.optional(v.string()),
-    // The lesson the reply rests on, and how it is named in the thread.
+    // The lesson or note the reply rests on, and how it is named in the thread.
     sourceResourceId: v.optional(v.id("communityResources")),
+    sourceNoteId: v.optional(v.id("communityNotes")),
     sourceLabel: v.optional(v.string()),
+    // Set when this draft answers a question inside a seated pod room.
+    podChannelId: v.optional(v.id("communityChannels")),
+    deliveryMode: v.optional(v.union(v.literal("approved"), v.literal("auto"))),
     runId: v.optional(v.id("agentWorkRuns")),
     // What went into the thread (the draft, or the host's edit of it).
     postedText: v.optional(v.string()),
@@ -1991,10 +1995,12 @@ export default defineSchema({
   })
     .index("by_root", ["rootId"])
     .index("by_community_status_createdAt", ["communityId", "status", "createdAt"])
+    .index("by_channel_status_createdAt", ["channelId", "status", "createdAt"])
     .index("by_community_createdAt", ["communityId", "createdAt"]),
 
-  // Proactive Member Coach settings per community (docs/specs/proactive-community-agent-v0.md,
-  // slice 1). Starts in draft mode (autoReasons: []); owners may turn auto-send on per reason.
+  // Proactive Member Coach & community reply auto-post settings per community
+  // (docs/specs/proactive-community-agent-v0.md). Starts in draft mode
+  // (autoReasons: [], autoReplyEnabled: false); owners enable auto-send per lane.
   communityMemberCoachSettings: defineTable({
     communityId: v.id("communities"),
     enabled: v.boolean(),
@@ -2005,6 +2011,7 @@ export default defineSchema({
         v.literal("quiet_member"),
       ),
     ),
+    autoReplyEnabled: v.optional(v.boolean()),
     nextScanAt: v.optional(v.number()),
     scanCursorCreatedAt: v.optional(v.number()),
     leaseUntil: v.optional(v.number()),
