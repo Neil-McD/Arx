@@ -49,6 +49,7 @@ export function KitPodRail(props: { session: unknown; communityId: string; pod: 
     ? { ...props.pod, can_manage: false, can_edit: false, requests: [] }
     : props.pod;
   const [busy, setBusy] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<{ scope: "requests" | "people"; message: string } | null>(null);
   const [editing, setEditing] = useState<Draft | null>(null);
   const [editError, setEditError] = useState<string | null>(null);
   const [confirmLeave, setConfirmLeave] = useState(false);
@@ -57,15 +58,22 @@ export function KitPodRail(props: { session: unknown; communityId: string; pod: 
   // The people part, opened to how each person is in.
   const [managing, setManaging] = useState(false);
   useEffect(() => {
-    if (asMember) { setEditing(null); setManaging(false); }
+    if (asMember) { setEditing(null); setManaging(false); setActionError(null); }
   }, [asMember]);
   // Your membership (paying, leaving, payment problem) starts open when a
   // payment needs attention, and toggles from the foot for enrolled members.
   const [membershipOpen, setMembershipOpen] = useState(() => pod.my_membership?.state === "payment_problem");
-  const act = async (key: string, work: () => Promise<void>) => {
+  const act = async (key: string, scope: "requests" | "people", work: () => Promise<void>) => {
     if (busy) return;
     setBusy(key);
-    try { await work(); props.onChanged(); } catch { /* the column reloads as it was */ } finally { setBusy(null); }
+    setActionError(null);
+    try { await work(); props.onChanged(); }
+    catch {
+      setActionError({
+        scope,
+        message: scope === "requests" ? "Couldn't update that request. Try again." : "Couldn't update host status. Try again.",
+      });
+    } finally { setBusy(null); }
   };
 
   const save = async () => {
@@ -130,10 +138,11 @@ export function KitPodRail(props: { session: unknown; communityId: string; pod: 
         {pod.requests.map((request) => (
           <div key={request.user_id} className={cx("need")}>
             <span className={cx("t")}><b>{request.name}</b> {request.status === "waitlist" ? "is on the waitlist" : "asked to join"}</span>
-            <Btn small go disabled={Boolean(busy)} onClick={() => void act(`yes:${request.user_id}`, () => decideCloudPodRequest({ session: props.session, communityId: props.communityId, channelId: pod.channel_id, userId: request.user_id, approve: true }))}>Add</Btn>
-            <Btn small txt disabled={Boolean(busy)} onClick={() => void act(`no:${request.user_id}`, () => decideCloudPodRequest({ session: props.session, communityId: props.communityId, channelId: pod.channel_id, userId: request.user_id, approve: false }))}>Decline</Btn>
+            <Btn small go disabled={Boolean(busy)} onClick={() => void act(`yes:${request.user_id}`, "requests", () => decideCloudPodRequest({ session: props.session, communityId: props.communityId, channelId: pod.channel_id, userId: request.user_id, approve: true }))}>Add</Btn>
+            <Btn small txt disabled={Boolean(busy)} onClick={() => void act(`no:${request.user_id}`, "requests", () => decideCloudPodRequest({ session: props.session, communityId: props.communityId, channelId: pod.channel_id, userId: request.user_id, approve: false }))}>Decline</Btn>
           </div>
         ))}
+        {actionError?.scope === "requests" ? <p className={cx("bad")} role="alert">{actionError.message}</p> : null}
       </div>
     ) : null],
     ["brief", brief ? <BriefPart brief={brief} now={now} /> : null],
@@ -145,7 +154,7 @@ export function KitPodRail(props: { session: unknown; communityId: string; pod: 
       // Everyone sees who is in it. Those who manage it open how each person
       // is in (paying, leaving, a payment problem) and, to edit, the host switch.
       <PanelPart label="In this pod" fact={String(pod.members.length)}
-        action={pod.can_manage && pod.members.length ? <PanelAction expanded={managing} onClick={() => setManaging(!managing)}>{managing ? "Done" : "Manage"}</PanelAction> : null}>
+        action={pod.can_manage && pod.members.length ? <PanelAction expanded={managing} onClick={() => { setActionError(null); setManaging(!managing); }}>{managing ? "Done" : "Manage"}</PanelAction> : null}>
         {!pod.members.length ? <PanelLine dim>No one yet</PanelLine> : managing ? pod.members.map((member) => (
           <div key={member.user_id} className={cx("ln")}>
             <span className={cx("av s")} title={member.name}>
@@ -161,12 +170,13 @@ export function KitPodRail(props: { session: unknown; communityId: string; pod: 
             <span className={cx("t")}>{member.name}{member.is_host ? " · host" : ""}</span>
             {member.payment ? <em>{memberTag(member.payment)}</em> : null}
             {pod.can_edit ? (
-              <PanelAction disabled={Boolean(busy)} onClick={() => void act(`host:${member.user_id}`, () => setCloudPodHost({ session: props.session, communityId: props.communityId, channelId: pod.channel_id, userId: member.user_id, host: !member.is_host }))}>
+              <PanelAction disabled={Boolean(busy)} onClick={() => void act(`host:${member.user_id}`, "people", () => setCloudPodHost({ session: props.session, communityId: props.communityId, channelId: pod.channel_id, userId: member.user_id, host: !member.is_host }))}>
                 {member.is_host ? "Not host" : "Make host"}
               </PanelAction>
             ) : null}
           </div>
         )) : <PanelPeople people={people} max={5} />}
+        {actionError?.scope === "people" ? <p className={cx("bad")} role="alert">{actionError.message}</p> : null}
       </PanelPart>
     )],
     ["about", (

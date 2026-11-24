@@ -2833,15 +2833,33 @@
   box-shadow: inset 0 0 0 1px rgba(13, 17, 23, 0.08);
 }
 
-/* The channel's right column on the kit (KitChannelRail): the kit pads it. */
+/* The channel's right column on the kit (KitChannelRail / KitPodRail): the kit pads it. */
 :root[data-design="v1"] .channel-roster-panel.is-v1.is-kit {
   padding: 0;
   gap: 0;
   overflow-y: auto;
 }
 
-:root[data-design="v1"] .channel-roster-panel.is-v1.is-kit > * {
-  min-height: 100%;
+:root[data-design="v1"] .channel-roster-panel.is-v1.is-kit > :not(.channel-people-back) {
+  flex: 1 0 auto;
+  min-height: 0;
+}
+
+:root[data-design="v1"] .channel-roster-panel.is-v1.is-kit > .channel-people-back {
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px 6px 10px;
+  border-bottom: 1px solid var(--border-default);
+}
+
+:root[data-design="v1"] .channel-roster-panel.is-v1.is-kit .channel-people-back-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-ink-primary);
 }
 
 /* The channel's top bar, as in the mock: the line about the channel after
