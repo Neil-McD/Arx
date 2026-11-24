@@ -1,6 +1,7 @@
 import type { KeyboardEvent, MutableRefObject } from "react";
 import { useCallback, useMemo, useState } from "react";
 import { Sparkles, Users } from "lucide-react";
+import { UserAvatar } from "../../../../shared/UserAvatar";
 import {
   splitBodyIntoMentionSegments,
   textContainsMentionToken,
@@ -13,6 +14,9 @@ export type MentionCandidate = {
   displayName: string;
   handle: string | null;
   avatarUrl: string | null;
+  avatarFocusX?: number | null;
+  avatarFocusY?: number | null;
+  avatarZoom?: number | null;
   // Non-user candidates tag canonical server-side identities by key, not user id.
   kind?: "user" | "community_agent" | "role";
   roleKey?: "everybody";
@@ -402,26 +406,28 @@ export function MentionAutocompleteMenu(props: {
           onMouseEnter={() => setHighlightedIndex(index)}
           onClick={() => pick(candidate)}
         >
-          <span
-            className="mention-autocomplete-avatar"
-            style={
-              candidate.avatarUrl
-                ? { backgroundImage: `url(${candidate.avatarUrl})` }
-                : // Only user avatars take a generated fill; role/agent tiles are
-                  // styled by their CSS class so the theme accent can take hold.
-                  (candidate.kind ?? "user") === "user"
-                  ? { backgroundColor: getAvatarColor(candidate.userId) }
-                  : undefined
-            }
-          >
-            {candidate.avatarUrl ? null : candidate.kind === "role" ? (
-              <Users size={16} aria-hidden="true" />
-            ) : candidate.kind === "community_agent" ? (
-              <Sparkles size={16} aria-hidden="true" />
-            ) : (
-              getInitials(candidate.displayName)
-            )}
-          </span>
+          {(candidate.kind ?? "user") === "user" ? (
+            <UserAvatar
+              className="mention-autocomplete-avatar"
+              name={candidate.displayName}
+              imageUrl={candidate.avatarUrl}
+              focusX={candidate.avatarFocusX}
+              focusY={candidate.avatarFocusY}
+              zoom={candidate.avatarZoom}
+              fallback={getInitials(candidate.displayName)}
+              fallbackStyle={{ backgroundColor: getAvatarColor(candidate.userId) }}
+              alt=""
+              aria-hidden
+            />
+          ) : (
+            <span className="mention-autocomplete-avatar">
+              {candidate.kind === "role" ? (
+                <Users size={16} aria-hidden="true" />
+              ) : (
+                <Sparkles size={16} aria-hidden="true" />
+              )}
+            </span>
+          )}
           <span className="mention-autocomplete-meta">
             <span className="mention-autocomplete-name-row">
               <span className="mention-autocomplete-name">{candidate.displayName}</span>

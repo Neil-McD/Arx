@@ -155,6 +155,9 @@ async function mapCommunityMentionUserCandidate(args: {
     display_name: projection.display_name ?? handle,
     handle,
     avatar_url: projection.avatar_url,
+    avatar_focus_x: projection.avatar_focus_x,
+    avatar_focus_y: projection.avatar_focus_y,
+    avatar_zoom: projection.avatar_zoom,
     role: args.role,
   };
 }

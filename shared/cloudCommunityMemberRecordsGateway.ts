@@ -10,6 +10,9 @@ export type CloudMemberRecordRow = {
   name: string;
   handle: string | null;
   avatar_url: string | null;
+  avatar_focus_x?: number | null;
+  avatar_focus_y?: number | null;
+  avatar_zoom?: number | null;
   role: "owner" | "admin" | "moderator" | "member";
   plan: MemberPlan;
   money: MemberMoney;
@@ -23,6 +26,9 @@ export type CloudPastMemberRow = {
   user_id: string;
   name: string;
   avatar_url: string | null;
+  avatar_focus_x?: number | null;
+  avatar_focus_y?: number | null;
+  avatar_zoom?: number | null;
   reason: MemberOutReason;
   reason_text: string;
   was_on: string | null;
@@ -51,6 +57,9 @@ export type CloudMemberRecord = {
   name: string;
   handle: string | null;
   avatar_url: string | null;
+  avatar_focus_x?: number | null;
+  avatar_focus_y?: number | null;
+  avatar_zoom?: number | null;
   role: string;
   joined_at: string | null;
   last_active_at: string | null;
@@ -103,6 +112,9 @@ export type CloudMemberDirectoryRow = {
   user_id: string;
   name: string;
   avatar_url: string | null;
+  avatar_focus_x?: number | null;
+  avatar_focus_y?: number | null;
+  avatar_zoom?: number | null;
   role: "owner" | "admin" | "moderator" | "member";
   working_on: string | null;
   here_now: boolean;
@@ -114,6 +126,9 @@ export type CloudMemberProfile = {
   user_id: string;
   name: string;
   avatar_url: string | null;
+  avatar_focus_x?: number | null;
+  avatar_focus_y?: number | null;
+  avatar_zoom?: number | null;
   role: string;
   here_now: boolean;
   you: boolean;

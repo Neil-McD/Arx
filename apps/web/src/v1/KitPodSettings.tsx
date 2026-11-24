@@ -213,10 +213,11 @@ function PeopleTab(props: Props) {
   const tag = (member: CloudPodDetail["members"][number]) => member.from_plan ? "From their plan"
     : member.payment?.state === "paying" ? "Paying" : member.payment?.state === "leaving" ? "Leaving"
       : member.payment?.state === "payment_problem" ? "Payment problem" : "Added";
-  const avatar = (name: string, url?: string | null) => (
-    <span className={cx("av s")} title={name}>
-      <UserAvatar className="community-dm-kit-avatar" readyClassName="has-image" name={name} imageUrl={url ?? null} alt=""
-        fallback={<span>{name.trim().charAt(0).toUpperCase() || "?"}</span>} />
+  const avatar = (person: { name: string; avatar_url?: string | null; avatar_focus_x?: number | null; avatar_focus_y?: number | null; avatar_zoom?: number | null }) => (
+    <span className={cx("av s")} title={person.name}>
+      <UserAvatar className="community-dm-kit-avatar" readyClassName="has-image" name={person.name} imageUrl={person.avatar_url ?? null}
+        focusX={person.avatar_focus_x} focusY={person.avatar_focus_y} zoom={person.avatar_zoom} alt=""
+        fallback={<span>{person.name.trim().charAt(0).toUpperCase() || "?"}</span>} />
     </span>
   );
   return (
@@ -237,7 +238,7 @@ function PeopleTab(props: Props) {
         <span className={cx("lab")}>In this pod<em>{pod.members.length}{pod.seats ? ` of ${pod.seats}` : ""}</em></span>
         {pod.members.length ? pod.members.map((member) => (
           <div key={member.user_id} className={cx("podset-row")}>
-            {avatar(member.name, member.avatar_url)}
+            {avatar(member)}
             <span className={cx("t")}>{member.name}{member.is_host ? <span className={cx("podset-host")}>Host</span> : null}</span>
             <em>{tag(member)}</em>
             {builder ? (
@@ -262,7 +263,7 @@ function PeopleTab(props: Props) {
           placeholder="Search the community's members" aria-label="Search the community's members" />
         {directory === null ? null : matches.length ? matches.map((row) => (
           <div key={row.user_id} className={cx("podset-row")}>
-            {avatar(row.name, row.avatar_url)}
+            {avatar(row)}
             <span className={cx("t")}>{row.name}</span>
             <button type="button" className={cx("la")} disabled={Boolean(busy)}
               onClick={() => void run(`add:${row.user_id}`, () => addCloudPodMember({ session: props.session, communityId: props.communityId, channelId: pod.channel_id, userId: row.user_id }))}>

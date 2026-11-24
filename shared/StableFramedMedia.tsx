@@ -9,7 +9,12 @@ import {
   type MouseEventHandler,
   type ReactNode,
 } from "react";
-import { computeCoverFrameLayout, getCoverFrameImageStyle, type CoverFrame } from "./coverFrameUi";
+import {
+  computeCoverFrameLayout,
+  getCoverFrameImageStyle,
+  measureFramedMediaViewport,
+  type CoverFrame,
+} from "./coverFrameUi";
 import {
   isImageLoadAllowed,
   observeImageNearViewport,
@@ -76,9 +81,7 @@ export function StableFramedMedia(props: StableFramedMediaProps) {
     const root = rootRef.current;
     if (!root || !url || (!shouldLoad && imageResource.status !== "ready")) return;
     const syncRootSize = () => {
-      const rect = root.getBoundingClientRect();
-      const width = Math.max(0, rect.width);
-      const height = Math.max(0, rect.height);
+      const { width, height } = measureFramedMediaViewport(root);
       setRootSize((current) => current.width === width && current.height === height
         ? current
         : { width, height });

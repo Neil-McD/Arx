@@ -17,7 +17,11 @@ async function fixture(entryPolicy: "open" | "approval") {
     const ownerId = await ctx.db.insert("users", {
       authSubject: "owner-subject", displayName: "Maya", handle: "maya", normalizedHandle: "maya", createdAt: NOW, updatedAt: NOW,
     } as any);
-    await ctx.db.insert("userProfileDetails", { userId: ownerId, displayName: "Maya Chen", bio: "Route setter and coach.", createdAt: NOW, updatedAt: NOW } as any);
+    await ctx.db.insert("userProfileDetails", {
+      userId: ownerId, displayName: "Maya Chen", bio: "Route setter and coach.",
+      avatarUrl: "https://cdn.example.com/maya.png", avatarFocusX: 0.4, avatarFocusY: 0.2, avatarZoom: 1.6,
+      createdAt: NOW, updatedAt: NOW,
+    } as any);
     await ctx.db.insert("users", {
       authSubject: "visitor-subject", displayName: "Sam", handle: "sam", normalizedHandle: "sam", createdAt: NOW, updatedAt: NOW,
     } as any);
@@ -66,7 +70,14 @@ test("signed out, the page shows the community, its public upcoming events, its 
   expect(page.viewer).toBeNull();
   expect(page.signed_in).toBe(false);
   expect(page.is_owner).toBe(false);
-  expect(page.host).toMatchObject({ name: "Maya Chen", bio: "Route setter and coach." });
+  expect(page.host).toMatchObject({
+    name: "Maya Chen",
+    bio: "Route setter and coach.",
+    avatar_url: "https://cdn.example.com/maya.png",
+    avatar_focus_x: 0.4,
+    avatar_focus_y: 0.2,
+    avatar_zoom: 1.6,
+  });
   expect(page.events.map((event: any) => event.title)).toEqual(["Sunrise session"]);
   expect(page.app).toEqual({ name: "Sunrise Log", url: "https://sunriselog.app", host: "sunriselog.app" });
   expect(await f.t.query(api.communityLanding.getCommunityLandingPage, { communitySlug: "nobody-here" })).toEqual({ ok: false });

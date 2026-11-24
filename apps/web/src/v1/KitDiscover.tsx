@@ -10,6 +10,7 @@ import { CommunityAvatar } from "../../../../shared/CommunityAvatar";
 import type { DiscoverCommunitySnapshot } from "../../../../shared/communityTypes";
 import type { CommunityVisualIdentity } from "../../../../shared/communityVisualIdentity";
 import { StableFramedMedia } from "../../../../shared/StableFramedMedia";
+import { UserAvatar } from "../../../../shared/UserAvatar";
 import { Btn, cx, Icon, KitApp } from "./kit";
 
 // Search is clutter until there is something to search.
@@ -27,8 +28,6 @@ export type DiscoverJoined = {
   avatarZoom?: number | null;
   visualIdentity?: CommunityVisualIdentity | null;
 };
-
-const initialsOf = (name: string) => name.trim().split(/\s+/).slice(0, 2).map((word) => word[0] ?? "").join("").toUpperCase();
 
 // One sign of life: a post in the last day, else the week's count, else nothing.
 export function discoverActivityWord(community: Pick<DiscoverCommunitySnapshot, "last_active_at" | "posts_this_week">, now: number): string | null {
@@ -102,16 +101,26 @@ export function DiscoverCard(props: { community: DiscoverCommunitySnapshot; now:
         />
         <span className={cx("dischead")}><b>{c.name}</b><span className={cx("tag")}>{discoverPriceWord(c)}</span></span>
         <span className={cx("discline")}>{c.one_liner}</span>
-        <span className={cx("discmeta")}>
+        <div className={cx("discmeta")}>
           {c.host ? (
             <>
-              <span className={cx("discface")}>{c.host.avatar_url ? <img src={c.host.avatar_url} alt="" loading="lazy" /> : initialsOf(c.host.name)}</span>
+              <UserAvatar
+                className={cx("discface")}
+                name={c.host.name}
+                imageUrl={c.host.avatar_url}
+                focusX={c.host.avatar_focus_x}
+                focusY={c.host.avatar_focus_y}
+                zoom={c.host.avatar_zoom}
+                loading="lazy"
+                alt=""
+                aria-hidden
+              />
               <span className={cx("dischost")}>{c.host.name}</span>
             </>
           ) : null}
           {members ? <span>{c.host ? "· " : ""}{members.toLocaleString("en-US")} {members === 1 ? "member" : "members"}</span> : null}
           {life ? <span className={cx("disclife")}><i />{life}</span> : null}
-        </span>
+        </div>
       </div>
     </a>
   );
