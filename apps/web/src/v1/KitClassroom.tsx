@@ -924,9 +924,9 @@ export function KitClassroom(props: {
           </div></div>
         ) : null}
 
-        {!props.loaded && courses.length === 0 ? (
-          <CourseCatalogSkeleton />
-        ) : here ? (
+        {!props.loaded && courses.length === 0 ? <CourseCatalogSkeleton /> : null}
+
+        {here ? (
           <div className={cx("khero-wrap")}>
           <button type="button" className={cx("khero")} onClick={() => { props.onOpenCourse(here.course.id); if (here.nextLesson) chooseLesson(here.nextLesson.id); }}>
             <span className={cx("kcover", "khero-cover", here.course.banner_url ? "" : coverTint(here.course.id))} style={here.course.banner_url ? { backgroundImage: `url(${JSON.stringify(here.course.banner_url)})`, backgroundSize: "cover", backgroundPosition: `${(here.course.banner_focus_x ?? 0.5) * 100}% ${(here.course.banner_focus_y ?? 0.5) * 100}%` } : undefined}>

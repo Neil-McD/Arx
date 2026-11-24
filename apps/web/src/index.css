@@ -404,10 +404,6 @@
   .web-skeleton-row::after {
     animation: none;
   }
-  .web-loading-skeleton {
-    animation: none;
-    opacity: 1;
-  }
 }
 
 .web-loading-sr {
@@ -440,6 +436,16 @@
 
 .web-loading-skeleton.is-quiet {
   opacity: 0.72;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .web-loading-skeleton {
+    animation: none;
+    opacity: 1;
+  }
+  .web-loading-skeleton.is-quiet {
+    opacity: 0.72;
+  }
 }
 
 .web-skeleton-channel {
