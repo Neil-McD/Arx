@@ -1,3 +1,12 @@
+import {
+  COMMUNITY_AGENT_MAX_IMAGE_ATTACHMENTS,
+  COMMUNITY_AGENT_MAX_IMAGE_BYTES,
+  COMMUNITY_AGENT_MAX_IMAGE_TOTAL_BYTES,
+  isAllowedCommunityAgentImageMime,
+  normalizeCommunityAgentImageMime,
+  normalizeCommunityAgentImageName,
+} from "./communityAgentAttachments";
+
 export const COMMUNITY_AGENT_THREAD_CONTEXT_VERSION = 2 as const;
 export const COMMUNITY_AGENT_THREAD_CONTEXT_MAX_CANDIDATE_REPLIES = 48;
 export const COMMUNITY_AGENT_THREAD_CONTEXT_MAX_TURNS = 24;
@@ -16,6 +25,22 @@ export type CommunityAgentThreadSpeakerRole =
   | "other_agent"
   | "system";
 
+export type CommunityAgentThreadImageInput = {
+  attachmentId: string;
+  storageId: string;
+  name: string;
+  mimeType: string;
+  sizeBytes: number;
+};
+
+export type CommunityAgentThreadImageMeta = CommunityAgentThreadImageInput & {
+  turnId: string;
+  turnKind: "root" | "reply";
+  turnSeq: number | null;
+  turnLabel: string;
+  speaker: string;
+};
+
 export type CommunityAgentThreadTurnInput = {
   id: string;
   kind: "root" | "reply";
@@ -30,6 +55,7 @@ export type CommunityAgentThreadTurnInput = {
   createdAt: number;
   editedAt: number | null;
   content: string;
+  images?: CommunityAgentThreadImageInput[];
 };
 
 export type CommunityAgentThreadParticipantInput = {
@@ -68,6 +94,7 @@ export type CommunityAgentThreadContextV2 = {
   omittedTurnCount: number;
   omittedUnreadableTurnCount: number;
   truncated: boolean;
+  images?: CommunityAgentThreadImageMeta[];
 };
 
 function boundedText(raw: unknown, maxLength: number): string {
@@ -77,6 +104,38 @@ function boundedText(raw: unknown, maxLength: number): string {
 function boundedTimestamp(raw: unknown): number {
   const parsed = Number(raw);
   return Number.isFinite(parsed) ? Math.max(0, Math.floor(parsed)) : 0;
+}
+
+function normalizedTurnImages(
+  raw: CommunityAgentThreadImageInput[] | undefined,
+): CommunityAgentThreadImageInput[] | undefined {
+  if (!Array.isArray(raw) || raw.length === 0) return undefined;
+  const out: CommunityAgentThreadImageInput[] = [];
+  for (const entry of raw) {
+    if (!entry || typeof entry !== "object") continue;
+    const attachmentId = boundedText(entry.attachmentId, 128);
+    const storageId = boundedText(entry.storageId, 128);
+    const mimeType = normalizeCommunityAgentImageMime(entry.mimeType);
+    const sizeBytes = Number(entry.sizeBytes);
+    if (
+      !attachmentId ||
+      !storageId ||
+      !isAllowedCommunityAgentImageMime(mimeType) ||
+      !Number.isFinite(sizeBytes) ||
+      sizeBytes <= 0 ||
+      sizeBytes > COMMUNITY_AGENT_MAX_IMAGE_BYTES
+    ) {
+      continue;
+    }
+    out.push({
+      attachmentId,
+      storageId,
+      name: normalizeCommunityAgentImageName(entry.name),
+      mimeType,
+      sizeBytes: Math.floor(sizeBytes),
+    });
+  }
+  return out.length > 0 ? out : undefined;
 }
 
 function normalizedTurn(turn: CommunityAgentThreadTurnInput): CommunityAgentThreadTurnInput {
@@ -95,6 +154,7 @@ function normalizedTurn(turn: CommunityAgentThreadTurnInput): CommunityAgentThre
         ? Math.max(0, Math.floor(turn.editedAt))
         : null,
     content: boundedText(turn.content, 1_200),
+    images: normalizedTurnImages(turn.images),
   };
 }
 
@@ -165,9 +225,15 @@ function renderTurn(
     selfAgentKey,
     requesterUserId,
   });
+  const imageTag = turn.images?.length
+    ? `[attached ${turn.images.length === 1 ? "image" : "images"}: ${turn.images.map((img) => img.name).join(", ")}]`
+    : "";
+  const body = turn.content
+    ? imageTag ? `${turn.content}\n${imageTag}` : turn.content
+    : imageTag || "[empty]";
   return [
     `<turn id="${turn.id}" position="${seq}" speaker="${speaker}" speaker_role="${speakerRole}" actor_type="${turn.actorType}"${target} created_at="${new Date(turn.createdAt).toISOString()}"${edited}>`,
-    turn.content || "[empty]",
+    body,
     "</turn>",
   ].join("\n");
 }
@@ -275,6 +341,96 @@ function renderPacket(args: {
   return `${header}\n\nAUTHORIZED PARTICIPANT ORIENTATION\n${participantBlock}\n\nTHREAD TRANSCRIPT\n${threadBlock}\n\n${truncation}`;
 }
 
+function turnSpeakerLabel(
+  turn: CommunityAgentThreadTurnInput,
+  participantsById: Map<string, CommunityAgentThreadParticipantInput>,
+): string {
+  const participant = turn.actorUserId ? participantsById.get(turn.actorUserId) : undefined;
+  if (turn.actorType === "human") {
+    return participantLabel(participant ?? {
+      userId: turn.actorUserId ?? "unknown",
+      displayName: turn.displayName,
+      handle: turn.handle,
+      role: null,
+      activeInCommunity: false,
+      situation: null,
+      goals: [],
+      interests: [],
+      facts: [],
+    });
+  }
+  return turn.actorType === "community_agent"
+    ? boundedText(turn.displayName, 80) || "Community agent"
+    : "System";
+}
+
+// Selects up to COMMUNITY_AGENT_MAX_IMAGE_ATTACHMENTS bounded raster images from
+// the surviving, visibility-checked thread turns. Prioritizes the triggering
+// turn first, then its direct reply target, then remaining turns newest-first,
+// and returns the chosen images in chronological thread order so visual inputs
+// match the transcript order.
+export function selectCommunityAgentThreadImages(args: {
+  turns: readonly CommunityAgentThreadTurnInput[];
+  participants: readonly CommunityAgentThreadParticipantInput[];
+  sourceRootId: string;
+  sourceReplyId: string | null;
+}): CommunityAgentThreadImageMeta[] {
+  const participantsById = new Map(args.participants.map((p) => [p.userId, p]));
+  const sourceId = args.sourceReplyId ?? args.sourceRootId;
+  const sourceTurn = args.turns.find((t) => t.id === sourceId);
+  const targetId = sourceTurn?.targetReplyId ?? null;
+
+  const prioritized: CommunityAgentThreadTurnInput[] = [];
+  const seenTurnIds = new Set<string>();
+  const pushTurn = (turn: CommunityAgentThreadTurnInput | undefined) => {
+    if (!turn || seenTurnIds.has(turn.id)) return;
+    seenTurnIds.add(turn.id);
+    prioritized.push(turn);
+  };
+  pushTurn(sourceTurn);
+  if (targetId) pushTurn(args.turns.find((t) => t.id === targetId));
+  for (const turn of args.turns.slice().reverse()) pushTurn(turn);
+
+  const chosen: Array<{ order: number; meta: CommunityAgentThreadImageMeta }> = [];
+  const seenAttachments = new Set<string>();
+  const seenStorageIds = new Set<string>();
+  let totalBytes = 0;
+  const turnOrderIndex = new Map(args.turns.map((turn, idx) => [turn.id, idx]));
+
+  for (const turn of prioritized) {
+    const images = turn.images ?? [];
+    if (images.length === 0) continue;
+    const speaker = turnSpeakerLabel(turn, participantsById);
+    const turnLabel = turn.kind === "root" ? "original post" : `reply #${Math.max(0, Math.floor(Number(turn.seq ?? 0)))}`;
+    const baseOrder = (turnOrderIndex.get(turn.id) ?? 0) * 100;
+    for (let idx = 0; idx < images.length; idx += 1) {
+      if (chosen.length >= COMMUNITY_AGENT_MAX_IMAGE_ATTACHMENTS) break;
+      const img = images[idx]!;
+      if (seenAttachments.has(img.attachmentId) || seenStorageIds.has(img.storageId)) continue;
+      if (!isAllowedCommunityAgentImageMime(img.mimeType)) continue;
+      if (img.sizeBytes <= 0 || img.sizeBytes > COMMUNITY_AGENT_MAX_IMAGE_BYTES) continue;
+      if (totalBytes + img.sizeBytes > COMMUNITY_AGENT_MAX_IMAGE_TOTAL_BYTES) continue;
+      seenAttachments.add(img.attachmentId);
+      seenStorageIds.add(img.storageId);
+      totalBytes += img.sizeBytes;
+      chosen.push({
+        order: baseOrder + idx,
+        meta: {
+          ...img,
+          turnId: turn.id,
+          turnKind: turn.kind,
+          turnSeq: turn.seq,
+          turnLabel,
+          speaker,
+        },
+      });
+    }
+    if (chosen.length >= COMMUNITY_AGENT_MAX_IMAGE_ATTACHMENTS) break;
+  }
+
+  return chosen.sort((a, b) => a.order - b.order).map((entry) => entry.meta);
+}
+
 export function compileCommunityAgentThreadContext(
   input: CommunityAgentThreadContextInput,
 ): CommunityAgentThreadContextV2 {
@@ -361,6 +517,13 @@ export function compileCommunityAgentThreadContext(
     });
   }
 
+  const images = selectCommunityAgentThreadImages({
+    turns,
+    participants,
+    sourceRootId: normalizedInput.sourceRootId,
+    sourceReplyId: normalizedInput.sourceReplyId,
+  });
+
   return {
     version: COMMUNITY_AGENT_THREAD_CONTEXT_VERSION,
     capturedAt: normalizedInput.capturedAt,
@@ -371,5 +534,6 @@ export function compileCommunityAgentThreadContext(
     omittedTurnCount,
     omittedUnreadableTurnCount,
     truncated: omittedTurnCount > 0 || omittedUnreadableTurnCount > 0,
+    ...(images.length > 0 ? { images } : {}),
   };
 }

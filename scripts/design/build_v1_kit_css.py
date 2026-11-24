@@ -1041,12 +1041,14 @@ css += """
 :where(:root[data-layout="phone"]) .app .startc{grid-template-columns:1fr}
 :where(:root[data-layout="phone"]) .app .startc-side{border-left:0;border-top:1px solid var(--line)}
 
-/* Kit addition: the shelf as the mock draws it (Nov 17). A course is not a
-   box: a cover, its name and one line, sitting in the page. It only gets a
-   body when it is pointed at, and a deeper one when it is picked up. */
+/* Kit addition: the shelf as the mock draws it (Nov 17), with a subtle
+   card surface and soft bottom shadow so cards read cleanly on dark and light
+   backgrounds (and on phones without hover). */
 .app .kgrid{grid-template-columns:repeat(auto-fill,minmax(max(190px,min(calc((100% - 32px) / 3),280px)),1fr));gap:16px}
-.app .kcourse{gap:10px;padding:8px 8px 12px;border-radius:12px;border:1px solid transparent;background:transparent;overflow:visible;transition:background .14s var(--ease),border-color .14s var(--ease)}
-.app .kcourse:hover{background:var(--s1);border-color:var(--line)}
+.app .kcourse{gap:10px;padding:8px 8px 12px;border-radius:12px;border:1px solid var(--line);background:var(--s1);box-shadow:0 8px 20px -12px rgba(0,0,0,.62),0 2px 5px -2px rgba(0,0,0,.42);overflow:visible;transition:background .14s var(--ease),border-color .14s var(--ease),box-shadow .14s var(--ease)}
+.app .kcourse:hover{background:var(--s2);border-color:var(--line2);box-shadow:0 12px 26px -12px rgba(0,0,0,.72),0 3px 8px -2px rgba(0,0,0,.48)}
+.app:is(.light:not(.on-mode-dark),.on-mode-light) .kcourse{background:#fff;border-color:rgba(13,17,23,.1);box-shadow:0 8px 20px -12px rgba(13,17,23,.22),0 2px 6px -2px rgba(13,17,23,.1)}
+.app:is(.light:not(.on-mode-dark),.on-mode-light) .kcourse:hover{background:#fff;border-color:rgba(13,17,23,.18);box-shadow:0 12px 26px -12px rgba(13,17,23,.28),0 3px 8px -2px rgba(13,17,23,.12)}
 .app .kcourse>.kcover{width:100%;height:auto;aspect-ratio:16/9;padding:0;border-radius:8px;align-items:center;justify-content:center}
 .app .kcourse>b{display:flex;align-items:baseline;gap:8px;margin:0;padding:0 4px;font-size:14.5px;font-weight:550;line-height:1.3;letter-spacing:0;overflow:visible}
 .app .kcourse>b>span{min-width:0;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden}
@@ -1061,7 +1063,8 @@ css += """
 .app .kcard.gap::after{content:"";position:absolute;inset:0;border-radius:12px;border:2px dashed var(--accent);opacity:.7}
 .app .kcard.klift{rotate:-1.6deg;scale:1.02}
 .app .kcard.klift>.kcourse{background:var(--pop);border-color:var(--line2);box-shadow:0 30px 60px -22px rgba(0,0,0,.85)}
-.app .kcourse.knew{display:flex;flex-direction:row;align-items:center;justify-content:center;gap:8px;min-height:150px;margin:0;border:1px dashed var(--line2)}
+.app .kcourse.knew{display:flex;flex-direction:row;align-items:center;justify-content:center;gap:8px;min-height:150px;margin:0;border:1px dashed var(--line2);background:transparent;box-shadow:none}
+.app:is(.light:not(.on-mode-dark),.on-mode-light) .kcourse.knew{background:transparent;border-color:var(--line2);box-shadow:none}
 .app .kcourse.knew .ic{width:16px;height:16px}
 
 /* Kit addition: the course page as the mock draws it (Nov 17). A lesson's

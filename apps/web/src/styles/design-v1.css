@@ -4098,6 +4098,11 @@
   gap: 2px;
 }
 
+:root[data-design="v1"] .app-root.mobile-shell .mobile-topbar.is-thread-page {
+  background: var(--surface-workspace, var(--surface-app));
+  border-bottom: 1px solid var(--border-default);
+}
+
 :root[data-design="v1"] .app-root.mobile-shell .mobile-topbar-left {
   padding: 0;
   background: transparent;
