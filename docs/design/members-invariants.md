@@ -57,6 +57,13 @@ leaves a trace on the record: who, and when.
 - They can see what is known about them, and take it back.
 - The guide's guesses about them stay hidden from others until they approve.
 - Leaving removes them from member-facing pages at once.
+- There is one profile of a person, the same wherever they are opened (a name
+  in a channel, the Members page): their own name, handle, bio and links;
+  here, their role, whether they are here now, what they approved sharing and
+  what you both said; elsewhere, communities they host and ones you share.
+  Someone who manages members sees one extra, fenced block from the person's
+  record (plan, joined, last here, notes). It comes from the record's own
+  query, which checks the reader again.
 
 ## 7. Scale and finding people
 
