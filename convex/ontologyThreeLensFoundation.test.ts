@@ -508,3 +508,81 @@ test("three-way self-orientation prompts distinguish member companion, founder c
   }).systemPromptBundle.text;
   expect(publicPrompt).toContain("Never share or guess anyone's private course progress, goals, or private talks.");
 });
+
+test("next_lesson matches classroom ordering when some lessons omit sortOrder, and recurring daily events beat later one-offs", async () => {
+  const t = convexTest(schema, modules);
+  const w = await seedOntologyWorld(t);
+  const now = Date.now();
+  const day = 24 * 60 * 60 * 1000;
+
+  await t.run(async (ctx: any) => {
+    // Insert an unordered lesson created earlier than the ordered lessons:
+    // classroom puts missing sortOrder LAST, so next_lesson must still pick Step 1 first.
+    await ctx.db.insert("communityResources", {
+      communityId: w.communityId,
+      moduleId: w.liveCourseId,
+      createdByUserId: w.ownerId,
+      type: "post",
+      role: "page",
+      status: "published",
+      title: "Bonus Appendix (unordered)",
+      bodyChars: 42,
+      pinned: false,
+      createdAt: now - 20_000,
+      updatedAt: now - 20_000,
+    });
+
+    // Clear existing events, then seed 5 later one-offs (days 6..10) + an ongoing daily series.
+    for (const ev of await ctx.db.query("communityEvents").collect()) {
+      await ctx.db.delete(ev._id);
+    }
+    for (let i = 6; i <= 10; i += 1) {
+      await ctx.db.insert("communityEvents", {
+        communityId: w.communityId,
+        createdByUserId: w.ownerId,
+        title: `One-off Day ${i}`,
+        startsAt: now + i * day,
+        endsAt: now + i * day + 3_600_000,
+        timezone: "UTC",
+        locationType: "online",
+        visibility: "members",
+        status: "live",
+        createdAt: now - 2_000,
+        updatedAt: now - 2_000,
+      });
+    }
+    await ctx.db.insert("communityEvents", {
+      communityId: w.communityId,
+      createdByUserId: w.ownerId,
+      title: "Daily Standup",
+      startsAt: now - 2 * day + 3_600_000,
+      endsAt: now - 2 * day + 5_400_000,
+      timezone: "UTC",
+      locationType: "online",
+      visibility: "members",
+      status: "live",
+      recurrenceFrequency: "daily",
+      recurrenceInterval: 1,
+      createdAt: now - 3 * day,
+      updatedAt: now - 3 * day,
+    });
+  });
+
+  const rashidCtx = await t.run((ctx: any) =>
+    resolveSelfCommunityMembershipContext({ ctx, actorUserId: w.rashidId, communityId: w.communityId }),
+  );
+  // Step 1 (sortOrder 1) must come before the unordered Bonus Appendix!
+  expect(rashidCtx.course_progress?.[0]).toMatchObject({
+    done: 0,
+    of: 4,
+    next_lesson: { id: String(w.l1), title: "Step 1: Define the niche" },
+  });
+  // All 5 earliest upcoming events must be the ongoing Daily Standup occurrences (days 0..4), not the days 6..10 one-offs!
+  expect(rashidCtx.upcoming_events?.map((e) => e.title)).toEqual([
+    "Daily Standup",
+    "Daily Standup",
+    "Daily Standup",
+    "Daily Standup",
+    "Daily Standup",
+  ]);
+});

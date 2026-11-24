@@ -233,6 +233,11 @@ export const setMyLessonDone = mutation({
   },
 });
 
+// Match shared/communityClassroom.ts (`courseLessons`): missing sortOrder goes last.
+function classroomSortOrder(value: unknown): number {
+  return typeof value === "number" && Number.isFinite(value) ? value : Number.MAX_SAFE_INTEGER;
+}
+
 // A course's lessons as members see them, in the host's order.
 async function memberVisibleLessons(ctx: any, communityId: any, module: any) {
   if (!module || !communityResourceModuleIsLive(module)) return [];
@@ -240,7 +245,11 @@ async function memberVisibleLessons(ctx: any, communityId: any, module: any) {
   return (await ctx.db.query("communityResources")
     .withIndex("by_community_module", (q: any) => q.eq("communityId", communityId).eq("moduleId", module._id)).take(LESSONS_PER_COURSE_CAP * 2))
     .filter((row: any) => communityResourceIsLiveModulePage(row, live))
-    .sort((a: any, b: any) => Number(a.sortOrder ?? 0) - Number(b.sortOrder ?? 0) || Number(a.createdAt ?? 0) - Number(b.createdAt ?? 0))
+    .sort((a: any, b: any) =>
+      classroomSortOrder(a.sortOrder) - classroomSortOrder(b.sortOrder) ||
+      Number(a.createdAt ?? 0) - Number(b.createdAt ?? 0) ||
+      String(a._id).localeCompare(String(b._id)),
+    )
     .slice(0, LESSONS_PER_COURSE_CAP);
 }
 
@@ -272,7 +281,11 @@ export async function readMemberCourseProgress(
   ]);
   const liveModules = modules
     .filter((module: any) => communityResourceModuleIsLive(module))
-    .sort((a: any, b: any) => Number(a.sortOrder ?? 0) - Number(b.sortOrder ?? 0) || Number(a.createdAt ?? 0) - Number(b.createdAt ?? 0))
+    .sort((a: any, b: any) =>
+      classroomSortOrder(a.sortOrder) - classroomSortOrder(b.sortOrder) ||
+      Number(a.createdAt ?? 0) - Number(b.createdAt ?? 0) ||
+      String(a._id).localeCompare(String(b._id)),
+    )
     .slice(0, COURSES_CAP);
   if (!liveModules.length) return [];
 
@@ -332,7 +345,11 @@ export async function readCommunityCourseProgressSummary(
   const modules = (await ctx.db.query("communityResourceModules")
     .withIndex("by_community", (q: any) => q.eq("communityId", community._id)).take(COURSES_CAP * 2))
     .filter((module: any) => communityResourceModuleIsLive(module))
-    .sort((a: any, b: any) => Number(a.sortOrder ?? 0) - Number(b.sortOrder ?? 0) || Number(a.createdAt ?? 0) - Number(b.createdAt ?? 0))
+    .sort((a: any, b: any) =>
+      classroomSortOrder(a.sortOrder) - classroomSortOrder(b.sortOrder) ||
+      Number(a.createdAt ?? 0) - Number(b.createdAt ?? 0) ||
+      String(a._id).localeCompare(String(b._id)),
+    )
     .slice(0, COURSES_CAP);
   const courses: CommunityCourseProgressSummaryRow[] = [];
   const state = createMemberKeysContext();

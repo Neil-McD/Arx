@@ -89,13 +89,21 @@ async function readMemberUpcomingCommunityEvents(
     includeCancelled: false,
   });
   const communityWide = candidates.filter((row) => !row.podChannelId);
-  const expanded = expandCommunityEventRows({
-    rows: communityWide,
-    startMs: nowMs,
-    endMs,
-    includeCancelled: false,
-    limit: SELF_UPCOMING_EVENTS_CAP,
-  });
+  // Expand each candidate independently up to the cap so later one-off events
+  // never crowd out nearer occurrences of an ongoing recurring series before
+  // global chronological sorting.
+  const expanded = communityWide
+    .flatMap((row) =>
+      expandCommunityEventRows({
+        rows: [row],
+        startMs: nowMs,
+        endMs,
+        includeCancelled: false,
+        limit: SELF_UPCOMING_EVENTS_CAP,
+      }),
+    )
+    .sort((a, b) => Date.parse(a.starts_at) - Date.parse(b.starts_at))
+    .slice(0, SELF_UPCOMING_EVENTS_CAP);
   return expanded.map((row) => ({
     title: String(row.title ?? "").trim() || "Event",
     starts_at: row.starts_at,
