@@ -35,6 +35,7 @@ import { courseLessons, courseProgress, lessonEnd, pageOf, coursePath, shelfPage
 import type { CommunityResource, CommunityResourceModule } from "../components/communityResourcesContracts";
 import { askGuide, openGuideFromSearch } from "../components/guideSearch";
 import { WebCommunityResourceViewerContent } from "../components/WebCommunityResourceViewerContent";
+import { CourseCatalogSkeleton } from "../components/WebLoadingSkeleton";
 import { PanelBrain, useBrainMap } from "./KitBrain";
 import { BriefPart, usePlaceBriefRead } from "./KitBrief";
 import { resolveAuthSubject, type AuthSessionLike } from "../../../../shared/authSession";
@@ -923,6 +924,8 @@ export function KitClassroom(props: {
           </div></div>
         ) : null}
 
+        {!props.loaded && courses.length === 0 ? <CourseCatalogSkeleton /> : null}
+
         {here ? (
           <div className={cx("khero-wrap")}>
           <button type="button" className={cx("khero")} onClick={() => { props.onOpenCourse(here.course.id); if (here.nextLesson) chooseLesson(here.nextLesson.id); }}>
@@ -949,7 +952,7 @@ export function KitClassroom(props: {
         ) : null}
 
         {/* One course: the block above is the whole shelf. */}
-        {props.canManage || courses.length > 1 ? (<>
+        {props.loaded && (props.canManage || courses.length > 1) ? (<>
         <div className={cx("khead")}>
           <span className={cx("lab")}>{props.canManage ? "Courses" : "All courses"}</span>
           {props.canManage ? null : <span className={cx("lab")} style={{ marginLeft: 10, fontWeight: 400 }}>In the order your host suggests. Open any of them.</span>}

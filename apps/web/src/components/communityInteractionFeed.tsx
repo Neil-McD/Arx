@@ -20,6 +20,7 @@ import { EmojiPickerButton, QUICK_REACTIONS, ReactionSummary } from "./community
 import { MessageLinkMedia } from "./MessageLinkMedia";
 import { PdfDocumentCard } from "./PdfDocumentCard";
 import { isPdfDocument, safeDocumentUrl } from "../../../../shared/messagePdf";
+import { ChannelFeedSkeleton } from "./WebLoadingSkeleton";
 import { groupInteractionFeed } from "./groupInteractionFeed";
 import { MemberAvatarStack, type MemberAvatarStackFace } from "./MemberAvatarStack";
 import type { WebCommunityInteractionProjectionProps } from "./WebCommunityInteractionProjection";
@@ -1078,10 +1079,7 @@ export function CommunityInteractionFeedList(props: CommunityInteractionFeedList
               </button>
             </div>
           ) : props.isLoadingRoots && props.roots.length === 0 && props.activityEvents.length === 0 ? (
-            <div key="loading" className="community-interaction-state" aria-live="polite">
-              <div>Loading messages…</div>
-              <div className="community-interaction-loading web-skeleton-pill" aria-hidden="true" />
-            </div>
+            <ChannelFeedSkeleton key="loading" />
           ) : props.roots.length === 0 && props.activityEvents.length === 0 ? (
             <div key="empty" className="community-interaction-empty">
               <MessageSquare size={22} aria-hidden="true" />

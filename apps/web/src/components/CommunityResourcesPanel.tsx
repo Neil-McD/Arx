@@ -20,6 +20,7 @@ import {
   type WebCommunityResourceInlineEditorField,
 } from "./WebCommunityResourceViewerContent";
 import { WebDeleteResourceModal } from "./WebDeleteResourceModal";
+import { CourseCatalogSkeleton } from "./WebLoadingSkeleton";
 import { ResourceCourseCatalog } from "./ResourceCourseCatalog";
 
 type CommunityResourcesPanelProps = {
@@ -877,15 +878,7 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
         </div>)}
         {isRefreshingResources && hasResourceContent ? <div role="status">Refreshing resources…</div> : null}
         {showInitialResourceLoading ? (
-          <div className="community-panel-state-shell">
-            <div className="community-chat-page-loading-card" aria-busy="true" aria-live="polite">
-              <div className="community-chat-page-loading-title">Loading knowledge…</div>
-              <div className="community-chat-page-loading-copy">
-                {`Preparing courses and lessons for ${capabilities.activeCommunityName ?? "this community"}.`}
-              </div>
-              <div className="community-chat-page-loading-progress web-skeleton-pill" aria-hidden="true" />
-            </div>
-          </div>
+          <CourseCatalogSkeleton />
         ) : !hasVisibleResourceContent && readErrors.length > 0 ? null : !hasVisibleResourceContent && !canManageResources ? (
           <div className="community-panel-state-shell">
             <div className="chat-empty-state">
