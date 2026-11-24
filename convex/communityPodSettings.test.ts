@@ -102,3 +102,14 @@ test("the builder sees which seats come from a plan; a pod people still pay for 
   await t.run((ctx: any) => ctx.db.patch(payment, { status: "ended" }));
   await expect(del()).resolves.toMatchObject({ deleted_channel_slug: "founders" });
 });
+
+test("adding someone works with the id the member directory gives (their public id), and members carry it", async () => {
+  const { t, ids, as, read } = await world();
+  await t.run(async (ctx: any) => { await ctx.db.patch(ids.otherId, { authSubject: "user_01OLA" }); });
+  await as("host").mutation((api as any).communityPods.addPodMember, { communityId: ids.communityId, channelId: ids.channelId, userId: "user_01OLA" });
+  const pod = await read("host");
+  const ola = pod.members.find((m: any) => m.name === "Ola");
+  expect(ola).toBeTruthy();
+  expect(ola.public_id).toBe("user_01OLA");
+  await expect(as("host").mutation((api as any).communityPods.addPodMember, { communityId: ids.communityId, channelId: ids.channelId, userId: "user_NOBODY" })).rejects.toThrow();
+});

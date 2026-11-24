@@ -203,7 +203,8 @@ function PeopleTab(props: Props) {
     setBusy(key); setError(null);
     try { await work(); props.onChanged(); } catch (failure) { setError(errorText(failure)); } finally { setBusy(null); }
   };
-  const inPod = useMemo(() => new Set(pod.members.map((member) => member.user_id)), [pod.members]);
+  // The directory names people by their public id; members carry both.
+  const inPod = useMemo(() => new Set(pod.members.flatMap((member) => [member.user_id, member.public_id].filter(Boolean) as string[])), [pod.members]);
   const loadDirectory = () => {
     if (directory) return;
     void listCloudCommunityMemberDirectory({ session: props.session, communityId: props.communityId }).then(setDirectory).catch(() => setDirectory([]));

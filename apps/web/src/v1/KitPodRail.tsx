@@ -4,7 +4,7 @@
 // is in, for the people who manage it). What the pod is for and the viewer's own
 // membership (paying, leaving, a payment problem, Leave pod) open from two
 // links at the foot.
-import { Fragment, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
+import { Fragment, lazy, Suspense, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
 import { CommunityChannelSessionContext } from "../components/CommunityChannelSessionContext";
 import {
   decideCloudPodRequest,
@@ -26,7 +26,8 @@ import { KitPodCall } from "./KitPodCall";
 import { KitPodKnowledge } from "./KitPodKnowledge";
 import { PanelAction, PanelLine, PanelPart, PanelPeople, usePanelSettled } from "./KitPanel";
 import { askForPodPagePreview, forgetPod, goToPodsPath, rememberPod } from "./podMemory";
-import { KitPodSettings } from "./KitPodSettings";
+// Only the pod's hosts and the builder open its settings: loaded on demand.
+const KitPodSettings = lazy(() => import("./KitPodSettings").then((module) => ({ default: module.KitPodSettings })));
 import { podSettingsTabsFor, usePodSettingsTab } from "./podSettingsTabs";
 
 
@@ -188,8 +189,10 @@ export function KitPodRail(props: { session: unknown; communityId: string; pod: 
   return (
     <KitApp view="wins" part="rail">
       {settings.tab && settingsTabs.length ? (
-        <KitPodSettings session={props.session} communityId={props.communityId} pod={pod} tab={settings.tab}
-          onTab={(tab) => settings.open(tab)} onClose={settings.close} onChanged={props.onChanged} />
+        <Suspense fallback={null}>
+          <KitPodSettings session={props.session} communityId={props.communityId} pod={pod} tab={settings.tab}
+            onTab={(tab) => settings.open(tab)} onClose={settings.close} onChanged={props.onChanged} />
+        </Suspense>
       ) : null}
       <Rail index={1} label="About this pod">
         {settled ? parts.map(([key, part]) => <Fragment key={key}>{part}</Fragment>) : null}
