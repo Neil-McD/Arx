@@ -963,6 +963,7 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
         </ThreadSurface>
       ) : null}
       {props.communityId && props.activeChannel ? <ChannelRosterPanel
+        isPodRoom={props.activeChannel.access_mode === "restricted"}
         onCloseNarrow={closePeople}
         narrowOpen={peopleOpen}
         pinned={props.pinnedRoot ? (() => {

@@ -47,6 +47,7 @@ type RosterProps = {
   // and what the channel is for.
   pinned?: (ChannelPinned & { label: string }) | null;
   channelDescription?: string | null;
+  isPodRoom?: boolean;
   narrowOpen?: boolean;
   onCloseNarrow?: () => void;
   joinReview?: ComponentProps<typeof CommunityJoinRequestReview>;
@@ -69,17 +70,22 @@ export function ChannelRosterPanel(props: RosterProps) {
   return <ChannelRosterWorkspace key={scopeKey} {...props} />;
 }
 
+export function shouldRedirectNarrowRosterToMembers(props: { narrowOpen?: boolean; isPodRoom?: boolean }): boolean {
+  return Boolean(props.narrowOpen && !props.isPodRoom);
+}
+
 function ChannelRosterWorkspace(props: RosterProps) {
-  // Members is a page of its own (/c/:slug/members). The channel's column
-  // links to it, and the people button on a phone goes there.
-  const asksForMembers = Boolean(props.narrowOpen);
+  // Members is a page of its own (/c/:slug/members). On an ordinary channel,
+  // the people button on a phone goes there; inside a pod room, it opens the
+  // pod's own right column (requests, calls, knowledge, members, membership).
+  const asksForMembers = shouldRedirectNarrowRosterToMembers(props);
   useEffect(() => {
     if (!asksForMembers) return;
     props.onCloseNarrow?.();
     goToMembersPage();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [asksForMembers]);
-  return <RosterSurface {...props} narrowOpen={false} onOpenMembers={() => goToMembersPage()} />;
+  return <RosterSurface {...props} narrowOpen={props.isPodRoom ? Boolean(props.narrowOpen) : false} onOpenMembers={() => goToMembersPage()} />;
 }
 
 
@@ -336,8 +342,9 @@ function RosterSurface(props: RosterProps & {
   // is here as faces; the full list, with its member tools, is one click away.
   const onlineCount = props.presenceSummary?.online_count;
   const isPodRail = Boolean(pod && scope?.communityId);
-  const kitRail = isPodRail || !props.onCloseNarrow || !props.narrowOpen;
-  const v1Rail = !props.directory ? <aside className={`community-context-panel channel-roster-panel is-v1${kitRail ? " is-kit" : ""}`} aria-label={isPodRail ? "About this pod" : "About this channel"}
+  const isPodSurface = isPodRail || Boolean(props.isPodRoom);
+  const kitRail = isPodSurface || !props.onCloseNarrow || !props.narrowOpen;
+  const v1Rail = !props.directory ? <aside className={`community-context-panel channel-roster-panel is-v1${kitRail ? " is-kit" : ""}${isPodSurface ? " is-pod-rail" : ""}`} aria-label={isPodSurface ? "About this pod" : "About this channel"}
     style={props.memberDetailOpen ? { display: "none" } : undefined}
     onKeyDown={event => {
       if (event.key === "Escape" && !event.defaultPrevented && props.narrowOpen) {
@@ -345,14 +352,15 @@ function RosterSurface(props: RosterProps & {
       }
     }}>
     {props.onCloseNarrow ? <div className="channel-people-back">
-      <button ref={backRef} className="back-to-workspace" type="button" aria-label={isPodRail ? "Back to pod" : "Back to channel"} onClick={props.onCloseNarrow}>
+      <button ref={backRef} className="back-to-workspace" type="button" aria-label={isPodSurface ? "Back to pod" : "Back to channel"} onClick={props.onCloseNarrow}>
         <svg viewBox="0 0 24 24" className="back-icon" aria-hidden="true"><path d="M19 12H5M12 19l-7-7 7-7" /></svg>
       </button>
-      {isPodRail && pod ? <span className="channel-people-back-title">{pod.name}</span> : null}
+      {isPodSurface && pod ? <span className="channel-people-back-title">{pod.name}</span> : null}
     </div> : null}
     {kitRail ? (
       // Design v1 beside a channel on a wide window, or inside a pod on any viewport: the mock's column, from the kit.
       isPodRail && pod && scope?.communityId ? <KitPodRail key={pod.channel_id} session={scope.session} communityId={scope.communityId} pod={pod} onChanged={() => void reloadPod()} /> :
+      props.isPodRoom ? null :
       <KitChannelRail
         communityId={scope?.communityId ?? null}
         session={scope?.session ?? null}

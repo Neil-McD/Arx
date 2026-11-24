@@ -55,7 +55,12 @@ describe("Pods mobile parity, landing Brain map, and call cancellation confirmat
     }));
 
     const { CommunityChannelSessionContext } = await import("../apps/web/src/components/CommunityChannelSessionContext");
-    const { ChannelRosterPanel } = await import("../apps/web/src/components/ChannelRosterPanel");
+    const { ChannelRosterPanel, shouldRedirectNarrowRosterToMembers } = await import("../apps/web/src/components/ChannelRosterPanel");
+
+    // Pod rooms must NEVER redirect narrow/mobile panel requests to Members; ordinary channels still do.
+    expect(shouldRedirectNarrowRosterToMembers({ narrowOpen: true, isPodRoom: true })).toBe(false);
+    expect(shouldRedirectNarrowRosterToMembers({ narrowOpen: true, isPodRoom: false })).toBe(true);
+    expect(shouldRedirectNarrowRosterToMembers({ narrowOpen: false, isPodRoom: false })).toBe(false);
 
     const html = renderToStaticMarkup(
       React.createElement(
@@ -64,6 +69,7 @@ describe("Pods mobile parity, landing Brain map, and call cancellation confirmat
         React.createElement(ChannelRosterPanel, {
           communityName: "Harbor",
           channelId: "ch_pod",
+          isPodRoom: true,
           narrowOpen: true,
           onCloseNarrow: () => {},
           presenceSummary: { online_count: 2, online_count_capped: false, online_faces: [] } as any,
@@ -77,7 +83,7 @@ describe("Pods mobile parity, landing Brain map, and call cancellation confirmat
     expect(html).toContain('aria-label="About this pod"');
     expect(html).toContain('aria-label="Back to pod"');
     expect(html).toContain("Founders Pod");
-    expect(html).toContain("channel-roster-panel is-v1 is-kit");
+    expect(html).toContain("channel-roster-panel is-v1 is-kit is-pod-rail");
     expect(html).toContain("Maya");
     expect(html).toContain("asked to join");
     expect(html).toContain("Weekly Critique");
