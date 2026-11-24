@@ -283,12 +283,27 @@ function buildAbsoluteAppUrl(origin: string, path: string): string {
   return new URL(path, `${origin.replace(/\/+$/, "")}/`).toString();
 }
 
+const MAX_COMMUNITY_ENROLLMENT_PAGES_PER_RUN = 10;
+
 export const processDueCommunityWeeklyDigestsInternal = internalAction({
   args: {
     nowMs: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
     const nowMs = Number.isFinite(args.nowMs) ? Math.floor(args.nowMs as number) : Date.now();
+    // Ensure pre-existing active communities (including free ones) have a schedule.
+    let enrollCursor: string | null = null;
+    for (let page = 0; page < MAX_COMMUNITY_ENROLLMENT_PAGES_PER_RUN; page += 1) {
+      const enrolled: { enrolled: number; isDone: boolean; continueCursor: string | null } =
+        await ctx.runMutation(
+          (internal as any).communityWeeklyDigestSchedule
+            .enrollActiveCommunitiesForWeeklyDigestPageInternal,
+          { cursor: enrollCursor, nowMs },
+        );
+      if (enrolled.isDone || !enrolled.continueCursor) break;
+      enrollCursor = enrolled.continueCursor;
+    }
+
     let communities = 0;
     let recipients = 0;
     let enqueued = 0;

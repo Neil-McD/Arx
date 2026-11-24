@@ -23,6 +23,7 @@ import { startFundedInferenceRun } from "./fundedInferenceGateway";
 import { deliverAssistantMessageToMemberCommunityThread } from "./threads";
 import { enqueueSingleEmailJob } from "./email";
 import { syncCommunityWeeklyDigestScheduleForCommunity } from "./communityWeeklyDigestSchedule";
+import { operatorGrantUsageCycleKey } from "./operatorGrantUsageCore";
 import { resolveUserProfileDisplayProjection } from "./userProfileProjection";
 import { readCanonicalPublicAppOrigin } from "./publicAppUrl";
 import { communityIsActive, normalizeCommunityLifecycle } from "../shared/communityLifecycle";
@@ -1415,7 +1416,7 @@ async function buildCoachSettingsView(
 ): Promise<MemberCoachSettingsView> {
   const nowMs = Date.now();
   const reengageCutoffMs = nowMs - REENGAGEMENT_WINDOW_MS;
-  const [row, sentWeek, waiting, openFounderCycle, sent30d] = await Promise.all([
+  const [row, sentWeek, waiting, openFounderCycle, operatorCycle, sent30d] = await Promise.all([
     ctx.db
       .query("communityMemberCoachSettings")
       .withIndex("by_community", (q: any) => q.eq("communityId", communityId))
@@ -1440,6 +1441,12 @@ async function buildCoachSettingsView(
       .order("desc")
       .first(),
     ctx.db
+      .query("operatorGrantUsageCycles")
+      .withIndex("by_cycle_key", (q: any) =>
+        q.eq("cycleKey", operatorGrantUsageCycleKey(communityId, nowMs)),
+      )
+      .first(),
+    ctx.db
       .query("communityMemberCoachDrafts")
       .withIndex("by_community_status_sentAt", (q: any) =>
         q.eq("communityId", communityId).eq("status", "sent").gte("sentAt", reengageCutoffMs),
@@ -1448,17 +1455,27 @@ async function buildCoachSettingsView(
       .take(REENGAGEMENT_DRAFT_SCAN_LIMIT + 1),
   ]);
 
-  // Align allowance & spend window with the active Stripe billing cycle when
-  // present, falling back to the UTC calendar month for operator-funded or free communities.
-  const activeCycle =
+  // Align allowance & spend window with the active Stripe billing cycle (or
+  // operator grant cycle) when present, falling back to UTC calendar month for free communities.
+  const activeFounderCycle =
     openFounderCycle &&
     typeof openFounderCycle.cycleEndAt === "number" &&
     openFounderCycle.cycleEndAt > nowMs
       ? openFounderCycle
       : null;
-  const cycleStartMs = activeCycle ? Number(activeCycle.cycleStartAt) : utcMonthWindow(nowMs).startAt;
-  const allowanceMicros = activeCycle
-    ? Number(activeCycle.includedCostMicros ?? POLYNET_FOUNDER_PLAN_INCLUDED_COST_MICROS)
+  const activeOperatorCycle =
+    !activeFounderCycle &&
+    operatorCycle &&
+    typeof operatorCycle.cycleEndAt === "number" &&
+    operatorCycle.cycleEndAt > nowMs
+      ? operatorCycle
+      : null;
+  const activeLedgerCycle = activeFounderCycle ?? activeOperatorCycle;
+  const cycleStartMs = activeLedgerCycle
+    ? Number(activeLedgerCycle.cycleStartAt)
+    : utcMonthWindow(nowMs).startAt;
+  const allowanceMicros = activeLedgerCycle
+    ? Number(activeLedgerCycle.includedCostMicros ?? POLYNET_FOUNDER_PLAN_INCLUDED_COST_MICROS)
     : POLYNET_FOUNDER_PLAN_INCLUDED_COST_MICROS;
 
   const rawCycleReceipts = await ctx.db
@@ -1471,18 +1488,24 @@ async function buildCoachSettingsView(
   const boundedReceipts = spendTruncated
     ? rawCycleReceipts.slice(0, MONTHLY_SPEND_RECEIPT_SCAN_LIMIT)
     : rawCycleReceipts;
-  const scopedReceipts = activeCycle
-    ? boundedReceipts.filter((receipt: any) => String(receipt.usageCycleId ?? "") === String(activeCycle._id))
-    : boundedReceipts;
+  const scopedReceipts = activeFounderCycle
+    ? boundedReceipts.filter((receipt: any) => String(receipt.usageCycleId ?? "") === String(activeFounderCycle._id))
+    : activeOperatorCycle
+      ? boundedReceipts.filter(
+          (receipt: any) =>
+            !receipt.operatorUsageCycleId ||
+            String(receipt.operatorUsageCycleId) === String(activeOperatorCycle._id),
+        )
+      : boundedReceipts;
   const spend = summarizeCommunityAiSpend({
     receipts: scopedReceipts,
     allowanceMicros,
-    truncated: spendTruncated,
+    truncated: spendTruncated && !activeLedgerCycle,
   });
-  // When an active billing cycle ledger exists, use its authoritative settled total
-  // for total_micros & percent_used so the headline never drifts on busy communities.
-  const authoritativeTotalMicros = activeCycle
-    ? Math.max(spend.totalMicros, Math.floor(Number(activeCycle.settledCostMicros ?? 0)))
+  // When an active billing or operator grant cycle ledger exists, use its
+  // authoritative settled total so the headline never drifts past 400 turns.
+  const authoritativeTotalMicros = activeLedgerCycle
+    ? Math.max(spend.totalMicros, Math.floor(Number(activeLedgerCycle.settledCostMicros ?? 0)))
     : spend.totalMicros;
   const authoritativePercentUsed =
     allowanceMicros > 0

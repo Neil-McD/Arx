@@ -10,6 +10,7 @@ import { internal } from "./_generated/api";
 import { internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import { resolveUserIdForAuthenticatedRequest } from "./authActor";
 import { resolveUserProfileDisplayProjection } from "./userProfileProjection";
+import { wakePausedCommunityHeartbeatIfNeeded } from "./communityHeartbeatWake";
 import { outReasonFor } from "../shared/communityMemberRecords";
 import {
   communityResourceIsLiveModulePage,
@@ -138,6 +139,7 @@ export const setLessonDoneInternal = internalMutation({
     // Setting (not toggling) makes a retry safe without a receipt.
     if (args.done && !existing) {
       await ctx.db.insert("communityLessonProgress", { communityId: args.communityId, userId: args.userId, resourceId, completedAt: nowMs });
+      await wakePausedCommunityHeartbeatIfNeeded(ctx, args.communityId, nowMs);
     } else if (!args.done && existing) {
       await ctx.db.delete(existing._id);
     }
@@ -216,6 +218,7 @@ export const setMyLessonDone = mutation({
     // Setting (not toggling) makes a retry safe.
     if (args.done && !existing) {
       await ctx.db.insert("communityLessonProgress", { communityId: args.communityId, userId, resourceId, completedAt: nowMs });
+      await wakePausedCommunityHeartbeatIfNeeded(ctx, args.communityId, nowMs);
     } else if (!args.done && existing) {
       await ctx.db.delete(existing._id);
     }
