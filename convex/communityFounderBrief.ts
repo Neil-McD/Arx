@@ -1,4 +1,5 @@
 import { communityWideEvents } from "./communityEventAudience";
+import { readFounderChiefOfStaffSignals, type FounderChiefOfStaffSignals } from "./communityChiefOfStaff";
 // The founder's daily brief: each morning, in the founder's time zone, the
 // community agent reads the community's last day (public activity and counts
 // only, never members' private conversations with the agent), writes a short
@@ -50,6 +51,9 @@ export type FounderBriefSnapshot = {
   quietNewcomers: { count: number; names: string[] };
   joinRequestsPending: number;
   upcomingEvents: Array<{ title: string; startsAt: string }>;
+  // Founder-only Chief of Staff intelligence (populated for the daily Founder
+  // Brief; never included on member Home snapshots).
+  chiefOfStaff?: FounderChiefOfStaffSignals;
 };
 
 export type FounderBrief = {
@@ -100,9 +104,10 @@ export async function buildSnapshot(
   community: any,
   windowStartMs: number,
   nowMs: number,
-  options?: { includeFounderOnly?: boolean },
+  options?: { includeFounderOnly?: boolean; includeChiefOfStaff?: boolean },
 ): Promise<FounderBriefSnapshot> {
   const includeFounderOnly = options?.includeFounderOnly !== false;
+  const includeChiefOfStaff = includeFounderOnly && options?.includeChiefOfStaff === true;
   const names = new Map<string, string>();
   const ownerId = String(community.ownerId);
   const memberRows = (from: number, to: number) => ctx.db.query("communityMemberships")
@@ -238,9 +243,15 @@ export async function buildSnapshot(
     }
   }
 
-  const [newMemberNames, quietNewcomerNames] = includeFounderOnly
-    ? await Promise.all([nameList(joined), nameList(quiet)])
-    : [[], []];
+  const [newMemberNames, quietNewcomerNames, chiefOfStaff] = includeFounderOnly
+    ? await Promise.all([
+        nameList(joined),
+        nameList(quiet),
+        includeChiefOfStaff
+          ? readFounderChiefOfStaffSignals(ctx, { community, windowStartMs, nowMs })
+          : Promise.resolve(undefined),
+      ])
+    : [[], [], undefined];
 
   return {
     communityName: String(community.name ?? community.slug ?? "your community"),
@@ -259,12 +270,25 @@ export async function buildSnapshot(
     quietNewcomers: includeFounderOnly ? { count: quiet.length, names: quietNewcomerNames } : { count: 0, names: [] },
     joinRequestsPending: pendingJoinRequests.length,
     upcomingEvents: communityWideEvents(events).map((event: any) => ({ title: clip(event.title, 120), startsAt: new Date(Number(event.startsAt)).toISOString() })),
+    ...(chiefOfStaff ? { chiefOfStaff } : {}),
   };
 }
 
 export function snapshotIsQuiet(snapshot: FounderBriefSnapshot): boolean {
+  const cos = snapshot.chiefOfStaff;
+  const hasChiefOfStaffActivity = Boolean(
+    cos &&
+      (cos.proactiveGuide.coachDraftsWaiting > 0 ||
+        cos.proactiveGuide.replyDraftsWaiting > 0 ||
+        cos.proactiveGuide.coachSentInWindow > 0 ||
+        cos.proactiveGuide.repliesAutoPostedInWindow > 0 ||
+        cos.stalledLearners.length > 0 ||
+        cos.quietPayingMembers.count > 0 ||
+        cos.risingContributors.length > 0),
+  );
   return snapshot.newMembers.count === 0 && snapshot.activity.posts === 0 && snapshot.activity.replies === 0
-    && snapshot.unanswered.length === 0 && snapshot.joinRequestsPending === 0 && snapshot.upcomingEvents.length === 0;
+    && snapshot.unanswered.length === 0 && snapshot.joinRequestsPending === 0 && snapshot.upcomingEvents.length === 0
+    && !hasChiefOfStaffActivity;
 }
 
 // ---------- writing ----------
@@ -282,33 +306,82 @@ export function deterministicBrief(snapshot: FounderBriefSnapshot): FounderBrief
         : "Post something that invites a reply, like a question for the week.",
     };
   }
+  const cos = snapshot.chiefOfStaff;
   const sections: FounderBrief["sections"] = [];
   const waiting: string[] = [];
   if (snapshot.joinRequestsPending) waiting.push(`${plural(snapshot.joinRequestsPending, "join request")} to review.`);
+  if (cos) {
+    const waitingDrafts = cos.proactiveGuide.coachDraftsWaiting + cos.proactiveGuide.replyDraftsWaiting;
+    if (waitingDrafts > 0) {
+      const parts: string[] = [];
+      if (cos.proactiveGuide.coachDraftsWaiting) parts.push(`${plural(cos.proactiveGuide.coachDraftsWaiting, "member check-in")}`);
+      if (cos.proactiveGuide.replyDraftsWaiting) parts.push(`${plural(cos.proactiveGuide.replyDraftsWaiting, "reply draft")}`);
+      waiting.push(`Your guide suggests: ${parts.join(" and ")} ready on Home.`);
+    }
+  }
   for (const post of snapshot.unanswered) waiting.push(`${post.author} in #${post.channel}, ${post.hoursAgo}h with no reply: "${post.text}"`);
-  if (waiting.length) sections.push({ title: "Waiting on you", items: waiting });
+  if (waiting.length) sections.push({ title: "Waiting on you", items: waiting.slice(0, 5) });
+
+  if (cos && (cos.proactiveGuide.coachSentInWindow > 0 || cos.proactiveGuide.repliesAutoPostedInWindow > 0)) {
+    const guideItems: string[] = [];
+    if (cos.proactiveGuide.coachSentInWindow) {
+      guideItems.push(`Sent ${plural(cos.proactiveGuide.coachSentInWindow, "private member check-in")}.`);
+    }
+    if (cos.proactiveGuide.repliesAutoPostedInWindow) {
+      guideItems.push(`Auto-replied to ${plural(cos.proactiveGuide.repliesAutoPostedInWindow, "unanswered question")}.`);
+    }
+    sections.push({ title: "Your guide", items: guideItems });
+  }
+
   const people: string[] = [];
   if (snapshot.newMembers.count) people.push(`${plural(snapshot.newMembers.count, "new member")}: ${snapshot.newMembers.names.join(", ")}.`);
+  if (cos && cos.quietPayingMembers.count > 0) {
+    people.push(`${plural(cos.quietPayingMembers.count, "paying member")} quiet 14+ days: ${cos.quietPayingMembers.names.join(", ")}.`);
+  }
+  if (cos && cos.stalledLearners.length > 0) {
+    const topStall = cos.stalledLearners[0]!;
+    people.push(`${plural(topStall.stalledCount, "learner")} stalled in ${topStall.course}: ${topStall.sampleNames.join(", ")}.`);
+  }
+  if (cos && cos.risingContributors.length > 0) {
+    const topContrib = cos.risingContributors.map((c) => `${c.name} (${c.posts + c.replies})`).join(", ");
+    people.push(`Rising contributors this week: ${topContrib}.`);
+  }
   if (snapshot.quietNewcomers.count) people.push(`${plural(snapshot.quietNewcomers.count, "newcomer")} haven't posted yet: ${snapshot.quietNewcomers.names.join(", ")}.`);
-  if (people.length) sections.push({ title: "People", items: people });
-  sections.push({ title: "Activity", items: [
+  if (people.length) sections.push({ title: "People", items: people.slice(0, 5) });
+
+  const activityItems = [
     `${plural(snapshot.activity.posts, "post")} and ${plural(snapshot.activity.replies, "reply")} from ${plural(snapshot.activity.activePeople, "person")} in the last ${snapshot.windowHours} hours.`,
-  ] });
+  ];
+  if (cos && cos.podHealth.length > 0) {
+    const podSummary = cos.podHealth.slice(0, 3).map((pod) => `${pod.name} (${pod.seats} seats, ${pod.messages7d} msgs/7d)`).join("; ");
+    activityItems.push(`Pods: ${podSummary}.`);
+  }
+  sections.push({ title: "Activity", items: activityItems });
+
   if (snapshot.upcomingEvents.length) {
     sections.push({ title: "Coming up", items: snapshot.upcomingEvents.map((event) => `${event.title} (${event.startsAt})`) });
   }
+  const nextStep = snapshot.unanswered[0]
+    ? `Reply to ${snapshot.unanswered[0].author} in #${snapshot.unanswered[0].channel}.`
+    : cos && (cos.proactiveGuide.coachDraftsWaiting > 0 || cos.proactiveGuide.replyDraftsWaiting > 0)
+      ? `Review your guide's waiting drafts on Home.`
+      : cos && cos.quietPayingMembers.names[0]
+        ? `Check in with paying member ${cos.quietPayingMembers.names[0]}, who has been quiet for 2+ weeks.`
+        : cos && cos.stalledLearners[0]
+          ? `Follow up with learners paused in ${cos.stalledLearners[0].course}.`
+          : null;
   return {
     headline: waiting.length ? `${plural(waiting.length, "thing")} waiting on you in ${snapshot.communityName}` : `Your day in ${snapshot.communityName}`,
     sections: sections.slice(0, 5),
-    nextStep: snapshot.unanswered[0] ? `Reply to ${snapshot.unanswered[0].author} in #${snapshot.unanswered[0].channel}.` : null,
+    nextStep,
   };
 }
 
 export const FOUNDER_BRIEF_PROMPT = [
-  "You are this community's AI agent writing the founder's morning brief.",
+  "You are this community's AI chief of staff writing the founder's morning brief.",
   "Write like a sharp chief of staff: short, specific, warm, no filler.",
-  "Use only facts in the snapshot. Never invent people, numbers or events.",
-  "Lead with what needs the founder (join requests, unanswered posts), then people (new members, quiet newcomers), then activity and what's coming up.",
+  "Use only facts in the snapshot. Never invent people, numbers or events, and never quote or speculate about members' private chats or private pod messages.",
+  "Lead with what needs the founder (join requests, waiting guide drafts on Home, unanswered posts), then what the guide did, then people signals (quiet paying members at churn risk, stalled course learners, rising contributors, new and quiet newcomers), then activity/pod health and what's coming up.",
   "Name people. Times are UTC ISO; say them as relative days (\"tomorrow\"), not raw timestamps.",
   "End with one concrete suggested next step the founder can do in two minutes.",
   "Reply with JSON only: {\"headline\": string (max 90 chars), \"sections\": [{\"title\": string (max 30 chars), \"items\": [string (max 220 chars)]}] (1-5 sections, 1-5 items each), \"next_step\": string (max 160 chars)}.",
@@ -556,7 +629,10 @@ export const readFounderBriefSnapshotInternal = internalQuery({
     const community = await ctx.db.get(args.communityId);
     if (!community || !communityIsActive(community)) return null;
     return {
-      snapshot: await buildSnapshot(ctx, community, args.windowStartMs, args.nowMs),
+      snapshot: await buildSnapshot(ctx, community, args.windowStartMs, args.nowMs, {
+        includeFounderOnly: true,
+        includeChiefOfStaff: true,
+      }),
       communitySlug: String(community.slug ?? ""),
       communityLifecycleGeneration: normalizeCommunityLifecycle(community).generation,
     };

@@ -337,6 +337,18 @@ export function communityAnalyticsDocument(args: {
   last30Days: CommunityAnalyticsSnapshot;
   last7Days: CommunityAnalyticsSnapshot;
   courses?: Array<{ module_id: string; title: string; lessons: number; started: number; finished: number }>;
+  chiefOfStaff?: {
+    proactiveGuide: {
+      coachDraftsWaiting: number;
+      replyDraftsWaiting: number;
+      coachSentInWindow: number;
+      repliesAutoPostedInWindow: number;
+    };
+    stalledLearners: Array<{ course: string; stalledCount: number; sampleNames: string[] }>;
+    quietPayingMembers: { count: number; names: string[] };
+    risingContributors: Array<{ name: string; posts: number; replies: number }>;
+    podHealth: Array<{ name: string; seats: number; messages7d: number }>;
+  };
 }) {
   const current = args.last30Days.summary;
   const money = (value: number | null) => formatMoneyBaseUnits(value, current.currency, current.currency_decimals);
@@ -380,6 +392,32 @@ export function communityAnalyticsDocument(args: {
             started: course.started,
             finished: course.finished,
           })),
+        }
+      : {}),
+    ...(args.chiefOfStaff
+      ? {
+          chief_of_staff: {
+            waiting_approvals: {
+              member_check_ins: args.chiefOfStaff.proactiveGuide.coachDraftsWaiting,
+              reply_drafts: args.chiefOfStaff.proactiveGuide.replyDraftsWaiting,
+            },
+            guide_activity_7d: {
+              check_ins_sent: args.chiefOfStaff.proactiveGuide.coachSentInWindow,
+              replies_auto_posted: args.chiefOfStaff.proactiveGuide.repliesAutoPostedInWindow,
+            },
+            stalled_learners: args.chiefOfStaff.stalledLearners.map((item) => ({
+              course: item.course,
+              stalled_count: item.stalledCount,
+              sample_names: item.sampleNames,
+            })),
+            quiet_paying_members: args.chiefOfStaff.quietPayingMembers,
+            rising_contributors: args.chiefOfStaff.risingContributors,
+            pod_health: args.chiefOfStaff.podHealth.map((pod) => ({
+              name: pod.name,
+              seats: pod.seats,
+              messages_7d: pod.messages7d,
+            })),
+          },
         }
       : {}),
   };
