@@ -2014,6 +2014,8 @@ export default defineSchema({
       ),
     ),
     autoReplyEnabled: v.optional(v.boolean()),
+    // Automatic thread follow-up after the guide replies (absent means enabled).
+    threadFollowupEnabled: v.optional(v.boolean()),
     nextScanAt: v.optional(v.number()),
     scanCursorCreatedAt: v.optional(v.number()),
     leaseUntil: v.optional(v.number()),
@@ -2354,6 +2356,7 @@ export default defineSchema({
     triggerKind: v.optional(v.union(
       v.literal("mention"),
       v.literal("direct_reply"),
+      v.literal("thread_followup"),
     )),
     sourceRootId: v.optional(v.id("communityInteractionRoots")),
     sourceReplyId: v.optional(v.id("communityInteractionReplies")),

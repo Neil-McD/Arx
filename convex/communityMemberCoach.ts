@@ -1042,6 +1042,7 @@ async function buildCoachSettingsView(
     enabled: row ? Boolean(row.enabled) : true,
     auto_reasons: normalizeMemberCoachReasons(row?.autoReasons ?? []),
     auto_reply_enabled: Boolean(row?.autoReplyEnabled),
+    thread_followup_enabled: row?.threadFollowupEnabled !== false,
     sent_this_week: sentWeek.length,
     waiting_count: waiting.filter((item: any) => nowMs - item.createdAt <= MEMBER_COACH_DRAFT_MAX_AGE_MS).length,
   };
@@ -1062,6 +1063,7 @@ export const setMemberCoachSettings = mutation({
     enabled: v.boolean(),
     autoReasons: v.array(reasonValidator),
     autoReplyEnabled: v.optional(v.boolean()),
+    threadFollowupEnabled: v.optional(v.boolean()),
   },
   handler: async (ctx, args): Promise<MemberCoachSettingsView> => {
     const { userId } = await requireOwner(ctx, args.authSubject, args.communityId);
@@ -1073,11 +1075,16 @@ export const setMemberCoachSettings = mutation({
       .first();
     const nextAutoReply =
       args.autoReplyEnabled !== undefined ? args.autoReplyEnabled : Boolean(existing?.autoReplyEnabled);
+    const nextThreadFollowup =
+      args.threadFollowupEnabled !== undefined
+        ? args.threadFollowupEnabled
+        : existing?.threadFollowupEnabled !== false;
     if (existing) {
       await ctx.db.patch(existing._id, {
         enabled: args.enabled,
         autoReasons,
         autoReplyEnabled: nextAutoReply,
+        threadFollowupEnabled: nextThreadFollowup,
         ...(args.enabled && !existing.nextScanAt ? { nextScanAt: nowMs } : {}),
         updatedByUserId: userId,
         updatedAt: nowMs,
@@ -1088,6 +1095,7 @@ export const setMemberCoachSettings = mutation({
         enabled: args.enabled,
         autoReasons,
         autoReplyEnabled: nextAutoReply,
+        threadFollowupEnabled: nextThreadFollowup,
         ...(args.enabled ? { nextScanAt: nowMs } : {}),
         updatedByUserId: userId,
         createdAt: nowMs,

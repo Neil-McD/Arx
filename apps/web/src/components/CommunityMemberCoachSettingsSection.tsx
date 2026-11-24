@@ -41,7 +41,12 @@ export function CommunityMemberCoachSettingsSection(props: {
     };
   }, [props.communityId]);
 
-  const save = async (next: { enabled: boolean; autoReasons: MemberCoachReason[]; autoReplyEnabled: boolean }) => {
+  const save = async (next: {
+    enabled: boolean;
+    autoReasons: MemberCoachReason[];
+    autoReplyEnabled: boolean;
+    threadFollowupEnabled: boolean;
+  }) => {
     if (saving) return;
     setSaving(true);
     setError(null);
@@ -55,6 +60,7 @@ export function CommunityMemberCoachSettingsSection(props: {
           enabled: next.enabled,
           autoReasons: next.autoReasons,
           autoReplyEnabled: next.autoReplyEnabled,
+          threadFollowupEnabled: next.threadFollowupEnabled,
         }),
       );
     } catch {
@@ -67,11 +73,12 @@ export function CommunityMemberCoachSettingsSection(props: {
   const enabled = settings ? settings.enabled : true;
   const autoReasons = settings?.auto_reasons ?? [];
   const autoReplyEnabled = Boolean(settings?.auto_reply_enabled);
+  const threadFollowupEnabled = settings ? settings.thread_followup_enabled : true;
   const toggleAutoReason = (reason: MemberCoachReason, checked: boolean) => {
     const next = checked
       ? [...new Set<MemberCoachReason>([...autoReasons, reason])]
       : autoReasons.filter((item) => item !== reason);
-    void save({ enabled, autoReasons: next, autoReplyEnabled });
+    void save({ enabled, autoReasons: next, autoReplyEnabled, threadFollowupEnabled });
   };
 
   const statusNote = settings && settings.sent_this_week > 0
@@ -80,6 +87,23 @@ export function CommunityMemberCoachSettingsSection(props: {
 
   return (
     <SettingsGroup label="Proactive guide">
+      <SettingsRow
+        label="Follow up in active threads"
+        help={
+          threadFollowupEnabled
+            ? "Once your guide replies in a thread, members can keep talking to it for up to 2 hours (up to 4 follow-ups) without tagging it again. Stays silent on wrap-ups or replies aimed at other members."
+            : "Members must tag your guide or reply directly to its message for every follow-up in a thread."
+        }
+      >
+        <SettingsSwitch
+          label="Follow up in active threads"
+          checked={threadFollowupEnabled}
+          disabled={!settings || saving}
+          onChange={(checked) =>
+            void save({ enabled, autoReasons, autoReplyEnabled, threadFollowupEnabled: checked })
+          }
+        />
+      </SettingsRow>
       <SettingsRow
         label="Auto-reply to unanswered questions"
         help={
@@ -92,7 +116,9 @@ export function CommunityMemberCoachSettingsSection(props: {
           label="Auto-reply to unanswered questions"
           checked={autoReplyEnabled}
           disabled={!settings || saving}
-          onChange={(checked) => void save({ enabled, autoReasons, autoReplyEnabled: checked })}
+          onChange={(checked) =>
+            void save({ enabled, autoReasons, autoReplyEnabled: checked, threadFollowupEnabled })
+          }
         />
       </SettingsRow>
       <SettingsRow
@@ -109,7 +135,9 @@ export function CommunityMemberCoachSettingsSection(props: {
           label="Prepare member check-ins"
           checked={enabled}
           disabled={!settings || saving}
-          onChange={(checked) => void save({ enabled: checked, autoReasons, autoReplyEnabled })}
+          onChange={(checked) =>
+            void save({ enabled: checked, autoReasons, autoReplyEnabled, threadFollowupEnabled })
+          }
         />
       </SettingsRow>
       {enabled ? (

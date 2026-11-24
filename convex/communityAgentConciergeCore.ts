@@ -4,6 +4,7 @@ import { normalizeIdValue, requireCommunityChatAccess } from "./communityCore";
 import { settleMentionRowInternal } from "./communityMentionLifecycle";
 import { CANONICAL_COMMUNITY_AGENT_KEY } from "../shared/communityAgentToolProtocol";
 import { COMMUNITY_AGENT_SERVE_RECOVERY_DELAYS_MS } from "../shared/communityAgentServeContract";
+import { shouldAutoFollowThreadReply } from "../shared/communityThreadFollowup";
 import { resolveCommunityInferenceFundingAdmission } from "./founderInferenceCore";
 import { requireAgentSourceChannelAccess } from "./communityAgentChannelAccess";
 
@@ -63,13 +64,13 @@ type InteractionReplyRow = {
 export type ConciergeIntakeResult = {
   mention_id: string | null;
   invocation_key: string;
-  trigger_kind: "mention" | "direct_reply" | null;
+  trigger_kind: "mention" | "direct_reply" | "thread_followup" | null;
   status: "queued" | "skipped" | "duplicate" | "ignored";
   intake_reason: ServeRequestIntakeReason;
   request_id: string | null;
 };
 
-type CommunityAgentTriggerKind = "mention" | "direct_reply";
+type CommunityAgentTriggerKind = "mention" | "direct_reply" | "thread_followup";
 
 function boundedText(raw: unknown, maxLength: number): string {
   return String(raw ?? "").trim().slice(0, maxLength);
@@ -318,8 +319,11 @@ async function resolveInvocationSource(args: {
 
 async function resolveTriggerKind(args: {
   ctx: any;
+  communityId: any;
   source: Awaited<ReturnType<typeof resolveInvocationSource>>;
   mention?: ConciergeMentionRow;
+  hasOtherMentions?: boolean;
+  nowMs: number;
 }): Promise<CommunityAgentTriggerKind | null> {
   const { root, reply } = args.source;
   if (reply?.targetReplyId) {
@@ -344,6 +348,67 @@ async function resolveTriggerKind(args: {
   ) {
     return "direct_reply";
   }
+  if (
+    reply &&
+    root &&
+    reply.actorType === "human" &&
+    reply.status === "live" &&
+    root.status === "live" &&
+    !reply.targetReplyId &&
+    !args.hasOtherMentions
+  ) {
+    const coachSettings = await args.ctx.db
+      .query("communityMemberCoachSettings" as any)
+      .withIndex("by_community", (q: any) => q.eq("communityId", args.communityId))
+      .first();
+    const enabled = coachSettings?.threadFollowupEnabled !== false;
+    if (!enabled) return null;
+
+    const recentReplies = (await args.ctx.db
+      .query("communityInteractionReplies" as any)
+      .withIndex("by_root_status_createdAt", (q: any) =>
+        q.eq("rootId", root._id).eq("status", "live"),
+      )
+      .order("desc")
+      .take(25)) as Array<InteractionReplyRow & { createdAt?: number }>;
+    const lastAgentReply = recentReplies.find(
+      (row) =>
+        normalizeIdValue(row._id) !== normalizeIdValue(reply._id) &&
+        row.actorType === "community_agent" &&
+        row.actorAgentKey === CANONICAL_COMMUNITY_AGENT_KEY,
+    );
+    const lastAgentReplyCreatedAt =
+      typeof lastAgentReply?.createdAt === "number" ? lastAgentReply.createdAt : null;
+
+    let consecutiveAutoFollowups = 0;
+    if (lastAgentReplyCreatedAt !== null) {
+      const recentRequests = (await args.ctx.db
+        .query("communityAgentServeRequests" as any)
+        .withIndex("by_sourceRoot_createdAt", (q: any) => q.eq("sourceRootId", root._id))
+        .order("desc")
+        .take(20)) as Array<Record<string, any>>;
+      for (const req of recentRequests) {
+        const activeOrSent =
+          req.status === "responded" || req.status === "queued" || req.status === "running";
+        if (!activeOrSent) continue;
+        if (req.triggerKind === "thread_followup") {
+          consecutiveAutoFollowups += 1;
+        } else {
+          break;
+        }
+      }
+    }
+
+    const decision = shouldAutoFollowThreadReply({
+      enabled,
+      hasTargetReply: Boolean(reply.targetReplyId),
+      hasOtherMentions: Boolean(args.hasOtherMentions),
+      lastAgentReplyCreatedAt,
+      consecutiveAutoFollowups,
+      nowMs: args.nowMs,
+    });
+    if (decision.allowed) return "thread_followup";
+  }
   return null;
 }
 
@@ -353,6 +418,7 @@ export async function intakeCommunityAgentTurn(args: {
   rootId?: any;
   replyId?: any;
   mention?: ConciergeMentionRow;
+  hasOtherMentions?: boolean;
   nowMs: number;
 }): Promise<ConciergeIntakeResult> {
   const mentionId = args.mention?._id;
@@ -419,8 +485,11 @@ export async function intakeCommunityAgentTurn(args: {
   });
   const triggerKind = await resolveTriggerKind({
     ctx: args.ctx,
+    communityId: args.communityId,
     source,
     mention: args.mention,
+    hasOtherMentions: args.hasOtherMentions,
+    nowMs: args.nowMs,
   });
   if (!source.root && !source.reply) {
     const skipped = await skipInvocation({

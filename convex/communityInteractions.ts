@@ -424,12 +424,14 @@ async function createCommunityInteractionComposerMessageCore(
     await ensureReplyChannelMatchesRoot({ ctx, root, reply, actor: channelActor });
 
     if (actorType === "human") {
+      const hasOtherMentions = mentionedUserIds.some((spec) => spec.kind !== "community_agent");
       await intakeCommunityAgentTurn({
         ctx,
         communityId: root.communityId,
         rootId: root._id,
         replyId: reply._id,
         ...(communityAgentMention ? { mention: communityAgentMention } : {}),
+        ...(hasOtherMentions ? { hasOtherMentions: true } : {}),
         nowMs,
       });
     }

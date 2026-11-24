@@ -48,6 +48,7 @@ export type MemberCoachSettingsView = {
   enabled: boolean;
   auto_reasons: MemberCoachReason[];
   auto_reply_enabled: boolean;
+  thread_followup_enabled: boolean;
   sent_this_week: number;
   waiting_count: number;
 };

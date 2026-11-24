@@ -47,7 +47,12 @@ export async function getCloudMemberCoachSettings(params: Params): Promise<Membe
 }
 
 export async function setCloudMemberCoachSettings(
-  params: Params & { enabled: boolean; autoReasons: MemberCoachReason[]; autoReplyEnabled?: boolean },
+  params: Params & {
+    enabled: boolean;
+    autoReasons: MemberCoachReason[];
+    autoReplyEnabled?: boolean;
+    threadFollowupEnabled?: boolean;
+  },
 ): Promise<MemberCoachSettingsView> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session as any);
   return await client.mutation("communityMemberCoach:setMemberCoachSettings" as any, {
@@ -56,6 +61,9 @@ export async function setCloudMemberCoachSettings(
     enabled: params.enabled,
     autoReasons: params.autoReasons,
     ...(params.autoReplyEnabled !== undefined ? { autoReplyEnabled: params.autoReplyEnabled } : {}),
+    ...(params.threadFollowupEnabled !== undefined
+      ? { threadFollowupEnabled: params.threadFollowupEnabled }
+      : {}),
   });
 }
 

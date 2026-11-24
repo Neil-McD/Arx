@@ -35,6 +35,7 @@ import {
   buildCommunityAgentServePromptBundle,
   type CommunityAgentServeResolvedImage,
 } from "../shared/communityAgentServePrompt";
+import { isSilentThreadFollowupReply } from "../shared/communityThreadFollowup";
 import {
   COMMUNITY_AGENT_MAX_IMAGE_BYTES,
   isAllowedCommunityAgentImageMime,
@@ -237,7 +238,7 @@ type ServeRequestRow = {
   agentKey: string;
   sourceMentionId?: any;
   invocationKey?: string;
-  triggerKind?: "mention" | "direct_reply";
+  triggerKind?: "mention" | "direct_reply" | "thread_followup";
   sourceRootId?: any;
   sourceReplyId?: any;
   requesterUserId?: any;
@@ -1501,6 +1502,7 @@ export const finalizeCommunityAgentServeReplyInternal = internalMutation({
     requestId: v.id("communityAgentServeRequests"),
     expectedAttempt: v.number(),
     content: v.string(),
+    silent: v.optional(v.boolean()),
     receiptKey: v.optional(v.string()),
     receiptClaimToken: v.optional(v.string()),
     promptTokens: v.optional(v.number()),
@@ -1641,6 +1643,16 @@ export const finalizeCommunityAgentServeReplyInternal = internalMutation({
         nowMs,
       );
       return { ok: false, errorCode: "source_not_readable" };
+    }
+
+    if (args.silent === true && request.triggerKind === "thread_followup") {
+      await ctx.db.patch(request._id as any, {
+        status: "skipped",
+        skipReason: "thread_followup_silent",
+        leaseExpiresAt: undefined,
+        updatedAt: nowMs,
+      });
+      return { ok: true, silent: true, responseReplyId: null };
     }
 
     const content = boundedText(args.content, REPLY_TEXT_MAX_CHARS);
@@ -1842,7 +1854,11 @@ export const processQueuedCommunityAgentServeRequestsInternal = internalAction({
         context.communityHandbookMd = layers.communityHandbookMd;
         context.communityMemoryMd = layers.communityMemoryMd;
       }
-      const servePromptBundle = buildCommunityAgentServePromptBundle(context);
+      const servePromptInput = {
+        ...context,
+        triggerKind: context.request.triggerKind,
+      };
+      const servePromptBundle = buildCommunityAgentServePromptBundle(servePromptInput);
       const initialMessages = servePromptBundle.messages;
       const serializedMessages = JSON.stringify(initialMessages);
       const snapshotJson = JSON.stringify({
@@ -1907,7 +1923,7 @@ export const processQueuedCommunityAgentServeRequestsInternal = internalAction({
         });
       }
       const liveMessages = resolvedThreadImages.length > 0
-        ? buildCommunityAgentServePromptBundle({ ...context, resolvedThreadImages }).messages
+        ? buildCommunityAgentServePromptBundle({ ...servePromptInput, resolvedThreadImages }).messages
         : initialMessages;
       const run = await runFundedCommunityAgent({
         lens: "guide_public",
@@ -1945,7 +1961,11 @@ export const processQueuedCommunityAgentServeRequestsInternal = internalAction({
         const failureCode = run.failureCode;
         // A tag over the AI rate limit still gets an answer in its thread, so
         // the member isn't left waiting on silence. No model ran, so no receipt.
-        if (turnContract && SERVE_RATE_LIMITED_CODES.has(failureCode)) {
+        if (
+          turnContract &&
+          context.request.triggerKind !== "thread_followup" &&
+          SERVE_RATE_LIMITED_CODES.has(failureCode)
+        ) {
           const busy = await ctx.runMutation(
             internalRefs.communityAgentServeWorker.finalizeCommunityAgentServeReplyInternal,
             { requestId, expectedAttempt, content: SERVE_RATE_LIMITED_REPLY, nowMs: Date.now() },
@@ -1977,6 +1997,10 @@ export const processQueuedCommunityAgentServeRequestsInternal = internalAction({
       if (!finalizedFundingSession) {
         throw new Error("community_inference_funding_session_missing");
       }
+      const assistantText = String((completion as any).assistantText ?? "");
+      const silentFollowup =
+        context.request.triggerKind === "thread_followup" &&
+        isSilentThreadFollowupReply(assistantText);
       try {
         finalized = await ctx.runMutation(
           internalRefs.communityAgentServeWorker
@@ -1984,7 +2008,8 @@ export const processQueuedCommunityAgentServeRequestsInternal = internalAction({
           {
             requestId,
             expectedAttempt,
-            content: String((completion as any).assistantText ?? ""),
+            content: silentFollowup ? "" : assistantText,
+            ...(silentFollowup ? { silent: true } : {}),
             receiptKey: finalizedFundingSession.receiptKey,
             receiptClaimToken: finalizedFundingSession.claimToken,
             promptTokens: usage.promptTokens,
@@ -2035,7 +2060,7 @@ export const processQueuedCommunityAgentServeRequestsInternal = internalAction({
       }
       results.push({
         request_id: normalizeIdValue(requestId),
-        status: finalized?.ok ? "responded" : "error",
+        status: finalized?.ok ? (finalized?.silent ? "skipped" : "responded") : "error",
         response_reply_id: finalized?.responseReplyId
           ? normalizeIdValue(finalized.responseReplyId)
           : null,
