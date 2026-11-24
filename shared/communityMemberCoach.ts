@@ -2,10 +2,15 @@
 // Pure deterministic rules, interruption-budget gate, and silence-by-default judge
 // prompt & parser. Client-safe types and labels live in communityMemberCoachTypes.ts.
 import {
+  MEMBER_COLD_UNANSWERED_CAP,
+  type MemberHeartbeatTemperature,
+} from "./agentHeartbeat";
+import {
   MEMBER_COACH_EDIT_MAX_CHARS,
   MEMBER_COACH_REASONS,
   MEMBER_COACH_REASON_LABELS,
   type MemberCoachDraftView,
+  type MemberCoachHeartbeatSummary,
   type MemberCoachPreferenceView,
   type MemberCoachReason,
   type MemberCoachSettingsView,
@@ -16,6 +21,7 @@ export {
   MEMBER_COACH_REASONS,
   MEMBER_COACH_REASON_LABELS,
   type MemberCoachDraftView,
+  type MemberCoachHeartbeatSummary,
   type MemberCoachPreferenceView,
   type MemberCoachReason,
   type MemberCoachSettingsView,
@@ -39,11 +45,12 @@ export const QUIET_NEWCOMER_MAX_AGE_MS = 14 * DAY_MS;
 export const COURSE_STALL_MIN_AGE_MS = 5 * DAY_MS;
 export const COURSE_STALL_MAX_AGE_MS = 21 * DAY_MS;
 export const QUIET_MEMBER_MIN_AGE_MS = 14 * DAY_MS;
-export const QUIET_MEMBER_MAX_AGE_MS = 45 * DAY_MS;
+export const QUIET_MEMBER_MAX_AGE_MS = 30 * DAY_MS;
 export const QUIET_MEMBER_EVENT_HORIZON_MS = 7 * DAY_MS;
 
 // Per-reason dedupe windows:
 export const DEDUPE_WINDOW_MS: Record<MemberCoachReason, number> = {
+  commitment_followup: 7 * DAY_MS,
   quiet_newcomer: 60 * DAY_MS,
   course_stall: 14 * DAY_MS,
   quiet_member: 30 * DAY_MS,
@@ -108,6 +115,8 @@ export type MemberCoachGateInput = {
   recentHistory: readonly MemberCoachHistoryRow[];
   autoReasonEnabled: boolean;
   communityTimeZone?: string | null;
+  memberTemperature?: MemberHeartbeatTemperature;
+  consecutiveUnanswered?: number;
 };
 
 export type MemberCoachGateResult =
@@ -119,6 +128,23 @@ export type MemberCoachGateResult =
 export function evaluateMemberCoachGate(input: MemberCoachGateInput): MemberCoachGateResult {
   if (input.isOwner) return { allowed: false, blockReason: "owner_excluded" };
   if (input.memberMuted) return { allowed: false, blockReason: "member_muted" };
+  if (
+    input.memberTemperature === "cold" ||
+    (typeof input.consecutiveUnanswered === "number" &&
+      input.consecutiveUnanswered >= MEMBER_COLD_UNANSWERED_CAP)
+  ) {
+    return { allowed: false, blockReason: "cold_handoff_to_system" };
+  }
+  // Private commitments never go through a founder-visible draft inbox so
+  // members' private words remain strictly private to them.
+  if (input.reason === "commitment_followup") {
+    if (!input.autoReasonEnabled) {
+      return { allowed: false, blockReason: "commitment_requires_private_auto" };
+    }
+    if (isCommunityQuietHour(input.nowMs, input.communityTimeZone)) {
+      return { allowed: false, blockReason: "quiet_hours" };
+    }
+  }
 
   if (
     typeof input.lastUserThreadMessageAt === "number" &&

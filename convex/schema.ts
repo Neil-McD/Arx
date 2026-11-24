@@ -2022,6 +2022,7 @@ export default defineSchema({
     enabled: v.boolean(),
     autoReasons: v.array(
       v.union(
+        v.literal("commitment_followup"),
         v.literal("quiet_newcomer"),
         v.literal("course_stall"),
         v.literal("quiet_member"),
@@ -2030,6 +2031,24 @@ export default defineSchema({
     autoReplyEnabled: v.optional(v.boolean()),
     // Automatic thread follow-up after the guide replies (absent means enabled).
     threadFollowupEnabled: v.optional(v.boolean()),
+    communityHeartbeatTier: v.optional(
+      v.union(
+        v.literal("active"),
+        v.literal("warm"),
+        v.literal("cooling"),
+        v.literal("paused"),
+      ),
+    ),
+    lastCommunityActivityAt: v.optional(v.number()),
+    temperatureSnapshot: v.optional(
+      v.object({
+        hot: v.number(),
+        warm: v.number(),
+        cooling: v.number(),
+        cold: v.number(),
+        sampledAt: v.number(),
+      }),
+    ),
     nextScanAt: v.optional(v.number()),
     scanCursorCreatedAt: v.optional(v.number()),
     leaseUntil: v.optional(v.number()),
@@ -2047,6 +2066,7 @@ export default defineSchema({
     communityId: v.id("communities"),
     memberUserId: v.id("users"),
     reason: v.union(
+      v.literal("commitment_followup"),
       v.literal("quiet_newcomer"),
       v.literal("course_stall"),
       v.literal("quiet_member"),
@@ -2065,6 +2085,10 @@ export default defineSchema({
     skipReason: v.optional(v.string()),
     threadId: v.optional(v.string()),
     threadMessageKey: v.optional(v.string()),
+    unseenEmailState: v.optional(
+      v.union(v.literal("enqueued"), v.literal("seen"), v.literal("suppressed")),
+    ),
+    unseenEmailCheckedAt: v.optional(v.number()),
     decidedByUserId: v.optional(v.id("users")),
     decidedAt: v.optional(v.number()),
     sentAt: v.optional(v.number()),
@@ -2073,6 +2097,7 @@ export default defineSchema({
   })
     .index("by_community_status_createdAt", ["communityId", "status", "createdAt"])
     .index("by_community_status_sentAt", ["communityId", "status", "sentAt"])
+    .index("by_status_sentAt", ["status", "sentAt"])
     .index("by_community_member_createdAt", ["communityId", "memberUserId", "createdAt"])
     .index("by_community_member_dedupe", ["communityId", "memberUserId", "dedupeKey"]),
 

@@ -8,6 +8,7 @@ export const EMAIL_TEMPLATE_KEYS = [
   "mention_notification",
   "dm_message_notification",
   "founder_daily_brief",
+  "member_coach_nudge",
 ] as const;
 
 export type EmailTemplateKey = (typeof EMAIL_TEMPLATE_KEYS)[number];
@@ -335,6 +336,25 @@ export function renderEmailTemplate(params: {
         subject: `Your ${communityName} brief${dateLabel ? ` · ${dateLabel}` : ""}`,
         html: shell.html,
         text: [shell.text, rendered.text, nextStep ? `Suggested next step: ${nextStep}` : ""].filter(Boolean).join("\n\n"),
+      };
+    }
+    case "member_coach_nudge": {
+      const guideName = readString(payload.guideName) || `${communityName} guide`;
+      const bodyPreview = readString(payload.bodyPreview);
+      const shell = buildEmailShell({
+        title: `${guideName} left you a note`,
+        subtitle: communityName,
+        bodyHtml: bodyPreview
+          ? `<div style="font-size:15px;line-height:1.55;color:#fcf8f0;">${escapeHtml(bodyPreview)}</div>`
+          : `<div style="font-size:15px;line-height:1.55;color:#fcf8f0;">Your guide in ${escapeHtml(communityName)} checked in on your private thread.</div>`,
+        ctaLabel: "Open your guide",
+        ctaUrl: readString(payload.actionUrl),
+        footerNote: "You can pause guide check-ins anytime in Membership settings.",
+      });
+      return {
+        subject: `${guideName} checked in · ${communityName}`,
+        html: shell.html,
+        text: [shell.text, bodyPreview || `Your guide in ${communityName} checked in on your private thread.`].filter(Boolean).join("\n\n"),
       };
     }
     case "event_reminder":

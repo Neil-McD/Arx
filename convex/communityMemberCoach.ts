@@ -22,8 +22,22 @@ import { resolveCommunityInferenceFundingForAction } from "./founderInferenceRun
 import { startFundedInferenceRun } from "./fundedInferenceGateway";
 import { deliverAssistantMessageToMemberCommunityThread } from "./threads";
 import { resolveUserProfileDisplayProjection } from "./userProfileProjection";
-import { communityIsActive } from "../shared/communityLifecycle";
+import { readCanonicalPublicAppOrigin } from "./publicAppUrl";
+import { communityIsActive, normalizeCommunityLifecycle } from "../shared/communityLifecycle";
 import { renderCommunityHandbook } from "../shared/communityHandbook";
+import { DEFAULT_PERSONAL_SOUL_MD, cleanAgentSoulText } from "../shared/agentSoul";
+import { renderPersonalMemory } from "../shared/personalMemory";
+import {
+  COMMITMENT_FOLLOWUP_MAX_AGE_MS,
+  COMMITMENT_FOLLOWUP_MIN_AGE_MS,
+  UNSEEN_COACH_EMAIL_GRACE_MS,
+  UNSEEN_COACH_EMAIL_MAX_AGE_MS,
+  classifyCommunityHeartbeatCadence,
+  classifyMemberHeartbeatTemperature,
+  countConsecutiveUnansweredCoachTouches,
+  type CommunityHeartbeatTier,
+  type MemberTemperatureCounts,
+} from "../shared/agentHeartbeat";
 import {
   COURSE_STALL_MAX_AGE_MS,
   COURSE_STALL_MIN_AGE_MS,
@@ -57,12 +71,28 @@ const COMMUNITY_CONCURRENCY = 4;
 const CANDIDATE_MEMBERS_SCAN = 60;
 const JUDGE_MAX_OUTPUT_TOKENS = 400;
 const HANDBOOK_EXCERPT_CHARS = 1_500;
+const UNSEEN_EMAIL_BATCH_LIMIT = 50;
 
 const reasonValidator = v.union(
+  v.literal("commitment_followup"),
   v.literal("quiet_newcomer"),
   v.literal("course_stall"),
   v.literal("quiet_member"),
 );
+
+const communityTierValidator = v.union(
+  v.literal("active"),
+  v.literal("warm"),
+  v.literal("cooling"),
+  v.literal("paused"),
+);
+
+const temperatureCountsValidator = v.object({
+  hot: v.number(),
+  warm: v.number(),
+  cooling: v.number(),
+  cold: v.number(),
+});
 
 async function requireOwner(ctx: any, authSubject: string | undefined, communityId: Id<"communities">) {
   const userId = await resolveUserIdForAuthenticatedRequest({ ctx, authSubject: authSubject ?? null });
@@ -289,6 +319,39 @@ export const enrollAndListDueMemberCoachCommunitiesInternal = internalMutation({
   },
 });
 
+async function readLatestCommunityActivityAt(
+  ctx: any,
+  communityId: Id<"communities">,
+): Promise<number | null> {
+  const [latestRoot, latestReply, latestMember] = await Promise.all([
+    ctx.db
+      .query("communityInteractionRoots")
+      .withIndex("by_community_status_createdAt", (q: any) =>
+        q.eq("communityId", communityId).eq("status", "live"),
+      )
+      .order("desc")
+      .first(),
+    ctx.db
+      .query("communityInteractionReplies")
+      .withIndex("by_community_status_createdAt", (q: any) =>
+        q.eq("communityId", communityId).eq("status", "live"),
+      )
+      .order("desc")
+      .first(),
+    ctx.db
+      .query("communityMemberships")
+      .withIndex("by_community_createdAt", (q: any) => q.eq("communityId", communityId))
+      .order("desc")
+      .first(),
+  ]);
+  const best = Math.max(
+    Number(latestRoot?.createdAt ?? 0),
+    Number(latestReply?.createdAt ?? 0),
+    Number(latestMember?.activatedAt ?? latestMember?.createdAt ?? 0),
+  );
+  return best > 0 ? best : null;
+}
+
 export const claimCommunityMemberCoachScanInternal = internalMutation({
   args: { settingsId: v.id("communityMemberCoachSettings"), nowMs: v.number() },
   handler: async (ctx, args) => {
@@ -307,7 +370,25 @@ export const claimCommunityMemberCoachScanInternal = internalMutation({
       return null;
     }
 
+    const lastCommunityActivityAt = await readLatestCommunityActivityAt(ctx, settings.communityId);
+    const cadence = classifyCommunityHeartbeatCadence({
+      nowMs: args.nowMs,
+      lastCommunityActivityAtMs: lastCommunityActivityAt,
+    });
+    if (cadence.skipAiScan) {
+      await ctx.db.patch(settings._id, {
+        communityHeartbeatTier: cadence.tier,
+        ...(lastCommunityActivityAt ? { lastCommunityActivityAt } : {}),
+        nextScanAt: args.nowMs + cadence.nextIntervalMs,
+        leaseUntil: undefined,
+        updatedAt: args.nowMs,
+      });
+      return null;
+    }
+
     await ctx.db.patch(settings._id, {
+      communityHeartbeatTier: cadence.tier,
+      ...(lastCommunityActivityAt ? { lastCommunityActivityAt } : {}),
       leaseUntil: args.nowMs + CLAIM_LEASE_MS,
       updatedAt: args.nowMs,
     });
@@ -319,6 +400,8 @@ export const claimCommunityMemberCoachScanInternal = internalMutation({
       ownerUserId: community.ownerId,
       autoReasons: normalizeMemberCoachReasons(settings.autoReasons),
       scanCursorCreatedAt: typeof settings.scanCursorCreatedAt === "number" ? settings.scanCursorCreatedAt : null,
+      nextIntervalMs: cadence.nextIntervalMs,
+      communityTier: cadence.tier as CommunityHeartbeatTier,
     };
   },
 });
@@ -327,16 +410,32 @@ export const finishCommunityMemberCoachScanInternal = internalMutation({
   args: {
     settingsId: v.id("communityMemberCoachSettings"),
     nowMs: v.number(),
+    nextIntervalMs: v.optional(v.number()),
     nextScanCursorCreatedAt: v.optional(v.union(v.number(), v.null())),
+    temperatureCounts: v.optional(temperatureCountsValidator),
+    communityTier: v.optional(communityTierValidator),
   },
   handler: async (ctx, args) => {
     const settings = await ctx.db.get(args.settingsId);
     if (!settings) return;
+    const intervalMs =
+      typeof args.nextIntervalMs === "number" && args.nextIntervalMs >= 60_000
+        ? args.nextIntervalMs
+        : MEMBER_COACH_SCAN_INTERVAL_MS;
     await ctx.db.patch(settings._id, {
       leaseUntil: undefined,
-      nextScanAt: args.nowMs + MEMBER_COACH_SCAN_INTERVAL_MS,
+      nextScanAt: args.nowMs + intervalMs,
+      ...(args.communityTier ? { communityHeartbeatTier: args.communityTier } : {}),
       ...(args.nextScanCursorCreatedAt !== undefined
         ? { scanCursorCreatedAt: args.nextScanCursorCreatedAt ?? undefined }
+        : {}),
+      ...(args.temperatureCounts
+        ? {
+            temperatureSnapshot: {
+              ...args.temperatureCounts,
+              sampledAt: args.nowMs,
+            },
+          }
         : {}),
       updatedAt: args.nowMs,
     });
@@ -433,6 +532,7 @@ export const readNextMemberCoachCandidateInternal = internalQuery({
     };
 
     const candidates: Candidate[] = [];
+    const temperatureCounts: MemberTemperatureCounts = { hot: 0, warm: 0, cooling: 0, cold: 0 };
 
     for (const membership of memberships) {
       if (!communityMembershipRowIsActive(membership)) continue;
@@ -442,12 +542,81 @@ export const readNextMemberCoachCandidateInternal = internalQuery({
 
       const joinedAt = Number(membership.activatedAt ?? membership.createdAt ?? 0);
       const memberAgeMs = args.nowMs - joinedAt;
-      const [lastChannelAt, lastUserAgentAt, recentHistory, courseProgress] = await Promise.all([
+      const [lastChannelAt, lastUserAgentAt, recentHistory, courseProgress, memberMemoryRow] = await Promise.all([
         readLatestMemberChannelActivityAt(ctx, args.communityId, membership.userId),
         readLastUserAgentMessageAt(ctx, args.communityId, membership.userId),
         readRecentCoachHistoryForMember(ctx, args.communityId, membership.userId),
         readMemberCourseProgress(ctx, args.communityId, membership.userId),
+        ctx.db
+          .query("memberMemories")
+          .withIndex("by_community_user", (q: any) =>
+            q.eq("communityId", args.communityId).eq("userId", membership.userId),
+          )
+          .unique(),
       ]);
+
+      const lastLessonMs = courseProgress.reduce((best, course) => {
+        const ms = course.last_done_at ? Date.parse(course.last_done_at) : 0;
+        return Number.isFinite(ms) && ms > best ? ms : best;
+      }, 0);
+      const lastRealActivityMs = Math.max(lastChannelAt ?? 0, lastLessonMs, lastUserAgentAt ?? 0);
+      const consecutiveUnanswered = countConsecutiveUnansweredCoachTouches(
+        recentHistory,
+        lastRealActivityMs > 0 ? lastRealActivityMs : null,
+      );
+      const heartbeatTemp = classifyMemberHeartbeatTemperature({
+        nowMs: args.nowMs,
+        lastActivityAtMs: lastRealActivityMs > 0 ? lastRealActivityMs : null,
+        joinedAtMs: joinedAt,
+        consecutiveUnanswered,
+      });
+      temperatureCounts[heartbeatTemp.temperature] += 1;
+
+      // Cold / dormant members (30+ days quiet OR 2 consecutive unanswered AI
+      // check-ins) stop AI heartbeats at $0 cost and hand off to system follow-up.
+      if (heartbeatTemp.handoffToSystem) {
+        continue;
+      }
+
+      // Signal 0 (priority 0): Personal Commitment follow-up (strictly private auto mode).
+      const commitmentEntry = (memberMemoryRow?.entries ?? [])
+        .filter((entry: any) => {
+          if (entry?.category !== "commitment") return false;
+          const ageMs = args.nowMs - Number(entry.at ?? 0);
+          return ageMs >= COMMITMENT_FOLLOWUP_MIN_AGE_MS && ageMs <= COMMITMENT_FOLLOWUP_MAX_AGE_MS;
+        })
+        .sort((a: any, b: any) => Number(b.at ?? 0) - Number(a.at ?? 0))[0] ?? null;
+      if (commitmentEntry && autoSet.has("commitment_followup")) {
+        const commitAt = Number(commitmentEntry.at ?? args.nowMs);
+        const dedupeKey = `commitment_followup:${Math.floor(commitAt / (7 * DAY_MS))}:${String(commitmentEntry.text ?? "").slice(0, 32).toLowerCase()}`;
+        const gate = evaluateMemberCoachGate({
+          nowMs: args.nowMs,
+          isOwner: false,
+          memberMuted: false,
+          reason: "commitment_followup",
+          dedupeKey,
+          lastUserThreadMessageAt: lastUserAgentAt,
+          recentHistory,
+          autoReasonEnabled: true,
+          communityTimeZone: tz,
+          memberTemperature: heartbeatTemp.temperature,
+          consecutiveUnanswered,
+        });
+        if (gate.allowed && gate.mode === "auto") {
+          const daysAgo = daysBetween(commitAt, args.nowMs);
+          candidates.push({
+            priority: 0,
+            memberUserId: membership.userId,
+            reason: "commitment_followup",
+            dedupeKey,
+            // Never copy private commitment words into summary fields.
+            signalSummary: `Active commitment shared with guide ${daysAgo} ${daysAgo === 1 ? "day" : "days"} ago`,
+            signalDetail: `The member shared a personal commitment ${daysAgo} days ago: "${String(commitmentEntry.text ?? "")}". Check in warmly on how it is going and offer one small next step.`,
+            mode: "auto",
+          });
+          continue;
+        }
+      }
 
       // Signal 1 (priority 1): Stalled partway through a published course (5..21 days since last lesson).
       const stalledCourse = courseProgress.find((course) => {
@@ -469,6 +638,8 @@ export const readNextMemberCoachCandidateInternal = internalQuery({
           recentHistory,
           autoReasonEnabled: autoSet.has("course_stall"),
           communityTimeZone: tz,
+          memberTemperature: heartbeatTemp.temperature,
+          consecutiveUnanswered,
         });
         if (gate.allowed) {
           const pausedDays = daysBetween(Date.parse(stalledCourse.last_done_at), args.nowMs);
@@ -503,6 +674,8 @@ export const readNextMemberCoachCandidateInternal = internalQuery({
           recentHistory,
           autoReasonEnabled: autoSet.has("quiet_newcomer"),
           communityTimeZone: tz,
+          memberTemperature: heartbeatTemp.temperature,
+          consecutiveUnanswered,
         });
         if (gate.allowed) {
           const joinedDays = daysBetween(joinedAt, args.nowMs);
@@ -523,12 +696,8 @@ export const readNextMemberCoachCandidateInternal = internalQuery({
         }
       }
 
-      // Signal 3 (priority 3): Quiet returning member (14..45 days since last activity)
+      // Signal 3 (priority 3): Quiet returning member (14..30 days since last activity)
       // ONLY when there is a concrete upcoming community event within 7 days.
-      const lastLessonMs = courseProgress.reduce((best, course) => {
-        const ms = course.last_done_at ? Date.parse(course.last_done_at) : 0;
-        return Number.isFinite(ms) && ms > best ? ms : best;
-      }, 0);
       const lastActivityMs = Math.max(lastChannelAt ?? 0, lastLessonMs);
       if (
         upcomingCommunityEvent &&
@@ -548,6 +717,8 @@ export const readNextMemberCoachCandidateInternal = internalQuery({
           recentHistory,
           autoReasonEnabled: autoSet.has("quiet_member"),
           communityTimeZone: tz,
+          memberTemperature: heartbeatTemp.temperature,
+          consecutiveUnanswered,
         });
         if (gate.allowed) {
           const quietDays = daysBetween(lastActivityMs, args.nowMs);
@@ -564,26 +735,50 @@ export const readNextMemberCoachCandidateInternal = internalQuery({
       }
     }
 
-    if (candidates.length === 0) return { candidate: null, nextScanCursorCreatedAt };
+    if (candidates.length === 0) return { candidate: null, nextScanCursorCreatedAt, temperatureCounts };
     candidates.sort((a, b) => a.priority - b.priority);
     const chosen = candidates[0]!;
 
     // Read ONLY this member's own consented self facts (lens: "self" — NEVER host notes
     // and NEVER any other member's private context or threads).
-    const person = await readPersonFacts(ctx, {
-      communityId: args.communityId,
-      subjectUserId: chosen.memberUserId,
-      lens: "self",
-    });
-    if (!person) return { candidate: null, nextScanCursorCreatedAt };
+    const [person, chosenMemRow] = await Promise.all([
+      readPersonFacts(ctx, {
+        communityId: args.communityId,
+        subjectUserId: chosen.memberUserId,
+        lens: "self",
+      }),
+      chosen.mode === "auto"
+        ? ctx.db
+            .query("memberMemories")
+            .withIndex("by_community_user", (q: any) =>
+              q.eq("communityId", args.communityId).eq("userId", chosen.memberUserId),
+            )
+            .unique()
+        : Promise.resolve(null),
+    ]);
+    if (!person) return { candidate: null, nextScanCursorCreatedAt, temperatureCounts };
+
+    // Private Soul & Memory are ONLY given to auto-delivered private messages
+    // (never to founder-visible approval drafts) so private words stay private.
+    const personalSoulMd =
+      chosen.mode === "auto"
+        ? cleanAgentSoulText(chosenMemRow?.soulMd) || DEFAULT_PERSONAL_SOUL_MD
+        : null;
+    const personalMemoryExcerpt =
+      chosen.mode === "auto" && chosenMemRow?.entries?.length
+        ? renderPersonalMemory(chosenMemRow.entries).slice(0, 800)
+        : null;
 
     return {
       nextScanCursorCreatedAt,
+      temperatureCounts,
       candidate: {
         memberUserId: chosen.memberUserId,
         memberName: person.name || (person.handle ? `@${person.handle}` : "Member"),
         memberBio: person.bio,
         memberSharedFacts: person.shared.slice(0, 6).map((fact) => `${fact.label}: ${fact.body}`),
+        personalSoulMd,
+        personalMemoryExcerpt,
         reason: chosen.reason,
         dedupeKey: chosen.dedupeKey,
         signalSummary: chosen.signalSummary,
@@ -615,9 +810,11 @@ export const recordMemberCoachJudgeOutcomeInternal = internalMutation({
     const eligibility = await checkMemberEligibleForCoach(ctx, community, args.memberUserId);
     if (!eligibility.ok) return { ok: false as const, code: eligibility.code };
 
-    const [lastUserAgentAt, recentHistory, tz, settingsRow] = await Promise.all([
+    const [lastChannelAt, lastUserAgentAt, recentHistory, courseProgress, tz, settingsRow] = await Promise.all([
+      readLatestMemberChannelActivityAt(ctx, args.communityId, args.memberUserId),
       readLastUserAgentMessageAt(ctx, args.communityId, args.memberUserId),
       readRecentCoachHistoryForMember(ctx, args.communityId, args.memberUserId),
+      readMemberCourseProgress(ctx, args.communityId, args.memberUserId),
       communityTimeZone(ctx, args.communityId),
       ctx.db
         .query("communityMemberCoachSettings")
@@ -625,6 +822,23 @@ export const recordMemberCoachJudgeOutcomeInternal = internalMutation({
         .first(),
     ]);
     if (settingsRow && !settingsRow.enabled) return { ok: false as const, code: "coach_disabled" };
+
+    const joinedAt = Number(eligibility.membership?.activatedAt ?? eligibility.membership?.createdAt ?? 0);
+    const lastLessonMs = courseProgress.reduce((best, course) => {
+      const ms = course.last_done_at ? Date.parse(course.last_done_at) : 0;
+      return Number.isFinite(ms) && ms > best ? ms : best;
+    }, 0);
+    const lastRealActivityMs = Math.max(lastChannelAt ?? 0, lastLessonMs, lastUserAgentAt ?? 0);
+    const consecutiveUnanswered = countConsecutiveUnansweredCoachTouches(
+      recentHistory,
+      lastRealActivityMs > 0 ? lastRealActivityMs : null,
+    );
+    const heartbeatTemp = classifyMemberHeartbeatTemperature({
+      nowMs: args.nowMs,
+      lastActivityAtMs: lastRealActivityMs > 0 ? lastRealActivityMs : null,
+      joinedAtMs: joinedAt,
+      consecutiveUnanswered,
+    });
 
     const autoEnabledNow =
       args.requestedMode === "auto" &&
@@ -640,6 +854,8 @@ export const recordMemberCoachJudgeOutcomeInternal = internalMutation({
       recentHistory,
       autoReasonEnabled: autoEnabledNow,
       communityTimeZone: tz,
+      memberTemperature: heartbeatTemp.temperature,
+      consecutiveUnanswered,
     });
     if (!gate.allowed) return { ok: false as const, code: gate.blockReason };
 
@@ -724,6 +940,7 @@ async function runCoachForCommunity(
   if (!claim) return "skipped";
 
   let nextScanCursorCreatedAt: number | null | undefined = undefined;
+  let temperatureCounts: MemberTemperatureCounts | undefined = undefined;
   try {
     const scanResult = await ctx.runQuery(internalRefs.communityMemberCoach.readNextMemberCoachCandidateInternal, {
       communityId: claim.communityId,
@@ -732,6 +949,7 @@ async function runCoachForCommunity(
       scanCursorCreatedAt: claim.scanCursorCreatedAt,
     });
     nextScanCursorCreatedAt = scanResult?.nextScanCursorCreatedAt ?? null;
+    temperatureCounts = scanResult?.temperatureCounts;
     const candidate = scanResult?.candidate ?? null;
     if (!candidate) return "no_candidate";
 
@@ -766,6 +984,9 @@ async function runCoachForCommunity(
       MEMBER_COACH_INSTRUCTIONS,
       `Community: ${claim.communityName}${claim.communityOneLiner ? ` — ${claim.communityOneLiner}` : ""}`,
       ...(handbookExcerpt ? [`Community handbook (excerpt):\n${handbookExcerpt}`] : []),
+      ...(candidate.personalSoulMd
+        ? [`Your Soul with this person (tone and coaching habits only):\n${candidate.personalSoulMd}`]
+        : []),
     ].join("\n\n");
 
     const user = [
@@ -773,6 +994,9 @@ async function runCoachForCommunity(
       ...(candidate.memberBio ? [`Bio: ${candidate.memberBio}`] : []),
       ...(candidate.memberSharedFacts.length
         ? [`Shared profile facts:\n- ${candidate.memberSharedFacts.join("\n- ")}`]
+        : []),
+      ...(candidate.personalMemoryExcerpt
+        ? [`Private memory with this member (for this private message only):\n${candidate.personalMemoryExcerpt}`]
         : []),
       `Signal (${candidate.reason}): ${candidate.signalDetail}`,
       "Decide whether to send a short, concrete check-in now or skip.",
@@ -821,10 +1045,122 @@ async function runCoachForCommunity(
     await ctx.runMutation(internalRefs.communityMemberCoach.finishCommunityMemberCoachScanInternal, {
       settingsId: item.settingsId,
       nowMs: Date.now(),
+      nextIntervalMs: claim.nextIntervalMs,
+      communityTier: claim.communityTier,
       ...(nextScanCursorCreatedAt !== undefined ? { nextScanCursorCreatedAt } : {}),
+      ...(temperatureCounts ? { temperatureCounts } : {}),
     });
   }
 }
+
+// 24-hour unseen proactive check-in email nudge: finds sent check-ins aged
+// 24..72h that haven't been checked yet, marks already-answered ones as "seen",
+// suppresses opted-out/inactive members, and returns ready email jobs to enqueue.
+export const claimUnseenMemberCoachEmailsInternal = internalMutation({
+  args: { nowMs: v.number() },
+  handler: async (ctx, args) => {
+    const oldestMs = args.nowMs - UNSEEN_COACH_EMAIL_MAX_AGE_MS;
+    const dueBeforeMs = args.nowMs - UNSEEN_COACH_EMAIL_GRACE_MS;
+    const candidates = await ctx.db
+      .query("communityMemberCoachDrafts")
+      .withIndex("by_status_sentAt", (q) =>
+        q.eq("status", "sent").gte("sentAt", oldestMs).lte("sentAt", dueBeforeMs),
+      )
+      .order("desc")
+      .take(200);
+
+    let origin = "https://www.polynet.ai";
+    try {
+      origin = readCanonicalPublicAppOrigin();
+    } catch {
+      // fallback to canonical public origin
+    }
+
+    const jobs: Array<{
+      draftId: string;
+      communityId: Id<"communities">;
+      communityLifecycleGeneration: number;
+      recipientUserId: Id<"users">;
+      dedupeKey: string;
+      payload: {
+        communityName: string;
+        guideName: string;
+        bodyPreview: string;
+        actionUrl: string;
+      };
+    }> = [];
+
+    for (const draft of candidates) {
+      if (jobs.length >= UNSEEN_EMAIL_BATCH_LIMIT) break;
+      if (draft.unseenEmailState) continue;
+      const sentAt = Number(draft.sentAt ?? draft.createdAt ?? 0);
+      if (sentAt <= 0 || args.nowMs - sentAt < UNSEEN_COACH_EMAIL_GRACE_MS) continue;
+
+      const community: any = await ctx.db.get(draft.communityId);
+      if (!community || !communityIsActive(community) || !(await communityAgentIsOn(ctx, draft.communityId))) {
+        await ctx.db.patch(draft._id, {
+          unseenEmailState: "suppressed",
+          unseenEmailCheckedAt: args.nowMs,
+          updatedAt: args.nowMs,
+        });
+        continue;
+      }
+
+      const eligibility = await checkMemberEligibleForCoach(ctx, community, draft.memberUserId);
+      if (!eligibility.ok) {
+        await ctx.db.patch(draft._id, {
+          unseenEmailState: "suppressed",
+          unseenEmailCheckedAt: args.nowMs,
+          updatedAt: args.nowMs,
+        });
+        continue;
+      }
+
+      const lastUserAgentAt = await readLastUserAgentMessageAt(ctx, draft.communityId, draft.memberUserId);
+      if (typeof lastUserAgentAt === "number" && lastUserAgentAt >= sentAt) {
+        await ctx.db.patch(draft._id, {
+          unseenEmailState: "seen",
+          unseenEmailCheckedAt: args.nowMs,
+          updatedAt: args.nowMs,
+        });
+        continue;
+      }
+
+      const lifecycle = normalizeCommunityLifecycle(community);
+      const slug = String(community.slug ?? "").trim();
+      const communityName = String(community.name ?? "your community").trim();
+      const guideName = `${communityName} guide`;
+      // Keep private commitment details out of plaintext email previews.
+      const rawText = String(draft.sentText ?? draft.text ?? "").trim();
+      const bodyPreview =
+        draft.reason === "commitment_followup"
+          ? "Your guide left a private check-in waiting for you."
+          : rawText.length > 180
+            ? `${rawText.slice(0, 177).trimEnd()}…`
+            : rawText || "Your guide left a check-in waiting for you.";
+
+      await ctx.db.patch(draft._id, {
+        unseenEmailState: "enqueued",
+        unseenEmailCheckedAt: args.nowMs,
+        updatedAt: args.nowMs,
+      });
+      jobs.push({
+        draftId: String(draft._id),
+        communityId: draft.communityId,
+        communityLifecycleGeneration: lifecycle.generation,
+        recipientUserId: draft.memberUserId,
+        dedupeKey: `member-coach-nudge:${String(draft._id)}`,
+        payload: {
+          communityName,
+          guideName,
+          bodyPreview,
+          actionUrl: slug ? `${origin}/c/${encodeURIComponent(slug)}/agent` : origin,
+        },
+      });
+    }
+    return { jobs };
+  },
+});
 
 const MAX_ENROLLMENT_PAGES_PER_RUN = 25;
 
@@ -860,7 +1196,26 @@ export const processDueMemberCoachScansInternal = internalAction({
         outcomes[outcome] = (outcomes[outcome] ?? 0) + 1;
       }
     }
-    return { scanned: due.length, outcomes };
+
+    // 24-hour unseen proactive check-in email fallback (bounded, preference-gated).
+    const unseen = await ctx.runMutation(
+      internalRefs.communityMemberCoach.claimUnseenMemberCoachEmailsInternal,
+      { nowMs },
+    );
+    let unseenEmailsEnqueued = 0;
+    for (const job of unseen?.jobs ?? []) {
+      await ctx.runMutation(internalRefs.email.enqueueEmailJobInternal, {
+        kind: "member_coach_nudge",
+        communityId: job.communityId,
+        communityLifecycleGeneration: job.communityLifecycleGeneration,
+        recipientUserId: job.recipientUserId,
+        templateKey: "member_coach_nudge",
+        payload: job.payload,
+        dedupeKey: job.dedupeKey,
+      });
+      unseenEmailsEnqueued += 1;
+    }
+    return { scanned: due.length, outcomes, unseenEmailsEnqueued };
   },
 });
 
@@ -1045,6 +1400,18 @@ async function buildCoachSettingsView(
     thread_followup_enabled: row?.threadFollowupEnabled !== false,
     sent_this_week: sentWeek.length,
     waiting_count: waiting.filter((item: any) => nowMs - item.createdAt <= MEMBER_COACH_DRAFT_MAX_AGE_MS).length,
+    heartbeat: {
+      community_tier: (row?.communityHeartbeatTier ?? "active") as CommunityHeartbeatTier,
+      counts: row?.temperatureSnapshot
+        ? {
+            hot: Number(row.temperatureSnapshot.hot ?? 0),
+            warm: Number(row.temperatureSnapshot.warm ?? 0),
+            cooling: Number(row.temperatureSnapshot.cooling ?? 0),
+            cold: Number(row.temperatureSnapshot.cold ?? 0),
+          }
+        : null,
+      sampled_at: typeof row?.temperatureSnapshot?.sampledAt === "number" ? row.temperatureSnapshot.sampledAt : null,
+    },
   };
 }
 
