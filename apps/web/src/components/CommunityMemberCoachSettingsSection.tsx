@@ -84,9 +84,29 @@ export function CommunityMemberCoachSettingsSection(props: {
   const statusNote = settings && settings.sent_this_week > 0
     ? ` ${settings.sent_this_week} sent this week.`
     : "";
+  const heartbeat = settings?.heartbeat;
+  const tierLabel =
+    heartbeat?.community_tier === "paused"
+      ? "Paused · $0 AI until new activity"
+      : heartbeat?.community_tier === "cooling"
+        ? "Cooling · daily rhythm"
+        : heartbeat?.community_tier === "warm"
+          ? "Warm · 6-hour rhythm"
+          : "Active · 2-hour rhythm";
+  const countsSummary = heartbeat?.counts
+    ? `${heartbeat.counts.hot} hot · ${heartbeat.counts.warm} warm · ${heartbeat.counts.cooling} cooling · ${heartbeat.counts.cold} handed off to system follow-up ($0 AI)`
+    : "Updates automatically on the next heartbeat scan.";
 
   return (
     <SettingsGroup label="Proactive guide">
+      {settings ? (
+        <SettingsRow
+          label="Heartbeat cadence"
+          help={`${tierLabel}. ${countsSummary}`}
+        >
+          <span className="settings-v1-value">{heartbeat?.community_tier === "paused" ? "Paused" : "Live"}</span>
+        </SettingsRow>
+      ) : null}
       <SettingsRow
         label="Follow up in active threads"
         help={
@@ -145,14 +165,21 @@ export function CommunityMemberCoachSettingsSection(props: {
           {MEMBER_COACH_REASONS.map((reason) => {
             const copy = MEMBER_COACH_REASON_LABELS[reason];
             const isAuto = autoReasons.includes(reason);
+            const modeHelp = copy.privateAutoOnly
+              ? isAuto
+                ? "Sends directly to their private thread during daytime hours."
+                : "Off — enable to let your guide follow up privately on goals members share."
+              : isAuto
+                ? "Sends automatically during daytime hours."
+                : "Waits for your approval on Home first.";
             return (
               <SettingsRow
                 key={reason}
-                label={`${copy.label} automatically`}
-                help={`${copy.description} ${isAuto ? "Sends automatically during daytime hours." : "Waits for your approval on Home first."}`}
+                label={copy.privateAutoOnly ? copy.label : `${copy.label} automatically`}
+                help={`${copy.description} ${modeHelp}`}
               >
                 <SettingsSwitch
-                  label={`${copy.label} automatically`}
+                  label={copy.privateAutoOnly ? copy.label : `${copy.label} automatically`}
                   checked={isAuto}
                   disabled={!settings || saving}
                   onChange={(checked) => toggleAutoReason(reason, checked)}

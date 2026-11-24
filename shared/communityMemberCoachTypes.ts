@@ -2,7 +2,13 @@
 // Server-only gate rules and judge prompts stay in shared/communityMemberCoach.ts
 // so they never ship in the web bundle.
 
+import type {
+  CommunityHeartbeatTier,
+  MemberTemperatureCounts,
+} from "./agentHeartbeat";
+
 export const MEMBER_COACH_REASONS = [
+  "commitment_followup",
   "quiet_newcomer",
   "course_stall",
   "quiet_member",
@@ -14,8 +20,15 @@ export const MEMBER_COACH_EDIT_MAX_CHARS = 1_500;
 
 export const MEMBER_COACH_REASON_LABELS: Record<
   MemberCoachReason,
-  { label: string; description: string; shortTag: string }
+  { label: string; description: string; shortTag: string; privateAutoOnly?: boolean }
 > = {
+  commitment_followup: {
+    label: "Follow up on member commitments",
+    description:
+      "Checks in privately when a member shared a goal or next step with their guide 2+ days ago. Sends directly to their private thread so their goals stay private.",
+    shortTag: "Commitment check-in",
+    privateAutoOnly: true,
+  },
   quiet_newcomer: {
     label: "Welcome quiet newcomers",
     description: "Members who joined 2–14 days ago and haven't posted yet.",
@@ -28,7 +41,7 @@ export const MEMBER_COACH_REASON_LABELS: Record<
   },
   quiet_member: {
     label: "Re-engage quiet members",
-    description: "Members quiet for 2+ weeks when a relevant event or pod call is coming up.",
+    description: "Members quiet for 2–4 weeks when a relevant event or pod call is coming up.",
     shortTag: "Event check-in",
   },
 };
@@ -44,6 +57,12 @@ export type MemberCoachDraftView = {
   created_at: string;
 };
 
+export type MemberCoachHeartbeatSummary = {
+  community_tier: CommunityHeartbeatTier;
+  counts: MemberTemperatureCounts | null;
+  sampled_at: number | null;
+};
+
 export type MemberCoachSettingsView = {
   enabled: boolean;
   auto_reasons: MemberCoachReason[];
@@ -51,6 +70,7 @@ export type MemberCoachSettingsView = {
   thread_followup_enabled: boolean;
   sent_this_week: number;
   waiting_count: number;
+  heartbeat?: MemberCoachHeartbeatSummary;
 };
 
 export type MemberCoachPreferenceView = {

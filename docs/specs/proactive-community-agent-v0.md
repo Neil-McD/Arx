@@ -35,6 +35,19 @@ One pipeline joins them:
   each one in the brief); automatic mode is enabled per reason afterwards.
 - **Caps:** at most 2 agent-started messages per member per week, 48 hours
   apart, never in the member's quiet hours, never mid-conversation.
+- **Activity-tapered heartbeats (Nov 24):** members are classified
+  deterministically before any model call as Hot (active within 3 days), Warm
+  (3–14 days), Cooling (14–30 days), or Cold (quiet 30+ days OR 2 consecutive
+  unanswered proactive check-ins). Cold members stop AI heartbeats ($0 AI spend)
+  and hand off to system follow-up until they return and wake back up to Hot.
+  Communities taper the same way (Active 2h → Warm 6h → Cooling 24h → Paused
+  after 14+ quiet days at $0 AI spend).
+- **Private commitment follow-ups:** commitment follow-ups read a member's
+  private memory and Personal Soul only when delivering directly into their
+  private thread (`auto` mode), never exposing private words to founder drafts.
+- **24-hour unseen email nudge:** a sent proactive check-in still unanswered
+  after 24 hours triggers one preference-gated, deduped email nudge back into
+  the member's private thread.
 - **Cards are members only** (no task cards in v0).
 - **The agent drafts the journey and rhythm** from the community's description;
   the founder edits in plain words.

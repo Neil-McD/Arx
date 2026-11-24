@@ -28,7 +28,7 @@ export function emailPriorityRankForTemplate(templateKey: EmailTemplateKey): num
   if (templateKey === "event_reminder" || templateKey === "weekly_member_digest") {
     return EMAIL_PRIORITY_BULK;
   }
-  if (templateKey === "mention_notification") {
+  if (templateKey === "mention_notification" || templateKey === "member_coach_nudge") {
     return EMAIL_PRIORITY_MENTION;
   }
   return EMAIL_PRIORITY_URGENT;
@@ -109,7 +109,8 @@ function isPreferenceControlledTemplate(templateKey: EmailTemplateKey): boolean 
   return (
     templateKey === "weekly_member_digest" ||
     templateKey === "event_reminder" ||
-    templateKey === "mention_notification"
+    templateKey === "mention_notification" ||
+    templateKey === "member_coach_nudge"
   );
 }
 
@@ -117,7 +118,7 @@ function preferenceAllowsTemplate(preferences: Record<string, unknown>, template
   if (templateKey === "weekly_member_digest") {
     return preferences.weeklyDigestEnabled !== false;
   }
-  if (templateKey === "mention_notification") {
+  if (templateKey === "mention_notification" || templateKey === "member_coach_nudge") {
     return preferences.mentionEmailsEnabled !== false;
   }
   if (templateKey === "event_reminder") {
@@ -237,7 +238,7 @@ export const enqueueEmailJobsBatchInternal = internalMutation({
   },
 });
 
-async function enqueueSingleEmailJob(
+export async function enqueueSingleEmailJob(
   ctx: any,
   args: {
     kind: string;
@@ -335,7 +336,7 @@ async function enqueueSingleEmailJob(
 
   if (
     !suppressionReason &&
-    templateKey === "weekly_member_digest" &&
+    (templateKey === "weekly_member_digest" || templateKey === "member_coach_nudge") &&
     args.communityId &&
     recipientUserId &&
     !(await weeklyDigestRecipientHasCommunityAccess(
